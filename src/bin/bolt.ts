@@ -7,7 +7,7 @@ import * as fs from "fs"
 import yargs from "yargs"
 
 import { Scanner } from "../scanner"
-import { Token, TextFile } from "../ast"
+import { Token, TextFile, SourceFile } from "../ast"
 
 function toArray<T>(value: T): T extends Array<any> ? T : T[] {
   if (Array.isArray(value)) {
@@ -63,13 +63,13 @@ yargs
     args => {
 
       const hooks: Hook[] = toArray(args.hook as string[] | string).map(parseHook);
+      const sourceFiles: SourceFile[] = [];
 
       for (const filepath of toArray(args.files as string[] | string)) {  
 
         const file = new TextFile(filepath);
         const content = fs.readFileSync(filepath, 'utf8')
         const scanner = new Scanner(file, content)
-        const tokens: Token[] = [];
 
         for (const hook of hooks) {
           if (hook.name === 'scan' && hook.timing === 'before') {
@@ -85,20 +85,21 @@ yargs
           }
         }
 
-        while (true) {
-          const token = scanner.scanToken()
-          if (token === null) {
-            break;
-          }
-          tokens.push(token);
-        }
+        const sourceFile = scanner.scan();
+        // while (true) {
+        //   const token = scanner.scanToken()
+        //   if (token === null) {
+        //     break;
+        //   }
+        //   tokens.push(token);
+        // }
 
         for (const hook of hooks) {
           if (hook.name === 'scan' && hook.timing == 'after') {
             for (const effect of hook.effects) {
               switch (effect) {
                 case 'dump':
-                  console.log(JSON.stringify(tokens.map(t => t.toJSON()), undefined, 2));
+                  console.log(JSON.stringify(sourceFile.toJSON(), undefined, 2));
                   break;
                 case 'abort':
                   process.exit(0);
@@ -110,7 +111,10 @@ yargs
           }
         }
 
+        sourceFiles.push(sourceFile);
+
       }
+
     })
 
   .help()

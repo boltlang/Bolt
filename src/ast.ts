@@ -13,15 +13,24 @@ export enum SyntaxKind {
   Identifier,
   Operator,
   Punctuated,
+  Semi,
+
+  // Special nodes
 
   SourceFile,
 
   QualName,
 
+  Sentence,
+
   // Expressions
 
   ConstantExpr,
   ReferenceExpr,
+
+  // Statements
+
+  ReturnStatement,
 
   // Type declarations
 
@@ -97,9 +106,14 @@ export class TextSpan {
 
 }
 
-export class Literal {
+abstract class SyntaxBase {
+  abstract kind: SyntaxKind;
+  abstract parentNode: Syntax | null;
+}
 
-  kind = SyntaxKind.Literal;
+export class Literal extends SyntaxBase {
+
+  kind: SyntaxKind.Literal = SyntaxKind.Literal;
 
   static META = {
     value: EdgeType.Primitive,
@@ -107,9 +121,10 @@ export class Literal {
 
   constructor(
     public value: string | bigint,
-    public span: TextSpan
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
   ) {
-
+    super();
   }
 
   toJSON(): Json {
@@ -127,9 +142,9 @@ export enum PunctType {
   Brace,
 }
 
-export class Punctuated {
+export class Punctuated extends SyntaxBase {
 
-  kind = SyntaxKind.Punctuated
+  kind: SyntaxKind.Punctuated = SyntaxKind.Punctuated
 
   static META = {
     punctuator: EdgeType.Primitive,
@@ -139,9 +154,10 @@ export class Punctuated {
   constructor(
     public punctuator: PunctType,
     public elements: Token[],
-    public span: TextSpan
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
   ) {
-
+    super();
   }
 
   toJSON(): Json {
@@ -154,9 +170,9 @@ export class Punctuated {
 
 }
 
-export class Identifier {
+export class Identifier extends SyntaxBase {
 
-  kind = SyntaxKind.Identifier;
+  kind: SyntaxKind.Identifier = SyntaxKind.Identifier;
 
   static META = {
     text: EdgeType.Primitive
@@ -164,9 +180,10 @@ export class Identifier {
 
   constructor(
     public text: string,
-    public span: TextSpan
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
   ) {
-
+    super();
   }
 
   toJSON(): Json {
@@ -179,9 +196,9 @@ export class Identifier {
 
 }
 
-export class Operator {
+export class Operator extends SyntaxBase {
 
-  kind = SyntaxKind.Operator;
+  kind: SyntaxKind.Operator = SyntaxKind.Operator;
 
   static META = {
     text: EdgeType.Primitive
@@ -192,7 +209,7 @@ export class Operator {
     public span: TextSpan,
     public parentNode: Syntax | null = null
   ) {
-
+    super();
   }
 
   toJSON(): Json {
@@ -205,15 +222,58 @@ export class Operator {
 
 }
 
+export class Semi extends SyntaxBase {
+  
+  kind: SyntaxKind.Semi = SyntaxKind.Semi;
+
+  constructor(
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON() {
+    return {
+      kind: 'Semi',
+      span: this.span.toJSON(),
+    }
+  }
+
+}
+
 export type Token
-  = Identifier
+  = Semi
+  | Identifier
   | Operator
   | Literal
   | Punctuated
 
+export class Sentence extends SyntaxBase {
+
+  kind = SyntaxKind.Sentence;
+
+  constructor(
+    public tokens: Token[],
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'Sentence',
+      tokens: this.tokens.map(token => token.toJSON()),
+      span: this.span.toJSON(),
+    }
+  }
+
+}
+
 export class QualName {
 
-  kind = SyntaxKind.QualName;
+  kind: SyntaxKind.QualName = SyntaxKind.QualName;
 
   static META = {
     name: EdgeType.Node,
@@ -252,9 +312,25 @@ export class ConstantExpr {
 export type Expr
   = ConstantExpr
 
+class ReturnStatement extends SyntaxBase {
+
+  kind: SyntaxKind.ReturnStatement = SyntaxKind.ReturnStatement;
+
+  constructor(
+    public value: Expr | null,
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+}
+
+export type Statement
+  = ReturnStatement
+
 export class TypeReference {
 
-  kind = SyntaxKind.TypeReference;
+  kind: SyntaxKind.TypeReference = SyntaxKind.TypeReference;
 
   static META = {
     name: EdgeType.Node,
@@ -275,23 +351,23 @@ export class TypeReference {
 export type TypeDecl
   = TypeReference
 
-export class Unexpanded {
+// export class Unexpanded {
+// 
+//   static META = {
+//     tokens: EdgeType.Node | EdgeType.List
+//   }
+// 
+//   constructor(
+//     public tokens: Token[],
+//     public span: TextSpan,
+//     public parentNode: Syntax | null = null
+//   ) {
+// 
+//   }
+// 
+// }
 
-  static META = {
-    tokens: EdgeType.Node | EdgeType.List
-  }
-
-  constructor(
-    public tokens: Token[],
-    public span: TextSpan,
-    public parentNode: Syntax | null = null
-  ) {
-
-  }
-
-}
-
-export class FunctionDecl {
+export class FunctionDecl extends SyntaxBase {
 
   kind = SyntaxKind.FunctionDecl;
 
@@ -310,13 +386,13 @@ export class FunctionDecl {
     public span: TextSpan, 
     public parentNode: Syntax | null = null
   ) {
-
+    super();
   }
 
 
 }
 
-export class VariableDecl {
+export class VariableDecl extends SyntaxBase {
 
   kind = SyntaxKind.VariableDecl;
 
@@ -332,13 +408,13 @@ export class VariableDecl {
     public value: Expr | null,
     public span: TextSpan
   ) {
-
+    super();
   }
 
 }
 
 export type Decl
-  = Unexpanded
+  = Sentence 
   | FunctionDecl
   | VariableDecl
 
@@ -348,11 +424,24 @@ export type Syntax
   | SourceFile
   | QualName
 
-export class SourceFile {
+export class SourceFile extends SyntaxBase {
 
-  constructor(public elements: Decl[], public span: TextSpan) {
+  kind: SyntaxKind.SourceFile = SyntaxKind.SourceFile;
 
-  } 
+  constructor(
+    public elements: (Decl | Statement)[],
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON() {
+    return {
+      elements: this.elements.map(element => element.toJSON()),
+      span: this.span.toJSON(),
+    }
+  }
 
 }
 

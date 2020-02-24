@@ -2,6 +2,7 @@
 import XRegExp from "xregexp"
 
 import {
+  SyntaxKind,
   TextFile,
   TextPos,
   TextSpan,
@@ -9,7 +10,10 @@ import {
   Operator,
   PunctType,
   Token,
+  Decl,
   Punctuated,
+  Sentence,
+  SourceFile
 } from "./ast"
 
 function escapeChar(ch: string) {
@@ -168,7 +172,7 @@ export class Scanner {
     return text;
   }
 
-  scanToken() {
+  scanToken(): Token | null {
 
     while (true) {
 
@@ -248,7 +252,40 @@ export class Scanner {
 
   }
 
-  scanTokenList() {
+  scan() {
+
+    const elements: Decl[] = []
+    const startPos = this.currPos.clone()
+
+    while (true) {
+
+      const tokens: Token[] = [];
+
+      while (true) {
+        const token = this.scanToken();
+        if (token === null) {
+          break;
+        }
+        if (token.kind === SyntaxKind.Semi) {
+          break;
+        }
+        tokens.push(token)
+        if (token.kind === SyntaxKind.Punctuated && token.punctuator === PunctType.Brace) {
+          break;
+        }
+      }
+
+      if (tokens.length === 0) {
+        break;
+      }
+
+      elements.push(new Sentence(tokens, new TextSpan(this.file, tokens[0].span.start.clone(), tokens[tokens.length-1].span.end.clone())))
+
+    }
+
+    const endPos = this.currPos.clone();
+
+    return new SourceFile(elements, new TextSpan(this.file, startPos, endPos))
 
   }
 
