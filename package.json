@@ -3,6 +3,9 @@
   "version": "0.0.1",
   "description": "A programming language for rapid prototyping",
   "main": "lib/index.js",
+  "bin": {
+    "bolt": "lib/bin/bolt.js"
+  },
   "scripts": {
     "test": "mocha lib/test"
   },
@@ -10,6 +13,17 @@
   "license": "GPL-3.0",
   "repository": "https://github.com/samvv/Bolt",
   "dependencies": {
-    "pegjs": "^0.11.0-master.b7b87ea"
+    "@types/node": "^13.7.4",
+    "glob": "^7.1.6",
+    "pegjs": "^0.11.0-master.b7b87ea",
+    "reflect-metadata": "^0.1.13",
+    "xregexp": "^4.3.0",
+    "yargs": "^15.1.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^4.2.9",
+    "@types/mocha": "^7.0.1",
+    "chai": "^4.2.0",
+    "mocha": "^7.0.1"
   }
 }
