@@ -14,6 +14,7 @@
   "repository": "https://github.com/samvv/Bolt",
   "dependencies": {
     "@types/node": "^13.7.4",
+    "@types/yargs": "^15.0.3",
     "glob": "^7.1.6",
     "pegjs": "^0.11.0-master.b7b87ea",
     "reflect-metadata": "^0.1.13",
