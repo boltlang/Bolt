@@ -5,3 +5,6 @@ node_modules/
 # tsc
 /lib/
 
+# local development files
+Makefile
+
