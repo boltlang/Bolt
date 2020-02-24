@@ -7,11 +7,14 @@ import {
   TextPos,
   TextSpan,
   Identifier,
+  RArrow,
   Operator,
   PunctType,
   Token,
   Decl,
-  Punctuated,
+  Parenthesized,
+  Braced,
+  Bracketed,
   Sentence,
   SourceFile,
   Semi,
@@ -192,6 +195,7 @@ export class Scanner {
 
       const startPos = this.currPos.clone()
 
+
       switch (c0) {
         case ';':
           this.getChar();
@@ -202,7 +206,6 @@ export class Scanner {
         case ':':
           this.getChar();
           return new Colon(new TextSpan(this.file, startPos, this.currPos.clone()));
-
       }
 
       if (isOpenPunct(c0)) {
@@ -244,7 +247,16 @@ export class Scanner {
 
         const endPos = this.currPos.clone();
 
-        return new Punctuated(punctType, elements, new TextSpan(this.file, startPos, endPos));
+        switch (punctType) {
+          case PunctType.Brace:
+            return new Braced(elements, new TextSpan(this.file, startPos, endPos));
+          case PunctType.Paren:
+            return new Parenthesized(elements, new TextSpan(this.file, startPos, endPos));
+          case PunctType.Bracket:
+            return new Bracketed(elements, new TextSpan(this.file, startPos, endPos));
+          default:
+            throw new Error("Got an invalid state.")
+        }
 
       } else if (isIdentStart(c0)) {
 
@@ -256,7 +268,13 @@ export class Scanner {
 
         const text = this.takeWhile(isOperatorPart)
         const endPos = this.currPos.clone()
-        return new Operator(text, new TextSpan(this.file, startPos, endPos));
+        const span = new TextSpan(this.file, startPos, endPos);
+
+        if (text === '->') {
+          return new RArrow(span);
+        } else {
+          return new Operator(text, span);
+        }
 
       } else {
 
@@ -290,7 +308,7 @@ export class Scanner {
           break;
         }
         tokens.push(token)
-        if (token.kind === SyntaxKind.Punctuated && token.punctuator === PunctType.Brace) {
+        if (token.kind === SyntaxKind.Braced) {
           break;
         }
       }

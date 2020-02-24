@@ -1,9 +1,13 @@
 
 import "reflect-metadata"
 
+import { Stream } from "./util"
+
 interface JsonArray extends Array<Json> {  };
 interface JsonObject { [key: string]: Json }
-type Json = string | boolean | number | JsonArray | JsonObject;
+type Json = null | string | boolean | number | JsonArray | JsonObject;
+
+export type TokenStream = Stream<Token>;
 
 export enum SyntaxKind {
 
@@ -12,10 +16,15 @@ export enum SyntaxKind {
   Literal,
   Identifier,
   Operator,
-  Punctuated,
+  Parenthesized,
+  Braced,
+  Bracketed,
   Semi,
   Comma,
   Colon,
+  Dot,
+  RArrow,
+  EqSign,
 
   // Special nodes
 
@@ -25,9 +34,16 @@ export enum SyntaxKind {
 
   Sentence,
 
+  Param,
+
+  // Patterns
+
+  BindPatt,
+  ExprPatt,
+
   // Expressions
 
-  ConstantExpr,
+  ConstExpr,
   ReferenceExpr,
 
   // Statements
@@ -144,17 +160,15 @@ export enum PunctType {
   Brace,
 }
 
-export class Punctuated extends SyntaxBase {
+export class Parenthesized extends SyntaxBase {
 
-  kind: SyntaxKind.Punctuated = SyntaxKind.Punctuated
+  kind: SyntaxKind.Parenthesized = SyntaxKind.Parenthesized;
 
   static META = {
-    punctuator: EdgeType.Primitive,
     elements: EdgeType.Node | EdgeType.List
   }
 
   constructor(
-    public punctuator: PunctType,
     public elements: Token[],
     public span: TextSpan,
     public parentNode: Syntax | null = null
@@ -164,8 +178,58 @@ export class Punctuated extends SyntaxBase {
 
   toJSON(): Json {
     return {
-      kind: 'Punctuated',
-      punctuator: this.punctuator,
+      kind: 'Parenthesized',
+      elements: this.elements.map(element => element.toJSON()),
+    }
+  }
+
+}
+
+
+export class Braced extends SyntaxBase {
+
+  kind: SyntaxKind.Braced = SyntaxKind.Braced;
+
+  static META = {
+    elements: EdgeType.Node | EdgeType.List
+  }
+
+  constructor(
+    public elements: Token[],
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'Braced',
+      elements: this.elements.map(element => element.toJSON()),
+    }
+  }
+
+}
+
+export class Bracketed extends SyntaxBase {
+
+  kind: SyntaxKind.Bracketed = SyntaxKind.Bracketed;
+
+  static META = {
+    elements: EdgeType.Node | EdgeType.List
+  }
+
+  constructor(
+    public elements: Token[],
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'Bracketed',
       elements: this.elements.map(element => element.toJSON()),
     }
   }
@@ -209,6 +273,7 @@ export class Operator extends SyntaxBase {
   constructor(
     public text: string,
     public span: TextSpan,
+    public origNode: Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -218,7 +283,7 @@ export class Operator extends SyntaxBase {
     return {
       kind: 'Operator',
       text: this.text,
-      span: this.span.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
     }
   }
 
@@ -229,16 +294,17 @@ export class Semi extends SyntaxBase {
   kind: SyntaxKind.Semi = SyntaxKind.Semi;
 
   constructor(
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
 
-  toJSON() {
+  toJSON(): Json {
     return {
       kind: 'Semi',
-      span: this.span.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
     }
   }
 
@@ -250,15 +316,16 @@ export class Colon extends SyntaxBase {
 
   constructor(
     public span: TextSpan,
+    public origNode: Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
 
-  toJSON() {
+  toJSON(): Json {
     return {
       kind: 'Colon',
-      span: this.span.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
     }
   }
 
@@ -269,7 +336,74 @@ export class Comma extends SyntaxBase {
   kind: SyntaxKind.Comma = SyntaxKind.Comma;
 
   constructor(
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'Comma',
+      span: this.span !== null ? this.span.toJSON() : null,
+    }
+  }
+
+}
+
+
+export class RArrow extends SyntaxBase {
+
+  kind: SyntaxKind.RArrow = SyntaxKind.RArrow;
+
+  constructor(
+    public span: TextSpan | null = null,
+    public origNode: Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'RArrow',
+      span: this.span !== null ? this.span.toJSON() : null,
+    }
+  }
+
+}
+
+
+
+export class EqSign extends SyntaxBase {
+
+  kind: SyntaxKind.EqSign = SyntaxKind.EqSign;
+
+  constructor(
+    public span: TextSpan | null = null,
+    public origNode: Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'EqSign',
+      span: this.span !== null ? this.span.toJSON() : null,
+    }
+  }
+
+}
+
+export class Dot extends SyntaxBase {
+
+  kind: SyntaxKind.Dot = SyntaxKind.Dot;
+
+  constructor(
+    public span: TextSpan | null = null,
+    public origNode: Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -277,8 +411,8 @@ export class Comma extends SyntaxBase {
 
   toJSON() {
     return {
-      kind: 'Comma',
-      span: this.span.toJSON(),
+      kind: 'Dot',
+      span: this.span !== null ? this.span.toJSON() : null,
     }
   }
 
@@ -286,10 +420,17 @@ export class Comma extends SyntaxBase {
 
 export type Token
   = Semi
+  | Comma
+  | Colon
+  | EqSign
+  | Dot
+  | RArrow
   | Identifier
   | Operator
   | Literal
-  | Punctuated
+  | Parenthesized
+  | Braced
+  | Bracketed
 
 export class Sentence extends SyntaxBase {
 
@@ -323,7 +464,7 @@ export class QualName {
   }
 
   constructor(
-    public name: string,
+    public name: Identifier | Operator,
     public path: Identifier[],
     public span: TextSpan,
     public parentNode: Syntax | null = null
@@ -333,9 +474,48 @@ export class QualName {
 
 }
 
-export class ConstantExpr {
+export class Param extends SyntaxBase {
 
-  kind = SyntaxKind.ConstantExpr;
+  kind: SyntaxKind.Param = SyntaxKind.Param;
+
+  constructor(
+    public bindings: Pattern,
+    public typeDecl: TypeDecl | null,
+    public defaultValue: Expr | null,
+    public span: TextSpan | null = null,
+    public parentNode: Syntax | null = null,
+  ) {
+    super();
+  }
+
+}
+
+export class BindPatt extends SyntaxBase {
+
+  kind: SyntaxKind.BindPatt = SyntaxKind.BindPatt;
+
+  constructor(
+    public name: Identifier,
+    public span: TextSpan | null = null,
+    public origNode: Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON() {
+    return {
+      kind: 'BindPatt',
+      name: this.name.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
+    }
+  }
+
+}
+
+export class ConstExpr {
+
+  kind = SyntaxKind.ConstExpr;
 
   static META = {
     value: EdgeType.Primitive,
@@ -352,7 +532,7 @@ export class ConstantExpr {
 }
 
 export type Expr
-  = ConstantExpr
+  = ConstExpr
 
 class ReturnStatement extends SyntaxBase {
 
@@ -463,6 +643,7 @@ export type Decl
 export type Syntax
   = Decl
   | Expr
+  | Token
   | SourceFile
   | QualName
 
