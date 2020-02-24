@@ -14,6 +14,8 @@ export enum SyntaxKind {
   Operator,
   Punctuated,
   Semi,
+  Comma,
+  Colon,
 
   // Special nodes
 
@@ -236,6 +238,46 @@ export class Semi extends SyntaxBase {
   toJSON() {
     return {
       kind: 'Semi',
+      span: this.span.toJSON(),
+    }
+  }
+
+}
+
+export class Colon extends SyntaxBase {
+  
+  kind: SyntaxKind.Colon = SyntaxKind.Colon;
+
+  constructor(
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON() {
+    return {
+      kind: 'Colon',
+      span: this.span.toJSON(),
+    }
+  }
+
+}
+
+export class Comma extends SyntaxBase {
+
+  kind: SyntaxKind.Comma = SyntaxKind.Comma;
+
+  constructor(
+    public span: TextSpan,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON() {
+    return {
+      kind: 'Comma',
       span: this.span.toJSON(),
     }
   }

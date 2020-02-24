@@ -13,7 +13,10 @@ import {
   Decl,
   Punctuated,
   Sentence,
-  SourceFile
+  SourceFile,
+  Semi,
+  Comma,
+  Colon
 } from "./ast"
 
 function escapeChar(ch: string) {
@@ -189,6 +192,19 @@ export class Scanner {
 
       const startPos = this.currPos.clone()
 
+      switch (c0) {
+        case ';':
+          this.getChar();
+          return new Semi(new TextSpan(this.file, startPos, this.currPos.clone()));
+        case ',':
+          this.getChar();
+          return new Comma(new TextSpan(this.file, startPos, this.currPos.clone()));
+        case ':':
+          this.getChar();
+          return new Colon(new TextSpan(this.file, startPos, this.currPos.clone()));
+
+      }
+
       if (isOpenPunct(c0)) {
 
         this.getChar();
@@ -257,14 +273,18 @@ export class Scanner {
     const elements: Decl[] = []
     const startPos = this.currPos.clone()
 
-    while (true) {
+    outer: while (true) {
 
       const tokens: Token[] = [];
 
-      while (true) {
+      inner: while (true) {
         const token = this.scanToken();
         if (token === null) {
-          break;
+          if (tokens.length === 0) {
+            break outer;
+          } else {
+            break inner;
+          }  
         }
         if (token.kind === SyntaxKind.Semi) {
           break;
@@ -275,11 +295,9 @@ export class Scanner {
         }
       }
 
-      if (tokens.length === 0) {
-        break;
+      if (tokens.length > 0) {
+        elements.push(new Sentence(tokens, new TextSpan(this.file, tokens[0].span.start.clone(), tokens[tokens.length-1].span.end.clone())))
       }
-
-      elements.push(new Sentence(tokens, new TextSpan(this.file, tokens[0].span.start.clone(), tokens[tokens.length-1].span.end.clone())))
 
     }
 
