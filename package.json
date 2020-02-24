@@ -1,0 +1,11 @@
+{
+  "name": "@samvv/bolt",
+  "version": "0.0.1",
+  "description": "A programming language for rapid prototyping",
+  "main": "lib/index.js",
+  "scripts": {
+    "test": "mocha lib/test"
+  },
+  "author": "Sam Vervaeck <vervaeck.sam@skynet.be>",
+  "license": "GPL-3.0"
+}
