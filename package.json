@@ -18,6 +18,7 @@
     "glob": "^7.1.6",
     "pegjs": "^0.11.0-master.b7b87ea",
     "reflect-metadata": "^0.1.13",
+    "source-map-support": "^0.5.16",
     "xregexp": "^4.3.0",
     "yargs": "^15.1.0"
   },
