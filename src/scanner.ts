@@ -196,6 +196,11 @@ export class Scanner {
 
           const c1 = this.peekChar();
 
+          if (isWhiteSpace(c1)) {
+            this.getChar()
+            continue;
+          }
+
           if (c1 === EOF) {
             throw new ScanError(this.file, this.currPos.clone(), EOF)
           }
