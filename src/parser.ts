@@ -72,7 +72,7 @@ function enumerate(elements: string[]) {
 
 export class ParseError extends Error {
   constructor(public actual: Token, public expected: SyntaxKind[]) {
-    super(`${actual.span.file.path}:${actual.span.start.line}:${actual.span.start.column}: got ${describeKind(actual.kind)} but expected ${enumerate(expected.map(e => describeKind(e)))}`)
+    super(`${actual.span.file.path}:${actual.span.start.line}:${actual.span.start.column}: expected ${enumerate(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`)
   }
 }
 
