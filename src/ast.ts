@@ -1,13 +1,23 @@
 
-import "reflect-metadata"
-
-import { Stream } from "./util"
+import { Stream, StreamWrapper } from "./util"
 
 interface JsonArray extends Array<Json> {  };
 interface JsonObject { [key: string]: Json }
 type Json = null | string | boolean | number | JsonArray | JsonObject;
 
 export type TokenStream = Stream<Token>;
+
+function jsonify(value: any): Json {
+  if (value === null || typeof value === 'string' || typeof value === 'number') {
+    return value;
+  } else if (Array.isArray(value)) {
+    return value.map(element => jsonify(element));
+  } else if (typeof value === 'object' && 'toJSON' in value) {
+    return value.toJSON();
+  } else {
+    throw new Error(`I don't know how to convert ${value} to a JSON representation`)
+  }
+}
 
 export enum SyntaxKind {
 
@@ -36,6 +46,8 @@ export enum SyntaxKind {
 
   Param,
 
+  EOS,
+
   // Patterns
 
   BindPatt,
@@ -44,20 +56,20 @@ export enum SyntaxKind {
   // Expressions
 
   ConstExpr,
-  ReferenceExpr,
+  RefExpr,
 
-  // Statements
+  // Stmts
 
-  ReturnStatement,
+  RetStmt,
 
   // Type declarations
 
-  TypeReference,
+  TypeRef,
 
   // Declaration nodes
 
-  VariableDecl,
-  FunctionDecl,
+  VarDecl,
+  FuncDecl,
 
 }
 
@@ -125,8 +137,27 @@ export class TextSpan {
 }
 
 abstract class SyntaxBase {
+
   abstract kind: SyntaxKind;
+  abstract origNode: [Syntax, Syntax] | Syntax | null;
   abstract parentNode: Syntax | null;
+  abstract span: TextSpan | null;
+
+  getSpan() {
+
+    let curr: Syntax | null = this as any as Syntax;
+
+    do {
+      if (curr.span !== null ) {
+        return curr.span;
+      }
+      curr = curr.origNode
+    } while (curr !== null)
+
+    throw new Error(`No TextSpan object found in this node or any of its originating nodes.`);
+
+  }
+
 }
 
 export class Literal extends SyntaxBase {
@@ -139,7 +170,8 @@ export class Literal extends SyntaxBase {
 
   constructor(
     public value: string | bigint,
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -147,8 +179,9 @@ export class Literal extends SyntaxBase {
 
   toJSON(): Json {
     return {
-      value: typeof this.value === 'bigint' ? Number(this.value) : this.value,
-      span: this.span.toJSON(),
+      value: typeof this.value === 'bigint' ? { type: 'bigint', value: this.value.toString() } : this.value,
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -158,6 +191,26 @@ export enum PunctType {
   Paren,
   Bracket,
   Brace,
+}
+
+class EOS extends SyntaxBase {
+
+  kind: SyntaxKind.EOS = SyntaxKind.EOS;
+
+  constructor(
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON() {
+    return {
+      kind: 'EOS'
+    }
+  }
+
 }
 
 export class Parenthesized extends SyntaxBase {
@@ -171,15 +224,25 @@ export class Parenthesized extends SyntaxBase {
   constructor(
     public elements: Token[],
     public span: TextSpan,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
+  }
+
+  toStream() {
+    return new StreamWrapper(
+      this.elements,
+      () => new EOS(new TextSpan(this.getSpan().file, this.getSpan().end.clone(), this.getSpan().end.clone()))
+    );
   }
 
   toJSON(): Json {
     return {
       kind: 'Parenthesized',
       elements: this.elements.map(element => element.toJSON()),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -197,15 +260,25 @@ export class Braced extends SyntaxBase {
   constructor(
     public elements: Token[],
     public span: TextSpan,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
+  }
+
+  toStream() {
+    return new StreamWrapper(
+      this.elements,
+      () => new EOS(new TextSpan(this.getSpan().file, this.getSpan().end.clone(), this.getSpan().end.clone()))
+    );
   }
 
   toJSON(): Json {
     return {
       kind: 'Braced',
       elements: this.elements.map(element => element.toJSON()),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -222,15 +295,25 @@ export class Bracketed extends SyntaxBase {
   constructor(
     public elements: Token[],
     public span: TextSpan,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
+  }
+
+  toStream() {
+    return new StreamWrapper(
+      this.elements,
+      () => new EOS(new TextSpan(this.getSpan().file, this.getSpan().end.clone(), this.getSpan().end.clone()))
+    );
   }
 
   toJSON(): Json {
     return {
       kind: 'Bracketed',
       elements: this.elements.map(element => element.toJSON()),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -246,7 +329,8 @@ export class Identifier extends SyntaxBase {
 
   constructor(
     public text: string,
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -256,7 +340,8 @@ export class Identifier extends SyntaxBase {
     return {
       kind: 'Identifier',
       text: this.text,
-      span: this.span.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -272,8 +357,8 @@ export class Operator extends SyntaxBase {
 
   constructor(
     public text: string,
-    public span: TextSpan,
-    public origNode: Syntax | null = null,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -284,6 +369,7 @@ export class Operator extends SyntaxBase {
       kind: 'Operator',
       text: this.text,
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -295,7 +381,7 @@ export class Semi extends SyntaxBase {
 
   constructor(
     public span: TextSpan | null = null,
-    public origNode: Syntax | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -305,6 +391,7 @@ export class Semi extends SyntaxBase {
     return {
       kind: 'Semi',
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -315,8 +402,8 @@ export class Colon extends SyntaxBase {
   kind: SyntaxKind.Colon = SyntaxKind.Colon;
 
   constructor(
-    public span: TextSpan,
-    public origNode: Syntax | null = null,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -326,6 +413,7 @@ export class Colon extends SyntaxBase {
     return {
       kind: 'Colon',
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -337,7 +425,7 @@ export class Comma extends SyntaxBase {
 
   constructor(
     public span: TextSpan | null = null,
-    public origNode: Syntax | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -347,6 +435,7 @@ export class Comma extends SyntaxBase {
     return {
       kind: 'Comma',
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -359,7 +448,7 @@ export class RArrow extends SyntaxBase {
 
   constructor(
     public span: TextSpan | null = null,
-    public origNode: Syntax | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -369,6 +458,7 @@ export class RArrow extends SyntaxBase {
     return {
       kind: 'RArrow',
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -382,7 +472,7 @@ export class EqSign extends SyntaxBase {
 
   constructor(
     public span: TextSpan | null = null,
-    public origNode: Syntax | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
@@ -392,6 +482,7 @@ export class EqSign extends SyntaxBase {
     return {
       kind: 'EqSign',
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -403,16 +494,17 @@ export class Dot extends SyntaxBase {
 
   constructor(
     public span: TextSpan | null = null,
-    public origNode: Syntax | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
 
-  toJSON() {
+  toJSON(): Json {
     return {
       kind: 'Dot',
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -425,6 +517,7 @@ export type Token
   | EqSign
   | Dot
   | RArrow
+  | EOS
   | Identifier
   | Operator
   | Literal
@@ -434,21 +527,30 @@ export type Token
 
 export class Sentence extends SyntaxBase {
 
-  kind = SyntaxKind.Sentence;
+  kind: SyntaxKind.Sentence = SyntaxKind.Sentence;
 
   constructor(
     public tokens: Token[],
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
+  }
+
+  toStream() {
+    return new StreamWrapper(
+      this.tokens,
+      () => new EOS(new TextSpan(this.getSpan().file, this.getSpan().end.clone(), this.getSpan().end.clone()))
+    );
   }
 
   toJSON(): Json {
     return {
       kind: 'Sentence',
       tokens: this.tokens.map(token => token.toJSON()),
-      span: this.span.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -466,10 +568,21 @@ export class QualName {
   constructor(
     public name: Identifier | Operator,
     public path: Identifier[],
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
 
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'QualName',
+      name: this.name.toJSON(),
+      path: this.path.map(p => p.toJSON()),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
+    }
   }
 
 }
@@ -479,13 +592,25 @@ export class Param extends SyntaxBase {
   kind: SyntaxKind.Param = SyntaxKind.Param;
 
   constructor(
-    public bindings: Pattern,
+    public bindings: Patt,
     public typeDecl: TypeDecl | null,
     public defaultValue: Expr | null,
     public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null,
   ) {
     super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'Param',
+      bindings: this.bindings.toJSON(),
+      typeDecl: this.typeDecl !== null ? this.typeDecl.toJSON() : null,
+      defaultValue: this.defaultValue !== null ? this.defaultValue.toJSON() : null,
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
+    }
   }
 
 }
@@ -497,25 +622,53 @@ export class BindPatt extends SyntaxBase {
   constructor(
     public name: Identifier,
     public span: TextSpan | null = null,
-    public origNode: Syntax | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
 
-  toJSON() {
+  toJSON(): Json {
     return {
       kind: 'BindPatt',
       name: this.name.toJSON(),
       span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
 }
 
-export class ConstExpr {
+export type Patt
+  = BindPatt
 
-  kind = SyntaxKind.ConstExpr;
+export class RefExpr extends SyntaxBase {
+
+  kind: SyntaxKind.RefExpr = SyntaxKind.RefExpr;
+
+  constructor(
+    public name: QualName,
+    public span: TextSpan | null = null, 
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  toJSON(): Json {
+    return {
+      kind: 'RefExpr',
+      name: this.name.toJSON(),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+    }
+  }
+
+}
+
+export class ConstExpr extends SyntaxBase {
+
+  kind: SyntaxKind.ConstExpr = SyntaxKind.ConstExpr;
 
   static META = {
     value: EdgeType.Primitive,
@@ -523,36 +676,58 @@ export class ConstExpr {
 
   constructor(
     public value: string | bigint, 
-    public span: TextSpan, 
+    public span: TextSpan | null = null, 
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
+    super();
+  }
 
+  toJSON(): Json {
+    return {
+      kind: 'ConstExpr',
+      value: typeof this.value === 'bigint' ? { 'type': 'bigint', value: this.value.toString() } : this.value,
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+    }
   }
 
 }
 
 export type Expr
   = ConstExpr
+  | RefExpr
 
-class ReturnStatement extends SyntaxBase {
+export class RetStmt extends SyntaxBase {
 
-  kind: SyntaxKind.ReturnStatement = SyntaxKind.ReturnStatement;
+  kind: SyntaxKind.RetStmt = SyntaxKind.RetStmt;
 
   constructor(
     public value: Expr | null,
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
+
+  toJSON(): Json {
+    return {
+      kind: 'RetStmt',
+      value: this.value !== null ? this.value.toJSON() : null,
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+    }
+  }
+
 }
 
-export type Statement
-  = ReturnStatement
+export type Stmt
+  = RetStmt
 
-export class TypeReference {
+export class TypeRef extends SyntaxBase {
 
-  kind: SyntaxKind.TypeReference = SyntaxKind.TypeReference;
+  kind: SyntaxKind.TypeRef = SyntaxKind.TypeRef;
 
   static META = {
     name: EdgeType.Node,
@@ -562,16 +737,27 @@ export class TypeReference {
   constructor(
     public name: QualName,
     public args: TypeDecl[],
-    public span: TextSpan,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
+    super();
+  }
 
+  toJSON(): Json {
+    return {
+      kind: 'TypeRef',
+      name: this.name.toJSON(),
+      args: this.args.map(a => a.toJSON()),
+      span: this.span !== null ? this.span.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+    }
   }
 
 }
 
 export type TypeDecl
-  = TypeReference
+  = TypeRef
 
 // export class Unexpanded {
 // 
@@ -589,9 +775,9 @@ export type TypeDecl
 // 
 // }
 
-export class FunctionDecl extends SyntaxBase {
+export class FuncDecl extends SyntaxBase {
 
-  kind = SyntaxKind.FunctionDecl;
+  kind: SyntaxKind.FuncDecl = SyntaxKind.FuncDecl;
 
   static META = {
     name: EdgeType.Node,
@@ -604,19 +790,31 @@ export class FunctionDecl extends SyntaxBase {
     public name: QualName, 
     public params: Param[],
     public returnType: TypeDecl | null,
-    public body: Statement[] | null,
-    public span: TextSpan, 
+    public body: Stmt[] | null,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
 
+  toJSON(): Json {
+    return {
+      kind: 'FuncDecl',
+      name: this.name.toJSON(),
+      params: this.params.map(p => p.toJSON()),
+      returnType: this.returnType !== null ? this.returnType.toJSON() : null,
+      body: this.body !== null ? this.body.map(s => s.toJSON()) : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+      span: this.span !== null ? this.span.toJSON() : this.span,
+    }
+  }
 
 }
 
-export class VariableDecl extends SyntaxBase {
+export class VarDecl extends SyntaxBase {
 
-  kind = SyntaxKind.VariableDecl;
+  kind: SyntaxKind.VarDecl = SyntaxKind.VarDecl;
 
   static META = {
     bindings: EdgeType.Node,
@@ -625,20 +823,33 @@ export class VariableDecl extends SyntaxBase {
   }
 
   constructor(
-    public bindings: Pattern, 
+    public bindings: Patt, 
     public typeDecl: TypeDecl | null,
     public value: Expr | null,
-    public span: TextSpan
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
+    public parentNode: Syntax | null = null
   ) {
     super();
+  }
+
+  toJSON(): Json {
+    return {
+      type: 'VarDecl',
+      bindings: this.bindings.toJSON(),
+      typeDecl: this.typeDecl !== null ? this.typeDecl.toJSON() : null,
+      value: this.value !== null ? this.value.toJSON() : null,
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+      span: this.span !== null ? this.span.toJSON() : this.span,
+    }
   }
 
 }
 
 export type Decl
   = Sentence 
-  | FunctionDecl
-  | VariableDecl
+  | FuncDecl
+  | VarDecl
 
 export type Syntax
   = Decl
@@ -646,23 +857,28 @@ export type Syntax
   | Token
   | SourceFile
   | QualName
+  | Param
+  | EOS
 
 export class SourceFile extends SyntaxBase {
 
   kind: SyntaxKind.SourceFile = SyntaxKind.SourceFile;
 
   constructor(
-    public elements: (Decl | Statement)[],
-    public span: TextSpan,
+    public elements: (Decl | Stmt)[],
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
   ) {
     super();
   }
 
-  toJSON() {
+  toJSON(): Json {
     return {
+      kind: 'SourceFile',
       elements: this.elements.map(element => element.toJSON()),
-      span: this.span.toJSON(),
+      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
+      span: this.span !== null ? this.span.toJSON() : null,
     }
   }
 
