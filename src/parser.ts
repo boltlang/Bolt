@@ -1,4 +1,6 @@
 
+import * as acorn from "acorn"
+
 import {
   Syntax,
   Token, 
@@ -17,7 +19,9 @@ import {
   TypeRef,
   TypeDecl,
   ConstExpr,
-  QualName
+  QualName,
+  ForeignDecl,
+  CallExpr,
 } from "./ast"
 
 function describeKind(kind: SyntaxKind): string {
@@ -26,8 +30,16 @@ function describeKind(kind: SyntaxKind): string {
       return "an identifier"
     case SyntaxKind.Operator:
       return "an operator"
-    case SyntaxKind.Literal:
-      return "a constant literal"
+    case SyntaxKind.StringLiteral:
+      return "a string"
+    case SyntaxKind.IntegerLiteral:
+      return "an integer"
+    case SyntaxKind.FunctionKeyword:
+      return "'fn'"
+    case SyntaxKind.ForeignKeyword:
+      return "'foreign'"
+    case SyntaxKind.LetKeyword:
+      return "'let'"
     case SyntaxKind.Semi:
       return "';'"
     case SyntaxKind.Colon:
@@ -42,8 +54,10 @@ function describeKind(kind: SyntaxKind): string {
       return "'[' .. ']'"
     case SyntaxKind.Parenthesized:
       return "'(' .. ')'"
+    case SyntaxKind.EOS:
+      return "'}', ')', ']' or end-of-file"
     default:
-      return "a token"
+      throw new Error(`failed to describe ${SyntaxKind[kind]}`)
   }
 }
 
@@ -51,7 +65,7 @@ function enumerate(elements: string[]) {
   if (elements.length === 1) {
     return elements[0]
   } else {
-    return elements.slice(0, elements.length-2).join(',') + ' or ' + elements[elements.length-1]
+    return elements.slice(0, elements.length-1).join(',') + ' or ' + elements[elements.length-1]
   }
 }
 
@@ -112,17 +126,21 @@ export class Parser {
     }
   }
 
-  parseExpr(tokens: TokenStream): Expr {
+  parsePrimExpr(tokens: TokenStream): Expr {
     const t0 = tokens.peek();
-    if (t0.kind === SyntaxKind.Literal) {
+    if (t0.kind === SyntaxKind.StringLiteral) {
+      tokens.get();
       return new ConstExpr(t0.value, null, t0);
-    
     } else if (t0.kind === SyntaxKind.Identifier) {
       const name = this.parseQualName(tokens);
       return new RefExpr(name, null, name.origNode);
     } else {
-      throw new ParseError(t0, [SyntaxKind.Literal, SyntaxKind.Identifier]);
+      throw new ParseError(t0, [SyntaxKind.StringLiteral, SyntaxKind.Identifier]);
     }
+  }
+
+  parseExpr(tokens: TokenStream) {
+    return this.parsePrimExpr(tokens)
   }
 
   parseParam(tokens: TokenStream) {
@@ -151,6 +169,9 @@ export class Parser {
   }
 
   parseVarDecl(tokens: TokenStream): VarDecl {
+
+    // Assuming first token is 'let'
+    tokens.get();
 
   }
 
@@ -183,13 +204,30 @@ export class Parser {
 
   parseFuncDecl(tokens: TokenStream, origNode: Syntax | null) {
 
-    // Assuming the first identifier is the 'fn' keyword
-    tokens.get();
+    let target = "Bolt";
+
+    const k0 = tokens.get();
+    if (k0.kind !== SyntaxKind.Identifier) {
+      throw new ParseError(k0, [SyntaxKind.ForeignKeyword, SyntaxKind.FunctionKeyword])
+    }
+    if (k0.text === 'foreign') {
+      const l1 = tokens.get();
+      if (l1.kind !== SyntaxKind.StringLiteral) {
+        throw new ParseError(l1, [SyntaxKind.StringLiteral])
+      }
+      target = l1.value;
+    }
+    const k1 = tokens.get();
+    if (k1.text !== 'fn') {
+      throw new ParseError(k1, [SyntaxKind.FunctionKeyword])
+    }
 
     let name: QualName;
     let returnType = null;
     let body = null;
     let params: Param[] = [];
+
+    // Parse parameters
 
     const t0 = tokens.peek(1);
     const t1 = tokens.peek(2);
@@ -204,7 +242,7 @@ export class Parser {
         return new Param(new BindPatt(t0, null, t0), null, null, null, t0)
       } else if (t0.kind === SyntaxKind.Parenthesized) {
         tokens.get();
-        const innerTokens = t0.toStream();
+        const innerTokens = t0.toTokenStream();
         const param = this.parseParam(innerTokens)
         this.assertEmpty(innerTokens);
         return param
@@ -212,8 +250,6 @@ export class Parser {
         throw new ParseError(t0, [SyntaxKind.Identifier, SyntaxKind.Parenthesized])
       }
     }
-
-    // Parse parameters
 
     if (t0.kind === SyntaxKind.Operator) {
 
@@ -242,7 +278,7 @@ export class Parser {
       name = this.parseQualName(tokens)
       const t2 = tokens.get();
       if (t2.kind === SyntaxKind.Parenthesized) {
-        const innerTokens = t2.toStream();
+        const innerTokens = t2.toTokenStream();
         while (true) {
           const t3 = innerTokens.peek();
           if (t3.kind === SyntaxKind.EOS) {
@@ -271,25 +307,58 @@ export class Parser {
     const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.RArrow) {
       tokens.get();
-      returnType = this.parseTypeDecl(tokens, t2);
+      returnType = this.parseTypeDecl(tokens);
     }
 
     // Parse function body
 
     const t3 = tokens.peek();
     if (t3.kind === SyntaxKind.Braced) {
-      body = this.parseStmts(tokens, t3);
+      tokens.get();
+      switch (target) {
+        case "Bolt":
+          body = this.parseStmts(tokens, t3);
+          break;
+        case "JS":
+          body = acorn.parse(t3.text).body;
+          break;
+        default:
+          throw new Error(`Unrecognised language: ${target}`);
+      }
     }
 
-    return new FuncDecl(name, params, returnType, body, null, origNode)
+    return new FuncDecl(target, name, params, returnType, body, null, origNode)
 
   }
 
-  parseDecl(tokens: TokenStream, origNode: Syntax | null) {
-    const t0 = tokens.peek(1);   
-    if (t0.kind === SyntaxKind.Identifier && t0.text === 'fn') {
-      this.parseFuncDecl(tokens, origNode)
+  parseCallExpr(tokens: TokenStream) {
+
+    const operator = this.parsePrimExpr(tokens)
+    const args: Expr[] = []
+
+    const t2 = tokens.get();
+    if (t2.kind !== SyntaxKind.Parenthesized) {
+      throw new ParseError(t2, [SyntaxKind.Parenthesized])
     }
+
+    const innerTokens = t2.toTokenStream();
+
+    while (true) {
+      const t3 = innerTokens.peek();
+      if (t3.kind === SyntaxKind.EOS) {
+        break; 
+      }
+      args.push(this.parseExpr(innerTokens))
+      const t4 = innerTokens.get();
+      if (t4.kind === SyntaxKind.EOS) {
+        break
+      } else if (t4.kind !== SyntaxKind.Comma){
+        throw new ParseError(t4, [SyntaxKind.Comma])
+      }
+    }
+
+    return new CallExpr(operator, args, null)
+
   }
 
 }

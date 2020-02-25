@@ -18,6 +18,7 @@ export class Expander {
 
   constructor(public parser: Parser) {
     this.transformers.set('fn', parser.parseFuncDecl.bind(parser))
+    this.transformers.set('foreign', parser.parseFuncDecl.bind(parser))
     this.transformers.set('let', parser.parseVarDecl.bind(parser))
     this.transformers.set('return', parser.parseRetStmt.bind(parser))
   }
@@ -41,7 +42,7 @@ export class Expander {
 
         console.log('expanding sententce')
 
-        const tokens: TokenStream = node.toStream()
+        const tokens: TokenStream = node.toTokenStream()
 
         const t0 = tokens.peek();
         if (t0.kind !== SyntaxKind.Identifier) {
@@ -49,7 +50,7 @@ export class Expander {
         }
 
         if (!this.transformers.has(t0.text)) {
-          throw new Error(`the macro '${t0.text}' does not seem to exist`)
+          return this.parser.parseCallExpr(tokens)
         }
 
         node = this.transformers.get(t0.text)!(tokens)

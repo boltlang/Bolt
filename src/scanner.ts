@@ -19,7 +19,10 @@ import {
   SourceFile,
   Semi,
   Comma,
-  Colon
+  StringLiteral,
+  IntegerLiteral,
+  Colon,
+  EOS,
 } from "./ast"
 
 function escapeChar(ch: string) {
@@ -57,7 +60,7 @@ function getPunctType(ch: string) {
     case '}':
       return PunctType.Brace;
     default:
-      throw new Error(`given character is not a valid punctuator`)
+      return null;
   }
 }
 
@@ -123,11 +126,12 @@ const EOF = ''
 export class Scanner {
 
   protected buffer: string[] = [];
-  protected currPos = new TextPos(0,1,1);
+  protected scanned: Token[] = [];
+  protected currPos: TextPos;
   protected offset = 0;
 
-  constructor(public file: TextFile, public input: string) {
-    
+  constructor(public file: TextFile, public input: string, startPos = new TextPos(0,1,1)) {
+    this.currPos = startPos;
   }
 
   protected readChar() {
@@ -178,7 +182,7 @@ export class Scanner {
     return text;
   }
 
-  scanToken(): Token | null {
+  scanToken(): Token {
 
     while (true) {
 
@@ -189,12 +193,11 @@ export class Scanner {
         continue;
       }
 
-      if (c0 == EOF) {
-        return null;
-      }
-
       const startPos = this.currPos.clone()
 
+      if (c0 == EOF) {
+        return new EOS(new TextSpan(this.file, startPos, startPos));
+      }
 
       switch (c0) {
         case ';':
@@ -208,40 +211,57 @@ export class Scanner {
           return new Colon(new TextSpan(this.file, startPos, this.currPos.clone()));
       }
 
-      if (isOpenPunct(c0)) {
+      if (c0 === '"') {
+
+        this.getChar();
+
+        let text = ''
+
+        while (true) {
+          const c1 = this.getChar();
+          if (c1 === EOF) {
+            throw new ScanError(this.file, this.currPos.clone(), EOF);
+          }
+          if (c1 === '"') {
+            break;
+          } else if (c1 === '\\') {
+            this.scanEscapeSequence()
+          } else {
+            text += c1
+          }
+        }
+
+        const endPos = this.currPos.clone();
+
+        return new StringLiteral(text, new TextSpan(this.file, startPos, endPos))
+
+      } else if (isOpenPunct(c0)) {
 
         this.getChar();
 
         const punctType = getPunctType(c0);
-        const elements: Token[] = [];
+        let punctCount = 1;
+        let text = ''
 
         while (true) {
 
-          const c1 = this.peekChar();
-
-          if (isWhiteSpace(c1)) {
-            this.getChar()
-            continue;
-          }
+          const c1 = this.getChar();
 
           if (c1 === EOF) {
             throw new ScanError(this.file, this.currPos.clone(), EOF)
           }
 
-          if (isClosePunct(c1)) {
-            if (punctType == getPunctType(c1)) {
-              this.getChar();
-              break;
+          if (punctType == getPunctType(c1)) {
+            if (isClosePunct(c1)) {
+              punctCount--;
+              if (punctCount === 0)
+                break;
             } else {
-              throw new ScanError(this.file, this.currPos, c1);
+              punctCount++;
             }
           }
 
-          const token = this.scanToken();
-          if (token === null) {
-            throw new ScanError(this.file, this.currPos.clone(), EOF)
-          }
-          elements.push(token!);
+          text += c1
 
         }
 
@@ -249,11 +269,11 @@ export class Scanner {
 
         switch (punctType) {
           case PunctType.Brace:
-            return new Braced(elements, new TextSpan(this.file, startPos, endPos));
+            return new Braced(text, new TextSpan(this.file, startPos, endPos));
           case PunctType.Paren:
-            return new Parenthesized(elements, new TextSpan(this.file, startPos, endPos));
+            return new Parenthesized(text, new TextSpan(this.file, startPos, endPos));
           case PunctType.Bracket:
-            return new Bracketed(elements, new TextSpan(this.file, startPos, endPos));
+            return new Bracketed(text, new TextSpan(this.file, startPos, endPos));
           default:
             throw new Error("Got an invalid state.")
         }
@@ -286,6 +306,19 @@ export class Scanner {
 
   }
 
+  peek(count = 1): Token {
+    while (this.scanned.length < count) {
+      this.scanned.push(this.scanToken());
+    }
+    return this.scanned[count - 1];
+  }
+
+  get(): Token {
+    return this.scanned.length > 0
+      ? this.scanned.shift()!
+      : this.scanToken();
+  }
+
   scan() {
 
     const elements: Decl[] = []
@@ -297,7 +330,7 @@ export class Scanner {
 
       inner: while (true) {
         const token = this.scanToken();
-        if (token === null) {
+        if (token.kind === SyntaxKind.EOS) {
           if (tokens.length === 0) {
             break outer;
           } else {
@@ -326,4 +359,3 @@ export class Scanner {
   }
 
 }
-

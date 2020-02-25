@@ -3,16 +3,21 @@
 import "reflect-metadata"
 import "source-map-support/register"
 
-import * as fs from "fs"
+import * as path from "path"
+import * as fs from "fs-extra"
+import { spawnSync } from "child_process"
 
 import yargs from "yargs"
 
 import { Scanner } from "../scanner"
 import { Parser } from "../parser"
 import { Expander } from "../expander"
-import { Token, TextFile, SourceFile } from "../ast"
+import { TypeChecker } from "../checker"
+import { Compiler } from "../compiler"
+import { Emitter } from "../emitter"
+import { TextFile, SourceFile, setParents } from "../ast"
 
-function toArray<T>(value: T): T extends Array<any> ? T : T[] {
+function toArray<T>(value: T | T[]): T[] {
   if (Array.isArray(value)) {
     return value as T[]
   }
@@ -23,6 +28,11 @@ function pushAll<T>(array: T[], elements: T[]) {
   for (const element of elements) {
     array.push(element);
   }
+}
+
+function stripExtension(filepath: string) {
+  const i = filepath.lastIndexOf('.');
+  return i !== -1 ? filepath.substring(0, i) : filepath
 }
 
 function flatMap<T>(array: T[], proc: (element: T) => T[]) {
@@ -54,6 +64,7 @@ function parseHook(str: string): Hook {
 }
 
 yargs
+
   .command(
 
     'compile [files..]',
@@ -143,6 +154,46 @@ yargs
       }
 
     })
+
+  .command(
+
+    'exec [files..]',
+    'Run the specified Bolt scripts',
+
+    yargs =>
+      yargs,
+
+    args => {
+
+      const parser = new Parser()
+
+      const sourceFiles = toArray(args.files as string[]).map(filepath => {
+        const file = new TextFile(filepath)
+        const contents = fs.readFileSync(filepath, 'utf8')
+        const scanner = new Scanner(file, contents)
+        const sourceFile = scanner.scan();
+        const expander = new Expander(parser)
+        const expanded = expander.getFullyExpanded(sourceFile)
+        // console.log(require('util').inspect(expanded.toJSON(), { colors: true, depth: Infinity }))
+        setParents(expanded)
+        return expanded;
+      })
+
+      const checker = new TypeChecker()
+      const compiler = new Compiler(checker, { target: "JS" })
+      const bundle = compiler.compile(sourceFiles)
+      const emitter = new Emitter()
+      for (const file of bundle) {
+        const text = emitter.emit(file);
+        fs.mkdirpSync('.bolt-work')
+        const filepath = path.join('.bolt-work', path.relative(process.cwd(), stripExtension(path.resolve(file.loc.source)) + '.js'))
+        fs.writeFileSync(filepath, text, 'utf8')
+        spawnSync('node', [filepath], { stdio: 'inherit' })
+      }
+
+    }
+
+  )
 
   .help()
   .version()
