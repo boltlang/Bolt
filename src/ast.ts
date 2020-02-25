@@ -181,7 +181,6 @@ export class Literal extends SyntaxBase {
     return {
       value: typeof this.value === 'bigint' ? { type: 'bigint', value: this.value.toString() } : this.value,
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -242,7 +241,6 @@ export class Parenthesized extends SyntaxBase {
       kind: 'Parenthesized',
       elements: this.elements.map(element => element.toJSON()),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -278,7 +276,6 @@ export class Braced extends SyntaxBase {
       kind: 'Braced',
       elements: this.elements.map(element => element.toJSON()),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -313,7 +310,6 @@ export class Bracketed extends SyntaxBase {
       kind: 'Bracketed',
       elements: this.elements.map(element => element.toJSON()),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -341,7 +337,6 @@ export class Identifier extends SyntaxBase {
       kind: 'Identifier',
       text: this.text,
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -369,7 +364,6 @@ export class Operator extends SyntaxBase {
       kind: 'Operator',
       text: this.text,
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -391,7 +385,6 @@ export class Semi extends SyntaxBase {
     return {
       kind: 'Semi',
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -413,7 +406,6 @@ export class Colon extends SyntaxBase {
     return {
       kind: 'Colon',
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -435,7 +427,6 @@ export class Comma extends SyntaxBase {
     return {
       kind: 'Comma',
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -458,7 +449,6 @@ export class RArrow extends SyntaxBase {
     return {
       kind: 'RArrow',
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -482,7 +472,6 @@ export class EqSign extends SyntaxBase {
     return {
       kind: 'EqSign',
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -504,7 +493,6 @@ export class Dot extends SyntaxBase {
     return {
       kind: 'Dot',
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -550,7 +538,6 @@ export class Sentence extends SyntaxBase {
       kind: 'Sentence',
       tokens: this.tokens.map(token => token.toJSON()),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -581,7 +568,6 @@ export class QualName {
       name: this.name.toJSON(),
       path: this.path.map(p => p.toJSON()),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -609,7 +595,6 @@ export class Param extends SyntaxBase {
       typeDecl: this.typeDecl !== null ? this.typeDecl.toJSON() : null,
       defaultValue: this.defaultValue !== null ? this.defaultValue.toJSON() : null,
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -633,7 +618,6 @@ export class BindPatt extends SyntaxBase {
       kind: 'BindPatt',
       name: this.name.toJSON(),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null
     }
   }
 
@@ -660,7 +644,6 @@ export class RefExpr extends SyntaxBase {
       kind: 'RefExpr',
       name: this.name.toJSON(),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -688,7 +671,6 @@ export class ConstExpr extends SyntaxBase {
       kind: 'ConstExpr',
       value: typeof this.value === 'bigint' ? { 'type': 'bigint', value: this.value.toString() } : this.value,
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -716,7 +698,6 @@ export class RetStmt extends SyntaxBase {
       kind: 'RetStmt',
       value: this.value !== null ? this.value.toJSON() : null,
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -750,7 +731,6 @@ export class TypeRef extends SyntaxBase {
       name: this.name.toJSON(),
       args: this.args.map(a => a.toJSON()),
       span: this.span !== null ? this.span.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
     }
   }
 
@@ -805,7 +785,6 @@ export class FuncDecl extends SyntaxBase {
       params: this.params.map(p => p.toJSON()),
       returnType: this.returnType !== null ? this.returnType.toJSON() : null,
       body: this.body !== null ? this.body.map(s => s.toJSON()) : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
       span: this.span !== null ? this.span.toJSON() : this.span,
     }
   }
@@ -839,7 +818,6 @@ export class VarDecl extends SyntaxBase {
       bindings: this.bindings.toJSON(),
       typeDecl: this.typeDecl !== null ? this.typeDecl.toJSON() : null,
       value: this.value !== null ? this.value.toJSON() : null,
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
       span: this.span !== null ? this.span.toJSON() : this.span,
     }
   }
@@ -877,7 +855,6 @@ export class SourceFile extends SyntaxBase {
     return {
       kind: 'SourceFile',
       elements: this.elements.map(element => element.toJSON()),
-      origNode: this.origNode !== null ? jsonify(this.origNode) : null,
       span: this.span !== null ? this.span.toJSON() : null,
     }
   }
