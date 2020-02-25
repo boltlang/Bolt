@@ -23,6 +23,7 @@ import {
   IntegerLiteral,
   Colon,
   EOS,
+  EqSign,
 } from "./ast"
 
 function escapeChar(ch: string) {
@@ -200,6 +201,9 @@ export class Scanner {
       }
 
       switch (c0) {
+        case '=':
+          this.getChar();
+          return new EqSign(new TextSpan(this.file, startPos, this.currPos.clone()));
         case ';':
           this.getChar();
           return new Semi(new TextSpan(this.file, startPos, this.currPos.clone()));

@@ -20,8 +20,8 @@ import {
   TypeDecl,
   ConstExpr,
   QualName,
-  ForeignDecl,
   CallExpr,
+  ImportDecl,
 } from "./ast"
 
 function describeKind(kind: SyntaxKind): string {
@@ -116,6 +116,20 @@ export class Parser {
     }
   }
 
+  parseImportDecl(tokens: TokenStream) {
+
+    // Assuming first keyword is 'import'
+    tokens.get();
+
+    const t0 = tokens.get();
+    if (t0.kind !== SyntaxKind.StringLiteral) {
+      throw new ParseError(t0, [SyntaxKind.StringLiteral])
+    }
+
+    return new ImportDecl(t0.value, null, t0);
+
+  }
+
   parseTypeDecl(tokens: TokenStream): TypeDecl {
     const t0 = tokens.peek();
     if (t0.kind === SyntaxKind.Identifier) {
@@ -170,8 +184,34 @@ export class Parser {
 
   parseVarDecl(tokens: TokenStream): VarDecl {
 
+    let isMutable = false;
+    let typeDecl = null;
+    let value = null;
+
     // Assuming first token is 'let'
     tokens.get();
+
+    const t0 = tokens.peek();
+    if (t0.kind === SyntaxKind.Identifier && t0.text === 'mut') {
+      tokens.get();
+      isMutable = true;
+    }
+
+    const bindings = this.parsePattern(tokens)
+
+    const t1 = tokens.peek();
+    if (t1.kind === SyntaxKind.Colon) {
+      tokens.get();
+      typeDecl = this.parseTypeDecl(tokens);
+    }
+
+    const t2 = tokens.peek();
+    if (t2.kind === SyntaxKind.EqSign) {
+      tokens.get();
+      value = this.parseExpr(tokens);
+    }
+
+    return new VarDecl(isMutable, bindings, typeDecl, value, null)
 
   }
 
@@ -206,7 +246,7 @@ export class Parser {
 
     let target = "Bolt";
 
-    const k0 = tokens.get();
+    const k0 = tokens.peek();
     if (k0.kind !== SyntaxKind.Identifier) {
       throw new ParseError(k0, [SyntaxKind.ForeignKeyword, SyntaxKind.FunctionKeyword])
     }
@@ -218,7 +258,7 @@ export class Parser {
       target = l1.value;
     }
     const k1 = tokens.get();
-    if (k1.text !== 'fn') {
+    if (k1.kind !== SyntaxKind.Identifier || k1.text !== 'fn') {
       throw new ParseError(k1, [SyntaxKind.FunctionKeyword])
     }
 

@@ -70,7 +70,7 @@ export enum SyntaxKind {
 
   VarDecl,
   FuncDecl,
-  ForeignDecl,
+  ImportDecl,
 
 }
 
@@ -920,6 +920,7 @@ export class VarDecl extends SyntaxBase {
   kind: SyntaxKind.VarDecl = SyntaxKind.VarDecl;
 
   constructor(
+    public isMutable: boolean,
     public bindings: Patt, 
     public typeDecl: TypeDecl | null,
     public value: Expr | null,
@@ -952,10 +953,31 @@ export class VarDecl extends SyntaxBase {
 
 }
 
+export class ImportDecl {
+
+  kind: SyntaxKind.ImportDecl = SyntaxKind.ImportDecl;
+
+  constructor(
+    public file: string,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+
+  }
+
+  *getChildren(): IterableIterator<Syntax> {
+
+  }
+
+}
+
 export type Decl
   = Sentence 
   | FuncDecl
+  | ImportDecl
   | VarDecl
+
 
 export type Syntax
   = Decl

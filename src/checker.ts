@@ -1,7 +1,8 @@
 
 import {
   Syntax,
-  SyntaxKind
+  SyntaxKind,
+  ImportDecl,
 } from "./ast"
 
 class Type {
@@ -27,7 +28,7 @@ export class TypeChecker {
 
   protected scopes = new Map<Syntax, Scope>();
 
-  createType(node: Syntax) {
+  protected createType(node: Syntax) {
     switch (node.kind) {
       case SyntaxKind.ConstExpr:
         if (typeof node.value === 'bigint') {
@@ -36,6 +37,10 @@ export class TypeChecker {
           return this.stringType;
         }
     }
+  }
+
+  getImportedSymbols(node: ImportDecl) {
+    return [{ name: 'fac' }]
   }
 
   getScope(node: Syntax): Scope {

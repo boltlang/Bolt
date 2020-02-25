@@ -96,6 +96,31 @@ export class Compiler {
 
     switch (node.kind) {
 
+      case SyntaxKind.ImportDecl:
+        preamble.push({
+          type: 'ImportDeclaration',
+          source: { type: 'Literal', value: node.file },
+          specifiers: this.checker.getImportedSymbols(node).map(s => ({
+            type: 'ImportSpecifier',
+            imported: { type: 'Identifier', name: s.name },
+            local: { type: 'Identifier', name: s.name },
+          })),
+        });
+        break;
+
+      case SyntaxKind.VarDecl:
+        const compiledValue = node.value !== null ? this.compileExpr(node.value, preamble) : null;
+        preamble.push({
+          type: 'VariableDeclaration',
+          kind: 'let',
+          declarations: [{
+            type: 'VariableDeclarator',
+            id: { type: 'Identifier', name: node.bindings.name.text },
+            init: compiledValue
+          }]
+        });
+        break;
+
       case SyntaxKind.FuncDecl:
         const params = [];
         if (node.target === this.target) {

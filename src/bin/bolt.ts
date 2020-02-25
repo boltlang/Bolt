@@ -183,14 +183,15 @@ yargs
       const compiler = new Compiler(checker, { target: "JS" })
       const bundle = compiler.compile(sourceFiles)
       const emitter = new Emitter()
-      for (const file of bundle) {
+      const outfiles = bundle.map(file => {
         const text = emitter.emit(file);
         fs.mkdirpSync('.bolt-work')
-        const filepath = path.join('.bolt-work', path.relative(process.cwd(), stripExtension(path.resolve(file.loc.source)) + '.js'))
+        const filepath = path.join('.bolt-work', path.relative(process.cwd(), stripExtension(path.resolve(file.loc.source)) + '.mjs'))
         fs.writeFileSync(filepath, text, 'utf8')
-        spawnSync('node', [filepath], { stdio: 'inherit' })
-      }
+        return filepath
+      })
 
+      spawnSync('node', [outfiles[0]], { stdio: 'inherit' })
     }
 
   )
