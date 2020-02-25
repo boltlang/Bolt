@@ -1,0 +1,9 @@
+
+fn + x;
+
+fn a + b;
+
+fn (a: Int) + (b: Int);
+
+fn a + b -> Int;
+

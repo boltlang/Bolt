@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import "reflect-metadata"
 import "source-map-support/register"
 
 import * as fs from "fs"
@@ -7,6 +8,8 @@ import * as fs from "fs"
 import yargs from "yargs"
 
 import { Scanner } from "../scanner"
+import { Parser } from "../parser"
+import { Expander } from "../expander"
 import { Token, TextFile, SourceFile } from "../ast"
 
 function toArray<T>(value: T): T extends Array<any> ? T : T[] {
@@ -112,6 +115,30 @@ yargs
         }
 
         sourceFiles.push(sourceFile);
+
+      }
+
+      for (const sourceFile of sourceFiles) {
+        const parser = new Parser()
+        const expander = new Expander(parser)
+        const expandedSourceFile = expander.getFullyExpanded(sourceFile)
+
+        for (const hook of hooks) {
+          if (hook.name === 'expand' && hook.timing == 'after') {
+            for (const effect of hook.effects) {
+              switch (effect) {
+                case 'dump':
+                  console.log(JSON.stringify(expandedSourceFile.toJSON(), undefined, 2));
+                  break;
+                case 'abort':
+                  process.exit(0);
+                  break;
+                default:
+                  throw new Error(`Could not execute hook effect '${effect}'.`)
+              }
+            }
+          }
+        }
 
       }
 
