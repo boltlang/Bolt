@@ -14,6 +14,7 @@ import { Parser } from "../parser"
 import { Expander } from "../expander"
 import { TypeChecker } from "../checker"
 import { Compiler } from "../compiler"
+import { Evaluator } from "../evaluator"
 import { Emitter } from "../emitter"
 import { TextFile, SourceFile, setParents } from "../ast"
 
@@ -129,9 +130,12 @@ yargs
 
       }
 
+      const checker = new TypeChecker()
+
       for (const sourceFile of sourceFiles) {
         const parser = new Parser()
-        const expander = new Expander(parser)
+        const evaluator = new Evaluator(checker)
+        const expander = new Expander(parser, evaluator, checker)
         const expandedSourceFile = expander.getFullyExpanded(sourceFile)
 
         for (const hook of hooks) {
@@ -166,20 +170,21 @@ yargs
     args => {
 
       const parser = new Parser()
+      const checker = new TypeChecker()
 
       const sourceFiles = toArray(args.files as string[]).map(filepath => {
         const file = new TextFile(filepath)
         const contents = fs.readFileSync(filepath, 'utf8')
         const scanner = new Scanner(file, contents)
         const sourceFile = scanner.scan();
-        const expander = new Expander(parser)
-        const expanded = expander.getFullyExpanded(sourceFile)
+        const evaluator = new Evaluator(checker)
+        const expander = new Expander(parser, evaluator, checker)
+        const expanded = expander.getFullyExpanded(sourceFile) as SourceFile;
         // console.log(require('util').inspect(expanded.toJSON(), { colors: true, depth: Infinity }))
         setParents(expanded)
         return expanded;
       })
 
-      const checker = new TypeChecker()
       const compiler = new Compiler(checker, { target: "JS" })
       const bundle = compiler.compile(sourceFiles)
       const emitter = new Emitter()
@@ -192,6 +197,26 @@ yargs
       })
 
       spawnSync('node', [outfiles[0]], { stdio: 'inherit' })
+    }
+
+  )
+
+  .command(
+
+    'dump [file]',
+    'Dump a representation of a given primitive node to disk',
+
+    yargs => yargs,
+
+    args => {
+
+      const file = new TextFile(args.file as string)
+      const contents = fs.readFileSync(args.file, 'utf8')
+      const scanner = new Scanner(file, contents)
+      const parser = new Parser();
+      const patt = parser.parsePattern(scanner)
+      console.log(JSON.stringify(patt.toJSON(), undefined, 2))
+
     }
 
   )

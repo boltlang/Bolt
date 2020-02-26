@@ -23,6 +23,7 @@ import {
   IntegerLiteral,
   Colon,
   EOS,
+  Dot,
   EqSign,
 } from "./ast"
 
@@ -95,6 +96,10 @@ class ScanError extends Error {
 
 interface Stream<T> {
   read(): T
+}
+
+function isDigit(ch: string) {
+  return XRegExp('\\p{Nd}').test(ch)
 }
 
 function isWhiteSpace(ch: string) {
@@ -201,6 +206,9 @@ export class Scanner {
       }
 
       switch (c0) {
+        case '.':
+          this.getChar();
+          return new Dot(new TextSpan(this.file, startPos, this.currPos.clone()));
         case '=':
           this.getChar();
           return new EqSign(new TextSpan(this.file, startPos, this.currPos.clone()));
@@ -238,6 +246,12 @@ export class Scanner {
         const endPos = this.currPos.clone();
 
         return new StringLiteral(text, new TextSpan(this.file, startPos, endPos))
+
+      } else if (isDigit(c0)) {
+
+        const digits = this.takeWhile(isDigit)
+        const endPos = this.currPos.clone();
+        return new IntegerLiteral(BigInt(digits), new TextSpan(this.file, startPos, endPos));
 
       } else if (isOpenPunct(c0)) {
 
@@ -323,10 +337,9 @@ export class Scanner {
       : this.scanToken();
   }
 
-  scan() {
+  scanTokens() {
 
-    const elements: Decl[] = []
-    const startPos = this.currPos.clone()
+    const elements: Sentence[] = []
 
     outer: while (true) {
 
@@ -351,15 +364,24 @@ export class Scanner {
       }
 
       if (tokens.length > 0) {
-        elements.push(new Sentence(tokens, new TextSpan(this.file, tokens[0].span.start.clone(), tokens[tokens.length-1].span.end.clone())))
+        elements.push(
+          new Sentence(
+            tokens,
+            new TextSpan(this.file, tokens[0].span!.start.clone(), tokens[tokens.length-1].span!.end.clone())
+          )
+        )
       }
 
     }
 
+    return elements
+  }
+
+  scan() {
+    const startPos = this.currPos.clone();
+    const elements = this.scanTokens();
     const endPos = this.currPos.clone();
-
-    return new SourceFile(elements, new TextSpan(this.file, startPos, endPos))
-
+    return new SourceFile(elements, new TextSpan(this.file, startPos, endPos));
   }
 
 }

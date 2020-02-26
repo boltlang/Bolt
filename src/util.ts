@@ -1,4 +1,8 @@
 
+export interface FastStringMap<T> {
+  [key: string]: T
+}
+
 export interface Stream<T> {
   get(): T;
   peek(count?: number): T;

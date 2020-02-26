@@ -22,7 +22,14 @@ import {
   QualName,
   CallExpr,
   ImportDecl,
+  SourceElement,
+  Module,
+  RecordDecl,
 } from "./ast"
+
+import { stringType, intType } from "./checker"
+
+import { PrimValue } from "./evaluator"
 
 function describeKind(kind: SyntaxKind): string {
   switch (kind) {
@@ -34,10 +41,12 @@ function describeKind(kind: SyntaxKind): string {
       return "a string"
     case SyntaxKind.IntegerLiteral:
       return "an integer"
-    case SyntaxKind.FunctionKeyword:
+    case SyntaxKind.FnKeyword:
       return "'fn'"
     case SyntaxKind.ForeignKeyword:
       return "'foreign'"
+    case SyntaxKind.PubKeyword:
+      return "'pub'"
     case SyntaxKind.LetKeyword:
       return "'let'"
     case SyntaxKind.Semi:
@@ -48,6 +57,12 @@ function describeKind(kind: SyntaxKind): string {
       return "'.'"
     case SyntaxKind.Comma:
       return "','"
+    case SyntaxKind.ModKeyword:
+      return "'mod'"
+    case SyntaxKind.StructKeyword:
+      return "'struct'"
+    case SyntaxKind.EnumKeyword:
+      return "'enum'"
     case SyntaxKind.Braced:
       return "'{' .. '}'"
     case SyntaxKind.Bracketed:
@@ -78,12 +93,7 @@ export class ParseError extends Error {
 
 export class Parser {
 
-
-  constructor() {
-
-  }
-
-  parseQualName(tokens: TokenStream) {
+  parseQualName(tokens: TokenStream): QualName {
 
     const path: Identifier[] = [];
 
@@ -116,7 +126,7 @@ export class Parser {
     }
   }
 
-  parseImportDecl(tokens: TokenStream) {
+  parseImportDecl(tokens: TokenStream): ImportDecl {
 
     // Assuming first keyword is 'import'
     tokens.get();
@@ -144,7 +154,10 @@ export class Parser {
     const t0 = tokens.peek();
     if (t0.kind === SyntaxKind.StringLiteral) {
       tokens.get();
-      return new ConstExpr(t0.value, null, t0);
+      return new ConstExpr(new PrimValue(stringType, t0.value), null, t0);
+    } else if (t0.kind === SyntaxKind.IntegerLiteral) {
+      tokens.get();
+      return new ConstExpr(new PrimValue(intType, t0.value), null, t0);
     } else if (t0.kind === SyntaxKind.Identifier) {
       const name = this.parseQualName(tokens);
       return new RefExpr(name, null, name.origNode);
@@ -153,11 +166,20 @@ export class Parser {
     }
   }
 
-  parseExpr(tokens: TokenStream) {
+  parseSyntax(tokens: TokenStream): Syntax {
+
+    // Assuming first token is 'syntax'
+    tokens.get();
+
+    throw new Error('not implemented')
+
+  }
+
+  parseExpr(tokens: TokenStream): Expr {
     return this.parsePrimExpr(tokens)
   }
 
-  parseParam(tokens: TokenStream) {
+  parseParam(tokens: TokenStream): Param {
 
     let defaultValue = null;
     let typeDecl = null;
@@ -173,7 +195,9 @@ export class Parser {
         tokens.get();
         defaultValue = this.parseExpr(tokens);
       }
-    } else if (t0.kind === SyntaxKind.EqSign) {
+    }
+
+    if (t0.kind === SyntaxKind.EqSign) {
       tokens.get();
       defaultValue = this.parseExpr(tokens);
     }
@@ -230,9 +254,72 @@ export class Parser {
     return new RetStmt(expr, null, [t0, expr.getEndNode()]);
   }
 
+  parseStmt(tokens: TokenStream): Stmt {
+
+  }
+
+  parseRecordDecl(tokens: TokenStream): RecordDecl {
+
+    let isPublic = false;
+
+    let kw = tokens.get();
+    if (kw.kind !== SyntaxKind.Identifier) {
+      throw new ParseError(kw, [SyntaxKind.PubKeyword, SyntaxKind.StructKeyword]);
+    }
+    if (kw.text === 'pub') {
+      isPublic = true;
+      kw = tokens.get();
+    }
+
+    if (kw.kind !== SyntaxKind.Identifier || kw.text !== 'struct') {
+      throw new ParseError(kw, [SyntaxKind.StructKeyword])
+    }
+
+    const name = this.parseQualName(tokens);
+
+    const t2 = tokens.get();
+
+    if (t2.kind !== SyntaxKind.Braced) {
+      throw new ParseError(kw, [SyntaxKind.Braced])
+    }
+
+    let fields = [];
+  
+    return new RecordDecl(isPublic, name, fields);
+
+  }
+
   parseStmts(tokens: TokenStream, origNode: Syntax | null): Stmt[] {
     // TODO
     return []
+  }
+
+  parseModDecl(tokens: TokenStream): Module {
+
+    let isPublic = false;
+
+    let kw = tokens.get();
+    if (kw.kind !== SyntaxKind.Identifier) {
+      throw new ParseError(kw, [SyntaxKind.PubKeyword, SyntaxKind.ModKeyword]);
+    }
+    if (kw.text === 'pub') {
+      isPublic = true;
+      kw = tokens.get();
+    }
+
+    if (kw.kind !== SyntaxKind.Identifier || kw.text !== 'mod') {
+      throw new ParseError(kw, [SyntaxKind.ModKeyword])
+    }
+
+    const name = this.parseQualName(tokens);
+
+    const t1 = tokens.get();
+    if (t1.kind !== SyntaxKind.Braced) {
+      throw new ParseError(t1, [SyntaxKind.Braced])
+    }
+
+    return new Module(isPublic, name, t1.toSentences());
+
   }
 
   protected assertEmpty(tokens: TokenStream) {
@@ -242,24 +329,35 @@ export class Parser {
     }
   }
 
-  parseFuncDecl(tokens: TokenStream, origNode: Syntax | null) {
+  parseFuncDecl(tokens: TokenStream, origNode: Syntax | null): FuncDecl {
 
     let target = "Bolt";
+    let isPublic = false;
 
     const k0 = tokens.peek();
     if (k0.kind !== SyntaxKind.Identifier) {
-      throw new ParseError(k0, [SyntaxKind.ForeignKeyword, SyntaxKind.FunctionKeyword])
+      throw new ParseError(k0, [SyntaxKind.PubKeyword, SyntaxKind.ForeignKeyword, SyntaxKind.FnKeyword])
     }
-    if (k0.text === 'foreign') {
+    if (k0.text === 'pub') {
+      tokens.get();
+      isPublic = true;
+    }
+
+    const k1 = tokens.peek();
+    if (k1.kind !== SyntaxKind.Identifier) {
+      throw new ParseError(k1, [SyntaxKind.ForeignKeyword, SyntaxKind.FnKeyword])
+    }
+    if (k1.text === 'foreign') {
+      tokens.get();
       const l1 = tokens.get();
       if (l1.kind !== SyntaxKind.StringLiteral) {
         throw new ParseError(l1, [SyntaxKind.StringLiteral])
       }
       target = l1.value;
     }
-    const k1 = tokens.get();
-    if (k1.kind !== SyntaxKind.Identifier || k1.text !== 'fn') {
-      throw new ParseError(k1, [SyntaxKind.FunctionKeyword])
+    const k2 = tokens.get();
+    if (k2.kind !== SyntaxKind.Identifier || k2.text !== 'fn') {
+      throw new ParseError(k2, [SyntaxKind.FnKeyword])
     }
 
     let name: QualName;
@@ -367,11 +465,49 @@ export class Parser {
       }
     }
 
-    return new FuncDecl(target, name, params, returnType, body, null, origNode)
+    return new FuncDecl(isPublic, target, name, params, returnType, body, null, origNode)
 
   }
 
-  parseCallExpr(tokens: TokenStream) {
+  parseSourceElement(tokens: TokenStream): SourceElement {
+    const t0 = tokens.peek(1);
+    if (t0.kind === SyntaxKind.Identifier) {
+      let i = 1;
+      let kw: Token = t0;
+      if (t0.text === 'pub') {
+        i++;
+        kw = tokens.peek(i);
+        if (kw.kind !== SyntaxKind.Identifier) {
+          throw new ParseError(kw, [SyntaxKind.ForeignKeyword, SyntaxKind.ModKeyword, SyntaxKind.LetKeyword, SyntaxKind.FnKeyword, SyntaxKind.EnumKeyword, SyntaxKind.StructKeyword])
+        }
+      }
+      if (t0.text === 'foreign') {
+        i += 2;
+        kw = tokens.peek(i);
+        if (kw.kind !== SyntaxKind.Identifier) {
+          throw new ParseError(kw, [SyntaxKind.ModKeyword, SyntaxKind.LetKeyword, SyntaxKind.FnKeyword, SyntaxKind.EnumKeyword, SyntaxKind.StructKeyword])
+        }
+      }
+      switch (kw.text) {
+        case 'mod':
+          return this.parseModDecl(tokens);
+        case 'fn':
+          return this.parseFuncDecl(tokens, null);
+        case 'let':
+          return this.parseVarDecl(tokens);
+        case 'struct':
+          return this.parseRecordDecl(tokens);
+        case 'enum':
+          return this.parseVariantDecl(tokens);
+        default:
+          throw new ParseError(kw, [SyntaxKind.ModKeyword, SyntaxKind.LetKeyword, SyntaxKind.FnKeyword, SyntaxKind.EnumKeyword, SyntaxKind.StructKeyword])
+      }
+    } else {
+      return this.parseStmt(tokens)
+    }
+  }
+
+  parseCallExpr(tokens: TokenStream): CallExpr {
 
     const operator = this.parsePrimExpr(tokens)
     const args: Expr[] = []

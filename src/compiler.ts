@@ -99,7 +99,7 @@ export class Compiler {
       case SyntaxKind.ImportDecl:
         preamble.push({
           type: 'ImportDeclaration',
-          source: { type: 'Literal', value: node.file },
+          source: { type: 'Literal', value: node.file + '.mjs' },
           specifiers: this.checker.getImportedSymbols(node).map(s => ({
             type: 'ImportSpecifier',
             imported: { type: 'Identifier', name: s.name },
@@ -123,9 +123,17 @@ export class Compiler {
 
       case SyntaxKind.FuncDecl:
         const params = [];
-        if (node.target === this.target) {
-          console.log(node.body)
-          preamble.push({
+        if (node.body !== null) {
+          let body;
+          if (node.target === this.target) {
+            body = node.body;
+          } else if (node.target === 'Bolt') {
+            let body: Stmt[] = [];
+            for (const stmt in node.body) {
+              this.compileDecl(stmt, body)
+            }
+          }
+          let result = {
             type: 'FunctionDeclaration',
             id: { type: 'Identifier',  name: node.name.name.text },
             params: node.params.map(p => ({ type: 'Identifier', name: p.bindings.name.text })),
@@ -133,9 +141,14 @@ export class Compiler {
               type: 'BlockStatement',
               body: node.body
             }
-          })
-        } else {
-          throw new Error(`Cannot yet compile Bolt functions`)
+          }
+          if (node.isPublic) {
+            result = {
+              type: 'ExportNamedDeclaration',
+              declaration: result,
+            }
+          }
+          preamble.push(result)
         }
         break;
 

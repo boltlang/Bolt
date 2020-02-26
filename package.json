@@ -13,6 +13,7 @@
   "license": "GPL-3.0",
   "repository": "https://github.com/samvv/Bolt",
   "dependencies": {
+    "@types/fs-extra": "^8.1.0",
     "@types/node": "^13.7.4",
     "@types/xregexp": "^3.0.30",
     "@types/yargs": "^15.0.3",
