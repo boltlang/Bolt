@@ -9,14 +9,13 @@ import { spawnSync } from "child_process"
 
 import yargs from "yargs"
 
-import { Scanner } from "../scanner"
-import { Parser } from "../parser"
-import { Expander } from "../expander"
-import { TypeChecker } from "../checker"
-import { Compiler } from "../compiler"
-import { Evaluator } from "../evaluator"
-import { Emitter } from "../emitter"
-import { TextFile, SourceFile, setParents } from "../ast"
+import { Package, loadPackage } from "../package"
+import { Program } from "../program"
+import { TextFile } from "../ast"
+
+global.debug = function (value: any) {
+  console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
+}
 
 function toArray<T>(value: T | T[]): T[] {
   if (Array.isArray(value)) {
@@ -44,178 +43,68 @@ function flatMap<T>(array: T[], proc: (element: T) => T[]) {
   return out
 }
 
-interface Hook {
-  timing: 'before' | 'after'
-  name: string
-  effects: string[]
-}
-
-function parseHook(str: string): Hook {
-  let timing: 'before' | 'after' = 'before';
-  if (str[0] === '+') {
-    str = str.substring(1)
-    timing = 'after';
-  }
-  const [name, rawEffects] = str.split('=');
-  return {
-    timing,
-    name,
-    effects: rawEffects.split(','),
-  }
-}
-
 yargs
 
   .command(
 
-    'compile [files..]',
-    'Compile a set of source files', 
-
-    yargs => yargs
-      .string('hook')
-      .describe('hook', 'Add a hook to a specific compile phase. See the manual for details.'),
+    'link [name]',
+    'Link projects with each other',
+  
+    yargs => yargs,
 
     args => {
 
-      const hooks: Hook[] = toArray(args.hook as string[] | string).map(parseHook);
-      const sourceFiles: SourceFile[] = [];
+      console.log(args.name)
 
-      for (const filepath of toArray(args.files as string[] | string)) {  
-
-        const file = new TextFile(filepath);
-        const content = fs.readFileSync(filepath, 'utf8')
-        const scanner = new Scanner(file, content)
-
-        for (const hook of hooks) {
-          if (hook.name === 'scan' && hook.timing === 'before') {
-            for (const effect of hook.effects) {
-              switch (effect) {
-                case 'abort':
-                  process.exit(0);
-                  break;
-                default:
-                  throw new Error(`Could not execute hook effect '${effect}.`);
-              }
-            }
-          }
-        }
-
-        const sourceFile = scanner.scan();
-        // while (true) {
-        //   const token = scanner.scanToken()
-        //   if (token === null) {
-        //     break;
-        //   }
-        //   tokens.push(token);
-        // }
-
-        for (const hook of hooks) {
-          if (hook.name === 'scan' && hook.timing == 'after') {
-            for (const effect of hook.effects) {
-              switch (effect) {
-                case 'dump':
-                  console.log(JSON.stringify(sourceFile.toJSON(), undefined, 2));
-                  break;
-                case 'abort':
-                  process.exit(0);
-                  break;
-                default:
-                  throw new Error(`Could not execute hook effect '${effect}'.`)
-              }
-            }
-          }
-        }
-
-        sourceFiles.push(sourceFile);
-
-      }
-
-      const checker = new TypeChecker()
-
-      for (const sourceFile of sourceFiles) {
-        const parser = new Parser()
-        const evaluator = new Evaluator(checker)
-        const expander = new Expander(parser, evaluator, checker)
-        const expandedSourceFile = expander.getFullyExpanded(sourceFile)
-
-        for (const hook of hooks) {
-          if (hook.name === 'expand' && hook.timing == 'after') {
-            for (const effect of hook.effects) {
-              switch (effect) {
-                case 'dump':
-                  console.log(JSON.stringify(expandedSourceFile.toJSON(), undefined, 2));
-                  break;
-                case 'abort':
-                  process.exit(0);
-                  break;
-                default:
-                  throw new Error(`Could not execute hook effect '${effect}'.`)
-              }
-            }
-          }
-        }
-
-      }
-
-    })
-
-  .command(
-
-    'exec [files..]',
-    'Run the specified Bolt scripts',
-
-    yargs =>
-      yargs,
-
-    args => {
-
-      const parser = new Parser()
-      const checker = new TypeChecker()
-
-      const sourceFiles = toArray(args.files as string[]).map(filepath => {
-        const file = new TextFile(filepath)
-        const contents = fs.readFileSync(filepath, 'utf8')
-        const scanner = new Scanner(file, contents)
-        const sourceFile = scanner.scan();
-        const evaluator = new Evaluator(checker)
-        const expander = new Expander(parser, evaluator, checker)
-        const expanded = expander.getFullyExpanded(sourceFile) as SourceFile;
-        // console.log(require('util').inspect(expanded.toJSON(), { colors: true, depth: Infinity }))
-        setParents(expanded)
-        return expanded;
-      })
-
-      const compiler = new Compiler(checker, { target: "JS" })
-      const bundle = compiler.compile(sourceFiles)
-      const emitter = new Emitter()
-      const outfiles = bundle.map(file => {
-        const text = emitter.emit(file);
-        fs.mkdirpSync('.bolt-work')
-        const filepath = path.join('.bolt-work', path.relative(process.cwd(), stripExtension(path.resolve(file.loc.source)) + '.mjs'))
-        fs.writeFileSync(filepath, text, 'utf8')
-        return filepath
-      })
-
-      spawnSync('node', [outfiles[0]], { stdio: 'inherit' })
     }
 
   )
 
   .command(
 
-    'dump [file]',
-    'Dump a representation of a given primitive node to disk',
+    'bundle [files..]',
+    'Compile and optimise a set of Bolt packages/scripts', 
 
-    yargs => yargs,
+    yargs => yargs
+      .string('work-dir')
+      .describe('work-dir', 'The working directory where files will be resolved against.')
+      .default('work-dir', '.'),
 
     args => {
 
-      const file = new TextFile(args.file as string)
-      const contents = fs.readFileSync(args.file, 'utf8')
-      const scanner = new Scanner(file, contents)
-      const parser = new Parser();
-      const patt = parser.parsePattern(scanner)
-      console.log(JSON.stringify(patt.toJSON(), undefined, 2))
+      const files = toArray(args.path as string[] | string).map(filepath => new TextFile(filepath, args['work-dir']));
+      const program = new Program(files)
+      program.compile({ target: "JS" });
+
+    })
+
+  .command(
+
+    'exec [files..]',
+    'Run the specified Bolt packages/scripts',
+
+    yargs => yargs
+      .string('work-dir')
+      .describe('work-dir', 'The working directory where files will be resolved against.')
+      .default('work-dir', '.'),
+
+    args => {
+
+      const files = toArray(args.files as string | string[]).map(p => new TextFile(p));
+
+      if (files.length > 0) {
+
+        const program = new Program(files);
+
+        for (const file of files) {
+          program.eval(file)
+        }
+
+      } else {
+
+        throw new Error(`Executing packages is not yet supported.`)
+
+      }
 
     }
 

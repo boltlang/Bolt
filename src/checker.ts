@@ -16,6 +16,17 @@ export class PrimType extends Type {
 
 }
 
+export class FunctionType extends Type {
+
+  constructor(
+    public paramTypes: Type[],
+    public returnType: Type,
+  ) {
+    super();
+  }
+
+}
+
 export class VariantType extends Type {
 
   constructor(public elementTypes: Type[]) {
@@ -28,6 +39,8 @@ export const stringType = new PrimType()
 export const intType = new PrimType()
 export const boolType = new PrimType()
 export const voidType = new PrimType()
+export const anyType = new PrimType()
+export const noneType = new PrimType();
 
 export class RecordType {
 
@@ -78,6 +91,9 @@ function getFullName(node: Syntax) {
   let curr: Syntax | null = node;
   while (true) {
     switch (curr.kind) {
+      case SyntaxKind.Identifier:
+        out.unshift(curr.text)
+        break;
       case SyntaxKind.Module:
         out.unshift(curr.name.fullText);
         break;
@@ -99,14 +115,55 @@ export class TypeChecker {
   protected types = new Map<Syntax, Type>();
   protected scopes = new Map<Syntax, Scope>();
 
-  protected createType(node: Syntax): Type {
+  constructor() {
+  }
 
-    console.log(node)
+  protected inferTypeFromUsage(bindings: Patt, body: Body) {
+    return anyType;
+  }
+
+  protected getTypeOfBody(body: Body) {
+    return anyType;
+  }
+
+  protected createType(node: Syntax): Type {
 
     switch (node.kind) {
 
       case SyntaxKind.ConstExpr:
         return node.value.type;
+
+      case SyntaxKind.NewTypeDecl:
+        console.log(getFullName(node.name))
+        this.symbols[getFullName(node.name)] = new PrimType();
+        return noneType;
+
+      case SyntaxKind.FuncDecl:
+        let returnType = anyType;
+        if (node.returnType !== null) {
+          returnType = this.getTypeOfNode(node.returnType)
+        }
+        if (node.body !== null) {
+          returnType = this.intersectTypes(returnType, this.getTypeOfBody(node.body))
+        }
+        let paramTypes = node.params.map(param => {
+          let paramType = this.getTypeOfNode(param);
+          if (node.body !== null) {
+            paramType = this.intersectTypes(
+              paramType,
+              this.inferTypeFromUsage(param.bindings, node.body)
+            )
+          }
+          return paramType
+        })
+        return new FunctionType(paramTypes, returnType);
+
+      case SyntaxKind.TypeRef:
+        const reffed = this.getTypeNamed(node.name.fullText);
+        if (reffed === null) {
+          throw new Error(`Could not find a type named '${node.name.fullText}'`);
+        }
+        return reffed;
 
       case SyntaxKind.RecordDecl:
 
@@ -116,17 +173,11 @@ export class TypeChecker {
 
         return typ;
 
-        // if (typeof node.value === 'bigint') {
-        //   return intType;
-        // } else if (typeof node.value === 'string') {
-        //   return stringType;
-        // } else if (typeof node.value === 'boolean') {
-        //   return boolType;
-        // } else if (isNode(node.value)) {
-        //   return this.getTypeNamed(`Bolt.AST.${SyntaxKind[node.value.kind]}`)!
-        // } else {
-        //   throw new Error(`Unrecognised kind of value associated with ConstExpr`)
-        // }
+      case SyntaxKind.Param:
+        if (node.typeDecl !== null) {
+          return this.getTypeOfNode(node.typeDecl)
+        }
+        return anyType;
 
       default:
         throw new Error(`Could not derive type of ${SyntaxKind[node.kind]}`)
@@ -136,8 +187,8 @@ export class TypeChecker {
   }
 
   getTypeNamed(name: string) {
-    return name in this.typeNames
-      ? this.typeNames[name]
+    return name in this.symbols
+      ? this.symbols[name]
       : null
   }
 
@@ -152,13 +203,23 @@ export class TypeChecker {
 
   check(node: Syntax) {
 
+    this.getTypeOfNode(node);
+
     switch (node.kind) {
 
       case SyntaxKind.Sentence:
+      case SyntaxKind.RecordDecl:
+      case SyntaxKind.NewTypeDecl:
         break;
 
-      case SyntaxKind.RecordDecl:
-        this.getTypeOfNode(node);
+      case SyntaxKind.FuncDecl:
+        if (node.body !== null) {
+          if (Array.isArray(node.body)) {
+            for (const element of node.body) {
+              this.check(element)
+            }
+          }
+        }
         break;
 
       case SyntaxKind.Module:
@@ -189,6 +250,27 @@ export class TypeChecker {
     const scope = new Scope(node)
     this.scopes.set(node, scope)
     return scope
+  }
+
+  protected intersectTypes(a: Type, b: Type): Type {
+    if (a === noneType || b == noneType) {
+      return noneType;
+    }
+    if (b === anyType) {
+      return a
+    }
+    if (a === anyType) {
+      return b;
+    }
+    if (a instanceof FunctionType && b instanceof FunctionType) {
+      if (a.paramTypes.length !== b.paramTypes.length) {
+        return noneType;
+      }
+      const returnType = this.intersectTypes(a.returnType, b.returnType);
+      const paramTypes = a.paramTypes.map((_, i) => this.intersectTypes(a.paramTypes[i], b.paramTypes[i]));
+      return new FunctionType(paramTypes, returnType)
+    }
+    return noneType;
   }
 
   // getMapperForNode(target: string, node: Syntax): Mapper {

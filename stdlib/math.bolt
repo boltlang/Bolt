@@ -1,0 +1,17 @@
+
+newtype Int;
+
+pub fn fac(n: Int) -> Int {
+  if n == 0 {
+    return 1
+  } else {
+    return fac(n-1)
+  }
+}
+
+fn (a: Int) + (b: Int) -> Int {
+  
+}
+
+precedence a + b < a * b;
+

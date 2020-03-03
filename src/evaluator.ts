@@ -103,6 +103,18 @@ export class Evaluator {
 
     switch (node.kind) {
 
+      case SyntaxKind.SourceFile:
+      case SyntaxKind.Module:
+        for (const element of node.elements) {
+          this.eval(element);
+        }
+        break;
+
+      case SyntaxKind.NewTypeDecl:
+      case SyntaxKind.RecordDecl:
+      case SyntaxKind.FuncDecl:
+        break;
+
       case SyntaxKind.MatchExpr:
         const value = this.eval(node.value);
         for (const [pattern, result] of node.arms) {

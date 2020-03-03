@@ -1,0 +1,11 @@
+
+syntax {
+  quote {
+    macro $name: QualName {
+
+    }
+  } => {
+
+  }
+}
+

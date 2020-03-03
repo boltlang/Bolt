@@ -129,7 +129,8 @@ export class Expander {
         return node;
       }
 
-      return new Module(node.isPublic, node.name, node.elements, null, node);
+      return new Module(node.isPublic, node.name, expanded, null, node);
+
 
     } else if (node.kind === SyntaxKind.Sentence) {
 

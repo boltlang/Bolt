@@ -27,12 +27,6 @@ print(fac(5)) // 10
 
 ## FAQ
 
-### What made you write Bolt?
-
-Because I was tired of writing applications in the horror that JavaScript
-is. Moreover, I usually write these applications by myself, so I have to be
-clever about how they will be implemented.
-
 ### Why should I choose Bolt over JavaScript?
 
 Bolt was made to make writing user-interfaces dead-simple, while also making
@@ -47,6 +41,18 @@ about _correctness_, _performance_ and _scalability_.
    language requires.
  - Scalability, because just like Rust, Bolt takes a _functional_ approach to
    software design using type traits, favouring composition over inheritance.
+
+### What languages inspired Bolt?
+
+Rust and Haskell are two of my favorite languages that you'll notice Bolt
+shares a lot of its syntax and semantics with.
+
+### What's the difference between Bolt and Rust?
+
+I really like Rust, but if I just care about writing an application I believe
+Rust's memory model with its borrow checker is overkill. Having a garbage
+collector certainly results in a performance penalty, but I believe that as
+long as the user does not notice it, it does not really matter.
 
 ## License
 

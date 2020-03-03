@@ -1,0 +1,24 @@
+
+mod Lang.Bolt.AST {
+
+  pub struct Pos {
+    offset: Int,
+    line: Int,
+    column: Int,
+  }
+
+  pub struct Span {
+    file: File,
+    start: TextPos,
+    end: TextPos,
+  }
+
+  pub struct Identifier {
+    text: String,
+    span: Option<Span>,
+    orig_node: Option<Node>,
+    parent: Option<Node>,
+  }
+
+}
+

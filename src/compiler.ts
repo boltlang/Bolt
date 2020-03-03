@@ -95,6 +95,12 @@ export class Compiler {
     }
 
     switch (node.kind) {
+  
+      case SyntaxKind.Module:
+        for (const element of node.elements) {
+          this.compileDecl(element, preamble);
+        }
+        break;
 
       case SyntaxKind.ImportDecl:
         preamble.push({

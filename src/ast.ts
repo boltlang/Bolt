@@ -1,6 +1,8 @@
 
 // FIXME SyntaxBase.getSpan() does not work then [n1, n2] is given as origNode
 
+import * as path from "path"
+
 import { Stream, StreamWrapper } from "./util"
 import { Scanner } from "./scanner"
 import { RecordType, PrimType, OptionType, VariantType, stringType, intType, boolType } from "./checker"
@@ -41,6 +43,7 @@ export enum SyntaxKind {
   ModKeyword,
   EnumKeyword,
   StructKeyword,
+  NewTypeKeyword,
 
   // Special nodes
 
@@ -86,13 +89,18 @@ export enum SyntaxKind {
   ImportDecl,
   RecordDecl,
   VariantDecl,
+  NewTypeDecl,
 
 }
 
 export class TextFile {
 
-  constructor(public path: string) {
+  constructor(public path: string, public cwd: string = '.') {
     
+  }
+
+  get fullPath() {
+    return path.resolve(this.cwd, this.path)
   }
 
 }
@@ -588,7 +596,7 @@ export class QualName {
     for (const chunk of this.path) {
       out += chunk.text + '.'
     }
-    return out + this.name
+    return out + this.name.text
   }
 
   toJSON(): Json {
@@ -982,7 +990,7 @@ export class FuncDecl extends SyntaxBase {
     public name: QualName, 
     public params: Param[],
     public returnType: TypeDecl | null,
-    public body: Stmt[] | null,
+    public body: Body | null,
     public span: TextSpan | null = null,
     public origNode: [Syntax, Syntax] | Syntax | null = null,
     public parentNode: Syntax | null = null
@@ -990,18 +998,18 @@ export class FuncDecl extends SyntaxBase {
     super();
   }
 
-  toJSON(): Json {
-    return {
-      kind: 'FuncDecl',
-      isPublic: this.isPublic,
-      target: this.target,
-      name: this.name.toJSON(),
-      params: this.params.map(p => p.toJSON()),
-      returnType: this.returnType !== null ? this.returnType.toJSON() : null,
-      body: this.body !== null ? this.body.map(s => s.toJSON()) : null,
-      span: this.span !== null ? this.span.toJSON() : this.span,
-    }
-  }
+  // toJSON(): Json {
+  //   return {
+  //     kind: 'FuncDecl',
+  //     isPublic: this.isPublic,
+  //     target: this.target,
+  //     name: this.name.toJSON(),
+  //     params: this.params.map(p => p.toJSON()),
+  //     returnType: this.returnType !== null ? this.returnType.toJSON() : null,
+  //     body: this.body !== null ? this.body.map(s => s.toJSON()) : null,
+  //     span: this.span !== null ? this.span.toJSON() : this.span,
+  //   }
+  // }
 
   *getChildren(): IterableIterator<Syntax> {
     yield this.name
@@ -1105,10 +1113,31 @@ export class RecordDecl extends SyntaxBase {
 
 }
 
+export class NewTypeDecl extends SyntaxBase {
+
+  kind: SyntaxKind.NewTypeDecl = SyntaxKind.NewTypeDecl;
+
+  constructor(
+    public isPublic: boolean,
+    public name: Identifier,
+    public span: TextSpan | null = null,
+    public origNode: [Syntax, Syntax] | Syntax | null = null,
+    public parentNode: Syntax | null = null
+  ) {
+    super();
+  }
+
+  *getChildren() {
+    yield this.name;
+  }
+
+}
+
 export type Decl
   = Sentence 
   | FuncDecl
   | ImportDecl
+  | NewTypeDecl
   | VarDecl
   | RecordDecl
 

@@ -25,6 +25,7 @@ import {
   SourceElement,
   Module,
   RecordDecl,
+  NewTypeDecl,
 } from "./ast"
 
 import { stringType, intType } from "./checker"
@@ -55,6 +56,8 @@ function describeKind(kind: SyntaxKind): string {
       return "':'"
     case SyntaxKind.Dot:
       return "'.'"
+    case SyntaxKind.RArrow:
+      return "'->'"
     case SyntaxKind.Comma:
       return "','"
     case SyntaxKind.ModKeyword:
@@ -91,7 +94,51 @@ export class ParseError extends Error {
   }
 }
 
+enum OperatorKind {
+  Prefix,
+  InfixL,
+  InfixR,
+  Suffix,
+}
+
+interface OperatorInfo {
+  kind: OperatorKind;
+  arity: number;
+  name: string;
+  precedence: number;
+}
+
 export class Parser {
+
+  operatorTable = [
+    [
+      [OperatorKind.InfixL, 2, '&&'],
+      [OperatorKind.InfixL, 2, '||']
+    ],
+    [
+      [OperatorKind.InfixL, 2, '<'],
+      [OperatorKind.InfixL, 2, '>'],
+      [OperatorKind.InfixL, 2, '<='],
+      [OperatorKind.InfixL, 2, '>=']
+    ],
+    [
+      [OperatorKind.InfixL, 2, '>>'],
+      [OperatorKind.InfixL, 2, '<<']
+    ],
+    [
+      [OperatorKind.InfixL, 2, '+'],
+      [OperatorKind.InfixL, 2, '-'],
+    ],
+    [
+      [OperatorKind.InfixL, 2, '/'],
+      [OperatorKind.InfixL, 2, '*'],
+      [OperatorKind.InfixL, 2, '%'],
+    ],
+    [
+      [OperatorKind.Prefix, '!']
+    ],
+  ];
+
 
   parseQualName(tokens: TokenStream): QualName {
 
@@ -171,7 +218,23 @@ export class Parser {
     // Assuming first token is 'syntax'
     tokens.get();
 
-    throw new Error('not implemented')
+    const t1 = tokens.get();
+    if (t1.kind !== SyntaxKind.Braced) {
+      throw new ParseError(t1, [SyntaxKind.Braced])
+    }
+
+    const innerTokens = t1.toTokenStream();
+
+    const pattern = this.parsePattern(innerTokens)
+
+    const t2 = innerTokens.get();
+    if (t2.kind !== SyntaxKind.RArrow) {
+      throw new ParseError(t2, [SyntaxKind.RArrow]);
+    }
+
+    const body = this.parseBody(innerTokens);
+
+    return new Macro(pattern, body)
 
   }
 
@@ -255,7 +318,7 @@ export class Parser {
   }
 
   parseStmt(tokens: TokenStream): Stmt {
-
+    this.parseCallExpr(tokens)
   }
 
   parseRecordDecl(tokens: TokenStream): RecordDecl {
@@ -327,6 +390,34 @@ export class Parser {
     if (t0.kind !== SyntaxKind.EOS) {
       throw new ParseError(t0, [SyntaxKind.EOS]);
     }
+  }
+
+  parseNewType(tokens: TokenSteam): NewTypeDecl {
+
+    let isPublic = false;
+    let t0 = tokens.get();
+    if (t0.kind !== SyntaxKind.Identifier) {
+      throw new ParseError(t0, [SyntaxKind.PubKeyword, SyntaxKind.NewTypeKeyword])
+    }
+    if (t0.text === 'pub') {
+      isPublic = true;
+      t0 = tokens.get();
+      if (t0.kind !== SyntaxKind.Identifier) {
+        throw new ParseError(t0, [SyntaxKind.NewTypeKeyword])
+      }
+    }
+
+    if (t0.text !== 'newtype') {
+      throw new ParseError(t0, [SyntaxKind.NewTypeKeyword])
+    }
+
+    const name = tokens.get();
+    if (name.kind !== SyntaxKind.Identifier) {
+      throw new ParseError(name, [SyntaxKind.Identifier])
+    }
+
+    return new NewTypeDecl(isPublic, name)
+
   }
 
   parseFuncDecl(tokens: TokenStream, origNode: Syntax | null): FuncDecl {
@@ -489,6 +580,10 @@ export class Parser {
         }
       }
       switch (kw.text) {
+        case 'newtype':
+          return this.parseNewType(tokens);
+        case 'syntax':
+          return this.parseSyntax(tokens);
         case 'mod':
           return this.parseModDecl(tokens);
         case 'fn':
@@ -500,11 +595,60 @@ export class Parser {
         case 'enum':
           return this.parseVariantDecl(tokens);
         default:
-          throw new ParseError(kw, [SyntaxKind.ModKeyword, SyntaxKind.LetKeyword, SyntaxKind.FnKeyword, SyntaxKind.EnumKeyword, SyntaxKind.StructKeyword])
+          try { 
+            return this.parseExpr(tokens)
+          } catch (e) {
+            if (e instanceof ParseError) {
+              throw new ParseError(kw, [...e.expected, SyntaxKind.ModKeyword, SyntaxKind.LetKeyword, SyntaxKind.FnKeyword, SyntaxKind.EnumKeyword, SyntaxKind.StructKeyword])
+            } else {
+              throw e;
+            }
+          }
       }
     } else {
       return this.parseStmt(tokens)
     }
+  }
+
+  getOperatorDesc(seekArity: number, seekName: string): OperatorInfo {
+    for (let i = 0; i < this.operatorTable.length; ++i) {
+      for (const [kind, arity, name] of this.operatorTable[i]) {
+        if (artity == seekArity && name === seekName) {
+          return {
+            kind,
+            name,
+            arity,
+            precedence: i
+          }
+        }
+      }
+    }
+  }
+
+  parseBinOp(tokens: TokenStream, lhs: Expr , minPrecedence: number) {
+    let lookahead = tokens.peek(1);
+    while (true) {
+      if (lookahead.kind !== SyntaxKind.Operator) {
+        break;
+      }
+      const lookaheadDesc = this.getOperatorDesc(2, lookahead.text);
+      if (lookaheadDesc === null || lookaheadDesc.precedence < minPrecedence) {
+        break;
+      }
+      const op = lookahead;
+      const opDesc = this.getOperatorDesc(2, op.text);
+      tokens.get();
+      let rhs = this.parsePrimExpr(tokens)
+      lookahead = tokens.peek()
+      while (lookaheadDesc.arity === 2 
+          && ((lookaheadDesc.precedence > opDesc.precedence)
+            || lookaheadDesc.kind === OperatorKind.InfixR && lookaheadDesc.precedence === opDesc.precedence)) {
+          rhs = this.parseBinOp(tokens, rhs, lookaheadDesc.precedence)
+      }
+      lookahead = tokens.peek();
+      lhs = new CallExpr(new RefExpr(new QualName(op, [])), [lhs, rhs]);
+    }
+    return lhs
   }
 
   parseCallExpr(tokens: TokenStream): CallExpr {
