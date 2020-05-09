@@ -3,7 +3,7 @@
 node_modules/
 
 # tsc
-/lib/
+lib/
 
 # local development files
 Makefile
