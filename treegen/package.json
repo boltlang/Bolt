@@ -4,6 +4,9 @@
   "version": "1.0.0",
   "description": "A tool to generate definitions for an arbitrary abstract syntax tree (AST)",
   "main": "lib/index.js",
+  "bin": {
+    "treegen": "lib/bin/treegen.js"
+  },
   "scripts": {
     "test": "mocha lib/test"
   },
