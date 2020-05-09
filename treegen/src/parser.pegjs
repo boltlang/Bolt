@@ -1,6 +1,26 @@
+{
+
+  function liftArray(value) {
+    if (Array.isArray(value)) {
+     return value;
+    }
+    return value === null || value === undefined ? [] : [value]
+  }
+
+  function createNode(type, props) {
+    return {
+      __IS_NODE: true,
+      type,
+      span: location(),
+      ...props,
+    }
+  }
+
+}
+
 
 File
-  = __ (@Declaration __)*
+  = __ @(@Declaration __)*
 
 Declaration
   = NodeDeclaration
@@ -8,34 +28,52 @@ Declaration
   / TypeDeclaration
 
 NodeDeclaration
-  = NodeToken __ name:Identifier parents:(__ '>' __ ExtendsList)? fields:(__ '{' __ (@NodeField __)* '}')? EOS
+  = NodeToken __ name:Identifier parents:(__ '>' __ ExtendsList)? fields:(__ '{' __ (@NodeField __)* '}')? EOS {
+      return createNode('NodeDeclaration', { name, parents: liftArray(parents), fields: liftArray(fields) });
+    }
 
 ExtendsList
-  = head:Identifier tail:(__ ',' __ @Identifier)*
+  = head:Identifier tail:(__ ',' __ @Identifier)* {
+      return [head, ...tail];
+    }
 
 NodeField
-  = name:Identifier __ ':' __ type:TypeNode EOD
+  = name:Identifier __ ':' __ typeNode:TypeNode EOD {
+      return createNode('NodeField', { name, typeNode });
+    }
 
 TypeNode
   = UnionTypeNode
 
 UnionTypeNode
-  = head:ReferenceTypeNode tail:(__ '|' __ @ReferenceTypeNode)*
+  = head:ReferenceTypeNode tail:(__ '|' __ @ReferenceTypeNode)* {
+      return [head, ...tail];
+    }
 
 ReferenceTypeNode
-  = name:Identifier genericArgs:(__ '<' __ @TypeNodeList __ '>')?
+  = name:Identifier genericArgs:(__ '<' __ @TypeNodeList __ '>')? {
+      return createNode('ReferenceTypeNode', { name, genericArgs });
+    }
 
 TypeNodeList
-  = head:TypeNode tail:(__ ',' __ @TypeNode)*
+  = parsed:(TypeNode (__ ',' __ @TypeNode)*)? {
+      return parsed !== null ? [parsed[0], ...parsed[1]] : [];
+    }
 
 EnumDeclaration
-  = EnumToken __ name:Identifier __ '{' __ (@EnumField __)* '}' EOS
+  = EnumToken __ name:Identifier __ '{' __ fields:(@EnumField __)* '}' EOS {
+      return createNode('EnumDeclaration', { name, fields });
+    }
 
 EnumField
-  = name:Identifier value:(__ '=' __ @Integer)? EOD
+  = name:Identifier value:(__ '=' __ @Integer)? EOD {
+      return createNode('EnumField', { name, value });
+    }
 
 TypeDeclaration
-  = TypeToken __ name:Identifier __ '=' __ type:TypeNode EOS
+  = TypeToken __ name:Identifier __ '=' __ typeNode:TypeNode EOS {
+      return createNode('TypeDeclaration', { name, typeNode });
+    }
 
 Identifier "an identifier"
   = $(IdentifierStart IdentifierPart*)
