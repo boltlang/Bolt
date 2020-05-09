@@ -3,7 +3,7 @@
 
 import * as path from "path"
 
-import { Stream, StreamWrapper } from "./util"
+import { Stream, StreamWrapper, FastStringMap } from "./util"
 import { Scanner } from "./scanner"
 import { RecordType, PrimType, OptionType, VariantType, stringType, intType, boolType } from "./checker"
 import { bind } from "./bindings"
@@ -16,6 +16,8 @@ type Json = null | string | boolean | number | JsonArray | JsonObject;
 export type TokenStream = Stream<Token>;
 
 export enum SyntaxKind {
+
+  // Bolt language AST
 
   // Tokens
 
@@ -48,15 +50,10 @@ export enum SyntaxKind {
   // Special nodes
 
   SourceFile,
-
   Module,
-
   QualName,
-
   Sentence,
-
   Param,
-
   EOS,
 
   // Patterns
@@ -91,16 +88,38 @@ export enum SyntaxKind {
   VariantDecl,
   NewTypeDecl,
 
+  // JavaScript AST
+
+  // Expressions
+
+  JSReferenceExpression,
+  JSCallExpression,
+  JSYieldExpression,
+
+  // Statements
+
+  JSReturnStatement,
+
+  // Special nodes
+
+  JSSourceFile,
+
+  // C language AST
+
+  // Miscellaneous elements
+
+  CSourceFile,
+
 }
 
 export class TextFile {
 
-  constructor(public path: string, public cwd: string = '.') {
-    
+  constructor(public origPath: string) {
+
   }
 
   get fullPath() {
-    return path.resolve(this.cwd, this.path)
+    return path.resolve(this.origPath)
   }
 
 }
@@ -119,14 +138,6 @@ export class TextPos {
     return new TextPos(this.offset, this.line, this.column)
   }
 
-  toJSON(): Json {
-    return {
-      offset: this.offset,
-      line: this.line,
-      column: this.column
-    }
-  }
-
 }
 
 export class TextSpan {
@@ -143,43 +154,22 @@ export class TextSpan {
     return new TextSpan(this.file, this.start.clone(), this.end.clone());
   }
 
-  toJSON(): Json {
-    return {
-      file: this.file.path,
-      start: this.start.toJSON(),
-      end: this.end.toJSON(),
-    }
-  }
-
 }
+
+export type SyntaxRange = [Syntax, Syntax];
 
 abstract class SyntaxBase {
 
   abstract kind: SyntaxKind;
-  abstract origNode: [Syntax, Syntax] | Syntax | null;
-  abstract parentNode: Syntax | null;
-  abstract span: TextSpan | null;
 
-  getSpan(): TextSpan {
+  public parentNode: Syntax | null = null;
 
-    let curr: Syntax | null = this as any as Syntax;
-
-    do {
-      if (curr.span !== null ) {
-        return curr.span;
-      }
-      curr = curr.origNode;
-    } while (curr !== null)
-
-    throw new Error(`No TextSpan object found in this node or any of its originating nodes.`);
+  constructor(
+    public span: TextSpan | null,
+    public origNode: SyntaxRange | null,
+  ) {
 
   }
-
-  getFile(): TextFile {
-    return this.getSpan().file;
-  }
-
-  abstract getChildren(): IterableIterator<Syntax>;
 
 }
 
@@ -192,22 +182,10 @@ export class StringLiteral extends SyntaxBase {
 
   constructor(
     public value: string,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      value: this.value,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
+    super(span, origNode);
   }
 
 }
@@ -218,11 +196,10 @@ export class IntegerLiteral extends SyntaxBase {
 
   constructor(
     public value: bigint,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
+    super(span, origNode);
   }
 
   toJSON(): Json {
@@ -246,62 +223,27 @@ export enum PunctType {
 }
 
 export class EOS extends SyntaxBase {
-
   kind: SyntaxKind.EOS = SyntaxKind.EOS;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON() {
-    return {
-      kind: 'EOS'
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
 export abstract class Punctuated extends SyntaxBase {
 
   constructor(
     public text: string,
-    public span: TextSpan,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
+    super(span, origNode);
   }
 
   toSentences() {
-    const span = this.getSpan();
-    const scanner = new Scanner(span.file, this.text)
+    const scanner = new Scanner(this.span!.file, this.text)
     return scanner.scanTokens()
   }
 
   toTokenStream() {
-    const span = this.getSpan();
-    const startPos = span.start;
-    return new Scanner(span.file, this.text, new TextPos(startPos.offset+1, startPos.line, startPos.column+1));
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Braced',
-      text: this.text,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
+    const startPos = this.span!.start;
+    return new Scanner(this.span!.file, this.text, new TextPos(startPos.offset+1, startPos.line, startPos.column+1));
   }
 
 }
@@ -324,23 +266,10 @@ export class Identifier extends SyntaxBase {
 
   constructor(
     public text: string,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Identifier',
-      text: this.text,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
+    super(span, origNode);
   }
 
 }
@@ -352,177 +281,37 @@ export class Operator extends SyntaxBase {
   constructor(
     public text: string,
     public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    origNode: SyntaxRange | null = null,
+    parentNode: Syntax | null = null
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Operator',
-      text: this.text,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
+    super(span, origNode);
   }
 
 }
 
 export class Semi extends SyntaxBase {
-  
   kind: SyntaxKind.Semi = SyntaxKind.Semi;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Semi',
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
 export class Colon extends SyntaxBase {
-  
   kind: SyntaxKind.Colon = SyntaxKind.Colon;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Colon',
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
 export class Comma extends SyntaxBase {
-
   kind: SyntaxKind.Comma = SyntaxKind.Comma;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Comma',
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
 
 export class RArrow extends SyntaxBase {
-
   kind: SyntaxKind.RArrow = SyntaxKind.RArrow;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'RArrow',
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
-
-
 export class EqSign extends SyntaxBase {
-
   kind: SyntaxKind.EqSign = SyntaxKind.EqSign;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'EqSign',
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
 export class Dot extends SyntaxBase {
-
   kind: SyntaxKind.Dot = SyntaxKind.Dot;
-
-  constructor(
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
-  ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Dot',
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
-  }
-
 }
 
 export type Token
@@ -547,11 +336,10 @@ export class Sentence extends SyntaxBase {
 
   constructor(
     public tokens: Token[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
+    super(span, origNode);
   }
 
   toTokenStream() {
@@ -561,34 +349,19 @@ export class Sentence extends SyntaxBase {
     );
   }
 
-  toJSON(): Json {
-    return {
-      kind: 'Sentence',
-      tokens: this.tokens.map(token => token.toJSON()),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    for (const token of this.tokens) {
-      yield token;
-    }
-  }
-
 }
 
-export class QualName {
+export class QualName extends SyntaxBase {
 
   kind: SyntaxKind.QualName = SyntaxKind.QualName;
 
   constructor(
     public name: Identifier | Operator,
     public path: Identifier[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-
+    super(span, origNode);
   }
 
   get fullText() {
@@ -598,22 +371,6 @@ export class QualName {
     }
     return out + this.name.text
   }
-
-  toJSON(): Json {
-    return {
-      kind: 'QualName',
-      name: this.name.toJSON(),
-      path: this.path.map(p => p.toJSON()),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-    *getChildren(): IterableIterator<Syntax> {
-      for (const chunk of this.path) {
-        yield chunk
-      }
-      yield this.name
-    }
 
 }
 
@@ -625,31 +382,10 @@ export class Param extends SyntaxBase {
     public bindings: Patt,
     public typeDecl: TypeDecl | null,
     public defaultValue: Expr | null,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null,
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'Param',
-      bindings: this.bindings.toJSON(),
-      typeDecl: this.typeDecl !== null ? this.typeDecl.toJSON() : null,
-      defaultValue: this.defaultValue !== null ? this.defaultValue.toJSON() : null,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren() { 
-    yield this.bindings
-    if (this.typeDecl !== null) {
-      yield this.typeDecl
-    }
-    if (this.defaultValue !== null) {
-      yield this.defaultValue
-    }
+    super(span, origNode);
   }
 
 }
@@ -660,27 +396,15 @@ export class BindPatt extends SyntaxBase {
 
   constructor(
     public name: Identifier,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'BindPatt',
-      name: this.name.toJSON(),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.name
+    super(span, origNode);
   }
 
 }
 
+// FIXME make this a node
 export interface RecordPattField {
   name: Identifier;
   pattern: Patt,
@@ -693,18 +417,10 @@ export class RecordPatt extends SyntaxBase {
   constructor(
     public typeDecl: TypeDecl,
     public fields: RecordPattField[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    for (const field of this.fields) {
-      yield field.name;
-      yield field.pattern;
-    }
+    super(span, origNode);
   }
 
 }
@@ -715,17 +431,10 @@ export class TuplePatt extends SyntaxBase {
 
   constructor(
     public elements: Patt[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    for (const element of this.elements) {
-      yield element;
-    }
+    super(span, origNode);
   }
 
 }
@@ -737,16 +446,10 @@ export class TypePatt extends SyntaxBase {
   constructor(
     public typeDecl: TypeDecl,
     public pattern: Patt,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  *getChildren() {
-    yield this.typeDecl;
-    yield this.pattern;
+    super(span, origNode);
   }
 
 }
@@ -764,23 +467,10 @@ export class RefExpr extends SyntaxBase {
 
   constructor(
     public name: QualName,
-    public span: TextSpan | null = null, 
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null, 
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'RefExpr',
-      name: this.name.toJSON(),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.name
+    super(span, origNode);
   }
 
 }
@@ -792,31 +482,15 @@ export class CallExpr extends SyntaxBase {
   constructor(
     public operator: Expr,
     public args: Expr[],
-    public span: TextSpan | null = null, 
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null, 
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'CallExpr',
-      operator: this.operator.toJSON(),
-      args: this.args.map(a => a.toJSON()),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.operator
-    for (const arg of this.args) {
-      yield arg
-    }
+    super(span, origNode);
   }
 
 }
 
+// FIXME make this a node
 export type MatchArm = [Patt, Expr | Stmt[]];
 
 export class MatchExpr extends SyntaxBase {
@@ -826,25 +500,10 @@ export class MatchExpr extends SyntaxBase {
   constructor(
     public value: Expr,
     public arms: MatchArm[],
-    public span: TextSpan | null = null, 
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null, 
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.value;
-    for (const [pattern, result] of this.arms) {
-      yield pattern
-      if (Array.isArray(result)) {
-        for (const stmt of result) {
-          yield stmt
-        }
-      } else {
-        yield result
-      }
-    }
+    super(span, origNode);
   }
 
 }
@@ -855,25 +514,11 @@ export class ConstExpr extends SyntaxBase {
 
   constructor(
     public value: Value,
-    public span: TextSpan | null = null, 
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null, 
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
+    super(span, origNode);
   }
-
-  toJSON(): Json {
-    return {
-      kind: 'ConstExpr',
-      value: typeof this.value === 'bigint' ? { 'type': 'bigint', value: this.value.toString() } : this.value,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    
-  }
-
 
 }
 
@@ -889,25 +534,10 @@ export class RetStmt extends SyntaxBase {
 
   constructor(
     public value: Expr | null,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'RetStmt',
-      value: this.value !== null ? this.value.toJSON() : null,
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    if (this.value !== null) {
-      yield this.value
-    }
+    super(span, origNode);
   }
 
 }
@@ -917,26 +547,16 @@ export interface Case {
   consequent: Stmt[]
 }
 
-export class CondStmt {
-  
+export class CondStmt extends SyntaxBase {
+
   kind: SyntaxKind.CondStmt = SyntaxKind.CondStmt
 
   constructor(
     public cases: Case[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    for (const kase of this.cases) {
-      yield kase.conditional
-      for (const stmt of kase.consequent) {
-        yield stmt
-      }
-    }
+    super(span, origNode);
   }
 
 }
@@ -952,27 +572,10 @@ export class TypeRef extends SyntaxBase {
   constructor(
     public name: QualName,
     public typeArgs: TypeDecl[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'TypeRef',
-      name: this.name.toJSON(),
-      args: this.typeArgs.map(a => a.toJSON()),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.name
-    for (const arg of this.typeArgs) {
-      yield arg
-    }
+    super(span, origNode);
   }
 
 }
@@ -991,39 +594,10 @@ export class FuncDecl extends SyntaxBase {
     public params: Param[],
     public returnType: TypeDecl | null,
     public body: Body | null,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  // toJSON(): Json {
-  //   return {
-  //     kind: 'FuncDecl',
-  //     isPublic: this.isPublic,
-  //     target: this.target,
-  //     name: this.name.toJSON(),
-  //     params: this.params.map(p => p.toJSON()),
-  //     returnType: this.returnType !== null ? this.returnType.toJSON() : null,
-  //     body: this.body !== null ? this.body.map(s => s.toJSON()) : null,
-  //     span: this.span !== null ? this.span.toJSON() : this.span,
-  //   }
-  // }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.name
-    for (const param of this.params) {
-      yield param
-    }
-    if (this.returnType !== null) {
-      yield this.returnType;
-    }
-    if (this.body !== null) {
-      for (const stmt of this.body) {
-        yield stmt
-      }
-    }
+    super(span, origNode);
   }
 
 }
@@ -1037,50 +611,24 @@ export class VarDecl extends SyntaxBase {
     public bindings: Patt, 
     public typeDecl: TypeDecl | null,
     public value: Expr | null,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'VarDecl',
-      bindings: this.bindings.toJSON(),
-      typeDecl: this.typeDecl !== null ? this.typeDecl.toJSON() : null,
-      value: this.value !== null ? this.value.toJSON() : null,
-      span: this.span !== null ? this.span.toJSON() : this.span,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    yield this.bindings
-    if (this.typeDecl !== null) {
-      yield this.typeDecl
-    }
-    if (this.value !== null) {
-      yield this.value;
-    }
+    super(span, origNode);
   }
 
 }
 
-export class ImportDecl {
+export class ImportDecl extends SyntaxBase {
 
   kind: SyntaxKind.ImportDecl = SyntaxKind.ImportDecl;
 
   constructor(
     public file: string,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-
+    super(span, origNode);
   }
 
 }
@@ -1095,20 +643,11 @@ export class RecordDecl extends SyntaxBase {
     public isPublic: boolean,
     public name: QualName,
     fields: Iterable<[Identifier, TypeDecl]>,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super()
+    super(span, origNode)
     this.fields = new Map(fields);
-  }
-
-  *getChildren() {
-    yield this.name;
-    for (const [name, typeDecl] of this.fields) {
-      yield name
-      yield typeDecl
-    }
   }
 
 }
@@ -1120,15 +659,10 @@ export class NewTypeDecl extends SyntaxBase {
   constructor(
     public isPublic: boolean,
     public name: Identifier,
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  *getChildren() {
-    yield this.name;
+    super(span, origNode);
   }
 
 }
@@ -1164,17 +698,10 @@ export class Module extends SyntaxBase {
     public isPublic: boolean,
     public name: QualName,
     public elements: SourceElement[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    for (const element of this.elements) {
-      yield element;
-    }
+    super(span, origNode);
   }
 
 }
@@ -1185,32 +712,190 @@ export class SourceFile extends SyntaxBase {
 
   constructor(
     public elements: SourceElement[],
-    public span: TextSpan | null = null,
-    public origNode: [Syntax, Syntax] | Syntax | null = null,
-    public parentNode: Syntax | null = null
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
   ) {
-    super();
-  }
-
-  toJSON(): Json {
-    return {
-      kind: 'SourceFile',
-      elements: this.elements.map(element => element.toJSON()),
-      span: this.span !== null ? this.span.toJSON() : null,
-    }
-  }
-
-  *getChildren(): IterableIterator<Syntax> {
-    for (const element of this.elements) {
-      yield element
-    }
+    super(span, origNode);
   }
 
 }
 
 export function isExpr(node: Syntax): node is Expr {
+  return node.kind === SyntaxKind.ConstExpr 
+      || node.kind === SyntaxKind.CallExpr
+      || node.kind === SyntaxKind.MatchExpr
+      || node.kind === SyntaxKind.RefExpr;
+}
 
-  return node.kind === SyntaxKind.ConstExpr || node.kind === SyntaxKind.CallExpr;
+export class JSYieldExpression extends SyntaxBase {
+
+  kind: SyntaxKind.JSYieldExpression = SyntaxKind.JSYieldExpression;
+
+  constructor(
+    public value: JSExpression,
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
+  ) {
+    super(span, origNode);
+  }
+
+}
+
+export class JSReferenceExpression extends SyntaxBase {
+
+  kind: SyntaxKind.JSReferenceExpression = SyntaxKind.JSReferenceExpression;
+
+  constructor(
+    public name: string,
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null
+  ) {
+    super(span, origNode);
+  }
+
+}
+
+export class JSCallExpression extends SyntaxBase {
+
+  kind: SyntaxKind.JSCallExpression = JSCallExpression;
+
+  constructor(
+    public operator: JSExpression,
+    public operands: JSExpression[],
+  ) {
+
+  }
+
+}
+
+export type JSExpression
+  = JSYieldExpression
+  | JSReferenceExpression
+  | JSCallExpression
+
+export type JSStatement
+  = JSReturnStatement
+
+export type JSDeclaration
+  = JSVariableDeclaration
+  | JSFunctionDeclaration
+
+export type JSSourceElement
+  = JSStatement
+  | JSDeclaration
+
+export class JSSourceFile extends SyntaxBase {
+
+  kind: SyntaxKind.JSSourceFile = SyntaxKind.JSSourceFile;
+
+  constructor(
+    public elements: JSSourceElement[],
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null,
+  ) {
+    super(span, origNode);
+  }
+
+}
+
+export type JSSyntax
+  = JSExpression
+  | JSStatement
+  | JSDeclaration
+  | JSSourceFile
+
+export type CSourceElement
+  = never
+
+export class CSourceFile extends SyntaxBase {
+
+  kind: SyntaxKind.CSourceFile = SyntaxKind.CSourceFile;
+
+  constructor(
+    public elements: CSourceElement,
+    span: TextSpan | null = null,
+    origNode: SyntaxRange | null = null
+  ) {
+    super(span, origNode);
+  }
+
+}
+
+export type CSyntax
+  = CSourceFile
+
+export type AnySyntax
+  = Syntax
+  | JSSyntax
+  | CSyntax
+
+export type AnySourceFile
+  = SourceFile
+  | JSSourceFile
+  | CSourceFile
+
+export function nodeToJSON(node: Syntax) {
+
+  const obj: Json = {
+    kind: SyntaxKind[node.kind],
+  };
+
+  for (const key of Object.keys(node)) {
+    if (key !== 'kind' && key !== 'origNode' && key !== 'parentNode') {
+      const value = (node as any)[key];
+      if (Array.isArray(value)) {
+        obj[key] = value.map(visit)
+      } else {
+        obj[key] = visit(value);
+      }
+    }
+  }
+
+  return obj;
+
+  function visit(value: any) {
+    if (isNode(value)) {
+      return nodeToJSON(node);
+    } else {
+      return value;
+    }
+  }
+
+}
+
+export function isJSNode(node: Syntax): node is JSSyntax {
+  return SyntaxKind[node.kind].startsWith('JS');
+}
+
+export function getChildren(node: Syntax) {
+
+  const out: Syntax[] = [];
+
+  for (const key of Object.keys(node)) {
+    if (key !== 'kind' && key !== 'origNode' && key !== 'parentNode') {
+      const value = (node as any)[key];
+      if (Array.isArray(value)) {
+        for (const element of value) {
+          visit(element)
+        }
+      } else {
+        visit(value)
+      }
+    }
+  }
+
+  return out;
+
+  function visit(value: any) {
+    if (isNode(value)) {
+      out.push(value);
+    }
+  }
+
+}
+
+export function kindToString(kind: SyntaxKind) {
+  return SyntaxKind[kind];
 }
 
 export function isNode(value: any): value is Syntax {
@@ -1218,15 +903,69 @@ export function isNode(value: any): value is Syntax {
       && Object.prototype.hasOwnProperty.call(SyntaxKind, value.kind)
 }
 
-export function isJSNode(node: Syntax) {
-  return typeof node.type === 'string'
+export function getTargetLanguage(node: AnySyntax) {
+  switch (node.kind) {
+    case SyntaxKind.StringLiteral:
+    case SyntaxKind.IntegerLiteral:
+    case SyntaxKind.Identifier:
+    case SyntaxKind.Operator:
+    case SyntaxKind.Parenthesized:
+    case SyntaxKind.Braced:
+    case SyntaxKind.Bracketed:
+    case SyntaxKind.Semi:
+    case SyntaxKind.Comma:
+    case SyntaxKind.Colon:
+    case SyntaxKind.Dot:
+    case SyntaxKind.RArrow:
+    case SyntaxKind.EqSign:
+    case SyntaxKind.FnKeyword:
+    case SyntaxKind.ForeignKeyword:
+    case SyntaxKind.LetKeyword:
+    case SyntaxKind.ImportKeyword:
+    case SyntaxKind.PubKeyword:
+    case SyntaxKind.ModKeyword:
+    case SyntaxKind.EnumKeyword:
+    case SyntaxKind.StructKeyword:
+    case SyntaxKind.NewTypeKeyword:
+    case SyntaxKind.SourceFile:
+    case SyntaxKind.Module:
+    case SyntaxKind.QualName:
+    case SyntaxKind.Sentence:
+    case SyntaxKind.Param:
+    case SyntaxKind.EOS:
+    case SyntaxKind.BindPatt:
+    case SyntaxKind.TypePatt:
+    case SyntaxKind.RecordPatt:
+    case SyntaxKind.TuplePatt:
+    case SyntaxKind.CallExpr:
+    case SyntaxKind.ConstExpr:
+    case SyntaxKind.RefExpr:
+    case SyntaxKind.MatchExpr:
+    case SyntaxKind.RetStmt:
+    case SyntaxKind.CondStmt:
+    case SyntaxKind.TypeRef:
+    case SyntaxKind.VarDecl:
+    case SyntaxKind.FuncDecl:
+    case SyntaxKind.ImportDecl:
+    case SyntaxKind.RecordDecl:
+    case SyntaxKind.VariantDecl:
+    case SyntaxKind.NewTypeDecl:
+        return "Bolt";
+    case SyntaxKind.JSReferenceExpression:
+    case SyntaxKind.JSCallExpression:
+    case SyntaxKind.JSYieldExpression:
+    case SyntaxKind.JSReturnStatement:
+    case SyntaxKind.JSSourceFile:
+      return "JS";
+    case SyntaxKind.CSourceFile:
+      return "C";
+    default:
+      throw new Error(`Could not determine language of ${SyntaxKind[node.kind]}.`);
+  }
 }
 
 export function setParents(node: Syntax) {
-  if (isJSNode(node)) {
-    return;
-  }
-  for (const child of node.getChildren()) {
+  for (const child of getChildren(node)) {
     child.parentNode = node
     setParents(child)
   }
