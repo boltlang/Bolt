@@ -28,7 +28,7 @@ Declaration
   / TypeDeclaration
 
 NodeDeclaration
-  = NodeToken __ name:Identifier parents:(__ '>' __ ExtendsList)? fields:(__ '{' __ (@NodeField __)* '}')? EOS {
+  = NodeToken __ name:Identifier parents:(__ '>' __ @ExtendsList)? fields:(__ '{' __ @(@NodeField __)* '}')? EOS {
       return createNode('NodeDeclaration', { name, parents: liftArray(parents), fields: liftArray(fields) });
     }
 
@@ -47,12 +47,15 @@ TypeNode
 
 UnionTypeNode
   = head:ReferenceTypeNode tail:(__ '|' __ @ReferenceTypeNode)* {
-      return [head, ...tail];
+      if (tail.length === 0) {
+        return head;
+      }
+      return createNode('UnionTypeNode', { elements: [head, ...tail] });
     }
 
 ReferenceTypeNode
-  = name:Identifier genericArgs:(__ '<' __ @TypeNodeList __ '>')? {
-      return createNode('ReferenceTypeNode', { name, genericArgs });
+  = name:Identifier typeArgs:(__ '<' __ @TypeNodeList __ '>')? {
+      return createNode('ReferenceTypeNode', { name, typeArgs });
     }
 
 TypeNodeList

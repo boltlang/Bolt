@@ -22,6 +22,7 @@ export interface NodeField {
 export interface NodeDeclaration {
   type: 'NodeDeclaration';
   name: string;
+  parents: string[];
   fields: NodeField[];
 }
 
