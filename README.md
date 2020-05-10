@@ -51,7 +51,7 @@ shares a lot of its syntax and semantics with.
 
 I really like Rust, but if I just care about writing an application I believe
 Rust's memory model with its borrow checker is overkill. Having a garbage
-collector certainly results in a performance penalty, but I believe that as
+collector might result in a performance penalty, but I believe that as
 long as the user does not notice it, it does not really matter.
 
 ## License
