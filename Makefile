@@ -2,7 +2,7 @@
 all: lib/ast.js
 	bolt bundle test.bolt
 
-lib/ast.js: spec/ast.txt lib/treegen/parser.js lib/bin/bolt-treegen.js lib/treegen/util.js src/treegen/ast-template.js
+lib/ast.js: spec/ast.txt lib/treegen/parser.js lib/bin/bolt-treegen.js lib/treegen
 	@echo "Generating AST definitions ..."
 	@mkdir -p lib/
 	@chmod +x lib/bin/*.js
