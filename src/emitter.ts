@@ -1,5 +1,5 @@
 
-import { Syntax, SyntaxKind, isJSNode } from "./ast"
+import { Syntax, SyntaxKind, kindToString } from "./ast"
 
 export class Emitter {
 
@@ -7,7 +7,7 @@ export class Emitter {
 
     switch (node.kind) {
 
-      case SyntaxKind.SourceFile:
+      case SyntaxKind.JSSourceFile:
         let out = ''
         for (const element of node.elements) {
           out += this.emit(element);
@@ -15,7 +15,7 @@ export class Emitter {
         return out;
 
       default:
-        throw new Error(`Could not emit source code for ${SyntaxKind[node.kind]}`)
+        throw new Error(`Could not emit source code for ${kindToString(node.kind)}`)
 
     }
 

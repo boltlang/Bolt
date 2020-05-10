@@ -2,30 +2,38 @@
 import XRegExp from "xregexp"
 
 import {
-  SyntaxKind,
   TextFile,
   TextPos,
   TextSpan,
-  Identifier,
-  RArrow,
-  Operator,
-  PunctType,
-  Token,
-  Decl,
-  Parenthesized,
-  Braced,
-  Bracketed,
-  Sentence,
-  SourceFile,
-  Semi,
-  Comma,
-  StringLiteral,
-  IntegerLiteral,
-  Colon,
-  EOS,
-  Dot,
-  EqSign,
+} from "./text"
+
+import {
+  SyntaxKind,
+  BoltToken,
+  BoltSentence,
+  createBoltSentence,
+  createBoltIdentifier,
+  createBoltRArrow,
+  createBoltOperator,
+  createBoltParenthesized,
+  createBoltBraced,
+  createBoltBracketed,
+  createBoltSourceFile,
+  createBoltSemi,
+  createBoltComma,
+  createBoltStringLiteral,
+  createBoltIntegerLiteral,
+  createBoltColon,
+  createBoltEOS,
+  createBoltDot,
+  createBoltEqSign,
 } from "./ast"
+
+export enum PunctType {
+  Paren,
+  Bracket,
+  Brace,
+}
 
 function escapeChar(ch: string) {
   switch (ch) {
@@ -90,12 +98,8 @@ function isOpenPunct(ch: string) {
 
 class ScanError extends Error {
   constructor(public file: TextFile, public position: TextPos, public char: string) {
-    super(`${file.path}:${position.line}:${position.column}: unexpected char '${escapeChar(char)}'`)
+    super(`${file.origPath}:${position.line}:${position.column}: unexpected char '${escapeChar(char)}'`)
   }
-}
-
-interface Stream<T> {
-  read(): T
 }
 
 function isDigit(ch: string) {
@@ -132,7 +136,7 @@ const EOF = ''
 export class Scanner {
 
   protected buffer: string[] = [];
-  protected scanned: Token[] = [];
+  protected scanned: BoltToken[] = [];
   protected currPos: TextPos;
   protected offset = 0;
 
@@ -188,7 +192,7 @@ export class Scanner {
     return text;
   }
 
-  scanToken(): Token {
+  scanToken(): BoltToken {
 
     while (true) {
 
@@ -202,25 +206,25 @@ export class Scanner {
       const startPos = this.currPos.clone()
 
       if (c0 == EOF) {
-        return new EOS(new TextSpan(this.file, startPos, startPos));
+        return createBoltEOS(new TextSpan(this.file, startPos, startPos));
       }
 
       switch (c0) {
         case '.':
           this.getChar();
-          return new Dot(new TextSpan(this.file, startPos, this.currPos.clone()));
+          return createBoltDot(new TextSpan(this.file, startPos, this.currPos.clone()));
         case '=':
           this.getChar();
-          return new EqSign(new TextSpan(this.file, startPos, this.currPos.clone()));
+          return createBoltEqSign(new TextSpan(this.file, startPos, this.currPos.clone()));
         case ';':
           this.getChar();
-          return new Semi(new TextSpan(this.file, startPos, this.currPos.clone()));
+          return createBoltSemi(new TextSpan(this.file, startPos, this.currPos.clone()));
         case ',':
           this.getChar();
-          return new Comma(new TextSpan(this.file, startPos, this.currPos.clone()));
+          return createBoltComma(new TextSpan(this.file, startPos, this.currPos.clone()));
         case ':':
           this.getChar();
-          return new Colon(new TextSpan(this.file, startPos, this.currPos.clone()));
+          return createBoltColon(new TextSpan(this.file, startPos, this.currPos.clone()));
       }
 
       if (c0 === '"') {
@@ -245,13 +249,13 @@ export class Scanner {
 
         const endPos = this.currPos.clone();
 
-        return new StringLiteral(text, new TextSpan(this.file, startPos, endPos))
+        return createBoltStringLiteral(text, new TextSpan(this.file, startPos, endPos))
 
       } else if (isDigit(c0)) {
 
         const digits = this.takeWhile(isDigit)
         const endPos = this.currPos.clone();
-        return new IntegerLiteral(BigInt(digits), new TextSpan(this.file, startPos, endPos));
+        return createBoltIntegerLiteral(BigInt(digits), new TextSpan(this.file, startPos, endPos));
 
       } else if (isOpenPunct(c0)) {
 
@@ -287,11 +291,11 @@ export class Scanner {
 
         switch (punctType) {
           case PunctType.Brace:
-            return new Braced(text, new TextSpan(this.file, startPos, endPos));
+            return createBoltBraced(text, new TextSpan(this.file, startPos, endPos));
           case PunctType.Paren:
-            return new Parenthesized(text, new TextSpan(this.file, startPos, endPos));
+            return createBoltParenthesized(text, new TextSpan(this.file, startPos, endPos));
           case PunctType.Bracket:
-            return new Bracketed(text, new TextSpan(this.file, startPos, endPos));
+            return createBoltBracketed(text, new TextSpan(this.file, startPos, endPos));
           default:
             throw new Error("Got an invalid state.")
         }
@@ -300,7 +304,7 @@ export class Scanner {
 
         const name = this.takeWhile(isIdentPart);
         const endPos = this.currPos.clone();
-        return new Identifier(name, new TextSpan(this.file, startPos, endPos))
+        return createBoltIdentifier(name, new TextSpan(this.file, startPos, endPos))
 
       } else if (isOperatorStart(c0)) {
 
@@ -309,9 +313,9 @@ export class Scanner {
         const span = new TextSpan(this.file, startPos, endPos);
 
         if (text === '->') {
-          return new RArrow(span);
+          return createBoltRArrow(span);
         } else {
-          return new Operator(text, span);
+          return createBoltOperator(text, span);
         }
 
       } else {
@@ -324,14 +328,14 @@ export class Scanner {
 
   }
 
-  peek(count = 1): Token {
+  peek(count = 1): BoltToken {
     while (this.scanned.length < count) {
       this.scanned.push(this.scanToken());
     }
     return this.scanned[count - 1];
   }
 
-  get(): Token {
+  get(): BoltToken {
     return this.scanned.length > 0
       ? this.scanned.shift()!
       : this.scanToken();
@@ -339,33 +343,33 @@ export class Scanner {
 
   scanTokens() {
 
-    const elements: Sentence[] = []
+    const elements: BoltSentence[] = []
 
     outer: while (true) {
 
-      const tokens: Token[] = [];
+      const tokens: BoltToken[] = [];
 
       inner: while (true) {
         const token = this.scanToken();
-        if (token.kind === SyntaxKind.EOS) {
+        if (token.kind === SyntaxKind.BoltEOS) {
           if (tokens.length === 0) {
             break outer;
           } else {
             break inner;
           }  
         }
-        if (token.kind === SyntaxKind.Semi) {
+        if (token.kind === SyntaxKind.BoltSemi) {
           break;
         }
         tokens.push(token)
-        if (token.kind === SyntaxKind.Braced) {
+        if (token.kind === SyntaxKind.BoltBraced) {
           break;
         }
       }
 
       if (tokens.length > 0) {
         elements.push(
-          new Sentence(
+          createBoltSentence(
             tokens,
             new TextSpan(this.file, tokens[0].span!.start.clone(), tokens[tokens.length-1].span!.end.clone())
           )
@@ -381,7 +385,7 @@ export class Scanner {
     const startPos = this.currPos.clone();
     const elements = this.scanTokens();
     const endPos = this.currPos.clone();
-    return new SourceFile(elements, new TextSpan(this.file, startPos, endPos));
+    return createBoltSourceFile(elements, new TextSpan(this.file, startPos, endPos));
   }
 
 }

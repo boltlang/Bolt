@@ -7,14 +7,14 @@ const nodeProto = {
   }
 }
 
+function isSyntax(value) {
+  return typeof value === 'object'
+      && value !== null
+      && value.__NODE_TYPE !== undefined;
+}
+
 function createNode(nodeType) {
   const obj = Object.create(nodeProto);
-  Object.defineProperty(obj, '__IS_NODE', {
-    enumerable: false,
-    writable: false,
-    configurable: true,
-    value: true,
-  });
   Object.defineProperty(obj, '__NODE_TYPE', {
     enumerable: false,
     writable: false,
@@ -23,9 +23,8 @@ function createNode(nodeType) {
   });
   Object.defineProperty(obj, 'kind', {
     enumerable: false,
-    writable: false,
     configurable: true,
-    getter() {
+    get() {
       return this.__NODE_TYPE.index;
     }
   });
@@ -35,6 +34,7 @@ function createNode(nodeType) {
 }
 
 for (const nodeName of Object.keys(NODE_TYPES)) {
+
   exported[`create${nodeName}`] = function (...args) {
     const nodeType = NODE_TYPES[nodeName];
     const node = createNode(nodeType);
@@ -67,6 +67,7 @@ for (const nodeName of Object.keys(NODE_TYPES)) {
     }
     return node;
   }
+
 }
 
 if (typeof module !== 'undefined') {

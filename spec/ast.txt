@@ -1,15 +1,12 @@
 
+@language Bolt;
+@language JS;
+
 // Bolt language AST definitions
 
 type BoltValue = Integer | bool | String;
 
 node FunctionBody;
-
-enum BoltDeclarationModifiers {
-  Mutable = 0x1,
-  Public  = 0x2,
-  IsType  = 0x4,
-}
 
 node BoltToken;
 
@@ -18,7 +15,7 @@ node BoltStringLiteral > BoltToken {
 }
 
 node BoltIntegerLiteral > BoltToken {
-  value: usize,
+  value: Int,
 }
 
 node BoltSymbol > BoltToken {
@@ -37,6 +34,7 @@ node BoltEOS    > BoltToken;
 
 node BoltComma  > BoltToken;
 node BoltSemi   > BoltToken;
+node BoltColon  > BoltToken;
 node BoltDot    > BoltToken;
 node BoltDotDot > BoltToken;
 node BoltRArrow > BoltToken;
@@ -63,8 +61,6 @@ node BoltParenthesized > BoltPunctuated;
 node BoltBraced > BoltPunctuated;
 node BoltBracketed > BoltPunctuated;
 
-node BoltSourceElement;
-
 node BoltSourceFile {
   elements: Vec<BoltSourceElement>,
 }
@@ -72,6 +68,10 @@ node BoltSourceFile {
 node BoltQualName {
   modulePath: Vec<BoltIdentifier>,
   name: BoltSymbol, 
+}
+
+node BoltSentence > BoltSourceElement {
+  tokens: Vec<BoltToken>,
 }
 
 node BoltTypeNode;
@@ -88,7 +88,7 @@ node BoltBindPattern > BoltPattern {
 }
 
 node BoltTypePattern > BoltPattern {
-  typeNode: BoltTypeNode,
+  type: BoltTypeNode,
   nestedPattern: BoltPattern,
 }
 
@@ -111,10 +111,15 @@ node BoltRecordPatternField {
 }
 
 node BoltRecordPattern > BoltPattern {
+  name: BoltTypeNode,
   fields: Vec<BoltRecordPatternField>,
 }
 
 node BoltExpression;
+
+node BoltReferenceExpression > BoltExpression {
+  name: BoltQualName,
+}
 
 node BoltCallExpression > BoltExpression {
   operator: BoltExpression,
@@ -152,7 +157,7 @@ node BoltConstantExpression > BoltExpression {
   value: BoltValue,
 }
 
-node BoltStatement;
+node BoltStatement > BoltSourceElement;
 
 node BoltReturnStatement > BoltStatement {
   value: Option<BoltExpression>,
@@ -166,40 +171,52 @@ node BoltExpressionStatement > BoltStatement {
   expression: BoltExpression,
 }
 
-node BoltModule {
-  modifiers: BoltDeclarationModifiers,
-  name: BoltQualName,
-  elements: BoltSourceElement,
-}
-
 node BoltParameter {
   index: usize,
   bindings: BoltPattern,
-  typeNode: Option<BoltTypeNode>,
+  type: Option<BoltTypeNode>,
   defaultValue: Option<BoltExpression>,
 }
 
-node BoltDeclaration;
+node BoltDeclaration > BoltSourceElement;
+
+enum BoltDeclarationModifiers {
+  Mutable = 0x1,
+  Public  = 0x2,
+  IsType  = 0x4,
+}
+
+node BoltNewTypeDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltIdentifier,
+}
+
+node BoltModule > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltQualName,
+  elements: Vec<BoltSourceElement>,
+}
 
 node BoltFunctionDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
   name: BoltSymbol,
   params: Vec<BoltParameter>,
-  type: Option<BoltTypeNode>,
+  returnType: Option<BoltTypeNode>,
   body: BoltExpression,
 }
 
 node BoltForeignFunctionDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
+  target: String,
   name: BoltSymbol,
   params: Vec<BoltParameter>,
-  type: Option<BoltTypeNode>,
+  returnType: Option<BoltTypeNode>,
   body: FunctionBody,
 }
 
 node BoltVariableDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
-  name: BoltSymbol,
+  bindings: BoltPattern,
   type: Option<BoltTypeNode>,
   value: Option<BoltExpression>,
 }
@@ -219,6 +236,8 @@ node BoltRecordDeclarationField {
   name: BoltIdentifier,
   type: BoltTypeNode,
 }
+
+node BoltSourceElement;
 
 node BoltRecordDeclaration > BoltDeclaration {
   name: BoltQualName,
@@ -241,8 +260,8 @@ node JSIdentifier > JSToken {
 
 node JSPattern;
 
-node JSBindPattern {
-  name: JSIdentifier,
+node JSBindPattern > JSPattern {
+  name: String,
 }
 
 node JSExpression;
@@ -298,13 +317,45 @@ node JSReferenceExpression > JSExpression {
 
 node JSStatement;
 
+node JSExpressionStatement > JSStatement {
+  expression: JSExpression,
+}
+
 node JSConditionalStatement > JSStatement {
   test: JSExpression,
   consequent: Vec<JSStatement>,
   alternate: Vec<JSStatement>,
 }
 
+node JSParameter {
+  index: usize,
+  bindings: JSPattern,
+  defaultValue: Option<JSExpression>,
+}
+
 node JSDeclaration;
+
+enum JSDeclarationModifiers {
+  IsExported = 0x1,
+}
+
+node JSFunctionDeclaration > JSDeclaration {
+  modifiers: JSDeclarationModifiers,
+  name: JSIdentifier,
+  params: Vec<JSParameter>,
+  body: Vec<JSStatement>,
+}
+
+node JSArrowFunctionDeclaration > JSDeclaration {
+  name: JSIdentifier,
+  params: Vec<JSParameter>,
+  body: JSExpression,
+}
+
+node JSLetDeclaration > JSDeclaration {
+  bindings: JSPattern,
+  value: Option<JSExpression>,
+}
 
 node JSSourceFile {
   elements: Vec<JSSourceElement>,

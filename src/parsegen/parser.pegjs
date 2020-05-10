@@ -1,110 +1,234 @@
+// PEG.js Grammar
+// ==============
+//
+// PEG.js grammar syntax is designed to be simple, expressive, and similar to
+// JavaScript where possible. This means that many rules, especially in the
+// lexical part, are based on the grammar from ECMA-262, 5.1 Edition [1]. Some
+// are directly taken or adapted from the JavaScript example grammar (see
+// examples/javascript.pegjs).
+//
+// Limitations:
+//
+//   * Non-BMP characters are completely ignored to avoid surrogate pair
+//     handling.
+//
+//   * One can create identifiers containing illegal characters using Unicode
+//     escape sequences. For example, "abcd\u0020efgh" is not a valid
+//     identifier, but it is accepted by the parser.
+//
+// Both limitations could be resolved, but the costs would likely outweigh
+// the benefits.
+//
+// [1] http://www.ecma-international.org/publications/standards/Ecma-262.htm
+
 {
 
-  function liftArray(value) {
-    if (Array.isArray(value)) {
-     return value;
-    }
-    return value === null || value === undefined ? [] : [value]
-  }
+    // Used as a shorthand property name for `LabeledExpression`
+    const pick = true;
 
-  function createNode(type, props) {
-    return {
-      __IS_NODE: true,
-      type,
-      span: location(),
-      ...props,
+    // Used by `LabelIdentifier` to disallow the use of certain words as labels
+    const RESERVED_WORDS = {};
+
+    // Populate `RESERVED_WORDS` using the optional option `reservedWords`
+    const reservedWords = options.reservedWords || util.reservedWords;
+    if ( Array.isArray( reservedWords ) ) reservedWords.forEach( word => {
+
+        RESERVED_WORDS[ word ] = true;
+
+    } );
+
+    // Helper to construct a new AST Node
+    function createNode( type, details ) {
+
+        const node = new ast.Node( type, location() );
+        if ( details === null ) return node;
+
+        util.extend( node, details );
+        return util.enforceFastProperties( node );
+
     }
-  }
+
+    // Used by `addComment` to store comments for the Grammar AST
+    const comments = options.extractComments ? {} : null;
+
+    // Helper that collects all the comments to pass to the Grammar AST
+    function addComment( text, multiline ) {
+
+        if ( options.extractComments ) {
+
+            const loc = location();
+
+            comments[ loc.start.offset ] = {
+                text: text,
+                multiline: multiline,
+                location: loc,
+            };
+
+        }
+
+        return text;
+
+    }
 
 }
 
+// ---- Syntactic Grammar -----
 
-File
-  = __ @(@Declaration __)*
+Grammar
+  = __ initializer:(@Initializer __)? rules:(@Rule __)+ {
 
-Declaration
-  = NodeDeclaration
-  / EnumDeclaration
-  / TypeDeclaration
-  / LanguageDeclaration
+        return new ast.Grammar( initializer, rules, comments, location() );
 
-NodeDeclaration
-  = NodeToken __ name:Identifier parents:(__ '>' __ @ExtendsList)? fields:(__ '{' __ @(@NodeField __)* '}')? EOS {
-      return createNode('NodeDeclaration', { name, parents: liftArray(parents), fields: liftArray(fields) });
     }
 
-ExtendsList
-  = head:Identifier tail:(__ ',' __ @Identifier)* {
-      return [head, ...tail];
+Initializer
+  = code:CodeBlock EOS {
+
+        return createNode( "initializer", { code } );
+
     }
 
-LanguageDeclaration
-  = '@' LanguageToken __ name:Identifier EOS {
-      return createNode('LanguageDeclaration', { name });
+Rule
+  = name:Identifier __ displayName:(@StringLiteral __)? "=" __ expression:Expression EOS {
+
+        if ( displayName )
+
+            expression = createNode( "named", {
+                name: displayName,
+                expression: expression,
+            } );
+
+        return createNode( "rule", { name, expression } );
+
     }
 
-NodeField
-  = name:Identifier __ ':' __ typeNode:TypeNode EOD {
-      return createNode('NodeField', { name, typeNode });
+Expression
+  = ChoiceExpression
+
+ChoiceExpression
+  = head:ActionExpression tail:(__ "/" __ @ActionExpression)* {
+
+        if ( tail.length === 0 ) return head;
+
+        return createNode( "choice", {
+            alternatives: [ head ].concat( tail ),
+        } );
+
     }
 
-TypeNode
-  = UnionTypeNode
+ActionExpression
+  = expression:SequenceExpression code:(__ @CodeBlock)? {
 
-UnionTypeNode
-  = head:ReferenceTypeNode tail:(__ '|' __ @ReferenceTypeNode)* {
-      if (tail.length === 0) {
-        return head;
-      }
-      return createNode('UnionTypeNode', { elements: [head, ...tail] });
+        if ( code === null ) return expression;
+
+        return createNode( "action", { expression, code } );
+
     }
 
-ReferenceTypeNode
-  = name:Identifier typeArgs:(__ '<' __ @TypeNodeList __ '>')? {
-      return createNode('ReferenceTypeNode', { name, typeArgs });
+SequenceExpression
+  = head:LabeledExpression tail:(__ @LabeledExpression)* {
+
+        let elements = [ head ];
+
+        if ( tail.length === 0 ) {
+
+            if ( head.type !== "labeled" || ! head.pick ) return head;
+
+        } else {
+
+            elements = elements.concat( tail );
+
+        }
+
+        return createNode( "sequence", { elements } );
+
     }
 
-TypeNodeList
-  = parsed:(TypeNode (__ ',' __ @TypeNode)*)? {
-      return parsed !== null ? [parsed[0], ...parsed[1]] : [];
+LabeledExpression
+  = "@" label:LabelIdentifier? __ expression:PrefixedExpression {
+
+        return createNode( "labeled", { pick, label, expression } );
+
+    }
+  / label:LabelIdentifier __ expression:PrefixedExpression {
+
+        return createNode( "labeled", { label, expression } );
+
+    }
+  / PrefixedExpression
+
+LabelIdentifier
+  = name:Identifier __ ":" {
+
+        if ( RESERVED_WORDS[ name ] !== true ) return name;
+
+        error( `Label can't be a reserved word "${ name }".`, location() );
+
     }
 
-EnumDeclaration
-  = EnumToken __ name:Identifier __ '{' __ fields:(@EnumField __)* '}' EOS {
-      return createNode('EnumDeclaration', { name, fields });
+PrefixedExpression
+  = operator:PrefixedOperator __ expression:SuffixedExpression {
+
+        return createNode( operator, { expression } );
+
+    }
+  / SuffixedExpression
+
+PrefixedOperator
+  = "$" { return "text"; }
+  / "&" { return "simple_and"; }
+  / "!" { return "simple_not"; }
+
+SuffixedExpression
+  = expression:PrimaryExpression __ operator:SuffixedOperator {
+
+        return createNode( operator, { expression } );
+
+    }
+  / PrimaryExpression
+
+SuffixedOperator
+  = "?" { return "optional"; }
+  / "*" { return "zero_or_more"; }
+  / "+" { return "one_or_more"; }
+
+PrimaryExpression
+  = LiteralMatcher
+  / CharacterClassMatcher
+  / AnyMatcher
+  / RuleReferenceExpression
+  / SemanticPredicateExpression
+  / "(" __ e:Expression __ ")" {
+
+        // The purpose of the "group" AST node is just to isolate label scope. We
+        // don't need to put it around nodes that can't contain any labels or
+        // nodes that already isolate label scope themselves.
+        if ( e.type !== "labeled" && e.type !== "sequence" ) return e;
+
+        // This leaves us with "labeled" and "sequence".
+        return createNode( "group", { expression: e } );
+
     }
 
-EnumField
-  = name:Identifier value:(__ '=' __ @Integer)? EOD {
-      return createNode('EnumField', { name, value });
+RuleReferenceExpression
+  = name:Identifier !(__ (StringLiteral __)? "=") {
+
+        return createNode( "rule_ref", { name } );
+
     }
 
-TypeDeclaration
-  = TypeToken __ name:Identifier __ '=' __ typeNode:TypeNode EOS {
-      return createNode('TypeDeclaration', { name, typeNode });
+SemanticPredicateExpression
+  = operator:SemanticPredicateOperator __ code:CodeBlock {
+
+        return createNode( operator, { code } );
+
     }
 
-Identifier "an identifier"
-  = $(IdentifierStart IdentifierPart*)
+SemanticPredicateOperator
+  = "&" { return "semantic_and"; }
+  / "!" { return "semantic_not"; }
 
-Integer
-  = HexInteger
-  / DecimalInteger
-
-DecimalInteger
-  = digits:$([0-9]+) {
-      return parseInt(digits);
-    }
-
-HexInteger
-  = '0x' digits:$([0-9a-z]i+) {
-      return parseInt(digits, 16);
-    }
-
-EnumToken     = 'enum' !IdentifierPart
-NodeToken     = 'node' !IdentifierPart
-TypeToken     = 'type' !IdentifierPart
-LanguageToken = 'language' !IdentifierPart
+// ---- Lexical Grammar -----
 
 SourceCharacter
   = .
@@ -133,41 +257,38 @@ Comment "comment"
   / SingleLineComment
 
 MultiLineComment
-  = "/*" (!"*/" SourceCharacter)* "*/"
+  = "/*" comment:$(!"*/" SourceCharacter)* "*/" {
+
+        return addComment( comment, true );
+
+  }
 
 MultiLineCommentNoLineTerminator
-  = "/*" (!("*/" / LineTerminator) SourceCharacter)* "*/"
+  = "/*" comment:$(!("*/" / LineTerminator) SourceCharacter)* "*/" {
+
+        return addComment( comment, true );
+
+  }
 
 SingleLineComment
-  = "//" (!LineTerminator SourceCharacter)*
+  = "//" comment:$(!LineTerminator SourceCharacter)* {
 
-__
-  = (WhiteSpace / LineTerminatorSequence / Comment)*
+        return addComment( comment, false );
 
-_
-  = (WhiteSpace / MultiLineCommentNoLineTerminator)*
+  }
 
+Identifier "identifier"
+  = head:IdentifierStart tail:IdentifierPart* {
+      
+        return head + tail.join("");
 
-EOD
-  = __ ","
-  / _ SingleLineComment? LineTerminatorSequence
-  / _ &"}"
-  / __ EOF
-
-EOS
-  = __ ";"
-  / _ SingleLineComment? LineTerminatorSequence
-  / _ &"}"
-  / __ EOF
-
-EOF
-  = !.
-
+    }
 
 IdentifierStart
   = UnicodeLetter
   / "$"
   / "_"
+  / "\\" @UnicodeEscapeSequence
 
 IdentifierPart
   = IdentifierStart
@@ -195,7 +316,127 @@ UnicodeDigit
 UnicodeConnectorPunctuation
   = Pc
 
+LiteralMatcher "literal"
+  = value:StringLiteral ignoreCase:"i"? {
 
+        return createNode( "literal", {
+            value: value,
+            ignoreCase: ignoreCase !== null,
+        } );
+
+    }
+
+StringLiteral "string"
+  = '"' chars:DoubleStringCharacter* '"' { return chars.join(""); }
+  / "'" chars:SingleStringCharacter* "'" { return chars.join(""); }
+
+DoubleStringCharacter
+  = !('"' / "\\" / LineTerminator) @SourceCharacter
+  / "\\" @EscapeSequence
+  / LineContinuation
+
+SingleStringCharacter
+  = !("'" / "\\" / LineTerminator) @SourceCharacter
+  / "\\" @EscapeSequence
+  / LineContinuation
+
+CharacterClassMatcher "character class"
+  = "[" inverted:"^"? parts:CharacterPart* "]" ignoreCase:"i"? {
+
+        return createNode( "class", {
+            parts: parts.filter( part => part !== "" ),
+            inverted: inverted !== null,
+            ignoreCase: ignoreCase !== null,
+        } );
+
+    }
+
+CharacterPart
+  = ClassCharacterRange
+  / ClassCharacter
+
+ClassCharacterRange
+  = begin:ClassCharacter "-" end:ClassCharacter {
+
+        if ( begin.charCodeAt( 0 ) > end.charCodeAt( 0 ) )
+
+            error( "Invalid character range: " + text() + "." );
+
+        return [ begin, end ];
+
+    }
+
+ClassCharacter
+  = !("]" / "\\" / LineTerminator) @SourceCharacter
+  / "\\" @EscapeSequence
+  / LineContinuation
+
+LineContinuation
+  = "\\" LineTerminatorSequence { return ""; }
+
+EscapeSequence
+  = CharacterEscapeSequence
+  / "0" !DecimalDigit { return "\0"; }
+  / HexEscapeSequence
+  / UnicodeEscapeSequence
+
+CharacterEscapeSequence
+  = SingleEscapeCharacter
+  / NonEscapeCharacter
+
+SingleEscapeCharacter
+  = "'"
+  / '"'
+  / "\\"
+  / "b"  { return "\b"; }
+  / "f"  { return "\f"; }
+  / "n"  { return "\n"; }
+  / "r"  { return "\r"; }
+  / "t"  { return "\t"; }
+  / "v"  { return "\v"; }
+
+NonEscapeCharacter
+  = !(EscapeCharacter / LineTerminator) @SourceCharacter
+
+EscapeCharacter
+  = SingleEscapeCharacter
+  / DecimalDigit
+  / "x"
+  / "u"
+
+HexEscapeSequence
+  = "x" digits:$(HexDigit HexDigit) {
+
+        return String.fromCharCode( parseInt( digits, 16 ) );
+
+    }
+
+UnicodeEscapeSequence
+  = "u" digits:$(HexDigit HexDigit HexDigit HexDigit) {
+
+        return String.fromCharCode( parseInt( digits, 16 ) );
+
+    }
+
+DecimalDigit
+  = [0-9]
+
+HexDigit
+  = [0-9a-f]i
+
+AnyMatcher
+  = "." {
+
+        return createNode( "any" );
+
+    }
+
+CodeBlock "code block"
+  = "{" @Code "}"
+  / "{" { error("Unbalanced brace."); }
+
+Code
+  = $((![{}] SourceCharacter)+ / "{" Code "}")*
 
 // Unicode Character Categories
 //
@@ -253,3 +494,20 @@ Pc = [\u005F\u203F-\u2040\u2054\uFE33-\uFE34\uFE4D-\uFE4F\uFF3F]
 // Separator, Space
 Zs = [\u0020\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]
 
+// Skipped
+
+__
+  = (WhiteSpace / LineTerminatorSequence / Comment)*
+
+_
+  = (WhiteSpace / MultiLineCommentNoLineTerminator)*
+
+// Automatic Semicolon Insertion
+
+EOS
+  = __ ";"
+  / _ SingleLineComment? LineTerminatorSequence
+  / __ EOF
+
+EOF
+  = !.

@@ -3,8 +3,13 @@
 // easily specify how the next expansion should happen. Just a thought.
 
 import {
+  SyntaxKind,
+  kindToString,
   BoltSyntax,
+  BoltSentence,
+  createBoltEOS,
   createBoltRecordPattern,
+  createBoltExpressionPattern,
   createBoltIdentifier,
   createBoltReferenceTypeNode,
   createBoltConstantExpression,
@@ -12,22 +17,41 @@ import {
   createBoltQualName,
   createBoltTypePattern,
   createBoltBindPattern,
+  createBoltMatchExpression,
+  createBoltMatchArm,
+  createBoltModule,
+  createBoltSourceFile,
   BoltPattern,
+  BoltSourceElement,
+  BoltReferenceTypeNode,
+  createBoltRecordDeclaration,
+  createBoltRecordDeclarationField,
+  isBoltSourceElement,
+  createBoltExpressionStatement,
+  isBoltExpression,
 } from "./ast"
 
-import { BoltTokenStream } from "./util"
+import { TextSpan } from "./text"
 import { TypeChecker } from "./checker"
 import { Parser, ParseError } from "./parser"
 import { Evaluator, TRUE, FALSE } from "./evaluator"
+import { StreamWrapper, setOrigNodeRange, BoltTokenStream } from "./util"
 
 interface Transformer {
   pattern: BoltPattern;
   transform: (node: BoltTokenStream) => BoltSyntax;
 }
 
-function createSimpleBoltReferenceTypeNode(text: string) {
+function createTokenStream(node: BoltSentence) {
+  return new StreamWrapper(
+    node.tokens,
+    () => createBoltEOS(new TextSpan(node.span!.file, node.span!.end.clone(), node.span!.end.clone()))
+  );
+}
+
+function createSimpleBoltReferenceTypeNode(text: string): BoltReferenceTypeNode {
   const ids = text.split('.').map(name => createBoltIdentifier(name))
-  return createBoltReferenceTypeNode(createBoltQualName(ids[ids.length-1], ids.slice(0, -1)), [])
+  return createBoltReferenceTypeNode(createBoltQualName(ids.slice(0, -1), ids[ids.length-1]), [])
 }
 
 /// This is actually a hand-parsed version of the following:
@@ -44,33 +68,34 @@ function createSimpleBoltReferenceTypeNode(text: string) {
 ///     }
 ///   ],
 /// }
-const PATTERN_SYNTAX: Pattern = 
-  createBoltRecordPattern(
-    createSimpleBoltReferenceTypeNode('Bolt.AST.Sentence'),
-    [{
-      name: createBoltIdentifier('elements'),
-      pattern: createBoltTuplePattern([
-        createBoltRecordPattern(
-          createSimpleBoltReferenceTypeNode('Bolt.AST.Identifier'),
-          [{
-            name: createBoltIdentifier('text'), 
-            pattern: createBoltConstantExpression('syntax')
-          }]
-        ),
-        createBoltRecordPattern(
-          createSimpleBoltReferenceTypeNode('Bolt.AST.Braced'),
-          [{
-            name: createBoltIdentifier('elements'),
-            pattern: createBoltTuplePattern([
-              createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Pattern'), createBoltBindPattern(createBoltIdentifier('pattern'))),
-              createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.RArrow'), createBoltBindPattern(createBoltIdentifier('_'))),
-              createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Expr'), createBoltBindPattern(createBoltIdentifier('expression')))
-            ])
-          }]
-        )
-      ])
-    }]
-  )
+//const PATTERN_SYNTAX: BoltPattern = 
+//  createBoltRecordPattern(
+//    createSimpleBoltReferenceTypeNode('Bolt.AST.Sentence'),
+//    [
+//      createBoltRecordDeclarationField(
+//        createBoltIdentifier('elements'),
+//        createBoltTuplePattern([
+//          createBoltRecordPattern(
+//            createSimpleBoltReferenceTypeNode('Bolt.AST.Identifier'),
+//            [{
+//              name: createBoltIdentifier('text'), 
+//              pattern: createBoltConstantExpression('syntax')
+//            }]
+//          ),
+//          createBoltRecordPattern(
+//            createSimpleBoltReferenceTypeNode('Bolt.AST.Braced'),
+//            [{
+//              name: createBoltIdentifier('elements'),
+//              pattern: createBoltTuplePattern([
+//                createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Pattern'), createBoltBindPattern(createBoltIdentifier('pattern'))),
+//                createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.RArrow'), createBoltBindPattern(createBoltIdentifier('_'))),
+//                createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Expr'), createBoltBindPattern(createBoltIdentifier('expression')))
+//              ])
+//            }]
+//          )
+//        ])
+//    )]
+//  )
 
 export class Expander {
 
@@ -83,58 +108,80 @@ export class Expander {
     // })
   }
 
-  getFullyExpanded(node: Syntax): Syntax {
+  getFullyExpanded(node: BoltSyntax): BoltSyntax {
 
-    if (node.kind === SyntaxKind.SourceFile) {
+    if (node.kind === SyntaxKind.BoltSourceFile) {
 
-      const expanded: (Decl | Stmt)[] = [];
+      const expanded: BoltSourceElement[] = [];
 
       let didExpand = false;
 
       for (const element of node.elements) {
+
         let newElement = this.getFullyExpanded(element);
+
+        // Automatically lift top-level expressions into so that they are valid.
+
+        if (isBoltExpression(newElement)) {
+          newElement = createBoltExpressionStatement(newElement);
+        }
+
+        // From this point, newElement really should be a BoltSourceElement
+
+        if (!isBoltSourceElement(newElement)) {
+          throw new Error(`Expanded element ${kindToString(newElement.kind)} is not valid in a top-level context.`);
+        }
+
         if (newElement !== element) {
           didExpand = true;
         }
-        expanded.push(newElement as Decl | Stmt)
+
+        expanded.push(newElement);
       }
 
       if (!didExpand) {
         return node;
       }
 
-      return new SourceFile(expanded, null, node);
+      const newSourceFile = createBoltSourceFile(expanded);
+      setOrigNodeRange(newSourceFile, node, node);
+      return newSourceFile;
 
-    } else if (node.kind == SyntaxKind.Module) {
+    } else if (node.kind == SyntaxKind.BoltModule) {
 
-      const expanded = [];
+      const expanded: BoltSourceElement[] = [];
 
       let didExpand = false;
 
       for (const element of node.elements) {
         let newElement = this.getFullyExpanded(element);
+        if (!isBoltSourceElement(newElement)) {
+          throw new Error(`Expanded element is invalid in a module context.`);
+        }
         if (newElement !== element) {
           didExpand = true;
         }
-        expanded.push(newElement as Decl | Stmt)
+        expanded.push(newElement);
       }
 
       if (!didExpand) {
         return node;
       }
 
-      return new Module(node.isPublic, node.name, expanded, null, node);
+      const newModule = createBoltModule(0, node.name, expanded);
+      setOrigNodeRange(newModule, node, node);
+      return newModule;
 
-
-    } else if (node.kind === SyntaxKind.Sentence) {
+    } else if (node.kind === SyntaxKind.BoltSentence) {
 
       let newElement;
 
-      const tokens = node.toTokenStream();
+      const tokens = createTokenStream(node);
 
       try {
 
         newElement = this.parser.parseSourceElement(tokens)
+        setOrigNodeRange(newElement, node, node);
 
       } catch (e) {
 
@@ -148,12 +195,18 @@ export class Expander {
 
         while (true) {
           let didExpand = false;
-          const expanded: Syntax[] = [];
-          const tokens = node.toTokenStream();
+          const expanded: BoltSyntax[] = [];
+          const tokens = createTokenStream(node);
           for (const transformer of this.transformers) {
-            if (this.evaluator.eval(new MatchExpr(new ConstExpr(this.evaluator.createValue(node)), [
-              [transformer.pattern, new ConstExpr(TRUE)],
-              [new ConstExpr(TRUE), new ConstExpr(FALSE)]
+            if (this.evaluator.eval(createBoltMatchExpression(createBoltConstantExpression(this.evaluator.createValue(node)), [
+              createBoltMatchArm(
+                transformer.pattern,
+                createBoltConstantExpression(TRUE)
+              ),
+              createBoltMatchArm(
+                createBoltExpressionPattern(createBoltConstantExpression(TRUE)),
+                createBoltConstantExpression(FALSE)
+              )
             ]))) {
               expanded.push(transformer.transform(tokens))
               didExpand = true;

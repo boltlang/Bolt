@@ -1,7 +1,6 @@
 
 import * as path from "path"
 import * as fs from "fs-extra"
-import * as crypto from "crypto"
 
 import { Parser } from "./parser"
 import { TypeChecker } from "./checker"
@@ -10,12 +9,15 @@ import { Expander } from "./expander"
 import { Scanner } from "./scanner"
 import { Compiler } from "./compiler"
 import { emit } from "./emitter"
-import { TextFile, SourceFile, AnySourceFile } from "./ast"
-import { upsearchSync, FastStringMap } from "./util"
+import { TextFile } from "./text"
+import { BoltSourceFile, Syntax } from "./ast"
+import { upsearchSync, FastStringMap, getFileStem, getLanguage } from "./util"
 import { Package } from "./package"
 
 const targetExtensions: FastStringMap<string> = {
-  'JS': '.mjs'
+  'JS': '.mjs',
+  'Bolt': '.bolt',
+  'C': '.c',
 };
 
 export class Program {
@@ -25,7 +27,7 @@ export class Program {
   public checker: TypeChecker;
   public expander: Expander;
 
-  private sourceFiles = new Map<string, SourceFile>();
+  private sourceFiles = new Map<string, BoltSourceFile>();
   private packages: FastStringMap<Package> = Object.create(null);
 
   constructor(files: TextFile[]) {
@@ -34,6 +36,7 @@ export class Program {
     this.evaluator = new Evaluator(this.checker);
     this.expander = new Expander(this.parser, this.evaluator, this.checker);
     for (const file of files) {
+      console.log(`Loading ${file.origPath} ...`);
       const contents = fs.readFileSync(file.fullPath, 'utf8');
       const scanner = new Scanner(file, contents)
       this.sourceFiles.set(file.fullPath, scanner.scan());
@@ -66,20 +69,21 @@ export class Program {
       if (pkg !== null) {
         
       }
-      fs.writeFileSync(this.mapToTargetFile(rootNode), emit(node), 'utf8');
+      fs.mkdirp('.bolt-work');
+      fs.writeFileSync(this.mapToTargetFile(rootNode), emit(rootNode), 'utf8');
     }
   }
 
-  private mapToTargetFile(node: AnySourceFile) {
-    getFileStem(node.span.file.fullPath) + '.' + getDefaultExtension(getTargetLanguage(node.kind));
+  private mapToTargetFile(node: Syntax) {
+    return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultExtension(getLanguage(node)));
   }
 
-  eval(file: TextFile) {
-    const original = this.sourceFiles.get(file);
+  eval(filename: string) {
+    const original = this.sourceFiles.get(filename);
     if (original === undefined) {
-      throw new Error(`File ${file.path} does not seem to be part of this Program.`)
+      throw new Error(`File ${filename} does not seem to be part of this Program.`)
     }
-    const expanded = this.expander.getFullyExpanded(original) as SourceFile;
+    const expanded = this.expander.getFullyExpanded(original) as BoltSourceFile;
     return this.evaluator.eval(expanded)
   }
 
@@ -90,10 +94,5 @@ function getDefaultExtension(target: string) {
     throw new Error(`Could not derive an appropriate extension for target "${target}".`)
   }
   return targetExtensions[target];
-}
-
-function getFileStem(filepath: string): string {
-  const chunks = path.basename(filepath).split('.')
-  return chunks[chunks.length-1];
 }
 

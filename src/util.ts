@@ -2,8 +2,52 @@
 import * as path from "path"
 import * as fs from "fs"
 
+import { TextSpan } from "./text"
+import { kindToString, Syntax, BoltToken, BoltQualName, BoltDeclaration, BoltDeclarationModifiers } from "./ast"
+
+export type BoltTokenStream = Stream<BoltToken>;
+
+export interface JsonArray extends Array<Json> {  };
+export interface JsonObject { [key: string]: Json }
+export type Json = null | string | boolean | number | JsonArray | JsonObject;
+
 export interface FastStringMap<T> {
   [key: string]: T
+}
+
+const supportedLanguages = ['Bolt', 'JS'];
+
+export function getLanguage(node: Syntax): string {
+  const kindStr = kindToString(node.kind);
+  for (const prefix of supportedLanguages) {
+    if (kindStr.startsWith(prefix)) {
+      return prefix;
+    }
+  }
+  throw new Error(`Could not determine the language of ${kindStr}`);
+}
+
+export function cloneSpan(span: TextSpan | null) {
+  if (span === null) {
+    return null;
+  }
+  return span.clone();
+}
+
+export function setOrigNodeRange(node: Syntax, startNode: Syntax, endNode: Syntax): void {
+  node.span = new TextSpan(startNode.span!.file, startNode.span!.start.clone(), endNode.span!.end.clone());
+}
+
+export function hasPublicModifier(node: BoltDeclaration) {
+  return (node.modifiers & BoltDeclarationModifiers.IsPublic) > 0;
+}
+
+export function getFullTextOfQualName(node: BoltQualName) {
+  let out = ''
+  for (const element of node.modulePath) {
+    out += element.text + '.';
+  }
+  return out + node.name.text;
 }
 
 export interface Stream<T> {
@@ -51,51 +95,7 @@ export function upsearchSync(filename: string, startDir = '.') {
   }
 }
 
-function isWhiteSpace(ch: string) {
-  return /[\r\t ]/.test(ch);
+export function getFileStem(filepath: string): string {
+  return path.basename(filepath).split('.')[0];
 }
 
-export interface FileWriterOptions {
-  indentStr?: string;
-  startIndent?: number;
-  indentWidth?: number;
-}
-
-export class FileWriter {
-
-  public currentText = '';
-
-  private atBlankLine = true;
-  private currentIndent: number;
-  private indentStr: string;
-  private indentWidth: number;
-
-  constructor(opts: FileWriterOptions = {}) {
-    this.indentStr = opts.indentStr ?? ' ';
-    this.indentWidth = opts.indentWidth ?? 2;
-    this.currentIndent = (opts.startIndent ?? 0) * this.indentWidth;
-  }
-
-  public indent(count = 1) {
-    this.currentIndent += this.indentWidth * count;
-  }
-
-  public dedent(count = 1) {
-    this.currentIndent -= this.indentWidth * count;
-  }
-
-  public write(str: string) {
-    for (const ch of str) {
-      if (ch === '\n') {
-        this.atBlankLine = true;
-      } else if (!(this.atBlankLine && isWhiteSpace(ch))) {
-        if (this.atBlankLine) {
-          this.currentText += this.indentStr.repeat(this.currentIndent)
-        }
-        this.atBlankLine = false;
-      }
-      this.currentText += ch;
-    }
-  }
-
-}

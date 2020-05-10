@@ -1,12 +1,13 @@
 
 import {
   Syntax,
+  kindToString,
   SyntaxKind,
-  ImportDecl,
-  Patt,
+  BoltImportDeclaration,
+  BoltPattern,
 } from "./ast"
 
-import { FastStringMap } from "./util"
+import { FastStringMap, getFullTextOfQualName } from "./util"
 
 export class Type {
   
@@ -91,14 +92,14 @@ function getFullName(node: Syntax) {
   let curr: Syntax | null = node;
   while (true) {
     switch (curr.kind) {
-      case SyntaxKind.Identifier:
+      case SyntaxKind.BoltIdentifier:
         out.unshift(curr.text)
         break;
-      case SyntaxKind.Module:
-        out.unshift(curr.name.fullText);
+      case SyntaxKind.BoltModule:
+        out.unshift(getFullTextOfQualName(curr.name));
         break;
-      case SyntaxKind.RecordDecl:
-        out.unshift(curr.name.fullText)
+      case SyntaxKind.BoltRecordDeclaration:
+        out.unshift(getFullTextOfQualName(curr.name))
         break;
     } 
     curr = curr.parentNode;
@@ -118,7 +119,7 @@ export class TypeChecker {
   constructor() {
   }
 
-  protected inferTypeFromUsage(bindings: Patt, body: Body) {
+  protected inferTypeFromUsage(bindings: BoltPattern, body: Body) {
     return anyType;
   }
 
@@ -130,18 +131,18 @@ export class TypeChecker {
 
     switch (node.kind) {
 
-      case SyntaxKind.RefExpr:
+      case SyntaxKind.BoltReferenceExpression:
         return anyType;
 
-      case SyntaxKind.ConstExpr:
+      case SyntaxKind.BoltConstantExpression:
         return node.value.type;
 
-      case SyntaxKind.NewTypeDecl:
+      case SyntaxKind.BoltNewTypeDeclaration:
         console.log(getFullName(node.name))
         this.symbols[getFullName(node.name)] = new PrimType();
         return noneType;
 
-      case SyntaxKind.FuncDecl:
+      case SyntaxKind.BoltFunctionDeclaration:
         let returnType = anyType;
         if (node.returnType !== null) {
           returnType = this.getTypeOfNode(node.returnType)
@@ -161,29 +162,30 @@ export class TypeChecker {
         })
         return new FunctionType(paramTypes, returnType);
 
-      case SyntaxKind.TypeRef:
-        const reffed = this.getTypeNamed(node.name.fullText);
+      case SyntaxKind.BoltReferenceTypeNode:
+        const name = getFullTextOfQualName(node.name);
+        const reffed = this.getTypeNamed(name);
         if (reffed === null) {
-          throw new Error(`Could not find a type named '${node.name.fullText}'`);
+          throw new Error(`Could not find a type named '${name}'`);
         }
         return reffed;
 
-      case SyntaxKind.RecordDecl:
+      case SyntaxKind.BoltRecordDeclaration:
 
-        const typ = new RecordType(map(node.fields, ([name, typ]) => ([name.text, typ])));
+        const typ = new RecordType(map(node.fields, field => ([field.name.text, this.getTypeOfNode(field.type)])));
 
         this.symbols[getFullName(node)] = typ;
 
         return typ;
 
-      case SyntaxKind.Param:
-        if (node.typeDecl !== null) {
-          return this.getTypeOfNode(node.typeDecl)
+      case SyntaxKind.BoltParameter:
+        if (node.typeNode !== null) {
+          return this.getTypeOfNode(node.typeNode)
         }
         return anyType;
 
       default:
-        throw new Error(`Could not derive type of ${SyntaxKind[node.kind]}`)
+        throw new Error(`Could not derive type of ${kindToString(node.kind)}`)
 
     }
 
@@ -210,12 +212,12 @@ export class TypeChecker {
 
     switch (node.kind) {
 
-      case SyntaxKind.Sentence:
-      case SyntaxKind.RecordDecl:
-      case SyntaxKind.NewTypeDecl:
+      case SyntaxKind.BoltSentence:
+      case SyntaxKind.BoltRecordDeclaration:
+      case SyntaxKind.BoltNewTypeDeclaration:
         break;
 
-      case SyntaxKind.FuncDecl:
+      case SyntaxKind.BoltFunctionDeclaration:
         if (node.body !== null) {
           if (Array.isArray(node.body)) {
             for (const element of node.body) {
@@ -225,30 +227,30 @@ export class TypeChecker {
         }
         break;
 
-      case SyntaxKind.RefExpr:
+      case SyntaxKind.BoltReferenceExpression:
         // TODO implement this
         break;
 
-      case SyntaxKind.Module:
-      case SyntaxKind.SourceFile:
+      case SyntaxKind.BoltModule:
+      case SyntaxKind.BoltSourceFile:
         for (const element of node.elements) {
           this.check(element)
         }
         break;
 
       default:
-        throw new Error(`Could not type-check node ${SyntaxKind[node.kind]}`)
+        throw new Error(`Could not type-check node ${kindToString(node.kind)}`)
 
     }
 
   }
 
-  getImportedSymbols(node: ImportDecl) {
+  getImportedSymbols(node: BoltImportDeclaration) {
     return [{ name: 'fac' }]
   }
 
   getScope(node: Syntax): Scope {
-    while (node.kind !== SyntaxKind.FuncDecl && node.kind !== SyntaxKind.SourceFile) {
+    while (node.kind !== SyntaxKind.BoltFunctionDeclaration && node.kind !== SyntaxKind.BoltSourceFile) {
       node = node.parentNode!;
     }
     if (this.scopes.has(node)) {

@@ -9,7 +9,7 @@ import * as fs from "fs-extra"
 import yargs from "yargs"
 
 import { Program } from "../program"
-import { TextFile } from "../ast"
+import { TextFile } from "../text"
 
 global.debug = function (value: any) {
   console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
@@ -70,7 +70,7 @@ yargs
 
     args => {
 
-      const files = toArray(args.path as string[] | string).map(filepath => new TextFile(filepath, args['work-dir']));
+      const files = toArray(args.files as string[] | string).map(filepath => new TextFile(filepath, args['work-dir']));
       const program = new Program(files)
       program.compile("JS");
 
