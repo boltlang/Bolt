@@ -112,7 +112,6 @@ interface SyntaxBase {
   kind: SyntaxKind;
   parentNode: Syntax | null;
   span: TextSpan | null;
-  origNodes: SyntaxRange | null;
 }
 `);
 
@@ -180,7 +179,7 @@ interface SyntaxBase {
     for (const field of getAllFields(decl)) {
       dtsFile.write(`${field.name}: ${emitTypeScriptType(field.typeNode)}, `);
     }
-    dtsFile.write(`span?: TextSpan | null, origNodes?: SyntaxRange | null): ${decl.name};\n`);
+    dtsFile.write(`span?: TextSpan | null): ${decl.name};\n`);
   }
 
   dtsFile.write('\n');

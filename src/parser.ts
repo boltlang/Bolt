@@ -1,46 +1,34 @@
 
-import * as acorn from "acorn"
-
 import {
   SyntaxKind,
-  BoltToken, 
+  kindToString,
+  BoltToken,
   BoltIdentifier,
-  createBoltFuncDecl,
-  createBoltIdentifier, 
-  createBoltSyntaxKind, 
-  createBoltTokenStream,
-  createBoltRetStmt,
-  createBoltVarDecl,
-  createBoltStmt,
-  createBoltPatt,
-  createBoltExpr,
-  createBoltBindPatt,
-  createBoltParam,
-  createBoltRefExpr,
-  createBoltTypeRef,
-  createBoltTypeDecl,
-  createBoltConstExpr,
+  BoltConstantExpression,
+  BoltReferenceExpression,
+  BoltExpression,
+  BoltRecordDeclaration,
+  BoltStatement,
   createBoltQualName,
-  createBoltCallExpr,
-  createBoltImportDecl,
-  createBoltSourceElement,
-  createBoltModule,
-  createBoltRecordDecl,
-  createBoltNewTypeDecl,
   BoltQualName,
   BoltPattern,
   createBoltBindPattern,
   BoltImportDeclaration,
   BoltTypeNode,
   createBoltReferenceTypeNode,
-  createJSReferenceExpression,
+  createBoltConstantExpression,
   createBoltReferenceExpression,
+  createBoltParameter,
+  BoltBindPattern,
+  createBoltRecordDeclaration,
+  createBoltRecordDeclarationField,
+  createBoltImportDeclaration,
+  BoltDeclarationModifiers,
+  BoltStringLiteral,
+  BoltImportSymbol,
 } from "./ast"
 
-import { stringType, intType } from "./checker"
-
-import { PrimValue } from "./evaluator"
-import {BoltTokenStream} from "./util"
+import { BoltTokenStream, setOrigNodeRange } from "./util"
 
 function describeKind(kind: SyntaxKind): string {
   switch (kind) {
@@ -99,8 +87,8 @@ function enumerate(elements: string[]) {
 
 
 export class ParseError extends Error {
-  constructor(public actual: Token, public expected: SyntaxKind[]) {
-    super(`${actual.span.file.path}:${actual.span.start.line}:${actual.span.start.column}: expected ${enumerate(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`)
+  constructor(public actual: BoltToken, public expected: SyntaxKind[]) {
+    super(`${actual.span!.file.origPath}:${actual.span!.start.line}:${actual.span!.start.column}: expected ${enumerate(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`)
   }
 }
 
@@ -117,6 +105,24 @@ interface OperatorInfo {
   name: string;
   precedence: number;
 }
+
+function assertToken(node: BoltToken, kind: SyntaxKind) {
+  if (node.kind !== kind) {
+    throw new ParseError(node, [kind]);
+  }
+}
+
+const KIND_EXPRESSION_T0 = [
+  SyntaxKind.BoltStringLiteral,
+  SyntaxKind.BoltIntegerLiteral,
+  SyntaxKind.BoltIdentifier,
+  SyntaxKind.BoltOperator,
+  ]
+
+const KIND_STATEMENT_T0 = [
+  SyntaxKind.BoltReturnKeyword,
+  ...KIND_EXPRESSION_T0,
+]
 
 export class Parser {
 
@@ -149,8 +155,14 @@ export class Parser {
     ],
   ];
 
+  protected assertEmpty(tokens: BoltTokenStream) {
+    const t0 = tokens.peek(1);
+    if (t0.kind !== SyntaxKind.BoltEOS) {
+      throw new ParseError(t0, [SyntaxKind.BoltEOS]);
+    }
+  }
 
-  parseQualName(tokens: BoltTokenStream): BoltQualName {
+  public parseQualName(tokens: BoltTokenStream): BoltQualName {
 
     const path: BoltIdentifier[] = [];
 
@@ -167,221 +179,335 @@ export class Parser {
     if (name.kind !== SyntaxKind.BoltIdentifier) {
       throw new ParseError(name, [SyntaxKind.BoltIdentifier]);
     }
-
     const startNode = path.length > 0 ? path[0] : name;
     const endNode = name;
-    return createBoltQualName(path, name, null, [startNode, endNode]);
+    const node = createBoltQualName(path, name, null);
+    setOrigNodeRange(node, startNode, endNode);
+    return node;
   }
 
-  parsePattern(tokens: BoltTokenStream): BoltPattern {
+  public parseBindPattern(tokens: BoltTokenStream): BoltBindPattern {
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.BoltIdentifier);
+    const node = createBoltBindPattern((t0 as BoltIdentifier).text);
+    setOrigNodeRange(node, t0, t0);
+    return node;
+  }
+
+  public parsePattern(tokens: BoltTokenStream): BoltPattern {
     const t0 = tokens.peek(1);
     if (t0.kind === SyntaxKind.BoltIdentifier) {
-      tokens.get();
-      return createBoltBindPattern(t0.text, null, [t0, t0])
+      return this.parseBindPattern(tokens);
     } else {
       throw new ParseError(t0, [SyntaxKind.BoltIdentifier])
     }
   }
 
-  parseImportDecl(tokens: BoltTokenStream): BoltImportDeclaration {
-
-    // Assuming first keyword is 'import'
-    tokens.get();
+  public parseImportDeclaration(tokens: BoltTokenStream): BoltImportDeclaration {
 
     const t0 = tokens.get();
-    if (t0.kind !== SyntaxKind.BoltStringLiteral) {
-      throw new ParseError(t0, [SyntaxKind.BoltStringLiteral])
-    }
+    assertToken(t0, SyntaxKind.BoltImportKeyword);
 
-    return createBoltImportDecl(t0.value, null, t0);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.BoltStringLiteral);
+    const filename = (t1 as BoltStringLiteral).value;
 
+    const symbols: BoltImportSymbol[] = [];
+    // TODO implement grammar and parsing logic for symbols
+
+    const node = createBoltImportDeclaration(filename, symbols);
+    setOrigNodeRange(node, t0, t1);
+    return node;
   }
 
-  parseTypeDecl(tokens: BoltTokenStream): BoltTypeNode {
+  public parseReferenceTypeNode(tokens: BoltTokenStream) {
+
+    const name = this.parseQualName(tokens)
+
+    const t1 = tokens.peek();
+
+    let typeArgs: BoltTypeNode[] | null = null;
+
+    if (t1.kind === SyntaxKind.BoltLtSign) {
+      tokens.get();
+      let first = true;
+      while (true) {
+        const t2 = tokens.peek();
+        if (t2.kind === SyntaxKind.BoltGtSign) { 
+          break;
+        }
+        if (first) {
+          first = false;
+        } else {
+          assertToken(t2, SyntaxKind.BoltComma);
+          tokens.get();
+        }
+        typeArgs!.push(this.parseTypeNode(tokens));
+      }
+      const t4 = tokens.get();
+      assertToken(t4, SyntaxKind.BoltGtSign);
+    }
+
+    const node = createBoltReferenceTypeNode(name, typeArgs);
+    setOrigNodeRange(node, name, name);
+    return node;
+  }
+
+  public parseTypeNode(tokens: BoltTokenStream): BoltTypeNode {
     const t0 = tokens.peek();
     if (t0.kind === SyntaxKind.BoltIdentifier) {
-      const name = this.parseQualName(tokens)
-      return createBoltReferenceTypeNode(name, [], null, name.origNodes)
+      return this.parseReferenceTypeNode(tokens);
     } else {
       throw new ParseError(t0, [SyntaxKind.BoltIdentifier]);
     }
   }
 
-  parsePrimExpr(tokens: TokenStream): Expr {
-    const t0 = tokens.peek();
+  public parseConstantExpression(tokens: BoltTokenStream): BoltConstantExpression {
+    const t0 = tokens.get();
+    let value: boolean | string | bigint;
     if (t0.kind === SyntaxKind.BoltStringLiteral) {
-      tokens.get();
-      return new ConstExpr(new PrimValue(stringType, t0.value), null, t0);
+      value = t0.value;
     } else if (t0.kind === SyntaxKind.BoltIntegerLiteral) {
-      tokens.get();
-      return new ConstExpr(new PrimValue(intType, t0.value), null, t0);
+      value = t0.value;
+    } else {
+      throw new ParseError(t0, [SyntaxKind.BoltStringLiteral, SyntaxKind.BoltIntegerLiteral]);
+    }
+    const node = createBoltConstantExpression(value);
+    setOrigNodeRange(node, t0, t0);
+    return node;
+  }
+
+  public parseReferenceExpression(tokens: BoltTokenStream): BoltReferenceExpression {
+    const name = this.parseQualName(tokens);
+    const node = createBoltReferenceExpression(name);
+    setOrigNodeRange(node, name, name);
+    return node;
+  }
+
+  protected parsePrimitiveExpression(tokens: BoltTokenStream): BoltExpression {
+    const t0 = tokens.peek();
+    if (t0.kind === SyntaxKind.BoltIntegerLiteral || t0.kind === SyntaxKind.BoltStringLiteral) {
+      return this.parseConstantExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltIdentifier) {
-      const name = this.parseQualName(tokens);
-      return createBoltReferenceExpression(name, null, name.origNode);
+      return this.parseReferenceExpression(tokens);
     } else {
       throw new ParseError(t0, [SyntaxKind.BoltStringLiteral, SyntaxKind.BoltIdentifier]);
     }
   }
 
-  parseSyntax(tokens: TokenStream): Syntax {
+  //parseSyntax(tokens: TokenStream): Syntax {
 
-    // Assuming first token is 'syntax'
-    tokens.get();
+  //  // Assuming first token is 'syntax'
+  //  const t0 = tokens.get();
+  //  assertToken(t0, SyntaxKind.Bolt
 
-    const t1 = tokens.get();
-    if (t1.kind !== SyntaxKind.BoltBraced) {
-      throw new ParseError(t1, [SyntaxKind.BoltBraced])
-    }
+  //  const t1 = tokens.get();
+  //  if (t1.kind !== SyntaxKind.BoltBraced) {
+  //    throw new ParseError(t1, [SyntaxKind.BoltBraced])
+  //  }
 
-    const innerTokens = t1.toTokenStream();
+  //  const innerTokens = t1.toTokenStream();
 
-    const pattern = this.parsePattern(innerTokens)
+  //  const pattern = this.parsePattern(innerTokens)
 
-    const t2 = innerTokens.get();
-    if (t2.kind !== SyntaxKind.BoltRArrow) {
-      throw new ParseError(t2, [SyntaxKind.BoltRArrow]);
-    }
+  //  const t2 = innerTokens.get();
+  //  if (t2.kind !== SyntaxKind.BoltRArrow) {
+  //    throw new ParseError(t2, [SyntaxKind.BoltRArrow]);
+  //  }
 
-    const body = this.parseBody(innerTokens);
+  //  const body = this.parseBody(innerTokens);
 
-    return new Macro(pattern, body)
+  //  return new Macro(pattern, body)
 
+  //}
+
+  public parseExpression(tokens: BoltTokenStream): BoltExpression {
+    return this.parsePrimitiveExpression(tokens)
   }
 
-  parseExpr(tokens: TokenStream): Expr {
-    return this.parsePrimExpr(tokens)
-  }
-
-  parseParam(tokens: TokenStream): Param {
+  public parseParameter(tokens: BoltTokenStream): BoltParameter {
 
     let defaultValue = null;
     let typeDecl = null;
 
     const pattern = this.parsePattern(tokens)
 
-    const t0 = tokens.peek(1);
+    let t0 = tokens.peek(1);
+    let endNode: BoltSyntax = pattern;
     if (t0.kind === SyntaxKind.BoltColon) {
       tokens.get();
-      typeDecl = this.parseTypeDecl(tokens);
-      const t1 = tokens.peek(1);
-      if (t1.kind === SyntaxKind.BoltEqSign) {
-        tokens.get();
-        defaultValue = this.parseExpr(tokens);
-      }
+      typeDecl = this.parseTypeNode(tokens);
+      endNode = typeDecl;
+      t0 = tokens.get();
     }
-
     if (t0.kind === SyntaxKind.BoltEqSign) {
       tokens.get();
-      defaultValue = this.parseExpr(tokens);
+      defaultValue = this.parseExpression(tokens);
+      endNode = defaultValue;
     }
 
-    return new Param(pattern, typeDecl, defaultValue)
+    const node = createBoltParameter(0, pattern, typeDecl, defaultValue)
+    setOrigNodeRange(node, pattern, endNode);
+    return node;
 
   }
 
-  parseVarDecl(tokens: TokenStream): VarDecl {
+  public parseVariableDeclaration(tokens: BoltTokenStream): BoltVariableDeclaration {
 
-    let isMutable = false;
+    let modifiers = 0;
     let typeDecl = null;
     let value = null;
 
-    // Assuming first token is 'let'
-    tokens.get();
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.BoltLetKeyword);
 
-    const t0 = tokens.peek();
-    if (t0.kind === SyntaxKind.BoltIdentifier && t0.text === 'mut') {
+    const t1 = tokens.peek();
+    if (t1.kind === SyntaxKind.BoltMutKeyword) {
       tokens.get();
-      isMutable = true;
+      modifiers |= BoltDeclarationModifiers.Mutable;
     }
 
     const bindings = this.parsePattern(tokens)
 
-    const t1 = tokens.peek();
-    if (t1.kind === SyntaxKind.BoltColon) {
+    let t2 = tokens.peek();
+    let lastNode: BoltSyntax = bindings;
+
+    if (t2.kind === SyntaxKind.BoltColon) {
       tokens.get();
-      typeDecl = this.parseTypeDecl(tokens);
+      lastNode = typeDecl = this.parseTypeNode(tokens);
+      t2 = tokens.peek();
     }
 
-    const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.BoltEqSign) {
       tokens.get();
-      value = this.parseExpr(tokens);
+      lastNode = value = this.parseExpression(tokens);
     }
 
-    return new VarDecl(isMutable, bindings, typeDecl, value, null)
-
+    const node = createBoltVariableDeclaration(modifiers, bindings, typeDecl, value)
+    setOrigNodeRange(node, t0, lastNode);
+    return node;
   }
 
-  parseRetStmt(tokens: TokenStream): RetStmt {
+  public parseReturnStatement(tokens: BoltTokenStream): BoltReturnStatement {
 
-    // Assuming first token is 'return'
     const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.BoltReturnKeyword);
 
     let expr = null;
 
     const t1 = tokens.peek();
     if (t1.kind !== SyntaxKind.BoltEOS) { 
-      expr = this.parseExpr(tokens)
+      expr = this.parseExpression(tokens)
     }
 
-    return new RetStmt(expr, null, [t0, expr.getEndNode()]);
+    const node = createBoltReturnStatement(expr);
+    setOrigNodeRange(node, t0, expr !== null ? expr : t0);
+    return node;
   }
 
-  parseStmt(tokens: TokenStream): Stmt {
-    this.parseCallExpr(tokens)
+  protected lookaheadHasExpression(tokens: BoltTokenStream, i = 1): boolean {
+    const t0 = tokens.peek(i);
+    if (t0.kind === SyntaxKind.BoltParenthesized) {
+      return this.lookaheadHasExpression(tokens, i+1);
+    }
+    return t0.kind === SyntaxKind.BoltIdentifier
+        || t0.kind === SyntaxKind.BoltStringLiteral
+        || t0.kind === SyntaxKind.BoltIntegerLiteral
+        || (t0.kind === SyntaxKind.BoltOperator && this.isUnaryOperator(t0.text));
   }
 
-  parseRecordDecl(tokens: TokenStream): RecordDecl {
-
-    let isPublic = false;
-
-    let kw = tokens.get();
-    if (kw.kind !== SyntaxKind.BoltIdentifier) {
-      throw new ParseError(kw, [SyntaxKind.BoltPubKeyword, SyntaxKind.BoltStructKeyword]);
+  public parseStatement(tokens: BoltTokenStream): BoltStatement {
+    const t0 = tokens.peek();
+    if (t0.kind === SyntaxKind.BoltReturnKeyword) {
+      return this.parseReturnStatement(tokens);
+    } else if (t0.kind === SyntaxKind.BoltLoopKeyword) {
+      return this.parseLoopStatement(tokens);
+    } else {
+      try {
+        return this.parseExpressionStatement(tokens);
+      } catch (e) {
+        if (!(e instanceof ParseError)) {
+          throw e;
+        }
+        throw new ParseError(t0, KIND_STATEMENT_T0);
+      }
     }
-    if (kw.text === 'pub') {
-      isPublic = true;
-      kw = tokens.get();
+  }
+
+  public parseRecordDeclaration(tokens: BoltTokenStream): BoltRecordDeclaration {
+
+    let modifiers = 0;
+
+    let t0 = tokens.get();
+    const firstToken = t0;
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      modifiers |= BoltDeclarationModifiers.Public;
+      t0 = tokens.get();
     }
 
-    if (kw.kind !== SyntaxKind.BoltIdentifier || kw.text !== 'struct') {
-      throw new ParseError(kw, [SyntaxKind.BoltStructKeyword])
+    if (t0.kind !== SyntaxKind.BoltStructKeyword) {
+      throw new ParseError(t0, [SyntaxKind.BoltStructKeyword])
     }
 
-    const name = this.parseQualName(tokens);
+    const name = tokens.get();
+    assertToken(name, SyntaxKind.BoltIdentifier);
 
     const t2 = tokens.get();
 
     if (t2.kind !== SyntaxKind.BoltBraced) {
-      throw new ParseError(kw, [SyntaxKind.BoltBraced])
+      throw new ParseError(t2, [SyntaxKind.BoltBraced])
     }
 
-    let fields = [];
-  
-    return new RecordDecl(isPublic, name, fields);
+    let fields: BoltRecordDeclarationField[] = [];
+    const innerTokens = createTokenStream(t2);
 
+    while (true) {
+      const t3 = innerTokens.get();
+      if (t3.kind === SyntaxKind.EOS) {
+        break;
+      }
+      const name = innerTokens.get();
+      assertToken(name, SyntaxKind.BoltIdentifier);
+      const t4 = innerTokens.get();
+      assertToken(t4, SyntaxKind.BoltColon);
+      const type = this.parseTypeNode(innerTokens);
+      const field = createBoltRecordDeclarationField(name as BoltIdentifier, type);
+      setOrigNodeRange(field, name, type);
+      fields.push(field);
+    }
+
+    const node = new RecordDecl(modifiers, name, fields);
+    setOrigNodeRange(node, firstToken, t2);
+    return node;
   }
 
-  parseStmts(tokens: TokenStream, origNode: Syntax | null): Stmt[] {
-    // TODO
-    return []
+  public parseStatements(tokens: BoltTokenStream): BoltStatement[] {
+    const statements: BoltStatement[] = [];
+    while (true) {
+      const t0 = tokens.peek();
+      if (t0.kind === SyntaxKind.BoltEOS) {
+        break;
+      }
+      const statement = this.parseStatement(tokens);
+      statements.push(statement);
+    }
+    return statements;
   }
 
-  parseModDecl(tokens: TokenStream): Module {
+  public parseModuleDeclaration(tokens: BoltTokenStream): BoltModule {
 
-    let isPublic = false;
+    let modifiers = 0;
 
-    let kw = tokens.get();
-    if (kw.kind !== SyntaxKind.BoltIdentifier) {
-      throw new ParseError(kw, [SyntaxKind.BoltPubKeyword, SyntaxKind.BoltModKeyword]);
+    let t0 = tokens.get();
+    const firstToken = t0;
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      tokens.get();
+      modifiers |= BoltDeclarationModifiers.Public;
+      t0 = tokens.peek();
     }
-    if (kw.text === 'pub') {
-      isPublic = true;
-      kw = tokens.get();
-    }
 
-    if (kw.kind !== SyntaxKind.BoltIdentifier || kw.text !== 'mod') {
-      throw new ParseError(kw, [SyntaxKind.BoltModKeyword])
+    if (t0.kind !== SyntaxKind.BoltIdentifier || t0.text !== 'mod') {
+      throw new ParseError(t0, [SyntaxKind.BoltModKeyword])
     }
 
     const name = this.parseQualName(tokens);
@@ -390,34 +516,30 @@ export class Parser {
     if (t1.kind !== SyntaxKind.BoltBraced) {
       throw new ParseError(t1, [SyntaxKind.BoltBraced])
     }
+    const sentences = this.parseSentences(createTokenStream(t1));
 
-    return new Module(isPublic, name, t1.toSentences());
-
+    const node = createBoltModule(modifiers, name, sentences);
+    setOrigNodeRange(node, firstToken, t1);
+    return node;
   }
 
-  protected assertEmpty(tokens: TokenStream) {
-    const t0 = tokens.peek(1);
-    if (t0.kind !== SyntaxKind.BoltEOS) {
-      throw new ParseError(t0, [SyntaxKind.BoltEOS]);
-    }
-  }
 
-  parseNewType(tokens: TokenSteam): NewTypeDecl {
+  public parseNewTypeDeclaration(tokens: BoltTokenSteam): BoltNewTypeDeclaration {
 
-    let isPublic = false;
+    let modifiers = 0;
+
     let t0 = tokens.get();
-    if (t0.kind !== SyntaxKind.BoltIdentifier) {
-      throw new ParseError(t0, [SyntaxKind.BoltPubKeyword, SyntaxKind.BoltNewTypeKeyword])
-    }
-    if (t0.text === 'pub') {
-      isPublic = true;
-      t0 = tokens.get();
+
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      tokens.get();
+      modifiers |= BoltDeclarationModifiers.Public;
+      t0 = tokens.peek();
       if (t0.kind !== SyntaxKind.BoltIdentifier) {
         throw new ParseError(t0, [SyntaxKind.BoltNewTypeKeyword])
       }
     }
 
-    if (t0.text !== 'newtype') {
+    if (t0.kind !== SyntaxKind.BoltNewTypeKeyword) {
       throw new ParseError(t0, [SyntaxKind.BoltNewTypeKeyword])
     }
 
@@ -426,63 +548,71 @@ export class Parser {
       throw new ParseError(name, [SyntaxKind.BoltIdentifier])
     }
 
-    return new NewTypeDecl(isPublic, name)
-
+    const node = createBoltNewTypeDeclaration(modifiers, name)
+    setOrigNodeRange(node, firstToken, name);
+    return node;
   }
 
-  parseFuncDecl(tokens: TokenStream, origNode: Syntax | null): FuncDecl {
+  private parseFunctionDeclarationMaybeForeign(tokens: BoltTokenStream): BoltFunctionDeclaration | BoltForeignFunctionDeclaration {
 
     let target = "Bolt";
-    let isPublic = false;
+    let modifiers = 0;
 
-    const k0 = tokens.peek();
-    if (k0.kind !== SyntaxKind.BoltIdentifier) {
-      throw new ParseError(k0, [SyntaxKind.BoltPubKeyword, SyntaxKind.BoltForeignKeyword, SyntaxKind.BoltFnKeyword])
-    }
-    if (k0.text === 'pub') {
+    let k0 = tokens.peek();
+    let lastNode: BoltSyntax;
+    const firstToken = k0;
+
+    if (k0.kind !== SyntaxKind.BoltPubKeyword) {
       tokens.get();
-      isPublic = true;
+      modifiers |= BoltDeclarationModifiers.Public;
+      k0 = tokens.peek();
     }
 
-    const k1 = tokens.peek();
-    if (k1.kind !== SyntaxKind.BoltIdentifier) {
-      throw new ParseError(k1, [SyntaxKind.BoltForeignKeyword, SyntaxKind.BoltFnKeyword])
-    }
-    if (k1.text === 'foreign') {
+    if (k0.kind === SyntaxKind.BoltForeignKeyword) {
       tokens.get();
+      modifiers |= BoltDeclarationModifiers.IsForeign;
       const l1 = tokens.get();
       if (l1.kind !== SyntaxKind.BoltStringLiteral) {
         throw new ParseError(l1, [SyntaxKind.BoltStringLiteral])
       }
       target = l1.value;
-    }
-    const k2 = tokens.get();
-    if (k2.kind !== SyntaxKind.BoltIdentifier || k2.text !== 'fn') {
-      throw new ParseError(k2, [SyntaxKind.BoltFnKeyword])
+      k0 = tokens.peek();
     }
 
-    let name: QualName;
+    if (k0.kind !== SyntaxKind.BoltFnKeyword) {
+      throw new ParseError(k0, [SyntaxKind.BoltFnKeyword])
+    }
+
+    tokens.get();
+
+    let name: BoltQualName;
     let returnType = null;
     let body = null;
-    let params: Param[] = [];
+    let params: BoltParameter[] = [];
 
     // Parse parameters
+
+    let i = 0;
 
     const t0 = tokens.peek(1);
     const t1 = tokens.peek(2);
 
-    const isParamLike = (token: Token) =>
+    const isParamLike = (token: BoltToken) =>
         token.kind === SyntaxKind.BoltIdentifier || token.kind === SyntaxKind.BoltParenthesized;
 
-    const parseParamLike = (tokens: TokenStream) => {
+    const parseParamLike = (tokens: BoltTokenStream) => {
       const t0 = tokens.peek(1);
       if (t0.kind === SyntaxKind.BoltIdentifier) {
         tokens.get();
-        return new Param(new BindPatt(t0, null, t0), null, null, null, t0)
+        const bindings = createBoltBindPattern(t0 as BoltIdentifier);
+        setOrigNodeRange(bindings, t0, t0);
+        const param = createBoltParameter(i++, bindings, null, null);
+        setOrigNodeRange(param, t0, t0);
+        return param;
       } else if (t0.kind === SyntaxKind.BoltParenthesized) {
         tokens.get();
-        const innerTokens = t0.toTokenStream();
-        const param = this.parseParam(innerTokens)
+        const innerTokens = createTokenStream(t0);
+        const param = this.parseParameter(innerTokens, i++)
         this.assertEmpty(innerTokens);
         return param
       } else {
@@ -492,14 +622,16 @@ export class Parser {
 
     if (t0.kind === SyntaxKind.BoltOperator) {
 
-      name = new QualName(t0, [], null, t0);
+      name = createBoltQualName([], t0);
+      setOrigNodeRange(name, t0, t0);
       tokens.get();
       params.push(parseParamLike(tokens))
 
     } else if (isParamLike(t0) && t1.kind == SyntaxKind.BoltOperator) {
 
       params.push(parseParamLike(tokens));
-      name = new QualName(t1, [], null, t1);
+      name = createBoltQualName([], t1);
+      setOrigNodeRange(name, t1, t1);
       while (true) {
         const t2 = tokens.peek();
         if (t2.kind !== SyntaxKind.BoltOperator) {
@@ -517,13 +649,13 @@ export class Parser {
       name = this.parseQualName(tokens)
       const t2 = tokens.get();
       if (t2.kind === SyntaxKind.BoltParenthesized) {
-        const innerTokens = t2.toTokenStream();
+        const innerTokens = createTokenStream(t2);
         while (true) {
           const t3 = innerTokens.peek();
           if (t3.kind === SyntaxKind.BoltEOS) {
             break;
           }
-          params.push(this.parseParam(innerTokens))
+          params.push(this.parseParameter(innerTokens, i++))
           const t4 = innerTokens.get();
           if (t4.kind === SyntaxKind.BoltComma) {
             continue;
@@ -546,7 +678,7 @@ export class Parser {
     const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.BoltRArrow) {
       tokens.get();
-      returnType = this.parseTypeDecl(tokens);
+      returnType = this.parseTypeNode(tokens);
     }
 
     // Parse function body
@@ -556,21 +688,29 @@ export class Parser {
       tokens.get();
       switch (target) {
         case "Bolt":
-          body = this.parseStmts(tokens, t3);
+          body = this.parseStatements(tokens);
           break;
         case "JS":
-          body = acorn.parse(t3.text).body;
+          // TODO
+          //body = acorn.parse(t3.text).body;
           break;
         default:
           throw new Error(`Unrecognised language: ${target}`);
       }
     }
 
-    return new FuncDecl(isPublic, target, name, params, returnType, body, null, origNode)
+    const node = createBoltFunctionDeclaration(
+      modifiers,
+      name,
+      params,
+      returnType,
+      body
+    );
+    setOrigNodeRange(node, firstToken, lastNode);
 
   }
 
-  parseSourceElement(tokens: TokenStream): SourceElement {
+  parseSourceElement(tokens: BoltTokenStream): SourceElement {
     const t0 = tokens.peek(1);
     if (t0.kind === SyntaxKind.BoltIdentifier) {
       let i = 1;
@@ -608,7 +748,7 @@ export class Parser {
           return this.parseVariantDecl(tokens);
         default:
           try { 
-            return this.parseExpr(tokens)
+            return this.parseExpression(tokens)
           } catch (e) {
             if (e instanceof ParseError) {
               throw new ParseError(kw, [...e.expected, SyntaxKind.BoltModKeyword, SyntaxKind.BoltLetKeyword, 
@@ -619,7 +759,7 @@ export class Parser {
           }
       }
     } else {
-      return this.parseStmt(tokens)
+      return this.parseStatement(tokens)
     }
   }
 
@@ -638,35 +778,35 @@ export class Parser {
     }
   }
 
-  parseBinOp(tokens: TokenStream, lhs: Expr , minPrecedence: number) {
-    let lookahead = tokens.peek(1);
-    while (true) {
-      if (lookahead.kind !== SyntaxKind.BoltOperator) {
-        break;
-      }
-      const lookaheadDesc = this.getOperatorDesc(2, lookahead.text);
-      if (lookaheadDesc === null || lookaheadDesc.precedence < minPrecedence) {
-        break;
-      }
-      const op = lookahead;
-      const opDesc = this.getOperatorDesc(2, op.text);
-      tokens.get();
-      let rhs = this.parsePrimExpr(tokens)
-      lookahead = tokens.peek()
-      while (lookaheadDesc.arity === 2 
-          && ((lookaheadDesc.precedence > opDesc.precedence)
-            || lookaheadDesc.kind === OperatorKind.InfixR && lookaheadDesc.precedence === opDesc.precedence)) {
-          rhs = this.parseBinOp(tokens, rhs, lookaheadDesc.precedence)
-      }
-      lookahead = tokens.peek();
-      lhs = new CallExpr(new RefExpr(new QualName(op, [])), [lhs, rhs]);
-    }
-    return lhs
-  }
+  //parseBinOp(tokens: TokenStream, lhs: Expr , minPrecedence: number) {
+  //  let lookahead = tokens.peek(1);
+  //  while (true) {
+  //    if (lookahead.kind !== SyntaxKind.BoltOperator) {
+  //      break;
+  //    }
+  //    const lookaheadDesc = this.getOperatorDesc(2, lookahead.text);
+  //    if (lookaheadDesc === null || lookaheadDesc.precedence < minPrecedence) {
+  //      break;
+  //    }
+  //    const op = lookahead;
+  //    const opDesc = this.getOperatorDesc(2, op.text);
+  //    tokens.get();
+  //    let rhs = this.parsePrimExpr(tokens)
+  //    lookahead = tokens.peek()
+  //    while (lookaheadDesc.arity === 2 
+  //        && ((lookaheadDesc.precedence > opDesc.precedence)
+  //          || lookaheadDesc.kind === OperatorKind.InfixR && lookaheadDesc.precedence === opDesc.precedence)) {
+  //        rhs = this.parseBinOp(tokens, rhs, lookaheadDesc.precedence)
+  //    }
+  //    lookahead = tokens.peek();
+  //    lhs = new CallExpr(new RefExpr(new QualName(op, [])), [lhs, rhs]);
+  //  }
+  //  return lhs
+  //}
 
   parseCallExpr(tokens: TokenStream): CallExpr {
 
-    const operator = this.parsePrimExpr(tokens)
+    const operator = this.parsePrimitiveExpression(tokens)
     const args: Expr[] = []
 
     const t2 = tokens.get();
@@ -681,7 +821,7 @@ export class Parser {
       if (t3.kind === SyntaxKind.BoltEOS) {
         break; 
       }
-      args.push(this.parseExpr(innerTokens))
+      args.push(this.parseExpression(innerTokens))
       const t4 = innerTokens.get();
       if (t4.kind === SyntaxKind.BoltEOS) {
         break

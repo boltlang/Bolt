@@ -40,15 +40,21 @@ node BoltDotDot > BoltToken;
 node BoltRArrow > BoltToken;
 node BoltLArrow > BoltToken;
 node BoltEqSign > BoltToken;
+node BoltGtSign > BoltToken;
+node BoltLtSign > BoltToken;
 
 node BoltKeyword;
 
 node BoltFnKeyword      > BoltToken, BoltKeyword;
 node BoltForeignKeyword > BoltToken, BoltKeyword;
 node BoltLetKeyword     > BoltToken, BoltKeyword;
+node BoltReturnKeyword  > BoltToken, BoltKeyword;
+node BoltLoopKeyword    > BoltToken, BoltKeyword;
+node BoltYieldKeyword   > BoltToken, BoltKeyword;
 node BoltImportKeyword  > BoltToken, BoltKeyword;
 node BoltPubKeyword     > BoltToken, BoltKeyword;
 node BoltModKeyword     > BoltToken, BoltKeyword;
+node BoltMutKeyword     > BoltToken, BoltKeyword;
 node BoltEnumKeyword    > BoltToken, BoltKeyword;
 node BoltStructKeyword  > BoltToken, BoltKeyword;
 node BoltNewTypeKeyword > BoltToken, BoltKeyword;
@@ -84,7 +90,7 @@ node BoltReferenceTypeNode > BoltTypeNode {
 node BoltPattern;
 
 node BoltBindPattern > BoltPattern {
-  name: String,
+  name: BoltIdentifier,
 }
 
 node BoltTypePattern > BoltPattern {
@@ -181,9 +187,10 @@ node BoltParameter {
 node BoltDeclaration > BoltSourceElement;
 
 enum BoltDeclarationModifiers {
-  Mutable = 0x1,
-  Public  = 0x2,
-  IsType  = 0x4,
+  Mutable   = 0x1,
+  Public    = 0x2,
+  IsType    = 0x4,
+  IsForeign = 0x8,
 }
 
 node BoltNewTypeDeclaration > BoltDeclaration {
@@ -261,7 +268,7 @@ node JSIdentifier > JSToken {
 node JSPattern;
 
 node JSBindPattern > JSPattern {
-  name: String,
+  name: JSIdentifier,
 }
 
 node JSExpression;

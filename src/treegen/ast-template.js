@@ -29,7 +29,6 @@ function createNode(nodeType) {
     }
   });
   obj.span = null;
-  obj.origNodes = null;
   return obj;
 }
 
@@ -58,9 +57,6 @@ for (const nodeName of Object.keys(NODE_TYPES)) {
     }
     if (i < args.length) {
       node.span = args[i++];
-    }
-    if (i < args.length) {
-      node.origNodes = i < args.length ? args[i++] : null;
     }
     if (i < args.length) {
       throw new Error(`Too many arguments provided to function create${nodeName}`);

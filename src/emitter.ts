@@ -5,7 +5,12 @@ export class Emitter {
 
   emit(node: Syntax) {
 
+    debug(node);
+
     switch (node.kind) {
+
+      case SyntaxKind.JSReferenceExpression:
+        return node.name;
 
       case SyntaxKind.JSSourceFile:
         let out = ''

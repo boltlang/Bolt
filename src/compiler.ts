@@ -60,7 +60,7 @@ export class Compiler {
       for (const element of s.elements) {
         this.compileDecl(element, body);
       }
-      return createJSSourceFile(body, s.span, [s, s]);
+      return createJSSourceFile(body, s.span);
     });
   }
 
@@ -75,21 +75,18 @@ export class Compiler {
           compiledOperator,
           compiledArgs,
           node.span,
-          [node, node],
         );
 
       case SyntaxKind.BoltReferenceExpression:
         return createJSReferenceExpression(
           getFullTextOfQualName(node.name),
           node.span,
-          [node, node],
         );
 
       case SyntaxKind.BoltConstantExpression:
         return createJSConstantExpression(
           node.value,
           node.span,
-          [node, node]
         );
 
       default:
@@ -128,10 +125,9 @@ export class Compiler {
         const compiledValue = node.value !== null ? this.compileExpr(node.value, preamble) : null;
         preamble.push(
           createJSLetDeclaration(
-            createJSBindPattern((node.bindings as BoltBindPattern).name, node.bindings.span, [node.bindings, node.bindings]),
+            createJSBindPattern((node.bindings as BoltBindPattern).name, node.bindings.span),
             compiledValue,
             node.span,
-            [node, node],
           ),
         );
         break;
@@ -145,11 +141,10 @@ export class Compiler {
           }
           let result = createJSFunctionDeclaration(
             0,
-            createJSIdentifier(node.name.text, node.name.span, [node.name, node.name]),
+            createJSIdentifier(node.name.text, node.name.span),
             params,
             body,
             node.span,
-            [node, node],
           );
           if (hasPublicModifier(node)) {
             result.modifiers |= JSDeclarationModifiers.IsExported;;
