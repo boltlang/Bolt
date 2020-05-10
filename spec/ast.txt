@@ -1,0 +1,314 @@
+
+// Bolt language AST definitions
+
+type BoltValue = Integer | bool | String;
+
+node FunctionBody;
+
+enum BoltDeclarationModifiers {
+  Mutable = 0x1,
+  Public  = 0x2,
+  IsType  = 0x4,
+}
+
+node BoltToken;
+
+node BoltStringLiteral > BoltToken {
+  value: String,
+}
+
+node BoltIntegerLiteral > BoltToken {
+  value: usize,
+}
+
+node BoltSymbol > BoltToken {
+  
+}
+
+node BoltIdentifier > BoltSymbol {
+  text: String,
+}
+
+node BoltOperator > BoltSymbol {
+  text: String,
+}
+
+node BoltEOS    > BoltToken;
+
+node BoltComma  > BoltToken;
+node BoltSemi   > BoltToken;
+node BoltDot    > BoltToken;
+node BoltDotDot > BoltToken;
+node BoltRArrow > BoltToken;
+node BoltLArrow > BoltToken;
+node BoltEqSign > BoltToken;
+
+node BoltKeyword;
+
+node BoltFnKeyword      > BoltToken, BoltKeyword;
+node BoltForeignKeyword > BoltToken, BoltKeyword;
+node BoltLetKeyword     > BoltToken, BoltKeyword;
+node BoltImportKeyword  > BoltToken, BoltKeyword;
+node BoltPubKeyword     > BoltToken, BoltKeyword;
+node BoltModKeyword     > BoltToken, BoltKeyword;
+node BoltEnumKeyword    > BoltToken, BoltKeyword;
+node BoltStructKeyword  > BoltToken, BoltKeyword;
+node BoltNewTypeKeyword > BoltToken, BoltKeyword;
+
+node BoltPunctuated > BoltToken {
+  text: String,
+}
+
+node BoltParenthesized > BoltPunctuated;
+node BoltBraced > BoltPunctuated;
+node BoltBracketed > BoltPunctuated;
+
+node BoltSourceElement;
+
+node BoltSourceFile {
+  elements: Vec<BoltSourceElement>,
+}
+
+node BoltQualName {
+  modulePath: Vec<BoltIdentifier>,
+  name: BoltSymbol, 
+}
+
+node BoltTypeNode;
+
+node BoltReferenceTypeNode > BoltTypeNode {
+  name: BoltQualName,
+  arguments: Option<Vec<BoltTypeNode>>,
+}
+
+node BoltPattern;
+
+node BoltBindPattern > BoltPattern {
+  name: String,
+}
+
+node BoltTypePattern > BoltPattern {
+  typeNode: BoltTypeNode,
+  nestedPattern: BoltPattern,
+}
+
+node BoltExpressionPattern > BoltPattern {
+  expression: BoltExpression,
+}
+
+node BoltTuplePatternElement {
+  index: usize,
+  pattern: BoltPattern,
+}
+
+node BoltTuplePattern > BoltPattern {
+  elements: Vec<BoltTuplePatternElement>,
+}
+
+node BoltRecordPatternField {
+  name: BoltIdentifier,
+  pattern: BoltPattern,
+}
+
+node BoltRecordPattern > BoltPattern {
+  fields: Vec<BoltRecordPatternField>,
+}
+
+node BoltExpression;
+
+node BoltCallExpression > BoltExpression {
+  operator: BoltExpression,
+  operands: Vec<BoltExpression>,
+}
+
+node BoltYieldExpression > BoltExpression {
+  value: BoltExpression,
+}
+
+node BoltMatchArm {
+  pattern: BoltPattern,
+  body: BoltExpression,
+}
+
+node BoltMatchExpression > BoltExpression {
+  value: BoltExpression,
+  arms: Vec<BoltMatchArm>,
+}
+
+node BoltCase {
+  test: BoltExpression,
+  result: BoltExpression,
+}
+
+node BoltCaseExpression > BoltExpression {
+  cases: Vec<BoltCase>,
+}
+
+node BoltBlockExpression > BoltExpression {
+  statements: Vec<BoltStatement>,
+}
+
+node BoltConstantExpression > BoltExpression {
+  value: BoltValue,
+}
+
+node BoltStatement;
+
+node BoltReturnStatement > BoltStatement {
+  value: Option<BoltExpression>,
+}
+
+node BoltResumeStatement > BoltStatement {
+  value: BoltExpression,
+}
+
+node BoltExpressionStatement > BoltStatement {
+  expression: BoltExpression,
+}
+
+node BoltModule {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltQualName,
+  elements: BoltSourceElement,
+}
+
+node BoltParameter {
+  index: usize,
+  bindings: BoltPattern,
+  typeNode: Option<BoltTypeNode>,
+  defaultValue: Option<BoltExpression>,
+}
+
+node BoltDeclaration;
+
+node BoltFunctionDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltSymbol,
+  params: Vec<BoltParameter>,
+  type: Option<BoltTypeNode>,
+  body: BoltExpression,
+}
+
+node BoltForeignFunctionDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltSymbol,
+  params: Vec<BoltParameter>,
+  type: Option<BoltTypeNode>,
+  body: FunctionBody,
+}
+
+node BoltVariableDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltSymbol,
+  type: Option<BoltTypeNode>,
+  value: Option<BoltExpression>,
+}
+
+node BoltImportSymbol;
+
+node BoltPlainImportSymbol > BoltImportSymbol {
+  name: BoltQualName,
+}
+
+node BoltImportDeclaration > BoltDeclaration {
+  file: String,
+  symbols: Vec<BoltImportSymbol>,
+}
+
+node BoltRecordDeclarationField {
+  name: BoltIdentifier,
+  type: BoltTypeNode,
+}
+
+node BoltRecordDeclaration > BoltDeclaration {
+  name: BoltQualName,
+  fields: Vec<BoltRecordDeclarationField>,
+}
+
+// JavaScript AST definitions
+
+type JSValue = Int | String | Bool | Void;
+
+node JSToken;
+
+node JSOperator > JSToken {
+  text: String,
+}
+
+node JSIdentifier > JSToken {
+  text: String,
+}
+
+node JSPattern;
+
+node JSBindPattern {
+  name: JSIdentifier,
+}
+
+node JSExpression;
+
+node JSConstantExpression > JSExpression {
+  value: BoltValue,
+}
+
+enum JSMemberExpressionModifiers {
+  Computed = 0x1,
+}
+
+node JSMemberExpression > JSExpression {
+  value: JSExpression,
+  property: JSExpression,
+  modifiers: JSMemberExpressionModifiers,
+}
+
+node JSCallExpression > JSExpression {
+  operator: JSExpression,
+  operands: Vec<JSExpression>,
+}
+
+node JSBinaryExpression > JSExpression {
+  left: JSExpression,
+  operator: JSOperator,
+  right: JSExpression,
+}
+
+node JSUnaryExpression > JSExpression {
+  operator: JSOperator,
+  operand: JSExpression
+}
+
+node JSNewExpression > JSExpression {
+  target: JSExpression,
+  arguments: Vec<JSExpression>,
+}
+
+node JSSequenceExpression > JSExpression {
+  expressions: Vec<JSExpression>,
+}
+
+node JSConditionalExpression > JSExpression {
+  test: JSExpression,
+  consequent: JSExpression,
+  alternate: JSExpression,
+}
+
+node JSReferenceExpression > JSExpression {
+  name: String,
+}
+
+node JSStatement;
+
+node JSConditionalStatement > JSStatement {
+  test: JSExpression,
+  consequent: Vec<JSStatement>,
+  alternate: Vec<JSStatement>,
+}
+
+node JSDeclaration;
+
+node JSSourceFile {
+  elements: Vec<JSSourceElement>,
+}
+
+node JSSourceElement > JSDeclaration, JSStatement;
+
