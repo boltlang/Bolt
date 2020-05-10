@@ -10,6 +10,7 @@ import {
   BoltRecordDeclaration,
   BoltStatement,
   BoltDeclaration,
+  BoltParameter,
   BoltSourceElement,
   createBoltQualName,
   BoltQualName,
@@ -31,6 +32,19 @@ import {
   BoltCallExpression,
   BoltExpressionStatement,
   createBoltExpressionStatement,
+  BoltVariableDeclaration,
+  BoltSyntax,
+  createBoltVariableDeclaration,
+  BoltReturnStatement,
+  createBoltReturnStatement,
+  BoltRecordDeclarationField,
+  BoltModule,
+  createBoltModule,
+  BoltNewTypeDeclaration,
+  createBoltNewTypeDeclaration,
+  BoltFunctionDeclaration,
+  createBoltFunctionDeclaration,
+  createBoltCallExpression,
 } from "./ast"
 
 import { BoltTokenStream, setOrigNodeRange } from "./util"
@@ -226,7 +240,7 @@ export class Parser {
   public parseBindPattern(tokens: BoltTokenStream): BoltBindPattern {
     const t0 = tokens.get();
     assertToken(t0, SyntaxKind.BoltIdentifier);
-    const node = createBoltBindPattern((t0 as BoltIdentifier).text);
+    const node = createBoltBindPattern(t0 as BoltIdentifier);
     setOrigNodeRange(node, t0, t0);
     return node;
   }
@@ -442,6 +456,11 @@ export class Parser {
     return node;
   }
 
+  protected isUnaryOperator(name: string) {
+    // TODO
+    return false;
+  }
+
   protected lookaheadHasExpression(tokens: BoltTokenStream, i = 1): boolean {
     const t0 = tokens.peek(i);
     if (t0.kind === SyntaxKind.BoltParenthesized) {
@@ -493,8 +512,9 @@ export class Parser {
       throw new ParseError(t0, [SyntaxKind.BoltStructKeyword])
     }
 
-    const name = tokens.get();
-    assertToken(name, SyntaxKind.BoltIdentifier);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.BoltIdentifier);
+    const name = createBoltQualName([], t1 as BoltIdentifier);
 
     const t2 = tokens.get();
 
@@ -507,7 +527,7 @@ export class Parser {
 
     while (true) {
       const t3 = innerTokens.get();
-      if (t3.kind === SyntaxKind.EOS) {
+      if (t3.kind === SyntaxKind.BoltEOS) {
         break;
       }
       const name = innerTokens.get();
@@ -520,7 +540,7 @@ export class Parser {
       fields.push(field);
     }
 
-    const node = new RecordDecl(modifiers, name, fields);
+    const node = createBoltRecordDeclaration(modifiers, name, fields);
     setOrigNodeRange(node, firstToken, t2);
     return node;
   }
@@ -568,11 +588,12 @@ export class Parser {
   }
 
 
-  public parseNewTypeDeclaration(tokens: BoltTokenSteam): BoltNewTypeDeclaration {
+  public parseNewTypeDeclaration(tokens: BoltTokenStream): BoltNewTypeDeclaration {
 
     let modifiers = 0;
 
     let t0 = tokens.get();
+    const firstToken = t0;
 
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
       tokens.get();
@@ -597,13 +618,13 @@ export class Parser {
     return node;
   }
 
-  private parseFunctionDeclaration(tokens: BoltTokenStream): BoltFunctionDeclaration | BoltForeignFunctionDeclaration {
+  private parseFunctionDeclaration(tokens: BoltTokenStream): BoltFunctionDeclaration {
 
     let target = "Bolt";
     let modifiers = 0;
 
     let k0 = tokens.peek();
-    let lastNode: BoltSyntax;
+    let lastToken: BoltSyntax;
     const firstToken = k0;
 
     if (k0.kind !== SyntaxKind.BoltPubKeyword) {
@@ -717,10 +738,15 @@ export class Parser {
 
     }
 
+    if (params.length > 0) {
+      lastToken = params[params.length-1];
+    }
+
     // Parse return type
 
     const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.BoltRArrow) {
+      lastToken = t2;
       tokens.get();
       returnType = this.parseTypeNode(tokens);
     }
@@ -729,6 +755,7 @@ export class Parser {
 
     const t3 = tokens.peek();
     if (t3.kind === SyntaxKind.BoltBraced) {
+      lastToken = t3;
       tokens.get();
       switch (target) {
         case "Bolt":
@@ -745,12 +772,13 @@ export class Parser {
 
     const node = createBoltFunctionDeclaration(
       modifiers,
+      target,
       name,
       params,
       returnType,
       body
     );
-    setOrigNodeRange(node, firstToken, lastNode);
+    setOrigNodeRange(node, firstToken, lastToken!);
     return node;
 
   }
@@ -875,7 +903,7 @@ export class Parser {
       }
     }
 
-    return new CallExpr(operator, args, null)
+    return createBoltCallExpression(operator, args, null)
 
   }
 

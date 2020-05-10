@@ -540,6 +540,7 @@ export type BoltSourceElement
 
 export interface BoltRecordDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltRecordDeclaration;
+  modifiers: BoltDeclarationModifiers;
   name: BoltQualName;
   fields: BoltRecordDeclarationField[];
 }
@@ -946,7 +947,7 @@ export function createBoltVariableDeclaration(modifiers: BoltDeclarationModifier
 export function createBoltPlainImportSymbol(name: BoltQualName, span?: TextSpan | null): BoltPlainImportSymbol;
 export function createBoltImportDeclaration(file: string, symbols: BoltImportSymbol[], span?: TextSpan | null): BoltImportDeclaration;
 export function createBoltRecordDeclarationField(name: BoltIdentifier, type: BoltTypeNode, span?: TextSpan | null): BoltRecordDeclarationField;
-export function createBoltRecordDeclaration(name: BoltQualName, fields: BoltRecordDeclarationField[], span?: TextSpan | null): BoltRecordDeclaration;
+export function createBoltRecordDeclaration(modifiers: BoltDeclarationModifiers, name: BoltQualName, fields: BoltRecordDeclarationField[], span?: TextSpan | null): BoltRecordDeclaration;
 export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;
 export function createJSIdentifier(text: string, span?: TextSpan | null): JSIdentifier;
 export function createJSBindPattern(name: JSIdentifier, span?: TextSpan | null): JSBindPattern;

@@ -240,6 +240,7 @@ node BoltRecordDeclarationField {
 node BoltSourceElement;
 
 node BoltRecordDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
   name: BoltQualName,
   fields: Vec<BoltRecordDeclarationField>,
 }
