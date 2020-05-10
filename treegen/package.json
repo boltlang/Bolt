@@ -1,5 +1,5 @@
 {
-  "name": "treegen",
+  "name": "@samvv/treegen",
   "private": true,
   "version": "1.0.0",
   "description": "A tool to generate definitions for an arbitrary abstract syntax tree (AST)",
@@ -26,6 +26,10 @@
   },
   "homepage": "https://github.com/samvv/BoltJS#readme",
   "devDependencies": {
+    "@types/minimist": "^1.2.0",
     "pegjs": "^0.11.0-master.b7b87ea"
+  },
+  "dependencies": {
+    "minimist": "^1.2.5"
   }
 }
