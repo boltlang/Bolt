@@ -8,6 +8,7 @@ import {
 } from "./text"
 
 import {
+  setParents,
   SyntaxKind,
   BoltToken,
   BoltSentence,
@@ -27,6 +28,18 @@ import {
   createBoltEOS,
   createBoltDot,
   createBoltEqSign,
+  createBoltPubKeyword,
+  createBoltMutKeyword,
+  createBoltStructKeyword,
+  createBoltEnumKeyword,
+  createBoltForeignKeyword,
+  createBoltAssignment,
+  createBoltYieldKeyword,
+  createBoltReturnKeyword,
+  createBoltFnKeyword,
+  createBoltLArrow,
+  createBoltDotDot,
+  createBoltNewTypeKeyword,
 } from "./ast"
 
 export enum PunctType {
@@ -122,14 +135,13 @@ function isIdentPart(ch: string) {
   return ch == '_' || XRegExp('\\p{L}').test(ch)
 }
 
-function isOperatorStart(ch: string) {
-  return /[+\-*\/%$!><]/.test(ch)
+function isSymbol(ch: string) {
+  return /[=+\/-*%$!><&^|]/.test(ch)
 }
 
-function isOperatorPart(ch: string) {
-  return /[=+\-*\/%$!><]/.test(ch)
-
-}
+//function isOperatorPart(ch: string) {
+  //return /[=+\-*\/%$!><]/.test(ch)
+//}
 
 const EOF = ''
 
@@ -210,12 +222,6 @@ export class Scanner {
       }
 
       switch (c0) {
-        case '.':
-          this.getChar();
-          return createBoltDot(new TextSpan(this.file, startPos, this.currPos.clone()));
-        case '=':
-          this.getChar();
-          return createBoltEqSign(new TextSpan(this.file, startPos, this.currPos.clone()));
         case ';':
           this.getChar();
           return createBoltSemi(new TextSpan(this.file, startPos, this.currPos.clone()));
@@ -304,18 +310,42 @@ export class Scanner {
 
         const name = this.takeWhile(isIdentPart);
         const endPos = this.currPos.clone();
-        return createBoltIdentifier(name, new TextSpan(this.file, startPos, endPos))
+        const span = new TextSpan(this.file, startPos, endPos);
+        switch (name) {
+          case 'pub':     return createBoltPubKeyword(span);
+          case 'fn':      return createBoltFnKeyword(span);
+          case 'return':  return createBoltReturnKeyword(span);
+          case 'yield':   return createBoltYieldKeyword(span);
+          case 'foreign': return createBoltForeignKeyword(span);
+          case 'let':     return createBoltPubKeyword(span);
+          case 'mut':     return createBoltMutKeyword(span);
+          case 'struct':  return createBoltStructKeyword(span);
+          case 'enum':    return createBoltEnumKeyword(span);
+          case 'newtype': return createBoltNewTypeKeyword(span);
+          default:        return createBoltIdentifier(name, span);
+        }
 
-      } else if (isOperatorStart(c0)) {
+      } else if (isSymbol(c0)) {
 
-        const text = this.takeWhile(isOperatorPart)
+        const text = this.takeWhile(isSymbol)
         const endPos = this.currPos.clone()
         const span = new TextSpan(this.file, startPos, endPos);
 
-        if (text === '->') {
-          return createBoltRArrow(span);
-        } else {
-          return createBoltOperator(text, span);
+        if (text.endsWith('=')) {
+          const operator = text.substring(0, text.length-1);
+          if (text === '==') {
+            return createBoltOperator(text, span);
+          }
+          return createBoltAssignment(operator.length === 0 ? null : operator, span);
+        }
+
+        switch (text) {
+          case '->': return createBoltRArrow(span);
+          case '<-': return createBoltLArrow(span);
+          case '.':  return createBoltDot(span);
+          case '..': return createBoltDotDot(span);
+          case '=':  return createBoltEqSign(span);
+          default:   return createBoltOperator(text, span);
         }
 
       } else {
@@ -385,7 +415,9 @@ export class Scanner {
     const startPos = this.currPos.clone();
     const elements = this.scanTokens();
     const endPos = this.currPos.clone();
-    return createBoltSourceFile(elements, new TextSpan(this.file, startPos, endPos));
+    const sourceFile = createBoltSourceFile(elements, new TextSpan(this.file, startPos, endPos));
+    setParents(sourceFile);
+    return sourceFile;
   }
 
 }

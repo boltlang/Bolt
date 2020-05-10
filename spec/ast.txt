@@ -30,6 +30,10 @@ node BoltOperator > BoltSymbol {
   text: String,
 }
 
+node BoltAssignment > BoltToken {
+  operator: Option<String>,
+}
+
 node BoltEOS    > BoltToken;
 
 node BoltComma  > BoltToken;

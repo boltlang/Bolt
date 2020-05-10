@@ -1,6 +1,8 @@
 
 import * as path from "path"
 import * as fs from "fs-extra"
+import { now } from "microtime"
+import { EventEmitter } from "events"
 
 import { Parser } from "./parser"
 import { TypeChecker } from "./checker"
@@ -10,9 +12,10 @@ import { Scanner } from "./scanner"
 import { Compiler } from "./compiler"
 import { emit } from "./emitter"
 import { TextFile } from "./text"
-import { BoltSourceFile, Syntax } from "./ast"
+import { BoltSourceFile, Syntax, JSSourceFile } from "./ast"
 import { upsearchSync, FastStringMap, getFileStem, getLanguage } from "./util"
 import { Package } from "./package"
+import { verbose, memoize } from "./util"
 
 const targetExtensions: FastStringMap<string> = {
   'JS': '.mjs',
@@ -20,55 +23,106 @@ const targetExtensions: FastStringMap<string> = {
   'C': '.c',
 };
 
+export interface TransformationContext {
+  
+}
+
+interface TimingInfo {
+  timestamp: number;
+  refCount: number;
+}
+
+class Timing extends EventEmitter {
+
+  private runningTasks: FastStringMap<TimingInfo> = Object.create(null);
+
+  public start(name: string) {
+    if (this.runningTasks[name] !== undefined) {
+      this.runningTasks[name].refCount++;
+      return;
+    }
+    this.runningTasks[name] = { timestamp: now(), refCount: 1 };
+    this.emit(`start ${name}`);
+  }
+
+  public end(name: string) {
+    if (this.runningTasks[name] === undefined) {
+      throw new Error(`Task '${name}' was never started.`);
+    }
+    const info = this.runningTasks[name];
+    info.refCount--;
+    if (info.refCount === 0) {
+      const usecs = now() - info.timestamp;
+      verbose(`Task '${name}' completed after ${usecs} microseconds.`);
+      this.emit(`end ${name}`);
+    }
+  }
+
+}
+
 export class Program {
 
   public parser: Parser
   public evaluator: Evaluator;
   public checker: TypeChecker;
   public expander: Expander;
+  public timing: Timing;
 
-  private sourceFiles = new Map<string, BoltSourceFile>();
-  private packages: FastStringMap<Package> = Object.create(null);
-
-  constructor(files: TextFile[]) {
+  constructor(public files: string[]) {
     this.checker = new TypeChecker();
     this.parser = new Parser();
     this.evaluator = new Evaluator(this.checker);
     this.expander = new Expander(this.parser, this.evaluator, this.checker);
-    for (const file of files) {
-      console.log(`Loading ${file.origPath} ...`);
-      const contents = fs.readFileSync(file.fullPath, 'utf8');
-      const scanner = new Scanner(file, contents)
-      this.sourceFiles.set(file.fullPath, scanner.scan());
-    }
+    this.timing = new Timing();
   }
 
+  @memoize
+  public getTextFile(filename: string): TextFile {
+    return new TextFile(filename);
+  }
+
+  @memoize
+  public getSourceFile(file: TextFile): BoltSourceFile {
+    this.timing.start('read');
+    const contents = fs.readFileSync(file.origPath, 'utf8');
+    this.timing.end('read');
+    const scanner = new Scanner(file, contents)
+    this.timing.start('scan');
+    const sourceFile = scanner.scan();
+    this.timing.end('scan');
+    return sourceFile;
+  }
+
+  @memoize
+  public getFullyExpandedSourceFile(file: TextFile): BoltSourceFile {
+    const sourceFile = this.getSourceFile(file);
+    this.timing.start('expand');
+    const expanded = this.expander.getFullyExpanded(sourceFile) as BoltSourceFile;
+    this.timing.end('expand');
+    return expanded;
+  }
+
+  @memoize
   public getPackage(filepath: string) {
-    filepath = path.resolve(filepath);
-    const projectFile = upsearchSync('Boltfile', path.dirname(filepath));
+    const file = this.getTextFile(filepath)
+    const projectFile = upsearchSync('Boltfile', path.dirname(file.fullPath));
     if (projectFile === null) {
       return null;
     }
     const projectDir = path.resolve(path.dirname(projectFile));
-    if (this.packages[projectDir] !== undefined) {
-      return this.packages[projectDir];
-    }
-    return this.packages[projectDir] = new Package(projectDir);
+    return new Package(projectDir);
   }
 
   public compile(target: string) {
     const compiler = new Compiler(this, this.checker, { target })
-    const expanded: SourceFile[] = [];
-    for (const [filepath, sourceFile] of this.sourceFiles) {
-      expanded.push(this.expander.getFullyExpanded(sourceFile) as SourceFile);
-    }
-    const compiled = compiler.compile(expanded) as AnySourceFile[];
+    const expanded = this.files.map(filename => this.getFullyExpandedSourceFile(this.getTextFile(filename)));
+    const compiled = compiler.compile(expanded) as JSSourceFile[];
     for (const rootNode of compiled) {
-      const filepath = rootNode.span!.file.fullPath;
-      const pkg = this.getPackage(filepath);
-      if (pkg !== null) {
-        
-      }
+      //const filepath = rootNode.span!.file.fullPath;
+      //const pkg = this.getPackage(filepath);
+      //if (pkg !== null) {
+      //
+      //}
       fs.mkdirp('.bolt-work');
       fs.writeFileSync(this.mapToTargetFile(rootNode), emit(rootNode), 'utf8');
     }
@@ -78,13 +132,12 @@ export class Program {
     return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultExtension(getLanguage(node)));
   }
 
-  eval(filename: string) {
-    const original = this.sourceFiles.get(filename);
-    if (original === undefined) {
-      throw new Error(`File ${filename} does not seem to be part of this Program.`)
+  public eval() {
+    for (const filename of this.files) {
+      const file = this.getTextFile(filename);
+      const expanded = this.getFullyExpandedSourceFile(file);
+      this.evaluator.eval(expanded)
     }
-    const expanded = this.expander.getFullyExpanded(original) as BoltSourceFile;
-    return this.evaluator.eval(expanded)
   }
 
 }

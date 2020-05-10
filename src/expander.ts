@@ -4,6 +4,7 @@
 
 import {
   SyntaxKind,
+  setParents,
   kindToString,
   BoltSyntax,
   BoltSentence,
@@ -35,18 +36,11 @@ import { TextSpan } from "./text"
 import { TypeChecker } from "./checker"
 import { Parser, ParseError } from "./parser"
 import { Evaluator, TRUE, FALSE } from "./evaluator"
-import { StreamWrapper, setOrigNodeRange, BoltTokenStream } from "./util"
+import { StreamWrapper, setOrigNodeRange, BoltTokenStream, createTokenStream } from "./util"
 
 interface Transformer {
   pattern: BoltPattern;
   transform: (node: BoltTokenStream) => BoltSyntax;
-}
-
-function createTokenStream(node: BoltSentence) {
-  return new StreamWrapper(
-    node.tokens,
-    () => createBoltEOS(new TextSpan(node.span!.file, node.span!.end.clone(), node.span!.end.clone()))
-  );
 }
 
 function createSimpleBoltReferenceTypeNode(text: string): BoltReferenceTypeNode {
@@ -145,6 +139,7 @@ export class Expander {
 
       const newSourceFile = createBoltSourceFile(expanded);
       setOrigNodeRange(newSourceFile, node, node);
+      setParents(newSourceFile);
       return newSourceFile;
 
     } else if (node.kind == SyntaxKind.BoltModule) {
@@ -170,6 +165,7 @@ export class Expander {
 
       const newModule = createBoltModule(0, node.name, expanded);
       setOrigNodeRange(newModule, node, node);
+      setParents(newModule);
       return newModule;
 
     } else if (node.kind === SyntaxKind.BoltSentence) {

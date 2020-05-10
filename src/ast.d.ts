@@ -5,91 +5,94 @@ export const enum SyntaxKind {
   BoltIntegerLiteral = 6,
   BoltIdentifier = 8,
   BoltOperator = 9,
-  BoltEOS = 10,
-  BoltComma = 11,
-  BoltSemi = 12,
-  BoltColon = 13,
-  BoltDot = 14,
-  BoltDotDot = 15,
-  BoltRArrow = 16,
-  BoltLArrow = 17,
-  BoltEqSign = 18,
-  BoltGtSign = 19,
-  BoltLtSign = 20,
-  BoltFnKeyword = 22,
-  BoltForeignKeyword = 23,
-  BoltLetKeyword = 24,
-  BoltReturnKeyword = 25,
-  BoltLoopKeyword = 26,
-  BoltYieldKeyword = 27,
-  BoltMatchKeyword = 28,
-  BoltImportKeyword = 29,
-  BoltPubKeyword = 30,
-  BoltModKeyword = 31,
-  BoltMutKeyword = 32,
-  BoltEnumKeyword = 33,
-  BoltStructKeyword = 34,
-  BoltNewTypeKeyword = 35,
-  BoltParenthesized = 37,
-  BoltBraced = 38,
-  BoltBracketed = 39,
-  BoltSourceFile = 40,
-  BoltQualName = 41,
-  BoltSentence = 42,
-  BoltReferenceTypeNode = 44,
-  BoltBindPattern = 46,
-  BoltTypePattern = 47,
-  BoltExpressionPattern = 48,
-  BoltTuplePatternElement = 49,
-  BoltTuplePattern = 50,
-  BoltRecordPatternField = 51,
-  BoltRecordPattern = 52,
-  BoltReferenceExpression = 54,
-  BoltCallExpression = 55,
-  BoltYieldExpression = 56,
-  BoltMatchArm = 57,
-  BoltMatchExpression = 58,
-  BoltCase = 59,
-  BoltCaseExpression = 60,
-  BoltBlockExpression = 61,
-  BoltConstantExpression = 62,
-  BoltReturnStatement = 64,
-  BoltResumeStatement = 65,
-  BoltExpressionStatement = 66,
-  BoltParameter = 67,
-  BoltNewTypeDeclaration = 70,
-  BoltModule = 71,
-  BoltFunctionDeclaration = 72,
-  BoltVariableDeclaration = 73,
-  BoltPlainImportSymbol = 75,
-  BoltImportDeclaration = 76,
-  BoltRecordDeclarationField = 77,
-  BoltRecordDeclaration = 79,
-  JSOperator = 82,
-  JSIdentifier = 83,
-  JSBindPattern = 85,
-  JSConstantExpression = 87,
-  JSMemberExpression = 89,
-  JSCallExpression = 90,
-  JSBinaryExpression = 91,
-  JSUnaryExpression = 92,
-  JSNewExpression = 93,
-  JSSequenceExpression = 94,
-  JSConditionalExpression = 95,
-  JSReferenceExpression = 96,
-  JSExpressionStatement = 98,
-  JSConditionalStatement = 99,
-  JSParameter = 100,
-  JSFunctionDeclaration = 103,
-  JSArrowFunctionDeclaration = 104,
-  JSLetDeclaration = 105,
-  JSSourceFile = 106,
-  JSSourceElement = 107,
+  BoltAssignment = 10,
+  BoltEOS = 11,
+  BoltComma = 12,
+  BoltSemi = 13,
+  BoltColon = 14,
+  BoltDot = 15,
+  BoltDotDot = 16,
+  BoltRArrow = 17,
+  BoltLArrow = 18,
+  BoltEqSign = 19,
+  BoltGtSign = 20,
+  BoltLtSign = 21,
+  BoltFnKeyword = 23,
+  BoltForeignKeyword = 24,
+  BoltLetKeyword = 25,
+  BoltReturnKeyword = 26,
+  BoltLoopKeyword = 27,
+  BoltYieldKeyword = 28,
+  BoltMatchKeyword = 29,
+  BoltImportKeyword = 30,
+  BoltPubKeyword = 31,
+  BoltModKeyword = 32,
+  BoltMutKeyword = 33,
+  BoltEnumKeyword = 34,
+  BoltStructKeyword = 35,
+  BoltNewTypeKeyword = 36,
+  BoltParenthesized = 38,
+  BoltBraced = 39,
+  BoltBracketed = 40,
+  BoltSourceFile = 41,
+  BoltQualName = 42,
+  BoltSentence = 43,
+  BoltReferenceTypeNode = 45,
+  BoltBindPattern = 47,
+  BoltTypePattern = 48,
+  BoltExpressionPattern = 49,
+  BoltTuplePatternElement = 50,
+  BoltTuplePattern = 51,
+  BoltRecordPatternField = 52,
+  BoltRecordPattern = 53,
+  BoltReferenceExpression = 55,
+  BoltCallExpression = 56,
+  BoltYieldExpression = 57,
+  BoltMatchArm = 58,
+  BoltMatchExpression = 59,
+  BoltCase = 60,
+  BoltCaseExpression = 61,
+  BoltBlockExpression = 62,
+  BoltConstantExpression = 63,
+  BoltReturnStatement = 65,
+  BoltResumeStatement = 66,
+  BoltExpressionStatement = 67,
+  BoltParameter = 68,
+  BoltNewTypeDeclaration = 71,
+  BoltModule = 72,
+  BoltFunctionDeclaration = 73,
+  BoltVariableDeclaration = 74,
+  BoltPlainImportSymbol = 76,
+  BoltImportDeclaration = 77,
+  BoltRecordDeclarationField = 78,
+  BoltRecordDeclaration = 80,
+  JSOperator = 83,
+  JSIdentifier = 84,
+  JSBindPattern = 86,
+  JSConstantExpression = 88,
+  JSMemberExpression = 90,
+  JSCallExpression = 91,
+  JSBinaryExpression = 92,
+  JSUnaryExpression = 93,
+  JSNewExpression = 94,
+  JSSequenceExpression = 95,
+  JSConditionalExpression = 96,
+  JSReferenceExpression = 97,
+  JSExpressionStatement = 99,
+  JSConditionalStatement = 100,
+  JSParameter = 101,
+  JSFunctionDeclaration = 104,
+  JSArrowFunctionDeclaration = 105,
+  JSLetDeclaration = 106,
+  JSSourceFile = 107,
+  JSSourceElement = 108,
 }
 
 
 
 import { TextSpan } from "./text"
+
+export function setParents(node: Syntax): void;
 
 export type SyntaxRange = [Syntax, Syntax];
 
@@ -107,6 +110,7 @@ export type BoltToken
   | BoltIntegerLiteral
   | BoltIdentifier
   | BoltOperator
+  | BoltAssignment
   | BoltEOS
   | BoltComma
   | BoltSemi
@@ -160,6 +164,11 @@ export interface BoltIdentifier extends SyntaxBase {
 export interface BoltOperator extends SyntaxBase {
   kind: SyntaxKind.BoltOperator;
   text: string;
+}
+
+export interface BoltAssignment extends SyntaxBase {
+  kind: SyntaxKind.BoltAssignment;
+  operator: string | null;
 }
 
 export interface BoltEOS extends SyntaxBase {
@@ -708,6 +717,7 @@ export type BoltSyntax
   | BoltIntegerLiteral
   | BoltIdentifier
   | BoltOperator
+  | BoltAssignment
   | BoltEOS
   | BoltComma
   | BoltSemi
@@ -799,6 +809,7 @@ export type Syntax
   | BoltIntegerLiteral
   | BoltIdentifier
   | BoltOperator
+  | BoltAssignment
   | BoltEOS
   | BoltComma
   | BoltSemi
@@ -888,6 +899,7 @@ export function createBoltStringLiteral(value: string, span?: TextSpan | null): 
 export function createBoltIntegerLiteral(value: bigint, span?: TextSpan | null): BoltIntegerLiteral;
 export function createBoltIdentifier(text: string, span?: TextSpan | null): BoltIdentifier;
 export function createBoltOperator(text: string, span?: TextSpan | null): BoltOperator;
+export function createBoltAssignment(operator: string | null, span?: TextSpan | null): BoltAssignment;
 export function createBoltEOS(span?: TextSpan | null): BoltEOS;
 export function createBoltComma(span?: TextSpan | null): BoltComma;
 export function createBoltSemi(span?: TextSpan | null): BoltSemi;
@@ -976,6 +988,7 @@ export function isBoltIntegerLiteral(value: any): value is BoltIntegerLiteral;
 export function isBoltSymbol(value: any): value is BoltSymbol;
 export function isBoltIdentifier(value: any): value is BoltIdentifier;
 export function isBoltOperator(value: any): value is BoltOperator;
+export function isBoltAssignment(value: any): value is BoltAssignment;
 export function isBoltEOS(value: any): value is BoltEOS;
 export function isBoltComma(value: any): value is BoltComma;
 export function isBoltSemi(value: any): value is BoltSemi;

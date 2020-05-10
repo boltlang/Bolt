@@ -1,4 +1,6 @@
 
+import * as acorn from "acorn"
+
 import {
   SyntaxKind,
   kindToString,
@@ -45,9 +47,12 @@ import {
   BoltFunctionDeclaration,
   createBoltFunctionDeclaration,
   createBoltCallExpression,
+  BoltSymbol,
 } from "./ast"
 
-import { BoltTokenStream, setOrigNodeRange } from "./util"
+import { Stream, setOrigNodeRange, createTokenStream, uniq } from "./util"
+
+export type BoltTokenStream = Stream<BoltToken>;
 
 function describeKind(kind: SyntaxKind): string {
   switch (kind) {
@@ -148,10 +153,10 @@ const KIND_EXPRESSION_T0 = [
   SyntaxKind.BoltYieldKeyword,
 ]
 
-const KIND_STATEMENT_T0 = [
+const KIND_STATEMENT_T0 = uniq([
   SyntaxKind.BoltReturnKeyword,
   ...KIND_EXPRESSION_T0,
-]
+])
 
 const KIND_DECLARATION_KEYWORD = [
   SyntaxKind.BoltFnKeyword,
@@ -162,18 +167,18 @@ const KIND_DECLARATION_KEYWORD = [
   SyntaxKind.BoltStructKeyword,
 ]
 
-const KIND_DECLARATION_T0 = [
+const KIND_DECLARATION_T0 = uniq([
   SyntaxKind.BoltPubKeyword,
   SyntaxKind.BoltForeignKeyword,
   ...KIND_DECLARATION_KEYWORD,
-]
+])
 
-const KIND_SOURCEELEMENT_T0 = [
+const KIND_SOURCEELEMENT_T0 = uniq([
   SyntaxKind.BoltModKeyword,
   ...KIND_EXPRESSION_T0,
   ...KIND_STATEMENT_T0,
   ...KIND_DECLARATION_T0,
-]
+])
 
 export class Parser {
 
@@ -211,6 +216,10 @@ export class Parser {
     if (t0.kind !== SyntaxKind.BoltEOS) {
       throw new ParseError(t0, [SyntaxKind.BoltEOS]);
     }
+  }
+
+  public parse(kind: SyntaxKind, tokens: BoltTokenStream): BoltSyntax {
+    return (this as any)['parse' + kindToString(kind).substring('Bolt'.length)](tokens);
   }
 
   public parseQualName(tokens: BoltTokenStream): BoltQualName {
@@ -373,7 +382,7 @@ export class Parser {
   //}
 
   public parseExpression(tokens: BoltTokenStream): BoltExpression {
-    return this.parsePrimitiveExpression(tokens)
+    return this.parseCallOrPrimitiveExpression(tokens)
   }
 
   public parseParameter(tokens: BoltTokenStream): BoltParameter {
@@ -627,7 +636,7 @@ export class Parser {
     let lastToken: BoltSyntax;
     const firstToken = k0;
 
-    if (k0.kind !== SyntaxKind.BoltPubKeyword) {
+    if (k0.kind === SyntaxKind.BoltPubKeyword) {
       tokens.get();
       modifiers |= BoltDeclarationModifiers.Public;
       k0 = tokens.peek();
@@ -650,9 +659,9 @@ export class Parser {
 
     tokens.get();
 
-    let name: BoltQualName;
+    let name: BoltSymbol;
     let returnType = null;
-    let body = null;
+    let body: any = null; // FIXME type-checking should not be disabled
     let params: BoltParameter[] = [];
 
     // Parse parameters
@@ -687,16 +696,14 @@ export class Parser {
 
     if (t0.kind === SyntaxKind.BoltOperator) {
 
-      name = createBoltQualName([], t0);
-      setOrigNodeRange(name, t0, t0);
+      name = t0;
       tokens.get();
       params.push(parseParamLike(tokens))
 
     } else if (isParamLike(t0) && t1.kind == SyntaxKind.BoltOperator) {
 
       params.push(parseParamLike(tokens));
-      name = createBoltQualName([], t1);
-      setOrigNodeRange(name, t1, t1);
+      name = t1;
       while (true) {
         const t2 = tokens.peek();
         if (t2.kind !== SyntaxKind.BoltOperator) {
@@ -711,7 +718,8 @@ export class Parser {
 
     } else if (t0.kind === SyntaxKind.BoltIdentifier) {
 
-      name = this.parseQualName(tokens)
+      name = t0;
+      tokens.get();
       const t2 = tokens.get();
       if (t2.kind === SyntaxKind.BoltParenthesized) {
         const innerTokens = createTokenStream(t2);
@@ -762,8 +770,7 @@ export class Parser {
           body = this.parseStatements(tokens);
           break;
         case "JS":
-          // TODO
-          //body = acorn.parse(t3.text).body;
+          body = acorn.parse(t3.text);
           break;
         default:
           throw new Error(`Unrecognised language: ${target}`);
@@ -787,7 +794,8 @@ export class Parser {
     let t0 = tokens.peek(1);
     let i = 1;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      t0 = tokens.peek(i++);
+      i += 1;
+      t0 = tokens.peek(i);
       if (t0.kind !== SyntaxKind.BoltForeignKeyword) {
         if (KIND_DECLARATION_KEYWORD.indexOf(t0.kind) === -1) {
           throw new ParseError(t0, KIND_DECLARATION_KEYWORD);
@@ -818,22 +826,22 @@ export class Parser {
         throw new ParseError(t0, KIND_DECLARATION_T0);
       }
   }
-
+  
   public parseSourceElement(tokens: BoltTokenStream): BoltSourceElement {
     const t0 = tokens.peek();
     try {
       return this.parseDeclaration(tokens)
-    } catch (e) {
-      if (!(e instanceof ParseError)) {
-        throw e;
+    } catch (e1) {
+      if (!(e1 instanceof ParseError)) {
+        throw e1;
       }
       try {
         return this.parseStatement(tokens);
-      } catch (e) {
-        if (!(e instanceof ParseError)) {
-          throw e;
+      } catch (e2) {
+        if (!(e2 instanceof ParseError)) {
+          throw e2;
         }
-        throw new ParseError(t0, KIND_SOURCEELEMENT_T0)
+        throw e1;
       }
     }
   }
@@ -879,14 +887,17 @@ export class Parser {
   //  return lhs
   //}
 
-  public parseCallExpression(tokens: BoltTokenStream): BoltCallExpression {
+  public parseCallOrPrimitiveExpression(tokens: BoltTokenStream): BoltExpression {
 
     const operator = this.parsePrimitiveExpression(tokens)
-    const args: BoltExpression[] = []
 
     const t2 = tokens.get();
+    if (t2.kind === SyntaxKind.BoltEOS) {
+      return operator;
+    }
     assertToken(t2, SyntaxKind.BoltParenthesized);
 
+    const args: BoltExpression[] = []
     const innerTokens = createTokenStream(t2);
 
     while (true) {
@@ -903,7 +914,9 @@ export class Parser {
       }
     }
 
-    return createBoltCallExpression(operator, args, null)
+    const node = createBoltCallExpression(operator, args, null)
+    setOrigNodeRange(node, operator, t2);
+    return node;
 
   }
 

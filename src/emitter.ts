@@ -5,24 +5,49 @@ export class Emitter {
 
   emit(node: Syntax) {
 
-    debug(node);
+    let out = '';
 
     switch (node.kind) {
 
       case SyntaxKind.JSReferenceExpression:
-        return node.name;
+        out += node.name;
+        break;
+
+      case SyntaxKind.JSConstantExpression:
+        if (typeof node.value === 'string') {
+          out += '"' + node.value + '"';
+        } else if (typeof node.value === 'bigint') {
+          out += node.value.toString();
+        } else {
+          throw new Error(`Could not emit the value of a specific JSConstantExpression.`);
+        }
+        break;
+
+      case SyntaxKind.JSFunctionDeclaration:
+        out += 'function ' + node.name.text + '(';
+        //out += node.params.map(p => this.emit(p)).join(', ');
+        out += ') {\n';
+        out += '}\n\n'
+        break;
+
+      case SyntaxKind.JSCallExpression:
+        out += this.emit(node.operator) + '(';
+        out += node.operands.map(op => this.emit(op)).join(', ');
+        out += ')'
+        break;
 
       case SyntaxKind.JSSourceFile:
-        let out = ''
         for (const element of node.elements) {
           out += this.emit(element);
         }
-        return out;
+        break;
 
       default:
         throw new Error(`Could not emit source code for ${kindToString(node.kind)}`)
 
     }
+
+    return out;
 
   }
 }

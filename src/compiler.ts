@@ -30,6 +30,8 @@ import {
   createJSBindPattern,
   JSDeclarationModifiers,
   JSParameter,
+  BoltSyntax,
+  BoltPattern,
 } from "./ast"
 
 import { getFullTextOfQualName, hasPublicModifier } from "./util"
@@ -95,9 +97,11 @@ export class Compiler {
 
   }
 
-  protected compileDecl(node: Syntax, preamble: Syntax[]) {
+  private compilePattern(node: BoltPattern) {
 
-    console.log(`compiling ${kindToString(node.kind)}`)
+  }
+
+  protected compileDecl(node: BoltSyntax, preamble: Syntax[]) {
 
     //if (isBoltExpression(node)) {
     //  const compiled = this.compileExpr(node, preamble);
@@ -121,6 +125,9 @@ export class Compiler {
         // TODO
         break;
 
+      case SyntaxKind.BoltNewTypeDeclaration:
+        break;
+
       case SyntaxKind.BoltVariableDeclaration:
         const compiledValue = node.value !== null ? this.compileExpr(node.value, preamble) : null;
         preamble.push(
@@ -132,8 +139,11 @@ export class Compiler {
         );
         break;
 
-      case SyntaxKind.BoltForeignFunctionDeclaration:
-        if (node.target === this.target && node.body !== null) {
+      case SyntaxKind.BoltFunctionDeclaration:
+        if (node.target === this.target) {
+          if (node.body === null) {
+            break;
+          }
           const params: JSParameter[] = [];
           let body: JSStatement[] = [];
           for (const param of node.params) {
@@ -150,6 +160,9 @@ export class Compiler {
             result.modifiers |= JSDeclarationModifiers.IsExported;;
           }
           preamble.push(result)
+        } else {
+          // TODO
+          throw new Error(`Compiling native functions is not yet implemented.`);
         }
         break;
 

@@ -3,9 +3,6 @@
 import "reflect-metadata"
 import "source-map-support/register"
 
-import * as path from "path"
-import * as fs from "fs-extra"
-
 import yargs from "yargs"
 
 import { Program } from "../program"
@@ -47,7 +44,7 @@ yargs
 
     'link [name]',
     'Link projects with each other',
-  
+
     yargs => yargs,
 
     args => {
@@ -66,12 +63,17 @@ yargs
     yargs => yargs
       .string('work-dir')
       .describe('work-dir', 'The working directory where files will be resolved against.')
-      .default('work-dir', '.'),
+      .default('work-dir', '.')
+      .string('inspect-server'),
 
     args => {
 
-      const files = toArray(args.files as string[] | string).map(filepath => new TextFile(filepath, args['work-dir']));
-      const program = new Program(files)
+      const files = toArray(args.files as string[] | string);
+      const opts = {};
+      if (args['inspect-server'] !== undefined) {
+        opts.inspector = connectToInspector(args['inspect-server'] as string);
+      }
+      const program = new Program(files, opts);
       program.compile("JS");
 
     })

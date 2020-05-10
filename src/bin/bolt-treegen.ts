@@ -6,7 +6,7 @@ import * as fs from "fs"
 import { parse, SyntaxError } from "../treegen/parser"
 import { Declaration } from "../treegen/ast"
 import { generateAST } from "../treegen/index"
-import { getFileStem } from "../util"
+import { getFileStem } from "../treegen/util"
 import minimist from "minimist"
 
 const PACKAGE_ROOT = path.join(__dirname, '..', '..');

@@ -106,6 +106,8 @@ export function generateAST(decls: Declaration[]) {
 
 import { TextSpan } from "./text"
 
+export function setParents(node: Syntax): void;
+
 export type SyntaxRange = [Syntax, Syntax];
 
 interface SyntaxBase {

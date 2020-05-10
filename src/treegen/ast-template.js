@@ -13,6 +13,26 @@ function isSyntax(value) {
       && value.__NODE_TYPE !== undefined;
 }
 
+function* getChildNodes(node) {
+  for (const key of Object.keys(node)) {
+    if (key === 'span' || key === 'parentNode') {
+      continue
+    }
+    const value = node[key];
+    if (Array.isArray(value)) {
+      for (const element of value) {
+        if (isSyntax(element)) {
+          yield element;
+        }
+      }
+    } else if (isSyntax(value)) {
+      if (isSyntax(value)) {
+        yield value;
+      }
+    }
+  }
+}
+
 function createNode(nodeType) {
   const obj = Object.create(nodeProto);
   Object.defineProperty(obj, '__NODE_TYPE', {
@@ -64,6 +84,13 @@ for (const nodeName of Object.keys(NODE_TYPES)) {
     return node;
   }
 
+}
+
+exported.setParents = function setParents(node, parentNode = null) {
+  node.parentNode = parentNode;
+  for (const child of getChildNodes(node)) {
+    setParents(child, node)
+  }
 }
 
 if (typeof module !== 'undefined') {

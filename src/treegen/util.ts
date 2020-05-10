@@ -1,4 +1,10 @@
 
+import * as path from "path"
+
+export function getFileStem(filepath: string): string {
+  return path.basename(filepath).split('.')[0];
+}
+
 function isWhiteSpace(ch: string) {
   return /[\r\t ]/.test(ch);
 }

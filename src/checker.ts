@@ -101,7 +101,7 @@ function getFullName(node: Syntax) {
       case SyntaxKind.BoltRecordDeclaration:
         out.unshift(getFullTextOfQualName(curr.name))
         break;
-    } 
+    }
     curr = curr.parentNode;
     if (curr === null) {
       break;
@@ -129,6 +129,8 @@ export class TypeChecker {
 
   protected createType(node: Syntax): Type {
 
+    console.error(`creating type for ${kindToString(node.kind)}`);
+
     switch (node.kind) {
 
       case SyntaxKind.BoltReferenceExpression:
@@ -144,6 +146,10 @@ export class TypeChecker {
 
       case SyntaxKind.BoltExpressionStatement:
         return voidType;
+
+      case SyntaxKind.BoltCallExpression:
+        // TODO
+        return anyType;
 
       case SyntaxKind.BoltFunctionDeclaration:
         let returnType = anyType;
@@ -182,8 +188,8 @@ export class TypeChecker {
         return typ;
 
       case SyntaxKind.BoltParameter:
-        if (node.typeNode !== null) {
-          return this.getTypeOfNode(node.typeNode)
+        if (node.type !== null) {
+          return this.getTypeOfNode(node.type)
         }
         return anyType;
 
@@ -218,10 +224,19 @@ export class TypeChecker {
       case SyntaxKind.BoltSentence:
       case SyntaxKind.BoltRecordDeclaration:
       case SyntaxKind.BoltNewTypeDeclaration:
+      case SyntaxKind.BoltConstantExpression:
         break;
 
       case SyntaxKind.BoltExpressionStatement:
         this.check(node.expression);
+        break;
+
+      case SyntaxKind.BoltCallExpression:
+        this.check(node.operator);
+        for (const operand of node.operands) {
+          this.check(operand);
+        }
+        // TODO check whether the overload matches the referenced operator
         break;
 
       case SyntaxKind.BoltFunctionDeclaration:
