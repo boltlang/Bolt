@@ -4,7 +4,8 @@
   "description": "A programming language for rapid prototyping",
   "main": "lib/index.js",
   "bin": {
-    "bolt": "lib/bin/bolt.js"
+    "bolt": "lib/bin/bolt.js",
+    "bolt-treegen": "lib/bin/bolt-treegen.js"
   },
   "scripts": {
     "test": "mocha lib/test"

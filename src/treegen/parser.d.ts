@@ -1,4 +1,9 @@
-export function parse(input:string):any;
+
+export interface ParseOptions {
+  [key: string]: any;
+}
+
+export function parse(input: string, opts?: ParseOptions): any;
 
 export interface Location {
   line: number;

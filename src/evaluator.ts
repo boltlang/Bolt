@@ -65,6 +65,43 @@ export class RecordWrapper extends RecordValue {
 
 }
 
+class Environment {
+
+  private symbols: FastStringMap<Value> = Object.create(null);
+
+  constructor(public parentEnv: Environment | null = null) {
+
+  }
+
+  setValue(name: string, value: Value) {
+    if (name in this.symbols) {
+      throw new Error(`A variable with the name '${name}' already exists.`);
+    }
+    this.symbols[name] = value;
+  }
+
+  updateValue(name: string, newValue: Value) {
+    if (!(name in this.symbols)) {
+      throw new Error(`Trying to update a variable '${name}' that has not been declared.`);
+    }
+  }
+
+  lookup(name: string) {
+    let curr = this as Environment;
+    while (true) {
+      if (name in curr.symbols) {
+        return curr.symbols[name];
+      }
+      if (curr.parentEnv === null) {
+        break;
+      }
+      curr = curr.parentEnv;
+    }
+    throw new Error(`A variable named '${name}' was not found.`);
+  }
+
+}
+
 export class Evaluator {
 
   constructor(public checker: TypeChecker) {
@@ -99,16 +136,19 @@ export class Evaluator {
     }
   }
 
-  eval(node: Syntax): Value { 
+  eval(node: Syntax, env: Environment = new Environment()): Value { 
 
     switch (node.kind) {
 
       case SyntaxKind.SourceFile:
       case SyntaxKind.Module:
         for (const element of node.elements) {
-          this.eval(element);
+          this.eval(element, env);
         }
         break;
+
+      case SyntaxKind.RefExpr:
+        return env.lookup(node.name.fullText);
 
       case SyntaxKind.NewTypeDecl:
       case SyntaxKind.RecordDecl:
@@ -116,10 +156,10 @@ export class Evaluator {
         break;
 
       case SyntaxKind.MatchExpr:
-        const value = this.eval(node.value);
+        const value = this.eval(node.value, env);
         for (const [pattern, result] of node.arms) {
           if (this.match(value, pattern)) {
-            return this.eval(result as Expr)
+            return this.eval(result as Expr, env)
           }
         }
         return new PrimValue(this.checker.getTypeNamed('Void')!, null);

@@ -2,38 +2,32 @@
 // FIXME Actually, the syntax expander could make use of algebraic effects to
 // easily specify how the next expansion should happen. Just a thought.
 
-import { 
-  TokenStream,
-  SyntaxKind,
-  Syntax, 
-  SourceFile, 
-  Decl,
-  RecordPatt,
-  Identifier,
-  TypeRef,
-  Patt,
-  ConstExpr,
-  QualName,
-  TuplePatt,
-  BindPatt,
-  TypePatt,
-  MatchExpr,
-  Stmt,
-  Module,
+import {
+  BoltSyntax,
+  createBoltRecordPattern,
+  createBoltIdentifier,
+  createBoltReferenceTypeNode,
+  createBoltConstantExpression,
+  createBoltTuplePattern,
+  createBoltQualName,
+  createBoltTypePattern,
+  createBoltBindPattern,
+  BoltPattern,
 } from "./ast"
 
+import { BoltTokenStream } from "./util"
 import { TypeChecker } from "./checker"
 import { Parser, ParseError } from "./parser"
 import { Evaluator, TRUE, FALSE } from "./evaluator"
 
 interface Transformer {
-  pattern: Patt;
-  transform: (node: TokenStream) => Syntax;
+  pattern: BoltPattern;
+  transform: (node: BoltTokenStream) => BoltSyntax;
 }
 
-function createTypeRef(text: string) {
-  const ids = text.split('.').map(name => new Identifier(name))
-  return new TypeRef(new QualName(ids[ids.length-1], ids.slice(0, -1)), [])
+function createSimpleBoltReferenceTypeNode(text: string) {
+  const ids = text.split('.').map(name => createBoltIdentifier(name))
+  return createBoltReferenceTypeNode(createBoltQualName(ids[ids.length-1], ids.slice(0, -1)), [])
 }
 
 /// This is actually a hand-parsed version of the following:
@@ -50,27 +44,27 @@ function createTypeRef(text: string) {
 ///     }
 ///   ],
 /// }
-const PATTERN_SYNTAX: Patt = 
-  new RecordPatt(
-    createTypeRef('Bolt.AST.Sentence'),
+const PATTERN_SYNTAX: Pattern = 
+  createBoltRecordPattern(
+    createSimpleBoltReferenceTypeNode('Bolt.AST.Sentence'),
     [{
-      name: new Identifier('elements'),
-      pattern: new TuplePatt([
-        new RecordPatt(
-          createTypeRef('Bolt.AST.Identifier'),
+      name: createBoltIdentifier('elements'),
+      pattern: createBoltTuplePattern([
+        createBoltRecordPattern(
+          createSimpleBoltReferenceTypeNode('Bolt.AST.Identifier'),
           [{
-            name: new Identifier('text'), 
-            pattern: new ConstExpr('syntax')
+            name: createBoltIdentifier('text'), 
+            pattern: createBoltConstantExpression('syntax')
           }]
         ),
-        new RecordPatt(
-          createTypeRef('Bolt.AST.Braced'),
+        createBoltRecordPattern(
+          createSimpleBoltReferenceTypeNode('Bolt.AST.Braced'),
           [{
-            name: new Identifier('elements'),
-            pattern: new TuplePatt([
-              new TypePatt(createTypeRef('Bolt.AST.Pattern'), new BindPatt(new Identifier('pattern'))),
-              new TypePatt(createTypeRef('Bolt.AST.RArrow'), new BindPatt(new Identifier('_'))),
-              new TypePatt(createTypeRef('Bolt.AST.Expr'), new BindPatt(new Identifier('expression')))
+            name: createBoltIdentifier('elements'),
+            pattern: createBoltTuplePattern([
+              createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Pattern'), createBoltBindPattern(createBoltIdentifier('pattern'))),
+              createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.RArrow'), createBoltBindPattern(createBoltIdentifier('_'))),
+              createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Expr'), createBoltBindPattern(createBoltIdentifier('expression')))
             ])
           }]
         )

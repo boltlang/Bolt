@@ -5,11 +5,9 @@ import "source-map-support/register"
 
 import * as path from "path"
 import * as fs from "fs-extra"
-import { spawnSync } from "child_process"
 
 import yargs from "yargs"
 
-import { Package, loadPackage } from "../package"
 import { Program } from "../program"
 import { TextFile } from "../ast"
 
@@ -74,7 +72,7 @@ yargs
 
       const files = toArray(args.path as string[] | string).map(filepath => new TextFile(filepath, args['work-dir']));
       const program = new Program(files)
-      program.compile({ target: "JS" });
+      program.compile("JS");
 
     })
 

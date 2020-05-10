@@ -16,6 +16,8 @@ import {
   isExpr,
 } from "./ast"
 
+import { Program } from "./program"
+
 export interface CompilerOptions {
   target: string;
 }
@@ -30,7 +32,7 @@ export class Compiler {
 
   readonly target: string;
 
-  constructor(public checker: TypeChecker, options: CompilerOptions) {
+  constructor(public program: Program, public checker: TypeChecker, options: CompilerOptions) {
     this.target = options.target
   }
 
@@ -44,14 +46,14 @@ export class Compiler {
         type: 'Program',
         body,
         loc: {
-          source: s.getFile().path
+          source: s.span!.file.path
         }
       }
     });
   }
 
-  protected compileExpr(node: Syntax, preamble: Syntax[]): Expr {
-  
+  protected compileExpr(node: Syntax, preamble: Syntax[]): JSExpression {
+
     switch (node.kind) {
 
       case SyntaxKind.CallExpr:

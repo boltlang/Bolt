@@ -1,15 +1,9 @@
 
-import * as astring from "astring"
-
 import { Syntax, SyntaxKind, isJSNode } from "./ast"
 
 export class Emitter {
 
   emit(node: Syntax) {
-
-    if (isJSNode(node)) {
-      return astring.generate(node)
-    }
 
     switch (node.kind) {
 
@@ -26,5 +20,13 @@ export class Emitter {
     }
 
   }
+}
+
+/**
+ * A wrapper around `Emitter` for quick emission of AST nodes with sane defaults.
+ */
+export function emit(node: Syntax) {
+  const emitter = new Emitter();
+  return emitter.emit(node);
 }
 

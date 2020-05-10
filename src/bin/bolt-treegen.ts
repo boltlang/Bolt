@@ -3,15 +3,23 @@
 import * as path from "path"
 import * as fs from "fs"
 
-import { parse, SyntaxError } from "../parser"
-import { Declaration, NodeDeclaration, TypeDeclaration, EnumDeclaration, TypeNode, NodeField } from "../ast"
+import { parse, SyntaxError } from "../treegen/parser"
+import { Syntax, Declaration, NodeDeclaration, TypeDeclaration, EnumDeclaration, TypeNode, NodeField } from "../ast"
 import { FileWriter } from "../util"
+import minimist from "minimist"
 
-for (const filename of process.argv.slice(2)) {
+const PACKAGE_ROOT = path.join(__dirname, '..', '..');
+
+const argv = minimist(process.argv.slice(2));
+
+const jsFilePath = argv['js-file'] ?? 'lib/ast.js';
+const dtsFilePath = argv['dts-file'] ?? 'src/ast.d.ts';
+
+for (const filename of argv._) {
   const contents = fs.readFileSync(filename, 'utf8');
   let decls: Declaration[];
   try {
-    decls = parse(contents);
+    decls = parse(contents, { prefix: getFileStem(filename) });
   } catch (e) {
     if (e instanceof SyntaxError) {
       console.error(`${filename}:${e.location.start.line}:${e.location.start.column}: ${e.message}`);
@@ -20,22 +28,29 @@ for (const filename of process.argv.slice(2)) {
       throw e;
     }
   }
-  const generated = generateAST(decls, getFileStem(filename));
-  fs.writeFileSync('src/ast-generated.js', generated, 'utf8');
+  const { jsFile, dtsFile } = generateAST(decls);
+  fs.writeFileSync(jsFilePath, jsFile, 'utf8');
+  fs.writeFileSync(dtsFilePath, dtsFile, 'utf8');
 }
 
 interface FastStringMap<T> { [key: string]: T }
 
-function generateAST(decls: Declaration[], langName: string) {
+function generateAST(decls: Declaration[]) {
 
   let jsFile = new FileWriter();
+  let dtsFile = new FileWriter();
+  let i;
+
+  // Sort declarations by category
 
   const nodeDecls: NodeDeclaration[] = decls.filter(decl => decl.type === 'NodeDeclaration') as NodeDeclaration[];
   const typeDecls: TypeDeclaration[] = decls.filter(decl => decl.type === 'TypeDeclaration') as TypeDeclaration[];
   const enumDecls: EnumDeclaration[] = decls.filter(decl => decl.type === 'EnumDeclaration') as EnumDeclaration[];
 
   const declByName: FastStringMap<Declaration> = Object.create(null);
+  i = 0;
   for (const decl of decls) {
+    decl.index = i++;
     declByName[decl.name] = decl;
   }
 
@@ -52,46 +67,89 @@ function generateAST(decls: Declaration[], langName: string) {
     }
   }
 
+  // After we're done mappping parents to children, we can use isLeafNode() 
+  // to store the nodes we will be iterating most frequently on.
+
+  const leafNodes: NodeDeclaration[] = nodeDecls.filter(decl => isLeafNode(decl.name));
+
   // Write a JavaScript file that contains all AST definitions.
 
-  jsFile.write(`\nconst NODE_TYPES = [\n`);
+  jsFile.write(`\nconst NODE_TYPES = {\n`);
   jsFile.indent();
-  for (const decl of decls) {
+  for (const decl of leafNodes) {
     if (decl.type === 'NodeDeclaration' && isLeafNode(decl.name)) {
-      jsFile.write(`'${decl.name}': new Map([\n`);
+      jsFile.write(`'${decl.name}': {\n`);
+      jsFile.indent();
+      jsFile.write(`index: ${decl.index},\n`);
+      jsFile.write(`fields: new Map([\n`);
       jsFile.indent();
       for (const field of getAllFields(decl)) {
-        jsFile.write(`[${field.name}, ${emitTypeNode(field.typeNode)}],\n`);
+        jsFile.write(`['${field.name}', ${JSON.stringify(jsonify(field.typeNode))}],\n`);
       }
       jsFile.dedent();
       jsFile.write(']),\n');
+      jsFile.dedent();
+      jsFile.write('},\n');
     }
   }
   jsFile.dedent();
-  jsFile.write('];\n\n');
+  jsFile.write('};\n\n');
 
-  function emitTypeNode(typeNode: TypeNode): string {
-    console.error(typeNode);
-    if (typeNode.type === 'ReferenceTypeNode') {
-      if (hasDeclarationNamed(typeNode.name)) {
-        return typeNode.name;
-      } else if (typeNode.name === 'Bool') {
-        return 'boolean';
-      } else if (typeNode.name === 'String') {
-        return 'string';
-      } else if (typeNode.name === 'usize') {
-        return 'bigint';
-      } else if (typeNode.name === 'Vec') {
-        return `${emitTypeNode(typeNode.typeArgs[0])}[]`;
-      } else if (typeNode.name === 'Option') {
-        return `${emitTypeNode(typeNode.typeArgs[0])} | null`;
-      }
-    }
-    throw new Error(`Could not emit TypeScript type for type node ${typeNode.type}.`);
+  jsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'src', 'treegen', 'ast-template.js'), 'utf8'));
+
+  jsFile.write(`if (typeof module !== 'undefined') {\n  module.exports = exported;\n}\n\n`)
+
+  // Write corresponding TypeScript declarations
+
+  dtsFile.write(`\nexport const enum SyntaxKind {\n`);
+  for (const decl of leafNodes) {
+    dtsFile.write(`  ${decl.name} = ${decl.index}\n`);
   }
+  dtsFile.write(`}\n\n`);
+
+  for (const decl of leafNodes) {
+    dtsFile.write(`export function create${decl.name}(`);
+    for (const field of getAllFields(decl)) {
+      dtsFile.write(`${field.name}: ${emitTypeScriptType(field.typeNode)}, `);
+    }
+    dtsFile.write(`span: TextSpan | null = null, origNodes: SyntaxRange | null = null);\n`);
+  }
+
+
+  return {
+    jsFile: jsFile.currentText,
+    dtsFile: dtsFile.currentText,
+  };
+
+  // Below are some useful functions
 
   function hasDeclarationNamed(name: string): boolean {
     return name in declByName;
+  }
+
+  function emitTypeScriptType(typeNode: TypeNode): string {
+    if (typeNode.type === 'ReferenceTypeNode') {
+      if (hasDeclarationNamed(typeNode.name)) {
+        return typeNode.name;
+      } else if (typeNode.name === 'Option') {
+        return `${emitTypeScriptType(typeNode.typeArgs[0])} | null`;
+      } else if (typeNode.name === 'Vec') {
+        return `${emitTypeScriptType(typeNode.typeArgs[0])}[]`;
+      } else if (typeNode.name === 'String') {
+        return `string`;
+      } else if (typeNode.name === 'Int') {
+        return `bigint`;
+      } else if (typeNode.name === 'usize') {
+        return `number`;
+      } else if (typeNode.name === 'bool') {
+        return `boolean`;
+      } else {
+        throw new Error(`Could not emit TypeScript type for reference type node named ${typeNode.name}`);
+      }
+    } else if (typeNode.type === 'UnionTypeNode') {
+      return typeNode.elements.map(emitTypeScriptType).join(' | ');
+    }
+    //throw new Error(`Could not emit TypeScript type for type node ${typeNode.type}`);
   }
 
   function getAllFields(nodeDecl: NodeDeclaration) {
@@ -123,14 +181,16 @@ function generateAST(decls: Declaration[], langName: string) {
     return childrenOf[name] === undefined || childrenOf[name].length === 0;
   }
 
-  return jsFile.currentText;
-
 }
 
 function pushAll<T>(arr: T[], els: T[]): void {
   for (const el of els) {
     arr.push(el);
   }
+}
+
+function isNode(value: any): value is Syntax {
+  return typeof value === 'object' && value !== null && value.__IS_NODE;
 }
 
 function jsonify(value: any) {
@@ -140,7 +200,7 @@ function jsonify(value: any) {
     const obj: any = {};
 
     for (const key of Object.keys(node)) {
-      if (key !== 'type' && key !== 'span') {
+      if (key !== 'type' && key !== 'span' && key !== '__IS_NODE') {
         const value = node[key];
         if (Array.isArray(value)) {
           obj[key] = value.map(visit);
@@ -154,7 +214,7 @@ function jsonify(value: any) {
   }
 
   function visit(value: any) {
-    if (value.__IS_NODE) {
+    if (isNode(value)) {
       return visitNode(value);
     } else {
       return value;
@@ -162,6 +222,13 @@ function jsonify(value: any) {
   }
 
   return visit(value);
+}
+
+function stripSuffix(str: string, suffix: string): string {
+  if (!str.endsWith(suffix)) {
+    return str;
+  }
+  return str.substring(0, str.length-suffix.length);
 }
 
 function getFileStem(filepath: string) {

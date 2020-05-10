@@ -3,7 +3,7 @@ import {
   Syntax,
   SyntaxKind,
   ImportDecl,
-  isNode,
+  Patt,
 } from "./ast"
 
 import { FastStringMap } from "./util"
@@ -130,6 +130,9 @@ export class TypeChecker {
 
     switch (node.kind) {
 
+      case SyntaxKind.RefExpr:
+        return anyType;
+
       case SyntaxKind.ConstExpr:
         return node.value.type;
 
@@ -220,6 +223,10 @@ export class TypeChecker {
             }
           }
         }
+        break;
+
+      case SyntaxKind.RefExpr:
+        // TODO implement this
         break;
 
       case SyntaxKind.Module:
