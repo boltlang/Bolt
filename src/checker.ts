@@ -142,6 +142,9 @@ export class TypeChecker {
         this.symbols[getFullName(node.name)] = new PrimType();
         return noneType;
 
+      case SyntaxKind.BoltExpressionStatement:
+        return voidType;
+
       case SyntaxKind.BoltFunctionDeclaration:
         let returnType = anyType;
         if (node.returnType !== null) {
@@ -215,6 +218,10 @@ export class TypeChecker {
       case SyntaxKind.BoltSentence:
       case SyntaxKind.BoltRecordDeclaration:
       case SyntaxKind.BoltNewTypeDeclaration:
+        break;
+
+      case SyntaxKind.BoltExpressionStatement:
+        this.check(node.expression);
         break;
 
       case SyntaxKind.BoltFunctionDeclaration:

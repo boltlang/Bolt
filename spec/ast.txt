@@ -51,6 +51,7 @@ node BoltLetKeyword     > BoltToken, BoltKeyword;
 node BoltReturnKeyword  > BoltToken, BoltKeyword;
 node BoltLoopKeyword    > BoltToken, BoltKeyword;
 node BoltYieldKeyword   > BoltToken, BoltKeyword;
+node BoltMatchKeyword   > BoltToken, BoltKeyword;
 node BoltImportKeyword  > BoltToken, BoltKeyword;
 node BoltPubKeyword     > BoltToken, BoltKeyword;
 node BoltModKeyword     > BoltToken, BoltKeyword;
@@ -206,19 +207,11 @@ node BoltModule > BoltDeclaration {
 
 node BoltFunctionDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
-  name: BoltSymbol,
-  params: Vec<BoltParameter>,
-  returnType: Option<BoltTypeNode>,
-  body: BoltExpression,
-}
-
-node BoltForeignFunctionDeclaration > BoltDeclaration {
-  modifiers: BoltDeclarationModifiers,
   target: String,
   name: BoltSymbol,
   params: Vec<BoltParameter>,
   returnType: Option<BoltTypeNode>,
-  body: FunctionBody,
+  body: Vec<BoltStatement>,
 }
 
 node BoltVariableDeclaration > BoltDeclaration {
