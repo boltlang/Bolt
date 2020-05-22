@@ -75,59 +75,65 @@ export const enum SyntaxKind {
   JSOperator = 89,
   JSIdentifier = 90,
   JSString = 91,
-  JSFromKeyword = 92,
-  JSReturnKeyword = 93,
-  JSTryKeyword = 94,
-  JSCatchKeyword = 95,
-  JSImportKeyword = 96,
-  JSAsKeyword = 97,
-  JSConstKeyword = 98,
-  JSLetKeyword = 99,
-  JSExportKeyword = 100,
-  JSFunctionKeyword = 101,
-  JSWhileKeyword = 102,
-  JSForKeyword = 103,
-  JSCloseBrace = 104,
-  JSCloseBracket = 105,
-  JSCloseParen = 106,
-  JSOpenBrace = 107,
-  JSOpenBracket = 108,
-  JSOpenParen = 109,
-  JSSemi = 110,
-  JSComma = 111,
-  JSDot = 112,
-  JSDotDotDot = 113,
-  JSMulOp = 114,
-  JSAddOp = 115,
-  JSDivOp = 116,
-  JSSubOp = 117,
-  JSLtOp = 118,
-  JSGtOp = 119,
-  JSBOrOp = 120,
-  JSBXorOp = 121,
-  JSBAndOp = 122,
-  JSBNotOp = 123,
-  JSNotOp = 124,
-  JSBindPattern = 126,
-  JSConstantExpression = 128,
-  JSMemberExpression = 129,
-  JSCallExpression = 130,
-  JSBinaryExpression = 131,
-  JSUnaryExpression = 132,
-  JSNewExpression = 133,
-  JSSequenceExpression = 134,
-  JSConditionalExpression = 135,
-  JSReferenceExpression = 136,
-  JSExpressionStatement = 139,
-  JSConditionalStatement = 140,
-  JSParameter = 141,
-  JSImportStarBinding = 145,
-  JSImportAsBinding = 146,
-  JSImportDeclaration = 147,
-  JSFunctionDeclaration = 148,
-  JSArrowFunctionDeclaration = 149,
-  JSLetDeclaration = 150,
-  JSSourceFile = 151,
+  JSInteger = 92,
+  JSFromKeyword = 93,
+  JSReturnKeyword = 94,
+  JSTryKeyword = 95,
+  JSFinallyKeyword = 96,
+  JSCatchKeyword = 97,
+  JSImportKeyword = 98,
+  JSAsKeyword = 99,
+  JSConstKeyword = 100,
+  JSLetKeyword = 101,
+  JSExportKeyword = 102,
+  JSFunctionKeyword = 103,
+  JSWhileKeyword = 104,
+  JSForKeyword = 105,
+  JSCloseBrace = 106,
+  JSCloseBracket = 107,
+  JSCloseParen = 108,
+  JSOpenBrace = 109,
+  JSOpenBracket = 110,
+  JSOpenParen = 111,
+  JSSemi = 112,
+  JSComma = 113,
+  JSDot = 114,
+  JSDotDotDot = 115,
+  JSMulOp = 116,
+  JSAddOp = 117,
+  JSDivOp = 118,
+  JSSubOp = 119,
+  JSLtOp = 120,
+  JSGtOp = 121,
+  JSBOrOp = 122,
+  JSBXorOp = 123,
+  JSBAndOp = 124,
+  JSBNotOp = 125,
+  JSNotOp = 126,
+  JSBindPattern = 128,
+  JSConstantExpression = 130,
+  JSMemberExpression = 131,
+  JSCallExpression = 132,
+  JSBinaryExpression = 133,
+  JSUnaryExpression = 134,
+  JSNewExpression = 135,
+  JSSequenceExpression = 136,
+  JSConditionalExpression = 137,
+  JSLiteralExpression = 139,
+  JSReferenceExpression = 140,
+  JSCatchBlock = 143,
+  JSTryCatchStatement = 144,
+  JSExpressionStatement = 145,
+  JSConditionalStatement = 146,
+  JSReturnStatement = 147,
+  JSParameter = 148,
+  JSImportStarBinding = 152,
+  JSImportAsBinding = 153,
+  JSImportDeclaration = 154,
+  JSFunctionDeclaration = 155,
+  JSArrowFunctionDeclaration = 156,
+  JSLetDeclaration = 157,
+  JSSourceFile = 158,
 }
 
 
@@ -650,9 +656,11 @@ export type JSToken
   | JSOperator
   | JSIdentifier
   | JSString
+  | JSInteger
   | JSFromKeyword
   | JSReturnKeyword
   | JSTryKeyword
+  | JSFinallyKeyword
   | JSCatchKeyword
   | JSImportKeyword
   | JSAsKeyword
@@ -700,6 +708,11 @@ export interface JSString extends SyntaxBase {
   value: string;
 }
 
+export interface JSInteger extends SyntaxBase {
+  kind: SyntaxKind.JSInteger;
+  value: bigint;
+}
+
 export interface JSFromKeyword extends SyntaxBase {
   kind: SyntaxKind.JSFromKeyword;
 }
@@ -710,6 +723,10 @@ export interface JSReturnKeyword extends SyntaxBase {
 
 export interface JSTryKeyword extends SyntaxBase {
   kind: SyntaxKind.JSTryKeyword;
+}
+
+export interface JSFinallyKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSFinallyKeyword;
 }
 
 export interface JSCatchKeyword extends SyntaxBase {
@@ -850,6 +867,7 @@ export type JSExpression
   | JSNewExpression
   | JSSequenceExpression
   | JSConditionalExpression
+  | JSLiteralExpression
   | JSReferenceExpression
 
 
@@ -901,6 +919,11 @@ export interface JSConditionalExpression extends SyntaxBase {
   alternate: JSExpression;
 }
 
+export interface JSLiteralExpression extends SyntaxBase {
+  kind: SyntaxKind.JSLiteralExpression;
+  value: JSValue;
+}
+
 export interface JSReferenceExpression extends SyntaxBase {
   kind: SyntaxKind.JSReferenceExpression;
   name: string;
@@ -909,6 +932,7 @@ export interface JSReferenceExpression extends SyntaxBase {
 export type JSSourceElement
   = JSExpressionStatement
   | JSConditionalStatement
+  | JSReturnStatement
   | JSImportDeclaration
   | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
@@ -918,7 +942,21 @@ export type JSSourceElement
 export type JSStatement
   = JSExpressionStatement
   | JSConditionalStatement
+  | JSReturnStatement
 
+
+export interface JSCatchBlock extends SyntaxBase {
+  kind: SyntaxKind.JSCatchBlock;
+  bindings: JSPattern | null;
+  elements: JSSourceElement[];
+}
+
+export interface JSTryCatchStatement extends SyntaxBase {
+  kind: SyntaxKind.JSTryCatchStatement;
+  tryBlock: JSSourceElement[];
+  catchBlock: JSCatchBlock | null;
+  finalBlock: JSSourceElement[] | null;
+}
 
 export interface JSExpressionStatement extends SyntaxBase {
   kind: SyntaxKind.JSExpressionStatement;
@@ -930,6 +968,11 @@ export interface JSConditionalStatement extends SyntaxBase {
   test: JSExpression;
   consequent: JSStatement[];
   alternate: JSStatement[];
+}
+
+export interface JSReturnStatement extends SyntaxBase {
+  kind: SyntaxKind.JSReturnStatement;
+  value: JSExpression | null;
 }
 
 export interface JSParameter extends SyntaxBase {
@@ -1074,9 +1117,11 @@ export type JSSyntax
   = JSOperator
   | JSIdentifier
   | JSString
+  | JSInteger
   | JSFromKeyword
   | JSReturnKeyword
   | JSTryKeyword
+  | JSFinallyKeyword
   | JSCatchKeyword
   | JSImportKeyword
   | JSAsKeyword
@@ -1116,9 +1161,13 @@ export type JSSyntax
   | JSNewExpression
   | JSSequenceExpression
   | JSConditionalExpression
+  | JSLiteralExpression
   | JSReferenceExpression
+  | JSCatchBlock
+  | JSTryCatchStatement
   | JSExpressionStatement
   | JSConditionalStatement
+  | JSReturnStatement
   | JSParameter
   | JSImportStarBinding
   | JSImportAsBinding
@@ -1205,9 +1254,11 @@ export type Syntax
   | JSOperator
   | JSIdentifier
   | JSString
+  | JSInteger
   | JSFromKeyword
   | JSReturnKeyword
   | JSTryKeyword
+  | JSFinallyKeyword
   | JSCatchKeyword
   | JSImportKeyword
   | JSAsKeyword
@@ -1247,9 +1298,13 @@ export type Syntax
   | JSNewExpression
   | JSSequenceExpression
   | JSConditionalExpression
+  | JSLiteralExpression
   | JSReferenceExpression
+  | JSCatchBlock
+  | JSTryCatchStatement
   | JSExpressionStatement
   | JSConditionalStatement
+  | JSReturnStatement
   | JSParameter
   | JSImportStarBinding
   | JSImportAsBinding
@@ -1337,9 +1392,11 @@ export function createBoltRecordDeclaration(modifiers: BoltDeclarationModifiers,
 export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;
 export function createJSIdentifier(text: string, span?: TextSpan | null): JSIdentifier;
 export function createJSString(value: string, span?: TextSpan | null): JSString;
+export function createJSInteger(value: bigint, span?: TextSpan | null): JSInteger;
 export function createJSFromKeyword(span?: TextSpan | null): JSFromKeyword;
 export function createJSReturnKeyword(span?: TextSpan | null): JSReturnKeyword;
 export function createJSTryKeyword(span?: TextSpan | null): JSTryKeyword;
+export function createJSFinallyKeyword(span?: TextSpan | null): JSFinallyKeyword;
 export function createJSCatchKeyword(span?: TextSpan | null): JSCatchKeyword;
 export function createJSImportKeyword(span?: TextSpan | null): JSImportKeyword;
 export function createJSAsKeyword(span?: TextSpan | null): JSAsKeyword;
@@ -1379,9 +1436,13 @@ export function createJSUnaryExpression(operator: JSOperator, operand: JSExpress
 export function createJSNewExpression(target: JSExpression, arguments: JSExpression[], span?: TextSpan | null): JSNewExpression;
 export function createJSSequenceExpression(expressions: JSExpression[], span?: TextSpan | null): JSSequenceExpression;
 export function createJSConditionalExpression(test: JSExpression, consequent: JSExpression, alternate: JSExpression, span?: TextSpan | null): JSConditionalExpression;
+export function createJSLiteralExpression(value: JSValue, span?: TextSpan | null): JSLiteralExpression;
 export function createJSReferenceExpression(name: string, span?: TextSpan | null): JSReferenceExpression;
+export function createJSCatchBlock(bindings: JSPattern | null, elements: JSSourceElement[], span?: TextSpan | null): JSCatchBlock;
+export function createJSTryCatchStatement(tryBlock: JSSourceElement[], catchBlock: JSCatchBlock | null, finalBlock: JSSourceElement[] | null, span?: TextSpan | null): JSTryCatchStatement;
 export function createJSExpressionStatement(expression: JSExpression, span?: TextSpan | null): JSExpressionStatement;
 export function createJSConditionalStatement(test: JSExpression, consequent: JSStatement[], alternate: JSStatement[], span?: TextSpan | null): JSConditionalStatement;
+export function createJSReturnStatement(value: JSExpression | null, span?: TextSpan | null): JSReturnStatement;
 export function createJSParameter(index: number, bindings: JSPattern, defaultValue: JSExpression | null, span?: TextSpan | null): JSParameter;
 export function createJSImportStarBinding(local: JSIdentifier, span?: TextSpan | null): JSImportStarBinding;
 export function createJSImportAsBinding(remote: JSIdentifier, local: JSIdentifier | null, span?: TextSpan | null): JSImportAsBinding;
@@ -1478,9 +1539,11 @@ export function isJSToken(value: any): value is JSToken;
 export function isJSOperator(value: any): value is JSOperator;
 export function isJSIdentifier(value: any): value is JSIdentifier;
 export function isJSString(value: any): value is JSString;
+export function isJSInteger(value: any): value is JSInteger;
 export function isJSFromKeyword(value: any): value is JSFromKeyword;
 export function isJSReturnKeyword(value: any): value is JSReturnKeyword;
 export function isJSTryKeyword(value: any): value is JSTryKeyword;
+export function isJSFinallyKeyword(value: any): value is JSFinallyKeyword;
 export function isJSCatchKeyword(value: any): value is JSCatchKeyword;
 export function isJSImportKeyword(value: any): value is JSImportKeyword;
 export function isJSAsKeyword(value: any): value is JSAsKeyword;
@@ -1522,11 +1585,15 @@ export function isJSUnaryExpression(value: any): value is JSUnaryExpression;
 export function isJSNewExpression(value: any): value is JSNewExpression;
 export function isJSSequenceExpression(value: any): value is JSSequenceExpression;
 export function isJSConditionalExpression(value: any): value is JSConditionalExpression;
+export function isJSLiteralExpression(value: any): value is JSLiteralExpression;
 export function isJSReferenceExpression(value: any): value is JSReferenceExpression;
 export function isJSSourceElement(value: any): value is JSSourceElement;
 export function isJSStatement(value: any): value is JSStatement;
+export function isJSCatchBlock(value: any): value is JSCatchBlock;
+export function isJSTryCatchStatement(value: any): value is JSTryCatchStatement;
 export function isJSExpressionStatement(value: any): value is JSExpressionStatement;
 export function isJSConditionalStatement(value: any): value is JSConditionalStatement;
+export function isJSReturnStatement(value: any): value is JSReturnStatement;
 export function isJSParameter(value: any): value is JSParameter;
 export function isJSDeclaration(value: any): value is JSDeclaration;
 export function isJSImportBinding(value: any): value is JSImportBinding;

@@ -41,10 +41,12 @@ import {
   createJSCatchKeyword,
   createJSFromKeyword,
   createJSString,
+  createJSTryKeyword,
+  createJSInteger,
 } from "../../ast"
 
 function isWhiteSpace(ch: string): boolean {
-  return /[\u0009\u000B\u000C\u0020\u00A0\u000B\uFEFF\p{Zs}]/.test(ch)
+  return /[\u0009\u000B\u000C\u0020\u00A0\u000B\uFEFF\p{Zs}]/u.test(ch)
 }
 
 function isLineTerminator(ch: string): boolean {
@@ -287,6 +289,12 @@ export class JSScanner {
       }
     }
 
+    if (c0 === '0') {
+      this.getChar();
+      const endPos = this.currPos.clone();
+      return createJSInteger(0, new TextSpan(this.file, startPos, endPos));
+    }
+
     if (isOperator(c0)) {
       const text = this.takeWhile(isOperator)
       const span = new TextSpan(this.file, startPos, this.currPos.clone());
@@ -322,6 +330,7 @@ export class JSScanner {
       const span = new TextSpan(this.file, startPos, endPos);
       switch (name) {
         case 'return':   return createJSReturnKeyword(span);
+        case 'try':      return createJSTryKeyword(span);
         case 'catch':    return createJSCatchKeyword(span);
         case 'from':     return createJSFromKeyword(span);
         case 'let':      return createJSLetKeyword(span);

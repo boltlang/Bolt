@@ -294,9 +294,14 @@ node JSString > JSToken {
   value: String,
 }
 
+node JSInteger > JSToken {
+  value: Int,
+}
+
 node JSFromKeyword > JSToken;
 node JSReturnKeyword > JSToken;
 node JSTryKeyword > JSToken;
+node JSFinallyKeyword > JSToken;
 node JSCatchKeyword > JSToken;
 node JSImportKeyword > JSToken;
 node JSAsKeyword > JSToken;
@@ -377,6 +382,12 @@ node JSConditionalExpression > JSExpression {
   alternate: JSExpression,
 }
 
+type JSValue = Int
+
+node JSLiteralExpression > JSExpression {
+  value: JSValue,
+}
+
 node JSReferenceExpression > JSExpression {
   name: String,
 }
@@ -384,6 +395,17 @@ node JSReferenceExpression > JSExpression {
 node JSSourceElement;
 
 node JSStatement > JSSourceElement;
+
+node JSCatchBlock {
+  bindings: Option<JSPattern>,
+  elements: Vec<JSSourceElement>,
+}
+
+node JSTryCatchStatement {
+  tryBlock: Vec<JSSourceElement>,
+  catchBlock: Option<JSCatchBlock>,
+  finalBlock: Option<Vec<JSSourceElement>>,
+}
 
 node JSExpressionStatement > JSStatement {
   expression: JSExpression,
@@ -393,6 +415,10 @@ node JSConditionalStatement > JSStatement {
   test: JSExpression,
   consequent: Vec<JSStatement>,
   alternate: Vec<JSStatement>,
+}
+
+node JSReturnStatement > JSStatement {
+  value: Option<JSExpression>,
 }
 
 node JSParameter {

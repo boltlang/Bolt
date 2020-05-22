@@ -19,10 +19,32 @@ import {
   JSString,
   createJSImportDeclaration,
   createJSImportStarBinding,
-  createJSImportAsBinding
+  createJSImportAsBinding,
+  JSReturnKeyword,
+  createJSReturnStatement,
+  JSReturnStatement,
+  createJSTryCatchStatement,
+  JSPattern,
+  createJSLiteralExpression,
 } from "../../ast"
 
 export type JSTokenStream = Stream<JSToken>;
+
+const T0_EXPRESSION = [
+  SyntaxKind.JSIdentifier,
+  SyntaxKind.JSString,
+  SyntaxKind.JSAddOp,
+  SyntaxKind.JSSubOp,
+  SyntaxKind.JSNotOp,
+  SyntaxKind.JSBNotOp,
+];
+
+const T0_STATEMENT = [
+  ...T0_EXPRESSION,
+  SyntaxKind.JSReturnKeyword,
+  SyntaxKind.JSTryKeyword,
+  SyntaxKind.JSForKeyword,
+];
 
 const T0_DECLARATION = [
   SyntaxKind.JSConstKeyword,
@@ -33,6 +55,11 @@ const T0_DECLARATION = [
 ];
 
 export class JSParser {
+
+  public parseJSPattern(tokens: JSTokenStream): JSPattern {
+    // TODO
+    tokens.get();
+  }
 
   public parseJSReferenceExpression(tokens: JSTokenStream): JSReferenceExpression {
     const t0 = tokens.get();
@@ -46,6 +73,11 @@ export class JSParser {
     const t0 = tokens.peek();
     if (t0.kind === SyntaxKind.JSIdentifier) {
       return this.parseJSReferenceExpression(tokens);
+    } else if (t0.kind === SyntaxKind.JSInteger) {
+      tokens.get();
+      const result = createJSLiteralExpression(t0.value);
+      setOrigNodeRange(result, t0, t0);
+      return result;
     } else {
       throw new ParseError(t0, [SyntaxKind.JSIdentifier]);
     }
@@ -56,7 +88,11 @@ export class JSParser {
     let result = this.parsePrimitiveJSExpression(tokens);
     while (true) {
       const t1 = tokens.peek();
-      if (t1.kind === SyntaxKind.JSCloseBrace || t1.kind === SyntaxKind.JSCloseParen || t1.kind === SyntaxKind.JSCloseBracket || t1.kind === SyntaxKind.JSSemi) {
+      if (t1.kind === SyntaxKind.JSCloseBrace
+       || t1.kind === SyntaxKind.JSCloseParen
+       || t1.kind === SyntaxKind.JSCloseBracket
+       || t1.kind === SyntaxKind.JSComma
+       || t1.kind === SyntaxKind.JSSemi) {
         break;
       }
       if (t1.kind === SyntaxKind.JSDot) {
@@ -105,8 +141,79 @@ export class JSParser {
     return result;
   }
 
+  public parseJSReturnStatement(tokens: JSTokenStream): JSReturnStatement {
+    let value = null;
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.JSReturnKeyword);
+    const t1 = tokens.peek();
+    if (T0_EXPRESSION.indexOf(t1.kind) !== -1) {
+      value = this.parseJSExpression(tokens);
+    }
+    const result = createJSReturnStatement(value)
+    setOrigNodeRange(result, t0, value !== null ? value : t0);
+    return result;
+  }
+
+  public parseJSTryCatchStatement(tokens: JSTokenStream): JSTryCatchStatement {
+
+    let catchBlock = null;
+    let finallyBlock = null;
+
+    let lastToken: JSToken;
+
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.JSTryKeyword);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.JSOpenBrace);
+    const tryBlock = this.parseJSSourceElementList(tokens);
+    const t3 = tokens.get();
+    assertToken(t3, SyntaxKind.JSCloseBrace);
+
+    let t4 = tokens.peek();
+    if (t4.kind === SyntaxKind.JSCatchKeyword) {
+      tokens.get();
+      const t5 = tokens.get();
+      let bindings = null;
+      if (t5.kind === SyntaxKind.JSOpenParen) {
+        bindings = this.parseJSPattern(tokens);
+        const t6 = tokens.get();
+        assertToken(t6, SyntaxKind.JSCloseParen);
+      }
+      const t7 = tokens.get();
+      assertToken(t7, SyntaxKind.JSOpenBrace);
+      const elements = this.parseJSSourceElementList(tokens);
+      const t8 = tokens.get();
+      assertToken(t8, SyntaxKind.JSCloseBrace);
+      lastToken = t8
+      t4 = tokens.peek();
+    }
+
+    if (t4.kind === SyntaxKind.JSFinallyKeyword) {
+      tokens.get();
+      const t7 = tokens.get();
+      assertToken(t7, SyntaxKind.JSOpenBrace);
+      finallyBlock = this.parseJSSourceElementList(tokens);
+      const t8 = tokens.get();
+      assertToken(t8, SyntaxKind.JSCloseBrace);
+      lastToken = t8
+    }
+
+    const result = createJSTryCatchStatement(tryBlock, catchBlock, finallyBlock)
+    setOrigNodeRange(result, t0, lastToken!);
+    return result;
+  }
+
   public parseJSStatement(tokens: JSTokenStream): JSStatement {
-    return this.parseJSExpressionStatement(tokens);
+    const t0 = tokens.peek();
+    if (t0.kind === SyntaxKind.JSReturnKeyword) {
+      return this.parseJSReturnStatement(tokens);
+    } else if (t0.kind === SyntaxKind.JSTryKeyword) {
+      return this.parseJSTryCatchStatement(tokens);
+    } else if (T0_EXPRESSION.indexOf(t0.kind) !== -1) {
+      return this.parseJSExpressionStatement(tokens);
+    } else {
+      throw new ParseError(t0, T0_STATEMENT);
+    }
   }
 
   public parseImportDeclaration(tokens: JSTokenStream): JSImportDeclaration {
@@ -179,7 +286,7 @@ export class JSParser {
     const elements: JSSourceElement[] = [];
     while (true) {
       const t0 = tokens.peek();
-      if (t0.kind === SyntaxKind.EndOfFile) {
+      if (t0.kind === SyntaxKind.EndOfFile || t0.kind === SyntaxKind.JSCloseBrace) {
         break;
       }
       if (t0.kind === SyntaxKind.JSSemi) {

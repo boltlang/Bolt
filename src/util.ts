@@ -223,6 +223,7 @@ export function getFileStem(filepath: string): string {
 export function describeKind(kind: SyntaxKind): string {
   switch (kind) {
     case SyntaxKind.JSIdentifier:
+      return "a JavaScript identifier"
     case SyntaxKind.BoltIdentifier:
       return "an identifier"
     case SyntaxKind.BoltOperator:
@@ -331,6 +332,10 @@ export function describeKind(kind: SyntaxKind): string {
       return "a JavaScript string"
     case SyntaxKind.JSReturnKeyword:
       return "'return'";
+    case SyntaxKind.JSForKeyword:
+      return "'for'";
+    case SyntaxKind.JSTryKeyword:
+      return "'try'";
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }
