@@ -49,6 +49,11 @@ import {
   BoltTypeParameter,
   createBoltTypePattern,
   createBoltTypeParameter,
+  BoltTraitDeclaration,
+  createBoltTraitKeyword,
+  createBoltTraitDeclaration,
+  createBoltImplDeclaration,
+  BoltImplDeclaration,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -81,6 +86,8 @@ const KIND_STATEMENT_T0 = uniq([
 ])
 
 const KIND_DECLARATION_KEYWORD = [
+  SyntaxKind.BoltImplKeyword,
+  SyntaxKind.BoltTraitKeyword,
   SyntaxKind.BoltFnKeyword,
   SyntaxKind.BoltEnumKeyword,
   SyntaxKind.BoltLetKeyword,
@@ -321,32 +328,6 @@ export class Parser {
     }
   }
 
-  //parseSyntax(tokens: TokenStream): Syntax {
-
-  //  // Assuming first token is 'syntax'
-  //  const t0 = tokens.get();
-  //  assertToken(t0, SyntaxKind.Bolt
-
-  //  const t1 = tokens.get();
-  //  if (t1.kind !== SyntaxKind.BoltBraced) {
-  //    throw new ParseError(t1, [SyntaxKind.BoltBraced])
-  //  }
-
-  //  const innerTokens = t1.toTokenStream();
-
-  //  const pattern = this.parsePattern(innerTokens)
-
-  //  const t2 = innerTokens.get();
-  //  if (t2.kind !== SyntaxKind.BoltRArrow) {
-  //    throw new ParseError(t2, [SyntaxKind.BoltRArrow]);
-  //  }
-
-  //  const body = this.parseBody(innerTokens);
-
-  //  return new Macro(pattern, body)
-
-  //}
-
   public parseExpression(tokens: BoltTokenStream): BoltExpression {
     return this.parseCallOrPrimitiveExpression(tokens)
   }
@@ -358,13 +339,13 @@ export class Parser {
 
     const pattern = this.parsePattern(tokens)
 
-    let t0 = tokens.peek(1);
+    let t0 = tokens.peek();
     let endNode: BoltSyntax = pattern;
     if (t0.kind === SyntaxKind.BoltColon) {
       tokens.get();
       typeDecl = this.parseTypeExpression(tokens);
       endNode = typeDecl;
-      t0 = tokens.get();
+      t0 = tokens.peek();
     }
     if (t0.kind === SyntaxKind.BoltEqSign) {
       tokens.get();
@@ -472,7 +453,7 @@ export class Parser {
     }
   }
 
-  public parseGenericTypeParameter(tokens: BoltTokenStream) {
+  public parseGenericTypeParameter(tokens: BoltTokenStream): BoltTypeParameter {
     const t0 = tokens.peek();
     if (t0.kind === SyntaxKind.BoltIdentifier) {
       tokens.get();
@@ -484,7 +465,7 @@ export class Parser {
     }
   }
 
-  private parseGenericTypeParameters(tokens: BoltTokenStream) {
+  private parseGenericTypeParameters(tokens: BoltTokenStream): BoltTypeParameter[] {
     let typeParams: BoltTypeParameter[] = [];
     const t0 = tokens.get();
     assertToken(t0, SyntaxKind.BoltLtSign);
@@ -817,6 +798,57 @@ export class Parser {
 
   }
 
+  public parseTraitDeclaration(tokens: BoltTokenStream): BoltTraitDeclaration {
+    let modifiers = 0;
+    let t0 = tokens.get();
+    const firstToken = t0;
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      modifiers |= BoltDeclarationModifiers.Public;
+      t0 = tokens.get();
+    }
+    assertToken(t0, SyntaxKind.BoltTraitKeyword);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.BoltIdentifier);
+    let typeParams = null
+    const t2 = tokens.peek();
+    if (t2.kind === SyntaxKind.BoltLtSign) {
+      typeParams = this.parseGenericTypeParameters(tokens);
+    }
+    const t3 = tokens.get();
+    assertToken(t3, SyntaxKind.BoltBraced);
+    const elements = this.parseSourceElementList(createTokenStream(t3));
+    const result = createBoltTraitDeclaration(modifiers, t1 as BoltIdentifier, typeParams, elements as BoltDeclaration[]);
+    setOrigNodeRange(result, firstToken, t3);
+    return result;
+  }
+
+  public parseImplDeclaration(tokens: BoltTokenStream): BoltImplDeclaration {
+    let modifiers = 0;
+    let t0 = tokens.get();
+    const firstToken = t0;
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      modifiers |= BoltDeclarationModifiers.Public;
+      t0 = tokens.get();
+    }
+    assertToken(t0, SyntaxKind.BoltImplKeyword);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.BoltIdentifier);
+    const t2 = tokens.get();
+    assertToken(t2, SyntaxKind.BoltForKeyword);
+    const typeExpr = this.parseTypeExpression(tokens);
+    let typeParams = null
+    const t3 = tokens.peek();
+    if (t3.kind === SyntaxKind.BoltLtSign) {
+      typeParams = this.parseGenericTypeParameters(tokens);
+    }
+    const t4 = tokens.get();
+    assertToken(t4, SyntaxKind.BoltBraced);
+    const elements = this.parseSourceElementList(createTokenStream(t4));
+    const result = createBoltImplDeclaration(modifiers, t1 as BoltIdentifier, typeExpr, typeParams, elements as BoltDeclaration[]);
+    setOrigNodeRange(result, firstToken, t4);
+    return result;
+  }
+
   public parseDeclaration(tokens: BoltTokenStream): BoltDeclaration {
     let t0 = tokens.peek(1);
     let i = 1;
@@ -837,6 +869,10 @@ export class Parser {
       }
     }
     switch (t0.kind) {
+      case SyntaxKind.BoltImplKeyword:
+        return this.parseImplDeclaration(tokens);
+      case SyntaxKind.BoltTraitKeyword:
+        return this.parseTraitDeclaration(tokens);
       case SyntaxKind.BoltTypeKeyword:
         return this.parseTypeAliasDeclaration(tokens);
       case SyntaxKind.BoltModKeyword:

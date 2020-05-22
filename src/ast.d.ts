@@ -19,87 +19,91 @@ export const enum SyntaxKind {
   BoltLtSign = 21,
   BoltFnKeyword = 23,
   BoltForeignKeyword = 24,
-  BoltLetKeyword = 25,
-  BoltReturnKeyword = 26,
-  BoltLoopKeyword = 27,
-  BoltYieldKeyword = 28,
-  BoltMatchKeyword = 29,
-  BoltImportKeyword = 30,
-  BoltPubKeyword = 31,
-  BoltModKeyword = 32,
-  BoltMutKeyword = 33,
-  BoltEnumKeyword = 34,
-  BoltStructKeyword = 35,
-  BoltTypeKeyword = 36,
-  BoltTraitKeyworkd = 37,
-  BoltParenthesized = 39,
-  BoltBraced = 40,
-  BoltBracketed = 41,
-  BoltSourceFile = 42,
-  BoltQualName = 43,
-  BoltSentence = 44,
-  BoltReferenceTypeExpression = 46,
-  BoltTypeParameter = 47,
-  BoltBindPattern = 49,
-  BoltTypePattern = 50,
-  BoltExpressionPattern = 51,
-  BoltTuplePatternElement = 52,
-  BoltTuplePattern = 53,
-  BoltRecordPatternField = 54,
-  BoltRecordPattern = 55,
-  BoltReferenceExpression = 57,
-  BoltCallExpression = 58,
-  BoltYieldExpression = 59,
-  BoltMatchArm = 60,
-  BoltMatchExpression = 61,
-  BoltCase = 62,
-  BoltCaseExpression = 63,
-  BoltBlockExpression = 64,
-  BoltConstantExpression = 65,
-  BoltReturnStatement = 67,
-  BoltResumeStatement = 68,
-  BoltExpressionStatement = 69,
-  BoltParameter = 70,
-  BoltModule = 74,
-  BoltFunctionDeclaration = 75,
-  BoltVariableDeclaration = 76,
-  BoltPlainImportSymbol = 78,
-  BoltImportDeclaration = 79,
-  BoltRecordDeclarationField = 80,
-  BoltTypeAliasDeclaration = 81,
-  BoltRecordDeclaration = 83,
-  JSOperator = 86,
-  JSIdentifier = 87,
-  JSReturnKeyword = 88,
-  JSTryKeyword = 89,
-  JSCatchKeyword = 90,
-  JSCloseBrace = 91,
-  JSCloseBracket = 92,
-  JSCloseParen = 93,
-  JSOpenBrace = 94,
-  JSOpenBracket = 95,
-  JSOpenParen = 96,
-  JSSemi = 97,
-  JSComma = 98,
-  JSDot = 99,
-  JSDotDotDot = 100,
-  JSBindPattern = 102,
-  JSConstantExpression = 104,
-  JSMemberExpression = 105,
-  JSCallExpression = 106,
-  JSBinaryExpression = 107,
-  JSUnaryExpression = 108,
-  JSNewExpression = 109,
-  JSSequenceExpression = 110,
-  JSConditionalExpression = 111,
-  JSReferenceExpression = 112,
-  JSExpressionStatement = 115,
-  JSConditionalStatement = 116,
-  JSParameter = 117,
-  JSFunctionDeclaration = 120,
-  JSArrowFunctionDeclaration = 121,
-  JSLetDeclaration = 122,
-  JSSourceFile = 123,
+  BoltForKeyword = 25,
+  BoltLetKeyword = 26,
+  BoltReturnKeyword = 27,
+  BoltLoopKeyword = 28,
+  BoltYieldKeyword = 29,
+  BoltMatchKeyword = 30,
+  BoltImportKeyword = 31,
+  BoltPubKeyword = 32,
+  BoltModKeyword = 33,
+  BoltMutKeyword = 34,
+  BoltEnumKeyword = 35,
+  BoltStructKeyword = 36,
+  BoltTypeKeyword = 37,
+  BoltTraitKeyword = 38,
+  BoltImplKeyword = 39,
+  BoltParenthesized = 41,
+  BoltBraced = 42,
+  BoltBracketed = 43,
+  BoltSourceFile = 44,
+  BoltQualName = 45,
+  BoltSentence = 46,
+  BoltReferenceTypeExpression = 48,
+  BoltTypeParameter = 49,
+  BoltBindPattern = 51,
+  BoltTypePattern = 52,
+  BoltExpressionPattern = 53,
+  BoltTuplePatternElement = 54,
+  BoltTuplePattern = 55,
+  BoltRecordPatternField = 56,
+  BoltRecordPattern = 57,
+  BoltReferenceExpression = 59,
+  BoltCallExpression = 60,
+  BoltYieldExpression = 61,
+  BoltMatchArm = 62,
+  BoltMatchExpression = 63,
+  BoltCase = 64,
+  BoltCaseExpression = 65,
+  BoltBlockExpression = 66,
+  BoltConstantExpression = 67,
+  BoltReturnStatement = 69,
+  BoltResumeStatement = 70,
+  BoltExpressionStatement = 71,
+  BoltParameter = 72,
+  BoltModule = 75,
+  BoltFunctionDeclaration = 76,
+  BoltVariableDeclaration = 77,
+  BoltPlainImportSymbol = 79,
+  BoltImportDeclaration = 80,
+  BoltTraitDeclaration = 81,
+  BoltImplDeclaration = 82,
+  BoltTypeAliasDeclaration = 83,
+  BoltRecordDeclarationField = 84,
+  BoltRecordDeclaration = 85,
+  JSOperator = 89,
+  JSIdentifier = 90,
+  JSReturnKeyword = 91,
+  JSTryKeyword = 92,
+  JSCatchKeyword = 93,
+  JSCloseBrace = 94,
+  JSCloseBracket = 95,
+  JSCloseParen = 96,
+  JSOpenBrace = 97,
+  JSOpenBracket = 98,
+  JSOpenParen = 99,
+  JSSemi = 100,
+  JSComma = 101,
+  JSDot = 102,
+  JSDotDotDot = 103,
+  JSBindPattern = 105,
+  JSConstantExpression = 107,
+  JSMemberExpression = 108,
+  JSCallExpression = 109,
+  JSBinaryExpression = 110,
+  JSUnaryExpression = 111,
+  JSNewExpression = 112,
+  JSSequenceExpression = 113,
+  JSConditionalExpression = 114,
+  JSReferenceExpression = 115,
+  JSExpressionStatement = 118,
+  JSConditionalStatement = 119,
+  JSParameter = 120,
+  JSFunctionDeclaration = 123,
+  JSArrowFunctionDeclaration = 124,
+  JSLetDeclaration = 125,
+  JSSourceFile = 126,
 }
 
 
@@ -142,6 +146,7 @@ export type BoltToken
   | BoltLtSign
   | BoltFnKeyword
   | BoltForeignKeyword
+  | BoltForKeyword
   | BoltLetKeyword
   | BoltReturnKeyword
   | BoltLoopKeyword
@@ -154,7 +159,8 @@ export type BoltToken
   | BoltEnumKeyword
   | BoltStructKeyword
   | BoltTypeKeyword
-  | BoltTraitKeyworkd
+  | BoltTraitKeyword
+  | BoltImplKeyword
   | BoltParenthesized
   | BoltBraced
   | BoltBracketed
@@ -233,6 +239,7 @@ export interface BoltLtSign extends SyntaxBase {
 export type BoltKeyword
   = BoltFnKeyword
   | BoltForeignKeyword
+  | BoltForKeyword
   | BoltLetKeyword
   | BoltReturnKeyword
   | BoltLoopKeyword
@@ -245,7 +252,8 @@ export type BoltKeyword
   | BoltEnumKeyword
   | BoltStructKeyword
   | BoltTypeKeyword
-  | BoltTraitKeyworkd
+  | BoltTraitKeyword
+  | BoltImplKeyword
 
 
 export interface BoltFnKeyword extends SyntaxBase {
@@ -254,6 +262,10 @@ export interface BoltFnKeyword extends SyntaxBase {
 
 export interface BoltForeignKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltForeignKeyword;
+}
+
+export interface BoltForKeyword extends SyntaxBase {
+  kind: SyntaxKind.BoltForKeyword;
 }
 
 export interface BoltLetKeyword extends SyntaxBase {
@@ -304,8 +316,12 @@ export interface BoltTypeKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltTypeKeyword;
 }
 
-export interface BoltTraitKeyworkd extends SyntaxBase {
-  kind: SyntaxKind.BoltTraitKeyworkd;
+export interface BoltTraitKeyword extends SyntaxBase {
+  kind: SyntaxKind.BoltTraitKeyword;
+}
+
+export interface BoltImplKeyword extends SyntaxBase {
+  kind: SyntaxKind.BoltImplKeyword;
 }
 
 export type BoltPunctuated
@@ -498,16 +514,13 @@ export interface BoltParameter extends SyntaxBase {
 }
 
 export type BoltDeclaration
-  = BoltTypeAliasDeclaration
-  | BoltRecordDeclaration
-  | BoltModule
+  = BoltModule
   | BoltFunctionDeclaration
   | BoltVariableDeclaration
   | BoltImportDeclaration
-
-
-export type BoltTypeDeclaration
-  = BoltTypeAliasDeclaration
+  | BoltTraitDeclaration
+  | BoltImplDeclaration
+  | BoltTypeAliasDeclaration
   | BoltRecordDeclaration
 
 
@@ -554,10 +567,21 @@ export interface BoltImportDeclaration extends SyntaxBase {
   symbols: BoltImportSymbol[];
 }
 
-export interface BoltRecordDeclarationField extends SyntaxBase {
-  kind: SyntaxKind.BoltRecordDeclarationField;
+export interface BoltTraitDeclaration extends SyntaxBase {
+  kind: SyntaxKind.BoltTraitDeclaration;
+  modifiers: BoltDeclarationModifiers;
   name: BoltIdentifier;
-  type: BoltTypeExpression;
+  typeParams: BoltTypeParameter[] | null;
+  elements: BoltDeclaration[];
+}
+
+export interface BoltImplDeclaration extends SyntaxBase {
+  kind: SyntaxKind.BoltImplDeclaration;
+  modifiers: BoltDeclarationModifiers;
+  name: BoltIdentifier;
+  trait: BoltTypeExpression;
+  typeParams: BoltTypeParameter[] | null;
+  elements: BoltDeclaration[];
 }
 
 export interface BoltTypeAliasDeclaration extends SyntaxBase {
@@ -568,18 +592,11 @@ export interface BoltTypeAliasDeclaration extends SyntaxBase {
   typeExpr: BoltTypeExpression;
 }
 
-export type BoltSourceElement
-  = BoltSentence
-  | BoltReturnStatement
-  | BoltResumeStatement
-  | BoltExpressionStatement
-  | BoltTypeAliasDeclaration
-  | BoltRecordDeclaration
-  | BoltModule
-  | BoltFunctionDeclaration
-  | BoltVariableDeclaration
-  | BoltImportDeclaration
-
+export interface BoltRecordDeclarationField extends SyntaxBase {
+  kind: SyntaxKind.BoltRecordDeclarationField;
+  name: BoltIdentifier;
+  type: BoltTypeExpression;
+}
 
 export interface BoltRecordDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltRecordDeclaration;
@@ -588,6 +605,21 @@ export interface BoltRecordDeclaration extends SyntaxBase {
   typeParms: BoltTypeParameter[] | null;
   fields: BoltRecordDeclarationField[];
 }
+
+export type BoltSourceElement
+  = BoltSentence
+  | BoltReturnStatement
+  | BoltResumeStatement
+  | BoltExpressionStatement
+  | BoltModule
+  | BoltFunctionDeclaration
+  | BoltVariableDeclaration
+  | BoltImportDeclaration
+  | BoltTraitDeclaration
+  | BoltImplDeclaration
+  | BoltTypeAliasDeclaration
+  | BoltRecordDeclaration
+
 
 export type JSToken
   = EndOfFile
@@ -829,6 +861,7 @@ export type BoltSyntax
   | BoltLtSign
   | BoltFnKeyword
   | BoltForeignKeyword
+  | BoltForKeyword
   | BoltLetKeyword
   | BoltReturnKeyword
   | BoltLoopKeyword
@@ -841,7 +874,8 @@ export type BoltSyntax
   | BoltEnumKeyword
   | BoltStructKeyword
   | BoltTypeKeyword
-  | BoltTraitKeyworkd
+  | BoltTraitKeyword
+  | BoltImplKeyword
   | BoltParenthesized
   | BoltBraced
   | BoltBracketed
@@ -875,8 +909,10 @@ export type BoltSyntax
   | BoltVariableDeclaration
   | BoltPlainImportSymbol
   | BoltImportDeclaration
-  | BoltRecordDeclarationField
+  | BoltTraitDeclaration
+  | BoltImplDeclaration
   | BoltTypeAliasDeclaration
+  | BoltRecordDeclarationField
   | BoltRecordDeclaration
 
 
@@ -935,6 +971,7 @@ export type Syntax
   | BoltLtSign
   | BoltFnKeyword
   | BoltForeignKeyword
+  | BoltForKeyword
   | BoltLetKeyword
   | BoltReturnKeyword
   | BoltLoopKeyword
@@ -947,7 +984,8 @@ export type Syntax
   | BoltEnumKeyword
   | BoltStructKeyword
   | BoltTypeKeyword
-  | BoltTraitKeyworkd
+  | BoltTraitKeyword
+  | BoltImplKeyword
   | BoltParenthesized
   | BoltBraced
   | BoltBracketed
@@ -981,8 +1019,10 @@ export type Syntax
   | BoltVariableDeclaration
   | BoltPlainImportSymbol
   | BoltImportDeclaration
-  | BoltRecordDeclarationField
+  | BoltTraitDeclaration
+  | BoltImplDeclaration
   | BoltTypeAliasDeclaration
+  | BoltRecordDeclarationField
   | BoltRecordDeclaration
   | JSOperator
   | JSIdentifier
@@ -1039,6 +1079,7 @@ export function createBoltGtSign(span?: TextSpan | null): BoltGtSign;
 export function createBoltLtSign(span?: TextSpan | null): BoltLtSign;
 export function createBoltFnKeyword(span?: TextSpan | null): BoltFnKeyword;
 export function createBoltForeignKeyword(span?: TextSpan | null): BoltForeignKeyword;
+export function createBoltForKeyword(span?: TextSpan | null): BoltForKeyword;
 export function createBoltLetKeyword(span?: TextSpan | null): BoltLetKeyword;
 export function createBoltReturnKeyword(span?: TextSpan | null): BoltReturnKeyword;
 export function createBoltLoopKeyword(span?: TextSpan | null): BoltLoopKeyword;
@@ -1051,7 +1092,8 @@ export function createBoltMutKeyword(span?: TextSpan | null): BoltMutKeyword;
 export function createBoltEnumKeyword(span?: TextSpan | null): BoltEnumKeyword;
 export function createBoltStructKeyword(span?: TextSpan | null): BoltStructKeyword;
 export function createBoltTypeKeyword(span?: TextSpan | null): BoltTypeKeyword;
-export function createBoltTraitKeyworkd(span?: TextSpan | null): BoltTraitKeyworkd;
+export function createBoltTraitKeyword(span?: TextSpan | null): BoltTraitKeyword;
+export function createBoltImplKeyword(span?: TextSpan | null): BoltImplKeyword;
 export function createBoltParenthesized(text: string, span?: TextSpan | null): BoltParenthesized;
 export function createBoltBraced(text: string, span?: TextSpan | null): BoltBraced;
 export function createBoltBracketed(text: string, span?: TextSpan | null): BoltBracketed;
@@ -1085,8 +1127,10 @@ export function createBoltFunctionDeclaration(modifiers: BoltDeclarationModifier
 export function createBoltVariableDeclaration(modifiers: BoltDeclarationModifiers, bindings: BoltPattern, type: BoltTypeExpression | null, value: BoltExpression | null, span?: TextSpan | null): BoltVariableDeclaration;
 export function createBoltPlainImportSymbol(name: BoltQualName, span?: TextSpan | null): BoltPlainImportSymbol;
 export function createBoltImportDeclaration(file: string, symbols: BoltImportSymbol[], span?: TextSpan | null): BoltImportDeclaration;
-export function createBoltRecordDeclarationField(name: BoltIdentifier, type: BoltTypeExpression, span?: TextSpan | null): BoltRecordDeclarationField;
+export function createBoltTraitDeclaration(modifiers: BoltDeclarationModifiers, name: BoltIdentifier, typeParams: BoltTypeParameter[] | null, elements: BoltDeclaration[], span?: TextSpan | null): BoltTraitDeclaration;
+export function createBoltImplDeclaration(modifiers: BoltDeclarationModifiers, name: BoltIdentifier, trait: BoltTypeExpression, typeParams: BoltTypeParameter[] | null, elements: BoltDeclaration[], span?: TextSpan | null): BoltImplDeclaration;
 export function createBoltTypeAliasDeclaration(modifiers: BoltDeclarationModifiers, name: BoltIdentifier, typeParams: BoltTypeParameter[] | null, typeExpr: BoltTypeExpression, span?: TextSpan | null): BoltTypeAliasDeclaration;
+export function createBoltRecordDeclarationField(name: BoltIdentifier, type: BoltTypeExpression, span?: TextSpan | null): BoltRecordDeclarationField;
 export function createBoltRecordDeclaration(modifiers: BoltDeclarationModifiers, name: BoltQualName, typeParms: BoltTypeParameter[] | null, fields: BoltRecordDeclarationField[], span?: TextSpan | null): BoltRecordDeclaration;
 export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;
 export function createJSIdentifier(text: string, span?: TextSpan | null): JSIdentifier;
@@ -1143,6 +1187,7 @@ export function isBoltLtSign(value: any): value is BoltLtSign;
 export function isBoltKeyword(value: any): value is BoltKeyword;
 export function isBoltFnKeyword(value: any): value is BoltFnKeyword;
 export function isBoltForeignKeyword(value: any): value is BoltForeignKeyword;
+export function isBoltForKeyword(value: any): value is BoltForKeyword;
 export function isBoltLetKeyword(value: any): value is BoltLetKeyword;
 export function isBoltReturnKeyword(value: any): value is BoltReturnKeyword;
 export function isBoltLoopKeyword(value: any): value is BoltLoopKeyword;
@@ -1155,7 +1200,8 @@ export function isBoltMutKeyword(value: any): value is BoltMutKeyword;
 export function isBoltEnumKeyword(value: any): value is BoltEnumKeyword;
 export function isBoltStructKeyword(value: any): value is BoltStructKeyword;
 export function isBoltTypeKeyword(value: any): value is BoltTypeKeyword;
-export function isBoltTraitKeyworkd(value: any): value is BoltTraitKeyworkd;
+export function isBoltTraitKeyword(value: any): value is BoltTraitKeyword;
+export function isBoltImplKeyword(value: any): value is BoltImplKeyword;
 export function isBoltPunctuated(value: any): value is BoltPunctuated;
 export function isBoltParenthesized(value: any): value is BoltParenthesized;
 export function isBoltBraced(value: any): value is BoltBraced;
@@ -1190,17 +1236,18 @@ export function isBoltResumeStatement(value: any): value is BoltResumeStatement;
 export function isBoltExpressionStatement(value: any): value is BoltExpressionStatement;
 export function isBoltParameter(value: any): value is BoltParameter;
 export function isBoltDeclaration(value: any): value is BoltDeclaration;
-export function isBoltTypeDeclaration(value: any): value is BoltTypeDeclaration;
 export function isBoltModule(value: any): value is BoltModule;
 export function isBoltFunctionDeclaration(value: any): value is BoltFunctionDeclaration;
 export function isBoltVariableDeclaration(value: any): value is BoltVariableDeclaration;
 export function isBoltImportSymbol(value: any): value is BoltImportSymbol;
 export function isBoltPlainImportSymbol(value: any): value is BoltPlainImportSymbol;
 export function isBoltImportDeclaration(value: any): value is BoltImportDeclaration;
-export function isBoltRecordDeclarationField(value: any): value is BoltRecordDeclarationField;
+export function isBoltTraitDeclaration(value: any): value is BoltTraitDeclaration;
+export function isBoltImplDeclaration(value: any): value is BoltImplDeclaration;
 export function isBoltTypeAliasDeclaration(value: any): value is BoltTypeAliasDeclaration;
-export function isBoltSourceElement(value: any): value is BoltSourceElement;
+export function isBoltRecordDeclarationField(value: any): value is BoltRecordDeclarationField;
 export function isBoltRecordDeclaration(value: any): value is BoltRecordDeclaration;
+export function isBoltSourceElement(value: any): value is BoltSourceElement;
 export function isJSToken(value: any): value is JSToken;
 export function isJSOperator(value: any): value is JSOperator;
 export function isJSIdentifier(value: any): value is JSIdentifier;

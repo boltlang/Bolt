@@ -297,6 +297,14 @@ export function describeKind(kind: SyntaxKind): string {
       return "';'";
     case SyntaxKind.JSComma:
       return "','";
+    case SyntaxKind.BoltTraitKeyword:
+      return "'trait'";
+    case SyntaxKind.BoltTraitKeyword:
+      return "'impl'";
+    case SyntaxKind.BoltImplKeyword:
+      return "'trait'";
+    case SyntaxKind.BoltForKeyword:
+      return "'for'";
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }

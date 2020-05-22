@@ -1,6 +1,4 @@
 
-import XRegExp from "xregexp"
-
 import { EOF, ScanError } from "./util"
 
 import {
@@ -47,6 +45,10 @@ import {
   createBoltGtSign,
   createBoltModKeyword,
   createBoltTypeKeyword,
+  createBoltForKeyword,
+  createBoltTraitDeclaration,
+  createBoltTraitKeyword,
+  createBoltImplKeyword,
 } from "./ast"
 
 export enum PunctType {
@@ -95,11 +97,11 @@ function isOpenPunct(ch: string) {
 
 
 function isDigit(ch: string) {
-  return XRegExp('\\p{Nd}').test(ch)
+  return /[\p{Nd}]/u.test(ch)
 }
 
 function isWhiteSpace(ch: string) {
-  return ch == '\n' || XRegExp('\\p{Zs}').test(ch)
+  return /[\n\p{Zs}]/u.test(ch)
 }
 
 function isNewLine(ch: string) {
@@ -107,11 +109,11 @@ function isNewLine(ch: string) {
 }
 
 function isIdentStart(ch: string) {
-  return ch == '_' || XRegExp('\\p{L}').test(ch)
+  return /[_\p{L}]/u.test(ch)
 }
 
 function isIdentPart(ch: string) {
-  return ch == '_' || XRegExp('\\p{L}').test(ch)
+  return /[_\p{L}\p{Nd}]/u.test(ch)
 }
 
 function isSymbol(ch: string) {
@@ -290,6 +292,9 @@ export class Scanner {
           case 'fn':      return createBoltFnKeyword(span);
           case 'return':  return createBoltReturnKeyword(span);
           case 'yield':   return createBoltYieldKeyword(span);
+          case 'for':     return createBoltForKeyword(span);
+          case 'trait':   return createBoltTraitKeyword(span);
+          case 'impl':    return createBoltImplKeyword(span);
           case 'type':    return createBoltTypeKeyword(span);
           case 'foreign': return createBoltForeignKeyword(span);
           case 'let':     return createBoltPubKeyword(span);

@@ -51,6 +51,7 @@ node BoltKeyword;
 
 node BoltFnKeyword      > BoltToken, BoltKeyword;
 node BoltForeignKeyword > BoltToken, BoltKeyword;
+node BoltForKeyword     > BoltToken, BoltKeyword;
 node BoltLetKeyword     > BoltToken, BoltKeyword;
 node BoltReturnKeyword  > BoltToken, BoltKeyword;
 node BoltLoopKeyword    > BoltToken, BoltKeyword;
@@ -63,7 +64,8 @@ node BoltMutKeyword     > BoltToken, BoltKeyword;
 node BoltEnumKeyword    > BoltToken, BoltKeyword;
 node BoltStructKeyword  > BoltToken, BoltKeyword;
 node BoltTypeKeyword    > BoltToken, BoltKeyword;
-node BoltTraitKeyworkd  > BoltToken, BoltKeyword;
+node BoltTraitKeyword   > BoltToken, BoltKeyword;
+node BoltImplKeyword    > BoltToken, BoltKeyword;
 
 node BoltPunctuated > BoltToken {
   text: String,
@@ -198,15 +200,12 @@ node BoltParameter {
 
 node BoltDeclaration > BoltSourceElement;
 
-node BoltTypeDeclaration > BoltDeclaration;
-
 enum BoltDeclarationModifiers {
   Mutable   = 0x1,
   Public    = 0x2,
   IsType    = 0x4,
   IsForeign = 0x8,
 }
-
 
 node BoltModule > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
@@ -241,26 +240,41 @@ node BoltImportDeclaration > BoltDeclaration {
   symbols: Vec<BoltImportSymbol>,
 }
 
-node BoltRecordDeclarationField {
+node BoltTraitDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
   name: BoltIdentifier,
-  type: BoltTypeExpression,
+  typeParams: Option<Vec<BoltTypeParameter>>,
+  elements: Vec<BoltDeclaration>,
 }
 
-node BoltTypeAliasDeclaration > BoltTypeDeclaration {
+node BoltImplDeclaration > BoltDeclaration {
+  modifiers: BoltDeclarationModifiers,
+  name: BoltIdentifier,
+  trait: BoltTypeExpression,
+  typeParams: Option<Vec<BoltTypeParameter>>,
+  elements: Vec<BoltDeclaration>,
+}
+
+node BoltTypeAliasDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
   typeExpr: BoltTypeExpression,
 }
 
-node BoltSourceElement;
+node BoltRecordDeclarationField {
+  name: BoltIdentifier,
+  type: BoltTypeExpression,
+}
 
-node BoltRecordDeclaration > BoltTypeDeclaration {
+node BoltRecordDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
   name: BoltQualName,
   typeParms: Option<Vec<BoltTypeParameter>>,
   fields: Vec<BoltRecordDeclarationField>,
 }
+
+node BoltSourceElement;
 
 // JavaScript AST definitions
 
@@ -280,6 +294,17 @@ node JSReturnKeyword > JSToken;
 node JSTryKeyword > JSToken;
 node JSCatchKeyword > JSToken;
 
+node JSCloseBrace > JSToken;
+node JSCloseBracket > JSToken;
+node JSCloseParen > JSToken;
+node JSOpenBrace > JSToken;
+node JSOpenBracket > JSToken;
+node JSOpenParen > JSToken;
+node JSSemi > JSToken;
+node JSComma > JSToken;
+node JSDot > JSToken;
+node JSDotDotDot > JSToken;
+
 node JSPattern;
 
 node JSBindPattern > JSPattern {
@@ -292,14 +317,9 @@ node JSConstantExpression > JSExpression {
   value: BoltValue,
 }
 
-enum JSMemberExpressionModifiers {
-  Computed = 0x1,
-}
-
 node JSMemberExpression > JSExpression {
   value: JSExpression,
-  property: JSExpression,
-  modifiers: JSMemberExpressionModifiers,
+  property: JSIdentifier,
 }
 
 node JSCallExpression > JSExpression {
