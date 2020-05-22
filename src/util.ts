@@ -4,7 +4,7 @@ import * as fs from "fs"
 import moment from "moment"
 import chalk from "chalk"
 
-import { TextSpan, TextPos } from "./text"
+import { TextFile, TextSpan, TextPos } from "./text"
 import { Scanner } from "./scanner"
 import { kindToString, Syntax, BoltQualName, BoltDeclaration, BoltDeclarationModifiers, createEndOfFile, SyntaxKind, isBoltPunctuated } from "./ast"
 
@@ -218,5 +218,185 @@ export function upsearchSync(filename: string, startDir = '.') {
 
 export function getFileStem(filepath: string): string {
   return path.basename(filepath).split('.')[0];
+}
+
+export function describeKind(kind: SyntaxKind): string {
+  switch (kind) {
+    case SyntaxKind.JSIdentifier:
+    case SyntaxKind.BoltIdentifier:
+      return "an identifier"
+    case SyntaxKind.BoltOperator:
+      return "an operator"
+    case SyntaxKind.BoltStringLiteral:
+      return "a string"
+    case SyntaxKind.BoltIntegerLiteral:
+      return "an integer"
+    case SyntaxKind.BoltFnKeyword:
+      return "'fn'"
+    case SyntaxKind.BoltForeignKeyword:
+      return "'foreign'"
+    case SyntaxKind.BoltMatchKeyword:
+      return "'match'";
+    case SyntaxKind.BoltYieldKeyword:
+      return "'yield'";
+    case SyntaxKind.BoltReturnKeyword:
+      return "'return'";
+    case SyntaxKind.BoltPubKeyword:
+      return "'pub'"
+    case SyntaxKind.BoltLetKeyword:
+      return "'let'"
+    case SyntaxKind.BoltSemi:
+      return "';'"
+    case SyntaxKind.BoltColon:
+      return "':'"
+    case SyntaxKind.BoltDot:
+      return "'.'"
+    case SyntaxKind.JSDot:
+      return "'.'"
+    case SyntaxKind.JSDotDotDot:
+      return "'...'"
+    case SyntaxKind.BoltRArrow:
+      return "'->'"
+    case SyntaxKind.BoltComma:
+      return "','"
+    case SyntaxKind.BoltModKeyword:
+      return "'mod'"
+    case SyntaxKind.BoltStructKeyword:
+      return "'struct'"
+    case SyntaxKind.BoltEnumKeyword:
+      return "'enum'"
+    case SyntaxKind.BoltTypeKeyword:
+      return "'type'";
+    case SyntaxKind.BoltBraced:
+      return "'{' .. '}'"
+    case SyntaxKind.BoltBracketed:
+      return "'[' .. ']'"
+    case SyntaxKind.BoltParenthesized:
+      return "'(' .. ')'"
+    case SyntaxKind.EndOfFile:
+      return "'}', ')', ']' or end-of-file"
+    case SyntaxKind.BoltLtSign:
+      return "'<'";
+    case SyntaxKind.BoltGtSign:
+      return "'<'";
+    case SyntaxKind.BoltEqSign:
+      return "'='";
+    case SyntaxKind.JSOpenBrace:
+      return "'{'";
+    case SyntaxKind.JSCloseBrace:
+      return "'}'";
+    case SyntaxKind.JSOpenBracket:
+      return "'['";
+    case SyntaxKind.JSCloseBracket:
+      return "']'";
+    case SyntaxKind.JSOpenParen:
+      return "'('";
+    case SyntaxKind.JSCloseParen:
+      return "')'";
+    case SyntaxKind.JSSemi:
+      return "';'";
+    case SyntaxKind.JSComma:
+      return "','";
+    default:
+      throw new Error(`failed to describe ${kindToString(kind)}`)
+  }
+}
+
+function enumerate(elements: string[]) {
+  if (elements.length === 1) {
+    return elements[0]
+  } else {
+    return elements.slice(0, elements.length-1).join(', ') + ' or ' + elements[elements.length-1]
+  }
+}
+
+export class ParseError extends Error {
+  constructor(public actual: Syntax, public expected: SyntaxKind[]) {
+    super(`${actual.span!.file.origPath}:${actual.span!.start.line}:${actual.span!.start.column}: expected ${enumerate(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`)
+  }
+}
+
+export enum OperatorKind {
+  Prefix,
+  InfixL,
+  InfixR,
+  Suffix,
+}
+
+export function isRightAssoc(kind: OperatorKind) {
+  return kind === OperatorKind.InfixR;
+}
+
+export interface OperatorInfo {
+  kind: OperatorKind;
+  arity: number;
+  name: string;
+  precedence: number;
+}
+
+export function assertToken(node: Syntax, kind: SyntaxKind) {
+  if (node.kind !== kind) {
+    throw new ParseError(node, [kind]);
+  }
+}
+
+
+type OperatorTableList = [OperatorKind, number, string][][];
+
+export class OperatorTable {
+
+  private operatorsByName = new FastStringMap<string, OperatorInfo>();
+  //private operatorsByPrecedence = FastStringMap<number, OperatorInfo>();
+
+  constructor(definitions: OperatorTableList) {
+    let i = 0;
+    for (const group of definitions) {
+      for (const [kind, arity, name] of group) {
+        const info = { kind, arity, name, precedence: i }
+        this.operatorsByName.set(name, info);
+        //this.operatorsByPrecedence[i] = info;
+      }
+      i++;
+    }
+  }
+
+  public lookup(name: string): OperatorInfo | null {
+    if (!this.operatorsByName.has(name)) {
+      return null;
+    }
+    return this.operatorsByName.get(name);
+  }
+
+}
+
+export const EOF = ''
+
+function escapeChar(ch: string) {
+  switch (ch) {
+    case '\a': return '\\a';
+    case '\b': return '\\b';
+    case '\f': return '\\f';
+    case '\n': return '\\n';
+    case '\r': return '\\r';
+    case '\t': return '\\t';
+    case '\v': return '\\v';
+    case '\0': return '\\0';
+    case '\'': return '\\\'';
+    default:
+      const code = ch.charCodeAt(0);
+      if (code >= 0x20 && code <= 0x7E)  {
+        return ch
+      } else if (code < 0x7F) {
+        return `\\x${code.toString(16).padStart(2, '0')}`
+      } else {
+        return `\\u${code.toString(16).padStart(4, '0')}`
+      }
+  }
+}
+
+export class ScanError extends Error {
+  constructor(public file: TextFile, public position: TextPos, public char: string) {
+    super(`${file.origPath}:${position.line}:${position.column}: unexpected char '${escapeChar(char)}'`)
+  }
 }
 

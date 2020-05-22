@@ -73,23 +73,33 @@ export const enum SyntaxKind {
   JSReturnKeyword = 88,
   JSTryKeyword = 89,
   JSCatchKeyword = 90,
-  JSBindPattern = 92,
-  JSConstantExpression = 94,
-  JSMemberExpression = 96,
-  JSCallExpression = 97,
-  JSBinaryExpression = 98,
-  JSUnaryExpression = 99,
-  JSNewExpression = 100,
-  JSSequenceExpression = 101,
-  JSConditionalExpression = 102,
-  JSReferenceExpression = 103,
-  JSExpressionStatement = 106,
-  JSConditionalStatement = 107,
-  JSParameter = 108,
-  JSFunctionDeclaration = 111,
-  JSArrowFunctionDeclaration = 112,
-  JSLetDeclaration = 113,
-  JSSourceFile = 114,
+  JSCloseBrace = 91,
+  JSCloseBracket = 92,
+  JSCloseParen = 93,
+  JSOpenBrace = 94,
+  JSOpenBracket = 95,
+  JSOpenParen = 96,
+  JSSemi = 97,
+  JSComma = 98,
+  JSDot = 99,
+  JSDotDotDot = 100,
+  JSBindPattern = 102,
+  JSConstantExpression = 104,
+  JSMemberExpression = 105,
+  JSCallExpression = 106,
+  JSBinaryExpression = 107,
+  JSUnaryExpression = 108,
+  JSNewExpression = 109,
+  JSSequenceExpression = 110,
+  JSConditionalExpression = 111,
+  JSReferenceExpression = 112,
+  JSExpressionStatement = 115,
+  JSConditionalStatement = 116,
+  JSParameter = 117,
+  JSFunctionDeclaration = 120,
+  JSArrowFunctionDeclaration = 121,
+  JSLetDeclaration = 122,
+  JSSourceFile = 123,
 }
 
 
@@ -586,6 +596,16 @@ export type JSToken
   | JSReturnKeyword
   | JSTryKeyword
   | JSCatchKeyword
+  | JSCloseBrace
+  | JSCloseBracket
+  | JSCloseParen
+  | JSOpenBrace
+  | JSOpenBracket
+  | JSOpenParen
+  | JSSemi
+  | JSComma
+  | JSDot
+  | JSDotDotDot
 
 
 export interface JSOperator extends SyntaxBase {
@@ -608,6 +628,46 @@ export interface JSTryKeyword extends SyntaxBase {
 
 export interface JSCatchKeyword extends SyntaxBase {
   kind: SyntaxKind.JSCatchKeyword;
+}
+
+export interface JSCloseBrace extends SyntaxBase {
+  kind: SyntaxKind.JSCloseBrace;
+}
+
+export interface JSCloseBracket extends SyntaxBase {
+  kind: SyntaxKind.JSCloseBracket;
+}
+
+export interface JSCloseParen extends SyntaxBase {
+  kind: SyntaxKind.JSCloseParen;
+}
+
+export interface JSOpenBrace extends SyntaxBase {
+  kind: SyntaxKind.JSOpenBrace;
+}
+
+export interface JSOpenBracket extends SyntaxBase {
+  kind: SyntaxKind.JSOpenBracket;
+}
+
+export interface JSOpenParen extends SyntaxBase {
+  kind: SyntaxKind.JSOpenParen;
+}
+
+export interface JSSemi extends SyntaxBase {
+  kind: SyntaxKind.JSSemi;
+}
+
+export interface JSComma extends SyntaxBase {
+  kind: SyntaxKind.JSComma;
+}
+
+export interface JSDot extends SyntaxBase {
+  kind: SyntaxKind.JSDot;
+}
+
+export interface JSDotDotDot extends SyntaxBase {
+  kind: SyntaxKind.JSDotDotDot;
 }
 
 export type JSPattern
@@ -636,14 +696,10 @@ export interface JSConstantExpression extends SyntaxBase {
   value: BoltValue;
 }
 
-export const enum JSMemberExpressionModifiers {
-  Computed = 1,}
-
 export interface JSMemberExpression extends SyntaxBase {
   kind: SyntaxKind.JSMemberExpression;
   value: JSExpression;
-  property: JSExpression;
-  modifiers: JSMemberExpressionModifiers;
+  property: JSIdentifier;
 }
 
 export interface JSCallExpression extends SyntaxBase {
@@ -830,6 +886,16 @@ export type JSSyntax
   | JSReturnKeyword
   | JSTryKeyword
   | JSCatchKeyword
+  | JSCloseBrace
+  | JSCloseBracket
+  | JSCloseParen
+  | JSOpenBrace
+  | JSOpenBracket
+  | JSOpenParen
+  | JSSemi
+  | JSComma
+  | JSDot
+  | JSDotDotDot
   | JSBindPattern
   | JSConstantExpression
   | JSMemberExpression
@@ -923,6 +989,16 @@ export type Syntax
   | JSReturnKeyword
   | JSTryKeyword
   | JSCatchKeyword
+  | JSCloseBrace
+  | JSCloseBracket
+  | JSCloseParen
+  | JSOpenBrace
+  | JSOpenBracket
+  | JSOpenParen
+  | JSSemi
+  | JSComma
+  | JSDot
+  | JSDotDotDot
   | JSBindPattern
   | JSConstantExpression
   | JSMemberExpression
@@ -1017,9 +1093,19 @@ export function createJSIdentifier(text: string, span?: TextSpan | null): JSIden
 export function createJSReturnKeyword(span?: TextSpan | null): JSReturnKeyword;
 export function createJSTryKeyword(span?: TextSpan | null): JSTryKeyword;
 export function createJSCatchKeyword(span?: TextSpan | null): JSCatchKeyword;
+export function createJSCloseBrace(span?: TextSpan | null): JSCloseBrace;
+export function createJSCloseBracket(span?: TextSpan | null): JSCloseBracket;
+export function createJSCloseParen(span?: TextSpan | null): JSCloseParen;
+export function createJSOpenBrace(span?: TextSpan | null): JSOpenBrace;
+export function createJSOpenBracket(span?: TextSpan | null): JSOpenBracket;
+export function createJSOpenParen(span?: TextSpan | null): JSOpenParen;
+export function createJSSemi(span?: TextSpan | null): JSSemi;
+export function createJSComma(span?: TextSpan | null): JSComma;
+export function createJSDot(span?: TextSpan | null): JSDot;
+export function createJSDotDotDot(span?: TextSpan | null): JSDotDotDot;
 export function createJSBindPattern(name: JSIdentifier, span?: TextSpan | null): JSBindPattern;
 export function createJSConstantExpression(value: BoltValue, span?: TextSpan | null): JSConstantExpression;
-export function createJSMemberExpression(value: JSExpression, property: JSExpression, modifiers: JSMemberExpressionModifiers, span?: TextSpan | null): JSMemberExpression;
+export function createJSMemberExpression(value: JSExpression, property: JSIdentifier, span?: TextSpan | null): JSMemberExpression;
 export function createJSCallExpression(operator: JSExpression, operands: JSExpression[], span?: TextSpan | null): JSCallExpression;
 export function createJSBinaryExpression(left: JSExpression, operator: JSOperator, right: JSExpression, span?: TextSpan | null): JSBinaryExpression;
 export function createJSUnaryExpression(operator: JSOperator, operand: JSExpression, span?: TextSpan | null): JSUnaryExpression;
@@ -1121,6 +1207,16 @@ export function isJSIdentifier(value: any): value is JSIdentifier;
 export function isJSReturnKeyword(value: any): value is JSReturnKeyword;
 export function isJSTryKeyword(value: any): value is JSTryKeyword;
 export function isJSCatchKeyword(value: any): value is JSCatchKeyword;
+export function isJSCloseBrace(value: any): value is JSCloseBrace;
+export function isJSCloseBracket(value: any): value is JSCloseBracket;
+export function isJSCloseParen(value: any): value is JSCloseParen;
+export function isJSOpenBrace(value: any): value is JSOpenBrace;
+export function isJSOpenBracket(value: any): value is JSOpenBracket;
+export function isJSOpenParen(value: any): value is JSOpenParen;
+export function isJSSemi(value: any): value is JSSemi;
+export function isJSComma(value: any): value is JSComma;
+export function isJSDot(value: any): value is JSDot;
+export function isJSDotDotDot(value: any): value is JSDotDotDot;
 export function isJSPattern(value: any): value is JSPattern;
 export function isJSBindPattern(value: any): value is JSBindPattern;
 export function isJSExpression(value: any): value is JSExpression;

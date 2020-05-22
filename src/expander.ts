@@ -8,11 +8,10 @@ import {
   kindToString,
   BoltSyntax,
   BoltSentence,
-  createBoltEOS,
   createBoltRecordPattern,
   createBoltExpressionPattern,
   createBoltIdentifier,
-  createBoltReferenceTypeNode,
+  createBoltReferenceTypeExpression,
   createBoltConstantExpression,
   createBoltTuplePattern,
   createBoltQualName,
@@ -24,7 +23,7 @@ import {
   createBoltSourceFile,
   BoltPattern,
   BoltSourceElement,
-  BoltReferenceTypeNode,
+  BoltReferenceTypeExpression,
   createBoltRecordDeclaration,
   createBoltRecordDeclarationField,
   isBoltSourceElement,
@@ -34,7 +33,8 @@ import {
 
 import { TextSpan } from "./text"
 import { TypeChecker } from "./checker"
-import { Parser, ParseError } from "./parser"
+import { ParseError } from "./util"
+import { Parser } from "./parser"
 import { Evaluator, TRUE, FALSE } from "./evaluator"
 import { StreamWrapper, setOrigNodeRange, BoltTokenStream, createTokenStream } from "./util"
 
@@ -43,9 +43,9 @@ interface Transformer {
   transform: (node: BoltTokenStream) => BoltSyntax;
 }
 
-function createSimpleBoltReferenceTypeNode(text: string): BoltReferenceTypeNode {
+function createSimpleBoltReferenceTypeExpression(text: string): BoltReferenceTypeExpression {
   const ids = text.split('.').map(name => createBoltIdentifier(name))
-  return createBoltReferenceTypeNode(createBoltQualName(ids.slice(0, -1), ids[ids.length-1]), [])
+  return createBoltReferenceTypeExpression(createBoltQualName(ids.slice(0, -1), ids[ids.length-1]), [])
 }
 
 /// This is actually a hand-parsed version of the following:
@@ -64,26 +64,26 @@ function createSimpleBoltReferenceTypeNode(text: string): BoltReferenceTypeNode 
 /// }
 //const PATTERN_SYNTAX: BoltPattern = 
 //  createBoltRecordPattern(
-//    createSimpleBoltReferenceTypeNode('Bolt.AST.Sentence'),
+//    createSimpleBoltReferenceTypeExpression('Bolt.AST.Sentence'),
 //    [
 //      createBoltRecordDeclarationField(
 //        createBoltIdentifier('elements'),
 //        createBoltTuplePattern([
 //          createBoltRecordPattern(
-//            createSimpleBoltReferenceTypeNode('Bolt.AST.Identifier'),
+//            createSimpleBoltReferenceTypeExpression('Bolt.AST.Identifier'),
 //            [{
 //              name: createBoltIdentifier('text'), 
 //              pattern: createBoltConstantExpression('syntax')
 //            }]
 //          ),
 //          createBoltRecordPattern(
-//            createSimpleBoltReferenceTypeNode('Bolt.AST.Braced'),
+//            createSimpleBoltReferenceTypeExpression('Bolt.AST.Braced'),
 //            [{
 //              name: createBoltIdentifier('elements'),
 //              pattern: createBoltTuplePattern([
-//                createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Pattern'), createBoltBindPattern(createBoltIdentifier('pattern'))),
-//                createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.RArrow'), createBoltBindPattern(createBoltIdentifier('_'))),
-//                createBoltTypePattern(createSimpleBoltReferenceTypeNode('Bolt.AST.Expr'), createBoltBindPattern(createBoltIdentifier('expression')))
+//                createBoltTypePattern(createSimpleBoltReferenceTypeExpression('Bolt.AST.Pattern'), createBoltBindPattern(createBoltIdentifier('pattern'))),
+//                createBoltTypePattern(createSimpleBoltReferenceTypeExpression('Bolt.AST.RArrow'), createBoltBindPattern(createBoltIdentifier('_'))),
+//                createBoltTypePattern(createSimpleBoltReferenceTypeExpression('Bolt.AST.Expr'), createBoltBindPattern(createBoltIdentifier('expression')))
 //              ])
 //            }]
 //          )

@@ -1,5 +1,3 @@
-)
-import * as acorn from "acorn"
 
 import {
   SyntaxKind,
@@ -48,119 +46,25 @@ import {
   createBoltFunctionDeclaration,
   createBoltCallExpression,
   BoltSymbol,
-  JSSourceElement,
-  JSStatement,
   BoltTypeParameter,
   createBoltTypePattern,
   createBoltTypeParameter,
 } from "./ast"
 
-import { Scanner } from "./scanner"
+import { parseForeignLanguage } from "./foreign"
 
-import { Stream, setOrigNodeRange, createTokenStream, uniq, FastStringMap } from "./util"
+import { 
+  Stream,
+  OperatorKind,
+  OperatorTable,
+  assertToken,
+  ParseError,
+  setOrigNodeRange,
+  createTokenStream,
+  uniq,
+} from "./util"
 
 export type BoltTokenStream = Stream<BoltToken>;
-
-export type JSTokenStream = Stream<JSToken>;
-
-function describeKind(kind: SyntaxKind): string {
-  switch (kind) {
-    case SyntaxKind.BoltIdentifier:
-      return "an identifier"
-    case SyntaxKind.BoltOperator:
-      return "an operator"
-    case SyntaxKind.BoltStringLiteral:
-      return "a string"
-    case SyntaxKind.BoltIntegerLiteral:
-      return "an integer"
-    case SyntaxKind.BoltFnKeyword:
-      return "'fn'"
-    case SyntaxKind.BoltForeignKeyword:
-      return "'foreign'"
-    case SyntaxKind.BoltMatchKeyword:
-      return "'match'";
-    case SyntaxKind.BoltYieldKeyword:
-      return "'yield'";
-    case SyntaxKind.BoltReturnKeyword:
-      return "'return'";
-    case SyntaxKind.BoltPubKeyword:
-      return "'pub'"
-    case SyntaxKind.BoltLetKeyword:
-      return "'let'"
-    case SyntaxKind.BoltSemi:
-      return "';'"
-    case SyntaxKind.BoltColon:
-      return "':'"
-    case SyntaxKind.BoltDot:
-      return "'.'"
-    case SyntaxKind.BoltRArrow:
-      return "'->'"
-    case SyntaxKind.BoltComma:
-      return "','"
-    case SyntaxKind.BoltModKeyword:
-      return "'mod'"
-    case SyntaxKind.BoltStructKeyword:
-      return "'struct'"
-    case SyntaxKind.BoltEnumKeyword:
-      return "'enum'"
-    case SyntaxKind.BoltTypeKeyword:
-      return "'type'";
-    case SyntaxKind.BoltBraced:
-      return "'{' .. '}'"
-    case SyntaxKind.BoltBracketed:
-      return "'[' .. ']'"
-    case SyntaxKind.BoltParenthesized:
-      return "'(' .. ')'"
-    case SyntaxKind.EndOfFile:
-      return "'}', ')', ']' or end-of-file"
-    case SyntaxKind.BoltLtSign:
-      return "'<'";
-    case SyntaxKind.BoltGtSign:
-      return "'<'";
-    case SyntaxKind.BoltEqSign:
-      return "'='";
-    default:
-      throw new Error(`failed to describe ${kindToString(kind)}`)
-  }
-}
-
-function enumerate(elements: string[]) {
-  if (elements.length === 1) {
-    return elements[0]
-  } else {
-    return elements.slice(0, elements.length-1).join(', ') + ' or ' + elements[elements.length-1]
-  }
-}
-
-export class ParseError extends Error {
-  constructor(public actual: BoltToken, public expected: SyntaxKind[]) {
-    super(`${actual.span!.file.origPath}:${actual.span!.start.line}:${actual.span!.start.column}: expected ${enumerate(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`)
-  }
-}
-
-enum OperatorKind {
-  Prefix,
-  InfixL,
-  InfixR,
-  Suffix,
-}
-
-function isRightAssoc(kind: OperatorKind) {
-  return kind === OperatorKind.InfixR;
-}
-
-interface OperatorInfo {
-  kind: OperatorKind;
-  arity: number;
-  name: string;
-  precedence: number;
-}
-
-function assertToken(node: BoltToken, kind: SyntaxKind) {
-  if (node.kind !== kind) {
-    throw new ParseError(node, [kind]);
-  }
-}
 
 const KIND_EXPRESSION_T0 = [
   SyntaxKind.BoltStringLiteral,
@@ -197,34 +101,6 @@ const KIND_SOURCEELEMENT_T0 = uniq([
   ...KIND_STATEMENT_T0,
   ...KIND_DECLARATION_T0,
 ])
-
-type OperatorTableMatrix = [OperatorKind, number, string][][];
-
-class OperatorTable {
-
-  private operatorsByName = new FastStringMap<string, OperatorInfo>();
-  //private operatorsByPrecedence = FastStringMap<number, OperatorInfo>();
-
-  constructor(definitions: OperatorTableMatrix) {
-    let i = 0;
-    for (const group of definitions) {
-      for (const [kind, arity, name] of group) {
-        const info = { kind, arity, name, precedence: i }
-        this.operatorsByName.set(name, info);
-        //this.operatorsByPrecedence[i] = info;
-      }
-      i++;
-    }
-  }
-
-  public lookup(name: string): OperatorInfo | null {
-    if (!this.operatorsByName.has(name)) {
-      return null;
-    }
-    return this.operatorsByName.get(name);
-  }
-
-}
 
 export class Parser {
 
@@ -922,16 +798,13 @@ export class Parser {
         case "Bolt":
           body = this.parseStatements(tokens);
           break;
-        case "JS":
-          const scanner = new Scanner(t3.span!.file, t3.text);
-          body = this.parseJSSourceElementList(scanner);
-          break;
         default:
-          throw new Error(`Unrecognised language: ${target}`);
+          body = parseForeignLanguage(target, t3.text, t3.span!.file, t3.span!.start);
+          break;
       }
     }
 
-    const node = createBoltFunctionDeclaration(
+    const result = createBoltFunctionDeclaration(
       modifiers,
       target,
       name,
@@ -939,27 +812,10 @@ export class Parser {
       returnType,
       body
     );
-    setOrigNodeRange(node, firstToken, lastToken!);
-    return node;
+    setOrigNodeRange(result, firstToken, lastToken!);
+    return result;
 
   }
-
-  //public parseModuleDeclaration(tokens: BoltTokenStream): BoltModule {
-    //let modifiers = 0;
-    //let t0 = tokens.get();
-    //if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      //modifiers |= BoltDeclarationModifiers.Public;
-      //t0 = tokens.get();
-    //}
-    //assertToken(t0, SyntaxKind.BoltModKeyword);
-    //const name = this.parseQualName(tokens);
-    //const t1 = tokens.get();
-    //assertToken(t1, SyntaxKind.BoltBraced);
-    //const elements = this.parseSourceElementList(createTokenStream(t1));
-    //const node = createBoltModule(modifiers, name, elements);
-    //setOrigNodeRange(node, t0, t1);
-    //return node;
-  //}
 
   public parseDeclaration(tokens: BoltTokenStream): BoltDeclaration {
     let t0 = tokens.peek(1);
@@ -1089,23 +945,6 @@ export class Parser {
     setOrigNodeRange(node, operator, t2);
     return node;
 
-  }
-
-  public parseJSStatement(tokens: JSTokenStream): JSStatement {
-    return this.parseJSExpressionStatement(tokens);
-  }
-
-  public parseJSSourceElementList(tokens: JSTokenStream): JSSourceElement[] {
-    const elements: JSSourceElement[] = [];
-    while (true) {
-      const t0 = tokens.peek();
-      if (t0.kind === SyntaxKind.EndOfFile) {
-        break;
-      }
-      const statement = this.parseJSStatement(tokens)
-      elements.push(statement);
-    }
-    return elements;
   }
 
 }
