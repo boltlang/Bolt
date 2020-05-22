@@ -6,7 +6,7 @@ import chalk from "chalk"
 
 import { TextSpan, TextPos } from "./text"
 import { Scanner } from "./scanner"
-import { kindToString, Syntax, BoltQualName, BoltDeclaration, BoltDeclarationModifiers, createBoltEOS, SyntaxKind, isBoltPunctuated } from "./ast"
+import { kindToString, Syntax, BoltQualName, BoltDeclaration, BoltDeclarationModifiers, createEndOfFile, SyntaxKind, isBoltPunctuated } from "./ast"
 
 export function createTokenStream(node: Syntax) {
   if (isBoltPunctuated(node)) {
@@ -16,7 +16,7 @@ export function createTokenStream(node: Syntax) {
   } else if (node.kind === SyntaxKind.BoltSentence) {
     return new StreamWrapper(
       node.tokens,
-      () => createBoltEOS(new TextSpan(node.span!.file, node.span!.end.clone(), node.span!.end.clone()))
+      () => createEndOfFile(new TextSpan(node.span!.file, node.span!.end.clone(), node.span!.end.clone()))
     );
   } else {
     throw new Error(`Could not convert ${kindToString(node.kind)} to a token stream.`);
@@ -40,8 +40,36 @@ export function uniq<T>(elements: T[]): T[] {
   return out;
 }
 
-export interface FastStringMap<T> {
-  [key: string]: T
+
+export class FastStringMap<K extends PropertyKey, V> {
+
+  private mapping = Object.create(null);
+
+  public get(key: K): V {
+    if (!(key in this.mapping)) {
+      throw new Error(`No value found for key '${key}'.`);
+    }
+    return this.mapping[key];
+  }
+
+  public set(key: K, value: V): void {
+    if (key in this.mapping) {
+      throw new Error(`A value for key '${key}' already exists.`);
+    }
+    this.mapping[key] = value
+  }
+
+  public has(key: K): boolean {
+    return key in this.mapping;
+  }
+
+  public delete(key: K): void {
+    if (!(key in this.mapping)) {
+      throw new Error(`No value found for key '${key}'.`);
+    }
+    delete this.mapping[key];
+  }
+
 }
 
 class DeepMap {

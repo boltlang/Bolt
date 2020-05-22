@@ -228,7 +228,7 @@ export class Expander {
 
     } else {
 
-      this.checker.check(node);
+      //this.checker.check(node);
 
       return node;
 

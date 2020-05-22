@@ -125,7 +125,7 @@ export class Compiler {
         // TODO
         break;
 
-      case SyntaxKind.BoltNewTypeDeclaration:
+      case SyntaxKind.BoltTypeAliasDeclaration:
         break;
 
       case SyntaxKind.BoltVariableDeclaration:
