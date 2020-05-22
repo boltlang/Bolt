@@ -305,6 +305,32 @@ export function describeKind(kind: SyntaxKind): string {
       return "'trait'";
     case SyntaxKind.BoltForKeyword:
       return "'for'";
+    case SyntaxKind.JSMulOp:
+      return "'*'";
+    case SyntaxKind.JSAddOp:
+      return "'+'";
+    case SyntaxKind.JSDivOp:
+      return "'/'";
+    case SyntaxKind.JSSubOp:
+      return "'-'";
+    case SyntaxKind.JSLtOp:
+      return "'<'";
+    case SyntaxKind.JSGtOp:
+      return "'>'";
+    case SyntaxKind.JSBOrOp:
+      return "'|'";
+    case SyntaxKind.JSBXorOp:
+      return "'^'";
+    case SyntaxKind.JSBAndOp:
+      return "'&'";
+    case SyntaxKind.JSBNotOp:
+      return "'~'";
+    case SyntaxKind.JSNotOp:
+      return "'~'";
+    case SyntaxKind.JSString:
+      return "a JavaScript string"
+    case SyntaxKind.JSReturnKeyword:
+      return "'return'";
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }

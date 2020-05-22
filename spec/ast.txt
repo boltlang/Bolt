@@ -290,9 +290,22 @@ node JSIdentifier > JSToken {
   text: String,
 }
 
+node JSString > JSToken {
+  value: String,
+}
+
+node JSFromKeyword > JSToken;
 node JSReturnKeyword > JSToken;
 node JSTryKeyword > JSToken;
 node JSCatchKeyword > JSToken;
+node JSImportKeyword > JSToken;
+node JSAsKeyword > JSToken;
+node JSConstKeyword > JSToken;
+node JSLetKeyword > JSToken;
+node JSExportKeyword > JSToken;
+node JSFunctionKeyword > JSToken;
+node JSWhileKeyword > JSToken;
+node JSForKeyword > JSToken;
 
 node JSCloseBrace > JSToken;
 node JSCloseBracket > JSToken;
@@ -304,6 +317,17 @@ node JSSemi > JSToken;
 node JSComma > JSToken;
 node JSDot > JSToken;
 node JSDotDotDot > JSToken;
+node JSMulOp > JSToken;
+node JSAddOp > JSToken;
+node JSDivOp > JSToken;
+node JSSubOp > JSToken;
+node JSLtOp > JSToken;
+node JSGtOp > JSToken;
+node JSBOrOp > JSToken;
+node JSBXorOp > JSToken;
+node JSBAndOp > JSToken;
+node JSBNotOp > JSToken;
+node JSNotOp > JSToken;
 
 node JSPattern;
 
@@ -381,6 +405,22 @@ node JSDeclaration > JSSourceElement;
 
 enum JSDeclarationModifiers {
   IsExported = 0x1,
+}
+
+node JSImportBinding;
+
+node JSImportStarBinding > JSImportBinding {
+  local: JSIdentifier,
+}
+
+node JSImportAsBinding > JSImportBinding {
+  remote: JSIdentifier,
+  local: Option<JSIdentifier>,
+}
+
+node JSImportDeclaration > JSDeclaration {
+  bindings: Vec<JSImportBinding>,
+  filename: JSString,
 }
 
 node JSFunctionDeclaration > JSDeclaration {

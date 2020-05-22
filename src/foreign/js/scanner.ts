@@ -18,6 +18,29 @@ import {
   createJSSemi,
   createJSComma,
   createEndOfFile,
+  createJSMulOp,
+  createJSNotOp,
+  createJSBOrOp,
+  createJSBNotOp,
+  createJSBXorOp,
+  createJSBAndOp,
+  createJSGtOp,
+  createJSLtOp,
+  createJSDivOp,
+  createJSSubOp,
+  createJSAddOp,
+  createJSLetKeyword,
+  createJSWhileKeyword,
+  createJSForKeyword,
+  createJSFunctionKeyword,
+  createJSExportKeyword,
+  createJSImportKeyword,
+  createJSConstKeyword,
+  createJSAsKeyword,
+  createJSReturnKeyword,
+  createJSCatchKeyword,
+  createJSFromKeyword,
+  createJSString,
 } from "../../ast"
 
 function isWhiteSpace(ch: string): boolean {
@@ -29,6 +52,10 @@ function isLineTerminator(ch: string): boolean {
       || ch === '\u000D'
       || ch === '\u2028'
       || ch === '\u2029';;
+}
+
+function isOperator(ch: string): boolean {
+  return /[-+*/&^|%!<>=]/.test(ch)
 }
 
 function isIdentStart(ch: string): boolean {
@@ -190,6 +217,22 @@ export class JSScanner {
     throw new Error(`Scanning unicode escape sequences is not yet implemented.`);
   }
 
+  protected takeWhile(pred: (ch: string) => boolean) {
+    let text = this.getChar();
+    while (true) {
+      const c0 = this.peekChar();
+      if (c0 === EOF) {
+        break;
+      }
+      if (!pred(c0)) {
+        break;
+      }
+      this.getChar()
+      text += c0;
+    }
+    return text;
+  }
+
   public scan(): JSToken {
 
     this.skipComments();
@@ -201,6 +244,15 @@ export class JSScanner {
     }
 
     const startPos = this.currPos.clone();
+
+    if (c0 === '"' || c0 === "'") {
+      // FIXME
+      this.getChar();
+      const value = this.takeWhile(ch => ch !== c0)
+      this.getChar();
+      const endPos = this.currPos.clone();
+      return createJSString(value, new TextSpan(this.file, startPos, endPos))
+    }
 
     if (/[,;()\[\]{}]/.test(c0)) {
       this.getChar();
@@ -235,6 +287,24 @@ export class JSScanner {
       }
     }
 
+    if (isOperator(c0)) {
+      const text = this.takeWhile(isOperator)
+      const span = new TextSpan(this.file, startPos, this.currPos.clone());
+      switch (text) {
+        case '+': return createJSAddOp(span);
+        case '-': return createJSSubOp(span);
+        case '*': return createJSMulOp(span);
+        case '/': return createJSDivOp(span);
+        case '<': return createJSLtOp(span);
+        case '>': return createJSGtOp(span);
+        case '&': return createJSBAndOp(span);
+        case '^': return createJSBXorOp(span);
+        case '~': return createJSBNotOp(span);
+        case '|': return createJSBOrOp(span);
+        case '!': return createJSNotOp(span);
+      }
+    }
+
     if (isIdentStart(c0)) {
       let name = '';
       while (true) {
@@ -249,7 +319,21 @@ export class JSScanner {
         }
       }
       const endPos = this.currPos.clone();
-      return createJSIdentifier(name, new TextSpan(this.file, startPos, endPos))
+      const span = new TextSpan(this.file, startPos, endPos);
+      switch (name) {
+        case 'return':   return createJSReturnKeyword(span);
+        case 'catch':    return createJSCatchKeyword(span);
+        case 'from':     return createJSFromKeyword(span);
+        case 'let':      return createJSLetKeyword(span);
+        case 'const':    return createJSConstKeyword(span);
+        case 'import':   return createJSImportKeyword(span);
+        case 'export':   return createJSExportKeyword(span);
+        case 'as':       return createJSAsKeyword(span);
+        case 'function': return createJSFunctionKeyword(span);
+        case 'for':      return createJSForKeyword(span);
+        case 'while':    return createJSWhileKeyword(span);
+        default:         return createJSIdentifier(name, span)
+      }
     } else {
       throw new ScanError(this.file, startPos, c0);
     }

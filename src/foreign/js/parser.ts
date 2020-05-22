@@ -14,10 +14,23 @@ import {
   JSIdentifier,
   JSMemberExpression,
   createJSMemberExpression,
-  createJSCallExpression
+  createJSCallExpression,
+  JSDeclaration,
+  JSString,
+  createJSImportDeclaration,
+  createJSImportStarBinding,
+  createJSImportAsBinding
 } from "../../ast"
 
 export type JSTokenStream = Stream<JSToken>;
+
+const T0_DECLARATION = [
+  SyntaxKind.JSConstKeyword,
+  SyntaxKind.JSLetKeyword,
+  SyntaxKind.JSFunctionKeyword,
+  SyntaxKind.JSImportKeyword,
+  SyntaxKind.JSExportKeyword,
+];
 
 export class JSParser {
 
@@ -96,6 +109,72 @@ export class JSParser {
     return this.parseJSExpressionStatement(tokens);
   }
 
+  public parseImportDeclaration(tokens: JSTokenStream): JSImportDeclaration {
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.JSImportKeyword);
+    const t1 = tokens.peek();
+    let bindings = [];
+    let filename;
+    if (t1.kind === SyntaxKind.JSString) {
+      tokens.get();
+      filename = t1 as JSString;
+    } else {
+      while (true) {
+        const t1 = tokens.get();
+        if (t1.kind === SyntaxKind.JSFromKeyword) {
+          break;
+        }
+        if (t1.kind === SyntaxKind.JSMulOp) {
+          const t2 = tokens.get();
+          assertToken(t2, SyntaxKind.JSAsKeyword);
+          const t3 = tokens.get();
+          assertToken(t3, SyntaxKind.JSIdentifier);
+          const binding = createJSImportStarBinding(t3 as JSIdentifier);
+          setOrigNodeRange(binding, t1, t1);
+          bindings.push(binding);
+        } else if (t1.kind === SyntaxKind.JSOpenBrace) {
+          // TODO
+        } else if (t1.kind === SyntaxKind.JSIdentifier) {
+          const binding = createJSImportAsBinding(t1, null)
+          setOrigNodeRange(binding, t1, t1);
+          bindings.push(binding);
+        } else {
+          throw new ParseError(t1, [SyntaxKind.JSMulOp, SyntaxKind.JSIdentifier, SyntaxKind.JSOpenBrace]);
+        }
+      }
+      const t2 = tokens.get();
+      assertToken(t2, SyntaxKind.JSString);
+      filename = t2 as JSString;
+    }
+    const result = createJSImportDeclaration(bindings, filename)
+    setOrigNodeRange(result, t0, filename);
+    return result;
+  }
+
+  public parseExportDeclaration(tokens: JSTokenStream): JSExportDeclaration {
+
+  }
+
+  public parseJSDeclaration(tokens: JSTokenStream): JSDeclaration {
+    const t0 = tokens.peek();
+    if (t0.kind === SyntaxKind.JSImportKeyword) {
+      return this.parseImportDeclaration(tokens);
+    } else if (t0.kind === SyntaxKind.JSExportKeyword) {
+      return this.parseExportDeclaration(tokens);
+    } else {
+      throw new ParseError(t0, T0_DECLARATION);
+    }
+  }
+
+  public parseJSSourceElement(tokens: JSTokenStream): JSSourceElement {
+    const t0 = tokens.peek();
+    if (T0_DECLARATION.indexOf(t0.kind) !== -1) {
+      return this.parseJSDeclaration(tokens);
+    } else {
+      return this.parseJSStatement(tokens);
+    }
+  }
+
   public parseJSSourceElementList(tokens: JSTokenStream): JSSourceElement[] {
     const elements: JSSourceElement[] = [];
     while (true) {
@@ -107,8 +186,8 @@ export class JSParser {
         tokens.get();
         continue;
       }
-      const statement = this.parseJSStatement(tokens)
-      elements.push(statement);
+      const element = this.parseJSSourceElement(tokens)
+      elements.push(element);
     }
     return elements;
   }

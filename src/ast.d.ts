@@ -74,36 +74,60 @@ export const enum SyntaxKind {
   BoltRecordDeclaration = 85,
   JSOperator = 89,
   JSIdentifier = 90,
-  JSReturnKeyword = 91,
-  JSTryKeyword = 92,
-  JSCatchKeyword = 93,
-  JSCloseBrace = 94,
-  JSCloseBracket = 95,
-  JSCloseParen = 96,
-  JSOpenBrace = 97,
-  JSOpenBracket = 98,
-  JSOpenParen = 99,
-  JSSemi = 100,
-  JSComma = 101,
-  JSDot = 102,
-  JSDotDotDot = 103,
-  JSBindPattern = 105,
-  JSConstantExpression = 107,
-  JSMemberExpression = 108,
-  JSCallExpression = 109,
-  JSBinaryExpression = 110,
-  JSUnaryExpression = 111,
-  JSNewExpression = 112,
-  JSSequenceExpression = 113,
-  JSConditionalExpression = 114,
-  JSReferenceExpression = 115,
-  JSExpressionStatement = 118,
-  JSConditionalStatement = 119,
-  JSParameter = 120,
-  JSFunctionDeclaration = 123,
-  JSArrowFunctionDeclaration = 124,
-  JSLetDeclaration = 125,
-  JSSourceFile = 126,
+  JSString = 91,
+  JSFromKeyword = 92,
+  JSReturnKeyword = 93,
+  JSTryKeyword = 94,
+  JSCatchKeyword = 95,
+  JSImportKeyword = 96,
+  JSAsKeyword = 97,
+  JSConstKeyword = 98,
+  JSLetKeyword = 99,
+  JSExportKeyword = 100,
+  JSFunctionKeyword = 101,
+  JSWhileKeyword = 102,
+  JSForKeyword = 103,
+  JSCloseBrace = 104,
+  JSCloseBracket = 105,
+  JSCloseParen = 106,
+  JSOpenBrace = 107,
+  JSOpenBracket = 108,
+  JSOpenParen = 109,
+  JSSemi = 110,
+  JSComma = 111,
+  JSDot = 112,
+  JSDotDotDot = 113,
+  JSMulOp = 114,
+  JSAddOp = 115,
+  JSDivOp = 116,
+  JSSubOp = 117,
+  JSLtOp = 118,
+  JSGtOp = 119,
+  JSBOrOp = 120,
+  JSBXorOp = 121,
+  JSBAndOp = 122,
+  JSBNotOp = 123,
+  JSNotOp = 124,
+  JSBindPattern = 126,
+  JSConstantExpression = 128,
+  JSMemberExpression = 129,
+  JSCallExpression = 130,
+  JSBinaryExpression = 131,
+  JSUnaryExpression = 132,
+  JSNewExpression = 133,
+  JSSequenceExpression = 134,
+  JSConditionalExpression = 135,
+  JSReferenceExpression = 136,
+  JSExpressionStatement = 139,
+  JSConditionalStatement = 140,
+  JSParameter = 141,
+  JSImportStarBinding = 145,
+  JSImportAsBinding = 146,
+  JSImportDeclaration = 147,
+  JSFunctionDeclaration = 148,
+  JSArrowFunctionDeclaration = 149,
+  JSLetDeclaration = 150,
+  JSSourceFile = 151,
 }
 
 
@@ -625,9 +649,19 @@ export type JSToken
   = EndOfFile
   | JSOperator
   | JSIdentifier
+  | JSString
+  | JSFromKeyword
   | JSReturnKeyword
   | JSTryKeyword
   | JSCatchKeyword
+  | JSImportKeyword
+  | JSAsKeyword
+  | JSConstKeyword
+  | JSLetKeyword
+  | JSExportKeyword
+  | JSFunctionKeyword
+  | JSWhileKeyword
+  | JSForKeyword
   | JSCloseBrace
   | JSCloseBracket
   | JSCloseParen
@@ -638,6 +672,17 @@ export type JSToken
   | JSComma
   | JSDot
   | JSDotDotDot
+  | JSMulOp
+  | JSAddOp
+  | JSDivOp
+  | JSSubOp
+  | JSLtOp
+  | JSGtOp
+  | JSBOrOp
+  | JSBXorOp
+  | JSBAndOp
+  | JSBNotOp
+  | JSNotOp
 
 
 export interface JSOperator extends SyntaxBase {
@@ -650,6 +695,15 @@ export interface JSIdentifier extends SyntaxBase {
   text: string;
 }
 
+export interface JSString extends SyntaxBase {
+  kind: SyntaxKind.JSString;
+  value: string;
+}
+
+export interface JSFromKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSFromKeyword;
+}
+
 export interface JSReturnKeyword extends SyntaxBase {
   kind: SyntaxKind.JSReturnKeyword;
 }
@@ -660,6 +714,38 @@ export interface JSTryKeyword extends SyntaxBase {
 
 export interface JSCatchKeyword extends SyntaxBase {
   kind: SyntaxKind.JSCatchKeyword;
+}
+
+export interface JSImportKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSImportKeyword;
+}
+
+export interface JSAsKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSAsKeyword;
+}
+
+export interface JSConstKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSConstKeyword;
+}
+
+export interface JSLetKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSLetKeyword;
+}
+
+export interface JSExportKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSExportKeyword;
+}
+
+export interface JSFunctionKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSFunctionKeyword;
+}
+
+export interface JSWhileKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSWhileKeyword;
+}
+
+export interface JSForKeyword extends SyntaxBase {
+  kind: SyntaxKind.JSForKeyword;
 }
 
 export interface JSCloseBrace extends SyntaxBase {
@@ -700,6 +786,50 @@ export interface JSDot extends SyntaxBase {
 
 export interface JSDotDotDot extends SyntaxBase {
   kind: SyntaxKind.JSDotDotDot;
+}
+
+export interface JSMulOp extends SyntaxBase {
+  kind: SyntaxKind.JSMulOp;
+}
+
+export interface JSAddOp extends SyntaxBase {
+  kind: SyntaxKind.JSAddOp;
+}
+
+export interface JSDivOp extends SyntaxBase {
+  kind: SyntaxKind.JSDivOp;
+}
+
+export interface JSSubOp extends SyntaxBase {
+  kind: SyntaxKind.JSSubOp;
+}
+
+export interface JSLtOp extends SyntaxBase {
+  kind: SyntaxKind.JSLtOp;
+}
+
+export interface JSGtOp extends SyntaxBase {
+  kind: SyntaxKind.JSGtOp;
+}
+
+export interface JSBOrOp extends SyntaxBase {
+  kind: SyntaxKind.JSBOrOp;
+}
+
+export interface JSBXorOp extends SyntaxBase {
+  kind: SyntaxKind.JSBXorOp;
+}
+
+export interface JSBAndOp extends SyntaxBase {
+  kind: SyntaxKind.JSBAndOp;
+}
+
+export interface JSBNotOp extends SyntaxBase {
+  kind: SyntaxKind.JSBNotOp;
+}
+
+export interface JSNotOp extends SyntaxBase {
+  kind: SyntaxKind.JSNotOp;
 }
 
 export type JSPattern
@@ -779,6 +909,7 @@ export interface JSReferenceExpression extends SyntaxBase {
 export type JSSourceElement
   = JSExpressionStatement
   | JSConditionalStatement
+  | JSImportDeclaration
   | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
@@ -809,13 +940,36 @@ export interface JSParameter extends SyntaxBase {
 }
 
 export type JSDeclaration
-  = JSFunctionDeclaration
+  = JSImportDeclaration
+  | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
 
 
 export const enum JSDeclarationModifiers {
   IsExported = 1,}
+
+export type JSImportBinding
+  = JSImportStarBinding
+  | JSImportAsBinding
+
+
+export interface JSImportStarBinding extends SyntaxBase {
+  kind: SyntaxKind.JSImportStarBinding;
+  local: JSIdentifier;
+}
+
+export interface JSImportAsBinding extends SyntaxBase {
+  kind: SyntaxKind.JSImportAsBinding;
+  remote: JSIdentifier;
+  local: JSIdentifier | null;
+}
+
+export interface JSImportDeclaration extends SyntaxBase {
+  kind: SyntaxKind.JSImportDeclaration;
+  bindings: JSImportBinding[];
+  filename: JSString;
+}
 
 export interface JSFunctionDeclaration extends SyntaxBase {
   kind: SyntaxKind.JSFunctionDeclaration;
@@ -919,9 +1073,19 @@ export type BoltSyntax
 export type JSSyntax
   = JSOperator
   | JSIdentifier
+  | JSString
+  | JSFromKeyword
   | JSReturnKeyword
   | JSTryKeyword
   | JSCatchKeyword
+  | JSImportKeyword
+  | JSAsKeyword
+  | JSConstKeyword
+  | JSLetKeyword
+  | JSExportKeyword
+  | JSFunctionKeyword
+  | JSWhileKeyword
+  | JSForKeyword
   | JSCloseBrace
   | JSCloseBracket
   | JSCloseParen
@@ -932,6 +1096,17 @@ export type JSSyntax
   | JSComma
   | JSDot
   | JSDotDotDot
+  | JSMulOp
+  | JSAddOp
+  | JSDivOp
+  | JSSubOp
+  | JSLtOp
+  | JSGtOp
+  | JSBOrOp
+  | JSBXorOp
+  | JSBAndOp
+  | JSBNotOp
+  | JSNotOp
   | JSBindPattern
   | JSConstantExpression
   | JSMemberExpression
@@ -945,6 +1120,9 @@ export type JSSyntax
   | JSExpressionStatement
   | JSConditionalStatement
   | JSParameter
+  | JSImportStarBinding
+  | JSImportAsBinding
+  | JSImportDeclaration
   | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
@@ -1026,9 +1204,19 @@ export type Syntax
   | BoltRecordDeclaration
   | JSOperator
   | JSIdentifier
+  | JSString
+  | JSFromKeyword
   | JSReturnKeyword
   | JSTryKeyword
   | JSCatchKeyword
+  | JSImportKeyword
+  | JSAsKeyword
+  | JSConstKeyword
+  | JSLetKeyword
+  | JSExportKeyword
+  | JSFunctionKeyword
+  | JSWhileKeyword
+  | JSForKeyword
   | JSCloseBrace
   | JSCloseBracket
   | JSCloseParen
@@ -1039,6 +1227,17 @@ export type Syntax
   | JSComma
   | JSDot
   | JSDotDotDot
+  | JSMulOp
+  | JSAddOp
+  | JSDivOp
+  | JSSubOp
+  | JSLtOp
+  | JSGtOp
+  | JSBOrOp
+  | JSBXorOp
+  | JSBAndOp
+  | JSBNotOp
+  | JSNotOp
   | JSBindPattern
   | JSConstantExpression
   | JSMemberExpression
@@ -1052,6 +1251,9 @@ export type Syntax
   | JSExpressionStatement
   | JSConditionalStatement
   | JSParameter
+  | JSImportStarBinding
+  | JSImportAsBinding
+  | JSImportDeclaration
   | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
@@ -1134,9 +1336,19 @@ export function createBoltRecordDeclarationField(name: BoltIdentifier, type: Bol
 export function createBoltRecordDeclaration(modifiers: BoltDeclarationModifiers, name: BoltQualName, typeParms: BoltTypeParameter[] | null, fields: BoltRecordDeclarationField[], span?: TextSpan | null): BoltRecordDeclaration;
 export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;
 export function createJSIdentifier(text: string, span?: TextSpan | null): JSIdentifier;
+export function createJSString(value: string, span?: TextSpan | null): JSString;
+export function createJSFromKeyword(span?: TextSpan | null): JSFromKeyword;
 export function createJSReturnKeyword(span?: TextSpan | null): JSReturnKeyword;
 export function createJSTryKeyword(span?: TextSpan | null): JSTryKeyword;
 export function createJSCatchKeyword(span?: TextSpan | null): JSCatchKeyword;
+export function createJSImportKeyword(span?: TextSpan | null): JSImportKeyword;
+export function createJSAsKeyword(span?: TextSpan | null): JSAsKeyword;
+export function createJSConstKeyword(span?: TextSpan | null): JSConstKeyword;
+export function createJSLetKeyword(span?: TextSpan | null): JSLetKeyword;
+export function createJSExportKeyword(span?: TextSpan | null): JSExportKeyword;
+export function createJSFunctionKeyword(span?: TextSpan | null): JSFunctionKeyword;
+export function createJSWhileKeyword(span?: TextSpan | null): JSWhileKeyword;
+export function createJSForKeyword(span?: TextSpan | null): JSForKeyword;
 export function createJSCloseBrace(span?: TextSpan | null): JSCloseBrace;
 export function createJSCloseBracket(span?: TextSpan | null): JSCloseBracket;
 export function createJSCloseParen(span?: TextSpan | null): JSCloseParen;
@@ -1147,6 +1359,17 @@ export function createJSSemi(span?: TextSpan | null): JSSemi;
 export function createJSComma(span?: TextSpan | null): JSComma;
 export function createJSDot(span?: TextSpan | null): JSDot;
 export function createJSDotDotDot(span?: TextSpan | null): JSDotDotDot;
+export function createJSMulOp(span?: TextSpan | null): JSMulOp;
+export function createJSAddOp(span?: TextSpan | null): JSAddOp;
+export function createJSDivOp(span?: TextSpan | null): JSDivOp;
+export function createJSSubOp(span?: TextSpan | null): JSSubOp;
+export function createJSLtOp(span?: TextSpan | null): JSLtOp;
+export function createJSGtOp(span?: TextSpan | null): JSGtOp;
+export function createJSBOrOp(span?: TextSpan | null): JSBOrOp;
+export function createJSBXorOp(span?: TextSpan | null): JSBXorOp;
+export function createJSBAndOp(span?: TextSpan | null): JSBAndOp;
+export function createJSBNotOp(span?: TextSpan | null): JSBNotOp;
+export function createJSNotOp(span?: TextSpan | null): JSNotOp;
 export function createJSBindPattern(name: JSIdentifier, span?: TextSpan | null): JSBindPattern;
 export function createJSConstantExpression(value: BoltValue, span?: TextSpan | null): JSConstantExpression;
 export function createJSMemberExpression(value: JSExpression, property: JSIdentifier, span?: TextSpan | null): JSMemberExpression;
@@ -1160,6 +1383,9 @@ export function createJSReferenceExpression(name: string, span?: TextSpan | null
 export function createJSExpressionStatement(expression: JSExpression, span?: TextSpan | null): JSExpressionStatement;
 export function createJSConditionalStatement(test: JSExpression, consequent: JSStatement[], alternate: JSStatement[], span?: TextSpan | null): JSConditionalStatement;
 export function createJSParameter(index: number, bindings: JSPattern, defaultValue: JSExpression | null, span?: TextSpan | null): JSParameter;
+export function createJSImportStarBinding(local: JSIdentifier, span?: TextSpan | null): JSImportStarBinding;
+export function createJSImportAsBinding(remote: JSIdentifier, local: JSIdentifier | null, span?: TextSpan | null): JSImportAsBinding;
+export function createJSImportDeclaration(bindings: JSImportBinding[], filename: JSString, span?: TextSpan | null): JSImportDeclaration;
 export function createJSFunctionDeclaration(modifiers: JSDeclarationModifiers, name: JSIdentifier, params: JSParameter[], body: JSStatement[], span?: TextSpan | null): JSFunctionDeclaration;
 export function createJSArrowFunctionDeclaration(name: JSIdentifier, params: JSParameter[], body: JSExpression, span?: TextSpan | null): JSArrowFunctionDeclaration;
 export function createJSLetDeclaration(bindings: JSPattern, value: JSExpression | null, span?: TextSpan | null): JSLetDeclaration;
@@ -1251,9 +1477,19 @@ export function isBoltSourceElement(value: any): value is BoltSourceElement;
 export function isJSToken(value: any): value is JSToken;
 export function isJSOperator(value: any): value is JSOperator;
 export function isJSIdentifier(value: any): value is JSIdentifier;
+export function isJSString(value: any): value is JSString;
+export function isJSFromKeyword(value: any): value is JSFromKeyword;
 export function isJSReturnKeyword(value: any): value is JSReturnKeyword;
 export function isJSTryKeyword(value: any): value is JSTryKeyword;
 export function isJSCatchKeyword(value: any): value is JSCatchKeyword;
+export function isJSImportKeyword(value: any): value is JSImportKeyword;
+export function isJSAsKeyword(value: any): value is JSAsKeyword;
+export function isJSConstKeyword(value: any): value is JSConstKeyword;
+export function isJSLetKeyword(value: any): value is JSLetKeyword;
+export function isJSExportKeyword(value: any): value is JSExportKeyword;
+export function isJSFunctionKeyword(value: any): value is JSFunctionKeyword;
+export function isJSWhileKeyword(value: any): value is JSWhileKeyword;
+export function isJSForKeyword(value: any): value is JSForKeyword;
 export function isJSCloseBrace(value: any): value is JSCloseBrace;
 export function isJSCloseBracket(value: any): value is JSCloseBracket;
 export function isJSCloseParen(value: any): value is JSCloseParen;
@@ -1264,6 +1500,17 @@ export function isJSSemi(value: any): value is JSSemi;
 export function isJSComma(value: any): value is JSComma;
 export function isJSDot(value: any): value is JSDot;
 export function isJSDotDotDot(value: any): value is JSDotDotDot;
+export function isJSMulOp(value: any): value is JSMulOp;
+export function isJSAddOp(value: any): value is JSAddOp;
+export function isJSDivOp(value: any): value is JSDivOp;
+export function isJSSubOp(value: any): value is JSSubOp;
+export function isJSLtOp(value: any): value is JSLtOp;
+export function isJSGtOp(value: any): value is JSGtOp;
+export function isJSBOrOp(value: any): value is JSBOrOp;
+export function isJSBXorOp(value: any): value is JSBXorOp;
+export function isJSBAndOp(value: any): value is JSBAndOp;
+export function isJSBNotOp(value: any): value is JSBNotOp;
+export function isJSNotOp(value: any): value is JSNotOp;
 export function isJSPattern(value: any): value is JSPattern;
 export function isJSBindPattern(value: any): value is JSBindPattern;
 export function isJSExpression(value: any): value is JSExpression;
@@ -1282,6 +1529,10 @@ export function isJSExpressionStatement(value: any): value is JSExpressionStatem
 export function isJSConditionalStatement(value: any): value is JSConditionalStatement;
 export function isJSParameter(value: any): value is JSParameter;
 export function isJSDeclaration(value: any): value is JSDeclaration;
+export function isJSImportBinding(value: any): value is JSImportBinding;
+export function isJSImportStarBinding(value: any): value is JSImportStarBinding;
+export function isJSImportAsBinding(value: any): value is JSImportAsBinding;
+export function isJSImportDeclaration(value: any): value is JSImportDeclaration;
 export function isJSFunctionDeclaration(value: any): value is JSFunctionDeclaration;
 export function isJSArrowFunctionDeclaration(value: any): value is JSArrowFunctionDeclaration;
 export function isJSLetDeclaration(value: any): value is JSLetDeclaration;
