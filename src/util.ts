@@ -468,8 +468,9 @@ export function format(message: string, data: MapLike<FormatArg>) {
       if (ch === '}') {
         out += data[name]!.toString();
         reset();
+      } else {
+        name += ch;
       }
-      name += ch
     } else {
       if (ch === '{') {
         insideParam = true;

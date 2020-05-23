@@ -80,7 +80,7 @@ node BoltSourceFile {
 }
 
 node BoltQualName {
-  modulePath: Vec<BoltIdentifier>,
+  modulePath: Option<Vec<BoltIdentifier>>,
   name: BoltSymbol, 
 }
 
@@ -166,7 +166,7 @@ node BoltCaseExpression > BoltExpression {
 }
 
 node BoltBlockExpression > BoltExpression {
-  statements: Vec<BoltStatement>,
+  elements: Vec<BoltFunctionBodyElement>,
 }
 
 node BoltConstantExpression > BoltExpression {
@@ -195,6 +195,8 @@ node BoltParameter {
 }
 
 node BoltDeclaration > BoltSourceElement;
+
+node BoltTypeDeclaration > BoltSourceElement;
 
 enum BoltDeclarationModifiers {
   Mutable   = 0x1,
@@ -238,7 +240,7 @@ node BoltImportDeclaration > BoltDeclaration {
   symbols: Vec<BoltImportSymbol>,
 }
 
-node BoltTraitDeclaration > BoltDeclaration {
+node BoltTraitDeclaration > BoltDeclaration, BoltTypeDeclaration {
   modifiers: BoltDeclarationModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
@@ -253,7 +255,7 @@ node BoltImplDeclaration > BoltDeclaration {
   elements: Vec<BoltDeclaration>,
 }
 
-node BoltTypeAliasDeclaration > BoltDeclaration {
+node BoltTypeAliasDeclaration > BoltDeclaration, BoltTypeDeclaration {
   modifiers: BoltDeclarationModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
@@ -267,9 +269,9 @@ node BoltRecordField > BoltRecordMember {
   type: BoltTypeExpression,
 }
 
-node BoltRecordDeclaration > BoltDeclaration {
+node BoltRecordDeclaration > BoltDeclaration, BoltTypeDeclaration {
   modifiers: BoltDeclarationModifiers,
-  name: BoltQualName,
+  name: BoltIdentifier,
   typeParms: Option<Vec<BoltTypeParameter>>,
   members: Option<Vec<BoltRecordMember>>,
 }

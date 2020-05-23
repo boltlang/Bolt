@@ -32,6 +32,10 @@ export function isOpaqueType(value: any): value is OpaqueType {
   return value.kind === TypeKind.OpaqueType;
 }
 
+export function createOpaqueType(): OpaqueType {
+  return new OpaqueType();
+}
+
 export class AnyType extends TypeBase {
   kind: TypeKind.AnyType = TypeKind.AnyType;
 }
