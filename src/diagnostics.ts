@@ -55,7 +55,7 @@ export class DiagnosticPrinter {
         }
       }
       out += '\n'
-      out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}: `);
+      out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}:${span.start.column}: `);
     }
     switch (diagnostic.severity) {
       case 'error':
