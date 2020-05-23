@@ -142,7 +142,6 @@ export class TypeChecker {
               node: arg,
             });
           }
-
         }
 
       }
@@ -159,7 +158,7 @@ export class TypeChecker {
     return this.getTypeOfNode(sym.declarations[0]);
   }
 
-  @memoize
+  @memoize(node => node.id)
   private getTypeOfNode(node: BoltSyntax): Type {
     switch (node.kind) {
       case SyntaxKind.BoltReferenceTypeExpression:
@@ -193,8 +192,8 @@ export class TypeChecker {
           type = this.resolveType('String', node)!;
         } else if (typeof node.value === 'boolean') {
           type = this.resolveType('bool', node)!;
-        } else if (typeof node.value === 'number') {
-          type = this.resolveType('int32', node)!;
+        } else if (typeof node.value === 'bigint') {
+          type = this.resolveType('i32', node)!;
         } else {
           throw new Error(`Could not derive type of constant expression.`);
         }

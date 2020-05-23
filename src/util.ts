@@ -123,22 +123,26 @@ class DeepMap {
 
 }
 
-export function memoize(target: any, key: PropertyKey) {
-  const origMethod = target[key];
-  target[key] = function wrapper(...args: any[]) {
-    if (this.__MEMOIZE_CACHE === undefined) {
-      this.__MEMOIZE_CACHE = Object.create(null);
+export function memoize(hasher: (...args: any[]) => string) {
+  return function (target: any, key: PropertyKey) {
+    const origMethod = target[key];
+    target[key] = function wrapper(...args: any[]) {
+      if (this.__MEMOIZE_CACHE === undefined) {
+        this.__MEMOIZE_CACHE = Object.create(null);
+      }
+      if (this.__MEMOIZE_CACHE[key] === undefined) {
+        this.__MEMOIZE_CACHE[key] = Object.create(null);
+      }
+      const hashed = hasher(...args);
+      const cache = this.__MEMOIZE_CACHE[key];
+      if (hashed in cache) {
+        return cache[hashed];
+      }
+      const result = origMethod.apply(this, args);
+      cache[hashed] = result;
+      return result;
     }
-    if (this.__MEMOIZE_CACHE[key] === undefined) {
-      this.__MEMOIZE_CACHE[key] = new DeepMap();
-    }
-    const cache = this.__MEMOIZE_CACHE[key];
-    if (cache.has(args)) {
-      return cache.get(args);
-    }
-    const result = origMethod.apply(this, args);
-    cache.set(args, result);
-    return result;
+    return target;
   }
 }
 
