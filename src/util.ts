@@ -8,6 +8,12 @@ import { TextFile, TextSpan, TextPos } from "./text"
 import { Scanner } from "./scanner"
 import { kindToString, Syntax, BoltQualName, BoltDeclaration, BoltDeclarationModifiers, createEndOfFile, SyntaxKind, isBoltPunctuated } from "./ast"
 
+export function assert(test: boolean): void {
+  if (!test) {
+    throw new Error(`Invariant violation: an internal sanity check failed.`);
+  }
+}
+
 export function createTokenStream(node: Syntax) {
   if (isBoltPunctuated(node)) {
     const origPos = node.span!.start;
@@ -50,6 +56,12 @@ export class FastStringMap<K extends PropertyKey, V> {
       throw new Error(`No value found for key '${key}'.`);
     }
     return this.mapping[key];
+  }
+
+  public *values(): IterableIterator<V> {
+    for (const key of Object.keys(this.mapping)) {
+      yield this.mapping[key];
+    }
   }
 
   public set(key: K, value: V): void {

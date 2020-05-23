@@ -110,17 +110,22 @@ export function setParents(node: Syntax): void;
 
 export type SyntaxRange = [Syntax, Syntax];
 
-interface SyntaxBase {
-  kind: SyntaxKind;
-  parentNode: Syntax | null;
+interface SyntaxBase<K extends SyntaxKind> {
+  kind: K;
+  parentNode: ParentTypesOf<K> | null;
   span: TextSpan | null;
+  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
+  findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
 }
+
+export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
+
 `);
 
   for (const decl of decls) {
     if (decl.type === 'NodeDeclaration') {
       if (isLeafNode(decl.name)) {
-        dtsFile.write(`export interface ${decl.name} extends SyntaxBase {\n`)
+        dtsFile.write(`export interface ${decl.name} extends SyntaxBase<SyntaxKind.${decl.name}> {\n`)
         dtsFile.indent()
         dtsFile.write(`kind: SyntaxKind.${decl.name};\n`);
         for (const field of getAllFields(decl)) {
@@ -149,6 +154,19 @@ interface SyntaxBase {
       dtsFile.write('}\n\n');
     }
   }
+
+  //dtsFile.write('export type ResolveSyntaxKind<K extends SyntaxKind>\n');
+  //{
+    //let i = 0;
+    //for (const decl of leafNodes) {
+      //dtsFile.write(i === 0 ? '  =' : '  |');
+      //dtsFile.write(`  K extends SyntaxKind.${decl.name} ? ${decl.name}`);
+      //dtsFile.write(' :');
+      //dtsFile.write('\n');
+      //i++;
+    //}
+    //dtsFile.write('  never\n\n');
+  //}
 
   for (const langName of langNames) {
     dtsFile.write(`export type ${langName}Syntax\n`);

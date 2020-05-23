@@ -14,10 +14,11 @@ function isFactory(value: any): boolean {
 }
 
 export function inject(target: any, key: PropertyKey, index: number) {
-  //return function(target: any) {
-    // This is a no-op because adding the decorator
-    // is enough for TypeScript to emit metadata
-  //}
+  if (!Reflect.hasMetadata('di:paramindices', target)) {
+    Reflect.defineMetadata('di:paramindices', [], target)
+  }
+  const indices = Reflect.getMetadata('di:paramindices', target);
+  indices.push(index);
 }
 
 function describeFactory(factory: Factory<any>): string {
@@ -37,10 +38,6 @@ export class Container {
     }
   }
 
-  private canResolve(serviceId: ServiceID): boolean {
-    return this.singletons.has(serviceId);
-  }
-
   private resolve<T>(factory: Factory<T>): T;
   private resolve(serviceId: ServiceID): any {
     return this.singletons.get(serviceId);
@@ -49,12 +46,13 @@ export class Container {
   public createInstance<T>(factory: Factory<T>, ...args: any[]): T {
     const newArgs: any[] = [];
     const paramTypes = Reflect.getMetadata('design:paramtypes', factory);
+    const indices = Reflect.getMetadata('di:paramindices', factory);
     if (paramTypes === undefined) {
       return new factory(...args);
     }
     let i = 0;
     for (const paramType of paramTypes) {
-      if (this.canResolve(paramType)) {
+      if (indices.indexOf(i) !== -1) {
         newArgs.push(this.resolve(paramType));
       } else {
         if (i >= args.length) {

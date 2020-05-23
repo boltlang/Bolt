@@ -24,7 +24,7 @@ import {
   createBoltParameter,
   BoltBindPattern,
   createBoltRecordDeclaration,
-  createBoltRecordDeclarationField,
+  createBoltRecordField,
   createBoltImportDeclaration,
   BoltDeclarationModifiers,
   BoltStringLiteral,
@@ -37,7 +37,7 @@ import {
   createBoltVariableDeclaration,
   BoltReturnStatement,
   createBoltReturnStatement,
-  BoltRecordDeclarationField,
+  BoltRecordMember,
   BoltModule,
   createBoltModule,
   BoltTypeAliasDeclaration,
@@ -54,6 +54,10 @@ import {
   createBoltTraitDeclaration,
   createBoltImplDeclaration,
   BoltImplDeclaration,
+  BoltSourceFile,
+  BoltFunctionBodyElement,
+  createBoltSourceFile,
+  BoltRecordField,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -70,6 +74,11 @@ import {
 } from "./util"
 
 export type BoltTokenStream = Stream<BoltToken>;
+
+export function isModifierKeyword(kind: SyntaxKind) {
+  return kind === SyntaxKind.BoltPubKeyword
+      || kind === SyntaxKind.BoltForeignKeyword;
+}
 
 const KIND_EXPRESSION_T0 = [
   SyntaxKind.BoltStringLiteral,
@@ -525,36 +534,43 @@ export class Parser {
       t2 = tokens.peek();
     }
 
-    if (t2.kind !== SyntaxKind.BoltBraced) {
-      throw new ParseError(t2, [SyntaxKind.BoltBraced])
+    let members = null;
+
+    if (t2.kind !== SyntaxKind.BoltSemi) {
+
+      if (t2.kind !== SyntaxKind.BoltBraced) {
+        throw new ParseError(t2, [SyntaxKind.BoltBraced])
+      }
+
+      members = [];
+
+      tokens.get();
+      const innerTokens = createTokenStream(t2);
+
+      while (true) {
+        const t3 = innerTokens.peek();
+        if (t3.kind === SyntaxKind.EndOfFile) {
+          break;
+        }
+        assertToken(t3, SyntaxKind.BoltIdentifier);
+        innerTokens.get();
+        const name = t3 as BoltIdentifier;
+        const t4 = innerTokens.get();
+        assertToken(t4, SyntaxKind.BoltColon);
+        const type = this.parseTypeExpression(innerTokens);
+        const field = createBoltRecordField(name as BoltIdentifier, type);
+        const t5 = innerTokens.get();
+        if (t5.kind === SyntaxKind.EndOfFile) {
+          break;
+        }
+        assertToken(t5, SyntaxKind.BoltComma);
+        setOrigNodeRange(field, name, type);
+        members.push(field);
+      }
+
     }
 
-    let fields: BoltRecordDeclarationField[] = [];
-    tokens.get();
-    const innerTokens = createTokenStream(t2);
-
-    while (true) {
-      const t3 = innerTokens.peek();
-      if (t3.kind === SyntaxKind.EndOfFile) {
-        break;
-      }
-      assertToken(t3, SyntaxKind.BoltIdentifier);
-      innerTokens.get();
-      const name = t3 as BoltIdentifier;
-      const t4 = innerTokens.get();
-      assertToken(t4, SyntaxKind.BoltColon);
-      const type = this.parseTypeExpression(innerTokens);
-      const field = createBoltRecordDeclarationField(name as BoltIdentifier, type);
-      const t5 = innerTokens.get();
-      if (t5.kind === SyntaxKind.EndOfFile) {
-        break;
-      }
-      assertToken(t5, SyntaxKind.BoltComma);
-      setOrigNodeRange(field, name, type);
-      fields.push(field);
-    }
-
-    const node = createBoltRecordDeclaration(modifiers, name, typeParams, fields);
+    const node = createBoltRecordDeclaration(modifiers, name, typeParams, members);
     setOrigNodeRange(node, firstToken, t2);
     return node;
   }
@@ -594,7 +610,7 @@ export class Parser {
     if (t1.kind !== SyntaxKind.BoltBraced) {
       throw new ParseError(t1, [SyntaxKind.BoltBraced])
     }
-    const sentences = this.parseSourceElementList(createTokenStream(t1));
+    const sentences = this.parseSourceElements(createTokenStream(t1));
 
     const node = createBoltModule(modifiers, name, sentences);
     setOrigNodeRange(node, firstToken, t1);
@@ -816,7 +832,7 @@ export class Parser {
     }
     const t3 = tokens.get();
     assertToken(t3, SyntaxKind.BoltBraced);
-    const elements = this.parseSourceElementList(createTokenStream(t3));
+    const elements = this.parseSourceElements(createTokenStream(t3));
     const result = createBoltTraitDeclaration(modifiers, t1 as BoltIdentifier, typeParams, elements as BoltDeclaration[]);
     setOrigNodeRange(result, firstToken, t3);
     return result;
@@ -843,7 +859,7 @@ export class Parser {
     }
     const t4 = tokens.get();
     assertToken(t4, SyntaxKind.BoltBraced);
-    const elements = this.parseSourceElementList(createTokenStream(t4));
+    const elements = this.parseSourceElements(createTokenStream(t4));
     const result = createBoltImplDeclaration(modifiers, t1 as BoltIdentifier, typeExpr, typeParams, elements as BoltDeclaration[]);
     setOrigNodeRange(result, firstToken, t4);
     return result;
@@ -890,25 +906,69 @@ export class Parser {
       }
   }
 
+  private getFirstTokenAfterModifiers(tokens: BoltTokenStream): BoltToken {
+    let mustBeDecl = false;
+    let mustBeFunctionOrVariable = false;
+    let i = 1;
+    let t0 = tokens.peek(i);
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      mustBeDecl = true;
+      t0 = tokens.peek(++i);
+    }
+    if (t0.kind === SyntaxKind.BoltForeignKeyword) {
+      mustBeFunctionOrVariable = true;
+      i++;
+      t0 = tokens.peek(++i);
+    }
+    if (mustBeFunctionOrVariable 
+      && t0.kind !== SyntaxKind.BoltStructKeyword
+      && t0.kind !== SyntaxKind.BoltFnKeyword) {
+      throw new ParseError(t0, [SyntaxKind.BoltStructKeyword, SyntaxKind.BoltFnKeyword]);
+    }
+    if (mustBeDecl && KIND_DECLARATION_T0.indexOf(t0.kind) === -1) {
+      throw new ParseError(t0, KIND_DECLARATION_KEYWORD);
+    }
+    return t0;
+  }
+
   public parseSourceElement(tokens: BoltTokenStream): BoltSourceElement {
-    try {
-      return this.parseDeclaration(tokens)
-    } catch (e1) {
-      if (!(e1 instanceof ParseError)) {
-        throw e1;
-      }
-      try {
-        return this.parseStatement(tokens);
-      } catch (e2) {
-        if (!(e2 instanceof ParseError)) {
-          throw e2;
-        }
-        throw e1;
-      }
+    const t0 = this.getFirstTokenAfterModifiers(tokens);
+    if (KIND_STATEMENT_T0.indexOf(t0.kind) !== -1) {
+      return this.parseStatement(tokens);
+    }
+    return this.parseDeclaration(tokens)
+  }
+
+  public parseFunctionBodyElement(tokens: BoltTokenStream): BoltFunctionBodyElement {
+    const t0 = this.getFirstTokenAfterModifiers(tokens);
+    if (KIND_STATEMENT_T0.indexOf(t0.kind) !== -1) {
+      return this.parseStatement(tokens);
+    } else if (t0.kind === SyntaxKind.BoltLetKeyword) {
+      return this.parseVariableDeclaration(tokens); 
+    } else if (t0.kind === SyntaxKind.BoltFnKeyword) {
+      return this.parseFunctionDeclaration(tokens);
+    } else {
+      throw new ParseError(t0, [...KIND_STATEMENT_T0, SyntaxKind.BoltLetKeyword, SyntaxKind.BoltFnKeyword]);
     }
   }
 
-  public parseSourceElementList(tokens: BoltTokenStream): BoltSourceElement[] {
+  public parseFunctionBodyElements(tokens: BoltTokenStream): BoltFunctionBodyElement[] {
+    const elements: BoltFunctionBodyElement[] = []
+    while (true) {
+      const t0 = tokens.peek();
+      if (t0.kind === SyntaxKind.EndOfFile) {
+        break;
+      }
+      if (t0.kind === SyntaxKind.BoltSemi) {
+        tokens.get();
+        continue;
+      }
+      elements.push(this.parseFunctionBodyElement(tokens));
+    }
+    return elements
+  }
+
+  public parseSourceElements(tokens: BoltTokenStream): BoltSourceElement[] {
     const elements: BoltSourceElement[] = []
     while (true) {
       const t0 = tokens.peek();
@@ -983,5 +1043,155 @@ export class Parser {
 
   }
 
+  public parseSourceFile(tokens: BoltTokenStream): BoltSourceFile {
+    const elements = this.parseSourceElements(tokens);
+    const t1 = tokens.peek();
+    assertToken(t1, SyntaxKind.EndOfFile);
+    return createBoltSourceFile(
+      elements,
+      new TextSpan(t1.span!.file, new TextPos(0,1,1), t1.span!.end.clone())
+    );
+  }
+
+  private canParseExpression(tokens: BoltTokenStream): boolean {
+    // TODO
+    return false;
+  }
+
+  private canParseReturnStatement(tokens: BoltTokenStream): boolean {
+    const t0 = tokens.get();
+    if (t0.kind !== SyntaxKind.BoltReturnKeyword) {
+      return false;
+    }
+    const t1 = tokens.peek();
+    if (t1.kind === SyntaxKind.EndOfFile) {
+      return true;
+    }
+    return this.canParseExpression(tokens);
+  }
+
+  private canParseStatement(tokens: BoltTokenStream): boolean {
+    const t0 = tokens.peek();
+    switch (t0.kind) {
+      case SyntaxKind.BoltReturnKeyword:
+        return this.canParseReturnStatement(tokens);
+      case SyntaxKind.BoltLoopKeyword:
+        return this.canParseLoopStatement(tokens);
+      default:
+        return this.canParseExpression(tokens)
+    }
+  }
+
+  private canParseFunctionDeclaration(tokens: BoltTokenStream): boolean {
+    let t0 = tokens.peek();
+    if (t0.kind === SyntaxKind.BoltPubKeyword) {
+      tokens.get();
+      t0 = tokens.peek();
+    }
+    if (t0.kind === SyntaxKind.BoltForeignKeyword) {
+      tokens.get();
+      const t1 = tokens.get();
+      if (t1.kind !== SyntaxKind.BoltStringLiteral) {
+        return false;
+      }
+      t0 = tokens.peek();
+    }
+    // TODO
+    return true;
+  }
+
+  private canParseRecordDeclaration(tokens: BoltTokenStream): boolean {
+    // TODO
+    return true;
+  }
+
+  private canParseVariableDeclaration(tokens: BoltTokenStream): boolean {
+    // TODO
+    return true;
+  }
+
+  private canParseDeclaration(tokens: BoltTokenStream): boolean {
+    let i = 0;
+    let t0 = tokens.peek(i);
+    while (isModifierKeyword(t0.kind)) {
+      t0 = tokens.peek(++i);
+    }
+    switch (t0.kind) {
+      case SyntaxKind.BoltFnKeyword:
+        return this.canParseFunctionDeclaration(tokens);
+      case SyntaxKind.BoltStructKeyword:
+        return this.canParseRecordDeclaration(tokens);
+      default:
+        return false;
+    }
+  }
+
+  private canParseSourceElement(tokens: BoltTokenStream): boolean {
+    return this.canParseStatement(tokens)
+        || this.canParseDeclaration(tokens)
+  }
+
+  private canParseRecordMember(tokens: BoltTokenStream): boolean {
+    // TODO
+    return true;
+  }
+
+  private canParseFunctionBodyElement(tokens: BoltTokenStream): boolean {
+    return this.canParseFunctionDeclaration(tokens)
+        || this.canParseStatement(tokens)
+        || this.canParseVariableDeclaration(tokens);
+  }
+
+  private canParseRecordMembers(tokens: BoltTokenStream): boolean {
+    while (true) {
+      const t0 = tokens.peek();
+      if (t0.kind === SyntaxKind.EndOfFile) {
+        break;
+      }
+      if (!this.canParseRecordMember(tokens)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private canParseSourceElements(tokens: BoltTokenStream): boolean {
+    while (true) {
+      const t0 = tokens.peek();
+      if (t0.kind === SyntaxKind.EndOfFile) {
+        break;
+      }
+      if (!this.canParseSourceElement(tokens)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  private canParseFunctionBodyElements(tokens: BoltTokenStream): boolean {
+    while (true) {
+      const t0 = tokens.peek();
+      if (t0.kind === SyntaxKind.EndOfFile) {
+        break;
+      }
+      if (!this.canParseFunctionBodyElement(tokens)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+}
+
+import { Scanner } from "./scanner"
+import { TextFile, TextSpan, TextPos } from "./text"
+import * as fs from "fs"
+
+export function parseSourceFile(filepath: string): BoltSourceFile {
+  const file = new TextFile(filepath);
+  const contents = fs.readFileSync(file.origPath, 'utf8');
+  const scanner = new Scanner(file, contents)
+  const parser = new Parser();
+  return parser.parseSourceFile(scanner);
 }
 

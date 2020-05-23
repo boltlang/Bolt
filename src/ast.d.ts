@@ -39,30 +39,29 @@ export const enum SyntaxKind {
   BoltBracketed = 43,
   BoltSourceFile = 44,
   BoltQualName = 45,
-  BoltSentence = 46,
-  BoltReferenceTypeExpression = 48,
-  BoltTypeParameter = 49,
-  BoltBindPattern = 51,
-  BoltTypePattern = 52,
-  BoltExpressionPattern = 53,
-  BoltTuplePatternElement = 54,
-  BoltTuplePattern = 55,
-  BoltRecordPatternField = 56,
-  BoltRecordPattern = 57,
-  BoltReferenceExpression = 59,
-  BoltCallExpression = 60,
-  BoltYieldExpression = 61,
-  BoltMatchArm = 62,
-  BoltMatchExpression = 63,
-  BoltCase = 64,
-  BoltCaseExpression = 65,
-  BoltBlockExpression = 66,
-  BoltConstantExpression = 67,
-  BoltReturnStatement = 69,
-  BoltResumeStatement = 70,
-  BoltExpressionStatement = 71,
-  BoltParameter = 72,
-  BoltModule = 75,
+  BoltReferenceTypeExpression = 47,
+  BoltTypeParameter = 48,
+  BoltBindPattern = 50,
+  BoltTypePattern = 51,
+  BoltExpressionPattern = 52,
+  BoltTuplePatternElement = 53,
+  BoltTuplePattern = 54,
+  BoltRecordPatternField = 55,
+  BoltRecordPattern = 56,
+  BoltReferenceExpression = 58,
+  BoltCallExpression = 59,
+  BoltYieldExpression = 60,
+  BoltMatchArm = 61,
+  BoltMatchExpression = 62,
+  BoltCase = 63,
+  BoltCaseExpression = 64,
+  BoltBlockExpression = 65,
+  BoltConstantExpression = 66,
+  BoltReturnStatement = 68,
+  BoltResumeStatement = 69,
+  BoltExpressionStatement = 70,
+  BoltParameter = 71,
+  BoltModule = 74,
   BoltFunctionDeclaration = 76,
   BoltVariableDeclaration = 77,
   BoltPlainImportSymbol = 79,
@@ -70,70 +69,71 @@ export const enum SyntaxKind {
   BoltTraitDeclaration = 81,
   BoltImplDeclaration = 82,
   BoltTypeAliasDeclaration = 83,
-  BoltRecordDeclarationField = 84,
-  BoltRecordDeclaration = 85,
-  JSOperator = 89,
-  JSIdentifier = 90,
-  JSString = 91,
-  JSInteger = 92,
-  JSFromKeyword = 93,
-  JSReturnKeyword = 94,
-  JSTryKeyword = 95,
-  JSFinallyKeyword = 96,
-  JSCatchKeyword = 97,
-  JSImportKeyword = 98,
-  JSAsKeyword = 99,
-  JSConstKeyword = 100,
-  JSLetKeyword = 101,
-  JSExportKeyword = 102,
-  JSFunctionKeyword = 103,
-  JSWhileKeyword = 104,
-  JSForKeyword = 105,
-  JSCloseBrace = 106,
-  JSCloseBracket = 107,
-  JSCloseParen = 108,
-  JSOpenBrace = 109,
-  JSOpenBracket = 110,
-  JSOpenParen = 111,
-  JSSemi = 112,
-  JSComma = 113,
-  JSDot = 114,
-  JSDotDotDot = 115,
-  JSMulOp = 116,
-  JSAddOp = 117,
-  JSDivOp = 118,
-  JSSubOp = 119,
-  JSLtOp = 120,
-  JSGtOp = 121,
-  JSBOrOp = 122,
-  JSBXorOp = 123,
-  JSBAndOp = 124,
-  JSBNotOp = 125,
-  JSNotOp = 126,
-  JSBindPattern = 128,
-  JSConstantExpression = 130,
-  JSMemberExpression = 131,
-  JSCallExpression = 132,
-  JSBinaryExpression = 133,
-  JSUnaryExpression = 134,
-  JSNewExpression = 135,
-  JSSequenceExpression = 136,
-  JSConditionalExpression = 137,
-  JSLiteralExpression = 139,
-  JSReferenceExpression = 140,
-  JSCatchBlock = 143,
-  JSTryCatchStatement = 144,
-  JSExpressionStatement = 145,
-  JSConditionalStatement = 146,
-  JSReturnStatement = 147,
-  JSParameter = 148,
-  JSImportStarBinding = 152,
-  JSImportAsBinding = 153,
-  JSImportDeclaration = 154,
-  JSFunctionDeclaration = 155,
-  JSArrowFunctionDeclaration = 156,
-  JSLetDeclaration = 157,
-  JSSourceFile = 158,
+  BoltRecordField = 85,
+  BoltRecordDeclaration = 86,
+  BoltMacroCall = 88,
+  JSOperator = 91,
+  JSIdentifier = 92,
+  JSString = 93,
+  JSInteger = 94,
+  JSFromKeyword = 95,
+  JSReturnKeyword = 96,
+  JSTryKeyword = 97,
+  JSFinallyKeyword = 98,
+  JSCatchKeyword = 99,
+  JSImportKeyword = 100,
+  JSAsKeyword = 101,
+  JSConstKeyword = 102,
+  JSLetKeyword = 103,
+  JSExportKeyword = 104,
+  JSFunctionKeyword = 105,
+  JSWhileKeyword = 106,
+  JSForKeyword = 107,
+  JSCloseBrace = 108,
+  JSCloseBracket = 109,
+  JSCloseParen = 110,
+  JSOpenBrace = 111,
+  JSOpenBracket = 112,
+  JSOpenParen = 113,
+  JSSemi = 114,
+  JSComma = 115,
+  JSDot = 116,
+  JSDotDotDot = 117,
+  JSMulOp = 118,
+  JSAddOp = 119,
+  JSDivOp = 120,
+  JSSubOp = 121,
+  JSLtOp = 122,
+  JSGtOp = 123,
+  JSBOrOp = 124,
+  JSBXorOp = 125,
+  JSBAndOp = 126,
+  JSBNotOp = 127,
+  JSNotOp = 128,
+  JSBindPattern = 130,
+  JSConstantExpression = 132,
+  JSMemberExpression = 133,
+  JSCallExpression = 134,
+  JSBinaryExpression = 135,
+  JSUnaryExpression = 136,
+  JSNewExpression = 137,
+  JSSequenceExpression = 138,
+  JSConditionalExpression = 139,
+  JSLiteralExpression = 141,
+  JSReferenceExpression = 142,
+  JSCatchBlock = 145,
+  JSTryCatchStatement = 146,
+  JSExpressionStatement = 147,
+  JSConditionalStatement = 148,
+  JSReturnStatement = 149,
+  JSParameter = 150,
+  JSImportStarBinding = 154,
+  JSImportAsBinding = 155,
+  JSImportDeclaration = 156,
+  JSFunctionDeclaration = 157,
+  JSArrowFunctionDeclaration = 158,
+  JSLetDeclaration = 159,
+  JSSourceFile = 160,
 }
 
 
@@ -144,16 +144,21 @@ export function setParents(node: Syntax): void;
 
 export type SyntaxRange = [Syntax, Syntax];
 
-interface SyntaxBase {
-  kind: SyntaxKind;
-  parentNode: Syntax | null;
+interface SyntaxBase<K extends SyntaxKind> {
+  kind: K;
+  parentNode: ParentTypesOf<K> | null;
   span: TextSpan | null;
+  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
+  findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
 }
-export interface EndOfFile extends SyntaxBase {
+
+export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
+
+export interface EndOfFile extends SyntaxBase<SyntaxKind.EndOfFile> {
   kind: SyntaxKind.EndOfFile;
 }
 
-export interface FunctionBody extends SyntaxBase {
+export interface FunctionBody extends SyntaxBase<SyntaxKind.FunctionBody> {
   kind: SyntaxKind.FunctionBody;
 }
 
@@ -196,12 +201,12 @@ export type BoltToken
   | BoltBracketed
 
 
-export interface BoltStringLiteral extends SyntaxBase {
+export interface BoltStringLiteral extends SyntaxBase<SyntaxKind.BoltStringLiteral> {
   kind: SyntaxKind.BoltStringLiteral;
   value: string;
 }
 
-export interface BoltIntegerLiteral extends SyntaxBase {
+export interface BoltIntegerLiteral extends SyntaxBase<SyntaxKind.BoltIntegerLiteral> {
   kind: SyntaxKind.BoltIntegerLiteral;
   value: bigint;
 }
@@ -211,58 +216,58 @@ export type BoltSymbol
   | BoltOperator
 
 
-export interface BoltIdentifier extends SyntaxBase {
+export interface BoltIdentifier extends SyntaxBase<SyntaxKind.BoltIdentifier> {
   kind: SyntaxKind.BoltIdentifier;
   text: string;
 }
 
-export interface BoltOperator extends SyntaxBase {
+export interface BoltOperator extends SyntaxBase<SyntaxKind.BoltOperator> {
   kind: SyntaxKind.BoltOperator;
   text: string;
 }
 
-export interface BoltAssignment extends SyntaxBase {
+export interface BoltAssignment extends SyntaxBase<SyntaxKind.BoltAssignment> {
   kind: SyntaxKind.BoltAssignment;
   operator: string | null;
 }
 
-export interface BoltComma extends SyntaxBase {
+export interface BoltComma extends SyntaxBase<SyntaxKind.BoltComma> {
   kind: SyntaxKind.BoltComma;
 }
 
-export interface BoltSemi extends SyntaxBase {
+export interface BoltSemi extends SyntaxBase<SyntaxKind.BoltSemi> {
   kind: SyntaxKind.BoltSemi;
 }
 
-export interface BoltColon extends SyntaxBase {
+export interface BoltColon extends SyntaxBase<SyntaxKind.BoltColon> {
   kind: SyntaxKind.BoltColon;
 }
 
-export interface BoltDot extends SyntaxBase {
+export interface BoltDot extends SyntaxBase<SyntaxKind.BoltDot> {
   kind: SyntaxKind.BoltDot;
 }
 
-export interface BoltDotDot extends SyntaxBase {
+export interface BoltDotDot extends SyntaxBase<SyntaxKind.BoltDotDot> {
   kind: SyntaxKind.BoltDotDot;
 }
 
-export interface BoltRArrow extends SyntaxBase {
+export interface BoltRArrow extends SyntaxBase<SyntaxKind.BoltRArrow> {
   kind: SyntaxKind.BoltRArrow;
 }
 
-export interface BoltLArrow extends SyntaxBase {
+export interface BoltLArrow extends SyntaxBase<SyntaxKind.BoltLArrow> {
   kind: SyntaxKind.BoltLArrow;
 }
 
-export interface BoltEqSign extends SyntaxBase {
+export interface BoltEqSign extends SyntaxBase<SyntaxKind.BoltEqSign> {
   kind: SyntaxKind.BoltEqSign;
 }
 
-export interface BoltGtSign extends SyntaxBase {
+export interface BoltGtSign extends SyntaxBase<SyntaxKind.BoltGtSign> {
   kind: SyntaxKind.BoltGtSign;
 }
 
-export interface BoltLtSign extends SyntaxBase {
+export interface BoltLtSign extends SyntaxBase<SyntaxKind.BoltLtSign> {
   kind: SyntaxKind.BoltLtSign;
 }
 
@@ -286,71 +291,71 @@ export type BoltKeyword
   | BoltImplKeyword
 
 
-export interface BoltFnKeyword extends SyntaxBase {
+export interface BoltFnKeyword extends SyntaxBase<SyntaxKind.BoltFnKeyword> {
   kind: SyntaxKind.BoltFnKeyword;
 }
 
-export interface BoltForeignKeyword extends SyntaxBase {
+export interface BoltForeignKeyword extends SyntaxBase<SyntaxKind.BoltForeignKeyword> {
   kind: SyntaxKind.BoltForeignKeyword;
 }
 
-export interface BoltForKeyword extends SyntaxBase {
+export interface BoltForKeyword extends SyntaxBase<SyntaxKind.BoltForKeyword> {
   kind: SyntaxKind.BoltForKeyword;
 }
 
-export interface BoltLetKeyword extends SyntaxBase {
+export interface BoltLetKeyword extends SyntaxBase<SyntaxKind.BoltLetKeyword> {
   kind: SyntaxKind.BoltLetKeyword;
 }
 
-export interface BoltReturnKeyword extends SyntaxBase {
+export interface BoltReturnKeyword extends SyntaxBase<SyntaxKind.BoltReturnKeyword> {
   kind: SyntaxKind.BoltReturnKeyword;
 }
 
-export interface BoltLoopKeyword extends SyntaxBase {
+export interface BoltLoopKeyword extends SyntaxBase<SyntaxKind.BoltLoopKeyword> {
   kind: SyntaxKind.BoltLoopKeyword;
 }
 
-export interface BoltYieldKeyword extends SyntaxBase {
+export interface BoltYieldKeyword extends SyntaxBase<SyntaxKind.BoltYieldKeyword> {
   kind: SyntaxKind.BoltYieldKeyword;
 }
 
-export interface BoltMatchKeyword extends SyntaxBase {
+export interface BoltMatchKeyword extends SyntaxBase<SyntaxKind.BoltMatchKeyword> {
   kind: SyntaxKind.BoltMatchKeyword;
 }
 
-export interface BoltImportKeyword extends SyntaxBase {
+export interface BoltImportKeyword extends SyntaxBase<SyntaxKind.BoltImportKeyword> {
   kind: SyntaxKind.BoltImportKeyword;
 }
 
-export interface BoltPubKeyword extends SyntaxBase {
+export interface BoltPubKeyword extends SyntaxBase<SyntaxKind.BoltPubKeyword> {
   kind: SyntaxKind.BoltPubKeyword;
 }
 
-export interface BoltModKeyword extends SyntaxBase {
+export interface BoltModKeyword extends SyntaxBase<SyntaxKind.BoltModKeyword> {
   kind: SyntaxKind.BoltModKeyword;
 }
 
-export interface BoltMutKeyword extends SyntaxBase {
+export interface BoltMutKeyword extends SyntaxBase<SyntaxKind.BoltMutKeyword> {
   kind: SyntaxKind.BoltMutKeyword;
 }
 
-export interface BoltEnumKeyword extends SyntaxBase {
+export interface BoltEnumKeyword extends SyntaxBase<SyntaxKind.BoltEnumKeyword> {
   kind: SyntaxKind.BoltEnumKeyword;
 }
 
-export interface BoltStructKeyword extends SyntaxBase {
+export interface BoltStructKeyword extends SyntaxBase<SyntaxKind.BoltStructKeyword> {
   kind: SyntaxKind.BoltStructKeyword;
 }
 
-export interface BoltTypeKeyword extends SyntaxBase {
+export interface BoltTypeKeyword extends SyntaxBase<SyntaxKind.BoltTypeKeyword> {
   kind: SyntaxKind.BoltTypeKeyword;
 }
 
-export interface BoltTraitKeyword extends SyntaxBase {
+export interface BoltTraitKeyword extends SyntaxBase<SyntaxKind.BoltTraitKeyword> {
   kind: SyntaxKind.BoltTraitKeyword;
 }
 
-export interface BoltImplKeyword extends SyntaxBase {
+export interface BoltImplKeyword extends SyntaxBase<SyntaxKind.BoltImplKeyword> {
   kind: SyntaxKind.BoltImplKeyword;
 }
 
@@ -360,48 +365,43 @@ export type BoltPunctuated
   | BoltBracketed
 
 
-export interface BoltParenthesized extends SyntaxBase {
+export interface BoltParenthesized extends SyntaxBase<SyntaxKind.BoltParenthesized> {
   kind: SyntaxKind.BoltParenthesized;
   text: string;
 }
 
-export interface BoltBraced extends SyntaxBase {
+export interface BoltBraced extends SyntaxBase<SyntaxKind.BoltBraced> {
   kind: SyntaxKind.BoltBraced;
   text: string;
 }
 
-export interface BoltBracketed extends SyntaxBase {
+export interface BoltBracketed extends SyntaxBase<SyntaxKind.BoltBracketed> {
   kind: SyntaxKind.BoltBracketed;
   text: string;
 }
 
-export interface BoltSourceFile extends SyntaxBase {
+export interface BoltSourceFile extends SyntaxBase<SyntaxKind.BoltSourceFile> {
   kind: SyntaxKind.BoltSourceFile;
   elements: BoltSourceElement[];
 }
 
-export interface BoltQualName extends SyntaxBase {
+export interface BoltQualName extends SyntaxBase<SyntaxKind.BoltQualName> {
   kind: SyntaxKind.BoltQualName;
   modulePath: BoltIdentifier[];
   name: BoltSymbol;
-}
-
-export interface BoltSentence extends SyntaxBase {
-  kind: SyntaxKind.BoltSentence;
-  tokens: BoltToken[];
 }
 
 export type BoltTypeExpression
   = BoltReferenceTypeExpression
 
 
-export interface BoltReferenceTypeExpression extends SyntaxBase {
+export interface BoltReferenceTypeExpression extends SyntaxBase<SyntaxKind.BoltReferenceTypeExpression> {
   kind: SyntaxKind.BoltReferenceTypeExpression;
   name: BoltQualName;
   arguments: BoltTypeExpression[] | null;
 }
 
-export interface BoltTypeParameter extends SyntaxBase {
+export interface BoltTypeParameter extends SyntaxBase<SyntaxKind.BoltTypeParameter> {
   kind: SyntaxKind.BoltTypeParameter;
   index: number;
   name: BoltIdentifier;
@@ -416,40 +416,40 @@ export type BoltPattern
   | BoltRecordPattern
 
 
-export interface BoltBindPattern extends SyntaxBase {
+export interface BoltBindPattern extends SyntaxBase<SyntaxKind.BoltBindPattern> {
   kind: SyntaxKind.BoltBindPattern;
   name: BoltIdentifier;
 }
 
-export interface BoltTypePattern extends SyntaxBase {
+export interface BoltTypePattern extends SyntaxBase<SyntaxKind.BoltTypePattern> {
   kind: SyntaxKind.BoltTypePattern;
   type: BoltTypeExpression;
   nestedPattern: BoltPattern;
 }
 
-export interface BoltExpressionPattern extends SyntaxBase {
+export interface BoltExpressionPattern extends SyntaxBase<SyntaxKind.BoltExpressionPattern> {
   kind: SyntaxKind.BoltExpressionPattern;
   expression: BoltExpression;
 }
 
-export interface BoltTuplePatternElement extends SyntaxBase {
+export interface BoltTuplePatternElement extends SyntaxBase<SyntaxKind.BoltTuplePatternElement> {
   kind: SyntaxKind.BoltTuplePatternElement;
   index: number;
   pattern: BoltPattern;
 }
 
-export interface BoltTuplePattern extends SyntaxBase {
+export interface BoltTuplePattern extends SyntaxBase<SyntaxKind.BoltTuplePattern> {
   kind: SyntaxKind.BoltTuplePattern;
   elements: BoltTuplePatternElement[];
 }
 
-export interface BoltRecordPatternField extends SyntaxBase {
+export interface BoltRecordPatternField extends SyntaxBase<SyntaxKind.BoltRecordPatternField> {
   kind: SyntaxKind.BoltRecordPatternField;
   name: BoltIdentifier;
   pattern: BoltPattern;
 }
 
-export interface BoltRecordPattern extends SyntaxBase {
+export interface BoltRecordPattern extends SyntaxBase<SyntaxKind.BoltRecordPattern> {
   kind: SyntaxKind.BoltRecordPattern;
   name: BoltTypeExpression;
   fields: BoltRecordPatternField[];
@@ -463,53 +463,54 @@ export type BoltExpression
   | BoltCaseExpression
   | BoltBlockExpression
   | BoltConstantExpression
+  | BoltMacroCall
 
 
-export interface BoltReferenceExpression extends SyntaxBase {
+export interface BoltReferenceExpression extends SyntaxBase<SyntaxKind.BoltReferenceExpression> {
   kind: SyntaxKind.BoltReferenceExpression;
   name: BoltQualName;
 }
 
-export interface BoltCallExpression extends SyntaxBase {
+export interface BoltCallExpression extends SyntaxBase<SyntaxKind.BoltCallExpression> {
   kind: SyntaxKind.BoltCallExpression;
   operator: BoltExpression;
   operands: BoltExpression[];
 }
 
-export interface BoltYieldExpression extends SyntaxBase {
+export interface BoltYieldExpression extends SyntaxBase<SyntaxKind.BoltYieldExpression> {
   kind: SyntaxKind.BoltYieldExpression;
   value: BoltExpression;
 }
 
-export interface BoltMatchArm extends SyntaxBase {
+export interface BoltMatchArm extends SyntaxBase<SyntaxKind.BoltMatchArm> {
   kind: SyntaxKind.BoltMatchArm;
   pattern: BoltPattern;
   body: BoltExpression;
 }
 
-export interface BoltMatchExpression extends SyntaxBase {
+export interface BoltMatchExpression extends SyntaxBase<SyntaxKind.BoltMatchExpression> {
   kind: SyntaxKind.BoltMatchExpression;
   value: BoltExpression;
   arms: BoltMatchArm[];
 }
 
-export interface BoltCase extends SyntaxBase {
+export interface BoltCase extends SyntaxBase<SyntaxKind.BoltCase> {
   kind: SyntaxKind.BoltCase;
   test: BoltExpression;
   result: BoltExpression;
 }
 
-export interface BoltCaseExpression extends SyntaxBase {
+export interface BoltCaseExpression extends SyntaxBase<SyntaxKind.BoltCaseExpression> {
   kind: SyntaxKind.BoltCaseExpression;
   cases: BoltCase[];
 }
 
-export interface BoltBlockExpression extends SyntaxBase {
+export interface BoltBlockExpression extends SyntaxBase<SyntaxKind.BoltBlockExpression> {
   kind: SyntaxKind.BoltBlockExpression;
   statements: BoltStatement[];
 }
 
-export interface BoltConstantExpression extends SyntaxBase {
+export interface BoltConstantExpression extends SyntaxBase<SyntaxKind.BoltConstantExpression> {
   kind: SyntaxKind.BoltConstantExpression;
   value: BoltValue;
 }
@@ -518,24 +519,25 @@ export type BoltStatement
   = BoltReturnStatement
   | BoltResumeStatement
   | BoltExpressionStatement
+  | BoltMacroCall
 
 
-export interface BoltReturnStatement extends SyntaxBase {
+export interface BoltReturnStatement extends SyntaxBase<SyntaxKind.BoltReturnStatement> {
   kind: SyntaxKind.BoltReturnStatement;
   value: BoltExpression | null;
 }
 
-export interface BoltResumeStatement extends SyntaxBase {
+export interface BoltResumeStatement extends SyntaxBase<SyntaxKind.BoltResumeStatement> {
   kind: SyntaxKind.BoltResumeStatement;
   value: BoltExpression;
 }
 
-export interface BoltExpressionStatement extends SyntaxBase {
+export interface BoltExpressionStatement extends SyntaxBase<SyntaxKind.BoltExpressionStatement> {
   kind: SyntaxKind.BoltExpressionStatement;
   expression: BoltExpression;
 }
 
-export interface BoltParameter extends SyntaxBase {
+export interface BoltParameter extends SyntaxBase<SyntaxKind.BoltParameter> {
   kind: SyntaxKind.BoltParameter;
   index: number;
   bindings: BoltPattern;
@@ -552,19 +554,29 @@ export type BoltDeclaration
   | BoltImplDeclaration
   | BoltTypeAliasDeclaration
   | BoltRecordDeclaration
+  | BoltMacroCall
 
 
 export const enum BoltDeclarationModifiers {
   Mutable = 1,Public = 2,IsType = 4,IsForeign = 8,}
 
-export interface BoltModule extends SyntaxBase {
+export interface BoltModule extends SyntaxBase<SyntaxKind.BoltModule> {
   kind: SyntaxKind.BoltModule;
   modifiers: BoltDeclarationModifiers;
   name: BoltQualName;
   elements: BoltSourceElement[];
 }
 
-export interface BoltFunctionDeclaration extends SyntaxBase {
+export type BoltFunctionBodyElement
+  = BoltReturnStatement
+  | BoltResumeStatement
+  | BoltExpressionStatement
+  | BoltMacroCall
+  | BoltFunctionDeclaration
+  | BoltVariableDeclaration
+
+
+export interface BoltFunctionDeclaration extends SyntaxBase<SyntaxKind.BoltFunctionDeclaration> {
   kind: SyntaxKind.BoltFunctionDeclaration;
   modifiers: BoltDeclarationModifiers;
   target: string;
@@ -574,7 +586,7 @@ export interface BoltFunctionDeclaration extends SyntaxBase {
   body: BoltStatement[];
 }
 
-export interface BoltVariableDeclaration extends SyntaxBase {
+export interface BoltVariableDeclaration extends SyntaxBase<SyntaxKind.BoltVariableDeclaration> {
   kind: SyntaxKind.BoltVariableDeclaration;
   modifiers: BoltDeclarationModifiers;
   bindings: BoltPattern;
@@ -586,18 +598,18 @@ export type BoltImportSymbol
   = BoltPlainImportSymbol
 
 
-export interface BoltPlainImportSymbol extends SyntaxBase {
+export interface BoltPlainImportSymbol extends SyntaxBase<SyntaxKind.BoltPlainImportSymbol> {
   kind: SyntaxKind.BoltPlainImportSymbol;
   name: BoltQualName;
 }
 
-export interface BoltImportDeclaration extends SyntaxBase {
+export interface BoltImportDeclaration extends SyntaxBase<SyntaxKind.BoltImportDeclaration> {
   kind: SyntaxKind.BoltImportDeclaration;
   file: string;
   symbols: BoltImportSymbol[];
 }
 
-export interface BoltTraitDeclaration extends SyntaxBase {
+export interface BoltTraitDeclaration extends SyntaxBase<SyntaxKind.BoltTraitDeclaration> {
   kind: SyntaxKind.BoltTraitDeclaration;
   modifiers: BoltDeclarationModifiers;
   name: BoltIdentifier;
@@ -605,7 +617,7 @@ export interface BoltTraitDeclaration extends SyntaxBase {
   elements: BoltDeclaration[];
 }
 
-export interface BoltImplDeclaration extends SyntaxBase {
+export interface BoltImplDeclaration extends SyntaxBase<SyntaxKind.BoltImplDeclaration> {
   kind: SyntaxKind.BoltImplDeclaration;
   modifiers: BoltDeclarationModifiers;
   name: BoltIdentifier;
@@ -614,7 +626,7 @@ export interface BoltImplDeclaration extends SyntaxBase {
   elements: BoltDeclaration[];
 }
 
-export interface BoltTypeAliasDeclaration extends SyntaxBase {
+export interface BoltTypeAliasDeclaration extends SyntaxBase<SyntaxKind.BoltTypeAliasDeclaration> {
   kind: SyntaxKind.BoltTypeAliasDeclaration;
   modifiers: BoltDeclarationModifiers;
   name: BoltIdentifier;
@@ -622,25 +634,30 @@ export interface BoltTypeAliasDeclaration extends SyntaxBase {
   typeExpr: BoltTypeExpression;
 }
 
-export interface BoltRecordDeclarationField extends SyntaxBase {
-  kind: SyntaxKind.BoltRecordDeclarationField;
+export type BoltRecordMember
+  = BoltRecordField
+  | BoltMacroCall
+
+
+export interface BoltRecordField extends SyntaxBase<SyntaxKind.BoltRecordField> {
+  kind: SyntaxKind.BoltRecordField;
   name: BoltIdentifier;
   type: BoltTypeExpression;
 }
 
-export interface BoltRecordDeclaration extends SyntaxBase {
+export interface BoltRecordDeclaration extends SyntaxBase<SyntaxKind.BoltRecordDeclaration> {
   kind: SyntaxKind.BoltRecordDeclaration;
   modifiers: BoltDeclarationModifiers;
   name: BoltQualName;
   typeParms: BoltTypeParameter[] | null;
-  fields: BoltRecordDeclarationField[];
+  members: BoltRecordMember[] | null;
 }
 
 export type BoltSourceElement
-  = BoltSentence
-  | BoltReturnStatement
+  = BoltReturnStatement
   | BoltResumeStatement
   | BoltExpressionStatement
+  | BoltMacroCall
   | BoltModule
   | BoltFunctionDeclaration
   | BoltVariableDeclaration
@@ -649,7 +666,14 @@ export type BoltSourceElement
   | BoltImplDeclaration
   | BoltTypeAliasDeclaration
   | BoltRecordDeclaration
+  | BoltMacroCall
 
+
+export interface BoltMacroCall extends SyntaxBase<SyntaxKind.BoltMacroCall> {
+  kind: SyntaxKind.BoltMacroCall;
+  name: BoltIdentifier;
+  text: string;
+}
 
 export type JSToken
   = EndOfFile
@@ -693,159 +717,159 @@ export type JSToken
   | JSNotOp
 
 
-export interface JSOperator extends SyntaxBase {
+export interface JSOperator extends SyntaxBase<SyntaxKind.JSOperator> {
   kind: SyntaxKind.JSOperator;
   text: string;
 }
 
-export interface JSIdentifier extends SyntaxBase {
+export interface JSIdentifier extends SyntaxBase<SyntaxKind.JSIdentifier> {
   kind: SyntaxKind.JSIdentifier;
   text: string;
 }
 
-export interface JSString extends SyntaxBase {
+export interface JSString extends SyntaxBase<SyntaxKind.JSString> {
   kind: SyntaxKind.JSString;
   value: string;
 }
 
-export interface JSInteger extends SyntaxBase {
+export interface JSInteger extends SyntaxBase<SyntaxKind.JSInteger> {
   kind: SyntaxKind.JSInteger;
   value: bigint;
 }
 
-export interface JSFromKeyword extends SyntaxBase {
+export interface JSFromKeyword extends SyntaxBase<SyntaxKind.JSFromKeyword> {
   kind: SyntaxKind.JSFromKeyword;
 }
 
-export interface JSReturnKeyword extends SyntaxBase {
+export interface JSReturnKeyword extends SyntaxBase<SyntaxKind.JSReturnKeyword> {
   kind: SyntaxKind.JSReturnKeyword;
 }
 
-export interface JSTryKeyword extends SyntaxBase {
+export interface JSTryKeyword extends SyntaxBase<SyntaxKind.JSTryKeyword> {
   kind: SyntaxKind.JSTryKeyword;
 }
 
-export interface JSFinallyKeyword extends SyntaxBase {
+export interface JSFinallyKeyword extends SyntaxBase<SyntaxKind.JSFinallyKeyword> {
   kind: SyntaxKind.JSFinallyKeyword;
 }
 
-export interface JSCatchKeyword extends SyntaxBase {
+export interface JSCatchKeyword extends SyntaxBase<SyntaxKind.JSCatchKeyword> {
   kind: SyntaxKind.JSCatchKeyword;
 }
 
-export interface JSImportKeyword extends SyntaxBase {
+export interface JSImportKeyword extends SyntaxBase<SyntaxKind.JSImportKeyword> {
   kind: SyntaxKind.JSImportKeyword;
 }
 
-export interface JSAsKeyword extends SyntaxBase {
+export interface JSAsKeyword extends SyntaxBase<SyntaxKind.JSAsKeyword> {
   kind: SyntaxKind.JSAsKeyword;
 }
 
-export interface JSConstKeyword extends SyntaxBase {
+export interface JSConstKeyword extends SyntaxBase<SyntaxKind.JSConstKeyword> {
   kind: SyntaxKind.JSConstKeyword;
 }
 
-export interface JSLetKeyword extends SyntaxBase {
+export interface JSLetKeyword extends SyntaxBase<SyntaxKind.JSLetKeyword> {
   kind: SyntaxKind.JSLetKeyword;
 }
 
-export interface JSExportKeyword extends SyntaxBase {
+export interface JSExportKeyword extends SyntaxBase<SyntaxKind.JSExportKeyword> {
   kind: SyntaxKind.JSExportKeyword;
 }
 
-export interface JSFunctionKeyword extends SyntaxBase {
+export interface JSFunctionKeyword extends SyntaxBase<SyntaxKind.JSFunctionKeyword> {
   kind: SyntaxKind.JSFunctionKeyword;
 }
 
-export interface JSWhileKeyword extends SyntaxBase {
+export interface JSWhileKeyword extends SyntaxBase<SyntaxKind.JSWhileKeyword> {
   kind: SyntaxKind.JSWhileKeyword;
 }
 
-export interface JSForKeyword extends SyntaxBase {
+export interface JSForKeyword extends SyntaxBase<SyntaxKind.JSForKeyword> {
   kind: SyntaxKind.JSForKeyword;
 }
 
-export interface JSCloseBrace extends SyntaxBase {
+export interface JSCloseBrace extends SyntaxBase<SyntaxKind.JSCloseBrace> {
   kind: SyntaxKind.JSCloseBrace;
 }
 
-export interface JSCloseBracket extends SyntaxBase {
+export interface JSCloseBracket extends SyntaxBase<SyntaxKind.JSCloseBracket> {
   kind: SyntaxKind.JSCloseBracket;
 }
 
-export interface JSCloseParen extends SyntaxBase {
+export interface JSCloseParen extends SyntaxBase<SyntaxKind.JSCloseParen> {
   kind: SyntaxKind.JSCloseParen;
 }
 
-export interface JSOpenBrace extends SyntaxBase {
+export interface JSOpenBrace extends SyntaxBase<SyntaxKind.JSOpenBrace> {
   kind: SyntaxKind.JSOpenBrace;
 }
 
-export interface JSOpenBracket extends SyntaxBase {
+export interface JSOpenBracket extends SyntaxBase<SyntaxKind.JSOpenBracket> {
   kind: SyntaxKind.JSOpenBracket;
 }
 
-export interface JSOpenParen extends SyntaxBase {
+export interface JSOpenParen extends SyntaxBase<SyntaxKind.JSOpenParen> {
   kind: SyntaxKind.JSOpenParen;
 }
 
-export interface JSSemi extends SyntaxBase {
+export interface JSSemi extends SyntaxBase<SyntaxKind.JSSemi> {
   kind: SyntaxKind.JSSemi;
 }
 
-export interface JSComma extends SyntaxBase {
+export interface JSComma extends SyntaxBase<SyntaxKind.JSComma> {
   kind: SyntaxKind.JSComma;
 }
 
-export interface JSDot extends SyntaxBase {
+export interface JSDot extends SyntaxBase<SyntaxKind.JSDot> {
   kind: SyntaxKind.JSDot;
 }
 
-export interface JSDotDotDot extends SyntaxBase {
+export interface JSDotDotDot extends SyntaxBase<SyntaxKind.JSDotDotDot> {
   kind: SyntaxKind.JSDotDotDot;
 }
 
-export interface JSMulOp extends SyntaxBase {
+export interface JSMulOp extends SyntaxBase<SyntaxKind.JSMulOp> {
   kind: SyntaxKind.JSMulOp;
 }
 
-export interface JSAddOp extends SyntaxBase {
+export interface JSAddOp extends SyntaxBase<SyntaxKind.JSAddOp> {
   kind: SyntaxKind.JSAddOp;
 }
 
-export interface JSDivOp extends SyntaxBase {
+export interface JSDivOp extends SyntaxBase<SyntaxKind.JSDivOp> {
   kind: SyntaxKind.JSDivOp;
 }
 
-export interface JSSubOp extends SyntaxBase {
+export interface JSSubOp extends SyntaxBase<SyntaxKind.JSSubOp> {
   kind: SyntaxKind.JSSubOp;
 }
 
-export interface JSLtOp extends SyntaxBase {
+export interface JSLtOp extends SyntaxBase<SyntaxKind.JSLtOp> {
   kind: SyntaxKind.JSLtOp;
 }
 
-export interface JSGtOp extends SyntaxBase {
+export interface JSGtOp extends SyntaxBase<SyntaxKind.JSGtOp> {
   kind: SyntaxKind.JSGtOp;
 }
 
-export interface JSBOrOp extends SyntaxBase {
+export interface JSBOrOp extends SyntaxBase<SyntaxKind.JSBOrOp> {
   kind: SyntaxKind.JSBOrOp;
 }
 
-export interface JSBXorOp extends SyntaxBase {
+export interface JSBXorOp extends SyntaxBase<SyntaxKind.JSBXorOp> {
   kind: SyntaxKind.JSBXorOp;
 }
 
-export interface JSBAndOp extends SyntaxBase {
+export interface JSBAndOp extends SyntaxBase<SyntaxKind.JSBAndOp> {
   kind: SyntaxKind.JSBAndOp;
 }
 
-export interface JSBNotOp extends SyntaxBase {
+export interface JSBNotOp extends SyntaxBase<SyntaxKind.JSBNotOp> {
   kind: SyntaxKind.JSBNotOp;
 }
 
-export interface JSNotOp extends SyntaxBase {
+export interface JSNotOp extends SyntaxBase<SyntaxKind.JSNotOp> {
   kind: SyntaxKind.JSNotOp;
 }
 
@@ -853,7 +877,7 @@ export type JSPattern
   = JSBindPattern
 
 
-export interface JSBindPattern extends SyntaxBase {
+export interface JSBindPattern extends SyntaxBase<SyntaxKind.JSBindPattern> {
   kind: SyntaxKind.JSBindPattern;
   name: JSIdentifier;
 }
@@ -871,60 +895,60 @@ export type JSExpression
   | JSReferenceExpression
 
 
-export interface JSConstantExpression extends SyntaxBase {
+export interface JSConstantExpression extends SyntaxBase<SyntaxKind.JSConstantExpression> {
   kind: SyntaxKind.JSConstantExpression;
   value: BoltValue;
 }
 
-export interface JSMemberExpression extends SyntaxBase {
+export interface JSMemberExpression extends SyntaxBase<SyntaxKind.JSMemberExpression> {
   kind: SyntaxKind.JSMemberExpression;
   value: JSExpression;
   property: JSIdentifier;
 }
 
-export interface JSCallExpression extends SyntaxBase {
+export interface JSCallExpression extends SyntaxBase<SyntaxKind.JSCallExpression> {
   kind: SyntaxKind.JSCallExpression;
   operator: JSExpression;
   operands: JSExpression[];
 }
 
-export interface JSBinaryExpression extends SyntaxBase {
+export interface JSBinaryExpression extends SyntaxBase<SyntaxKind.JSBinaryExpression> {
   kind: SyntaxKind.JSBinaryExpression;
   left: JSExpression;
   operator: JSOperator;
   right: JSExpression;
 }
 
-export interface JSUnaryExpression extends SyntaxBase {
+export interface JSUnaryExpression extends SyntaxBase<SyntaxKind.JSUnaryExpression> {
   kind: SyntaxKind.JSUnaryExpression;
   operator: JSOperator;
   operand: JSExpression;
 }
 
-export interface JSNewExpression extends SyntaxBase {
+export interface JSNewExpression extends SyntaxBase<SyntaxKind.JSNewExpression> {
   kind: SyntaxKind.JSNewExpression;
   target: JSExpression;
   arguments: JSExpression[];
 }
 
-export interface JSSequenceExpression extends SyntaxBase {
+export interface JSSequenceExpression extends SyntaxBase<SyntaxKind.JSSequenceExpression> {
   kind: SyntaxKind.JSSequenceExpression;
   expressions: JSExpression[];
 }
 
-export interface JSConditionalExpression extends SyntaxBase {
+export interface JSConditionalExpression extends SyntaxBase<SyntaxKind.JSConditionalExpression> {
   kind: SyntaxKind.JSConditionalExpression;
   test: JSExpression;
   consequent: JSExpression;
   alternate: JSExpression;
 }
 
-export interface JSLiteralExpression extends SyntaxBase {
+export interface JSLiteralExpression extends SyntaxBase<SyntaxKind.JSLiteralExpression> {
   kind: SyntaxKind.JSLiteralExpression;
   value: JSValue;
 }
 
-export interface JSReferenceExpression extends SyntaxBase {
+export interface JSReferenceExpression extends SyntaxBase<SyntaxKind.JSReferenceExpression> {
   kind: SyntaxKind.JSReferenceExpression;
   name: string;
 }
@@ -945,37 +969,37 @@ export type JSStatement
   | JSReturnStatement
 
 
-export interface JSCatchBlock extends SyntaxBase {
+export interface JSCatchBlock extends SyntaxBase<SyntaxKind.JSCatchBlock> {
   kind: SyntaxKind.JSCatchBlock;
   bindings: JSPattern | null;
   elements: JSSourceElement[];
 }
 
-export interface JSTryCatchStatement extends SyntaxBase {
+export interface JSTryCatchStatement extends SyntaxBase<SyntaxKind.JSTryCatchStatement> {
   kind: SyntaxKind.JSTryCatchStatement;
   tryBlock: JSSourceElement[];
   catchBlock: JSCatchBlock | null;
   finalBlock: JSSourceElement[] | null;
 }
 
-export interface JSExpressionStatement extends SyntaxBase {
+export interface JSExpressionStatement extends SyntaxBase<SyntaxKind.JSExpressionStatement> {
   kind: SyntaxKind.JSExpressionStatement;
   expression: JSExpression;
 }
 
-export interface JSConditionalStatement extends SyntaxBase {
+export interface JSConditionalStatement extends SyntaxBase<SyntaxKind.JSConditionalStatement> {
   kind: SyntaxKind.JSConditionalStatement;
   test: JSExpression;
   consequent: JSStatement[];
   alternate: JSStatement[];
 }
 
-export interface JSReturnStatement extends SyntaxBase {
+export interface JSReturnStatement extends SyntaxBase<SyntaxKind.JSReturnStatement> {
   kind: SyntaxKind.JSReturnStatement;
   value: JSExpression | null;
 }
 
-export interface JSParameter extends SyntaxBase {
+export interface JSParameter extends SyntaxBase<SyntaxKind.JSParameter> {
   kind: SyntaxKind.JSParameter;
   index: number;
   bindings: JSPattern;
@@ -997,24 +1021,24 @@ export type JSImportBinding
   | JSImportAsBinding
 
 
-export interface JSImportStarBinding extends SyntaxBase {
+export interface JSImportStarBinding extends SyntaxBase<SyntaxKind.JSImportStarBinding> {
   kind: SyntaxKind.JSImportStarBinding;
   local: JSIdentifier;
 }
 
-export interface JSImportAsBinding extends SyntaxBase {
+export interface JSImportAsBinding extends SyntaxBase<SyntaxKind.JSImportAsBinding> {
   kind: SyntaxKind.JSImportAsBinding;
   remote: JSIdentifier;
   local: JSIdentifier | null;
 }
 
-export interface JSImportDeclaration extends SyntaxBase {
+export interface JSImportDeclaration extends SyntaxBase<SyntaxKind.JSImportDeclaration> {
   kind: SyntaxKind.JSImportDeclaration;
   bindings: JSImportBinding[];
   filename: JSString;
 }
 
-export interface JSFunctionDeclaration extends SyntaxBase {
+export interface JSFunctionDeclaration extends SyntaxBase<SyntaxKind.JSFunctionDeclaration> {
   kind: SyntaxKind.JSFunctionDeclaration;
   modifiers: JSDeclarationModifiers;
   name: JSIdentifier;
@@ -1022,20 +1046,20 @@ export interface JSFunctionDeclaration extends SyntaxBase {
   body: JSStatement[];
 }
 
-export interface JSArrowFunctionDeclaration extends SyntaxBase {
+export interface JSArrowFunctionDeclaration extends SyntaxBase<SyntaxKind.JSArrowFunctionDeclaration> {
   kind: SyntaxKind.JSArrowFunctionDeclaration;
   name: JSIdentifier;
   params: JSParameter[];
   body: JSExpression;
 }
 
-export interface JSLetDeclaration extends SyntaxBase {
+export interface JSLetDeclaration extends SyntaxBase<SyntaxKind.JSLetDeclaration> {
   kind: SyntaxKind.JSLetDeclaration;
   bindings: JSPattern;
   value: JSExpression | null;
 }
 
-export interface JSSourceFile extends SyntaxBase {
+export interface JSSourceFile extends SyntaxBase<SyntaxKind.JSSourceFile> {
   kind: SyntaxKind.JSSourceFile;
   elements: JSSourceElement[];
 }
@@ -1078,7 +1102,6 @@ export type BoltSyntax
   | BoltBracketed
   | BoltSourceFile
   | BoltQualName
-  | BoltSentence
   | BoltReferenceTypeExpression
   | BoltTypeParameter
   | BoltBindPattern
@@ -1109,8 +1132,9 @@ export type BoltSyntax
   | BoltTraitDeclaration
   | BoltImplDeclaration
   | BoltTypeAliasDeclaration
-  | BoltRecordDeclarationField
+  | BoltRecordField
   | BoltRecordDeclaration
+  | BoltMacroCall
 
 
 export type JSSyntax
@@ -1218,7 +1242,6 @@ export type Syntax
   | BoltBracketed
   | BoltSourceFile
   | BoltQualName
-  | BoltSentence
   | BoltReferenceTypeExpression
   | BoltTypeParameter
   | BoltBindPattern
@@ -1249,8 +1272,9 @@ export type Syntax
   | BoltTraitDeclaration
   | BoltImplDeclaration
   | BoltTypeAliasDeclaration
-  | BoltRecordDeclarationField
+  | BoltRecordField
   | BoltRecordDeclaration
+  | BoltMacroCall
   | JSOperator
   | JSIdentifier
   | JSString
@@ -1356,7 +1380,6 @@ export function createBoltBraced(text: string, span?: TextSpan | null): BoltBrac
 export function createBoltBracketed(text: string, span?: TextSpan | null): BoltBracketed;
 export function createBoltSourceFile(elements: BoltSourceElement[], span?: TextSpan | null): BoltSourceFile;
 export function createBoltQualName(modulePath: BoltIdentifier[], name: BoltSymbol, span?: TextSpan | null): BoltQualName;
-export function createBoltSentence(tokens: BoltToken[], span?: TextSpan | null): BoltSentence;
 export function createBoltReferenceTypeExpression(name: BoltQualName, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
 export function createBoltTypeParameter(index: number, name: BoltIdentifier, defaultType: BoltTypeExpression | null, span?: TextSpan | null): BoltTypeParameter;
 export function createBoltBindPattern(name: BoltIdentifier, span?: TextSpan | null): BoltBindPattern;
@@ -1387,8 +1410,9 @@ export function createBoltImportDeclaration(file: string, symbols: BoltImportSym
 export function createBoltTraitDeclaration(modifiers: BoltDeclarationModifiers, name: BoltIdentifier, typeParams: BoltTypeParameter[] | null, elements: BoltDeclaration[], span?: TextSpan | null): BoltTraitDeclaration;
 export function createBoltImplDeclaration(modifiers: BoltDeclarationModifiers, name: BoltIdentifier, trait: BoltTypeExpression, typeParams: BoltTypeParameter[] | null, elements: BoltDeclaration[], span?: TextSpan | null): BoltImplDeclaration;
 export function createBoltTypeAliasDeclaration(modifiers: BoltDeclarationModifiers, name: BoltIdentifier, typeParams: BoltTypeParameter[] | null, typeExpr: BoltTypeExpression, span?: TextSpan | null): BoltTypeAliasDeclaration;
-export function createBoltRecordDeclarationField(name: BoltIdentifier, type: BoltTypeExpression, span?: TextSpan | null): BoltRecordDeclarationField;
-export function createBoltRecordDeclaration(modifiers: BoltDeclarationModifiers, name: BoltQualName, typeParms: BoltTypeParameter[] | null, fields: BoltRecordDeclarationField[], span?: TextSpan | null): BoltRecordDeclaration;
+export function createBoltRecordField(name: BoltIdentifier, type: BoltTypeExpression, span?: TextSpan | null): BoltRecordField;
+export function createBoltRecordDeclaration(modifiers: BoltDeclarationModifiers, name: BoltQualName, typeParms: BoltTypeParameter[] | null, members: BoltRecordMember[] | null, span?: TextSpan | null): BoltRecordDeclaration;
+export function createBoltMacroCall(name: BoltIdentifier, text: string, span?: TextSpan | null): BoltMacroCall;
 export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;
 export function createJSIdentifier(text: string, span?: TextSpan | null): JSIdentifier;
 export function createJSString(value: string, span?: TextSpan | null): JSString;
@@ -1495,7 +1519,6 @@ export function isBoltBraced(value: any): value is BoltBraced;
 export function isBoltBracketed(value: any): value is BoltBracketed;
 export function isBoltSourceFile(value: any): value is BoltSourceFile;
 export function isBoltQualName(value: any): value is BoltQualName;
-export function isBoltSentence(value: any): value is BoltSentence;
 export function isBoltTypeExpression(value: any): value is BoltTypeExpression;
 export function isBoltReferenceTypeExpression(value: any): value is BoltReferenceTypeExpression;
 export function isBoltTypeParameter(value: any): value is BoltTypeParameter;
@@ -1524,6 +1547,7 @@ export function isBoltExpressionStatement(value: any): value is BoltExpressionSt
 export function isBoltParameter(value: any): value is BoltParameter;
 export function isBoltDeclaration(value: any): value is BoltDeclaration;
 export function isBoltModule(value: any): value is BoltModule;
+export function isBoltFunctionBodyElement(value: any): value is BoltFunctionBodyElement;
 export function isBoltFunctionDeclaration(value: any): value is BoltFunctionDeclaration;
 export function isBoltVariableDeclaration(value: any): value is BoltVariableDeclaration;
 export function isBoltImportSymbol(value: any): value is BoltImportSymbol;
@@ -1532,9 +1556,11 @@ export function isBoltImportDeclaration(value: any): value is BoltImportDeclarat
 export function isBoltTraitDeclaration(value: any): value is BoltTraitDeclaration;
 export function isBoltImplDeclaration(value: any): value is BoltImplDeclaration;
 export function isBoltTypeAliasDeclaration(value: any): value is BoltTypeAliasDeclaration;
-export function isBoltRecordDeclarationField(value: any): value is BoltRecordDeclarationField;
+export function isBoltRecordMember(value: any): value is BoltRecordMember;
+export function isBoltRecordField(value: any): value is BoltRecordField;
 export function isBoltRecordDeclaration(value: any): value is BoltRecordDeclaration;
 export function isBoltSourceElement(value: any): value is BoltSourceElement;
+export function isBoltMacroCall(value: any): value is BoltMacroCall;
 export function isJSToken(value: any): value is JSToken;
 export function isJSOperator(value: any): value is JSOperator;
 export function isJSIdentifier(value: any): value is JSIdentifier;

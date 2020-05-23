@@ -6,7 +6,9 @@ import "source-map-support/register"
 import yargs from "yargs"
 
 import { Program } from "../program"
-import { TextFile } from "../text"
+import { parseSourceFile } from "../parser"
+import { BoltSourceFile} from "../ast"
+import { Frontend } from "../frontend"
 
 global.debug = function (value: any) {
   console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
@@ -64,17 +66,16 @@ yargs
       .string('work-dir')
       .describe('work-dir', 'The working directory where files will be resolved against.')
       .default('work-dir', '.')
-      .string('inspect-server'),
+      .string('target')
+      .describe('target', 'The target language to compile to.')
+      .default('target', 'JS')
 
-    args => {
+    , args => {
 
-      const files = toArray(args.files as string[] | string);
-      const opts = {};
-      if (args['inspect-server'] !== undefined) {
-        opts.inspector = connectToInspector(args['inspect-server'] as string);
-      }
-      const program = new Program(files, opts);
-      program.compile("JS");
+      const sourceFiles = toArray(args.files as string[] | string).map(parseSourceFile);
+      const program = new Program(sourceFiles);
+      const frontend = new Frontend();
+      frontend.compile(program, args.target);
 
     })
 
@@ -90,21 +91,15 @@ yargs
 
     args => {
 
-      const files = toArray(args.files as string | string[]).map(p => new TextFile(p));
+      const sourceFiles = toArray(args.files as string | string[]).map(parseSourceFile);
 
-      if (files.length > 0) {
-
-        const program = new Program(files);
-
-        for (const file of files) {
-          program.eval(file)
-        }
-
-      } else {
-
+      if (sourceFiles.length === 0) {
         throw new Error(`Executing packages is not yet supported.`)
-
       }
+
+      const program = new Program(sourceFiles);
+      const frontend = new Frontend();
+      frontend.eval(program);
 
     }
 

@@ -9,6 +9,10 @@ export class Emitter {
 
     switch (node.kind) {
 
+      case SyntaxKind.JSExpressionStatement:
+        out += this.emit(node.expression) + ';\n';
+        break;
+
       case SyntaxKind.JSReferenceExpression:
         out += node.name;
         break;
