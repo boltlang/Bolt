@@ -1,5 +1,5 @@
 
-import { Syntax, SyntaxKind, Expr, isNode } from "./ast"
+import { Syntax, SyntaxKind, Expr, isNode, BoltQualName } from "./ast"
 import { TypeChecker, Type, RecordType, PrimType, boolType } from "./checker"
 import { FastStringMap } from "./util"
 
@@ -65,28 +65,32 @@ export class RecordWrapper extends RecordValue {
 
 }
 
+function getDeclarationPath(node: BoltQualName) {
+  return [...node.modulePath.map(id => id.text), node.name.text];
+}
+
 class Environment {
 
-  private symbols: FastStringMap<Value> = Object.create(null);
+  private symbols = FastStringMap<string, Value>();
 
   constructor(public parentEnv: Environment | null = null) {
 
   }
 
-  setValue(name: string, value: Value) {
+  public setValue(name: string, value: Value) {
     if (name in this.symbols) {
       throw new Error(`A variable with the name '${name}' already exists.`);
     }
     this.symbols[name] = value;
   }
 
-  updateValue(name: string, newValue: Value) {
+  public updateValue(name: string, newValue: Value) {
     if (!(name in this.symbols)) {
       throw new Error(`Trying to update a variable '${name}' that has not been declared.`);
     }
   }
 
-  lookup(name: string) {
+  public lookup(name: string) {
     let curr = this as Environment;
     while (true) {
       if (name in curr.symbols) {
@@ -136,26 +140,26 @@ export class Evaluator {
     }
   }
 
-  eval(node: Syntax, env: Environment = new Environment()): Value { 
+  public eval(node: Syntax, env: Environment = new Environment()): Value { 
 
     switch (node.kind) {
 
-      case SyntaxKind.SourceFile:
-      case SyntaxKind.Module:
+      case SyntaxKind.BoltSourceFile:
+      case SyntaxKind.BoltModule:
         for (const element of node.elements) {
           this.eval(element, env);
         }
         break;
 
-      case SyntaxKind.RefExpr:
-        return env.lookup(node.name.fullText);
+      case SyntaxKind.BoltReferenceTypeExpression:
+        // FIXME
+        return env.lookup(node.name.name.text);
 
-      case SyntaxKind.NewTypeDecl:
-      case SyntaxKind.RecordDecl:
-      case SyntaxKind.FuncDecl:
+      case SyntaxKind.BoltRecordDeclaration:
+      case SyntaxKind.BoltFunctionDeclaration:
         break;
 
-      case SyntaxKind.MatchExpr:
+      case SyntaxKind.BoltMatchExpression:
         const value = this.eval(node.value, env);
         for (const [pattern, result] of node.arms) {
           if (this.match(value, pattern)) {
@@ -164,7 +168,7 @@ export class Evaluator {
         }
         return new PrimValue(this.checker.getTypeNamed('Void')!, null);
 
-      case SyntaxKind.ConstExpr:
+      case SyntaxKind.BoltConstantExpression:
         return new PrimValue(this.checker.getTypeOfNode(node), node.value)
 
       default:

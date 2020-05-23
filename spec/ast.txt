@@ -84,10 +84,6 @@ node BoltQualName {
   name: BoltSymbol, 
 }
 
-node BoltSentence > BoltSourceElement {
-  tokens: Vec<BoltToken>,
-}
-
 node BoltTypeExpression;
 
 node BoltReferenceTypeExpression > BoltTypeExpression {
@@ -177,7 +173,7 @@ node BoltConstantExpression > BoltExpression {
   value: BoltValue,
 }
 
-node BoltStatement > BoltSourceElement;
+node BoltStatement > BoltFunctionBodyElement, BoltSourceElement;
 
 node BoltReturnStatement > BoltStatement {
   value: Option<BoltExpression>,
@@ -213,16 +209,18 @@ node BoltModule > BoltDeclaration {
   elements: Vec<BoltSourceElement>,
 }
 
-node BoltFunctionDeclaration > BoltDeclaration {
+node BoltFunctionBodyElement;
+
+node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
   target: String,
   name: BoltSymbol,
   params: Vec<BoltParameter>,
   returnType: Option<BoltTypeExpression>,
-  body: Vec<BoltStatement>,
+  body: Vec<BoltFunctionBodyElement>,
 }
 
-node BoltVariableDeclaration > BoltDeclaration {
+node BoltVariableDeclaration > BoltFunctionBodyElement, BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
   bindings: BoltPattern,
   type: Option<BoltTypeExpression>,
@@ -262,7 +260,9 @@ node BoltTypeAliasDeclaration > BoltDeclaration {
   typeExpr: BoltTypeExpression,
 }
 
-node BoltRecordDeclarationField {
+node BoltRecordMember;
+
+node BoltRecordField > BoltRecordMember {
   name: BoltIdentifier,
   type: BoltTypeExpression,
 }
@@ -271,10 +271,15 @@ node BoltRecordDeclaration > BoltDeclaration {
   modifiers: BoltDeclarationModifiers,
   name: BoltQualName,
   typeParms: Option<Vec<BoltTypeParameter>>,
-  fields: Vec<BoltRecordDeclarationField>,
+  members: Option<Vec<BoltRecordMember>>,
 }
 
 node BoltSourceElement;
+
+node BoltMacroCall > BoltRecordMember, BoltStatement, BoltDeclaration, BoltExpression {
+  name: BoltIdentifier,
+  text: String,
+}
 
 // JavaScript AST definitions
 

@@ -5,6 +5,8 @@ import {
   SyntaxKind,
   BoltImportDeclaration,
   BoltPattern,
+  isBoltTypeAliasDeclaration,
+  BoltFunctionBodyElement,
 } from "./ast"
 
 import { FastStringMap, getFullTextOfQualName } from "./util"
@@ -45,13 +47,13 @@ export const noneType = new PrimType();
 
 export class RecordType {
 
-  fieldTypes: FastStringMap<Type> = Object.create(null);
+  private fieldTypes = new FastStringMap<string, Type>();
 
   constructor(
     iterable: IterableIterator<[string, Type]>,
   ) {
-    for (const [name, typ] of iterable) {
-      this.fieldTypes[name] = typ;
+    for (const [name, type] of iterable) {
+      this.fieldTypes.set(name, type);
     }
   }
 
@@ -60,18 +62,47 @@ export class RecordType {
   }
 
   getTypeOfField(name: string) {
-    if (name in this.fieldTypes) {
-      return this.fieldTypes[name]
-    }
-    throw new Error(`Field '${name}' does not exist on this record type.`)
+    return this.fieldTypes.get(name);
   }
 
 }
 
+interface SymbolInfo {
+  type: Type | null;
+  definitions: Syntax[];
+}
+
 export class Scope {
 
-  constructor(public origin: Syntax) {
+  private symbolsByLocalName = new FastStringMap<string, SymbolInfo>();
 
+  constructor(
+    public originatingNode: Syntax,
+    public parentScope?: Scope | null
+  ) {
+
+  }
+
+  public getSymbolNamed(name: string): SymbolInfo | null {
+    let currScope: Scope | null = this;
+    while (true) {
+      if (currScope.symbolsByLocalName.has(name)) {
+        return currScope.symbolsByLocalName.get(name);
+      }
+      currScope = currScope.parentScope;
+      if (currScope === null) {
+        break;
+      }
+    }
+    return null;
+  }
+
+  public getTypeNamed(name: string): Type | null {
+    const sym = this.getSymbolNamed(name);
+    if (sym === null || !introducesNewType(sym.definitions[0].kind)) {
+      return null;
+    }
+    return sym.type!;
   }
 
 }
@@ -85,6 +116,16 @@ function* map<T, R>(iterable: Iterable<T>, proc: (value: T) => R): IterableItera
     }
     yield proc(value)
   }
+}
+
+function introducesNewType(kind: SyntaxKind): boolean {
+  return kind === SyntaxKind.BoltRecordDeclaration
+      || kind === SyntaxKind.BoltTypeAliasDeclaration;
+}
+
+function introducesNewScope(kind: SyntaxKind): boolean {
+  return kind === SyntaxKind.BoltFunctionDeclaration 
+      || kind === SyntaxKind.BoltSourceFile;
 }
 
 function getFullName(node: Syntax) {
@@ -112,22 +153,19 @@ function getFullName(node: Syntax) {
 
 export class TypeChecker {
 
-  protected symbols: FastStringMap<Type> = Object.create(null)
-  protected types = new Map<Syntax, Type>();
-  protected scopes = new Map<Syntax, Scope>();
+  private symbols = new FastStringMap<string, Type>();
+  private types = new Map<Syntax, Type>();
+  private scopes = new Map<Syntax, Scope>();
 
-  constructor() {
-  }
-
-  protected inferTypeFromUsage(bindings: BoltPattern, body: Body) {
+  private inferTypeFromUsage(bindings: BoltPattern, body: BoltFunctionBodyElement[]) {
     return anyType;
   }
 
-  protected getTypeOfBody(body: Body) {
+  private getTypeOfBody(body: BoltFunctionBodyElement[]) {
     return anyType;
   }
 
-  protected createType(node: Syntax): Type {
+  private createType(node: Syntax): Type {
 
     console.error(`creating type for ${kindToString(node.kind)}`);
 
@@ -138,11 +176,6 @@ export class TypeChecker {
 
       case SyntaxKind.BoltConstantExpression:
         return node.value.type;
-
-      case SyntaxKind.BoltNewTypeDeclaration:
-        console.log(getFullName(node.name))
-        this.symbols[getFullName(node.name)] = new PrimType();
-        return noneType;
 
       case SyntaxKind.BoltExpressionStatement:
         return voidType;
@@ -171,21 +204,29 @@ export class TypeChecker {
         })
         return new FunctionType(paramTypes, returnType);
 
-      case SyntaxKind.BoltReferenceTypeNode:
+      case SyntaxKind.BoltReferenceTypeExpression:
         const name = getFullTextOfQualName(node.name);
-        const reffed = this.getTypeNamed(name);
+        const scope = this.getScope(node);
+        let reffed = scope.getTypeNamed(name);
         if (reffed === null) {
-          throw new Error(`Could not find a type named '${name}'`);
+          reffed = anyType;
         }
         return reffed;
 
       case SyntaxKind.BoltRecordDeclaration:
 
-        const typ = new RecordType(map(node.fields, field => ([field.name.text, this.getTypeOfNode(field.type)])));
+        const fullName = getFullName(node);
+        let type;
 
-        this.symbols[getFullName(node)] = typ;
+        if (node.members === null) {
+          type = new PrimType();
+          this.symbols.set(fullName, type);
+        } else {
+          type = new RecordType(map(node.members, member => ([field.name.text, this.getTypeOfNode(field.type)])));
+          this.symbols.set(fullName, type);
+        }
 
-        return typ;
+        return type;
 
       case SyntaxKind.BoltParameter:
         if (node.type !== null) {
@@ -200,13 +241,14 @@ export class TypeChecker {
 
   }
 
-  getTypeNamed(name: string) {
-    return name in this.symbols
-      ? this.symbols[name]
-      : null
+  public getSymbolNamed(name: string) {
+    if (!this.symbols.has(name)) {
+      return null;
+    }
+    return this.symbols.get(name);
   }
 
-  getTypeOfNode(node: Syntax): Type {
+  public getTypeOfNode(node: Syntax): Type {
     if (this.types.has(node)) {
       return this.types.get(node)!
     }
@@ -215,15 +257,13 @@ export class TypeChecker {
     return newType;
   }
 
-  check(node: Syntax) {
+  public check(node: Syntax) {
 
     this.getTypeOfNode(node);
 
     switch (node.kind) {
 
-      case SyntaxKind.BoltSentence:
       case SyntaxKind.BoltRecordDeclaration:
-      case SyntaxKind.BoltNewTypeDeclaration:
       case SyntaxKind.BoltConstantExpression:
         break;
 
@@ -267,12 +307,8 @@ export class TypeChecker {
 
   }
 
-  getImportedSymbols(node: BoltImportDeclaration) {
-    return [{ name: 'fac' }]
-  }
-
-  getScope(node: Syntax): Scope {
-    while (node.kind !== SyntaxKind.BoltFunctionDeclaration && node.kind !== SyntaxKind.BoltSourceFile) {
+  public getScope(node: Syntax): Scope {
+    while (!introducesNewScope(node.kind)) {
       node = node.parentNode!;
     }
     if (this.scopes.has(node)) {
@@ -283,7 +319,7 @@ export class TypeChecker {
     return scope
   }
 
-  protected intersectTypes(a: Type, b: Type): Type {
+  private intersectTypes(a: Type, b: Type): Type {
     if (a === noneType || b == noneType) {
       return noneType;
     }
@@ -303,10 +339,6 @@ export class TypeChecker {
     }
     return noneType;
   }
-
-  // getMapperForNode(target: string, node: Syntax): Mapper {
-  //   return this.getScope(node).getMapper(target)
-  // }
 
 }
 
