@@ -10,6 +10,8 @@ export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for func
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
 export const E_INVALID_ARGUMENTS = "Invalid arguments passed to function '{name}'."
 
+const DIAG_NUM_EXTRA_LINES = 1;
+
 export interface Diagnostic {
   message: string;
   severity: string;
@@ -30,40 +32,43 @@ export class DiagnosticPrinter {
 
   public add(diagnostic: Diagnostic): void {
     let out = ''
+    if (diagnostic.node !== undefined) {
+      const span = diagnostic.node.span!;
+      const content = span.file.getText();
+      const startLine = Math.max(0, span.start.line-1-DIAG_NUM_EXTRA_LINES)
+      const lines = content.split('\n')
+      const endLine = Math.min(lines.length-1, (span.end !== undefined ? span.end.line : startLine)+DIAG_NUM_EXTRA_LINES)
+      const gutterWidth = Math.max(2, countDigits(endLine+1))
+      for (let i = startLine; i < endLine; i++) {
+        out += '  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+lines[i]+'\n'
+        const gutter = '  '+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
+        if (span.end !== undefined) {
+          if (i === span.start.line-1 && i === span.end.line-1) {
+            out += gutter+' '.repeat(span.start.column-1)+chalk.red('~'.repeat(span.end.column-span.start.column)) + '\n'
+          } else if (i === span.start.line-1) {
+            out += gutter+' '.repeat(span.start.column-1)+chalk.red('~'.repeat(lines[i].length-span.start.column+1)) + '\n'
+          } else if (i === span.end.line-1) {
+            out += gutter+chalk.red('~'.repeat(span.end.column-1)) + '\n'
+          } else if (i > span.start.line-1 && i < span.end.line-1) {
+            out += gutter+chalk.red('~'.repeat(lines[i].length)) + '\n'
+          }
+        }
+      }
+      out += '\n'
+      out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}: `);
+    }
     switch (diagnostic.severity) {
       case 'error':
         this.hasErrors = true;
         out += chalk.bold.red('error: ');
     }
-    if (diagnostic.node !== undefined) {
-      // message = this.fileManager.getFileName(diag.location.fileId)+': '+message
-      const content = this.fileManager.getContent(diag.location.fileId)
-      const startLine = Math.max(0, diag.location.start.line-1-DIAG_NUM_EXTRA_LINES)
-      const lines = content.split('\n')
-      const endLine = Math.min(lines.length-1, (diag.location.end !== undefined ? diag.location.end.line : startLine)+DIAG_NUM_EXTRA_LINES)
-      const gutterWidth = Math.max(2, countDigits(endLine+1))
-      for (let i = startLine; i < endLine; i++) {
-        console.error('  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+lines[i])
-        const gutter = '  '+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
-          if (diag.location.end !== undefined) {
-            if (i === diag.location.start.line-1 && i === diag.location.end.line-1) {
-              console.error(gutter+' '.repeat(diag.location.start.column-1)+chalk.red('~'.repeat(diag.location.end.column-diag.location.start.column)))
-            } else if (i === diag.location.start.line-1) {
-              console.error(gutter+' '.repeat(diag.location.start.column-1)+chalk.red('~'.repeat(lines[i].length-diag.location.start.column+1)))
-            } else if (i === diag.location.end.line-1) {
-              console.error(gutter+chalk.red('~'.repeat(diag.location.end.column-1)))
-            } else if (i > diag.location.start.line-1 && i < diag.location.end.line-1) {
-              console.error(gutter+chalk.red('~'.repeat(lines[i].length)))
-            }
-          }
-        }
-    }
     if (diagnostic.args !== undefined) {
-      out += format(diagnostic.message, diagnostic.args);
+      out += format(diagnostic.message, diagnostic.args) + '\n';
     } else {
-      out += diagnostic.message;
+      out += diagnostic.message + '\n';
     }
-    process.stderr.write(out + '\n');
+    out += '\n'
+    process.stderr.write(out);
   }
 
 }

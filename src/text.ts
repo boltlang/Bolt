@@ -1,14 +1,26 @@
 
 import * as path from "path"
+import * as fs from "fs"
 
 export class TextFile {
+
+  private cachedText: string | null = null;
 
   constructor(public origPath: string) {
 
   }
 
-  get fullPath() {
+  public get fullPath() {
     return path.resolve(this.origPath)
+  }
+
+  public getText(): string {
+    if (this.cachedText !== null) {
+      return this.cachedText;
+    }
+    const text = fs.readFileSync(this.fullPath, 'utf8');
+    this.cachedText = text;
+    return text
   }
 
 }
@@ -23,7 +35,7 @@ export class TextPos {
 
   }
 
-  clone() {
+  public clone() {
     return new TextPos(this.offset, this.line, this.column)
   }
 
@@ -39,7 +51,7 @@ export class TextSpan {
 
   }
 
-  clone() {
+  public clone() {
     return new TextSpan(this.file, this.start.clone(), this.end.clone());
   }
 
