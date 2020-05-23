@@ -69,12 +69,19 @@ yargs
       .string('target')
       .describe('target', 'The target language to compile to.')
       .default('target', 'JS')
+      .boolean('force')
+      .describe('force', 'Ignore as much errors as possible.')
+      .default('force', false)
 
     , args => {
 
       const sourceFiles = toArray(args.files as string[] | string).map(parseSourceFile);
       const program = new Program(sourceFiles);
       const frontend = new Frontend();
+      frontend.typeCheck(program);
+      if (frontend.diagnostics.hasErrors && !args.force) {
+        process.exit(1);
+      }
       frontend.compile(program, args.target);
 
     })

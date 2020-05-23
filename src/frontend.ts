@@ -88,18 +88,16 @@ export class Frontend {
     return new Package(projectDir);
   }
 
-  public compile(program: Program, target: string) {
-
+  public typeCheck(program: Program) {
     for (const sourceFile of program.getAllSourceFiles()) {
       this.checker.registerSourceFile(sourceFile as BoltSourceFile);
     }
     for (const sourceFile of program.getAllSourceFiles()) {
       this.checker.checkSourceFile(sourceFile as BoltSourceFile);
     }
+  }
 
-    if (this.diagnostics.hasErrors) {
-      throw new Error(`Compilation failed because of type-checking errors.`);
-    }
+  public compile(program: Program, target: string) {
 
     switch (target) {
 
