@@ -8,7 +8,7 @@ import { Program } from "./program"
 import { TypeChecker } from "./checker"
 import { Evaluator } from "./evaluator"
 import { emit } from "./emitter"
-import { Syntax } from "./ast"
+import { Syntax, BoltSourceFile } from "./ast"
 import { upsearchSync, FastStringMap, getFileStem, getLanguage } from "./util"
 import { Package } from "./package"
 import { verbose, memoize } from "./util"
@@ -18,6 +18,7 @@ import CompileBoltToJSTransform from "./transforms/boltToJS"
 import ConstFoldTransform from "./transforms/constFold"
 import EliminateModulesTransform from "./transforms/eliminateModules"
 import { TransformManager } from "./transforms/index"
+import {DiagnosticPrinter} from "./diagnostics"
 
 const targetExtensions: MapLike<string> = {
   'JS': '.mjs',
@@ -62,12 +63,14 @@ export class Frontend {
 
   public evaluator: Evaluator;
   public checker: TypeChecker;
+  public diagnostics: DiagnosticPrinter;
   public timing: Timing;
   
   private container = new Container();
 
   constructor() {
-    this.checker = new TypeChecker();
+    this.diagnostics = new DiagnosticPrinter();
+    this.checker = new TypeChecker(this.diagnostics);
     this.evaluator = new Evaluator(this.checker);
     this.timing = new Timing();
     this.container.bindSelf(this.evaluator);
@@ -86,6 +89,17 @@ export class Frontend {
   }
 
   public compile(program: Program, target: string) {
+
+    for (const sourceFile of program.getAllSourceFiles()) {
+      this.checker.registerSourceFile(sourceFile as BoltSourceFile);
+    }
+    for (const sourceFile of program.getAllSourceFiles()) {
+      this.checker.checkSourceFile(sourceFile as BoltSourceFile);
+    }
+
+    if (this.diagnostics.hasErrors) {
+      throw new Error(`Compilation failed because of type-checking errors.`);
+    }
 
     switch (target) {
 

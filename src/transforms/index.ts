@@ -1,8 +1,8 @@
 
-import { SourceFile, Program } from "./program"
-import { Container } from "./di"
-import {Evaluator} from "./evaluator";
-import {TypeChecker} from "./checker";
+import { SourceFile, Program } from "../program"
+import { Container, Newable } from "../di"
+import {Evaluator} from "../evaluator";
+import {TypeChecker} from "../checker";
 
 export interface Transformer {
   isApplicable(node: SourceFile): boolean;
@@ -11,10 +11,6 @@ export interface Transformer {
 
 export interface RegisterTransformerOptions {
 
-}
-
-function createInstance<T>(factory: Factory<T>, ...args: any[]): T {
-  return new factory(...args);
 }
 
 export class TransformManager {
@@ -26,7 +22,7 @@ export class TransformManager {
   }
 
   public register(transformerFactory: Newable<Transformer>, options: RegisterTransformerOptions = {}) {
-    const transformer = this.container.createInstance(transformerFactory, this);
+    const transformer = this.container.createInstance(transformerFactory, this) as Transformer;
     this.transformers.push(transformer);
   }
 

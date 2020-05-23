@@ -41,7 +41,7 @@ import {
   BoltSourceElement,
 } from "../ast"
 
-import { getFullTextOfQualName, hasPublicModifier, setOrigNodeRange, FastStringMap } from "../util"
+import { hasPublicModifier, setOrigNodeRange } from "../util"
 import { Program, SourceFile } from "../program"
 import { Transformer, TransformManager } from "./index"
 import { assert } from "../util"
@@ -119,8 +119,9 @@ export class BoltToJSTransform implements Transformer {
         );
 
       case SyntaxKind.BoltReferenceExpression:
+        assert(node.name.modulePath === null);
         return createJSReferenceExpression(
-          getFullTextOfQualName(node.name),
+          node.name.name.text,
           node.span,
         );
 

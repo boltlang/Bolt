@@ -122,30 +122,30 @@ function isSymbol(ch: string) {
 
 export class Scanner {
 
-  protected buffer: string[] = [];
-  protected scanned: BoltToken[] = [];
-  protected currPos: TextPos;
-  protected offset = 0;
+  private buffer: string[] = [];
+  private scanned: BoltToken[] = [];
+  private currPos: TextPos;
+  private offset = 0;
 
   constructor(public file: TextFile, public input: string, startPos = new TextPos(0,1,1)) {
     this.currPos = startPos;
   }
 
-  protected readChar() {
+  private readChar() {
     if (this.offset == this.input.length) {
       return EOF
     }
     return this.input[this.offset++]
   }
 
-  protected peekChar(count = 1) {
+  private peekChar(count = 1) {
     while (this.buffer.length < count) {
       this.buffer.push(this.readChar());
     }
     return this.buffer[count - 1];
   }
 
-  protected getChar() {
+  private getChar() {
 
     const ch = this.buffer.length > 0
       ? this.buffer.shift()!
@@ -166,7 +166,7 @@ export class Scanner {
     return ch
   }
 
-  protected takeWhile(pred: (ch: string) => boolean) {
+  private takeWhile(pred: (ch: string) => boolean) {
     let text = this.getChar();
     while (true) {
       const c0 = this.peekChar();
@@ -187,6 +187,12 @@ export class Scanner {
 
       if (isWhiteSpace(c0)) {
         this.getChar();
+        continue;
+      }
+
+      const c1 = this.peekChar(2);
+      if (c0 === '/' && c1 == '/') {
+        this.scanLineComment();
         continue;
       }
 
@@ -336,6 +342,37 @@ export class Scanner {
 
     }
 
+  }
+
+  private assertChar(ch: string): void {
+    const c0 = this.peekChar();
+    if (c0 !== ch) {
+      throw new ScanError(this.file, this.currPos.clone(), ch);
+    }
+    this.getChar();
+  }
+
+  private scanLineComment(): string {
+    let text = '';
+    this.assertChar('/');
+    this.assertChar('/');
+    while (true) {
+      const c0 = this.peekChar();
+      if (c0 === EOF) {
+        break;
+      }
+      if (c0 == '\n') {
+        this.getChar();
+        const c1 = this.peekChar();
+        if (c1 === '\r') {
+          this.getChar();
+        }
+        break;
+      }
+      text += c0
+      this.getChar();
+    }
+    return text;
   }
 
   public peek(count = 1): BoltToken {

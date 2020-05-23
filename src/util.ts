@@ -169,12 +169,11 @@ export function hasPublicModifier(node: BoltDeclaration) {
   return (node.modifiers & BoltDeclarationModifiers.Public) > 0;
 }
 
-export function getFullTextOfQualName(node: BoltQualName) {
-  let out = ''
-  for (const element of node.modulePath) {
-    out += element.text + '.';
+export function toDeclarationPath(node: BoltQualName): string[] {
+  if (node.modulePath === null) {
+    return [ node.name.text ];
   }
-  return out + node.name.text;
+  return [...node.modulePath.map(id => id.text), node.name.text];
 }
 
 export interface Stream<T> {
@@ -449,5 +448,43 @@ export class ScanError extends Error {
   constructor(public file: TextFile, public position: TextPos, public char: string) {
     super(`${file.origPath}:${position.line}:${position.column}: unexpected char '${escapeChar(char)}'`)
   }
+}
+
+export interface MapLike<T> {
+  [key: string]: T;
+}
+
+export type FormatArg = string | Date | number
+
+export function format(message: string, data: MapLike<FormatArg>) {
+
+  let out = ''
+
+  let name = '';
+  let insideParam = false;
+
+  for (const ch of message) {
+    if (insideParam) {
+      if (ch === '}') {
+        out += data[name]!.toString();
+        reset();
+      }
+      name += ch
+    } else {
+      if (ch === '{') {
+        insideParam = true;
+      } else {
+        out += ch;
+      }
+    }
+  }
+
+  return out;
+
+  function reset() {
+    name = '';
+    insideParam = false;
+  }
+
 }
 

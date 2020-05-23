@@ -58,6 +58,8 @@ function isSyntax(value) {
       && value.__NODE_TYPE !== undefined;
 }
 
+let nextNodeId = 1;
+
 function createNode(nodeType) {
   const obj = Object.create(nodeProto);
   Object.defineProperty(obj, '__NODE_TYPE', {
@@ -73,6 +75,11 @@ function createNode(nodeType) {
       return this.__NODE_TYPE.index;
     }
   });
+  Object.defineProperty(obj, 'id', {
+    enumerable: true,
+    configurable: true,
+    value: nextNodeId++,
+  })
   obj.span = null;
   return obj;
 }
@@ -113,7 +120,7 @@ for (const nodeName of Object.keys(NODE_TYPES)) {
 
 exported.setParents = function setParents(node, parentNode = null) {
   node.parentNode = parentNode;
-  for (const child of getChildNodes(node)) {
+  for (const child of node.getChildNodes()) {
     setParents(child, node)
   }
 }

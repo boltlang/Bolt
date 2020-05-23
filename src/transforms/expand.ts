@@ -10,12 +10,9 @@ import {
   BoltMacroCall,
 } from "../ast"
 
-import { TextSpan } from "../text"
 import { TypeChecker, Scope } from "../checker"
-import { ParseError } from "../util"
 import { BoltTokenStream, Parser, isModifierKeyword } from "../parser"
 import { Evaluator, TRUE, FALSE } from "../evaluator"
-import { setOrigNodeRange, createTokenStream } from "../util"
 import { Transformer, TransformManager } from "./index"
 import { inject } from "../di"
 import {SourceFile} from "../program"

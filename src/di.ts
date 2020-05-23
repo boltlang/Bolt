@@ -38,8 +38,8 @@ export class Container {
     }
   }
 
-  private resolve<T>(factory: Factory<T>): T;
-  private resolve(serviceId: ServiceID): any {
+  public resolve<T>(factory: Factory<T>): T;
+  public resolve(serviceId: ServiceID): any {
     return this.singletons.get(serviceId);
   }
 

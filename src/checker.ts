@@ -1,343 +1,291 @@
+/**
+ *
+ * ```
+ * mod foo {
+ *   type MyType1 = i32;
+ *   mod bar {
+ *     pub type MyType2 = MyType1;
+ *   }
+ * }
+ * ```
+ *
+ * ```
+ * mod foo {
+ *   let x = 1;
+ *   mod bar {
+ *     fn do_something(y) {
+ *       return x + y;
+ *     }
+ *   }
+ * }
+ * ```
+ *
+ * Note that the `pub`-keyword is not present on `MyType1`.
+ */
 
-import {
-  Syntax,
-  kindToString,
-  SyntaxKind,
-  BoltImportDeclaration,
-  BoltPattern,
-  isBoltTypeAliasDeclaration,
-  BoltFunctionBodyElement,
-} from "./ast"
-
-import { FastStringMap, getFullTextOfQualName } from "./util"
-
-export class Type {
-  
-}
-
-export class PrimType extends Type {
-
-}
-
-export class FunctionType extends Type {
-
-  constructor(
-    public paramTypes: Type[],
-    public returnType: Type,
-  ) {
-    super();
-  }
-
-}
-
-export class VariantType extends Type {
-
-  constructor(public elementTypes: Type[]) {
-    super();
-  }
-
-}
-
-export const stringType = new PrimType()
-export const intType = new PrimType()
-export const boolType = new PrimType()
-export const voidType = new PrimType()
-export const anyType = new PrimType()
-export const noneType = new PrimType();
-
-export class RecordType {
-
-  private fieldTypes = new FastStringMap<string, Type>();
-
-  constructor(
-    iterable: IterableIterator<[string, Type]>,
-  ) {
-    for (const [name, type] of iterable) {
-      this.fieldTypes.set(name, type);
-    }
-  }
-
-  hasField(name: string) {
-    return name in this.fieldTypes;
-  }
-
-  getTypeOfField(name: string) {
-    return this.fieldTypes.get(name);
-  }
-
-}
+import {Syntax, SyntaxKind, BoltReferenceExpression, BoltDeclaration, BoltSourceFile, BoltSyntax, BoltReferenceTypeExpression, BoltTypeDeclaration} from "./ast";
+import {FastStringMap} from "./util";
+import {DiagnosticPrinter, E_TYPES_NOT_ASSIGNABLE, E_TYPE_DECLARATION_NOT_FOUND, E_DECLARATION_NOT_FOUND} from "./diagnostics";
 
 interface SymbolInfo {
-  type: Type | null;
-  definitions: Syntax[];
+  declarations: BoltDeclaration[];
 }
 
-export class Scope {
-
-  private symbolsByLocalName = new FastStringMap<string, SymbolInfo>();
-
-  constructor(
-    public originatingNode: Syntax,
-    public parentScope?: Scope | null
-  ) {
-
-  }
-
-  public getSymbolNamed(name: string): SymbolInfo | null {
-    let currScope: Scope | null = this;
-    while (true) {
-      if (currScope.symbolsByLocalName.has(name)) {
-        return currScope.symbolsByLocalName.get(name);
-      }
-      currScope = currScope.parentScope;
-      if (currScope === null) {
-        break;
-      }
-    }
-    return null;
-  }
-
-  public getTypeNamed(name: string): Type | null {
-    const sym = this.getSymbolNamed(name);
-    if (sym === null || !introducesNewType(sym.definitions[0].kind)) {
-      return null;
-    }
-    return sym.type!;
-  }
-
-}
-
-function* map<T, R>(iterable: Iterable<T>, proc: (value: T) => R): IterableIterator<R> {
-  const iterator = iterable[Symbol.iterator]();
-  while (true) {
-    let { done, value }= iterator.next();
-    if (done) {
-      break
-    }
-    yield proc(value)
-  }
-}
-
-function introducesNewType(kind: SyntaxKind): boolean {
-  return kind === SyntaxKind.BoltRecordDeclaration
-      || kind === SyntaxKind.BoltTypeAliasDeclaration;
+interface TypeSymbolInfo {
+  declarations: BoltTypeDeclaration[];
 }
 
 function introducesNewScope(kind: SyntaxKind): boolean {
-  return kind === SyntaxKind.BoltFunctionDeclaration 
+  return kind === SyntaxKind.BoltSourceFile
+      || kind === SyntaxKind.BoltModule
+      || kind === SyntaxKind.BoltFunctionDeclaration
+      || kind === SyntaxKind.BoltBlockExpression;
+}
+
+function introducesNewTypeScope(kind: SyntaxKind): boolean {
+  return kind === SyntaxKind.BoltModule
       || kind === SyntaxKind.BoltSourceFile;
 }
 
-function getFullName(node: Syntax) {
-  let out = []
-  let curr: Syntax | null = node;
-  while (true) {
-    switch (curr.kind) {
-      case SyntaxKind.BoltIdentifier:
-        out.unshift(curr.text)
-        break;
-      case SyntaxKind.BoltModule:
-        out.unshift(getFullTextOfQualName(curr.name));
-        break;
-      case SyntaxKind.BoltRecordDeclaration:
-        out.unshift(getFullTextOfQualName(curr.name))
-        break;
-    }
-    curr = curr.parentNode;
-    if (curr === null) {
-      break;
-    }
-  }
-  return out.join('.');
+type Scope = unknown;
+type TypeScope = unknown;
+
+function createSymbol(node: BoltDeclaration): SymbolInfo {
+  return { declarations: [ node ] };
+}
+
+function createTypeSymbol(node: BoltTypeDeclaration): TypeSymbolInfo {
+  return { declarations: [ node ] };
 }
 
 export class TypeChecker {
 
-  private symbols = new FastStringMap<string, Type>();
-  private types = new Map<Syntax, Type>();
-  private scopes = new Map<Syntax, Scope>();
+  constructor(private diagnostics: DiagnosticPrinter) {
 
-  private inferTypeFromUsage(bindings: BoltPattern, body: BoltFunctionBodyElement[]) {
-    return anyType;
   }
 
-  private getTypeOfBody(body: BoltFunctionBodyElement[]) {
-    return anyType;
+  private symbols = new FastStringMap<string, SymbolInfo>();
+  private typeSymbols = new FastStringMap<string, TypeSymbolInfo>();
+
+  public checkSourceFile(node: BoltSourceFile): void {
+
+    const refExps = node.findAllChildrenOfKind(SyntaxKind.BoltReferenceExpression);
+    for (const refExp of refExps) {
+      if (this.resolveReferenceExpression(refExp) === null) {
+        this.diagnostics.add({
+          message: E_DECLARATION_NOT_FOUND,
+          args: { name: refExp.name.name.text },
+          severity: 'error',
+          node: refExp,
+        })
+      }
+    }
+
+    const typeRefExps = node.findAllChildrenOfKind(SyntaxKind.BoltReferenceTypeExpression);
+    for (const typeRefExp of typeRefExps) {
+      if (this.resolveTypeReferenceExpression(typeRefExp) === null) {
+        this.diagnostics.add({
+          message: E_TYPE_DECLARATION_NOT_FOUND,
+          args: { name: typeRefExp.name.name.text },
+          severity: 'error',
+          node: typeRefExp,
+        })
+      }
+    }
+
   }
 
-  private createType(node: Syntax): Type {
+  public registerSourceFile(node: BoltSourceFile): void {
+    this.addAllSymbolsInNode(node);
+  }
 
-    console.error(`creating type for ${kindToString(node.kind)}`);
+  private addAllSymbolsInNode(node: BoltSyntax): void {
 
     switch (node.kind) {
 
-      case SyntaxKind.BoltReferenceExpression:
-        return anyType;
-
-      case SyntaxKind.BoltConstantExpression:
-        return node.value.type;
-
-      case SyntaxKind.BoltExpressionStatement:
-        return voidType;
-
-      case SyntaxKind.BoltCallExpression:
-        // TODO
-        return anyType;
+      case SyntaxKind.BoltSourceFile:
+      case SyntaxKind.BoltModule:
+        for (const element of node.elements) {
+          this.addAllSymbolsInNode(element);
+        }
+        break;
 
       case SyntaxKind.BoltFunctionDeclaration:
-        let returnType = anyType;
-        if (node.returnType !== null) {
-          returnType = this.getTypeOfNode(node.returnType)
-        }
-        if (node.body !== null) {
-          returnType = this.intersectTypes(returnType, this.getTypeOfBody(node.body))
-        }
-        let paramTypes = node.params.map(param => {
-          let paramType = this.getTypeOfNode(param);
-          if (node.body !== null) {
-            paramType = this.intersectTypes(
-              paramType,
-              this.inferTypeFromUsage(param.bindings, node.body)
-            )
-          }
-          return paramType
-        })
-        return new FunctionType(paramTypes, returnType);
-
-      case SyntaxKind.BoltReferenceTypeExpression:
-        const name = getFullTextOfQualName(node.name);
-        const scope = this.getScope(node);
-        let reffed = scope.getTypeNamed(name);
-        if (reffed === null) {
-          reffed = anyType;
-        }
-        return reffed;
+      {
+        const scope = this.getScopeSurroundingNode(node);
+        const sym = createSymbol(node);
+        this.addSymbol(node.name.text, scope, sym);
+        break;
+      }
 
       case SyntaxKind.BoltRecordDeclaration:
-
-        const fullName = getFullName(node);
-        let type;
-
-        if (node.members === null) {
-          type = new PrimType();
-          this.symbols.set(fullName, type);
-        } else {
-          type = new RecordType(map(node.members, member => ([field.name.text, this.getTypeOfNode(field.type)])));
-          this.symbols.set(fullName, type);
-        }
-
-        return type;
-
-      case SyntaxKind.BoltParameter:
-        if (node.type !== null) {
-          return this.getTypeOfNode(node.type)
-        }
-        return anyType;
-
-      default:
-        throw new Error(`Could not derive type of ${kindToString(node.kind)}`)
+      {
+        const typeScope = this.getTypeScopeSurroundingNode(node);
+        const typeSym = createTypeSymbol(node);
+        this.addTypeSymbol(node.name.text, typeScope, typeSym);
+      }
 
     }
 
   }
 
-  public getSymbolNamed(name: string) {
-    if (!this.symbols.has(name)) {
+  private addSymbol(name: string, scope: Scope, sym: SymbolInfo): void {
+    this.symbols.set(`${name}@${(scope as any).id}`, sym);
+  }
+
+  private addTypeSymbol(name: string, scope: TypeScope, sym: TypeSymbolInfo): void {
+    this.typeSymbols.set(`${name}@${(scope as any).id}`, sym);
+  }
+
+  public getParentScope(scope: Scope): Scope | null {
+    let node = scope as Syntax;
+    if (node.kind === SyntaxKind.BoltSourceFile) {
       return null;
     }
-    return this.symbols.get(name);
-  }
-
-  public getTypeOfNode(node: Syntax): Type {
-    if (this.types.has(node)) {
-      return this.types.get(node)!
-    }
-    const newType = this.createType(node)
-    this.types.set(node, newType)
-    return newType;
-  }
-
-  public check(node: Syntax) {
-
-    this.getTypeOfNode(node);
-
-    switch (node.kind) {
-
-      case SyntaxKind.BoltRecordDeclaration:
-      case SyntaxKind.BoltConstantExpression:
-        break;
-
-      case SyntaxKind.BoltExpressionStatement:
-        this.check(node.expression);
-        break;
-
-      case SyntaxKind.BoltCallExpression:
-        this.check(node.operator);
-        for (const operand of node.operands) {
-          this.check(operand);
-        }
-        // TODO check whether the overload matches the referenced operator
-        break;
-
-      case SyntaxKind.BoltFunctionDeclaration:
-        if (node.body !== null) {
-          if (Array.isArray(node.body)) {
-            for (const element of node.body) {
-              this.check(element)
-            }
-          }
-        }
-        break;
-
-      case SyntaxKind.BoltReferenceExpression:
-        // TODO implement this
-        break;
-
-      case SyntaxKind.BoltModule:
-      case SyntaxKind.BoltSourceFile:
-        for (const element of node.elements) {
-          this.check(element)
-        }
-        break;
-
-      default:
-        throw new Error(`Could not type-check node ${kindToString(node.kind)}`)
-
-    }
-
-  }
-
-  public getScope(node: Syntax): Scope {
+    node = node.parentNode!;
     while (!introducesNewScope(node.kind)) {
       node = node.parentNode!;
     }
-    if (this.scopes.has(node)) {
-      return this.scopes.get(node)!
-    }
-    const scope = new Scope(node)
-    this.scopes.set(node, scope)
-    return scope
+    return node;
   }
 
-  private intersectTypes(a: Type, b: Type): Type {
-    if (a === noneType || b == noneType) {
-      return noneType;
+  public getParentTypeScope(scope: TypeScope): TypeScope | null {
+    let node = scope as Syntax;
+    if (node.kind === SyntaxKind.BoltSourceFile) {
+      return null;
     }
-    if (b === anyType) {
-      return a
+    node = node.parentNode!;
+    while (!introducesNewTypeScope(node.kind)) {
+      node = node.parentNode!;
     }
-    if (a === anyType) {
-      return b;
+    return node;
+  }
+
+  private getScopeSurroundingNode(node: Syntax): Scope {
+    if (node.kind === SyntaxKind.BoltSourceFile) {
+      return node;
     }
-    if (a instanceof FunctionType && b instanceof FunctionType) {
-      if (a.paramTypes.length !== b.paramTypes.length) {
-        return noneType;
+    return this.getScopeForNode(node.parentNode);
+  }
+
+  private getTypeScopeSurroundingNode(node: Syntax): TypeScope {
+    if (node.kind === SyntaxKind.BoltSourceFile) {
+      return node;
+    }
+    return this.getScopeForNode(node.parentNode);
+  }
+
+  private getScopeForNode(node: Syntax): Scope {
+    if (node.kind === SyntaxKind.BoltSourceFile) {
+      return node;
+    }
+    let currNode = node;
+    while (!introducesNewScope(currNode.kind)) {
+      currNode = currNode.parentNode!;
+    }
+    return currNode;
+  }
+
+  private getTypeScopeForNode(node: Syntax): TypeScope {
+    if (node.kind === SyntaxKind.BoltSourceFile) {
+      return node;
+    }
+    let currNode = node;
+    while (!introducesNewTypeScope(currNode.kind)) {
+      currNode = currNode.parentNode!;
+    }
+    return currNode;
+  }
+
+  private lookupSymbolInScope(name: string, scope: Scope): SymbolInfo | null {
+    const key = `${name}@${(scope as any).id}`;
+    if (!this.symbols.has(key)) {
+      return null;
+    }
+    return this.symbols.get(key);
+  }
+
+  private lookupSymbolInTypeScope(name: string, scope: TypeScope): TypeSymbolInfo | null {
+    const key = `${name}@${(scope as any).id}`;
+    if (!this.typeSymbols.has(key)) {
+      return null;
+    }
+    return this.typeSymbols.get(key);
+  }
+
+  public findSymbolInScopeOf(name: string, scope: Scope): SymbolInfo | null {
+    while (true) {
+      const sym = this.lookupSymbolInScope(name, scope);
+      if (sym !== null) {
+        return sym;
       }
-      const returnType = this.intersectTypes(a.returnType, b.returnType);
-      const paramTypes = a.paramTypes.map((_, i) => this.intersectTypes(a.paramTypes[i], b.paramTypes[i]));
-      return new FunctionType(paramTypes, returnType)
+      const parentScope = this.getParentScope(scope);
+      if (parentScope === null) {
+        break;
+      }
+      scope = parentScope;
     }
-    return noneType;
+    return null;
+  }
+
+  public findSymbolInTypeScopeOf(name: string, scope: TypeScope): TypeSymbolInfo | null {
+    while (true) {
+      const sym = this.lookupSymbolInTypeScope(name, scope);
+      if (sym !== null) {
+        return sym;
+      }
+      const parentTypeScope = this.getParentTypeScope(scope);
+      if (parentTypeScope === null) {
+        break;
+      }
+      scope = parentTypeScope;
+    }
+    return null;
+  }
+
+  public resolveReferenceExpression(node: BoltReferenceExpression): BoltDeclaration | null {
+    let scope = this.getScopeSurroundingNode(node);
+    if (node.name.modulePath !== null) {
+      while (true) {
+        let shouldSearchParentScopes = false;
+        let currScope = scope;
+        for (const name of node.name.modulePath) {
+          const sym = this.lookupSymbolInScope(name.text, currScope);
+          if (sym === null) {
+            shouldSearchParentScopes = true;
+            break;
+          }
+          if (sym.declarations[0].kind !== SyntaxKind.BoltModule) {
+            shouldSearchParentScopes = true;
+            break;
+          }
+          currScope = this.getScopeForNode(sym.declarations[0]);
+        }
+        if (!shouldSearchParentScopes) {
+          scope = currScope;
+          break;
+        }
+        const parentScope = this.getParentScope(scope);
+        if (parentScope === null) {
+          return null;
+        }
+        scope = parentScope;
+      }
+    }
+    const sym = this.findSymbolInScopeOf(node.name.name.text, scope);
+    if (sym === null) {
+      return null;
+    }
+    return sym.declarations[0]!;
+  }
+
+  public resolveTypeReferenceExpression(node: BoltReferenceTypeExpression): BoltTypeDeclaration | null {
+    const typeScope = this.getTypeScopeSurroundingNode(node);
+    const typeSym = this.findSymbolInTypeScopeOf(node.name.name.text, typeScope);
+    if (typeSym === null) {
+      return null;
+    }
+    return typeSym.declarations[0]!;
   }
 
 }

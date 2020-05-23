@@ -58,6 +58,7 @@ import {
   BoltFunctionBodyElement,
   createBoltSourceFile,
   BoltRecordField,
+  setParents,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -168,24 +169,25 @@ export class Parser {
 
   public parseQualName(tokens: BoltTokenStream): BoltQualName {
 
-    const path: BoltIdentifier[] = [];
+    let modulePath = null;
 
-    while (true) {
-      const t0 = tokens.peek(2);
-      if (t0.kind !== SyntaxKind.BoltDot) {
-        break;
+    if (tokens.peek(2).kind === SyntaxKind.BoltDot) {
+      modulePath = [];
+      while (true) {
+        modulePath.push(tokens.get() as BoltIdentifier)
+        tokens.get();
+        const t0 = tokens.peek(2);
+        if (t0.kind !== SyntaxKind.BoltDot) {
+          break;
+        }
       }
-      path.push(tokens.get() as BoltIdentifier)
-      tokens.get();
     }
 
     const name = tokens.get();
-    if (name.kind !== SyntaxKind.BoltIdentifier) {
-      throw new ParseError(name, [SyntaxKind.BoltIdentifier]);
-    }
-    const startNode = path.length > 0 ? path[0] : name;
+    assertToken(name, SyntaxKind.BoltIdentifier);
+    const startNode = modulePath !== null ? modulePath[0] : name;
     const endNode = name;
-    const node = createBoltQualName(path, name, null);
+    const node = createBoltQualName(modulePath, name as BoltIdentifier, null);
     setOrigNodeRange(node, startNode, endNode);
     return node;
   }
@@ -446,19 +448,14 @@ export class Parser {
 
   public parseStatement(tokens: BoltTokenStream): BoltStatement {
     const t0 = tokens.peek();
-    if (t0.kind === SyntaxKind.BoltReturnKeyword) {
+    if (KIND_EXPRESSION_T0.indexOf(t0.kind) !== -1) {
+      return this.parseExpressionStatement(tokens);
+    } else if (t0.kind === SyntaxKind.BoltReturnKeyword) {
       return this.parseReturnStatement(tokens);
     } else if (t0.kind === SyntaxKind.BoltLoopKeyword) {
       return this.parseLoopStatement(tokens);
     } else {
-      try {
-        return this.parseExpressionStatement(tokens);
-      } catch (e) {
-        if (!(e instanceof ParseError)) {
-          throw e;
-        }
-        throw new ParseError(t0, KIND_STATEMENT_T0);
-      }
+      throw new ParseError(t0, KIND_STATEMENT_T0);
     }
   }
 
@@ -519,7 +516,7 @@ export class Parser {
 
     const t1 = tokens.get();
     assertToken(t1, SyntaxKind.BoltIdentifier);
-    const name = createBoltQualName([], t1 as BoltIdentifier);
+    const name = t1 as BoltIdentifier;
 
     let t2 = tokens.peek();
 
@@ -581,6 +578,10 @@ export class Parser {
       const t0 = tokens.peek();
       if (t0.kind === SyntaxKind.EndOfFile) {
         break;
+      }
+      if (t0.kind === SyntaxKind.BoltSemi) {
+        tokens.get();
+        continue;
       }
       const statement = this.parseStatement(tokens);
       statements.push(statement);
@@ -1192,6 +1193,8 @@ export function parseSourceFile(filepath: string): BoltSourceFile {
   const contents = fs.readFileSync(file.origPath, 'utf8');
   const scanner = new Scanner(file, contents)
   const parser = new Parser();
-  return parser.parseSourceFile(scanner);
+  const sourceFile = parser.parseSourceFile(scanner);
+  setParents(sourceFile);
+  return sourceFile;
 }
 
