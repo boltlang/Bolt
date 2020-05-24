@@ -36,16 +36,17 @@ node BoltAssignment > BoltToken {
   operator: Option<String>,
 }
 
-node BoltComma  > BoltToken;
-node BoltSemi   > BoltToken;
-node BoltColon  > BoltToken;
-node BoltDot    > BoltToken;
-node BoltDotDot > BoltToken;
-node BoltRArrow > BoltToken;
-node BoltLArrow > BoltToken;
-node BoltEqSign > BoltToken;
-node BoltGtSign > BoltToken;
-node BoltLtSign > BoltToken;
+node BoltComma     > BoltToken;
+node BoltSemi      > BoltToken;
+node BoltColon     > BoltToken;
+node BoltDot       > BoltToken;
+node BoltDotDot    > BoltToken;
+node BoltRArrow    > BoltToken;
+node BoltRArrowAlt > BoltToken;
+node BoltLArrow    > BoltToken;
+node BoltEqSign    > BoltToken;
+node BoltGtSign    > BoltToken;
+node BoltLtSign    > BoltToken;
 
 node BoltKeyword;
 

@@ -7,7 +7,7 @@ import {
 
 export type BoltFunctionBody = BoltFunctionBodyElement[];
 
-export function getAllReturnStatements(body: BoltFunctionBody): BoltReturnStatement[] {
+export function getReturnStatementsInFunctionBody(body: BoltFunctionBody): BoltReturnStatement[] {
 
   const results: BoltReturnStatement[] = [];
 

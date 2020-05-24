@@ -98,6 +98,10 @@ export class VariantType extends TypeBase {
 
 }
 
+export function createVariantType(...elementTypes: Type[]): VariantType {
+  return new VariantType(elementTypes);
+}
+
 export function isVariantType(value: any): value is VariantType {
   return value instanceof VariantType;
 }
@@ -138,6 +142,30 @@ export class TupleType extends TypeBase {
     super();
   }
 
+}
+
+export function createTupleType(...elementTypes: Type[]) {
+  return new TupleType(elementTypes);
+}
+
+export function isTupleType(value: any): value is TupleType {
+  return value.kind === TypeKind.TupleType;
+}
+
+export function createVoidType() {
+  return createTupleType();
+}
+
+export function isVoidType(value: any) {
+  return isTupleType(value) && value.elementTypes.length === 0;
+}
+
+export function narrowType(outer: Type, inner: Type): Type {
+  if (isAnyType(outer) || isNeverType(inner)) {
+    return inner;
+  }
+  // TODO cover the other cases
+  return outer;
 }
 
 export function intersectTypes(a: Type, b: Type): Type {

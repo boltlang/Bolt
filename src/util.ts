@@ -351,6 +351,8 @@ export function describeKind(kind: SyntaxKind): string {
       return "'for'";
     case SyntaxKind.JSTryKeyword:
       return "'try'";
+    case SyntaxKind.BoltRArrowAlt:
+      return "'=>'";
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }

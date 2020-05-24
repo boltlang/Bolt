@@ -11,9 +11,8 @@ import {
   setParents,
   SyntaxKind,
   BoltToken,
-  BoltSentence,
+  createBoltRArrowAlt,
   createEndOfFile,
-  createBoltSentence,
   createBoltIdentifier,
   createBoltRArrow,
   createBoltOperator,
@@ -39,16 +38,14 @@ import {
   createBoltFnKeyword,
   createBoltLArrow,
   createBoltDotDot,
-  createJSIdentifier,
-  JSToken,
   createBoltLtSign,
   createBoltGtSign,
   createBoltModKeyword,
   createBoltTypeKeyword,
   createBoltForKeyword,
-  createBoltTraitDeclaration,
   createBoltTraitKeyword,
   createBoltImplKeyword,
+  createBoltMatchKeyword,
 } from "./ast"
 
 export enum PunctType {
@@ -297,6 +294,7 @@ export class Scanner {
           case 'mod':     return createBoltModKeyword(span);
           case 'fn':      return createBoltFnKeyword(span);
           case 'return':  return createBoltReturnKeyword(span);
+          case 'match':   return createBoltMatchKeyword(span);
           case 'yield':   return createBoltYieldKeyword(span);
           case 'for':     return createBoltForKeyword(span);
           case 'trait':   return createBoltTraitKeyword(span);
@@ -318,6 +316,7 @@ export class Scanner {
 
         switch (text) {
           case '->': return createBoltRArrow(span);
+          case '=>': return createBoltRArrowAlt(span);
           case '<-': return createBoltLArrow(span);
           case '<':  return createBoltLtSign(span);
           case '>':  return createBoltGtSign(span);

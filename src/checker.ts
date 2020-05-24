@@ -23,7 +23,25 @@
  * Note that the `pub`-keyword is not present on `MyType1`.
  */
 
-import {Syntax, SyntaxKind, BoltReferenceExpression, BoltDeclaration, BoltSourceFile, BoltSyntax, BoltReferenceTypeExpression, BoltTypeDeclaration, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, createBoltReferenceTypeExpression, createBoltIdentifier} from "./ast";
+import {
+  Syntax,
+  SyntaxKind,
+  BoltReferenceExpression,
+  BoltDeclaration,
+  BoltSourceFile,
+  BoltSyntax,
+  BoltReferenceTypeExpression,
+  BoltTypeDeclaration,
+  BoltExpression,
+  BoltFunctionDeclaration,
+  BoltFunctionBodyElement,
+  kindToString,
+  BoltStatement,
+  BoltTypeExpression,
+  BoltSourceElement,
+  isBoltStatement,
+  isBoltDeclaration
+} from "./ast";
 import {FastStringMap, memoize, assert} from "./util";
 import {
   DiagnosticPrinter,
@@ -34,7 +52,8 @@ import {
   E_DECLARATION_NOT_FOUND,
   E_INVALID_ARGUMENTS
 } from "./diagnostics";
-import {createAnyType, isOpaqueType, createOpaqueType, Type} from "./types";
+import { createAnyType, isOpaqueType, createOpaqueType, Type, createVoidType, createVariantType, isVoidType } from "./types";
+import { getReturnStatementsInFunctionBody } from "./common";
 
 interface SymbolInfo {
   declarations: BoltDeclaration[];
@@ -78,74 +97,223 @@ export class TypeChecker {
 
   public checkSourceFile(node: BoltSourceFile): void {
 
-    const refExps = node.findAllChildrenOfKind(SyntaxKind.BoltReferenceExpression);
-    for (const refExp of refExps) {
-      if (this.resolveReferenceExpression(refExp) === null) {
-        this.diagnostics.add({
-          message: E_DECLARATION_NOT_FOUND,
-          args: { name: refExp.name.name.text },
-          severity: 'error',
-          node: refExp,
-        })
-      }
+    const self = this;
+    for (const element of node.elements) {
+      visitSourceElement(element);
     }
 
-    const typeRefExps = node.findAllChildrenOfKind(SyntaxKind.BoltReferenceTypeExpression);
-    for (const typeRefExp of typeRefExps) {
-      if (this.resolveTypeReferenceExpression(typeRefExp) === null) {
-        this.diagnostics.add({
-          message: E_TYPE_DECLARATION_NOT_FOUND,
-          args: { name: typeRefExp.name.name.text },
-          severity: 'error',
-          node: typeRefExp,
-        })
-      }
-    }
+    function visitExpression(node: BoltExpression) {
 
-    const callExps = node.findAllChildrenOfKind(SyntaxKind.BoltCallExpression);
+      switch (node.kind) {
 
-    for (const callExp of callExps) {
-
-      const fnDecls = this.getAllFunctionsInExpression(callExp.operator);
-
-      for (const fnDecl of fnDecls) {
-
-        if (fnDecl.params.length > callExp.operands.length) {
-          this.diagnostics.add({
-            message: E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
-            args: { expected: fnDecl.params.length, actual: callExp.operands.length },
-            severity: 'error',
-            node: callExp,
-          })
-        }
-
-        if (fnDecl.params.length < callExp.operands.length) {
-          this.diagnostics.add({
-            message: E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL,
-            args: { expected: fnDecl.params.length, actual: callExp.operands.length },
-            severity: 'error',
-            node: callExp,
-          })
-        }
-
-        const paramCount = fnDecl.params.length;
-        for (let i = 0; i < paramCount; i++) {
-          const arg = callExp.operands[i];
-          const param = fnDecl.params[i];
-          let argType = this.getTypeOfNode(arg);
-          let paramType = this.getTypeOfNode(param);
-          if (!this.isTypeAssignableTo(argType, paramType)) {
-            this.diagnostics.add({
-              message: E_INVALID_ARGUMENTS,
+        case SyntaxKind.BoltReferenceExpression:
+        {
+          if (self.resolveReferenceExpression(node) === null) {
+            self.diagnostics.add({
+              message: E_DECLARATION_NOT_FOUND,
+              args: { name: node.name.name.text },
               severity: 'error',
-              args: { name: fnDecl.name.text },
-              node: arg,
+              node: node,
+            })
+          }
+          break;
+        }
+
+        case SyntaxKind.BoltCallExpression:
+        {
+
+          const fnDecls = self.getAllFunctionsInExpression(node.operator);
+
+          for (const fnDecl of fnDecls) {
+
+            if (fnDecl.params.length > node.operands.length) {
+
+              self.diagnostics.add({
+                message: E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
+                args: { expected: fnDecl.params.length, actual: node.operands.length },
+                severity: 'error',
+                node: node,
+              });
+
+            } else if (fnDecl.params.length < node.operands.length) {
+
+              self.diagnostics.add({
+                message: E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL,
+                args: { expected: fnDecl.params.length, actual: node.operands.length },
+                severity: 'error',
+                node: node,
+              });
+
+            } else {
+
+              const paramCount = fnDecl.params.length;
+              for (let i = 0; i < paramCount; i++) {
+                const arg = node.operands[i];
+                const param = fnDecl.params[i];
+                let argType = self.getTypeOfNode(arg);
+                let paramType = self.getTypeOfNode(param);
+                if (!self.isTypeAssignableTo(argType, paramType)) {
+                  self.diagnostics.add({
+                    message: E_INVALID_ARGUMENTS,
+                    severity: 'error',
+                    args: { name: fnDecl.name.text },
+                    node: arg,
+                  });
+                }
+              }
+
+            }
+
+          }
+
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown node of type ${kindToString(node.kind)}.`);
+
+      }
+
+    }
+
+    function visitTypeExpressionn(node: BoltTypeExpression) {
+
+      switch (node.kind) {
+
+        case SyntaxKind.BoltReferenceTypeExpression:
+        {
+          if (self.resolveTypeReferenceExpression(node) === null) {
+            self.diagnostics.add({
+              message: E_TYPE_DECLARATION_NOT_FOUND,
+              args: { name: node.name.name.text },
+              severity: 'error',
+              node: node,
+            })
+          }
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown node of type ${kindToString(node.kind)}.`);
+      }
+    }
+
+    function visitDeclaration(node: BoltDeclaration) {
+
+      switch (node.kind) {
+
+        case SyntaxKind.BoltRecordDeclaration:
+        {
+          if (node.members !== null) {
+            for (const member of node.members) {
+              if (member.kind === SyntaxKind.BoltRecordField) {
+                visitTypeExpressionn(member.type);
+              }
+            }
+          }
+          break;
+        }
+
+        case SyntaxKind.BoltFunctionDeclaration:
+        {
+          let fnReturnType: Type = createAnyType();
+
+          if (node.returnType !== null) {
+            fnReturnType = self.getTypeOfNode(node.returnType);
+          }
+
+          if (node.body !== null) {
+            const returnStmts = getReturnStatementsInFunctionBody(node.body)
+            const validReturnTypes: Type[] = [];
+            for (const returnStmt of returnStmts) {
+              if (returnStmt.value === null) {
+                if (!isVoidType(fnReturnType)) {
+                  self.diagnostics.add({
+                    message: E_MUST_RETURN_A_VALUE,
+                    node: returnStmt,
+                    severity: 'error',
+                  });
+                }
+              } else {
+                checkExpressionMatchesType(returnStmt.value, fnReturnType);
+              }
+              //const returnType = self.getTypeOfNode(returnStmt);
+              //if (!self.isTypeAssignableTo(fnReturnType, returnType)) {
+                //self.diagnostics.add({
+                  //severity: 'error',
+                  //node: returnStmt.value !== null ? returnStmt.value : returnStmt,
+                  //args: { left: fnReturnType, right: returnType },
+                  //message: E_TYPES_NOT_ASSIGNABLE,
+                //});
+              //} else {
+                //validReturnTypes.push(returnType);
+              //}
+            }
+          }
+
+          // TODO Sort the return types and find the largest types, eliminating types that fall under other types.
+          //      Next, add the resulting types as type hints to `fnReturnType`.
+
+          break;
+        }
+
+        default:
+          throw new Error(`Unknown node of type ${kindToString(node.kind)}.`);
+
+      }
+
+    }
+
+    function checkExpressionMatchesType(node: BoltExpression, expectedType: Type) {
+      switch (node.kind) {
+        case SyntaxKind.BoltMatchExpression:
+        {
+          for (const matchArm of node.arms) {
+            checkExpressionMatchesType(matchArm.body, expectedType);
+          }
+          break;
+        }
+        default:
+        {
+          const actualType = self.getTypeOfNode(node);
+          if (!self.isTypeAssignableTo(expectedType, actualType)) {
+            self.diagnostics.add({
+              severity: 'error',
+              message: E_TYPES_NOT_ASSIGNABLE,
+              args: { left: expectedType, right: actualType },
+              node,
             });
           }
+          break;
         }
-
       }
+    }
 
+    function visitStatement(node: BoltStatement) {
+      switch (node.kind) {
+        case SyntaxKind.BoltExpressionStatement:
+          // TODO check for values that should be unwrapped
+          visitExpression(node.expression);
+          break;
+        case SyntaxKind.BoltReturnStatement:
+          if (node.value !== null) {
+            visitExpression(node.value);
+          }
+          break;
+
+        default:
+          throw new Error(`Unknown node of type ${kindToString(node.kind)}.`);
+      }
+    }
+
+    function visitSourceElement(node: BoltSourceElement) {
+      if (isBoltStatement(node)) {
+        visitStatement(node);
+      } else if (isBoltDeclaration(node)) {
+        visitDeclaration(node);
+      } else {
+        throw new Error(`Unknown node of kind ${kindToString(node)}`);
+      }
     }
 
   }
@@ -185,6 +353,13 @@ export class TypeChecker {
         }
         return type;
       }
+      case SyntaxKind.BoltReturnStatement:
+      {
+        if (node.value === null) {
+          return createVoidType();
+        }
+        return this.getTypeOfNode(node.value)
+      }
       case SyntaxKind.BoltConstantExpression:
       {
         let type;
@@ -199,6 +374,10 @@ export class TypeChecker {
         }
         assert(type !== null);
         return type;
+      }
+      case SyntaxKind.BoltMatchExpression:
+      {
+        return createVariantType(...node.arms.map(arm => this.getTypeOfNode(arm.body)));
       }
       default:
           throw new Error(`Could not derive type of node ${kindToString(node.kind)}.`);
