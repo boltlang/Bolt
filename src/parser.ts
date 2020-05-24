@@ -82,6 +82,8 @@ import {
   createBoltFunctionExpression,
   BoltMacroCall,
   createBoltMacroCall,
+  BoltMemberExpression,
+  createBoltMemberExpression,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -594,27 +596,80 @@ export class Parser {
     return result;
   }
 
-  private parsePrimitiveExpression(tokens: BoltTokenStream): BoltExpression {
+  private parseExpression(tokens: BoltTokenStream): BoltExpression {
+
     const t0 = tokens.peek();
+
+    let result;
     if (t0.kind === SyntaxKind.BoltVBar) {
-      return this.parseFunctionExpression(tokens);
+      result = this.parseFunctionExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltBraced) {
-      return this.parseBlockExpression(tokens);
+      result = this.parseBlockExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltQuoteKeyword) {
-      return this.parseQuoteExpression(tokens);
+      result = this.parseQuoteExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltMatchKeyword) {
-      return this.parseMatchExpression(tokens);
+      result = this.parseMatchExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltIntegerLiteral || t0.kind === SyntaxKind.BoltStringLiteral) {
-      return this.parseConstantExpression(tokens);
+      result = this.parseConstantExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltIdentifier) {
-      return this.parseReferenceExpression(tokens);
+      result = this.parseReferenceExpression(tokens);
     } else {
       throw new ParseError(t0, [SyntaxKind.BoltStringLiteral, SyntaxKind.BoltIdentifier]);
     }
-  }
 
-  public parseExpression(tokens: BoltTokenStream): BoltExpression {
-    return this.parseCallOrPrimitiveExpression(tokens)
+    while (true) {
+
+      let t2 = tokens.peek();
+      const firstToken = t2;
+
+      const path: BoltIdentifier[] = [];
+
+      while (t2.kind === SyntaxKind.BoltDot) {
+        tokens.get();
+        const t3 = tokens.get();
+        assertToken(t3, SyntaxKind.BoltIdentifier);
+        path.push(t3 as BoltIdentifier);
+        t2 = tokens.peek();
+      }
+
+      if (path.length > 0) {
+        const node = createBoltMemberExpression(result, path);
+        setOrigNodeRange(node, firstToken, t2);
+        result = node;
+      }
+
+      if (t2.kind !== SyntaxKind.BoltParenthesized) {
+        break;
+      }
+
+      tokens.get();
+
+      const args: BoltExpression[] = []
+      const innerTokens = createTokenStream(t2);
+
+      while (true) {
+        const t3 = innerTokens.peek();
+        if (t3.kind === SyntaxKind.EndOfFile) {
+          break; 
+        }
+        args.push(this.parseExpression(innerTokens))
+        const t4 = innerTokens.get();
+        if (t4.kind === SyntaxKind.EndOfFile) {
+          break
+        }
+        if (t4.kind !== SyntaxKind.BoltComma) {
+          throw new ParseError(t4, [SyntaxKind.BoltComma])
+        }
+      }
+
+      const node = createBoltCallExpression(result, args, null)
+      setOrigNodeRange(node, result, t2);
+      result = node;
+
+    }
+
+    return result;
+
   }
 
   public parseParameter(tokens: BoltTokenStream, index: number): BoltParameter {
@@ -1311,39 +1366,6 @@ export class Parser {
   //  }
   //  return lhs
   //}
-
-  private parseCallOrPrimitiveExpression(tokens: BoltTokenStream): BoltExpression {
-
-    const operator = this.parsePrimitiveExpression(tokens)
-
-    const t2 = tokens.peek();
-    if (t2.kind !== SyntaxKind.BoltParenthesized) {
-      return operator;
-    }
-    tokens.get();
-
-    const args: BoltExpression[] = []
-    const innerTokens = createTokenStream(t2);
-
-    while (true) {
-      const t3 = innerTokens.peek();
-      if (t3.kind === SyntaxKind.EndOfFile) {
-        break; 
-      }
-      args.push(this.parseExpression(innerTokens))
-      const t4 = innerTokens.get();
-      if (t4.kind === SyntaxKind.EndOfFile) {
-        break
-      } else if (t4.kind !== SyntaxKind.BoltComma){
-        throw new ParseError(t4, [SyntaxKind.BoltComma])
-      }
-    }
-
-    const node = createBoltCallExpression(operator, args, null)
-    setOrigNodeRange(node, operator, t2);
-    return node;
-
-  }
 
   public parseSourceFile(tokens: BoltTokenStream): BoltSourceFile {
     const elements = this.parseSourceElements(tokens);

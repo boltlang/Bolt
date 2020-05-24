@@ -155,6 +155,11 @@ node BoltReferenceExpression > BoltExpression {
   name: BoltQualName,
 }
 
+node BoltMemberExpression > BoltExpression {
+  expression: BoltExpression,
+  path: Vec<BoltIdentifier>,
+}
+
 node BoltFunctionExpression > BoltExpression {
   params: Vec<BoltParameter>,
   returnType: Option<BoltTypeExpression>,
