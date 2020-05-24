@@ -426,7 +426,6 @@ export class Parser {
       if (desc0 === null || desc0.arity !== 2 || desc0.precedence < minPrecedence) {
         break;
       }
-      console.log(desc0)
       tokens.get();
       let rhs = this.parsePrimTypeExpression(tokens);
       while (true) {
