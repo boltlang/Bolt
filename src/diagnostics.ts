@@ -26,6 +26,17 @@ export function countDigits(num: number) {
   return Math.ceil(Math.log10(num+1))
 }
 
+function firstIndexOfNonEmpty(str: string) {
+  let j = 0;
+  for (; j < str.length; j++) {
+    const ch = str[j];
+    if (ch !== ' ' && ch !== '\t') {
+      break;
+    }
+  }
+  return j
+}
+
 export class DiagnosticPrinter {
 
   public hasErrors = false;
@@ -40,19 +51,31 @@ export class DiagnosticPrinter {
       const endLine = Math.min(lines.length-1, (span.end !== undefined ? span.end.line : startLine)+DIAG_NUM_EXTRA_LINES)
       const gutterWidth = Math.max(2, countDigits(endLine+1))
       for (let i = startLine; i < endLine; i++) {
-        out += '  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+lines[i]+'\n'
+        const line = lines[i];
+        let j = firstIndexOfNonEmpty(line);
+        out += '  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+line+'\n'
         const gutter = '  '+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
-        if (span.end !== undefined) {
-          if (i === span.start.line-1 && i === span.end.line-1) {
-            out += gutter+' '.repeat(span.start.column-1)+chalk.red('~'.repeat(span.end.column-span.start.column)) + '\n'
-          } else if (i === span.start.line-1) {
-            out += gutter+' '.repeat(span.start.column-1)+chalk.red('~'.repeat(lines[i].length-span.start.column+1)) + '\n'
-          } else if (i === span.end.line-1) {
-            out += gutter+chalk.red('~'.repeat(span.end.column-1)) + '\n'
-          } else if (i > span.start.line-1 && i < span.end.line-1) {
-            out += gutter+chalk.red('~'.repeat(lines[i].length)) + '\n'
-          }
+        let mark: number;
+        let skip: number;
+        if (i === span.start.line-1 && i === span.end.line-1) {
+          skip = span.start.column-1;
+          mark = span.end.column-span.start.column;
+        } else if (i === span.start.line-1) {
+          skip = span.start.column-1;
+          mark = line.length-span.start.column+1;
+        } else if (i === span.end.line-1) {
+          skip = 0;
+          mark = span.end.column-1;
+        } else if (i > span.start.line-1 && i < span.end.line-1) {
+          skip = 0;
+          mark = line.length;
+        } else {
+          continue;
         }
+        if (j < skip) {
+          j = 0;
+        }
+        out += gutter+' '.repeat(j+skip)+chalk.red('~'.repeat(mark-j)) + '\n'
       }
       out += '\n'
       out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}:${span.start.column}: `);
