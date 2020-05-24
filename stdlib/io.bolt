@@ -1,0 +1,40 @@
+
+pub struct String;
+
+pub struct Either<L, R> {
+  is_right: bool,
+  value: L | R,
+}
+
+mod io {
+
+  pub type Result<T> = Either<Error, T>;
+
+  pub foreign "JS" fn print(message: String) {
+    process.stdout.write(message);
+  }
+
+  pub trait Read {
+    fn read(self, count: usize, target: Vec<u8>) -> Result<usize>;
+  }
+
+  impl Read for File {
+
+    foreign "JS" fn read(self, count, target) -> Result<usize> {
+
+      import * as fs from "fs"
+
+      try {
+        return Ok(fs.readSync(self.fd, target, 0, count, null));
+      } catch (e) {
+        return Err(e.code);
+      }
+
+    }
+
+  }
+
+}
+
+print("Hello, world!");
+
