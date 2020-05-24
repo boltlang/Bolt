@@ -783,40 +783,33 @@ export class Parser {
 
   public parseGenericTypeParameter(tokens: BoltTokenStream): BoltTypeParameter {
     const t0 = tokens.peek();
-    if (t0.kind === SyntaxKind.BoltIdentifier) {
+    tokens.get();
+    assertToken(t0, SyntaxKind.BoltIdentifier);
+    let typeBound = null;
+    const t1 = tokens.peek();
+    if (t1.kind === SyntaxKind.BoltColon) {
       tokens.get();
-      const node = createBoltTypeParameter(0, t0, null)
-      setOrigNodeRange(node, t0, t0);
-      return node;
-    } else {
-      throw new ParseError(t0, [SyntaxKind.BoltIdentifier]);
+      typeBound = this.parseTypeExpression(tokens);
     }
+    const node = createBoltTypeParameter(0, t0 as BoltIdentifier, typeBound)
+    setOrigNodeRange(node, t0, t0);
+    return node;
   }
 
   private parseGenericTypeParameters(tokens: BoltTokenStream): BoltTypeParameter[] {
     let typeParams: BoltTypeParameter[] = [];
-    const t0 = tokens.get();
-    assertToken(t0, SyntaxKind.BoltLtSign);
     while (true) {
       let t1 = tokens.peek();
-      if (t1.kind === SyntaxKind.BoltGtSign) {
+      if (t1.kind !== SyntaxKind.BoltIdentifier) {
         break;
       }
-      if (t1.kind === SyntaxKind.EndOfFile) {
-        throw new ParseError(t1, [SyntaxKind.BoltGtSign, SyntaxKind.BoltIdentifier, SyntaxKind.BoltComma]);
-      }
-      if (typeParams.length > 0) {
-        tokens.get();
-        assertToken(t1, SyntaxKind.BoltComma);
-        t1 = tokens.peek();
-      }
-      if (t1.kind === SyntaxKind.EndOfFile) {
-        throw new ParseError(t1, [SyntaxKind.BoltGtSign, SyntaxKind.BoltIdentifier]);
-      }
       typeParams.push(this.parseGenericTypeParameter(tokens));
+      const t2 = tokens.peek();
+      if (t2.kind !== SyntaxKind.BoltComma) {
+        break;
+      }
+      tokens.get();
     }
-    const t3 = tokens.get();
-    assertToken(t3, SyntaxKind.BoltGtSign);
     return typeParams;
   }
 
@@ -849,7 +842,10 @@ export class Parser {
     }
 
     if (t2.kind === SyntaxKind.BoltLtSign) {
+      tokens.get();
       typeParams = this.parseGenericTypeParameters(tokens);
+      const t3 = tokens.get();
+      assertToken(t3, SyntaxKind.BoltGtSign);
       t2 = tokens.peek();
     }
 
@@ -963,7 +959,10 @@ export class Parser {
 
     const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.BoltLtSign) {
+      tokens.get();
       typeParams = this.parseGenericTypeParameters(tokens);
+      const t3 = tokens.get();
+      assertToken(t3, SyntaxKind.BoltGtSign);
     }
 
     const t3 = tokens.get();
@@ -982,7 +981,6 @@ export class Parser {
     let modifiers = 0;
 
     let k0 = tokens.peek();
-    let lastToken: BoltSyntax;
     const firstToken = k0;
 
     if (k0.kind === SyntaxKind.BoltPubKeyword) {
@@ -1012,6 +1010,7 @@ export class Parser {
     let returnType = null;
     let body: any = null; // FIXME type-checking should not be disabled
     let params: BoltParameter[] = [];
+    let typeParams = null;
 
     // Parse parameters
 
@@ -1095,24 +1094,26 @@ export class Parser {
 
     }
 
-    if (params.length > 0) {
-      lastToken = params[params.length-1];
-    }
-
     // Parse return type
 
     const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.BoltRArrow) {
-      lastToken = t2;
       tokens.get();
       returnType = this.parseTypeExpression(tokens);
+    }
+
+    // Parse second possible version of generic type parameters
+
+    const t4 = tokens.peek();
+    if (t4.kind === SyntaxKind.BoltWhereKeyword) {
+      tokens.get();
+      typeParams = this.parseGenericTypeParameters(tokens);
     }
 
     // Parse function body
 
     const t3 = tokens.peek();
     if (t3.kind === SyntaxKind.BoltBraced) {
-      lastToken = t3;
       tokens.get();
       switch (target) {
         case "Bolt":
@@ -1136,9 +1137,10 @@ export class Parser {
       name,
       params,
       returnType,
+      typeParams,
       body
     );
-    setOrigNodeRange(result, firstToken, lastToken!);
+    setOrigNodeRange(result, firstToken, t3);
     return result;
 
   }
@@ -1160,7 +1162,9 @@ export class Parser {
     let elements = null;
     if (t2.kind === SyntaxKind.BoltLtSign || t2.kind === SyntaxKind.BoltBraced) {
       if (t2.kind === SyntaxKind.BoltLtSign) {
+        tokens.get();
         typeParams = this.parseGenericTypeParameters(tokens);
+        tokens.get();
       }
       const t3 = tokens.get();
       assertToken(t3, SyntaxKind.BoltBraced);

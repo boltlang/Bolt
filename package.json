@@ -15,6 +15,7 @@
   "repository": "https://github.com/samvv/Bolt",
   "dependencies": {
     "@types/fs-extra": "^9.0.1",
+    "@types/glob": "^7.1.1",
     "@types/microtime": "^2.1.0",
     "@types/minimist": "^1.2.0",
     "@types/node": "^14.0.5",

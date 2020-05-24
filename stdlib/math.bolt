@@ -27,10 +27,9 @@ fn (a: N) * (b: N) -> N where N: Num {
 // precedence a + b < a * b;
 
 pub fn fac(n: I) -> I where I: int {
-  if n == 0 {
-    return 1
-  } else {
-    return fac(n-1)
+  match n {
+    0 => 1,
+    i => i * fac(i-1),
   }
 }
 

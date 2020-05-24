@@ -223,6 +223,24 @@ export class TypeChecker {
           break;
         }
 
+        case SyntaxKind.BoltTypeAliasDeclaration:
+        {
+          // TODO
+          break;
+        }
+
+        case SyntaxKind.BoltTraitDeclaration:
+        {
+          // TODO
+          break;
+        }
+
+        case SyntaxKind.BoltImplDeclaration:
+        {
+          // TODO
+          break;
+        }
+
         case SyntaxKind.BoltFunctionDeclaration:
         {
           let fnReturnType: Type = createAnyType();

@@ -56,6 +56,7 @@ node BoltVBar      > BoltToken, BoltOperatorLike;
 
 node BoltKeyword;
 
+node BoltWhereKeyword   > BoltToken, BoltKeyword;
 node BoltQuoteKeyword   > BoltToken, BoltKeyword;
 node BoltFnKeyword      > BoltToken, BoltKeyword;
 node BoltForeignKeyword > BoltToken, BoltKeyword;
@@ -257,6 +258,7 @@ node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
   name: BoltSymbol,
   params: Vec<BoltParameter>,
   returnType: Option<BoltTypeExpression>,
+  typeParams: Option<Vec<BoltTypeParameter>>,
   body: Vec<BoltFunctionBodyElement>,
 }
 
