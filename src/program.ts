@@ -1,10 +1,7 @@
 
-import { BoltSourceFile, JSSourceFile } from "./ast"
+import { SourceFile } from "./common"
+import { BoltSourceFile } from "./ast"
 import { FastStringMap } from "./util";
-
-export type SourceFile
-  = BoltSourceFile
-  | JSSourceFile
 
 export class Program {
 

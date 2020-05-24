@@ -39,6 +39,7 @@ import {
   isBoltStatement,
   JSBindPattern,
   BoltSourceElement,
+  createJSParameter,
 } from "../ast"
 
 import { hasPublicModifier, setOrigNodeRange } from "../util"
@@ -69,7 +70,7 @@ class CompileContext {
 
   private generatedNodes: JSSyntax[] = [];
 
-  constructor(public scope: Scope) {
+  constructor() {
 
   }
 
@@ -98,7 +99,7 @@ export class BoltToJSTransform implements Transformer {
   }
 
   public transform(sourceFile: BoltSourceFile): JSSourceFile {
-    const ctx = new CompileContext(this.checker.getScope(sourceFile))
+    const ctx = new CompileContext()
     for (const element of sourceFile.elements) {
       this.compileSourceElement(element, ctx);
     }
@@ -110,6 +111,7 @@ export class BoltToJSTransform implements Transformer {
     switch (node.kind) {
 
       case SyntaxKind.BoltCallExpression:
+      {
         const compiledOperator = this.compileExpression(node.operator, ctx);
         const compiledArgs = node.operands.map(arg => this.compileExpression(arg, ctx))
         return createJSCallExpression(
@@ -117,19 +119,22 @@ export class BoltToJSTransform implements Transformer {
           compiledArgs,
           node.span,
         );
+      }
 
       case SyntaxKind.BoltReferenceExpression:
+      {
         assert(node.name.modulePath === null);
-        return createJSReferenceExpression(
-          node.name.name.text,
-          node.span,
-        );
+        const result = createJSReferenceExpression(node.name.name.text);
+        setOrigNodeRange(result, node, node);
+        return result;
+      }
 
       case SyntaxKind.BoltConstantExpression:
-        return createJSConstantExpression(
-          node.value,
-          node.span,
-        );
+      {
+        const result = createJSConstantExpression(node.value);
+        setOrigNodeRange(result, node, node);
+        return result;
+      }
 
       default:
         throw new Error(`Could not compile expression node ${kindToString(node.kind)}`)
@@ -147,7 +152,7 @@ export class BoltToJSTransform implements Transformer {
     return jsBindPatt;
   }
 
-  protected compileSourceElement(node: BoltSourceElement, ctx: CompileContext) {
+  private compileSourceElement(node: BoltSourceElement, ctx: CompileContext) {
 
     switch (node.kind) {
 
@@ -167,6 +172,7 @@ export class BoltToJSTransform implements Transformer {
         break;
 
       case SyntaxKind.BoltVariableDeclaration:
+      {
         const jsValue = node.value !== null ? this.compileExpression(node.value, ctx) : null;
         const jsValueBindPatt = this.convertPattern(node.bindings);
         const jsValueDecl = createJSLetDeclaration(
@@ -175,35 +181,50 @@ export class BoltToJSTransform implements Transformer {
         );
         ctx.appendNode(jsValueDecl);
         break;
+      }
 
       case SyntaxKind.BoltFunctionDeclaration:
-          if (node.body === null) {
-            break;
-          }
-        if (node.target === "JS") {
-          const params: JSParameter[] = [];
-          let body: JSStatement[] = [];
-          for (const param of node.params) {
-            assert(param.defaultValue === null);
-            const jsPatt = this.convertPattern(param.bindings)
-            params.push(jsPatt);
-          }
-          let result = createJSFunctionDeclaration(
-            0,
-            createJSIdentifier(node.name.text, node.name.span),
-            params,
-            body,
-            node.span,
-          );
-          if (hasPublicModifier(node)) {
-            result.modifiers |= JSDeclarationModifiers.IsExported;;
-          }
-          ctx.appendNode(result)
-        } else {
-          // TODO
-          throw new Error(`Compiling native functions is not yet implemented.`);
+      {
+        if (node.body === null) {
+          break;
         }
+        const params: JSParameter[] = [];
+        let body: JSStatement[] = [];
+        let modifiers = 0;
+        if (hasPublicModifier(node)) {
+          modifiers |= JSDeclarationModifiers.IsExported;;
+        }
+        let i = 0;
+        for (const param of node.params) {
+          assert(param.defaultValue === null);
+          const jsPatt = this.convertPattern(param.bindings)
+          const jsParam = createJSParameter(i, jsPatt, null);
+          params.push(jsParam);
+          i++;
+        }
+        const name = createJSIdentifier(node.name.text)
+        setOrigNodeRange(name, node.name, node.name);
+        const bodyCtx = new CompileContext();
+        if (node.target === "JS") {
+          for (const element of node.body) {
+            this.compileJSStatement(element, bodyCtx);
+          }
+        } else {
+          for (const element of node.body) {
+            this.compileSourceElement(element, bodyCtx);
+          }
+        }
+        const result = createJSFunctionDeclaration(
+          modifiers,
+          name,
+          params,
+          bodyCtx.getGeneratedNodes() as JSStatement[],
+          node.span,
+        );
+        setOrigNodeRange(result, node, node);
+        ctx.appendNode(result)
         break;
+      }
 
       default:
         throw new Error(`Could not compile node ${kindToString(node.kind)}`);

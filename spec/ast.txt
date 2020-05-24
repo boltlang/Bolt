@@ -180,6 +180,15 @@ node BoltReturnStatement > BoltStatement {
   value: Option<BoltExpression>,
 }
 
+node BoltConditionalCase {
+  test: Option<BoltExpression>,
+  body: Vec<BoltFunctionBodyElement>,
+}
+
+node BoltConditionalStatement > BoltStatement {
+  cases: Vec<BoltConditionalCase>,
+}
+
 node BoltResumeStatement > BoltStatement {
   value: BoltExpression,
 }
@@ -402,7 +411,9 @@ node JSReferenceExpression > JSExpression {
 
 node JSSourceElement;
 
-node JSStatement > JSSourceElement;
+node JSFunctionBodyElement;
+
+node JSStatement > JSSourceElement, JSFunctionBodyElement;
 
 node JSCatchBlock {
   bindings: Option<JSPattern>,
@@ -419,10 +430,13 @@ node JSExpressionStatement > JSStatement {
   expression: JSExpression,
 }
 
+node JSConditionalCase {
+  test: Option<JSExpression>,
+  body: Vec<JSFunctionBodyElement>,
+}
+
 node JSConditionalStatement > JSStatement {
-  test: JSExpression,
-  consequent: Vec<JSStatement>,
-  alternate: Vec<JSStatement>,
+  cases: Vec<JSConditionalCase>,
 }
 
 node JSReturnStatement > JSStatement {
@@ -457,20 +471,20 @@ node JSImportDeclaration > JSDeclaration {
   filename: JSString,
 }
 
-node JSFunctionDeclaration > JSDeclaration {
+node JSFunctionDeclaration > JSDeclaration, JSFunctionBodyElement {
   modifiers: JSDeclarationModifiers,
   name: JSIdentifier,
   params: Vec<JSParameter>,
   body: Vec<JSStatement>,
 }
 
-node JSArrowFunctionDeclaration > JSDeclaration {
+node JSArrowFunctionDeclaration > JSDeclaration, JSFunctionBodyElement {
   name: JSIdentifier,
   params: Vec<JSParameter>,
   body: JSExpression,
 }
 
-node JSLetDeclaration > JSDeclaration {
+node JSLetDeclaration > JSDeclaration, JSFunctionBodyElement {
   bindings: JSPattern,
   value: Option<JSExpression>,
 }

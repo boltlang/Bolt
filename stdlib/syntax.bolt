@@ -1,11 +1,5 @@
 
-syntax {
-  quote {
-    macro $name: QualName {
-
-    }
-  } => {
-
-  }
-}
-
+import "lang/bolt" (
+  Identifier,
+  Syntax,
+);

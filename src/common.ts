@@ -2,8 +2,14 @@ import {
   BoltFunctionBodyElement,
   BoltReturnStatement,
   SyntaxKind,
-  BoltExpression
+  BoltExpression,
+  BoltSourceFile,
+  JSSourceFile
 } from "./ast";
+
+export type SourceFile
+  = BoltSourceFile
+  | JSSourceFile
 
 export type BoltFunctionBody = BoltFunctionBodyElement[];
 

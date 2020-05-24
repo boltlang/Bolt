@@ -104,7 +104,6 @@ export class Frontend {
       case "JS":
         const transforms = new TransformManager(this.container);
         transforms.register(ExpandBoltTransform);
-        transforms.register(EliminateModulesTransform);
         transforms.register(CompileBoltToJSTransform);
         transforms.register(ConstFoldTransform);
         transforms.apply(program);

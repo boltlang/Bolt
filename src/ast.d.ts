@@ -59,82 +59,85 @@ export const enum SyntaxKind {
   BoltBlockExpression = 66,
   BoltConstantExpression = 67,
   BoltReturnStatement = 69,
-  BoltResumeStatement = 70,
-  BoltExpressionStatement = 71,
-  BoltParameter = 72,
-  BoltModule = 76,
-  BoltFunctionDeclaration = 78,
-  BoltVariableDeclaration = 79,
-  BoltPlainImportSymbol = 81,
-  BoltImportDeclaration = 82,
-  BoltTraitDeclaration = 83,
-  BoltImplDeclaration = 84,
-  BoltTypeAliasDeclaration = 85,
-  BoltRecordField = 87,
-  BoltRecordDeclaration = 88,
-  BoltMacroCall = 90,
-  JSOperator = 93,
-  JSIdentifier = 94,
-  JSString = 95,
-  JSInteger = 96,
-  JSFromKeyword = 97,
-  JSReturnKeyword = 98,
-  JSTryKeyword = 99,
-  JSFinallyKeyword = 100,
-  JSCatchKeyword = 101,
-  JSImportKeyword = 102,
-  JSAsKeyword = 103,
-  JSConstKeyword = 104,
-  JSLetKeyword = 105,
-  JSExportKeyword = 106,
-  JSFunctionKeyword = 107,
-  JSWhileKeyword = 108,
-  JSForKeyword = 109,
-  JSCloseBrace = 110,
-  JSCloseBracket = 111,
-  JSCloseParen = 112,
-  JSOpenBrace = 113,
-  JSOpenBracket = 114,
-  JSOpenParen = 115,
-  JSSemi = 116,
-  JSComma = 117,
-  JSDot = 118,
-  JSDotDotDot = 119,
-  JSMulOp = 120,
-  JSAddOp = 121,
-  JSDivOp = 122,
-  JSSubOp = 123,
-  JSLtOp = 124,
-  JSGtOp = 125,
-  JSBOrOp = 126,
-  JSBXorOp = 127,
-  JSBAndOp = 128,
-  JSBNotOp = 129,
-  JSNotOp = 130,
-  JSBindPattern = 132,
-  JSConstantExpression = 134,
-  JSMemberExpression = 135,
-  JSCallExpression = 136,
-  JSBinaryExpression = 137,
-  JSUnaryExpression = 138,
-  JSNewExpression = 139,
-  JSSequenceExpression = 140,
-  JSConditionalExpression = 141,
-  JSLiteralExpression = 143,
-  JSReferenceExpression = 144,
-  JSCatchBlock = 147,
-  JSTryCatchStatement = 148,
-  JSExpressionStatement = 149,
-  JSConditionalStatement = 150,
-  JSReturnStatement = 151,
-  JSParameter = 152,
-  JSImportStarBinding = 156,
-  JSImportAsBinding = 157,
-  JSImportDeclaration = 158,
-  JSFunctionDeclaration = 159,
-  JSArrowFunctionDeclaration = 160,
-  JSLetDeclaration = 161,
-  JSSourceFile = 162,
+  BoltConditionalCase = 70,
+  BoltConditionalStatement = 71,
+  BoltResumeStatement = 72,
+  BoltExpressionStatement = 73,
+  BoltParameter = 74,
+  BoltModule = 78,
+  BoltFunctionDeclaration = 80,
+  BoltVariableDeclaration = 81,
+  BoltPlainImportSymbol = 83,
+  BoltImportDeclaration = 84,
+  BoltTraitDeclaration = 85,
+  BoltImplDeclaration = 86,
+  BoltTypeAliasDeclaration = 87,
+  BoltRecordField = 89,
+  BoltRecordDeclaration = 90,
+  BoltMacroCall = 92,
+  JSOperator = 95,
+  JSIdentifier = 96,
+  JSString = 97,
+  JSInteger = 98,
+  JSFromKeyword = 99,
+  JSReturnKeyword = 100,
+  JSTryKeyword = 101,
+  JSFinallyKeyword = 102,
+  JSCatchKeyword = 103,
+  JSImportKeyword = 104,
+  JSAsKeyword = 105,
+  JSConstKeyword = 106,
+  JSLetKeyword = 107,
+  JSExportKeyword = 108,
+  JSFunctionKeyword = 109,
+  JSWhileKeyword = 110,
+  JSForKeyword = 111,
+  JSCloseBrace = 112,
+  JSCloseBracket = 113,
+  JSCloseParen = 114,
+  JSOpenBrace = 115,
+  JSOpenBracket = 116,
+  JSOpenParen = 117,
+  JSSemi = 118,
+  JSComma = 119,
+  JSDot = 120,
+  JSDotDotDot = 121,
+  JSMulOp = 122,
+  JSAddOp = 123,
+  JSDivOp = 124,
+  JSSubOp = 125,
+  JSLtOp = 126,
+  JSGtOp = 127,
+  JSBOrOp = 128,
+  JSBXorOp = 129,
+  JSBAndOp = 130,
+  JSBNotOp = 131,
+  JSNotOp = 132,
+  JSBindPattern = 134,
+  JSConstantExpression = 136,
+  JSMemberExpression = 137,
+  JSCallExpression = 138,
+  JSBinaryExpression = 139,
+  JSUnaryExpression = 140,
+  JSNewExpression = 141,
+  JSSequenceExpression = 142,
+  JSConditionalExpression = 143,
+  JSLiteralExpression = 145,
+  JSReferenceExpression = 146,
+  JSCatchBlock = 150,
+  JSTryCatchStatement = 151,
+  JSExpressionStatement = 152,
+  JSConditionalCase = 153,
+  JSConditionalStatement = 154,
+  JSReturnStatement = 155,
+  JSParameter = 156,
+  JSImportStarBinding = 160,
+  JSImportAsBinding = 161,
+  JSImportDeclaration = 162,
+  JSFunctionDeclaration = 163,
+  JSArrowFunctionDeclaration = 164,
+  JSLetDeclaration = 165,
+  JSSourceFile = 166,
 }
 
 
@@ -523,6 +526,7 @@ export interface BoltConstantExpression extends SyntaxBase<SyntaxKind.BoltConsta
 
 export type BoltStatement
   = BoltReturnStatement
+  | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
   | BoltMacroCall
@@ -531,6 +535,17 @@ export type BoltStatement
 export interface BoltReturnStatement extends SyntaxBase<SyntaxKind.BoltReturnStatement> {
   kind: SyntaxKind.BoltReturnStatement;
   value: BoltExpression | null;
+}
+
+export interface BoltConditionalCase extends SyntaxBase<SyntaxKind.BoltConditionalCase> {
+  kind: SyntaxKind.BoltConditionalCase;
+  test: BoltExpression | null;
+  body: BoltFunctionBodyElement[];
+}
+
+export interface BoltConditionalStatement extends SyntaxBase<SyntaxKind.BoltConditionalStatement> {
+  kind: SyntaxKind.BoltConditionalStatement;
+  cases: BoltConditionalCase[];
 }
 
 export interface BoltResumeStatement extends SyntaxBase<SyntaxKind.BoltResumeStatement> {
@@ -581,6 +596,7 @@ export interface BoltModule extends SyntaxBase<SyntaxKind.BoltModule> {
 
 export type BoltFunctionBodyElement
   = BoltReturnStatement
+  | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
   | BoltMacroCall
@@ -667,6 +683,7 @@ export interface BoltRecordDeclaration extends SyntaxBase<SyntaxKind.BoltRecordD
 
 export type BoltSourceElement
   = BoltReturnStatement
+  | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
   | BoltMacroCall
@@ -978,6 +995,15 @@ export type JSSourceElement
   | JSLetDeclaration
 
 
+export type JSFunctionBodyElement
+  = JSExpressionStatement
+  | JSConditionalStatement
+  | JSReturnStatement
+  | JSFunctionDeclaration
+  | JSArrowFunctionDeclaration
+  | JSLetDeclaration
+
+
 export type JSStatement
   = JSExpressionStatement
   | JSConditionalStatement
@@ -1002,11 +1028,15 @@ export interface JSExpressionStatement extends SyntaxBase<SyntaxKind.JSExpressio
   expression: JSExpression;
 }
 
+export interface JSConditionalCase extends SyntaxBase<SyntaxKind.JSConditionalCase> {
+  kind: SyntaxKind.JSConditionalCase;
+  test: JSExpression | null;
+  body: JSFunctionBodyElement[];
+}
+
 export interface JSConditionalStatement extends SyntaxBase<SyntaxKind.JSConditionalStatement> {
   kind: SyntaxKind.JSConditionalStatement;
-  test: JSExpression;
-  consequent: JSStatement[];
-  alternate: JSStatement[];
+  cases: JSConditionalCase[];
 }
 
 export interface JSReturnStatement extends SyntaxBase<SyntaxKind.JSReturnStatement> {
@@ -1137,6 +1167,8 @@ export type BoltSyntax
   | BoltBlockExpression
   | BoltConstantExpression
   | BoltReturnStatement
+  | BoltConditionalCase
+  | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
   | BoltParameter
@@ -1206,6 +1238,7 @@ export type JSSyntax
   | JSCatchBlock
   | JSTryCatchStatement
   | JSExpressionStatement
+  | JSConditionalCase
   | JSConditionalStatement
   | JSReturnStatement
   | JSParameter
@@ -1278,6 +1311,8 @@ export type Syntax
   | BoltBlockExpression
   | BoltConstantExpression
   | BoltReturnStatement
+  | BoltConditionalCase
+  | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
   | BoltParameter
@@ -1344,6 +1379,7 @@ export type Syntax
   | JSCatchBlock
   | JSTryCatchStatement
   | JSExpressionStatement
+  | JSConditionalCase
   | JSConditionalStatement
   | JSReturnStatement
   | JSParameter
@@ -1417,6 +1453,8 @@ export function createBoltCaseExpression(cases: BoltCase[], span?: TextSpan | nu
 export function createBoltBlockExpression(elements: BoltFunctionBodyElement[], span?: TextSpan | null): BoltBlockExpression;
 export function createBoltConstantExpression(value: BoltValue, span?: TextSpan | null): BoltConstantExpression;
 export function createBoltReturnStatement(value: BoltExpression | null, span?: TextSpan | null): BoltReturnStatement;
+export function createBoltConditionalCase(test: BoltExpression | null, body: BoltFunctionBodyElement[], span?: TextSpan | null): BoltConditionalCase;
+export function createBoltConditionalStatement(cases: BoltConditionalCase[], span?: TextSpan | null): BoltConditionalStatement;
 export function createBoltResumeStatement(value: BoltExpression, span?: TextSpan | null): BoltResumeStatement;
 export function createBoltExpressionStatement(expression: BoltExpression, span?: TextSpan | null): BoltExpressionStatement;
 export function createBoltParameter(index: number, bindings: BoltPattern, type: BoltTypeExpression | null, defaultValue: BoltExpression | null, span?: TextSpan | null): BoltParameter;
@@ -1483,7 +1521,8 @@ export function createJSReferenceExpression(name: string, span?: TextSpan | null
 export function createJSCatchBlock(bindings: JSPattern | null, elements: JSSourceElement[], span?: TextSpan | null): JSCatchBlock;
 export function createJSTryCatchStatement(tryBlock: JSSourceElement[], catchBlock: JSCatchBlock | null, finalBlock: JSSourceElement[] | null, span?: TextSpan | null): JSTryCatchStatement;
 export function createJSExpressionStatement(expression: JSExpression, span?: TextSpan | null): JSExpressionStatement;
-export function createJSConditionalStatement(test: JSExpression, consequent: JSStatement[], alternate: JSStatement[], span?: TextSpan | null): JSConditionalStatement;
+export function createJSConditionalCase(test: JSExpression | null, body: JSFunctionBodyElement[], span?: TextSpan | null): JSConditionalCase;
+export function createJSConditionalStatement(cases: JSConditionalCase[], span?: TextSpan | null): JSConditionalStatement;
 export function createJSReturnStatement(value: JSExpression | null, span?: TextSpan | null): JSReturnStatement;
 export function createJSParameter(index: number, bindings: JSPattern, defaultValue: JSExpression | null, span?: TextSpan | null): JSParameter;
 export function createJSImportStarBinding(local: JSIdentifier, span?: TextSpan | null): JSImportStarBinding;
@@ -1561,6 +1600,8 @@ export function isBoltBlockExpression(value: any): value is BoltBlockExpression;
 export function isBoltConstantExpression(value: any): value is BoltConstantExpression;
 export function isBoltStatement(value: any): value is BoltStatement;
 export function isBoltReturnStatement(value: any): value is BoltReturnStatement;
+export function isBoltConditionalCase(value: any): value is BoltConditionalCase;
+export function isBoltConditionalStatement(value: any): value is BoltConditionalStatement;
 export function isBoltResumeStatement(value: any): value is BoltResumeStatement;
 export function isBoltExpressionStatement(value: any): value is BoltExpressionStatement;
 export function isBoltParameter(value: any): value is BoltParameter;
@@ -1634,10 +1675,12 @@ export function isJSConditionalExpression(value: any): value is JSConditionalExp
 export function isJSLiteralExpression(value: any): value is JSLiteralExpression;
 export function isJSReferenceExpression(value: any): value is JSReferenceExpression;
 export function isJSSourceElement(value: any): value is JSSourceElement;
+export function isJSFunctionBodyElement(value: any): value is JSFunctionBodyElement;
 export function isJSStatement(value: any): value is JSStatement;
 export function isJSCatchBlock(value: any): value is JSCatchBlock;
 export function isJSTryCatchStatement(value: any): value is JSTryCatchStatement;
 export function isJSExpressionStatement(value: any): value is JSExpressionStatement;
+export function isJSConditionalCase(value: any): value is JSConditionalCase;
 export function isJSConditionalStatement(value: any): value is JSConditionalStatement;
 export function isJSReturnStatement(value: any): value is JSReturnStatement;
 export function isJSParameter(value: any): value is JSParameter;

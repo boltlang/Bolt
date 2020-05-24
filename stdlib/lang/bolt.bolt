@@ -1,5 +1,5 @@
 
-mod Lang.Bolt.AST {
+mod Bolt.Lang {
 
   pub struct Pos {
     offset: Int,
@@ -19,6 +19,56 @@ mod Lang.Bolt.AST {
     orig_node: Option<Node>,
     parent: Option<Node>,
   }
+
+  pub type Token
+    = Identifier
+
+  pub struct ConditionalCase {
+    test: Option<Expression>,
+    result: Vec<FunctionBodyElement>,
+  }
+
+  pub struct ConditionalStatement {
+    cases: Vec<ConditionalCase>,
+  }
+
+  pub type Statement
+    = ReturnStatement
+    | ConditionalStatement
+
+  pub type Expression
+    = ReferenceExpression
+
+  pub type Transformer = fn (node: Node) -> Node;
+
+  fn build_predicate_from_pattern(pattern: Pattern) -> Expression {
+    match pattern {
+      BindPattern { name } => quote(true).taint(pattern),
+      VariantPatten { elements } => quote(or($(elements),*)),
+      RecordPattern { members } => quote(and($elements),*)),
+    }
+  }
+
+  fn eliminate_match_rule(stx: Syntax) {
+    match stx {
+      quote {
+        match $value: Expression {
+          $patterns @ ( $pattern: Pattern => $expression: Expression ),* (,)?
+        }
+      } => {
+        let cases = patterns.map(|pattern| {
+          ConditionalCase::from_node(
+            pattern,
+            build_predicate_from_pattern(pattern),
+            value
+          )
+        });
+        return ConditionalStatement::from_node(stx, cases);
+      }
+    }
+  }
+
+  register_transformer!(elminate_match_rule);
 
 }
 
