@@ -9,6 +9,15 @@ export class Emitter {
 
     switch (node.kind) {
 
+      case SyntaxKind.BoltQualName:
+        if (node.modulePath !== null) {
+          for (const element of node.modulePath) {
+            out += '.' + element.text;
+          }
+        }
+        out += this.emit(node.name);
+        break;
+
       case SyntaxKind.BoltIdentifier:
       case SyntaxKind.BoltOperator:
         out += node.text;

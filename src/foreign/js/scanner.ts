@@ -1,8 +1,6 @@
 
-import XRegExp from "xregexp"
-
 import { TextPos, TextSpan, TextFile } from "../../text"
-import { EOF, ScanError } from "../../util"
+import { EOF, ScanError } from "../../common"
 
 import {
   JSToken,

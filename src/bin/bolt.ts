@@ -3,6 +3,9 @@
 import "reflect-metadata"
 import "source-map-support/register"
 
+import { sync as globSync } from "glob"
+import * as path from "path"
+import * as fs from "fs"
 import yargs from "yargs"
 
 import { Program } from "../program"
@@ -10,9 +13,9 @@ import { parseSourceFile } from "../parser"
 import { BoltSourceFile} from "../ast"
 import { Frontend } from "../frontend"
 
-global.debug = function (value: any) {
-  console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
-}
+//global.print = function (value: any) {
+//  console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
+//}
 
 function toArray<T>(value: T | T[]): T[] {
   if (Array.isArray(value)) {
@@ -38,6 +41,18 @@ function flatMap<T>(array: T[], proc: (element: T) => T[]) {
     pushAll(out, proc(element));
   }
   return out
+}
+
+function loadAllSourceFiles(filenames: string[]): BoltSourceFile[] {
+  const sourceFiles = [];
+  for (const filename of filenames) {
+    if (fs.statSync(filename).isDirectory()) {
+      for (const filepath of globSync(path.join(filename, '**/*.bolt'))) {
+        sourceFiles.push(parseSourceFile(filepath));
+      }
+    }
+  }
+  return sourceFiles;
 }
 
 yargs
@@ -75,7 +90,7 @@ yargs
 
     , args => {
 
-      const sourceFiles = toArray(args.files as string[] | string).map(parseSourceFile);
+      const sourceFiles = loadAllSourceFiles(toArray(args.files as string[] | string));
       const program = new Program(sourceFiles);
       const frontend = new Frontend();
       frontend.typeCheck(program);

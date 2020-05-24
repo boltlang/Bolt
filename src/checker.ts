@@ -54,6 +54,7 @@ import {
 } from "./diagnostics";
 import { createAnyType, isOpaqueType, createOpaqueType, Type, createVoidType, createVariantType, isVoidType } from "./types";
 import { getReturnStatementsInFunctionBody } from "./common";
+import {emit} from "./emitter";
 
 interface SymbolInfo {
   declarations: BoltDeclaration[];
@@ -207,6 +208,7 @@ export class TypeChecker {
           for (const element of node.elements) {
             visitSourceElement(element);
           }
+          break;
         }
 
         case SyntaxKind.BoltRecordDeclaration:
@@ -457,7 +459,7 @@ export class TypeChecker {
       {
         const scope = this.getScopeSurroundingNode(node);
         const sym = createSymbol(node);
-        this.addSymbol(node.name.text, scope, sym);
+        this.addSymbol(emit(node.name), scope, sym);
         break;
       }
 
@@ -473,10 +475,12 @@ export class TypeChecker {
   }
 
   private addSymbol(name: string, scope: Scope, sym: SymbolInfo): void {
+    console.error(`Adding symbol ${name}`);
     this.symbols.set(`${name}@${(scope as any).id}`, sym);
   }
 
   private addTypeSymbol(name: string, scope: TypeScope, sym: TypeSymbolInfo): void {
+    console.error(`Adding type symbol ${name}`);
     this.typeSymbols.set(`${name}@${(scope as any).id}`, sym);
   }
 
@@ -615,7 +619,7 @@ export class TypeChecker {
         scope = parentScope;
       }
     }
-    const sym = this.findSymbolInScopeOf(node.name.name.text, scope);
+    const sym = this.findSymbolInScopeOf(emit(node.name.name), scope);
     if (sym === null) {
       return null;
     }
@@ -624,7 +628,7 @@ export class TypeChecker {
 
   public resolveTypeReferenceExpression(node: BoltReferenceTypeExpression): BoltTypeDeclaration | null {
     const typeScope = this.getTypeScopeSurroundingNode(node);
-    const typeSym = this.findSymbolInTypeScopeOf(node.name.name.text, typeScope);
+    const typeSym = this.findSymbolInTypeScopeOf(emit(node.name.name), typeScope);
     if (typeSym === null) {
       return null;
     }

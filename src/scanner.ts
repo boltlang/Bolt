@@ -48,6 +48,7 @@ import {
   createBoltVBar,
   createBoltColonColon,
   createBoltExMark,
+  createBoltWhereKeyword,
 } from "./ast"
 
 export enum PunctType {
@@ -299,6 +300,7 @@ export class Scanner {
           case 'pub':     return createBoltPubKeyword(span);
           case 'mod':     return createBoltModKeyword(span);
           case 'fn':      return createBoltFnKeyword(span);
+          case 'where':   return createBoltWhereKeyword(span);
           case 'return':  return createBoltReturnKeyword(span);
           case 'match':   return createBoltMatchKeyword(span);
           case 'yield':   return createBoltYieldKeyword(span);

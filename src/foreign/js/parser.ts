@@ -1,5 +1,6 @@
 
-import  { Stream, assertToken, setOrigNodeRange, ParseError } from "../../util"
+import  { Stream } from "../../util"
+import { assertToken, setOrigNodeRange, ParseError } from "../../common"
 
 import {
   SyntaxKind,

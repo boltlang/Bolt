@@ -21,131 +21,132 @@ export const enum SyntaxKind {
   BoltExMark = 26,
   BoltLtSign = 27,
   BoltVBar = 28,
-  BoltQuoteKeyword = 30,
-  BoltFnKeyword = 31,
-  BoltForeignKeyword = 32,
-  BoltForKeyword = 33,
-  BoltLetKeyword = 34,
-  BoltReturnKeyword = 35,
-  BoltLoopKeyword = 36,
-  BoltYieldKeyword = 37,
-  BoltMatchKeyword = 38,
-  BoltImportKeyword = 39,
-  BoltPubKeyword = 40,
-  BoltModKeyword = 41,
-  BoltMutKeyword = 42,
-  BoltEnumKeyword = 43,
-  BoltStructKeyword = 44,
-  BoltTypeKeyword = 45,
-  BoltTraitKeyword = 46,
-  BoltImplKeyword = 47,
-  BoltParenthesized = 49,
-  BoltBraced = 50,
-  BoltBracketed = 51,
-  BoltSourceFile = 52,
-  BoltQualName = 53,
-  BoltReferenceTypeExpression = 55,
-  BoltFunctionTypeExpression = 56,
-  BoltTypeParameter = 57,
-  BoltBindPattern = 59,
-  BoltTypePattern = 60,
-  BoltExpressionPattern = 61,
-  BoltTuplePatternElement = 62,
-  BoltTuplePattern = 63,
-  BoltRecordFieldPattern = 64,
-  BoltRecordPattern = 65,
-  BoltQuoteExpression = 67,
-  BoltReferenceExpression = 68,
-  BoltMemberExpression = 69,
-  BoltFunctionExpression = 70,
-  BoltCallExpression = 71,
-  BoltYieldExpression = 72,
-  BoltMatchArm = 73,
-  BoltMatchExpression = 74,
-  BoltCase = 75,
-  BoltCaseExpression = 76,
-  BoltBlockExpression = 77,
-  BoltConstantExpression = 78,
-  BoltReturnStatement = 80,
-  BoltConditionalCase = 81,
-  BoltConditionalStatement = 82,
-  BoltResumeStatement = 83,
-  BoltExpressionStatement = 84,
-  BoltParameter = 85,
-  BoltModule = 89,
-  BoltFunctionDeclaration = 91,
-  BoltVariableDeclaration = 92,
-  BoltPlainImportSymbol = 94,
-  BoltImportDeclaration = 95,
-  BoltTraitDeclaration = 96,
-  BoltImplDeclaration = 97,
-  BoltTypeAliasDeclaration = 98,
-  BoltRecordField = 100,
-  BoltRecordDeclaration = 101,
-  BoltMacroCall = 103,
-  JSOperator = 106,
-  JSIdentifier = 107,
-  JSString = 108,
-  JSInteger = 109,
-  JSFromKeyword = 110,
-  JSReturnKeyword = 111,
-  JSTryKeyword = 112,
-  JSFinallyKeyword = 113,
-  JSCatchKeyword = 114,
-  JSImportKeyword = 115,
-  JSAsKeyword = 116,
-  JSConstKeyword = 117,
-  JSLetKeyword = 118,
-  JSExportKeyword = 119,
-  JSFunctionKeyword = 120,
-  JSWhileKeyword = 121,
-  JSForKeyword = 122,
-  JSCloseBrace = 123,
-  JSCloseBracket = 124,
-  JSCloseParen = 125,
-  JSOpenBrace = 126,
-  JSOpenBracket = 127,
-  JSOpenParen = 128,
-  JSSemi = 129,
-  JSComma = 130,
-  JSDot = 131,
-  JSDotDotDot = 132,
-  JSMulOp = 133,
-  JSAddOp = 134,
-  JSDivOp = 135,
-  JSSubOp = 136,
-  JSLtOp = 137,
-  JSGtOp = 138,
-  JSBOrOp = 139,
-  JSBXorOp = 140,
-  JSBAndOp = 141,
-  JSBNotOp = 142,
-  JSNotOp = 143,
-  JSBindPattern = 145,
-  JSConstantExpression = 147,
-  JSMemberExpression = 148,
-  JSCallExpression = 149,
-  JSBinaryExpression = 150,
-  JSUnaryExpression = 151,
-  JSNewExpression = 152,
-  JSSequenceExpression = 153,
-  JSConditionalExpression = 154,
-  JSLiteralExpression = 156,
-  JSReferenceExpression = 157,
-  JSCatchBlock = 161,
-  JSTryCatchStatement = 162,
-  JSExpressionStatement = 163,
-  JSConditionalCase = 164,
-  JSConditionalStatement = 165,
-  JSReturnStatement = 166,
-  JSParameter = 167,
-  JSImportStarBinding = 171,
-  JSImportAsBinding = 172,
-  JSImportDeclaration = 173,
-  JSFunctionDeclaration = 174,
-  JSArrowFunctionDeclaration = 175,
-  JSLetDeclaration = 176,
-  JSSourceFile = 177,
+  BoltWhereKeyword = 30,
+  BoltQuoteKeyword = 31,
+  BoltFnKeyword = 32,
+  BoltForeignKeyword = 33,
+  BoltForKeyword = 34,
+  BoltLetKeyword = 35,
+  BoltReturnKeyword = 36,
+  BoltLoopKeyword = 37,
+  BoltYieldKeyword = 38,
+  BoltMatchKeyword = 39,
+  BoltImportKeyword = 40,
+  BoltPubKeyword = 41,
+  BoltModKeyword = 42,
+  BoltMutKeyword = 43,
+  BoltEnumKeyword = 44,
+  BoltStructKeyword = 45,
+  BoltTypeKeyword = 46,
+  BoltTraitKeyword = 47,
+  BoltImplKeyword = 48,
+  BoltParenthesized = 50,
+  BoltBraced = 51,
+  BoltBracketed = 52,
+  BoltSourceFile = 53,
+  BoltQualName = 54,
+  BoltReferenceTypeExpression = 56,
+  BoltFunctionTypeExpression = 57,
+  BoltTypeParameter = 58,
+  BoltBindPattern = 60,
+  BoltTypePattern = 61,
+  BoltExpressionPattern = 62,
+  BoltTuplePatternElement = 63,
+  BoltTuplePattern = 64,
+  BoltRecordFieldPattern = 65,
+  BoltRecordPattern = 66,
+  BoltQuoteExpression = 68,
+  BoltReferenceExpression = 69,
+  BoltMemberExpression = 70,
+  BoltFunctionExpression = 71,
+  BoltCallExpression = 72,
+  BoltYieldExpression = 73,
+  BoltMatchArm = 74,
+  BoltMatchExpression = 75,
+  BoltCase = 76,
+  BoltCaseExpression = 77,
+  BoltBlockExpression = 78,
+  BoltConstantExpression = 79,
+  BoltReturnStatement = 81,
+  BoltConditionalCase = 82,
+  BoltConditionalStatement = 83,
+  BoltResumeStatement = 84,
+  BoltExpressionStatement = 85,
+  BoltParameter = 86,
+  BoltModule = 90,
+  BoltFunctionDeclaration = 92,
+  BoltVariableDeclaration = 93,
+  BoltPlainImportSymbol = 95,
+  BoltImportDeclaration = 96,
+  BoltTraitDeclaration = 97,
+  BoltImplDeclaration = 98,
+  BoltTypeAliasDeclaration = 99,
+  BoltRecordField = 101,
+  BoltRecordDeclaration = 102,
+  BoltMacroCall = 104,
+  JSOperator = 107,
+  JSIdentifier = 108,
+  JSString = 109,
+  JSInteger = 110,
+  JSFromKeyword = 111,
+  JSReturnKeyword = 112,
+  JSTryKeyword = 113,
+  JSFinallyKeyword = 114,
+  JSCatchKeyword = 115,
+  JSImportKeyword = 116,
+  JSAsKeyword = 117,
+  JSConstKeyword = 118,
+  JSLetKeyword = 119,
+  JSExportKeyword = 120,
+  JSFunctionKeyword = 121,
+  JSWhileKeyword = 122,
+  JSForKeyword = 123,
+  JSCloseBrace = 124,
+  JSCloseBracket = 125,
+  JSCloseParen = 126,
+  JSOpenBrace = 127,
+  JSOpenBracket = 128,
+  JSOpenParen = 129,
+  JSSemi = 130,
+  JSComma = 131,
+  JSDot = 132,
+  JSDotDotDot = 133,
+  JSMulOp = 134,
+  JSAddOp = 135,
+  JSDivOp = 136,
+  JSSubOp = 137,
+  JSLtOp = 138,
+  JSGtOp = 139,
+  JSBOrOp = 140,
+  JSBXorOp = 141,
+  JSBAndOp = 142,
+  JSBNotOp = 143,
+  JSNotOp = 144,
+  JSBindPattern = 146,
+  JSConstantExpression = 148,
+  JSMemberExpression = 149,
+  JSCallExpression = 150,
+  JSBinaryExpression = 151,
+  JSUnaryExpression = 152,
+  JSNewExpression = 153,
+  JSSequenceExpression = 154,
+  JSConditionalExpression = 155,
+  JSLiteralExpression = 157,
+  JSReferenceExpression = 158,
+  JSCatchBlock = 162,
+  JSTryCatchStatement = 163,
+  JSExpressionStatement = 164,
+  JSConditionalCase = 165,
+  JSConditionalStatement = 166,
+  JSReturnStatement = 167,
+  JSParameter = 168,
+  JSImportStarBinding = 172,
+  JSImportAsBinding = 173,
+  JSImportDeclaration = 174,
+  JSFunctionDeclaration = 175,
+  JSArrowFunctionDeclaration = 176,
+  JSLetDeclaration = 177,
+  JSSourceFile = 178,
 }
 
 
@@ -195,6 +196,7 @@ export type Token
   | BoltExMark
   | BoltLtSign
   | BoltVBar
+  | BoltWhereKeyword
   | BoltQuoteKeyword
   | BoltFnKeyword
   | BoltForeignKeyword
@@ -291,6 +293,7 @@ export type BoltToken
   | BoltExMark
   | BoltLtSign
   | BoltVBar
+  | BoltWhereKeyword
   | BoltQuoteKeyword
   | BoltFnKeyword
   | BoltForeignKeyword
@@ -412,7 +415,8 @@ export interface BoltVBar extends SyntaxBase<SyntaxKind.BoltVBar> {
 }
 
 export type BoltKeyword
-  = BoltQuoteKeyword
+  = BoltWhereKeyword
+  | BoltQuoteKeyword
   | BoltFnKeyword
   | BoltForeignKeyword
   | BoltForKeyword
@@ -431,6 +435,10 @@ export type BoltKeyword
   | BoltTraitKeyword
   | BoltImplKeyword
 
+
+export interface BoltWhereKeyword extends SyntaxBase<SyntaxKind.BoltWhereKeyword> {
+  kind: SyntaxKind.BoltWhereKeyword;
+}
 
 export interface BoltQuoteKeyword extends SyntaxBase<SyntaxKind.BoltQuoteKeyword> {
   kind: SyntaxKind.BoltQuoteKeyword;
@@ -1294,6 +1302,7 @@ export type BoltSyntax
   | BoltExMark
   | BoltLtSign
   | BoltVBar
+  | BoltWhereKeyword
   | BoltQuoteKeyword
   | BoltFnKeyword
   | BoltForeignKeyword
@@ -1446,6 +1455,7 @@ export type Syntax
   | BoltExMark
   | BoltLtSign
   | BoltVBar
+  | BoltWhereKeyword
   | BoltQuoteKeyword
   | BoltFnKeyword
   | BoltForeignKeyword
@@ -1596,6 +1606,7 @@ export function createBoltGtSign(span?: TextSpan | null): BoltGtSign;
 export function createBoltExMark(span?: TextSpan | null): BoltExMark;
 export function createBoltLtSign(span?: TextSpan | null): BoltLtSign;
 export function createBoltVBar(span?: TextSpan | null): BoltVBar;
+export function createBoltWhereKeyword(span?: TextSpan | null): BoltWhereKeyword;
 export function createBoltQuoteKeyword(span?: TextSpan | null): BoltQuoteKeyword;
 export function createBoltFnKeyword(span?: TextSpan | null): BoltFnKeyword;
 export function createBoltForeignKeyword(span?: TextSpan | null): BoltForeignKeyword;
@@ -1749,6 +1760,7 @@ export function isBoltExMark(value: any): value is BoltExMark;
 export function isBoltLtSign(value: any): value is BoltLtSign;
 export function isBoltVBar(value: any): value is BoltVBar;
 export function isBoltKeyword(value: any): value is BoltKeyword;
+export function isBoltWhereKeyword(value: any): value is BoltWhereKeyword;
 export function isBoltQuoteKeyword(value: any): value is BoltQuoteKeyword;
 export function isBoltFnKeyword(value: any): value is BoltFnKeyword;
 export function isBoltForeignKeyword(value: any): value is BoltForeignKeyword;

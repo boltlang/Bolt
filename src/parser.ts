@@ -1122,6 +1122,12 @@ export class Parser {
           body = parseForeignLanguage(target, t3.text, t3.span!.file, t3.span!.start);
           break;
       }
+    } else if (t3.kind !== SyntaxKind.BoltSemi) {
+      const expected = [ SyntaxKind.BoltBraced, SyntaxKind.BoltSemi ];
+      if (returnType === null) {
+        expected.push(SyntaxKind.BoltRArrow);
+      }
+      throw new ParseError(t3, expected);
     }
 
     const result = createBoltFunctionDeclaration(
@@ -1148,16 +1154,21 @@ export class Parser {
     assertToken(t0, SyntaxKind.BoltTraitKeyword);
     const t1 = tokens.get();
     assertToken(t1, SyntaxKind.BoltIdentifier);
-    let typeParams = null
+    let lastToken = t1;
     const t2 = tokens.peek();
-    if (t2.kind === SyntaxKind.BoltLtSign) {
-      typeParams = this.parseGenericTypeParameters(tokens);
+    let typeParams = null
+    let elements = null;
+    if (t2.kind === SyntaxKind.BoltLtSign || t2.kind === SyntaxKind.BoltBraced) {
+      if (t2.kind === SyntaxKind.BoltLtSign) {
+        typeParams = this.parseGenericTypeParameters(tokens);
+      }
+      const t3 = tokens.get();
+      assertToken(t3, SyntaxKind.BoltBraced);
+      elements = this.parseSourceElements(createTokenStream(t3));
+      lastToken = t3;
     }
-    const t3 = tokens.get();
-    assertToken(t3, SyntaxKind.BoltBraced);
-    const elements = this.parseSourceElements(createTokenStream(t3));
     const result = createBoltTraitDeclaration(modifiers, t1 as BoltIdentifier, typeParams, elements as BoltDeclaration[]);
-    setOrigNodeRange(result, firstToken, t3);
+    setOrigNodeRange(result, firstToken, lastToken);
     return result;
   }
 
