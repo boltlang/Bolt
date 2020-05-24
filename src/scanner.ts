@@ -46,6 +46,8 @@ import {
   createBoltTraitKeyword,
   createBoltImplKeyword,
   createBoltMatchKeyword,
+  createBoltQuoteKeyword,
+  createBoltLetKeyword,
 } from "./ast"
 
 export enum PunctType {
@@ -114,7 +116,7 @@ function isIdentPart(ch: string) {
 }
 
 function isSymbol(ch: string) {
-  return /[=+\/\-*%$!><&^|]/.test(ch)
+  return /[=+\/\-*%$!><&^|\.]/.test(ch)
 }
 
 export class Scanner {
@@ -176,7 +178,7 @@ export class Scanner {
     return text;
   }
 
-  scanToken(): BoltToken {
+  public scan(): BoltToken {
 
     while (true) {
 
@@ -301,9 +303,10 @@ export class Scanner {
           case 'impl':    return createBoltImplKeyword(span);
           case 'type':    return createBoltTypeKeyword(span);
           case 'foreign': return createBoltForeignKeyword(span);
-          case 'let':     return createBoltPubKeyword(span);
+          case 'let':     return createBoltLetKeyword(span);
           case 'mut':     return createBoltMutKeyword(span);
           case 'struct':  return createBoltStructKeyword(span);
+          case 'quote':   return createBoltQuoteKeyword(span);
           case 'enum':    return createBoltEnumKeyword(span);
           default:        return createBoltIdentifier(name, span);
         }
@@ -376,7 +379,7 @@ export class Scanner {
 
   public peek(count = 1): BoltToken {
     while (this.scanned.length < count) {
-      this.scanned.push(this.scanToken());
+      this.scanned.push(this.scan());
     }
     return this.scanned[count - 1];
   }
@@ -384,56 +387,7 @@ export class Scanner {
   public get(): BoltToken {
     return this.scanned.length > 0
       ? this.scanned.shift()!
-      : this.scanToken();
-  }
-
-  scanTokens() {
-
-    const elements: BoltSentence[] = []
-
-    outer: while (true) {
-
-      const tokens: BoltToken[] = [];
-
-      inner: while (true) {
-        const token = this.scanToken();
-        if (token.kind === SyntaxKind.EndOfFile) {
-          if (tokens.length === 0) {
-            break outer;
-          } else {
-            break inner;
-          }  
-        }
-        if (token.kind === SyntaxKind.BoltSemi) {
-          break;
-        }
-        tokens.push(token)
-        if (token.kind === SyntaxKind.BoltBraced) {
-          break;
-        }
-      }
-
-      if (tokens.length > 0) {
-        elements.push(
-          createBoltSentence(
-            tokens,
-            new TextSpan(this.file, tokens[0].span!.start.clone(), tokens[tokens.length-1].span!.end.clone())
-          )
-        )
-      }
-
-    }
-
-    return elements
-  }
-
-  public scan() {
-    const startPos = this.currPos.clone();
-    const elements = this.scanTokens();
-    const endPos = this.currPos.clone();
-    const sourceFile = createBoltSourceFile(elements, new TextSpan(this.file, startPos, endPos));
-    setParents(sourceFile);
-    return sourceFile;
+      : this.scan();
   }
 
 }

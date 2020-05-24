@@ -3,6 +3,8 @@
 @language JS;
 
 node EndOfFile > BoltToken, JSToken;
+node Token;
+node SourceFile;
 
 // Bolt language AST definitions
 
@@ -10,7 +12,7 @@ type BoltValue = Integer | bool | String;
 
 node FunctionBody;
 
-node BoltToken;
+node BoltToken > Token;
 
 node BoltStringLiteral > BoltToken {
   value: String,
@@ -50,6 +52,7 @@ node BoltLtSign    > BoltToken;
 
 node BoltKeyword;
 
+node BoltQuoteKeyword   > BoltToken, BoltKeyword;
 node BoltFnKeyword      > BoltToken, BoltKeyword;
 node BoltForeignKeyword > BoltToken, BoltKeyword;
 node BoltForKeyword     > BoltToken, BoltKeyword;
@@ -76,7 +79,7 @@ node BoltParenthesized > BoltPunctuated;
 node BoltBraced > BoltPunctuated;
 node BoltBracketed > BoltPunctuated;
 
-node BoltSourceFile {
+node BoltSourceFile > SourceFile {
   elements: Vec<BoltSourceElement>,
 }
 
@@ -90,6 +93,11 @@ node BoltTypeExpression;
 node BoltReferenceTypeExpression > BoltTypeExpression {
   name: BoltQualName,
   arguments: Option<Vec<BoltTypeExpression>>,
+}
+
+node BoltFunctionTypeExpression > BoltTypeExpression {
+  params: Vec<BoltParameter>,
+  returnType: Option<BoltTypeExpression>,
 }
 
 node BoltTypeParameter {
@@ -122,17 +130,22 @@ node BoltTuplePattern > BoltPattern {
   elements: Vec<BoltTuplePatternElement>,
 }
 
-node BoltRecordPatternField {
-  name: BoltIdentifier,
-  pattern: BoltPattern,
+node BoltRecordFieldPattern {
+  isRest: bool,
+  name: Option<BoltIdentifier>,
+  pattern: Option<BoltPattern>,
 }
 
 node BoltRecordPattern > BoltPattern {
-  name: BoltTypeExpression,
-  fields: Vec<BoltRecordPatternField>,
+  name: BoltQualName,
+  fields: Vec<BoltRecordFieldPattern>,
 }
 
 node BoltExpression;
+
+node BoltQuoteExpression > BoltExpression {
+  tokens: Vec<Token>,
+}
 
 node BoltReferenceExpression > BoltExpression {
   name: BoltQualName,
@@ -297,7 +310,7 @@ node BoltMacroCall > BoltRecordMember, BoltStatement, BoltDeclaration, BoltExpre
 
 type JSValue = Int | String | Bool | Void;
 
-node JSToken;
+node JSToken > Token;
 
 node JSOperator > JSToken {
   text: String,
@@ -489,7 +502,7 @@ node JSLetDeclaration > JSDeclaration, JSFunctionBodyElement {
   value: Option<JSExpression>,
 }
 
-node JSSourceFile {
+node JSSourceFile > SourceFile {
   elements: Vec<JSSourceElement>,
 }
 

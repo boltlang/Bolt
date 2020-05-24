@@ -249,6 +249,10 @@ export function describeKind(kind: SyntaxKind): string {
       return "an integer"
     case SyntaxKind.BoltFnKeyword:
       return "'fn'"
+    case SyntaxKind.BoltQuoteKeyword:
+      return "'quote'";
+    case SyntaxKind.BoltModKeyword:
+      return "'mod'";
     case SyntaxKind.BoltForeignKeyword:
       return "'foreign'"
     case SyntaxKind.BoltMatchKeyword:
