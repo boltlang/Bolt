@@ -3,11 +3,36 @@ import { Syntax, SyntaxKind, kindToString } from "./ast"
 
 export class Emitter {
 
-  emit(node: Syntax) {
+  public emit(node: Syntax) {
 
     let out = '';
 
     switch (node.kind) {
+
+      case SyntaxKind.BoltIdentifier:
+      case SyntaxKind.BoltOperator:
+        out += node.text;
+        break;
+
+      case SyntaxKind.BoltGtSign:
+        out += '>';
+        break;
+
+      case SyntaxKind.BoltLtSign:
+        out += '<';
+        break;
+
+      case SyntaxKind.BoltEqSign:
+        out += '=';
+        break;
+
+      case SyntaxKind.BoltVBar:
+        out += '|';
+        break;
+
+      case SyntaxKind.BoltExMark:
+        out += '!';
+        break;
 
       case SyntaxKind.JSExpressionStatement:
         out += this.emit(node.expression) + ';\n';
@@ -54,6 +79,7 @@ export class Emitter {
     return out;
 
   }
+
 }
 
 /**

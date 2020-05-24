@@ -48,6 +48,9 @@ import {
   createBoltMatchKeyword,
   createBoltQuoteKeyword,
   createBoltLetKeyword,
+  createBoltVBar,
+  createBoltColonColon,
+  createBoltExMark,
 } from "./ast"
 
 export enum PunctType {
@@ -210,6 +213,10 @@ export class Scanner {
           return createBoltComma(new TextSpan(this.file, startPos, this.currPos.clone()));
         case ':':
           this.getChar();
+          if (this.peekChar() === ':') {
+            this.getChar();
+            return createBoltColonColon(new TextSpan(this.file, startPos, this.currPos.clone()));
+          }
           return createBoltColon(new TextSpan(this.file, startPos, this.currPos.clone()));
       }
 
@@ -318,6 +325,8 @@ export class Scanner {
         const span = new TextSpan(this.file, startPos, endPos);
 
         switch (text) {
+          case '!': return createBoltExMark(span);
+          case '|': return createBoltVBar(span);
           case '->': return createBoltRArrow(span);
           case '=>': return createBoltRArrowAlt(span);
           case '<-': return createBoltLArrow(span);

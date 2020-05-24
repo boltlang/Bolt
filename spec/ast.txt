@@ -22,13 +22,13 @@ node BoltIntegerLiteral > BoltToken {
   value: Int,
 }
 
-node BoltSymbol > BoltToken {
-  
-}
+node BoltSymbol > BoltToken;
 
 node BoltIdentifier > BoltSymbol {
   text: String,
 }
+
+node BoltOperatorLike > BoltSymbol;
 
 node BoltOperator > BoltSymbol {
   text: String,
@@ -38,17 +38,21 @@ node BoltAssignment > BoltToken {
   operator: Option<String>,
 }
 
-node BoltComma     > BoltToken;
-node BoltSemi      > BoltToken;
-node BoltColon     > BoltToken;
-node BoltDot       > BoltToken;
-node BoltDotDot    > BoltToken;
-node BoltRArrow    > BoltToken;
-node BoltRArrowAlt > BoltToken;
-node BoltLArrow    > BoltToken;
-node BoltEqSign    > BoltToken;
-node BoltGtSign    > BoltToken;
-node BoltLtSign    > BoltToken;
+node BoltComma      > BoltToken;
+node BoltSemi       > BoltToken;
+node BoltColon      > BoltToken;
+node BoltColonColon > BoltToken;
+node BoltDot        > BoltToken;
+node BoltDotDot     > BoltToken;
+node BoltRArrow     > BoltToken;
+node BoltRArrowAlt  > BoltToken;
+node BoltLArrow     > BoltToken;
+node BoltEqSign     > BoltToken;
+
+node BoltGtSign    > BoltToken, BoltOperatorLike;
+node BoltExMark    > BoltToken, BoltOperatorLike;
+node BoltLtSign    > BoltToken, BoltOperatorLike;
+node BoltVBar      > BoltToken, BoltOperatorLike;
 
 node BoltKeyword;
 
@@ -149,6 +153,12 @@ node BoltQuoteExpression > BoltExpression {
 
 node BoltReferenceExpression > BoltExpression {
   name: BoltQualName,
+}
+
+node BoltFunctionExpression > BoltExpression {
+  params: Vec<BoltParameter>,
+  returnType: Option<BoltTypeExpression>,
+  body: Vec<BoltFunctionBodyElement>,
 }
 
 node BoltCallExpression > BoltExpression {

@@ -237,6 +237,8 @@ export function getFileStem(filepath: string): string {
 
 export function describeKind(kind: SyntaxKind): string {
   switch (kind) {
+    case SyntaxKind.BoltExMark:
+      return "'!'";
     case SyntaxKind.JSIdentifier:
       return "a JavaScript identifier"
     case SyntaxKind.BoltIdentifier:
@@ -269,6 +271,8 @@ export function describeKind(kind: SyntaxKind): string {
       return "';'"
     case SyntaxKind.BoltColon:
       return "':'"
+    case SyntaxKind.BoltColonColon:
+      return "'::'";
     case SyntaxKind.BoltDot:
       return "'.'"
     case SyntaxKind.JSDot:
@@ -277,6 +281,8 @@ export function describeKind(kind: SyntaxKind): string {
       return "'...'"
     case SyntaxKind.BoltRArrow:
       return "'->'"
+    case SyntaxKind.BoltVBar:
+      return "'|'";
     case SyntaxKind.BoltComma:
       return "','"
     case SyntaxKind.BoltModKeyword:
