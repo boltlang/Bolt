@@ -1,6 +1,5 @@
 
-import { SourceFile } from "./common"
-import { BoltSourceFile } from "./ast"
+import { SourceFile } from "./ast"
 import { FastStringMap } from "./util";
 
 export class Program {
@@ -8,7 +7,7 @@ export class Program {
   private transformed = new FastStringMap<string, SourceFile>();
 
   constructor(
-    sourceFiles: BoltSourceFile[]
+    sourceFiles: SourceFile[]
   ) {
     for (const sourceFile of sourceFiles) {
       this.transformed.set(sourceFile.span!.file.fullPath, sourceFile);

@@ -1,5 +1,5 @@
 
-import { EOF, ScanError } from "./util"
+import { EOF, ScanError } from "./common"
 
 import {
   TextFile,
@@ -8,8 +8,6 @@ import {
 } from "./text"
 
 import {
-  setParents,
-  SyntaxKind,
   BoltToken,
   createBoltRArrowAlt,
   createEndOfFile,
@@ -19,7 +17,6 @@ import {
   createBoltParenthesized,
   createBoltBraced,
   createBoltBracketed,
-  createBoltSourceFile,
   createBoltSemi,
   createBoltComma,
   createBoltStringLiteral,

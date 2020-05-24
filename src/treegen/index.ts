@@ -5,7 +5,7 @@ import * as path from "path"
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 
 import { Syntax, Declaration, NodeDeclaration, TypeDeclaration, EnumDeclaration, TypeNode, NodeField } from "./ast"
-import { FastStringMap } from "../util"
+import { MapLike } from "../util"
 import { FileWriter } from "./util"
 
 export function generateAST(decls: Declaration[]) {
@@ -21,7 +21,7 @@ export function generateAST(decls: Declaration[]) {
   const enumDecls: EnumDeclaration[] = decls.filter(decl => decl.type === 'EnumDeclaration') as EnumDeclaration[];
   const langNames: string[] = decls.filter(decl => decl.type === 'LanguageDeclaration').map(decl => decl.name);
 
-  const declByName: FastStringMap<Declaration> = Object.create(null);
+  const declByName: MapLike<Declaration> = Object.create(null);
   i = 0;
   for (const decl of decls) {
     decl.index = i++;
@@ -31,7 +31,7 @@ export function generateAST(decls: Declaration[]) {
   // Generate a mapping from parent node to child node
   // This makes it easy to generate union types for the intermediate nodes.
 
-  const childrenOf: FastStringMap<string[]> = Object.create(null);
+  const childrenOf: MapLike<string[]> = Object.create(null);
   for (const nodeDecl of nodeDecls) {
     for (const parentName of nodeDecl.parents) {
       if (childrenOf[parentName] === undefined) {

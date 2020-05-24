@@ -202,6 +202,13 @@ export class TypeChecker {
 
       switch (node.kind) {
 
+        case SyntaxKind.BoltModule:
+        {
+          for (const element of node.elements) {
+            visitSourceElement(element);
+          }
+        }
+
         case SyntaxKind.BoltRecordDeclaration:
         {
           if (node.members !== null) {

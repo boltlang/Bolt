@@ -10,12 +10,12 @@ import {
   BoltMacroCall,
 } from "../ast"
 
-import { TypeChecker, Scope } from "../checker"
+import { TypeChecker } from "../checker"
 import { BoltTokenStream, Parser, isModifierKeyword } from "../parser"
 import { Evaluator, TRUE, FALSE } from "../evaluator"
 import { Transformer, TransformManager } from "./index"
 import { inject } from "../di"
-import {SourceFile} from "../program"
+import { SourceFile } from "../ast"
 
 interface SyntaxTransformer {
   pattern: BoltPattern;

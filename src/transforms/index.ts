@@ -1,8 +1,7 @@
 
-import { SourceFile, Program } from "../program"
+import { Program } from "../program"
 import { Container, Newable } from "../di"
-import {Evaluator} from "../evaluator";
-import {TypeChecker} from "../checker";
+import {SourceFile} from "../ast";
 
 export interface Transformer {
   isApplicable(node: SourceFile): boolean;
