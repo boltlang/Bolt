@@ -1,17 +1,36 @@
 
-newtype Int;
+pub struct i32;
+pub struct i64;
+pub struct isize;
+pub struct u32;
+pub struct u64;
+pub struct usize;
 
-pub fn fac(n: Int) -> Int {
+trait Num;
+
+fn (a: N) + (b: N) -> N where N: Num {
+  N::add(a, b)
+}
+
+fn (a: N) - (b: N) -> N where N: Num {
+  N::sub(a, b)
+}
+
+fn (a: N) / (b: N) -> N where N: Num {
+  N::div(a, b)
+}
+
+fn (a: N) * (b: N) -> N where N: Num {
+  N::mul(a, b)
+}
+
+// precedence a + b < a * b;
+
+pub fn fac(n: I) -> I where I: int {
   if n == 0 {
     return 1
   } else {
     return fac(n-1)
   }
 }
-
-fn (a: Int) + (b: Int) -> Int {
-  
-}
-
-precedence a + b < a * b;
 

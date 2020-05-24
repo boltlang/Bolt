@@ -1,12 +1,5 @@
 
-pub struct String;
-
-pub struct Either<L, R> {
-  is_right: bool,
-  value: L | R,
-}
-
-mod io {
+mod IO {
 
   pub type Result<T> = Either<Error, T>;
 
@@ -36,5 +29,5 @@ mod io {
 
 }
 
-print("Hello, world!");
+// IO::print("Hello, world!");
 

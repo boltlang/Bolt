@@ -1,5 +1,5 @@
 
-mod Bolt.Lang {
+mod Bolt::Lang {
 
   pub struct Pos {
     offset: Int,
