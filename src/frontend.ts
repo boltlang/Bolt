@@ -70,11 +70,7 @@ export class Frontend {
 
   constructor() {
     this.diagnostics = new DiagnosticPrinter();
-    this.checker = new TypeChecker(this.diagnostics);
-    this.evaluator = new Evaluator(this.checker);
     this.timing = new Timing();
-    this.container.bindSelf(this.evaluator);
-    this.container.bindSelf(this.checker);
   }
 
   @memoize
@@ -89,15 +85,24 @@ export class Frontend {
   }
 
   public typeCheck(program: Program) {
+    const checker = new TypeChecker(this.diagnostics, program);
     for (const sourceFile of program.getAllSourceFiles()) {
-      this.checker.registerSourceFile(sourceFile as BoltSourceFile);
+      checker.registerSourceFile(sourceFile as BoltSourceFile);
     }
     for (const sourceFile of program.getAllSourceFiles()) {
-      this.checker.checkSourceFile(sourceFile as BoltSourceFile);
+      checker.checkSourceFile(sourceFile as BoltSourceFile);
     }
   }
 
   public compile(program: Program, target: string) {
+
+    // FIXME type checker should be shared across multple different method invocations
+    const checker = new TypeChecker(this.diagnostics, program);
+
+    const container = new Container();
+
+    //container.bindSelf(evaluator);
+    container.bindSelf(checker);
 
     switch (target) {
 

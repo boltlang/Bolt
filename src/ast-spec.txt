@@ -277,7 +277,7 @@ node BoltPlainImportSymbol > BoltImportSymbol {
 
 node BoltImportDirective > BoltSourceElement {
   modifiers: BoltModifiers,
-  file: String,
+  file: BoltStringLiteral,
   symbols: Vec<BoltImportSymbol>,
 }
 

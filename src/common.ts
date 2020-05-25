@@ -10,15 +10,36 @@ import {
   isBoltPunctuated,
   SourceFile,
   BoltSourceFile,
-  BoltSourceFileModifiers
+  BoltSourceFileModifiers,
+  isSourceFile
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
 import {emit} from "./emitter";
-import {FastStringMap, enumerate, escapeChar} from "./util";
+import {FastStringMap, enumerate, escapeChar, assert} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
 
+export function getSourceFile(node: Syntax) {
+  while (true) {
+    if (isSourceFile(node)) {
+      return node
+    }
+    assert(node.parentNode !== null);
+    node = node.parentNode;
+  }
+}
+
+export function getPackage(node: Syntax) {
+  const sourceFile = getSourceFile(node);
+  assert(sourceFile.kind === SyntaxKind.BoltSourceFile);
+  return (sourceFile as BoltSourceFile).package;
+}
+
+let nextPackageId = 1;
+
 export class Package {
+
+  public id = nextPackageId++;
 
   constructor(
     public rootDir: string,
@@ -326,39 +347,5 @@ export function describeKind(kind: SyntaxKind): string {
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }
-}
-
-export type DeclarationPath = unknown;
-
-type DeclarationPathInfo = {
-  modulePath: string[],
-  isAbsolute: boolean,
-  name: string
-};
-
-export function getModulePath(path: DeclarationPath): string[] {
-  return (path as DeclarationPathInfo).modulePath;
-}
-
-export function hasAbsoluteModulePath(path: DeclarationPath): boolean {
-  return (path as DeclarationPathInfo).modulePath.length > 0 
-      && (path as DeclarationPathInfo).isAbsolute;
-}
-
-export function hasRelativeModulePath(path: DeclarationPath): boolean {
-  return (path as DeclarationPathInfo).modulePath.length > 0
-     && !(path as DeclarationPathInfo).isAbsolute;
-}
-
-export function getSymbolNameOfDeclarationPath(path: DeclarationPath): string {
-  return (path as DeclarationPathInfo).name;
-}
-
-export function createDeclarationPath(node: BoltQualName): DeclarationPath {
-  const name = emit(node.name);
-  if (node.modulePath === null) {
-    return { modulePath: [], isAbsolute: false, name };
-  }
-  return { modulePath: node.modulePath.map(id => id.text), isAbsolute: false, name };
 }
 

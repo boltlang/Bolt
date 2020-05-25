@@ -1,7 +1,27 @@
 
+import { Type } from "./types"
+import { ScopeInfo } from "./checker"
 import { Package } from "./common"
+import { TextSpan } from "./text"
+
+export function setParents(node: Syntax): void;
+
+export type SyntaxRange = [Syntax, Syntax];
 
 export function isSyntax(value: any): value is Syntax;
+
+interface SyntaxBase<K extends SyntaxKind> {
+  id: number;
+  _scope?: ScopeInfo;
+  kind: K;
+  parentNode: ParentTypesOf<K> | null;
+  span: TextSpan | null;
+  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
+  findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
+}
+
+export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
+
 
 
 export const enum SyntaxKind {
@@ -157,25 +177,6 @@ export const enum SyntaxKind {
   JSLetDeclaration = 181,
   JSSourceFile = 182,
 }
-
-
-
-import { TextSpan } from "./text"
-
-export function setParents(node: Syntax): void;
-
-export type SyntaxRange = [Syntax, Syntax];
-
-interface SyntaxBase<K extends SyntaxKind> {
-  id: number;
-  kind: K;
-  parentNode: ParentTypesOf<K> | null;
-  span: TextSpan | null;
-  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
-  findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
-}
-
-export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
 
 export interface EndOfFile extends SyntaxBase<SyntaxKind.EndOfFile> {
   kind: SyntaxKind.EndOfFile;
@@ -824,7 +825,7 @@ export interface BoltPlainImportSymbol extends SyntaxBase<SyntaxKind.BoltPlainIm
 export interface BoltImportDirective extends SyntaxBase<SyntaxKind.BoltImportDirective> {
   kind: SyntaxKind.BoltImportDirective;
   modifiers: BoltModifiers;
-  file: string;
+  file: BoltStringLiteral;
   symbols: BoltImportSymbol[];
 }
 
@@ -1705,7 +1706,7 @@ export function createBoltModule(modifiers: BoltModifiers, name: BoltQualName, e
 export function createBoltFunctionDeclaration(modifiers: BoltModifiers, target: string, name: BoltSymbol, params: BoltParameter[], returnType: BoltTypeExpression | null, typeParams: BoltTypeParameter[] | null, body: BoltFunctionBodyElement[], span?: TextSpan | null): BoltFunctionDeclaration;
 export function createBoltVariableDeclaration(modifiers: BoltModifiers, bindings: BoltPattern, type: BoltTypeExpression | null, value: BoltExpression | null, span?: TextSpan | null): BoltVariableDeclaration;
 export function createBoltPlainImportSymbol(name: BoltQualName, span?: TextSpan | null): BoltPlainImportSymbol;
-export function createBoltImportDirective(modifiers: BoltModifiers, file: string, symbols: BoltImportSymbol[], span?: TextSpan | null): BoltImportDirective;
+export function createBoltImportDirective(modifiers: BoltModifiers, file: BoltStringLiteral, symbols: BoltImportSymbol[], span?: TextSpan | null): BoltImportDirective;
 export function createBoltExportSymbol(span?: TextSpan | null): BoltExportSymbol;
 export function createBoltPlainExportSymbol(name: BoltQualName, span?: TextSpan | null): BoltPlainExportSymbol;
 export function createBoltExportDirective(file: string, symbols: BoltExportSymbol[] | null, span?: TextSpan | null): BoltExportDirective;

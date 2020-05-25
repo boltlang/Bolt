@@ -98,39 +98,13 @@ export function generateAST(decls: Declaration[]) {
 
   // Write corresponding TypeScript declarations
 
-
-  // FIXME These imports are specific to our project and should somehow
-  //       form part of the user specification.
-  dtsFile.write('\nimport { Package } from "./common"\n\n');
-
-  dtsFile.write('export function isSyntax(value: any): value is Syntax;\n\n');
+  dtsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'src', 'treegen', 'ast.dts.template'), 'utf8'));
 
   dtsFile.write(`\nexport const enum SyntaxKind {\n`);
   for (const decl of leafNodes) {
     dtsFile.write(`  ${decl.name} = ${decl.index},\n`);
   }
   dtsFile.write(`}\n\n`);
-
-  dtsFile.write(`
-
-import { TextSpan } from "./text"
-
-export function setParents(node: Syntax): void;
-
-export type SyntaxRange = [Syntax, Syntax];
-
-interface SyntaxBase<K extends SyntaxKind> {
-  id: number;
-  kind: K;
-  parentNode: ParentTypesOf<K> | null;
-  span: TextSpan | null;
-  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
-  findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
-}
-
-export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
-
-`);
 
   for (const decl of decls) {
     if (decl.type === 'NodeDeclaration') {

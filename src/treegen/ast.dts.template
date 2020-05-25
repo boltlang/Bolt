@@ -1,0 +1,25 @@
+
+import { Type } from "./types"
+import { ScopeInfo } from "./checker"
+import { Package } from "./common"
+import { TextSpan } from "./text"
+
+export function setParents(node: Syntax): void;
+
+export type SyntaxRange = [Syntax, Syntax];
+
+export function isSyntax(value: any): value is Syntax;
+
+interface SyntaxBase<K extends SyntaxKind> {
+  id: number;
+  _scope?: ScopeInfo;
+  kind: K;
+  parentNode: ParentTypesOf<K> | null;
+  span: TextSpan | null;
+  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
+  findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
+}
+
+export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
+
+

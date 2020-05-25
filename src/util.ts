@@ -14,12 +14,31 @@ export interface JsonArray extends Array<Json> {  };
 export interface JsonObject { [key: string]: Json }
 export type Json = null | string | boolean | number | JsonArray | JsonObject;
 
+export function isInsideDirectory(filepath: string, rootDir: string): boolean {
+  const relPath = path.relative(rootDir, filepath)
+  return !relPath.startsWith('..');
+}
+
+export function stripExtensions(filepath: string) {
+  const i = filepath.indexOf('.')
+  return i !== -1
+    ? filepath.substring(0, i)
+    : filepath;
+}
+
 export function isString(value: any): boolean {
   return typeof value === 'string';
 }
 
 export function hasOwnProperty<T extends object, K extends PropertyKey>(obj: T, key: K): boolean {
   return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
+export function countDigits(x: number, base: number = 10) {
+  if (x === 0) {
+    return 1
+  }
+  return Math.ceil(Math.log(x+1) / Math.log(base))
 }
 
 export function uniq<T>(elements: T[]): T[] {

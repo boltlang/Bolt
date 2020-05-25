@@ -337,15 +337,14 @@ export class Parser {
 
     const t1 = tokens.get();
     assertToken(t1, SyntaxKind.BoltStringLiteral);
-    const filename = (t1 as BoltStringLiteral).value;
 
-    const symbols: BoltImportSymbol[] = [];
+    const symbols: BoltImportSymbol[] = null;
     const t2 = tokens.get();
     if (t2.kind === SyntaxKind.BoltParenthesized) {
       // TODO implement grammar and parsing logic for symbols
     }
 
-    const node = createBoltImportDirective(modifiers, filename, symbols);
+    const node = createBoltImportDirective(modifiers, t1 as BoltStringLiteral, symbols);
     setOrigNodeRange(node, t0, t1);
     return node;
   }

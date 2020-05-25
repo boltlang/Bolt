@@ -1,8 +1,9 @@
 
 import chalk from "chalk"
 import {Syntax} from "./ast";
-import {format, MapLike, FormatArg} from "./util";
+import {format, MapLike, FormatArg, countDigits} from "./util";
 
+export const E_FILE_NOT_FOUND = "A file named {filename} was not found.";
 export const E_FIELD_HAS_INVALID_VERSION_NUMBER = "Field '{name}' contains an invalid version nunmber."
 export const E_FIELD_MUST_BE_STRING = "Field '{name}' must be a string."
 export const E_FIELD_NOT_PRESENT = "Field '{name}' is not present."
@@ -20,13 +21,6 @@ export interface Diagnostic {
   severity: string;
   args?: MapLike<FormatArg>;
   node?: Syntax;
-}
-
-export function countDigits(num: number) {
-  if (num === 0) {
-    return 1
-  }
-  return Math.ceil(Math.log10(num+1))
 }
 
 function firstIndexOfNonEmpty(str: string) {

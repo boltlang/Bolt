@@ -36,11 +36,6 @@ function pushAll<T>(array: T[], elements: T[]) {
   }
 }
 
-function stripExtension(filepath: string) {
-  const i = filepath.lastIndexOf('.');
-  return i !== -1 ? filepath.substring(0, i) : filepath
-}
-
 function flatMap<T>(array: T[], proc: (element: T) => T[]) {
   let out: T[] = []
   for (const element of array) {
@@ -123,6 +118,7 @@ function loadPackageMetadata(rootDir: string) {
 }
 
 function loadPackage(rootDir: string): Package {
+  rootDir = path.resolve(rootDir);
   const data = loadPackageMetadata(rootDir);
   const pkg = new Package(rootDir, data.name, data.version, []);
   for (const filepath of globSync(path.join(rootDir, '**/*.bolt'))) {
@@ -132,13 +128,14 @@ function loadPackage(rootDir: string): Package {
 }
 
 function loadPackagesAndSourceFiles(filenames: string[], cwd = '.'): Package[] {
+  cwd = path.resolve(cwd);
   const anonPkg = new Package(cwd, null, null, []);
   const pkgs = [ anonPkg ];
   for (const filename of filenames) {
     if (fs.statSync(filename).isDirectory()) {
       pkgs.push(loadPackage(filename));
     } else {
-      anonPkg.addSourceFile(parseSourceFile(filename, anonPkg, 0));
+      anonPkg.addSourceFile(parseSourceFile(filename, anonPkg));
     }
   }
   return pkgs;
