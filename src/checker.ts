@@ -24,13 +24,13 @@
  */
 
 import {
+  isSyntax,
   Syntax,
   SyntaxKind,
   BoltReferenceExpression,
   BoltDeclaration,
   BoltSourceFile,
   BoltSyntax,
-  BoltReferenceTypeExpression,
   BoltTypeDeclaration,
   BoltExpression,
   BoltFunctionDeclaration,
@@ -40,9 +40,11 @@ import {
   BoltTypeExpression,
   BoltSourceElement,
   isBoltStatement,
-  isBoltDeclaration
+  isBoltDeclaration,
+  isSourceFile,
+  BoltReferenceTypeExpression
 } from "./ast";
-import {FastStringMap, memoize, assert} from "./util";
+import {FastStringMap, memoize, assert, verbose} from "./util";
 import {
   DiagnosticPrinter,
   E_TYPES_NOT_ASSIGNABLE,
@@ -53,15 +55,13 @@ import {
   E_INVALID_ARGUMENTS
 } from "./diagnostics";
 import { createAnyType, isOpaqueType, createOpaqueType, Type, createVoidType, createVariantType, isVoidType } from "./types";
-import { getReturnStatementsInFunctionBody } from "./common";
+import { getReturnStatementsInFunctionBody, isAutoImported, toDeclarationPath, createDeclarationPath, hasRelativeModulePath, hasAbsoluteModulePath, DeclarationPath, getModulePath, getSymbolNameOfDeclarationPath } from "./common";
 import {emit} from "./emitter";
 
-interface SymbolInfo {
-  declarations: BoltDeclaration[];
-}
+const PACKAGE_SCOPE_ID = 0;
 
-interface TypeSymbolInfo {
-  declarations: BoltTypeDeclaration[];
+interface SymbolInfo<N extends Syntax> {
+  declarations: N[];
 }
 
 function introducesNewScope(kind: SyntaxKind): boolean {
@@ -79,12 +79,120 @@ function introducesNewTypeScope(kind: SyntaxKind): boolean {
 type Scope = unknown;
 type TypeScope = unknown;
 
+function getScopeId(scope: Scope | TypeScope) {
+  if (isSyntax(scope)) {
+    return scope.id;
+  }
+  return PACKAGE_SCOPE_ID;
+}
+
 function createSymbol(node: BoltDeclaration): SymbolInfo {
   return { declarations: [ node ] };
 }
 
-function createTypeSymbol(node: BoltTypeDeclaration): TypeSymbolInfo {
-  return { declarations: [ node ] };
+class SymbolResolver<N extends Syntax> {
+
+  private symbols = new FastStringMap<string, SymbolInfo<N>>();
+
+  constructor(private introducesNewScope: (kind: SyntaxKind) => boolean) {
+
+  }
+
+  public addSymbol(name: string, node: N): void {
+    const scope = this.getScopeSurroundingNode(node)
+    verbose(`Adding symbol ${name} in scope #${getScopeId(scope)}`);
+    const sym = { declarations: [ node ] };
+    this.symbols.set(`${name}@${getScopeId(scope)}`, sym);
+  }
+
+  public getParentScope(scope: Scope): Scope | null {
+    if (!isSyntax(scope)) {
+      // Scope is the global package scope
+      return null;
+    }
+    if (scope.kind === SyntaxKind.BoltSourceFile) {
+      return scope.package;
+    }
+    return this.getScopeForNode(scope.parentNode!)
+  }
+
+  public getScopeSurroundingNode(node: Syntax): Scope {
+    assert(node.parentNode !== null);
+    return this.getScopeForNode(node.parentNode!);
+  }
+
+  public getScopeForNode(node: Syntax): Scope {
+    let currNode = node;
+    while (!this.introducesNewScope(currNode.kind)) {
+      if (currNode.kind === SyntaxKind.BoltSourceFile) {
+        return currNode.package;
+      }
+      currNode = currNode.parentNode!;
+    }
+    return currNode;
+  }
+
+  private lookupSymbolInScope(name: string, scope: Scope): SymbolInfo<N> | null {
+    const key = `${name}@${getScopeId(scope)}`;
+    if (!this.symbols.has(key)) {
+      return null;
+    }
+    return this.symbols.get(key);
+  }
+
+  public findSymbolInScopeOf(name: string, scope: Scope): SymbolInfo<N> | null {
+    while (true) {
+      const sym = this.lookupSymbolInScope(name, scope);
+      if (sym !== null) {
+        return sym;
+      }
+      const parentScope = this.getParentScope(scope);
+      if (parentScope === null) {
+        break;
+      }
+      scope = parentScope;
+    }
+    return null;
+  }
+
+  public resolve(path: DeclarationPath, node: BoltSyntax): BoltSyntax | null {
+    let scope = this.getScopeSurroundingNode(node);
+    if (hasAbsoluteModulePath(path)) {
+      // TODO
+    } else if (hasRelativeModulePath(path)) {
+      while (true) {
+        let shouldSearchParentScopes = false;
+        let currScope = scope;
+        for (const name of getModulePath(path)) {
+          const sym = this.lookupSymbolInScope(name, currScope);
+          if (sym === null) {
+            shouldSearchParentScopes = true;
+            break;
+          }
+          if (sym.declarations[0].kind !== SyntaxKind.BoltModule) {
+            shouldSearchParentScopes = true;
+            break;
+          }
+          currScope = this.getScopeForNode(sym.declarations[0]);
+        }
+        if (!shouldSearchParentScopes) {
+          scope = currScope;
+          break;
+        }
+        const parentScope = this.getParentScope(scope);
+        if (parentScope === null) {
+          return null;
+        }
+        scope = parentScope;
+      }
+    }
+    const sym = this.findSymbolInScopeOf(getSymbolNameOfDeclarationPath(path), scope);
+    if (sym === null) {
+      return null;
+    }
+    return sym.declarations[0]!;
+  }
+
 }
 
 export class TypeChecker {
@@ -93,8 +201,8 @@ export class TypeChecker {
 
   }
 
-  private symbols = new FastStringMap<string, SymbolInfo>();
-  private typeSymbols = new FastStringMap<string, TypeSymbolInfo>();
+  private varResolver = new SymbolResolver<BoltDeclaration>(introducesNewScope);
+  private typeResolver = new SymbolResolver<BoltTypeDeclaration>(introducesNewTypeScope);
 
   public checkSourceFile(node: BoltSourceFile): void {
 
@@ -107,12 +215,15 @@ export class TypeChecker {
 
       switch (node.kind) {
 
+        case SyntaxKind.BoltConstantExpression:
+          break;
+
         case SyntaxKind.BoltReferenceExpression:
         {
           if (self.resolveReferenceExpression(node) === null) {
             self.diagnostics.add({
               message: E_DECLARATION_NOT_FOUND,
-              args: { name: node.name.name.text },
+              args: { name: emit(node.name.name) },
               severity: 'error',
               node: node,
             })
@@ -186,7 +297,7 @@ export class TypeChecker {
           if (self.resolveTypeReferenceExpression(node) === null) {
             self.diagnostics.add({
               message: E_TYPE_DECLARATION_NOT_FOUND,
-              args: { name: node.name.name.text },
+              args: { name: emit(node.name.name) },
               severity: 'error',
               node: node,
             })
@@ -338,15 +449,19 @@ export class TypeChecker {
         visitStatement(node);
       } else if (isBoltDeclaration(node)) {
         visitDeclaration(node);
-      } else {
-        throw new Error(`Unknown node of kind ${kindToString(node)}`);
+      } else if (node.kind === SyntaxKind.BoltModule) {
+        for (const element of node.elements) {
+          visitSourceElement(element);
+        }
+      } else if (node.kind !== SyntaxKind.BoltImportDirective) {
+        throw new Error(`Unknown node of kind ${kindToString(node.kind)}`);
       }
     }
 
   }
 
   private resolveType(name: string, node: BoltSyntax): Type | null {
-    const sym = this.findSymbolInTypeScopeOf(name, this.getTypeScopeSurroundingNode(node))
+    const sym = this.typeResolver.findSymbolInScopeOf(name, this.typeResolver.getScopeSurroundingNode(node))
     if (sym === null) {
       return null;
     }
@@ -429,11 +544,13 @@ export class TypeChecker {
     function visitExpression(node: BoltExpression) {
       switch (node.kind) {
         case SyntaxKind.BoltReferenceExpression:
+        {
           const resolved = self.resolveReferenceExpression(node);
           if (resolved !== null) {
             visitFunctionBodyElement(resolved);
           }
           break;
+        }
         default:
           throw new Error(`Unexpected node type ${kindToString(node.kind)}`);
       }
@@ -475,182 +592,25 @@ export class TypeChecker {
 
       case SyntaxKind.BoltFunctionDeclaration:
       {
-        const scope = this.getScopeSurroundingNode(node);
-        const sym = createSymbol(node);
-        this.addSymbol(emit(node.name), scope, sym);
+        this.varResolver.addSymbol(emit(node.name), node);
         break;
       }
 
       case SyntaxKind.BoltRecordDeclaration:
       {
-        const typeScope = this.getTypeScopeSurroundingNode(node);
-        const typeSym = createTypeSymbol(node);
-        this.addTypeSymbol(node.name.text, typeScope, typeSym);
+        this.typeResolver.addSymbol(node.name.text, node);
       }
 
     }
 
   }
 
-  private addSymbol(name: string, scope: Scope, sym: SymbolInfo): void {
-    console.error(`Adding symbol ${name}`);
-    this.symbols.set(`${name}@${(scope as any).id}`, sym);
+  private resolveReferenceExpression(node: BoltReferenceExpression): BoltDeclaration | null {
+    return this.varResolver.resolve(createDeclarationPath(node.name), node);
   }
 
-  private addTypeSymbol(name: string, scope: TypeScope, sym: TypeSymbolInfo): void {
-    console.error(`Adding type symbol ${name}`);
-    this.typeSymbols.set(`${name}@${(scope as any).id}`, sym);
-  }
-
-  public getParentScope(scope: Scope): Scope | null {
-    let node = scope as Syntax;
-    if (node.kind === SyntaxKind.BoltSourceFile) {
-      return null;
-    }
-    node = node.parentNode!;
-    while (!introducesNewScope(node.kind)) {
-      node = node.parentNode!;
-    }
-    return node;
-  }
-
-  public getParentTypeScope(scope: TypeScope): TypeScope | null {
-    let node = scope as Syntax;
-    if (node.kind === SyntaxKind.BoltSourceFile) {
-      return null;
-    }
-    node = node.parentNode!;
-    while (!introducesNewTypeScope(node.kind)) {
-      node = node.parentNode!;
-    }
-    return node;
-  }
-
-  private getScopeSurroundingNode(node: Syntax): Scope {
-    if (node.kind === SyntaxKind.BoltSourceFile) {
-      return node;
-    }
-    return this.getScopeForNode(node.parentNode);
-  }
-
-  private getTypeScopeSurroundingNode(node: Syntax): TypeScope {
-    if (node.kind === SyntaxKind.BoltSourceFile) {
-      return node;
-    }
-    return this.getScopeForNode(node.parentNode);
-  }
-
-  private getScopeForNode(node: Syntax): Scope {
-    if (node.kind === SyntaxKind.BoltSourceFile) {
-      return node;
-    }
-    let currNode = node;
-    while (!introducesNewScope(currNode.kind)) {
-      currNode = currNode.parentNode!;
-    }
-    return currNode;
-  }
-
-  private getTypeScopeForNode(node: Syntax): TypeScope {
-    if (node.kind === SyntaxKind.BoltSourceFile) {
-      return node;
-    }
-    let currNode = node;
-    while (!introducesNewTypeScope(currNode.kind)) {
-      currNode = currNode.parentNode!;
-    }
-    return currNode;
-  }
-
-  private lookupSymbolInScope(name: string, scope: Scope): SymbolInfo | null {
-    const key = `${name}@${(scope as any).id}`;
-    if (!this.symbols.has(key)) {
-      return null;
-    }
-    return this.symbols.get(key);
-  }
-
-  private lookupSymbolInTypeScope(name: string, scope: TypeScope): TypeSymbolInfo | null {
-    const key = `${name}@${(scope as any).id}`;
-    if (!this.typeSymbols.has(key)) {
-      return null;
-    }
-    return this.typeSymbols.get(key);
-  }
-
-  public findSymbolInScopeOf(name: string, scope: Scope): SymbolInfo | null {
-    while (true) {
-      const sym = this.lookupSymbolInScope(name, scope);
-      if (sym !== null) {
-        return sym;
-      }
-      const parentScope = this.getParentScope(scope);
-      if (parentScope === null) {
-        break;
-      }
-      scope = parentScope;
-    }
-    return null;
-  }
-
-  public findSymbolInTypeScopeOf(name: string, scope: TypeScope): TypeSymbolInfo | null {
-    while (true) {
-      const sym = this.lookupSymbolInTypeScope(name, scope);
-      if (sym !== null) {
-        return sym;
-      }
-      const parentTypeScope = this.getParentTypeScope(scope);
-      if (parentTypeScope === null) {
-        break;
-      }
-      scope = parentTypeScope;
-    }
-    return null;
-  }
-
-  public resolveReferenceExpression(node: BoltReferenceExpression): BoltDeclaration | null {
-    let scope = this.getScopeSurroundingNode(node);
-    if (node.name.modulePath !== null) {
-      while (true) {
-        let shouldSearchParentScopes = false;
-        let currScope = scope;
-        for (const name of node.name.modulePath) {
-          const sym = this.lookupSymbolInScope(name.text, currScope);
-          if (sym === null) {
-            shouldSearchParentScopes = true;
-            break;
-          }
-          if (sym.declarations[0].kind !== SyntaxKind.BoltModule) {
-            shouldSearchParentScopes = true;
-            break;
-          }
-          currScope = this.getScopeForNode(sym.declarations[0]);
-        }
-        if (!shouldSearchParentScopes) {
-          scope = currScope;
-          break;
-        }
-        const parentScope = this.getParentScope(scope);
-        if (parentScope === null) {
-          return null;
-        }
-        scope = parentScope;
-      }
-    }
-    const sym = this.findSymbolInScopeOf(emit(node.name.name), scope);
-    if (sym === null) {
-      return null;
-    }
-    return sym.declarations[0]!;
-  }
-
-  public resolveTypeReferenceExpression(node: BoltReferenceTypeExpression): BoltTypeDeclaration | null {
-    const typeScope = this.getTypeScopeSurroundingNode(node);
-    const typeSym = this.findSymbolInTypeScopeOf(emit(node.name.name), typeScope);
-    if (typeSym === null) {
-      return null;
-    }
-    return typeSym.declarations[0]!;
+  private resolveTypeReferenceExpression(node: BoltReferenceTypeExpression): BoltTypeDeclaration | null {
+    return this.typeResolver.resolve(createDeclarationPath(node.name), node);
   }
 
 }

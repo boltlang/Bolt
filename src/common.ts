@@ -7,13 +7,40 @@ import {
   kindToString,
   Syntax,
   Token,
-  isBoltPunctuated
+  isBoltPunctuated,
+  SourceFile,
+  BoltSourceFile,
+  BoltSourceFileModifiers
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
 import {emit} from "./emitter";
 import {FastStringMap, enumerate, escapeChar} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
+
+export class Package {
+
+  constructor(
+    public rootDir: string,
+    public name: string | null,
+    public version: string | null,
+    public sourceFiles: SourceFile[],
+  ) {
+
+  }
+
+  public addSourceFile(sourceFile: SourceFile) {
+    this.sourceFiles.push(sourceFile);
+  }
+
+}
+
+export function isAutoImported(node: BoltSourceFile): boolean {
+  //if (node.kind !== SyntaxKind.BoltSourceFile) {
+  //  node = node.getParentOfKind(SyntaxKind.BoltSourceFile)!
+  //}
+  return (node.modifiers & BoltSourceFileModifiers.AutoImport) > 0;
+}
 
 export function getLanguage(node: Syntax): string {
   const kindStr = kindToString(node.kind);
@@ -164,6 +191,10 @@ export class OperatorTable {
 
 export function describeKind(kind: SyntaxKind): string {
   switch (kind) {
+    case SyntaxKind.BoltImportKeyword:
+      return "'import'";
+    case SyntaxKind.BoltExportKeyword:
+      return "'export'";
     case SyntaxKind.BoltExMark:
       return "'!'";
     case SyntaxKind.JSIdentifier:
@@ -257,7 +288,7 @@ export function describeKind(kind: SyntaxKind): string {
     case SyntaxKind.BoltTraitKeyword:
       return "'impl'";
     case SyntaxKind.BoltImplKeyword:
-      return "'trait'";
+      return "'impl'";
     case SyntaxKind.BoltForKeyword:
       return "'for'";
     case SyntaxKind.JSMulOp:
@@ -297,11 +328,37 @@ export function describeKind(kind: SyntaxKind): string {
   }
 }
 
-export function toDeclarationPath(node: BoltQualName): string[] {
-  const lastElement = emit(node.name);
+export type DeclarationPath = unknown;
+
+type DeclarationPathInfo = {
+  modulePath: string[],
+  isAbsolute: boolean,
+  name: string
+};
+
+export function getModulePath(path: DeclarationPath): string[] {
+  return (path as DeclarationPathInfo).modulePath;
+}
+
+export function hasAbsoluteModulePath(path: DeclarationPath): boolean {
+  return (path as DeclarationPathInfo).modulePath.length > 0 
+      && (path as DeclarationPathInfo).isAbsolute;
+}
+
+export function hasRelativeModulePath(path: DeclarationPath): boolean {
+  return (path as DeclarationPathInfo).modulePath.length > 0
+     && !(path as DeclarationPathInfo).isAbsolute;
+}
+
+export function getSymbolNameOfDeclarationPath(path: DeclarationPath): string {
+  return (path as DeclarationPathInfo).name;
+}
+
+export function createDeclarationPath(node: BoltQualName): DeclarationPath {
+  const name = emit(node.name);
   if (node.modulePath === null) {
-    return [ lastElement ];
+    return { modulePath: [], isAbsolute: false, name };
   }
-  return [...node.modulePath.map(id => id.text), lastElement];
+  return { modulePath: node.modulePath.map(id => id.text), isAbsolute: false, name };
 }
 

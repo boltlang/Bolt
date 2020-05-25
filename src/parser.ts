@@ -16,7 +16,7 @@ import {
   BoltQualName,
   BoltPattern,
   createBoltBindPattern,
-  BoltImportDeclaration,
+  BoltImportDirective,
   BoltTypeExpression,
   createBoltReferenceTypeExpression,
   createBoltConstantExpression,
@@ -25,8 +25,8 @@ import {
   BoltBindPattern,
   createBoltRecordDeclaration,
   createBoltRecordField,
-  createBoltImportDeclaration,
-  BoltDeclarationModifiers,
+  createBoltImportDirective,
+  BoltModifiers,
   BoltStringLiteral,
   BoltImportSymbol,
   BoltExpressionStatement,
@@ -77,6 +77,7 @@ import {
   BoltMacroCall,
   createBoltMacroCall,
   createBoltMemberExpression,
+  BoltSourceFileModifiers,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -88,6 +89,7 @@ import {
   ParseError,
   setOrigNodeRange,
   createTokenStream,
+  Package,
 } from "./common"
 import { Stream, uniq } from "./util"
 
@@ -140,6 +142,7 @@ const KIND_DECLARATION_T0 = uniq([
 
 const KIND_SOURCEELEMENT_T0 = uniq([
   SyntaxKind.BoltModKeyword,
+  SyntaxKind.BoltImportKeyword,
   ...KIND_EXPRESSION_T0,
   ...KIND_STATEMENT_T0,
   ...KIND_DECLARATION_T0,
@@ -321,7 +324,13 @@ export class Parser {
     }
   }
 
-  public parseImportDeclaration(tokens: BoltTokenStream): BoltImportDeclaration {
+  public parseImportDirective(tokens: BoltTokenStream): BoltImportDirective {
+
+    let modifiers = 0;
+    if (tokens.peek().kind === SyntaxKind.BoltPubKeyword) {
+      tokens.get();
+      modifiers |= BoltModifiers.IsPublic;
+    }
 
     const t0 = tokens.get();
     assertToken(t0, SyntaxKind.BoltImportKeyword);
@@ -331,9 +340,12 @@ export class Parser {
     const filename = (t1 as BoltStringLiteral).value;
 
     const symbols: BoltImportSymbol[] = [];
-    // TODO implement grammar and parsing logic for symbols
+    const t2 = tokens.get();
+    if (t2.kind === SyntaxKind.BoltParenthesized) {
+      // TODO implement grammar and parsing logic for symbols
+    }
 
-    const node = createBoltImportDeclaration(filename, symbols);
+    const node = createBoltImportDirective(modifiers, filename, symbols);
     setOrigNodeRange(node, t0, t1);
     return node;
   }
@@ -701,7 +713,7 @@ export class Parser {
     const t1 = tokens.peek();
     if (t1.kind === SyntaxKind.BoltMutKeyword) {
       tokens.get();
-      modifiers |= BoltDeclarationModifiers.Mutable;
+      modifiers |= BoltModifiers.Mutable;
     }
 
     const bindings = this.parsePattern(tokens)
@@ -821,7 +833,7 @@ export class Parser {
     let t0 = tokens.get();
     const firstToken = t0;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      modifiers |= BoltDeclarationModifiers.Public;
+      modifiers |= BoltModifiers.IsPublic;
       t0 = tokens.get();
     }
 
@@ -915,7 +927,7 @@ export class Parser {
     const firstToken = t0;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
       tokens.get();
-      modifiers |= BoltDeclarationModifiers.Public;
+      modifiers |= BoltModifiers.IsPublic;
       t0 = tokens.peek();
     }
 
@@ -946,7 +958,7 @@ export class Parser {
     const firstToken = t0;
 
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      modifiers |= BoltDeclarationModifiers.Public;
+      modifiers |= BoltModifiers.IsPublic;
       t0 = tokens.get();
     }
 
@@ -985,13 +997,12 @@ export class Parser {
 
     if (k0.kind === SyntaxKind.BoltPubKeyword) {
       tokens.get();
-      modifiers |= BoltDeclarationModifiers.Public;
+      modifiers |= BoltModifiers.IsPublic;
       k0 = tokens.peek();
     }
 
     if (k0.kind === SyntaxKind.BoltForeignKeyword) {
       tokens.get();
-      modifiers |= BoltDeclarationModifiers.IsForeign;
       const l1 = tokens.get();
       if (l1.kind !== SyntaxKind.BoltStringLiteral) {
         throw new ParseError(l1, [SyntaxKind.BoltStringLiteral])
@@ -1150,7 +1161,7 @@ export class Parser {
     let t0 = tokens.get();
     const firstToken = t0;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      modifiers |= BoltDeclarationModifiers.Public;
+      modifiers |= BoltModifiers.IsPublic;
       t0 = tokens.get();
     }
     assertToken(t0, SyntaxKind.BoltTraitKeyword);
@@ -1181,7 +1192,7 @@ export class Parser {
     let t0 = tokens.get();
     const firstToken = t0;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      modifiers |= BoltDeclarationModifiers.Public;
+      modifiers |= BoltModifiers.IsPublic;
       t0 = tokens.get();
     }
     assertToken(t0, SyntaxKind.BoltImplKeyword);
@@ -1244,12 +1255,12 @@ export class Parser {
   }
 
   private getFirstTokenAfterModifiers(tokens: BoltTokenStream): BoltToken {
-    let mustBeDecl = false;
+    let mustBeDeclOrImport = false;
     let mustBeFunctionOrVariable = false;
     let i = 1;
     let t0 = tokens.peek(i);
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      mustBeDecl = true;
+      mustBeDeclOrImport = true;
       t0 = tokens.peek(++i);
     }
     if (t0.kind === SyntaxKind.BoltForeignKeyword) {
@@ -1262,7 +1273,7 @@ export class Parser {
       && t0.kind !== SyntaxKind.BoltFnKeyword) {
       throw new ParseError(t0, [SyntaxKind.BoltStructKeyword, SyntaxKind.BoltFnKeyword]);
     }
-    if (mustBeDecl && KIND_DECLARATION_T0.indexOf(t0.kind) === -1) {
+    if (mustBeDeclOrImport && KIND_DECLARATION_T0.indexOf(t0.kind) === -1 && t0.kind !== SyntaxKind.BoltImportKeyword) {
       throw new ParseError(t0, KIND_DECLARATION_KEYWORD);
     }
     return t0;
@@ -1278,9 +1289,12 @@ export class Parser {
       return this.parseMacroCall(tokens);
     }
     const t0 = this.getFirstTokenAfterModifiers(tokens);
-    if (KIND_STATEMENT_T0.indexOf(t0.kind) !== -1) {
+    if (t0.kind ===  SyntaxKind.BoltImportKeyword) {
+      return this.parseImportDirective(tokens);
+    } else if (KIND_STATEMENT_T0.indexOf(t0.kind) !== -1) {
       return this.parseStatement(tokens);
     }
+    // FIXME This should only parse when the tokens are valid and otherwise display a friendly error message.
     return this.parseDeclaration(tokens);
   }
 
@@ -1372,12 +1386,13 @@ export class Parser {
   //  return lhs
   //}
 
-  public parseSourceFile(tokens: BoltTokenStream): BoltSourceFile {
+  public parseSourceFile(tokens: BoltTokenStream, pkg: Package): BoltSourceFile {
     const elements = this.parseSourceElements(tokens);
     const t1 = tokens.peek();
     assertToken(t1, SyntaxKind.EndOfFile);
     return createBoltSourceFile(
       elements,
+      pkg,
       new TextSpan(t1.span!.file, new TextPos(0,1,1), t1.span!.end.clone())
     );
   }
@@ -1518,12 +1533,12 @@ import * as fs from "fs"
 import {JSScanner} from "./foreign/js/scanner";
 import {emit} from "./emitter";
 
-export function parseSourceFile(filepath: string): BoltSourceFile {
+export function parseSourceFile(filepath: string, pkg: Package): BoltSourceFile {
   const file = new TextFile(filepath);
   const contents = fs.readFileSync(file.origPath, 'utf8');
   const scanner = new Scanner(file, contents)
   const parser = new Parser();
-  const sourceFile = parser.parseSourceFile(scanner);
+  const sourceFile = parser.parseSourceFile(scanner, pkg);
   setParents(sourceFile);
   return sourceFile;
 }

@@ -4,6 +4,8 @@ import * as path from "path"
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 
+const CUSTOM_TYPES = ['Package'];
+
 import { Syntax, Declaration, NodeDeclaration, TypeDeclaration, EnumDeclaration, TypeNode, NodeField } from "./ast"
 import { MapLike } from "../util"
 import { FileWriter } from "./util"
@@ -96,6 +98,13 @@ export function generateAST(decls: Declaration[]) {
 
   // Write corresponding TypeScript declarations
 
+
+  // FIXME These imports are specific to our project and should somehow
+  //       form part of the user specification.
+  dtsFile.write('\nimport { Package } from "./common"\n\n');
+
+  dtsFile.write('export function isSyntax(value: any): value is Syntax;\n\n');
+
   dtsFile.write(`\nexport const enum SyntaxKind {\n`);
   for (const decl of leafNodes) {
     dtsFile.write(`  ${decl.name} = ${decl.index},\n`);
@@ -111,6 +120,7 @@ export function setParents(node: Syntax): void;
 export type SyntaxRange = [Syntax, Syntax];
 
 interface SyntaxBase<K extends SyntaxKind> {
+  id: number;
   kind: K;
   parentNode: ParentTypesOf<K> | null;
   span: TextSpan | null;
@@ -227,6 +237,8 @@ export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K 
         return `${emitTypeScriptType(typeNode.typeArgs[0])} | null`;
       } else if (typeNode.name === 'Vec') {
         return `${emitTypeScriptType(typeNode.typeArgs[0])}[]`;
+      } else if (CUSTOM_TYPES.indexOf(typeNode.name) !== -1) {
+        return typeNode.name;
       } else if (typeNode.name === 'String') {
         return `string`;
       } else if (typeNode.name === 'Int') {

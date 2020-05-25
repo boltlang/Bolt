@@ -58,6 +58,8 @@ function isSyntax(value) {
       && value.__NODE_TYPE !== undefined;
 }
 
+exported.isSyntax = isSyntax;
+
 let nextNodeId = 1;
 
 function createNode(nodeType) {

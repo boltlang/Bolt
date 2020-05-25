@@ -67,6 +67,7 @@ node BoltLoopKeyword    > BoltToken, BoltKeyword;
 node BoltYieldKeyword   > BoltToken, BoltKeyword;
 node BoltMatchKeyword   > BoltToken, BoltKeyword;
 node BoltImportKeyword  > BoltToken, BoltKeyword;
+node BoltExportKeyword  > BoltToken, BoltKeyword;
 node BoltPubKeyword     > BoltToken, BoltKeyword;
 node BoltModKeyword     > BoltToken, BoltKeyword;
 node BoltMutKeyword     > BoltToken, BoltKeyword;
@@ -86,6 +87,7 @@ node BoltBracketed > BoltPunctuated;
 
 node BoltSourceFile > SourceFile {
   elements: Vec<BoltSourceElement>,
+  package: Package,
 }
 
 node BoltQualName {
@@ -237,15 +239,13 @@ node BoltDeclaration > BoltSourceElement;
 
 node BoltTypeDeclaration > BoltSourceElement;
 
-enum BoltDeclarationModifiers {
-  Mutable   = 0x1,
-  Public    = 0x2,
-  IsType    = 0x4,
-  IsForeign = 0x8,
+enum BoltModifiers {
+  IsMutable   = 0x1,
+  IsPublic    = 0x2,
 }
 
-node BoltModule > BoltDeclaration {
-  modifiers: BoltDeclarationModifiers,
+node BoltModule > BoltSourceElement {
+  modifiers: BoltModifiers,
   name: BoltQualName,
   elements: Vec<BoltSourceElement>,
 }
@@ -253,7 +253,7 @@ node BoltModule > BoltDeclaration {
 node BoltFunctionBodyElement;
 
 node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
-  modifiers: BoltDeclarationModifiers,
+  modifiers: BoltModifiers,
   target: String,
   name: BoltSymbol,
   params: Vec<BoltParameter>,
@@ -263,7 +263,7 @@ node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
 }
 
 node BoltVariableDeclaration > BoltFunctionBodyElement, BoltDeclaration {
-  modifiers: BoltDeclarationModifiers,
+  modifiers: BoltModifiers,
   bindings: BoltPattern,
   type: Option<BoltTypeExpression>,
   value: Option<BoltExpression>,
@@ -275,20 +275,32 @@ node BoltPlainImportSymbol > BoltImportSymbol {
   name: BoltQualName,
 }
 
-node BoltImportDeclaration > BoltDeclaration {
+node BoltImportDirective > BoltSourceElement {
+  modifiers: BoltModifiers,
   file: String,
   symbols: Vec<BoltImportSymbol>,
 }
 
+node BoltExportSymbol;
+
+node BoltPlainExportSymbol {
+  name: BoltQualName,
+}
+
+node BoltExportDirective > BoltSourceElement {
+  file: String,
+  symbols: Option<Vec<BoltExportSymbol>>,
+}
+
 node BoltTraitDeclaration > BoltDeclaration, BoltTypeDeclaration {
-  modifiers: BoltDeclarationModifiers,
+  modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
   elements: Vec<BoltDeclaration>,
 }
 
 node BoltImplDeclaration > BoltDeclaration {
-  modifiers: BoltDeclarationModifiers,
+  modifiers: BoltModifiers,
   name: BoltIdentifier,
   trait: BoltTypeExpression,
   typeParams: Option<Vec<BoltTypeParameter>>,
@@ -296,7 +308,7 @@ node BoltImplDeclaration > BoltDeclaration {
 }
 
 node BoltTypeAliasDeclaration > BoltDeclaration, BoltTypeDeclaration {
-  modifiers: BoltDeclarationModifiers,
+  modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
   typeExpr: BoltTypeExpression,
@@ -310,7 +322,7 @@ node BoltRecordField > BoltRecordMember {
 }
 
 node BoltRecordDeclaration > BoltDeclaration, BoltTypeDeclaration {
-  modifiers: BoltDeclarationModifiers,
+  modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParms: Option<Vec<BoltTypeParameter>>,
   members: Option<Vec<BoltRecordMember>>,

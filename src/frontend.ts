@@ -8,7 +8,7 @@ import { Program } from "./program"
 import { TypeChecker } from "./checker"
 import { Evaluator } from "./evaluator"
 import { emit } from "./emitter"
-import { Syntax, BoltSourceFile } from "./ast"
+import { Syntax, BoltSourceFile, SourceFile } from "./ast"
 import { upsearchSync, FastStringMap, getFileStem, getLanguage } from "./util"
 import { Package } from "./package"
 import { verbose, memoize } from "./util"
@@ -115,18 +115,13 @@ export class Frontend {
     }
 
     for (const sourceFile of program.getAllSourceFiles()) {
-      //const filepath = rootNode.span!.file.fullPath;
-      //const pkg = this.getPackage(filepath);
-      //if (pkg !== null) {
-      //
-      //}
       fs.mkdirp('.bolt-work');
       fs.writeFileSync(this.mapToTargetFile(sourceFile), emit(sourceFile), 'utf8');
     }
 
   }
 
-  private mapToTargetFile(node: Syntax) {
+  private mapToTargetFile(node: SourceFile) {
     return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultExtension(getLanguage(node)));
   }
 

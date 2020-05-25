@@ -14,6 +14,14 @@ export interface JsonArray extends Array<Json> {  };
 export interface JsonObject { [key: string]: Json }
 export type Json = null | string | boolean | number | JsonArray | JsonObject;
 
+export function isString(value: any): boolean {
+  return typeof value === 'string';
+}
+
+export function hasOwnProperty<T extends object, K extends PropertyKey>(obj: T, key: K): boolean {
+  return Object.prototype.hasOwnProperty.call(obj, key);
+}
+
 export function uniq<T>(elements: T[]): T[] {
   const out: T[] = [];
   const visited = new Set<T>();

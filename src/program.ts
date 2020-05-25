@@ -1,4 +1,5 @@
 
+import { Package } from "./common"
 import { SourceFile } from "./ast"
 import { FastStringMap } from "./util";
 
@@ -7,10 +8,12 @@ export class Program {
   private transformed = new FastStringMap<string, SourceFile>();
 
   constructor(
-    sourceFiles: SourceFile[]
+    pkgs: Package[]
   ) {
-    for (const sourceFile of sourceFiles) {
-      this.transformed.set(sourceFile.span!.file.fullPath, sourceFile);
+    for (const pkg of pkgs) {
+      for (const sourceFile of pkg.sourceFiles) {
+        this.transformed.set(sourceFile.span!.file.fullPath, sourceFile);
+      }
     }
   }
 

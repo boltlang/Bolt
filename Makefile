@@ -1,14 +1,14 @@
 
-TREEGEN_FILES = spec/ast.txt lib/bin/bolt-treegen.js lib/treegen/parser.js lib/treegen/index.js lib/treegen/util.js src/treegen/ast-template.js
+TREEGEN_FILES = src/ast-spec.txt lib/bin/bolt-treegen.js lib/treegen/parser.js lib/treegen/index.js lib/treegen/util.js src/treegen/ast-template.js
 
 all: lib/ast.js
-	bolt bundle test.bolt
+	bolt bundle stdlib
 
 lib/ast.js: $(TREEGEN_FILES)
 	@echo "Generating AST definitions ..."
 	@mkdir -p lib/
 	@chmod +x lib/bin/*.js
-	@bolt-treegen --js-file=lib/ast.js --dts-file src/ast.d.ts spec/ast.txt
+	@bolt-treegen --js-file=lib/ast.js --dts-file src/ast.d.ts src/ast-spec.txt
 
 lib/treegen/parser.js: src/treegen/parser.pegjs
 	@echo "Generating parser ..."

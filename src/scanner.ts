@@ -9,6 +9,8 @@ import {
 
 import {
   BoltToken,
+  createBoltImportKeyword,
+  createBoltExportKeyword,
   createBoltRArrowAlt,
   createEndOfFile,
   createBoltIdentifier,
@@ -308,6 +310,8 @@ export class Scanner {
           case 'trait':   return createBoltTraitKeyword(span);
           case 'impl':    return createBoltImplKeyword(span);
           case 'type':    return createBoltTypeKeyword(span);
+          //case 'export':  return createBoltExportKeyword(span);
+          case 'import':  return createBoltImportKeyword(span);
           case 'foreign': return createBoltForeignKeyword(span);
           case 'let':     return createBoltLetKeyword(span);
           case 'mut':     return createBoltMutKeyword(span);

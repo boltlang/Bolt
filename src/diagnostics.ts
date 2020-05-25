@@ -3,6 +3,9 @@ import chalk from "chalk"
 import {Syntax} from "./ast";
 import {format, MapLike, FormatArg} from "./util";
 
+export const E_FIELD_HAS_INVALID_VERSION_NUMBER = "Field '{name}' contains an invalid version nunmber."
+export const E_FIELD_MUST_BE_STRING = "Field '{name}' must be a string."
+export const E_FIELD_NOT_PRESENT = "Field '{name}' is not present."
 export const E_TYPE_DECLARATION_NOT_FOUND = "A type declaration named '{name}' was not found."
 export const E_DECLARATION_NOT_FOUND = "Reference to an undefined declaration '{name}'.";
 export const E_TYPES_NOT_ASSIGNABLE = "Types {left} and {right} are not assignable.";
@@ -84,6 +87,9 @@ export class DiagnosticPrinter {
       case 'error':
         this.hasErrors = true;
         out += chalk.bold.red('error: ');
+      case 'warning':
+        this.hasErrors = true;
+        out += chalk.bold.red('warning: ');
     }
     if (diagnostic.args !== undefined) {
       out += format(diagnostic.message, diagnostic.args) + '\n';
