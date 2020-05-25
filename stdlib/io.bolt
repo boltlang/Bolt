@@ -1,4 +1,9 @@
 
+import "./numbers"
+import "./either"
+import "./vec"
+import "./string"
+
 pub mod IO {
 
   pub type Result<T> = Either<Error, T>;

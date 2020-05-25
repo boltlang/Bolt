@@ -1,7 +1,11 @@
 
+pub struct i8;
+pub struct i16;
 pub struct i32;
 pub struct i64;
 pub struct isize;
+pub struct u8;
+pub struct u16;
 pub struct u32;
 pub struct u64;
 pub struct usize;
