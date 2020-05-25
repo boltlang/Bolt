@@ -19,31 +19,35 @@ mod Bolt::Lang {
     end: Pos,
   }
 
-  pub struct Identifier {
-    text: String,
-    span: Option<Span>,
-    orig_node: Option<Node>,
-    parent: Option<Node>,
+  define_nodes! {
+
+    Identifier : Symbol {
+      text: String,
+    },
+
+    Statement,
+
+    ReturnStatement : Statement {
+      expression: Option<Expression>,
+    },
+
+    ConditionalCase {
+      test: Option<Expression>,
+      result: Vec<FunctionBodyElement>,
+    },
+
+    ConditionalStatement : Statement {
+      cases: Vec<ConditionalCase>,
+    },
+
+    Expression,
+
+    ReferenceExpression : Expression {
+      modulePath: Option<ModulePath>,
+      name: Symbol,
+    }
+
   }
-
-  pub type Token
-    = Identifier
-
-  pub struct ConditionalCase {
-    test: Option<Expression>,
-    result: Vec<FunctionBodyElement>,
-  }
-
-  pub struct ConditionalStatement {
-    cases: Vec<ConditionalCase>,
-  }
-
-  pub type Statement
-    = ReturnStatement
-    | ConditionalStatement
-
-  pub type Expression
-    = ReferenceExpression
 
   pub type Transformer = fn (node: Node) -> Node;
 
