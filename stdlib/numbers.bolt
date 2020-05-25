@@ -1,0 +1,26 @@
+
+pub struct i32;
+pub struct i64;
+pub struct isize;
+pub struct u32;
+pub struct u64;
+pub struct usize;
+
+trait Num;
+
+fn (a: N) + (b: N) -> N where N: Num {
+  N::add(a, b)
+}
+
+fn (a: N) - (b: N) -> N where N: Num {
+  N::sub(a, b)
+}
+
+fn (a: N) / (b: N) -> N where N: Num {
+  N::div(a, b)
+}
+
+fn (a: N) * (b: N) -> N where N: Num {
+  N::mul(a, b)
+}
+

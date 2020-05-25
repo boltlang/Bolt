@@ -1,10 +1,13 @@
 
+import "../option"
+import "../numbers"
+
 mod Bolt::Lang {
 
   pub struct Pos {
-    offset: Int,
-    line: Int,
-    column: Int,
+    offset: usize,
+    line: usize,
+    column: usize,
   }
 
   pub struct Span {
