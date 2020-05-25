@@ -1,11 +1,13 @@
 
-mod IO {
+pub mod IO {
 
   pub type Result<T> = Either<Error, T>;
 
   pub foreign "JS" fn print(message: String) {
     process.stdout.write(message);
   }
+
+  pub struct File;
 
   pub trait Read {
     fn read(self, count: usize, target: Vec<u8>) -> Result<usize>;

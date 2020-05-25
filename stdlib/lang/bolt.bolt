@@ -1,6 +1,9 @@
 
-import "../option"
-import "../numbers"
+import "../option";
+import "../numbers";
+import "../vec";
+import "../string";
+import "../io";
 
 mod Bolt::Lang {
 
@@ -11,9 +14,9 @@ mod Bolt::Lang {
   }
 
   pub struct Span {
-    file: File,
-    start: TextPos,
-    end: TextPos,
+    file: IO::File,
+    start: Pos,
+    end: Pos,
   }
 
   pub struct Identifier {
