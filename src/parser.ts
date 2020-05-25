@@ -77,7 +77,8 @@ import {
   BoltMacroCall,
   createBoltMacroCall,
   createBoltMemberExpression,
-  BoltSourceFileModifiers,
+  createBoltModulePath,
+  BoltModulePath,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -193,29 +194,25 @@ export class Parser {
     return (this as any)['parse' + kindToString(kind).substring('Bolt'.length)](tokens);
   }
 
-  public parseNamespacePath(tokens: BoltTokenStream): BoltQualName {
+  public parseNamespacePath(tokens: BoltTokenStream): BoltModulePath {
 
-    let modulePath = null;
+    let isAbsolute = false;
+    let elements = [];
 
-    if (tokens.peek(2).kind === SyntaxKind.BoltColonColon) {
-      modulePath = [];
-      while (true) {
-        modulePath.push(tokens.get() as BoltIdentifier)
-        tokens.get();
-        const t0 = tokens.peek(2);
-        if (t0.kind !== SyntaxKind.BoltColonColon) {
-          break;
-        }
+    while (true) {
+      const t1 = tokens.get();
+      assertToken(t1, SyntaxKind.BoltIdentifier);
+      elements.push(t1 as BoltIdentifier)
+      const t2 = tokens.peek();
+      if (t2.kind !== SyntaxKind.BoltColonColon) {
+        break;
       }
+      tokens.get();
     }
 
-    const name = tokens.get();
-    assertToken(name, SyntaxKind.BoltIdentifier);
-    const startNode = modulePath !== null ? modulePath[0] : name;
-    const endNode = name;
-    const node = createBoltQualName(modulePath, name as BoltIdentifier, null);
-    setOrigNodeRange(node, startNode, endNode);
-    return node;
+    const result = createBoltModulePath(isAbsolute, elements);
+    setOrigNodeRange(result, elements[0], elements[elements.length-1]);
+    return result;
   }
 
   public parseQualName(tokens: BoltTokenStream): BoltQualName {
@@ -253,7 +250,7 @@ export class Parser {
 
   public parseRecordPattern(tokens: BoltTokenStream): BoltRecordPattern {
 
-    const name = this.parseNamespacePath(tokens);
+    const name = this.parseTypeExpression(tokens);
     const t1 = tokens.get();
     assertToken(t1, SyntaxKind.BoltBraced);
 
@@ -384,11 +381,11 @@ export class Parser {
 
   public parseReferenceTypeExpression(tokens: BoltTokenStream): BoltReferenceTypeExpression {
 
-    const name = this.parseNamespacePath(tokens)
-
+    const path = this.parseNamespacePath(tokens)
     const t1 = tokens.peek();
 
     let typeArgs: BoltTypeExpression[] | null = null;
+    let lastToken: BoltToken = path.elements[path.elements.length-1];
 
     if (t1.kind === SyntaxKind.BoltLtSign) {
       typeArgs = [];
@@ -409,10 +406,11 @@ export class Parser {
       }
       const t4 = tokens.get();
       assertToken(t4, SyntaxKind.BoltGtSign);
+      lastToken = t4;
     }
 
-    const node = createBoltReferenceTypeExpression(name, typeArgs);
-    setOrigNodeRange(node, name, name);
+    const node = createBoltReferenceTypeExpression(path, typeArgs);
+    setOrigNodeRange(node, path.elements[0], lastToken);
     return node;
   }
 
@@ -836,9 +834,7 @@ export class Parser {
       t0 = tokens.get();
     }
 
-    if (t0.kind !== SyntaxKind.BoltStructKeyword) {
-      throw new ParseError(t0, [SyntaxKind.BoltStructKeyword])
-    }
+    assertToken(t0, SyntaxKind.BoltStructKeyword);
 
     const t1 = tokens.get();
     assertToken(t1, SyntaxKind.BoltIdentifier);
@@ -925,15 +921,15 @@ export class Parser {
     let t0 = tokens.get();
     const firstToken = t0;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
-      tokens.get();
       modifiers |= BoltModifiers.IsPublic;
-      t0 = tokens.peek();
+      t0 = tokens.get();
     }
 
     if (t0.kind !== SyntaxKind.BoltModKeyword) {
       throw new ParseError(t0, [SyntaxKind.BoltModKeyword])
     }
 
+    // FIXME should fail to parse absolute paths
     const name = this.parseNamespacePath(tokens);
 
     const t1 = tokens.get();
@@ -942,7 +938,7 @@ export class Parser {
     }
     const sentences = this.parseSourceElements(createTokenStream(t1));
 
-    const node = createBoltModule(modifiers, name, sentences);
+    const node = createBoltModule(modifiers, name.elements, sentences);
     setOrigNodeRange(node, firstToken, t1);
     return node;
   }

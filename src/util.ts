@@ -190,6 +190,10 @@ export function verbose(message: string) {
   console.error(chalk.gray('[') + chalk.magenta('verb') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
 }
 
+export function warn(message: string) {
+  console.error(chalk.gray('[') + chalk.red('warn') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
+}
+
 export function upsearchSync(filename: string, startDir = '.') {
   let currDir = startDir;
   while (true) {

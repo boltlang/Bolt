@@ -95,10 +95,15 @@ node BoltQualName {
   name: BoltSymbol, 
 }
 
+node BoltModulePath {
+  isAbsolute: bool,
+  elements: Vec<BoltIdentifier>,
+}
+
 node BoltTypeExpression;
 
 node BoltReferenceTypeExpression > BoltTypeExpression {
-  name: BoltQualName,
+  path: BoltModulePath,
   arguments: Option<Vec<BoltTypeExpression>>,
 }
 
@@ -144,7 +149,7 @@ node BoltRecordFieldPattern {
 }
 
 node BoltRecordPattern > BoltPattern {
-  name: BoltQualName,
+  name: BoltTypeExpression,
   fields: Vec<BoltRecordFieldPattern>,
 }
 
@@ -246,7 +251,7 @@ enum BoltModifiers {
 
 node BoltModule > BoltSourceElement {
   modifiers: BoltModifiers,
-  name: BoltQualName,
+  name: Vec<BoltIdentifier>,
   elements: Vec<BoltSourceElement>,
 }
 

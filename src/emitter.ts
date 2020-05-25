@@ -9,6 +9,10 @@ export class Emitter {
 
     switch (node.kind) {
 
+      case SyntaxKind.BoltModulePath:
+        out += node.elements.map(el => el.text).join('::');
+        break;
+
       case SyntaxKind.BoltQualName:
         if (node.modulePath !== null) {
           for (const element of node.modulePath) {
