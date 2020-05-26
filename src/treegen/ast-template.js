@@ -1,6 +1,19 @@
 
 const exported = {};
 
+class NodeVisitor {
+  visit(node) {
+    for (const child of node.preorder()) {
+      const key = `visit${kindToString(child.kind)}`;
+      if (this[key] !== undefined) {
+        this[key](child);
+      }
+    }
+  }
+}
+
+exported.NodeVisitor = NodeVisitor;
+
 const nodeProto = {
 
   *getChildNodes() {
