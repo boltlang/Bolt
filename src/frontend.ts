@@ -6,7 +6,7 @@ import { EventEmitter } from "events"
 
 import { Program } from "./program"
 import { emitNode } from "./emitter"
-import { Syntax, BoltSourceFile, SourceFile, NodeVisitor } from "./ast"
+import { Syntax, BoltSourceFile, SourceFile, NodeVisitor, createBoltConditionalCase } from "./ast"
 import { getFileStem, MapLike } from "./util"
 import { verbose, memoize } from "./util"
 import { Container, Newable } from "./di"
@@ -17,7 +17,7 @@ import { TransformManager } from "./transforms/index"
 import {DiagnosticPrinter} from "./diagnostics"
 import { TypeChecker } from "./types"
 import { checkServerIdentity } from "tls"
-import { CheckInvalidFilePaths, CheckTypeAssignments } from "./checks"
+import { CheckInvalidFilePaths, CheckTypeAssignments, CheckReferences } from "./checks"
 import { SymbolResolver, BoltSymbolResolutionStrategy } from "./resolver"
 
 const targetExtensions: MapLike<string> = {
@@ -84,6 +84,7 @@ export class Frontend {
 
   public check(program: Program) {
 
+
     const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
     const checker = new TypeChecker(resolver);
 
@@ -91,9 +92,11 @@ export class Frontend {
     container.bindSelf(program);
     container.bindSelf(resolver);
     container.bindSelf(checker);
+    container.bindSelf(this.diagnostics);
 
     const checks: Newable<NodeVisitor>[] = [
        CheckInvalidFilePaths,
+       CheckReferences,
        CheckTypeAssignments,
     ];
     

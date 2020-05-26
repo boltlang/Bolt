@@ -28,6 +28,12 @@ export class SymbolPath {
 
 export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
   switch (node.kind) {
+    case SyntaxKind.BoltReferenceExpression:
+      return new SymbolPath(
+        node.modulePath === null ? [] : node.modulePath.elements.map(id => id.text),
+        node.modulePath !== null && node.modulePath.isAbsolute,
+        emitNode(node.name),
+      );
     case SyntaxKind.BoltIdentifier:
       return new SymbolPath([], false, emitNode(node));
     case SyntaxKind.BoltQualName:
@@ -160,7 +166,7 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
     }
   }
 
-  public introducesNewScope(node: BoltSyntax, kind: ScopeType): boolean {
+  public introducesNewScope(node: Syntax, kind: ScopeType): boolean {
     switch (kind) {
       case ScopeType.Variable:
         return node.kind === SyntaxKind.BoltSourceFile
@@ -185,6 +191,11 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
 
   public *getNextScopeSources(source: ScopeSource, kind: ScopeType): IterableIterator<ScopeSource> {
 
+    // If we are in the global scope, there is no scope above it.
+    if (source instanceof GlobalScopeSource) {
+      return;
+    }
+    
     // If we are at a scope that was created by an AST node, we 
     // search the nearest parent that introduces a new scope of
     // the requested kind. If no such scope was found, then we
@@ -196,12 +207,13 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
           yield new PackageScopeSource(currNode.package);
           return;
         }
-        if (this.introducesNewScope(currNode, kind)) {
-          yield source;
+        const nextNode = currNode.parentNode;
+        assert(nextNode !== null);
+        if (this.introducesNewScope(nextNode, kind)) {
+          yield new NodeScopeSource(nextNode);
           return;
         }
-        assert(currNode.parentNode !== null);
-        currNode = currNode.parentNode;
+        currNode = nextNode;
       }
     }
 
@@ -212,14 +224,13 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
       return;
     }
 
-    // If we are in the global scope, there is no scope above it.
-    if (source instanceof GlobalScopeSource) {
-      return;
-    }
+    throw new Error(`Unknown scope source provided.`)
     
   }
   
 }
+
+let nextSymbolId = 1;
 
 class Scope {
 
@@ -245,7 +256,7 @@ class Scope {
       return Scope.scopeCache.get(this.globallyUniqueKey);
     }
     const newScope = new Scope(this.resolver, kind, this.source);
-    Scope.scopeCache.set(this.globallyUniqueKey, newScope);
+    Scope.scopeCache.set(newScope.globallyUniqueKey, newScope);
     return newScope;
   }
 
@@ -254,10 +265,10 @@ class Scope {
     for (const nextSource of this.resolver.strategy.getNextScopeSources(this.source, this.kind)) {
       const key = `${this.kind}:${nextSource.id}`;
       if (Scope.scopeCache.has(key)) {
-        yield Scope.scopeCache.get(this.globallyUniqueKey);
+        yield Scope.scopeCache.get(key);
       } else {
         const newScope = new Scope(this.resolver, this.kind, nextSource);
-        Scope.scopeCache.set(this.globallyUniqueKey, newScope);
+        Scope.scopeCache.set(key, newScope);
         yield newScope;
       }
     }
@@ -304,10 +315,11 @@ class Scope {
       }
     } else {
       const sym = {
-         name,
-         scope: this,
-         declarations: new Set([ node ]),
-         isExported: isExported(node)
+        id: nextSymbolId++,
+        name,
+        scope: this,
+        declarations: new Set([ node ]),
+        isExported: isExported(node)
       } as SymbolInfo;
       this.symbols.set(name, sym);
     }
@@ -315,7 +327,8 @@ class Scope {
 
 }
 
-interface SymbolInfo {
+export interface SymbolInfo {
+  id: number;
   name: string;
   scope: Scope;
   isExported: boolean;
@@ -409,22 +422,16 @@ export class SymbolResolver {
 
     // We will keep looping until we are at the topmost module of
     // the package corresponding to `node`.
-    while (true) {
-
-      // An empty stack means we've looked everywhere but did not find a scope that contained
-      // the given module path.
-      if (stack.length === 0) {
-        return null;
-      }
-
+    while (stack.length > 0) {
 
       let shouldSearchNextScopes = false;
-      let currScope = stack.pop()!;
+      let scope = stack.pop()!;
+      let currScope = scope;
 
       // Go through each of the parent names in normal order, resolving to the module
       // that declared the name, and mark when we failed to look up the inner module.
       for (const name of path) {
-        const sym = currScope.getSymbol(name);
+        const sym = currScope.getLocalSymbol(name);
         if (sym === null) {
           shouldSearchNextScopes = true;
           break;
@@ -435,19 +442,26 @@ export class SymbolResolver {
 
       // If the previous loop did not fail, we are done.
       if (!shouldSearchNextScopes) {
-        scope = currScope;
-        break;
+        return currScope;
       }
 
-      // We continue the outer loop by getting the parent module, which should be
-      // equivalent to getting the parent module scope.
+      // We continue the outer loop by going up one scope.
       for (const nextScope of scope.getNextScopes()) {
         stack.push(nextScope);
       }
 
     }
 
-    return scope;
+    return null;
+  }
+
+  public getSymbolForNode(node: Syntax) {
+    assert(this.strategy.hasSymbol(node));
+    const scope = this.getScopeForNode(node, this.strategy.getScopeType(node));
+    if (scope === null) {
+      return null;
+    }
+    return scope.getSymbol(this.strategy.getSymbolName(node));
   }
 
   public resolveSymbolPath(path: SymbolPath, scope: Scope): SymbolInfo | null {
@@ -485,13 +499,5 @@ export class SymbolResolver {
 
     return sym;
   }
-
-  //public resolveTypeName(name: string, node: Syntax): Type | null {
-  //  const sym = this.findSymbolInScopeOf(name, this.getScopeSurroundingNode(node));
-  //  if (sym === null) {
-  //    return null;
-  //  }
-  //  return this.getTypeOfNode(sym.declarations[0]);
-  //}
 
 }

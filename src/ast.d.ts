@@ -631,13 +631,15 @@ export interface BoltIdentifier extends SyntaxBase {
 }
 
 export type BoltIdentifierParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | never
 
 export type BoltIdentifierAnyParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | BoltSourceFile
@@ -683,13 +685,15 @@ export interface BoltOperator extends SyntaxBase {
 }
 
 export type BoltOperatorParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | never
 
 export type BoltOperatorAnyParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | BoltSourceFile
@@ -1179,13 +1183,15 @@ export interface BoltGtSign extends SyntaxBase {
 }
 
 export type BoltGtSignParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | never
 
 export type BoltGtSignAnyParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | BoltSourceFile
@@ -1223,13 +1229,15 @@ export interface BoltExMark extends SyntaxBase {
 }
 
 export type BoltExMarkParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | never
 
 export type BoltExMarkAnyParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | BoltSourceFile
@@ -1267,13 +1275,15 @@ export interface BoltLtSign extends SyntaxBase {
 }
 
 export type BoltLtSignParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | never
 
 export type BoltLtSignAnyParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | BoltSourceFile
@@ -1311,13 +1321,15 @@ export interface BoltVBar extends SyntaxBase {
 }
 
 export type BoltVBarParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | never
 
 export type BoltVBarAnyParent
-= BoltQuoteExpression
+= BoltQualName
+| BoltQuoteExpression
 | BoltReferenceExpression
 | BoltFunctionDeclaration
 | BoltSourceFile
@@ -2342,7 +2354,8 @@ export type BoltSourceFileChild
 
 export interface BoltQualName extends SyntaxBase {
   kind: SyntaxKind.BoltQualName;
-  modulePath: BoltIdentifier[] | null;
+  modulePath: BoltModulePath | null;
+  name: BoltSymbol;
   parentNode: BoltQualNameParent;
   getChildNodes(): IterableIterator<BoltQualNameChild>
 }
@@ -6936,7 +6949,7 @@ export function createBoltParenthesized(text: string, span?: TextSpan | null): B
 export function createBoltBraced(text: string, span?: TextSpan | null): BoltBraced;
 export function createBoltBracketed(text: string, span?: TextSpan | null): BoltBracketed;
 export function createBoltSourceFile(elements: BoltSourceElement[], package: Package, span?: TextSpan | null): BoltSourceFile;
-export function createBoltQualName(modulePath: BoltIdentifier[] | null, span?: TextSpan | null): BoltQualName;
+export function createBoltQualName(modulePath: BoltModulePath | null, name: BoltSymbol, span?: TextSpan | null): BoltQualName;
 export function createBoltModulePath(isAbsolute: boolean, elements: BoltIdentifier[], span?: TextSpan | null): BoltModulePath;
 export function createBoltReferenceTypeExpression(path: BoltModulePath, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
 export function createBoltFunctionTypeExpression(params: BoltParameter[], returnType: BoltTypeExpression | null, span?: TextSpan | null): BoltFunctionTypeExpression;

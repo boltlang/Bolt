@@ -4,44 +4,39 @@ import { FastStringMap, assert } from "./util"
 import { emitNode } from "./emitter";
 import { Type, TypeChecker, RecordType } from "./types";
 
-export interface Value {
-   readonly type?: Type;
-   data: ValueData;
-}
+//export class Record {
 
-class Record {
- 
-  private fields: Map<string, Value>;
+//  private fields: Map<string, Value>;
   
-  constructor(fields: Iterable<[string, Value]>) {
-    this.fields = new Map(fields);
-  }
+//  constructor(fields: Iterable<[string, Value]>) {
+//    this.fields = new Map(fields);
+//  }
 
-  public clone(): Record {
-    return new Record(this.fields);
-  }
+//  public clone(): Record {
+//    return new Record(this.fields);
+//  }
 
-  public addField(name: string, value: Value): void {
-    this.fields.set(name, value);
-  }
+//  public addField(name: string, value: Value): void {
+//    this.fields.set(name, value);
+//  }
 
-  public deleteField(name: string): void {
-    this.fields.delete(name);
-  }
+//  public deleteField(name: string): void {
+//    this.fields.delete(name);
+//  }
 
-  public clear(): void {
-    this.fields.clear();
-  }
+//  public clear(): void {
+//    this.fields.clear();
+//  }
 
-}
+//}
 
-type ValueData
+export type Value
   = string
   | undefined
   | boolean
   | number
   | bigint
-  | Record
+  | object
 
 class Environment {
 

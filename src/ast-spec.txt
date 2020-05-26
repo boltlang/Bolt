@@ -91,7 +91,8 @@ node BoltSourceFile > SourceFile {
 }
 
 node BoltQualName {
-  modulePath: Option<Vec<BoltIdentifier>>,
+  modulePath: Option<BoltModulePath>,
+  name: BoltSymbol,
 }
 
 node BoltModulePath {

@@ -1,7 +1,8 @@
 
-import { FastStringMap, assert } from "./util";
+import { FastStringMap, assert, isPlainObject } from "./util";
 import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString } from "./ast";
-import { getSymbolPathFromNode, ScopeType, SymbolResolver } from "./resolver";
+import { getSymbolPathFromNode, ScopeType, SymbolResolver, SymbolInfo } from "./resolver";
+import { Value } from "./evaluator";
 
 enum TypeKind {
   OpaqueType,
@@ -9,6 +10,7 @@ enum TypeKind {
   NeverType,
   FunctionType,
   RecordType,
+  PlainRecordFieldType,
   VariantType,
   UnionType,
   TupleType,
@@ -24,24 +26,32 @@ export type Type
   | TupleType
 
 abstract class TypeBase {
-  abstract kind: TypeKind;
+
+  public abstract kind: TypeKind;
+
+  constructor(public symbol?: SymbolInfo) {
+    
+  }
+
 }
 
 export class OpaqueType extends TypeBase {
-  kind: TypeKind.OpaqueType = TypeKind.OpaqueType;
+
+  public kind: TypeKind.OpaqueType = TypeKind.OpaqueType;
+
 }
 
 export class AnyType extends TypeBase {
-  kind: TypeKind.AnyType = TypeKind.AnyType;
+  public kind: TypeKind.AnyType = TypeKind.AnyType;
 }
 
 export class NeverType extends TypeBase {
-  kind: TypeKind.NeverType = TypeKind.NeverType;
+  public kind: TypeKind.NeverType = TypeKind.NeverType;
 }
 
 export class FunctionType extends TypeBase {
 
-  kind: TypeKind.FunctionType = TypeKind.FunctionType;
+  public kind: TypeKind.FunctionType = TypeKind.FunctionType;
 
   constructor(
     public paramTypes: Type[],
@@ -54,7 +64,7 @@ export class FunctionType extends TypeBase {
     return this.paramTypes.length;
   }
 
-  public getParamTypeAtIndex(index: number) {
+  public getTypeAtParameterIndex(index: number) {
     if (index < 0 || index >= this.paramTypes.length) {
       throw new Error(`Could not get the parameter type at index ${index} because the index  was out of bounds.`);
     }
@@ -65,7 +75,7 @@ export class FunctionType extends TypeBase {
 
 export class VariantType extends TypeBase {
 
-  kind: TypeKind.VariantType = TypeKind.VariantType;
+  public kind: TypeKind.VariantType = TypeKind.VariantType;
 
   constructor(public elementTypes: Type[]) {
     super();
@@ -77,36 +87,57 @@ export class VariantType extends TypeBase {
 
 }
 
-export function isVariantType(value: any): value is VariantType {
-  return value instanceof VariantType;
+export class UnionType extends TypeBase {
+
+  public kind: TypeKind.UnionType = TypeKind.UnionType;
+
+}
+
+export type RecordFieldType
+ = PlainRecordFieldType
+
+class PlainRecordFieldType extends TypeBase {
+
+  public kind: TypeKind.PlainRecordFieldType = TypeKind.PlainRecordFieldType;
+
+  constructor(public type: Type) {
+    super();
+  }
+
 }
 
 export class RecordType {
 
-  kind: TypeKind.RecordType = TypeKind.RecordType;
+  public kind: TypeKind.RecordType = TypeKind.RecordType;
 
-  private fieldTypes = new FastStringMap<string, Type>();
+  private fieldTypes = new FastStringMap<string, RecordFieldType>();
 
   constructor(
-    iterable: IterableIterator<[string, Type]>,
+    iterable?: Iterable<[string, RecordFieldType]>,
   ) {
-    for (const [name, type] of iterable) {
-      this.fieldTypes.set(name, type);
+    if (iterable !== undefined) {
+      for (const [name, type] of iterable) {
+        this.fieldTypes.set(name, type);
+      }
     }
+  }
+
+  public addField(name: string, type: RecordFieldType): void {
+    this.fieldTypes.set(name, type);
   }
 
   public hasField(name: string) {
     return name in this.fieldTypes;
   }
 
-  public getTypeOfField(name: string) {
+  public getFieldType(name: string) {
     return this.fieldTypes.get(name);
   }
 
-}
+  public clear(): void {
+    this.fieldTypes.clear();
+  }
 
-export function isRecordType(value: any): value is RecordType {
-  return value.kind === TypeKind.RecordType;
 }
 
 export class TupleType extends TypeBase {
@@ -119,45 +150,35 @@ export class TupleType extends TypeBase {
 
 }
 
-export function isTupleType(value: any): value is TupleType {
-  return value.kind === TypeKind.TupleType;
-}
+//export function narrowType(outer: Type, inner: Type): Type {
+//  if (isAnyType(outer) || isNeverType(inner)) {
+//    return inner;
+//  }
+//  // TODO cover the other cases
+//  return outer;
+//}
 
-export function isVoidType(value: any) {
-  return isTupleType(value) && value.elementTypes.length === 0;
-}
-
-export function narrowType(outer: Type, inner: Type): Type {
-  if (isAnyType(outer) || isNeverType(inner)) {
-    return inner;
-  }
-  // TODO cover the other cases
-  return outer;
-}
-
-export function intersectTypes(a: Type, b: Type): Type {
-  if (isNeverType(a) || isNeverType(b)) {
-    return new NeverType();
-  }
-  if (isAnyType(b)) {
-    return a
-  }
-  if (isAnyType(a)) {
-    return b;
-  }
-  if (isFunctionType(a) && isFunctionType(b)) {
-    if (a.paramTypes.length !== b.paramTypes.length) {
-      return new NeverType();
-    }
-    const returnType = intersectTypes(a.returnType, b.returnType);
-    const paramTypes = a.paramTypes
-      .map((_, i) => intersectTypes(a.paramTypes[i], b.paramTypes[i]));
-    return new FunctionType(paramTypes, returnType)
-  }
-  return new NeverType();
-}
-
-export type TypeInfo = never;
+//export function intersectTypes(a: Type, b: Type): Type {
+//  if (a.kind === TypeKind.NeverType && b.kind === TypeKind.NeverType)
+//    return new NeverType();
+//  }
+//  if (a.kind == TypeKind.AnyType) {
+//    return a
+//  }
+//  if (isAnyType(a)) {
+//    return b;
+//  }
+//  if (a.kind === TypeKind.FunctionType && b.kind === TypeKind.FunctionType) {
+//    if (a.paramTypes.length !== b.paramTypes.length) {
+//      return new NeverType();
+//    }
+//    const returnType = intersectTypes(a.returnType, b.returnType);
+//    const paramTypes = a.paramTypes
+//      .map((_, i) => intersectTypes(a.paramTypes[i], b.paramTypes[i]));
+//    return new FunctionType(paramTypes, returnType)
+//  }
+//  return new NeverType();
+//}
 
 interface AssignmentError {
   node: Syntax;
@@ -165,7 +186,54 @@ interface AssignmentError {
 
 export class TypeChecker {
 
+  private opaqueTypes = new FastStringMap<number, OpaqueType>();
+
+  private stringType = new OpaqueType();
+  private intType = new OpaqueType();
+  private floatType = new OpaqueType();
+
   constructor(private resolver: SymbolResolver) {
+
+  }
+
+  public getTypeOfValue(value: Value): Type {
+    if (typeof(value) === 'string') {
+      return this.stringType;
+    } else if (typeof(value) === 'bigint') {
+      return this.intType;
+    } else if (typeof(value) === 'number') {
+      return this.floatType;
+    } else if (isPlainObject(value)) {
+      const recordType = new RecordType()   
+      for (const key of Object.keys(value)) {
+         recordType.addField(key, new PlainRecordFieldType(this.getTypeOfValue(value[key])));
+      }
+      return recordType;
+    } else {
+      throw new Error(`Could not determine type of given value.`);
+    }
+  }
+
+  public getTypeOfNode(node: Syntax) {
+
+    switch (node.kind) {
+
+      case SyntaxKind.BoltRecordDeclaration:
+      {
+        const recordSym = this.resolver.getSymbolForNode(node);
+        assert(recordSym !== null);
+        if (this.opaqueTypes.has(recordSym!.id)) {
+          return this.opaqueTypes.get(recordSym!.id);
+        }
+        const opaqueType = new OpaqueType(recordSym!);
+        this.opaqueTypes.set(recordSym!.id, opaqueType);
+        break;
+      }
+
+      case SyntaxKind.BoltConstantExpression:
+        return this.getTypeOfValue(node.value);
+
+    }
 
   }
 
@@ -185,7 +253,6 @@ export class TypeChecker {
     //      Next, add the resulting types as type hints to `fnReturnType`.
 
   }
-
   
   public getCallableFunctions(node: BoltExpression): BoltFunctionDeclaration[] {
 

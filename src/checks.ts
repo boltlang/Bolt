@@ -32,7 +32,7 @@ export class CheckInvalidFilePaths extends NodeVisitor {
 
 }
 
-export class CheckReference extends NodeVisitor {
+export class CheckReferences extends NodeVisitor {
 
     constructor(
         @inject private diagnostics: DiagnosticPrinter,
@@ -75,7 +75,7 @@ export class CheckReference extends NodeVisitor {
     protected visitBoltReferenceTypeExpression(node: BoltReferenceTypeExpression) {
         const scope = this.resolver.getScopeForNode(node, ScopeType.Type);
         assert(scope !== null);
-        const resolvedSym = this.resolver.resolveSymbolPath(getSymbolPathFromNode(node), scope!);
+        const resolvedSym = this.resolver.resolveSymbolPath(getSymbolPathFromNode(node.path), scope!);
         if (resolvedSym === null) {
             this.diagnostics.add({
                 message: E_TYPE_DECLARATION_NOT_FOUND,
