@@ -59,8 +59,8 @@ mod Bolt::Lang {
     }
   }
 
-  fn eliminate_match_rule(stx: Syntax) {
-    match stx {
+  fn eliminate_match_rule(node: Node) {
+    match node {
       quote {
         match $value: Expression {
           $patterns @ ( $pattern: Pattern => $expression: Expression ),* (,)?
@@ -73,7 +73,7 @@ mod Bolt::Lang {
             value
           )
         });
-        return ConditionalStatement::from_node(stx, cases);
+        return ConditionalStatement::from_node(node, cases);
       }
     }
   }
