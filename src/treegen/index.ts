@@ -46,14 +46,14 @@ export function generateAST(decls: Declaration[]) {
   // After we're done mappping parents to children, we can use isLeafNode() 
   // to store the nodes we will be iterating most frequently on.
 
-  const finalNodes: NodeDeclaration[] = nodeDecls.filter(decl => isLeafNode(decl.name));
+  const finalNodes: NodeDeclaration[] = nodeDecls.filter(decl => isFinalNode(decl.name));
 
   // Write a JavaScript file that contains all AST definitions.
 
   jsFile.write(`\nconst NODE_TYPES = {\n`);
   jsFile.indent();
   for (const decl of finalNodes) {
-    if (decl.type === 'NodeDeclaration' && isLeafNode(decl.name)) {
+    if (decl.type === 'NodeDeclaration' && isFinalNode(decl.name)) {
       jsFile.write(`'${decl.name}': {\n`);
       jsFile.indent();
       jsFile.write(`index: ${decl.index},\n`);
@@ -86,7 +86,7 @@ export function generateAST(decls: Declaration[]) {
     jsFile.write(`exported.is${decl.name} = function (value) {\n`);
     jsFile.indent();
     jsFile.write(`if (!isSyntax(value)) {\n  return false;\n}\n`);
-    if (isLeafNode(decl.name)) {
+    if (isFinalNode(decl.name)) {
       jsFile.write(`  return value.kind === ${decl.index};\n`);
     } else {
       jsFile.write('return ' + [...getFinalNodes(decl.name)].map(d => `value.kind === ${getDeclarationNamed(d).index}`).join(' || ') + '\n');
@@ -104,7 +104,7 @@ export function generateAST(decls: Declaration[]) {
   dtsFile.write('export class NodeVisitor {\n');
   dtsFile.write('  public visit(node: Syntax): void;\n');
   for (const decl of finalNodes) {
-    dtsFile.write(`  protected visit${decl.name}(node: ${decl.name}): void;\n`);
+    dtsFile.write(`  protected visit${decl.name}?(node: ${decl.name}): void;\n`);
   }
   dtsFile.write('}\n\n');
 
@@ -116,15 +116,14 @@ export function generateAST(decls: Declaration[]) {
 
   for (const decl of decls) {
     if (decl.type === 'NodeDeclaration') {
-      if (isLeafNode(decl.name)) {
-        dtsFile.write(`export interface ${decl.name} extends SyntaxBase<SyntaxKind.${decl.name}> {\n`)
+      if (isFinalNode(decl.name)) {
+        dtsFile.write(`export interface ${decl.name} extends SyntaxBase {\n`)
         dtsFile.indent()
         dtsFile.write(`kind: SyntaxKind.${decl.name};\n`);
         for (const field of getAllFields(decl)) {
           dtsFile.write(`${field.name}: ${emitTypeScriptType(field.typeNode)};\n`);
         }
         dtsFile.write(`parentNode: ${decl.name}Parent;\n`);
-        dtsFile.write(`getParentOfKind(kind: SyntaxKind): ${decl.name}AnyParent;\n`)
         dtsFile.write(`getChildNodes(): IterableIterator<${decl.name}Child>\n`)
         dtsFile.dedent();
         dtsFile.write(`}\n\n`);
@@ -373,14 +372,13 @@ export function generateAST(decls: Declaration[]) {
   function* getFinalNodes(declName: string): IterableIterator<string> {
     const stack = [ declName ];
     while (stack.length > 0) {
-      console.log("HE")
       const nodeName = stack.pop()!;
       for (const childName of getNodesDirectlyInheritingFrom(nodeName)) {
         //const childDecl = getDeclarationNamed(childName)
         //if (childDecl.type !== 'NodeDeclaration') {
         //  throw new Error(`Node ${declName} has a child named '${childDecl.name}' that is not a node.`);
         //}
-        if (isLeafNode(childName)) {
+        if (isFinalNode(childName)) {
           yield childName;
         } else {
           stack.push(childName);
@@ -390,14 +388,15 @@ export function generateAST(decls: Declaration[]) {
   }
 
   function* getAllFields(nodeDecl: NodeDeclaration): IterableIterator<NodeField> {
-    if (isLeafNode(nodeDecl.name)) {
-      yield* nodeDecl.fields;
-      //for (const parentName of nodeDecl.parents) {
-      //  const parentDecl = getDeclarationNamed(parentName);
-      //  if (parentDecl.type !== 'NodeDeclaration') {
-      //    throw new Error(`Parent declaration '${parentName}' of '${nodeDecl.name}' must be a node declaration.`);
-      //  }
-      //}
+    yield* nodeDecl.fields;
+    if (isFinalNode(nodeDecl.name)) {
+      for (const parentName of nodeDecl.parents) {
+        const parentDecl = getDeclarationNamed(parentName);
+        if (parentDecl.type !== 'NodeDeclaration') {
+          throw new Error(`Parent declaration '${parentName}' of '${nodeDecl.name}' must be a node declaration.`);
+        }
+        yield* parentDecl.fields;
+      }
     } else {
       for (const nodeName of getFinalNodes(nodeDecl.name)) {
         yield* getAllFields(getDeclarationNamed(nodeName) as NodeDeclaration);
@@ -417,7 +416,7 @@ export function generateAST(decls: Declaration[]) {
     return childrenOf[name] !== undefined && childrenOf[name].length !== 0;
   }
 
-  function isLeafNode(name: string): boolean {
+  function isFinalNode(name: string): boolean {
     const decl = getDeclarationNamed(name);
     if (decl.type !== 'NodeDeclaration') {
       return false;

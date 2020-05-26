@@ -9,13 +9,15 @@ export type SyntaxRange = [Syntax, Syntax];
 
 export function isSyntax(value: any): value is Syntax;
 
-interface SyntaxBase<K extends SyntaxKind> {
+interface SyntaxBase {
   id: number;
-  kind: K
+  kind: SyntaxKind;
   _typeInfo: TypeInfo;
   parentNode: Syntax | null;
   span: TextSpan | null;
+  visit(visitors: NodeVisitor[]): void;
   preorder(): IterableIterator<Syntax>;
+  getParentOfKind<K1 extends SyntaxKind>(kind: K1): ResolveSyntaxKind<K1> | null;
   getChildNodes(): IterableIterator<Syntax>,
   findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
 }

@@ -36,6 +36,22 @@ const nodeProto = {
     }
   },
 
+  visit(visitors) {
+    const stack = [this];
+    while (stack.length > 0) {
+      const node = stack.pop();
+      const key = `visit${kindToString(node.kind)}`
+      for (const visitor of visitors) {
+         if (visitor[key] !== undefined) {
+           visitor[key](node);
+         }
+      }
+      for (const childNode of node.getChildNodes()) {
+        stack.push(childNode);
+      }
+    }
+  },
+
   *preorder() {
     const stack = [this];
     while (stack.length > 0) {
@@ -50,6 +66,17 @@ const nodeProto = {
   mayContainKind(kind) {
     // TODO
     return true;
+  },
+
+  getParentOfKind(kind) {
+    let currNode = this.parentNode;
+    while (currNode !== null) {
+      if (currNode.kind === kind) {
+        return currNode;
+      }
+      currNode = currNode.parentNode;
+    }
+    return null;
   },
 
   *findAllChildrenOfKind(kind) {
