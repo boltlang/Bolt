@@ -3,6 +3,7 @@ import chalk from "chalk"
 import {Syntax} from "./ast";
 import {format, MapLike, FormatArg, countDigits} from "./util";
 
+export const E_MUST_RETURN_A_VALUE = "The function must return a value on all control paths.";;;;
 export const E_FILE_NOT_FOUND = "A file named {filename} was not found.";
 export const E_FIELD_HAS_INVALID_VERSION_NUMBER = "Field '{name}' contains an invalid version nunmber."
 export const E_FIELD_MUST_BE_STRING = "Field '{name}' must be a string."
@@ -13,6 +14,8 @@ export const E_TYPES_NOT_ASSIGNABLE = "Types {left} and {right} are not assignab
 export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for function call. Expected {expected} but got {actual}.";
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
 export const E_INVALID_ARGUMENTS = "Invalid arguments passed to function '{name}'."
+
+const BOLT_HARD_ERRORS = process.env['BOLT_HARD_ERRORS']
 
 const DIAG_NUM_EXTRA_LINES = 1;
 
@@ -39,8 +42,44 @@ export class DiagnosticPrinter {
   public hasErrors = false;
 
   public add(diagnostic: Diagnostic): void {
+
+    if (BOLT_HARD_ERRORS && (diagnostic.severity === 'error' || diagnostic.severity === 'fatal')) {
+      let out = ''
+      if (diagnostic.args !== undefined) {
+        out += format(diagnostic.message, diagnostic.args);
+      } else {
+        out += diagnostic.message;
+      }
+      throw new Error(out);
+    }
+
     let out = ''
+
+    switch (diagnostic.severity) {
+      case 'error':
+        this.hasErrors = true;
+        out += chalk.bold.red('error: ');
+        break;
+      case 'warning':
+        this.hasErrors = true;
+        out += chalk.bold.red('warning: ');
+        break;
+      default:
+        throw new Error(`Unkown severity for diagnostic message.`);
+    }
+
     if (diagnostic.node !== undefined) {
+      const span = diagnostic.node.span!;
+      out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}:${span.start.column}: `);
+    }
+    if (diagnostic.args !== undefined) {
+      out += format(diagnostic.message, diagnostic.args) + '\n';
+    } else {
+      out += diagnostic.message + '\n';
+    }
+
+    if (diagnostic.node !== undefined) {
+      out += '\n'
       const span = diagnostic.node.span!;
       const content = span.file.getText();
       const startLine = Math.max(0, span.start.line-1-DIAG_NUM_EXTRA_LINES)
@@ -69,28 +108,14 @@ export class DiagnosticPrinter {
         } else {
           continue;
         }
-        if (j < skip) {
+        if (j <= skip) {
           j = 0;
         }
         out += gutter+' '.repeat(j+skip)+chalk.red('~'.repeat(mark-j)) + '\n'
       }
       out += '\n'
-      out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}:${span.start.column}: `);
     }
-    switch (diagnostic.severity) {
-      case 'error':
-        this.hasErrors = true;
-        out += chalk.bold.red('error: ');
-      case 'warning':
-        this.hasErrors = true;
-        out += chalk.bold.red('warning: ');
-    }
-    if (diagnostic.args !== undefined) {
-      out += format(diagnostic.message, diagnostic.args) + '\n';
-    } else {
-      out += diagnostic.message + '\n';
-    }
-    out += '\n'
+
     process.stderr.write(out);
   }
 
