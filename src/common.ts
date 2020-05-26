@@ -10,11 +10,11 @@ import {
   isBoltPunctuated,
   SourceFile,
   BoltSourceFile,
-  BoltSourceFileModifiers,
-  isSourceFile
+  isSourceFile,
+  BoltSyntax,
+  BoltModifiers
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
-import {emit} from "./emitter";
 import {FastStringMap, enumerate, escapeChar, assert} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
@@ -54,13 +54,6 @@ export class Package {
     this.sourceFiles.push(sourceFile);
   }
 
-}
-
-export function isAutoImported(node: BoltSourceFile): boolean {
-  //if (node.kind !== SyntaxKind.BoltSourceFile) {
-  //  node = node.getParentOfKind(SyntaxKind.BoltSourceFile)!
-  //}
-  return (node.modifiers & BoltSourceFileModifiers.AutoImport) > 0;
 }
 
 export function getLanguage(node: Syntax): string {
@@ -148,10 +141,6 @@ export function getReturnStatementsInFunctionBody(body: BoltFunctionBody): BoltR
 
 }
 
-export function hasPublicModifier(node: BoltDeclaration) {
-  return (node.modifiers & BoltDeclarationModifiers.Public) > 0;
-}
-
 export enum OperatorKind {
   Prefix,
   InfixL,
@@ -208,6 +197,37 @@ export class OperatorTable {
     return this.operatorsByName.get(name);
   }
 
+}
+
+export function getModulePathToNode(node: BoltSyntax): string[] {
+  let elements = [];
+  while (true) {
+    if (node.kind === SyntaxKind.BoltModule) {
+      for (const element of node.name) {
+        elements.unshift(element.text);
+      }
+    }
+    if (node.parentNode === null) {
+      break;
+    }
+    node = node.parentNode;
+  }
+  return elements;
+}
+
+export function isExported(node: Syntax) { 
+  switch (node.kind) {
+    case SyntaxKind.BoltVariableDeclaration:
+    case SyntaxKind.BoltFunctionDeclaration:
+    case SyntaxKind.BoltModule:
+    case SyntaxKind.BoltRecordDeclaration:
+    case SyntaxKind.BoltTypeAliasDeclaration:
+    case SyntaxKind.BoltTraitDeclaration:
+    case SyntaxKind.BoltImplDeclaration:
+      return (node.modifiers & BoltModifiers.IsPublic) > 0;
+    default:
+      throw new Error(`The node ${kindToString(node.kind)} can not be exported.`)
+  }
 }
 
 export function describeKind(kind: SyntaxKind): string {

@@ -79,6 +79,7 @@ import {
   createBoltMemberExpression,
   createBoltModulePath,
   BoltModulePath,
+  isBoltSymbol,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -108,16 +109,23 @@ function assertNoTokens(tokens: BoltTokenStream) {
   }
 }
 
-const KIND_EXPRESSION_T0 = [
-  SyntaxKind.BoltStringLiteral,
-  SyntaxKind.BoltIntegerLiteral,
+const KIND_SYMBOL = [
   SyntaxKind.BoltIdentifier,
   SyntaxKind.BoltOperator,
   SyntaxKind.BoltVBar,
+  SyntaxKind.BoltLtSign,
+  SyntaxKind.BoltGtSign,
+];
+
+const KIND_EXPRESSION_T0 = uniq([
+  SyntaxKind.BoltStringLiteral,
+  SyntaxKind.BoltIntegerLiteral,
+  SyntaxKind.BoltOperator,
   SyntaxKind.BoltMatchKeyword,
   SyntaxKind.BoltQuoteKeyword,
   SyntaxKind.BoltYieldKeyword,
-]
+  ...KIND_SYMBOL,
+])
 
 const KIND_STATEMENT_T0 = uniq([
   SyntaxKind.BoltReturnKeyword,
@@ -194,7 +202,7 @@ export class Parser {
     return (this as any)['parse' + kindToString(kind).substring('Bolt'.length)](tokens);
   }
 
-  public parseNamespacePath(tokens: BoltTokenStream): BoltModulePath {
+  public parseModulePath(tokens: BoltTokenStream): BoltModulePath {
 
     let isAbsolute = false;
     let elements = [];
@@ -381,7 +389,7 @@ export class Parser {
 
   public parseReferenceTypeExpression(tokens: BoltTokenStream): BoltReferenceTypeExpression {
 
-    const path = this.parseNamespacePath(tokens)
+    const path = this.parseModulePath(tokens)
     const t1 = tokens.peek();
 
     let typeArgs: BoltTypeExpression[] | null = null;
@@ -431,7 +439,7 @@ export class Parser {
       if (!isBoltOperatorLike(t0)) {
         break;
       }
-      let desc0 = this.typeOperatorTable.lookup(emit(t0));
+      let desc0 = this.typeOperatorTable.lookup(emitNode(t0));
       if (desc0 === null || desc0.arity !== 2 || desc0.precedence < minPrecedence) {
         break;
       }
@@ -442,7 +450,7 @@ export class Parser {
         if (!isBoltOperatorLike(t1.kind)) {
           break;
         }
-        const desc1 = this.typeOperatorTable.lookup(emit(t1))
+        const desc1 = this.typeOperatorTable.lookup(emitNode(t1))
         if (desc1 === null || desc1.arity !== 2 || desc1.precedence < desc0.precedence || !isRightAssoc(desc1.kind)) {
           break;
         }
@@ -512,9 +520,35 @@ export class Parser {
   }
 
   public parseReferenceExpression(tokens: BoltTokenStream): BoltReferenceExpression {
-    const name = this.parseNamespacePath(tokens);
-    const node = createBoltReferenceExpression(name);
-    setOrigNodeRange(node, name, name);
+
+    const firstToken = tokens.peek();
+    let isAbsolute = false;
+    let elements = [];
+
+    while (true) {
+      const t2 = tokens.peek(2);
+      if (t2.kind !== SyntaxKind.BoltColonColon) {
+        break;
+      }
+      const t1 = tokens.get();
+      assertToken(t1, SyntaxKind.BoltIdentifier);
+      elements.push(t1 as BoltIdentifier)
+      tokens.get();
+    }
+
+    let path = null;
+    if (elements.length > 0) {
+      path = createBoltModulePath(isAbsolute, elements);
+      setOrigNodeRange(path, elements[0], elements[elements.length-1]);
+    }
+
+    const t3 = tokens.get();
+    assertToken(t3, SyntaxKind.BoltIdentifier);
+
+    // TODO Add support for parsing parenthesized operators
+
+    const node = createBoltReferenceExpression(path, t3 as BoltIdentifier);
+    setOrigNodeRange(node, firstToken, t3);
     return node;
   }
 
@@ -930,7 +964,7 @@ export class Parser {
     }
 
     // FIXME should fail to parse absolute paths
-    const name = this.parseNamespacePath(tokens);
+    const name = this.parseModulePath(tokens);
 
     const t1 = tokens.get();
     if (t1.kind !== SyntaxKind.BoltBraced) {
@@ -1526,7 +1560,7 @@ import { Scanner } from "./scanner"
 import { TextFile, TextSpan, TextPos } from "./text"
 import * as fs from "fs"
 import {JSScanner} from "./foreign/js/scanner";
-import {emit} from "./emitter";
+import {emitNode} from "./emitter";
 
 export function parseSourceFile(filepath: string, pkg: Package): BoltSourceFile {
   const file = new TextFile(filepath);

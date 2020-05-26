@@ -1,77 +1,51 @@
 
-import { Syntax, SyntaxKind, Expr, isNode, BoltQualName } from "./ast"
-import { TypeChecker, Type, RecordType, PrimType, boolType } from "./checker"
-import { FastStringMap } from "./util"
+import { Syntax, SyntaxKind, BoltQualName, BoltExpression, kindToString, BoltSyntax, isBoltStatement } from "./ast"
+import { FastStringMap, assert } from "./util"
+import { emitNode } from "./emitter";
+import { Type, TypeChecker, RecordType } from "./types";
 
 export interface Value {
-  type: Type;
+   readonly type?: Type;
+   data: ValueData;
 }
 
-export class PrimValue implements Value {
+class Record {
+ 
+  private fields: Map<string, Value>;
+  
+  constructor(fields: Iterable<[string, Value]>) {
+    this.fields = new Map(fields);
+  }
 
-  constructor(
-    public type: PrimType,
-    public value: any
-  ) {
-    
+  public clone(): Record {
+    return new Record(this.fields);
+  }
+
+  public addField(name: string, value: Value): void {
+    this.fields.set(name, value);
+  }
+
+  public deleteField(name: string): void {
+    this.fields.delete(name);
+  }
+
+  public clear(): void {
+    this.fields.clear();
   }
 
 }
 
-export const TRUE = new PrimValue(boolType, true);
-export const FALSE = new PrimValue(boolType, false);
-
-export abstract class RecordValue implements Value {
-
-  abstract type: RecordType;
-
-  abstract getValueOfField(name: string): Value;
-
-}
-
-export class NativeRecord implements Value {
-
-  constructor(
-    public type: RecordType,
-    protected fields: FastStringMap<Value>,
-  ) {
-    
-  }
-
-  getValueOfField(name: string): Value {
-    if (!this.type.hasField(name)) {
-      throw new Error(`Field '${name}' does not exist on this record.`)
-    }
-    return this.fields[name]
-  }
-
-}
-
-export class RecordWrapper extends RecordValue {
-
-  constructor(
-    public type: RecordType,
-    protected data: any,
-  ) {
-    super();
-  }
-
-  getValueOfField(name: string): Value {
-    if (!this.type.hasField(name)) {
-      throw new Error(`Field '${name}' does not exist on this record.`)
-    }
-    return this.data[name]
-  }
-
-}
-
-function getDeclarationPath(node: BoltQualName) {
-  return [...node.modulePath.map(id => id.text), node.name.text];
-}
+type ValueData
+  = string
+  | undefined
+  | boolean
+  | number
+  | bigint
+  | Record
 
 class Environment {
 
-  private symbols = FastStringMap<string, Value>();
+  private symbols = new FastStringMap<string, Value>();
 
   constructor(public parentEnv: Environment | null = null) {
 
@@ -81,20 +55,22 @@ class Environment {
     if (name in this.symbols) {
       throw new Error(`A variable with the name '${name}' already exists.`);
     }
-    this.symbols[name] = value;
+    this.symbols.set(name, value);
   }
 
   public updateValue(name: string, newValue: Value) {
-    if (!(name in this.symbols)) {
+    if (!this.symbols.has(name)) {
       throw new Error(`Trying to update a variable '${name}' that has not been declared.`);
     }
+    this.symbols.delete(name);
+    this.symbols.set(name, newValue); 
   }
 
   public lookup(name: string) {
     let curr = this as Environment;
     while (true) {
-      if (name in curr.symbols) {
-        return curr.symbols[name];
+      if (this.symbols.has(name)) {
+        return curr.symbols.get(name);
       }
       if (curr.parentEnv === null) {
         break;
@@ -106,38 +82,76 @@ class Environment {
 
 }
 
+function mangle(node: BoltSyntax) {
+  switch (node.kind) {
+    case SyntaxKind.BoltIdentifier:
+      return emitNode(node);
+    default:
+      throw new Error(`Could not mangle ${kindToString(node.kind)} to a symbol name.`)
+  }
+}
+
+class EvaluationError extends Error {
+
+}
+
 export class Evaluator {
 
   constructor(public checker: TypeChecker) {
 
   }
 
-  match(value: Value, node: Syntax) {
+  private performPatternMatch(value: Value, node: Syntax, env: Environment): boolean {
 
     switch (node.kind) {
 
-      case SyntaxKind.RecordPatt:
-        for (const field of node.fields) {
-          if (!this.match((value as RecordValue).getValueOfField(field.name.text), field.pattern)) {
-            return false;
+      case SyntaxKind.BoltBindPattern:
+      {
+        env.setValue(node.name.text, value);
+        return true;
+      }
+
+      case SyntaxKind.BoltRecordPattern:
+      {
+        if (!(value.data instanceof Record)) {
+          throw new EvaluationError(`A deconstructing record pattern received a value that is not a record.`);
+        }
+        const record = value.data.clone();
+        for (const fieldPatt of node.fields) {
+          if (fieldPatt.isRest) {
+            if (fieldPatt.name !== null) {
+              env.setValue(fieldPatt.name.text, { data: fields.clone() });
+            }
+            record.clear();
+          } else {
+            assert(fieldPatt.name !== null);
+            let isMatch = true;
+            if (fieldPatt.pattern !== null) {
+              isMatch = this.performPatternMatch(value.getFieldValue(fieldPatt.name!.text), fieldPatt.pattern, env);
+            }
+            if (!isMatch) {
+              return false;
+            }
+            record.deleteField(fieldPatt.name!.text);
           }
         }
         return true;
+      }
 
-      case SyntaxKind.TypePatt:
-        return value.type === this.checker.getTypeOfNode(node)
+      case SyntaxKind.BoltTypePattern:
+      {
+        const expectedType = this.checker.getTypeOfNode(node.type);
+        if (!this.checker.isTypeAssignableTo(expectedType, getTypeOfValue(value))) {
+          return false;
+        }
+        return false;
+      }
 
       default:
-        throw new Error(`I did not know how to match on pattern ${SyntaxKind[node.kind]}`)
+        throw new Error(`I did not know how to match on pattern ${kindToString(node.kind)}`)
 
     }
 
-  }
-
-  createValue(data: any) {
-    if (isNode(data)) {
-      return new RecordWrapper(this.checker.getTypeNamed(`Bolt.AST.${SyntaxKind[data.kind]}`)! as RecordType, data)
-    }
   }
 
   public eval(node: Syntax, env: Environment = new Environment()): Value { 
@@ -147,32 +161,31 @@ export class Evaluator {
       case SyntaxKind.BoltSourceFile:
       case SyntaxKind.BoltModule:
         for (const element of node.elements) {
-          this.eval(element, env);
+          if (isBoltStatement(element)) {
+            this.eval(element, env);
+          }
         }
-        break;
+        return { data: undefined }
 
-      case SyntaxKind.BoltReferenceTypeExpression:
-        // FIXME
-        return env.lookup(node.name.name.text);
-
-      case SyntaxKind.BoltRecordDeclaration:
-      case SyntaxKind.BoltFunctionDeclaration:
-        break;
+      case SyntaxKind.BoltReferenceExpression:
+        return env.lookup(mangle(node.name));
 
       case SyntaxKind.BoltMatchExpression:
         const value = this.eval(node.value, env);
-        for (const [pattern, result] of node.arms) {
-          if (this.match(value, pattern)) {
-            return this.eval(result as Expr, env)
+        for (const matchArm of node.arms) {
+          const matchArmEnv = new Environment(env);
+          const isMatch = this.performPatternMatch(value, matchArm.pattern, matchArmEnv);
+          if (isMatch) {
+            return this.eval(matchArm.body, env)
           }
         }
-        return new PrimValue(this.checker.getTypeNamed('Void')!, null);
+        return { data: undefined };
 
       case SyntaxKind.BoltConstantExpression:
-        return new PrimValue(this.checker.getTypeOfNode(node), node.value)
+        return node.value;
 
       default:
-        throw new Error(`Could not evaluate node ${SyntaxKind[node.kind]}`)
+        throw new Error(`Could not evaluate node ${kindToString(node.kind)}`)
 
     }
 

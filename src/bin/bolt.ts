@@ -17,7 +17,6 @@ import { Package } from "../common"
 import {hasOwnProperty} from "../util"
 import {isString} from "util"
 import {DiagnosticPrinter, E_FIELD_NOT_PRESENT, E_FIELD_MUST_BE_STRING, E_FIELD_HAS_INVALID_VERSION_NUMBER} from "../diagnostics"
-import {BoltSourceFileModifiers} from "../ast"
 
 //global.print = function (value: any) {
 //  console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
@@ -156,6 +155,18 @@ yargs
 
     }
 
+  )
+
+  .command(
+    'check [files..]',
+    'Check the given files/packages for mistakes.',
+    yargs => yargs,
+    args => {
+      const pkgs = loadPackagesAndSourceFiles(toArray(args.files as string[] | string));
+      const program = new Program(pkgs);
+      const frontend = new Frontend();
+      frontend.check(program);
+    }
   )
 
   .command(

@@ -92,7 +92,6 @@ node BoltSourceFile > SourceFile {
 
 node BoltQualName {
   modulePath: Option<Vec<BoltIdentifier>>,
-  name: BoltSymbol, 
 }
 
 node BoltModulePath {
@@ -156,11 +155,16 @@ node BoltRecordPattern > BoltPattern {
 node BoltExpression;
 
 node BoltQuoteExpression > BoltExpression {
-  tokens: Vec<Token>,
+  tokens: Vec<Token | BoltExpression>,
+}
+
+node BoltTupleExpression > BoltExpression {
+  elements: Vec<BoltExpression>,
 }
 
 node BoltReferenceExpression > BoltExpression {
-  name: BoltQualName,
+  modulePath: Option<BoltModulePath>,
+  name: BoltSymbol,
 }
 
 node BoltMemberExpression > BoltExpression {

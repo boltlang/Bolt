@@ -4,6 +4,24 @@ import * as fs from "fs"
 import moment from "moment"
 import chalk from "chalk"
 
+export function isPowerOf(x: number, n: number):boolean {
+  const a = Math.log(x) / Math.log(n);
+  return Math.pow(a, n) == x;
+}
+
+export function every<T>(iterator: Iterator<T>, pred: (value: T) => boolean): boolean {
+  while (true) {
+    const { value, done } = iterator.next();
+    if (done) {
+      break;
+    }
+    if (!pred(value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function assert(test: boolean): void {
   if (!test) {
     throw new Error(`Invariant violation: an internal sanity check failed.`);
@@ -248,7 +266,7 @@ export interface MapLike<T> {
   [key: string]: T;
 }
 
-export type FormatArg = string | Date | number
+export type FormatArg = any;
 
 export function format(message: string, data: MapLike<FormatArg>) {
 

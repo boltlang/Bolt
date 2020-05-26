@@ -1,5 +1,7 @@
 
-import { FastStringMap } from "./util";
+import { FastStringMap, assert } from "./util";
+import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString } from "./ast";
+import { getSymbolPathFromNode, ScopeType, SymbolResolver } from "./resolver";
 
 enum TypeKind {
   OpaqueType,
@@ -8,6 +10,7 @@ enum TypeKind {
   FunctionType,
   RecordType,
   VariantType,
+  UnionType,
   TupleType,
 }
 
@@ -28,32 +31,12 @@ export class OpaqueType extends TypeBase {
   kind: TypeKind.OpaqueType = TypeKind.OpaqueType;
 }
 
-export function isOpaqueType(value: any): value is OpaqueType {
-  return value.kind === TypeKind.OpaqueType;
-}
-
-export function createOpaqueType(): OpaqueType {
-  return new OpaqueType();
-}
-
 export class AnyType extends TypeBase {
   kind: TypeKind.AnyType = TypeKind.AnyType;
 }
 
-export function createAnyType(): AnyType {
-  return new AnyType();
-}
-
-export function isAnyType(value: any): value is AnyType {
-  return value.kind === TypeKind.AnyType;
-}
-
 export class NeverType extends TypeBase {
   kind: TypeKind.NeverType = TypeKind.NeverType;
-}
-
-export function isNeverType(value: any): value is NeverType {
-  return value instanceof NeverType;
 }
 
 export class FunctionType extends TypeBase {
@@ -80,10 +63,6 @@ export class FunctionType extends TypeBase {
 
 }
 
-export function isFunctionType(value: any): value is FunctionType {
-  return value instanceof FunctionType;
-}
-
 export class VariantType extends TypeBase {
 
   kind: TypeKind.VariantType = TypeKind.VariantType;
@@ -96,10 +75,6 @@ export class VariantType extends TypeBase {
     return this.elementTypes[Symbol.iterator]();
   }
 
-}
-
-export function createVariantType(...elementTypes: Type[]): VariantType {
-  return new VariantType(elementTypes);
 }
 
 export function isVariantType(value: any): value is VariantType {
@@ -144,16 +119,8 @@ export class TupleType extends TypeBase {
 
 }
 
-export function createTupleType(...elementTypes: Type[]) {
-  return new TupleType(elementTypes);
-}
-
 export function isTupleType(value: any): value is TupleType {
   return value.kind === TypeKind.TupleType;
-}
-
-export function createVoidType() {
-  return createTupleType();
 }
 
 export function isVoidType(value: any) {
@@ -190,32 +157,94 @@ export function intersectTypes(a: Type, b: Type): Type {
   return new NeverType();
 }
 
+export type TypeInfo = never;
 
-export function isTypeAssignable(a: Type, b: Type): boolean {
-  if (isNeverType(a)) {
-    return false;
-  }
-  if (isAnyType(b)) {
-    return true;
-  }
-  if (isOpaqueType(a) && isOpaqueType(b)) {
-    return a === b;
-  }
-  if (a.kind !== b.kind) {
-    return false;
-  }
-  if (isFunctionType(a) && isFunctionType(b)) {
-    if (a.paramTypes.length !== b.paramTypes.length) {
-      return false;
-    }
-    const paramCount = a.getParameterCount();
-    for (let i = 0; i < paramCount; i++) {
-      if (!isTypeAssignable(a.getParamTypeAtIndex(i), b.getParamTypeAtIndex(i))) {
-        return false;
-      }
-    }
-    return true;
-  }
-  throw new Error(`Should not get here.`);
+interface AssignmentError {
+  node: Syntax;
 }
 
+export class TypeChecker {
+
+  constructor(private resolver: SymbolResolver) {
+
+  }
+
+  public isVoid(node: Syntax): boolean {
+    switch (node.kind) {
+      case SyntaxKind.BoltTupleExpression:
+        return node.elements.length === 0;
+      default:
+        throw new Error(`Could not determine whether the given type resolves to the void type.`)
+    }
+  }
+
+  public *getAssignmentErrors(left: Syntax, right: Syntax): IterableIterator<AssignmentError> {
+
+    // TODO For function bodies, we can do something special.
+    //      Sort the return types and find the largest types, eliminating types that fall under other types.
+    //      Next, add the resulting types as type hints to `fnReturnType`.
+
+  }
+
+  
+  public getCallableFunctions(node: BoltExpression): BoltFunctionDeclaration[] {
+
+    const resolver = this.resolver;
+
+    const results: BoltFunctionDeclaration[] = [];
+    visitExpression(node);
+    return results;
+
+    function visitExpression(node: BoltExpression) {
+      switch (node.kind) {
+        case SyntaxKind.BoltMemberExpression:
+        {
+          visitExpression(node.expression);
+          break;
+        }
+        case SyntaxKind.BoltQuoteExpression:
+        {
+          // TODO visit all unquote expressions
+          //visitExpression(node.tokens);
+          break;
+        }
+        case SyntaxKind.BoltCallExpression:
+        {
+          // TODO
+          break;
+        }
+        case SyntaxKind.BoltReferenceExpression:
+        {
+          const scope = resolver.getScopeForNode(node, ScopeType.Variable);
+          assert(scope !== null);
+          const resolvedSym = resolver.resolveSymbolPath(getSymbolPathFromNode(node), scope!);
+          if (resolvedSym !== null) {
+            for (const decl of resolvedSym.declarations) {
+              visitFunctionBodyElement(decl as BoltFunctionBodyElement);
+            }
+          }
+          break;
+        }
+        default:
+          throw new Error(`Unexpected node type ${kindToString(node.kind)}`);
+      }
+    }
+
+    function visitFunctionBodyElement(node: BoltFunctionBodyElement) {
+      switch (node.kind) {
+        case SyntaxKind.BoltFunctionDeclaration:
+          results.push(node);
+          break;
+        case SyntaxKind.BoltVariableDeclaration:
+          if (node.value !== null) {
+            visitExpression(node.value);
+          }
+          break;
+        default:
+          throw new Error(`Unexpected node type ${kindToString(node.kind)}`);
+      }
+    }
+
+  }
+
+}

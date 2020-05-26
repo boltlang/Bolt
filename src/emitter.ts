@@ -98,7 +98,7 @@ export class Emitter {
 /**
  * A wrapper around `Emitter` for quick emission of AST nodes with sane defaults.
  */
-export function emit(node: Syntax) {
+export function emitNode(node: Syntax) {
   const emitter = new Emitter();
   return emitter.emit(node);
 }

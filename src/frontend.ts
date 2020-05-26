@@ -5,20 +5,20 @@ import { now } from "microtime"
 import { EventEmitter } from "events"
 
 import { Program } from "./program"
-import { TypeChecker } from "./checker"
-import { Evaluator } from "./evaluator"
-import { emit } from "./emitter"
-import { Syntax, BoltSourceFile, SourceFile } from "./ast"
-import { upsearchSync, FastStringMap, getFileStem, getLanguage } from "./util"
-import { Package } from "./package"
+import { emitNode } from "./emitter"
+import { Syntax, BoltSourceFile, SourceFile, NodeVisitor } from "./ast"
+import { getFileStem, MapLike } from "./util"
 import { verbose, memoize } from "./util"
-import { Container } from "./di"
+import { Container, Newable } from "./di"
 import ExpandBoltTransform from "./transforms/expand"
 import CompileBoltToJSTransform from "./transforms/boltToJS"
 import ConstFoldTransform from "./transforms/constFold"
-import EliminateModulesTransform from "./transforms/eliminateModules"
 import { TransformManager } from "./transforms/index"
 import {DiagnosticPrinter} from "./diagnostics"
+import { TypeChecker } from "./types"
+import { checkServerIdentity } from "tls"
+import { CheckInvalidFilePaths, CheckTypeAssignments } from "./checks"
+import { SymbolResolver, BoltSymbolResolutionStrategy } from "./resolver"
 
 const targetExtensions: MapLike<string> = {
   'JS': '.mjs',
@@ -33,7 +33,7 @@ interface TimingInfo {
 
 class Timing extends EventEmitter {
 
-  private runningTasks: FastStringMap<TimingInfo> = Object.create(null);
+  private runningTasks: MapLike<TimingInfo> = Object.create(null);
 
   public start(name: string) {
     if (this.runningTasks[name] !== undefined) {
@@ -61,53 +61,67 @@ class Timing extends EventEmitter {
 
 export class Frontend {
 
-  public evaluator: Evaluator;
-  public checker: TypeChecker;
+  //public resolver = new SymbolResolver();
+  //public evaluator = new Evaluator(this.resolver);
   public diagnostics: DiagnosticPrinter;
   public timing: Timing;
-  
-  private container = new Container();
 
   constructor() {
     this.diagnostics = new DiagnosticPrinter();
     this.timing = new Timing();
   }
 
-  @memoize
-  public getPackage(filepath: string) {
-    const file = this.getTextFile(filepath)
-    const projectFile = upsearchSync('Boltfile', path.dirname(file.fullPath));
-    if (projectFile === null) {
-      return null;
-    }
-    const projectDir = path.resolve(path.dirname(projectFile));
-    return new Package(projectDir);
-  }
+  //@memoize(filepath => path.resolve(filepath))
+  //public getPackage(filepath: string) {
+  //  const file = this.getTextFile(filepath)
+  //  const projectFile = upsearchSync('Boltfile', path.dirname(file.fullPath));
+  //  if (projectFile === null) {
+  //    return null;
+  //  }
+  //  const projectDir = path.resolve(path.dirname(projectFile));
+  //  return new Package(projectDir);
+  //}
 
-  public typeCheck(program: Program) {
-    const checker = new TypeChecker(this.diagnostics, program);
+  public check(program: Program) {
+
+    const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
+    const checker = new TypeChecker(resolver);
+
+    const container = new Container();
+    container.bindSelf(program);
+    container.bindSelf(resolver);
+    container.bindSelf(checker);
+
+    const checks: Newable<NodeVisitor>[] = [
+       CheckInvalidFilePaths,
+       CheckTypeAssignments,
+    ];
+    
+    const checkers = checks.map(check => container.createInstance(check));
+
     for (const sourceFile of program.getAllSourceFiles()) {
-      checker.registerSourceFile(sourceFile as BoltSourceFile);
+      resolver.registerSourceFile(sourceFile as BoltSourceFile);
     }
     for (const sourceFile of program.getAllSourceFiles()) {
-      checker.checkSourceFile(sourceFile as BoltSourceFile);
+      sourceFile.visit(checkers)
     }
   }
 
   public compile(program: Program, target: string) {
 
-    // FIXME type checker should be shared across multple different method invocations
-    const checker = new TypeChecker(this.diagnostics, program);
-
     const container = new Container();
-
-    //container.bindSelf(evaluator);
-    container.bindSelf(checker);
+    const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
+    for (const sourceFile of program.getAllSourceFiles()) {
+      resolver.registerSourceFile(sourceFile as BoltSourceFile);
+    }
+    const transforms = new TransformManager(container);
+    container.bindSelf(transforms);
+    container.bindSelf(program);
+    container.bindSelf(resolver);
 
     switch (target) {
 
       case "JS":
-        const transforms = new TransformManager(this.container);
         transforms.register(ExpandBoltTransform);
         transforms.register(CompileBoltToJSTransform);
         transforms.register(ConstFoldTransform);
@@ -121,7 +135,7 @@ export class Frontend {
 
     for (const sourceFile of program.getAllSourceFiles()) {
       fs.mkdirp('.bolt-work');
-      fs.writeFileSync(this.mapToTargetFile(sourceFile), emit(sourceFile), 'utf8');
+      fs.writeFileSync(this.mapToTargetFile(sourceFile), emitNode(sourceFile), 'utf8');
     }
 
   }

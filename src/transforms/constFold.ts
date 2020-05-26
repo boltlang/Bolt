@@ -1,12 +1,7 @@
 
-import { SourceFile } from "../program"
-import { TransformManager } from "../transformers";
+import { SourceFile } from "../ast"
 
 export class ConstFoldTransform {
-
-  constructor(public transformers: TransformManager) {
-
-  }
 
   public isApplicable(node: SourceFile): boolean {
     return true;

@@ -1,8 +1,5 @@
 
-import { 
-  TypeChecker,
-  Scope
-} from "../checker"
+import { TypeChecker } from "../types"
 
 import {
   Syntax,
@@ -33,7 +30,6 @@ import {
   JSSyntax,
   JSSourceFile,
   isBoltSourceFile,
-  BoltImportDeclaration,
   BoltIdentifier,
   isBoltDeclaration,
   isBoltStatement,
@@ -42,11 +38,12 @@ import {
   createJSParameter,
 } from "../ast"
 
-import { hasPublicModifier, setOrigNodeRange } from "../util"
-import { Program, SourceFile } from "../program"
+import { setOrigNodeRange } from "../common"
+import { Program } from "../program"
 import { Transformer, TransformManager } from "./index"
 import { assert } from "../util"
 import { inject } from "../di"
+import { isExported } from "../common"
 
 export interface JSCompilerOptions {
 
@@ -191,7 +188,7 @@ export class BoltToJSTransform implements Transformer {
         const params: JSParameter[] = [];
         let body: JSStatement[] = [];
         let modifiers = 0;
-        if (hasPublicModifier(node)) {
+        if (isExported(node)) {
           modifiers |= JSDeclarationModifiers.IsExported;;
         }
         let i = 0;

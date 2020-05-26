@@ -1,6 +1,5 @@
 
-import { Type } from "./types"
-import { ScopeInfo } from "./checker"
+import { TypeInfo } from "./types"
 import { Package } from "./common"
 import { TextSpan } from "./text"
 
@@ -10,18 +9,178 @@ export type SyntaxRange = [Syntax, Syntax];
 
 export function isSyntax(value: any): value is Syntax;
 
-interface SyntaxBase<K extends SyntaxKind> {
+interface SyntaxBase {
   id: number;
-  _scope?: ScopeInfo;
-  kind: K;
-  parentNode: ParentTypesOf<K> | null;
+  kind: SyntaxKind;
+  _typeInfo: TypeInfo;
+  parentNode: Syntax | null;
   span: TextSpan | null;
-  getChildNodes(): IterableIterator<ChildTypesOf<K>>,
+  visit(visitors: NodeVisitor[]): void;
+  preorder(): IterableIterator<Syntax>;
+  getParentOfKind<K1 extends SyntaxKind>(kind: K1): ResolveSyntaxKind<K1> | null;
+  getChildNodes(): IterableIterator<Syntax>,
   findAllChildrenOfKind<K1 extends SyntaxKind>(kind: K1): IterableIterator<ResolveSyntaxKind<K1>>;
 }
 
 export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
 
+
+export class NodeVisitor {
+  public visit(node: Syntax): void;
+  protected visitEndOfFile?(node: EndOfFile): void;
+  protected visitFunctionBody?(node: FunctionBody): void;
+  protected visitBoltStringLiteral?(node: BoltStringLiteral): void;
+  protected visitBoltIntegerLiteral?(node: BoltIntegerLiteral): void;
+  protected visitBoltIdentifier?(node: BoltIdentifier): void;
+  protected visitBoltOperator?(node: BoltOperator): void;
+  protected visitBoltAssignment?(node: BoltAssignment): void;
+  protected visitBoltComma?(node: BoltComma): void;
+  protected visitBoltSemi?(node: BoltSemi): void;
+  protected visitBoltColon?(node: BoltColon): void;
+  protected visitBoltColonColon?(node: BoltColonColon): void;
+  protected visitBoltDot?(node: BoltDot): void;
+  protected visitBoltDotDot?(node: BoltDotDot): void;
+  protected visitBoltRArrow?(node: BoltRArrow): void;
+  protected visitBoltRArrowAlt?(node: BoltRArrowAlt): void;
+  protected visitBoltLArrow?(node: BoltLArrow): void;
+  protected visitBoltEqSign?(node: BoltEqSign): void;
+  protected visitBoltGtSign?(node: BoltGtSign): void;
+  protected visitBoltExMark?(node: BoltExMark): void;
+  protected visitBoltLtSign?(node: BoltLtSign): void;
+  protected visitBoltVBar?(node: BoltVBar): void;
+  protected visitBoltWhereKeyword?(node: BoltWhereKeyword): void;
+  protected visitBoltQuoteKeyword?(node: BoltQuoteKeyword): void;
+  protected visitBoltFnKeyword?(node: BoltFnKeyword): void;
+  protected visitBoltForeignKeyword?(node: BoltForeignKeyword): void;
+  protected visitBoltForKeyword?(node: BoltForKeyword): void;
+  protected visitBoltLetKeyword?(node: BoltLetKeyword): void;
+  protected visitBoltReturnKeyword?(node: BoltReturnKeyword): void;
+  protected visitBoltLoopKeyword?(node: BoltLoopKeyword): void;
+  protected visitBoltYieldKeyword?(node: BoltYieldKeyword): void;
+  protected visitBoltMatchKeyword?(node: BoltMatchKeyword): void;
+  protected visitBoltImportKeyword?(node: BoltImportKeyword): void;
+  protected visitBoltExportKeyword?(node: BoltExportKeyword): void;
+  protected visitBoltPubKeyword?(node: BoltPubKeyword): void;
+  protected visitBoltModKeyword?(node: BoltModKeyword): void;
+  protected visitBoltMutKeyword?(node: BoltMutKeyword): void;
+  protected visitBoltEnumKeyword?(node: BoltEnumKeyword): void;
+  protected visitBoltStructKeyword?(node: BoltStructKeyword): void;
+  protected visitBoltTypeKeyword?(node: BoltTypeKeyword): void;
+  protected visitBoltTraitKeyword?(node: BoltTraitKeyword): void;
+  protected visitBoltImplKeyword?(node: BoltImplKeyword): void;
+  protected visitBoltParenthesized?(node: BoltParenthesized): void;
+  protected visitBoltBraced?(node: BoltBraced): void;
+  protected visitBoltBracketed?(node: BoltBracketed): void;
+  protected visitBoltSourceFile?(node: BoltSourceFile): void;
+  protected visitBoltQualName?(node: BoltQualName): void;
+  protected visitBoltModulePath?(node: BoltModulePath): void;
+  protected visitBoltReferenceTypeExpression?(node: BoltReferenceTypeExpression): void;
+  protected visitBoltFunctionTypeExpression?(node: BoltFunctionTypeExpression): void;
+  protected visitBoltTypeParameter?(node: BoltTypeParameter): void;
+  protected visitBoltBindPattern?(node: BoltBindPattern): void;
+  protected visitBoltTypePattern?(node: BoltTypePattern): void;
+  protected visitBoltExpressionPattern?(node: BoltExpressionPattern): void;
+  protected visitBoltTuplePatternElement?(node: BoltTuplePatternElement): void;
+  protected visitBoltTuplePattern?(node: BoltTuplePattern): void;
+  protected visitBoltRecordFieldPattern?(node: BoltRecordFieldPattern): void;
+  protected visitBoltRecordPattern?(node: BoltRecordPattern): void;
+  protected visitBoltQuoteExpression?(node: BoltQuoteExpression): void;
+  protected visitBoltTupleExpression?(node: BoltTupleExpression): void;
+  protected visitBoltReferenceExpression?(node: BoltReferenceExpression): void;
+  protected visitBoltMemberExpression?(node: BoltMemberExpression): void;
+  protected visitBoltFunctionExpression?(node: BoltFunctionExpression): void;
+  protected visitBoltCallExpression?(node: BoltCallExpression): void;
+  protected visitBoltYieldExpression?(node: BoltYieldExpression): void;
+  protected visitBoltMatchArm?(node: BoltMatchArm): void;
+  protected visitBoltMatchExpression?(node: BoltMatchExpression): void;
+  protected visitBoltCase?(node: BoltCase): void;
+  protected visitBoltCaseExpression?(node: BoltCaseExpression): void;
+  protected visitBoltBlockExpression?(node: BoltBlockExpression): void;
+  protected visitBoltConstantExpression?(node: BoltConstantExpression): void;
+  protected visitBoltReturnStatement?(node: BoltReturnStatement): void;
+  protected visitBoltConditionalCase?(node: BoltConditionalCase): void;
+  protected visitBoltConditionalStatement?(node: BoltConditionalStatement): void;
+  protected visitBoltResumeStatement?(node: BoltResumeStatement): void;
+  protected visitBoltExpressionStatement?(node: BoltExpressionStatement): void;
+  protected visitBoltParameter?(node: BoltParameter): void;
+  protected visitBoltModule?(node: BoltModule): void;
+  protected visitBoltFunctionDeclaration?(node: BoltFunctionDeclaration): void;
+  protected visitBoltVariableDeclaration?(node: BoltVariableDeclaration): void;
+  protected visitBoltPlainImportSymbol?(node: BoltPlainImportSymbol): void;
+  protected visitBoltImportDirective?(node: BoltImportDirective): void;
+  protected visitBoltExportSymbol?(node: BoltExportSymbol): void;
+  protected visitBoltPlainExportSymbol?(node: BoltPlainExportSymbol): void;
+  protected visitBoltExportDirective?(node: BoltExportDirective): void;
+  protected visitBoltTraitDeclaration?(node: BoltTraitDeclaration): void;
+  protected visitBoltImplDeclaration?(node: BoltImplDeclaration): void;
+  protected visitBoltTypeAliasDeclaration?(node: BoltTypeAliasDeclaration): void;
+  protected visitBoltRecordField?(node: BoltRecordField): void;
+  protected visitBoltRecordDeclaration?(node: BoltRecordDeclaration): void;
+  protected visitBoltMacroCall?(node: BoltMacroCall): void;
+  protected visitJSOperator?(node: JSOperator): void;
+  protected visitJSIdentifier?(node: JSIdentifier): void;
+  protected visitJSString?(node: JSString): void;
+  protected visitJSInteger?(node: JSInteger): void;
+  protected visitJSFromKeyword?(node: JSFromKeyword): void;
+  protected visitJSReturnKeyword?(node: JSReturnKeyword): void;
+  protected visitJSTryKeyword?(node: JSTryKeyword): void;
+  protected visitJSFinallyKeyword?(node: JSFinallyKeyword): void;
+  protected visitJSCatchKeyword?(node: JSCatchKeyword): void;
+  protected visitJSImportKeyword?(node: JSImportKeyword): void;
+  protected visitJSAsKeyword?(node: JSAsKeyword): void;
+  protected visitJSConstKeyword?(node: JSConstKeyword): void;
+  protected visitJSLetKeyword?(node: JSLetKeyword): void;
+  protected visitJSExportKeyword?(node: JSExportKeyword): void;
+  protected visitJSFunctionKeyword?(node: JSFunctionKeyword): void;
+  protected visitJSWhileKeyword?(node: JSWhileKeyword): void;
+  protected visitJSForKeyword?(node: JSForKeyword): void;
+  protected visitJSCloseBrace?(node: JSCloseBrace): void;
+  protected visitJSCloseBracket?(node: JSCloseBracket): void;
+  protected visitJSCloseParen?(node: JSCloseParen): void;
+  protected visitJSOpenBrace?(node: JSOpenBrace): void;
+  protected visitJSOpenBracket?(node: JSOpenBracket): void;
+  protected visitJSOpenParen?(node: JSOpenParen): void;
+  protected visitJSSemi?(node: JSSemi): void;
+  protected visitJSComma?(node: JSComma): void;
+  protected visitJSDot?(node: JSDot): void;
+  protected visitJSDotDotDot?(node: JSDotDotDot): void;
+  protected visitJSMulOp?(node: JSMulOp): void;
+  protected visitJSAddOp?(node: JSAddOp): void;
+  protected visitJSDivOp?(node: JSDivOp): void;
+  protected visitJSSubOp?(node: JSSubOp): void;
+  protected visitJSLtOp?(node: JSLtOp): void;
+  protected visitJSGtOp?(node: JSGtOp): void;
+  protected visitJSBOrOp?(node: JSBOrOp): void;
+  protected visitJSBXorOp?(node: JSBXorOp): void;
+  protected visitJSBAndOp?(node: JSBAndOp): void;
+  protected visitJSBNotOp?(node: JSBNotOp): void;
+  protected visitJSNotOp?(node: JSNotOp): void;
+  protected visitJSBindPattern?(node: JSBindPattern): void;
+  protected visitJSConstantExpression?(node: JSConstantExpression): void;
+  protected visitJSMemberExpression?(node: JSMemberExpression): void;
+  protected visitJSCallExpression?(node: JSCallExpression): void;
+  protected visitJSBinaryExpression?(node: JSBinaryExpression): void;
+  protected visitJSUnaryExpression?(node: JSUnaryExpression): void;
+  protected visitJSNewExpression?(node: JSNewExpression): void;
+  protected visitJSSequenceExpression?(node: JSSequenceExpression): void;
+  protected visitJSConditionalExpression?(node: JSConditionalExpression): void;
+  protected visitJSLiteralExpression?(node: JSLiteralExpression): void;
+  protected visitJSReferenceExpression?(node: JSReferenceExpression): void;
+  protected visitJSCatchBlock?(node: JSCatchBlock): void;
+  protected visitJSTryCatchStatement?(node: JSTryCatchStatement): void;
+  protected visitJSExpressionStatement?(node: JSExpressionStatement): void;
+  protected visitJSConditionalCase?(node: JSConditionalCase): void;
+  protected visitJSConditionalStatement?(node: JSConditionalStatement): void;
+  protected visitJSReturnStatement?(node: JSReturnStatement): void;
+  protected visitJSParameter?(node: JSParameter): void;
+  protected visitJSImportStarBinding?(node: JSImportStarBinding): void;
+  protected visitJSImportAsBinding?(node: JSImportAsBinding): void;
+  protected visitJSImportDeclaration?(node: JSImportDeclaration): void;
+  protected visitJSFunctionDeclaration?(node: JSFunctionDeclaration): void;
+  protected visitJSArrowFunctionDeclaration?(node: JSArrowFunctionDeclaration): void;
+  protected visitJSLetDeclaration?(node: JSLetDeclaration): void;
+  protected visitJSSourceFile?(node: JSSourceFile): void;
+}
 
 
 export const enum SyntaxKind {
@@ -83,155 +242,146 @@ export const enum SyntaxKind {
   BoltRecordFieldPattern = 67,
   BoltRecordPattern = 68,
   BoltQuoteExpression = 70,
-  BoltReferenceExpression = 71,
-  BoltMemberExpression = 72,
-  BoltFunctionExpression = 73,
-  BoltCallExpression = 74,
-  BoltYieldExpression = 75,
-  BoltMatchArm = 76,
-  BoltMatchExpression = 77,
-  BoltCase = 78,
-  BoltCaseExpression = 79,
-  BoltBlockExpression = 80,
-  BoltConstantExpression = 81,
-  BoltReturnStatement = 83,
-  BoltConditionalCase = 84,
-  BoltConditionalStatement = 85,
-  BoltResumeStatement = 86,
-  BoltExpressionStatement = 87,
-  BoltParameter = 88,
-  BoltModule = 92,
-  BoltFunctionDeclaration = 94,
-  BoltVariableDeclaration = 95,
-  BoltPlainImportSymbol = 97,
-  BoltImportDirective = 98,
-  BoltExportSymbol = 99,
-  BoltPlainExportSymbol = 100,
-  BoltExportDirective = 101,
-  BoltTraitDeclaration = 102,
-  BoltImplDeclaration = 103,
-  BoltTypeAliasDeclaration = 104,
-  BoltRecordField = 106,
-  BoltRecordDeclaration = 107,
-  BoltMacroCall = 109,
-  JSOperator = 112,
-  JSIdentifier = 113,
-  JSString = 114,
-  JSInteger = 115,
-  JSFromKeyword = 116,
-  JSReturnKeyword = 117,
-  JSTryKeyword = 118,
-  JSFinallyKeyword = 119,
-  JSCatchKeyword = 120,
-  JSImportKeyword = 121,
-  JSAsKeyword = 122,
-  JSConstKeyword = 123,
-  JSLetKeyword = 124,
-  JSExportKeyword = 125,
-  JSFunctionKeyword = 126,
-  JSWhileKeyword = 127,
-  JSForKeyword = 128,
-  JSCloseBrace = 129,
-  JSCloseBracket = 130,
-  JSCloseParen = 131,
-  JSOpenBrace = 132,
-  JSOpenBracket = 133,
-  JSOpenParen = 134,
-  JSSemi = 135,
-  JSComma = 136,
-  JSDot = 137,
-  JSDotDotDot = 138,
-  JSMulOp = 139,
-  JSAddOp = 140,
-  JSDivOp = 141,
-  JSSubOp = 142,
-  JSLtOp = 143,
-  JSGtOp = 144,
-  JSBOrOp = 145,
-  JSBXorOp = 146,
-  JSBAndOp = 147,
-  JSBNotOp = 148,
-  JSNotOp = 149,
-  JSBindPattern = 151,
-  JSConstantExpression = 153,
-  JSMemberExpression = 154,
-  JSCallExpression = 155,
-  JSBinaryExpression = 156,
-  JSUnaryExpression = 157,
-  JSNewExpression = 158,
-  JSSequenceExpression = 159,
-  JSConditionalExpression = 160,
-  JSLiteralExpression = 162,
-  JSReferenceExpression = 163,
-  JSCatchBlock = 167,
-  JSTryCatchStatement = 168,
-  JSExpressionStatement = 169,
-  JSConditionalCase = 170,
-  JSConditionalStatement = 171,
-  JSReturnStatement = 172,
-  JSParameter = 173,
-  JSImportStarBinding = 177,
-  JSImportAsBinding = 178,
-  JSImportDeclaration = 179,
-  JSFunctionDeclaration = 180,
-  JSArrowFunctionDeclaration = 181,
-  JSLetDeclaration = 182,
-  JSSourceFile = 183,
+  BoltTupleExpression = 71,
+  BoltReferenceExpression = 72,
+  BoltMemberExpression = 73,
+  BoltFunctionExpression = 74,
+  BoltCallExpression = 75,
+  BoltYieldExpression = 76,
+  BoltMatchArm = 77,
+  BoltMatchExpression = 78,
+  BoltCase = 79,
+  BoltCaseExpression = 80,
+  BoltBlockExpression = 81,
+  BoltConstantExpression = 82,
+  BoltReturnStatement = 84,
+  BoltConditionalCase = 85,
+  BoltConditionalStatement = 86,
+  BoltResumeStatement = 87,
+  BoltExpressionStatement = 88,
+  BoltParameter = 89,
+  BoltModule = 93,
+  BoltFunctionDeclaration = 95,
+  BoltVariableDeclaration = 96,
+  BoltPlainImportSymbol = 98,
+  BoltImportDirective = 99,
+  BoltExportSymbol = 100,
+  BoltPlainExportSymbol = 101,
+  BoltExportDirective = 102,
+  BoltTraitDeclaration = 103,
+  BoltImplDeclaration = 104,
+  BoltTypeAliasDeclaration = 105,
+  BoltRecordField = 107,
+  BoltRecordDeclaration = 108,
+  BoltMacroCall = 110,
+  JSOperator = 113,
+  JSIdentifier = 114,
+  JSString = 115,
+  JSInteger = 116,
+  JSFromKeyword = 117,
+  JSReturnKeyword = 118,
+  JSTryKeyword = 119,
+  JSFinallyKeyword = 120,
+  JSCatchKeyword = 121,
+  JSImportKeyword = 122,
+  JSAsKeyword = 123,
+  JSConstKeyword = 124,
+  JSLetKeyword = 125,
+  JSExportKeyword = 126,
+  JSFunctionKeyword = 127,
+  JSWhileKeyword = 128,
+  JSForKeyword = 129,
+  JSCloseBrace = 130,
+  JSCloseBracket = 131,
+  JSCloseParen = 132,
+  JSOpenBrace = 133,
+  JSOpenBracket = 134,
+  JSOpenParen = 135,
+  JSSemi = 136,
+  JSComma = 137,
+  JSDot = 138,
+  JSDotDotDot = 139,
+  JSMulOp = 140,
+  JSAddOp = 141,
+  JSDivOp = 142,
+  JSSubOp = 143,
+  JSLtOp = 144,
+  JSGtOp = 145,
+  JSBOrOp = 146,
+  JSBXorOp = 147,
+  JSBAndOp = 148,
+  JSBNotOp = 149,
+  JSNotOp = 150,
+  JSBindPattern = 152,
+  JSConstantExpression = 154,
+  JSMemberExpression = 155,
+  JSCallExpression = 156,
+  JSBinaryExpression = 157,
+  JSUnaryExpression = 158,
+  JSNewExpression = 159,
+  JSSequenceExpression = 160,
+  JSConditionalExpression = 161,
+  JSLiteralExpression = 163,
+  JSReferenceExpression = 164,
+  JSCatchBlock = 168,
+  JSTryCatchStatement = 169,
+  JSExpressionStatement = 170,
+  JSConditionalCase = 171,
+  JSConditionalStatement = 172,
+  JSReturnStatement = 173,
+  JSParameter = 174,
+  JSImportStarBinding = 178,
+  JSImportAsBinding = 179,
+  JSImportDeclaration = 180,
+  JSFunctionDeclaration = 181,
+  JSArrowFunctionDeclaration = 182,
+  JSLetDeclaration = 183,
+  JSSourceFile = 184,
 }
 
-export interface EndOfFile extends SyntaxBase<SyntaxKind.EndOfFile> {
+export interface EndOfFile extends SyntaxBase {
   kind: SyntaxKind.EndOfFile;
+  parentNode: EndOfFileParent;
+  getChildNodes(): IterableIterator<EndOfFileChild>
 }
+
+export type EndOfFileParent
+= BoltQuoteExpression
+| never
+
+export type EndOfFileAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type EndOfFileChild
+= never
 
 export type Token
   = EndOfFile
-  | BoltStringLiteral
-  | BoltIntegerLiteral
-  | BoltIdentifier
-  | BoltGtSign
-  | BoltExMark
-  | BoltLtSign
-  | BoltVBar
-  | BoltOperator
-  | BoltAssignment
-  | BoltComma
-  | BoltSemi
-  | BoltColon
-  | BoltColonColon
-  | BoltDot
-  | BoltDotDot
-  | BoltRArrow
-  | BoltRArrowAlt
-  | BoltLArrow
-  | BoltEqSign
-  | BoltGtSign
-  | BoltExMark
-  | BoltLtSign
-  | BoltVBar
-  | BoltWhereKeyword
-  | BoltQuoteKeyword
-  | BoltFnKeyword
-  | BoltForeignKeyword
-  | BoltForKeyword
-  | BoltLetKeyword
-  | BoltReturnKeyword
-  | BoltLoopKeyword
-  | BoltYieldKeyword
-  | BoltMatchKeyword
-  | BoltImportKeyword
-  | BoltExportKeyword
-  | BoltPubKeyword
-  | BoltModKeyword
-  | BoltMutKeyword
-  | BoltEnumKeyword
-  | BoltStructKeyword
-  | BoltTypeKeyword
-  | BoltTraitKeyword
-  | BoltImplKeyword
-  | BoltParenthesized
-  | BoltBraced
-  | BoltBracketed
-  | EndOfFile
   | JSOperator
   | JSIdentifier
   | JSString
@@ -270,27 +420,8 @@ export type Token
   | JSBAndOp
   | JSBNotOp
   | JSNotOp
-
-
-export type SourceFile
-  = BoltSourceFile
-  | JSSourceFile
-
-
-export interface FunctionBody extends SyntaxBase<SyntaxKind.FunctionBody> {
-  kind: SyntaxKind.FunctionBody;
-}
-
-export type BoltToken
-  = EndOfFile
   | BoltStringLiteral
   | BoltIntegerLiteral
-  | BoltIdentifier
-  | BoltGtSign
-  | BoltExMark
-  | BoltLtSign
-  | BoltVBar
-  | BoltOperator
   | BoltAssignment
   | BoltComma
   | BoltSemi
@@ -329,31 +460,213 @@ export type BoltToken
   | BoltParenthesized
   | BoltBraced
   | BoltBracketed
+  | BoltIdentifier
+  | BoltOperator
 
 
-export interface BoltStringLiteral extends SyntaxBase<SyntaxKind.BoltStringLiteral> {
-  kind: SyntaxKind.BoltStringLiteral;
-  value: string;
+export type SourceFile
+  = BoltSourceFile
+  | JSSourceFile
+
+
+export interface FunctionBody extends SyntaxBase {
+  kind: SyntaxKind.FunctionBody;
+  parentNode: FunctionBodyParent;
+  getChildNodes(): IterableIterator<FunctionBodyChild>
 }
 
-export interface BoltIntegerLiteral extends SyntaxBase<SyntaxKind.BoltIntegerLiteral> {
-  kind: SyntaxKind.BoltIntegerLiteral;
-  value: bigint;
-}
+export type FunctionBodyParent
+= never
 
-export type BoltSymbol
-  = BoltIdentifier
+export type FunctionBodyAnyParent
+= never
+
+export type FunctionBodyChild
+= never
+
+export type BoltToken
+  = EndOfFile
+  | BoltStringLiteral
+  | BoltIntegerLiteral
+  | BoltAssignment
+  | BoltComma
+  | BoltSemi
+  | BoltColon
+  | BoltColonColon
+  | BoltDot
+  | BoltDotDot
+  | BoltRArrow
+  | BoltRArrowAlt
+  | BoltLArrow
+  | BoltEqSign
   | BoltGtSign
   | BoltExMark
   | BoltLtSign
   | BoltVBar
+  | BoltWhereKeyword
+  | BoltQuoteKeyword
+  | BoltFnKeyword
+  | BoltForeignKeyword
+  | BoltForKeyword
+  | BoltLetKeyword
+  | BoltReturnKeyword
+  | BoltLoopKeyword
+  | BoltYieldKeyword
+  | BoltMatchKeyword
+  | BoltImportKeyword
+  | BoltExportKeyword
+  | BoltPubKeyword
+  | BoltModKeyword
+  | BoltMutKeyword
+  | BoltEnumKeyword
+  | BoltStructKeyword
+  | BoltTypeKeyword
+  | BoltTraitKeyword
+  | BoltImplKeyword
+  | BoltParenthesized
+  | BoltBraced
+  | BoltBracketed
+  | BoltIdentifier
   | BoltOperator
 
 
-export interface BoltIdentifier extends SyntaxBase<SyntaxKind.BoltIdentifier> {
+export interface BoltStringLiteral extends SyntaxBase {
+  kind: SyntaxKind.BoltStringLiteral;
+  value: string;
+  parentNode: BoltStringLiteralParent;
+  getChildNodes(): IterableIterator<BoltStringLiteralChild>
+}
+
+export type BoltStringLiteralParent
+= BoltQuoteExpression
+| never
+
+export type BoltStringLiteralAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltStringLiteralChild
+= never
+
+export interface BoltIntegerLiteral extends SyntaxBase {
+  kind: SyntaxKind.BoltIntegerLiteral;
+  value: bigint;
+  parentNode: BoltIntegerLiteralParent;
+  getChildNodes(): IterableIterator<BoltIntegerLiteralChild>
+}
+
+export type BoltIntegerLiteralParent
+= BoltQuoteExpression
+| never
+
+export type BoltIntegerLiteralAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltIntegerLiteralChild
+= never
+
+export type BoltSymbol
+  = BoltIdentifier
+  | BoltOperator
+  | BoltGtSign
+  | BoltExMark
+  | BoltLtSign
+  | BoltVBar
+
+
+export interface BoltIdentifier extends SyntaxBase {
   kind: SyntaxKind.BoltIdentifier;
   text: string;
+  parentNode: BoltIdentifierParent;
+  getChildNodes(): IterableIterator<BoltIdentifierChild>
 }
+
+export type BoltIdentifierParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| never
+
+export type BoltIdentifierAnyParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltIdentifierChild
+= never
 
 export type BoltOperatorLike
   = BoltGtSign
@@ -362,71 +675,678 @@ export type BoltOperatorLike
   | BoltVBar
 
 
-export interface BoltOperator extends SyntaxBase<SyntaxKind.BoltOperator> {
+export interface BoltOperator extends SyntaxBase {
   kind: SyntaxKind.BoltOperator;
   text: string;
+  parentNode: BoltOperatorParent;
+  getChildNodes(): IterableIterator<BoltOperatorChild>
 }
 
-export interface BoltAssignment extends SyntaxBase<SyntaxKind.BoltAssignment> {
+export type BoltOperatorParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| never
+
+export type BoltOperatorAnyParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltOperatorChild
+= never
+
+export interface BoltAssignment extends SyntaxBase {
   kind: SyntaxKind.BoltAssignment;
   operator: string | null;
+  parentNode: BoltAssignmentParent;
+  getChildNodes(): IterableIterator<BoltAssignmentChild>
 }
 
-export interface BoltComma extends SyntaxBase<SyntaxKind.BoltComma> {
+export type BoltAssignmentParent
+= BoltQuoteExpression
+| never
+
+export type BoltAssignmentAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltAssignmentChild
+= never
+
+export interface BoltComma extends SyntaxBase {
   kind: SyntaxKind.BoltComma;
+  parentNode: BoltCommaParent;
+  getChildNodes(): IterableIterator<BoltCommaChild>
 }
 
-export interface BoltSemi extends SyntaxBase<SyntaxKind.BoltSemi> {
+export type BoltCommaParent
+= BoltQuoteExpression
+| never
+
+export type BoltCommaAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltCommaChild
+= never
+
+export interface BoltSemi extends SyntaxBase {
   kind: SyntaxKind.BoltSemi;
+  parentNode: BoltSemiParent;
+  getChildNodes(): IterableIterator<BoltSemiChild>
 }
 
-export interface BoltColon extends SyntaxBase<SyntaxKind.BoltColon> {
+export type BoltSemiParent
+= BoltQuoteExpression
+| never
+
+export type BoltSemiAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltSemiChild
+= never
+
+export interface BoltColon extends SyntaxBase {
   kind: SyntaxKind.BoltColon;
+  parentNode: BoltColonParent;
+  getChildNodes(): IterableIterator<BoltColonChild>
 }
 
-export interface BoltColonColon extends SyntaxBase<SyntaxKind.BoltColonColon> {
+export type BoltColonParent
+= BoltQuoteExpression
+| never
+
+export type BoltColonAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltColonChild
+= never
+
+export interface BoltColonColon extends SyntaxBase {
   kind: SyntaxKind.BoltColonColon;
+  parentNode: BoltColonColonParent;
+  getChildNodes(): IterableIterator<BoltColonColonChild>
 }
 
-export interface BoltDot extends SyntaxBase<SyntaxKind.BoltDot> {
+export type BoltColonColonParent
+= BoltQuoteExpression
+| never
+
+export type BoltColonColonAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltColonColonChild
+= never
+
+export interface BoltDot extends SyntaxBase {
   kind: SyntaxKind.BoltDot;
+  parentNode: BoltDotParent;
+  getChildNodes(): IterableIterator<BoltDotChild>
 }
 
-export interface BoltDotDot extends SyntaxBase<SyntaxKind.BoltDotDot> {
+export type BoltDotParent
+= BoltQuoteExpression
+| never
+
+export type BoltDotAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltDotChild
+= never
+
+export interface BoltDotDot extends SyntaxBase {
   kind: SyntaxKind.BoltDotDot;
+  parentNode: BoltDotDotParent;
+  getChildNodes(): IterableIterator<BoltDotDotChild>
 }
 
-export interface BoltRArrow extends SyntaxBase<SyntaxKind.BoltRArrow> {
+export type BoltDotDotParent
+= BoltQuoteExpression
+| never
+
+export type BoltDotDotAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltDotDotChild
+= never
+
+export interface BoltRArrow extends SyntaxBase {
   kind: SyntaxKind.BoltRArrow;
+  parentNode: BoltRArrowParent;
+  getChildNodes(): IterableIterator<BoltRArrowChild>
 }
 
-export interface BoltRArrowAlt extends SyntaxBase<SyntaxKind.BoltRArrowAlt> {
+export type BoltRArrowParent
+= BoltQuoteExpression
+| never
+
+export type BoltRArrowAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltRArrowChild
+= never
+
+export interface BoltRArrowAlt extends SyntaxBase {
   kind: SyntaxKind.BoltRArrowAlt;
+  parentNode: BoltRArrowAltParent;
+  getChildNodes(): IterableIterator<BoltRArrowAltChild>
 }
 
-export interface BoltLArrow extends SyntaxBase<SyntaxKind.BoltLArrow> {
+export type BoltRArrowAltParent
+= BoltQuoteExpression
+| never
+
+export type BoltRArrowAltAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltRArrowAltChild
+= never
+
+export interface BoltLArrow extends SyntaxBase {
   kind: SyntaxKind.BoltLArrow;
+  parentNode: BoltLArrowParent;
+  getChildNodes(): IterableIterator<BoltLArrowChild>
 }
 
-export interface BoltEqSign extends SyntaxBase<SyntaxKind.BoltEqSign> {
+export type BoltLArrowParent
+= BoltQuoteExpression
+| never
+
+export type BoltLArrowAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltLArrowChild
+= never
+
+export interface BoltEqSign extends SyntaxBase {
   kind: SyntaxKind.BoltEqSign;
+  parentNode: BoltEqSignParent;
+  getChildNodes(): IterableIterator<BoltEqSignChild>
 }
 
-export interface BoltGtSign extends SyntaxBase<SyntaxKind.BoltGtSign> {
+export type BoltEqSignParent
+= BoltQuoteExpression
+| never
+
+export type BoltEqSignAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltEqSignChild
+= never
+
+export interface BoltGtSign extends SyntaxBase {
   kind: SyntaxKind.BoltGtSign;
+  parentNode: BoltGtSignParent;
+  getChildNodes(): IterableIterator<BoltGtSignChild>
 }
 
-export interface BoltExMark extends SyntaxBase<SyntaxKind.BoltExMark> {
+export type BoltGtSignParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| never
+
+export type BoltGtSignAnyParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltGtSignChild
+= never
+
+export interface BoltExMark extends SyntaxBase {
   kind: SyntaxKind.BoltExMark;
+  parentNode: BoltExMarkParent;
+  getChildNodes(): IterableIterator<BoltExMarkChild>
 }
 
-export interface BoltLtSign extends SyntaxBase<SyntaxKind.BoltLtSign> {
+export type BoltExMarkParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| never
+
+export type BoltExMarkAnyParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltExMarkChild
+= never
+
+export interface BoltLtSign extends SyntaxBase {
   kind: SyntaxKind.BoltLtSign;
+  parentNode: BoltLtSignParent;
+  getChildNodes(): IterableIterator<BoltLtSignChild>
 }
 
-export interface BoltVBar extends SyntaxBase<SyntaxKind.BoltVBar> {
+export type BoltLtSignParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| never
+
+export type BoltLtSignAnyParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltLtSignChild
+= never
+
+export interface BoltVBar extends SyntaxBase {
   kind: SyntaxKind.BoltVBar;
+  parentNode: BoltVBarParent;
+  getChildNodes(): IterableIterator<BoltVBarChild>
 }
+
+export type BoltVBarParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| never
+
+export type BoltVBarAnyParent
+= BoltQuoteExpression
+| BoltReferenceExpression
+| BoltFunctionDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltVBarChild
+= never
 
 export type BoltKeyword
   = BoltWhereKeyword
@@ -451,85 +1371,825 @@ export type BoltKeyword
   | BoltImplKeyword
 
 
-export interface BoltWhereKeyword extends SyntaxBase<SyntaxKind.BoltWhereKeyword> {
+export interface BoltWhereKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltWhereKeyword;
+  parentNode: BoltWhereKeywordParent;
+  getChildNodes(): IterableIterator<BoltWhereKeywordChild>
 }
 
-export interface BoltQuoteKeyword extends SyntaxBase<SyntaxKind.BoltQuoteKeyword> {
+export type BoltWhereKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltWhereKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltWhereKeywordChild
+= never
+
+export interface BoltQuoteKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltQuoteKeyword;
+  parentNode: BoltQuoteKeywordParent;
+  getChildNodes(): IterableIterator<BoltQuoteKeywordChild>
 }
 
-export interface BoltFnKeyword extends SyntaxBase<SyntaxKind.BoltFnKeyword> {
+export type BoltQuoteKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltQuoteKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltQuoteKeywordChild
+= never
+
+export interface BoltFnKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltFnKeyword;
+  parentNode: BoltFnKeywordParent;
+  getChildNodes(): IterableIterator<BoltFnKeywordChild>
 }
 
-export interface BoltForeignKeyword extends SyntaxBase<SyntaxKind.BoltForeignKeyword> {
+export type BoltFnKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltFnKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltFnKeywordChild
+= never
+
+export interface BoltForeignKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltForeignKeyword;
+  parentNode: BoltForeignKeywordParent;
+  getChildNodes(): IterableIterator<BoltForeignKeywordChild>
 }
 
-export interface BoltForKeyword extends SyntaxBase<SyntaxKind.BoltForKeyword> {
+export type BoltForeignKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltForeignKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltForeignKeywordChild
+= never
+
+export interface BoltForKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltForKeyword;
+  parentNode: BoltForKeywordParent;
+  getChildNodes(): IterableIterator<BoltForKeywordChild>
 }
 
-export interface BoltLetKeyword extends SyntaxBase<SyntaxKind.BoltLetKeyword> {
+export type BoltForKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltForKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltForKeywordChild
+= never
+
+export interface BoltLetKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltLetKeyword;
+  parentNode: BoltLetKeywordParent;
+  getChildNodes(): IterableIterator<BoltLetKeywordChild>
 }
 
-export interface BoltReturnKeyword extends SyntaxBase<SyntaxKind.BoltReturnKeyword> {
+export type BoltLetKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltLetKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltLetKeywordChild
+= never
+
+export interface BoltReturnKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltReturnKeyword;
+  parentNode: BoltReturnKeywordParent;
+  getChildNodes(): IterableIterator<BoltReturnKeywordChild>
 }
 
-export interface BoltLoopKeyword extends SyntaxBase<SyntaxKind.BoltLoopKeyword> {
+export type BoltReturnKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltReturnKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltReturnKeywordChild
+= never
+
+export interface BoltLoopKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltLoopKeyword;
+  parentNode: BoltLoopKeywordParent;
+  getChildNodes(): IterableIterator<BoltLoopKeywordChild>
 }
 
-export interface BoltYieldKeyword extends SyntaxBase<SyntaxKind.BoltYieldKeyword> {
+export type BoltLoopKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltLoopKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltLoopKeywordChild
+= never
+
+export interface BoltYieldKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltYieldKeyword;
+  parentNode: BoltYieldKeywordParent;
+  getChildNodes(): IterableIterator<BoltYieldKeywordChild>
 }
 
-export interface BoltMatchKeyword extends SyntaxBase<SyntaxKind.BoltMatchKeyword> {
+export type BoltYieldKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltYieldKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltYieldKeywordChild
+= never
+
+export interface BoltMatchKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltMatchKeyword;
+  parentNode: BoltMatchKeywordParent;
+  getChildNodes(): IterableIterator<BoltMatchKeywordChild>
 }
 
-export interface BoltImportKeyword extends SyntaxBase<SyntaxKind.BoltImportKeyword> {
+export type BoltMatchKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltMatchKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltMatchKeywordChild
+= never
+
+export interface BoltImportKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltImportKeyword;
+  parentNode: BoltImportKeywordParent;
+  getChildNodes(): IterableIterator<BoltImportKeywordChild>
 }
 
-export interface BoltExportKeyword extends SyntaxBase<SyntaxKind.BoltExportKeyword> {
+export type BoltImportKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltImportKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltImportKeywordChild
+= never
+
+export interface BoltExportKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltExportKeyword;
+  parentNode: BoltExportKeywordParent;
+  getChildNodes(): IterableIterator<BoltExportKeywordChild>
 }
 
-export interface BoltPubKeyword extends SyntaxBase<SyntaxKind.BoltPubKeyword> {
+export type BoltExportKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltExportKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltExportKeywordChild
+= never
+
+export interface BoltPubKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltPubKeyword;
+  parentNode: BoltPubKeywordParent;
+  getChildNodes(): IterableIterator<BoltPubKeywordChild>
 }
 
-export interface BoltModKeyword extends SyntaxBase<SyntaxKind.BoltModKeyword> {
+export type BoltPubKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltPubKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltPubKeywordChild
+= never
+
+export interface BoltModKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltModKeyword;
+  parentNode: BoltModKeywordParent;
+  getChildNodes(): IterableIterator<BoltModKeywordChild>
 }
 
-export interface BoltMutKeyword extends SyntaxBase<SyntaxKind.BoltMutKeyword> {
+export type BoltModKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltModKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltModKeywordChild
+= never
+
+export interface BoltMutKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltMutKeyword;
+  parentNode: BoltMutKeywordParent;
+  getChildNodes(): IterableIterator<BoltMutKeywordChild>
 }
 
-export interface BoltEnumKeyword extends SyntaxBase<SyntaxKind.BoltEnumKeyword> {
+export type BoltMutKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltMutKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltMutKeywordChild
+= never
+
+export interface BoltEnumKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltEnumKeyword;
+  parentNode: BoltEnumKeywordParent;
+  getChildNodes(): IterableIterator<BoltEnumKeywordChild>
 }
 
-export interface BoltStructKeyword extends SyntaxBase<SyntaxKind.BoltStructKeyword> {
+export type BoltEnumKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltEnumKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltEnumKeywordChild
+= never
+
+export interface BoltStructKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltStructKeyword;
+  parentNode: BoltStructKeywordParent;
+  getChildNodes(): IterableIterator<BoltStructKeywordChild>
 }
 
-export interface BoltTypeKeyword extends SyntaxBase<SyntaxKind.BoltTypeKeyword> {
+export type BoltStructKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltStructKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltStructKeywordChild
+= never
+
+export interface BoltTypeKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltTypeKeyword;
+  parentNode: BoltTypeKeywordParent;
+  getChildNodes(): IterableIterator<BoltTypeKeywordChild>
 }
 
-export interface BoltTraitKeyword extends SyntaxBase<SyntaxKind.BoltTraitKeyword> {
+export type BoltTypeKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltTypeKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltTypeKeywordChild
+= never
+
+export interface BoltTraitKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltTraitKeyword;
+  parentNode: BoltTraitKeywordParent;
+  getChildNodes(): IterableIterator<BoltTraitKeywordChild>
 }
 
-export interface BoltImplKeyword extends SyntaxBase<SyntaxKind.BoltImplKeyword> {
+export type BoltTraitKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltTraitKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltTraitKeywordChild
+= never
+
+export interface BoltImplKeyword extends SyntaxBase {
   kind: SyntaxKind.BoltImplKeyword;
+  parentNode: BoltImplKeywordParent;
+  getChildNodes(): IterableIterator<BoltImplKeywordChild>
 }
+
+export type BoltImplKeywordParent
+= BoltQuoteExpression
+| never
+
+export type BoltImplKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltImplKeywordChild
+= never
 
 export type BoltPunctuated
   = BoltParenthesized
@@ -537,62 +2197,322 @@ export type BoltPunctuated
   | BoltBracketed
 
 
-export interface BoltParenthesized extends SyntaxBase<SyntaxKind.BoltParenthesized> {
+export interface BoltParenthesized extends SyntaxBase {
   kind: SyntaxKind.BoltParenthesized;
   text: string;
+  parentNode: BoltParenthesizedParent;
+  getChildNodes(): IterableIterator<BoltParenthesizedChild>
 }
 
-export interface BoltBraced extends SyntaxBase<SyntaxKind.BoltBraced> {
+export type BoltParenthesizedParent
+= BoltQuoteExpression
+| never
+
+export type BoltParenthesizedAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltParenthesizedChild
+= never
+
+export interface BoltBraced extends SyntaxBase {
   kind: SyntaxKind.BoltBraced;
   text: string;
+  parentNode: BoltBracedParent;
+  getChildNodes(): IterableIterator<BoltBracedChild>
 }
 
-export interface BoltBracketed extends SyntaxBase<SyntaxKind.BoltBracketed> {
+export type BoltBracedParent
+= BoltQuoteExpression
+| never
+
+export type BoltBracedAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltBracedChild
+= never
+
+export interface BoltBracketed extends SyntaxBase {
   kind: SyntaxKind.BoltBracketed;
   text: string;
+  parentNode: BoltBracketedParent;
+  getChildNodes(): IterableIterator<BoltBracketedChild>
 }
 
-export interface BoltSourceFile extends SyntaxBase<SyntaxKind.BoltSourceFile> {
+export type BoltBracketedParent
+= BoltQuoteExpression
+| never
+
+export type BoltBracketedAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltBracketedChild
+= never
+
+export interface BoltSourceFile extends SyntaxBase {
   kind: SyntaxKind.BoltSourceFile;
   elements: BoltSourceElement[];
   package: Package;
+  parentNode: BoltSourceFileParent;
+  getChildNodes(): IterableIterator<BoltSourceFileChild>
 }
 
-export interface BoltQualName extends SyntaxBase<SyntaxKind.BoltQualName> {
+export type BoltSourceFileParent
+= never
+
+export type BoltSourceFileAnyParent
+= never
+
+export type BoltSourceFileChild
+= never
+
+export interface BoltQualName extends SyntaxBase {
   kind: SyntaxKind.BoltQualName;
   modulePath: BoltIdentifier[] | null;
-  name: BoltSymbol;
+  parentNode: BoltQualNameParent;
+  getChildNodes(): IterableIterator<BoltQualNameChild>
 }
 
-export interface BoltModulePath extends SyntaxBase<SyntaxKind.BoltModulePath> {
+export type BoltQualNameParent
+= never
+
+export type BoltQualNameAnyParent
+= never
+
+export type BoltQualNameChild
+= never
+
+export interface BoltModulePath extends SyntaxBase {
   kind: SyntaxKind.BoltModulePath;
   isAbsolute: boolean;
   elements: BoltIdentifier[];
+  parentNode: BoltModulePathParent;
+  getChildNodes(): IterableIterator<BoltModulePathChild>
 }
+
+export type BoltModulePathParent
+= never
+
+export type BoltModulePathAnyParent
+= never
+
+export type BoltModulePathChild
+= never
 
 export type BoltTypeExpression
   = BoltReferenceTypeExpression
   | BoltFunctionTypeExpression
 
 
-export interface BoltReferenceTypeExpression extends SyntaxBase<SyntaxKind.BoltReferenceTypeExpression> {
+export interface BoltReferenceTypeExpression extends SyntaxBase {
   kind: SyntaxKind.BoltReferenceTypeExpression;
   path: BoltModulePath;
   arguments: BoltTypeExpression[] | null;
+  parentNode: BoltReferenceTypeExpressionParent;
+  getChildNodes(): IterableIterator<BoltReferenceTypeExpressionChild>
 }
 
-export interface BoltFunctionTypeExpression extends SyntaxBase<SyntaxKind.BoltFunctionTypeExpression> {
+export type BoltReferenceTypeExpressionParent
+= BoltReferenceTypeExpression
+| BoltFunctionTypeExpression
+| BoltTypeParameter
+| BoltTypePattern
+| BoltRecordPattern
+| BoltFunctionExpression
+| BoltParameter
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltImplDeclaration
+| BoltTypeAliasDeclaration
+| BoltRecordField
+| never
+
+export type BoltReferenceTypeExpressionAnyParent
+= BoltFunctionTypeExpression
+| BoltTypeParameter
+| BoltTypePattern
+| BoltRecordPattern
+| BoltFunctionExpression
+| BoltParameter
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltImplDeclaration
+| BoltTypeAliasDeclaration
+| BoltRecordField
+| BoltRecordDeclaration
+| BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltReferenceTypeExpressionChild
+= never
+
+export interface BoltFunctionTypeExpression extends SyntaxBase {
   kind: SyntaxKind.BoltFunctionTypeExpression;
   params: BoltParameter[];
   returnType: BoltTypeExpression | null;
+  parentNode: BoltFunctionTypeExpressionParent;
+  getChildNodes(): IterableIterator<BoltFunctionTypeExpressionChild>
 }
 
-export interface BoltTypeParameter extends SyntaxBase<SyntaxKind.BoltTypeParameter> {
+export type BoltFunctionTypeExpressionParent
+= BoltReferenceTypeExpression
+| BoltFunctionTypeExpression
+| BoltTypeParameter
+| BoltTypePattern
+| BoltRecordPattern
+| BoltFunctionExpression
+| BoltParameter
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltImplDeclaration
+| BoltTypeAliasDeclaration
+| BoltRecordField
+| never
+
+export type BoltFunctionTypeExpressionAnyParent
+= BoltReferenceTypeExpression
+| BoltTypeParameter
+| BoltTypePattern
+| BoltRecordPattern
+| BoltFunctionExpression
+| BoltParameter
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltImplDeclaration
+| BoltTypeAliasDeclaration
+| BoltRecordField
+| BoltRecordDeclaration
+| BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltFunctionTypeExpressionChild
+= never
+
+export interface BoltTypeParameter extends SyntaxBase {
   kind: SyntaxKind.BoltTypeParameter;
   index: number;
   name: BoltIdentifier;
   defaultType: BoltTypeExpression | null;
+  parentNode: BoltTypeParameterParent;
+  getChildNodes(): IterableIterator<BoltTypeParameterChild>
 }
+
+export type BoltTypeParameterParent
+= never
+
+export type BoltTypeParameterAnyParent
+= never
+
+export type BoltTypeParameterChild
+= never
 
 export type BoltPattern
   = BoltBindPattern
@@ -602,48 +2522,274 @@ export type BoltPattern
   | BoltRecordPattern
 
 
-export interface BoltBindPattern extends SyntaxBase<SyntaxKind.BoltBindPattern> {
+export interface BoltBindPattern extends SyntaxBase {
   kind: SyntaxKind.BoltBindPattern;
   name: BoltIdentifier;
+  parentNode: BoltBindPatternParent;
+  getChildNodes(): IterableIterator<BoltBindPatternChild>
 }
 
-export interface BoltTypePattern extends SyntaxBase<SyntaxKind.BoltTypePattern> {
+export type BoltBindPatternParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltBindPatternAnyParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| never
+
+export type BoltBindPatternChild
+= never
+
+export interface BoltTypePattern extends SyntaxBase {
   kind: SyntaxKind.BoltTypePattern;
   type: BoltTypeExpression;
   nestedPattern: BoltPattern;
+  parentNode: BoltTypePatternParent;
+  getChildNodes(): IterableIterator<BoltTypePatternChild>
 }
 
-export interface BoltExpressionPattern extends SyntaxBase<SyntaxKind.BoltExpressionPattern> {
+export type BoltTypePatternParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltTypePatternAnyParent
+= BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| never
+
+export type BoltTypePatternChild
+= never
+
+export interface BoltExpressionPattern extends SyntaxBase {
   kind: SyntaxKind.BoltExpressionPattern;
   expression: BoltExpression;
+  parentNode: BoltExpressionPatternParent;
+  getChildNodes(): IterableIterator<BoltExpressionPatternChild>
 }
 
-export interface BoltTuplePatternElement extends SyntaxBase<SyntaxKind.BoltTuplePatternElement> {
+export type BoltExpressionPatternParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltExpressionPatternAnyParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| never
+
+export type BoltExpressionPatternChild
+= never
+
+export interface BoltTuplePatternElement extends SyntaxBase {
   kind: SyntaxKind.BoltTuplePatternElement;
   index: number;
   pattern: BoltPattern;
+  parentNode: BoltTuplePatternElementParent;
+  getChildNodes(): IterableIterator<BoltTuplePatternElementChild>
 }
 
-export interface BoltTuplePattern extends SyntaxBase<SyntaxKind.BoltTuplePattern> {
+export type BoltTuplePatternElementParent
+= never
+
+export type BoltTuplePatternElementAnyParent
+= never
+
+export type BoltTuplePatternElementChild
+= never
+
+export interface BoltTuplePattern extends SyntaxBase {
   kind: SyntaxKind.BoltTuplePattern;
   elements: BoltTuplePatternElement[];
+  parentNode: BoltTuplePatternParent;
+  getChildNodes(): IterableIterator<BoltTuplePatternChild>
 }
 
-export interface BoltRecordFieldPattern extends SyntaxBase<SyntaxKind.BoltRecordFieldPattern> {
+export type BoltTuplePatternParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltTuplePatternAnyParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| never
+
+export type BoltTuplePatternChild
+= never
+
+export interface BoltRecordFieldPattern extends SyntaxBase {
   kind: SyntaxKind.BoltRecordFieldPattern;
   isRest: boolean;
   name: BoltIdentifier | null;
   pattern: BoltPattern | null;
+  parentNode: BoltRecordFieldPatternParent;
+  getChildNodes(): IterableIterator<BoltRecordFieldPatternChild>
 }
 
-export interface BoltRecordPattern extends SyntaxBase<SyntaxKind.BoltRecordPattern> {
+export type BoltRecordFieldPatternParent
+= never
+
+export type BoltRecordFieldPatternAnyParent
+= never
+
+export type BoltRecordFieldPatternChild
+= never
+
+export interface BoltRecordPattern extends SyntaxBase {
   kind: SyntaxKind.BoltRecordPattern;
   name: BoltTypeExpression;
   fields: BoltRecordFieldPattern[];
+  parentNode: BoltRecordPatternParent;
+  getChildNodes(): IterableIterator<BoltRecordPatternChild>
 }
+
+export type BoltRecordPatternParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltRecordPatternAnyParent
+= BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| BoltMatchArm
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| never
+
+export type BoltRecordPatternChild
+= never
 
 export type BoltExpression
   = BoltQuoteExpression
+  | BoltTupleExpression
   | BoltReferenceExpression
   | BoltMemberExpression
   | BoltFunctionExpression
@@ -656,72 +2802,632 @@ export type BoltExpression
   | BoltMacroCall
 
 
-export interface BoltQuoteExpression extends SyntaxBase<SyntaxKind.BoltQuoteExpression> {
+export interface BoltQuoteExpression extends SyntaxBase {
   kind: SyntaxKind.BoltQuoteExpression;
-  tokens: Token[];
+  tokens: Token | BoltExpression[];
+  parentNode: BoltQuoteExpressionParent;
+  getChildNodes(): IterableIterator<BoltQuoteExpressionChild>
 }
 
-export interface BoltReferenceExpression extends SyntaxBase<SyntaxKind.BoltReferenceExpression> {
+export type BoltQuoteExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltQuoteExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltQuoteExpressionChild
+= never
+
+export interface BoltTupleExpression extends SyntaxBase {
+  kind: SyntaxKind.BoltTupleExpression;
+  elements: BoltExpression[];
+  parentNode: BoltTupleExpressionParent;
+  getChildNodes(): IterableIterator<BoltTupleExpressionChild>
+}
+
+export type BoltTupleExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltTupleExpressionAnyParent
+= BoltExpressionPattern
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltTupleExpressionChild
+= never
+
+export interface BoltReferenceExpression extends SyntaxBase {
   kind: SyntaxKind.BoltReferenceExpression;
-  name: BoltQualName;
+  modulePath: BoltModulePath | null;
+  name: BoltSymbol;
+  parentNode: BoltReferenceExpressionParent;
+  getChildNodes(): IterableIterator<BoltReferenceExpressionChild>
 }
 
-export interface BoltMemberExpression extends SyntaxBase<SyntaxKind.BoltMemberExpression> {
+export type BoltReferenceExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltReferenceExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltReferenceExpressionChild
+= never
+
+export interface BoltMemberExpression extends SyntaxBase {
   kind: SyntaxKind.BoltMemberExpression;
   expression: BoltExpression;
   path: BoltIdentifier[];
+  parentNode: BoltMemberExpressionParent;
+  getChildNodes(): IterableIterator<BoltMemberExpressionChild>
 }
 
-export interface BoltFunctionExpression extends SyntaxBase<SyntaxKind.BoltFunctionExpression> {
+export type BoltMemberExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltMemberExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltMemberExpressionChild
+= never
+
+export interface BoltFunctionExpression extends SyntaxBase {
   kind: SyntaxKind.BoltFunctionExpression;
   params: BoltParameter[];
   returnType: BoltTypeExpression | null;
   body: BoltFunctionBodyElement[];
+  parentNode: BoltFunctionExpressionParent;
+  getChildNodes(): IterableIterator<BoltFunctionExpressionChild>
 }
 
-export interface BoltCallExpression extends SyntaxBase<SyntaxKind.BoltCallExpression> {
+export type BoltFunctionExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltFunctionExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltFunctionExpressionChild
+= never
+
+export interface BoltCallExpression extends SyntaxBase {
   kind: SyntaxKind.BoltCallExpression;
   operator: BoltExpression;
   operands: BoltExpression[];
+  parentNode: BoltCallExpressionParent;
+  getChildNodes(): IterableIterator<BoltCallExpressionChild>
 }
 
-export interface BoltYieldExpression extends SyntaxBase<SyntaxKind.BoltYieldExpression> {
+export type BoltCallExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltCallExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltCallExpressionChild
+= never
+
+export interface BoltYieldExpression extends SyntaxBase {
   kind: SyntaxKind.BoltYieldExpression;
   value: BoltExpression;
+  parentNode: BoltYieldExpressionParent;
+  getChildNodes(): IterableIterator<BoltYieldExpressionChild>
 }
 
-export interface BoltMatchArm extends SyntaxBase<SyntaxKind.BoltMatchArm> {
+export type BoltYieldExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltYieldExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltYieldExpressionChild
+= never
+
+export interface BoltMatchArm extends SyntaxBase {
   kind: SyntaxKind.BoltMatchArm;
   pattern: BoltPattern;
   body: BoltExpression;
+  parentNode: BoltMatchArmParent;
+  getChildNodes(): IterableIterator<BoltMatchArmChild>
 }
 
-export interface BoltMatchExpression extends SyntaxBase<SyntaxKind.BoltMatchExpression> {
+export type BoltMatchArmParent
+= never
+
+export type BoltMatchArmAnyParent
+= never
+
+export type BoltMatchArmChild
+= never
+
+export interface BoltMatchExpression extends SyntaxBase {
   kind: SyntaxKind.BoltMatchExpression;
   value: BoltExpression;
   arms: BoltMatchArm[];
+  parentNode: BoltMatchExpressionParent;
+  getChildNodes(): IterableIterator<BoltMatchExpressionChild>
 }
 
-export interface BoltCase extends SyntaxBase<SyntaxKind.BoltCase> {
+export type BoltMatchExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltMatchExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltMatchExpressionChild
+= never
+
+export interface BoltCase extends SyntaxBase {
   kind: SyntaxKind.BoltCase;
   test: BoltExpression;
   result: BoltExpression;
+  parentNode: BoltCaseParent;
+  getChildNodes(): IterableIterator<BoltCaseChild>
 }
 
-export interface BoltCaseExpression extends SyntaxBase<SyntaxKind.BoltCaseExpression> {
+export type BoltCaseParent
+= never
+
+export type BoltCaseAnyParent
+= never
+
+export type BoltCaseChild
+= never
+
+export interface BoltCaseExpression extends SyntaxBase {
   kind: SyntaxKind.BoltCaseExpression;
   cases: BoltCase[];
+  parentNode: BoltCaseExpressionParent;
+  getChildNodes(): IterableIterator<BoltCaseExpressionChild>
 }
 
-export interface BoltBlockExpression extends SyntaxBase<SyntaxKind.BoltBlockExpression> {
+export type BoltCaseExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltCaseExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltCaseExpressionChild
+= never
+
+export interface BoltBlockExpression extends SyntaxBase {
   kind: SyntaxKind.BoltBlockExpression;
   elements: BoltFunctionBodyElement[];
+  parentNode: BoltBlockExpressionParent;
+  getChildNodes(): IterableIterator<BoltBlockExpressionChild>
 }
 
-export interface BoltConstantExpression extends SyntaxBase<SyntaxKind.BoltConstantExpression> {
+export type BoltBlockExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltBlockExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltBlockExpressionChild
+= never
+
+export interface BoltConstantExpression extends SyntaxBase {
   kind: SyntaxKind.BoltConstantExpression;
   value: BoltValue;
+  parentNode: BoltConstantExpressionParent;
+  getChildNodes(): IterableIterator<BoltConstantExpressionChild>
 }
+
+export type BoltConstantExpressionParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| never
+
+export type BoltConstantExpressionAnyParent
+= BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltConstantExpressionChild
+= never
 
 export type BoltStatement
   = BoltReturnStatement
@@ -731,39 +3437,222 @@ export type BoltStatement
   | BoltMacroCall
 
 
-export interface BoltReturnStatement extends SyntaxBase<SyntaxKind.BoltReturnStatement> {
+export interface BoltReturnStatement extends SyntaxBase {
   kind: SyntaxKind.BoltReturnStatement;
   value: BoltExpression | null;
+  parentNode: BoltReturnStatementParent;
+  getChildNodes(): IterableIterator<BoltReturnStatementChild>
 }
 
-export interface BoltConditionalCase extends SyntaxBase<SyntaxKind.BoltConditionalCase> {
+export type BoltReturnStatementParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| never
+
+export type BoltReturnStatementAnyParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltReturnStatementChild
+= never
+
+export interface BoltConditionalCase extends SyntaxBase {
   kind: SyntaxKind.BoltConditionalCase;
   test: BoltExpression | null;
   body: BoltFunctionBodyElement[];
+  parentNode: BoltConditionalCaseParent;
+  getChildNodes(): IterableIterator<BoltConditionalCaseChild>
 }
 
-export interface BoltConditionalStatement extends SyntaxBase<SyntaxKind.BoltConditionalStatement> {
+export type BoltConditionalCaseParent
+= never
+
+export type BoltConditionalCaseAnyParent
+= never
+
+export type BoltConditionalCaseChild
+= never
+
+export interface BoltConditionalStatement extends SyntaxBase {
   kind: SyntaxKind.BoltConditionalStatement;
   cases: BoltConditionalCase[];
+  parentNode: BoltConditionalStatementParent;
+  getChildNodes(): IterableIterator<BoltConditionalStatementChild>
 }
 
-export interface BoltResumeStatement extends SyntaxBase<SyntaxKind.BoltResumeStatement> {
+export type BoltConditionalStatementParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| never
+
+export type BoltConditionalStatementAnyParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltConditionalStatementChild
+= never
+
+export interface BoltResumeStatement extends SyntaxBase {
   kind: SyntaxKind.BoltResumeStatement;
   value: BoltExpression;
+  parentNode: BoltResumeStatementParent;
+  getChildNodes(): IterableIterator<BoltResumeStatementChild>
 }
 
-export interface BoltExpressionStatement extends SyntaxBase<SyntaxKind.BoltExpressionStatement> {
+export type BoltResumeStatementParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| never
+
+export type BoltResumeStatementAnyParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltResumeStatementChild
+= never
+
+export interface BoltExpressionStatement extends SyntaxBase {
   kind: SyntaxKind.BoltExpressionStatement;
   expression: BoltExpression;
+  parentNode: BoltExpressionStatementParent;
+  getChildNodes(): IterableIterator<BoltExpressionStatementChild>
 }
 
-export interface BoltParameter extends SyntaxBase<SyntaxKind.BoltParameter> {
+export type BoltExpressionStatementParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| never
+
+export type BoltExpressionStatementAnyParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltExpressionStatementChild
+= never
+
+export interface BoltParameter extends SyntaxBase {
   kind: SyntaxKind.BoltParameter;
   index: number;
   bindings: BoltPattern;
   type: BoltTypeExpression | null;
   defaultValue: BoltExpression | null;
+  parentNode: BoltParameterParent;
+  getChildNodes(): IterableIterator<BoltParameterChild>
 }
+
+export type BoltParameterParent
+= never
+
+export type BoltParameterAnyParent
+= never
+
+export type BoltParameterChild
+= never
 
 export type BoltDeclaration
   = BoltFunctionDeclaration
@@ -784,24 +3673,38 @@ export type BoltTypeDeclaration
 export const enum BoltModifiers {
   IsMutable = 1,IsPublic = 2,}
 
-export interface BoltModule extends SyntaxBase<SyntaxKind.BoltModule> {
+export interface BoltModule extends SyntaxBase {
   kind: SyntaxKind.BoltModule;
   modifiers: BoltModifiers;
   name: BoltIdentifier[];
   elements: BoltSourceElement[];
+  parentNode: BoltModuleParent;
+  getChildNodes(): IterableIterator<BoltModuleChild>
 }
 
+export type BoltModuleParent
+= BoltSourceFile
+| BoltModule
+| never
+
+export type BoltModuleAnyParent
+= BoltSourceFile
+| never
+
+export type BoltModuleChild
+= never
+
 export type BoltFunctionBodyElement
-  = BoltReturnStatement
+  = BoltFunctionDeclaration
+  | BoltVariableDeclaration
+  | BoltReturnStatement
   | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
   | BoltMacroCall
-  | BoltFunctionDeclaration
-  | BoltVariableDeclaration
 
 
-export interface BoltFunctionDeclaration extends SyntaxBase<SyntaxKind.BoltFunctionDeclaration> {
+export interface BoltFunctionDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltFunctionDeclaration;
   modifiers: BoltModifiers;
   target: string;
@@ -810,117 +3713,413 @@ export interface BoltFunctionDeclaration extends SyntaxBase<SyntaxKind.BoltFunct
   returnType: BoltTypeExpression | null;
   typeParams: BoltTypeParameter[] | null;
   body: BoltFunctionBodyElement[];
+  parentNode: BoltFunctionDeclarationParent;
+  getChildNodes(): IterableIterator<BoltFunctionDeclarationChild>
 }
 
-export interface BoltVariableDeclaration extends SyntaxBase<SyntaxKind.BoltVariableDeclaration> {
+export type BoltFunctionDeclarationParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltFunctionDeclarationAnyParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltFunctionDeclarationChild
+= never
+
+export interface BoltVariableDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltVariableDeclaration;
   modifiers: BoltModifiers;
   bindings: BoltPattern;
   type: BoltTypeExpression | null;
   value: BoltExpression | null;
+  parentNode: BoltVariableDeclarationParent;
+  getChildNodes(): IterableIterator<BoltVariableDeclarationChild>
 }
+
+export type BoltVariableDeclarationParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltVariableDeclarationAnyParent
+= BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltVariableDeclarationChild
+= never
 
 export type BoltImportSymbol
   = BoltPlainImportSymbol
 
 
-export interface BoltPlainImportSymbol extends SyntaxBase<SyntaxKind.BoltPlainImportSymbol> {
+export interface BoltPlainImportSymbol extends SyntaxBase {
   kind: SyntaxKind.BoltPlainImportSymbol;
   name: BoltQualName;
+  parentNode: BoltPlainImportSymbolParent;
+  getChildNodes(): IterableIterator<BoltPlainImportSymbolChild>
 }
 
-export interface BoltImportDirective extends SyntaxBase<SyntaxKind.BoltImportDirective> {
+export type BoltPlainImportSymbolParent
+= BoltImportDirective
+| never
+
+export type BoltPlainImportSymbolAnyParent
+= BoltImportDirective
+| BoltSourceFile
+| BoltModule
+| never
+
+export type BoltPlainImportSymbolChild
+= never
+
+export interface BoltImportDirective extends SyntaxBase {
   kind: SyntaxKind.BoltImportDirective;
   modifiers: BoltModifiers;
   file: BoltStringLiteral;
   symbols: BoltImportSymbol[];
+  parentNode: BoltImportDirectiveParent;
+  getChildNodes(): IterableIterator<BoltImportDirectiveChild>
 }
 
-export interface BoltExportSymbol extends SyntaxBase<SyntaxKind.BoltExportSymbol> {
+export type BoltImportDirectiveParent
+= BoltSourceFile
+| BoltModule
+| never
+
+export type BoltImportDirectiveAnyParent
+= BoltSourceFile
+| BoltModule
+| never
+
+export type BoltImportDirectiveChild
+= never
+
+export interface BoltExportSymbol extends SyntaxBase {
   kind: SyntaxKind.BoltExportSymbol;
+  parentNode: BoltExportSymbolParent;
+  getChildNodes(): IterableIterator<BoltExportSymbolChild>
 }
 
-export interface BoltPlainExportSymbol extends SyntaxBase<SyntaxKind.BoltPlainExportSymbol> {
+export type BoltExportSymbolParent
+= never
+
+export type BoltExportSymbolAnyParent
+= never
+
+export type BoltExportSymbolChild
+= never
+
+export interface BoltPlainExportSymbol extends SyntaxBase {
   kind: SyntaxKind.BoltPlainExportSymbol;
   name: BoltQualName;
+  parentNode: BoltPlainExportSymbolParent;
+  getChildNodes(): IterableIterator<BoltPlainExportSymbolChild>
 }
 
-export interface BoltExportDirective extends SyntaxBase<SyntaxKind.BoltExportDirective> {
+export type BoltPlainExportSymbolParent
+= never
+
+export type BoltPlainExportSymbolAnyParent
+= never
+
+export type BoltPlainExportSymbolChild
+= never
+
+export interface BoltExportDirective extends SyntaxBase {
   kind: SyntaxKind.BoltExportDirective;
   file: string;
   symbols: BoltExportSymbol[] | null;
+  parentNode: BoltExportDirectiveParent;
+  getChildNodes(): IterableIterator<BoltExportDirectiveChild>
 }
 
-export interface BoltTraitDeclaration extends SyntaxBase<SyntaxKind.BoltTraitDeclaration> {
+export type BoltExportDirectiveParent
+= BoltSourceFile
+| BoltModule
+| never
+
+export type BoltExportDirectiveAnyParent
+= BoltSourceFile
+| BoltModule
+| never
+
+export type BoltExportDirectiveChild
+= never
+
+export interface BoltTraitDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltTraitDeclaration;
   modifiers: BoltModifiers;
   name: BoltIdentifier;
   typeParams: BoltTypeParameter[] | null;
   elements: BoltDeclaration[];
+  parentNode: BoltTraitDeclarationParent;
+  getChildNodes(): IterableIterator<BoltTraitDeclarationChild>
 }
 
-export interface BoltImplDeclaration extends SyntaxBase<SyntaxKind.BoltImplDeclaration> {
+export type BoltTraitDeclarationParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltTraitDeclarationAnyParent
+= BoltSourceFile
+| BoltModule
+| BoltImplDeclaration
+| never
+
+export type BoltTraitDeclarationChild
+= never
+
+export interface BoltImplDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltImplDeclaration;
   modifiers: BoltModifiers;
   name: BoltIdentifier;
   trait: BoltTypeExpression;
   typeParams: BoltTypeParameter[] | null;
   elements: BoltDeclaration[];
+  parentNode: BoltImplDeclarationParent;
+  getChildNodes(): IterableIterator<BoltImplDeclarationChild>
 }
 
-export interface BoltTypeAliasDeclaration extends SyntaxBase<SyntaxKind.BoltTypeAliasDeclaration> {
+export type BoltImplDeclarationParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltImplDeclarationAnyParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| never
+
+export type BoltImplDeclarationChild
+= never
+
+export interface BoltTypeAliasDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltTypeAliasDeclaration;
   modifiers: BoltModifiers;
   name: BoltIdentifier;
   typeParams: BoltTypeParameter[] | null;
   typeExpr: BoltTypeExpression;
+  parentNode: BoltTypeAliasDeclarationParent;
+  getChildNodes(): IterableIterator<BoltTypeAliasDeclarationChild>
 }
+
+export type BoltTypeAliasDeclarationParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltTypeAliasDeclarationAnyParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltTypeAliasDeclarationChild
+= never
 
 export type BoltRecordMember
   = BoltRecordField
   | BoltMacroCall
 
 
-export interface BoltRecordField extends SyntaxBase<SyntaxKind.BoltRecordField> {
+export interface BoltRecordField extends SyntaxBase {
   kind: SyntaxKind.BoltRecordField;
   name: BoltIdentifier;
   type: BoltTypeExpression;
+  parentNode: BoltRecordFieldParent;
+  getChildNodes(): IterableIterator<BoltRecordFieldChild>
 }
 
-export interface BoltRecordDeclaration extends SyntaxBase<SyntaxKind.BoltRecordDeclaration> {
+export type BoltRecordFieldParent
+= BoltRecordDeclaration
+| never
+
+export type BoltRecordFieldAnyParent
+= BoltRecordDeclaration
+| BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltRecordFieldChild
+= never
+
+export interface BoltRecordDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltRecordDeclaration;
   modifiers: BoltModifiers;
   name: BoltIdentifier;
   typeParms: BoltTypeParameter[] | null;
   members: BoltRecordMember[] | null;
+  parentNode: BoltRecordDeclarationParent;
+  getChildNodes(): IterableIterator<BoltRecordDeclarationChild>
 }
 
+export type BoltRecordDeclarationParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltRecordDeclarationAnyParent
+= BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| never
+
+export type BoltRecordDeclarationChild
+= never
+
 export type BoltSourceElement
-  = BoltReturnStatement
+  = BoltModule
+  | BoltImportDirective
+  | BoltExportDirective
+  | BoltTraitDeclaration
+  | BoltTypeAliasDeclaration
+  | BoltRecordDeclaration
+  | BoltFunctionDeclaration
+  | BoltVariableDeclaration
+  | BoltImplDeclaration
+  | BoltMacroCall
+  | BoltReturnStatement
   | BoltConditionalStatement
   | BoltResumeStatement
   | BoltExpressionStatement
-  | BoltMacroCall
-  | BoltFunctionDeclaration
-  | BoltVariableDeclaration
-  | BoltTraitDeclaration
-  | BoltImplDeclaration
-  | BoltTypeAliasDeclaration
-  | BoltRecordDeclaration
-  | BoltMacroCall
-  | BoltTraitDeclaration
-  | BoltTypeAliasDeclaration
-  | BoltRecordDeclaration
-  | BoltModule
-  | BoltImportDirective
-  | BoltExportDirective
 
 
-export interface BoltMacroCall extends SyntaxBase<SyntaxKind.BoltMacroCall> {
+export interface BoltMacroCall extends SyntaxBase {
   kind: SyntaxKind.BoltMacroCall;
   name: BoltIdentifier;
   text: string;
+  parentNode: BoltMacroCallParent;
+  getChildNodes(): IterableIterator<BoltMacroCallChild>
 }
+
+export type BoltMacroCallParent
+= BoltSourceFile
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltFunctionExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltBlockExpression
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltModule
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltRecordDeclaration
+| never
+
+export type BoltMacroCallAnyParent
+= BoltSourceFile
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltFunctionExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltBlockExpression
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltModule
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltRecordDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltMacroCallChild
+= never
 
 export type JSToken
   = EndOfFile
@@ -964,170 +4163,1596 @@ export type JSToken
   | JSNotOp
 
 
-export interface JSOperator extends SyntaxBase<SyntaxKind.JSOperator> {
+export interface JSOperator extends SyntaxBase {
   kind: SyntaxKind.JSOperator;
   text: string;
+  parentNode: JSOperatorParent;
+  getChildNodes(): IterableIterator<JSOperatorChild>
 }
 
-export interface JSIdentifier extends SyntaxBase<SyntaxKind.JSIdentifier> {
+export type JSOperatorParent
+= BoltQuoteExpression
+| never
+
+export type JSOperatorAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSOperatorChild
+= never
+
+export interface JSIdentifier extends SyntaxBase {
   kind: SyntaxKind.JSIdentifier;
   text: string;
+  parentNode: JSIdentifierParent;
+  getChildNodes(): IterableIterator<JSIdentifierChild>
 }
 
-export interface JSString extends SyntaxBase<SyntaxKind.JSString> {
+export type JSIdentifierParent
+= BoltQuoteExpression
+| never
+
+export type JSIdentifierAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSIdentifierChild
+= never
+
+export interface JSString extends SyntaxBase {
   kind: SyntaxKind.JSString;
   value: string;
+  parentNode: JSStringParent;
+  getChildNodes(): IterableIterator<JSStringChild>
 }
 
-export interface JSInteger extends SyntaxBase<SyntaxKind.JSInteger> {
+export type JSStringParent
+= BoltQuoteExpression
+| never
+
+export type JSStringAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSStringChild
+= never
+
+export interface JSInteger extends SyntaxBase {
   kind: SyntaxKind.JSInteger;
   value: bigint;
+  parentNode: JSIntegerParent;
+  getChildNodes(): IterableIterator<JSIntegerChild>
 }
 
-export interface JSFromKeyword extends SyntaxBase<SyntaxKind.JSFromKeyword> {
+export type JSIntegerParent
+= BoltQuoteExpression
+| never
+
+export type JSIntegerAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSIntegerChild
+= never
+
+export interface JSFromKeyword extends SyntaxBase {
   kind: SyntaxKind.JSFromKeyword;
+  parentNode: JSFromKeywordParent;
+  getChildNodes(): IterableIterator<JSFromKeywordChild>
 }
 
-export interface JSReturnKeyword extends SyntaxBase<SyntaxKind.JSReturnKeyword> {
+export type JSFromKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSFromKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSFromKeywordChild
+= never
+
+export interface JSReturnKeyword extends SyntaxBase {
   kind: SyntaxKind.JSReturnKeyword;
+  parentNode: JSReturnKeywordParent;
+  getChildNodes(): IterableIterator<JSReturnKeywordChild>
 }
 
-export interface JSTryKeyword extends SyntaxBase<SyntaxKind.JSTryKeyword> {
+export type JSReturnKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSReturnKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSReturnKeywordChild
+= never
+
+export interface JSTryKeyword extends SyntaxBase {
   kind: SyntaxKind.JSTryKeyword;
+  parentNode: JSTryKeywordParent;
+  getChildNodes(): IterableIterator<JSTryKeywordChild>
 }
 
-export interface JSFinallyKeyword extends SyntaxBase<SyntaxKind.JSFinallyKeyword> {
+export type JSTryKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSTryKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSTryKeywordChild
+= never
+
+export interface JSFinallyKeyword extends SyntaxBase {
   kind: SyntaxKind.JSFinallyKeyword;
+  parentNode: JSFinallyKeywordParent;
+  getChildNodes(): IterableIterator<JSFinallyKeywordChild>
 }
 
-export interface JSCatchKeyword extends SyntaxBase<SyntaxKind.JSCatchKeyword> {
+export type JSFinallyKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSFinallyKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSFinallyKeywordChild
+= never
+
+export interface JSCatchKeyword extends SyntaxBase {
   kind: SyntaxKind.JSCatchKeyword;
+  parentNode: JSCatchKeywordParent;
+  getChildNodes(): IterableIterator<JSCatchKeywordChild>
 }
 
-export interface JSImportKeyword extends SyntaxBase<SyntaxKind.JSImportKeyword> {
+export type JSCatchKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSCatchKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSCatchKeywordChild
+= never
+
+export interface JSImportKeyword extends SyntaxBase {
   kind: SyntaxKind.JSImportKeyword;
+  parentNode: JSImportKeywordParent;
+  getChildNodes(): IterableIterator<JSImportKeywordChild>
 }
 
-export interface JSAsKeyword extends SyntaxBase<SyntaxKind.JSAsKeyword> {
+export type JSImportKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSImportKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSImportKeywordChild
+= never
+
+export interface JSAsKeyword extends SyntaxBase {
   kind: SyntaxKind.JSAsKeyword;
+  parentNode: JSAsKeywordParent;
+  getChildNodes(): IterableIterator<JSAsKeywordChild>
 }
 
-export interface JSConstKeyword extends SyntaxBase<SyntaxKind.JSConstKeyword> {
+export type JSAsKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSAsKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSAsKeywordChild
+= never
+
+export interface JSConstKeyword extends SyntaxBase {
   kind: SyntaxKind.JSConstKeyword;
+  parentNode: JSConstKeywordParent;
+  getChildNodes(): IterableIterator<JSConstKeywordChild>
 }
 
-export interface JSLetKeyword extends SyntaxBase<SyntaxKind.JSLetKeyword> {
+export type JSConstKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSConstKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSConstKeywordChild
+= never
+
+export interface JSLetKeyword extends SyntaxBase {
   kind: SyntaxKind.JSLetKeyword;
+  parentNode: JSLetKeywordParent;
+  getChildNodes(): IterableIterator<JSLetKeywordChild>
 }
 
-export interface JSExportKeyword extends SyntaxBase<SyntaxKind.JSExportKeyword> {
+export type JSLetKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSLetKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSLetKeywordChild
+= never
+
+export interface JSExportKeyword extends SyntaxBase {
   kind: SyntaxKind.JSExportKeyword;
+  parentNode: JSExportKeywordParent;
+  getChildNodes(): IterableIterator<JSExportKeywordChild>
 }
 
-export interface JSFunctionKeyword extends SyntaxBase<SyntaxKind.JSFunctionKeyword> {
+export type JSExportKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSExportKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSExportKeywordChild
+= never
+
+export interface JSFunctionKeyword extends SyntaxBase {
   kind: SyntaxKind.JSFunctionKeyword;
+  parentNode: JSFunctionKeywordParent;
+  getChildNodes(): IterableIterator<JSFunctionKeywordChild>
 }
 
-export interface JSWhileKeyword extends SyntaxBase<SyntaxKind.JSWhileKeyword> {
+export type JSFunctionKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSFunctionKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSFunctionKeywordChild
+= never
+
+export interface JSWhileKeyword extends SyntaxBase {
   kind: SyntaxKind.JSWhileKeyword;
+  parentNode: JSWhileKeywordParent;
+  getChildNodes(): IterableIterator<JSWhileKeywordChild>
 }
 
-export interface JSForKeyword extends SyntaxBase<SyntaxKind.JSForKeyword> {
+export type JSWhileKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSWhileKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSWhileKeywordChild
+= never
+
+export interface JSForKeyword extends SyntaxBase {
   kind: SyntaxKind.JSForKeyword;
+  parentNode: JSForKeywordParent;
+  getChildNodes(): IterableIterator<JSForKeywordChild>
 }
 
-export interface JSCloseBrace extends SyntaxBase<SyntaxKind.JSCloseBrace> {
+export type JSForKeywordParent
+= BoltQuoteExpression
+| never
+
+export type JSForKeywordAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSForKeywordChild
+= never
+
+export interface JSCloseBrace extends SyntaxBase {
   kind: SyntaxKind.JSCloseBrace;
+  parentNode: JSCloseBraceParent;
+  getChildNodes(): IterableIterator<JSCloseBraceChild>
 }
 
-export interface JSCloseBracket extends SyntaxBase<SyntaxKind.JSCloseBracket> {
+export type JSCloseBraceParent
+= BoltQuoteExpression
+| never
+
+export type JSCloseBraceAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSCloseBraceChild
+= never
+
+export interface JSCloseBracket extends SyntaxBase {
   kind: SyntaxKind.JSCloseBracket;
+  parentNode: JSCloseBracketParent;
+  getChildNodes(): IterableIterator<JSCloseBracketChild>
 }
 
-export interface JSCloseParen extends SyntaxBase<SyntaxKind.JSCloseParen> {
+export type JSCloseBracketParent
+= BoltQuoteExpression
+| never
+
+export type JSCloseBracketAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSCloseBracketChild
+= never
+
+export interface JSCloseParen extends SyntaxBase {
   kind: SyntaxKind.JSCloseParen;
+  parentNode: JSCloseParenParent;
+  getChildNodes(): IterableIterator<JSCloseParenChild>
 }
 
-export interface JSOpenBrace extends SyntaxBase<SyntaxKind.JSOpenBrace> {
+export type JSCloseParenParent
+= BoltQuoteExpression
+| never
+
+export type JSCloseParenAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSCloseParenChild
+= never
+
+export interface JSOpenBrace extends SyntaxBase {
   kind: SyntaxKind.JSOpenBrace;
+  parentNode: JSOpenBraceParent;
+  getChildNodes(): IterableIterator<JSOpenBraceChild>
 }
 
-export interface JSOpenBracket extends SyntaxBase<SyntaxKind.JSOpenBracket> {
+export type JSOpenBraceParent
+= BoltQuoteExpression
+| never
+
+export type JSOpenBraceAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSOpenBraceChild
+= never
+
+export interface JSOpenBracket extends SyntaxBase {
   kind: SyntaxKind.JSOpenBracket;
+  parentNode: JSOpenBracketParent;
+  getChildNodes(): IterableIterator<JSOpenBracketChild>
 }
 
-export interface JSOpenParen extends SyntaxBase<SyntaxKind.JSOpenParen> {
+export type JSOpenBracketParent
+= BoltQuoteExpression
+| never
+
+export type JSOpenBracketAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSOpenBracketChild
+= never
+
+export interface JSOpenParen extends SyntaxBase {
   kind: SyntaxKind.JSOpenParen;
+  parentNode: JSOpenParenParent;
+  getChildNodes(): IterableIterator<JSOpenParenChild>
 }
 
-export interface JSSemi extends SyntaxBase<SyntaxKind.JSSemi> {
+export type JSOpenParenParent
+= BoltQuoteExpression
+| never
+
+export type JSOpenParenAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSOpenParenChild
+= never
+
+export interface JSSemi extends SyntaxBase {
   kind: SyntaxKind.JSSemi;
+  parentNode: JSSemiParent;
+  getChildNodes(): IterableIterator<JSSemiChild>
 }
 
-export interface JSComma extends SyntaxBase<SyntaxKind.JSComma> {
+export type JSSemiParent
+= BoltQuoteExpression
+| never
+
+export type JSSemiAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSSemiChild
+= never
+
+export interface JSComma extends SyntaxBase {
   kind: SyntaxKind.JSComma;
+  parentNode: JSCommaParent;
+  getChildNodes(): IterableIterator<JSCommaChild>
 }
 
-export interface JSDot extends SyntaxBase<SyntaxKind.JSDot> {
+export type JSCommaParent
+= BoltQuoteExpression
+| never
+
+export type JSCommaAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSCommaChild
+= never
+
+export interface JSDot extends SyntaxBase {
   kind: SyntaxKind.JSDot;
+  parentNode: JSDotParent;
+  getChildNodes(): IterableIterator<JSDotChild>
 }
 
-export interface JSDotDotDot extends SyntaxBase<SyntaxKind.JSDotDotDot> {
+export type JSDotParent
+= BoltQuoteExpression
+| never
+
+export type JSDotAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSDotChild
+= never
+
+export interface JSDotDotDot extends SyntaxBase {
   kind: SyntaxKind.JSDotDotDot;
+  parentNode: JSDotDotDotParent;
+  getChildNodes(): IterableIterator<JSDotDotDotChild>
 }
 
-export interface JSMulOp extends SyntaxBase<SyntaxKind.JSMulOp> {
+export type JSDotDotDotParent
+= BoltQuoteExpression
+| never
+
+export type JSDotDotDotAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSDotDotDotChild
+= never
+
+export interface JSMulOp extends SyntaxBase {
   kind: SyntaxKind.JSMulOp;
+  parentNode: JSMulOpParent;
+  getChildNodes(): IterableIterator<JSMulOpChild>
 }
 
-export interface JSAddOp extends SyntaxBase<SyntaxKind.JSAddOp> {
+export type JSMulOpParent
+= BoltQuoteExpression
+| never
+
+export type JSMulOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSMulOpChild
+= never
+
+export interface JSAddOp extends SyntaxBase {
   kind: SyntaxKind.JSAddOp;
+  parentNode: JSAddOpParent;
+  getChildNodes(): IterableIterator<JSAddOpChild>
 }
 
-export interface JSDivOp extends SyntaxBase<SyntaxKind.JSDivOp> {
+export type JSAddOpParent
+= BoltQuoteExpression
+| never
+
+export type JSAddOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSAddOpChild
+= never
+
+export interface JSDivOp extends SyntaxBase {
   kind: SyntaxKind.JSDivOp;
+  parentNode: JSDivOpParent;
+  getChildNodes(): IterableIterator<JSDivOpChild>
 }
 
-export interface JSSubOp extends SyntaxBase<SyntaxKind.JSSubOp> {
+export type JSDivOpParent
+= BoltQuoteExpression
+| never
+
+export type JSDivOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSDivOpChild
+= never
+
+export interface JSSubOp extends SyntaxBase {
   kind: SyntaxKind.JSSubOp;
+  parentNode: JSSubOpParent;
+  getChildNodes(): IterableIterator<JSSubOpChild>
 }
 
-export interface JSLtOp extends SyntaxBase<SyntaxKind.JSLtOp> {
+export type JSSubOpParent
+= BoltQuoteExpression
+| never
+
+export type JSSubOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSSubOpChild
+= never
+
+export interface JSLtOp extends SyntaxBase {
   kind: SyntaxKind.JSLtOp;
+  parentNode: JSLtOpParent;
+  getChildNodes(): IterableIterator<JSLtOpChild>
 }
 
-export interface JSGtOp extends SyntaxBase<SyntaxKind.JSGtOp> {
+export type JSLtOpParent
+= BoltQuoteExpression
+| never
+
+export type JSLtOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSLtOpChild
+= never
+
+export interface JSGtOp extends SyntaxBase {
   kind: SyntaxKind.JSGtOp;
+  parentNode: JSGtOpParent;
+  getChildNodes(): IterableIterator<JSGtOpChild>
 }
 
-export interface JSBOrOp extends SyntaxBase<SyntaxKind.JSBOrOp> {
+export type JSGtOpParent
+= BoltQuoteExpression
+| never
+
+export type JSGtOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSGtOpChild
+= never
+
+export interface JSBOrOp extends SyntaxBase {
   kind: SyntaxKind.JSBOrOp;
+  parentNode: JSBOrOpParent;
+  getChildNodes(): IterableIterator<JSBOrOpChild>
 }
 
-export interface JSBXorOp extends SyntaxBase<SyntaxKind.JSBXorOp> {
+export type JSBOrOpParent
+= BoltQuoteExpression
+| never
+
+export type JSBOrOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSBOrOpChild
+= never
+
+export interface JSBXorOp extends SyntaxBase {
   kind: SyntaxKind.JSBXorOp;
+  parentNode: JSBXorOpParent;
+  getChildNodes(): IterableIterator<JSBXorOpChild>
 }
 
-export interface JSBAndOp extends SyntaxBase<SyntaxKind.JSBAndOp> {
+export type JSBXorOpParent
+= BoltQuoteExpression
+| never
+
+export type JSBXorOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSBXorOpChild
+= never
+
+export interface JSBAndOp extends SyntaxBase {
   kind: SyntaxKind.JSBAndOp;
+  parentNode: JSBAndOpParent;
+  getChildNodes(): IterableIterator<JSBAndOpChild>
 }
 
-export interface JSBNotOp extends SyntaxBase<SyntaxKind.JSBNotOp> {
+export type JSBAndOpParent
+= BoltQuoteExpression
+| never
+
+export type JSBAndOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSBAndOpChild
+= never
+
+export interface JSBNotOp extends SyntaxBase {
   kind: SyntaxKind.JSBNotOp;
+  parentNode: JSBNotOpParent;
+  getChildNodes(): IterableIterator<JSBNotOpChild>
 }
 
-export interface JSNotOp extends SyntaxBase<SyntaxKind.JSNotOp> {
+export type JSBNotOpParent
+= BoltQuoteExpression
+| never
+
+export type JSBNotOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSBNotOpChild
+= never
+
+export interface JSNotOp extends SyntaxBase {
   kind: SyntaxKind.JSNotOp;
+  parentNode: JSNotOpParent;
+  getChildNodes(): IterableIterator<JSNotOpChild>
 }
+
+export type JSNotOpParent
+= BoltQuoteExpression
+| never
+
+export type JSNotOpAnyParent
+= BoltQuoteExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltConditionalCase
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltParameter
+| BoltVariableDeclaration
+| BoltSourceFile
+| BoltFunctionExpression
+| BoltBlockExpression
+| BoltModule
+| BoltFunctionDeclaration
+| BoltTraitDeclaration
+| BoltImplDeclaration
+| BoltTypePattern
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type JSNotOpChild
+= never
 
 export type JSPattern
   = JSBindPattern
 
 
-export interface JSBindPattern extends SyntaxBase<SyntaxKind.JSBindPattern> {
+export interface JSBindPattern extends SyntaxBase {
   kind: SyntaxKind.JSBindPattern;
   name: JSIdentifier;
+  parentNode: JSBindPatternParent;
+  getChildNodes(): IterableIterator<JSBindPatternChild>
 }
+
+export type JSBindPatternParent
+= JSCatchBlock
+| JSParameter
+| JSLetDeclaration
+| never
+
+export type JSBindPatternAnyParent
+= JSCatchBlock
+| JSParameter
+| JSLetDeclaration
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSBindPatternChild
+= never
 
 export type JSExpression
   = JSConstantExpression
@@ -1142,81 +5767,484 @@ export type JSExpression
   | JSReferenceExpression
 
 
-export interface JSConstantExpression extends SyntaxBase<SyntaxKind.JSConstantExpression> {
+export interface JSConstantExpression extends SyntaxBase {
   kind: SyntaxKind.JSConstantExpression;
   value: BoltValue;
+  parentNode: JSConstantExpressionParent;
+  getChildNodes(): IterableIterator<JSConstantExpressionChild>
 }
 
-export interface JSMemberExpression extends SyntaxBase<SyntaxKind.JSMemberExpression> {
+export type JSConstantExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSConstantExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSConstantExpressionChild
+= never
+
+export interface JSMemberExpression extends SyntaxBase {
   kind: SyntaxKind.JSMemberExpression;
   value: JSExpression;
   property: JSIdentifier;
+  parentNode: JSMemberExpressionParent;
+  getChildNodes(): IterableIterator<JSMemberExpressionChild>
 }
 
-export interface JSCallExpression extends SyntaxBase<SyntaxKind.JSCallExpression> {
+export type JSMemberExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSMemberExpressionAnyParent
+= JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSMemberExpressionChild
+= never
+
+export interface JSCallExpression extends SyntaxBase {
   kind: SyntaxKind.JSCallExpression;
   operator: JSExpression;
   operands: JSExpression[];
+  parentNode: JSCallExpressionParent;
+  getChildNodes(): IterableIterator<JSCallExpressionChild>
 }
 
-export interface JSBinaryExpression extends SyntaxBase<SyntaxKind.JSBinaryExpression> {
+export type JSCallExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSCallExpressionAnyParent
+= JSMemberExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSCallExpressionChild
+= never
+
+export interface JSBinaryExpression extends SyntaxBase {
   kind: SyntaxKind.JSBinaryExpression;
   left: JSExpression;
   operator: JSOperator;
   right: JSExpression;
+  parentNode: JSBinaryExpressionParent;
+  getChildNodes(): IterableIterator<JSBinaryExpressionChild>
 }
 
-export interface JSUnaryExpression extends SyntaxBase<SyntaxKind.JSUnaryExpression> {
+export type JSBinaryExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSBinaryExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSBinaryExpressionChild
+= never
+
+export interface JSUnaryExpression extends SyntaxBase {
   kind: SyntaxKind.JSUnaryExpression;
   operator: JSOperator;
   operand: JSExpression;
+  parentNode: JSUnaryExpressionParent;
+  getChildNodes(): IterableIterator<JSUnaryExpressionChild>
 }
 
-export interface JSNewExpression extends SyntaxBase<SyntaxKind.JSNewExpression> {
+export type JSUnaryExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSUnaryExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSUnaryExpressionChild
+= never
+
+export interface JSNewExpression extends SyntaxBase {
   kind: SyntaxKind.JSNewExpression;
   target: JSExpression;
   arguments: JSExpression[];
+  parentNode: JSNewExpressionParent;
+  getChildNodes(): IterableIterator<JSNewExpressionChild>
 }
 
-export interface JSSequenceExpression extends SyntaxBase<SyntaxKind.JSSequenceExpression> {
+export type JSNewExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSNewExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSNewExpressionChild
+= never
+
+export interface JSSequenceExpression extends SyntaxBase {
   kind: SyntaxKind.JSSequenceExpression;
   expressions: JSExpression[];
+  parentNode: JSSequenceExpressionParent;
+  getChildNodes(): IterableIterator<JSSequenceExpressionChild>
 }
 
-export interface JSConditionalExpression extends SyntaxBase<SyntaxKind.JSConditionalExpression> {
+export type JSSequenceExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSSequenceExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSSequenceExpressionChild
+= never
+
+export interface JSConditionalExpression extends SyntaxBase {
   kind: SyntaxKind.JSConditionalExpression;
   test: JSExpression;
   consequent: JSExpression;
   alternate: JSExpression;
+  parentNode: JSConditionalExpressionParent;
+  getChildNodes(): IterableIterator<JSConditionalExpressionChild>
 }
 
-export interface JSLiteralExpression extends SyntaxBase<SyntaxKind.JSLiteralExpression> {
+export type JSConditionalExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSConditionalExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSConditionalExpressionChild
+= never
+
+export interface JSLiteralExpression extends SyntaxBase {
   kind: SyntaxKind.JSLiteralExpression;
   value: JSValue;
+  parentNode: JSLiteralExpressionParent;
+  getChildNodes(): IterableIterator<JSLiteralExpressionChild>
 }
 
-export interface JSReferenceExpression extends SyntaxBase<SyntaxKind.JSReferenceExpression> {
+export type JSLiteralExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSLiteralExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSLiteralExpressionChild
+= never
+
+export interface JSReferenceExpression extends SyntaxBase {
   kind: SyntaxKind.JSReferenceExpression;
   name: string;
+  parentNode: JSReferenceExpressionParent;
+  getChildNodes(): IterableIterator<JSReferenceExpressionChild>
 }
 
+export type JSReferenceExpressionParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| never
+
+export type JSReferenceExpressionAnyParent
+= JSMemberExpression
+| JSCallExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| never
+
+export type JSReferenceExpressionChild
+= never
+
 export type JSSourceElement
-  = JSExpressionStatement
-  | JSConditionalStatement
-  | JSReturnStatement
-  | JSImportDeclaration
+  = JSImportDeclaration
   | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
+  | JSExpressionStatement
+  | JSConditionalStatement
+  | JSReturnStatement
 
 
 export type JSFunctionBodyElement
-  = JSExpressionStatement
-  | JSConditionalStatement
-  | JSReturnStatement
-  | JSFunctionDeclaration
+  = JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
+  | JSExpressionStatement
+  | JSConditionalStatement
+  | JSReturnStatement
 
 
 export type JSStatement
@@ -1225,46 +6253,153 @@ export type JSStatement
   | JSReturnStatement
 
 
-export interface JSCatchBlock extends SyntaxBase<SyntaxKind.JSCatchBlock> {
+export interface JSCatchBlock extends SyntaxBase {
   kind: SyntaxKind.JSCatchBlock;
   bindings: JSPattern | null;
   elements: JSSourceElement[];
+  parentNode: JSCatchBlockParent;
+  getChildNodes(): IterableIterator<JSCatchBlockChild>
 }
 
-export interface JSTryCatchStatement extends SyntaxBase<SyntaxKind.JSTryCatchStatement> {
+export type JSCatchBlockParent
+= never
+
+export type JSCatchBlockAnyParent
+= never
+
+export type JSCatchBlockChild
+= never
+
+export interface JSTryCatchStatement extends SyntaxBase {
   kind: SyntaxKind.JSTryCatchStatement;
   tryBlock: JSSourceElement[];
   catchBlock: JSCatchBlock | null;
   finalBlock: JSSourceElement[] | null;
+  parentNode: JSTryCatchStatementParent;
+  getChildNodes(): IterableIterator<JSTryCatchStatementChild>
 }
 
-export interface JSExpressionStatement extends SyntaxBase<SyntaxKind.JSExpressionStatement> {
+export type JSTryCatchStatementParent
+= never
+
+export type JSTryCatchStatementAnyParent
+= never
+
+export type JSTryCatchStatementChild
+= never
+
+export interface JSExpressionStatement extends SyntaxBase {
   kind: SyntaxKind.JSExpressionStatement;
   expression: JSExpression;
+  parentNode: JSExpressionStatementParent;
+  getChildNodes(): IterableIterator<JSExpressionStatementChild>
 }
 
-export interface JSConditionalCase extends SyntaxBase<SyntaxKind.JSConditionalCase> {
+export type JSExpressionStatementParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSFunctionDeclaration
+| JSSourceFile
+| never
+
+export type JSExpressionStatementAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSFunctionDeclaration
+| JSSourceFile
+| never
+
+export type JSExpressionStatementChild
+= never
+
+export interface JSConditionalCase extends SyntaxBase {
   kind: SyntaxKind.JSConditionalCase;
   test: JSExpression | null;
   body: JSFunctionBodyElement[];
+  parentNode: JSConditionalCaseParent;
+  getChildNodes(): IterableIterator<JSConditionalCaseChild>
 }
 
-export interface JSConditionalStatement extends SyntaxBase<SyntaxKind.JSConditionalStatement> {
+export type JSConditionalCaseParent
+= never
+
+export type JSConditionalCaseAnyParent
+= never
+
+export type JSConditionalCaseChild
+= never
+
+export interface JSConditionalStatement extends SyntaxBase {
   kind: SyntaxKind.JSConditionalStatement;
   cases: JSConditionalCase[];
+  parentNode: JSConditionalStatementParent;
+  getChildNodes(): IterableIterator<JSConditionalStatementChild>
 }
 
-export interface JSReturnStatement extends SyntaxBase<SyntaxKind.JSReturnStatement> {
+export type JSConditionalStatementParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSFunctionDeclaration
+| JSSourceFile
+| never
+
+export type JSConditionalStatementAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSFunctionDeclaration
+| JSSourceFile
+| never
+
+export type JSConditionalStatementChild
+= never
+
+export interface JSReturnStatement extends SyntaxBase {
   kind: SyntaxKind.JSReturnStatement;
   value: JSExpression | null;
+  parentNode: JSReturnStatementParent;
+  getChildNodes(): IterableIterator<JSReturnStatementChild>
 }
 
-export interface JSParameter extends SyntaxBase<SyntaxKind.JSParameter> {
+export type JSReturnStatementParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSFunctionDeclaration
+| JSSourceFile
+| never
+
+export type JSReturnStatementAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSFunctionDeclaration
+| JSSourceFile
+| never
+
+export type JSReturnStatementChild
+= never
+
+export interface JSParameter extends SyntaxBase {
   kind: SyntaxKind.JSParameter;
   index: number;
   bindings: JSPattern;
   defaultValue: JSExpression | null;
+  parentNode: JSParameterParent;
+  getChildNodes(): IterableIterator<JSParameterChild>
 }
+
+export type JSParameterParent
+= never
+
+export type JSParameterAnyParent
+= never
+
+export type JSParameterChild
+= never
 
 export type JSDeclaration
   = JSImportDeclaration
@@ -1281,48 +6416,165 @@ export type JSImportBinding
   | JSImportAsBinding
 
 
-export interface JSImportStarBinding extends SyntaxBase<SyntaxKind.JSImportStarBinding> {
+export interface JSImportStarBinding extends SyntaxBase {
   kind: SyntaxKind.JSImportStarBinding;
   local: JSIdentifier;
+  parentNode: JSImportStarBindingParent;
+  getChildNodes(): IterableIterator<JSImportStarBindingChild>
 }
 
-export interface JSImportAsBinding extends SyntaxBase<SyntaxKind.JSImportAsBinding> {
+export type JSImportStarBindingParent
+= JSImportDeclaration
+| never
+
+export type JSImportStarBindingAnyParent
+= JSImportDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| never
+
+export type JSImportStarBindingChild
+= never
+
+export interface JSImportAsBinding extends SyntaxBase {
   kind: SyntaxKind.JSImportAsBinding;
   remote: JSIdentifier;
   local: JSIdentifier | null;
+  parentNode: JSImportAsBindingParent;
+  getChildNodes(): IterableIterator<JSImportAsBindingChild>
 }
 
-export interface JSImportDeclaration extends SyntaxBase<SyntaxKind.JSImportDeclaration> {
+export type JSImportAsBindingParent
+= JSImportDeclaration
+| never
+
+export type JSImportAsBindingAnyParent
+= JSImportDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| never
+
+export type JSImportAsBindingChild
+= never
+
+export interface JSImportDeclaration extends SyntaxBase {
   kind: SyntaxKind.JSImportDeclaration;
   bindings: JSImportBinding[];
   filename: JSString;
+  parentNode: JSImportDeclarationParent;
+  getChildNodes(): IterableIterator<JSImportDeclarationChild>
 }
 
-export interface JSFunctionDeclaration extends SyntaxBase<SyntaxKind.JSFunctionDeclaration> {
+export type JSImportDeclarationParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| never
+
+export type JSImportDeclarationAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| never
+
+export type JSImportDeclarationChild
+= never
+
+export interface JSFunctionDeclaration extends SyntaxBase {
   kind: SyntaxKind.JSFunctionDeclaration;
   modifiers: JSDeclarationModifiers;
   name: JSIdentifier;
   params: JSParameter[];
   body: JSStatement[];
+  parentNode: JSFunctionDeclarationParent;
+  getChildNodes(): IterableIterator<JSFunctionDeclarationChild>
 }
 
-export interface JSArrowFunctionDeclaration extends SyntaxBase<SyntaxKind.JSArrowFunctionDeclaration> {
+export type JSFunctionDeclarationParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSFunctionDeclarationAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSFunctionDeclarationChild
+= never
+
+export interface JSArrowFunctionDeclaration extends SyntaxBase {
   kind: SyntaxKind.JSArrowFunctionDeclaration;
   name: JSIdentifier;
   params: JSParameter[];
   body: JSExpression;
+  parentNode: JSArrowFunctionDeclarationParent;
+  getChildNodes(): IterableIterator<JSArrowFunctionDeclarationChild>
 }
 
-export interface JSLetDeclaration extends SyntaxBase<SyntaxKind.JSLetDeclaration> {
+export type JSArrowFunctionDeclarationParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSArrowFunctionDeclarationAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSArrowFunctionDeclarationChild
+= never
+
+export interface JSLetDeclaration extends SyntaxBase {
   kind: SyntaxKind.JSLetDeclaration;
   bindings: JSPattern;
   value: JSExpression | null;
+  parentNode: JSLetDeclarationParent;
+  getChildNodes(): IterableIterator<JSLetDeclarationChild>
 }
 
-export interface JSSourceFile extends SyntaxBase<SyntaxKind.JSSourceFile> {
+export type JSLetDeclarationParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSLetDeclarationAnyParent
+= JSCatchBlock
+| JSTryCatchStatement
+| JSConditionalCase
+| JSSourceFile
+| never
+
+export type JSLetDeclarationChild
+= never
+
+export interface JSSourceFile extends SyntaxBase {
   kind: SyntaxKind.JSSourceFile;
   elements: JSSourceElement[];
+  parentNode: JSSourceFileParent;
+  getChildNodes(): IterableIterator<JSSourceFileChild>
 }
+
+export type JSSourceFileParent
+= never
+
+export type JSSourceFileAnyParent
+= never
+
+export type JSSourceFileChild
+= never
 
 export type BoltSyntax
   = BoltStringLiteral
@@ -1381,6 +6633,7 @@ export type BoltSyntax
   | BoltRecordFieldPattern
   | BoltRecordPattern
   | BoltQuoteExpression
+  | BoltTupleExpression
   | BoltReferenceExpression
   | BoltMemberExpression
   | BoltFunctionExpression
@@ -1539,6 +6792,7 @@ export type Syntax
   | BoltRecordFieldPattern
   | BoltRecordPattern
   | BoltQuoteExpression
+  | BoltTupleExpression
   | BoltReferenceExpression
   | BoltMemberExpression
   | BoltFunctionExpression
@@ -1682,7 +6936,7 @@ export function createBoltParenthesized(text: string, span?: TextSpan | null): B
 export function createBoltBraced(text: string, span?: TextSpan | null): BoltBraced;
 export function createBoltBracketed(text: string, span?: TextSpan | null): BoltBracketed;
 export function createBoltSourceFile(elements: BoltSourceElement[], package: Package, span?: TextSpan | null): BoltSourceFile;
-export function createBoltQualName(modulePath: BoltIdentifier[] | null, name: BoltSymbol, span?: TextSpan | null): BoltQualName;
+export function createBoltQualName(modulePath: BoltIdentifier[] | null, span?: TextSpan | null): BoltQualName;
 export function createBoltModulePath(isAbsolute: boolean, elements: BoltIdentifier[], span?: TextSpan | null): BoltModulePath;
 export function createBoltReferenceTypeExpression(path: BoltModulePath, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
 export function createBoltFunctionTypeExpression(params: BoltParameter[], returnType: BoltTypeExpression | null, span?: TextSpan | null): BoltFunctionTypeExpression;
@@ -1694,8 +6948,9 @@ export function createBoltTuplePatternElement(index: number, pattern: BoltPatter
 export function createBoltTuplePattern(elements: BoltTuplePatternElement[], span?: TextSpan | null): BoltTuplePattern;
 export function createBoltRecordFieldPattern(isRest: boolean, name: BoltIdentifier | null, pattern: BoltPattern | null, span?: TextSpan | null): BoltRecordFieldPattern;
 export function createBoltRecordPattern(name: BoltTypeExpression, fields: BoltRecordFieldPattern[], span?: TextSpan | null): BoltRecordPattern;
-export function createBoltQuoteExpression(tokens: Token[], span?: TextSpan | null): BoltQuoteExpression;
-export function createBoltReferenceExpression(name: BoltQualName, span?: TextSpan | null): BoltReferenceExpression;
+export function createBoltQuoteExpression(tokens: Token | BoltExpression[], span?: TextSpan | null): BoltQuoteExpression;
+export function createBoltTupleExpression(elements: BoltExpression[], span?: TextSpan | null): BoltTupleExpression;
+export function createBoltReferenceExpression(modulePath: BoltModulePath | null, name: BoltSymbol, span?: TextSpan | null): BoltReferenceExpression;
 export function createBoltMemberExpression(expression: BoltExpression, path: BoltIdentifier[], span?: TextSpan | null): BoltMemberExpression;
 export function createBoltFunctionExpression(params: BoltParameter[], returnType: BoltTypeExpression | null, body: BoltFunctionBodyElement[], span?: TextSpan | null): BoltFunctionExpression;
 export function createBoltCallExpression(operator: BoltExpression, operands: BoltExpression[], span?: TextSpan | null): BoltCallExpression;
@@ -1858,6 +7113,7 @@ export function isBoltRecordFieldPattern(value: any): value is BoltRecordFieldPa
 export function isBoltRecordPattern(value: any): value is BoltRecordPattern;
 export function isBoltExpression(value: any): value is BoltExpression;
 export function isBoltQuoteExpression(value: any): value is BoltQuoteExpression;
+export function isBoltTupleExpression(value: any): value is BoltTupleExpression;
 export function isBoltReferenceExpression(value: any): value is BoltReferenceExpression;
 export function isBoltMemberExpression(value: any): value is BoltMemberExpression;
 export function isBoltFunctionExpression(value: any): value is BoltFunctionExpression;

@@ -2,7 +2,7 @@
 TREEGEN_FILES = src/ast-spec.txt lib/bin/bolt-treegen.js lib/treegen/parser.js lib/treegen/index.js lib/treegen/util.js src/treegen/ast-template.js
 
 all: lib/ast.js
-	bolt bundle stdlib
+	bolt check stdlib
 
 lib/ast.js: $(TREEGEN_FILES)
 	@echo "Generating AST definitions ..."

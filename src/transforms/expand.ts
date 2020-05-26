@@ -8,9 +8,10 @@ import {
   BoltPattern,
   isBoltSourceFile,
   BoltMacroCall,
+  BoltSourceFile,
 } from "../ast"
 
-import { TypeChecker } from "../checker"
+import { TypeChecker } from "../types"
 import { BoltTokenStream, Parser, isModifierKeyword } from "../parser"
 import { Evaluator, TRUE, FALSE } from "../evaluator"
 import { Transformer, TransformManager } from "./index"
@@ -30,7 +31,6 @@ export class ExpandBoltTransform implements Transformer {
   private toExpand: BoltMacroCall[] = [];
 
   constructor(
-    private transforms: TransformManager,
     @inject private evaluator: Evaluator,
     @inject private checker: TypeChecker
   ) {
@@ -57,8 +57,8 @@ export class ExpandBoltTransform implements Transformer {
     return isBoltSourceFile(node)
   }
 
-  public transform(node: BoltSyntax) {
-    return this.expand(node);
+  public transform(node: SourceFile) {
+    return this.expand(node as BoltSourceFile) as BoltSourceFile;
   }
 
   private expand(node: BoltSyntax) {
