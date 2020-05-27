@@ -1,5 +1,5 @@
 
-import { TypeInfo } from "./types"
+import { Type } from "./checker"
 import { Package } from "./common"
 import { TextSpan } from "./text"
 
@@ -12,7 +12,8 @@ export function isSyntax(value: any): value is Syntax;
 interface SyntaxBase {
   id: number;
   kind: SyntaxKind;
-  _typeInfo: TypeInfo;
+  type?: Type;
+  errors: CompileError[]
   parentNode: Syntax | null;
   span: TextSpan | null;
   visit(visitors: NodeVisitor[]): void;

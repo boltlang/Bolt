@@ -3,6 +3,7 @@ import chalk from "chalk"
 import {Syntax} from "./ast";
 import {format, MapLike, FormatArg, countDigits} from "./util";
 
+export const E_MAY_NOT_RETURN_A_VALUE = "Returning a value inside a function that does not return values."
 export const E_MUST_RETURN_A_VALUE = "The function must return a value on all control paths.";;;;
 export const E_FILE_NOT_FOUND = "A file named {filename} was not found.";
 export const E_FIELD_HAS_INVALID_VERSION_NUMBER = "Field '{name}' contains an invalid version nunmber."

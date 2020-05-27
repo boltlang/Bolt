@@ -80,6 +80,7 @@ import {
   createBoltModulePath,
   BoltModulePath,
   isBoltSymbol,
+  BoltIdentifierChild,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -109,8 +110,7 @@ function assertNoTokens(tokens: BoltTokenStream) {
   }
 }
 
-const KIND_SYMBOL = [
-  SyntaxKind.BoltIdentifier,
+const KIND_OPERATOR = [
   SyntaxKind.BoltOperator,
   SyntaxKind.BoltVBar,
   SyntaxKind.BoltLtSign,
@@ -124,7 +124,8 @@ const KIND_EXPRESSION_T0 = uniq([
   SyntaxKind.BoltMatchKeyword,
   SyntaxKind.BoltQuoteKeyword,
   SyntaxKind.BoltYieldKeyword,
-  ...KIND_SYMBOL,
+  SyntaxKind.BoltIdentifier,
+  SyntaxKind.BoltParenthesized,
 ])
 
 const KIND_STATEMENT_T0 = uniq([
@@ -239,17 +240,41 @@ export class Parser {
 
   public parseQualName(tokens: BoltTokenStream): BoltQualName {
 
-    let modulePath = null;
-    if (tokens.peek(2).kind === SyntaxKind.BoltDot) {
-      modulePath = this.parseModulePath(tokens);
+    const firstToken = tokens.peek();
+    let isAbsolute = false;
+    let modulePath = [];
+    let name;
+    if (tokens.peek().kind === SyntaxKind.BoltColonColon) {
+      isAbsolute = true;
+      tokens.get();
     }
 
-    const name = tokens.get();
-    assertToken(name, SyntaxKind.BoltIdentifier);
-    const startNode = modulePath !== null ? modulePath : name;
-    const endNode = name;
-    const node = createBoltQualName(modulePath, name as BoltIdentifier, null);
-    setOrigNodeRange(node, startNode, endNode);
+    while (true) {
+      const t1 = tokens.get();
+      if (tokens.peek().kind === SyntaxKind.BoltColonColon) {
+        assertToken(t1, SyntaxKind.BoltIdentifier);
+        modulePath.push(t1 as BoltIdentifier);
+        tokens.get();
+      } else {
+        if (t1.kind === SyntaxKind.BoltParenthesized) {
+          const innerTokens = createTokenStream(t1);
+          const t2 = innerTokens.get();
+          if (!isBoltOperatorLike(t2)) {
+            throw new ParseError(t2, KIND_OPERATOR);
+          }
+          assertNoTokens(innerTokens);
+          name = t2;
+        } else if (t1.kind === SyntaxKind.BoltIdentifier) {
+          name = t1;
+        } else {
+          throw new ParseError(t1, [SyntaxKind.BoltParenthesized, SyntaxKind.BoltIdentifier]);
+        }
+        break;
+      }
+    }
+
+    const node = createBoltQualName(isAbsolute, modulePath, name as BoltIdentifier, null);
+    setOrigNodeRange(node, firstToken, name);
     return node;
   }
 
@@ -395,15 +420,29 @@ export class Parser {
   public parseReferenceTypeExpression(tokens: BoltTokenStream): BoltReferenceTypeExpression {
 
     const firstToken = tokens.peek();
-    let modulePath = null;
-    if (tokens.peek(2).kind === SyntaxKind.BoltColonColon) {
-      modulePath = this.parseModulePath(tokens)
+    let isAbsolute = false;
+    let modulePath = [];
+    let name;
+
+    if (tokens.peek().kind === SyntaxKind.BoltColonColon) {
+      isAbsolute = true;
+      tokens.get();
     }
 
-    const t1 = tokens.get();
-    assertToken(t1, SyntaxKind.BoltIdentifier);
-    let lastToken = t1;
+    while (true) {
+      const t1 = tokens.get();
+      if (tokens.peek().kind === SyntaxKind.BoltColonColon) {
+        assertToken(t1, SyntaxKind.BoltIdentifier);
+        modulePath.push(t1 as BoltIdentifier);
+        tokens.get();
+      } else {
+        assertToken(t1, SyntaxKind.BoltIdentifier);
+        name = t1 as BoltIdentifier;
+        break;
+      }
+    }
 
+    let lastToken: BoltToken = name;
     let typeArgs: BoltTypeExpression[] | null = null;
 
     if (tokens.peek().kind === SyntaxKind.BoltLtSign) {
@@ -428,7 +467,9 @@ export class Parser {
       lastToken = t4;
     }
 
-    const node = createBoltReferenceTypeExpression(modulePath, t1 as BoltIdentifier, typeArgs);
+    const qualName = createBoltQualName(isAbsolute, modulePath, name);
+    setOrigNodeRange(qualName, firstToken, modulePath.length > 0 ? modulePath[modulePath.length-1] : firstToken)
+    const node = createBoltReferenceTypeExpression(qualName, typeArgs);
     setOrigNodeRange(node, firstToken, lastToken);
     return node;
   }
@@ -536,35 +577,10 @@ export class Parser {
   }
 
   public parseReferenceExpression(tokens: BoltTokenStream): BoltReferenceExpression {
-
     const firstToken = tokens.peek();
-    let isAbsolute = false;
-    let elements = [];
-
-    while (true) {
-      const t2 = tokens.peek(2);
-      if (t2.kind !== SyntaxKind.BoltColonColon) {
-        break;
-      }
-      const t1 = tokens.get();
-      assertToken(t1, SyntaxKind.BoltIdentifier);
-      elements.push(t1 as BoltIdentifier)
-      tokens.get();
-    }
-
-    let path = null;
-    if (elements.length > 0) {
-      path = createBoltModulePath(isAbsolute, elements);
-      setOrigNodeRange(path, elements[0], elements[elements.length-1]);
-    }
-
-    const t3 = tokens.get();
-    assertToken(t3, SyntaxKind.BoltIdentifier);
-
-    // TODO Add support for parsing parenthesized operators
-
-    const node = createBoltReferenceExpression(path, t3 as BoltIdentifier);
-    setOrigNodeRange(node, firstToken, t3);
+    const name = this.parseQualName(tokens);
+    const node = createBoltReferenceExpression(name);
+    setOrigNodeRange(node, firstToken, name);
     return node;
   }
 
@@ -631,7 +647,7 @@ export class Parser {
       }
       scanned.push(t2);
     }
-    const result = createBoltQuoteExpression(scanned);
+    const result = createBoltQuoteExpression(scanned as Token[]);
     setOrigNodeRange(result, t0, t1);
     return result;
   }
@@ -967,6 +983,7 @@ export class Parser {
   public parseModuleDeclaration(tokens: BoltTokenStream): BoltModule {
 
     let modifiers = 0;
+    let pathElements = [];
 
     let t0 = tokens.get();
     const firstToken = t0;
@@ -979,16 +996,24 @@ export class Parser {
       throw new ParseError(t0, [SyntaxKind.BoltModKeyword])
     }
 
-    // FIXME should fail to parse absolute paths
-    const name = this.parseModulePath(tokens);
+    while (true) {
+      const t1 = tokens.get();
+      assertToken(t1, SyntaxKind.BoltIdentifier)
+      pathElements.push(t1 as BoltIdentifier)
+      const t2 = tokens.peek();
+      if (t2.kind !== SyntaxKind.BoltColonColon) {
+        break;
+      }
+      tokens.get();
+    }
 
     const t1 = tokens.get();
     if (t1.kind !== SyntaxKind.BoltBraced) {
       throw new ParseError(t1, [SyntaxKind.BoltBraced])
     }
-    const sentences = this.parseSourceElements(createTokenStream(t1));
+    const elements = this.parseSourceElements(createTokenStream(t1));
 
-    const node = createBoltModule(modifiers, name.elements, sentences);
+    const node = createBoltModule(modifiers, pathElements, elements);
     setOrigNodeRange(node, firstToken, t1);
     return node;
   }

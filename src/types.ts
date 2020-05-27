@@ -1,8 +1,12 @@
 
 import { FastStringMap, assert, isPlainObject } from "./util";
-import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString } from "./ast";
+import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, isBoltMacroCall, BoltTypeExpression } from "./ast";
 import { getSymbolPathFromNode, ScopeType, SymbolResolver, SymbolInfo } from "./resolver";
-import { Value } from "./evaluator";
+import { Value, Record } from "./evaluator";
+
+// TODO For function bodies, we can do something special.
+//      Sort the return types and find the largest types, eliminating types that fall under other types.
+//      Next, add the resulting types as type hints to `fnReturnType`.
 
 enum TypeKind {
   OpaqueType,
@@ -24,6 +28,7 @@ export type Type
   | RecordType
   | VariantType
   | TupleType
+  | UnionType
 
 abstract class TypeBase {
 
@@ -91,6 +96,18 @@ export class UnionType extends TypeBase {
 
   public kind: TypeKind.UnionType = TypeKind.UnionType;
 
+  constructor(private elements: Type[] = []) {
+    super();
+  }
+
+  public addElement(element: Type): void {
+    this.elements.push(element);
+  }
+
+  public getElements(): IterableIterator<Type> {
+    return this.elements[Symbol.iterator]();
+  }
+
 }
 
 export type RecordFieldType
@@ -140,6 +157,19 @@ export class RecordType {
 
 }
 
+export enum ErrorType {
+  AssignmentError,
+}
+
+interface AssignmentError {
+  type: ErrorType.AssignmentError;
+  left: Syntax;
+  right: Syntax;
+}
+
+export type CompileError
+  = AssignmentError
+
 export class TupleType extends TypeBase {
 
   kind: TypeKind.TupleType = TypeKind.TupleType;
@@ -180,17 +210,17 @@ export class TupleType extends TypeBase {
 //  return new NeverType();
 //}
 
-interface AssignmentError {
-  node: Syntax;
-}
-
 export class TypeChecker {
 
   private opaqueTypes = new FastStringMap<number, OpaqueType>();
 
+  private anyType = new AnyType();
   private stringType = new OpaqueType();
   private intType = new OpaqueType();
   private floatType = new OpaqueType();
+  private voidType = new OpaqueType();
+
+  private syntaxType = new UnionType(); // FIXME
 
   constructor(private resolver: SymbolResolver) {
 
@@ -203,10 +233,10 @@ export class TypeChecker {
       return this.intType;
     } else if (typeof(value) === 'number') {
       return this.floatType;
-    } else if (isPlainObject(value)) {
+    } else if (value instanceof Record) {
       const recordType = new RecordType()   
-      for (const key of Object.keys(value)) {
-         recordType.addField(key, new PlainRecordFieldType(this.getTypeOfValue(value[key])));
+      for (const [fieldName, fieldValue] of value.getFields()) {
+         recordType.addField(name, new PlainRecordFieldType(this.getTypeOfValue(fieldValue)));
       }
       return recordType;
     } else {
@@ -214,46 +244,108 @@ export class TypeChecker {
     }
   }
 
-  public getTypeOfNode(node: Syntax) {
+  public registerSourceFile(sourceFile: SourceFile): void {
+    for (const node of sourceFile.preorder()) {
+      if (isBoltMacroCall(node)) {
+        continue;  // FIXME only continue when we're not in an expression context
+      }
+      if (isBoltExpression(node)) {
+        node.type = this.createInitialTypeForExpression(node);
+      }
+    }
+  }
+
+  private createInitialTypeForExpression(node: Syntax): Type {
+
+    if (node.type !== undefined) {
+      return node.type;
+    }
+
+    let resultType;
 
     switch (node.kind) {
 
+      case SyntaxKind.BoltMatchExpression:
+      {
+        const unionType = new UnionType();
+        for (const matchArm of node.arms) {
+          unionType.addElement(this.createInitialTypeForExpression(matchArm.body));
+        }
+        resultType = unionType;
+        break;
+      }
+
       case SyntaxKind.BoltRecordDeclaration:
       {
-        const recordSym = this.resolver.getSymbolForNode(node);
+        const recordSym = this.resolver.getSymbolForNode(node, ScopeType.Type);
         assert(recordSym !== null);
         if (this.opaqueTypes.has(recordSym!.id)) {
-          return this.opaqueTypes.get(recordSym!.id);
+          resultType = this.opaqueTypes.get(recordSym!.id);
+        } else {
+          const opaqueType = new OpaqueType(recordSym!);
+          this.opaqueTypes.set(recordSym!.id, opaqueType);
+          resultType = opaqueType;
         }
-        const opaqueType = new OpaqueType(recordSym!);
-        this.opaqueTypes.set(recordSym!.id, opaqueType);
+        break;
+      }
+
+      case SyntaxKind.BoltFunctionExpression:
+      {
+        const paramTypes = node.params.map(param => {
+          if (param.type === null) {
+            return this.anyType;
+          }
+          return this.createInitialTypeForTypeExpression(param.type);
+        });
+        let returnType = node.returnType === null
+          ? this.anyType
+          : this.createInitialTypeForTypeExpression(node.returnType);
+        const funcType = new FunctionType(paramTypes, returnType);
+        break;
+      }
+
+      case SyntaxKind.BoltQuoteExpression:
+        return this.syntaxType;
+
+      case SyntaxKind.BoltMemberExpression:
+      case SyntaxKind.BoltReferenceExpression:
+      case SyntaxKind.BoltCallExpression:
+      case SyntaxKind.BoltBlockExpression:
+      {
+        resultType = this.anyType;
         break;
       }
 
       case SyntaxKind.BoltConstantExpression:
-        return this.getTypeOfValue(node.value);
+      {
+        resultType = this.getTypeOfValue(node.value);
+        break;
+      }
 
-    }
-
-  }
-
-  public isVoid(node: Syntax): boolean {
-    switch (node.kind) {
-      case SyntaxKind.BoltTupleExpression:
-        return node.elements.length === 0;
       default:
-        throw new Error(`Could not determine whether the given type resolves to the void type.`)
+        throw new Error(`Could not create a type for node ${kindToString(node.kind)}.`);
+
+    }
+
+    node.type = resultType;
+
+    return resultType;
+
+  }
+
+  private createInitialTypeForTypeExpression(node: BoltTypeExpression): Type {
+    switch (node.kind) {
+      case SyntaxKind.BoltLiftedTypeExpression:
+        return this.createInitialTypeForExpression(node.expression);
+      default:
+        throw new Error(`Could not create a type for node ${kindToString(node.kind)}.`);
     }
   }
 
-  public *getAssignmentErrors(left: Syntax, right: Syntax): IterableIterator<AssignmentError> {
-
-    // TODO For function bodies, we can do something special.
-    //      Sort the return types and find the largest types, eliminating types that fall under other types.
-    //      Next, add the resulting types as type hints to `fnReturnType`.
-
+  public isVoidType(type: Type): boolean {
+    return type === this.voidType;
   }
-  
+
   public getCallableFunctions(node: BoltExpression): BoltFunctionDeclaration[] {
 
     const resolver = this.resolver;

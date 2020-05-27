@@ -12,6 +12,10 @@ export class Record {
     this.fields = new Map(fields);
   }
 
+  public getFields(): IterableIterator<[string, Value]> {
+    return this.fields[Symbol.iterator]();
+  }
+
   public clone(): Record {
     return new Record(this.fields);
   }

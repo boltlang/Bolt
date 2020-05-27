@@ -93,7 +93,8 @@ export class Frontend {
     const checkers = checks.map(check => container.createInstance(check));
 
     for (const sourceFile of program.getAllSourceFiles()) {
-      resolver.registerSourceFile(sourceFile as BoltSourceFile);
+      checker.registerSourceFile(sourceFile);
+      resolver.registerSourceFile(sourceFile);
     }
     for (const sourceFile of program.getAllSourceFiles()) {
       sourceFile.visit(checkers)

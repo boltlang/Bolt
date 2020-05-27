@@ -356,7 +356,7 @@ export function generateAST(decls: Declaration[]) {
         throw new Error(`Could not emit TypeScript type for reference type node named ${typeNode.name}`);
       }
     } else if (typeNode.type === 'UnionTypeNode') {
-      return typeNode.elements.map(emitTypeScriptType).join(' | ');
+      return '(' + typeNode.elements.map(emitTypeScriptType).join(' | ') + ')';
     }
     throw new Error(`Could not emit TypeScript type for type node ${typeNode}`);
   }

@@ -30,8 +30,8 @@ export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
   switch (node.kind) {
     case SyntaxKind.BoltReferenceExpression:
       return new SymbolPath(
-        node.modulePath === null ? [] : node.modulePath.elements.map(id => id.text),
-        node.modulePath !== null && node.modulePath.isAbsolute,
+        node.name.modulePath.map(id => id.text),
+        node.name.isAbsolute,
         emitNode(node.name),
       );
     case SyntaxKind.BoltIdentifier:
@@ -41,7 +41,7 @@ export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
       if (node.modulePath === null) {
         return new SymbolPath([], false, name);
       }
-      return new SymbolPath(node.modulePath.elements.map(id => id.text), false, name);
+      return new SymbolPath(node.modulePath.map(id => id.text), false, name);
     case SyntaxKind.BoltModulePath:
       return new SymbolPath(
         node.elements.slice(0, -1).map(el => el.text),
@@ -104,7 +104,7 @@ class NodeScopeSource implements ScopeSource {
 
 interface ResolutionStrategy {
   getSymbolName(node: Syntax): string;
-  getScopeType(node: Syntax): ScopeType;
+  getScopeTypes(node: Syntax): ScopeType[];
   getNextScopeSource(source: ScopeSource, kind: ScopeType): ScopeSource | null;
 }
 
@@ -425,12 +425,12 @@ export class SymbolResolver {
     }
   }
 
-  public getScopeSurroundingNode(node: Syntax, kind: ScopeType = this.strategy.getScopeType(node)): Scope | null {
+  public getScopeSurroundingNode(node: Syntax, kind: ScopeType): Scope | null {
     assert(node.parentNode !== null);
     return this.getScopeForNode(node.parentNode!, kind);
   }
 
-  public getScopeForNode(node: Syntax, kind: ScopeType = this.strategy.getScopeType(node)): Scope | null {
+  public getScopeForNode(node: Syntax, kind: ScopeType): Scope | null {
     let source: ScopeSource = new NodeScopeSource(node);
     if (!this.strategy.introducesNewScope(source, kind)) {
       const nextSource = this.strategy.getNextScopeSource(source, kind);
@@ -482,7 +482,7 @@ export class SymbolResolver {
     return null;
   }
 
-  public getSymbolForNode(node: Syntax, kind: ScopeType = this.strategy.getScopeType(node)) {
+  public getSymbolForNode(node: Syntax, kind: ScopeType) {
     assert(this.strategy.hasSymbol(node));
     const scope = this.getScopeForNode(node, kind);
     if (scope === null) {

@@ -1,13 +1,14 @@
-import { BoltImportDirective, Syntax, BoltParameter, BoltModulePath, BoltReferenceExpression, BoltReferenceTypeExpression, BoltSourceFile, BoltCallExpression, BoltReturnKeyword, BoltReturnStatement, SyntaxKind, NodeVisitor } from "./ast";
+import { BoltImportDirective, Syntax, BoltParameter, BoltModulePath, BoltReferenceExpression, BoltReferenceTypeExpression, BoltSourceFile, BoltCallExpression, BoltReturnKeyword, BoltReturnStatement, SyntaxKind, NodeVisitor, BoltSyntax, BoltIdentifier } from "./ast";
 import { Program } from "./program";
-import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_TYPES_NOT_ASSIGNABLE, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND, E_MUST_RETURN_A_VALUE } from "./diagnostics";
+import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_TYPES_NOT_ASSIGNABLE, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND, E_MUST_RETURN_A_VALUE, E_MAY_NOT_RETURN_A_VALUE } from "./diagnostics";
 import { getSymbolPathFromNode } from "./resolver"
-import { inject } from "./di";
+import { inject } from "./ioc";
 import { SymbolResolver, ScopeType } from "./resolver";
-import { assert } from "./util";
+import { assert, every } from "./util";
 import { emitNode } from "./emitter";
-import { TypeChecker, Type } from "./types";
+import { TypeChecker, Type, ErrorType } from "./types";
 import { getReturnStatementsInFunctionBody } from "./common";
+import { errorMonitor } from "events";
 
 export class CheckInvalidFilePaths extends NodeVisitor {
 
@@ -41,24 +42,65 @@ export class CheckReferences extends NodeVisitor {
         super();
     }
 
-    private checkBoltModulePath(node: BoltModulePath, symbolKind: ScopeType) {
-        const scope = this.resolver.getScopeForNode(node, symbolKind);
-        assert(scope !== null);
-        const sym = this.resolver.resolveModulePath(node.elements.map(el => el.text), scope!);
-        if (sym === null) {
+    private checkBoltModulePath(node: BoltSyntax, elements: BoltIdentifier[]) {
+
+        let modScope = this.resolver.getScopeForNode(node, ScopeType.Module);
+        assert(modScope !== null);
+        let foundModule = false;
+        let partiallyMatchingModules = [];
+
+        // We will keep looping until we are at the topmost module of
+        // the package corresponding to `node`.
+        while (true) {
+
+          let failedToFindScope = false;
+          let currScope = modScope;
+
+          // Go through each of the parent names in normal order, resolving to the module
+          // that declared the name, and mark when we failed to look up the inner module.
+          for (const name of elements) {
+            const sym = currScope!.getLocalSymbol(name.text);;
+            if (sym === null) {
+              failedToFindScope = true;
+              partiallyMatchingModules.push((currScope!.source) as NodeScopeSource).node);
+              break;
+            }
+            assert(every(sym.declarations.values(), decl => decl.kind === SyntaxKind.BoltModule));
+            currScope = sym.scope;
+          }
+
+          // If the previous loop did not fail, that means we found a module.
+          if (!failedToFindScope) {
+            foundModule = true;
+            break;
+          }
+
+          // We continue the outer loop by going up one scope.
+          const nextScope = modScope!.getNextScope();
+
+          // If we are here and there are no scopes left to search in, then no scope had the given module.
+          if (nextScope === null) {
+              break;
+          }
+
+          modScope = nextScope;
+
+        }
+ 
+        if (!foundModule) {
             this.diagnostics.add({
                 message: E_DECLARATION_NOT_FOUND,
                 severity: 'error',
                 args: { name: emitNode(node) },
                 node,
             });
+            // TODO add informational diagnostics about the modules that provided a partial match
         }
+
     }
 
     protected visitBoltReferenceExpression(node: BoltReferenceExpression) {
-        if (node.modulePath !== null) {
-            this.checkBoltModulePath(node.modulePath, ScopeType.Variable);
-        }
+        this.checkBoltModulePath(node.name, node.name.modulePath);
         const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Variable);
         assert(scope !== null);
         const resolvedSym = this.resolver.resolveSymbolPath(getSymbolPathFromNode(node), scope!);
@@ -75,14 +117,14 @@ export class CheckReferences extends NodeVisitor {
     protected visitBoltReferenceTypeExpression(node: BoltReferenceTypeExpression) {
         const scope = this.resolver.getScopeForNode(node, ScopeType.Type);
         assert(scope !== null);
-        const symbolPath = getSymbolPathFromNode(node.path);
+        const symbolPath = getSymbolPathFromNode(node.name);
         const resolvedSym = this.resolver.resolveSymbolPath(symbolPath, scope!);
         if (resolvedSym === null) {
             this.diagnostics.add({
                 message: E_TYPE_DECLARATION_NOT_FOUND,
-                args: { name: emitNode(node.path) },
+                args: { name: emitNode(node.name) },
                 severity: 'error',
-                node: node.path,
+                node: node.name,
             })
         }
     }
@@ -92,59 +134,86 @@ export class CheckReferences extends NodeVisitor {
 
 export class CheckTypeAssignments extends NodeVisitor {
 
-    constructor(
-        @inject private diagnostics: DiagnosticPrinter,
-        @inject private checker: TypeChecker,
-    ) {
+    constructor(@inject private diagnostics: DiagnosticPrinter) {
         super();
     }
 
-    protected visitBoltReturnStatement(node: BoltReturnStatement) {
-
-        const fnDecl = node.getParentOfKind(SyntaxKind.BoltFunctionDeclaration)!;
-
-        if (node.value === null) {
-          if (fnDecl.returnType !== null && this.checker.isVoid(fnDecl.returnType)) {
-            this.diagnostics.add({
-              message: E_MUST_RETURN_A_VALUE,
-              node,
-              severity: 'error',
-            });
-          }
-        } else {
-          for (const error of this.checker.getAssignmentErrors(fnDecl.returnType, node.value)) {
-            this.diagnostics.add({
-              message: E_MUST_RETURN_A_VALUE,
-              node: node,
-              severity: 'error',
-            });
-          }
-        }
-
-    }
-
-    protected visitBoltParameter(node: BoltParameter) {
-        if (node.defaultValue !== null) {
-            for (const error of this.checker.getAssignmentErrors(node.bindings, node.defaultValue)) {
-                this.diagnostics.add({
-                    severity: 'error',
-                    message: E_TYPES_NOT_ASSIGNABLE,
-                    args: { node: error.node }
-                });
-            }
-        }
-    }
-
-    protected visitBoltCallExpression(node: BoltCallExpression) {
-        for (const fnDecl of this.checker.getCallableFunctions(node)) {
-            for (const error of this.checker.getAssignmentErrors(fnDecl, node)) {
-                this.diagnostics.add({
-                    severity: 'error',
-                    message: E_TYPES_NOT_ASSIGNABLE,
-                    args: { node: error.node },
-                });
+    protected visitSyntax(node: Syntax) {
+        for (const error of node.errors) {
+            switch (error.type) {
+                case ErrorType.AssignmentError:
+                    this.diagnostics.add({
+                        message: E_TYPES_NOT_ASSIGNABLE,
+                        severity: 'error',
+                        node: error.left,
+                    });
+                default:
+                    throw new Error(`Could not add a diagnostic message for the error ${ErrorType[error.type]}`)
             }
         }
     }
 
 }
+
+//export class CheckTypeAssignments extends NodeVisitor {
+
+//    constructor(
+//        @inject private diagnostics: DiagnosticPrinter,
+//        @inject private checker: TypeChecker,
+//    ) {
+//        super();
+//    }
+
+//    protected visitBoltReturnStatement(node: BoltReturnStatement) {
+
+//        const fnDecl = node.getParentOfKind(SyntaxKind.BoltFunctionDeclaration)!;
+
+//        if ((this.checker.isVoidType(node) && !this.checker.isVoidType(fnDecl)) {
+//            this.diagnostics.add({
+//              message: E_MUST_RETURN_A_VALUE,
+//            node: node.value !== null ? node.value : node,
+//              severity: 'error',
+//            });
+//        } else if (!this.checker.isVoidType(node) && this.checker.isVoidType(fnDecl)) {
+//            this.diagnostics.add({
+//                message: E_MAY_NOT_RETURN_A_VALUE,
+//                node: node.value !== null ? node.value : node,
+//                severity: 'error',
+//            })
+//        } else {
+//            for (const error of this.checker.checkAssignment(fnDecl, node)) {
+//                this.diagnostics.add({
+//                  message: E_TYPES_NOT_ASSIGNABLE,
+//                  node: error.node,
+//                  severity: 'error',
+//                });
+//            }
+//        }
+
+//    }
+
+//    protected visitBoltParameter(node: BoltParameter) {
+//        if (node.defaultValue !== null) {
+//            for (const error of this.checker.checkAssignment(node.bindings, node.defaultValue)) {
+//                this.diagnostics.add({
+//                    severity: 'error',
+//                    message: E_TYPES_NOT_ASSIGNABLE,
+//                    node: error.node,
+//                });
+//            }
+//        }
+//    }
+
+//    protected visitBoltCallExpression(node: BoltCallExpression) {
+//        for (const fnDecl of this.checker.getCallableFunctions(node)) {
+//            for (const error of this.checker.checkAssignment(fnDecl, node)) {
+//                this.diagnostics.add({
+//                    severity: 'error',
+//                    message: E_TYPES_NOT_ASSIGNABLE,
+//                    node: error.node,
+//                });
+//            }
+//        }
+//    }
+
+//}

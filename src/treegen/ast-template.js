@@ -117,6 +117,11 @@ function createNode(nodeType) {
       return this.__NODE_TYPE.index;
     }
   });
+  Object.defineProperty(obj, 'errors', {
+    enumerable: false,
+    configurable: true,
+    value: [],
+  })
   Object.defineProperty(obj, 'id', {
     enumerable: true,
     configurable: true,

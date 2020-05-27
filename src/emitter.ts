@@ -15,11 +15,11 @@ export class Emitter {
 
       case SyntaxKind.BoltQualName:
         if (node.modulePath !== null) {
-          if (node.modulePath.isAbsolute) {
+          if (node.isAbsolute) {
             out += '::'
           }
-          for (const element of node.modulePath.elements) {
-            out += '::' + element.text;
+          for (const element of node.modulePath) {
+            out += element.text + '::';
           }
         }
         out += this.emit(node.name);

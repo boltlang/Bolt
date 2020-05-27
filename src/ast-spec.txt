@@ -91,7 +91,8 @@ node BoltSourceFile > SourceFile {
 }
 
 node BoltQualName {
-  modulePath: Option<BoltModulePath>,
+  isAbsolute: bool,
+  modulePath: Vec<BoltIdentifier>,
   name: BoltSymbol,
 }
 
@@ -103,14 +104,17 @@ node BoltModulePath {
 node BoltTypeExpression;
 
 node BoltReferenceTypeExpression > BoltTypeExpression {
-  modulePath: Option<BoltModulePath>,
-  name: BoltIdentifier,
+  name: BoltQualName,
   arguments: Option<Vec<BoltTypeExpression>>,
 }
 
 node BoltFunctionTypeExpression > BoltTypeExpression {
   params: Vec<BoltParameter>,
   returnType: Option<BoltTypeExpression>,
+}
+
+node BoltLiftedTypeExpression > BoltTypeExpression {
+  expression: BoltExpression, 
 }
 
 node BoltTypeParameter {
@@ -166,8 +170,7 @@ node BoltTupleExpression > BoltExpression {
 }
 
 node BoltReferenceExpression > BoltExpression {
-  modulePath: Option<BoltModulePath>,
-  name: BoltSymbol,
+  name: BoltQualName,
 }
 
 node BoltMemberExpression > BoltExpression {
@@ -284,7 +287,8 @@ node BoltVariableDeclaration > BoltFunctionBodyElement, BoltDeclaration {
 node BoltImportSymbol;
 
 node BoltPlainImportSymbol > BoltImportSymbol {
-  name: BoltQualName,
+  remote: BoltQualName,
+  local: BoltSymbol,
 }
 
 node BoltImportDirective > BoltSourceElement {
@@ -296,7 +300,8 @@ node BoltImportDirective > BoltSourceElement {
 node BoltExportSymbol;
 
 node BoltPlainExportSymbol {
-  name: BoltQualName,
+  local: BoltQualName,
+  remote: BoltSymbol,
 }
 
 node BoltExportDirective > BoltSourceElement {
