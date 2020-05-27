@@ -226,7 +226,7 @@ export function isExported(node: Syntax) {
     case SyntaxKind.BoltImplDeclaration:
       return (node.modifiers & BoltModifiers.IsPublic) > 0;
     default:
-      throw new Error(`The node ${kindToString(node.kind)} can not be exported.`)
+      return false;
   }
 }
 

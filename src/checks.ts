@@ -75,7 +75,8 @@ export class CheckReferences extends NodeVisitor {
     protected visitBoltReferenceTypeExpression(node: BoltReferenceTypeExpression) {
         const scope = this.resolver.getScopeForNode(node, ScopeType.Type);
         assert(scope !== null);
-        const resolvedSym = this.resolver.resolveSymbolPath(getSymbolPathFromNode(node.path), scope!);
+        const symbolPath = getSymbolPathFromNode(node.path);
+        const resolvedSym = this.resolver.resolveSymbolPath(symbolPath, scope!);
         if (resolvedSym === null) {
             this.diagnostics.add({
                 message: E_TYPE_DECLARATION_NOT_FOUND,

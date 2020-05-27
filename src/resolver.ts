@@ -41,7 +41,7 @@ export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
       if (node.modulePath === null) {
         return new SymbolPath([], false, name);
       }
-      return new SymbolPath(node.modulePath.map(id => id.text), false, name);
+      return new SymbolPath(node.modulePath.elements.map(id => id.text), false, name);
     case SyntaxKind.BoltModulePath:
       return new SymbolPath(
         node.elements.slice(0, -1).map(el => el.text),
@@ -105,7 +105,7 @@ class NodeScopeSource implements ScopeSource {
 interface ResolutionStrategy {
   getSymbolName(node: Syntax): string;
   getScopeType(node: Syntax): ScopeType;
-  getNextScopeSources(source: ScopeSource, kind: ScopeType): IterableIterator<ScopeSource>;
+  getNextScopeSource(source: ScopeSource, kind: ScopeType): ScopeSource | null;
 }
 
 export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
@@ -117,9 +117,9 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
       case SyntaxKind.BoltFunctionDeclaration:
       case SyntaxKind.BoltTypeAliasDeclaration:
       case SyntaxKind.BoltRecordDeclaration:
-      case SyntaxKind.BoltBindPattern:
       case SyntaxKind.BoltTraitDeclaration:
       case SyntaxKind.BoltImplDeclaration:
+      case SyntaxKind.BoltTypeParameter:
         return true;
       default:
         return false;
@@ -128,6 +128,8 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
 
   public getSymbolName(node: Syntax): string {
     switch (node.kind) {
+      case SyntaxKind.BoltTypeParameter:
+        return node.name.text;
       case SyntaxKind.BoltModule:
         return node.name[node.name.length-1].text;
       case SyntaxKind.BoltBindPattern:
@@ -149,51 +151,63 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
     }
   }
 
-  public getScopeType(node: Syntax): ScopeType {
+  public getScopeTypes(node: Syntax): ScopeType[] {
     switch (node.kind) {
       case SyntaxKind.BoltVariableDeclaration:
+      case SyntaxKind.BoltBindPattern:
+        return [ ScopeType.Variable ];
       case SyntaxKind.BoltFunctionDeclaration:
-        return ScopeType.Variable;
-      case SyntaxKind.BoltImplDeclaration:
+        return [ ScopeType.Type, ScopeType.Variable ];
       case SyntaxKind.BoltTraitDeclaration:
-      case SyntaxKind.BoltTypeAliasDeclaration:
       case SyntaxKind.BoltRecordDeclaration:
-        return ScopeType.Type;
+        return [ ScopeType.Type, ScopeType.Module ];
+      case SyntaxKind.BoltFunctionDeclaration:
+      case SyntaxKind.BoltImplDeclaration:
+      case SyntaxKind.BoltTypeAliasDeclaration:
+      case SyntaxKind.BoltTypeParameter:
+        return [ ScopeType.Type ];
       case SyntaxKind.BoltModule:
-        return ScopeType.Module;
+        return [ ScopeType.Module ];
       default:
         throw new Error(`Could not derive scope type of node ${kindToString(node.kind)}.`)
     }
   }
 
-  public introducesNewScope(node: Syntax, kind: ScopeType): boolean {
-    switch (kind) {
-      case ScopeType.Variable:
-        return node.kind === SyntaxKind.BoltSourceFile
-            || node.kind === SyntaxKind.BoltModule
-            || node.kind === SyntaxKind.BoltFunctionDeclaration
-            || node.kind === SyntaxKind.BoltBlockExpression;
-      case ScopeType.Type:
-        return node.kind === SyntaxKind.BoltModule
-            || node.kind === SyntaxKind.BoltSourceFile
-            || node.kind === SyntaxKind.BoltFunctionDeclaration
-            || node.kind === SyntaxKind.BoltRecordDeclaration
-            || node.kind === SyntaxKind.BoltTraitDeclaration
-            || node.kind === SyntaxKind.BoltImplDeclaration;
-        case ScopeType.Module:
-          return node.kind === SyntaxKind.BoltModule
-              || node.kind === SyntaxKind.BoltRecordDeclaration
-              || node.kind === SyntaxKind.BoltSourceFile;
-      default:
-        throw new Error(`Invalid scope type detected.`)
+  public introducesNewScope(source: ScopeSource, kind: ScopeType): boolean {
+    if (source instanceof PackageScopeSource || source instanceof GlobalScopeSource) {
+      return true;
     }
+    if (source instanceof NodeScopeSource) {
+      switch (kind) {
+        case ScopeType.Variable:
+          return source.node.kind === SyntaxKind.BoltSourceFile
+              || source.node.kind === SyntaxKind.BoltModule
+              || source.node.kind === SyntaxKind.BoltFunctionDeclaration
+              || source.node.kind === SyntaxKind.BoltBlockExpression;
+        case ScopeType.Type:
+          return source.node.kind === SyntaxKind.BoltModule
+              || source.node.kind === SyntaxKind.BoltSourceFile
+              || source.node.kind === SyntaxKind.BoltFunctionDeclaration
+              || source.node.kind === SyntaxKind.BoltRecordDeclaration
+              || source.node.kind === SyntaxKind.BoltTraitDeclaration
+              || source.node.kind === SyntaxKind.BoltImplDeclaration;
+          case ScopeType.Module:
+            return source.node.kind === SyntaxKind.BoltModule
+                || source.node.kind === SyntaxKind.BoltRecordDeclaration
+                || source.node.kind === SyntaxKind.BoltTraitDeclaration
+                || source.node.kind === SyntaxKind.BoltSourceFile;
+        default:
+          throw new Error(`Invalid scope type detected.`)
+      }
+    }
+    throw new Error(`Invalid source type detected.`)
   }
 
-  public *getNextScopeSources(source: ScopeSource, kind: ScopeType): IterableIterator<ScopeSource> {
+  public getNextScopeSource(source: ScopeSource, kind: ScopeType): ScopeSource | null {
 
     // If we are in the global scope, there is no scope above it.
     if (source instanceof GlobalScopeSource) {
-      return;
+      return null;
     }
     
     // If we are at a scope that was created by an AST node, we 
@@ -204,14 +218,12 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
       let currNode = source.node;
       while (true) {
         if (currNode.kind === SyntaxKind.BoltSourceFile) {
-          yield new PackageScopeSource(currNode.package);
-          return;
+          return new PackageScopeSource(currNode.package);
         }
         const nextNode = currNode.parentNode;
         assert(nextNode !== null);
-        if (this.introducesNewScope(nextNode, kind)) {
-          yield new NodeScopeSource(nextNode);
-          return;
+        if (this.introducesNewScope(new NodeScopeSource(nextNode), kind)) {
+          return new NodeScopeSource(nextNode);
         }
         currNode = nextNode;
       }
@@ -220,8 +232,7 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
     // If we already are at the local package scope level, we go one up 
     // to the global scope shared by all packages.
     if (source instanceof PackageScopeSource) {
-      yield new GlobalScopeSource();
-      return;
+      return new GlobalScopeSource();;
     }
 
     throw new Error(`Unknown scope source provided.`)
@@ -239,6 +250,17 @@ class Scope {
   private nextScope: Scope | null | undefined;
   private symbols = new FastStringMap<string, SymbolInfo>();
 
+  public static findOrCreate(resolver: SymbolResolver, kind: ScopeType, source: ScopeSource): Scope {
+    const key = `${kind}:${source.id}`;
+    if (Scope.scopeCache.has(key)) {
+      return Scope.scopeCache.get(key);
+    } else {
+      const newScope = new Scope(resolver, kind, source);
+      Scope.scopeCache.set(key, newScope);
+      return newScope;
+    }
+  }
+
   constructor(
     private resolver: SymbolResolver,
     public kind: ScopeType,
@@ -252,26 +274,22 @@ class Scope {
   }
 
   public getScope(kind: ScopeType) {
-    if (Scope.scopeCache.has(this.globallyUniqueKey)) {
-      return Scope.scopeCache.get(this.globallyUniqueKey);
+    let source: ScopeSource = this.source;
+    while (!this.resolver.strategy.introducesNewScope(source, kind)) {
+      const nextSource = this.resolver.strategy.getNextScopeSource(source, kind);
+      assert(nextSource !== null);
+      source = nextSource!;
     }
-    const newScope = new Scope(this.resolver, kind, this.source);
-    Scope.scopeCache.set(newScope.globallyUniqueKey, newScope);
-    return newScope;
+    return Scope.findOrCreate(this.resolver, kind, source);
   }
 
-  public *getNextScopes(): IterableIterator<Scope> {
+  public getNextScope(): Scope | null {
     let results = [];
-    for (const nextSource of this.resolver.strategy.getNextScopeSources(this.source, this.kind)) {
-      const key = `${this.kind}:${nextSource.id}`;
-      if (Scope.scopeCache.has(key)) {
-        yield Scope.scopeCache.get(key);
-      } else {
-        const newScope = new Scope(this.resolver, this.kind, nextSource);
-        Scope.scopeCache.set(key, newScope);
-        yield newScope;
-      }
+    const nextSource = this.resolver.strategy.getNextScopeSource(this.source, this.kind);
+    if (nextSource === null) {
+      return null;
     }
+    return Scope.findOrCreate(this.resolver, this.kind, nextSource);
   }
 
   public getLocalSymbol(name: string) {
@@ -293,16 +311,17 @@ class Scope {
   }
 
   public getSymbol(name: string): SymbolInfo | null {
-    const stack: Scope[] = [ this ];
-    while (stack.length > 0) {
-      const currScope = stack.pop()!;
+    let currScope: Scope = this;
+    while (true) {
       const sym = currScope.getLocalSymbol(name);
       if (sym !== null) {
         return sym;
       }
-      for (const nextScope of currScope.getNextScopes()) {
-        stack.push(nextScope);
+      const nextScope = currScope.getNextScope();
+      if (nextScope === null) {
+        break;
       }
+      currScope = nextScope;
     }
     return null;
   }
@@ -349,11 +368,13 @@ export class SymbolResolver {
   public registerSourceFile(node: SourceFile): void {
 
     for (const childNode of node.preorder()) {
-      if (this.strategy.hasSymbol(node)) {
-        const name = this.strategy.getSymbolName(node);
-        const scope = this.getScopeForNode(node, this.strategy.getScopeType(node));
-        assert(scope !== null);
-        scope!.addNodeAsSymbol(name, node);
+      if (this.strategy.hasSymbol(childNode)) {
+        for (const scopeType of this.strategy.getScopeTypes(childNode)) {
+          const name = this.strategy.getSymbolName(childNode);
+          const scope = this.getScopeSurroundingNode(childNode, scopeType);
+          assert(scope !== null);
+          scope!.addNodeAsSymbol(name, childNode);
+        }
       }
     }
 
@@ -374,13 +395,19 @@ export class SymbolResolver {
                     }
                   }
                 }
+                break;
+              default:
+                throw new Error(`Could not import symbols due to an unknown node.`)
             }
           }
         } else {
           for (const exportedNode of this.getAllExportedNodes(sourceFile)) {
-            const scope = this.getScopeForNode(importDir, this.strategy.getScopeType(exportedNode));
-            assert(scope !== null);
-            scope!.addNodeAsSymbol(this.strategy.getSymbolName(exportedNode), exportedNode);
+            for (const exportedScopeType of this.strategy.getScopeTypes(exportedNode)) {
+              const importName = this.strategy.getSymbolName(exportedNode);
+              const scope = this.getScopeForNode(importDir, exportedScopeType);
+              assert(scope !== null);
+              scope!.addNodeAsSymbol(importName, exportedNode);
+            }
           }
         }
       }
@@ -398,42 +425,40 @@ export class SymbolResolver {
     }
   }
 
-  public getScopeSurroundingNode(node: Syntax, kind: ScopeType): Scope | null {
+  public getScopeSurroundingNode(node: Syntax, kind: ScopeType = this.strategy.getScopeType(node)): Scope | null {
     assert(node.parentNode !== null);
     return this.getScopeForNode(node.parentNode!, kind);
   }
 
-  public getScopeForNode(node: Syntax, kind: ScopeType): Scope | null {
+  public getScopeForNode(node: Syntax, kind: ScopeType = this.strategy.getScopeType(node)): Scope | null {
     let source: ScopeSource = new NodeScopeSource(node);
     if (!this.strategy.introducesNewScope(source, kind)) {
-      const sources = [...this.strategy.getNextScopeSources(source, kind)];
-      if (sources.length === 0) {
+      const nextSource = this.strategy.getNextScopeSource(source, kind);
+      if (nextSource === null) {
         return null;
       }
-      assert(sources.length === 1);
-      source = sources[0];
+      source = nextSource;
     }
-    return new Scope(this, kind, source);
+    return Scope.findOrCreate(this, kind, source);
   }
 
   public resolveModulePath(path: string[], scope: Scope): Scope | null {
-
-    const stack: Scope[] = [ scope ];
+  
+    let modScope = scope.getScope(ScopeType.Module);
 
     // We will keep looping until we are at the topmost module of
     // the package corresponding to `node`.
-    while (stack.length > 0) {
+    while (true) {
 
-      let shouldSearchNextScopes = false;
-      let scope = stack.pop()!;
-      let currScope = scope;
+      let failedToFindScope = false;
+      let currScope = modScope;
 
       // Go through each of the parent names in normal order, resolving to the module
       // that declared the name, and mark when we failed to look up the inner module.
       for (const name of path) {
         const sym = currScope.getLocalSymbol(name);
         if (sym === null) {
-          shouldSearchNextScopes = true;
+          failedToFindScope = true;
           break;
         }
         assert(every(sym.declarations.values(), decl => decl.kind === SyntaxKind.BoltModule));
@@ -441,23 +466,25 @@ export class SymbolResolver {
       }
 
       // If the previous loop did not fail, we are done.
-      if (!shouldSearchNextScopes) {
-        return currScope;
+      if (!failedToFindScope) {
+        return currScope.getScope(scope.kind);
       }
 
       // We continue the outer loop by going up one scope.
-      for (const nextScope of scope.getNextScopes()) {
-        stack.push(nextScope);
+      const nextScope = modScope.getNextScope();
+      if (nextScope === null) {
+        break;
       }
+      modScope = nextScope;
 
     }
 
     return null;
   }
 
-  public getSymbolForNode(node: Syntax) {
+  public getSymbolForNode(node: Syntax, kind: ScopeType = this.strategy.getScopeType(node)) {
     assert(this.strategy.hasSymbol(node));
-    const scope = this.getScopeForNode(node, this.strategy.getScopeType(node));
+    const scope = this.getScopeForNode(node, kind);
     if (scope === null) {
       return null;
     }
@@ -491,7 +518,7 @@ export class SymbolResolver {
     // Once we've handled any module path that might have been present,
     // we resolve the actual symbol using a helper method.
 
-    const sym = scope.getExportedSymbol(path.name);
+    const sym = scope.getSymbol(path.name);
 
     if (sym === null) {
       return null;
