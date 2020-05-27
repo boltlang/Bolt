@@ -292,20 +292,23 @@ export class TypeChecker {
       case SyntaxKind.BoltFunctionExpression:
       {
         const paramTypes = node.params.map(param => {
-          if (param.type === null) {
+          if (param.typeExpr === null) {
             return this.anyType;
           }
-          return this.createInitialTypeForTypeExpression(param.type);
+          return this.createInitialTypeForTypeExpression(param.typeExpr);
         });
         let returnType = node.returnType === null
           ? this.anyType
           : this.createInitialTypeForTypeExpression(node.returnType);
-        const funcType = new FunctionType(paramTypes, returnType);
+        resultType = new FunctionType(paramTypes, returnType);
         break;
       }
 
       case SyntaxKind.BoltQuoteExpression:
-        return this.syntaxType;
+      {
+        resultType = this.syntaxType;
+        break
+      }
 
       case SyntaxKind.BoltMemberExpression:
       case SyntaxKind.BoltReferenceExpression:

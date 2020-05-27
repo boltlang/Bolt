@@ -1,5 +1,5 @@
 
-import { Type } from "./checker"
+import { Type } from "./types"
 import { Package } from "./common"
 import { TextSpan } from "./text"
 

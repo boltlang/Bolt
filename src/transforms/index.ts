@@ -1,6 +1,6 @@
 
 import { Program } from "../program"
-import { Container, Newable } from "../di"
+import { Container, Newable } from "../ioc"
 import {SourceFile} from "../ast";
 
 export interface Transformer {

@@ -23,7 +23,7 @@ export class CheckInvalidFilePaths extends NodeVisitor {
         const sourceFile = this.program.resolveToSourceFile(node.file.value, node);
         if (sourceFile === null) {
             this.diagnostics.add({
-                severity: 'error',
+                severity: 'fatal',
                 message: E_FILE_NOT_FOUND,
                 args: { filename: node.file.value },
                 node: node.file,
@@ -62,7 +62,7 @@ export class CheckReferences extends NodeVisitor {
             const sym = currScope!.getLocalSymbol(name.text);;
             if (sym === null) {
               failedToFindScope = true;
-              partiallyMatchingModules.push((currScope!.source) as NodeScopeSource).node);
+              partiallyMatchingModules.push(((currScope!.source) as NodeScopeSource).node);
               break;
             }
             assert(every(sym.declarations.values(), decl => decl.kind === SyntaxKind.BoltModule));
@@ -115,7 +115,7 @@ export class CheckReferences extends NodeVisitor {
     }
 
     protected visitBoltReferenceTypeExpression(node: BoltReferenceTypeExpression) {
-        const scope = this.resolver.getScopeForNode(node, ScopeType.Type);
+        const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Type);
         assert(scope !== null);
         const symbolPath = getSymbolPathFromNode(node.name);
         const resolvedSym = this.resolver.resolveSymbolPath(symbolPath, scope!);

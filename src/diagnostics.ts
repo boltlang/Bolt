@@ -40,7 +40,8 @@ function firstIndexOfNonEmpty(str: string) {
 
 export class DiagnosticPrinter {
 
-  public hasErrors = false;
+  public hasErrors = false
+  public hasFatal = false;
 
   public add(diagnostic: Diagnostic): void {
 
@@ -61,6 +62,9 @@ export class DiagnosticPrinter {
         this.hasErrors = true;
         out += chalk.bold.red('error: ');
         break;
+      case 'fatal':
+        this.hasFatal = true;
+        out += chalk.bold.red('fatal:' );
       case 'warning':
         this.hasErrors = true;
         out += chalk.bold.red('warning: ');

@@ -1,5 +1,5 @@
 
-import { Type } from "./checker"
+import { Type } from "./types"
 import { Package } from "./common"
 import { TextSpan } from "./text"
 
@@ -2941,7 +2941,7 @@ export interface BoltTypeParameter extends SyntaxBase {
   kind: SyntaxKind.BoltTypeParameter;
   index: number;
   name: BoltIdentifier;
-  typeNode: BoltTypeExpression | null;
+  typeExpr: BoltTypeExpression | null;
   defaultType: BoltTypeExpression | null;
   parentNode: BoltTypeParameterParent;
   getChildNodes(): IterableIterator<BoltTypeParameterChild>
@@ -3020,7 +3020,7 @@ export type BoltBindPatternChild
 
 export interface BoltTypePattern extends SyntaxBase {
   kind: SyntaxKind.BoltTypePattern;
-  type: BoltTypeExpression;
+  typeExpr: BoltTypeExpression;
   nestedPattern: BoltPattern;
   parentNode: BoltTypePatternParent;
   getChildNodes(): IterableIterator<BoltTypePatternChild>
@@ -4250,7 +4250,7 @@ export interface BoltParameter extends SyntaxBase {
   kind: SyntaxKind.BoltParameter;
   index: number;
   bindings: BoltPattern;
-  type: BoltTypeExpression | null;
+  typeExpr: BoltTypeExpression | null;
   defaultValue: BoltExpression | null;
   parentNode: BoltParameterParent;
   getChildNodes(): IterableIterator<BoltParameterChild>
@@ -4380,7 +4380,7 @@ export interface BoltVariableDeclaration extends SyntaxBase {
   kind: SyntaxKind.BoltVariableDeclaration;
   modifiers: BoltModifiers;
   bindings: BoltPattern;
-  type: BoltTypeExpression | null;
+  typeExpr: BoltTypeExpression | null;
   value: BoltExpression | null;
   parentNode: BoltVariableDeclarationParent;
   getChildNodes(): IterableIterator<BoltVariableDeclarationChild>
@@ -4622,7 +4622,7 @@ export type BoltRecordMember
 export interface BoltRecordField extends SyntaxBase {
   kind: SyntaxKind.BoltRecordField;
   name: BoltIdentifier;
-  type: BoltTypeExpression;
+  typeExpr: BoltTypeExpression;
   parentNode: BoltRecordFieldParent;
   getChildNodes(): IterableIterator<BoltRecordFieldChild>
 }
@@ -7884,9 +7884,9 @@ export function createBoltModulePath(isAbsolute: boolean, elements: BoltIdentifi
 export function createBoltReferenceTypeExpression(name: BoltQualName, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
 export function createBoltFunctionTypeExpression(params: BoltParameter[], returnType: BoltTypeExpression | null, span?: TextSpan | null): BoltFunctionTypeExpression;
 export function createBoltLiftedTypeExpression(expression: BoltExpression, span?: TextSpan | null): BoltLiftedTypeExpression;
-export function createBoltTypeParameter(index: number, name: BoltIdentifier, typeNode: BoltTypeExpression | null, defaultType: BoltTypeExpression | null, span?: TextSpan | null): BoltTypeParameter;
+export function createBoltTypeParameter(index: number, name: BoltIdentifier, typeExpr: BoltTypeExpression | null, defaultType: BoltTypeExpression | null, span?: TextSpan | null): BoltTypeParameter;
 export function createBoltBindPattern(name: BoltIdentifier, span?: TextSpan | null): BoltBindPattern;
-export function createBoltTypePattern(type: BoltTypeExpression, nestedPattern: BoltPattern, span?: TextSpan | null): BoltTypePattern;
+export function createBoltTypePattern(typeExpr: BoltTypeExpression, nestedPattern: BoltPattern, span?: TextSpan | null): BoltTypePattern;
 export function createBoltExpressionPattern(expression: BoltExpression, span?: TextSpan | null): BoltExpressionPattern;
 export function createBoltTuplePatternElement(index: number, pattern: BoltPattern, span?: TextSpan | null): BoltTuplePatternElement;
 export function createBoltTuplePattern(elements: BoltTuplePatternElement[], span?: TextSpan | null): BoltTuplePattern;
@@ -7910,10 +7910,10 @@ export function createBoltConditionalCase(test: BoltExpression | null, body: Bol
 export function createBoltConditionalStatement(cases: BoltConditionalCase[], span?: TextSpan | null): BoltConditionalStatement;
 export function createBoltResumeStatement(value: BoltExpression, span?: TextSpan | null): BoltResumeStatement;
 export function createBoltExpressionStatement(expression: BoltExpression, span?: TextSpan | null): BoltExpressionStatement;
-export function createBoltParameter(index: number, bindings: BoltPattern, type: BoltTypeExpression | null, defaultValue: BoltExpression | null, span?: TextSpan | null): BoltParameter;
+export function createBoltParameter(index: number, bindings: BoltPattern, typeExpr: BoltTypeExpression | null, defaultValue: BoltExpression | null, span?: TextSpan | null): BoltParameter;
 export function createBoltModule(modifiers: BoltModifiers, name: BoltIdentifier[], elements: BoltSourceElement[], span?: TextSpan | null): BoltModule;
 export function createBoltFunctionDeclaration(modifiers: BoltModifiers, target: string, name: BoltSymbol, params: BoltParameter[], returnType: BoltTypeExpression | null, typeParams: BoltTypeParameter[] | null, body: BoltFunctionBodyElement[], span?: TextSpan | null): BoltFunctionDeclaration;
-export function createBoltVariableDeclaration(modifiers: BoltModifiers, bindings: BoltPattern, type: BoltTypeExpression | null, value: BoltExpression | null, span?: TextSpan | null): BoltVariableDeclaration;
+export function createBoltVariableDeclaration(modifiers: BoltModifiers, bindings: BoltPattern, typeExpr: BoltTypeExpression | null, value: BoltExpression | null, span?: TextSpan | null): BoltVariableDeclaration;
 export function createBoltPlainImportSymbol(remote: BoltQualName, local: BoltSymbol, span?: TextSpan | null): BoltPlainImportSymbol;
 export function createBoltImportDirective(modifiers: BoltModifiers, file: BoltStringLiteral, symbols: BoltImportSymbol[], span?: TextSpan | null): BoltImportDirective;
 export function createBoltExportSymbol(span?: TextSpan | null): BoltExportSymbol;
@@ -7922,7 +7922,7 @@ export function createBoltExportDirective(file: string, symbols: BoltExportSymbo
 export function createBoltTraitDeclaration(modifiers: BoltModifiers, name: BoltIdentifier, typeParams: BoltTypeParameter[] | null, elements: BoltDeclaration[], span?: TextSpan | null): BoltTraitDeclaration;
 export function createBoltImplDeclaration(modifiers: BoltModifiers, name: BoltIdentifier, trait: BoltTypeExpression, typeParams: BoltTypeParameter[] | null, elements: BoltDeclaration[], span?: TextSpan | null): BoltImplDeclaration;
 export function createBoltTypeAliasDeclaration(modifiers: BoltModifiers, name: BoltIdentifier, typeParams: BoltTypeParameter[] | null, typeExpr: BoltTypeExpression, span?: TextSpan | null): BoltTypeAliasDeclaration;
-export function createBoltRecordField(name: BoltIdentifier, type: BoltTypeExpression, span?: TextSpan | null): BoltRecordField;
+export function createBoltRecordField(name: BoltIdentifier, typeExpr: BoltTypeExpression, span?: TextSpan | null): BoltRecordField;
 export function createBoltRecordDeclaration(modifiers: BoltModifiers, name: BoltIdentifier, typeParms: BoltTypeParameter[] | null, members: BoltRecordMember[] | null, span?: TextSpan | null): BoltRecordDeclaration;
 export function createBoltMacroCall(name: BoltIdentifier, text: string, span?: TextSpan | null): BoltMacroCall;
 export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;

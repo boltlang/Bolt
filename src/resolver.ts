@@ -518,13 +518,7 @@ export class SymbolResolver {
     // Once we've handled any module path that might have been present,
     // we resolve the actual symbol using a helper method.
 
-    const sym = scope.getSymbol(path.name);
-
-    if (sym === null) {
-      return null;
-    }
-
-    return sym;
+    return scope.getSymbol(path.name);
   }
 
 }

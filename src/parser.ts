@@ -373,8 +373,8 @@ export class Parser {
     const t1 = tokens.get();
     assertToken(t1, SyntaxKind.BoltStringLiteral);
 
-    const symbols: BoltImportSymbol[] = [];
-    const t2 = tokens.get();
+    const symbols = null;
+    const t2 = tokens.peek();
     if (t2.kind === SyntaxKind.BoltParenthesized) {
       // TODO implement grammar and parsing logic for symbols
     }

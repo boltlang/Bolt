@@ -120,7 +120,7 @@ node BoltLiftedTypeExpression > BoltTypeExpression {
 node BoltTypeParameter {
   index: usize,
   name: BoltIdentifier,
-  typeNode: Option<BoltTypeExpression>,
+  typeExpr: Option<BoltTypeExpression>,
   defaultType: Option<BoltTypeExpression>,
 }
 
@@ -131,7 +131,7 @@ node BoltBindPattern > BoltPattern {
 }
 
 node BoltTypePattern > BoltPattern {
-  type: BoltTypeExpression,
+  typeExpr: BoltTypeExpression,
   nestedPattern: BoltPattern,
 }
 
@@ -246,7 +246,7 @@ node BoltExpressionStatement > BoltStatement {
 node BoltParameter {
   index: usize,
   bindings: BoltPattern,
-  type: Option<BoltTypeExpression>,
+  typeExpr: Option<BoltTypeExpression>,
   defaultValue: Option<BoltExpression>,
 }
 
@@ -280,7 +280,7 @@ node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
 node BoltVariableDeclaration > BoltFunctionBodyElement, BoltDeclaration {
   modifiers: BoltModifiers,
   bindings: BoltPattern,
-  type: Option<BoltTypeExpression>,
+  typeExpr: Option<BoltTypeExpression>,
   value: Option<BoltExpression>,
 }
 
@@ -335,7 +335,7 @@ node BoltRecordMember;
 
 node BoltRecordField > BoltRecordMember {
   name: BoltIdentifier,
-  type: BoltTypeExpression,
+  typeExpr: BoltTypeExpression,
 }
 
 node BoltRecordDeclaration > BoltDeclaration, BoltTypeDeclaration {
