@@ -56,7 +56,7 @@ export class Package {
 
 }
 
-export function getLanguage(node: Syntax): string {
+export function getNodeLanguage(node: Syntax): string {
   const kindStr = kindToString(node.kind);
   for (const prefix of BOLT_SUPPORTED_LANGUAGES) {
     if (kindStr.startsWith(prefix)) {

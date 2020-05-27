@@ -103,7 +103,8 @@ node BoltModulePath {
 node BoltTypeExpression;
 
 node BoltReferenceTypeExpression > BoltTypeExpression {
-  path: BoltModulePath,
+  modulePath: Option<BoltModulePath>,
+  name: BoltIdentifier,
   arguments: Option<Vec<BoltTypeExpression>>,
 }
 
@@ -115,7 +116,7 @@ node BoltFunctionTypeExpression > BoltTypeExpression {
 node BoltTypeParameter {
   index: usize,
   name: BoltIdentifier,
-  typeNode: BoltTypeExpression,
+  typeNode: Option<BoltTypeExpression>,
   defaultType: Option<BoltTypeExpression>,
 }
 

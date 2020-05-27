@@ -11,7 +11,7 @@
             "outputCapture": "std",
             "skipFiles": [
                 "${workspaceFolder}/node_modules/**/*.js",
-                "${workspaceFolder}/lib/***/*.js",
+                "${workspaceFolder}/lib/**/*.js",
                 "<node_internals>/**"
             ],
             "program": "${workspaceFolder}/lib/bin/bolt.js",

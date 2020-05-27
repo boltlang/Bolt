@@ -13,9 +13,9 @@ import {
 
 import { TypeChecker } from "../types"
 import { BoltTokenStream, Parser, isModifierKeyword } from "../parser"
-import { Evaluator, TRUE, FALSE } from "../evaluator"
+import { Evaluator } from "../evaluator"
 import { Transformer, TransformManager } from "./index"
-import { inject } from "../di"
+import { inject } from "../ioc"
 import { SourceFile } from "../ast"
 
 interface SyntaxTransformer {
@@ -63,10 +63,8 @@ export class ExpandBoltTransform implements Transformer {
 
   private expand(node: BoltSyntax) {
 
-    for (const identNode of node.findAllChildrenOfKind(SyntaxKind.BoltIdentifier)) {
-      if (identNode.text.endsWith('1')) {
-        this.toExpand.push(node.parentNode!);
-      }
+    for (const macroCall of node.findAllChildrenOfKind(SyntaxKind.BoltMacroCall)) {
+      this.toExpand.push(macroCall);
     }
 
     // FIXME

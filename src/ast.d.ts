@@ -2393,7 +2393,8 @@ export type BoltTypeExpression
 
 export interface BoltReferenceTypeExpression extends SyntaxBase {
   kind: SyntaxKind.BoltReferenceTypeExpression;
-  path: BoltModulePath;
+  modulePath: BoltModulePath | null;
+  name: BoltIdentifier;
   arguments: BoltTypeExpression[] | null;
   parentNode: BoltReferenceTypeExpressionParent;
   getChildNodes(): IterableIterator<BoltReferenceTypeExpressionChild>
@@ -2513,7 +2514,7 @@ export interface BoltTypeParameter extends SyntaxBase {
   kind: SyntaxKind.BoltTypeParameter;
   index: number;
   name: BoltIdentifier;
-  typeNode: BoltTypeExpression;
+  typeNode: BoltTypeExpression | null;
   defaultType: BoltTypeExpression | null;
   parentNode: BoltTypeParameterParent;
   getChildNodes(): IterableIterator<BoltTypeParameterChild>
@@ -6952,9 +6953,9 @@ export function createBoltBracketed(text: string, span?: TextSpan | null): BoltB
 export function createBoltSourceFile(elements: BoltSourceElement[], package: Package, span?: TextSpan | null): BoltSourceFile;
 export function createBoltQualName(modulePath: BoltModulePath | null, name: BoltSymbol, span?: TextSpan | null): BoltQualName;
 export function createBoltModulePath(isAbsolute: boolean, elements: BoltIdentifier[], span?: TextSpan | null): BoltModulePath;
-export function createBoltReferenceTypeExpression(path: BoltModulePath, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
+export function createBoltReferenceTypeExpression(modulePath: BoltModulePath | null, name: BoltIdentifier, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
 export function createBoltFunctionTypeExpression(params: BoltParameter[], returnType: BoltTypeExpression | null, span?: TextSpan | null): BoltFunctionTypeExpression;
-export function createBoltTypeParameter(index: number, name: BoltIdentifier, typeNode: BoltTypeExpression, defaultType: BoltTypeExpression | null, span?: TextSpan | null): BoltTypeParameter;
+export function createBoltTypeParameter(index: number, name: BoltIdentifier, typeNode: BoltTypeExpression | null, defaultType: BoltTypeExpression | null, span?: TextSpan | null): BoltTypeParameter;
 export function createBoltBindPattern(name: BoltIdentifier, span?: TextSpan | null): BoltBindPattern;
 export function createBoltTypePattern(type: BoltTypeExpression, nestedPattern: BoltPattern, span?: TextSpan | null): BoltTypePattern;
 export function createBoltExpressionPattern(expression: BoltExpression, span?: TextSpan | null): BoltExpressionPattern;

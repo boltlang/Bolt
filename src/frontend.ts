@@ -9,7 +9,7 @@ import { emitNode } from "./emitter"
 import { Syntax, BoltSourceFile, SourceFile, NodeVisitor, createBoltConditionalCase } from "./ast"
 import { getFileStem, MapLike } from "./util"
 import { verbose, memoize } from "./util"
-import { Container, Newable } from "./di"
+import { Container, Newable } from "./ioc"
 import ExpandBoltTransform from "./transforms/expand"
 import CompileBoltToJSTransform from "./transforms/boltToJS"
 import ConstFoldTransform from "./transforms/constFold"
@@ -19,6 +19,8 @@ import { TypeChecker } from "./types"
 import { checkServerIdentity } from "tls"
 import { CheckInvalidFilePaths, CheckTypeAssignments, CheckReferences } from "./checks"
 import { SymbolResolver, BoltSymbolResolutionStrategy } from "./resolver"
+import { Evaluator } from "./evaluator"
+import { getNodeLanguage } from "./common"
 
 const targetExtensions: MapLike<string> = {
   'JS': '.mjs',
@@ -71,19 +73,7 @@ export class Frontend {
     this.timing = new Timing();
   }
 
-  //@memoize(filepath => path.resolve(filepath))
-  //public getPackage(filepath: string) {
-  //  const file = this.getTextFile(filepath)
-  //  const projectFile = upsearchSync('Boltfile', path.dirname(file.fullPath));
-  //  if (projectFile === null) {
-  //    return null;
-  //  }
-  //  const projectDir = path.resolve(path.dirname(projectFile));
-  //  return new Package(projectDir);
-  //}
-
   public check(program: Program) {
-
 
     const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
     const checker = new TypeChecker(resolver);
@@ -144,12 +134,15 @@ export class Frontend {
   }
 
   private mapToTargetFile(node: SourceFile) {
-    return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultExtension(getLanguage(node)));
+    return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultExtension(getNodeLanguage(node)));
   }
 
   public eval(program: Program) {
+    const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
+    const checker = new TypeChecker(resolver);
+    const evaluator = new Evaluator(checker)
     for (const sourceFile of program.getAllSourceFiles()) {
-      this.evaluator.eval(sourceFile)
+      evaluator.eval(sourceFile)
     }
   }
 

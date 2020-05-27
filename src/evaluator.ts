@@ -4,31 +4,38 @@ import { FastStringMap, assert } from "./util"
 import { emitNode } from "./emitter";
 import { Type, TypeChecker, RecordType } from "./types";
 
-//export class Record {
+export class Record {
 
-//  private fields: Map<string, Value>;
-  
-//  constructor(fields: Iterable<[string, Value]>) {
-//    this.fields = new Map(fields);
-//  }
+  private fields: Map<string, Value>;
 
-//  public clone(): Record {
-//    return new Record(this.fields);
-//  }
+  constructor(fields: Iterable<[string, Value]>) {
+    this.fields = new Map(fields);
+  }
 
-//  public addField(name: string, value: Value): void {
-//    this.fields.set(name, value);
-//  }
+  public clone(): Record {
+    return new Record(this.fields);
+  }
 
-//  public deleteField(name: string): void {
-//    this.fields.delete(name);
-//  }
+  public getFieldValue(name: string): Value {
+    if (!this.fields.has(name)) {
+      throw new Error(`Trying to access non-existent field ${name} of a record.`);
+    }
+    return this.fields.get(name);
+  }
 
-//  public clear(): void {
-//    this.fields.clear();
-//  }
+  public addField(name: string, value: Value): void {
+    this.fields.set(name, value);
+  }
 
-//}
+  public deleteField(name: string): void {
+    this.fields.delete(name);
+  }
+
+  public clear(): void {
+    this.fields.clear();
+  }
+
+}
 
 export type Value
   = string
@@ -108,14 +115,14 @@ export class Evaluator {
 
       case SyntaxKind.BoltRecordPattern:
       {
-        if (!(value.data instanceof Record)) {
+        if (!(value instanceof Record)) {
           throw new EvaluationError(`A deconstructing record pattern received a value that is not a record.`);
         }
-        const record = value.data.clone();
+        const record = value.clone();
         for (const fieldPatt of node.fields) {
           if (fieldPatt.isRest) {
             if (fieldPatt.name !== null) {
-              env.setValue(fieldPatt.name.text, { data: fields.clone() });
+              env.setValue(fieldPatt.name.text, { data: record.clone() });
             }
             record.clear();
           } else {
@@ -136,7 +143,7 @@ export class Evaluator {
       case SyntaxKind.BoltTypePattern:
       {
         const expectedType = this.checker.getTypeOfNode(node.type);
-        if (!this.checker.isTypeAssignableTo(expectedType, getTypeOfValue(value))) {
+        if (!this.checker.isTypeAssignableTo(expectedType, this.checker.getTypeOfValue(value))) {
           return false;
         }
         return false;
