@@ -28,7 +28,7 @@ const nodeProto = {
             yield element;
           }
         }
-      } else if (isSyntax(value)) {
+      } else {
         if (isSyntax(value)) {
           yield value;
         }
