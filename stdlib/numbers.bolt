@@ -10,6 +10,9 @@ pub struct u32;
 pub struct u64;
 pub struct usize;
 
+pub struct int;
+pub struct uint;
+
 trait Num;
 
 fn (a: N) + (b: N) -> N where N: Num {
