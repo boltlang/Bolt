@@ -115,6 +115,7 @@ node BoltFunctionTypeExpression > BoltTypeExpression {
 node BoltTypeParameter {
   index: usize,
   name: BoltIdentifier,
+  typeNode: BoltTypeExpression,
   defaultType: Option<BoltTypeExpression>,
 }
 

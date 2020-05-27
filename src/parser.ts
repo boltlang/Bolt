@@ -834,7 +834,7 @@ export class Parser {
       tokens.get();
       typeBound = this.parseTypeExpression(tokens);
     }
-    const node = createBoltTypeParameter(0, t0 as BoltIdentifier, typeBound)
+    const node = createBoltTypeParameter(0, t0 as BoltIdentifier, typeBound, null)
     setOrigNodeRange(node, t0, t0);
     return node;
   }
