@@ -18,6 +18,7 @@ import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
 import {FastStringMap, enumerate, escapeChar, assert} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
+import * as path from "path"
 
 export function getSourceFile(node: Syntax) {
   while (true) {
@@ -41,17 +42,35 @@ export class Package {
 
   public id = nextPackageId++;
 
+  private sourceFilesByPath = new FastStringMap<string, SourceFile>();
+
   constructor(
     public rootDir: string,
     public name: string | null,
     public version: string | null,
-    public sourceFiles: SourceFile[],
+    sourceFiles: SourceFile[],
+    public isAutoImported: boolean,
+    public isDependency: boolean,
   ) {
+    for (const sourceFile of sourceFiles) {
+      this.addSourceFile(sourceFile);
+    }
+  }
 
+  public getAllSourceFiles(): IterableIterator<SourceFile> {
+    return this.sourceFilesByPath.values();
+  }
+
+  public getMainLibrarySourceFile(): SourceFile | null {
+    const fullPath = path.resolve(this.rootDir, 'lib.bolt');
+    if (!this.sourceFilesByPath.has(fullPath)) {
+      return null;
+    }
+    return this.sourceFilesByPath.get(fullPath)
   }
 
   public addSourceFile(sourceFile: SourceFile) {
-    this.sourceFiles.push(sourceFile);
+    this.sourceFilesByPath.set(sourceFile.span!.file.fullPath, sourceFile);
   }
 
 }

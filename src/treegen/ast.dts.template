@@ -1,5 +1,6 @@
 
 import { Type } from "./types"
+import { Diagnostic } from "./diagnostics"
 import { Package } from "./common"
 import { TextSpan } from "./text"
 
@@ -13,7 +14,7 @@ interface SyntaxBase {
   id: number;
   kind: SyntaxKind;
   type?: Type;
-  errors: CompileError[]
+  errors: Diagnostic[]
   parentNode: Syntax | null;
   span: TextSpan | null;
   visit(visitors: NodeVisitor[]): void;

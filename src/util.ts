@@ -1,12 +1,29 @@
 
 import * as path from "path"
 import * as fs from "fs"
+import * as os from "os"
+
 import moment from "moment"
 import chalk from "chalk"
+import { LOG_DATETIME_FORMAT } from "./constants"
 
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
   return Math.pow(a, n) == x;
+}
+
+
+export function some<T>(iterator: Iterator<T>, pred: (value: T) => boolean): boolean {
+  while (true) {
+    const { value, done } = iterator.next();
+    if (done) {
+      break;
+    }
+    if (pred(value)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function every<T>(iterator: Iterator<T>, pred: (value: T) => boolean): boolean {
@@ -97,6 +114,23 @@ export function isPlainObject(value: any): value is object {
   return Object.getPrototypeOf(value) === proto
 }
 
+export function mapValues<T extends object, R extends PropertyKey>(obj: T, func: (value: keyof T) => R): { [K in keyof T]: R } {
+  const newObj: any = {}
+  for (const key of Object.keys(obj)) {
+    newObj[key] = func((obj as any)[key]);
+  }
+  return newObj;
+}
+
+export const prettyPrintTag = Symbol('pretty printer');
+
+export function prettyPrint(value: any): string {
+  if (isObjectLike(value) && value[prettyPrintTag] !== undefined) {
+    return value[prettyPrintTag]();
+  }
+  return value.toString();
+}
+
 export class FastStringMap<K extends PropertyKey, V> {
 
   private mapping = Object.create(null);
@@ -104,12 +138,24 @@ export class FastStringMap<K extends PropertyKey, V> {
   public clear(): void {
     this.mapping.clear();
   }
-  
+
+  public *[Symbol.iterator](): IterableIterator<[K, V]> {
+    for (const key of Object.keys(this.mapping)) {
+      yield [key as K, this.mapping[key]];
+    }
+  }
+
   public get(key: K): V {
     if (!(key in this.mapping)) {
       throw new Error(`No value found for key '${key}'.`);
     }
     return this.mapping[key];
+  }
+
+  public *keys(): IterableIterator<K> {
+    for (const key of Object.keys(this.mapping)) {
+      yield key as K;
+    }
   }
 
   public *values(): IterableIterator<V> {
@@ -230,14 +276,28 @@ export class StreamWrapper<T> {
 
 }
 
-const DATETIME_FORMAT = 'YYYY-MM-DD HH:mm:ss'
+export function expandPath(filepath: string) {
+  let out = ''
+  for (const ch of filepath) {
+    if (ch === '~') {
+      out += os.homedir();
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
 
 export function verbose(message: string) {
-  console.error(chalk.gray('[') + chalk.magenta('verb') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
+  console.error(chalk.gray('[') + chalk.magenta('verb') + ' ' + chalk.gray(moment().format(LOG_DATETIME_FORMAT) + ']') + ' ' + message);
 }
 
 export function warn(message: string) {
   console.error(chalk.gray('[') + chalk.red('warn') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
+}
+
+export function error(message: string) {
+  console.error(chalk.gray('[') + chalk.red('erro') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
 }
 
 export function upsearchSync(filename: string, startDir = '.') {

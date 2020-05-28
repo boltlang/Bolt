@@ -1,7 +1,8 @@
 
 import chalk from "chalk"
 import {Syntax} from "./ast";
-import {format, MapLike, FormatArg, countDigits} from "./util";
+import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint} from "./util";
+import { BOLT_DIAG_NUM_EXTRA_LINES } from "./constants";
 
 export const E_MAY_NOT_RETURN_A_VALUE = "Returning a value inside a function that does not return values."
 export const E_MUST_RETURN_A_VALUE = "The function must return a value on all control paths.";;;;
@@ -9,22 +10,29 @@ export const E_FILE_NOT_FOUND = "A file named {filename} was not found.";
 export const E_FIELD_HAS_INVALID_VERSION_NUMBER = "Field '{name}' contains an invalid version nunmber."
 export const E_FIELD_MUST_BE_STRING = "Field '{name}' must be a string."
 export const E_FIELD_NOT_PRESENT = "Field '{name}' is not present."
+export const E_FIELD_MUST_BE_BOOLEAN = "Field '{name}' must be a either 'true' or 'false'."
 export const E_TYPE_DECLARATION_NOT_FOUND = "A type declaration named '{name}' was not found."
 export const E_DECLARATION_NOT_FOUND = "Reference to an undefined declaration '{name}'.";
 export const E_TYPES_NOT_ASSIGNABLE = "Types {left} and {right} are not assignable.";
 export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for function call. Expected {expected} but got {actual}.";
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
-export const E_INVALID_ARGUMENTS = "Invalid arguments passed to function '{name}'."
+export const E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER = "Candidate function requires this parameter."
+export const E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER = "Argument has no corresponding parameter."
+export const E_INVALID_ARGUMENTS = "Invalid arguments passed to function '{name}'"
+export const E_RECORD_MISSING_MEMBER = "Record {name} does not have a member declaration named {memberName}"
+export const E_TYPES_MISSING_MEMBER = "Not all types resolve to a record with the a member named '{name}'."
+export const E_NODE_DOES_NOT_CONTAIN_MEMBER = "This node does not contain the the member '{name}'."
+export const E_MAY_NOT_RETURN_BECAUSE_TYPE_RESOLVES_TO_VOID = "May not return a value because the function's return type resolves to '()'"
+export const E_MUST_RETURN_BECAUSE_TYPE_DOES_NOT_RESOLVE_TO_VOID = "Must return a value because the function's return type does not resolve to '()'"
 
 const BOLT_HARD_ERRORS = process.env['BOLT_HARD_ERRORS']
-
-const DIAG_NUM_EXTRA_LINES = 1;
 
 export interface Diagnostic {
   message: string;
   severity: string;
   args?: MapLike<FormatArg>;
   node?: Syntax;
+  nested?: Diagnostic[];
 }
 
 function firstIndexOfNonEmpty(str: string) {
@@ -78,7 +86,7 @@ export class DiagnosticPrinter {
       out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}:${span.start.column}: `);
     }
     if (diagnostic.args !== undefined) {
-      out += format(diagnostic.message, diagnostic.args) + '\n';
+      out += format(diagnostic.message, mapValues(diagnostic.args, prettyPrint)) + '\n';
     } else {
       out += diagnostic.message + '\n';
     }
@@ -87,9 +95,9 @@ export class DiagnosticPrinter {
       out += '\n'
       const span = diagnostic.node.span!;
       const content = span.file.getText();
-      const startLine = Math.max(0, span.start.line-1-DIAG_NUM_EXTRA_LINES)
+      const startLine = Math.max(0, span.start.line-1-BOLT_DIAG_NUM_EXTRA_LINES)
       const lines = content.split('\n')
-      const endLine = Math.min(lines.length-1, (span.end !== undefined ? span.end.line : startLine)+DIAG_NUM_EXTRA_LINES)
+      const endLine = Math.min(lines.length-1, (span.end !== undefined ? span.end.line : startLine)+BOLT_DIAG_NUM_EXTRA_LINES)
       const gutterWidth = Math.max(2, countDigits(endLine+1))
       for (let i = startLine; i < endLine; i++) {
         const line = lines[i];

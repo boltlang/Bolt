@@ -1,5 +1,6 @@
 
 import { Type } from "./types"
+import { Diagnostic } from "./diagnostics"
 import { Package } from "./common"
 import { TextSpan } from "./text"
 
@@ -13,7 +14,7 @@ interface SyntaxBase {
   id: number;
   kind: SyntaxKind;
   type?: Type;
-  errors: CompileError[]
+  errors: Diagnostic[]
   parentNode: Syntax | null;
   span: TextSpan | null;
   visit(visitors: NodeVisitor[]): void;
@@ -74,7 +75,7 @@ export class NodeVisitor {
   protected visitBoltBracketed?(node: BoltBracketed): void;
   protected visitBoltSourceFile?(node: BoltSourceFile): void;
   protected visitBoltQualName?(node: BoltQualName): void;
-  protected visitBoltModulePath?(node: BoltModulePath): void;
+  protected visitBoltTypeOfExpression?(node: BoltTypeOfExpression): void;
   protected visitBoltReferenceTypeExpression?(node: BoltReferenceTypeExpression): void;
   protected visitBoltFunctionTypeExpression?(node: BoltFunctionTypeExpression): void;
   protected visitBoltLiftedTypeExpression?(node: BoltLiftedTypeExpression): void;
@@ -119,7 +120,6 @@ export class NodeVisitor {
   protected visitBoltRecordField?(node: BoltRecordField): void;
   protected visitBoltRecordDeclaration?(node: BoltRecordDeclaration): void;
   protected visitBoltMacroCall?(node: BoltMacroCall): void;
-  protected visitJSOperator?(node: JSOperator): void;
   protected visitJSIdentifier?(node: JSIdentifier): void;
   protected visitJSString?(node: JSString): void;
   protected visitJSInteger?(node: JSInteger): void;
@@ -186,114 +186,113 @@ export class NodeVisitor {
 
 
 export const enum SyntaxKind {
-  EndOfFile = 2,
-  FunctionBody = 6,
-  BoltStringLiteral = 8,
-  BoltIntegerLiteral = 9,
-  BoltIdentifier = 11,
-  BoltOperator = 13,
-  BoltAssignment = 14,
-  BoltComma = 15,
-  BoltSemi = 16,
-  BoltColon = 17,
-  BoltColonColon = 18,
-  BoltDot = 19,
-  BoltDotDot = 20,
-  BoltRArrow = 21,
-  BoltRArrowAlt = 22,
-  BoltLArrow = 23,
-  BoltEqSign = 24,
-  BoltGtSign = 25,
-  BoltExMark = 26,
-  BoltLtSign = 27,
-  BoltVBar = 28,
-  BoltWhereKeyword = 30,
-  BoltQuoteKeyword = 31,
-  BoltFnKeyword = 32,
-  BoltForeignKeyword = 33,
-  BoltForKeyword = 34,
-  BoltLetKeyword = 35,
-  BoltReturnKeyword = 36,
-  BoltLoopKeyword = 37,
-  BoltYieldKeyword = 38,
-  BoltMatchKeyword = 39,
-  BoltImportKeyword = 40,
-  BoltExportKeyword = 41,
-  BoltPubKeyword = 42,
-  BoltModKeyword = 43,
-  BoltMutKeyword = 44,
-  BoltEnumKeyword = 45,
-  BoltStructKeyword = 46,
-  BoltTypeKeyword = 47,
-  BoltTraitKeyword = 48,
-  BoltImplKeyword = 49,
-  BoltParenthesized = 51,
-  BoltBraced = 52,
-  BoltBracketed = 53,
-  BoltSourceFile = 54,
-  BoltQualName = 55,
-  BoltModulePath = 56,
-  BoltReferenceTypeExpression = 58,
-  BoltFunctionTypeExpression = 59,
-  BoltLiftedTypeExpression = 60,
-  BoltTypeParameter = 61,
-  BoltBindPattern = 63,
-  BoltTypePattern = 64,
-  BoltExpressionPattern = 65,
-  BoltTuplePatternElement = 66,
-  BoltTuplePattern = 67,
-  BoltRecordFieldPattern = 68,
-  BoltRecordPattern = 69,
-  BoltQuoteExpression = 71,
-  BoltTupleExpression = 72,
-  BoltReferenceExpression = 73,
-  BoltMemberExpression = 74,
-  BoltFunctionExpression = 75,
-  BoltCallExpression = 76,
-  BoltYieldExpression = 77,
-  BoltMatchArm = 78,
-  BoltMatchExpression = 79,
-  BoltCase = 80,
-  BoltCaseExpression = 81,
-  BoltBlockExpression = 82,
-  BoltConstantExpression = 83,
-  BoltReturnStatement = 85,
-  BoltConditionalCase = 86,
-  BoltConditionalStatement = 87,
-  BoltResumeStatement = 88,
-  BoltExpressionStatement = 89,
-  BoltParameter = 90,
-  BoltModule = 94,
-  BoltFunctionDeclaration = 96,
-  BoltVariableDeclaration = 97,
-  BoltPlainImportSymbol = 99,
-  BoltImportDirective = 100,
-  BoltExportSymbol = 101,
-  BoltPlainExportSymbol = 102,
-  BoltExportDirective = 103,
-  BoltTraitDeclaration = 104,
-  BoltImplDeclaration = 105,
-  BoltTypeAliasDeclaration = 106,
-  BoltRecordField = 108,
-  BoltRecordDeclaration = 109,
-  BoltMacroCall = 111,
-  JSOperator = 114,
-  JSIdentifier = 115,
-  JSString = 116,
-  JSInteger = 117,
-  JSFromKeyword = 118,
-  JSReturnKeyword = 119,
-  JSTryKeyword = 120,
-  JSFinallyKeyword = 121,
-  JSCatchKeyword = 122,
-  JSImportKeyword = 123,
-  JSAsKeyword = 124,
-  JSConstKeyword = 125,
-  JSLetKeyword = 126,
-  JSExportKeyword = 127,
-  JSFunctionKeyword = 128,
-  JSWhileKeyword = 129,
-  JSForKeyword = 130,
+  EndOfFile = 0,
+  FunctionBody = 3,
+  BoltStringLiteral = 6,
+  BoltIntegerLiteral = 7,
+  BoltIdentifier = 9,
+  BoltOperator = 11,
+  BoltAssignment = 12,
+  BoltComma = 13,
+  BoltSemi = 14,
+  BoltColon = 15,
+  BoltColonColon = 16,
+  BoltDot = 17,
+  BoltDotDot = 18,
+  BoltRArrow = 19,
+  BoltRArrowAlt = 20,
+  BoltLArrow = 21,
+  BoltEqSign = 22,
+  BoltGtSign = 23,
+  BoltExMark = 24,
+  BoltLtSign = 25,
+  BoltVBar = 26,
+  BoltWhereKeyword = 28,
+  BoltQuoteKeyword = 29,
+  BoltFnKeyword = 30,
+  BoltForeignKeyword = 31,
+  BoltForKeyword = 32,
+  BoltLetKeyword = 33,
+  BoltReturnKeyword = 34,
+  BoltLoopKeyword = 35,
+  BoltYieldKeyword = 36,
+  BoltMatchKeyword = 37,
+  BoltImportKeyword = 38,
+  BoltExportKeyword = 39,
+  BoltPubKeyword = 40,
+  BoltModKeyword = 41,
+  BoltMutKeyword = 42,
+  BoltEnumKeyword = 43,
+  BoltStructKeyword = 44,
+  BoltTypeKeyword = 45,
+  BoltTraitKeyword = 46,
+  BoltImplKeyword = 47,
+  BoltParenthesized = 49,
+  BoltBraced = 50,
+  BoltBracketed = 51,
+  BoltSourceFile = 52,
+  BoltQualName = 53,
+  BoltTypeOfExpression = 55,
+  BoltReferenceTypeExpression = 56,
+  BoltFunctionTypeExpression = 57,
+  BoltLiftedTypeExpression = 58,
+  BoltTypeParameter = 59,
+  BoltBindPattern = 61,
+  BoltTypePattern = 62,
+  BoltExpressionPattern = 63,
+  BoltTuplePatternElement = 64,
+  BoltTuplePattern = 65,
+  BoltRecordFieldPattern = 66,
+  BoltRecordPattern = 67,
+  BoltQuoteExpression = 69,
+  BoltTupleExpression = 70,
+  BoltReferenceExpression = 71,
+  BoltMemberExpression = 72,
+  BoltFunctionExpression = 73,
+  BoltCallExpression = 74,
+  BoltYieldExpression = 75,
+  BoltMatchArm = 76,
+  BoltMatchExpression = 77,
+  BoltCase = 78,
+  BoltCaseExpression = 79,
+  BoltBlockExpression = 80,
+  BoltConstantExpression = 81,
+  BoltReturnStatement = 83,
+  BoltConditionalCase = 84,
+  BoltConditionalStatement = 85,
+  BoltResumeStatement = 86,
+  BoltExpressionStatement = 87,
+  BoltParameter = 88,
+  BoltModule = 92,
+  BoltFunctionDeclaration = 95,
+  BoltVariableDeclaration = 96,
+  BoltPlainImportSymbol = 98,
+  BoltImportDirective = 99,
+  BoltExportSymbol = 100,
+  BoltPlainExportSymbol = 101,
+  BoltExportDirective = 102,
+  BoltTraitDeclaration = 103,
+  BoltImplDeclaration = 104,
+  BoltTypeAliasDeclaration = 105,
+  BoltRecordField = 107,
+  BoltRecordDeclaration = 108,
+  BoltMacroCall = 110,
+  JSIdentifier = 114,
+  JSString = 115,
+  JSInteger = 116,
+  JSFromKeyword = 117,
+  JSReturnKeyword = 118,
+  JSTryKeyword = 119,
+  JSFinallyKeyword = 120,
+  JSCatchKeyword = 121,
+  JSImportKeyword = 122,
+  JSAsKeyword = 123,
+  JSConstKeyword = 124,
+  JSLetKeyword = 125,
+  JSExportKeyword = 126,
+  JSFunctionKeyword = 127,
+  JSWhileKeyword = 128,
+  JSForKeyword = 129,
   JSCloseBrace = 131,
   JSCloseBracket = 132,
   JSCloseParen = 133,
@@ -324,22 +323,22 @@ export const enum SyntaxKind {
   JSNewExpression = 160,
   JSSequenceExpression = 161,
   JSConditionalExpression = 162,
-  JSLiteralExpression = 164,
-  JSReferenceExpression = 165,
-  JSCatchBlock = 169,
-  JSTryCatchStatement = 170,
-  JSExpressionStatement = 171,
-  JSConditionalCase = 172,
-  JSConditionalStatement = 173,
-  JSReturnStatement = 174,
-  JSParameter = 175,
-  JSImportStarBinding = 179,
-  JSImportAsBinding = 180,
-  JSImportDeclaration = 181,
-  JSFunctionDeclaration = 182,
-  JSArrowFunctionDeclaration = 183,
-  JSLetDeclaration = 184,
-  JSSourceFile = 185,
+  JSLiteralExpression = 163,
+  JSReferenceExpression = 164,
+  JSCatchBlock = 168,
+  JSTryCatchStatement = 169,
+  JSExpressionStatement = 170,
+  JSConditionalCase = 171,
+  JSConditionalStatement = 172,
+  JSReturnStatement = 173,
+  JSParameter = 174,
+  JSImportStarBinding = 178,
+  JSImportAsBinding = 179,
+  JSImportDeclaration = 180,
+  JSFunctionDeclaration = 181,
+  JSArrowFunctionDeclaration = 182,
+  JSLetDeclaration = 183,
+  JSSourceFile = 184,
 }
 
 export interface EndOfFile extends SyntaxBase {
@@ -354,6 +353,7 @@ export type EndOfFileParent
 
 export type EndOfFileAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -393,7 +393,6 @@ export type EndOfFileChild
 
 export type Token
   = EndOfFile
-  | JSOperator
   | JSIdentifier
   | JSString
   | JSInteger
@@ -495,6 +494,96 @@ export type FunctionBodyAnyParent
 export type FunctionBodyChild
 = never
 
+export type BoltSyntax
+  = BoltSourceFile
+  | BoltQualName
+  | BoltTypeParameter
+  | BoltTuplePatternElement
+  | BoltRecordFieldPattern
+  | BoltMatchArm
+  | BoltCase
+  | BoltConditionalCase
+  | BoltParameter
+  | BoltModule
+  | BoltExportSymbol
+  | BoltRecordField
+  | BoltMacroCall
+  | BoltPlainImportSymbol
+  | BoltTraitDeclaration
+  | BoltImplDeclaration
+  | BoltTypeAliasDeclaration
+  | BoltRecordDeclaration
+  | BoltFunctionDeclaration
+  | BoltVariableDeclaration
+  | BoltReturnStatement
+  | BoltConditionalStatement
+  | BoltResumeStatement
+  | BoltExpressionStatement
+  | BoltQuoteExpression
+  | BoltTupleExpression
+  | BoltReferenceExpression
+  | BoltMemberExpression
+  | BoltFunctionExpression
+  | BoltCallExpression
+  | BoltYieldExpression
+  | BoltMatchExpression
+  | BoltCaseExpression
+  | BoltBlockExpression
+  | BoltConstantExpression
+  | BoltBindPattern
+  | BoltTypePattern
+  | BoltExpressionPattern
+  | BoltTuplePattern
+  | BoltRecordPattern
+  | BoltTypeOfExpression
+  | BoltReferenceTypeExpression
+  | BoltFunctionTypeExpression
+  | BoltLiftedTypeExpression
+  | EndOfFile
+  | BoltStringLiteral
+  | BoltIntegerLiteral
+  | BoltAssignment
+  | BoltComma
+  | BoltSemi
+  | BoltColon
+  | BoltColonColon
+  | BoltDot
+  | BoltDotDot
+  | BoltRArrow
+  | BoltRArrowAlt
+  | BoltLArrow
+  | BoltEqSign
+  | BoltGtSign
+  | BoltExMark
+  | BoltLtSign
+  | BoltVBar
+  | BoltWhereKeyword
+  | BoltQuoteKeyword
+  | BoltFnKeyword
+  | BoltForeignKeyword
+  | BoltForKeyword
+  | BoltLetKeyword
+  | BoltReturnKeyword
+  | BoltLoopKeyword
+  | BoltYieldKeyword
+  | BoltMatchKeyword
+  | BoltImportKeyword
+  | BoltExportKeyword
+  | BoltPubKeyword
+  | BoltModKeyword
+  | BoltMutKeyword
+  | BoltEnumKeyword
+  | BoltStructKeyword
+  | BoltTypeKeyword
+  | BoltTraitKeyword
+  | BoltImplKeyword
+  | BoltParenthesized
+  | BoltBraced
+  | BoltBracketed
+  | BoltIdentifier
+  | BoltOperator
+
+
 export type BoltToken
   = EndOfFile
   | BoltStringLiteral
@@ -554,6 +643,7 @@ export type BoltStringLiteralParent
 
 export type BoltStringLiteralAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -604,6 +694,7 @@ export type BoltIntegerLiteralParent
 
 export type BoltIntegerLiteralAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -679,6 +770,7 @@ export type BoltIdentifierAnyParent
 | BoltConditionalCase
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -744,6 +836,7 @@ export type BoltOperatorAnyParent
 | BoltConditionalCase
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -786,6 +879,7 @@ export type BoltAssignmentParent
 
 export type BoltAssignmentAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -835,6 +929,7 @@ export type BoltCommaParent
 
 export type BoltCommaAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -884,6 +979,7 @@ export type BoltSemiParent
 
 export type BoltSemiAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -933,6 +1029,7 @@ export type BoltColonParent
 
 export type BoltColonAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -982,6 +1079,7 @@ export type BoltColonColonParent
 
 export type BoltColonColonAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1031,6 +1129,7 @@ export type BoltDotParent
 
 export type BoltDotAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1080,6 +1179,7 @@ export type BoltDotDotParent
 
 export type BoltDotDotAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1129,6 +1229,7 @@ export type BoltRArrowParent
 
 export type BoltRArrowAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1178,6 +1279,7 @@ export type BoltRArrowAltParent
 
 export type BoltRArrowAltAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1227,6 +1329,7 @@ export type BoltLArrowParent
 
 export type BoltLArrowAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1276,6 +1379,7 @@ export type BoltEqSignParent
 
 export type BoltEqSignAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1341,6 +1445,7 @@ export type BoltGtSignAnyParent
 | BoltConditionalCase
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1398,6 +1503,7 @@ export type BoltExMarkAnyParent
 | BoltConditionalCase
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1455,6 +1561,7 @@ export type BoltLtSignAnyParent
 | BoltConditionalCase
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1512,6 +1619,7 @@ export type BoltVBarAnyParent
 | BoltConditionalCase
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1576,6 +1684,7 @@ export type BoltWhereKeywordParent
 
 export type BoltWhereKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1625,6 +1734,7 @@ export type BoltQuoteKeywordParent
 
 export type BoltQuoteKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1674,6 +1784,7 @@ export type BoltFnKeywordParent
 
 export type BoltFnKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1723,6 +1834,7 @@ export type BoltForeignKeywordParent
 
 export type BoltForeignKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1772,6 +1884,7 @@ export type BoltForKeywordParent
 
 export type BoltForKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1821,6 +1934,7 @@ export type BoltLetKeywordParent
 
 export type BoltLetKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1870,6 +1984,7 @@ export type BoltReturnKeywordParent
 
 export type BoltReturnKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1919,6 +2034,7 @@ export type BoltLoopKeywordParent
 
 export type BoltLoopKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -1968,6 +2084,7 @@ export type BoltYieldKeywordParent
 
 export type BoltYieldKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2017,6 +2134,7 @@ export type BoltMatchKeywordParent
 
 export type BoltMatchKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2066,6 +2184,7 @@ export type BoltImportKeywordParent
 
 export type BoltImportKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2115,6 +2234,7 @@ export type BoltExportKeywordParent
 
 export type BoltExportKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2164,6 +2284,7 @@ export type BoltPubKeywordParent
 
 export type BoltPubKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2213,6 +2334,7 @@ export type BoltModKeywordParent
 
 export type BoltModKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2262,6 +2384,7 @@ export type BoltMutKeywordParent
 
 export type BoltMutKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2311,6 +2434,7 @@ export type BoltEnumKeywordParent
 
 export type BoltEnumKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2360,6 +2484,7 @@ export type BoltStructKeywordParent
 
 export type BoltStructKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2409,6 +2534,7 @@ export type BoltTypeKeywordParent
 
 export type BoltTypeKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2458,6 +2584,7 @@ export type BoltTraitKeywordParent
 
 export type BoltTraitKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2507,6 +2634,7 @@ export type BoltImplKeywordParent
 
 export type BoltImplKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2563,6 +2691,7 @@ export type BoltParenthesizedParent
 
 export type BoltParenthesizedAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2613,6 +2742,7 @@ export type BoltBracedParent
 
 export type BoltBracedAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2663,6 +2793,7 @@ export type BoltBracketedParent
 
 export type BoltBracketedAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2735,28 +2866,72 @@ export type BoltQualNameAnyParent
 export type BoltQualNameChild
 = never
 
-export interface BoltModulePath extends SyntaxBase {
-  kind: SyntaxKind.BoltModulePath;
-  isAbsolute: boolean;
-  elements: BoltIdentifier[];
-  parentNode: BoltModulePathParent;
-  getChildNodes(): IterableIterator<BoltModulePathChild>
-}
-
-export type BoltModulePathParent
-= never
-
-export type BoltModulePathAnyParent
-= never
-
-export type BoltModulePathChild
-= never
-
 export type BoltTypeExpression
-  = BoltReferenceTypeExpression
+  = BoltTypeOfExpression
+  | BoltReferenceTypeExpression
   | BoltFunctionTypeExpression
   | BoltLiftedTypeExpression
 
+
+export interface BoltTypeOfExpression extends SyntaxBase {
+  kind: SyntaxKind.BoltTypeOfExpression;
+  expression: BoltExpression;
+  parentNode: BoltTypeOfExpressionParent;
+  getChildNodes(): IterableIterator<BoltTypeOfExpressionChild>
+}
+
+export type BoltTypeOfExpressionParent
+= BoltReferenceTypeExpression
+| BoltFunctionTypeExpression
+| BoltTypeParameter
+| BoltTypePattern
+| BoltRecordPattern
+| BoltFunctionExpression
+| BoltParameter
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltImplDeclaration
+| BoltTypeAliasDeclaration
+| BoltRecordField
+| never
+
+export type BoltTypeOfExpressionAnyParent
+= BoltReferenceTypeExpression
+| BoltFunctionTypeExpression
+| BoltTypeParameter
+| BoltTypePattern
+| BoltRecordPattern
+| BoltFunctionExpression
+| BoltParameter
+| BoltFunctionDeclaration
+| BoltVariableDeclaration
+| BoltImplDeclaration
+| BoltTypeAliasDeclaration
+| BoltRecordField
+| BoltRecordDeclaration
+| BoltSourceFile
+| BoltModule
+| BoltTraitDeclaration
+| BoltBlockExpression
+| BoltConditionalCase
+| BoltLiftedTypeExpression
+| BoltExpressionPattern
+| BoltTupleExpression
+| BoltMemberExpression
+| BoltCallExpression
+| BoltYieldExpression
+| BoltMatchArm
+| BoltMatchExpression
+| BoltCase
+| BoltReturnStatement
+| BoltResumeStatement
+| BoltExpressionStatement
+| BoltTuplePatternElement
+| BoltRecordFieldPattern
+| never
+
+export type BoltTypeOfExpressionChild
+= never
 
 export interface BoltReferenceTypeExpression extends SyntaxBase {
   kind: SyntaxKind.BoltReferenceTypeExpression;
@@ -2799,6 +2974,7 @@ export type BoltReferenceTypeExpressionAnyParent
 | BoltTraitDeclaration
 | BoltBlockExpression
 | BoltConditionalCase
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2859,6 +3035,7 @@ export type BoltFunctionTypeExpressionAnyParent
 | BoltTraitDeclaration
 | BoltBlockExpression
 | BoltConditionalCase
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -2919,6 +3096,7 @@ export type BoltLiftedTypeExpressionAnyParent
 | BoltTraitDeclaration
 | BoltBlockExpression
 | BoltConditionalCase
+| BoltTypeOfExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -2995,6 +3173,7 @@ export type BoltBindPatternAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -3049,6 +3228,7 @@ export type BoltTypePatternAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -3103,6 +3283,7 @@ export type BoltExpressionPatternAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3173,6 +3354,7 @@ export type BoltTuplePatternAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -3246,6 +3428,7 @@ export type BoltRecordPatternAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -3291,7 +3474,8 @@ export interface BoltQuoteExpression extends SyntaxBase {
 }
 
 export type BoltQuoteExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3309,7 +3493,8 @@ export type BoltQuoteExpressionParent
 | never
 
 export type BoltQuoteExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3354,7 +3539,8 @@ export interface BoltTupleExpression extends SyntaxBase {
 }
 
 export type BoltTupleExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3372,7 +3558,8 @@ export type BoltTupleExpressionParent
 | never
 
 export type BoltTupleExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltMemberExpression
 | BoltCallExpression
@@ -3416,7 +3603,8 @@ export interface BoltReferenceExpression extends SyntaxBase {
 }
 
 export type BoltReferenceExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3434,7 +3622,8 @@ export type BoltReferenceExpressionParent
 | never
 
 export type BoltReferenceExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3480,7 +3669,8 @@ export interface BoltMemberExpression extends SyntaxBase {
 }
 
 export type BoltMemberExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3498,7 +3688,8 @@ export type BoltMemberExpressionParent
 | never
 
 export type BoltMemberExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltCallExpression
@@ -3544,7 +3735,8 @@ export interface BoltFunctionExpression extends SyntaxBase {
 }
 
 export type BoltFunctionExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3562,7 +3754,8 @@ export type BoltFunctionExpressionParent
 | never
 
 export type BoltFunctionExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3607,7 +3800,8 @@ export interface BoltCallExpression extends SyntaxBase {
 }
 
 export type BoltCallExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3625,7 +3819,8 @@ export type BoltCallExpressionParent
 | never
 
 export type BoltCallExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3669,7 +3864,8 @@ export interface BoltYieldExpression extends SyntaxBase {
 }
 
 export type BoltYieldExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3687,7 +3883,8 @@ export type BoltYieldExpressionParent
 | never
 
 export type BoltYieldExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3749,7 +3946,8 @@ export interface BoltMatchExpression extends SyntaxBase {
 }
 
 export type BoltMatchExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3767,7 +3965,8 @@ export type BoltMatchExpressionParent
 | never
 
 export type BoltMatchExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3828,7 +4027,8 @@ export interface BoltCaseExpression extends SyntaxBase {
 }
 
 export type BoltCaseExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3846,7 +4046,8 @@ export type BoltCaseExpressionParent
 | never
 
 export type BoltCaseExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3891,7 +4092,8 @@ export interface BoltBlockExpression extends SyntaxBase {
 }
 
 export type BoltBlockExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3909,7 +4111,8 @@ export type BoltBlockExpressionParent
 | never
 
 export type BoltBlockExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3953,7 +4156,8 @@ export interface BoltConstantExpression extends SyntaxBase {
 }
 
 export type BoltConstantExpressionParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -3971,7 +4175,8 @@ export type BoltConstantExpressionParent
 | never
 
 export type BoltConstantExpressionAnyParent
-= BoltLiftedTypeExpression
+= BoltTypeOfExpression
+| BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
 | BoltMemberExpression
@@ -4041,6 +4246,7 @@ export type BoltReturnStatementAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4111,6 +4317,7 @@ export type BoltConditionalStatementAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4165,6 +4372,7 @@ export type BoltResumeStatementAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4218,6 +4426,7 @@ export type BoltExpressionStatementAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4268,15 +4477,13 @@ export type BoltParameterChild
 export type BoltDeclaration
   = BoltFunctionDeclaration
   | BoltVariableDeclaration
-  | BoltTraitDeclaration
-  | BoltImplDeclaration
-  | BoltTypeAliasDeclaration
   | BoltRecordDeclaration
   | BoltMacroCall
 
 
 export type BoltTypeDeclaration
   = BoltTraitDeclaration
+  | BoltImplDeclaration
   | BoltTypeAliasDeclaration
   | BoltRecordDeclaration
 
@@ -4304,6 +4511,15 @@ export type BoltModuleAnyParent
 
 export type BoltModuleChild
 = never
+
+export type BoltDeclarationLike
+  = BoltFunctionDeclaration
+  | BoltVariableDeclaration
+  | BoltTraitDeclaration
+  | BoltImplDeclaration
+  | BoltTypeAliasDeclaration
+  | BoltRecordDeclaration
+
 
 export type BoltFunctionBodyElement
   = BoltFunctionDeclaration
@@ -4347,6 +4563,7 @@ export type BoltFunctionDeclarationAnyParent
 | BoltModule
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4406,6 +4623,7 @@ export type BoltVariableDeclarationAnyParent
 | BoltFunctionDeclaration
 | BoltTraitDeclaration
 | BoltImplDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4463,7 +4681,7 @@ export interface BoltImportDirective extends SyntaxBase {
   kind: SyntaxKind.BoltImportDirective;
   modifiers: BoltModifiers;
   file: BoltStringLiteral;
-  symbols: BoltImportSymbol[];
+  symbols: BoltImportSymbol[] | null;
   parentNode: BoltImportDirectiveParent;
   getChildNodes(): IterableIterator<BoltImportDirectiveChild>
 }
@@ -4547,14 +4765,11 @@ export interface BoltTraitDeclaration extends SyntaxBase {
 export type BoltTraitDeclarationParent
 = BoltSourceFile
 | BoltModule
-| BoltTraitDeclaration
-| BoltImplDeclaration
 | never
 
 export type BoltTraitDeclarationAnyParent
 = BoltSourceFile
 | BoltModule
-| BoltImplDeclaration
 | never
 
 export type BoltTraitDeclarationChild
@@ -4574,14 +4789,11 @@ export interface BoltImplDeclaration extends SyntaxBase {
 export type BoltImplDeclarationParent
 = BoltSourceFile
 | BoltModule
-| BoltTraitDeclaration
-| BoltImplDeclaration
 | never
 
 export type BoltImplDeclarationAnyParent
 = BoltSourceFile
 | BoltModule
-| BoltTraitDeclaration
 | never
 
 export type BoltImplDeclarationChild
@@ -4600,15 +4812,11 @@ export interface BoltTypeAliasDeclaration extends SyntaxBase {
 export type BoltTypeAliasDeclarationParent
 = BoltSourceFile
 | BoltModule
-| BoltTraitDeclaration
-| BoltImplDeclaration
 | never
 
 export type BoltTypeAliasDeclarationAnyParent
 = BoltSourceFile
 | BoltModule
-| BoltTraitDeclaration
-| BoltImplDeclaration
 | never
 
 export type BoltTypeAliasDeclarationChild
@@ -4674,11 +4882,11 @@ export type BoltSourceElement
   | BoltImportDirective
   | BoltExportDirective
   | BoltTraitDeclaration
+  | BoltImplDeclaration
   | BoltTypeAliasDeclaration
   | BoltRecordDeclaration
   | BoltFunctionDeclaration
   | BoltVariableDeclaration
-  | BoltImplDeclaration
   | BoltMacroCall
   | BoltReturnStatement
   | BoltConditionalStatement
@@ -4696,6 +4904,7 @@ export interface BoltMacroCall extends SyntaxBase {
 
 export type BoltMacroCallParent
 = BoltSourceFile
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4722,6 +4931,7 @@ export type BoltMacroCallParent
 
 export type BoltMacroCallAnyParent
 = BoltSourceFile
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4758,9 +4968,30 @@ export type BoltMacroCallAnyParent
 export type BoltMacroCallChild
 = never
 
-export type JSToken
-  = EndOfFile
-  | JSOperator
+export type JSSyntax
+  = JSCatchBlock
+  | JSTryCatchStatement
+  | JSConditionalCase
+  | JSParameter
+  | JSSourceFile
+  | JSImportStarBinding
+  | JSImportAsBinding
+  | JSImportDeclaration
+  | JSFunctionDeclaration
+  | JSArrowFunctionDeclaration
+  | JSLetDeclaration
+  | JSConstantExpression
+  | JSMemberExpression
+  | JSCallExpression
+  | JSBinaryExpression
+  | JSUnaryExpression
+  | JSNewExpression
+  | JSSequenceExpression
+  | JSConditionalExpression
+  | JSLiteralExpression
+  | JSReferenceExpression
+  | JSBindPattern
+  | EndOfFile
   | JSIdentifier
   | JSString
   | JSInteger
@@ -4800,55 +5031,60 @@ export type JSToken
   | JSNotOp
 
 
-export interface JSOperator extends SyntaxBase {
-  kind: SyntaxKind.JSOperator;
-  text: string;
-  parentNode: JSOperatorParent;
-  getChildNodes(): IterableIterator<JSOperatorChild>
-}
+export type JSToken
+  = EndOfFile
+  | JSIdentifier
+  | JSString
+  | JSInteger
+  | JSFromKeyword
+  | JSReturnKeyword
+  | JSTryKeyword
+  | JSFinallyKeyword
+  | JSCatchKeyword
+  | JSImportKeyword
+  | JSAsKeyword
+  | JSConstKeyword
+  | JSLetKeyword
+  | JSExportKeyword
+  | JSFunctionKeyword
+  | JSWhileKeyword
+  | JSForKeyword
+  | JSCloseBrace
+  | JSCloseBracket
+  | JSCloseParen
+  | JSOpenBrace
+  | JSOpenBracket
+  | JSOpenParen
+  | JSSemi
+  | JSComma
+  | JSDot
+  | JSDotDotDot
+  | JSMulOp
+  | JSAddOp
+  | JSDivOp
+  | JSSubOp
+  | JSLtOp
+  | JSGtOp
+  | JSBOrOp
+  | JSBXorOp
+  | JSBAndOp
+  | JSBNotOp
+  | JSNotOp
 
-export type JSOperatorParent
-= BoltQuoteExpression
-| never
 
-export type JSOperatorAnyParent
-= BoltQuoteExpression
-| BoltLiftedTypeExpression
-| BoltExpressionPattern
-| BoltTupleExpression
-| BoltMemberExpression
-| BoltCallExpression
-| BoltYieldExpression
-| BoltMatchArm
-| BoltMatchExpression
-| BoltCase
-| BoltReturnStatement
-| BoltConditionalCase
-| BoltResumeStatement
-| BoltExpressionStatement
-| BoltParameter
-| BoltVariableDeclaration
-| BoltSourceFile
-| BoltFunctionExpression
-| BoltBlockExpression
-| BoltModule
-| BoltFunctionDeclaration
-| BoltTraitDeclaration
-| BoltImplDeclaration
-| BoltTypePattern
-| BoltTuplePatternElement
-| BoltRecordFieldPattern
-| BoltReferenceTypeExpression
-| BoltFunctionTypeExpression
-| BoltTypeParameter
-| BoltRecordPattern
-| BoltTypeAliasDeclaration
-| BoltRecordField
-| BoltRecordDeclaration
-| never
+export type JSOperator
+  = JSMulOp
+  | JSAddOp
+  | JSDivOp
+  | JSSubOp
+  | JSLtOp
+  | JSGtOp
+  | JSBOrOp
+  | JSBXorOp
+  | JSBAndOp
+  | JSBNotOp
+  | JSNotOp
 
-export type JSOperatorChild
-= never
 
 export interface JSIdentifier extends SyntaxBase {
   kind: SyntaxKind.JSIdentifier;
@@ -4863,6 +5099,7 @@ export type JSIdentifierParent
 
 export type JSIdentifierAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4913,6 +5150,7 @@ export type JSStringParent
 
 export type JSStringAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -4963,6 +5201,7 @@ export type JSIntegerParent
 
 export type JSIntegerAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5012,6 +5251,7 @@ export type JSFromKeywordParent
 
 export type JSFromKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5061,6 +5301,7 @@ export type JSReturnKeywordParent
 
 export type JSReturnKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5110,6 +5351,7 @@ export type JSTryKeywordParent
 
 export type JSTryKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5159,6 +5401,7 @@ export type JSFinallyKeywordParent
 
 export type JSFinallyKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5208,6 +5451,7 @@ export type JSCatchKeywordParent
 
 export type JSCatchKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5257,6 +5501,7 @@ export type JSImportKeywordParent
 
 export type JSImportKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5306,6 +5551,7 @@ export type JSAsKeywordParent
 
 export type JSAsKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5355,6 +5601,7 @@ export type JSConstKeywordParent
 
 export type JSConstKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5404,6 +5651,7 @@ export type JSLetKeywordParent
 
 export type JSLetKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5453,6 +5701,7 @@ export type JSExportKeywordParent
 
 export type JSExportKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5502,6 +5751,7 @@ export type JSFunctionKeywordParent
 
 export type JSFunctionKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5551,6 +5801,7 @@ export type JSWhileKeywordParent
 
 export type JSWhileKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5600,6 +5851,7 @@ export type JSForKeywordParent
 
 export type JSForKeywordAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5637,6 +5889,20 @@ export type JSForKeywordAnyParent
 export type JSForKeywordChild
 = never
 
+export type JSOperator
+  = JSMulOp
+  | JSAddOp
+  | JSDivOp
+  | JSSubOp
+  | JSLtOp
+  | JSGtOp
+  | JSBOrOp
+  | JSBXorOp
+  | JSBAndOp
+  | JSBNotOp
+  | JSNotOp
+
+
 export interface JSCloseBrace extends SyntaxBase {
   kind: SyntaxKind.JSCloseBrace;
   parentNode: JSCloseBraceParent;
@@ -5649,6 +5915,7 @@ export type JSCloseBraceParent
 
 export type JSCloseBraceAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5698,6 +5965,7 @@ export type JSCloseBracketParent
 
 export type JSCloseBracketAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5747,6 +6015,7 @@ export type JSCloseParenParent
 
 export type JSCloseParenAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5796,6 +6065,7 @@ export type JSOpenBraceParent
 
 export type JSOpenBraceAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5845,6 +6115,7 @@ export type JSOpenBracketParent
 
 export type JSOpenBracketAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5894,6 +6165,7 @@ export type JSOpenParenParent
 
 export type JSOpenParenAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5943,6 +6215,7 @@ export type JSSemiParent
 
 export type JSSemiAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -5992,6 +6265,7 @@ export type JSCommaParent
 
 export type JSCommaAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6041,6 +6315,7 @@ export type JSDotParent
 
 export type JSDotAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6090,6 +6365,7 @@ export type JSDotDotDotParent
 
 export type JSDotDotDotAnyParent
 = BoltQuoteExpression
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6135,10 +6411,30 @@ export interface JSMulOp extends SyntaxBase {
 
 export type JSMulOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSMulOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6184,10 +6480,30 @@ export interface JSAddOp extends SyntaxBase {
 
 export type JSAddOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSAddOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6233,10 +6549,30 @@ export interface JSDivOp extends SyntaxBase {
 
 export type JSDivOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSDivOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6282,10 +6618,30 @@ export interface JSSubOp extends SyntaxBase {
 
 export type JSSubOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSSubOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6331,10 +6687,30 @@ export interface JSLtOp extends SyntaxBase {
 
 export type JSLtOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSLtOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6380,10 +6756,30 @@ export interface JSGtOp extends SyntaxBase {
 
 export type JSGtOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSGtOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6429,10 +6825,30 @@ export interface JSBOrOp extends SyntaxBase {
 
 export type JSBOrOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSBOrOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6478,10 +6894,30 @@ export interface JSBXorOp extends SyntaxBase {
 
 export type JSBXorOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSBXorOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6527,10 +6963,30 @@ export interface JSBAndOp extends SyntaxBase {
 
 export type JSBAndOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSBAndOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6576,10 +7032,30 @@ export interface JSBNotOp extends SyntaxBase {
 
 export type JSBNotOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSBNotOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -6625,10 +7101,30 @@ export interface JSNotOp extends SyntaxBase {
 
 export type JSNotOpParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
 | never
 
 export type JSNotOpAnyParent
 = BoltQuoteExpression
+| JSBinaryExpression
+| JSUnaryExpression
+| JSMemberExpression
+| JSCallExpression
+| JSNewExpression
+| JSSequenceExpression
+| JSConditionalExpression
+| JSExpressionStatement
+| JSConditionalCase
+| JSReturnStatement
+| JSParameter
+| JSArrowFunctionDeclaration
+| JSLetDeclaration
+| JSCatchBlock
+| JSTryCatchStatement
+| JSSourceFile
+| JSFunctionDeclaration
+| BoltTypeOfExpression
 | BoltLiftedTypeExpression
 | BoltExpressionPattern
 | BoltTupleExpression
@@ -7517,164 +8013,6 @@ export type JSSourceFileAnyParent
 export type JSSourceFileChild
 = never
 
-export type BoltSyntax
-  = BoltStringLiteral
-  | BoltIntegerLiteral
-  | BoltIdentifier
-  | BoltOperator
-  | BoltAssignment
-  | BoltComma
-  | BoltSemi
-  | BoltColon
-  | BoltColonColon
-  | BoltDot
-  | BoltDotDot
-  | BoltRArrow
-  | BoltRArrowAlt
-  | BoltLArrow
-  | BoltEqSign
-  | BoltGtSign
-  | BoltExMark
-  | BoltLtSign
-  | BoltVBar
-  | BoltWhereKeyword
-  | BoltQuoteKeyword
-  | BoltFnKeyword
-  | BoltForeignKeyword
-  | BoltForKeyword
-  | BoltLetKeyword
-  | BoltReturnKeyword
-  | BoltLoopKeyword
-  | BoltYieldKeyword
-  | BoltMatchKeyword
-  | BoltImportKeyword
-  | BoltExportKeyword
-  | BoltPubKeyword
-  | BoltModKeyword
-  | BoltMutKeyword
-  | BoltEnumKeyword
-  | BoltStructKeyword
-  | BoltTypeKeyword
-  | BoltTraitKeyword
-  | BoltImplKeyword
-  | BoltParenthesized
-  | BoltBraced
-  | BoltBracketed
-  | BoltSourceFile
-  | BoltQualName
-  | BoltModulePath
-  | BoltReferenceTypeExpression
-  | BoltFunctionTypeExpression
-  | BoltLiftedTypeExpression
-  | BoltTypeParameter
-  | BoltBindPattern
-  | BoltTypePattern
-  | BoltExpressionPattern
-  | BoltTuplePatternElement
-  | BoltTuplePattern
-  | BoltRecordFieldPattern
-  | BoltRecordPattern
-  | BoltQuoteExpression
-  | BoltTupleExpression
-  | BoltReferenceExpression
-  | BoltMemberExpression
-  | BoltFunctionExpression
-  | BoltCallExpression
-  | BoltYieldExpression
-  | BoltMatchArm
-  | BoltMatchExpression
-  | BoltCase
-  | BoltCaseExpression
-  | BoltBlockExpression
-  | BoltConstantExpression
-  | BoltReturnStatement
-  | BoltConditionalCase
-  | BoltConditionalStatement
-  | BoltResumeStatement
-  | BoltExpressionStatement
-  | BoltParameter
-  | BoltModule
-  | BoltFunctionDeclaration
-  | BoltVariableDeclaration
-  | BoltPlainImportSymbol
-  | BoltImportDirective
-  | BoltExportSymbol
-  | BoltPlainExportSymbol
-  | BoltExportDirective
-  | BoltTraitDeclaration
-  | BoltImplDeclaration
-  | BoltTypeAliasDeclaration
-  | BoltRecordField
-  | BoltRecordDeclaration
-  | BoltMacroCall
-
-
-export type JSSyntax
-  = JSOperator
-  | JSIdentifier
-  | JSString
-  | JSInteger
-  | JSFromKeyword
-  | JSReturnKeyword
-  | JSTryKeyword
-  | JSFinallyKeyword
-  | JSCatchKeyword
-  | JSImportKeyword
-  | JSAsKeyword
-  | JSConstKeyword
-  | JSLetKeyword
-  | JSExportKeyword
-  | JSFunctionKeyword
-  | JSWhileKeyword
-  | JSForKeyword
-  | JSCloseBrace
-  | JSCloseBracket
-  | JSCloseParen
-  | JSOpenBrace
-  | JSOpenBracket
-  | JSOpenParen
-  | JSSemi
-  | JSComma
-  | JSDot
-  | JSDotDotDot
-  | JSMulOp
-  | JSAddOp
-  | JSDivOp
-  | JSSubOp
-  | JSLtOp
-  | JSGtOp
-  | JSBOrOp
-  | JSBXorOp
-  | JSBAndOp
-  | JSBNotOp
-  | JSNotOp
-  | JSBindPattern
-  | JSConstantExpression
-  | JSMemberExpression
-  | JSCallExpression
-  | JSBinaryExpression
-  | JSUnaryExpression
-  | JSNewExpression
-  | JSSequenceExpression
-  | JSConditionalExpression
-  | JSLiteralExpression
-  | JSReferenceExpression
-  | JSCatchBlock
-  | JSTryCatchStatement
-  | JSExpressionStatement
-  | JSConditionalCase
-  | JSConditionalStatement
-  | JSReturnStatement
-  | JSParameter
-  | JSImportStarBinding
-  | JSImportAsBinding
-  | JSImportDeclaration
-  | JSFunctionDeclaration
-  | JSArrowFunctionDeclaration
-  | JSLetDeclaration
-  | JSSourceFile
-
-
 export type Syntax
   = EndOfFile
   | FunctionBody
@@ -7722,7 +8060,7 @@ export type Syntax
   | BoltBracketed
   | BoltSourceFile
   | BoltQualName
-  | BoltModulePath
+  | BoltTypeOfExpression
   | BoltReferenceTypeExpression
   | BoltFunctionTypeExpression
   | BoltLiftedTypeExpression
@@ -7767,7 +8105,6 @@ export type Syntax
   | BoltRecordField
   | BoltRecordDeclaration
   | BoltMacroCall
-  | JSOperator
   | JSIdentifier
   | JSString
   | JSInteger
@@ -7880,7 +8217,7 @@ export function createBoltBraced(text: string, span?: TextSpan | null): BoltBrac
 export function createBoltBracketed(text: string, span?: TextSpan | null): BoltBracketed;
 export function createBoltSourceFile(elements: BoltSourceElement[], package: Package, span?: TextSpan | null): BoltSourceFile;
 export function createBoltQualName(isAbsolute: boolean, modulePath: BoltIdentifier[], name: BoltSymbol, span?: TextSpan | null): BoltQualName;
-export function createBoltModulePath(isAbsolute: boolean, elements: BoltIdentifier[], span?: TextSpan | null): BoltModulePath;
+export function createBoltTypeOfExpression(expression: BoltExpression, span?: TextSpan | null): BoltTypeOfExpression;
 export function createBoltReferenceTypeExpression(name: BoltQualName, arguments: BoltTypeExpression[] | null, span?: TextSpan | null): BoltReferenceTypeExpression;
 export function createBoltFunctionTypeExpression(params: BoltParameter[], returnType: BoltTypeExpression | null, span?: TextSpan | null): BoltFunctionTypeExpression;
 export function createBoltLiftedTypeExpression(expression: BoltExpression, span?: TextSpan | null): BoltLiftedTypeExpression;
@@ -7915,7 +8252,7 @@ export function createBoltModule(modifiers: BoltModifiers, name: BoltIdentifier[
 export function createBoltFunctionDeclaration(modifiers: BoltModifiers, target: string, name: BoltSymbol, params: BoltParameter[], returnType: BoltTypeExpression | null, typeParams: BoltTypeParameter[] | null, body: BoltFunctionBodyElement[], span?: TextSpan | null): BoltFunctionDeclaration;
 export function createBoltVariableDeclaration(modifiers: BoltModifiers, bindings: BoltPattern, typeExpr: BoltTypeExpression | null, value: BoltExpression | null, span?: TextSpan | null): BoltVariableDeclaration;
 export function createBoltPlainImportSymbol(remote: BoltQualName, local: BoltSymbol, span?: TextSpan | null): BoltPlainImportSymbol;
-export function createBoltImportDirective(modifiers: BoltModifiers, file: BoltStringLiteral, symbols: BoltImportSymbol[], span?: TextSpan | null): BoltImportDirective;
+export function createBoltImportDirective(modifiers: BoltModifiers, file: BoltStringLiteral, symbols: BoltImportSymbol[] | null, span?: TextSpan | null): BoltImportDirective;
 export function createBoltExportSymbol(span?: TextSpan | null): BoltExportSymbol;
 export function createBoltPlainExportSymbol(local: BoltQualName, remote: BoltSymbol, span?: TextSpan | null): BoltPlainExportSymbol;
 export function createBoltExportDirective(file: string, symbols: BoltExportSymbol[] | null, span?: TextSpan | null): BoltExportDirective;
@@ -7925,7 +8262,6 @@ export function createBoltTypeAliasDeclaration(modifiers: BoltModifiers, name: B
 export function createBoltRecordField(name: BoltIdentifier, typeExpr: BoltTypeExpression, span?: TextSpan | null): BoltRecordField;
 export function createBoltRecordDeclaration(modifiers: BoltModifiers, name: BoltIdentifier, typeParms: BoltTypeParameter[] | null, members: BoltRecordMember[] | null, span?: TextSpan | null): BoltRecordDeclaration;
 export function createBoltMacroCall(name: BoltIdentifier, text: string, span?: TextSpan | null): BoltMacroCall;
-export function createJSOperator(text: string, span?: TextSpan | null): JSOperator;
 export function createJSIdentifier(text: string, span?: TextSpan | null): JSIdentifier;
 export function createJSString(value: string, span?: TextSpan | null): JSString;
 export function createJSInteger(value: bigint, span?: TextSpan | null): JSInteger;
@@ -7993,6 +8329,7 @@ export function isEndOfFile(value: any): value is EndOfFile;
 export function isToken(value: any): value is Token;
 export function isSourceFile(value: any): value is SourceFile;
 export function isFunctionBody(value: any): value is FunctionBody;
+export function isBoltSyntax(value: any): value is BoltSyntax;
 export function isBoltToken(value: any): value is BoltToken;
 export function isBoltStringLiteral(value: any): value is BoltStringLiteral;
 export function isBoltIntegerLiteral(value: any): value is BoltIntegerLiteral;
@@ -8042,8 +8379,8 @@ export function isBoltBraced(value: any): value is BoltBraced;
 export function isBoltBracketed(value: any): value is BoltBracketed;
 export function isBoltSourceFile(value: any): value is BoltSourceFile;
 export function isBoltQualName(value: any): value is BoltQualName;
-export function isBoltModulePath(value: any): value is BoltModulePath;
 export function isBoltTypeExpression(value: any): value is BoltTypeExpression;
+export function isBoltTypeOfExpression(value: any): value is BoltTypeOfExpression;
 export function isBoltReferenceTypeExpression(value: any): value is BoltReferenceTypeExpression;
 export function isBoltFunctionTypeExpression(value: any): value is BoltFunctionTypeExpression;
 export function isBoltLiftedTypeExpression(value: any): value is BoltLiftedTypeExpression;
@@ -8080,6 +8417,7 @@ export function isBoltParameter(value: any): value is BoltParameter;
 export function isBoltDeclaration(value: any): value is BoltDeclaration;
 export function isBoltTypeDeclaration(value: any): value is BoltTypeDeclaration;
 export function isBoltModule(value: any): value is BoltModule;
+export function isBoltDeclarationLike(value: any): value is BoltDeclarationLike;
 export function isBoltFunctionBodyElement(value: any): value is BoltFunctionBodyElement;
 export function isBoltFunctionDeclaration(value: any): value is BoltFunctionDeclaration;
 export function isBoltVariableDeclaration(value: any): value is BoltVariableDeclaration;
@@ -8097,6 +8435,7 @@ export function isBoltRecordField(value: any): value is BoltRecordField;
 export function isBoltRecordDeclaration(value: any): value is BoltRecordDeclaration;
 export function isBoltSourceElement(value: any): value is BoltSourceElement;
 export function isBoltMacroCall(value: any): value is BoltMacroCall;
+export function isJSSyntax(value: any): value is JSSyntax;
 export function isJSToken(value: any): value is JSToken;
 export function isJSOperator(value: any): value is JSOperator;
 export function isJSIdentifier(value: any): value is JSIdentifier;
@@ -8115,6 +8454,7 @@ export function isJSExportKeyword(value: any): value is JSExportKeyword;
 export function isJSFunctionKeyword(value: any): value is JSFunctionKeyword;
 export function isJSWhileKeyword(value: any): value is JSWhileKeyword;
 export function isJSForKeyword(value: any): value is JSForKeyword;
+export function isJSOperator(value: any): value is JSOperator;
 export function isJSCloseBrace(value: any): value is JSCloseBrace;
 export function isJSCloseBracket(value: any): value is JSCloseBracket;
 export function isJSCloseParen(value: any): value is JSCloseParen;

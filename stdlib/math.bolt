@@ -1,4 +1,6 @@
 
+import "./numbers.bolt";
+
 // precedence a + b < a * b;
 
 pub fn fac(n: I) -> I where I: int {

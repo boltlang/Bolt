@@ -1,4 +1,4 @@
-import { BoltImportDirective, Syntax, BoltParameter, BoltModulePath, BoltReferenceExpression, BoltReferenceTypeExpression, BoltSourceFile, BoltCallExpression, BoltReturnKeyword, BoltReturnStatement, SyntaxKind, NodeVisitor, BoltSyntax, BoltIdentifier } from "./ast";
+import { BoltImportDirective, Syntax, BoltParameter, BoltReferenceExpression, BoltReferenceTypeExpression, BoltSourceFile, BoltCallExpression, BoltReturnKeyword, BoltReturnStatement, SyntaxKind, NodeVisitor, BoltSyntax, BoltIdentifier } from "./ast";
 import { Program } from "./program";
 import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_TYPES_NOT_ASSIGNABLE, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND, E_MUST_RETURN_A_VALUE, E_MAY_NOT_RETURN_A_VALUE } from "./diagnostics";
 import { getSymbolPathFromNode } from "./resolver"
@@ -140,16 +140,7 @@ export class CheckTypeAssignments extends NodeVisitor {
 
     protected visitSyntax(node: Syntax) {
         for (const error of node.errors) {
-            switch (error.type) {
-                case ErrorType.AssignmentError:
-                    this.diagnostics.add({
-                        message: E_TYPES_NOT_ASSIGNABLE,
-                        severity: 'error',
-                        node: error.left,
-                    });
-                default:
-                    throw new Error(`Could not add a diagnostic message for the error ${ErrorType[error.type]}`)
-            }
+            this.diagnostics.add({ node, ...error });
         }
     }
 

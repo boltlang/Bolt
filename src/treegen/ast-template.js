@@ -40,11 +40,15 @@ const nodeProto = {
     const stack = [this];
     while (stack.length > 0) {
       const node = stack.pop();
-      const key = `visit${kindToString(node.kind)}`
+      const kindName = kindToString(node.kind);
+      const kindNamesToVisit = [kindName, ...NODE_TYPES[kindName].parents];
       for (const visitor of visitors) {
-         if (visitor[key] !== undefined) {
-           visitor[key](node);
-         }
+        for (const kindName of kindNamesToVisit) {
+          const key = `visit${kindName}`
+          if (visitor[key] !== undefined) {
+            visitor[key](node);
+          }
+        }
       }
       for (const childNode of node.getChildNodes()) {
         stack.push(childNode);

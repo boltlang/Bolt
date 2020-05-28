@@ -11,10 +11,13 @@ export class Program {
   private sourceFilesByFilePath = new FastStringMap<string, SourceFile>();
 
   constructor(
-    pkgs: Package[]
+    private pkgs: Package[]
   ) {
     for (const pkg of pkgs) {
-      for (const sourceFile of pkg.sourceFiles) {
+      if (pkg.name !== null) {
+        this.packagesByName.set(pkg.name, pkg);
+      }
+      for (const sourceFile of pkg.getAllSourceFiles()) {
         this.sourceFilesByFilePath.set(stripExtensions(sourceFile.span!.file.fullPath), sourceFile);
       }
     }
@@ -30,6 +33,21 @@ export class Program {
       return null;
     }
     return this.sourceFilesByFilePath.get(filepath);
+  }
+
+  public getAllPackages(): IterableIterator<Package> {
+    return this.pkgs[Symbol.iterator]();
+  }
+
+  public *getAllGloballyDeclaredSourceFiles(): IterableIterator<SourceFile> {
+    for (const pkg of this.getAllPackages()) {
+      if (pkg.isAutoImported) {
+        const mainLibrarySourceFile = pkg.getMainLibrarySourceFile();
+        if (mainLibrarySourceFile !== null) {
+          yield mainLibrarySourceFile;
+        }
+      }
+    }
   }
 
   public getPackageNamed(name: string): Package {

@@ -4,7 +4,7 @@ import * as path from "path"
 
 const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
 
-const CUSTOM_TYPES = ['Package'];
+const CUSTOM_TYPES = ['Package', 'BoltValue', 'JSValue'];
 
 import { Syntax, Declaration, NodeDeclaration, TypeDeclaration, EnumDeclaration, TypeNode, NodeField } from "./ast"
 import { MapLike, assert } from "../util"
@@ -21,7 +21,6 @@ export function generateAST(decls: Declaration[]) {
   const nodeDecls: NodeDeclaration[] = decls.filter(decl => decl.type === 'NodeDeclaration') as NodeDeclaration[];
   const typeDecls: TypeDeclaration[] = decls.filter(decl => decl.type === 'TypeDeclaration') as TypeDeclaration[];
   const enumDecls: EnumDeclaration[] = decls.filter(decl => decl.type === 'EnumDeclaration') as EnumDeclaration[];
-  const langNames: string[] = decls.filter(decl => decl.type === 'LanguageDeclaration').map(decl => decl.name);
 
   const declByName: MapLike<Declaration> = Object.create(null);
   i = 0;
@@ -57,6 +56,11 @@ export function generateAST(decls: Declaration[]) {
       jsFile.write(`'${decl.name}': {\n`);
       jsFile.indent();
       jsFile.write(`index: ${decl.index},\n`);
+      jsFile.write(`parents: [`);
+      for (const parentName of getParentChain(decl.name)) {
+        jsFile.write(`'${decl.name}', `)
+      }
+      jsFile.write(`'Syntax'],\n`);
       jsFile.write(`fields: new Map([\n`);
       jsFile.indent();
       for (const field of getAllFields(decl)) {
@@ -188,20 +192,6 @@ export function generateAST(decls: Declaration[]) {
     //}
     //dtsFile.write('  never\n\n');
   //}
-
-  for (const langName of langNames) {
-    dtsFile.write(`export type ${langName}Syntax\n`);
-    let first = true;
-    dtsFile.indent();
-    for (const decl of finalNodes) {
-      if (decl.name.startsWith(langName)) {
-        dtsFile.write((first ? '=' : '|') + ' ' + decl.name + '\n');
-        first = false;
-      }
-    }
-    dtsFile.dedent();
-    dtsFile.write('\n\n');
-  }
 
   dtsFile.write(`export type Syntax\n`);
   let first = true;
@@ -367,6 +357,17 @@ export function generateAST(decls: Declaration[]) {
       return []
     }
     return children;
+  }
+
+  function *getParentChain(nodeName: string) {
+    const stack = [ nodeName ];
+    while (stack.length > 0) {
+      const nodeDecl = getDeclarationNamed(stack.pop()!) as NodeDeclaration;
+      for (const parentName of nodeDecl.parents) {
+        yield parentName;
+        stack.push(parentName);
+      }
+    }
   }
 
   function* getFinalNodes(declName: string): IterableIterator<string> {

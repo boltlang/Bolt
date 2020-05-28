@@ -93,11 +93,17 @@ export class Frontend {
     const checkers = checks.map(check => container.createInstance(check));
 
     for (const sourceFile of program.getAllSourceFiles()) {
-      checker.registerSourceFile(sourceFile);
       resolver.registerSourceFile(sourceFile);
     }
     for (const sourceFile of program.getAllSourceFiles()) {
-      sourceFile.visit(checkers)
+      checker.registerSourceFile(sourceFile);
+    }
+    for (const pkg of program.getAllPackages()) {
+      if (!pkg.isDependency) {
+        for (const sourceFile of pkg.getAllSourceFiles()) {
+          sourceFile.visit(checkers)
+        }
+      }
     }
   }
 

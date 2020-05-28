@@ -1,10 +1,10 @@
 
-import "./numbers"
-import "./either"
-import "./vec"
-import "./string"
-
 pub mod IO {
+
+  import "./numbers"
+  import "./either"
+  import "./vec"
+  import "./string"
 
   pub type Result<T> = Either<Error, T>;
 

@@ -1,18 +1,14 @@
 
-@language Bolt;
-@language JS;
-
 node EndOfFile > BoltToken, JSToken;
 node Token;
 node SourceFile;
+node FunctionBody;
 
 // Bolt language AST definitions
 
-type BoltValue = Integer | bool | String;
+node BoltSyntax;
 
-node FunctionBody;
-
-node BoltToken > Token;
+node BoltToken > Token, BoltSyntax;
 
 node BoltStringLiteral > BoltToken {
   value: String,
@@ -85,23 +81,22 @@ node BoltParenthesized > BoltPunctuated;
 node BoltBraced > BoltPunctuated;
 node BoltBracketed > BoltPunctuated;
 
-node BoltSourceFile > SourceFile {
+node BoltSourceFile > BoltSyntax, SourceFile {
   elements: Vec<BoltSourceElement>,
   package: Package,
 }
 
-node BoltQualName {
+node BoltQualName > BoltSyntax {
   isAbsolute: bool,
   modulePath: Vec<BoltIdentifier>,
   name: BoltSymbol,
 }
 
-node BoltModulePath {
-  isAbsolute: bool,
-  elements: Vec<BoltIdentifier>,
-}
+node BoltTypeExpression > BoltSyntax;
 
-node BoltTypeExpression;
+node BoltTypeOfExpression > BoltTypeExpression {
+  expression: BoltExpression,
+}
 
 node BoltReferenceTypeExpression > BoltTypeExpression {
   name: BoltQualName,
@@ -117,14 +112,14 @@ node BoltLiftedTypeExpression > BoltTypeExpression {
   expression: BoltExpression, 
 }
 
-node BoltTypeParameter {
+node BoltTypeParameter > BoltSyntax {
   index: usize,
   name: BoltIdentifier,
   typeExpr: Option<BoltTypeExpression>,
   defaultType: Option<BoltTypeExpression>,
 }
 
-node BoltPattern;
+node BoltPattern > BoltSyntax;
 
 node BoltBindPattern > BoltPattern {
   name: BoltIdentifier,
@@ -139,7 +134,7 @@ node BoltExpressionPattern > BoltPattern {
   expression: BoltExpression,
 }
 
-node BoltTuplePatternElement {
+node BoltTuplePatternElement > BoltSyntax {
   index: usize,
   pattern: BoltPattern,
 }
@@ -148,7 +143,7 @@ node BoltTuplePattern > BoltPattern {
   elements: Vec<BoltTuplePatternElement>,
 }
 
-node BoltRecordFieldPattern {
+node BoltRecordFieldPattern > BoltSyntax {
   isRest: bool,
   name: Option<BoltIdentifier>,
   pattern: Option<BoltPattern>,
@@ -159,7 +154,7 @@ node BoltRecordPattern > BoltPattern {
   fields: Vec<BoltRecordFieldPattern>,
 }
 
-node BoltExpression;
+node BoltExpression > BoltSyntax;
 
 node BoltQuoteExpression > BoltExpression {
   tokens: Vec<Token | BoltExpression>,
@@ -193,7 +188,7 @@ node BoltYieldExpression > BoltExpression {
   value: BoltExpression,
 }
 
-node BoltMatchArm {
+node BoltMatchArm > BoltSyntax {
   pattern: BoltPattern,
   body: BoltExpression,
 }
@@ -203,7 +198,7 @@ node BoltMatchExpression > BoltExpression {
   arms: Vec<BoltMatchArm>,
 }
 
-node BoltCase {
+node BoltCase > BoltSyntax {
   test: BoltExpression,
   result: BoltExpression,
 }
@@ -220,13 +215,13 @@ node BoltConstantExpression > BoltExpression {
   value: BoltValue,
 }
 
-node BoltStatement > BoltFunctionBodyElement, BoltSourceElement;
+node BoltStatement > BoltSyntax, BoltFunctionBodyElement, BoltSourceElement;
 
 node BoltReturnStatement > BoltStatement {
   value: Option<BoltExpression>,
 }
 
-node BoltConditionalCase {
+node BoltConditionalCase > BoltSyntax {
   test: Option<BoltExpression>,
   body: Vec<BoltFunctionBodyElement>,
 }
@@ -243,31 +238,33 @@ node BoltExpressionStatement > BoltStatement {
   expression: BoltExpression,
 }
 
-node BoltParameter {
+node BoltParameter > BoltSyntax {
   index: usize,
   bindings: BoltPattern,
   typeExpr: Option<BoltTypeExpression>,
   defaultValue: Option<BoltExpression>,
 }
 
-node BoltDeclaration > BoltSourceElement;
+node BoltDeclaration > BoltSyntax, BoltSourceElement;
 
-node BoltTypeDeclaration > BoltSourceElement;
+node BoltTypeDeclaration > BoltSyntax, BoltSourceElement;
 
 enum BoltModifiers {
   IsMutable   = 0x1,
   IsPublic    = 0x2,
 }
 
-node BoltModule > BoltSourceElement {
+node BoltModule > BoltSyntax, BoltSourceElement {
   modifiers: BoltModifiers,
   name: Vec<BoltIdentifier>,
   elements: Vec<BoltSourceElement>,
 }
 
+node BoltDeclarationLike;
+
 node BoltFunctionBodyElement;
 
-node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
+node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike {
   modifiers: BoltModifiers,
   target: String,
   name: BoltSymbol,
@@ -277,14 +274,14 @@ node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration {
   body: Vec<BoltFunctionBodyElement>,
 }
 
-node BoltVariableDeclaration > BoltFunctionBodyElement, BoltDeclaration {
+node BoltVariableDeclaration > BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike {
   modifiers: BoltModifiers,
   bindings: BoltPattern,
   typeExpr: Option<BoltTypeExpression>,
   value: Option<BoltExpression>,
 }
 
-node BoltImportSymbol;
+node BoltImportSymbol > BoltSyntax;
 
 node BoltPlainImportSymbol > BoltImportSymbol {
   remote: BoltQualName,
@@ -294,10 +291,10 @@ node BoltPlainImportSymbol > BoltImportSymbol {
 node BoltImportDirective > BoltSourceElement {
   modifiers: BoltModifiers,
   file: BoltStringLiteral,
-  symbols: Vec<BoltImportSymbol>,
+  symbols: Option<Vec<BoltImportSymbol>>,
 }
 
-node BoltExportSymbol;
+node BoltExportSymbol > BoltSyntax;
 
 node BoltPlainExportSymbol {
   local: BoltQualName,
@@ -309,14 +306,14 @@ node BoltExportDirective > BoltSourceElement {
   symbols: Option<Vec<BoltExportSymbol>>,
 }
 
-node BoltTraitDeclaration > BoltDeclaration, BoltTypeDeclaration {
+node BoltTraitDeclaration > BoltDeclarationLike, BoltTypeDeclaration {
   modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
   elements: Vec<BoltDeclaration>,
 }
 
-node BoltImplDeclaration > BoltDeclaration {
+node BoltImplDeclaration > BoltTypeDeclaration, BoltDeclarationLike {
   modifiers: BoltModifiers,
   name: BoltIdentifier,
   trait: BoltTypeExpression,
@@ -324,21 +321,21 @@ node BoltImplDeclaration > BoltDeclaration {
   elements: Vec<BoltDeclaration>,
 }
 
-node BoltTypeAliasDeclaration > BoltDeclaration, BoltTypeDeclaration {
+node BoltTypeAliasDeclaration > BoltDeclarationLike, BoltTypeDeclaration {
   modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
   typeExpr: BoltTypeExpression,
 }
 
-node BoltRecordMember;
+node BoltRecordMember > BoltSyntax;
 
 node BoltRecordField > BoltRecordMember {
   name: BoltIdentifier,
   typeExpr: BoltTypeExpression,
 }
 
-node BoltRecordDeclaration > BoltDeclaration, BoltTypeDeclaration {
+node BoltRecordDeclaration > BoltDeclaration, BoltTypeDeclaration, BoltDeclarationLike {
   modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParms: Option<Vec<BoltTypeParameter>>,
@@ -354,9 +351,9 @@ node BoltMacroCall > BoltRecordMember, BoltStatement, BoltDeclaration, BoltExpre
 
 // JavaScript AST definitions
 
-type JSValue = Int | String | Bool | Void;
+node JSSyntax;
 
-node JSToken > Token;
+node JSToken > JSSyntax, Token;
 
 node JSOperator > JSToken {
   text: String,
@@ -388,6 +385,8 @@ node JSFunctionKeyword > JSToken;
 node JSWhileKeyword > JSToken;
 node JSForKeyword > JSToken;
 
+node JSOperator;
+
 node JSCloseBrace > JSToken;
 node JSCloseBracket > JSToken;
 node JSCloseParen > JSToken;
@@ -398,25 +397,25 @@ node JSSemi > JSToken;
 node JSComma > JSToken;
 node JSDot > JSToken;
 node JSDotDotDot > JSToken;
-node JSMulOp > JSToken;
-node JSAddOp > JSToken;
-node JSDivOp > JSToken;
-node JSSubOp > JSToken;
-node JSLtOp > JSToken;
-node JSGtOp > JSToken;
-node JSBOrOp > JSToken;
-node JSBXorOp > JSToken;
-node JSBAndOp > JSToken;
-node JSBNotOp > JSToken;
-node JSNotOp > JSToken;
+node JSMulOp > JSToken, JSOperator;
+node JSAddOp > JSToken, JSOperator;
+node JSDivOp > JSToken, JSOperator;
+node JSSubOp > JSToken, JSOperator;
+node JSLtOp > JSToken, JSOperator;
+node JSGtOp > JSToken, JSOperator;
+node JSBOrOp > JSToken, JSOperator;
+node JSBXorOp > JSToken, JSOperator;
+node JSBAndOp > JSToken, JSOperator;
+node JSBNotOp > JSToken, JSOperator;
+node JSNotOp > JSToken, JSOperator;
 
-node JSPattern;
+node JSPattern > JSSyntax;
 
 node JSBindPattern > JSPattern {
   name: JSIdentifier,
 }
 
-node JSExpression;
+node JSExpression > JSSyntax;
 
 node JSConstantExpression > JSExpression {
   value: BoltValue,
@@ -458,8 +457,6 @@ node JSConditionalExpression > JSExpression {
   alternate: JSExpression,
 }
 
-type JSValue = Int
-
 node JSLiteralExpression > JSExpression {
   value: JSValue,
 }
@@ -474,12 +471,12 @@ node JSFunctionBodyElement;
 
 node JSStatement > JSSourceElement, JSFunctionBodyElement;
 
-node JSCatchBlock {
+node JSCatchBlock > JSSyntax {
   bindings: Option<JSPattern>,
   elements: Vec<JSSourceElement>,
 }
 
-node JSTryCatchStatement {
+node JSTryCatchStatement > JSSyntax {
   tryBlock: Vec<JSSourceElement>,
   catchBlock: Option<JSCatchBlock>,
   finalBlock: Option<Vec<JSSourceElement>>,
@@ -489,7 +486,7 @@ node JSExpressionStatement > JSStatement {
   expression: JSExpression,
 }
 
-node JSConditionalCase {
+node JSConditionalCase > JSSyntax {
   test: Option<JSExpression>,
   body: Vec<JSFunctionBodyElement>,
 }
@@ -502,19 +499,19 @@ node JSReturnStatement > JSStatement {
   value: Option<JSExpression>,
 }
 
-node JSParameter {
+node JSParameter > JSSyntax {
   index: usize,
   bindings: JSPattern,
   defaultValue: Option<JSExpression>,
 }
 
-node JSDeclaration > JSSourceElement;
+node JSDeclaration > JSSyntax, JSSourceElement;
 
 enum JSDeclarationModifiers {
   IsExported = 0x1,
 }
 
-node JSImportBinding;
+node JSImportBinding > JSSyntax;
 
 node JSImportStarBinding > JSImportBinding {
   local: JSIdentifier,
@@ -548,7 +545,6 @@ node JSLetDeclaration > JSDeclaration, JSFunctionBodyElement {
   value: Option<JSExpression>,
 }
 
-node JSSourceFile > SourceFile {
+node JSSourceFile > JSSyntax, SourceFile {
   elements: Vec<JSSourceElement>,
-}
-
+} 

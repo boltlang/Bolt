@@ -1,5 +1,5 @@
 
-TREEGEN_FILES = src/ast-spec.txt lib/bin/bolt-treegen.js lib/treegen/parser.js lib/treegen/index.js lib/treegen/util.js src/treegen/ast-template.js
+TREEGEN_FILES = src/treegen/ast.dts.template src/ast-spec.txt lib/bin/bolt-treegen.js lib/treegen/parser.js lib/treegen/index.js lib/treegen/util.js src/treegen/ast-template.js
 
 all: lib/ast.js
 	bolt check stdlib

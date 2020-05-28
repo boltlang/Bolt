@@ -42,12 +42,12 @@ export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
         return new SymbolPath([], false, name);
       }
       return new SymbolPath(node.modulePath.map(id => id.text), false, name);
-    case SyntaxKind.BoltModulePath:
-      return new SymbolPath(
-        node.elements.slice(0, -1).map(el => el.text),
-        node.isAbsolute,
-        node.elements[node.elements.length-1].text
-      );
+    //case SyntaxKind.BoltModulePath:
+    //  return new SymbolPath(
+    //    node.elements.slice(0, -1).map(el => el.text),
+    //    node.isAbsolute,
+    //    node.elements[node.elements.length-1].text
+    //  );
     default:
       throw new Error(`Could not extract a symbol path from the given node.`);
   }
@@ -489,6 +489,21 @@ export class SymbolResolver {
       return null;
     }
     return scope.getSymbol(this.strategy.getSymbolName(node));
+  }
+
+  public resolveGlobalSymbol(name: string, kind: ScopeType) {
+    const symbolPath = new SymbolPath([], true, name);
+    for (const sourceFile of this.program.getAllGloballyDeclaredSourceFiles()) {
+      const scope = this.getScopeForNode(sourceFile, kind);
+      if (scope === null) {
+        continue;
+      }
+      const sym = scope.getLocalSymbol(name);
+      if (sym !== null) {
+        return sym
+      }
+    }
+    return null;
   }
 
   public resolveSymbolPath(path: SymbolPath, scope: Scope): SymbolInfo | null {

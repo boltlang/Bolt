@@ -81,6 +81,7 @@ import {
   BoltModulePath,
   isBoltSymbol,
   BoltIdentifierChild,
+  BoltDeclarationLike,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -1284,7 +1285,7 @@ export class Parser {
     return result;
   }
 
-  public parseDeclaration(tokens: BoltTokenStream): BoltDeclaration {
+  public parseDeclarationLike(tokens: BoltTokenStream): BoltDeclarationLike {
     let t0 = tokens.peek(1);
     let i = 1;
     if (t0.kind === SyntaxKind.BoltPubKeyword) {
@@ -1365,7 +1366,7 @@ export class Parser {
     } else if (KIND_STATEMENT_T0.indexOf(t1.kind) !== -1) {
       return this.parseStatement(tokens);
     } else if (KIND_DECLARATION_KEYWORD.indexOf(t1.kind) !== -1) {
-      return this.parseDeclaration(tokens);
+      return this.parseDeclarationLike(tokens);
     } else {
       throw new ParseError(t0, KIND_SOURCEELEMENT_T0);
     }

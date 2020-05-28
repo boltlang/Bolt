@@ -14,13 +14,15 @@ import { Program } from "../program"
 import { parseSourceFile } from "../parser"
 import { Frontend } from "../frontend"
 import { Package } from "../common"
-import {hasOwnProperty} from "../util"
+import {hasOwnProperty, upsearchSync, expandPath, FastStringMap, assert} from "../util"
 import {isString} from "util"
-import {DiagnosticPrinter, E_FIELD_NOT_PRESENT, E_FIELD_MUST_BE_STRING, E_FIELD_HAS_INVALID_VERSION_NUMBER} from "../diagnostics"
+import {DiagnosticPrinter, E_FIELD_NOT_PRESENT, E_FIELD_MUST_BE_BOOLEAN, E_FIELD_MUST_BE_STRING, E_FIELD_HAS_INVALID_VERSION_NUMBER} from "../diagnostics"
 
 //global.print = function (value: any) {
 //  console.error(require('util').inspect(value, { depth: Infinity, colors: true }))
 //}
+
+const BOLT_HOME = expandPath(process.env['BOLT_HOME'] ?? '~/.bolt-compiler')
 
 function toArray<T>(value: T | T[]): T[] {
   if (Array.isArray(value)) {
@@ -49,6 +51,7 @@ function loadPackageMetadata(rootDir: string) {
 
   let name = null
   let version = null;
+  let autoImport = false;
 
   let hasVersionErrors = false;
   let hasNameErrors = false;
@@ -90,6 +93,17 @@ function loadPackageMetadata(rootDir: string) {
           }
         }
       }
+      if (hasOwnProperty(data, 'auto-import')) {
+        if (typeof(data['auto-import']) !== 'boolean') {
+          diagnostics.add({
+            message: E_FIELD_MUST_BE_BOOLEAN,
+            args: { name: 'auto-import' },
+            severity: 'error', 
+          })
+        } else {
+          autoImport = data['auto-import'];
+        }
+      }
     }
   }
 
@@ -111,33 +125,65 @@ function loadPackageMetadata(rootDir: string) {
 
   return {
     name,
-    version
+    version,
+    autoImport,
   };
 
 }
 
-function loadPackage(rootDir: string): Package {
+function loadPackageFromPath(rootDir: string, isDependency: boolean): Package {
   rootDir = path.resolve(rootDir);
   const data = loadPackageMetadata(rootDir);
-  const pkg = new Package(rootDir, data.name, data.version, []);
+  const pkg = new Package(rootDir, data.name, data.version, [], data.autoImport, isDependency);
   for (const filepath of globSync(path.join(rootDir, '**/*.bolt'))) {
     pkg.addSourceFile(parseSourceFile(filepath, pkg));
   }
   return pkg;
 }
 
-function loadPackagesAndSourceFiles(filenames: string[], cwd = '.'): Package[] {
+function error(message: string) {
+  console.error(`Error: ${message}`);
+}
+
+function loadPackagesAndSourceFiles(filenames: string[], pkgResolver: PackageResolver, cwd = '.', useStd: boolean): Package[] {
   cwd = path.resolve(cwd);
-  const anonPkg = new Package(cwd, null, null, []);
+  const anonPkg = new Package(cwd, null, null, [], false, false);
   const pkgs = [ anonPkg ];
   for (const filename of filenames) {
     if (fs.statSync(filename).isDirectory()) {
-      pkgs.push(loadPackage(filename));
+      pkgs.push(loadPackageFromPath(filename, false));
     } else {
       anonPkg.addSourceFile(parseSourceFile(filename, anonPkg));
     }
   }
+  if (useStd && pkgs.find(pkg => pkg.name === 'stdlib') === undefined) {
+    const resolvedPath = pkgResolver.findPackagePath('stdlib');
+    if (resolvedPath === null) {
+      error(`Package 'stdlib' is required to build the current source set but it was not found. Use --no-std if you know what you are doing.`);
+      process.exit(1);
+    }
+    const stdlibPkg = loadPackageFromPath(resolvedPath, true);
+    assert(stdlibPkg !== null);
+    pkgs.push(stdlibPkg);
+  }
   return pkgs;
+}
+
+class PackagePathResolver {
+
+  private packageNameToPath = new FastStringMap<string, string>();
+
+  public findPackagePath(name: string): string | null {
+    if (this.packageNameToPath.has(name)) {
+      return this.packageNameToPath.get(name);
+    }
+    return null;
+  }
+
+  public mapPackgeNameToPath(name: string, filepath: string): void {
+    this.packageNameToPath.set(name, filepath);
+  }
+
 }
 
 yargs
@@ -160,9 +206,31 @@ yargs
   .command(
     'check [files..]',
     'Check the given files/packages for mistakes.',
-    yargs => yargs,
+    yargs => yargs
+      .string('work-dir')
+      .describe('work-dir', 'The working directory where files will be resolved against.')
+      .default('work-dir', '.')
+      .boolean('no-std')
+      .describe('no-std', 'Do not build using the standard library.')
+      .string('pkg'),
     args => {
-      const pkgs = loadPackagesAndSourceFiles(toArray(args.files as string[] | string));
+      const useStd = args['std'] as boolean ?? true;
+      const cwd = process.cwd();
+      const pkgResolver = new PackagePathResolver();
+      for (const pkgMapping of toArray(args.pkg as string[] | string)) {
+        const [pkgName, pkgPath] = pkgMapping.split(':');
+        pkgResolver.mapPackgeNameToPath(pkgName, pkgPath) 
+      }
+      const files = toArray(args.files as string[] | string);
+      if (files.length === 0) {
+        const metadataPath = upsearchSync('Boltfile');
+        if (metadataPath === null) {
+          error(`No source files specified on the command-line and no Boltfile found in ${cwd} or any of its parent directories.`)
+          process.exit(1);
+        }
+        files.push(metadataPath);
+      }
+      const pkgs = loadPackagesAndSourceFiles(files, pkgResolver, cwd, useStd);
       const program = new Program(pkgs);
       const frontend = new Frontend();
       frontend.check(program);
@@ -187,10 +255,20 @@ yargs
 
     , args => {
 
-      const pkgs = loadPackagesAndSourceFiles(toArray(args.files as string[] | string));
+      const cwd = process.cwd();
+      const files = toArray(args.files as string[] | string);
+      if (files.length === 0) {
+        const metadataPath = upsearchSync('Boltfile');
+        if (metadataPath === null) {
+          error(`No source files specified on the command-line and no Boltfile found in ${cwd} or any of its parent directories.`)
+          process.exit(1);
+        }
+        files.push(metadataPath);
+      }
+      const pkgs = loadPackagesAndSourceFiles(files);
       const program = new Program(pkgs);
       const frontend = new Frontend();
-      frontend.typeCheck(program);
+      frontend.check(program);
       if (frontend.diagnostics.hasErrors && !args.force) {
         process.exit(1);
       }
