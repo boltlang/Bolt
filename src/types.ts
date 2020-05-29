@@ -3,7 +3,7 @@ import { FastStringMap, assert, isPlainObject, some, prettyPrintTag, map, flatMa
 import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, BoltCallExpression, BoltIdentifier, isBoltDeclarationLike, isBoltPattern, isJSExpression, isBoltStatement, isJSStatement, isJSPattern, isJSParameter, isBoltParameter, isBoltMatchArm, isBoltRecordField, isBoltRecordFieldPattern, isEndOfFile, isSyntax, } from "./ast";
 import { convertNodeToSymbolPath, ScopeType, SymbolResolver, SymbolInfo, SymbolPath } from "./resolver";
 import { Value, Record } from "./evaluator";
-import { getReturnStatementsInFunctionBody, getAllReturnStatementsInFunctionBody, getFullyQualifiedPathToNode } from "./common";
+import { getReturnStatementsInFunctionBody, getAllReturnStatementsInFunctionBody, getFullyQualifiedPathToNode, hasDiagnostic, hasTypeError } from "./common";
 import { E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL, E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL, E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER, E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER, E_TYPE_MISMATCH, Diagnostic, E_ARGUMENT_TYPE_NOT_ASSIGNABLE } from "./diagnostics";
 import { BOLT_MAX_FIELDS_TO_PRINT } from "./constants";
 import { emitNode } from "./emitter";
@@ -147,7 +147,7 @@ export class OpaqueType extends TypeBase {
 
   public kind: TypeKind.OpaqueType = TypeKind.OpaqueType;
 
-  constructor(public name: string) {
+  constructor(public name: string, public source?: Syntax) {
     super();
   }
 
@@ -335,6 +335,7 @@ export function prettyPrintType(type: Type): string {
         out += '{ ' + elementType.name + ' } ';
         break;
       case TypeKind.ReturnType:
+        out += 'return type of '
         out += prettyPrintType(elementType.fnType);
         out += '(';
         out += elementType.argumentTypes.map(prettyPrintType).join(', ')
@@ -433,10 +434,8 @@ function introducesType(node: Syntax) {
       || isBoltRecordField(node)
       || isBoltRecordFieldPattern(node)
       || isBoltPattern(node)
-      || isBoltStatement(node)
       || isBoltTypeExpression(node)
       || isJSExpression(node)
-      || isJSStatement(node)
       || isJSPattern(node)
       || isJSParameter(node)
 }
@@ -487,78 +486,8 @@ export class TypeChecker {
     }
   }
 
-  private diagnoseTypeMismatch(node: Syntax, a: Type, b: Type): void {
-    if (a.kind === TypeKind.ReturnType && b.kind === TypeKind.FunctionType) {
-      if (b.paramTypes.length > a.argumentTypes.length) {
-        let nested: Diagnostic[] = [];
-        //for (let i = b.paramTypes.length; i < a.argumentTypes.length; i++) {
-        //  nested.push({
-        //    message: E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER,
-        //    severity: 'error',
-        //    node: b.getTypeAtParameterIndex(a.argumentTypes.length).node!
-        //  });
-        //}
-        node.errors.push({
-          message: E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL,
-          severity: 'error',
-          node: a.node,
-          args: {
-            expected: b.paramTypes.length,
-            actual: a.argumentTypes.length,
-          },
-          nested,
-        });
-      } else if (b.paramTypes.length < a.argumentTypes.length) {
-        let nested: Diagnostic[] = [];
-        //for (let i = b.paramTypes.length; i < a.argumentTypes.length; i++) {
-        //  nested.push({
-        //    message: E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER,
-        //    severity: 'error',
-        //    node: (a.node as BoltCallExpression).operands[i]
-        //  });
-        //}
-        node.errors.push({
-          message: E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
-          severity: 'error',
-          node: a.node,
-          args: {
-            expected: b.paramTypes.length,
-            actual: a.argumentTypes.length, 
-          },
-          nested,
-        });
-      } else {
-        const paramCount = a.argumentTypes.length;
-        for (let i = 0; i < paramCount; i++) {
-          const argType = a.argumentTypes[i];
-          const paramType = b.paramTypes[i];
-          if (!this.areTypesSemanticallyEquivalent(argType, paramType)) {
-            node.errors.push({
-              message: E_ARGUMENT_TYPE_NOT_ASSIGNABLE,
-              severity: 'error',
-              node: argType.node,
-            })
-          }
-          //if (!this.areTypesSemanticallyEquivalent(paramA, paramB)) {
-          //  yield {
-          //    message: E_TYPE_MISMATCH,
-          //    severity: 'error',
-          //    node: a.node,
-          //    args: {
-          //      left: a,
-          //      right: b,
-          //    },
-          //  };
-          //}
-        }
-      }
-    } else {
-      node.errors.push({
-        message: E_TYPE_MISMATCH,
-        severity: 'error',
-        args: { left: a, right: b },
-      })
-    }
+  private *diagnoseTypeMismatch(a: Type, b: Type): IterableIterator<Diagnostic> {
+
   }
 
   public registerSourceFile(sourceFile: SourceFile): void {
@@ -607,6 +536,7 @@ export class TypeChecker {
       const node = queued.shift()!;
 
       const derivedType = this.deriveTypeUsingChildren(node);
+      derivedType.node = node;
       const newType = this.simplifyType(derivedType);
 
       //if (newType !== derivedType) {
@@ -616,13 +546,14 @@ export class TypeChecker {
       const narrowedType = this.narrowTypeDownTo(node.type!.solved, newType);
       
       if (narrowedType === null) {
-        this.diagnoseTypeMismatch(node, node.type!, derivedType);
-        //node.errors.push({
-        //  message: E_TYPE_MISMATCH,
-        //  severity: 'error',
-        //  args: { left: node.type!, right: newType },
-        //  nested: [...this.diagnoseTypeMismatch(node.type!.solved, newType)],
-        //});
+        if (!hasTypeError(node)) {
+          node.errors.push({
+            message: E_TYPE_MISMATCH,
+            severity: 'error',
+            args: { left: node.type!, right: newType },
+            nested: [...this.diagnoseTypeMismatch(node.type!.solved, newType)],
+          });
+        }
       } else {
         narrowedType.node = node;
         if (node.type.solved !== narrowedType) {
@@ -671,87 +602,6 @@ export class TypeChecker {
   public isVoidType(type: Type): boolean {
     return this.areTypesSemanticallyEquivalent(new TupleType, type);
   }
-
-  //private *getTypesForMember(origNode: Syntax, fieldName: string, type: Type): IterableIterator<Type> {
-  //  switch (type.kind) {
-  //    case TypeKind.UnionType:
-  //    {
-  //      const typesMissingMember = [];
-  //      for (const elementType of getAllPossibleElementTypes(type)) {
-  //        let foundType = false;
-  //        for (const recordType of this.getTypesForMemberNoUnionType(origNode, fieldName, elementType, false)) {
-  //          yield recordType;
-  //          foundType = true;
-  //        }
-  //        if (!foundType) {
-  //          origNode.errors.push({
-  //            message: E_TYPES_MISSING_MEMBER,
-  //            severity: 'error',
-  //          })
-  //        }
-  //      }
-  //    }
-  //    default:
-  //      return this.getTypesForMemberNoUnionType(origNode, fieldName, type, true);
-  //  }
-  //}
-
-  //private *getTypesForMemberNoUnionType(origNode: Syntax, fieldName: string, type: Type, hardError: boolean): IterableIterator<Type> {
-  //  switch (type.kind) {
-  //    case TypeKind.AnyType:
-  //      break;
-  //    case TypeKind.FunctionType:
-  //      if (hardError) {
-  //        origNode.errors.push({
-  //          message: E_TYPES_MISSING_MEMBER,
-  //          severity: 'error',
-  //          args: {
-  //            name: fieldName,
-  //          },
-  //          nested: [{
-  //            message: E_NODE_DOES_NOT_CONTAIN_MEMBER,
-  //            severity: 'error',
-  //            node: type.node!,
-  //          }]
-  //        });
-  //      }
-  //      break;
-  //    case TypeKind.RecordType:
-  //    {
-  //      if (type.isFieldRequired(fieldName)) {
-  //        const fieldType = type.getAllMemberTypesForField(fieldName);
-  //        yield (fieldType as PlainRecordFieldType).type;
-  //      } else {
-  //        if (hardError) {
-  //          origNode.errors.push({
-  //            message: E_TYPES_MISSING_MEMBER,
-  //            severity: 'error',
-  //            args: {
-  //              name: fieldName
-  //            }
-  //          })
-  //        }
-  //      }
-  //      break;
-  //    }
-  //    default:
-  //      throw new Error(`I do not know how to find record member types for ${TypeKind[type.kind]}`)
-  //  }
-  //}
-
-  //private *getAllNodesForType(type: Type): IterableIterator<Syntax> {
-  //  if (type.node !== undefined) {
-  //    yield type.node;
-  //  }
-  //  switch (type.kind) {
-  //    case TypeKind.UnionType:
-  //      for (const elementType of type.getElementTypes()) {
-  //        yield* this.getAllNodesForType(type);
-  //      }
-  //      break;
-  //    default:
-  //  }
-  //}
 
   /**
    * Narrows @param outter down to @param inner. If @param outer could not be narrowed, this function return null.
@@ -836,36 +686,38 @@ export class TypeChecker {
       return new AnyType;
     }
 
+    this.mergeDuplicateTypes(elementTypes);
+
     // This is a small optimisation to prevent the complexity of processing a 
     // union type everwhere where it just contains one element.
     if (elementTypes.length === 1) {
       return elementTypes[0];
     }
 
-    return this.mergeDuplicateTypes(new UnionType(elementTypes));
+    return new UnionType(elementTypes);
   }
 
   private deriveTypeUsingChildren(node: Syntax): Type {
 
     switch (node.kind) {
 
-      case SyntaxKind.JSReturnStatement:
-      {
-        if (node.value === null) {
-          return this.getOpaqueType('undefined');
-        }
-        this.markNodeAsRequiringUpdate(node.value, node);
-        return node.value.type!.solved;
-      }
+      //case SyntaxKind.JSReturnStatement:
+      //{
+      //  if (node.value === null) {
+      //    return this.getOpaqueType('undefined');
+      //  }
+      //  this.markNodeAsRequiringUpdate(node.value, node);
+      //  return node.value.type!.solved;
+      //}
 
-      case SyntaxKind.JSExpressionStatement:
-      {
-        if (node.expression === null) {
-          return new TupleType;
-        }
-        this.markNodeAsRequiringUpdate(node.expression, node);
-        return node.expression.type!.solved;
-      }
+      //case SyntaxKind.JSExpressionStatement:
+      //{
+      //  if (node.expression === null) {
+      //    return new TupleType;
+      //  }
+      //  this.markNodeAsRequiringUpdate(node.expression, node);
+      //  return node.expression.type!.solved;
+      //}
 
       case SyntaxKind.JSMemberExpression:
       {
@@ -947,7 +799,7 @@ export class TypeChecker {
       {
         if (node.members === null) {
           const symbolPath = getFullyQualifiedPathToNode(node);
-          return new OpaqueType(symbolPath.encode());
+          return new OpaqueType(symbolPath.encode(), node);
         } else {
           let memberTypes: RecordFieldType[] = []
           for (const member of node.members) {
@@ -1069,31 +921,33 @@ export class TypeChecker {
         return this.getOpaqueType('Lang::Bolt::Node');
       }
 
-      case SyntaxKind.BoltExpressionStatement:
-      {
-        return this.deriveTypeUsingChildren(node.expression);
-      }
+      //case SyntaxKind.BoltExpressionStatement:
+      //{
+      //  return this.deriveTypeUsingChildren(node.expression);
+      //}
 
-      case SyntaxKind.BoltReturnStatement:
-      {
-        if (node.value === null) {
-          const tupleType = new TupleType();
-          return tupleType
-        }
-        return node.value.type!.solved;
-      }
+      //case SyntaxKind.BoltReturnStatement:
+      //{
+      //  if (node.value === null) {
+      //    const tupleType = new TupleType();
+      //    return tupleType
+      //  }
+      //  return node.value.type!.solved;
+      //}
 
-      case SyntaxKind.BoltBlockExpression:
-      {
-        let elementTypes = [];
-        if (node.elements !== null) {
-          for (const returnStmt of getReturnStatementsInFunctionBody(node.elements)) {
-            elementTypes.push(returnStmt.type!.solved)
-            this.markNodeAsRequiringUpdate(returnStmt, node);
-          }
-        }
-        return new UnionType(elementTypes);
-      }
+      //case SyntaxKind.BoltBlockExpression:
+      //{
+      //  let elementTypes = [];
+      //  if (node.elements !== null) {
+      //    for (const returnStmt of getReturnStatementsInFunctionBody(node.elements)) {
+      //      if (returnStmt.value !== null) {
+      //        elementTypes.push(returnStmt.value.type!.solved)
+      //        this.markNodeAsRequiringUpdate(returnStmt.value, node);
+      //      }
+      //    }
+      //  }
+      //  return new UnionType(elementTypes);
+      //}
 
       case SyntaxKind.BoltMemberExpression:
       {
@@ -1145,8 +999,12 @@ export class TypeChecker {
         }
         if (node.body !== null) {
           for (const returnStmt of getAllReturnStatementsInFunctionBody(node.body)) {
-            returnTypes.push(returnStmt.type!.solved);
-            this.markNodeAsRequiringUpdate(returnStmt, node);
+            if (returnStmt.value !== null) {
+              returnTypes.push(returnStmt.value.type!.solved);
+              this.markNodeAsRequiringUpdate(returnStmt.value, node);
+            } else {
+              returnTypes.push(new TupleType);
+            }
           }
         }
         let paramTypes = [];
@@ -1261,7 +1119,7 @@ export class TypeChecker {
       return this.areTypesSemanticallyEquivalent(resolvedType, b);
     }
     if (b.kind === TypeKind.ReturnType) {
-      const resolvedType = this.resolveReturnType(a);
+      const resolvedType = this.resolveReturnType(b);
       return this.areTypesSemanticallyEquivalent(a, resolvedType);
     }
 
@@ -1282,7 +1140,7 @@ export class TypeChecker {
     // FIXME There are probably more cases that should be covered.
     throw new Error(`I did not know how to calculate the equivalence of ${TypeKind[a.kind]} and ${TypeKind[b.kind]}`)
   }
-  
+
   private resolveReturnType(type: ReturnType): Type {
 
     let resultTypes = [];
@@ -1306,38 +1164,91 @@ export class TypeChecker {
           
         case TypeKind.FunctionType:
 
-          // Early check to see if the signature of the function call matches that of the function declaration.
-          if (type.argumentTypes.length !== elementType.paramTypes.length) {
-            continue;
-          }
+          if (elementType.paramTypes.length < type.argumentTypes.length) {
 
-          // Since we are assured by now that `type.argumentTypes` and `elementType.paramTypes` have equal length,
-          // we may pick the length of any of these two as the index bound in the next loop.
-          const paramCount = type.argumentTypes.length;
+            if (!hasDiagnostic(type.node!, E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL)) {
 
-          let matchFailed = false;
+              let nested: Diagnostic[] = [];
+              for (let i = elementType.paramTypes.length; i < type.argumentTypes.length; i++) {
+                nested.push({
+                  message: E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER,
+                  severity: 'error',
+                  node: elementType.getTypeAtParameterIndex(type.argumentTypes.length).node!
+                });
+              }
+              type.node!.errors.push({
+                message: E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL,
+                severity: 'error',
+                args: {
+                  expected: elementType.paramTypes.length,
+                  actual: type.argumentTypes.length,
+                },
+                nested,
+              });
 
-          // Iterate pairwise over the argument types and parameter types, checking whether they are assignable to each other.
-          // In the current version of the checker, this amounts to checking if they are semantically equal.
-          for (let i = 0; i < paramCount; i++) {
-            const argType = type.argumentTypes[i].solved;
-            const paramType = elementType.paramTypes[i].solved;
-            if (!this.areTypesSemanticallyEquivalent(argType, paramType)) {
-              //argType.node!.errors.push({
-                //message: E_TYPE_MISMATCH,
-                //severity: 'error',
-                //args: { left: paramType, right: argType }
-              //})
-              matchFailed = true;
-              break;
             }
+            
+            // Skip this return type
+            continue;
+
+          } else if (elementType.paramTypes.length > type.argumentTypes.length) {
+
+            if (!hasDiagnostic(type.node!, E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL)) {
+
+              const nested: Diagnostic[] = [];
+              for (let i = type.argumentTypes.length; i < elementType.paramTypes.length; i++) {
+                nested.push({
+                  message: E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER,
+                  severity: 'info',
+                  node: elementType.paramTypes[i].node!
+                });
+              }
+              type.node!.errors.push({
+                message: E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
+                severity: 'error',
+                args: {
+                  expected: elementType.paramTypes.length,
+                  actual: type.argumentTypes.length, 
+                },
+                nested,
+              });
+
+            }
+          
+            // Skip this return type
+            continue;
+
+          } else {
+
+            let hasErrors = false;
+
+            const paramCount = type.argumentTypes.length;
+            for (let i = 0; i < paramCount; i++) {
+              const argType = type.argumentTypes[i];
+              const paramType = elementType.paramTypes[i];
+              if (!this.areTypesSemanticallyEquivalent(argType, paramType)) {
+                if (!hasDiagnostic(type.solved.node!, E_ARGUMENT_TYPE_NOT_ASSIGNABLE)) {
+                  type.node!.errors.push({
+                    message: E_ARGUMENT_TYPE_NOT_ASSIGNABLE,
+                    severity: 'error',
+                    node: argType.node,
+                    args: { argType, paramType }
+                  })
+                }
+                hasErrors = true;
+              }
+            }
+
+            // Skip this return type if we had type errors
+            if (hasErrors) {
+              continue;
+            }
+
           }
 
           // If the argument types and parameter types didn't fail to match,
           // the function type is eligable to be 'called' by the given ReturnType.
-          if (!matchFailed) {
-            resultTypes.push(elementType.returnType.solved);
-          }
+          resultTypes.push(elementType.returnType.solved);
           break;
 
         default:
@@ -1363,9 +1274,7 @@ export class TypeChecker {
     return new UnionType(resultTypes);
   }
 
-  private mergeDuplicateTypes(type: Type): Type {
-
-    const resultTypes = [...getAllPossibleElementTypes(type)];
+  private mergeDuplicateTypes(resultTypes: Type[]): void {
 
     resultTypes.sort(comparator(areTypesLexicallyLessThan));
 
@@ -1377,19 +1286,9 @@ export class TypeChecker {
           break;
         }
       }
-      resultTypes.splice(i, j-i-1);
       resultTypes.splice(i+1, j-i-1);
     }
-
-    if (resultTypes.length === 0) {
-      return new NeverType;
-    }
-
-    if (resultTypes.length === 1) {
-      return resultTypes[0];
-    }
-
-    return new UnionType(resultTypes);
+    
   }
 
   private simplifyType(type: Type): Type {
@@ -1402,8 +1301,6 @@ export class TypeChecker {
     // new union types might be created, of which the elements need to take part in the 
     // iteration.
     const stack = [ type ];
-
-    //this.removeDuplicateTypes(elementTypes);
 
     while (stack.length > 0) {
 
@@ -1454,12 +1351,14 @@ export class TypeChecker {
       }
     }
 
+    this.mergeDuplicateTypes(resultTypes);
+
     // Small optimisation to make debugging easier.
     if (resultTypes.length === 1) {
       return resultTypes[0]
     }
 
-    return this.mergeDuplicateTypes(new UnionType(resultTypes));
+    return new UnionType(resultTypes);
   }
 
 }

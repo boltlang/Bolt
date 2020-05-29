@@ -20,6 +20,7 @@ import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
 import * as path from "path"
 import { convertNodeToSymbolPath } from "./resolver";
+import { TYPE_ERROR_MESSAGES } from "./diagnostics";
 
 export function getSourceFile(node: Syntax) {
   while (true) {
@@ -248,6 +249,19 @@ export function isExported(node: Syntax) {
     default:
       return false;
   }
+}
+
+export function hasTypeError(node: Syntax) {
+  for (const message of TYPE_ERROR_MESSAGES) {
+    if (hasDiagnostic(node, message)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function hasDiagnostic(node: Syntax, message: string): boolean {
+  return node.errors.some(d => d.message === message);
 }
 
 export function getFullyQualifiedPathToNode(node: Syntax) {

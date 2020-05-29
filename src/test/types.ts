@@ -11,7 +11,7 @@ describe('a function that merges two equivalent types', () => {
         type1.node = createBoltIdentifier('a');
         const type2 = new AnyType;
         type2.node = createBoltIdentifier('b');
-        const types = new UnionType([type1 type2]);
+        const types = new UnionType([type1, type2]);
         mergeTypes(types);
     })
 

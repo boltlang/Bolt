@@ -17,7 +17,7 @@ export const E_TYPE_MISMATCH = "Types {left} and {right} are not semantically eq
 export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for function call. Expected {expected} but got {actual}.";
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
 export const E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER = "Candidate function requires this parameter."
-export const E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER = "Argument has no corresponding parameter."
+export const E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER = "This argument is missing a corresponding parameter."
 export const E_INVALID_ARGUMENTS = "Invalid arguments passed to function '{name}'"
 export const E_RECORD_MISSING_MEMBER = "Record {name} does not have a member declaration named {memberName}"
 export const E_TYPES_MISSING_MEMBER = "Not all types resolve to a record with the a member named '{name}'."
@@ -25,6 +25,13 @@ export const E_NODE_DOES_NOT_CONTAIN_MEMBER = "This node does not contain the th
 export const E_MAY_NOT_RETURN_BECAUSE_TYPE_RESOLVES_TO_VOID = "May not return a value because the function's return type resolves to '()'"
 export const E_MUST_RETURN_BECAUSE_TYPE_DOES_NOT_RESOLVE_TO_VOID = "Must return a value because the function's return type does not resolve to '()'"
 export const E_ARGUMENT_TYPE_NOT_ASSIGNABLE = "This argument's type is not assignable to the function's parameter type."
+
+export const TYPE_ERROR_MESSAGES = [
+  E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
+  E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL,
+  E_ARGUMENT_TYPE_NOT_ASSIGNABLE,
+  E_TYPE_MISMATCH,
+]
 
 const BOLT_HARD_ERRORS = process.env['BOLT_HARD_ERRORS']
 
@@ -52,6 +59,8 @@ export class DiagnosticPrinter {
   public hasErrors = false
   public hasFatal = false;
 
+  private indent = 0;
+
   public add(diagnostic: Diagnostic): void {
 
     if (BOLT_HARD_ERRORS && (diagnostic.severity === 'error' || diagnostic.severity === 'fatal')) {
@@ -64,7 +73,9 @@ export class DiagnosticPrinter {
       throw new Error(out);
     }
 
-    let out = ''
+    const indentation = ' '.repeat(this.indent);
+
+    let out = indentation;
 
     switch (diagnostic.severity) {
       case 'error':
@@ -77,6 +88,9 @@ export class DiagnosticPrinter {
       case 'warning':
         this.hasErrors = true;
         out += chalk.bold.red('warning: ');
+        break;
+      case 'info':
+        out += chalk.bold.yellow('info: ')
         break;
       default:
         throw new Error(`Unkown severity for diagnostic message.`);
@@ -103,8 +117,8 @@ export class DiagnosticPrinter {
       for (let i = startLine; i < endLine; i++) {
         const line = lines[i];
         let j = firstIndexOfNonEmpty(line);
-        out += '  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+line+'\n'
-        const gutter = '  '+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
+        out +=  indentation + '  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+line+'\n'
+        const gutter = indentation + '  '+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
         let mark: number;
         let skip: number;
         if (i === span.start.line-1 && i === span.end.line-1) {
@@ -131,6 +145,15 @@ export class DiagnosticPrinter {
     }
 
     process.stderr.write(out);
+
+    if (diagnostic.nested !== undefined) {
+      this.indent += 2;
+      for (const nested of diagnostic.nested) {
+        this.add(nested);
+      }
+      this.indent -= 2;
+    }
+
   }
 
 }
