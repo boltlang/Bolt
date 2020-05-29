@@ -147,7 +147,7 @@ export class Evaluator {
       case SyntaxKind.BoltTypePattern:
       {
         const expectedType = this.checker.getTypeOfNode(node.type);
-        if (!this.checker.isTypeAssignableTo(expectedType, this.checker.getTypeOfValue(value))) {
+        if (!this.checker.isTypeAssignableTo(expectedType, this.checker.createTypeForValue(value))) {
           return false;
         }
         return false;

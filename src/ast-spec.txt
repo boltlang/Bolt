@@ -2,7 +2,8 @@
 node EndOfFile > BoltToken, JSToken;
 node Token;
 node SourceFile;
-node FunctionBody;
+node FunctionBodyElement;
+node ReturnStatement;
 
 // Bolt language AST definitions
 
@@ -217,7 +218,7 @@ node BoltConstantExpression > BoltExpression {
 
 node BoltStatement > BoltSyntax, BoltFunctionBodyElement, BoltSourceElement;
 
-node BoltReturnStatement > BoltStatement {
+node BoltReturnStatement > ReturnStatement, BoltStatement {
   value: Option<BoltExpression>,
 }
 
@@ -262,7 +263,7 @@ node BoltModule > BoltSyntax, BoltSourceElement {
 
 node BoltDeclarationLike;
 
-node BoltFunctionBodyElement;
+node BoltFunctionBodyElement > FunctionBodyElement;
 
 node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike {
   modifiers: BoltModifiers,
@@ -467,9 +468,9 @@ node JSReferenceExpression > JSExpression {
 
 node JSSourceElement;
 
-node JSFunctionBodyElement;
+node JSFunctionBodyElement > FunctionBodyElement;
 
-node JSStatement > JSSourceElement, JSFunctionBodyElement;
+node JSStatement > JSSyntax, JSSourceElement, JSFunctionBodyElement;
 
 node JSCatchBlock > JSSyntax {
   bindings: Option<JSPattern>,
@@ -495,7 +496,7 @@ node JSConditionalStatement > JSStatement {
   cases: Vec<JSConditionalCase>,
 }
 
-node JSReturnStatement > JSStatement {
+node JSReturnStatement > ReturnStatement, JSStatement {
   value: Option<JSExpression>,
 }
 

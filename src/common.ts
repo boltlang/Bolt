@@ -19,6 +19,7 @@ import {FastStringMap, enumerate, escapeChar, assert} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
 import * as path from "path"
+import { convertNodeToSymbolPath } from "./resolver";
 
 export function getSourceFile(node: Syntax) {
   while (true) {
@@ -249,6 +250,23 @@ export function isExported(node: Syntax) {
   }
 }
 
+export function getFullyQualifiedPathToNode(node: Syntax) {
+  const symbolPath = convertNodeToSymbolPath(node);
+  while (true) {
+    const parentNode = node.parentNode;
+    if (parentNode === null) {
+      break;
+    }
+    node = parentNode;
+    if (node.kind === SyntaxKind.BoltModule) {
+      for (const element of node.name) {
+        symbolPath.modulePath.unshift(element.text);
+      }
+    }
+  }
+  return symbolPath;
+}
+
 export function describeKind(kind: SyntaxKind): string {
   switch (kind) {
     case SyntaxKind.BoltImportKeyword:
@@ -388,3 +406,39 @@ export function describeKind(kind: SyntaxKind): string {
   }
 }
 
+export function *getAllReturnStatementsInFunctionBody(body: FunctionBody): IterableIterator<ReturnStatement> {
+  for (const element of body) {
+    switch (element.kind) {
+      case SyntaxKind.BoltReturnStatement:
+      case SyntaxKind.JSReturnStatement:
+      {
+        yield element;
+        break;
+      }
+      case SyntaxKind.BoltConditionalStatement:
+      {
+        for (const caseNode of element.cases) {
+          yield* getAllReturnStatementsInFunctionBody(caseNode.body);
+        }
+        break;
+      }
+      case SyntaxKind.JSTryCatchStatement:
+      {
+        yield* getAllReturnStatementsInFunctionBody(element.tryBlock)
+        if (element.catchBlock !== null) {
+          yield* getAllReturnStatementsInFunctionBody(element.catchBlock.elements)
+        }
+        if (element.finalBlock !== null) {
+          yield* getAllReturnStatementsInFunctionBody(element.finalBlock)
+        }
+        break;
+      }
+      case SyntaxKind.JSExpressionStatement:
+      case SyntaxKind.BoltExpressionStatement:
+      case SyntaxKind.JSImportDeclaration:
+        break;
+      default:
+        throw new Error(`I did not know how to find return statements in ${kindToString(element.kind)}`);
+    }
+  }
+}

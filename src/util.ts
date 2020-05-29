@@ -6,6 +6,7 @@ import * as os from "os"
 import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
+import { E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER } from "./diagnostics"
 
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
@@ -37,6 +38,53 @@ export function every<T>(iterator: Iterator<T>, pred: (value: T) => boolean): bo
     }
   }
   return true;
+}
+
+export function* filter<T>(iterator: Iterator<T>, pred: (value: T) => boolean): IterableIterator<T> {
+  while (true) {
+    const { value, done } = iterator.next();
+    if (done) {
+      break;
+    }
+    if (pred(value)) {
+      yield value;
+    }
+  }
+}
+
+export function* map<T, R>(iterator: Iterator<T>, func: (value: T) => R): IterableIterator<R> {
+  while (true) {
+    const { value, done } = iterator.next();
+    if (done) {
+      break;
+    }
+    yield func(value);
+  }
+}
+
+export function* flatMap<T, R>(iterator: Iterator<T>, func: (value: T) => IterableIterator<R>): IterableIterator<R> {
+  while (true) {
+    const { value, done } = iterator.next();
+    if (done) {
+      break;
+    }
+    for (const element of func(value)) {
+      yield element;
+    }
+  }
+  
+}
+
+export function comparator<T>(pred: (a: T, b: T) => boolean): (a: T, b: T) => number {
+  return function (a, b) {
+    if (pred(a, b)) {
+      return 1;
+    } else if (pred(b, a)) {
+      return -1;
+    } else {
+      return 0;
+    }
+  }
 }
 
 export function assert(test: boolean): void {
@@ -129,6 +177,102 @@ export function prettyPrint(value: any): string {
     return value[prettyPrintTag]();
   }
   return value.toString();
+}
+
+export type TransparentProxy<T> = T & { updateHandle(value: T): void }
+
+export function createTransparentProxy<T extends object>(value: T): TransparentProxy<T> {
+  const handlerObject = {
+    __HANDLE: value,
+    __IS_HANDLE: true,
+    updateHandle(newValue: T) {
+      if (newValue.__IS_HANDLE) {
+        newValue = newValue.__HANDLE;
+      }
+      value = newValue;
+      handlerObject.__HANDLE = newValue;
+    }
+  };
+  return new Proxy<any>({}, {
+    getPrototypeOf(target: T): object | null {
+      return Reflect.getPrototypeOf(value);
+    },
+    setPrototypeOf(target: T, v: any): boolean {
+      return Reflect.setPrototypeOf(value, v);
+    },
+    isExtensible(target: T): boolean {
+      return Reflect.isExtensible(value);
+    },
+    preventExtensions(target: T): boolean {
+      return Reflect.preventExtensions(value);
+    },
+    getOwnPropertyDescriptor(target: T, p: PropertyKey): PropertyDescriptor | undefined {
+      return Reflect.getOwnPropertyDescriptor(value, p);
+    },
+    has(target: T, p: PropertyKey): boolean {
+      return Reflect.has(value, p);
+    },
+    get(target: T, p: PropertyKey, receiver: any): any {
+      if (hasOwnProperty(handlerObject, p)) {
+        return Reflect.get(handlerObject, p);
+      }
+      return Reflect.get(value, p, receiver)
+    },
+    set(target: T, p: PropertyKey, value: any, receiver: any): boolean {
+      return Reflect.set(value, p, value);
+    },
+    deleteProperty(target: T, p: PropertyKey): boolean {
+      return Reflect.deleteProperty(value, p);
+    },
+    defineProperty(target: T, p: PropertyKey, attributes: PropertyDescriptor): boolean {
+      return Reflect.defineProperty(value, p, attributes);
+    },
+    enumerate(target: T): PropertyKey[] {
+      return [...Reflect.enumerate(value)];
+    },
+    ownKeys(target: T): PropertyKey[] {
+      return Reflect.ownKeys(value);
+    },
+    apply(target: T, thisArg: any, argArray?: any): any {
+      return Reflect.apply(value as any, thisArg, argArray);
+    },
+    construct(target: T, argArray: any, newTarget?: any): object {
+      return Reflect.construct(value as any, argArray, newTarget);
+    }
+  });
+}
+
+export const getKeyTag = Symbol('get key of object');
+
+function getKey(value: any): string {
+  if (typeof(value) === 'string') {
+    return value;
+  } else if (typeof(value) === 'number') {
+    return value.toString();
+  } else if (isObjectLike(value) && hasOwnProperty(value, getKeyTag)) {
+    return value[getKeyTag]();
+  } else {
+    throw new Error(`Could not calculate a key for ${value}`);
+  }
+}
+
+export class FastMultiMap<K, V> {
+
+  private mapping = Object.create(null);
+
+  public clear(): void {
+    this.mapping = Object.create(null);
+  }
+
+  public add(key: K, value: V) {
+    const keyStr = getKey(key);
+    if (keyStr in this.mapping) {
+      this.mapping[keyStr].push(keyStr);
+    } else {
+      this.mapping[keyStr] = [ value ]
+    }
+  }
+
 }
 
 export class FastStringMap<K extends PropertyKey, V> {

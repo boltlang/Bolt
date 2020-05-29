@@ -1,5 +1,5 @@
 
-import { Type } from "./types"
+import { TypeRef } from "./types"
 import { Diagnostic } from "./diagnostics"
 import { Package } from "./common"
 import { TextSpan } from "./text"
@@ -13,7 +13,7 @@ export function isSyntax(value: any): value is Syntax;
 interface SyntaxBase {
   id: number;
   kind: SyntaxKind;
-  type?: Type;
+  type?: TypeRef;
   errors: Diagnostic[]
   parentNode: Syntax | null;
   span: TextSpan | null;
@@ -30,7 +30,6 @@ export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K 
 export class NodeVisitor {
   public visit(node: Syntax): void;
   protected visitEndOfFile?(node: EndOfFile): void;
-  protected visitFunctionBody?(node: FunctionBody): void;
   protected visitBoltStringLiteral?(node: BoltStringLiteral): void;
   protected visitBoltIntegerLiteral?(node: BoltIntegerLiteral): void;
   protected visitBoltIdentifier?(node: BoltIdentifier): void;
@@ -187,158 +186,157 @@ export class NodeVisitor {
 
 export const enum SyntaxKind {
   EndOfFile = 0,
-  FunctionBody = 3,
-  BoltStringLiteral = 6,
-  BoltIntegerLiteral = 7,
-  BoltIdentifier = 9,
-  BoltOperator = 11,
-  BoltAssignment = 12,
-  BoltComma = 13,
-  BoltSemi = 14,
-  BoltColon = 15,
-  BoltColonColon = 16,
-  BoltDot = 17,
-  BoltDotDot = 18,
-  BoltRArrow = 19,
-  BoltRArrowAlt = 20,
-  BoltLArrow = 21,
-  BoltEqSign = 22,
-  BoltGtSign = 23,
-  BoltExMark = 24,
-  BoltLtSign = 25,
-  BoltVBar = 26,
-  BoltWhereKeyword = 28,
-  BoltQuoteKeyword = 29,
-  BoltFnKeyword = 30,
-  BoltForeignKeyword = 31,
-  BoltForKeyword = 32,
-  BoltLetKeyword = 33,
-  BoltReturnKeyword = 34,
-  BoltLoopKeyword = 35,
-  BoltYieldKeyword = 36,
-  BoltMatchKeyword = 37,
-  BoltImportKeyword = 38,
-  BoltExportKeyword = 39,
-  BoltPubKeyword = 40,
-  BoltModKeyword = 41,
-  BoltMutKeyword = 42,
-  BoltEnumKeyword = 43,
-  BoltStructKeyword = 44,
-  BoltTypeKeyword = 45,
-  BoltTraitKeyword = 46,
-  BoltImplKeyword = 47,
-  BoltParenthesized = 49,
-  BoltBraced = 50,
-  BoltBracketed = 51,
-  BoltSourceFile = 52,
-  BoltQualName = 53,
-  BoltTypeOfExpression = 55,
-  BoltReferenceTypeExpression = 56,
-  BoltFunctionTypeExpression = 57,
-  BoltLiftedTypeExpression = 58,
-  BoltTypeParameter = 59,
-  BoltBindPattern = 61,
-  BoltTypePattern = 62,
-  BoltExpressionPattern = 63,
-  BoltTuplePatternElement = 64,
-  BoltTuplePattern = 65,
-  BoltRecordFieldPattern = 66,
-  BoltRecordPattern = 67,
-  BoltQuoteExpression = 69,
-  BoltTupleExpression = 70,
-  BoltReferenceExpression = 71,
-  BoltMemberExpression = 72,
-  BoltFunctionExpression = 73,
-  BoltCallExpression = 74,
-  BoltYieldExpression = 75,
-  BoltMatchArm = 76,
-  BoltMatchExpression = 77,
-  BoltCase = 78,
-  BoltCaseExpression = 79,
-  BoltBlockExpression = 80,
-  BoltConstantExpression = 81,
-  BoltReturnStatement = 83,
-  BoltConditionalCase = 84,
-  BoltConditionalStatement = 85,
-  BoltResumeStatement = 86,
-  BoltExpressionStatement = 87,
-  BoltParameter = 88,
-  BoltModule = 92,
-  BoltFunctionDeclaration = 95,
-  BoltVariableDeclaration = 96,
-  BoltPlainImportSymbol = 98,
-  BoltImportDirective = 99,
-  BoltExportSymbol = 100,
-  BoltPlainExportSymbol = 101,
-  BoltExportDirective = 102,
-  BoltTraitDeclaration = 103,
-  BoltImplDeclaration = 104,
-  BoltTypeAliasDeclaration = 105,
-  BoltRecordField = 107,
-  BoltRecordDeclaration = 108,
-  BoltMacroCall = 110,
-  JSIdentifier = 114,
-  JSString = 115,
-  JSInteger = 116,
-  JSFromKeyword = 117,
-  JSReturnKeyword = 118,
-  JSTryKeyword = 119,
-  JSFinallyKeyword = 120,
-  JSCatchKeyword = 121,
-  JSImportKeyword = 122,
-  JSAsKeyword = 123,
-  JSConstKeyword = 124,
-  JSLetKeyword = 125,
-  JSExportKeyword = 126,
-  JSFunctionKeyword = 127,
-  JSWhileKeyword = 128,
-  JSForKeyword = 129,
-  JSCloseBrace = 131,
-  JSCloseBracket = 132,
-  JSCloseParen = 133,
-  JSOpenBrace = 134,
-  JSOpenBracket = 135,
-  JSOpenParen = 136,
-  JSSemi = 137,
-  JSComma = 138,
-  JSDot = 139,
-  JSDotDotDot = 140,
-  JSMulOp = 141,
-  JSAddOp = 142,
-  JSDivOp = 143,
-  JSSubOp = 144,
-  JSLtOp = 145,
-  JSGtOp = 146,
-  JSBOrOp = 147,
-  JSBXorOp = 148,
-  JSBAndOp = 149,
-  JSBNotOp = 150,
-  JSNotOp = 151,
-  JSBindPattern = 153,
-  JSConstantExpression = 155,
-  JSMemberExpression = 156,
-  JSCallExpression = 157,
-  JSBinaryExpression = 158,
-  JSUnaryExpression = 159,
-  JSNewExpression = 160,
-  JSSequenceExpression = 161,
-  JSConditionalExpression = 162,
-  JSLiteralExpression = 163,
-  JSReferenceExpression = 164,
-  JSCatchBlock = 168,
-  JSTryCatchStatement = 169,
-  JSExpressionStatement = 170,
-  JSConditionalCase = 171,
-  JSConditionalStatement = 172,
-  JSReturnStatement = 173,
-  JSParameter = 174,
-  JSImportStarBinding = 178,
-  JSImportAsBinding = 179,
-  JSImportDeclaration = 180,
-  JSFunctionDeclaration = 181,
-  JSArrowFunctionDeclaration = 182,
-  JSLetDeclaration = 183,
-  JSSourceFile = 184,
+  BoltStringLiteral = 7,
+  BoltIntegerLiteral = 8,
+  BoltIdentifier = 10,
+  BoltOperator = 12,
+  BoltAssignment = 13,
+  BoltComma = 14,
+  BoltSemi = 15,
+  BoltColon = 16,
+  BoltColonColon = 17,
+  BoltDot = 18,
+  BoltDotDot = 19,
+  BoltRArrow = 20,
+  BoltRArrowAlt = 21,
+  BoltLArrow = 22,
+  BoltEqSign = 23,
+  BoltGtSign = 24,
+  BoltExMark = 25,
+  BoltLtSign = 26,
+  BoltVBar = 27,
+  BoltWhereKeyword = 29,
+  BoltQuoteKeyword = 30,
+  BoltFnKeyword = 31,
+  BoltForeignKeyword = 32,
+  BoltForKeyword = 33,
+  BoltLetKeyword = 34,
+  BoltReturnKeyword = 35,
+  BoltLoopKeyword = 36,
+  BoltYieldKeyword = 37,
+  BoltMatchKeyword = 38,
+  BoltImportKeyword = 39,
+  BoltExportKeyword = 40,
+  BoltPubKeyword = 41,
+  BoltModKeyword = 42,
+  BoltMutKeyword = 43,
+  BoltEnumKeyword = 44,
+  BoltStructKeyword = 45,
+  BoltTypeKeyword = 46,
+  BoltTraitKeyword = 47,
+  BoltImplKeyword = 48,
+  BoltParenthesized = 50,
+  BoltBraced = 51,
+  BoltBracketed = 52,
+  BoltSourceFile = 53,
+  BoltQualName = 54,
+  BoltTypeOfExpression = 56,
+  BoltReferenceTypeExpression = 57,
+  BoltFunctionTypeExpression = 58,
+  BoltLiftedTypeExpression = 59,
+  BoltTypeParameter = 60,
+  BoltBindPattern = 62,
+  BoltTypePattern = 63,
+  BoltExpressionPattern = 64,
+  BoltTuplePatternElement = 65,
+  BoltTuplePattern = 66,
+  BoltRecordFieldPattern = 67,
+  BoltRecordPattern = 68,
+  BoltQuoteExpression = 70,
+  BoltTupleExpression = 71,
+  BoltReferenceExpression = 72,
+  BoltMemberExpression = 73,
+  BoltFunctionExpression = 74,
+  BoltCallExpression = 75,
+  BoltYieldExpression = 76,
+  BoltMatchArm = 77,
+  BoltMatchExpression = 78,
+  BoltCase = 79,
+  BoltCaseExpression = 80,
+  BoltBlockExpression = 81,
+  BoltConstantExpression = 82,
+  BoltReturnStatement = 84,
+  BoltConditionalCase = 85,
+  BoltConditionalStatement = 86,
+  BoltResumeStatement = 87,
+  BoltExpressionStatement = 88,
+  BoltParameter = 89,
+  BoltModule = 93,
+  BoltFunctionDeclaration = 96,
+  BoltVariableDeclaration = 97,
+  BoltPlainImportSymbol = 99,
+  BoltImportDirective = 100,
+  BoltExportSymbol = 101,
+  BoltPlainExportSymbol = 102,
+  BoltExportDirective = 103,
+  BoltTraitDeclaration = 104,
+  BoltImplDeclaration = 105,
+  BoltTypeAliasDeclaration = 106,
+  BoltRecordField = 108,
+  BoltRecordDeclaration = 109,
+  BoltMacroCall = 111,
+  JSIdentifier = 115,
+  JSString = 116,
+  JSInteger = 117,
+  JSFromKeyword = 118,
+  JSReturnKeyword = 119,
+  JSTryKeyword = 120,
+  JSFinallyKeyword = 121,
+  JSCatchKeyword = 122,
+  JSImportKeyword = 123,
+  JSAsKeyword = 124,
+  JSConstKeyword = 125,
+  JSLetKeyword = 126,
+  JSExportKeyword = 127,
+  JSFunctionKeyword = 128,
+  JSWhileKeyword = 129,
+  JSForKeyword = 130,
+  JSCloseBrace = 132,
+  JSCloseBracket = 133,
+  JSCloseParen = 134,
+  JSOpenBrace = 135,
+  JSOpenBracket = 136,
+  JSOpenParen = 137,
+  JSSemi = 138,
+  JSComma = 139,
+  JSDot = 140,
+  JSDotDotDot = 141,
+  JSMulOp = 142,
+  JSAddOp = 143,
+  JSDivOp = 144,
+  JSSubOp = 145,
+  JSLtOp = 146,
+  JSGtOp = 147,
+  JSBOrOp = 148,
+  JSBXorOp = 149,
+  JSBAndOp = 150,
+  JSBNotOp = 151,
+  JSNotOp = 152,
+  JSBindPattern = 154,
+  JSConstantExpression = 156,
+  JSMemberExpression = 157,
+  JSCallExpression = 158,
+  JSBinaryExpression = 159,
+  JSUnaryExpression = 160,
+  JSNewExpression = 161,
+  JSSequenceExpression = 162,
+  JSConditionalExpression = 163,
+  JSLiteralExpression = 164,
+  JSReferenceExpression = 165,
+  JSCatchBlock = 169,
+  JSTryCatchStatement = 170,
+  JSExpressionStatement = 171,
+  JSConditionalCase = 172,
+  JSConditionalStatement = 173,
+  JSReturnStatement = 174,
+  JSParameter = 175,
+  JSImportStarBinding = 179,
+  JSImportAsBinding = 180,
+  JSImportDeclaration = 181,
+  JSFunctionDeclaration = 182,
+  JSArrowFunctionDeclaration = 183,
+  JSLetDeclaration = 184,
+  JSSourceFile = 185,
 }
 
 export interface EndOfFile extends SyntaxBase {
@@ -479,20 +477,26 @@ export type SourceFile
   | JSSourceFile
 
 
-export interface FunctionBody extends SyntaxBase {
-  kind: SyntaxKind.FunctionBody;
-  parentNode: FunctionBodyParent;
-  getChildNodes(): IterableIterator<FunctionBodyChild>
-}
+export type FunctionBodyElement
+  = JSFunctionDeclaration
+  | JSArrowFunctionDeclaration
+  | JSLetDeclaration
+  | JSExpressionStatement
+  | JSConditionalStatement
+  | JSReturnStatement
+  | BoltFunctionDeclaration
+  | BoltVariableDeclaration
+  | BoltReturnStatement
+  | BoltConditionalStatement
+  | BoltResumeStatement
+  | BoltExpressionStatement
+  | BoltMacroCall
 
-export type FunctionBodyParent
-= never
 
-export type FunctionBodyAnyParent
-= never
+export type ReturnStatement
+  = BoltReturnStatement
+  | JSReturnStatement
 
-export type FunctionBodyChild
-= never
 
 export type BoltSyntax
   = BoltSourceFile
@@ -4980,6 +4984,9 @@ export type JSSyntax
   | JSFunctionDeclaration
   | JSArrowFunctionDeclaration
   | JSLetDeclaration
+  | JSExpressionStatement
+  | JSConditionalStatement
+  | JSReturnStatement
   | JSConstantExpression
   | JSMemberExpression
   | JSCallExpression
@@ -8015,7 +8022,6 @@ export type JSSourceFileChild
 
 export type Syntax
   = EndOfFile
-  | FunctionBody
   | BoltStringLiteral
   | BoltIntegerLiteral
   | BoltIdentifier
@@ -8172,7 +8178,6 @@ export type Syntax
 export function kindToString(kind: SyntaxKind): string;
 
 export function createEndOfFile(span?: TextSpan | null): EndOfFile;
-export function createFunctionBody(span?: TextSpan | null): FunctionBody;
 export function createBoltStringLiteral(value: string, span?: TextSpan | null): BoltStringLiteral;
 export function createBoltIntegerLiteral(value: bigint, span?: TextSpan | null): BoltIntegerLiteral;
 export function createBoltIdentifier(text: string, span?: TextSpan | null): BoltIdentifier;
@@ -8328,7 +8333,8 @@ export function createJSSourceFile(elements: JSSourceElement[], span?: TextSpan 
 export function isEndOfFile(value: any): value is EndOfFile;
 export function isToken(value: any): value is Token;
 export function isSourceFile(value: any): value is SourceFile;
-export function isFunctionBody(value: any): value is FunctionBody;
+export function isFunctionBodyElement(value: any): value is FunctionBodyElement;
+export function isReturnStatement(value: any): value is ReturnStatement;
 export function isBoltSyntax(value: any): value is BoltSyntax;
 export function isBoltToken(value: any): value is BoltToken;
 export function isBoltStringLiteral(value: any): value is BoltStringLiteral;

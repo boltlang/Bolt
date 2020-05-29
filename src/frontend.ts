@@ -98,6 +98,7 @@ export class Frontend {
     for (const sourceFile of program.getAllSourceFiles()) {
       checker.registerSourceFile(sourceFile);
     }
+    checker.solve(program.getAllSourceFiles());
     for (const pkg of program.getAllPackages()) {
       if (!pkg.isDependency) {
         for (const sourceFile of pkg.getAllSourceFiles()) {

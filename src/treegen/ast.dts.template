@@ -1,5 +1,5 @@
 
-import { Type } from "./types"
+import { TypeRef } from "./types"
 import { Diagnostic } from "./diagnostics"
 import { Package } from "./common"
 import { TextSpan } from "./text"
@@ -13,7 +13,7 @@ export function isSyntax(value: any): value is Syntax;
 interface SyntaxBase {
   id: number;
   kind: SyntaxKind;
-  type?: Type;
+  type?: TypeRef;
   errors: Diagnostic[]
   parentNode: Syntax | null;
   span: TextSpan | null;

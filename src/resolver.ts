@@ -9,25 +9,49 @@ const GLOBAL_SCOPE_ID = 'global';
 export class SymbolPath {
 
   constructor(
-    private parents: string[],
+    public modulePath: string[],
     public isAbsolute: boolean,
     public name: string
   ) {
 
   }
 
-  public hasParents(): boolean {
-    return this.parents.length > 0;
+  public encode(): string {
+    let out = '';
+    if (this.isAbsolute) {
+      out += '::'
+    }
+    for (const element of this.modulePath) {
+      out += element + '::'
+    }
+    out += this.name;
+    return out;
   }
 
-  public getParents() {
-    return this.parents;
+  public hasModulePath(): boolean {
+    return this.modulePath.length > 0;
+  }
+
+  public getModulePath() {
+    return this.modulePath;
   }
 
 }
 
-export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
+export function convertNodeToSymbolPath(node: Syntax): SymbolPath {
   switch (node.kind) {
+    case SyntaxKind.BoltRecordDeclaration:
+      return new SymbolPath(
+        [],
+        false,
+        node.name.text,
+      );
+    case SyntaxKind.BoltFunctionDeclaration:
+      return new SymbolPath(
+        [],
+        false,
+        emitNode(node.name),
+      );
     case SyntaxKind.BoltReferenceExpression:
       return new SymbolPath(
         node.name.modulePath.map(id => id.text),
@@ -42,14 +66,8 @@ export function getSymbolPathFromNode(node: BoltSyntax): SymbolPath {
         return new SymbolPath([], false, name);
       }
       return new SymbolPath(node.modulePath.map(id => id.text), false, name);
-    //case SyntaxKind.BoltModulePath:
-    //  return new SymbolPath(
-    //    node.elements.slice(0, -1).map(el => el.text),
-    //    node.isAbsolute,
-    //    node.elements[node.elements.length-1].text
-    //  );
     default:
-      throw new Error(`Could not extract a symbol path from the given node.`);
+      throw new Error(`Could not extract a symbol path from node ${kindToString(node.kind)}.`);
   }
 }
 
@@ -388,7 +406,7 @@ export class SymbolResolver {
                 for (const scopeType of getAllSymbolKinds()) {
                   const scope = this.getScopeForNode(importDir, scopeType);
                   assert(scope !== null);
-                  const exported = this.resolveSymbolPath(getSymbolPathFromNode(importSymbol), scope!);
+                  const exported = this.resolveSymbolPath(convertNodeToSymbolPath(importSymbol), scope!);
                   if (exported !== null) {
                     for (const decl of exported.declarations) {
                       scope!.addNodeAsSymbol(this.strategy.getSymbolName(decl), decl);
@@ -491,16 +509,17 @@ export class SymbolResolver {
     return scope.getSymbol(this.strategy.getSymbolName(node));
   }
 
-  public resolveGlobalSymbol(name: string, kind: ScopeType) {
-    const symbolPath = new SymbolPath([], true, name);
+  public resolveGlobalSymbol(path: SymbolPath, kind: ScopeType) {
     for (const sourceFile of this.program.getAllGloballyDeclaredSourceFiles()) {
       const scope = this.getScopeForNode(sourceFile, kind);
-      if (scope === null) {
+      assert(scope !== null);
+      const modScope = this.resolveModulePath(path.getModulePath(), scope!);
+      if (modScope === null) {
         continue;
       }
-      const sym = scope.getLocalSymbol(name);
+      const sym = modScope?.getLocalSymbol(path.name)
       if (sym !== null) {
-        return sym
+        return sym;
       }
     }
     return null;
@@ -508,7 +527,7 @@ export class SymbolResolver {
 
   public resolveSymbolPath(path: SymbolPath, scope: Scope): SymbolInfo | null {
 
-    if (path.hasParents()) {
+    if (path.hasModulePath()) {
 
       if (path.isAbsolute) {
 
@@ -517,7 +536,7 @@ export class SymbolResolver {
       } else {
 
         // Perform the acutal module resolution.
-        const resolvedScope = this.resolveModulePath(path.getParents(), scope);
+        const resolvedScope = this.resolveModulePath(path.getModulePath(), scope);
 
         // Failing to find any module means that we cannot continue, because
         // it does not make sense to get the symbol of a non-existent module.
@@ -533,7 +552,11 @@ export class SymbolResolver {
     // Once we've handled any module path that might have been present,
     // we resolve the actual symbol using a helper method.
 
-    return scope.getSymbol(path.name);
+    const sym = scope.getSymbol(path.name);
+    if (sym !== null) {
+      return sym
+    }
+    return this.resolveGlobalSymbol(path, scope.kind);
   }
 
 }

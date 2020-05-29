@@ -13,7 +13,7 @@ export const E_FIELD_NOT_PRESENT = "Field '{name}' is not present."
 export const E_FIELD_MUST_BE_BOOLEAN = "Field '{name}' must be a either 'true' or 'false'."
 export const E_TYPE_DECLARATION_NOT_FOUND = "A type declaration named '{name}' was not found."
 export const E_DECLARATION_NOT_FOUND = "Reference to an undefined declaration '{name}'.";
-export const E_TYPES_NOT_ASSIGNABLE = "Types {left} and {right} are not assignable.";
+export const E_TYPE_MISMATCH = "Types {left} and {right} are not semantically equivalent.";
 export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for function call. Expected {expected} but got {actual}.";
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
 export const E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER = "Candidate function requires this parameter."
@@ -24,6 +24,7 @@ export const E_TYPES_MISSING_MEMBER = "Not all types resolve to a record with th
 export const E_NODE_DOES_NOT_CONTAIN_MEMBER = "This node does not contain the the member '{name}'."
 export const E_MAY_NOT_RETURN_BECAUSE_TYPE_RESOLVES_TO_VOID = "May not return a value because the function's return type resolves to '()'"
 export const E_MUST_RETURN_BECAUSE_TYPE_DOES_NOT_RESOLVE_TO_VOID = "Must return a value because the function's return type does not resolve to '()'"
+export const E_ARGUMENT_TYPE_NOT_ASSIGNABLE = "This argument's type is not assignable to the function's parameter type."
 
 const BOLT_HARD_ERRORS = process.env['BOLT_HARD_ERRORS']
 

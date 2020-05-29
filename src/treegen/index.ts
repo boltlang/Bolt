@@ -58,7 +58,7 @@ export function generateAST(decls: Declaration[]) {
       jsFile.write(`index: ${decl.index},\n`);
       jsFile.write(`parents: [`);
       for (const parentName of getParentChain(decl.name)) {
-        jsFile.write(`'${decl.name}', `)
+        jsFile.write(`'${parentName}', `)
       }
       jsFile.write(`'Syntax'],\n`);
       jsFile.write(`fields: new Map([\n`);
@@ -359,7 +359,7 @@ export function generateAST(decls: Declaration[]) {
     return children;
   }
 
-  function *getParentChain(nodeName: string) {
+  function *getParentChain(nodeName: string): IterableIterator<string> {
     const stack = [ nodeName ];
     while (stack.length > 0) {
       const nodeDecl = getDeclarationNamed(stack.pop()!) as NodeDeclaration;

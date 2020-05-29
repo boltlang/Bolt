@@ -18,7 +18,7 @@ const nodeProto = {
 
   *getChildNodes() {
     for (const key of Object.keys(this)) {
-      if (key === 'span' || key === 'parentNode') {
+      if (key === 'span' || key === 'parentNode' || key === 'type') {
         continue
       }
       const value = this[key];

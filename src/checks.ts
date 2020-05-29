@@ -1,7 +1,7 @@
 import { BoltImportDirective, Syntax, BoltParameter, BoltReferenceExpression, BoltReferenceTypeExpression, BoltSourceFile, BoltCallExpression, BoltReturnKeyword, BoltReturnStatement, SyntaxKind, NodeVisitor, BoltSyntax, BoltIdentifier } from "./ast";
 import { Program } from "./program";
-import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_TYPES_NOT_ASSIGNABLE, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND, E_MUST_RETURN_A_VALUE, E_MAY_NOT_RETURN_A_VALUE } from "./diagnostics";
-import { getSymbolPathFromNode } from "./resolver"
+import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_TYPE_MISMATCH, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND, E_MUST_RETURN_A_VALUE, E_MAY_NOT_RETURN_A_VALUE } from "./diagnostics";
+import { convertNodeToSymbolPath } from "./resolver"
 import { inject } from "./ioc";
 import { SymbolResolver, ScopeType } from "./resolver";
 import { assert, every } from "./util";
@@ -103,7 +103,7 @@ export class CheckReferences extends NodeVisitor {
         this.checkBoltModulePath(node.name, node.name.modulePath);
         const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Variable);
         assert(scope !== null);
-        const resolvedSym = this.resolver.resolveSymbolPath(getSymbolPathFromNode(node), scope!);
+        const resolvedSym = this.resolver.resolveSymbolPath(convertNodeToSymbolPath(node), scope!);
         if (resolvedSym === null) {
             this.diagnostics.add({
                 message: E_DECLARATION_NOT_FOUND,
@@ -117,7 +117,7 @@ export class CheckReferences extends NodeVisitor {
     protected visitBoltReferenceTypeExpression(node: BoltReferenceTypeExpression) {
         const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Type);
         assert(scope !== null);
-        const symbolPath = getSymbolPathFromNode(node.name);
+        const symbolPath = convertNodeToSymbolPath(node.name);
         const resolvedSym = this.resolver.resolveSymbolPath(symbolPath, scope!);
         if (resolvedSym === null) {
             this.diagnostics.add({
