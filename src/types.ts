@@ -1,6 +1,6 @@
 
 import { FastStringMap, assert, isPlainObject, some, prettyPrintTag, map, flatMap, filter, memoize, comparator, createTransparentProxy, TransparentProxy, every, FastMultiMap, getKeyTag } from "./util";
-import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, BoltCallExpression, BoltIdentifier, isBoltDeclarationLike, isBoltPattern, isJSExpression, isBoltStatement, isJSStatement, isJSPattern, isJSParameter, isBoltParameter, isBoltMatchArm, isBoltRecordField, isBoltRecordFieldPattern, isEndOfFile, isSyntax, } from "./ast";
+import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, BoltCallExpression, BoltIdentifier, isBoltDeclarationLike, isBoltPattern, isJSExpression, isBoltStatement, isJSStatement, isJSPattern, isJSParameter, isBoltParameter, isBoltMatchArm, isBoltRecordField, isBoltRecordFieldPattern, isEndOfFile, isSyntax, isBoltFunctionDeclaration, isBoltTypeDeclaration, isBoltRecordDeclaration, } from "./ast";
 import { convertNodeToSymbolPath, ScopeType, SymbolResolver, SymbolInfo, SymbolPath } from "./resolver";
 import { Value, Record } from "./evaluator";
 import { getReturnStatementsInFunctionBody, getAllReturnStatementsInFunctionBody, getFullyQualifiedPathToNode, hasDiagnostic, hasTypeError } from "./common";
@@ -428,7 +428,9 @@ let nextRecordTypeId = 1;
 
 function introducesType(node: Syntax) {
   return isBoltExpression(node)
-      || isBoltDeclarationLike(node)
+      || isBoltFunctionDeclaration(node)
+      || isBoltTypeDeclaration(node)
+      || isBoltRecordDeclaration(node)
       || isBoltParameter(node)
       || isBoltMatchArm(node)
       || isBoltRecordField(node)
@@ -701,24 +703,6 @@ export class TypeChecker {
 
     switch (node.kind) {
 
-      //case SyntaxKind.JSReturnStatement:
-      //{
-      //  if (node.value === null) {
-      //    return this.getOpaqueType('undefined');
-      //  }
-      //  this.markNodeAsRequiringUpdate(node.value, node);
-      //  return node.value.type!.solved;
-      //}
-
-      //case SyntaxKind.JSExpressionStatement:
-      //{
-      //  if (node.expression === null) {
-      //    return new TupleType;
-      //  }
-      //  this.markNodeAsRequiringUpdate(node.expression, node);
-      //  return node.expression.type!.solved;
-      //}
-
       case SyntaxKind.JSMemberExpression:
       {
         // TODO
@@ -845,7 +829,7 @@ export class TypeChecker {
           return new PlainRecordFieldType(node.name!.text, nestedFieldType);
         }
       }
-      
+
       case SyntaxKind.BoltTypeAliasDeclaration:
       {
         // TODO
@@ -854,7 +838,6 @@ export class TypeChecker {
 
       case SyntaxKind.BoltImplDeclaration:
       {
-        // TODO
         return new AnyType;
       }
 
