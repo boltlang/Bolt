@@ -8,3 +8,7 @@ lib/
 # bolt
 .bolt-work/
 
+# webpack
+/build/
+/dist/
+

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 
 import "reflect-metadata"
 import "source-map-support/register"

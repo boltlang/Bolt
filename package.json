@@ -4,10 +4,11 @@
   "description": "A programming language for rapid prototyping",
   "main": "lib/index.js",
   "bin": {
-    "bolt": "lib/bin/bolt.js",
-    "bolt-treegen": "lib/bin/bolt-treegen.js"
+    "bolt": "build/bin/bolt.js"
   },
   "scripts": {
+    "watch": "webpack --watch --config webpack.dev.js",
+    "prepare": "webpack --config webpack.dev.js",
     "test": "mocha lib/test"
   },
   "author": "Sam Vervaeck <vervaeck.sam@skynet.be>",
@@ -36,9 +37,17 @@
     "yargs": "^15.3.1"
   },
   "devDependencies": {
+    "@babel/core": "^7.10.1",
+    "@babel/plugin-proposal-class-properties": "^7.10.1",
     "@types/chai": "^4.2.11",
     "@types/mocha": "^7.0.2",
+    "babel-loader": "^8.1.0",
     "chai": "^4.2.0",
-    "mocha": "^7.2.0"
+    "concurrently": "^5.2.0",
+    "mocha": "^7.2.0",
+    "ts-loader": "^7.0.5",
+    "typescript": "^3.9.3",
+    "webpack": "^4.43.0",
+    "webpack-cli": "^3.3.11"
   }
 }
