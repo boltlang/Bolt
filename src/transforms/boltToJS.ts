@@ -42,7 +42,7 @@ import { setOrigNodeRange } from "../common"
 import { Program } from "../program"
 import { Transformer, TransformManager } from "./index"
 import { assert } from "../util"
-import { inject } from "../di"
+import { inject } from "../ioc"
 import { isExported } from "../common"
 
 export interface JSCompilerOptions {
