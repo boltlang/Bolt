@@ -1,19 +1,18 @@
 
-import { TypeRef } from "./types"
 import { Diagnostic } from "./diagnostics"
-import { Package } from "./common"
 import { TextSpan } from "./text"
 
-export function setParents(node: Syntax): void;
+import { Package } from "./package"
+import { Type  } from "./types"
 
-export type SyntaxRange = [Syntax, Syntax];
+export function setParents(node: Syntax): void;
 
 export function isSyntax(value: any): value is Syntax;
 
 interface SyntaxBase {
   id: number;
   kind: SyntaxKind;
-  type?: TypeRef;
+  type?: Type;
   errors: Diagnostic[]
   parentNode: Syntax | null;
   span: TextSpan | null;

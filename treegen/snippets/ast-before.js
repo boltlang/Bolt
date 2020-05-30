@@ -103,7 +103,7 @@ class SyntaxBase {
 export function isSyntax(value) {
   return typeof value === 'object'
       && value !== null
-      && value.__NODE_TYPE !== undefined;
+      && value instanceof SyntaxBase;
 }
 
 export function setParents(node, parentNode = null) {
