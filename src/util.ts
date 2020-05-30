@@ -437,11 +437,11 @@ export function verbose(message: string) {
 }
 
 export function warn(message: string) {
-  console.error(chalk.gray('[') + chalk.red('warn') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
+  console.error(chalk.gray('[') + chalk.red('warn') + ' ' + chalk.gray(moment().format(LOG_DATETIME_FORMAT) + ']') + ' ' + message);
 }
 
 export function error(message: string) {
-  console.error(chalk.gray('[') + chalk.red('erro') + ' ' + chalk.gray(moment().format(DATETIME_FORMAT) + ']') + ' ' + message);
+  console.error(chalk.gray('[') + chalk.red('erro') + ' ' + chalk.gray(moment().format(LOG_DATETIME_FORMAT) + ']') + ' ' + message);
 }
 
 export function upsearchSync(filename: string, startDir = '.') {
