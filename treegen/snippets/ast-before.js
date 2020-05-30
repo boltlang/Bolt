@@ -1,7 +1,5 @@
 
-const exported = {};
-
-class NodeVisitor {
+export class NodeVisitor {
   visit(node) {
     for (const child of node.preorder()) {
       const key = `visit${kindToString(child.kind)}`;
@@ -12,9 +10,15 @@ class NodeVisitor {
   }
 }
 
-exported.NodeVisitor = NodeVisitor;
+let nextNodeId = 1;
 
-const nodeProto = {
+class SyntaxBase {
+
+  constructor(span) {
+    this.id = nextNodeId++;
+    this.errors = [];
+    this.span = span;
+  }
 
   *getChildNodes() {
     for (const key of Object.keys(this)) {
@@ -34,7 +38,7 @@ const nodeProto = {
         }
       }
     }
-  },
+  }
 
   visit(visitors) {
     const stack = [this];
@@ -54,7 +58,7 @@ const nodeProto = {
         stack.push(childNode);
       }
     }
-  },
+  }
 
   *preorder() {
     const stack = [this];
@@ -65,12 +69,12 @@ const nodeProto = {
         stack.push(childNode);
       }
     }
-  },
+  }
 
   mayContainKind(kind) {
     // TODO
     return true;
-  },
+  }
 
   getParentOfKind(kind) {
     let currNode = this.parentNode;
@@ -81,7 +85,7 @@ const nodeProto = {
       currNode = currNode.parentNode;
     }
     return null;
-  },
+  }
 
   *findAllChildrenOfKind(kind) {
     for (const node of this.preorder()) {
@@ -96,87 +100,15 @@ const nodeProto = {
 
 }
 
-function isSyntax(value) {
+export function isSyntax(value) {
   return typeof value === 'object'
       && value !== null
       && value.__NODE_TYPE !== undefined;
 }
 
-exported.isSyntax = isSyntax;
-
-let nextNodeId = 1;
-
-function createNode(nodeType) {
-  const obj = Object.create(nodeProto);
-  Object.defineProperty(obj, '__NODE_TYPE', {
-    enumerable: false,
-    writable: false,
-    configurable: true,
-    value: nodeType,
-  });
-  Object.defineProperty(obj, 'kind', {
-    enumerable: false,
-    configurable: true,
-    get() {
-      return this.__NODE_TYPE.index;
-    }
-  });
-  Object.defineProperty(obj, 'errors', {
-    enumerable: false,
-    configurable: true,
-    value: [],
-  })
-  Object.defineProperty(obj, 'id', {
-    enumerable: true,
-    configurable: true,
-    value: nextNodeId++,
-  })
-  obj.span = null;
-  return obj;
-}
-
-for (const nodeName of Object.keys(NODE_TYPES)) {
-
-  exported[`create${nodeName}`] = function (...args) {
-    const nodeType = NODE_TYPES[nodeName];
-    const node = createNode(nodeType);
-    let i = 0;
-    const iter = nodeType.fields[Symbol.iterator]();
-    for (; i < args.length; i++) {
-      const { done, value } = iter.next();
-      if (done) {
-        break;
-      }
-      const [fieldName, fieldType] = value;
-      node[fieldName] = args[i];
-    }
-    while (true) {
-      const { done, value } = iter.next();
-      if (done) {
-        break;
-      }
-      const [fieldName, fieldType] = value;
-      throw new Error(`No argument provided for field '${fieldName}'`);
-    }
-    if (i < args.length) {
-      node.span = args[i++];
-    }
-    if (i < args.length) {
-      throw new Error(`Too many arguments provided to function create${nodeName}`);
-    }
-    return node;
-  }
-
-}
-
-exported.setParents = function setParents(node, parentNode = null) {
+export function setParents(node, parentNode = null) {
   node.parentNode = parentNode;
   for (const child of node.getChildNodes()) {
     setParents(child, node)
   }
 }
-
-if (typeof module !== 'undefined') {
-  module.exports = exports;
-}
-

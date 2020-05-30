@@ -5,6 +5,8 @@ export function getFileStem(filepath: string): string {
   return path.basename(filepath).split('.')[0];
 }
 
+export interface MapLike<T> { [key: string]: T }
+
 function isWhiteSpace(ch: string) {
   return /[\r\t ]/.test(ch);
 }

@@ -3,13 +3,13 @@
 import * as path from "path"
 import * as fs from "fs"
 
-import { parse, SyntaxError } from "../treegen/parser"
-import { Declaration } from "../treegen/ast"
-import { generateAST } from "../treegen/index"
-import { getFileStem } from "../treegen/util"
+import { parse, SyntaxError } from "./parser"
+import { Declaration } from "./ast"
+import { generateAST } from "./index"
+import { getFileStem } from "./util"
 import minimist from "minimist"
 
-const PACKAGE_ROOT = path.join(__dirname, '..', '..');
+//const PACKAGE_ROOT = path.join(__dirname, '..', '..');
 
 const argv = minimist(process.argv.slice(2));
 

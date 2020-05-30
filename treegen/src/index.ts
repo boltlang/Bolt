@@ -2,13 +2,12 @@
 import * as fs from "fs"
 import * as path from "path"
 
-const PACKAGE_ROOT = path.resolve(__dirname, '..', '..');
+const PACKAGE_ROOT = path.resolve(__dirname, '..');
 
 const CUSTOM_TYPES = ['Package', 'BoltValue', 'JSValue'];
 
 import { Syntax, Declaration, NodeDeclaration, TypeDeclaration, EnumDeclaration, TypeNode, NodeField } from "./ast"
-import { MapLike, assert } from "../util"
-import { FileWriter } from "./util"
+import { MapLike, FileWriter } from "./util"
 
 export function generateAST(decls: Declaration[]) {
 
@@ -49,45 +48,65 @@ export function generateAST(decls: Declaration[]) {
 
   // Write a JavaScript file that contains all AST definitions.
 
-  jsFile.write(`\nconst NODE_TYPES = {\n`);
-  jsFile.indent();
+  jsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'snippets', 'ast-before.js'), 'utf8'));
+
+  //jsFile.write(`\nconst NODE_TYPES = {\n`);
+  //jsFile.indent();
   for (const decl of finalNodes) {
-    if (decl.type === 'NodeDeclaration' && isFinalNode(decl.name)) {
-      jsFile.write(`'${decl.name}': {\n`);
-      jsFile.indent();
-      jsFile.write(`index: ${decl.index},\n`);
-      jsFile.write(`parents: [`);
-      for (const parentName of getParentChain(decl.name)) {
-        jsFile.write(`'${parentName}', `)
-      }
-      jsFile.write(`'Syntax'],\n`);
-      jsFile.write(`fields: new Map([\n`);
-      jsFile.indent();
-      for (const field of getAllFields(decl)) {
-        jsFile.write(`['${field.name}', ${JSON.stringify(jsonify(field.typeNode))}],\n`);
-      }
-      jsFile.dedent();
-      jsFile.write(']),\n');
-      jsFile.dedent();
-      jsFile.write('},\n');
+
+    jsFile.write(`class ${decl.name} extends SyntaxBase {\n\n`);
+    jsFile.indent();
+
+    jsFile.write(`static kind = ${decl.index};\n\n`);
+    jsFile.write(`static parents = `);
+    jsFile.write(JSON.stringify([...getParentChain(decl.name), 'Syntax'], undefined, 2));
+    jsFile.write(';\n\n')
+    //jsFile.write(`static fields = new Map([\n`);
+    //jsFile.indent();
+    //jsFile.write(JSON.stringify([...getAllFields(decl)].map(field => [field.name, jsonify(field.typeNode)]), undefined, 2)),
+    //jsFile.dedent();
+
+    jsFile.write(`constructor(\n`);
+    jsFile.indent();
+    for (const field of getAllFields(decl)) {
+      jsFile.write(`${field.name},\n`);
     }
+    jsFile.write(`span = null,\n`)
+    jsFile.dedent();
+    jsFile.write(`) {\n`);
+    jsFile.indent();
+    jsFile.write(`super(span);\n`);
+    for (const field of getAllFields(decl)) {
+      jsFile.write(`this.${field.name} = ${field.name};\n`);
+    }
+    jsFile.write(`this.span = span\n`)
+    jsFile.dedent();
+    jsFile.write('}\n\n')
+
+    jsFile.dedent();
+    jsFile.write('}\n');
+  }
+
+  jsFile.write(`const NODE_CLASSES = {\n`)
+  jsFile.indent();
+  for (const node of finalNodes) {
+    jsFile.write(node.name + ',\n');
   }
   jsFile.dedent();
-  jsFile.write('};\n\n');
+  jsFile.write('}\n\n')
+  //jsFile.dedent();
+  //jsFile.write('};\n\n');
 
-  jsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'src', 'treegen', 'ast-template.js'), 'utf8'));
-
-  jsFile.write(`function kindToString (kind) {\n  switch (kind) {\n`);
+  jsFile.write(`export function kindToString (kind) {\n  switch (kind) {\n`);
   jsFile.indent(2);
   for (const leafNode of finalNodes) {
     jsFile.write(`case ${leafNode.index}: return '${leafNode.name}';\n`);
   }
   jsFile.dedent(2);
   jsFile.write(`  }\n}\n\n`);
-  jsFile.write('exported.kindToString = kindToString;\n\n');
 
   for (const decl of nodeDecls) {
-    jsFile.write(`exported.is${decl.name} = function (value) {\n`);
+    jsFile.write(`export function is${decl.name}(value) {\n`);
     jsFile.indent();
     jsFile.write(`if (!isSyntax(value)) {\n  return false;\n}\n`);
     if (isFinalNode(decl.name)) {
@@ -99,11 +118,11 @@ export function generateAST(decls: Declaration[]) {
     jsFile.write(`}\n`);
   }
 
-  jsFile.write(`\nif (typeof module !== 'undefined') {\n  module.exports = exported;\n}\n\n`)
+  jsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'snippets', 'ast-after.js'), 'utf8'));
 
   // Write corresponding TypeScript declarations
 
-  dtsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'src', 'treegen', 'ast.dts.template'), 'utf8'));
+  dtsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'snippets', 'ast-before.d.ts'), 'utf8'));
 
   dtsFile.write('export class NodeVisitor {\n');
   dtsFile.write('  public visit(node: Syntax): void;\n');
@@ -218,6 +237,8 @@ export function generateAST(decls: Declaration[]) {
   for (const decl of nodeDecls) {
     dtsFile.write(`export function is${decl.name}(value: any): value is ${decl.name};\n`);
   }
+
+  dtsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'snippets', 'ast-after.d.ts'), 'utf8'));
 
   return {
     jsFile: jsFile.currentText,
