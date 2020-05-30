@@ -84,7 +84,7 @@ node BoltBracketed > BoltPunctuated;
 
 node BoltSourceFile > BoltSyntax, SourceFile {
   elements: Vec<BoltSourceElement>,
-  package: Package,
+  pkg: Package,
 }
 
 node BoltQualName > BoltSyntax {
@@ -101,7 +101,7 @@ node BoltTypeOfExpression > BoltTypeExpression {
 
 node BoltReferenceTypeExpression > BoltTypeExpression {
   name: BoltQualName,
-  arguments: Option<Vec<BoltTypeExpression>>,
+  typeArgs: Option<Vec<BoltTypeExpression>>,
 }
 
 node BoltFunctionTypeExpression > BoltTypeExpression {
@@ -265,7 +265,7 @@ node BoltDeclarationLike;
 
 node BoltFunctionBodyElement > FunctionBodyElement;
 
-node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike {
+node BoltFunctionDeclaration > BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike, BoltTraitOrImplElement {
   modifiers: BoltModifiers,
   target: String,
   name: BoltSymbol,
@@ -307,22 +307,25 @@ node BoltExportDirective > BoltSourceElement {
   symbols: Option<Vec<BoltExportSymbol>>,
 }
 
+node BoltTraitOrImplElement;
+
 node BoltTraitDeclaration > BoltDeclarationLike, BoltTypeDeclaration {
   modifiers: BoltModifiers,
-  name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
-  elements: Vec<BoltDeclaration>,
+  name: BoltIdentifier,
+  typeBoundExpr: Option<BoltTypeExpression>,
+  elements: Option<Vec<BoltDeclaration>>,
 }
 
 node BoltImplDeclaration > BoltTypeDeclaration, BoltDeclarationLike {
   modifiers: BoltModifiers,
-  name: BoltIdentifier,
-  trait: BoltTypeExpression,
   typeParams: Option<Vec<BoltTypeParameter>>,
+  name: BoltIdentifier,
+  traitTypeExpr: Option<BoltTypeExpression>,
   elements: Vec<BoltDeclaration>,
 }
 
-node BoltTypeAliasDeclaration > BoltDeclarationLike, BoltTypeDeclaration {
+node BoltTypeAliasDeclaration > BoltDeclarationLike, BoltTypeDeclaration, BoltTraitOrImplElement {
   modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParams: Option<Vec<BoltTypeParameter>>,
@@ -345,7 +348,7 @@ node BoltRecordDeclaration > BoltDeclaration, BoltTypeDeclaration, BoltDeclarati
 
 node BoltSourceElement;
 
-node BoltMacroCall > BoltRecordMember, BoltStatement, BoltDeclaration, BoltExpression {
+node BoltMacroCall > BoltRecordMember, BoltSourceElement, BoltTraitOrImplElement, BoltFunctionBodyElement {
   name: BoltIdentifier,
   text: String,
 }
@@ -355,10 +358,6 @@ node BoltMacroCall > BoltRecordMember, BoltStatement, BoltDeclaration, BoltExpre
 node JSSyntax;
 
 node JSToken > JSSyntax, Token;
-
-node JSOperator > JSToken {
-  text: String,
-}
 
 node JSIdentifier > JSToken {
   text: String,
@@ -386,7 +385,11 @@ node JSFunctionKeyword > JSToken;
 node JSWhileKeyword > JSToken;
 node JSForKeyword > JSToken;
 
-node JSOperator;
+node JSOperatorLike;
+
+node JSOperator > JSToken {
+  text: String,
+}
 
 node JSCloseBrace > JSToken;
 node JSCloseBracket > JSToken;
@@ -398,17 +401,17 @@ node JSSemi > JSToken;
 node JSComma > JSToken;
 node JSDot > JSToken;
 node JSDotDotDot > JSToken;
-node JSMulOp > JSToken, JSOperator;
-node JSAddOp > JSToken, JSOperator;
-node JSDivOp > JSToken, JSOperator;
-node JSSubOp > JSToken, JSOperator;
-node JSLtOp > JSToken, JSOperator;
-node JSGtOp > JSToken, JSOperator;
-node JSBOrOp > JSToken, JSOperator;
-node JSBXorOp > JSToken, JSOperator;
-node JSBAndOp > JSToken, JSOperator;
-node JSBNotOp > JSToken, JSOperator;
-node JSNotOp > JSToken, JSOperator;
+node JSMulOp > JSToken, JSOperatorLike;
+node JSAddOp > JSToken, JSOperatorLike;
+node JSDivOp > JSToken, JSOperatorLike;
+node JSSubOp > JSToken, JSOperatorLike;
+node JSLtOp > JSToken, JSOperatorLike;
+node JSGtOp > JSToken, JSOperatorLike;
+node JSBOrOp > JSToken, JSOperatorLike;
+node JSBXorOp > JSToken, JSOperatorLike;
+node JSBAndOp > JSToken, JSOperatorLike;
+node JSBNotOp > JSToken, JSOperatorLike;
+node JSNotOp > JSToken, JSOperatorLike;
 
 node JSPattern > JSSyntax;
 
@@ -445,7 +448,7 @@ node JSUnaryExpression > JSExpression {
 
 node JSNewExpression > JSExpression {
   target: JSExpression,
-  arguments: Vec<JSExpression>,
+  args: Vec<JSExpression>,
 }
 
 node JSSequenceExpression > JSExpression {
