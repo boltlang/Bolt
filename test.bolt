@@ -1,0 +1,20 @@
+
+struct int;
+
+impl int {
+
+  fn fac(self) -> int {
+    return match n {
+      0 => 1,
+      _ => n * fac(n-1),
+    }
+  }
+
+}
+
+// This is wrong
+fac();
+
+// This is also wrong
+fac("FOO");
+
