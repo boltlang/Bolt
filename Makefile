@@ -1,28 +1,16 @@
 
-TREEGEN_FILES = src/treegen/ast.dts.template src/ast-spec.txt lib/bin/bolt-treegen.js lib/treegen/parser.js lib/treegen/index.js lib/treegen/util.js src/treegen/ast-template.js
+all: src/ast.js
+	bolt check test.bolt --no-std
 
-all: lib/ast.js
-	bolt check stdlib
-
-lib/ast.js: $(TREEGEN_FILES)
+src/ast.js: src/ast-spec.txt
 	@echo "Generating AST definitions ..."
 	@mkdir -p lib/
-	@chmod +x lib/bin/*.js
-	@bolt-treegen --js-file=lib/ast.js --dts-file src/ast.d.ts src/ast-spec.txt
-
-lib/treegen/parser.js: src/treegen/parser.pegjs
-	@echo "Generating parser ..."
-	@mkdir -p lib/treegen/
-	@if ! npx pegjs --output lib/treegen/parser.js src/treegen/parser.pegjs; then \
-			rm -rf lib/treegen/parser.js; \
-			exit 1; \
-		fi
+	@treegen --js-file=src/ast.js --dts-file src/ast.d.ts src/ast-spec.txt
 
 .PHONY: clean
 
 clean:
-	rm -rf lib/treegen/parser.js
-	rm -rf lib/ast.js
+	rm -rf src/ast.js
 	rm -rf src/ast.d.ts
 
 .PHONY: distclean
