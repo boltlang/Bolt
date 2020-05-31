@@ -50,14 +50,12 @@ export function generateAST(decls: Declaration[]) {
 
   jsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'snippets', 'ast-before.js'), 'utf8'));
 
-  //jsFile.write(`\nconst NODE_TYPES = {\n`);
-  //jsFile.indent();
   for (const decl of finalNodes) {
 
     jsFile.write(`class ${decl.name} extends SyntaxBase {\n\n`);
     jsFile.indent();
 
-    jsFile.write(`static kind = ${decl.index};\n\n`);
+    jsFile.write(`kind = ${decl.index};\n\n`);
     jsFile.write(`static parents = `);
     jsFile.write(JSON.stringify([...getParentChain(decl.name), 'Syntax'], undefined, 2));
     jsFile.write(';\n\n')
@@ -105,6 +103,14 @@ export function generateAST(decls: Declaration[]) {
   jsFile.dedent(2);
   jsFile.write(`  }\n}\n\n`);
 
+
+
+  jsFile.write(`export const SyntaxKind = {\n`)
+  for (const leafNode of finalNodes) {
+    jsFile.write(`  ${leafNode.name}: ${leafNode.index},\n`);
+  }
+  jsFile.write('}\n\n')
+
   for (const decl of nodeDecls) {
     jsFile.write(`export function is${decl.name}(value) {\n`);
     jsFile.indent();
@@ -116,6 +122,14 @@ export function generateAST(decls: Declaration[]) {
     }
     jsFile.dedent();
     jsFile.write(`}\n`);
+  }
+
+  for (const node of finalNodes) {
+    jsFile.write(`export function create${node.name}(...args) {\n`)
+    jsFile.indent()
+    jsFile.write(`return new ${node.name}(...args);\n`)
+    jsFile.dedent();
+    jsFile.write('}\n\n')
   }
 
   jsFile.write(fs.readFileSync(path.join(PACKAGE_ROOT, 'snippets', 'ast-after.js'), 'utf8'));
