@@ -7,7 +7,6 @@ import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
 import { E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER } from "./diagnostics"
-
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
   return Math.pow(a, n) == x;
@@ -72,7 +71,12 @@ export function* flatMap<T, R>(iterator: Iterator<T>, func: (value: T) => Iterab
       yield element;
     }
   }
-  
+}
+
+export function pushAll<T>(array: T[], elements: T[]) {
+  for (const element of elements) {
+    array.push(element);
+  }
 }
 
 export function comparator<T>(pred: (a: T, b: T) => boolean): (a: T, b: T) => number {
@@ -463,7 +467,7 @@ export function getFileStem(filepath: string): string {
   return path.basename(filepath).split('.')[0];
 }
 
-export function enumerate(elements: string[]) {
+export function enumOr(elements: string[]) {
   if (elements.length === 1) {
     return elements[0]
   } else {
@@ -500,35 +504,88 @@ export interface MapLike<T> {
 
 export type FormatArg = any;
 
+enum FormatScanMode {
+  Text,
+  ScanningParamName,
+  ScanningParamModifier,
+}
+
+type FormatModifierFn = (value: any) => any;
+
+const FORMAT_MODIFIERS: MapLike<FormatModifierFn> = {
+  enum(elements) {
+    return enumOr(elements);
+  }
+}
+
 export function format(message: string, data: MapLike<FormatArg>) {
 
   let out = ''
 
   let name = '';
-  let insideParam = false;
+  let modifierName = '';
+  let modifiers: string[] = [];
+  let mode = FormatScanMode.Text;
 
   for (const ch of message) {
-    if (insideParam) {
-      if (ch === '}') {
-        out += data[name]!.toString();
-        reset();
-      } else {
-        name += ch;
-      }
-    } else {
-      if (ch === '{') {
-        insideParam = true;
-      } else {
-        out += ch;
-      }
+    switch (mode) {
+      case FormatScanMode.ScanningParamModifier:
+        if (ch === '}') {
+          modifiers.push(modifierName);
+          push();
+        } else if (ch === ':') {
+          if (modifierName.length === 0) {
+            throw new Error(`Parameter modfifier name in format string is empty.`)
+          }
+          modifiers.push(modifierName);
+          modifierName = '';
+        } else {
+          modifierName += ch;
+        }
+      case FormatScanMode.ScanningParamName:
+        if (ch === '}') {
+          push();
+        } else if (ch === ':') {
+          mode = FormatScanMode.ScanningParamModifier;
+        } else {
+          name += ch;
+        }
+        break;
+      case FormatScanMode.Text:
+        if (ch === '{') {
+          mode = FormatScanMode.ScanningParamName;
+        } else {
+          out += ch;
+        }
+        break
+      default:
+        throw new Error(`Invalid format scanning mode.`)
     }
   }
 
   return out;
 
+  function push() {
+    let value = data[name]!;
+    if (value === undefined) {
+      throw new Error(`Format string requires key '${name}' but it was not provided.`)
+    }
+    for (const modifier of modifiers) {
+      const modifierFn = FORMAT_MODIFIERS[modifier];
+      if (modifierFn === undefined) {
+        throw new Error(`A format modifier named '${modifier}' was not found.`)
+      }
+      value = modifierFn(value);
+    }
+    out += value.toString();
+    reset();
+  }
+
   function reset() {
     name = '';
-    insideParam = false;
+    modifierName = '';
+    mode = FormatScanMode.Text;
+    modifiers = [];
   }
 
 }
