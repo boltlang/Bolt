@@ -12,10 +12,12 @@ import {
   BoltSourceFile,
   isSourceFile,
   BoltSyntax,
-  BoltModifiers
+  BoltModifiers,
+  ReturnStatement,
+  FunctionBodyElement
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
-import {FastStringMap, enumerate, escapeChar, assert} from "./util";
+import {FastStringMap, enumOr, escapeChar, assert} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
 import * as path from "path"
@@ -35,46 +37,7 @@ export function getSourceFile(node: Syntax) {
 export function getPackage(node: Syntax) {
   const sourceFile = getSourceFile(node);
   assert(sourceFile.kind === SyntaxKind.BoltSourceFile);
-  return (sourceFile as BoltSourceFile).package;
-}
-
-let nextPackageId = 1;
-
-export class Package {
-
-  public id = nextPackageId++;
-
-  private sourceFilesByPath = new FastStringMap<string, SourceFile>();
-
-  constructor(
-    public rootDir: string,
-    public name: string | null,
-    public version: string | null,
-    sourceFiles: SourceFile[],
-    public isAutoImported: boolean,
-    public isDependency: boolean,
-  ) {
-    for (const sourceFile of sourceFiles) {
-      this.addSourceFile(sourceFile);
-    }
-  }
-
-  public getAllSourceFiles(): IterableIterator<SourceFile> {
-    return this.sourceFilesByPath.values();
-  }
-
-  public getMainLibrarySourceFile(): SourceFile | null {
-    const fullPath = path.resolve(this.rootDir, 'lib.bolt');
-    if (!this.sourceFilesByPath.has(fullPath)) {
-      return null;
-    }
-    return this.sourceFilesByPath.get(fullPath)
-  }
-
-  public addSourceFile(sourceFile: SourceFile) {
-    this.sourceFilesByPath.set(sourceFile.span!.file.fullPath, sourceFile);
-  }
-
+  return (sourceFile as BoltSourceFile).pkg;
 }
 
 export function getNodeLanguage(node: Syntax): string {
@@ -175,7 +138,7 @@ export function isRightAssoc(kind: OperatorKind) {
 
 export class ParseError extends Error {
   constructor(public actual: Syntax, public expected: SyntaxKind[]) {
-    super(`${actual.span!.file.origPath}:${actual.span!.start.line}:${actual.span!.start.column}: expected ${enumerate(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`)
+    super(`${actual.span!.file.origPath}:${actual.span!.start.line}:${actual.span!.start.column}: expected ${enumOr(expected.map(e => describeKind(e)))} but got ${describeKind(actual.kind)}`);
   }
 }
 
@@ -220,7 +183,7 @@ export class OperatorTable {
 
 }
 
-export function getModulePathToNode(node: BoltSyntax): string[] {
+export function getModulePathToNode(node: Syntax): string[] {
   let elements = [];
   while (true) {
     if (node.kind === SyntaxKind.BoltModule) {
@@ -420,7 +383,7 @@ export function describeKind(kind: SyntaxKind): string {
   }
 }
 
-export function *getAllReturnStatementsInFunctionBody(body: FunctionBody): IterableIterator<ReturnStatement> {
+export function *getAllReturnStatementsInFunctionBody(body: FunctionBodyElement[]): IterableIterator<ReturnStatement> {
   for (const element of body) {
     switch (element.kind) {
       case SyntaxKind.BoltReturnStatement:

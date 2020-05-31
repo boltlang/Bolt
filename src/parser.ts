@@ -13,7 +13,6 @@ import {
   BoltParameter,
   BoltSourceElement,
   createBoltQualName,
-  BoltQualName,
   BoltPattern,
   createBoltBindPattern,
   BoltImportDirective,
@@ -28,7 +27,6 @@ import {
   createBoltImportDirective,
   BoltModifiers,
   BoltStringLiteral,
-  BoltImportSymbol,
   BoltExpressionStatement,
   createBoltExpressionStatement,
   BoltVariableDeclaration,
@@ -53,7 +51,6 @@ import {
   BoltSourceFile,
   BoltFunctionBodyElement,
   createBoltSourceFile,
-  setParents,
   BoltMatchExpression,
   createBoltMatchArm,
   BoltMatchArm,
@@ -79,6 +76,9 @@ import {
   createBoltMemberExpression,
   BoltDeclarationLike,
   BoltTraitOrImplElement,
+  BoltQualName,
+  BoltLoopStatement,
+  createBoltLoopStatement,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -90,9 +90,13 @@ import {
   ParseError,
   setOrigNodeRange,
   createTokenStream,
-  Package,
 } from "./common"
 import { Stream, uniq, assert } from "./util"
+
+import { Scanner } from "./scanner"
+import { TextSpan, TextPos } from "./text"
+import {JSScanner} from "./foreign/js/scanner";
+import { Package } from "./package"
 
 export type BoltTokenStream = Stream<BoltToken>;
 
@@ -201,40 +205,40 @@ export class Parser {
     return (this as any)['parse' + kindToString(kind).substring('Bolt'.length)](tokens);
   }
 
-  public parseModulePath(tokens: BoltTokenStream): BoltModulePath | null {
+  // private parseModulePath(tokens: BoltTokenStream): BoltModulePath | null {
 
-    let firstToken = tokens.peek();;
-    let lastToken: Token;
-    let isAbsolute = false;
-    let elements = [];
+  //   let firstToken = tokens.peek();;
+  //   let lastToken: Token;
+  //   let isAbsolute = false;
+  //   let elements = [];
 
-    const t0 = tokens.peek();
-    if (t0.kind === SyntaxKind.BoltColonColon) {
-      isAbsolute = true;
-      tokens.get();
-      lastToken = t0;
-    }
+  //   const t0 = tokens.peek();
+  //   if (t0.kind === SyntaxKind.BoltColonColon) {
+  //     isAbsolute = true;
+  //     tokens.get();
+  //     lastToken = t0;
+  //   }
 
-    if (tokens.peek(2).kind === SyntaxKind.BoltColonColon) {
-      while (true) {
-        const t1 = tokens.get();
-        assertToken(t1, SyntaxKind.BoltIdentifier);
-        elements.push(t1 as BoltIdentifier)
-        const t2 = tokens.get();
-        if (tokens.peek(2).kind !== SyntaxKind.BoltColonColon) {
-          lastToken = t2;
-          break;
-        }
-      }
-    }
+  //   if (tokens.peek(2).kind === SyntaxKind.BoltColonColon) {
+  //     while (true) {
+  //       const t1 = tokens.get();
+  //       assertToken(t1, SyntaxKind.BoltIdentifier);
+  //       elements.push(t1 as BoltIdentifier)
+  //       const t2 = tokens.get();
+  //       if (tokens.peek(2).kind !== SyntaxKind.BoltColonColon) {
+  //         lastToken = t2;
+  //         break;
+  //       }
+  //     }
+  //   }
 
-    if (!isAbsolute && elements.length === 0) {
-      return null;
-    }
-    const result = createBoltModulePath(isAbsolute, elements);
-    setOrigNodeRange(result, firstToken, lastToken!);
-    return result;
-  }
+  //   if (!isAbsolute && elements.length === 0) {
+  //     return null;
+  //   }
+  //   const result = createBoltModulePath(isAbsolute, elements);
+  //   setOrigNodeRange(result, firstToken, lastToken!);
+  //   return result;
+  // }
 
   public parseQualName(tokens: BoltTokenStream): BoltQualName {
 
@@ -838,10 +842,22 @@ export class Parser {
     return node;
   }
 
+  public parseLoopStatement(tokens: BoltTokenStream): BoltLoopStatement {
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.BoltLoopKeyword);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.BoltBraced);
+    const innerTokens = createTokenStream(t1);
+    const elements = this.parseFunctionBodyElements(innerTokens);
+    const result = createBoltLoopStatement(elements);
+    setOrigNodeRange(result, t0, t1);
+    return result;
+  }
+
   public parseStatement(tokens: BoltTokenStream): BoltStatement {
-    if (this.lookaheadIsMacroCall(tokens)) {
-      return this.parseMacroCall(tokens);
-    }
+    // if (this.lookaheadIsMacroCall(tokens)) {
+    //   return this.parseMacroCall(tokens);
+    // }
     const t0 = tokens.peek();
     if (KIND_EXPRESSION_T0.indexOf(t0.kind) !== -1) {
       return this.parseExpressionStatement(tokens);
@@ -1196,7 +1212,7 @@ export class Parser {
       tokens.get();
       switch (target) {
         case "Bolt":
-          body = this.parseStatements(createTokenStream(t3));
+          body = this.parseFunctionBodyElement(createTokenStream(t3));
           break;
         default:
           body = parseForeignLanguage(target, t3.text, t3.span!.file, t3.span!.start);
@@ -1335,10 +1351,10 @@ export class Parser {
     // Parse all 'fn ...' and 'type ...' elements
     const t5 = tokens.get();
     assertToken(t5, SyntaxKind.BoltBraced);
-    const elements = this.parseSourceElements(createTokenStream(t5));
+    const elements = this.parseTraitOrImplElements(createTokenStream(t5));
 
     // Create and return the result
-    const result = createBoltImplDeclaration(modifiers, typeParams, name, traitTypeExpr, elements as BoltDeclaration[]);
+    const result = createBoltImplDeclaration(modifiers, typeParams, name, traitTypeExpr, elements);
     setOrigNodeRange(result, firstToken, t5);
     return result;
   }
@@ -1577,6 +1593,13 @@ export class Parser {
     return this.canParseExpression(tokens);
   }
 
+  private canParseLoopStatement(tokens: BoltTokenStream): boolean {
+    if (tokens.peek(1).kind !== SyntaxKind.BoltLoopKeyword) {
+      return false;
+    }
+    return true;
+  }
+
   private canParseStatement(tokens: BoltTokenStream): boolean {
     const t0 = tokens.peek();
     switch (t0.kind) {
@@ -1689,22 +1712,3 @@ export class Parser {
   }
 
 }
-
-import { Scanner } from "./scanner"
-import { TextFile, TextSpan, TextPos } from "./text"
-import * as fs from "fs"
-import {JSScanner} from "./foreign/js/scanner";
-import {emitNode} from "./emitter";
-import { timingSafeEqual } from "crypto";
-import { isatty } from "tty";
-
-export function parseSourceFile(filepath: string, pkg: Package): BoltSourceFile {
-  const file = new TextFile(filepath);
-  const contents = fs.readFileSync(file.origPath, 'utf8');
-  const scanner = new Scanner(file, contents)
-  const parser = new Parser();
-  const sourceFile = parser.parseSourceFile(scanner, pkg);
-  setParents(sourceFile);
-  return sourceFile;
-}
-

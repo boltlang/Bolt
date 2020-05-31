@@ -1,26 +1,30 @@
 
 import * as path from "path"
 import * as fs from "fs-extra"
-import { now } from "microtime"
 import { EventEmitter } from "events"
+import { sync as globSync } from "glob"
 
 import { Program } from "./program"
 import { emitNode } from "./emitter"
-import { Syntax, BoltSourceFile, SourceFile, NodeVisitor, createBoltConditionalCase } from "./ast"
-import { getFileStem, MapLike } from "./util"
+import { Syntax, BoltSourceFile, SourceFile, NodeVisitor, createBoltConditionalCase, setParents, kindToString } from "./ast"
+import { getFileStem, MapLike, assert, FastStringMap, upsearchSync } from "./util"
 import { verbose, memoize } from "./util"
 import { Container, Newable } from "./ioc"
 import ExpandBoltTransform from "./transforms/expand"
 import CompileBoltToJSTransform from "./transforms/boltToJS"
 import ConstFoldTransform from "./transforms/constFold"
 import { TransformManager } from "./transforms/index"
-import {DiagnosticPrinter} from "./diagnostics"
+import {DiagnosticPrinter, E_PARSE_ERROR, E_STDLIB_NOT_FOUND, E_SSCAN_ERROR as E_SCAN_ERROR, E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS} from "./diagnostics"
 import { TypeChecker } from "./types"
-import { checkServerIdentity } from "tls"
 import { CheckInvalidFilePaths, CheckTypeAssignments, CheckReferences } from "./checks"
 import { SymbolResolver, BoltSymbolResolutionStrategy } from "./resolver"
 import { Evaluator } from "./evaluator"
-import { getNodeLanguage } from "./common"
+import { getNodeLanguage, ParseError, ScanError } from "./common"
+import { Package, loadPackageMetadata } from "./package"
+import { TextFile } from "./text"
+import { Scanner } from "./scanner"
+import { Parser } from "./parser"
+import { now } from "moment"
 
 const targetExtensions: MapLike<string> = {
   'JS': '.mjs',
@@ -68,9 +72,15 @@ export class Frontend {
   public diagnostics: DiagnosticPrinter;
   public timing: Timing;
 
+  private packagePathOverrides = new FastStringMap<string, string>();
+
   constructor() {
     this.diagnostics = new DiagnosticPrinter();
     this.timing = new Timing();
+  }
+
+  public mapPackageNameToPath(pkgName: string, pkgPath: string): void {
+    this.packagePathOverrides.set(pkgName, pkgPath);
   }
 
   public check(program: Program) {
@@ -142,7 +152,7 @@ export class Frontend {
   }
 
   private mapToTargetFile(node: SourceFile) {
-    return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultExtension(getNodeLanguage(node)));
+    return path.join('.bolt-work', getFileStem(node.span!.file.fullPath) + getDefaultFileExtension(getNodeLanguage(node)));
   }
 
   public eval(program: Program) {
@@ -154,9 +164,125 @@ export class Frontend {
     }
   }
 
+  private parseSourceFile(filepath: string, pkg: Package): BoltSourceFile | null {
+
+    const file = new TextFile(filepath);
+    const contents = fs.readFileSync(file.origPath, 'utf8');
+    const scanner = new Scanner(file, contents)
+    const parser = new Parser();
+
+    let sourceFile;
+    try {
+      sourceFile = parser.parseSourceFile(scanner, pkg);
+    } catch (e) {
+      if (e instanceof ScanError) {
+        this.diagnostics.add({
+          severity: 'fatal',
+          message: E_SCAN_ERROR,
+          args: { char: e.char },
+          position: e.position,
+          file: e.file,
+        });
+        return null;
+      } else if (e instanceof ParseError) {
+        this.diagnostics.add({
+          message: E_PARSE_ERROR,
+          args: { actual: kindToString(e.actual.kind), expected: e.expected.map(kindToString) },
+          node: e.actual,
+          severity: 'fatal',
+        });
+        return null;
+      } else {
+        throw e;
+      }
+    }
+
+    setParents(sourceFile);
+
+    return sourceFile;
+  }
+
+  public loadPackageFromPath(filepath: string, isDependency: boolean): Package {
+    let metadataPath;
+    let rootDir;
+    if (path.basename(filepath) === 'Boltfile') {
+      metadataPath = filepath
+      rootDir = path.dirname(filepath);
+    } else {
+      metadataPath = path.join(filepath, 'Boltfile');
+      rootDir = filepath;
+    }
+    const data = loadPackageMetadata(this.diagnostics, metadataPath);
+    const pkg = new Package(rootDir, data.name, data.version, [], data.autoImport, isDependency);
+    for (const filepath of globSync(path.join(rootDir, '**/*.bolt'))) {
+      const sourceFile = this.parseSourceFile(filepath, pkg);
+      if (sourceFile !== null) {
+        pkg.addSourceFile(sourceFile);
+      }
+    }
+    return pkg;
+  }
+
+  private findPackagePath(pkgName: string): string | null {
+    if (this.packagePathOverrides.has(pkgName)) {
+      return this.packagePathOverrides.get(pkgName);
+    }
+    return null;
+  }
+
+  public loadProgramFromFileList(filenames: string[], cwd = '.', useStd = true): Program | null {
+
+    cwd = path.resolve(cwd);
+
+    if (filenames.length === 0) {
+      const metadataPath = upsearchSync('Boltfile');
+      if (metadataPath === null) {
+        this.diagnostics.add({
+          severity: 'fatal',
+          message: E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS,
+        });
+        return null;
+      }
+      filenames.push(metadataPath);
+    }
+
+    const anonPkg = new Package(cwd, null, null, [], false, false);
+    
+    const pkgs = [ anonPkg ];
+    
+    for (const filename of filenames) {
+
+      if (fs.statSync(filename).isDirectory() || path.basename(filename) === 'Boltfile') {
+        pkgs.push(this.loadPackageFromPath(filename, false));
+      } else {
+        const sourceFile = this.parseSourceFile(filename, anonPkg);
+        if (sourceFile !== null) {
+          anonPkg.addSourceFile(sourceFile);
+        }
+      }
+    }
+
+    if (useStd) {
+      if (pkgs.find(pkg => pkg.name === 'stdlib') === undefined) {
+        const resolvedPath = this.findPackagePath('stdlib');
+        if (resolvedPath === null) {
+          this.diagnostics.add({
+            message: E_STDLIB_NOT_FOUND,
+            severity: 'error',
+          });
+          return null;
+        }
+        const stdlibPkg = this.loadPackageFromPath(resolvedPath, true);
+        pkgs.push(stdlibPkg);
+      }
+
+    }
+    return new Program(pkgs);
+  }
+
 }
 
-function getDefaultExtension(target: string) {
+function getDefaultFileExtension(target: string) {
   if (targetExtensions[target] === undefined) {
     throw new Error(`Could not derive an appropriate extension for target "${target}".`)
   }

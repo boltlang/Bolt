@@ -1,9 +1,15 @@
 
+import * as fs from "fs"
 import chalk from "chalk"
-import {Syntax} from "./ast";
-import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint} from "./util";
+import { Syntax } from "./ast";
+import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint, assert} from "./util";
 import { BOLT_DIAG_NUM_EXTRA_LINES } from "./constants";
+import { TextPos, TextFile, TextSpan } from "./text";
 
+export const E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS = 'No Boltfile found in {path} or any of its parent directories.'
+export const E_SSCAN_ERROR = "Got an unexpected {char}"
+export const E_STDLIB_NOT_FOUND = "Package 'stdlib' is required to build the current source set but it was not found. Use --no-std if you know what you are doing."
+export const E_PARSE_ERROR = "Expected {expected:enum} but got {actual}"
 export const E_MAY_NOT_RETURN_A_VALUE = "Returning a value inside a function that does not return values."
 export const E_MUST_RETURN_A_VALUE = "The function must return a value on all control paths.";;;;
 export const E_FILE_NOT_FOUND = "A file named {filename} was not found.";
@@ -41,6 +47,8 @@ export interface Diagnostic {
   args?: MapLike<FormatArg>;
   node?: Syntax;
   nested?: Diagnostic[];
+  position?: TextPos,
+  file?: TextFile,
 }
 
 function firstIndexOfNonEmpty(str: string) {
@@ -52,6 +60,18 @@ function firstIndexOfNonEmpty(str: string) {
     }
   }
   return j
+}
+
+export class DiagnosticWriter {
+
+  constructor(private fd: number) {
+
+  }
+
+  public add(diagnostic: Diagnostic) {
+    fs.writeSync(this.fd, JSON.stringify(diagnostic) + '\n');
+  }
+
 }
 
 export class DiagnosticPrinter {
@@ -106,9 +126,16 @@ export class DiagnosticPrinter {
       out += diagnostic.message + '\n';
     }
 
+    let span = null;
     if (diagnostic.node !== undefined) {
+      span = diagnostic.node.span!;
+    } else if (diagnostic.position !== undefined) {
+      assert(diagnostic.file !== undefined);
+      span = new TextSpan(diagnostic.file!, diagnostic.position, diagnostic.position)
+    }
+
+    if (span !== null) {
       out += '\n'
-      const span = diagnostic.node.span!;
       const content = span.file.getText();
       const startLine = Math.max(0, span.start.line-1-BOLT_DIAG_NUM_EXTRA_LINES)
       const lines = content.split('\n')
