@@ -7,7 +7,7 @@ node ReturnStatement;
 
 // Bolt language AST definitions
 
-node BoltSyntax;
+interface BoltSyntax;
 
 node BoltToken > Token, BoltSyntax;
 
@@ -239,6 +239,10 @@ node BoltExpressionStatement > BoltStatement {
   expression: BoltExpression,
 }
 
+node BoltLoopStatement > BoltStatement {
+  elements: Vec<BoltFunctionBodyElement>,
+}
+
 node BoltParameter > BoltSyntax {
   index: usize,
   bindings: BoltPattern,
@@ -289,7 +293,7 @@ node BoltPlainImportSymbol > BoltImportSymbol {
   local: BoltSymbol,
 }
 
-node BoltImportDirective > BoltSourceElement {
+node BoltImportDirective > BoltSyntax, BoltSourceElement {
   modifiers: BoltModifiers,
   file: BoltStringLiteral,
   symbols: Option<Vec<BoltImportSymbol>>,
@@ -297,7 +301,7 @@ node BoltImportDirective > BoltSourceElement {
 
 node BoltExportSymbol > BoltSyntax;
 
-node BoltPlainExportSymbol {
+node BoltPlainExportSymbol > BoltExportSymbol {
   local: BoltQualName,
   remote: BoltSymbol,
 }
@@ -314,7 +318,7 @@ node BoltTraitDeclaration > BoltDeclarationLike, BoltTypeDeclaration {
   typeParams: Option<Vec<BoltTypeParameter>>,
   name: BoltIdentifier,
   typeBoundExpr: Option<BoltTypeExpression>,
-  elements: Option<Vec<BoltDeclaration>>,
+  elements: Option<Vec<BoltTraitOrImplElement>>,
 }
 
 node BoltImplDeclaration > BoltTypeDeclaration, BoltDeclarationLike {
@@ -322,7 +326,7 @@ node BoltImplDeclaration > BoltTypeDeclaration, BoltDeclarationLike {
   typeParams: Option<Vec<BoltTypeParameter>>,
   name: BoltIdentifier,
   traitTypeExpr: Option<BoltTypeExpression>,
-  elements: Vec<BoltDeclaration>,
+  elements: Vec<BoltTraitOrImplElement>,
 }
 
 node BoltTypeAliasDeclaration > BoltDeclarationLike, BoltTypeDeclaration, BoltTraitOrImplElement {
@@ -480,7 +484,7 @@ node JSCatchBlock > JSSyntax {
   elements: Vec<JSSourceElement>,
 }
 
-node JSTryCatchStatement > JSSyntax {
+node JSTryCatchStatement > JSStatement {
   tryBlock: Vec<JSSourceElement>,
   catchBlock: Option<JSCatchBlock>,
   finalBlock: Option<Vec<JSSourceElement>>,
@@ -526,7 +530,8 @@ node JSImportAsBinding > JSImportBinding {
   local: Option<JSIdentifier>,
 }
 
-node JSImportDeclaration > JSDeclaration {
+// By exception, we alloww 'import ..'-statements to appear in foreign function bodies
+node JSImportDeclaration > JSDeclaration, JSFunctionBodyElement {
   bindings: Vec<JSImportBinding>,
   filename: JSString,
 }
