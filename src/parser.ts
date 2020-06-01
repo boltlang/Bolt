@@ -1212,7 +1212,7 @@ export class Parser {
       tokens.get();
       switch (target) {
         case "Bolt":
-          body = this.parseFunctionBodyElement(createTokenStream(t3));
+          body = this.parseFunctionBodyElements(createTokenStream(t3));
           break;
         default:
           body = parseForeignLanguage(target, t3.text, t3.span!.file, t3.span!.start);
