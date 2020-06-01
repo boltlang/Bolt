@@ -2586,12 +2586,474 @@ export function isJSSourceFile(value: any): value is JSSourceFile { return value
 export function isSyntax(value: any): value is Syntax { return typeof value === "object" && value !== null && value instanceof SyntaxBase; }
 
 export class Visitor {
+    visit(node: Syntax): void { switch (node.kind) {
+        case SyntaxKind.EndOfFile:
+            this.visitEndOfFile((node as EndOfFile));
+            break;
+        case SyntaxKind.BoltStringLiteral:
+            this.visitBoltStringLiteral((node as BoltStringLiteral));
+            break;
+        case SyntaxKind.BoltIntegerLiteral:
+            this.visitBoltIntegerLiteral((node as BoltIntegerLiteral));
+            break;
+        case SyntaxKind.BoltIdentifier:
+            this.visitBoltIdentifier((node as BoltIdentifier));
+            break;
+        case SyntaxKind.BoltOperator:
+            this.visitBoltOperator((node as BoltOperator));
+            break;
+        case SyntaxKind.BoltAssignment:
+            this.visitBoltAssignment((node as BoltAssignment));
+            break;
+        case SyntaxKind.BoltComma:
+            this.visitBoltComma((node as BoltComma));
+            break;
+        case SyntaxKind.BoltSemi:
+            this.visitBoltSemi((node as BoltSemi));
+            break;
+        case SyntaxKind.BoltColon:
+            this.visitBoltColon((node as BoltColon));
+            break;
+        case SyntaxKind.BoltColonColon:
+            this.visitBoltColonColon((node as BoltColonColon));
+            break;
+        case SyntaxKind.BoltDot:
+            this.visitBoltDot((node as BoltDot));
+            break;
+        case SyntaxKind.BoltDotDot:
+            this.visitBoltDotDot((node as BoltDotDot));
+            break;
+        case SyntaxKind.BoltRArrow:
+            this.visitBoltRArrow((node as BoltRArrow));
+            break;
+        case SyntaxKind.BoltRArrowAlt:
+            this.visitBoltRArrowAlt((node as BoltRArrowAlt));
+            break;
+        case SyntaxKind.BoltLArrow:
+            this.visitBoltLArrow((node as BoltLArrow));
+            break;
+        case SyntaxKind.BoltEqSign:
+            this.visitBoltEqSign((node as BoltEqSign));
+            break;
+        case SyntaxKind.BoltGtSign:
+            this.visitBoltGtSign((node as BoltGtSign));
+            break;
+        case SyntaxKind.BoltExMark:
+            this.visitBoltExMark((node as BoltExMark));
+            break;
+        case SyntaxKind.BoltLtSign:
+            this.visitBoltLtSign((node as BoltLtSign));
+            break;
+        case SyntaxKind.BoltVBar:
+            this.visitBoltVBar((node as BoltVBar));
+            break;
+        case SyntaxKind.BoltWhereKeyword:
+            this.visitBoltWhereKeyword((node as BoltWhereKeyword));
+            break;
+        case SyntaxKind.BoltQuoteKeyword:
+            this.visitBoltQuoteKeyword((node as BoltQuoteKeyword));
+            break;
+        case SyntaxKind.BoltFnKeyword:
+            this.visitBoltFnKeyword((node as BoltFnKeyword));
+            break;
+        case SyntaxKind.BoltForeignKeyword:
+            this.visitBoltForeignKeyword((node as BoltForeignKeyword));
+            break;
+        case SyntaxKind.BoltForKeyword:
+            this.visitBoltForKeyword((node as BoltForKeyword));
+            break;
+        case SyntaxKind.BoltLetKeyword:
+            this.visitBoltLetKeyword((node as BoltLetKeyword));
+            break;
+        case SyntaxKind.BoltReturnKeyword:
+            this.visitBoltReturnKeyword((node as BoltReturnKeyword));
+            break;
+        case SyntaxKind.BoltLoopKeyword:
+            this.visitBoltLoopKeyword((node as BoltLoopKeyword));
+            break;
+        case SyntaxKind.BoltYieldKeyword:
+            this.visitBoltYieldKeyword((node as BoltYieldKeyword));
+            break;
+        case SyntaxKind.BoltMatchKeyword:
+            this.visitBoltMatchKeyword((node as BoltMatchKeyword));
+            break;
+        case SyntaxKind.BoltImportKeyword:
+            this.visitBoltImportKeyword((node as BoltImportKeyword));
+            break;
+        case SyntaxKind.BoltExportKeyword:
+            this.visitBoltExportKeyword((node as BoltExportKeyword));
+            break;
+        case SyntaxKind.BoltPubKeyword:
+            this.visitBoltPubKeyword((node as BoltPubKeyword));
+            break;
+        case SyntaxKind.BoltModKeyword:
+            this.visitBoltModKeyword((node as BoltModKeyword));
+            break;
+        case SyntaxKind.BoltMutKeyword:
+            this.visitBoltMutKeyword((node as BoltMutKeyword));
+            break;
+        case SyntaxKind.BoltEnumKeyword:
+            this.visitBoltEnumKeyword((node as BoltEnumKeyword));
+            break;
+        case SyntaxKind.BoltStructKeyword:
+            this.visitBoltStructKeyword((node as BoltStructKeyword));
+            break;
+        case SyntaxKind.BoltTypeKeyword:
+            this.visitBoltTypeKeyword((node as BoltTypeKeyword));
+            break;
+        case SyntaxKind.BoltTraitKeyword:
+            this.visitBoltTraitKeyword((node as BoltTraitKeyword));
+            break;
+        case SyntaxKind.BoltImplKeyword:
+            this.visitBoltImplKeyword((node as BoltImplKeyword));
+            break;
+        case SyntaxKind.BoltParenthesized:
+            this.visitBoltParenthesized((node as BoltParenthesized));
+            break;
+        case SyntaxKind.BoltBraced:
+            this.visitBoltBraced((node as BoltBraced));
+            break;
+        case SyntaxKind.BoltBracketed:
+            this.visitBoltBracketed((node as BoltBracketed));
+            break;
+        case SyntaxKind.BoltSourceFile:
+            this.visitBoltSourceFile((node as BoltSourceFile));
+            break;
+        case SyntaxKind.BoltQualName:
+            this.visitBoltQualName((node as BoltQualName));
+            break;
+        case SyntaxKind.BoltTypeOfExpression:
+            this.visitBoltTypeOfExpression((node as BoltTypeOfExpression));
+            break;
+        case SyntaxKind.BoltReferenceTypeExpression:
+            this.visitBoltReferenceTypeExpression((node as BoltReferenceTypeExpression));
+            break;
+        case SyntaxKind.BoltFunctionTypeExpression:
+            this.visitBoltFunctionTypeExpression((node as BoltFunctionTypeExpression));
+            break;
+        case SyntaxKind.BoltLiftedTypeExpression:
+            this.visitBoltLiftedTypeExpression((node as BoltLiftedTypeExpression));
+            break;
+        case SyntaxKind.BoltTypeParameter:
+            this.visitBoltTypeParameter((node as BoltTypeParameter));
+            break;
+        case SyntaxKind.BoltBindPattern:
+            this.visitBoltBindPattern((node as BoltBindPattern));
+            break;
+        case SyntaxKind.BoltTypePattern:
+            this.visitBoltTypePattern((node as BoltTypePattern));
+            break;
+        case SyntaxKind.BoltExpressionPattern:
+            this.visitBoltExpressionPattern((node as BoltExpressionPattern));
+            break;
+        case SyntaxKind.BoltTuplePatternElement:
+            this.visitBoltTuplePatternElement((node as BoltTuplePatternElement));
+            break;
+        case SyntaxKind.BoltTuplePattern:
+            this.visitBoltTuplePattern((node as BoltTuplePattern));
+            break;
+        case SyntaxKind.BoltRecordFieldPattern:
+            this.visitBoltRecordFieldPattern((node as BoltRecordFieldPattern));
+            break;
+        case SyntaxKind.BoltRecordPattern:
+            this.visitBoltRecordPattern((node as BoltRecordPattern));
+            break;
+        case SyntaxKind.BoltQuoteExpression:
+            this.visitBoltQuoteExpression((node as BoltQuoteExpression));
+            break;
+        case SyntaxKind.BoltTupleExpression:
+            this.visitBoltTupleExpression((node as BoltTupleExpression));
+            break;
+        case SyntaxKind.BoltReferenceExpression:
+            this.visitBoltReferenceExpression((node as BoltReferenceExpression));
+            break;
+        case SyntaxKind.BoltMemberExpression:
+            this.visitBoltMemberExpression((node as BoltMemberExpression));
+            break;
+        case SyntaxKind.BoltFunctionExpression:
+            this.visitBoltFunctionExpression((node as BoltFunctionExpression));
+            break;
+        case SyntaxKind.BoltCallExpression:
+            this.visitBoltCallExpression((node as BoltCallExpression));
+            break;
+        case SyntaxKind.BoltYieldExpression:
+            this.visitBoltYieldExpression((node as BoltYieldExpression));
+            break;
+        case SyntaxKind.BoltMatchArm:
+            this.visitBoltMatchArm((node as BoltMatchArm));
+            break;
+        case SyntaxKind.BoltMatchExpression:
+            this.visitBoltMatchExpression((node as BoltMatchExpression));
+            break;
+        case SyntaxKind.BoltCase:
+            this.visitBoltCase((node as BoltCase));
+            break;
+        case SyntaxKind.BoltCaseExpression:
+            this.visitBoltCaseExpression((node as BoltCaseExpression));
+            break;
+        case SyntaxKind.BoltBlockExpression:
+            this.visitBoltBlockExpression((node as BoltBlockExpression));
+            break;
+        case SyntaxKind.BoltConstantExpression:
+            this.visitBoltConstantExpression((node as BoltConstantExpression));
+            break;
+        case SyntaxKind.BoltReturnStatement:
+            this.visitBoltReturnStatement((node as BoltReturnStatement));
+            break;
+        case SyntaxKind.BoltConditionalCase:
+            this.visitBoltConditionalCase((node as BoltConditionalCase));
+            break;
+        case SyntaxKind.BoltConditionalStatement:
+            this.visitBoltConditionalStatement((node as BoltConditionalStatement));
+            break;
+        case SyntaxKind.BoltResumeStatement:
+            this.visitBoltResumeStatement((node as BoltResumeStatement));
+            break;
+        case SyntaxKind.BoltExpressionStatement:
+            this.visitBoltExpressionStatement((node as BoltExpressionStatement));
+            break;
+        case SyntaxKind.BoltLoopStatement:
+            this.visitBoltLoopStatement((node as BoltLoopStatement));
+            break;
+        case SyntaxKind.BoltParameter:
+            this.visitBoltParameter((node as BoltParameter));
+            break;
+        case SyntaxKind.BoltModule:
+            this.visitBoltModule((node as BoltModule));
+            break;
+        case SyntaxKind.BoltFunctionDeclaration:
+            this.visitBoltFunctionDeclaration((node as BoltFunctionDeclaration));
+            break;
+        case SyntaxKind.BoltVariableDeclaration:
+            this.visitBoltVariableDeclaration((node as BoltVariableDeclaration));
+            break;
+        case SyntaxKind.BoltPlainImportSymbol:
+            this.visitBoltPlainImportSymbol((node as BoltPlainImportSymbol));
+            break;
+        case SyntaxKind.BoltImportDirective:
+            this.visitBoltImportDirective((node as BoltImportDirective));
+            break;
+        case SyntaxKind.BoltPlainExportSymbol:
+            this.visitBoltPlainExportSymbol((node as BoltPlainExportSymbol));
+            break;
+        case SyntaxKind.BoltExportDirective:
+            this.visitBoltExportDirective((node as BoltExportDirective));
+            break;
+        case SyntaxKind.BoltTraitDeclaration:
+            this.visitBoltTraitDeclaration((node as BoltTraitDeclaration));
+            break;
+        case SyntaxKind.BoltImplDeclaration:
+            this.visitBoltImplDeclaration((node as BoltImplDeclaration));
+            break;
+        case SyntaxKind.BoltTypeAliasDeclaration:
+            this.visitBoltTypeAliasDeclaration((node as BoltTypeAliasDeclaration));
+            break;
+        case SyntaxKind.BoltRecordField:
+            this.visitBoltRecordField((node as BoltRecordField));
+            break;
+        case SyntaxKind.BoltRecordDeclaration:
+            this.visitBoltRecordDeclaration((node as BoltRecordDeclaration));
+            break;
+        case SyntaxKind.BoltMacroCall:
+            this.visitBoltMacroCall((node as BoltMacroCall));
+            break;
+        case SyntaxKind.JSIdentifier:
+            this.visitJSIdentifier((node as JSIdentifier));
+            break;
+        case SyntaxKind.JSString:
+            this.visitJSString((node as JSString));
+            break;
+        case SyntaxKind.JSInteger:
+            this.visitJSInteger((node as JSInteger));
+            break;
+        case SyntaxKind.JSFromKeyword:
+            this.visitJSFromKeyword((node as JSFromKeyword));
+            break;
+        case SyntaxKind.JSReturnKeyword:
+            this.visitJSReturnKeyword((node as JSReturnKeyword));
+            break;
+        case SyntaxKind.JSTryKeyword:
+            this.visitJSTryKeyword((node as JSTryKeyword));
+            break;
+        case SyntaxKind.JSFinallyKeyword:
+            this.visitJSFinallyKeyword((node as JSFinallyKeyword));
+            break;
+        case SyntaxKind.JSCatchKeyword:
+            this.visitJSCatchKeyword((node as JSCatchKeyword));
+            break;
+        case SyntaxKind.JSImportKeyword:
+            this.visitJSImportKeyword((node as JSImportKeyword));
+            break;
+        case SyntaxKind.JSAsKeyword:
+            this.visitJSAsKeyword((node as JSAsKeyword));
+            break;
+        case SyntaxKind.JSConstKeyword:
+            this.visitJSConstKeyword((node as JSConstKeyword));
+            break;
+        case SyntaxKind.JSLetKeyword:
+            this.visitJSLetKeyword((node as JSLetKeyword));
+            break;
+        case SyntaxKind.JSExportKeyword:
+            this.visitJSExportKeyword((node as JSExportKeyword));
+            break;
+        case SyntaxKind.JSFunctionKeyword:
+            this.visitJSFunctionKeyword((node as JSFunctionKeyword));
+            break;
+        case SyntaxKind.JSWhileKeyword:
+            this.visitJSWhileKeyword((node as JSWhileKeyword));
+            break;
+        case SyntaxKind.JSForKeyword:
+            this.visitJSForKeyword((node as JSForKeyword));
+            break;
+        case SyntaxKind.JSOperator:
+            this.visitJSOperator((node as JSOperator));
+            break;
+        case SyntaxKind.JSCloseBrace:
+            this.visitJSCloseBrace((node as JSCloseBrace));
+            break;
+        case SyntaxKind.JSCloseBracket:
+            this.visitJSCloseBracket((node as JSCloseBracket));
+            break;
+        case SyntaxKind.JSCloseParen:
+            this.visitJSCloseParen((node as JSCloseParen));
+            break;
+        case SyntaxKind.JSOpenBrace:
+            this.visitJSOpenBrace((node as JSOpenBrace));
+            break;
+        case SyntaxKind.JSOpenBracket:
+            this.visitJSOpenBracket((node as JSOpenBracket));
+            break;
+        case SyntaxKind.JSOpenParen:
+            this.visitJSOpenParen((node as JSOpenParen));
+            break;
+        case SyntaxKind.JSSemi:
+            this.visitJSSemi((node as JSSemi));
+            break;
+        case SyntaxKind.JSComma:
+            this.visitJSComma((node as JSComma));
+            break;
+        case SyntaxKind.JSDot:
+            this.visitJSDot((node as JSDot));
+            break;
+        case SyntaxKind.JSDotDotDot:
+            this.visitJSDotDotDot((node as JSDotDotDot));
+            break;
+        case SyntaxKind.JSMulOp:
+            this.visitJSMulOp((node as JSMulOp));
+            break;
+        case SyntaxKind.JSAddOp:
+            this.visitJSAddOp((node as JSAddOp));
+            break;
+        case SyntaxKind.JSDivOp:
+            this.visitJSDivOp((node as JSDivOp));
+            break;
+        case SyntaxKind.JSSubOp:
+            this.visitJSSubOp((node as JSSubOp));
+            break;
+        case SyntaxKind.JSLtOp:
+            this.visitJSLtOp((node as JSLtOp));
+            break;
+        case SyntaxKind.JSGtOp:
+            this.visitJSGtOp((node as JSGtOp));
+            break;
+        case SyntaxKind.JSBOrOp:
+            this.visitJSBOrOp((node as JSBOrOp));
+            break;
+        case SyntaxKind.JSBXorOp:
+            this.visitJSBXorOp((node as JSBXorOp));
+            break;
+        case SyntaxKind.JSBAndOp:
+            this.visitJSBAndOp((node as JSBAndOp));
+            break;
+        case SyntaxKind.JSBNotOp:
+            this.visitJSBNotOp((node as JSBNotOp));
+            break;
+        case SyntaxKind.JSNotOp:
+            this.visitJSNotOp((node as JSNotOp));
+            break;
+        case SyntaxKind.JSBindPattern:
+            this.visitJSBindPattern((node as JSBindPattern));
+            break;
+        case SyntaxKind.JSConstantExpression:
+            this.visitJSConstantExpression((node as JSConstantExpression));
+            break;
+        case SyntaxKind.JSMemberExpression:
+            this.visitJSMemberExpression((node as JSMemberExpression));
+            break;
+        case SyntaxKind.JSCallExpression:
+            this.visitJSCallExpression((node as JSCallExpression));
+            break;
+        case SyntaxKind.JSBinaryExpression:
+            this.visitJSBinaryExpression((node as JSBinaryExpression));
+            break;
+        case SyntaxKind.JSUnaryExpression:
+            this.visitJSUnaryExpression((node as JSUnaryExpression));
+            break;
+        case SyntaxKind.JSNewExpression:
+            this.visitJSNewExpression((node as JSNewExpression));
+            break;
+        case SyntaxKind.JSSequenceExpression:
+            this.visitJSSequenceExpression((node as JSSequenceExpression));
+            break;
+        case SyntaxKind.JSConditionalExpression:
+            this.visitJSConditionalExpression((node as JSConditionalExpression));
+            break;
+        case SyntaxKind.JSLiteralExpression:
+            this.visitJSLiteralExpression((node as JSLiteralExpression));
+            break;
+        case SyntaxKind.JSReferenceExpression:
+            this.visitJSReferenceExpression((node as JSReferenceExpression));
+            break;
+        case SyntaxKind.JSCatchBlock:
+            this.visitJSCatchBlock((node as JSCatchBlock));
+            break;
+        case SyntaxKind.JSTryCatchStatement:
+            this.visitJSTryCatchStatement((node as JSTryCatchStatement));
+            break;
+        case SyntaxKind.JSExpressionStatement:
+            this.visitJSExpressionStatement((node as JSExpressionStatement));
+            break;
+        case SyntaxKind.JSConditionalCase:
+            this.visitJSConditionalCase((node as JSConditionalCase));
+            break;
+        case SyntaxKind.JSConditionalStatement:
+            this.visitJSConditionalStatement((node as JSConditionalStatement));
+            break;
+        case SyntaxKind.JSReturnStatement:
+            this.visitJSReturnStatement((node as JSReturnStatement));
+            break;
+        case SyntaxKind.JSParameter:
+            this.visitJSParameter((node as JSParameter));
+            break;
+        case SyntaxKind.JSImportStarBinding:
+            this.visitJSImportStarBinding((node as JSImportStarBinding));
+            break;
+        case SyntaxKind.JSImportAsBinding:
+            this.visitJSImportAsBinding((node as JSImportAsBinding));
+            break;
+        case SyntaxKind.JSImportDeclaration:
+            this.visitJSImportDeclaration((node as JSImportDeclaration));
+            break;
+        case SyntaxKind.JSFunctionDeclaration:
+            this.visitJSFunctionDeclaration((node as JSFunctionDeclaration));
+            break;
+        case SyntaxKind.JSArrowFunctionDeclaration:
+            this.visitJSArrowFunctionDeclaration((node as JSArrowFunctionDeclaration));
+            break;
+        case SyntaxKind.JSLetDeclaration:
+            this.visitJSLetDeclaration((node as JSLetDeclaration));
+            break;
+        case SyntaxKind.JSSourceFile:
+            this.visitJSSourceFile((node as JSSourceFile));
+            break;
+    } }
+    protected visitSyntax(node: Syntax): void { }
     protected visitEndOfFile(node: EndOfFile): void { this.visitBoltToken(node); this.visitJSToken(node); }
-    protected visitToken(node: Token): void { }
-    protected visitSourceFile(node: SourceFile): void { }
-    protected visitFunctionBodyElement(node: FunctionBodyElement): void { }
-    protected visitReturnStatement(node: ReturnStatement): void { }
-    protected visitBoltSyntax(node: BoltSyntax): void { }
+    protected visitToken(node: Token): void { this.visitSyntax(node); }
+    protected visitSourceFile(node: SourceFile): void { this.visitSyntax(node); }
+    protected visitFunctionBodyElement(node: FunctionBodyElement): void { this.visitSyntax(node); }
+    protected visitReturnStatement(node: ReturnStatement): void { this.visitSyntax(node); }
+    protected visitBoltSyntax(node: BoltSyntax): void { this.visitSyntax(node); }
     protected visitBoltToken(node: BoltToken): void { this.visitToken(node); this.visitBoltSyntax(node); }
     protected visitBoltStringLiteral(node: BoltStringLiteral): void { this.visitBoltToken(node); }
     protected visitBoltIntegerLiteral(node: BoltIntegerLiteral): void { this.visitBoltToken(node); }
@@ -2614,7 +3076,7 @@ export class Visitor {
     protected visitBoltExMark(node: BoltExMark): void { this.visitBoltToken(node); this.visitBoltOperatorLike(node); }
     protected visitBoltLtSign(node: BoltLtSign): void { this.visitBoltToken(node); this.visitBoltOperatorLike(node); }
     protected visitBoltVBar(node: BoltVBar): void { this.visitBoltToken(node); this.visitBoltOperatorLike(node); }
-    protected visitBoltKeyword(node: BoltKeyword): void { }
+    protected visitBoltKeyword(node: BoltKeyword): void { this.visitSyntax(node); }
     protected visitBoltWhereKeyword(node: BoltWhereKeyword): void { this.visitBoltToken(node); this.visitBoltKeyword(node); }
     protected visitBoltQuoteKeyword(node: BoltQuoteKeyword): void { this.visitBoltToken(node); this.visitBoltKeyword(node); }
     protected visitBoltFnKeyword(node: BoltFnKeyword): void { this.visitBoltToken(node); this.visitBoltKeyword(node); }
@@ -2680,7 +3142,7 @@ export class Visitor {
     protected visitBoltDeclaration(node: BoltDeclaration): void { this.visitBoltSyntax(node); this.visitBoltSourceElement(node); }
     protected visitBoltTypeDeclaration(node: BoltTypeDeclaration): void { this.visitBoltSyntax(node); this.visitBoltSourceElement(node); }
     protected visitBoltModule(node: BoltModule): void { this.visitBoltSyntax(node); this.visitBoltSourceElement(node); }
-    protected visitBoltDeclarationLike(node: BoltDeclarationLike): void { }
+    protected visitBoltDeclarationLike(node: BoltDeclarationLike): void { this.visitSyntax(node); }
     protected visitBoltFunctionBodyElement(node: BoltFunctionBodyElement): void { this.visitFunctionBodyElement(node); }
     protected visitBoltFunctionDeclaration(node: BoltFunctionDeclaration): void { this.visitBoltFunctionBodyElement(node); this.visitBoltDeclaration(node); this.visitBoltDeclarationLike(node); this.visitBoltTraitOrImplElement(node); }
     protected visitBoltVariableDeclaration(node: BoltVariableDeclaration): void { this.visitBoltFunctionBodyElement(node); this.visitBoltDeclaration(node); this.visitBoltDeclarationLike(node); }
@@ -2690,16 +3152,16 @@ export class Visitor {
     protected visitBoltExportSymbol(node: BoltExportSymbol): void { this.visitBoltSyntax(node); }
     protected visitBoltPlainExportSymbol(node: BoltPlainExportSymbol): void { this.visitBoltExportSymbol(node); }
     protected visitBoltExportDirective(node: BoltExportDirective): void { this.visitBoltSourceElement(node); }
-    protected visitBoltTraitOrImplElement(node: BoltTraitOrImplElement): void { }
+    protected visitBoltTraitOrImplElement(node: BoltTraitOrImplElement): void { this.visitSyntax(node); }
     protected visitBoltTraitDeclaration(node: BoltTraitDeclaration): void { this.visitBoltDeclarationLike(node); this.visitBoltTypeDeclaration(node); }
     protected visitBoltImplDeclaration(node: BoltImplDeclaration): void { this.visitBoltTypeDeclaration(node); this.visitBoltDeclarationLike(node); }
     protected visitBoltTypeAliasDeclaration(node: BoltTypeAliasDeclaration): void { this.visitBoltDeclarationLike(node); this.visitBoltTypeDeclaration(node); this.visitBoltTraitOrImplElement(node); }
     protected visitBoltRecordMember(node: BoltRecordMember): void { this.visitBoltSyntax(node); }
     protected visitBoltRecordField(node: BoltRecordField): void { this.visitBoltRecordMember(node); }
     protected visitBoltRecordDeclaration(node: BoltRecordDeclaration): void { this.visitBoltDeclaration(node); this.visitBoltTypeDeclaration(node); this.visitBoltDeclarationLike(node); }
-    protected visitBoltSourceElement(node: BoltSourceElement): void { }
+    protected visitBoltSourceElement(node: BoltSourceElement): void { this.visitSyntax(node); }
     protected visitBoltMacroCall(node: BoltMacroCall): void { this.visitBoltRecordMember(node); this.visitBoltSourceElement(node); this.visitBoltTraitOrImplElement(node); this.visitBoltFunctionBodyElement(node); }
-    protected visitJSSyntax(node: JSSyntax): void { }
+    protected visitJSSyntax(node: JSSyntax): void { this.visitSyntax(node); }
     protected visitJSToken(node: JSToken): void { this.visitJSSyntax(node); this.visitToken(node); }
     protected visitJSIdentifier(node: JSIdentifier): void { this.visitJSToken(node); }
     protected visitJSString(node: JSString): void { this.visitJSToken(node); }
@@ -2717,7 +3179,7 @@ export class Visitor {
     protected visitJSFunctionKeyword(node: JSFunctionKeyword): void { this.visitJSToken(node); }
     protected visitJSWhileKeyword(node: JSWhileKeyword): void { this.visitJSToken(node); }
     protected visitJSForKeyword(node: JSForKeyword): void { this.visitJSToken(node); }
-    protected visitJSOperatorLike(node: JSOperatorLike): void { }
+    protected visitJSOperatorLike(node: JSOperatorLike): void { this.visitSyntax(node); }
     protected visitJSOperator(node: JSOperator): void { this.visitJSToken(node); }
     protected visitJSCloseBrace(node: JSCloseBrace): void { this.visitJSToken(node); }
     protected visitJSCloseBracket(node: JSCloseBracket): void { this.visitJSToken(node); }
@@ -2753,7 +3215,7 @@ export class Visitor {
     protected visitJSConditionalExpression(node: JSConditionalExpression): void { this.visitJSExpression(node); }
     protected visitJSLiteralExpression(node: JSLiteralExpression): void { this.visitJSExpression(node); }
     protected visitJSReferenceExpression(node: JSReferenceExpression): void { this.visitJSExpression(node); }
-    protected visitJSSourceElement(node: JSSourceElement): void { }
+    protected visitJSSourceElement(node: JSSourceElement): void { this.visitSyntax(node); }
     protected visitJSFunctionBodyElement(node: JSFunctionBodyElement): void { this.visitFunctionBodyElement(node); }
     protected visitJSStatement(node: JSStatement): void { this.visitJSSyntax(node); this.visitJSSourceElement(node); this.visitJSFunctionBodyElement(node); }
     protected visitJSCatchBlock(node: JSCatchBlock): void { this.visitJSSyntax(node); }

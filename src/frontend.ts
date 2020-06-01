@@ -6,7 +6,7 @@ import { sync as globSync } from "glob"
 
 import { Program } from "./program"
 import { emitNode } from "./emitter"
-import { Syntax, BoltSourceFile, SourceFile, NodeVisitor, createBoltConditionalCase, setParents, kindToString } from "./ast"
+import { Syntax, BoltSourceFile, SourceFile, setParents, kindToString, Visitor } from "./ast"
 import { getFileStem, MapLike, assert, FastStringMap, upsearchSync } from "./util"
 import { verbose, memoize } from "./util"
 import { Container, Newable } from "./ioc"
@@ -94,7 +94,7 @@ export class Frontend {
     container.bindSelf(checker);
     container.bindSelf(this.diagnostics);
 
-    const checks: Newable<NodeVisitor>[] = [
+    const checks: Newable<Visitor>[] = [
        CheckInvalidFilePaths,
        CheckReferences,
        CheckTypeAssignments,
@@ -112,7 +112,11 @@ export class Frontend {
     for (const pkg of program.getAllPackages()) {
       if (!pkg.isDependency) {
         for (const sourceFile of pkg.getAllSourceFiles()) {
-          sourceFile.visit(checkers)
+          for (const node of sourceFile.preorder()) {
+            for (const checker of checkers) {
+              checker.visit(node);
+            }
+          }
         }
       }
     }

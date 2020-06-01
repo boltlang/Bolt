@@ -1,16 +1,13 @@
-import { BoltImportDirective, Syntax, BoltParameter, BoltReferenceExpression, BoltReferenceTypeExpression, BoltSourceFile, BoltCallExpression, BoltReturnKeyword, BoltReturnStatement, SyntaxKind, NodeVisitor, BoltSyntax, BoltIdentifier } from "./ast";
+import { BoltImportDirective, Syntax, BoltReferenceExpression, BoltReferenceTypeExpression, SyntaxKind, Visitor, BoltSyntax, BoltIdentifier } from "./ast";
 import { Program } from "./program";
-import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_TYPE_MISMATCH, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND, E_MUST_RETURN_A_VALUE, E_MAY_NOT_RETURN_A_VALUE } from "./diagnostics";
+import { DiagnosticPrinter, E_FILE_NOT_FOUND, E_DECLARATION_NOT_FOUND, E_TYPE_DECLARATION_NOT_FOUND} from "./diagnostics";
 import { convertNodeToSymbolPath } from "./resolver"
 import { inject } from "./ioc";
 import { SymbolResolver, ScopeType } from "./resolver";
 import { assert, every } from "./util";
 import { emitNode } from "./emitter";
-import { TypeChecker, Type, ErrorType } from "./types";
-import { getReturnStatementsInFunctionBody } from "./common";
-import { errorMonitor } from "events";
 
-export class CheckInvalidFilePaths extends NodeVisitor {
+export class CheckInvalidFilePaths extends Visitor {
 
     constructor(
         @inject private program: Program,
@@ -33,7 +30,7 @@ export class CheckInvalidFilePaths extends NodeVisitor {
 
 }
 
-export class CheckReferences extends NodeVisitor {
+export class CheckReferences extends Visitor {
 
     constructor(
         @inject private diagnostics: DiagnosticPrinter,
@@ -132,7 +129,7 @@ export class CheckReferences extends NodeVisitor {
 
 }
 
-export class CheckTypeAssignments extends NodeVisitor {
+export class CheckTypeAssignments extends Visitor {
 
     constructor(@inject private diagnostics: DiagnosticPrinter) {
         super();

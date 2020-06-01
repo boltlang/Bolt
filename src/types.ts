@@ -103,6 +103,8 @@ function areTypesLexicallyLessThan(a: Type, b: Type): boolean {
     return a.source.id < b.source.id;
   }
   if (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType) {
+    assert(a.source.id !== undefined)
+    assert(b.source.id !== undefined)
     return a.source.id < b.source.id;
   }
 
@@ -558,8 +560,8 @@ export class TypeChecker {
         }
       } else {
         narrowedType.node = node;
-        if (node.type.solved !== narrowedType) {
-          node.type.solved.nextType = narrowedType;
+        if (node.type!.solved !== narrowedType) {
+          node.type!.solved.nextType = narrowedType;
         }
         for (const dependantNode of this.getParentsThatMightNeedUpdate(node)) {
           nextQueue.add(dependantNode);
@@ -810,7 +812,7 @@ export class TypeChecker {
           memberTypes.push(member.type!.solved as RecordFieldType);
           this.markNodeAsRequiringUpdate(member, node);
         }
-        return new RecordType(node.name.type, memberTypes);
+        return new RecordType(node.name, memberTypes);
       }
 
       case SyntaxKind.BoltRecordFieldPattern:

@@ -1,6 +1,7 @@
 
 import * as path from "path"
-import { Package, getPackage } from "./common"
+import { getPackage } from "./common"
+import { Package } from "./package"
 import { SourceFile, Syntax } from "./ast"
 import { FastStringMap, assert, isInsideDirectory, stripExtensions } from "./util";
 
