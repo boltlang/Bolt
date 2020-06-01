@@ -1,6 +1,7 @@
 import { BoltSyntax, SyntaxKind, Syntax, BoltSourceFile, SourceFile, kindToString } from "./ast";
 import { emitNode } from "./emitter";
-import { Package, isExported } from "./common";
+import { isExported } from "./common";
+import { Package } from "./package"
 import { FastStringMap, assert, every } from "./util";
 import { Program } from "./program";
 
@@ -236,14 +237,14 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
       let currNode = source.node;
       while (true) {
         if (currNode.kind === SyntaxKind.BoltSourceFile) {
-          return new PackageScopeSource(currNode.package);
+          return new PackageScopeSource(currNode.pkg);
         }
         const nextNode = currNode.parentNode;
         assert(nextNode !== null);
-        if (this.introducesNewScope(new NodeScopeSource(nextNode), kind)) {
-          return new NodeScopeSource(nextNode);
+        if (this.introducesNewScope(new NodeScopeSource(nextNode!), kind)) {
+          return new NodeScopeSource(nextNode!);
         }
-        currNode = nextNode;
+        currNode = nextNode!;
       }
     }
 

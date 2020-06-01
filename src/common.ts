@@ -20,7 +20,6 @@ import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
 import {FastStringMap, enumOr, escapeChar, assert} from "./util";
 import {TextSpan, TextPos, TextFile} from "./text";
 import {Scanner} from "./scanner";
-import * as path from "path"
 import { convertNodeToSymbolPath } from "./resolver";
 import { TYPE_ERROR_MESSAGES } from "./diagnostics";
 
@@ -30,7 +29,7 @@ export function getSourceFile(node: Syntax) {
       return node
     }
     assert(node.parentNode !== null);
-    node = node.parentNode;
+    node = node.parentNode!;
   }
 }
 
