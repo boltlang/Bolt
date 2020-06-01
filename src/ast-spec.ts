@@ -1,10 +1,81 @@
 
+import { Type } from "./types"
+import { TextSpan } from "./text"
 import { Value } from "./evaluator"
 import { Package } from "./package"
+import { Diagnostic } from "./diagnostics";
 
-export class Syntax {
+let nextNodeId = 1;
+
+type SyntaxKind = number;
+
+export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
+
+export abstract class Syntax {
+
+  public id: number;
+
+  public type?: Type;
+
+  public errors: Diagnostic[] = [];
+
+  public abstract kind: SyntaxKind;
+
+  public abstract parentNode: Syntax | null = null;
+
+  public abstract getChildNodes(): IterableIterator<Syntax>;
+
+  constructor(public span: TextSpan | null = null) {
+    this.id = nextNodeId++;
+  }
+
+  *preorder() {
+    const stack: Syntax[] = [ this as unknown as Syntax ] ;
+    while (stack.length > 0) {
+      const node = stack.pop()!;
+      yield node
+      for (const childNode of node.getChildNodes()) {
+        stack.push(childNode);
+      }
+    }
+  }
+
+  mayContainKind(kind: SyntaxKind) {
+    // TODO
+    return true;
+  }
+
+  getParentOfKind(kind: SyntaxKind) {
+    let currNode = this.parentNode;
+    while (currNode !== null) {
+      if (currNode.kind === kind) {
+        return currNode;
+      }
+      currNode = currNode.parentNode;
+    }
+    return null;
+  }
+
+  *findAllChildrenOfKind<K extends SyntaxKind>(kind: K): IterableIterator<ResolveSyntaxKind<K>> {
+    for (const node of this.preorder()) {
+      if (!node.mayContainKind(kind)) {
+        break;
+      }
+      if (node.kind === kind) {
+        yield node as ResolveSyntaxKind<K>;
+      }
+    }
+  }
 
 }
+
+export function setParents(node: Syntax, parentNode: Syntax | null = null) {
+  // NOTE We cast to any here because TypeScript does not like this complex assignment
+  node.parentNode = parentNode as any;
+  for (const child of node.getChildNodes()) {
+    setParents(child, node)
+  }
+} 
 
 export interface EndOfFile extends BoltToken, JSToken {}
 
@@ -15,12 +86,12 @@ export interface ReturnStatement {}
 
 // Bolt language AST definitions
 
-export interface BoltSyntax {}
+export interface BoltSyntax extends Syntax {}
 
 export interface BoltToken extends Token, BoltSyntax {}
 
 export interface BoltStringLiteral extends BoltToken {
-  value: String,
+  value: string,
 }
 
 export interface BoltIntegerLiteral extends BoltToken {
@@ -30,17 +101,17 @@ export interface BoltIntegerLiteral extends BoltToken {
 export interface BoltSymbol extends BoltToken {}
 
 export interface BoltIdentifier extends BoltSymbol {
-  text: String,
+  text: string,
 }
 
 export interface BoltOperatorLike extends BoltSymbol {}
 
 export interface BoltOperator extends BoltSymbol {
-  text: String,
+  text: string,
 }
 
 export interface BoltAssignment extends BoltToken {
-  operator: String | null,
+  operator: string | null,
 }
 
 export interface BoltComma      extends BoltToken {}
@@ -83,7 +154,7 @@ export interface BoltTraitKeyword   extends BoltToken, BoltKeyword {}
 export interface BoltImplKeyword    extends BoltToken, BoltKeyword {}
 
 export interface BoltPunctuated extends BoltToken {
-  text: String,
+  text: string,
 }
 
 export interface BoltParenthesized extends BoltPunctuated {}
@@ -262,7 +333,7 @@ export interface BoltDeclaration extends BoltSyntax, BoltSourceElement {}
 
 export interface BoltTypeDeclaration extends BoltSyntax, BoltSourceElement {}
 
-enum BoltModifiers {
+export enum BoltModifiers {
   IsMutable   = 0x1,
   IsPublic    = 0x2,
 }
@@ -279,7 +350,7 @@ export interface BoltFunctionBodyElement extends FunctionBodyElement {}
 
 export interface BoltFunctionDeclaration extends BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike, BoltTraitOrImplElement {
   modifiers: BoltModifiers,
-  target: String,
+  target: string,
   name: BoltSymbol,
   params: BoltParameter[],
   returnType: BoltTypeExpression | null,
@@ -315,7 +386,7 @@ export interface BoltPlainExportSymbol extends BoltExportSymbol {
 }
 
 export interface BoltExportDirective extends BoltSourceElement {
-  file: String,
+  file: string,
   symbols: BoltExportSymbol[] | null,
 }
 
@@ -362,21 +433,21 @@ export interface BoltSourceElement {}
 
 export interface BoltMacroCall extends BoltRecordMember, BoltSourceElement, BoltTraitOrImplElement, BoltFunctionBodyElement {
   name: BoltIdentifier,
-  text: String,
+  text: string,
 }
 
 // JavaScript AST definitions
 
-export interface JSSyntax {}
+export interface JSSyntax extends Syntax {}
 
 export interface JSToken extends JSSyntax, Token {}
 
 export interface JSIdentifier extends JSToken {
-  text: String,
+  text: string,
 }
 
 export interface JSString extends JSToken {
-  value: String,
+  value: string,
 }
 
 export interface JSInteger extends JSToken {
@@ -400,7 +471,7 @@ export interface JSForKeyword extends JSToken {}
 export interface JSOperatorLike {}
 
 export interface JSOperator extends JSToken {
-  text: String,
+  text: string,
 }
 
 export interface JSCloseBrace extends JSToken {}
@@ -478,7 +549,7 @@ export interface JSLiteralExpression extends JSExpression {
 }
 
 export interface JSReferenceExpression extends JSExpression {
-  name: String,
+  name: string,
 }
 
 export interface JSSourceElement {}
@@ -523,7 +594,7 @@ export interface JSParameter extends JSSyntax {
 
 export interface JSDeclaration extends JSSyntax, JSSourceElement {}
 
-enum JSDeclarationModifiers {
+export enum JSDeclarationModifiers {
   IsExported = 0x1,
 }
 
