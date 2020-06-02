@@ -1,18 +1,19 @@
 Bolt
 ====
 
-Bolt is a new programming language for rapidly building complex applications.
-Bolt has an unique mix of features that allows you to write fully-fledged
-applications insanely fast.
+Bolt is a new programming language in the making for rapidly building complex applications.
+It Bolt makes writing web applications dead-simple, and will eventually also support mobile and desktop.
 
- - **Garbage collected** using state-of-the art garbage collectors where
-   possible, so you don't have to worry about memory leaks.
+Bolt has an unique mix of features that allows you to write fully-fledged
+applications insanely fast, while at the same time guaranteeing that your programs
+do what they are supposed to do.
+
+ - **Garbage collected**, freeing you from worrying about memory management.
  - **JSX support**, so you write your views in the syntax you're already
    familiar with.
- - **Advanced language feature**, such as _algebraic effects_, making things
-   like React's `useState` primitive objects in the language.
+ - **Lots of useful language features** such as match-expressions, tuples, macros, static type checking, automatic type inference, and much more to give you the best development experience.
  - **Cross-platform standard library**, allowing you to write your code for the
-   web and the desktop at the same time.
+   web platform and the native platform at the same time.
 
 ```
 fn fac(n) {
@@ -22,10 +23,19 @@ fn fac(n) {
   }
 }
 
-print(fac(5)) // 10
+println!("The faculty of {} is {}", 5, fac(5));
 ```
 
 ## FAQ
+
+### Why yet another programming language?
+
+Granted, there are _a lot_ of programming languages, but oddly enough I found myself
+in the situation where I was still not completely satisfied. For example, Rust is a fantastic programming language,
+but writing web applications in it feels a little counter-intuitive due to its manual memory management.
+On the other hand, functional  programming languages like Haskell and Idris look like they come straight out of the future, but sometimes have unpredictable run-time performance and force you to do weird things when all you want to do is mutate a variable. Bolt aims to solve these two issues, and to be a gate into more complex compilers. Who knows what the successor will look like?
+
+More expressiveness, less boilerplate, and most of all more safety. Bolt is my first attempt at finding it.
 
 ### Why should I choose Bolt over JavaScript?
 
@@ -56,8 +66,8 @@ long as the user does not notice it, it does not really matter.
 
 ## License
 
-Bolt itself is licensed under the GPL-3.0, because we put a lot of work in it
-and we want the open-source nature of Bolt to be preserved. However, code that
+Bolt itself is licensed under the GPL-3.0, because I put a lot of work in it
+and I want the open-source nature of Bolt to be preserved. However, code that
 is compiled using the Bolt compiler may be licensed under any license you want.
 
     This program is free software: you can redistribute it and/or modify
