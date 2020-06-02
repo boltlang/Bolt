@@ -1,7 +1,9 @@
 Bolt
 ====
 
-<img height="100" src="https://github.com/boltlang/Bolt/blob/master/logo.png?raw=true" />
+<p align="center">
+  <img height="100" src="https://github.com/boltlang/Bolt/blob/master/logo.png?raw=true" />
+</p>
 
 Bolt is a new programming language in the making for rapidly building complex applications.
 It Bolt makes writing web applications dead-simple, and will eventually also support mobile and desktop.
