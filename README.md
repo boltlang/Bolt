@@ -59,14 +59,22 @@ about _correctness_, _performance_ and _scalability_.
 ### What languages inspired Bolt?
 
 Rust and Haskell are two of my favorite languages that you'll notice Bolt
-shares a lot of its syntax and semantics with.
+shares a lot of its syntax and semantics with. Rust is the language that inspired Bolt's syntax,
+while Haskell helped guide the type checker and standard library design.
+Traces of other languages can be found, too.
+The macro system was inspired by Racket's macro system,
+and the sucesses of garbage-collected languages like Go, JavaScript, Python and Java convinced me that
+this feature is a must-have.
+
+All in all, Bolt is a mixture of many very different programming languages, and I believe this mixture makes it unique.
 
 ### What's the difference between Bolt and Rust?
 
-I really like Rust, but if I just care about writing an application I believe
-Rust's memory model with its borrow checker is overkill. Having a garbage
-collector might result in a performance penalty, but I believe that as
-long as the user does not notice it, it does not really matter.
+Right now, Bolt looks a lot like Rust. I think the developers of the Rust programming language did a great job at 
+creating a language that is both pleasant to read and write and is open to a lot of optimisations. However,
+Bolt does not come with the advanced borrow checker of the Rust language. It simply isn't needed, because Bolt uses
+a garbage collector underneath, and hopefully will contain some optimisations in the future that can make your programs
+as fast as Rust.
 
 ## License
 
