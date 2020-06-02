@@ -5,8 +5,8 @@ Bolt
   <img height="100" src="https://github.com/boltlang/Bolt/blob/master/logo.png?raw=true" />
 </p>
 
-Bolt is a new programming language in the making for rapidly building complex applications.
-It Bolt makes writing web applications dead-simple, and will eventually also support mobile and desktop.
+Bolt is a new programming language in the making for rapidly building complex web applications.
+Bolt makes writing applications dead-simple, and will eventually also support mobile and desktop.
 
 Bolt has an unique mix of features that allows you to write fully-fledged
 applications insanely fast, while at the same time guaranteeing that your programs
