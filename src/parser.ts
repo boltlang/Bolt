@@ -1534,7 +1534,7 @@ export class Parser {
   //  return lhs
   //}
 
-  public parseSourceFile(tokens: BoltTokenStream, pkg: Package): BoltSourceFile {
+  public parseSourceFile(tokens: BoltTokenStream, pkg: Package | null = null): BoltSourceFile {
     const elements = this.parseSourceElements(tokens);
     const t1 = tokens.peek();
     assertToken(t1, SyntaxKind.EndOfFile);

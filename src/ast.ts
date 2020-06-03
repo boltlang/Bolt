@@ -575,7 +575,7 @@ type BoltBracketedChild = never;
 export class BoltSourceFile extends SyntaxBase {
     parentNode: null | BoltSourceFileParent = null;
     kind: SyntaxKind.BoltSourceFile = SyntaxKind.BoltSourceFile;
-    constructor(public elements: BoltSourceElement[], public pkg: Package, span: TextSpan | null = null) { super(span); }
+    constructor(public elements: BoltSourceElement[], public pkg: Package | null, span: TextSpan | null = null) { super(span); }
     *getChildNodes(): IterableIterator<BoltSourceFileChild> { for (let element of this.elements)
         yield element; }
 }
@@ -1991,7 +1991,7 @@ export function createBoltBraced(text: string, span: TextSpan | null = null): Bo
 
 export function createBoltBracketed(text: string, span: TextSpan | null = null): BoltBracketed { return new BoltBracketed(text, span); }
 
-export function createBoltSourceFile(elements: BoltSourceElement[], pkg: Package, span: TextSpan | null = null): BoltSourceFile { return new BoltSourceFile(elements, pkg, span); }
+export function createBoltSourceFile(elements: BoltSourceElement[], pkg: Package | null, span: TextSpan | null = null): BoltSourceFile { return new BoltSourceFile(elements, pkg, span); }
 
 export function createBoltQualName(isAbsolute: boolean, modulePath: BoltIdentifier[], name: BoltSymbol, span: TextSpan | null = null): BoltQualName { return new BoltQualName(isAbsolute, modulePath, name, span); }
 

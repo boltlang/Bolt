@@ -62,14 +62,16 @@ function firstIndexOfNonEmpty(str: string) {
   return j
 }
 
-export class DiagnosticWriter {
+export class DiagnosticIndex {
 
-  constructor(private fd: number) {
-
-  }
+  private diagnostics = new Array<Diagnostic>();
 
   public add(diagnostic: Diagnostic) {
-    fs.writeSync(this.fd, JSON.stringify(diagnostic) + '\n');
+    this.diagnostics.push(diagnostic);
+  }
+  
+  public getAllDiagnostics(): IterableIterator<Diagnostic> {
+    return this.diagnostics[Symbol.iterator]();
   }
 
 }

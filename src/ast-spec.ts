@@ -163,7 +163,7 @@ export interface BoltBracketed extends BoltPunctuated {}
 
 export interface BoltSourceFile extends BoltSyntax, SourceFile {
   elements: BoltSourceElement[],
-  pkg: Package,
+  pkg: Package | null,
 }
 
 export interface BoltQualName extends BoltSyntax {

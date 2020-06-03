@@ -7,6 +7,7 @@ import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
 import { E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER } from "./diagnostics"
+import { isPrimitive } from "util"
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
   return Math.pow(a, n) == x;
@@ -152,7 +153,7 @@ function isObjectLike(value: any) {
   return typeof value === 'object' && value !== null;
 }
 
-export function isPlainObject(value: any): value is object {
+export function isPlainObject(value: any): value is MapLike<any> {
   if (!isObjectLike(value) || getTag(value) != '[object Object]') {
     return false
   }
@@ -166,10 +167,16 @@ export function isPlainObject(value: any): value is object {
   return Object.getPrototypeOf(value) === proto
 }
 
-export function mapValues<T extends object, R extends PropertyKey>(obj: T, func: (value: keyof T) => R): { [K in keyof T]: R } {
+export function* values<T extends object>(obj: T): IterableIterator<T[keyof T]> {
+  for (const key of Object.keys(obj)) {
+    yield obj[key as keyof T];
+  }
+}
+
+export function mapValues<T extends object, R>(obj: T, func: (value: T[keyof T]) => R): { [K in keyof T]: R } {
   const newObj: any = {}
   for (const key of Object.keys(obj)) {
-    newObj[key] = func((obj as any)[key]);
+    newObj[key as keyof T] = func(obj[key as keyof T]);
   }
   return newObj;
 }
@@ -181,6 +188,47 @@ export function prettyPrint(value: any): string {
     return value[prettyPrintTag]();
   }
   return value.toString();
+}
+
+export type Newable<T> = {
+  new(...args: any): T;
+}
+
+export const serializeTag = Symbol('serializer tag');
+
+const serializableClasses = new Map<string, Newable<{ [serializeTag](): Json }>>();
+
+export function serialize(value: any): Json {
+  if (isPrimitive(value)) {
+    return {
+      type: 'primitive',
+      value,
+    }
+  } else if (isObjectLike(value)) {
+    if (isPlainObject(value)) {
+      return { 
+        type: 'object',
+        elements: [...map(values(value), element => serialize(element))]
+      };
+    } else if (value[serializeTag] !== undefined
+        && typeof(value[serializeTag]) === 'function'
+        && typeof(value.constructor.name) === 'string') {
+      return {
+        type: 'class',
+        name: value.constructor.name,
+        data: value[serializeTag](),
+      }
+    } else {
+      throw new Error(`Could not serialize ${value}: it was a non-primitive object and has no serializer tag.`)
+    }
+  } else if (Array.isArray(value)) {
+    return {
+      type: 'array',
+      elements: value.map(serialize)
+    }
+  } else {
+    throw new Error(`Could not serialize ${value}: is was not recognised as a primitive type, an object, a class instance, or an array.`)
+  }
 }
 
 export type TransparentProxy<T> = T & { updateHandle(value: T): void }
