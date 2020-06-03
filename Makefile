@@ -1,17 +1,16 @@
 
-all: src/ast.js
+all: src/ast.ts
 	bolt check test.bolt --no-std
 
-src/ast.js: src/ast-spec.txt
+src/ast.ts: src/ast-spec.ts
 	@echo "Generating AST definitions ..."
 	@mkdir -p lib/
-	@treegen --js-file=src/ast.js --dts-file src/ast.d.ts src/ast-spec.txt
+	@tsastgen src/ast-spec.ts:src/ast.ts
 
 .PHONY: clean
 
 clean:
-	rm -rf src/ast.js
-	rm -rf src/ast.d.ts
+	rm -rf src/ast.ts
 
 .PHONY: distclean
 
