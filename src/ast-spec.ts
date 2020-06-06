@@ -4,6 +4,7 @@ import { TextSpan } from "./text"
 import { Value } from "./evaluator"
 import { Package } from "./package"
 import { Diagnostic } from "./diagnostics";
+import { serializeTag, serialize, JsonObject } from "./util";
 
 let nextNodeId = 1;
 
@@ -27,6 +28,17 @@ export abstract class Syntax {
 
   constructor(public span: TextSpan | null = null) {
     this.id = nextNodeId++;
+  }
+
+  [serializeTag]() {
+    const result: JsonObject = {};
+    for (const key of Object.keys(this)) {
+      if (key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+        continue;
+      }
+      result[key] = serialize((this as any)[key]);
+    }
+    return result;
   }
 
   *preorder() {

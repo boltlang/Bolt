@@ -8,6 +8,8 @@ import { Package } from "./package";
 
 import { Diagnostic } from "./diagnostics";
 
+import { serializeTag, serialize, JsonObject } from "./util";
+
 let nextNodeId = 1;
 
 export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, {
@@ -23,6 +25,16 @@ export abstract class SyntaxBase {
     public abstract getChildNodes(): IterableIterator<Syntax>;
     constructor(public span: TextSpan | null = null) {
         this.id = nextNodeId++;
+    }
+    [serializeTag]() {
+        const result: JsonObject = {};
+        for (const key of Object.keys(this)) {
+            if (key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+                continue;
+            }
+            result[key] = serialize((this as any)[key]);
+        }
+        return result;
     }
     *preorder() {
         const stack: Syntax[] = [this as unknown as Syntax];
