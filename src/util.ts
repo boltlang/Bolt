@@ -6,13 +6,11 @@ import * as os from "os"
 import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
-import { E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER } from "./diagnostics"
-import { isPrimitive } from "util"
+
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
   return Math.pow(a, n) == x;
 }
-
 
 export function some<T>(iterator: Iterator<T>, pred: (value: T) => boolean): boolean {
   while (true) {
@@ -194,15 +192,31 @@ export type Newable<T> = {
   new(...args: any): T;
 }
 
+export function isPrimitive(value: any): boolean {
+  return (typeof(value) !== 'function' && typeof(value) !== 'object') || value === null;
+}
+
 export const serializeTag = Symbol('serializer tag');
 
 const serializableClasses = new Map<string, Newable<{ [serializeTag](): Json }>>();
 
 export function serialize(value: any): Json {
   if (isPrimitive(value)) {
+    if (typeof(value) === 'bigint') {
+      return {
+        type: 'bigint',
+        value: value.toString(),
+      } 
+    } else {
+      return {
+        type: 'primitive',
+        value,
+      }
+    }
+  } else if (Array.isArray(value)) {
     return {
-      type: 'primitive',
-      value,
+      type: 'array',
+      elements: value.map(serialize)
     }
   } else if (isObjectLike(value)) {
     if (isPlainObject(value)) {
@@ -219,12 +233,8 @@ export function serialize(value: any): Json {
         data: value[serializeTag](),
       }
     } else {
+      console.log(value);
       throw new Error(`Could not serialize ${value}: it was a non-primitive object and has no serializer tag.`)
-    }
-  } else if (Array.isArray(value)) {
-    return {
-      type: 'array',
-      elements: value.map(serialize)
     }
   } else {
     throw new Error(`Could not serialize ${value}: is was not recognised as a primitive type, an object, a class instance, or an array.`)
@@ -503,8 +513,8 @@ export function upsearchSync(filename: string, startDir = '.') {
     if (fs.existsSync(filePath)) {
       return filePath
     }
-    const  { root, dir } = path.parse(currDir);
-    if (dir === root) {
+    const { root, dir } = path.parse(currDir);
+    if (currDir === root) {
       return null;
     }
     currDir = dir;
@@ -636,5 +646,31 @@ export function format(message: string, data: MapLike<FormatArg>) {
     modifiers = [];
   }
 
+}
+
+export function deepEqual(a: any, b: any): boolean {
+  if (isPrimitive(a) && isPrimitive(b)) {
+    return a === b;
+  } else if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) {
+      return false;
+    }
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) {
+        return false;
+      }
+    }
+    return true;
+  } else if (isPlainObject(a) && isPlainObject(b)) {
+    const unmarked = new Set(Object.keys(b));
+    for (const key of Object.keys(a)) {
+      if (!deepEqual(a[key], b[key])) {
+        return false;
+      }
+      unmarked.delete(key);
+    }
+    return unmarked.size === 0;
+  }
+  return false;
 }
 

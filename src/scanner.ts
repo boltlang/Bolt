@@ -52,6 +52,7 @@ import {
   createBoltExMark,
   createBoltWhereKeyword,
 } from "./ast"
+import { outputFile } from "fs-extra";
 
 export enum PunctType {
   Paren,
@@ -111,11 +112,11 @@ function isNewLine(ch: string) {
 }
 
 function isIdentStart(ch: string) {
-  return /[_\p{L}]/u.test(ch)
+  return /[_\p{ID_Start}]/u.test(ch)
 }
 
 function isIdentPart(ch: string) {
-  return /[_\p{L}\p{Nd}]/u.test(ch)
+  return /[_\p{ID_Continue}]/u.test(ch)
 }
 
 function isSymbol(ch: string) {
@@ -181,6 +182,86 @@ export class Scanner {
     return text;
   }
 
+  private scanHexDigit(): number {
+    const c0 = this.peekChar();
+    let out;
+    switch (c0) {
+      case '0': out = 0; break;
+      case '1': out = 1; break;
+      case '2': out = 2; break;
+      case '3': out = 3; break;
+      case '4': out = 4; break;
+      case '5': out = 5; break;
+      case '6': out = 6; break;
+      case '7': out = 7; break;
+      case '8': out = 8; break;
+      case '9': out = 9; break;
+      case 'a': out = 10; break;
+      case 'b': out = 11; break;
+      case 'c': out = 12; break;
+      case 'd': out = 13; break;
+      case 'e': out = 14; break;
+      case 'f': out = 15; break;
+      case 'A': out = 10; break;
+      case 'B': out = 11; break;
+      case 'C': out = 12; break;
+      case 'D': out = 13; break;
+      case 'E': out = 14; break;
+      case 'F': out = 15; break;
+      default:
+        throw new ScanError(this.file, this.currPos.clone(), c0);
+    }
+    this.getChar();
+    return out;
+  }
+
+  private scanEscapeSequence(): string {
+    this.assertChar('\\')
+    const c0 = this.peekChar();
+    switch (c0) {
+      case 'a': 
+        this.getChar();
+        return '\n'
+      case 'b': 
+        this.getChar();
+        return '\b'
+      case 'f': 
+        this.getChar();
+        return '\f'
+      case 'n': 
+        this.getChar();
+        return '\n'
+      case 'r': 
+        this.getChar();
+        return '\r'
+      case 't': 
+        this.getChar();
+        return '\t'
+      case 'v': 
+        this.getChar();
+        return '\v'
+      case '0': 
+        this.getChar();
+        return '\0'
+      case 'u':
+      {
+        const d0 = this.scanHexDigit();
+        const d1 = this.scanHexDigit();
+        const d2 = this.scanHexDigit();
+        const d3 = this.scanHexDigit();
+        return String.fromCharCode(d0 * (16 ** 3) + d1 * (16 ** 2) + d2 * 16 + d3);
+      } 
+      case 'x':
+      {
+        const d0 = this.scanHexDigit();
+        const d1 = this.scanHexDigit();
+        return String.fromCharCode(d0 * 16 + d1);
+      }
+      default:
+        throw new ScanError(this.file, this.currPos.clone(), c0);
+    }
+  }
+
   public scan(): BoltToken {
 
     while (true) {
@@ -227,15 +308,17 @@ export class Scanner {
         let text = ''
 
         while (true) {
-          const c1 = this.getChar();
+          const c1 = this.peekChar();
           if (c1 === EOF) {
             throw new ScanError(this.file, this.currPos.clone(), EOF);
           }
           if (c1 === '"') {
+            this.getChar();
             break;
           } else if (c1 === '\\') {
-            this.scanEscapeSequence()
+            text += this.scanEscapeSequence()
           } else {
+            this.getChar();
             text += c1
           }
         }
@@ -246,7 +329,7 @@ export class Scanner {
 
       } else if (isDigit(c0)) {
 
-        const digits = this.takeWhile(isDigit)
+        const digits = this.takeWhile(isDigit);
         const endPos = this.currPos.clone();
         return createBoltIntegerLiteral(BigInt(digits), new TextSpan(this.file, startPos, endPos));
 

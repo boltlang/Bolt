@@ -1,6 +1,7 @@
 
 import * as path from "path"
 import * as fs from "fs"
+import { serializeTag, serialize } from "./util";
 
 export class TextFile {
 
@@ -14,11 +15,15 @@ export class TextFile {
     return path.resolve(this.origPath)
   }
 
-  public getText(): string {
+  [serializeTag]() {
+    return this.origPath;
+  }
+
+  public getText(encoding: BufferEncoding = 'utf8'): string {
     if (this.cachedText !== null) {
       return this.cachedText;
     }
-    const text = fs.readFileSync(this.fullPath, 'utf8');
+    const text = fs.readFileSync(this.fullPath, encoding);
     this.cachedText = text;
     return text
   }
@@ -39,6 +44,26 @@ export class TextPos {
     return new TextPos(this.offset, this.line, this.column)
   }
 
+  [serializeTag]() {
+    return {
+      offset: this.offset,
+      line: this.line,
+      column: this.column,
+    }
+  }
+
+  public advance(str: string) {
+    for (const ch of str) {
+      if (ch === '\n') {
+        this.line++;
+        this.column = 1;
+      } else {
+        this.column++;
+      }
+      this.offset++;
+    }
+  }
+
 }
 
 export class TextSpan {
@@ -53,6 +78,14 @@ export class TextSpan {
 
   public clone() {
     return new TextSpan(this.file, this.start.clone(), this.end.clone());
+  }
+
+  [serializeTag]() {
+    return {
+      file: serialize(this.file),
+      start: serialize(this.start),
+      end: serialize(this.end),
+    }
   }
 
 }

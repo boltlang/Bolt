@@ -5,9 +5,12 @@ const path = require("path");
 module.exports = {
   target: 'node',
   mode: 'development',
-  entry: './src/bin/bolt.ts',
+  entry: {
+    'bolt': './src/bin/bolt.ts',
+    'bolt-test': './src/bin/bolt-test.ts',
+  },
   output: {
-    filename: 'bin/bolt.js',
+    filename: 'bin/[name].js',
     path: path.resolve(__dirname, 'build'),
   },
   resolve: {
