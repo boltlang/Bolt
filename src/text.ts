@@ -1,8 +1,9 @@
 
 import * as path from "path"
 import * as fs from "fs"
-import { serializeTag, serialize } from "./util";
+import { serializeTag, serialize, deserializable } from "./util";
 
+@deserializable()
 export class TextFile {
 
   private cachedText: string | null = null;
@@ -16,7 +17,7 @@ export class TextFile {
   }
 
   [serializeTag]() {
-    return this.origPath;
+    return [ this.origPath ];
   }
 
   public getText(encoding: BufferEncoding = 'utf8'): string {
@@ -30,6 +31,7 @@ export class TextFile {
 
 }
 
+@deserializable()
 export class TextPos {
 
   constructor(
@@ -45,11 +47,11 @@ export class TextPos {
   }
 
   [serializeTag]() {
-    return {
-      offset: this.offset,
-      line: this.line,
-      column: this.column,
-    }
+    return [
+      this.offset,
+      this.line,
+      this.column,
+    ]
   }
 
   public advance(str: string) {
@@ -66,6 +68,7 @@ export class TextPos {
 
 }
 
+@deserializable()
 export class TextSpan {
 
   constructor(
@@ -81,11 +84,11 @@ export class TextSpan {
   }
 
   [serializeTag]() {
-    return {
-      file: serialize(this.file),
-      start: serialize(this.start),
-      end: serialize(this.end),
-    }
+    return [
+      this.file,
+      this.start,
+      this.end,
+    ]
   }
 
 }

@@ -6,6 +6,7 @@ import * as os from "os"
 import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
+import { NODE_TYPES } from "./ast"
 
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
@@ -196,44 +197,45 @@ export function isPrimitive(value: any): boolean {
   return (typeof(value) !== 'function' && typeof(value) !== 'object') || value === null;
 }
 
-export const serializeTag = Symbol('serializer tag');
+export const serializeTag = Symbol('serialize tag');
+export const deserializeTag = Symbol('deserialize tag');
 
-const serializableClasses = new Map<string, Newable<{ [serializeTag](): Json }>>();
+const deserializableClasses = new Map<string, Newable<{ [serializeTag](): Json }>>();
+
+export function registerClass(cls: Newable<any>) {
+  deserializableClasses.set(cls.name, cls)
+}
+
+const TYPE_KEY = '__type'
 
 export function serialize(value: any): Json {
   if (isPrimitive(value)) {
     if (typeof(value) === 'bigint') {
       return {
-        type: 'bigint',
+        [TYPE_KEY]: 'bigint',
         value: value.toString(),
       } 
     } else {
-      return {
-        type: 'primitive',
-        value,
-      }
+      return value;
     }
   } else if (Array.isArray(value)) {
-    return {
-      type: 'array',
-      elements: value.map(serialize)
-    }
+    return value.map(serialize);
   } else if (isObjectLike(value)) {
     if (isPlainObject(value)) {
-      return { 
-        type: 'object',
-        elements: [...map(values(value), element => serialize(element))]
-      };
+      const result: MapLike<Json> = {};
+      for (const key of Object.keys(value)) {
+        result[key] = serialize(value[key]);
+      }
+      return result;
     } else if (value[serializeTag] !== undefined
         && typeof(value[serializeTag]) === 'function'
         && typeof(value.constructor.name) === 'string') {
       return {
-        type: 'class',
+        [TYPE_KEY]: 'classinstance',
         name: value.constructor.name,
-        data: value[serializeTag](),
+        args: value[serializeTag]().map(serialize),
       }
     } else {
-      console.log(value);
       throw new Error(`Could not serialize ${value}: it was a non-primitive object and has no serializer tag.`)
     }
   } else {
@@ -241,68 +243,102 @@ export function serialize(value: any): Json {
   }
 }
 
-export type TransparentProxy<T> = T & { updateHandle(value: T): void }
-
-export function createTransparentProxy<T extends object>(value: T): TransparentProxy<T> {
-  const handlerObject = {
-    __HANDLE: value,
-    __IS_HANDLE: true,
-    updateHandle(newValue: T) {
-      if (newValue.__IS_HANDLE) {
-        newValue = newValue.__HANDLE;
-      }
-      value = newValue;
-      handlerObject.__HANDLE = newValue;
+export function deserialize(data: Json): any {
+  if (isPrimitive(data)) {
+    return data;
+  }
+  if (Array.isArray(data)) {
+    return data.map(deserialize);
+  }
+  if (isPlainObject(data)) {
+    if (data[TYPE_KEY] === 'bigint') {
+      return BigInt(data.value);
     }
-  };
-  return new Proxy<any>({}, {
-    getPrototypeOf(target: T): object | null {
-      return Reflect.getPrototypeOf(value);
-    },
-    setPrototypeOf(target: T, v: any): boolean {
-      return Reflect.setPrototypeOf(value, v);
-    },
-    isExtensible(target: T): boolean {
-      return Reflect.isExtensible(value);
-    },
-    preventExtensions(target: T): boolean {
-      return Reflect.preventExtensions(value);
-    },
-    getOwnPropertyDescriptor(target: T, p: PropertyKey): PropertyDescriptor | undefined {
-      return Reflect.getOwnPropertyDescriptor(value, p);
-    },
-    has(target: T, p: PropertyKey): boolean {
-      return Reflect.has(value, p);
-    },
-    get(target: T, p: PropertyKey, receiver: any): any {
-      if (hasOwnProperty(handlerObject, p)) {
-        return Reflect.get(handlerObject, p);
+    if (data[TYPE_KEY] === 'classinstance') {
+      const cls = deserializableClasses.get(data.name as string);
+      if (cls === undefined) {
+        throw new Error(`Could not deserialize ${data.name}: class not found.`)
       }
-      return Reflect.get(value, p, receiver)
-    },
-    set(target: T, p: PropertyKey, value: any, receiver: any): boolean {
-      return Reflect.set(value, p, value);
-    },
-    deleteProperty(target: T, p: PropertyKey): boolean {
-      return Reflect.deleteProperty(value, p);
-    },
-    defineProperty(target: T, p: PropertyKey, attributes: PropertyDescriptor): boolean {
-      return Reflect.defineProperty(value, p, attributes);
-    },
-    enumerate(target: T): PropertyKey[] {
-      return [...Reflect.enumerate(value)];
-    },
-    ownKeys(target: T): PropertyKey[] {
-      return Reflect.ownKeys(value);
-    },
-    apply(target: T, thisArg: any, argArray?: any): any {
-      return Reflect.apply(value as any, thisArg, argArray);
-    },
-    construct(target: T, argArray: any, newTarget?: any): object {
-      return Reflect.construct(value as any, argArray, newTarget);
+      const args = (data.args as JsonArray).map(deserialize);
+      return new cls(...args)
     }
-  });
+    const result: MapLike<any> = {};
+    for (const key of Object.keys(data)) {
+      result[key] = deserialize(data[key]);
+    }
+    return result;
+  }
+  throw new Error(`I did not know how to deserialize ${data}'.`)
 }
+
+export function deserializable() {
+  return function (target: any) {
+    deserializableClasses.set(target.name, target);
+  }
+}
+
+//export type TransparentProxy<T> = T & { updateHandle(value: T): void }
+
+//export function createTransparentProxy<T extends object>(value: T): TransparentProxy<T> {
+//  const handlerObject = {
+//    __HANDLE: value,
+//    __IS_HANDLE: true,
+//    updateHandle(newValue: T) {
+//      if (newValue.__IS_HANDLE) {
+//        newValue = newValue.__HANDLE;
+//      }
+//      value = newValue;
+//      handlerObject.__HANDLE = newValue;
+//    }
+//  };
+//  return new Proxy<any>({}, {
+//    getPrototypeOf(target: T): object | null {
+//      return Reflect.getPrototypeOf(value);
+//    },
+//    setPrototypeOf(target: T, v: any): boolean {
+//      return Reflect.setPrototypeOf(value, v);
+//    },
+//    isExtensible(target: T): boolean {
+//      return Reflect.isExtensible(value);
+//    },
+//    preventExtensions(target: T): boolean {
+//      return Reflect.preventExtensions(value);
+//    },
+//    getOwnPropertyDescriptor(target: T, p: PropertyKey): PropertyDescriptor | undefined {
+//      return Reflect.getOwnPropertyDescriptor(value, p);
+//    },
+//    has(target: T, p: PropertyKey): boolean {
+//      return Reflect.has(value, p);
+//    },
+//    get(target: T, p: PropertyKey, receiver: any): any {
+//      if (hasOwnProperty(handlerObject, p)) {
+//        return Reflect.get(handlerObject, p);
+//      }
+//      return Reflect.get(value, p, receiver)
+//    },
+//    set(target: T, p: PropertyKey, value: any, receiver: any): boolean {
+//      return Reflect.set(value, p, value);
+//    },
+//    deleteProperty(target: T, p: PropertyKey): boolean {
+//      return Reflect.deleteProperty(value, p);
+//    },
+//    defineProperty(target: T, p: PropertyKey, attributes: PropertyDescriptor): boolean {
+//      return Reflect.defineProperty(value, p, attributes);
+//    },
+//    enumerate(target: T): PropertyKey[] {
+//      return [...Reflect.enumerate(value)];
+//    },
+//    ownKeys(target: T): PropertyKey[] {
+//      return Reflect.ownKeys(value);
+//    },
+//    apply(target: T, thisArg: any, argArray?: any): any {
+//      return Reflect.apply(value as any, thisArg, argArray);
+//    },
+//    construct(target: T, argArray: any, newTarget?: any): object {
+//      return Reflect.construct(value as any, argArray, newTarget);
+//    }
+//  });
+//}
 
 export const getKeyTag = Symbol('get key of object');
 
@@ -647,6 +683,7 @@ export function format(message: string, data: MapLike<FormatArg>) {
   }
 
 }
+
 
 export function deepEqual(a: any, b: any): boolean {
   if (isPrimitive(a) && isPrimitive(b)) {

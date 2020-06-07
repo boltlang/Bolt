@@ -17,11 +17,16 @@ import {
   FunctionBodyElement
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
-import {FastStringMap, enumOr, escapeChar, assert} from "./util";
-import {TextSpan, TextPos, TextFile} from "./text";
-import {Scanner} from "./scanner";
+import { FastStringMap, enumOr, escapeChar, assert, registerClass, Newable } from "./util";
+import { TextSpan, TextPos, TextFile } from "./text";
+import { Scanner } from "./scanner";
 import { convertNodeToSymbolPath } from "./resolver";
 import { TYPE_ERROR_MESSAGES } from "./diagnostics";
+import { NODE_TYPES } from "./ast"
+
+for (const key of Object.keys(NODE_TYPES)) {
+  registerClass((NODE_TYPES as any)[key]);
+}
 
 export function getSourceFile(node: Syntax) {
   while (true) {

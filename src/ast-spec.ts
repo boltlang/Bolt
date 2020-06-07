@@ -4,7 +4,7 @@ import { TextSpan } from "./text"
 import { Value } from "./evaluator"
 import { Package } from "./package"
 import { Diagnostic } from "./diagnostics";
-import { serializeTag, serialize, JsonObject } from "./util";
+import { serializeTag, serialize } from "./util";
 
 let nextNodeId = 1;
 
@@ -31,13 +31,14 @@ export abstract class Syntax {
   }
 
   [serializeTag]() {
-    const result: JsonObject = {};
+    const result: any[] = [];
     for (const key of Object.keys(this)) {
       if (key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
         continue;
       }
-      result[key] = serialize((this as any)[key]);
+      result.push((this as any)[key]);
     }
+    result.push(this.span);
     return result;
   }
 

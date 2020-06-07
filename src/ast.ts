@@ -8,7 +8,7 @@ import { Package } from "./package";
 
 import { Diagnostic } from "./diagnostics";
 
-import { serializeTag, serialize, JsonObject } from "./util";
+import { serializeTag, serialize } from "./util";
 
 let nextNodeId = 1;
 
@@ -27,13 +27,14 @@ export abstract class SyntaxBase {
         this.id = nextNodeId++;
     }
     [serializeTag]() {
-        const result: JsonObject = {};
+        const result: any[] = [];
         for (const key of Object.keys(this)) {
             if (key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
                 continue;
             }
-            result[key] = serialize((this as any)[key]);
+            result.push((this as any)[key]);
         }
+        result.push(this.span);
         return result;
     }
     *preorder() {
@@ -3252,6 +3253,8 @@ export function kindToString(kind: SyntaxKind): string { if (SyntaxKind[kind] ==
     throw new Error("The SyntaxKind value that was passed in was not found."); return SyntaxKind[kind]; }
 
 export type Syntax = EndOfFile | BoltStringLiteral | BoltIntegerLiteral | BoltIdentifier | BoltOperator | BoltAssignment | BoltComma | BoltSemi | BoltColon | BoltColonColon | BoltDot | BoltDotDot | BoltRArrow | BoltRArrowAlt | BoltLArrow | BoltEqSign | BoltGtSign | BoltExMark | BoltLtSign | BoltVBar | BoltWhereKeyword | BoltQuoteKeyword | BoltFnKeyword | BoltForeignKeyword | BoltForKeyword | BoltLetKeyword | BoltReturnKeyword | BoltLoopKeyword | BoltYieldKeyword | BoltMatchKeyword | BoltImportKeyword | BoltExportKeyword | BoltPubKeyword | BoltModKeyword | BoltMutKeyword | BoltEnumKeyword | BoltStructKeyword | BoltTypeKeyword | BoltTraitKeyword | BoltImplKeyword | BoltParenthesized | BoltBraced | BoltBracketed | BoltSourceFile | BoltQualName | BoltTypeOfExpression | BoltReferenceTypeExpression | BoltFunctionTypeExpression | BoltLiftedTypeExpression | BoltTypeParameter | BoltBindPattern | BoltTypePattern | BoltExpressionPattern | BoltTuplePatternElement | BoltTuplePattern | BoltRecordFieldPattern | BoltRecordPattern | BoltQuoteExpression | BoltTupleExpression | BoltReferenceExpression | BoltMemberExpression | BoltFunctionExpression | BoltCallExpression | BoltYieldExpression | BoltMatchArm | BoltMatchExpression | BoltCase | BoltCaseExpression | BoltBlockExpression | BoltConstantExpression | BoltReturnStatement | BoltConditionalCase | BoltConditionalStatement | BoltResumeStatement | BoltExpressionStatement | BoltLoopStatement | BoltParameter | BoltModule | BoltFunctionDeclaration | BoltVariableDeclaration | BoltPlainImportSymbol | BoltImportDirective | BoltPlainExportSymbol | BoltExportDirective | BoltTraitDeclaration | BoltImplDeclaration | BoltTypeAliasDeclaration | BoltRecordField | BoltRecordDeclaration | BoltMacroCall | JSIdentifier | JSString | JSInteger | JSFromKeyword | JSReturnKeyword | JSTryKeyword | JSFinallyKeyword | JSCatchKeyword | JSImportKeyword | JSAsKeyword | JSConstKeyword | JSLetKeyword | JSExportKeyword | JSFunctionKeyword | JSWhileKeyword | JSForKeyword | JSOperator | JSCloseBrace | JSCloseBracket | JSCloseParen | JSOpenBrace | JSOpenBracket | JSOpenParen | JSSemi | JSComma | JSDot | JSDotDotDot | JSMulOp | JSAddOp | JSDivOp | JSSubOp | JSLtOp | JSGtOp | JSBOrOp | JSBXorOp | JSBAndOp | JSBNotOp | JSNotOp | JSBindPattern | JSConstantExpression | JSMemberExpression | JSCallExpression | JSBinaryExpression | JSUnaryExpression | JSNewExpression | JSSequenceExpression | JSConditionalExpression | JSLiteralExpression | JSReferenceExpression | JSCatchBlock | JSTryCatchStatement | JSExpressionStatement | JSConditionalCase | JSConditionalStatement | JSReturnStatement | JSParameter | JSImportStarBinding | JSImportAsBinding | JSImportDeclaration | JSFunctionDeclaration | JSArrowFunctionDeclaration | JSLetDeclaration | JSSourceFile;
+
+export const NODE_TYPES = { EndOfFile, BoltStringLiteral, BoltIntegerLiteral, BoltIdentifier, BoltOperator, BoltAssignment, BoltComma, BoltSemi, BoltColon, BoltColonColon, BoltDot, BoltDotDot, BoltRArrow, BoltRArrowAlt, BoltLArrow, BoltEqSign, BoltGtSign, BoltExMark, BoltLtSign, BoltVBar, BoltWhereKeyword, BoltQuoteKeyword, BoltFnKeyword, BoltForeignKeyword, BoltForKeyword, BoltLetKeyword, BoltReturnKeyword, BoltLoopKeyword, BoltYieldKeyword, BoltMatchKeyword, BoltImportKeyword, BoltExportKeyword, BoltPubKeyword, BoltModKeyword, BoltMutKeyword, BoltEnumKeyword, BoltStructKeyword, BoltTypeKeyword, BoltTraitKeyword, BoltImplKeyword, BoltParenthesized, BoltBraced, BoltBracketed, BoltSourceFile, BoltQualName, BoltTypeOfExpression, BoltReferenceTypeExpression, BoltFunctionTypeExpression, BoltLiftedTypeExpression, BoltTypeParameter, BoltBindPattern, BoltTypePattern, BoltExpressionPattern, BoltTuplePatternElement, BoltTuplePattern, BoltRecordFieldPattern, BoltRecordPattern, BoltQuoteExpression, BoltTupleExpression, BoltReferenceExpression, BoltMemberExpression, BoltFunctionExpression, BoltCallExpression, BoltYieldExpression, BoltMatchArm, BoltMatchExpression, BoltCase, BoltCaseExpression, BoltBlockExpression, BoltConstantExpression, BoltReturnStatement, BoltConditionalCase, BoltConditionalStatement, BoltResumeStatement, BoltExpressionStatement, BoltLoopStatement, BoltParameter, BoltModule, BoltFunctionDeclaration, BoltVariableDeclaration, BoltPlainImportSymbol, BoltImportDirective, BoltPlainExportSymbol, BoltExportDirective, BoltTraitDeclaration, BoltImplDeclaration, BoltTypeAliasDeclaration, BoltRecordField, BoltRecordDeclaration, BoltMacroCall, JSIdentifier, JSString, JSInteger, JSFromKeyword, JSReturnKeyword, JSTryKeyword, JSFinallyKeyword, JSCatchKeyword, JSImportKeyword, JSAsKeyword, JSConstKeyword, JSLetKeyword, JSExportKeyword, JSFunctionKeyword, JSWhileKeyword, JSForKeyword, JSOperator, JSCloseBrace, JSCloseBracket, JSCloseParen, JSOpenBrace, JSOpenBracket, JSOpenParen, JSSemi, JSComma, JSDot, JSDotDotDot, JSMulOp, JSAddOp, JSDivOp, JSSubOp, JSLtOp, JSGtOp, JSBOrOp, JSBXorOp, JSBAndOp, JSBNotOp, JSNotOp, JSBindPattern, JSConstantExpression, JSMemberExpression, JSCallExpression, JSBinaryExpression, JSUnaryExpression, JSNewExpression, JSSequenceExpression, JSConditionalExpression, JSLiteralExpression, JSReferenceExpression, JSCatchBlock, JSTryCatchStatement, JSExpressionStatement, JSConditionalCase, JSConditionalStatement, JSReturnStatement, JSParameter, JSImportStarBinding, JSImportAsBinding, JSImportDeclaration, JSFunctionDeclaration, JSArrowFunctionDeclaration, JSLetDeclaration, JSSourceFile };
 
 export enum SyntaxKind {
     EndOfFile,

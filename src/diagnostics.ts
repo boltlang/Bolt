@@ -6,6 +6,8 @@ import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint, assert}
 import { BOLT_DIAG_NUM_EXTRA_LINES } from "./constants";
 import { TextPos, TextFile, TextSpan } from "./text";
 
+export const E_INVALID_TEST_COMPARE = "The given test results cannot be compared because they use different specifications."
+export const E_TESTS_DO_NOT_COMPARE = "This test does not compare with its expected output."
 export const E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS = 'No Boltfile found in {path} or any of its parent directories.'
 export const E_SSCAN_ERROR = "Got an unexpected {char}"
 export const E_STDLIB_NOT_FOUND = "Package 'stdlib' is required to build the current source set but it was not found. Use --no-std if you know what you are doing."
@@ -45,7 +47,7 @@ export interface Diagnostic {
   message: string;
   severity: string;
   args?: MapLike<FormatArg>;
-  node?: Syntax;
+  node?: { span: TextSpan | null };
   nested?: Diagnostic[];
   position?: TextPos,
   file?: TextFile,

@@ -10,7 +10,7 @@
     "watch": "webpack --watch --config webpack.dev.js",
     "prepare": "webpack --config webpack.dev.js",
     "test": "node build/bin/bolt-test.js",
-    "update-lkg": "node build/bin/bolt-test.js snapshot lkg"
+    "update-lkg": "node build/bin/bolt-test.js create-snapshot lkg"
   },
   "author": "Sam Vervaeck <vervaeck.sam@skynet.be>",
   "license": "GPL-3.0",
@@ -24,6 +24,7 @@
     "@types/node": "^14.0.11",
     "@types/ora": "^3.2.0",
     "@types/semver": "^7.2.0",
+    "@types/uuid": "^8.0.0",
     "@types/yargs": "^15.0.5",
     "chalk": "^4.0.0",
     "fs-extra": "^9.0.1",
@@ -37,6 +38,7 @@
     "reflect-metadata": "^0.1.13",
     "semver": "^7.3.2",
     "source-map-support": "^0.5.19",
+    "uuid": "^8.1.0",
     "yargs": "^15.3.1"
   },
   "devDependencies": {
