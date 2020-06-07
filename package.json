@@ -10,6 +10,7 @@
     "watch": "webpack --watch --config webpack.dev.js",
     "prepare": "webpack --config webpack.dev.js",
     "test": "node build/bin/bolt-test.js",
+    "generate-ast": "tsastgen src/ast-spec.ts:src/ast.ts",
     "update-lkg": "node build/bin/bolt-test.js create-snapshot lkg"
   },
   "author": "Sam Vervaeck <vervaeck.sam@skynet.be>",
