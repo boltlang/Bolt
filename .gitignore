@@ -1,9 +1,9 @@
 
+# IDEs
+.vscode/
+
 # npm
 node_modules/
-
-# tsc
-lib/
 
 # bolt
 .bolt-work/
