@@ -1,4 +1,7 @@
 
+# embedded repositories
+/meta/
+
 # IDEs
 .vscode/
 
