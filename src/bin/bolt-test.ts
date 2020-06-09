@@ -288,17 +288,17 @@ function* loadTests(filepath: string): IterableIterator<Test> {
 
 }
 
-function findSnapshot(name: string): string | null {
+function findSnapshot(ref: string): string | null {
 
   // If `name` directly refers to a snapshot, we don't have any more work to do.
-  if (fs.existsSync(path.join(STORAGE_DIR, 'snapshots', name))) {
-    return name;
+  if (fs.existsSync(path.join(STORAGE_DIR, 'snapshots', ref))) {
+    return ref;
   }
 
   // Try to read an alias, returning early if it was indeed found
-  const ref = tryReadFileSync(path.join(STORAGE_DIR, 'aliases', name));
-  if (ref !== null) {
-    return ref;
+  const snapshotKey = tryReadFileSync(path.join(STORAGE_DIR, 'aliases', ref));
+  if (snapshotKey !== null) {
+    return snapshotKey;
   }
 
   // We don't support any more refs at the moment, so we indicate failure
