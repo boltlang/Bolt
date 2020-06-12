@@ -6,7 +6,6 @@ import * as os from "os"
 import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
-import { NODE_TYPES } from "./ast"
 
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
@@ -518,6 +517,24 @@ export class StreamWrapper<T> {
 
 }
 
+export const inspectTag = require('util').inspect.custom;
+
+export function indent(text: string, indentation = '  ', afterNewLine = true) {
+  let out = ''
+  for (const ch of text) {
+    if (ch === '\n') {
+      afterNewLine = true;
+      out += ch;
+    } else if (afterNewLine) {
+      out += indentation + ch;
+      afterNewLine = false;
+    } else {
+      out += ch;
+    }
+  }
+  return out;
+}
+
 export function expandPath(filepath: string) {
   let out = ''
   for (const ch of filepath) {
@@ -684,7 +701,6 @@ export function format(message: string, data: MapLike<FormatArg>) {
 
 }
 
-
 export function deepEqual(a: any, b: any): boolean {
   if (isPrimitive(a) && isPrimitive(b)) {
     return a === b;
@@ -710,4 +726,3 @@ export function deepEqual(a: any, b: any): boolean {
   }
   return false;
 }
-

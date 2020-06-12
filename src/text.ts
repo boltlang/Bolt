@@ -1,7 +1,8 @@
 
 import * as path from "path"
 import * as fs from "fs"
-import { serializeTag, serialize, deserializable } from "./util";
+import { serializeTag, serialize, deserializable, inspectTag } from "./util";
+import { InspectOptionsStylized } from "util";
 
 @deserializable()
 export class TextFile {
@@ -16,7 +17,11 @@ export class TextFile {
     return path.resolve(this.origPath)
   }
 
-  [serializeTag]() {
+  private [inspectTag](depth: numbber | null, options: InspectOptionsStylized) {
+    return `TextFile { ${this.origPath} }`
+  }
+
+  private [serializeTag]() {
     return [ this.origPath ];
   }
 

@@ -4,7 +4,8 @@ import { TextSpan } from "./text"
 import { Value } from "./evaluator"
 import { Package } from "./package"
 import { Diagnostic } from "./diagnostics";
-import { serializeTag, serialize } from "./util";
+import { MapLike, serializeTag, inspectTag, indent } from "./util";
+import { InspectOptions, InspectOptionsStylized, inspect } from "util";
 
 let nextNodeId = 1;
 
@@ -30,10 +31,30 @@ export abstract class Syntax {
     this.id = nextNodeId++;
   }
 
+  protected [inspectTag](depth: number | null, options: InspectOptionsStylized) {
+    const proto = Object.getPrototypeOf(this);
+    if (depth !== null && depth < 0) {
+      return options.stylize(`[${proto.constructor.name}]`, 'special')
+    }
+    const newOptions = {
+      ...options,
+      depth: options.depth === null ? null : options.depth!-1,
+    }
+    let out = `${proto.constructor.name} {\n`;
+    for (const key of Object.keys(this)) {
+      if (key === 'kind' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+        continue;
+      }
+      out += `${key}: ${inspect((this as any)[key], newOptions)},\n`;
+    }
+    out += '}\n';
+    return out;
+  }
+
   [serializeTag]() {
     const result: any[] = [];
     for (const key of Object.keys(this)) {
-      if (key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+      if (key === 'kind' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
         continue;
       }
       result.push((this as any)[key]);

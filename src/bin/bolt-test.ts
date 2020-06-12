@@ -1,4 +1,7 @@
 
+// NOTE The code in this file is not as clean as we want it to be, but we'll be upgrading our
+//      test infrastructure anyways with version 1.0.0 so it does not matter much.
+
 import "source-map-support/register"
 import "reflect-metadata"
 
@@ -6,24 +9,27 @@ import * as fs from "fs-extra"
 import * as path from "path"
 import * as crypto from "crypto"
 
+import chalk from "chalk"
 import { v4 as uuidv4 } from "uuid"
 import yargs from "yargs"
 import yaml, { FAILSAFE_SCHEMA } from "js-yaml"
 import { sync as globSync } from "glob"
-import ora from "ora"
-
+import ora, { Ora } from "ora"
+import { Parser as CommonmarkParser } from "commonmark"
 import { Parser } from "../parser"
 import { Scanner } from "../scanner"
 import { SyntaxKind, Syntax } from "../ast"
-import { Json, serialize, JsonObject, MapLike, upsearchSync, deepEqual, serializeTag, deserializable, deserialize } from "../util"
-import { DiagnosticIndex, DiagnosticPrinter, E_TESTS_DO_NOT_COMPARE, E_INVALID_TEST_COMPARE } from "../diagnostics"
+import { Json, serialize, JsonObject, MapLike, upsearchSync, deepEqual, serializeTag, deserializable, deserialize, JsonArray, verbose, diffpatcher } from "../util"
+import { DiagnosticIndex, DiagnosticPrinter, E_TESTS_DO_NOT_COMPARE, E_INVALID_TEST_COMPARE, E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS, Diagnostic } from "../diagnostics"
 import { TextFile, TextPos, TextSpan } from "../text"
+import { diffLines } from "diff"
+import { inspect } from "util"
 
 const PACKAGE_ROOT = path.dirname(upsearchSync('package.json')!);
 const STORAGE_DIR = path.join(PACKAGE_ROOT, '.test-storage');
 
 const diagnostics = new DiagnosticPrinter();
-const spinner = ora(`Initializing test session ...`).start();
+let spinner: Ora;
 
 // TODO move some logic from TestSession to TestSuite
 // TODO hash the entire code base and have it serve as a unique key for TestSession
@@ -40,7 +46,7 @@ class Test {
 
   public key: string;
 
-  public result?: Json;
+  public result?: any;
   public error: Error | null = null;
 
   constructor(
@@ -148,20 +154,40 @@ class TestSession {
 
 }
 
+function toString(value: any): string {
+  return inspect(value, {
+    colors: false,
+    depth: Infinity,
+  })
+}
+
 function compare(actualKey: string, expectedKey: string) {
 
   for (const testKey of fs.readdirSync(path.join(STORAGE_DIR, 'snapshots', actualKey))) { 
 
     const test = deserialize(readJson(path.join(STORAGE_DIR, 'tests', testKey)))
 
-    const actualTestData = deserialize(readJson(path.join(STORAGE_DIR, 'snapshots', actualKey, testKey))!);
-    const expectedTestData = deserialize(readJson(path.join(STORAGE_DIR, 'snapshots', expectedKey, testKey)));
-    if (!deepEqual(actualTestData.result, expectedTestData.result)) {
+    const actualData = readJson(path.join(STORAGE_DIR, 'snapshots', actualKey, testKey))!;
+    const expectedData = readJson(path.join(STORAGE_DIR, 'snapshots', expectedKey, testKey))!;
+    const actual = deserialize(actualData);
+    const expected = deserialize(expectedData);
+    const diffs = diffLines(toString(actual), toString(expected));
+    if (diffs.some(diff => diff.added || diff.removed)) {
       diagnostics.add({
         message: E_TESTS_DO_NOT_COMPARE,
         severity: 'error',
         node: test,
-      })
+      });
+      for (const diff of diffs) {
+        let out = diff.value;
+        if (diff.removed) {
+          out = chalk.red(out);
+        } else if (diff.added) {
+          out = chalk.green(out);
+        }
+        process.stderr.write(out);
+      }
+      //lconsole.error(jsondiffpatch.formatters.console.format(delta, expected) + '\n');
     }
 
   }
@@ -177,115 +203,60 @@ interface TestFileMetadata {
   expect: string;
 }
 
-function* loadTests(filepath: string): IterableIterator<Test> {
+interface SimpleToken {
+  text: string;
+  startPos: TextPos;
+  endPos: TextPos;
+}
 
+const PREAMBLE_START = '---\n';
+const PREAMBLE_END = '---\n';
+
+function getPreamble(text: string): string {
+  if (!text.startsWith(PREAMBLE_START)) {
+    return '';
+  }
+  let out = '';
+  for (let i = PREAMBLE_START.length; i < text.length; i++) {
+    if (text.startsWith(PREAMBLE_END, i)) {
+      break;
+    }
+    out += text[i];
+  }
+  return out;
+}
+
+function* loadTests(filepath: string): IterableIterator<Test> {
   const file = new TextFile(filepath);
   const contents = file.getText('utf8');
-
-  let i = 0;
-  let column = 1
-  let line = 1;
-  let atNewLine = true;
-
-  assertText('---');
-  let yamlStr = '';
-  i += 3;
-  while (!lookaheadEquals('---')) {
-    yamlStr += contents[i++];
+  const preamble = getPreamble(contents);
+  const metadata = yaml.safeLoad(preamble);
+  const parser = new CommonmarkParser();
+  const rootNode = parser.parse(contents);
+  if (rootNode.firstChild === null) {
+    return;
   }
-  i += 3;
-  const metadata = yaml.safeLoad(yamlStr);
-
-  while (i < contents.length) {
-    skipWhiteSpace();
-    if (atNewLine && column >= 5) {
-      const startPos = new TextPos(i, line, column);
-      const text = scanCodeBlock();
-      const endPos = new TextPos(i, line, column);
+  for (let node = rootNode.firstChild; node.next !== null; node = node.next) {
+    if (node.type === 'code_block') {
       if (metadata['split-lines']) {
-        for (const line of text.split('\n')) {
-          if (line.trim() !== '') {
-            yield new Test(new TextSpan(file, startPos.clone(), endPos), metadata.type, line, metadata);
-            startPos.advance(line);
+        let startPos = new TextPos(0, node.sourcepos[0][0], node.sourcepos[0][1]);
+        startPos.advance('```')
+        startPos.advance(node.info! + '\n')
+        let endPos = startPos.clone();
+        for (const line of node.literal!.split('\n')) {
+          if (line.length > 0) {
+            yield new Test(new TextSpan(file, startPos.clone(), endPos.clone()), metadata.type, line, metadata);
+            startPos = endPos;
           }
+          endPos.advance(line + '\n');
         }
       } else {
-        yield new Test(new TextSpan(file, startPos, endPos), metadata.type, text, metadata);
-      }
-    } else {
-      getChar();
-    }
-  }
-
-  function getChar() {
-    const ch = contents[i++];
-    if (ch === '\n') {
-      column = 1;
-      line++;
-      atNewLine = true;
-    } else {
-      if (!isEmpty(ch)) {
-        atNewLine = false;
-      }
-      column++;
-    }
-    return ch;
-  }
-
-  function assertText(str: string) {
-    for (let k = 0; k < str.length; k++) {
-      if (contents[i+k] !== str[k]) {
-        throw new Error(`Expected '${str}' but got ${contents.substr(i, i+str.length)}`)
+        const startPos = new TextPos(0, node.sourcepos[0][0], node.sourcepos[0][1]);
+        const endPos = new TextPos(0, node.sourcepos[1][0], node.sourcepos[1][1]);
+        yield new Test(new TextSpan(file, startPos, endPos), metadata.type, node.literal!, metadata);
       }
     }
   }
-
-  function isEmpty(ch: string): boolean {
-    return /[\t ]/.test(ch);
-  }
-
-  function lookaheadEquals(str: string): boolean {
-    for (let k = 0; k < str.length; k++) {
-      if (contents[i+k] !== str[k]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  function scanCodeBlock() {
-    let out = ''
-    while (i < contents.length) {
-      const ch = getChar();
-      if (ch === '\n') {
-        out += ch;
-        skipWhiteSpace();
-        continue;
-      }
-      if (column < 5) {
-        break;
-      }
-      out += ch;
-    }
-    return out;
-  }
-
-  function skipWhiteSpace() {
-    takeWhile(isWhiteSpace)
-  }
-
-  function takeWhile(pred: (ch: string) => boolean) {
-    let out = '';
-    while (true) {
-      const c0 = contents[i];
-      if (!pred(c0)) {
-        break
-      }
-      out += getChar();
-    }
-    return out;
-  }
-
 }
 
 function findSnapshot(ref: string): string | null {
@@ -344,9 +315,9 @@ type TestRunner = (test: Test) => Json;
 
 const TEST_RUNNERS: MapLike<TestRunner> = {
 
-  scan(test: Test): Json {
+  scan(test: Test): any {
       const diagnostics = new DiagnosticIndex;
-      const scanner = new Scanner(test.span.file, test.text, test.span.start);
+      const scanner = new Scanner(test.span.file, test.text, test.span.start.clone());
       const tokens = []
       while (true) {
           const token = scanner.scan();
@@ -355,13 +326,13 @@ const TEST_RUNNERS: MapLike<TestRunner> = {
           }
           tokens.push(token);
       }
-      return serialize({
+      return {
           diagnostics: [...diagnostics.getAllDiagnostics()],
           tokens,
-      });
+      };
   },
 
-  parse(test: Test): Json {
+  parse(test: Test): any {
       const kind = test.data.expect ?? 'SourceFile';
       const diagnostics = new DiagnosticIndex;
       const parser = new Parser();
@@ -377,15 +348,27 @@ const TEST_RUNNERS: MapLike<TestRunner> = {
           default:
               throw new Error(`I did not know how to parse ${kind}`)
       }
-      return serialize({
+      return {
           diagnostics: [...diagnostics.getAllDiagnostics()],
           results,
-      })
+      };
   },
 
 }
 
+const TEST_REPORTERS = {
+
+  scan(test: Test) {
+    const printer = new DiagnosticPrinter();
+    for (const diagnostic of test.result!.diagnostics) {
+      printer.add(diagnostic as Diagnostic);
+    }
+  }
+
+}
+
 yargs
+
   .command(['$0 [pattern..]', 'run [pattern..]'], 'Run all tests on the current version of the compiler',
     yargs => yargs
       .array('pattern')
@@ -400,6 +383,8 @@ yargs
       .describe('alias', 'Save the test results under the given alias')
       .default('alias', [])
     , args => {
+
+      spinner = ora(`Initializing test session ...`).start();
 
       const session = new TestSession();
       session.scanForTests(args as LoadTestsOptions);
@@ -424,6 +409,7 @@ yargs
 
     }
   )
+
   .command(['create-snapshot [alias..]'], 'Create a new snapshot from the output of the current compiler',
     yargs => yargs
       .array('alias')
@@ -436,6 +422,8 @@ yargs
       .describe('exclude', 'Files to never scan for tests')
       .default('exclude', [])
     , args => {
+
+      spinner = ora(`Initializing test session ...`).start();
 
       // Load and run all tests, saving the results to disk
       const session = new TestSession();
@@ -450,28 +438,56 @@ yargs
       }
     }
   )
-  .command('compare [snapshot-a] [snapshot-b]', 'Compare the output of two given tests',
+
+  .command('compare [expected] [actual]', 'Compare the output of two given tests',
     yargs => yargs
     , args => {
-      const keyA = findSnapshot(args['snapshot-a'] as string);
+
+      spinner = ora(`Initializing test session ...`).start();
+
+      let expectedSessionKey;
+      let actualSessionKey;
+
+      if (args.expected !== undefined) {
+        expectedSessionKey = args.expected;
+      } else {
+        expectedSessionKey = 'lkg';
+      }
+
+      if (args.actual !== undefined) {
+        actualSessionKey = args.actual;
+      } else {
+        // Load and run all tests, saving the results to disk
+        const session = new TestSession();
+        session.scanForTests(args as LoadTestsOptions);
+        session.run();
+        session.save();
+        actualSessionKey = session.key;
+      }
+
+      spinner.info(`Comparing ${actualSessionKey} to ${expectedSessionKey}`)
+
+      const keyA = findSnapshot(expectedSessionKey as string);
       if (keyA === null) {
-        spinner.fail(`A test snapshot named '${keyA}' was not found.`)
+        spinner.fail(`A test snapshot named '${expectedSessionKey}' was not found.`)
         return 1;
       }
-      const keyB = findSnapshot(args['snapshot-b'] as string);
+      const keyB = findSnapshot(actualSessionKey as string);
       if (keyB === null) {
-        spinner.fail(`A test snapshot named '${keyB}' was not found.`)
+        spinner.fail(`A test snapshot named '${actualSessionKey}' was not found.`)
         return 1;
       }
       compare(keyA, keyB);
     }
   )
+
   .command( 'clean', 'Clean up test snapshots that are unused', 
     yargs => yargs
       .array('keep')
       .default('keep', ['lkg'])
       .describe('keep', 'Keep the given aliases and anything they refer to')
     , args => {
+      spinner = ora(`Initializing test session ...`).start();
       const snapshotsToKeep = new Set();
       for (const alias of fs.readdirSync(path.join(STORAGE_DIR, 'aliases'))) {
         if (args.keep.indexOf(alias) !== -1) {
@@ -492,6 +508,7 @@ yargs
       spinner.succeed('Cleanup complete.')
     }
   )
+
   .version()
   .help()
   .argv;
