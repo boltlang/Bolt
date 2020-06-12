@@ -4,12 +4,13 @@
   "description": "A programming language for rapid prototyping",
   "main": "lib/index.js",
   "bin": {
-    "bolt": "build/bin/bolt.js"
+    "bolt": "build/bin/bolt.js",
+    "bolt-test": "build/bin/bolt-test.js"
   },
   "scripts": {
     "watch": "webpack --watch --config webpack.dev.js",
     "prepare": "webpack --config webpack.dev.js",
-    "test": "node build/bin/bolt-test.js",
+    "test": "node build/bin/bolt-test.js compare",
     "generate-ast": "tsastgen src/ast-spec.ts:src/ast.ts",
     "update-lkg": "node build/bin/bolt-test.js create-snapshot lkg"
   },
@@ -22,12 +23,12 @@
     "@types/js-yaml": "^3.12.4",
     "@types/microtime": "^2.1.0",
     "@types/minimist": "^1.2.0",
-    "@types/node": "^14.0.11",
+    "@types/node": "^14.0.13",
     "@types/ora": "^3.2.0",
     "@types/semver": "^7.2.0",
     "@types/uuid": "^8.0.0",
     "@types/yargs": "^15.0.5",
-    "chalk": "^4.0.0",
+    "chalk": "^4.1.0",
     "fs-extra": "^9.0.1",
     "glob": "^7.1.6",
     "js-yaml": "^3.14.0",
@@ -50,7 +51,7 @@
     "babel-loader": "^8.1.0",
     "chai": "^4.2.0",
     "concurrently": "^5.2.0",
-    "mocha": "^7.2.0",
+    "mocha": "^8.0.1",
     "ts-loader": "^7.0.5",
     "typescript": "^3.9.5",
     "webpack": "^4.43.0",
