@@ -40,7 +40,6 @@
     "minimist": "^1.2.5",
     "moment": "^2.26.0",
     "ora": "^4.0.4",
-    "pegjs": "^0.11.0-master.b7b87ea",
     "reflect-metadata": "^0.1.13",
     "semver": "^7.3.2",
     "source-map-support": "^0.5.19",
