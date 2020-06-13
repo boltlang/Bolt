@@ -11,6 +11,9 @@ node_modules/
 # bolt
 .bolt-work/
 
+# these are ignored to avoid a lot of bloat in IDEs
+/.test-infrastructure/snapshots/
+
 # build directories
 /lib/
 /build/
