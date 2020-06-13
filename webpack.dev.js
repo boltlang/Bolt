@@ -1,6 +1,15 @@
 
+const fs = require('fs');
 const webpack = require("webpack");
 const path = require("path");
+
+function zip(entries) {
+  const obj = {};
+  for (const [k, v] of entries) {
+    obj[k] = v;
+  }
+  return obj;
+}
 
 module.exports = {
   target: 'node',
@@ -16,6 +25,7 @@ module.exports = {
   resolve: {
     extensions: [".ts", ".js"],
   },
+  externals: zip(fs.readdirSync('node_modules').map(m => [m, `commonjs ${m}`])),
   plugins: [
     new webpack.BannerPlugin({ banner: '#!/usr/bin/env node', raw: true }),
   ],
