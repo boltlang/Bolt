@@ -11,7 +11,8 @@ node_modules/
 # bolt
 .bolt-work/
 
-# webpack
+# build directories
+/lib/
 /build/
 /dist/
 
