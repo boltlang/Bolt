@@ -10,7 +10,6 @@ import {
 import {
   BoltToken,
   createBoltImportKeyword,
-  createBoltExportKeyword,
   createBoltRArrowAlt,
   createEndOfFile,
   createBoltIdentifier,
@@ -52,7 +51,6 @@ import {
   createBoltExMark,
   createBoltWhereKeyword,
 } from "./ast"
-import { outputFile } from "fs-extra";
 
 export enum PunctType {
   Paren,
