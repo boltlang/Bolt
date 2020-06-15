@@ -2,31 +2,31 @@
 // NOTE The code in this file is not as clean as we want it to be, but we'll be upgrading our
 //      test infrastructure anyways with version 1.0.0 so it does not matter much.
 
-import "source-map-support/register"
-import "reflect-metadata"
-
-import * as fs from "fs-extra"
-import * as path from "path"
-import * as crypto from "crypto"
-
 import chalk from "chalk"
-import { v4 as uuidv4 } from "uuid"
-import yargs from "yargs"
-import yaml, { FAILSAFE_SCHEMA } from "js-yaml"
-import { sync as globSync } from "glob"
-import ora, { Ora } from "ora"
 import { Parser as CommonmarkParser } from "commonmark"
+import * as crypto from "crypto"
+import { diffLines } from "diff"
+import * as fs from "fs-extra"
+import { sync as globSync } from "glob"
+import yaml from "js-yaml"
+import ora, { Ora } from "ora"
+import * as path from "path"
+import "reflect-metadata"
+import "source-map-support/register"
+import { inspect } from "util"
+import yargs, { Argv } from "yargs"
+import { Syntax, SyntaxKind } from "../ast"
+import { Diagnostic, DiagnosticIndex, DiagnosticPrinter, E_TESTS_DO_NOT_COMPARE } from "../diagnostics"
 import { Parser } from "../parser"
 import { Scanner } from "../scanner"
-import { SyntaxKind, Syntax } from "../ast"
-import { Json, serialize, JsonObject, MapLike, upsearchSync, deepEqual, serializeTag, deserializable, deserialize, JsonArray, verbose, diffpatcher } from "../util"
-import { DiagnosticIndex, DiagnosticPrinter, E_TESTS_DO_NOT_COMPARE, E_INVALID_TEST_COMPARE, E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS, Diagnostic } from "../diagnostics"
 import { TextFile, TextPos, TextSpan } from "../text"
-import { diffLines } from "diff"
-import { inspect } from "util"
+import { deserializable, deserialize, Json, JsonObject, MapLike, serialize, serializeTag, upsearchSync, assert } from "../util"
+import { resolve } from "path"
+import { expect } from "chai"
 
-const PACKAGE_ROOT = path.dirname(upsearchSync('package.json')!);
-const STORAGE_DIR = path.join(PACKAGE_ROOT, '.test-storage');
+const PACKAGE_ROOT = path.resolve(path.dirname(upsearchSync('package.json')!));
+const DEFAULT_STORAGE_DIR = 'test-storage';
+const STORAGE_DIR = path.join(PACKAGE_ROOT, 'test-storage');
 
 const diagnostics = new DiagnosticPrinter();
 let spinner: Ora;
@@ -34,11 +34,10 @@ let spinner: Ora;
 // TODO move some logic from TestSession to TestSuite
 // TODO hash the entire code base and have it serve as a unique key for TestSession
 
-function toArray<T>(value: T | T[]): T[] {
-  if (Array.isArray(value)) {
-    return value;
+class FancyError extends Error {
+  constructor(public message: string) {
+    super(message);
   }
-  return value === undefined || value === null ? [] : [ value ]
 }
 
 @deserializable()
@@ -46,137 +45,174 @@ class Test {
 
   public key: string;
 
-  public result?: any;
-  public error: Error | null = null;
-
   constructor(
     public readonly span: TextSpan,
     public readonly type: string,
     public readonly text: string,
     public readonly data: JsonObject,
+    public result?: any,
+    public error: Error | null = null
   ) {
     this.key = hash([text, data]);
   }
 
+  /**
+   * Note that tests loose their associated test results when they are serialized.
+   */
   [serializeTag]() {
     return [
       this.span,
       this.type,
       this.text,
       this.data,
+      this.result,
+      this.error,
     ]
   }
 
 }
 
-interface LoadTestsOptions {
+interface ScanForTestsOptions {
   include: string[];
   exclude: string[];
 }
 
-class TestSuite {
-
-  constructor(private tests: Test[]) {
-
+function getKeyForCurrentSources() {
+  const hasher = crypto.createHash('sha512');
+  for (const filepath of globSync('src/**/*.ts')) {
+    const contents = fs.readFileSync(filepath, 'binary');
+    hasher.update(contents)
+    hasher.update('\0');
   }
-
+  return hasher.digest('hex')
 }
 
-class TestSession {
-
-  private failCount = 0;
-
-  public key: string;
-
-  constructor(private tests: Test[] = []) {
-    this.key = uuidv4();
-  }
-
-  public getAllTests() {
-    return this.tests[Symbol.iterator]();;
-  }
-
-  public scanForTests(options?: LoadTestsOptions) {
-    const includes = options?.include ?? ['test/**/*.md'];
-    const excludes = options?.exclude ?? [];
-    spinner.text = 'Scanning for tests [0 found]';
-    for (const include of includes) {
-      for (const filepath of globSync(include, { ignore: excludes })) {
-        spinner.info(`Found file ${filepath}`)
-        for (const test of loadTests(filepath)) {
-          this.tests.push(test);
-          spinner.text = `Scanning for tests [${this.tests.length} found]`;
-        }
+function scanForTestsInCurrentSources(options: ScanForTestsOptions) {
+  const tests: Test[] = [];
+  const includes = options?.include ?? ['test/**/*.md'];
+  const excludes = options?.exclude ?? [];
+  spinner.text = 'Scanning for tests [0 found]';
+  for (const include of includes) {
+    for (const filepath of globSync(include, { ignore: excludes })) {
+      spinner.info(`Found file ${filepath}`)
+      for (const test of loadTests(filepath)) {
+        tests.push(test);
+        spinner.text = `Scanning for tests [${tests.length} found]`;
       }
     }
   }
+  return tests;
+}
 
-  public run() {
-    let i = 1;
-    //let failed = [];
-    for (const test of this.tests) {
-      spinner.text = `Running tests [${i}/${this.tests.length}]`
-      const runner = TEST_RUNNERS[test.type]
-      if (runner === undefined) {
-        spinner.warn(`Test runner '${test.type}' not found.`)
-        continue;
-      }
-      let result;
-      try {
-        test.result = runner(test);
-      } catch (e) {
-        test.error = e;
-        this.failCount++;
-        //failed.push(test);
-        spinner.warn(`The following test from ${path.relative(process.cwd(), test.span.file.fullPath)} failed with "${e.message}":\n\n${test.text}\n`)
-      }
-      i++;
-    }
-    if (this.failCount > 0) {
-      spinner.fail(`${this.failCount} tests failed.`)
-    }
+function getSnapshotForCurrentSources(options: ScanForTestsOptions): TestSnapshot | null {
+  const key = getKeyForCurrentSources();
+  const tests = scanForTestsInCurrentSources(options);
+  runTests(tests);
+  if (tests.some(t => t.error !== null)) {
+    return null;
   }
+  return new TestSnapshot(key, tests);
+}
 
-  public save() {
-    fs.mkdirpSync(path.join(STORAGE_DIR, 'tests'));
-    for (const test of this.tests) {
-      fs.writeFileSync(path.join(STORAGE_DIR, 'tests', test.key), JSON.stringify(serialize(test)), 'utf8');
+function runTests(tests: Test[]): void {
+  let failCount = 0;
+  let i = 1;
+  for (const test of tests) {
+    spinner.text = `Running tests [${i}/${tests.length}]`
+    const runner = TEST_RUNNERS[test.type]
+    if (runner === undefined) {
+      spinner.warn(`Test runner '${test.type}' not found.`)
+      continue;
     }
-    fs.mkdirpSync(path.join(STORAGE_DIR, 'snapshots', this.key))
-    for (const test of this.tests) {
-      fs.writeFileSync(path.join(STORAGE_DIR, 'snapshots', this.key, test.key), JSON.stringify(serialize(test.result)), 'utf8');
+    let result;
+    try {
+      test.result = runner(test);
+    } catch (e) {
+      test.error = e;
+      failCount++;
+      spinner.warn(`The following test from ${path.relative(process.cwd(), test.span.file.fullPath)} failed with "${e.message}":\n\n${test.text}\n`)
     }
+    i++;
+  }
+  if (failCount > 0) {
+    spinner.fail(`${failCount} tests failed.`)
+  }
+}
+
+//function saveTest(test: Test) {
+//  fs.mkdirpSync(path.join(STORAGE_DIR, 'tests'));
+//  fs.writeFileSync(path.join(STORAGE_DIR, 'tests', test.key), JSON.stringify(serialize(test)), 'utf8');
+//}
+
+@deserializable()
+class TestSnapshot {
+
+  constructor(
+    public key: string,
+    public tests: Test[],
+  ) {
+    fs.mkdirpSync(path.join(STORAGE_DIR, 'snapshots'));
+    fs.writeFileSync(path.join(STORAGE_DIR, 'snapshots', key), JSON.stringify(serialize(this)), 'utf8');
   }
 
   public hasFailedTests() {
-    return this.failCount > 0;
+    return this.tests.some(t => t.error !== null);
+  }
+
+  public saveTo(dir: string) {
+    fs.mkdirpSync(dir);
+    const fd = fs.openSync(path.join(dir, this.key), fs.constants.O_WRONLY);
+    try {
+      for (const test of this.tests) {
+        assert(test.error === null);
+        fs.writeSync(fd, JSON.stringify([serialize(test), serialize(test.result)]) + '\n', undefined, 'utf8');
+      }
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  private [serializeTag]() {
+    return [
+      this.key,
+      this.tests,
+    ]
   }
 
 }
 
-function toString(value: any): string {
+function loadSnapshot(key: string): TestSnapshot {
+  const resolvedKey = resolveSnapshotReference(key);
+  const data = readJson(path.join(STORAGE_DIR, 'snapshots', resolvedKey));
+  if (data === null) {
+    throw new FancyError(`A snapshot named '${resolvedKey}' could not be loaded.`)
+  }
+  return deserialize(data);
+}
+
+function valueToString(value: any): string {
   return inspect(value, {
     colors: false,
     depth: Infinity,
   })
 }
 
-function compare(actualKey: string, expectedKey: string) {
+function compareTestSnapshots(actualSnapshot: TestSnapshot, expectedSnapshot: TestSnapshot) {
 
-  for (const testKey of fs.readdirSync(path.join(STORAGE_DIR, 'snapshots', actualKey))) { 
+  for (const actualTest of actualSnapshot.tests) {
 
-    const test = deserialize(readJson(path.join(STORAGE_DIR, 'tests', testKey)))
+    const expectedTest = expectedSnapshot.tests.find(t => t.key === actualTest.key);
+    if (expectedTest === undefined) {
+      spinner.warn(`Test result '${actualTest.key}' has no correspoding result to compare against.`)
+      continue;
+    }
 
-    const actualData = readJson(path.join(STORAGE_DIR, 'snapshots', actualKey, testKey))!;
-    const expectedData = readJson(path.join(STORAGE_DIR, 'snapshots', expectedKey, testKey))!;
-    const actual = deserialize(actualData);
-    const expected = deserialize(expectedData);
-    const diffs = diffLines(toString(actual), toString(expected));
+    const diffs = diffLines(valueToString(actualTest.result), valueToString(expectedTest.result));
     if (diffs.some(diff => diff.added || diff.removed)) {
       diagnostics.add({
         message: E_TESTS_DO_NOT_COMPARE,
         severity: 'error',
-        node: test,
+        node: actualTest,
       });
       for (const diff of diffs) {
         let out = diff.value;
@@ -187,7 +223,6 @@ function compare(actualKey: string, expectedKey: string) {
         }
         process.stderr.write(out);
       }
-      //lconsole.error(jsondiffpatch.formatters.console.format(delta, expected) + '\n');
     }
 
   }
@@ -259,21 +294,21 @@ function* loadTests(filepath: string): IterableIterator<Test> {
   }
 }
 
-function findSnapshot(ref: string): string | null {
+function resolveSnapshotReference(reference: string): string {
 
   // If `name` directly refers to a snapshot, we don't have any more work to do.
-  if (fs.existsSync(path.join(STORAGE_DIR, 'snapshots', ref))) {
-    return ref;
+  if (fs.existsSync(path.join(STORAGE_DIR, 'snapshots', reference))) {
+    return reference;
   }
 
-  // Try to read an alias, returning early if it was indeed found
-  const snapshotKey = tryReadFileSync(path.join(STORAGE_DIR, 'aliases', ref));
+  // Try to read an alias, returning early if it was indeed found.
+  const snapshotKey = tryReadFileSync(path.join(STORAGE_DIR, 'aliases', reference));
   if (snapshotKey !== null) {
     return snapshotKey;
   }
 
   // We don't support any more refs at the moment, so we indicate failure
-  return null;
+  throw new FancyError(`A test snapshot named '${reference}' was not found.`)
 }
 
 function readJson(filename: string): Json | null {
@@ -367,6 +402,32 @@ const TEST_REPORTERS = {
 
 }
 
+interface CommonArgv {
+
+}
+
+function createTestEngineFromArgs(args: CommonArgv) {
+  
+}
+
+function wrapper<T extends object>(fn: (args: T) => number | undefined) {
+  return function (args: T) {
+    spinner = ora(`Initializing test session ...`).start();
+    let exitCode;
+    try {
+      exitCode = fn(args);
+    } catch (e) {
+      if (e instanceof FancyError) {
+        spinner.fail(e.message);
+        process.exit(1);
+      } else {
+        throw e;
+      }
+    }
+    process.exit(exitCode ?? 0);
+  }
+}
+
 yargs
 
   .command(['$0 [pattern..]', 'run [pattern..]'], 'Run all tests on the current version of the compiler',
@@ -382,33 +443,30 @@ yargs
       .array('alias')
       .describe('alias', 'Save the test results under the given alias')
       .default('alias', [])
-    , args => {
+      .string('storage-dir')
+      .alias('S', 'storage-dir')
+      .describe('storage-dir', 'The directory where test results will be stored')
+      .default('storage-dir', DEFAULT_STORAGE_DIR)
+    , wrapper(args => {
 
-      spinner = ora(`Initializing test session ...`).start();
+      const testEngine = createTestEngineFromArgs(args);
 
-      const session = new TestSession();
-      session.scanForTests(args as LoadTestsOptions);
-      session.run();
-      session.save();
-
-      if (session.hasFailedTests()) {
-        return;
+      // Load and run all tests, saving the results to disk
+      const snapshot = getSnapshotForCurrentSources(args)
+      if (snapshot === null || snapshot.hasFailedTests()) {
+        return 1;
       }
 
       for (const alias of args.alias) {
         fs.mkdirpSync(path.join(STORAGE_DIR, 'aliases'))
-        fs.writeFileSync(path.join(STORAGE_DIR, 'aliases', alias), session.key, 'utf8')       
+        fs.writeFileSync(path.join(STORAGE_DIR, 'aliases', alias), snapshot.key, 'utf8')       
       }
 
-      const expectedKey = tryReadFileSync(path.join(STORAGE_DIR, 'aliases', 'lkg'), 'utf8');
-      if (expectedKey === null) {
-        spinner.fail(`An alias for 'lkg' was not found.`);
-        process.exit(1);
-      }
-      compare(session.key, expectedKey)
+      const expectedSnapshot = loadSnapshot('lkg');
+      compareTestSnapshots(snapshot, expectedSnapshot)
 
     }
-  )
+  ))
 
   .command(['create-snapshot [alias..]'], 'Create a new snapshot from the output of the current compiler',
     yargs => yargs
@@ -421,73 +479,72 @@ yargs
       .array('exclude')
       .describe('exclude', 'Files to never scan for tests')
       .default('exclude', [])
-    , args => {
-
-      spinner = ora(`Initializing test session ...`).start();
+    , wrapper(args => {
 
       // Load and run all tests, saving the results to disk
-      const session = new TestSession();
-      session.scanForTests(args as LoadTestsOptions);
-      session.run();
-      session.save();
+      const snapshot = getSnapshotForCurrentSources(args);
+      if (snapshot === null || snapshot.hasFailedTests()) {
+        return 1;
+      }
 
       // Add any aliases that might have been requested for this snapshot
       fs.mkdirpSync(path.join(STORAGE_DIR, 'aliases'));
       for (const alias of args.alias) {
-        fs.writeFileSync(path.join(STORAGE_DIR, 'aliases', alias), session.key, 'utf8')
+        fs.writeFileSync(path.join(STORAGE_DIR, 'aliases', alias), snapshot.key, 'utf8')
       }
+
+      // Output the unqiue identifier for this snapshot
+      spinner.succeed(`${snapshot.key} created.`)
+
     }
-  )
+  ))
 
   .command('compare [expected] [actual]', 'Compare the output of two given tests',
+
     yargs => yargs
-    , args => {
+      .string('actual')
+      .describe('actual', 'A reference to a snapshot that will be checked')
+      .string('expected')
+      .describe('expected', 'A reference to a test snapshot that will serve as the ground truth')
 
-      spinner = ora(`Initializing test session ...`).start();
+    , wrapper(args => {
 
-      let expectedSessionKey;
-      let actualSessionKey;
+      let expectedKey = args.expected ?? 'lkg';
+      let expectedSnapshot = null;
+      let actualKey = args.actual ?? null;
+      let actualSnapshot = null;
 
-      if (args.expected !== undefined) {
-        expectedSessionKey = args.expected;
-      } else {
-        expectedSessionKey = 'lkg';
-      }
-
-      if (args.actual !== undefined) {
-        actualSessionKey = args.actual;
-      } else {
+      if (args.actual === undefined) {
         // Load and run all tests, saving the results to disk
-        const session = new TestSession();
-        session.scanForTests(args as LoadTestsOptions);
-        session.run();
-        session.save();
-        actualSessionKey = session.key;
+        const snapshot = getSnapshotForCurrentSources(args);
+        if (snapshot === null) {
+          return 1;
+        }
+        actualSnapshot = snapshot;
+        actualKey = snapshot.key;
       }
 
-      spinner.info(`Comparing ${actualSessionKey} to ${expectedSessionKey}`)
+      if (expectedSnapshot === null) {
+        expectedSnapshot = loadSnapshot(expectedKey);
+      }
+      if (actualSnapshot === null) {
+        actualSnapshot = loadSnapshot(actualKey!);
+      }
 
-      const keyA = findSnapshot(expectedSessionKey as string);
-      if (keyA === null) {
-        spinner.fail(`A test snapshot named '${expectedSessionKey}' was not found.`)
-        return 1;
-      }
-      const keyB = findSnapshot(actualSessionKey as string);
-      if (keyB === null) {
-        spinner.fail(`A test snapshot named '${actualSessionKey}' was not found.`)
-        return 1;
-      }
-      compare(keyA, keyB);
+      spinner.info(`Comparing test snapshot ${actualKey} to ${expectedKey}`)
+
+      compareTestSnapshots(actualSnapshot, expectedSnapshot);
+
     }
-  )
+  ))
 
   .command( 'clean', 'Clean up test snapshots that are unused', 
     yargs => yargs
+      .string('keep')
       .array('keep')
       .default('keep', ['lkg'])
       .describe('keep', 'Keep the given aliases and anything they refer to')
-    , args => {
-      spinner = ora(`Initializing test session ...`).start();
+    , wrapper(args => {
       const snapshotsToKeep = new Set();
       for (const alias of fs.readdirSync(path.join(STORAGE_DIR, 'aliases'))) {
         if (args.keep.indexOf(alias) !== -1) {
@@ -501,13 +558,14 @@ yargs
         }
       }
       for (const snapshotKey of fs.readdirSync(path.join(STORAGE_DIR, 'snapshots'))) {
-         if (!(snapshotKey in snapshotsToKeep)) {
+         if (!snapshotsToKeep.has(snapshotKey)) {
            fs.removeSync(path.join(STORAGE_DIR, 'snapshots', snapshotKey));
          }
       }
       spinner.succeed('Cleanup complete.')
+      return 0;
     }
-  )
+  ))
 
   .version()
   .help()

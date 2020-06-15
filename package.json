@@ -10,7 +10,7 @@
   "scripts": {
     "watch": "webpack --watch --config webpack.dev.js",
     "prepare": "webpack --config webpack.prod.js",
-    "test": "node lib/bin/bolt-test.js compare",
+    "test": "node lib/bin/bolt-test.js",
     "generate-ast": "tsastgen src/ast-spec.ts:src/ast.ts",
     "update-lkg": "node lib/bin/bolt-test.js create-snapshot lkg"
   },

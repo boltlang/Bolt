@@ -54,7 +54,7 @@ export abstract class Syntax {
   [serializeTag]() {
     const result: any[] = [];
     for (const key of Object.keys(this)) {
-      if (key === 'kind' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+      if (key === 'kind' || key === 'span' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
         continue;
       }
       result.push((this as any)[key]);
