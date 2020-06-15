@@ -56,6 +56,25 @@ about _correctness_, _performance_ and _scalability_.
  - Scalability, because just like Rust, Bolt takes a _functional_ approach to
    software design using type traits, favouring composition over inheritance.
 
+### When will the first version be released?
+
+We have set the 1st of August as a deadline for version 1.0.0, though there
+are no guarantees. There's a lot of work that still needs to be done, and we
+prefer to take our time and make the right decisions from the start rather than
+having to cope with fundamental design issues later on.
+
+You can have a look at the [first milestone](https://github.com/boltlang/Bolt/milestone/1)
+for more information.
+
+### Will this eventually become a community project?
+
+Most definitely! I first want to make sure the design and philosophy is as
+clear as it can be and that all use-cases have been covered. After that, 
+I will start building the necessary infrastructure for discussing RFCs, 
+helping newcomers out, and hosting libraries. There's a lot to be done, and 
+I'm looking forward to the exciting new input of early adopters of this
+programmming language. Together we can move mountains!
+
 ### What languages inspired Bolt?
 
 Rust and Haskell are two of my favorite languages that you'll notice Bolt
