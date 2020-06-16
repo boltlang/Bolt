@@ -1300,8 +1300,8 @@ export class Parser {
 
     let modifiers = 0;
     let typeParams = null;
-    let traitTypeExpr = null;
-    let name;
+    let traitTypeExpr;
+    let typeExpr = null;
 
     // Parse the 'pub' keyword
     let t0 = tokens.get();
@@ -1337,16 +1337,26 @@ export class Parser {
 
     if (foundForKeyword) {
 
+      // Parse the type expression that references the trait the user wants to implement
       traitTypeExpr = this.parseTypeExpression(tokens);
 
       // Skip the 'for' keyword itself
-      tokens.get();
-    }
+      assertToken(tokens.get(), SyntaxKind.BoltForKeyword);
 
-    // Parse the name of the type that this implementation is for
-    const t3 = tokens.get();
-    assertToken(t3, SyntaxKind.BoltIdentifier);
-    name = t3 as BoltIdentifier;
+      // Parse the type that this implementation is for
+      typeExpr = this.parseTypeExpression(tokens);
+
+    } else {
+
+      // Just parse the trait the user wants to implement and leave the rest as is
+      const resultTypeExpr = this.parseTypeExpression(tokens);
+
+      // We cheat a bit by assigning the referenced trait to both fields
+      // NOTE Assigning the same node by reference to different fields should be done with great care.
+      typeExpr =  resultTypeExpr;
+      traitTypeExpr = resultTypeExpr;
+
+    }
 
     // Parse all 'fn ...' and 'type ...' elements
     const t5 = tokens.get();
@@ -1354,7 +1364,7 @@ export class Parser {
     const elements = this.parseTraitOrImplElements(createTokenStream(t5));
 
     // Create and return the result
-    const result = createBoltImplDeclaration(modifiers, typeParams, name, traitTypeExpr, elements);
+    const result = createBoltImplDeclaration(modifiers, typeParams, typeExpr, traitTypeExpr, elements);
     setOrigNodeRange(result, firstToken, t5);
     return result;
   }

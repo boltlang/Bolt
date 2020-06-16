@@ -21,8 +21,6 @@ import { Parser } from "../parser"
 import { Scanner } from "../scanner"
 import { TextFile, TextPos, TextSpan } from "../text"
 import { deserializable, deserialize, Json, JsonObject, MapLike, serialize, serializeTag, upsearchSync, assert } from "../util"
-import { resolve } from "path"
-import { expect } from "chai"
 
 const PACKAGE_ROOT = path.resolve(path.dirname(upsearchSync('package.json')!));
 const DEFAULT_STORAGE_DIR = 'test-storage';

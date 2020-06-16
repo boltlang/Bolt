@@ -1,6 +1,6 @@
 
 import { FastStringMap, assert, isPlainObject, some, prettyPrintTag, map, flatMap, filter, memoize, comparator, createTransparentProxy, TransparentProxy, every, FastMultiMap, getKeyTag } from "./util";
-import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, BoltCallExpression, BoltIdentifier, isBoltDeclarationLike, isBoltPattern, isJSExpression, isBoltStatement, isJSStatement, isJSPattern, isJSParameter, isBoltParameter, isBoltMatchArm, isBoltRecordField, isBoltRecordFieldPattern, isEndOfFile, isSyntax, isBoltFunctionDeclaration, isBoltTypeDeclaration, isBoltRecordDeclaration, } from "./ast";
+import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, BoltCallExpression, BoltIdentifier, isBoltDeclarationLike, isBoltPattern, isJSExpression, isBoltStatement, isJSStatement, isJSPattern, isJSParameter, isBoltParameter, isBoltMatchArm, isBoltRecordField, isBoltRecordFieldPattern, isEndOfFile, isSyntax, isBoltFunctionDeclaration, isBoltTypeDeclaration, isBoltRecordDeclaration, BoltImplDeclaration, isBoltTraitDeclaration, isBoltImplDeclaration, BoltTypeExpression, BoltDeclaration, BoltTypeDeclaration, BoltReferenceExpression, BoltReferenceTypeExpression, } from "./ast";
 import { convertNodeToSymbolPath, ScopeType, SymbolResolver, SymbolInfo, SymbolPath } from "./resolver";
 import { Value, Record } from "./evaluator";
 import { getReturnStatementsInFunctionBody, getAllReturnStatementsInFunctionBody, getFullyQualifiedPathToNode, hasDiagnostic, hasTypeError } from "./common";
@@ -27,6 +27,7 @@ enum TypeKind {
   UnionType,
   TupleType,
   ReturnType,
+  TraitType,
 }
 
 export type Type
@@ -40,6 +41,7 @@ export type Type
   | TupleType
   | UnionType
   | PlainRecordFieldType
+  | TraitType
 
 let nextTypeId = 1;
 
@@ -63,6 +65,9 @@ function areTypesLexicallyEquivalent(a: Type, b: Type): boolean {
     return a.source.id === b.source.id;
   }
   if (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType) {
+    return a.source.id === b.source.id;
+  }
+  if (a.kind === TypeKind.TraitType && b.kind === TypeKind.TraitType) {
     return a.source.id === b.source.id;
   }
 
@@ -105,6 +110,9 @@ function areTypesLexicallyLessThan(a: Type, b: Type): boolean {
   if (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType) {
     assert(a.source.id !== undefined)
     assert(b.source.id !== undefined)
+    return a.source.id < b.source.id;
+  }
+  if (a.kind === TypeKind.TraitType && b.kind === TypeKind.TraitType) {
     return a.source.id < b.source.id;
   }
 
@@ -234,6 +242,21 @@ class PlainRecordFieldType extends TypeBase {
 
   constructor(public name: string, public type: Type) {
     super();
+  }
+
+}
+
+export class TraitType extends TypeBase {
+
+  public kind: TypeKind.TraitType = TypeKind.TraitType;
+
+  private functionTypesByName = new FastStringMap<string, FunctionType>();
+
+  constructor(public source: Syntax, public memberTypes: Iterable<[string, FunctionType]>) {
+    super();
+    for (const [name, type] of memberTypes) {
+      this.functionTypesByName.set(name, type);
+    }
   }
 
 }
@@ -491,13 +514,21 @@ export class TypeChecker {
   }
 
   private *diagnoseTypeMismatch(a: Type, b: Type): IterableIterator<Diagnostic> {
-
+    // FIXME Implement this method
   }
 
   public registerSourceFile(sourceFile: SourceFile): void {
     for (const node of sourceFile.preorder()) {
       if (introducesType(node)) {
         node.type = new AnyType;
+      }
+      if (isBoltImplDeclaration(node)) {
+        const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Type);
+        assert(scope !== null);
+        const traitSymbol = this.resolver.resolveSymbolPath(convertNodeToSymbolPath(node.traitTypeExpr), scope!)
+        for (const traitDecl of traitSymbol!.declarations) {
+          traitDecl.addImplDeclaration(node);
+        }
       }
     }
   }
@@ -564,9 +595,12 @@ export class TypeChecker {
           node.type!.solved.nextType = narrowedType;
         }
         for (const dependantNode of this.getParentsThatMightNeedUpdate(node)) {
-          nextQueue.add(dependantNode);
+          if (introducesType(dependantNode)) {
+            nextQueue.add(dependantNode);
+          }
         }
         for (const dependantNode of this.getNodesRequiringUpdate(node)) {
+          assert(introducesType(dependantNode));
           nextQueue.add(dependantNode);
         }
       }
@@ -644,6 +678,7 @@ export class TypeChecker {
         case TypeKind.OpaqueType:
         case TypeKind.FunctionType:
         case TypeKind.RecordType:
+        case TypeKind.TraitType:
           elementTypes.push(elementType);
           break;
    
@@ -676,6 +711,7 @@ export class TypeChecker {
         case TypeKind.FunctionType:
         case TypeKind.RecordType:
         case TypeKind.OpaqueType:
+        case TypeKind.TraitType:
           elementTypes.push(elementType);
           break
 
@@ -838,16 +874,27 @@ export class TypeChecker {
         return new AnyType;
       }
 
-      case SyntaxKind.BoltImplDeclaration:
-      {
-        return new AnyType;
-      }
+      //case SyntaxKind.BoltImplDeclaration:
+      //{
+      //  return new TraitType(
+      //    node,
+      //    node.elements
+      //      .filter(isBoltFunctionDeclaration)
+      //      .map(element => {
+      //        this.markNodeAsRequiringUpdate(element, node);
+      //        return [
+      //          emitNode(element.name),
+      //          element.type!.solved
+      //        ] as [string, FunctionType];
+      //      })
+      //  );
+      //}
 
-      case SyntaxKind.BoltTraitDeclaration:
-      {
-        // TODO
-        return new AnyType;
-      }
+      //case SyntaxKind.BoltTraitDeclaration:
+      //{
+      //  // TODO
+      //  return new AnyType;
+      //}
 
       case SyntaxKind.BoltVariableDeclaration:
       {
@@ -1121,9 +1168,13 @@ export class TypeChecker {
     if (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType) {
       return a.source === b.source;
     }
+    if (a.kind === TypeKind.TraitType && b.kind === TypeKind.TraitType) {
+      return a.source === b.source;
+    }
 
     // FIXME There are probably more cases that should be covered.
-    throw new Error(`I did not know how to calculate the equivalence of ${TypeKind[a.kind]} and ${TypeKind[b.kind]}`)
+    return false;
+    //throw new Error(`I did not know how to calculate the equivalence of ${TypeKind[a.kind]} and ${TypeKind[b.kind]}`)
   }
 
   private resolveReturnType(type: ReturnType): Type {
@@ -1318,11 +1369,12 @@ export class TypeChecker {
         case TypeKind.FunctionType:
         case TypeKind.NeverType:
         case TypeKind.OpaqueType:
+        case TypeKind.TraitType:
           resultTypes.push(elementType);
           break;
 
         default:
-          throw new Error(`I did not know how to simpllify type ${TypeKind[elementType.kind]}`)
+          throw new Error(`I did not know how to simplify type ${TypeKind[elementType.kind]}`)
 
       }
 

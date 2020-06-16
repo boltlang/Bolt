@@ -20,7 +20,7 @@ import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
 import { FastStringMap, enumOr, escapeChar, assert, registerClass, Newable } from "./util";
 import { TextSpan, TextPos, TextFile } from "./text";
 import { Scanner } from "./scanner";
-import { convertNodeToSymbolPath } from "./resolver";
+import { convertNodeToSymbolPath, SymbolPath } from "./resolver";
 import { TYPE_ERROR_MESSAGES } from "./diagnostics";
 import { NODE_TYPES } from "./ast"
 
@@ -231,7 +231,7 @@ export function hasDiagnostic(node: Syntax, message: string): boolean {
   return node.errors.some(d => d.message === message);
 }
 
-export function getFullyQualifiedPathToNode(node: Syntax) {
+export function getFullyQualifiedPathToNode(node: Syntax): SymbolPath {
   const symbolPath = convertNodeToSymbolPath(node);
   while (true) {
     const parentNode = node.parentNode;

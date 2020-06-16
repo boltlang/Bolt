@@ -57,7 +57,13 @@ export function convertNodeToSymbolPath(node: Syntax): SymbolPath {
       return new SymbolPath(
         node.name.modulePath.map(id => id.text),
         node.name.isAbsolute,
-        emitNode(node.name),
+        emitNode(node.name.name),
+      );
+    case SyntaxKind.BoltReferenceTypeExpression:
+      return new SymbolPath(
+        node.name.modulePath.map(id => id.text),
+        node.name.isAbsolute,
+        emitNode(node.name.name),
       );
     case SyntaxKind.BoltIdentifier:
       return new SymbolPath([], false, emitNode(node));
@@ -164,7 +170,7 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
       case SyntaxKind.BoltTraitDeclaration:
         return node.name.text;
       case SyntaxKind.BoltImplDeclaration:
-        return node.name.text;
+        return node.type;
       default:
         throw new Error(`Could not derive symbol name of node ${kindToString(node.kind)}`)
     }
