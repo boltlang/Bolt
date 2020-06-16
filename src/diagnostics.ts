@@ -2,7 +2,7 @@
 import * as fs from "fs"
 import chalk from "chalk"
 import { Syntax } from "./ast";
-import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint, assert} from "./util";
+import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint, assert, isPlainObject, isPrimitive, JsonObject, Json} from "./util";
 import { BOLT_DIAG_NUM_EXTRA_LINES } from "./constants";
 import { TextPos, TextFile, TextSpan } from "./text";
 
@@ -125,7 +125,7 @@ export class DiagnosticPrinter {
       out += chalk.bold.yellow(`${span.file.origPath}:${span.start.line}:${span.start.column}: `);
     }
     if (diagnostic.args !== undefined) {
-      out += format(diagnostic.message, mapValues(diagnostic.args, prettyPrint)) + '\n';
+      out += format(diagnostic.message, diagnostic.args) + '\n';
     } else {
       out += diagnostic.message + '\n';
     }

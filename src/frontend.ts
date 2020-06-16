@@ -19,7 +19,7 @@ import { TypeChecker } from "./types"
 import { CheckInvalidFilePaths, CheckTypeAssignments, CheckReferences } from "./checks"
 import { SymbolResolver, BoltSymbolResolutionStrategy } from "./resolver"
 import { Evaluator } from "./evaluator"
-import { getNodeLanguage, ParseError, ScanError } from "./common"
+import { getNodeLanguage, ParseError, ScanError, describeKind } from "./common"
 import { Package, loadPackageMetadata } from "./package"
 import { TextFile } from "./text"
 import { Scanner } from "./scanner"
@@ -191,7 +191,7 @@ export class Frontend {
       } else if (e instanceof ParseError) {
         this.diagnostics.add({
           message: E_PARSE_ERROR,
-          args: { actual: kindToString(e.actual.kind), expected: e.expected.map(kindToString) },
+          args: { actual: describeKind(e.actual.kind), expected: e.expected.map(describeKind) },
           node: e.actual,
           severity: 'fatal',
         });

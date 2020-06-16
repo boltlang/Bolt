@@ -627,6 +627,9 @@ type FormatModifierFn = (value: any) => any;
 const FORMAT_MODIFIERS: MapLike<FormatModifierFn> = {
   enum(elements) {
     return enumOr(elements);
+  },
+  pretty(value) {
+    return value.map(prettyPrint);
   }
 }
 
@@ -643,17 +646,20 @@ export function format(message: string, data: MapLike<FormatArg>) {
     switch (mode) {
       case FormatScanMode.ScanningParamModifier:
         if (ch === '}') {
-          modifiers.push(modifierName);
-          push();
-        } else if (ch === ':') {
           if (modifierName.length === 0) {
             throw new Error(`Parameter modfifier name in format string is empty.`)
           }
           modifiers.push(modifierName);
-          modifierName = '';
+          push();
+        } else if (ch === ':') {
+          if (modifierName.length > 0) {
+            modifiers.push(modifierName);
+            modifierName = '';
+          }
         } else {
           modifierName += ch;
         }
+        break;
       case FormatScanMode.ScanningParamName:
         if (ch === '}') {
           push();
