@@ -143,7 +143,6 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
       case SyntaxKind.BoltTypeAliasDeclaration:
       case SyntaxKind.BoltRecordDeclaration:
       case SyntaxKind.BoltTraitDeclaration:
-      case SyntaxKind.BoltImplDeclaration:
       case SyntaxKind.BoltTypeParameter:
         return true;
       default:
@@ -169,8 +168,6 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
         return node.name.text;
       case SyntaxKind.BoltTraitDeclaration:
         return node.name.text;
-      case SyntaxKind.BoltImplDeclaration:
-        return node.type;
       default:
         throw new Error(`Could not derive symbol name of node ${kindToString(node.kind)}`)
     }
@@ -208,7 +205,8 @@ export class BoltSymbolResolutionStrategy implements ResolutionStrategy {
           return source.node.kind === SyntaxKind.BoltSourceFile
               || source.node.kind === SyntaxKind.BoltModule
               || source.node.kind === SyntaxKind.BoltFunctionDeclaration
-              || source.node.kind === SyntaxKind.BoltBlockExpression;
+              || source.node.kind === SyntaxKind.BoltBlockExpression
+              || source.node.kind === SyntaxKind.BoltImplDeclaration;
         case ScopeType.Type:
           return source.node.kind === SyntaxKind.BoltModule
               || source.node.kind === SyntaxKind.BoltSourceFile
