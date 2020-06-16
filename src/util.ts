@@ -525,10 +525,11 @@ export function indent(text: string, indentation = '  ', afterNewLine = true) {
     if (ch === '\n') {
       afterNewLine = true;
       out += ch;
-    } else if (afterNewLine) {
-      out += indentation + ch;
-      afterNewLine = false;
     } else {
+      if (afterNewLine && !/[\t ]/.test(ch)) {
+        out += indentation;
+        afterNewLine = false;
+      }
       out += ch;
     }
   }

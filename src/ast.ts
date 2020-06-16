@@ -25,7 +25,7 @@ export abstract class SyntaxBase {
     // --------------------------------------------------------------------------------
     // NOTE The following properties and methods are only valid when inside a BoltTraitDeclaration
     // TODO Move this to BoltTraitDeclaration as soon as tsastgen supports this
-    private impls?: BoltImplDeclaration[] = [];
+    private impls?: BoltImplDeclaration[];
     public addImplDeclaration(node: BoltImplDeclaration) {
         if (this.impls === undefined) {
             this.impls = [];
@@ -53,10 +53,10 @@ export abstract class SyntaxBase {
         };
         let out = `${proto.constructor.name} {\n`;
         for (const key of Object.keys(this)) {
-            if (key === 'kind' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+            if (key === 'kind' || key === 'impls' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
                 continue;
             }
-            out += `${key}: ${inspect((this as any)[key], newOptions)},\n`;
+            out += indent(`${key}: ${inspect((this as any)[key], newOptions)},\n`);
         }
         out += '}\n';
         return out;
@@ -64,7 +64,7 @@ export abstract class SyntaxBase {
     private [serializeTag]() {
         const result: any[] = [];
         for (const key of Object.keys(this)) {
-            if (key === 'kind' || key === 'span' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
+            if (key === 'kind' || key === 'impls' || key === 'span' || key === 'parentNode' || key === 'errors' || key === 'type' || key === 'id') {
                 continue;
             }
             result.push((this as any)[key]);
