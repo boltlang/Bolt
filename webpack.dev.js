@@ -21,6 +21,7 @@ module.exports = {
   output: {
     filename: 'bin/[name].js',
     path: path.resolve(__dirname, 'build'),
+    devtoolModuleFilenameTemplate: '[absolute-resource-path]'
   },
   resolve: {
     extensions: [".ts", ".js"],
@@ -32,7 +33,7 @@ module.exports = {
   devtool: 'source-map',
   module: {
     rules: [
-      { test: /\.ts$/, loader: "ts-loader", options: { transpileOnly: true } },
+      { test: /\.ts$/, exclude: /node_modules/, loader: "ts-loader", options: { transpileOnly: true } },
       { test: /\.m?js$/, exclude: /node_modules/, loader: 'babel-loader' },
     ]
   }

@@ -22,8 +22,17 @@ module.exports = {
   devtool: 'source-map',
   module: {
     rules: [
-      { test: /\.ts$/, loader: "ts-loader", options: { transpileOnly: true } },
-      { test: /\.m?js$/, exclude: /node_modules/, loader: 'babel-loader' },
+      {
+        test: /\.ts$/,
+        exclude: /node_modules/,
+        loader: "ts-loader",
+        options: { transpileOnly: true }
+      },
+      {
+        test: /\.m?js$/,
+        exclude: /node_modules/,
+        loader: 'babel-loader'
+      },
     ]
   }
 };
