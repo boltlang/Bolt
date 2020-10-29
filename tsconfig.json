@@ -3,6 +3,7 @@
     "target": "es2017",
     "module": "commonjs",
     "outDir": "./lib",
+    "noEmit": true,
     "strict": true,
     "esModuleInterop": true,
     "sourceMap": true,
