@@ -22,8 +22,10 @@ export const E_FIELD_MUST_BE_BOOLEAN = "Field '{name}' must be a either 'true' o
 export const E_TYPE_DECLARATION_NOT_FOUND = "A type declaration named '{name}' was not found."
 export const E_DECLARATION_NOT_FOUND = "Reference to an undefined declaration '{name}'.";
 export const E_TYPE_MISMATCH = "Types {left} and {right} are not semantically equivalent.";
+export const E_THIS_NODE_CAUSED_INVALID_TYPE = "This node resolved to the type {type}, which caused type matching to fail."
 export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for function call. Expected {expected} but got {actual}.";
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
+export const E_NOT_CALLABLE = "The result of this expression is not callable."
 export const E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER = "Candidate function requires this parameter."
 export const E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER = "This argument is missing a corresponding parameter."
 export const E_INVALID_ARGUMENTS = "Invalid arguments passed to function '{name}'"
@@ -33,6 +35,8 @@ export const E_NODE_DOES_NOT_CONTAIN_MEMBER = "This node does not contain the th
 export const E_MAY_NOT_RETURN_BECAUSE_TYPE_RESOLVES_TO_VOID = "May not return a value because the function's return type resolves to '()'"
 export const E_MUST_RETURN_BECAUSE_TYPE_DOES_NOT_RESOLVE_TO_VOID = "Must return a value because the function's return type does not resolve to '()'"
 export const E_ARGUMENT_TYPE_NOT_ASSIGNABLE = "This argument's type is not assignable to the function's parameter type."
+export const E_PARAMETER_DECLARED_HERE = "Function parameter was declared here."
+export const E_BUILTIN_TYPE_MISSING = "A built-in type named '{name}' in the prelude."
 
 export const TYPE_ERROR_MESSAGES = [
   E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
@@ -109,6 +113,7 @@ export class DiagnosticPrinter {
       case 'fatal':
         this.hasFatal = true;
         out += chalk.bold.red('fatal:' );
+        break;
       case 'warning':
         this.hasErrors = true;
         out += chalk.bold.red('warning: ');

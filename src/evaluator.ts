@@ -2,7 +2,7 @@
 import { Syntax, SyntaxKind, BoltQualName, BoltExpression, kindToString, BoltSyntax, isBoltStatement } from "./ast"
 import { FastStringMap, assert } from "./util"
 import { emitNode } from "./emitter";
-import { Type, TypeChecker, RecordType } from "./types";
+import { TypeChecker } from "./checker";
 
 export class Record {
 

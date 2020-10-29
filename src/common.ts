@@ -14,10 +14,11 @@ import {
   BoltSyntax,
   BoltModifiers,
   ReturnStatement,
-  FunctionBodyElement
+  FunctionBodyElement,
+  BoltToken
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
-import { FastStringMap, enumOr, escapeChar, assert, registerClass, Newable } from "./util";
+import { FastStringMap, enumOr, escapeChar, assert, registerClass, Newable, GeneratorStream } from "./util";
 import { TextSpan, TextPos, TextFile } from "./text";
 import { Scanner } from "./scanner";
 import { convertNodeToSymbolPath, SymbolPath } from "./resolver";
@@ -58,7 +59,8 @@ export function createTokenStream(node: Syntax) {
   if (isBoltPunctuated(node)) {
     const origPos = node.span!.start;
     const startPos = new TextPos(origPos.offset+1, origPos.line, origPos.column+1);
-    return new Scanner(node.span!.file, node.text, startPos);
+    const scanner = new Scanner(node.span!.file, node.text, startPos);
+    return new GeneratorStream<BoltToken>(() => scanner.scan());
   } else {
     throw new Error(`Could not convert ${kindToString(node.kind)} to a token stream.`);
   }
@@ -146,6 +148,10 @@ export class ParseError extends Error {
   }
 }
 
+export class HardParseError extends ParseError {
+  
+}
+
 export interface OperatorInfo {
   kind: OperatorKind;
   arity: number;
@@ -153,9 +159,13 @@ export interface OperatorInfo {
   precedence: number;
 }
 
-export function assertToken(node: Token, kind: SyntaxKind) {
+export function assertToken(node: Token, kind: SyntaxKind, isHardError = false) {
   if (node.kind !== kind) {
-    throw new ParseError(node, [kind]);
+    if (isHardError) {
+      throw new HardParseError(node, [kind]);
+    } else {
+      throw new ParseError(node, [kind]);
+    }
   }
 }
 
@@ -382,6 +392,8 @@ export function describeKind(kind: SyntaxKind): string {
       return "'try'";
     case SyntaxKind.BoltRArrowAlt:
       return "'=>'";
+    case SyntaxKind.BoltBraced:
+      return "'{ ... }'";
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }

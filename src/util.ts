@@ -6,6 +6,7 @@ import * as os from "os"
 import moment from "moment"
 import chalk from "chalk"
 import { LOG_DATETIME_FORMAT } from "./constants"
+import { timeStamp } from "console"
 
 export function isPowerOf(x: number, n: number):boolean {
   const a = Math.log(x) / Math.log(n);
@@ -276,68 +277,79 @@ export function deserializable() {
   }
 }
 
-//export type TransparentProxy<T> = T & { updateHandle(value: T): void }
+export type Ref<T extends object = any> = T & {
+  replaceWith(value: T): void;
+  cloneRef(): Ref<T>;
+}
 
-//export function createTransparentProxy<T extends object>(value: T): TransparentProxy<T> {
-//  const handlerObject = {
-//    __HANDLE: value,
-//    __IS_HANDLE: true,
-//    updateHandle(newValue: T) {
-//      if (newValue.__IS_HANDLE) {
-//        newValue = newValue.__HANDLE;
-//      }
-//      value = newValue;
-//      handlerObject.__HANDLE = newValue;
-//    }
-//  };
-//  return new Proxy<any>({}, {
-//    getPrototypeOf(target: T): object | null {
-//      return Reflect.getPrototypeOf(value);
-//    },
-//    setPrototypeOf(target: T, v: any): boolean {
-//      return Reflect.setPrototypeOf(value, v);
-//    },
-//    isExtensible(target: T): boolean {
-//      return Reflect.isExtensible(value);
-//    },
-//    preventExtensions(target: T): boolean {
-//      return Reflect.preventExtensions(value);
-//    },
-//    getOwnPropertyDescriptor(target: T, p: PropertyKey): PropertyDescriptor | undefined {
-//      return Reflect.getOwnPropertyDescriptor(value, p);
-//    },
-//    has(target: T, p: PropertyKey): boolean {
-//      return Reflect.has(value, p);
-//    },
-//    get(target: T, p: PropertyKey, receiver: any): any {
-//      if (hasOwnProperty(handlerObject, p)) {
-//        return Reflect.get(handlerObject, p);
-//      }
-//      return Reflect.get(value, p, receiver)
-//    },
-//    set(target: T, p: PropertyKey, value: any, receiver: any): boolean {
-//      return Reflect.set(value, p, value);
-//    },
-//    deleteProperty(target: T, p: PropertyKey): boolean {
-//      return Reflect.deleteProperty(value, p);
-//    },
-//    defineProperty(target: T, p: PropertyKey, attributes: PropertyDescriptor): boolean {
-//      return Reflect.defineProperty(value, p, attributes);
-//    },
-//    enumerate(target: T): PropertyKey[] {
-//      return [...Reflect.enumerate(value)];
-//    },
-//    ownKeys(target: T): PropertyKey[] {
-//      return Reflect.ownKeys(value);
-//    },
-//    apply(target: T, thisArg: any, argArray?: any): any {
-//      return Reflect.apply(value as any, thisArg, argArray);
-//    },
-//    construct(target: T, argArray: any, newTarget?: any): object {
-//      return Reflect.construct(value as any, argArray, newTarget);
-//    }
-//  });
-//}
+const refSymbolTag = Symbol('is reference');
+
+export function isRef<T extends object>(value: T): value is Ref<T> {
+  return typeof(value) === 'object'
+      && value !== null
+      && (value as any)[refSymbolTag] !== undefined
+}
+
+export function createRef<T extends object>(value: T): Ref<T> {
+ return new Proxy<any>({
+    [refSymbolTag]: { value },
+    replaceWith(newValue: T) {
+      this[refSymbolTag].value = isRef(newValue) ? (newValue as any)[refSymbolTag].value : newValue;
+    },
+    cloneRef() {
+      return createRef(this[refSymbolTag].value);
+    }
+  }, {
+   getPrototypeOf(target: T): object | null {
+     return Reflect.getPrototypeOf((target as any)[refSymbolTag].value);
+   },
+   setPrototypeOf(target: T, v: any): boolean {
+     return Reflect.setPrototypeOf((target as any)[refSymbolTag].value, v);
+   },
+   isExtensible(target: T): boolean {
+     return Reflect.isExtensible((target as any)[refSymbolTag].value);
+   },
+   preventExtensions(target: T): boolean {
+     return Reflect.preventExtensions((target as any)[refSymbolTag].value);
+   },
+   getOwnPropertyDescriptor(target: T, p: PropertyKey): PropertyDescriptor | undefined {
+     return Reflect.getOwnPropertyDescriptor((target as any)[refSymbolTag].value, p);
+   },
+   has(target: T, p: PropertyKey): boolean {
+     return Reflect.has((target as any)[refSymbolTag].value, p);
+   },
+   get(target: T, p: PropertyKey, receiver: any): any {
+     if (hasOwnProperty(target, p)) {
+       return Reflect.get(target, p);
+     }
+     return Reflect.get((target as any)[refSymbolTag].value, p, receiver)
+   },
+   set(target: T, p: PropertyKey, value: any, receiver: any): boolean {
+     return Reflect.set((target as any)[refSymbolTag].value, p, value);
+   },
+   deleteProperty(target: T, p: PropertyKey): boolean {
+     return Reflect.deleteProperty((target as any)[refSymbolTag].value, p);
+   },
+   defineProperty(target: T, p: PropertyKey, attributes: PropertyDescriptor): boolean {
+     return Reflect.defineProperty((target as any)[refSymbolTag].value, p, attributes);
+   },
+   enumerate(target: T): PropertyKey[] {
+     return [...Reflect.enumerate((target as any)[refSymbolTag].value)];
+   },
+   ownKeys(target: T): PropertyKey[] {
+     return Reflect.ownKeys((target as any)[refSymbolTag].value);
+   },
+   apply(target: T, thisArg: any, argArray?: any): any {
+     return Reflect.apply((target as any)[refSymbolTag].value as any, thisArg, argArray);
+   },
+   construct(target: T, argArray: any, newTarget?: any): object {
+     return Reflect.construct((target as any)[refSymbolTag].value as any, argArray, newTarget);
+   }
+ });
+}
+
+function delegate<T extends object, U extends object>(obj: T, handlerObject: U): T & U {
+}
 
 export const getKeyTag = Symbol('get key of object');
 
@@ -353,12 +365,36 @@ function getKey(value: any): string {
   }
 }
 
+class EmptyIterator implements IterableIterator<any> {
+
+  public [Symbol.iterator]() {
+    return this;
+  }
+
+  public next() {
+    return {
+      done: undefined,
+      value: undefined
+    } as IteratorYieldResult<any>;
+  }
+
+}
+
 export class FastMultiMap<K, V> {
 
   private mapping = Object.create(null);
 
+  public size = 0;
+
   public clear(): void {
     this.mapping = Object.create(null);
+  }
+
+  public get(key: string): IterableIterator<V> {
+    if (this.mapping[key] === undefined) {
+      return new EmptyIterator;
+    }
+    return this.mapping[key][Symbol.iterator]();
   }
 
   public add(key: K, value: V) {
@@ -367,6 +403,19 @@ export class FastMultiMap<K, V> {
       this.mapping[keyStr].push(keyStr);
     } else {
       this.mapping[keyStr] = [ value ]
+    }
+    this.size++;
+  }
+
+  public has(key: K): boolean {
+    return key in this.mapping;
+  }
+
+  public *[Symbol.iterator]() {
+    for (const key of Object.keys(this.mapping)) {
+      for (const element of this.mapping[key]) {
+        yield [key, element];
+      }
     }
   }
 
@@ -490,17 +539,56 @@ export function memoize(hasher: (...args: any[]) => string) {
 export interface Stream<T> {
   get(): T;
   peek(count?: number): T;
+  fork(): Stream<T>;
+  join(forked: Stream<T>): void;
+}
+
+export class GeneratorStream<T> implements Stream<T> {
+
+  public constructor(
+    protected generate: () => T,
+    private buffer: T[] = [],
+    private offset = 0,
+  ) {
+
+  }
+
+  public get() {
+    while (this.buffer.length <= this.offset) {
+      this.buffer.push(this.generate());
+    }
+    return this.buffer[this.offset++];
+  }
+
+  public peek(i = 1) {
+    const offset = this.offset + i;
+    while (this.buffer.length < offset) {
+      this.buffer.push(this.generate());
+    }
+    return this.buffer[offset-1];
+  }
+
+  public fork(): GeneratorStream<T> {
+    return new GeneratorStream(this.generate, this.buffer, this.offset);
+  }
+
+  public join(other: GeneratorStream<T>) {
+    this.offset = Math.max(this.offset, other.offset);
+  }
+
 }
 
 export class StreamWrapper<T> {
 
-  offset = 0
-
-  constructor(protected data: T[], protected createSentry: () => T) {
+  constructor(
+    protected data: T[],
+    protected createSentry: () => T,
+    protected offset = 0
+  ) {
 
   }
 
-  peek(count = 1) {
+  public peek(count = 1) {
     const offset = this.offset + (count - 1);
     if (offset >= this.data.length) {
       return this.createSentry();
@@ -508,11 +596,19 @@ export class StreamWrapper<T> {
     return this.data[offset];
   }
 
-  get() {
+  public get() {
     if (this.offset >= this.data.length) {
       return this.createSentry();
     }
     return this.data[this.offset++];
+  }
+
+  public fork() {
+    return new StreamWrapper(this.data, this.createSentry, this.offset);
+  }
+
+  public join(other: StreamWrapper<T>) {
+    this.offset = Math.max(this.offset, other.offset);
   }
 
 }

@@ -1,4 +1,4 @@
 
-import { AnyType, UnionType } from "../types"
+import { AnyType, UnionType } from "../checker"
 import { createBoltIdentifier } from "../ast";
 

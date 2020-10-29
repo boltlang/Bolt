@@ -1,11 +1,11 @@
 
-import { Type } from "./types"
 import { TextSpan } from "./text"
 import { Value } from "./evaluator"
 import { Package } from "./package"
 import { Diagnostic } from "./diagnostics";
-import { MapLike, serializeTag, inspectTag, indent } from "./util";
-import { InspectOptions, InspectOptionsStylized, inspect } from "util";
+import { serializeTag, inspectTag, indent } from "./util";
+import { InspectOptionsStylized, inspect } from "util";
+import { TypeRef } from "./checker";
 
 let nextNodeId = 1;
 
@@ -17,14 +17,14 @@ export abstract class Syntax {
 
   public id: number;
 
-  public type?: Type;
-
   public errors: Diagnostic[] = [];
+
+  public type?: TypeRef;
 
   // --------------------------------------------------------------------------------
   // NOTE The following properties and methods are only valid when inside a BoltTraitDeclaration
   // TODO Move this to BoltTraitDeclaration as soon as tsastgen supports this
-  
+
   private impls?: BoltImplDeclaration[];
 
   public addImplDeclaration(node: BoltImplDeclaration) {
@@ -289,6 +289,18 @@ export interface BoltRecordPattern extends BoltPattern {
 
 export interface BoltExpression extends BoltSyntax {}
 
+export interface BoltRecordExpression extends BoltExpression {
+    typeRef: BoltReferenceTypeExpression;
+    fields: BoltRecordExpressionElement[];
+}
+
+export interface BoltRecordExpressionElement extends BoltSyntax {}
+
+export interface BoltRecordFieldValue extends BoltRecordExpressionElement {
+  name: BoltIdentifier;
+  value: BoltExpression | null;
+}
+
 export interface BoltQuoteExpression extends BoltExpression {
   tokens: (Token | BoltExpression)[],
 }
@@ -371,6 +383,11 @@ export interface BoltExpressionStatement extends BoltStatement {
   expression: BoltExpression,
 }
 
+export interface BoltAssignStatement extends BoltStatement {
+  lhs: BoltPattern;
+  rhs: BoltExpression;
+}
+
 export interface BoltLoopStatement extends BoltStatement {
   elements: BoltFunctionBodyElement[],
 }
@@ -408,7 +425,7 @@ export interface BoltFunctionDeclaration extends BoltFunctionBodyElement, BoltDe
   params: BoltParameter[],
   returnType: BoltTypeExpression | null,
   typeParams: BoltTypeParameter[] | null,
-  body: BoltFunctionBodyElement[],
+  body: BoltFunctionBodyElement[] | null,
 }
 
 export interface BoltVariableDeclaration extends BoltFunctionBodyElement, BoltDeclaration, BoltDeclarationLike {
@@ -468,9 +485,9 @@ export interface BoltTypeAliasDeclaration extends BoltDeclarationLike, BoltTypeD
   typeExpr: BoltTypeExpression,
 }
 
-export interface BoltRecordMember extends BoltSyntax {}
+export interface BoltRecordDeclartionElement extends BoltSyntax {}
 
-export interface BoltRecordField extends BoltRecordMember {
+export interface BoltRecordDeclarationField extends BoltRecordDeclartionElement {
   name: BoltIdentifier,
   typeExpr: BoltTypeExpression,
 }
@@ -479,12 +496,12 @@ export interface BoltRecordDeclaration extends BoltDeclaration, BoltTypeDeclarat
   modifiers: BoltModifiers,
   name: BoltIdentifier,
   typeParms: BoltTypeParameter[] | null,
-  members: BoltRecordMember[] | null,
+  members: BoltRecordDeclartionElement[] | null,
 }
 
 export interface BoltSourceElement {}
 
-export interface BoltMacroCall extends BoltRecordMember, BoltSourceElement, BoltTraitOrImplElement, BoltFunctionBodyElement {
+export interface BoltMacroCall extends BoltRecordDeclartionElement, BoltSourceElement, BoltTraitOrImplElement, BoltFunctionBodyElement {
   name: BoltIdentifier,
   text: string,
 }

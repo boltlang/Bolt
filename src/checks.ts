@@ -144,18 +144,18 @@ export class CheckTypeAssignments extends Visitor {
 }
 
 //export class CheckTypeAssignments extends NodeVisitor {
-
+//
 //    constructor(
 //        @inject private diagnostics: DiagnosticPrinter,
 //        @inject private checker: TypeChecker,
 //    ) {
 //        super();
 //    }
-
+//
 //    protected visitBoltReturnStatement(node: BoltReturnStatement) {
-
+//
 //        const fnDecl = node.getParentOfKind(SyntaxKind.BoltFunctionDeclaration)!;
-
+//
 //        if ((this.checker.isVoidType(node) && !this.checker.isVoidType(fnDecl)) {
 //            this.diagnostics.add({
 //              message: E_MUST_RETURN_A_VALUE,
@@ -177,9 +177,9 @@ export class CheckTypeAssignments extends Visitor {
 //                });
 //            }
 //        }
-
+//
 //    }
-
+//
 //    protected visitBoltParameter(node: BoltParameter) {
 //        if (node.defaultValue !== null) {
 //            for (const error of this.checker.checkAssignment(node.bindings, node.defaultValue)) {
@@ -191,7 +191,7 @@ export class CheckTypeAssignments extends Visitor {
 //            }
 //        }
 //    }
-
+//
 //    protected visitBoltCallExpression(node: BoltCallExpression) {
 //        for (const fnDecl of this.checker.getCallableFunctions(node)) {
 //            for (const error of this.checker.checkAssignment(fnDecl, node)) {
@@ -203,5 +203,5 @@ export class CheckTypeAssignments extends Visitor {
 //            }
 //        }
 //    }
-
+//
 //}

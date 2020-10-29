@@ -1,5 +1,5 @@
 
-import { TypeChecker } from "../types"
+import { TypeChecker } from "../checker"
 
 import {
   Syntax,

@@ -6,8 +6,8 @@ import { sync as globSync } from "glob"
 
 import { Program } from "./program"
 import { emitNode } from "./emitter"
-import { Syntax, BoltSourceFile, SourceFile, setParents, kindToString, Visitor } from "./ast"
-import { getFileStem, MapLike, assert, FastStringMap, upsearchSync } from "./util"
+import { Syntax, BoltSourceFile, SourceFile, setParents, kindToString, Visitor, BoltToken } from "./ast"
+import { getFileStem, MapLike, assert, FastStringMap, upsearchSync, GeneratorStream } from "./util"
 import { verbose, memoize } from "./util"
 import { Container, Newable } from "./ioc"
 import ExpandBoltTransform from "./transforms/expand"
@@ -15,7 +15,7 @@ import CompileBoltToJSTransform from "./transforms/boltToJS"
 import ConstFoldTransform from "./transforms/constFold"
 import { TransformManager } from "./transforms/index"
 import {DiagnosticPrinter, E_PARSE_ERROR, E_STDLIB_NOT_FOUND, E_SSCAN_ERROR as E_SCAN_ERROR, E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS} from "./diagnostics"
-import { TypeChecker } from "./types"
+import { TypeChecker } from "./checker"
 import { CheckInvalidFilePaths, CheckTypeAssignments, CheckReferences } from "./checks"
 import { SymbolResolver, BoltSymbolResolutionStrategy } from "./resolver"
 import { Evaluator } from "./evaluator"
@@ -86,7 +86,7 @@ export class Frontend {
   public check(program: Program) {
 
     const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
-    const checker = new TypeChecker(resolver);
+    const checker = new TypeChecker(resolver, this.diagnostics);
 
     const container = new Container();
     container.bindSelf(program);
@@ -99,7 +99,7 @@ export class Frontend {
        CheckReferences,
        CheckTypeAssignments,
     ];
-    
+
     const checkers = checks.map(check => container.createInstance(check));
 
     for (const sourceFile of program.getAllSourceFiles()) {
@@ -108,7 +108,9 @@ export class Frontend {
     for (const sourceFile of program.getAllSourceFiles()) {
       checker.registerSourceFile(sourceFile);
     }
+
     checker.solve(program.getAllSourceFiles());
+
     for (const pkg of program.getAllPackages()) {
       if (!pkg.isDependency) {
         for (const sourceFile of pkg.getAllSourceFiles()) {
@@ -161,7 +163,7 @@ export class Frontend {
 
   public eval(program: Program) {
     const resolver = new SymbolResolver(program, new BoltSymbolResolutionStrategy);
-    const checker = new TypeChecker(resolver);
+    const checker = new TypeChecker(resolver, this.diagnostics);
     const evaluator = new Evaluator(checker)
     for (const sourceFile of program.getAllSourceFiles()) {
       evaluator.eval(sourceFile)
@@ -173,11 +175,12 @@ export class Frontend {
     const file = new TextFile(filepath);
     const contents = fs.readFileSync(file.origPath, 'utf8');
     const scanner = new Scanner(file, contents)
+    const tokens = new GeneratorStream<BoltToken>(() => scanner.scan());
     const parser = new Parser();
 
     let sourceFile;
     try {
-      sourceFile = parser.parseSourceFile(scanner, pkg);
+      sourceFile = parser.parseSourceFile(tokens, pkg);
     } catch (e) {
       if (e instanceof ScanError) {
         this.diagnostics.add({

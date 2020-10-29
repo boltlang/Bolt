@@ -11,7 +11,7 @@ import {
   BoltSourceFile,
 } from "../ast"
 
-import { TypeChecker } from "../types"
+import { TypeChecker } from "../checker"
 import { BoltTokenStream, Parser, isModifierKeyword } from "../parser"
 import { Evaluator } from "../evaluator"
 import { Transformer, TransformManager } from "./index"

@@ -124,7 +124,6 @@ function isSymbol(ch: string) {
 export class Scanner {
 
   private buffer: string[] = [];
-  private scanned: BoltToken[] = [];
   private currPos: TextPos;
   private offset = 0;
 
@@ -468,19 +467,6 @@ export class Scanner {
       this.getChar();
     }
     return text;
-  }
-
-  public peek(count = 1): BoltToken {
-    while (this.scanned.length < count) {
-      this.scanned.push(this.scan());
-    }
-    return this.scanned[count - 1];
-  }
-
-  public get(): BoltToken {
-    return this.scanned.length > 0
-      ? this.scanned.shift()!
-      : this.scan();
   }
 
 }
