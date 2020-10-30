@@ -51,6 +51,7 @@
     "@babel/plugin-proposal-class-properties": "^7.12.1",
     "@types/chai": "^4.2.14",
     "@types/tape": "^4.13.0",
+    "ava": "^3.13.0",
     "babel-loader": "^8.1.0",
     "concurrently": "^5.3.0",
     "tap-min": "^2.0.0",
