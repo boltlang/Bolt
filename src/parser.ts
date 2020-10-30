@@ -87,6 +87,8 @@ import {
   BoltBraced,
   BoltAssignStatement,
   createBoltAssignStatement,
+  BoltExportDirective,
+  BoltParenthesized,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -205,7 +207,7 @@ export class Parser {
     ],
   ]);
 
-  typeOperatorTable = new OperatorTable([
+  private typeOperatorTable = new OperatorTable([
     [
       [OperatorKind.InfixL, 2, '|'],
     ]
@@ -752,11 +754,54 @@ export class Parser {
     // Return wherever position we landed
 
     return i;
- 
+
   }
 
+  public parseExpression(tokens: BoltTokenStream) {
+    return this.parseBinaryExpression(tokens, this.parseUnaryExpression(tokens), 0);
+  }
 
-  private parseExpression(tokens: BoltTokenStream): BoltExpression {
+  private parseUnaryExpression(tokens: BoltTokenStream) {
+    return this.parseExpressionPrimitive(tokens);
+  }
+
+  private parseBinaryExpression(tokens: BoltTokenStream, lhs: BoltExpression, minPrecedence: number) {
+    let lookahead = tokens.peek(1);
+    while (true) {
+      if (lookahead.kind !== SyntaxKind.BoltOperator) {
+        break;
+      }
+      const lookaheadDesc = this.exprOperatorTable.lookup(2, lookahead.text);
+      if (lookaheadDesc === null || lookaheadDesc.precedence < minPrecedence) {
+        break;
+      }
+      const op = lookahead;
+      const opDesc = this.exprOperatorTable.lookup(2, op.text);
+      if (opDesc === null) {
+        break;
+      }
+      tokens.get();
+      let rhs = this.parseUnaryExpression(tokens)
+      lookahead = tokens.peek()
+      while (lookaheadDesc.arity === 2 
+          && ((lookaheadDesc.precedence > opDesc.precedence)
+            || lookaheadDesc.kind === OperatorKind.InfixR && lookaheadDesc.precedence === opDesc.precedence)) {
+          rhs = this.parseBinaryExpression(tokens, rhs, lookaheadDesc.precedence)
+          lookahead = tokens.peek();
+      }
+      lookahead = tokens.peek();
+      const qualName = createBoltQualName(false, [], op);
+      setOrigNodeRange(qualName, op, op);
+      const refExpr = createBoltReferenceExpression(qualName);
+      setOrigNodeRange(refExpr, op, op);
+      const binExpr = createBoltCallExpression(refExpr, [lhs, rhs]);
+      setOrigNodeRange(binExpr, lhs, rhs);
+      lhs = binExpr;
+    }
+    return lhs
+  }
+
+  private parseExpressionPrimitive(tokens: BoltTokenStream): BoltExpression {
 
     try {
       const forked = tokens.fork();
@@ -774,6 +819,11 @@ export class Parser {
     let result;
     if (t0.kind === SyntaxKind.BoltVBar) {
       result = this.parseFunctionExpression(tokens);
+    } else if (t0.kind === SyntaxKind.BoltParenthesized) {
+      tokens.get();
+      const innerTokens = createTokenStream(t0);
+      result = this.parseExpression(innerTokens);
+      setOrigNodeRange(result, t0, t0);
     } else if (t0.kind === SyntaxKind.BoltBraced) {
       result = this.parseBlockExpression(tokens);
     } else if (t0.kind === SyntaxKind.BoltQuoteKeyword) {
@@ -1647,32 +1697,6 @@ export class Parser {
     }
     return elements
   }
-
-  //parseBinOp(tokens: TokenStream, lhs: Expr , minPrecedence: number) {
-  //  let lookahead = tokens.peek(1);
-  //  while (true) {
-  //    if (lookahead.kind !== SyntaxKind.BoltOperator) {
-  //      break;
-  //    }
-  //    const lookaheadDesc = this.getOperatorDesc(2, lookahead.text);
-  //    if (lookaheadDesc === null || lookaheadDesc.precedence < minPrecedence) {
-  //      break;
-  //    }
-  //    const op = lookahead;
-  //    const opDesc = this.getOperatorDesc(2, op.text);
-  //    tokens.get();
-  //    let rhs = this.parsePrimExpr(tokens)
-  //    lookahead = tokens.peek()
-  //    while (lookaheadDesc.arity === 2 
-  //        && ((lookaheadDesc.precedence > opDesc.precedence)
-  //          || lookaheadDesc.kind === OperatorKind.InfixR && lookaheadDesc.precedence === opDesc.precedence)) {
-  //        rhs = this.parseBinOp(tokens, rhs, lookaheadDesc.precedence)
-  //    }
-  //    lookahead = tokens.peek();
-  //    lhs = new CallExpr(new RefExpr(new QualName(op, [])), [lhs, rhs]);
-  //  }
-  //  return lhs
-  //}
 
   public parseSourceFile(tokens: BoltTokenStream, pkg: Package | null = null): BoltSourceFile {
     const elements = this.parseSourceElements(tokens);

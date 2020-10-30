@@ -1,15 +1,12 @@
 
-import { FastStringMap, assert, isPlainObject, some, prettyPrintTag, map, flatMap, filter, memoize, comparator, Ref, createRef, every, FastMultiMap, getKeyTag, pushAll } from "./util";
+import { FastStringMap, assert, isPlainObject, some, prettyPrintTag, map, flatMap, filter, memoize, comparator, getKeyTag, pushAll, zip } from "./util";
 import { SyntaxKind, Syntax, isBoltTypeExpression, BoltExpression, BoltFunctionDeclaration, BoltFunctionBodyElement, kindToString, SourceFile, isBoltExpression, BoltCallExpression, BoltIdentifier, isBoltDeclarationLike, isBoltPattern, isJSExpression, isBoltStatement, isJSStatement, isJSPattern, isJSParameter, isBoltParameter, isBoltMatchArm, isBoltRecordFieldValue, isBoltRecordFieldPattern, isEndOfFile, isSyntax, isBoltFunctionDeclaration, isBoltTypeDeclaration, isBoltRecordDeclaration, BoltImplDeclaration, isBoltTraitDeclaration, isBoltImplDeclaration, BoltTypeExpression, BoltDeclaration, BoltTypeDeclaration, BoltReferenceExpression, BoltReferenceTypeExpression, BoltRecordDeclaration, } from "./ast";
 import { convertNodeToSymbolPath, ScopeType, SymbolResolver, SymbolInfo, SymbolPath } from "./resolver";
 import { Value, Record } from "./evaluator";
 import { getAllReturnStatementsInFunctionBody, getFullyQualifiedPathToNode, hasDiagnostic } from "./common";
-import { E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL, E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL, E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER, E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER, E_TYPE_MISMATCH, Diagnostic, E_ARGUMENT_TYPE_NOT_ASSIGNABLE, DiagnosticPrinter, E_THIS_NODE_CAUSED_INVALID_TYPE, E_NOT_CALLABLE, E_PARAMETER_DECLARED_HERE, E_BUILTIN_TYPE_MISSING } from "./diagnostics";
+import { E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL, E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL, E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER, E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER, E_TYPE_MISMATCH, Diagnostic, E_ARGUMENT_TYPE_NOT_ASSIGNABLE, DiagnosticPrinter, E_THIS_NODE_CAUSED_INVALID_TYPE, E_NOT_CALLABLE, E_PARAMETER_DECLARED_HERE, E_BUILTIN_TYPE_MISSING, E_TYPE_NEVER_MATCHES } from "./diagnostics";
 import { BOLT_MAX_FIELDS_TO_PRINT } from "./constants";
-import { emitNode } from "./emitter";
-import { type } from "os";
-import { fn } from "moment";
-import { intersects } from "semver";
+import { timeStamp } from "console";
 
 // TODO For function bodies, we can do something special.
 //      Sort the return types and find the largest types, eliminating types that fall under other types.
@@ -60,44 +57,47 @@ export type Type
   | PlainRecordFieldType
   | TraitType
 
-type TypeRef = Ref<Type>;
+enum TypeRefFlags {
+  None = 0,
+  HasTypeError = 1,
+}
 
-let nextTypeId = 1;
+export class TypeRef<T = Type> {
 
-function areTypesEquivalent(a: Type, b: Type): boolean {
+  private flags = 0;
 
-  if (a.kind === TypeKind.TupleType && b.kind === TypeKind.VoidType) {
+  constructor(public type: T) {
 
   }
 
-  // This is a hack that should be fixed
-  if (a.kind !== b.kind) {
-    return false;
+  public hasTypeError() {
+    return (this.flags & TypeRefFlags.HasTypeError) > 0;
   }
 
-  if (a.kind === TypeKind.NeverType && a.kind === TypeKind.NeverType) {
-      return true;
-  }
-  if (a.kind === TypeKind.AnyType && a.kind === TypeKind.AnyType) {
-    return true;
-  }
-  if (a.kind === TypeKind.PrimType && b.kind === TypeKind.PrimType) {
-    return a.name === b.name;
+  public markAsHavingTypeError() {
+    this.flags |= TypeRefFlags.HasTypeError;
   }
 
-  if (a.kind === TypeKind.FunctionType && b.kind === TypeKind.FunctionType) {
-    return a.source.id === b.source.id;
-  }
-  if (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType) {
-    return a.source.id === b.source.id;
-  }
-  if (a.kind === TypeKind.TraitType && b.kind === TypeKind.TraitType) {
-    return a.source.id === b.source.id;
+  public get(): T {
+    return this.type;
   }
 
-  throw new Error(`I did not expected to see the provided type combination.`)
+  public replaceWith(newType: T | TypeRef<T>): void {
+    if (newType instanceof TypeRef) {
+      this.flags = newType.flags;
+      this.type = newType.type;
+    } else {
+      this.type = newType;
+    }
+  }
 
 }
+
+export function createTypeRef(type: Type) {
+  return new TypeRef(type);
+}
+
+let nextTypeId = 1;
 
 function isTypeLessThan(a: Type, b: Type): boolean {
 
@@ -130,10 +130,8 @@ function isTypeLessThan(a: Type, b: Type): boolean {
   //  }
   //}
 
-  if ((a.kind === TypeKind.FunctionType && b.kind === TypeKind.FunctionType)
-    || (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType)
-    || (a.kind === TypeKind.TraitType && b.kind === TypeKind.TraitType)) {
-    return a.id < b.id;
+  if (a.kind === TypeKind.FunctionType && b.kind === TypeKind.FunctionType) {
+    return a.fnId < b.fnId;
   }
 
   throw new Error(`I did not expected to see the provided type combination.`)
@@ -145,18 +143,12 @@ abstract class TypeBase {
 
   public id = nextTypeId++;
 
-  public failed = false;
-
   constructor(public sourceNodes: Syntax[] = []) {
     
   }
 
   public [getKeyTag](): string {
     return this.id.toString();
-  }
-
-  public markAsFailed() {
-    this.failed = true;
   }
 
   public [prettyPrintTag](): string {
@@ -198,7 +190,7 @@ export class FunctionType extends TypeBase {
   public kind: TypeKind.FunctionType = TypeKind.FunctionType;
 
   constructor(
-    public id: number,
+    public fnId: number,
     public paramTypes: TypeRef[],
     public returnType: TypeRef,
     sources: Syntax[] = [],
@@ -311,15 +303,15 @@ export class RecordType extends TypeBase {
 
   public kind: TypeKind.RecordType = TypeKind.RecordType;
 
-  private memberTypes: RecordFieldType[] = [];
+  private memberTypes: TypeRef<RecordFieldType>[] = [];
   private memberTypesByFieldName = new FastStringMap<string, RecordFieldType>();
 
   constructor(
     public source: Syntax | Type | number,
-    iterable?: Iterable<RecordFieldType>,
+    iterable?: Iterable<TypeRef<RecordFieldType>>,
     sources: Syntax[] = []
   ) {
-    super();
+    super(sources);
     if (iterable !== undefined) {
       for (const type of iterable) {
         this.addMemberType(type);
@@ -331,14 +323,14 @@ export class RecordType extends TypeBase {
     return this.memberTypesByFieldName.keys();
   }
 
-  public addMemberType(type: RecordFieldType): void {
+  public addMemberType(type: TypeRef<RecordFieldType>): void {
     this.memberTypes.push(type);
     if (type instanceof PlainRecordFieldType) {
       this.memberTypesByFieldName.set(type.name, type);
     }
   }
 
-  public getMemberTypes(): IterableIterator<RecordFieldType> {
+  public getMemberTypes(): IterableIterator<TypeRef<RecordFieldType>> {
     return this.memberTypes[Symbol.iterator]();
   }
 
@@ -384,18 +376,27 @@ export class CallType extends TypeBase {
 
 }
 
-function isTypePotentiallyCallable(type: Type): boolean {
-  return type.kind === TypeKind.FunctionType
-      || type.kind === TypeKind.AnyType
-      || (type.kind === TypeKind.UnionType && type.elementTypes.some(isTypePotentiallyCallable))
-}
-
-function* getAllUnionElementTypes(type: TypeRef): IterableIterator<TypeRef> {
+function* getAllUnionElementTypeRefs(typeRef: TypeRef): IterableIterator<TypeRef> {
+  const type = typeRef.get();
   switch (type.kind) {
     case TypeKind.UnionType:
     {
       for (const elementType of type.getElementTypes()) {
-        yield* getAllUnionElementTypes(elementType);
+        yield* getAllUnionElementTypeRefs(elementType);
+      }
+      break;
+    }
+    default:
+      yield typeRef;
+  }
+}
+
+function* getAllUnionElementTypes(type: Type): IterableIterator<Type> {
+  switch (type.kind) {
+    case TypeKind.UnionType:
+    {
+      for (const elementType of type.getElementTypes()) {
+        yield* getAllUnionElementTypes(elementType.get());
       }
       break;
     }
@@ -404,52 +405,70 @@ function* getAllUnionElementTypes(type: TypeRef): IterableIterator<TypeRef> {
   }
 }
 
-export function prettyPrintType(typeRef: TypeRef): string {
+export function prettyPrintType(type: Type): string {
+
   let out = ''
+
   let hasElementType = false;
-  for (const elementType of getAllUnionElementTypes(typeRef)) {
+
+  for (const elementType of getAllUnionElementTypes(type)) {
+
     if (hasElementType) {
       out += ' | '
+    } else {
+      hasElementType = true;
     }
-    hasElementType = true;
+
     switch (elementType.kind) {
+
       case TypeKind.PlainRecordFieldType:
         out += '{ ' + elementType.name + ' } ';
         break;
+
       case TypeKind.CallType:
         out += 'return type of '
-        out += prettyPrintType(elementType.fnType);
+        out += prettyPrintType(elementType.fnType.get());
         out += '(';
-        out += elementType.argumentTypes.map(prettyPrintType).join(', ')
+        out += elementType.argumentTypes.map(t => prettyPrintType(t.get())).join(', ')
         out += ')'
         break;
+
       case TypeKind.PrimType:
         out += elementType.name;
         break;
+
       case TypeKind.AnyType:
         out += 'any';
         break;
+
       case TypeKind.NeverType:
         out += 'never'
         break;
+
       case TypeKind.FunctionType:
       {
         out += 'fn (';
         out += elementType.paramTypes.map(prettyPrintType).join(', ');
-        out += ')';
+        out += ') -> ';
+        out += prettyPrintType(elementType.returnType.get());
         break;
       }
+
       case TypeKind.IntersectType:
       {
-        out += elementType.elementTypes.map(t => prettyPrintType(t)).join(' & ');
+        if (elementType.elementTypes.length === 0) {
+          return '<empty intersection type>';
+        }
+        out += elementType.elementTypes.map(t => prettyPrintType(t.get())).join(' & ');
         break;
       }
+
       case TypeKind.TupleType:
       {
         out += '('
         let i = 0;
         for (const tupleElementType of elementType.elementTypes) {
-          out += prettyPrintType(tupleElementType);
+          out += prettyPrintType(tupleElementType.get());
           i++
           if (i >= BOLT_MAX_FIELDS_TO_PRINT) {
             out += ' (element types omitted)'
@@ -459,6 +478,7 @@ export function prettyPrintType(typeRef: TypeRef): string {
         out += ')'
         break;
       }
+
       case TypeKind.RecordType:
       {
         if (elementType.sourceNodes.length > 0) {
@@ -497,13 +517,18 @@ export function prettyPrintType(typeRef: TypeRef): string {
         //out += ' }'
         //break;
       }
+
       default:
         throw new Error(`Could not pretty-print type ${TypeKind[elementType.kind]}`)
+
     }
+
   }
+
   if (!hasElementType) {
     out += 'never'
   }
+
   return out;
 }
 
@@ -528,7 +553,7 @@ export class TypeChecker {
 
   private dependencyGraph = new FastStringMap<string, Syntax[]>();
 
-  private neverType = new NeverType();
+  private neverType = createTypeRef(new NeverType());
 
   constructor(private resolver: SymbolResolver, private diagnostics: DiagnosticPrinter) {
 
@@ -538,7 +563,7 @@ export class TypeChecker {
     return this.neverType;
   }
 
-  private getPrimType(path: string): Type {
+  private getPrimType(path: string): TypeRef {
     const elements = path.split('::');
     const symbolPath = new SymbolPath(elements.slice(0,-1), true, elements[elements.length-1]);
     const resolvedSymbol = this.resolver.resolveGlobalSymbol(symbolPath, ScopeType.Type);
@@ -548,22 +573,22 @@ export class TypeChecker {
         args: { name: path },
         severity: 'error',
       })
-      return createRef(new AnyType);
+      return createTypeRef(new AnyType);
     }
-    return createRef(new PrimType(GLOBAL_SCOPE_MARKER + path, [...resolvedSymbol.declarations]));
+    return createTypeRef(new PrimType(GLOBAL_SCOPE_MARKER + path, [...resolvedSymbol.declarations]));
   }
 
-  public createTypeForValue(value: Value, source: Syntax): Type {
+  public createTypeForValue(value: Value, source: Syntax): TypeRef {
     if (typeof(value) === 'string') {
-      return new PrimType('@String', [ source ]);
+      return createTypeRef(new PrimType('@String', [ source ]));
     } else if (typeof(value) === 'bigint') {
-      return new PrimType('@int', [ source ]);
+      return createTypeRef(new PrimType('@int', [ source ]));
     } else if (typeof(value) === 'number') {
-      return new PrimType('@f64', [ source ]);
+      return createTypeRef(new PrimType('@f64', [ source ]));
     } else if (value instanceof Record) {
       const memberTypes = [];
       for (const [fieldName, fieldValue] of value.getFields()) {
-        const recordFieldType = new PlainRecordFieldType(name, this.createTypeForValue(fieldValue));
+        const recordFieldType = new PlainRecordFieldType(name, this.createTypeForValue(fieldValue, source));
          memberTypes.push(recordFieldType);
       }
       const recordType = new RecordType(nextRecordTypeId++, memberTypes);
@@ -585,7 +610,7 @@ export class TypeChecker {
             message: E_THIS_NODE_CAUSED_INVALID_TYPE,
             severity: 'info',
             node,
-            args: { type: invalidType },
+            args: { type: invalidType, origType: affectedType },
           }
         })
       });
@@ -595,7 +620,7 @@ export class TypeChecker {
   public registerSourceFile(sourceFile: SourceFile): void {
     for (const node of sourceFile.preorder()) {
       if (introducesType(node)) {
-        node.type = createRef(new AnyType);
+        node.type = createTypeRef(new AnyType);
       }
       if (isBoltImplDeclaration(node)) {
         const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Type);
@@ -643,13 +668,14 @@ export class TypeChecker {
           break;
         }
       }
+
       const node = queued.shift()!;
 
       const derivedType = this.deriveTypeUsingChildren(node);
-      node.type.replaceWith(new IntersectType([node.type!.cloneRef(), derivedType], [ node ]));
+      node.type!.replaceWith(new IntersectType([createTypeRef(node.type!.get()), derivedType], [ node ]));
       this.checkType(node.type!);
 
-      if (!node.type!.failed) {
+      if (!node.type!.hasTypeError()) {
         for (const dependantNode of this.getParentsThatMightNeedUpdate(node)) {
           if (introducesType(dependantNode)) {
             nextQueue.add(dependantNode);
@@ -693,8 +719,9 @@ export class TypeChecker {
     }
   }
 
-  public isVoidType(type: Type): boolean {
-    return this.areTypesEquivalent(new TupleType, type);
+  public isVoidType(type: TypeRef): boolean {
+    this.checkType(type);
+    return this.areTypesEquivalent(new VoidType, type);
   }
 
   /**
@@ -703,14 +730,14 @@ export class TypeChecker {
    * @param targetType The type that will be narrowed.
    * @param smallerType The type that serves as the outer bound of `smallerType`.
    */
-  private deriveTypeUsingChildren(node: Syntax): Type {
+  private deriveTypeUsingChildren(node: Syntax): TypeRef {
 
     switch (node.kind) {
 
       case SyntaxKind.JSMemberExpression:
       {
         // TODO
-        return createRef(new AnyType);
+        return createTypeRef(new AnyType);
       }
 
       case SyntaxKind.JSLiteralExpression:
@@ -727,13 +754,13 @@ export class TypeChecker {
       case SyntaxKind.JSReferenceExpression:
       {
         // TODO
-        return createRef(new AnyType);
+        return createTypeRef(new AnyType);
       }
 
       case SyntaxKind.JSCallExpression:
       {
         // TODO
-        return createRef(new AnyType);
+        return createTypeRef(new AnyType);
       }
 
       case SyntaxKind.BoltMatchExpression:
@@ -743,7 +770,7 @@ export class TypeChecker {
           this.markNodeAsRequiringUpdate(arm.body, node);
           exprTypes.push(arm.body.type!);
         }
-        return createRef(new IntersectType(exprTypes, [ node ]));
+        return createTypeRef(new IntersectType(exprTypes, [ node ]));
       }
 
       case SyntaxKind.BoltParameter:
@@ -758,7 +785,7 @@ export class TypeChecker {
           resultTypes.push(node.defaultValue.type!)
           this.markNodeAsRequiringUpdate(node.defaultValue, node)
         }
-        return createRef(new UnionType(resultTypes, [ node ]));
+        return createTypeRef(new UnionType(resultTypes, [ node ]));
       }
 
       case SyntaxKind.BoltFunctionExpression:
@@ -769,27 +796,27 @@ export class TypeChecker {
         const paramTypes = node.params.map(param => param.type!);
         let returnType;
         if (node.returnType === null) {
-          returnType = createRef(new AnyType([ node ]));
+          returnType = createTypeRef(new AnyType([ node ]));
         } else {
           returnType = node.returnType.type!;
           this.markNodeAsRequiringUpdate(node.returnType, node);
         }
-        return createRef(new FunctionType(node.id, paramTypes, returnType, [ node ]));
+        return createTypeRef(new FunctionType(node.id, paramTypes, returnType, [ node ]));
       }
 
       case SyntaxKind.BoltRecordDeclaration:
       {
         if (node.members === null) {
           const symbolPath = getFullyQualifiedPathToNode(node);
-          return createRef(new PrimType(symbolPath.encode(), [ node ]));
+          return createTypeRef(new PrimType(symbolPath.encode(), [ node ]));
         } else {
-          let memberTypes: RecordFieldType[] = []
+          let memberTypes = []
           for (const member of node.members) {
             //assert(member instanceof PlainRecordFieldType);
-            memberTypes.push(member.type! as RecordFieldType)
+            memberTypes.push(member.type! as TypeRef<RecordFieldType>)
             this.markNodeAsRequiringUpdate(member, node);
           }
-          return createRef(new RecordType(node, memberTypes));
+          return createTypeRef(new RecordType(node, memberTypes));
         }
       }
 
@@ -797,7 +824,7 @@ export class TypeChecker {
       {
         const resultType = new PlainRecordFieldType(node.name.text, node.typeExpr.type!);
         this.markNodeAsRequiringUpdate(node.typeExpr, node)
-        return resultType;
+        return createTypeRef(resultType);
       }
 
       case SyntaxKind.BoltRecordPattern:
@@ -805,10 +832,10 @@ export class TypeChecker {
         let memberTypes = []
         for (const member of node.fields) {
           //assert(member.type instanceof PlainRecordFieldType);
-          memberTypes.push(member.type! as RecordFieldType);
+          memberTypes.push(member.type! as TypeRef<RecordFieldType>);
           this.markNodeAsRequiringUpdate(member, node);
         }
-        return createRef(new RecordType(node.name, memberTypes));
+        return createTypeRef(new RecordType(node.name, memberTypes));
       }
 
       case SyntaxKind.BoltRecordFieldPattern:
@@ -819,19 +846,19 @@ export class TypeChecker {
           assert(node.name !== null);
           let nestedFieldType;
           if (node.pattern === null) {
-            nestedFieldType = new AnyType;
+            nestedFieldType = createTypeRef(new AnyType);
           } else {
             nestedFieldType = node.pattern.type!;
             this.markNodeAsRequiringUpdate(node.pattern, node);
           }
-          return createRef(new PlainRecordFieldType(node.name!.text, nestedFieldType));
+          return createTypeRef(new PlainRecordFieldType(node.name!.text, nestedFieldType));
         }
       }
 
       case SyntaxKind.BoltTypeAliasDeclaration:
       {
         // TODO
-        return createRef(new AnyType);
+        return createTypeRef(new AnyType([ node ]));
       }
 
       //case SyntaxKind.BoltImplDeclaration:
@@ -867,7 +894,7 @@ export class TypeChecker {
           elementTypes.push(node.typeExpr.type!);
           this.markNodeAsRequiringUpdate(node.typeExpr, node);
         }
-        return createRef(new UnionType(elementTypes));
+        return createTypeRef(new UnionType(elementTypes, [ node ]));
       }
 
       case SyntaxKind.BoltExpressionPattern:
@@ -878,7 +905,7 @@ export class TypeChecker {
       case SyntaxKind.BoltBindPattern:
       {
         // TODO
-        return createRef(new AnyType);
+        return createTypeRef(new AnyType([ node ]));
       }
 
       case SyntaxKind.BoltConstantExpression:
@@ -894,18 +921,18 @@ export class TypeChecker {
         })
         let returnType = null;
         if (node.returnType === null) {
-          returnType = createRef(new AnyType);
+          returnType = createTypeRef(new AnyType([ node ]));
         } else {
           returnType = node.returnType.type!;
           this.markNodeAsRequiringUpdate(node.returnType!, node);
         }
-        return createRef(new FunctionType(node.id, paramTypes, returnType, [ node ]));
+        return createTypeRef(new FunctionType(node.id, paramTypes, returnType, [ node ]));
       }
 
       case SyntaxKind.BoltMacroCall:
       {
         // TODO
-        return createRef(new AnyType);
+        return createTypeRef(new AnyType([ node ]));
       }
 
       case SyntaxKind.BoltQuoteExpression:
@@ -943,13 +970,13 @@ export class TypeChecker {
 
       case SyntaxKind.BoltMemberExpression:
       {
-        let unionType = new UnionType([]);
+        let unionTypeElements = [];
         assert(node.path.length === 1);
         const recordTypes = []; 
         for (const memberType of this.getTypesForMember(node.path[0], node.path[0].text, node.expression.type!)) {
-          unionType.addElement(memberType);
+          unionTypeElements.push(memberType);
         }
-        return createRef(unionType);
+        return createTypeRef(new UnionType(unionTypeElements, [ node ]));
       }
 
       case SyntaxKind.BoltCallExpression:
@@ -960,26 +987,26 @@ export class TypeChecker {
           this.markNodeAsRequiringUpdate(operand, node);
         }
         this.markNodeAsRequiringUpdate(node.operator, node);
-        return createRef(new CallType(node.operator.type!, operandTypes, [ node ]));
+        return createTypeRef(new CallType(node.operator.type!, operandTypes, [ node ]));
       }
 
       case SyntaxKind.BoltReferenceExpression:
       {
         const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Variable);
         if (scope === null) {
-          return createRef(new AnyType);
+          return createTypeRef(new AnyType);
         }
         const symbolPath = convertNodeToSymbolPath(node.name);
         const resolvedSym = this.resolver.resolveSymbolPath(symbolPath, scope!);
         if (resolvedSym === null) {
-          return createRef(new AnyType);
+          return createTypeRef(new AnyType);
         }
         let elementTypes = [];
         for (const decl of resolvedSym.declarations) {
           elementTypes.push(decl.type!);
           this.markNodeAsRequiringUpdate(decl, node)
         }
-        return createRef(new UnionType(elementTypes));
+        return createTypeRef(new UnionType(elementTypes));
       }
 
       case SyntaxKind.BoltFunctionDeclaration:
@@ -995,7 +1022,7 @@ export class TypeChecker {
               returnTypes.push(returnStmt.value.type!);
               this.markNodeAsRequiringUpdate(returnStmt.value, node);
             } else {
-              returnTypes.push(createRef(new VoidType([ returnStmt ])));
+              returnTypes.push(createTypeRef(new VoidType([ returnStmt ])));
             }
           }
         }
@@ -1004,7 +1031,7 @@ export class TypeChecker {
           paramTypes.push(param.type!);
           this.markNodeAsRequiringUpdate(param, node);
         }
-        return createRef(new FunctionType(node.id, paramTypes, createRef(new UnionType(returnTypes))));
+        return createTypeRef(new FunctionType(node.id, paramTypes, createTypeRef(new UnionType(returnTypes, [ node ])), [ node ]));
       }
 
       case SyntaxKind.BoltReferenceTypeExpression:
@@ -1012,13 +1039,13 @@ export class TypeChecker {
         if (node.name.modulePath.length === 0) {
           switch ((node.name.name as BoltIdentifier).text) {
             case 'never':
-              return createRef(new NeverType);
+              return createTypeRef(new NeverType([ node ]));
             case 'any':
-              return createRef(new AnyType);
+              return createTypeRef(new AnyType([ node ]));
             case 'int':
-              return createRef(new PrimType('@int'));
+              return createTypeRef(new PrimType('@int', [ node ]));
             case 'String':
-              return createRef(new PrimType('@String'));
+              return createTypeRef(new PrimType('@String', [ node ]));
           }
         }
         const scope = this.resolver.getScopeSurroundingNode(node, ScopeType.Type);
@@ -1026,14 +1053,14 @@ export class TypeChecker {
         const symbolPath = convertNodeToSymbolPath(node.name);
         const resolvedSym = this.resolver.resolveSymbolPath(symbolPath, scope!);
         if (resolvedSym === null) {
-          return createRef(new NeverType([ node ]));
+          return createTypeRef(new NeverType([ node ]));
         }
         let elementTypes = [];
         for (const decl of resolvedSym.declarations) {
           this.markNodeAsRequiringUpdate(decl, node);
           elementTypes.push(decl.type!);
         }
-        return createRef(new UnionType(elementTypes, [ node ]));
+        return createTypeRef(new UnionType(elementTypes, [ node ]));
       }
 
       default:
@@ -1082,77 +1109,58 @@ export class TypeChecker {
 
   private areTypesEquivalent(a: Type, b: Type): boolean {
 
-    // The next statements handle equivalence checking of the special types.
-    // These checks should happen before other checks.
-
-    if (a.kind === TypeKind.NeverType && b.kind === TypeKind.NeverType) {
-      return true;
-    }
-    if (a.kind === TypeKind.NeverType) {
-      return false;
-    }
-    if (a.kind === TypeKind.AnyType || b.kind === TypeKind.AnyType) {
+    if ((a.kind === TypeKind.NeverType && b.kind === TypeKind.NeverType)
+      || (a.kind === TypeKind.AnyType && b.kind === TypeKind.AnyType)
+      || (a.kind == TypeKind.VoidType && b.kind === TypeKind.VoidType)
+      || (a.kind === TypeKind.FunctionType && b.kind === TypeKind.FunctionType && a.fnId === b.fnId)
+      || (a.kind === TypeKind.PrimType && b.kind === TypeKind.PrimType && a.name === b.name)) {
       return true;
     }
 
-    // Next up are checks for the semantic equivalence of union types. If a union type occurs on the left,
-    // each and every type inside the union type must match the right-hand-side. In the other case,
-    // the type is semantic equivalent is one of the element types matched the left-hand-side.
-
-    if (a.kind === TypeKind.UnionType) {
-      return a.elementTypes.every(el => this.areTypesEquivalent(el, b));
-    }
-    if (b.kind === TypeKind.UnionType) {
-      return b.elementTypes.some(el => this.areTypesEquivalent(el, a));
+    if (a.kind === TypeKind.CallType && b.kind === TypeKind.CallType) {
+      assert(false);
     }
 
-    // To check equivalence, we have no choice but to resolve the return types and see if the returned type matches
-    // the other size of the equivalence. The equivalence is anticommutative, so we have to repeat the checks for
-    // each side of the equivalence.
-
-    if (a.kind === TypeKind.CallType) {
-      const resolvedType = this.resolveReturnType(a);
-      return this.areTypesEquivalent(resolvedType, b);
-    }
-    if (b.kind === TypeKind.CallType) {
-      const resolvedType = this.resolveReturnType(b);
-      return this.areTypesEquivalent(a, resolvedType);
-    }
-
-    // The following cases cover types that have nominal typing as their semantics.
-    // Checking equivalence between them should be the same as checking whether they originated
-    // from the same node in the AST.
-
-    if (a.kind === TypeKind.PrimType && b.kind === TypeKind.PrimType) {
-      return a.name === b.name;
-    }
-    if (a.kind === TypeKind.FunctionType && b.kind === TypeKind.FunctionType) {
-      return a.source === b.source;
-    }
-    if (a.kind === TypeKind.RecordType && b.kind === TypeKind.RecordType) {
-      return a.source === b.source;
-    }
-    if (a.kind === TypeKind.TraitType && b.kind === TypeKind.TraitType) {
-      return a.source === b.source;
+    if ((a.kind === TypeKind.UnionType && b.kind === TypeKind.UnionType)
+      || (a.kind === TypeKind.IntersectType && b.kind === TypeKind.IntersectType)) {
+      a.elementTypes.sort(comparator((a, b) => isTypeLessThan(a.get(), b.get())));
+      b.elementTypes.sort(comparator((a, b) => isTypeLessThan(a.get(), b.get())));
+      let i = 0;
+      let j = 0;
+      while (true) {
+        if (i >= a.elementTypes.length && j >= b.elementTypes.length) {
+          break;
+        }
+        if (i >= a.elementTypes.length || j >= b.elementTypes.length) {
+          return false;
+        }
+        const elementA = a.elementTypes[i++];
+        const elementB = b.elementTypes[j++];
+        if (!this.areTypesEquivalent(elementA.get(), elementB.get())) {
+          return false;
+        }
+      }
+      return true;
     }
 
-    // FIXME There are probably more cases that should be covered.
+    // FIXME Record types are not handled.
     return false;
-    //throw new Error(`I did not know how to calculate the equivalence of ${TypeKind[a.kind]} and ${TypeKind[b.kind]}`)
   }
 
-  private diagnoseFunctionCall(callType: CallType, fnType: FunctionType) {
+  private checkFunctionCall(callTypeRef: TypeRef<CallType>, fnType: FunctionType) {
+
+    const callType = callTypeRef.get();
 
     if (fnType.paramTypes.length > callType.argumentTypes.length) {
 
-      if (!callType.failed) {
+      if (!callTypeRef.hasTypeError()) {
 
         let nested: Diagnostic[] = [];
         for (let i = callType.argumentTypes.length; i < fnType.paramTypes.length; i++) {
           nested.push({
             message: E_CANDIDATE_FUNCTION_REQUIRES_THIS_PARAMETER,
             severity: 'info',
-            node: fnType.paramTypes[i].sourceNodes[0]
+            node: fnType.paramTypes[i].get().sourceNodes[0]
           });
         }
         this.diagnostics.add({
@@ -1166,7 +1174,7 @@ export class TypeChecker {
           nested,
         });
 
-        callType.markAsFailed();
+        callTypeRef.markAsHavingTypeError();
 
       }
 
@@ -1174,18 +1182,18 @@ export class TypeChecker {
 
     } else if (callType.argumentTypes.length > fnType.paramTypes.length) {
 
-      if (!callType.failed) {
+      if (!callTypeRef.hasTypeError()) {
 
         const nested: Diagnostic[] = [];
         for (let i = fnType.paramTypes.length; i < callType.argumentTypes.length; i++) {
           nested.push({
             message: E_ARGUMENT_HAS_NO_CORRESPONDING_PARAMETER,
             severity: 'info',
-            node: callType.argumentTypes[i].sourceNodes[0],
+            node: callType.argumentTypes[i].get().sourceNodes[0],
           });
         }
         this.diagnostics.add({
-          message: E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
+          message: E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL,
           severity: 'error',
           node: callType.sourceNodes[0],
           args: {
@@ -1195,7 +1203,7 @@ export class TypeChecker {
           nested,
         });
 
-        callType.markAsFailed();
+        callTypeRef.markAsHavingTypeError();
 
       }
 
@@ -1208,22 +1216,25 @@ export class TypeChecker {
       const paramCount = fnType.paramTypes.length;
 
       for (let i = 0; i < paramCount; i++) {
-        const argType = callType.argumentTypes[i];
-        const paramType = fnType.paramTypes[i];
+        const argTypeRef = callType.argumentTypes[i];
+        const argType = argTypeRef.get();
+        const paramTypeRef = fnType.paramTypes[i];
+        const paramType = paramTypeRef.get();
         if (!this.isTypeAssignableTo(argType, paramType)) {
-          if (!argType.failed) {
+          if (!argTypeRef.hasTypeError()) {
             this.diagnostics.add({
               message: E_ARGUMENT_TYPE_NOT_ASSIGNABLE,
               severity: 'error',
               node: argType.sourceNodes[0],
               args: { argType, paramType },
               nested: [{
-                message: E_PARAMETER_DECLARED_HERE,
+                message: E_THIS_NODE_CAUSED_INVALID_TYPE,
                 severity: 'info',
-                node: fnType.paramTypes[i].sourceNodes[0],
+                node: paramType.sourceNodes[0],
+                args: { type: paramType, origType: argType }
               }]
             });
-            argType.markAsFailed();
+            argTypeRef.markAsHavingTypeError();
           }
           hasErrors = true;
         }
@@ -1235,7 +1246,10 @@ export class TypeChecker {
 
   }
 
-  private *getReturnTypes(fnType: TypeRef, callType: TypeRef): IterableIterator<TypeRef> {
+  private *getReturnTypes(fnTypeRef: TypeRef, callTypeRef: TypeRef<CallType>): IterableIterator<TypeRef> {
+
+    const fnType = fnTypeRef.get();
+    const callType = callTypeRef.get();
 
     switch (fnType.kind) {
 
@@ -1247,7 +1261,7 @@ export class TypeChecker {
       case TypeKind.AnyType:
         // The return type of an 'any'-type (which includes all functions that have 'any' as return type)
         // is the 'any'-type. If we don't find a more specific match, this will be the type that is returned.
-        yield fnType;
+        yield fnTypeRef;
         break;
 
       case TypeKind.PrimType:
@@ -1261,12 +1275,12 @@ export class TypeChecker {
 
       case TypeKind.UnionType:
         for (const elementType of fnType.elementTypes) {
-          yield* this.getReturnTypes(elementType, callType);
+          yield* this.getReturnTypes(elementType, callTypeRef);
         }
         break;
 
       case TypeKind.FunctionType:
-        if (this.diagnoseFunctionCall(callType, fnType)) {
+        if (this.checkFunctionCall(callTypeRef, fnType)) {
           // If the argument types and parameter types didn't fail to match,
           // the function type is eligable to be 'called' by the given ReturnType.
           yield fnType.returnType;
@@ -1276,11 +1290,11 @@ export class TypeChecker {
       case TypeKind.IntersectType:
         const returnTypes = [];
         for (const elementType of fnType.elementTypes) {
-          for (const returnType of this.getReturnTypes(elementType, callType)) {
+          for (const returnType of this.getReturnTypes(elementType, callTypeRef)) {
             returnTypes.push(returnType);
           }
         }
-        yield createRef(new IntersectType(returnTypes));
+        yield createTypeRef(new IntersectType(returnTypes));
         break;
 
       default:
@@ -1291,17 +1305,16 @@ export class TypeChecker {
   }
 
   private mergeTypes(target: Type, source: Type): void {
-    if ((target.kind === TypeKind.NeverType && source.kind === TypeKind.NeverType)
-      || (target.kind === TypeKind.AnyType && source.kind === TypeKind.AnyType)) {
+    assert(this.areTypesEquivalent(target, source));
+    if (source !== target) {
       pushAll(target.sourceNodes, source.sourceNodes);
-    } else {
-      throw new Error(`could not merge two types`);
+      target.failed = target.failed || source.failed;
     }
   }
 
   private removeNeverTypes(types: TypeRef[]) {
     for (let i = 0; i < types.length; i++) {
-      if (types[i].kind === TypeKind.NeverType) {
+      if (types[i].get().kind === TypeKind.NeverType) {
         types.splice(i, 1);
       }
     }
@@ -1309,23 +1322,23 @@ export class TypeChecker {
 
   private removeAnyTypes(types: TypeRef[]) {
     for (let i = 0; i < types.length; i++) {
-      if (types[i].kind === TypeKind.AnyType) {
+      if (types[i].get().kind === TypeKind.AnyType) {
         types.splice(i, 1);
       }
     }
   }
 
-  private mergeNeverTypes(types: TypeRef[]): Type | null {
+  private mergeNeverTypes(types: TypeRef[]): TypeRef | null {
 
     let firstNeverType = null;
 
     for (let i = 0; i < types.length; i++) {
       const type = types[i];
-      if (type.kind === TypeKind.NeverType) {
+      if (type.get().kind === TypeKind.NeverType) {
         if (firstNeverType === null) {
           firstNeverType = type;
         } else {
-          this.mergeTypes(firstNeverType, type);
+          this.mergeTypes(firstNeverType.get(), type.get());
         }
       }
     }
@@ -1334,27 +1347,29 @@ export class TypeChecker {
 
   }
 
-  private mergeAnyTypes(types: TypeRef[]) {
+  private mergeAnyTypes(types: TypeRef[]): TypeRef | null {
 
     let firstAnyType = null;
 
     for (let i = 0; i < types.length; i++) {
       const type = types[i];
-      if (type.kind === TypeKind.AnyType) {
+      if (type.get().kind === TypeKind.AnyType) {
         if (firstAnyType === null) {
           firstAnyType = type;
         } else {
-          this.mergeTypes(firstAnyType, type);
+          this.mergeTypes(firstAnyType.get(), type.get());
           types.splice(i, 1);
         }
       }
     }
 
+    return firstAnyType;
+
   }
 
-  private checkType(type: TypeRef) {
+  private checkType(typeRef: TypeRef) {
 
-    const resultTypes = [];
+    const type = typeRef.get();
 
     switch (type.kind) {
 
@@ -1362,13 +1377,24 @@ export class TypeChecker {
         break;
 
       case TypeKind.FunctionType:
+        for (const paramType of type.paramTypes) {
+          this.checkType(paramType);
+        }
         break;
 
       case TypeKind.AnyType:
         break;
 
       case TypeKind.NeverType:
-        this.diagnoseTypeError(type, null);
+        if (!typeRef.hasTypeError()) {
+          this.diagnostics.add({
+            message: E_TYPE_NEVER_MATCHES,
+            severity: 'error',
+            node: type.sourceNodes[0],
+            args: { type }
+          });
+          typeRef.markAsHavingTypeError();
+        }
         break;
 
       case TypeKind.IntersectType:
@@ -1378,30 +1404,43 @@ export class TypeChecker {
         }
         const neverType = this.mergeNeverTypes(type.elementTypes);
         if (neverType !== null) {
-          this.diagnoseTypeError(type, neverType);
-          type.replaceWith(neverType);
+          this.diagnoseTypeError(type, neverType.get());
+          typeRef.replaceWith(neverType);
           break;
         }
         const anyType = this.mergeAnyTypes(type.elementTypes);
         let firstSpecialType = null;
-        for (const elementType of type.elementTypes) {
+        for (let i = 0; i < type.elementTypes.length; i++) {
+          const elementTypeRef = type.elementTypes[i];
+          const elementType = elementTypeRef.get();
           if (elementType.kind === TypeKind.PrimType || elementType.kind === TypeKind.FunctionType || elementType.kind === TypeKind.RecordType) {
             if (firstSpecialType === null) {
-              firstSpecialType = elementType;
+              firstSpecialType = elementTypeRef;
             } else {
-              if (!this.areTypesEquivalent(firstSpecialType, elementType)) {
-                this.diagnoseTypeError(firstSpecialType, elementType);
-                this.mergeTypes(firstSpecialType, elementType);
-                elementType.replaceWith(new NeverType(firstSpecialType.sourceNodes))
+              if (this.areTypesEquivalent(firstSpecialType.get(), elementType)) {
+                this.mergeTypes(firstSpecialType.get(), elementType);
+                type.elementTypes.splice(i, 1);
+              } else {
+                if (!firstSpecialType.hasTypeError()) {
+                  this.diagnoseTypeError(firstSpecialType.get(), elementType);
+                  firstSpecialType.markAsHavingTypeError();
+                }
+                type.elementTypes.splice(i, 1);
+                // elementType.replaceWith(new NeverType(firstSpecialType.sourceNodes))
+                elementTypeRef.markAsHavingTypeError();
+                break;
               }
             }
           }
         }
-        if (anyType !== null && firstSpecialType !== null) {
+        if (anyType !== null && type.elementTypes.length > 1) {
           this.removeAnyTypes(type.elementTypes);
         }
         if (type.elementTypes.length === 1) {
-          type.replaceWith(type.elementTypes[0]);
+          typeRef.replaceWith(type.elementTypes[0]);
+        } else if (type.elementTypes.length === 0) {
+          typeRef.replaceWith(new AnyType([...type.sourceNodes]));
+          // TODO Determine whether the new AnyType should be marked as failed (probably not).
         }
         break;
       }
@@ -1411,8 +1450,23 @@ export class TypeChecker {
         for (const elementType of type.elementTypes) {
           this.checkType(elementType);
         }
+        const neverType = this.mergeNeverTypes(type.elementTypes);
         this.removeNeverTypes(type.elementTypes);
-        this.mergeAnyTypes(type.elementTypes);
+        const anyType = this.mergeAnyTypes(type.elementTypes);
+        if (anyType !== null && type.elementTypes.length > 1) {
+          this.removeAnyTypes(type.elementTypes);
+        }
+        if (type.elementTypes.length === 1) {
+          typeRef.replaceWith(type.elementTypes[0]);
+        } else if (type.elementTypes.length === 0) {
+          if (!typeRef.hasTypeError()) {
+            if (neverType !== null) {
+              this.diagnoseTypeError(type, neverType.get());
+            }
+            typeRef.markAsHavingTypeError();
+          }
+          typeRef.replaceWith(new AnyType([...type.sourceNodes]));
+        }
         break;
       }
 
@@ -1422,8 +1476,21 @@ export class TypeChecker {
         for (const argType of type.getArgumentTypes()) {
           this.checkType(argType);
         }
-        const returnTypes = [...this.getReturnTypes(type.fnType, type)];
-        type.replaceWith(new UnionType(returnTypes, type.sourceNodes));
+        const returnTypes = [...this.getReturnTypes(type.fnType, typeRef as TypeRef<CallType>)];
+        if (returnTypes.length === null) {
+          if (!typeRef.hasTypeError()) {
+            this.diagnostics.add({
+              message: E_NOT_CALLABLE,
+              node: type.sourceNodes[0],
+              severity: 'error',
+            });
+            typeRef.markAsHavingTypeError();
+          }
+          typeRef.replaceWith(new AnyType([...type.sourceNodes]));
+        } else {
+          typeRef.replaceWith(new UnionType(returnTypes, [...type.sourceNodes]));
+          this.checkType(typeRef);
+        }
         break;
       }
 
@@ -1436,7 +1503,7 @@ export class TypeChecker {
 
   private isTypeAssignableTo(source: Type, target: Type): boolean {
 
-    // Functions are at the moment immutable and can never be assigned to one another.
+    // Functions are at the moment immutable and can never be assigned to one another, even not to the 'any'-type.
     // FIXME Passing a lambda expression to a function parameter
     if (source.kind === TypeKind.FunctionType || target.kind === TypeKind.FunctionType) {
       return false;

@@ -791,7 +791,7 @@ export function format(message: string, data: MapLike<FormatArg>) {
       }
       value = modifierFn(value);
     }
-    out += value.toString();
+    out += prettyPrint(value);
     reset();
   }
 

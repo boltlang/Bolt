@@ -18,7 +18,7 @@ import {
   BoltToken
 } from "./ast";
 import { BOLT_SUPPORTED_LANGUAGES } from "./constants"
-import { FastStringMap, enumOr, escapeChar, assert, registerClass, Newable, GeneratorStream } from "./util";
+import { FastStringMap, enumOr, escapeChar, assert, registerClass, Newable, GeneratorStream, FastMultiMap } from "./util";
 import { TextSpan, TextPos, TextFile } from "./text";
 import { Scanner } from "./scanner";
 import { convertNodeToSymbolPath, SymbolPath } from "./resolver";
@@ -173,7 +173,7 @@ type OperatorTableList = [OperatorKind, number, string][][];
 
 export class OperatorTable {
 
-  private operatorsByName = new FastStringMap<string, OperatorInfo>();
+  private operatorsByName = new FastMultiMap<string, OperatorInfo>();
   //private operatorsByPrecedence = FastStringMap<number, OperatorInfo>();
 
   constructor(definitions: OperatorTableList) {
@@ -181,18 +181,21 @@ export class OperatorTable {
     for (const group of definitions) {
       for (const [kind, arity, name] of group) {
         const info = { kind, arity, name, precedence: i }
-        this.operatorsByName.set(name, info);
-        //this.operatorsByPrecedence[i] = info;
+        this.operatorsByName.add(name, info);
       }
       i++;
     }
   }
 
-  public lookup(name: string): OperatorInfo | null {
+  public lookup(arity: number, name: string): OperatorInfo | null {
     if (!this.operatorsByName.has(name)) {
       return null;
     }
-    return this.operatorsByName.get(name);
+    for (const operatorInfo of this.operatorsByName.get(name)) {
+      if (operatorInfo.arity === arity) {
+        return operatorInfo;
+      }
+    }
   }
 
 }

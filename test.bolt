@@ -1,0 +1,16 @@
+
+struct int;
+struct String;
+
+fn (a: int) - (b: int) -> int;
+fn (a: int) * (b: int) -> int;
+
+fn fac(n: int) -> int {
+  return match n {
+    0 => 1,
+    1 => 1,
+    k => k * (k-1),
+  }
+}
+
+fac(1);
