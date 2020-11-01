@@ -6,6 +6,12 @@ import {format, MapLike, FormatArg, countDigits, mapValues, prettyPrint, assert,
 import { BOLT_DIAG_NUM_EXTRA_LINES } from "./constants";
 import { TextPos, TextFile, TextSpan } from "./text";
 
+export const E_ASSIGN_TUPLE_LENGTH_MISMATCH = "Trying to assign a tuple of length {rhsLength} to a tuple of length {lhsLength}"
+export const E_ASSIGN_TYPES_MISMATCH = "Trying to assign to a pattern of type {lhsType}, which is incompatible with expression of type {rhsType}"
+
+export const E_MAY_NOT_RETURN_BECAUSE_TYPE_RESOLVES_TO_VOID = "May not return a value because the function's return type resolves to '()'"
+export const E_MUST_RETURN_BECAUSE_TYPE_DOES_NOT_RESOLVE_TO_VOID = "Must return a value because the function's return type does not resolve to '()'"
+
 export const E_INVALID_TEST_COMPARE = "The given test results cannot be compared because they use different specifications."
 export const E_TESTS_DO_NOT_COMPARE = "This test does not compare with its expected output."
 export const E_NO_BOLTFILE_FOUND_IN_PATH_OR_PARENT_DIRS = 'No Boltfile found in {path} or any of its parent directories.'
@@ -13,7 +19,6 @@ export const E_SSCAN_ERROR = "Got an unexpected {char}"
 export const E_STDLIB_NOT_FOUND = "Package 'stdlib' is required to build the current source set but it was not found. Use --no-std if you know what you are doing."
 export const E_PARSE_ERROR = "Expected {expected:enum} but got {actual}"
 export const E_MAY_NOT_RETURN_A_VALUE = "Returning a value inside a function that does not return values."
-export const E_MUST_RETURN_A_VALUE = "The function must return a value on all control paths.";;;;
 export const E_FILE_NOT_FOUND = "A file named {filename} was not found.";
 export const E_FIELD_HAS_INVALID_VERSION_NUMBER = "Field '{name}' contains an invalid version nunmber."
 export const E_FIELD_MUST_BE_STRING = "Field '{name}' must be a string."
@@ -22,7 +27,7 @@ export const E_FIELD_MUST_BE_BOOLEAN = "Field '{name}' must be a either 'true' o
 export const E_TYPE_DECLARATION_NOT_FOUND = "A type declaration named '{name}' was not found."
 export const E_DECLARATION_NOT_FOUND = "Reference to an undefined declaration '{name}'.";
 export const E_TYPE_MISMATCH = "Types {left} and {right} are not compatible with one another.";
-export const E_THIS_NODE_CAUSED_INVALID_TYPE = "This node resolved to the type {type}, which is incompatible with {origType}."
+export const E_THIS_NODE_CAUSED_INVALID_TYPE = "This expression resolved to the type {type}, which is incompatible with {origType}."
 export const E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL = "Too few arguments for function call. Expected {expected} but got {actual}.";
 export const E_TOO_MANY_ARGUMENTS_FOR_FUNCTION_CALL = "Too many arguments for function call. Expected {expected} but got {actual}.";
 export const E_NOT_CALLABLE = "The result of this expression is not callable."
@@ -33,11 +38,9 @@ export const E_RECORD_MISSING_MEMBER = "Record {name} does not have a member dec
 export const E_TYPE_NEVER_MATCHES = "Type '{type}' never matches anything."
 export const E_TYPES_MISSING_MEMBER = "Not all types resolve to a record with the a member named '{name}'."
 export const E_NODE_DOES_NOT_CONTAIN_MEMBER = "This node does not contain the the member '{name}'."
-export const E_MAY_NOT_RETURN_BECAUSE_TYPE_RESOLVES_TO_VOID = "May not return a value because the function's return type resolves to '()'"
-export const E_MUST_RETURN_BECAUSE_TYPE_DOES_NOT_RESOLVE_TO_VOID = "Must return a value because the function's return type does not resolve to '()'"
 export const E_ARGUMENT_TYPE_NOT_ASSIGNABLE = "This argument's type '{argType}' is not assignable to the function's parameter type '{paramType}'."
-export const E_PARAMETER_DECLARED_HERE = "Function parameter was declared here."
-export const E_BUILTIN_TYPE_MISSING = "A built-in type named '{name}' in the prelude."
+export const E_PARAMETER_DECLARED_HERE = "The parameter was declared here with type {type}."
+export const E_BUILTIN_TYPE_MISSING = "A built-in type named '{name}' was not found in the prelude."
 
 export const TYPE_ERROR_MESSAGES = [
   E_TOO_FEW_ARGUMENTS_FOR_FUNCTION_CALL,
@@ -113,7 +116,7 @@ export class DiagnosticPrinter {
         break;
       case 'fatal':
         this.hasFatal = true;
-        out += chalk.bold.red('fatal:' );
+        out += chalk.bold.red('fatal: ') 
         break;
       case 'warning':
         this.hasErrors = true;
@@ -149,7 +152,7 @@ export class DiagnosticPrinter {
       const content = span.file.getText();
       const startLine = Math.max(0, span.start.line-1-BOLT_DIAG_NUM_EXTRA_LINES)
       const lines = content.split('\n')
-      const endLine = Math.min(lines.length-1, (span.end !== undefined ? span.end.line : startLine)+BOLT_DIAG_NUM_EXTRA_LINES)
+      const endLine = Math.min(lines.length, (span.end !== undefined ? span.end.line : startLine)+BOLT_DIAG_NUM_EXTRA_LINES)
       const gutterWidth = Math.max(2, countDigits(endLine+1))
       for (let i = startLine; i < endLine; i++) {
         const line = lines[i];
