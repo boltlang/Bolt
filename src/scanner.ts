@@ -50,6 +50,8 @@ import {
   createBoltColonColon,
   createBoltExMark,
   createBoltWhereKeyword,
+  createBoltIfKeyword,
+  createBoltElseKeyword,
 } from "./ast"
 
 export enum PunctType {
@@ -390,7 +392,6 @@ export class Scanner {
           case 'trait':   return createBoltTraitKeyword(span);
           case 'impl':    return createBoltImplKeyword(span);
           case 'type':    return createBoltTypeKeyword(span);
-          //case 'export':  return createBoltExportKeyword(span);
           case 'import':  return createBoltImportKeyword(span);
           case 'foreign': return createBoltForeignKeyword(span);
           case 'let':     return createBoltLetKeyword(span);
@@ -398,6 +399,8 @@ export class Scanner {
           case 'struct':  return createBoltStructKeyword(span);
           case 'quote':   return createBoltQuoteKeyword(span);
           case 'enum':    return createBoltEnumKeyword(span);
+          case 'if':      return createBoltIfKeyword(span);
+          case 'else':    return createBoltElseKeyword(span);
           default:        return createBoltIdentifier(name, span);
         }
 

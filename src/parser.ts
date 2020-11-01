@@ -89,6 +89,9 @@ import {
   createBoltAssignStatement,
   BoltExportDirective,
   BoltParenthesized,
+  createBoltCaseStatementCase,
+  createBoltCaseStatement,
+  createBoltElseKeyword,
 } from "./ast"
 
 import { parseForeignLanguage } from "./foreign"
@@ -101,13 +104,13 @@ import {
   setOrigNodeRange,
   createTokenStream,
 } from "./common"
-import { Stream, uniq, assert, isInsideDirectory } from "./util"
+import { Stream, uniq, assert, isInsideDirectory, first } from "./util"
 
 import { Scanner } from "./scanner"
 import { TextSpan, TextPos } from "./text"
 import {JSScanner} from "./foreign/js/scanner";
 import { Package } from "./package"
-import { Syntax } from "./ast-spec"
+import { BoltCaseStatement, Syntax } from "./ast-spec"
 import { resourceUsage } from "process"
 
 export type BoltTokenStream = Stream<BoltToken>;
@@ -144,6 +147,7 @@ const KIND_EXPRESSION_T0 = uniq([
 
 const KIND_STATEMENT_T0 = uniq([
   SyntaxKind.BoltReturnKeyword,
+  SyntaxKind.BoltIfKeyword,
   ...KIND_EXPRESSION_T0,
 ])
 
@@ -179,6 +183,9 @@ function isRightAssoc(kind: OperatorKind): boolean {
 export class Parser {
 
   private exprOperatorTable = new OperatorTable([
+    [
+      [OperatorKind.InfixL, 2, '==']
+    ],
     [
       [OperatorKind.InfixL, 2, '&&'],
       [OperatorKind.InfixL, 2, '||']
@@ -1045,9 +1052,62 @@ export class Parser {
       return this.parseReturnStatement(tokens);
     } else if (t0.kind === SyntaxKind.BoltLoopKeyword) {
       return this.parseLoopStatement(tokens);
+    } else if (t0.kind === SyntaxKind.BoltIfKeyword) {
+      return this.parseIfStatement(tokens);
     } else {
       throw new ParseError(t0, KIND_STATEMENT_T0);
     }
+  }
+
+  public parseIfStatement(tokens: BoltTokenStream): BoltCaseStatement {
+
+    const t0 = tokens.get();
+    assertToken(t0, SyntaxKind.BoltIfKeyword);
+
+    const test = this.parseExpression(tokens);
+    const t1 = tokens.get();
+    assertToken(t1, SyntaxKind.BoltBraced);
+    const bodyTokens = createTokenStream(t1);
+    const body = this.parseFunctionBodyElements(bodyTokens);
+    const firstCase = createBoltCaseStatementCase(test, body)
+    setOrigNodeRange(firstCase, t0, t1);
+    const cases = [ firstCase ];
+
+    let lastToken = t1;
+
+    while (true) {
+      const t2 = tokens.peek(1);
+      const t3 = tokens.peek(2);
+      if (t2.kind !== SyntaxKind.BoltElseKeyword || t3.kind !== SyntaxKind.BoltIfKeyword) {
+        break;
+      }
+      tokens.get();
+      tokens.get();
+      const test = this.parseExpression(tokens);
+      const t4 = tokens.get();
+      assertToken(t4, SyntaxKind.BoltBraced);
+      const bodyTokens = createTokenStream(t4);
+      const body = this.parseFunctionBodyElements(bodyTokens);
+      const altCase = createBoltCaseStatementCase(test, body);
+      setOrigNodeRange(altCase, t2, t4);
+      cases.push(altCase);
+      lastToken = t4;
+    }
+
+    let alternative = null;
+    const t4 = tokens.peek();
+    if (t4.kind === SyntaxKind.BoltElseKeyword) {
+      tokens.get();
+      const t5 = tokens.get();
+      assertToken(t5, SyntaxKind.BoltBraced);
+      const alternativeTokens = createTokenStream(t5);
+      alternative = this.parseFunctionBodyElements(alternativeTokens)
+      lastToken = t5;
+    }
+
+    const result = createBoltCaseStatement(cases, alternative);
+    setOrigNodeRange(result, t0, lastToken);
+    return result;
   }
 
   public parseGenericTypeParameter(tokens: BoltTokenStream): BoltTypeParameter {

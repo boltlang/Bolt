@@ -174,7 +174,6 @@ type OperatorTableList = [OperatorKind, number, string][][];
 export class OperatorTable {
 
   private operatorsByName = new FastMultiMap<string, OperatorInfo>();
-  //private operatorsByPrecedence = FastStringMap<number, OperatorInfo>();
 
   constructor(definitions: OperatorTableList) {
     let i = 0;
@@ -397,6 +396,10 @@ export function describeKind(kind: SyntaxKind): string {
       return "'=>'";
     case SyntaxKind.BoltBraced:
       return "'{ ... }'";
+    case SyntaxKind.BoltIfKeyword:
+      return "'if'";
+    case SyntaxKind.BoltElseKeyword:
+      return "'else'";
     default:
       throw new Error(`failed to describe ${kindToString(kind)}`)
   }
@@ -410,6 +413,15 @@ export function *getAllReturnStatementsInFunctionBody(body: FunctionBodyElement[
       {
         yield element;
         break;
+      }
+      case SyntaxKind.BoltCaseStatement:
+      {
+        for (const caseNode of element.cases) {
+          yield* getAllReturnStatementsInFunctionBody(caseNode.body);
+        }
+        if (element.alternative !== null) {
+          yield* getAllReturnStatementsInFunctionBody(element.alternative);
+        }
       }
       case SyntaxKind.BoltConditionalStatement:
       {

@@ -5,7 +5,7 @@ import { Package } from "./package"
 import { Diagnostic } from "./diagnostics";
 import { serializeTag, inspectTag, indent } from "./util";
 import { InspectOptionsStylized, inspect } from "util";
-import { TypeRef } from "./checker";
+import { Type } from "./checker";
 
 let nextNodeId = 1;
 
@@ -13,13 +13,26 @@ type SyntaxKind = number;
 
 export type ResolveSyntaxKind<K extends SyntaxKind> = Extract<Syntax, { kind: K }>;
 
+enum NodeFlags {
+  None = 0,
+  HasTypeError = 1,
+}
+
 export abstract class Syntax {
 
   public id: number;
 
+  private flags = NodeFlags.None;
+
   public errors: Diagnostic[] = [];
 
-  public type?: TypeRef;
+  public hasTypeError() {
+    return (this.flags & NodeFlags.HasTypeError) > 0;
+  }
+
+  public markAsHavingTypeError() {
+    this.flags |= NodeFlags.HasTypeError;
+  }
 
   // --------------------------------------------------------------------------------
   // NOTE The following properties and methods are only valid when inside a BoltTraitDeclaration
@@ -185,6 +198,8 @@ export interface BoltVBar      extends BoltToken, BoltOperatorLike {}
 
 export interface BoltKeyword {}
 
+export interface BoltElseKeyword      extends BoltToken, BoltKeyword {}
+export interface BoltIfKeyword      extends BoltToken, BoltKeyword {}
 export interface BoltWhereKeyword   extends BoltToken, BoltKeyword {}
 export interface BoltQuoteKeyword   extends BoltToken, BoltKeyword {}
 export interface BoltFnKeyword      extends BoltToken, BoltKeyword {}
@@ -343,13 +358,14 @@ export interface BoltMatchExpression extends BoltExpression {
   arms: BoltMatchArm[],
 }
 
-export interface BoltCase extends BoltSyntax {
+export interface BoltCaseStatementCase extends BoltSyntax {
   test: BoltExpression,
-  result: BoltExpression,
+  body: BoltFunctionBodyElement[],
 }
 
-export interface BoltCaseExpression extends BoltExpression {
-  cases: BoltCase[],
+export interface BoltCaseStatement extends BoltStatement {
+  cases: BoltCaseStatementCase[],
+  alternative: BoltFunctionBodyElement[] | null;
 }
 
 export interface BoltBlockExpression extends BoltExpression {
