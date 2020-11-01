@@ -22,8 +22,8 @@ do what they are supposed to do.
 ```
 fn fac(n) {
   match n {
-    0 => 1,
-    _ => fac(n-1),
+    0 | 1 => 1,
+    k => k * fac(k-1),
   }
 }
 
