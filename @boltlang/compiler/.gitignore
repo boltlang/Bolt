@@ -1,0 +1,16 @@
+
+# all compiled files except a few
+*.js
+*.js.map
+*.d.ts
+*.d.ts.map
+!/webpack.config.js
+
+# npm
+node_modules/
+
+# compiled code for testing
+/lib/
+
+# often created when publishing to npm
+*.tgz

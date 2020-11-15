@@ -1,16 +1,25 @@
 
-struct int;
-struct String;
-
+fn (a: int) == (b: int) -> int;
 fn (a: int) - (b: int) -> int;
 fn (a: int) * (b: int) -> int;
 
-fn fac(n: int) -> int {
-  return match n {
-    0 => 1,
-    1 => 1,
-    k => k * (k-1),
+fn write(data: String);
+
+struct Point<NumT> {
+  x: NumT,
+  y: NumT,
+}
+
+trait Print {
+  fn print(self);
+}
+
+impl Print for Point {
+  fn print(self) {
+    write("A point!");
   }
 }
 
-fac(1);
+let p1 = Point { x: 1, y: 2 }
+
+p1.printer();

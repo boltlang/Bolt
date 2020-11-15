@@ -1,0 +1,60 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Bolt",
+	"patterns": [
+		{
+			"include": "#keywords"
+		},
+		{
+			"include": "#strings"
+		},
+		{
+			"include": "#constants"
+		},
+		{
+			"name": "storage.type.bolt",
+			"match": "\\b(int|bool|String)\\b"
+		}
+	],
+	"repository": {
+		"keywords": {
+			"patterns": [{
+				"name": "keyword.control.bolt",
+				"match": "\\b(let|fn|pub|struct|if|impl|trait|while|for|return|loop)\\b"
+			}, {
+				"name": "keyword.operator.bolt",
+				"match": "(==+|[-+*/%^&!<>]+)"
+			}, {
+				"name": "keyword.operator.assignment.bolt",
+				"match": "[-+*/%^&!<>]*="
+			}]
+		},
+		"constants": {
+			"patterns": [{
+				"name": "constant.numeric.bolt",
+				"match": "\\b[0-9][0-9]*\\b"
+			}, {
+				"name": "constant.character.bolt",
+				"match": "'.'"
+			}, {
+				"name": "constant.character.escape.bolt",
+				"match": "'\\\\.'"
+			}, {
+				"name": "constant.language.boolean.bolt",
+				"match": "\\b(true|false)\\b"
+			}]
+		},
+		"strings": {
+			"name": "string.quoted.double.bolt",
+			"begin": "\"",
+			"end": "\"",
+			"patterns": [
+				{
+					"name": "constant.character.escape.bolt",
+					"match": "\\\\."
+				}
+			]
+		}
+	},
+	"scopeName": "source.bolt"
+}

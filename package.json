@@ -1,64 +1,39 @@
 {
-  "name": "@samvv/bolt",
-  "version": "0.0.1",
-  "description": "A programming language for rapid prototyping",
-  "main": "lib/index.js",
-  "bin": {
-    "bolt": "build/bin/bolt.js",
-    "bolt-test": "build/bin/bolt-test.js"
-  },
+  "name": "bolt-workspace",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The root workspace for building various Bolt language tools",
+  "workspaces": [
+    "@boltlang/compiler",
+    "@boltlang/langserver",
+    "@boltlang/cli",
+    "vscode-extension"
+  ],
   "scripts": {
-    "watch": "webpack --watch --config webpack.dev.js",
-    "prepare": "webpack --config webpack.prod.js",
-    "test": "node lib/bin/bolt-test.js",
-    "generate-ast": "tsastgen src/ast-spec.ts:src/ast.ts",
-    "update-lkg": "node lib/bin/bolt-test.js create-snapshot lkg"
+    "test": "concurrently --names compiler 'cd @boltlang/compiler && npm test'",
+    "watch": "concurrently --names compiler,langserver,cli,vscode 'cd @boltlang/compiler && npm run watch' 'cd @boltlang/langserver && npm run watch' 'cd @boltlang/cli && npm run watch' 'cd vscode-extension && npm run watch'"
   },
-  "author": "Sam Vervaeck <vervaeck.sam@skynet.be>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/samvv/BoltJS.git"
+  },
+  "author": "Sam Vervaeck",
   "license": "GPL-3.0",
-  "repository": "https://github.com/samvv/Bolt",
-  "dependencies": {
-    "@types/commonmark": "^0.27.4",
-    "@types/diff": "^4.0.2",
-    "@types/fs-extra": "^9.0.2",
-    "@types/glob": "^7.1.3",
-    "@types/js-yaml": "^3.12.5",
-    "@types/microtime": "^2.1.0",
-    "@types/minimist": "^1.2.0",
-    "@types/node": "^14.14.6",
-    "@types/ora": "^3.2.0",
-    "@types/semver": "^7.3.4",
-    "@types/uuid": "^8.3.0",
-    "@types/yargs": "^15.0.9",
-    "chalk": "^4.1.0",
-    "commonmark": "^0.29.2",
-    "diff": "^4.0.2",
-    "fs-extra": "^9.0.1",
-    "glob": "^7.1.6",
-    "js-yaml": "^3.14.0",
-    "microtime": "^3.0.0",
-    "minimist": "^1.2.5",
-    "moment": "^2.29.1",
-    "ora": "^5.1.0",
-    "reflect-metadata": "^0.1.13",
-    "semver": "^7.3.2",
-    "source-map-support": "^0.5.19",
-    "uuid": "^8.3.1",
-    "yargs": "^16.1.0"
+  "bugs": {
+    "url": "https://github.com/samvv/BoltJS/issues"
   },
+  "homepage": "https://github.com/samvv/BoltJS#readme",
   "devDependencies": {
     "@babel/core": "^7.12.3",
     "@babel/plugin-proposal-class-properties": "^7.12.1",
-    "@types/chai": "^4.2.14",
-    "@types/tape": "^4.13.0",
+    "@babel/preset-env": "^7.12.1",
+    "@types/node": "^14.14.7",
     "ava": "^3.13.0",
-    "babel-loader": "^8.1.0",
+    "babel-loader": "^8.2.1",
     "concurrently": "^5.3.0",
-    "tap-min": "^2.0.0",
-    "tape": "^5.0.1",
-    "ts-loader": "^8.0.7",
+    "ts-loader": "^8.0.11",
     "typescript": "^4.0.5",
-    "webpack": "^5.3.1",
-    "webpack-cli": "^4.1.0"
+    "webpack": "^5.4.0",
+    "webpack-cli": "^4.2.0"
   }
 }

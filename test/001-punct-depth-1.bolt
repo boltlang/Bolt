@@ -1,3 +1,0 @@
-{ foo baz bar };
-( foo baz bar );
-[ foo baz bar ];

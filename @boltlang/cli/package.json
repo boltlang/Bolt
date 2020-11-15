@@ -1,0 +1,28 @@
+{
+  "name": "@boltlang/cli",
+  "version": "1.0.0",
+  "description": "The official command-line interface of the Bolt programming language",
+  "main": "index.js",
+  "bin": {
+    "bolt": "bin/bolt.js"
+  },
+  "scripts": {
+    "prepare": "webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BoltLang/BoltJS.git"
+  },
+  "author": "Sam Vervaeck",
+  "license": "GPL-3.0",
+  "bugs": {
+    "url": "https://github.com/BoltLang/BoltJS/issues"
+  },
+  "homepage": "https://github.com/BoltLang/BoltJS#readme",
+  "dependencies": {
+    "ora": "^5.1.0",
+    "yargs": "^16.1.0"
+  }
+}

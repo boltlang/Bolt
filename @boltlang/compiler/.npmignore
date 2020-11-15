@@ -1,0 +1,7 @@
+/src/
+/test/
+/scripts/
+Makefile
+webpack.config.js
+*.tgz
+tsconfig.json
