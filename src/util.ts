@@ -38,3 +38,16 @@ export abstract class BufferedStream<T> implements Stream<T> {
 
 }
 
+export function countDigits(x: number, base: number = 10) {
+  return x === 0
+       ? 1 : Math.ceil(Math.log(x+1) / Math.log(base))
+}
+
+export enum CompareMode {
+  None           = 0,
+  Greater        = 1,
+  Lesser         = 2,
+  Equal          = 4,
+  GreaterOrEqual = Greater | Equal,
+  LesserOrEqual  = Lesser | Equal,
+}

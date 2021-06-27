@@ -1,57 +1,36 @@
-
-export interface TextPosition {
-  offset: number;
-  line: number;
-  column: number;
-}
-
-export type TextRange = [TextPosition, TextPosition];
-
-export type TextSpan = [number, number];
+import { TextFile, TextPosition, TextRange, TextSpan } from "./text";
+import { ColonSign, DecimalInteger, DotSign, EqualSign, Identifier, LetKeyword, LParen, PubKeyword, RArrowSign, ReturnKeyword, RParen, StructKeyword, TildeSign, Token } from "./token";
 
 export enum SyntaxKind {
 
+  // Module-level nodes
+  Declaration,
+  VariableDefinition,
+  FunctionDefinition,
+
   // Other nodes
-  MacroInvocation,
+  Module,
   SourceFile,
+  MacroInvocation,
 
   // Purely syntactic nodes
   QualName,
-  Paramater,
+  Parameter,
   TypeParameter,
   RecordDeclarationField,
+  BlockDefinitionBody,
+  InlineDefinitionBody,
 
-  // Keywords
-  ReturnKeyword,
-  StructKeyword,
-  TypeKeyword,
-  ImportKeyword,
-  PubKeyword,
-  MutKeyword,
-  LetKeyword,
-  PerformKeyword,
-  YieldKeyword,
-  ResumeKeyword,
-
-  // Other tokens
-  EndOfFile,
-  EndOfIndent,
-  EndOfLine,
-  Identifier,
-  CustomOperator,
-  DotSign,
-  DotDotSign,
-  ColonSign,
-  EqualSign,
-  LBracket,
-  RBracket,
-  LBrace,
-  RBrace,
-  LParen,
-  RParen,
+  // Patterns
+  BindPattern,
+  RecordPattern,
+  TuplePattern,
 
   // Expressions
   ReferenceExpression,
+  ConstantExpression,
+  MatchExpression,
+  CallExpression,
 
   // Statements
   ReturnStatement,
@@ -67,286 +46,205 @@ export enum SyntaxKind {
 
 export type Syntax
   = SourceFile
-  | ReturnKeyword
-  | StructKeyword
-  | TypeKeyword
-  | ImportKeyword
-  | PubKeyword
-  | MutKeyword
-  | LetKeyword
-  | PerformKeyword
-  | YieldKeyword
-  | ResumeKeyword
-  | Identifier
-  | ReferenceExpression
-  | ReturnStatement
-  | ExpressionStatement
-
-export interface SyntaxBase {
-  readonly id: number;
-  readonly kind: SyntaxKind;
-  span: TextSpan | null;
-}
+  | TypeParameter
+  | Parameter
+  | QualName
+  | Statement
+  | Pattern
+  | Expression
+  | FunctionDefinition
+  | VariableDefinition
 
 let nextNodeId = 0;
 
-function createNodeObject(kind: SyntaxKind, span: TextSpan | null): SyntaxBase {
-  const obj = {} as SyntaxBase;
-  Object.defineProperties(obj, {
-    id: { value: nextNodeId++ },
-    kind: { value: kind },
-    span: {
-      value: span,
-      writable: true,
-    },
-  });
-  return obj;
-}
+abstract class SyntaxBase {
 
-export type Token
-  = EndOfFile
-  | EndOfIndent
-  | EndOfLine
-  | Identifier
-  | StructKeyword
-  | ReturnKeyword
-  | ImportKeyword
-  | PubKeyword
-  | LetKeyword
-  | MutKeyword
-  | TypeKeyword
-  | PerformKeyword
-  | ResumeKeyword
-  | YieldKeyword
-  | DotSign
-  | DotDotSign
-  | ColonSign
-  | EqualSign
-  | LBracket
-  | RBracket
-  | LBrace
-  | RBrace
-  | LParen
-  | RParen
+  public readonly kind!: SyntaxKind;
 
-export type TokenSyntaxKind
-  = Token['kind'];
-
-interface TokenBase {
-  readonly id: number;
-  readonly kind: SyntaxKind;
-  indentLevel: number;
-  range: TextRange | null;
-  getStartPos(): TextPosition;
-  getStartLine(): number;
-  getStartColumn(): number;
-  getEndPos(): TextPosition;
-  getEndLine(): number;
-  getEndColumn(): number;
-}
-
-const tokenPrototype = {
-
-  getStartPos(this: TokenBase): TextPosition {
-    if (this.range === null) {
-      throw new Error(`The 'range'-property was not set on a Token object.`)
-    }
-    return this.range[0];
-  },
-
-  getStartLine(this: TokenBase) {
-    if (this.range === null) {
-      throw new Error(`The 'range'-property was not set on a Token object.`)
-    }
-    return this.range[0].line;
-  },
-
-  getStartColumn(this: TokenBase) {
-    if (this.range === null) {
-      throw new Error(`The 'range'-property was not set on a Token object.`)
-    }
-    return this.range[0].column;
-  },
-
-  getEndPos(this: TokenBase): TextPosition {
-    if (this.range === null) {
-      throw new Error(`The 'range'-property was not set on a Token object.`)
-    }
-    return this.range[1];
-  },
-
-  getEndLine(this: TokenBase) {
-    if (this.range === null) {
-      throw new Error(`The 'range'-property was not set on a Token object.`)
-    }
-    return this.range[1].line;
-  },
-
-  getEndColumn(this: TokenBase) {
-    if (this.range === null) {
-      throw new Error(`The 'range'-property was not set on a Token object.`)
-    }
-    return this.range[1].column;
-  },
-
-}
-
-function createTokenObject(kind: TokenSyntaxKind): TokenBase {
-  const token = Object.create(tokenPrototype) as TokenBase;
-  Object.defineProperties(token, {
-    id: { value: nextNodeId++ },
-    kind: { value: kind },
-  });
-  return token;
-}
-
-const TOKEN_TEXT: Partial<Record<SyntaxKind, string>> = {
-  [SyntaxKind.LetKeyword]: 'let',
-  [SyntaxKind.PubKeyword]: 'pub',
-  [SyntaxKind.MutKeyword]: 'mut',
-  [SyntaxKind.PerformKeyword]: 'perform',
-  [SyntaxKind.YieldKeyword]: 'yield',
-  [SyntaxKind.ResumeKeyword]: 'resume',
-  [SyntaxKind.StructKeyword]: 'struct',
-  [SyntaxKind.DotSign]: '.',
-  [SyntaxKind.DotDotSign]: '..',
-  [SyntaxKind.ColonSign]: ':',
-  [SyntaxKind.EqualSign]: '=',
-  [SyntaxKind.LBracket]: '{',
-  [SyntaxKind.RBracket]: '}',
-  [SyntaxKind.LBrace]: '{',
-  [SyntaxKind.RBrace]: '}',
-  [SyntaxKind.LParen]: '(',
-  [SyntaxKind.RParen]: ')',
-}
-
-export function getTokenText(token: Token) {
-  if (token.kind in TOKEN_TEXT) {
-    return TOKEN_TEXT[token.kind];
+  constructor(kind: SyntaxKind) {
+    Object.defineProperties(this, {
+      id: { value: nextNodeId++ },
+      kind: { value: kind },
+    })
   }
-  switch (token.kind) {
-    case SyntaxKind.Identifier:
-      return token.text;
-    case SyntaxKind.EndOfFile:
-      return '';
-    default:
-      throw new Error(`Unhandled Token.kind value ${token.kind}`);
+
+  public abstract getTokens(): Iterable<Token>;
+
+  public abstract getFirstToken(): Token;
+
+  public abstract getLastToken(): Token;
+
+}
+
+export class QualName extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.QualName;
+
+  public constructor(
+    public modulePath: Array<[Identifier, DotSign]> = [],
+    public name: Identifier,
+  ) {
+    super(SyntaxKind.QualName);
   }
-}
 
-export function describeToken(kind: SyntaxKind) {
-  if (kind in TOKEN_TEXT) {
-    return `'${TOKEN_TEXT[kind]}'`
+  public *getTokens(): Iterable<Token> {
+    for (const [name, dotSign] of this.modulePath) {
+      yield name;
+      yield dotSign
+    }
+    yield this.name;
   }
-  switch (kind) {
-    case SyntaxKind.Identifier: return 'an identifier';
-    case SyntaxKind.CustomOperator: return 'an operator';
-    case SyntaxKind.EndOfLine: return 'end-of-line';
-    case SyntaxKind.EndOfFile : return 'end-of-file';
-    case SyntaxKind.EndOfIndent: return 'the ending of an indented block';
-    default:
-      throw new Error(`Unhandled SyntaxKind value ${kind}`);
+
+  public getFirstToken(): Token {
+    if (this.modulePath.length > 0) {
+      return this.modulePath[0][0];
+    }
+    return this.name;
   }
-}
 
-export interface Identifier extends TokenBase {
-  readonly kind: SyntaxKind.Identifier;
-  text: string;
-}
+  public getLastToken(): Token {
+    return this.name;
+  }
 
-export function createIdentifier(
-  text: string,
-  indentLevel: number,
-  range: TextRange | null = null,
-): Identifier {
-  const token = createTokenObject(SyntaxKind.Identifier) as Identifier;
-  token.text = text;
-  token.indentLevel = indentLevel;
-  token.range = range;
-  Object.seal(token);
-  return token;
-}
-
-interface SimpleToken<K extends SyntaxKind> extends TokenBase {
-  kind: K;
-}
-
-export function createSimpleToken<K extends TokenSyntaxKind>(
-  kind: K,
-  indentLevel: number,
-  range: TextRange | null = null,
-): SimpleToken<K> {
-  const token = createTokenObject(kind) as SimpleToken<K>;
-  token.indentLevel = indentLevel;
-  token.range = range;
-  Object.seal(token);
-  return token;
-}
-
-export type EndOfFile = SimpleToken<SyntaxKind.EndOfFile>;
-export type EndOfLine = SimpleToken<SyntaxKind.EndOfLine>;
-export type EndOfIndent = SimpleToken<SyntaxKind.EndOfIndent>;
-
-export type DotSign = SimpleToken<SyntaxKind.DotSign>;
-export type DotDotSign = SimpleToken<SyntaxKind.DotDotSign>;
-export type ColonSign = SimpleToken<SyntaxKind.ColonSign>;
-export type EqualSign = SimpleToken<SyntaxKind.EqualSign>;
-export type LBracket = SimpleToken<SyntaxKind.LBracket>;
-export type RBracket = SimpleToken<SyntaxKind.RBracket>;
-export type LParen = SimpleToken<SyntaxKind.LParen>;
-export type RParen = SimpleToken<SyntaxKind.RParen>;
-export type LBrace = SimpleToken<SyntaxKind.LBrace>;
-export type RBrace = SimpleToken<SyntaxKind.RBrace>;
-
-export type ReturnKeyword = SimpleToken<SyntaxKind.ReturnKeyword>;
-export type StructKeyword = SimpleToken<SyntaxKind.StructKeyword>;
-export type ImportKeyword = SimpleToken<SyntaxKind.ImportKeyword>;
-export type PubKeyword = SimpleToken<SyntaxKind.PubKeyword>;
-export type LetKeyword = SimpleToken<SyntaxKind.LetKeyword>;
-export type MutKeyword = SimpleToken<SyntaxKind.MutKeyword>;
-export type TypeKeyword = SimpleToken<SyntaxKind.TypeKeyword>;
-export type PerformKeyword = SimpleToken<SyntaxKind.PerformKeyword>;
-export type ResumeKeyword = SimpleToken<SyntaxKind.ResumeKeyword>;
-export type YieldKeyword = SimpleToken<SyntaxKind.YieldKeyword>;
-
-export interface QualName extends SyntaxBase {
-  readonly kind: SyntaxKind.QualName;
-  isAbsolute: boolean;
-  modulePath: Identifier[];
-  name: Identifier;
-}
-
-export function createQualName(
-  isAbsolute: boolean = false,
-  modulePath: Identifier[] = [],
-  name: Identifier,
-  span: TextSpan | null = null,
-): QualName {
-  const obj = createNodeObject(SyntaxKind.QualName, span) as QualName;
-  obj.isAbsolute = isAbsolute;
-  obj.modulePath = modulePath;
-  obj.name = name;
-  Object.seal(obj);
-  return obj;
 }
 
 export type Expression
   = ReferenceExpression
+  | ConstantExpression
+  | CallExpression
 
-export interface ReferenceExpression extends SyntaxBase {
-  readonly kind: SyntaxKind.ReferenceExpression;
-  name: Identifier;
+export class ReferenceExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ReferenceExpression;
+
+  public constructor(
+    public name: Identifier,
+  ) {
+    super(SyntaxKind.ReferenceExpression);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.name;
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
 }
 
-export interface ReturnStatement extends SyntaxBase {
-  readonly kind: SyntaxKind.ReturnStatement;
-  returnKeyword: ReturnKeyword;
-  expression: Expression;
+export class ConstantExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ConstantExpression;
+
+  public constructor(
+    public value: DecimalInteger,
+  ) {
+    super(SyntaxKind.ConstantExpression);
+  }
+
+  public *getTokens(): Generator<Token> {
+    yield this.value;
+  }
+
+  public getFirstToken(): Token {
+    return this.value;
+  }
+
+  public getLastToken(): Token {
+    return this.value;
+  }
+
 }
 
-export interface ExpressionStatement extends SyntaxBase {
-  readonly kind: SyntaxKind.ExpressionStatement;
-  expression: Expression;
+export class CallExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.CallExpression;
+
+  public constructor(
+    public operator: Expression,
+    public args: Expression[],
+  ) {
+    super(SyntaxKind.CallExpression);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield* this.operator.getTokens()
+    for (const arg of this.args) {
+      yield* arg.getTokens();
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.operator.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    if (this.args.length > 0) {
+      return this.args[this.args.length-1].getLastToken();
+    }
+    return this.operator.getLastToken();
+  }
+
+}
+
+export class ReturnStatement extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ReturnStatement;
+
+  public constructor(
+    public returnKeyword: ReturnKeyword,
+    public expression: Expression | null = null,
+  ) {
+    super(SyntaxKind.ReturnStatement);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.returnKeyword;
+    if (this.expression !== null) {
+      yield* this.expression.getTokens();
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.returnKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.expression !== null) {
+      return this.expression.getLastToken()
+    }
+    return this.returnKeyword;
+  }
+
+}
+
+export class ExpressionStatement extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ExpressionStatement;
+
+  public constructor(
+    public expression: Expression,
+  ) {
+    super(SyntaxKind.ExpressionStatement);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield* this.expression.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    return this.expression.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
 }
 
 export type Statement
@@ -355,24 +253,58 @@ export type Statement
 export type TypeExpression
   = TypeReferenceExpression
 
-export interface TypeReferenceExpression extends SyntaxBase {
-  readonly kind: SyntaxKind.TypeReferenceExpression;
-  name: QualName;
+export class TypeReferenceExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.TypeReferenceExpression;
+
+  public constructor(
+    public name: QualName,
+    public typeArgs: TypeExpression[] = [],
+  ) {
+    super(SyntaxKind.QualName);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield* this.name.getTokens();
+    for (const typeArg of this.typeArgs) {
+      yield* typeArg.getTokens();
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.name.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.typeArgs.length > 0
+      ? this.typeArgs[this.typeArgs.length-1].getLastToken()
+      : this.name.getLastToken();
+  }
+
 }
 
-export interface TypeParameter extends SyntaxBase {
-  readonly kind: SyntaxKind.TypeParameter;
-  name: Identifier;
-}
+export class TypeParameter extends SyntaxBase {
 
-export function createTypeParameter(
-  name: Identifier,
-  span: TextSpan | null = null
-): TypeParameter {
-  const obj = createNodeObject(SyntaxKind.TypeParameter, span) as TypeParameter;
-  obj.name = name;
-  Object.seal(obj);
-  return obj;
+  public readonly kind!: SyntaxKind.TypeParameter;
+
+  public constructor(
+    public name: Identifier,
+  ) {
+    super(SyntaxKind.TypeParameter);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.name;
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
 }
 
 export interface Block<T> {
@@ -380,78 +312,452 @@ export interface Block<T> {
   elements: T[];
 }
 
-export interface RecordDeclaration extends SyntaxBase {
-  readonly kind: SyntaxKind.RecordDeclaration;
-  pubKeyword: PubKeyword | null;
-  structKeyword: StructKeyword;
-  name: Identifier;
-  typeParams: TypeParameter[];
-  body: Block<RecordDeclarationElement> | null;
-}
+export class RecordDeclaration extends SyntaxBase {
 
-export function createRecordDeclaration(
-  pubKeyword: PubKeyword | null = null,
-  structKeyword: StructKeyword,
-  name: Identifier,
-  typeParams: TypeParameter[] = [],
-  body: Block<RecordDeclarationElement> | null = null,
-  span: TextSpan | null = null
-): RecordDeclaration {
-  const obj = createNodeObject(SyntaxKind.RecordDeclaration, span) as RecordDeclaration;
-  obj.pubKeyword = pubKeyword;
-  obj.structKeyword = structKeyword;
-  obj.name = name;
-  obj.typeParams = typeParams;
-  obj.body = body;
-  Object.seal(obj);
-  return obj;
+  public readonly kind!: SyntaxKind.RecordDeclaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null = null,
+    public structKeyword: StructKeyword,
+    public name: Identifier,
+    public typeParams: TypeParameter[] = [],
+    public body: Block<RecordDeclarationElement> | null = null,
+  ) {
+    super(SyntaxKind.RecordDeclaration);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    if (this.pubKeyword !== null) {
+      yield this.pubKeyword;
+    }
+    yield this.structKeyword;
+    yield this.name;
+    for (const typeParam of this.typeParams) {
+      yield* typeParam.getTokens();
+    }
+    if (this.body !== null) {
+      yield this.body.dotSign;
+      for (const element of this.body.elements) {
+        yield* element.getTokens();
+      }
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.pubKeyword !== null
+        ? this.pubKeyword
+        : this.structKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.body !== null) {
+      return this.body.elements.length > 0
+          ? this.body.elements[this.body.elements.length-1].getLastToken()
+          : this.body.dotSign;
+    }
+    if (this.typeParams.length > 0) {
+      return this.typeParams[this.typeParams.length-1].getLastToken();
+    }
+    return this.name;
+  }
+
 }
 
 export type RecordDeclarationElement
   = RecordDeclarationField
   | MacroInvocation
 
-export interface RecordDeclarationField extends SyntaxBase {
-  readonly kind: SyntaxKind.RecordDeclarationField;
-  name: Identifier;
-  colonSign: ColonSign;
-  typeExpr: TypeExpression;
+export class RecordDeclarationField extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.RecordDeclarationField;
+
+  public constructor(
+    public name: Identifier,
+    public colonSign: ColonSign,
+    public typeExpr: TypeExpression,
+  ) {
+    super(SyntaxKind.RecordDeclarationField);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.name;
+    yield this.colonSign;
+    yield* this.typeExpr.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpr.getLastToken();
+  }
+
 }
 
-export function createRecordDeclarationField(
-  name: Identifier,
-  colonSign: ColonSign,
-  typeExpr: TypeExpression,
-  span: TextSpan | null = null,
-): RecordDeclarationField {
-  const obj = createNodeObject(SyntaxKind.RecordDeclarationField, span) as RecordDeclarationField;
-  obj.name = name;
-  obj.colonSign = colonSign;
-  obj.typeExpr = typeExpr;
-  Object.seal(obj);
-  return obj;
-}
+export class MacroInvocation extends SyntaxBase {
 
-export interface MacroInvocation extends SyntaxBase {
-  readonly kind: SyntaxKind.MacroInvocation;
-  text: string;
+  public readonly kind!: SyntaxKind.MacroInvocation;
+
+  public constructor(
+    public text: string,
+  ) {
+    super(SyntaxKind.MacroInvocation);
+  }
+
+  public getTokens(): Iterable<Token> {
+    throw new Error(`Can not extract tokens from a macro invocation.`);
+  }
+
+  public getFirstToken(): Token {
+    throw new Error(`Can not extract tokens from a macro invocation.`);
+  }
+
+  public getLastToken(): Token {
+    throw new Error(`Can not extract tokens from a macro invocation.`);
+  }
+
 }
 
 export type SourceElement
   = Statement
   | RecordDeclaration
+  | Declaration
+  | FunctionDefinition
+  | VariableDefinition
 
-export interface SourceFile extends SyntaxBase {
-  elements: SourceElement[];
+export type FunctionBodyElement
+  = Statement
+  | Expression
+
+export interface ParameterDefaultValue {
+  tildeSign: TildeSign;
+  expression: Expression;
 }
 
-export function createSourceFile(
-  elements: SourceElement[],
-  span: TextSpan | null = null
-): SourceFile {
-  const obj = createNodeObject(SyntaxKind.SourceFile, span) as SourceFile;
-  obj.elements = elements;
-  Object.seal(obj);
-  return obj;
+export class Parameter extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.Parameter;
+
+  public constructor(
+    public name: Identifier,
+    public defaultValue: ParameterDefaultValue | null = null,
+  ) {
+    super(SyntaxKind.Parameter);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.name;
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.defaultValue !== null
+      ? this.defaultValue.expression.getLastToken()
+      : this.name;
+  }
+
+}
+
+export class Declaration extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.Declaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public name: Identifier,
+    public colonSign: ColonSign,
+    public paramTypes: Array<[TypeExpression, RArrowSign]>,
+    public returnType: TypeExpression,
+  ) {
+    super(SyntaxKind.Declaration);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    if (this.pubKeyword !== null) {
+      yield this.pubKeyword;
+    }
+    yield this.name;
+    yield this.colonSign;
+    for (const [typeExpr, rarrow] of this.paramTypes) {
+      yield* typeExpr.getTokens();
+      yield rarrow;
+    }
+    yield* this.returnType.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.returnType.getLastToken();
+  }
+
+}
+
+export type Pattern
+  = BindPattern
+  | TuplePattern
+
+export class BindPattern extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.BindPattern;
+
+  public constructor(
+    public name: Identifier,
+  ) {
+    super(SyntaxKind.BindPattern);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.name;
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
+}
+
+export class TuplePattern extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.TuplePattern;
+
+  public constructor(
+    public lparen: LParen,
+    public elements: Pattern[],
+    public rparen: RParen,
+  ) {
+    super(SyntaxKind.TuplePattern);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.lparen;
+    for (const element of this.elements) {
+      yield* element.getTokens();
+    }
+    yield this.rparen;
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
+}
+
+export type DefinitionBody
+  = BlockDefinitionBody
+  | InlineDefinitionBody
+
+export class BlockDefinitionBody extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.BlockDefinitionBody;
+
+  public constructor(
+    public dotSign: DotSign,
+    public elements: FunctionBodyElement[],
+  ) {
+    super(SyntaxKind.BlockDefinitionBody);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.dotSign;
+    for (const element of this.elements) {
+      yield* element.getTokens();
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.dotSign;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.dotSign;
+  }
+
+}
+
+export class InlineDefinitionBody extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.InlineDefinitionBody;
+
+  public constructor(
+    public equalSign: EqualSign,
+    public expression: Expression,
+  ) {
+    super(SyntaxKind.InlineDefinitionBody);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.equalSign;
+    yield* this.expression.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    return this.equalSign;
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
+}
+
+export class FunctionDefinition extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.FunctionDefinition;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public letKeyword: LetKeyword,
+    public name: Identifier,
+    public params: Parameter[],
+    public body: DefinitionBody,
+  ) {
+    super(SyntaxKind.FunctionDefinition);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    if (this.pubKeyword !== null) {
+      yield this.pubKeyword;
+    }
+    yield this.letKeyword;
+    yield this.name;
+    for (const param of this.params) {
+      yield* param.getTokens();
+    }
+    yield* this.body.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.letKeyword;
+  }
+
+  public getLastToken(): Token {
+    return this.body.getLastToken();
+  }
+
+}
+
+
+export class VariableDefinition extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.VariableDefinition;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public letKeyword: LetKeyword,
+    public pattern: Pattern,
+    public body: DefinitionBody,
+  ) {
+    super(SyntaxKind.VariableDefinition);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    if (this.pubKeyword !== null) {
+      yield this.pubKeyword;
+    }
+    yield this.letKeyword;
+    yield* this.pattern.getTokens();
+    yield* this.body.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.letKeyword;
+  }
+
+  public getLastToken(): Token {
+    return this.body.getLastToken();
+  }
+
+}
+
+const INIT_POS = {
+  line: 1,
+  column: 1,
+  offset: 0,
+}
+
+export class SourceFile extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.SourceFile;
+
+  public file!: TextFile | null;
+
+  private endPosition!: TextPosition;
+
+  public constructor(
+    public elements: SourceElement[],
+    file: TextFile | null = null,
+    endPosition: TextPosition | null = null,
+  ) {
+    super(SyntaxKind.SourceFile);
+    Object.defineProperties(this, {
+      file: {
+        writable: true,
+        value: file,
+      },
+      endPosition: {
+        writable: true,
+        value: endPosition,
+      },
+    });
+  }
+
+  public *getTokens(): Iterable<Token> {
+    for (const element of this.elements) {
+      yield* element.getTokens();
+    }
+  }
+
+  public getStartPos(): TextPosition {
+    return INIT_POS;
+  }
+
+  public getEndPos(): TextPosition {
+    if (this.endPosition === null) {
+      throw new Error(`SourceFile has no information about its end position.`);
+    }
+    return this.endPosition;
+  }
+
+  public getFirstToken(): Token {
+    if (this.elements.length === 0) {
+      throw new Error(`Can not get first token of an empty SourceFile.`); 
+    }
+    return this.elements[0].getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length === 0) {
+      throw new Error(`Can not get last token of an empty SourceFile.`); 
+    }
+    return this.elements[this.elements.length-1].getLastToken();
+  }
+
 }
 

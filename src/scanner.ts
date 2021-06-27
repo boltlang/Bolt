@@ -1,5 +1,6 @@
 
-import { createIdentifier, createSimpleToken, SyntaxKind, TextPosition, Token, TokenSyntaxKind } from "./cst";
+import { TextPosition } from "./text";
+import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger } from "./token";
 import { BufferedStream, hasOwnProperty } from "./util";
 
 const EOF = '\uFFFF';
@@ -14,6 +15,21 @@ function isIdentStart(ch: string): boolean {
 
 function isIdentPart(ch: string): boolean {
   return /[a-zA-Z0-9_]/.test(ch);
+}
+
+function isDigit(ch: string): boolean {
+  return /[0-9]/.test(ch);
+}
+
+function countLeadingChars(text: string, ch: string): number {
+  let i = 0;
+  for (const ch2 of text) {
+    if (ch2 !== ch) {
+      break;
+    }
+    i++;
+  }
+  return i;
 }
 
 const ASCII_ESCAPE_CHARS: Record<string, string> = {
@@ -38,17 +54,17 @@ function describeChar(ch: string): string {
   return `character '${ch}'`
 }
 
-const KEYWORDS: Record<string, TokenSyntaxKind> = {
-  'return': SyntaxKind.ReturnKeyword,
-  'struct': SyntaxKind.StructKeyword,
-  'type': SyntaxKind.TypeKeyword,
-  'import': SyntaxKind.ImportKeyword,
-  'pub': SyntaxKind.PubKeyword,
-  'mut': SyntaxKind.MutKeyword,
-  'let': SyntaxKind.LetKeyword,
-  'perform': SyntaxKind.PerformKeyword,
-  'yield': SyntaxKind.YieldKeyword,
-  'resume': SyntaxKind.ResumeKeyword,
+const KEYWORDS: Record<string, TokenType> = {
+  'return': TokenType.ReturnKeyword,
+  'struct': TokenType.StructKeyword,
+  'type': TokenType.TypeKeyword,
+  'import': TokenType.ImportKeyword,
+  'pub': TokenType.PubKeyword,
+  'mut': TokenType.MutKeyword,
+  'let': TokenType.LetKeyword,
+  'perform': TokenType.PerformKeyword,
+  'yield': TokenType.YieldKeyword,
+  'resume': TokenType.ResumeKeyword,
 }
 
 export class ScanError extends Error {
@@ -144,12 +160,12 @@ export class Scanner extends BufferedStream<Token> {
     }
   }
 
-  private scanChar(kind: TokenSyntaxKind): Token {
+  private scanChar(kind: TokenType): Token {
     const startPos = this.getPosition();
     this.getChar();
     const endPos = this.getPosition();
     // @ts-ignore Unification fails due to `kind` being ambiguous
-    return createSimpleToken(kind, this.currIndentLevel, [startPos, endPos]);
+    return new SimpleToken(kind, this.currIndentLevel, [startPos, endPos]);
   }
 
   public read(): Token {
@@ -161,19 +177,33 @@ export class Scanner extends BufferedStream<Token> {
       const c0 = this.peekChar()
 
       if (c0 === EOF) {
-        return createSimpleToken(SyntaxKind.EndOfFile, 0);
+        return new EndOfFile([ this.getPosition(), this.getPosition() ]);
       }
 
       switch (c0) {
-        case '(': return this.scanChar(SyntaxKind.LParen);
-        case '(': return this.scanChar(SyntaxKind.RParen);
-        case '{': return this.scanChar(SyntaxKind.LBrace);
-        case '}': return this.scanChar(SyntaxKind.RBrace);
-        case '[': return this.scanChar(SyntaxKind.LBracket);
-        case ']': return this.scanChar(SyntaxKind.RBracket);
-        case '.': return this.scanChar(SyntaxKind.DotSign);
-        case ':': return this.scanChar(SyntaxKind.ColonSign);
-        case '=': return this.scanChar(SyntaxKind.EqualSign);
+        case '(': return this.scanChar(TokenType.LParen);
+        case ')': return this.scanChar(TokenType.RParen);
+        case '{': return this.scanChar(TokenType.LBrace);
+        case '}': return this.scanChar(TokenType.RBrace);
+        case '[': return this.scanChar(TokenType.LBracket);
+        case ']': return this.scanChar(TokenType.RBracket);
+        case '.': return this.scanChar(TokenType.DotSign);
+        case ':': return this.scanChar(TokenType.ColonSign);
+        case '=': return this.scanChar(TokenType.EqualSign);
+        case ',': return this.scanChar(TokenType.CommaSign);
+      }
+
+      if (isDigit(c0)) {
+        const startPos = this.getPosition()
+        this.getChar()
+        const digits = c0 + this.takeWhile(isDigit)
+        const endPos = this.getPosition();
+        return new DecimalInteger(
+          countLeadingChars(digits, '0'),
+          BigInt(digits),
+          this.currIndentLevel,
+          [ startPos, endPos ]
+        );
       }
 
       if (isIdentStart(c0)) {
@@ -183,9 +213,9 @@ export class Scanner extends BufferedStream<Token> {
         const endPos = this.getPosition();
         if (hasOwnProperty(KEYWORDS, name)) {
           // @ts-ignore Unification fails due to KEYWORDS[name] being ambiguous
-          return createSimpleToken(KEYWORDS[name], this.currIndentLevel, [startPos, endPos]);
+          return new SimpleToken(KEYWORDS[name], this.currIndentLevel, [startPos, endPos]);
         }
-        return createIdentifier(name, this.currIndentLevel, [startPos, endPos]);
+        return new Identifier(name, this.currIndentLevel, [startPos, endPos]);
       }
 
       throw new ScanError(c0, this.textOffset);
