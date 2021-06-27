@@ -1,5 +1,5 @@
 import { PrintExcerptOptions, TextFile, TextPosition, TextRange, TextSpan } from "./text";
-import { ColonSign, DecimalInteger, DotSign, EqualSign, Identifier, LetKeyword, LParen, PubKeyword, RArrowSign, ReturnKeyword, RParen, StructKeyword, TildeSign, Token } from "./token";
+import { ColonSign, DecimalInteger, DotSign, EqualSign, Identifier, LetKeyword, LParen, MatchKeyword, PubKeyword, RArrowSign, ReturnKeyword, RParen, StructKeyword, TildeSign, Token } from "./token";
 
 export enum SyntaxKind {
 
@@ -20,6 +20,7 @@ export enum SyntaxKind {
   RecordDeclarationField,
   BlockDefinitionBody,
   InlineDefinitionBody,
+  MatchArm,
 
   // Patterns
   BindPattern,
@@ -116,6 +117,7 @@ export type Expression
   | CallExpression
   | BinaryExpression
   | NestedExpression
+  | MatchExpression
 
 export class NestedExpression extends SyntaxBase {
 
@@ -141,6 +143,69 @@ export class NestedExpression extends SyntaxBase {
 
   public getLastToken(): Token {
     return this.rparen;
+  }
+
+}
+
+export class MatchArm extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.MatchArm;
+
+  public constructor(
+    public pattern: Pattern,
+    public equalSign: EqualSign,
+    public expression: Expression,
+  ) {
+    super(SyntaxKind.MatchArm);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield* this.pattern.getTokens();
+    yield this.equalSign;
+    yield* this.expression.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    return this.pattern.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
+}
+
+export class MatchExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.MatchExpression;
+
+  public constructor(
+    public matchKeyword: MatchKeyword,
+    public expression: Expression,
+    public dotSign: DotSign,
+    public arms: MatchArm[],
+  ) {
+    super(SyntaxKind.MatchExpression);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.matchKeyword;
+    yield* this.expression.getTokens()
+    yield this.dotSign;
+    for (const arm of this.arms) {
+      yield* arm.getTokens();
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.matchKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.arms.length > 0) {
+      return this.arms[this.arms.length-1].getLastToken();
+    }
+    return this.dotSign;
   }
 
 }
@@ -367,10 +432,7 @@ export class TypeParameter extends SyntaxBase {
 
 }
 
-export interface Block<T> {
-  dotSign: DotSign;
-  elements: T[];
-}
+export type RecordDeclarationBody = [DotSign, Array<RecordDeclarationElement>];
 
 export class RecordDeclaration extends SyntaxBase {
 
@@ -381,7 +443,7 @@ export class RecordDeclaration extends SyntaxBase {
     public structKeyword: StructKeyword,
     public name: Identifier,
     public typeParams: TypeParameter[] = [],
-    public body: Block<RecordDeclarationElement> | null = null,
+    public body: RecordDeclarationBody | null = null,
   ) {
     super(SyntaxKind.RecordDeclaration);
   }
@@ -396,8 +458,8 @@ export class RecordDeclaration extends SyntaxBase {
       yield* typeParam.getTokens();
     }
     if (this.body !== null) {
-      yield this.body.dotSign;
-      for (const element of this.body.elements) {
+      yield this.body[0];
+      for (const element of this.body[1]) {
         yield* element.getTokens();
       }
     }
@@ -411,9 +473,10 @@ export class RecordDeclaration extends SyntaxBase {
 
   public getLastToken(): Token {
     if (this.body !== null) {
-      return this.body.elements.length > 0
-          ? this.body.elements[this.body.elements.length-1].getLastToken()
-          : this.body.dotSign;
+      const [dotSign, elements] = this.body;
+      return elements.length > 0
+          ? elements[elements.length-1].getLastToken()
+          : dotSign;
     }
     if (this.typeParams.length > 0) {
       return this.typeParams[this.typeParams.length-1].getLastToken();

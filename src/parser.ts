@@ -23,7 +23,10 @@ import {
   TuplePattern,
   Pattern,
   BinaryExpression,
-  NestedExpression
+  NestedExpression,
+  MatchExpression,
+  MatchArm,
+  RecordDeclarationBody
 } from "./cst";
 import {
   Diagnostics,
@@ -148,9 +151,84 @@ export class Parser {
     return new QualName(modulePath, name);
   }
 
+  public parseMatchExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<MatchExpression> {
+
+    const matchKeyword = tokens.peek()
+    if (matchKeyword.type !== TokenType.MatchKeyword) {
+      if (ctx.enableDiagnostics) {
+        this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, matchKeyword, [ TokenType.MatchKeyword ]));
+      }
+      return MAY_BACKTRACK
+    }
+    tokens.get();
+
+    const afterMatchCtx = { file: ctx.file, enableDiagnostics: true };
+
+    const expression = this.parseExpression(tokens, afterMatchCtx)
+    if (typeof(expression) === 'number') {
+      return expression;
+    }
+
+    const dotSign = tokens.peek();
+    if (dotSign.type !== TokenType.DotSign) {
+      this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, dotSign, [ TokenType.DotSign ]));
+      return NO_BACKTRACK
+    }
+    tokens.get();
+
+    const arms = [];
+
+    const firstToken = tokens.peek();
+    let lastRefToken = firstToken;
+    for (;;) {
+      const t3 = tokens.peek();
+      if (t3.type === TokenType.EndOfIndent) {
+        break;
+      }
+      if (t3.getStartLine() === dotSign.getStartLine()) {
+        this.diagnostics.add(new NewLineRequiredDiagnostic(ctx.file, t3));
+        return NO_BACKTRACK;
+      }
+      if (t3.getStartColumn() < lastRefToken.getStartColumn()) {
+        if (t3.getStartColumn() > firstToken.getStartColumn()) {
+          this.diagnostics.add(new UnexpectedIndentationDiagnostic(ctx.file, CompareMode.Equal, t3.getStartColumn()-1, lastRefToken.getStartColumn()-1)) ;
+          return NO_BACKTRACK;
+        }
+        break;
+      }
+      lastRefToken = t3;
+      const armTokens = new LineFoldTokenStream(tokens, t3.getStartPos());
+      const pattern = this.parsePattern(armTokens, afterMatchCtx);
+      if (typeof (pattern) === 'number') {
+        return pattern;
+      }
+      const equalSign = armTokens.peek()
+      if (equalSign.type !== TokenType.EqualSign) {
+        this.diagnostics.add(new UnexpectedTokenDiagnostic(afterMatchCtx.file, equalSign, [ TokenType.EqualSign ]));
+        return NO_BACKTRACK;
+      }
+      armTokens.get();
+      const expression = this.parseExpression(armTokens, afterMatchCtx);
+      if (typeof(expression) === 'number') {
+        return expression;
+      }
+      arms.push(new MatchArm(pattern, equalSign, expression));
+    }
+
+    return new MatchExpression(
+      matchKeyword,
+      expression,
+      dotSign,
+      arms,
+    );
+
+  }
+
   public parsePrimitiveExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<Expression> {
     const t0 = tokens.peek();
     switch (t0.type) {
+      case TokenType.MatchKeyword:
+        return this.parseMatchExpression(tokens, ctx);
       case TokenType.Identifier:
         tokens.get();
         return new ReferenceExpression(t0);
@@ -188,7 +266,8 @@ export class Parser {
     const args = [];
     for (;;) {
       const t1 = tokens.peek();
-      if (t1.type === TokenType.RParen || isOperator(t1) || t1.type === TokenType.EndOfIndent) {
+      // FIXME TokenType.DotSign should only be checked if it is the last token on the line
+      if (t1.type === TokenType.DotSign || t1.type === TokenType.RParen || isOperator(t1) || t1.type === TokenType.EndOfIndent) {
         break;
       }
       const arg = this.parsePrimitiveExpression(tokens, ctx)
@@ -300,7 +379,7 @@ export class Parser {
   public parseStructDeclaration(tokens: TokenStream, ctx: ParseContext): ParseResult<RecordDeclaration> {
     let pubKeyword = null;
     const typeParams = [];
-    let body = null;
+    let body: RecordDeclarationBody | null = null;
     let t0 = tokens.peek();
     const firstToken = t0;
     if (t0.type === TokenType.PubKeyword) {
@@ -381,7 +460,7 @@ export class Parser {
           return NO_BACKTRACK;
         }
       }
-      body = { dotSign, elements };
+      body = [dotSign, elements];
     }
     return new RecordDeclaration(
       pubKeyword,

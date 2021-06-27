@@ -6,6 +6,7 @@ export enum TokenType {
   EndOfIndent,
   Identifier,
   CustomOperator,
+  Assignment,
   DecimalInteger,
   StructKeyword,
   ReturnKeyword,
@@ -16,6 +17,7 @@ export enum TokenType {
   TypeKeyword,
   PerformKeyword,
   ResumeKeyword,
+  MatchKeyword,
   YieldKeyword,
   DotSign,
   DotDotSign,
@@ -24,6 +26,7 @@ export enum TokenType {
   RArrowSign,
   TildeSign,
   CommaSign,
+  BSlashSign,
   LBracket,
   RBracket,
   LBrace,
@@ -39,6 +42,7 @@ export type Token
   | RArrowSign
   | DecimalInteger
   | CustomOperator
+  | Assignment
   | StructKeyword
   | ReturnKeyword
   | ImportKeyword
@@ -48,6 +52,7 @@ export type Token
   | TypeKeyword
   | PerformKeyword
   | ResumeKeyword
+  | MatchKeyword
   | YieldKeyword
   | DotSign
   | DotDotSign
@@ -55,6 +60,7 @@ export type Token
   | EqualSign
   | TildeSign
   | CommaSign
+  | BSlashSign
   | LBracket
   | RBracket
   | LBrace
@@ -88,6 +94,8 @@ export abstract class TokenBase {
       },
     })
   }
+
+  public abstract getText(): string;
 
   public getRange(): TextRange {
     if (this.range === null) {
@@ -126,7 +134,7 @@ export class EndOfFile extends TokenBase {
 
   public readonly type!: TokenType.EndOfFile;
 
-  constructor(
+  public constructor(
     range: TextRange | null = null,
   ) {
     super(TokenType.EndOfFile, 0, range);
@@ -142,7 +150,7 @@ export class EndOfIndent extends TokenBase {
 
   public readonly type!: TokenType.EndOfIndent;
 
-  constructor(
+  public constructor(
     public token: Token
   ) {
     super(TokenType.EndOfIndent, token.indentLevel, token.range);
@@ -158,7 +166,7 @@ export class Identifier extends TokenBase {
 
   public readonly type!: TokenType.Identifier;
 
-  constructor(
+  public constructor(
     public text: string,
     indentLevel: number,
     range: TextRange | null = null,
@@ -176,7 +184,7 @@ export class CustomOperator extends TokenBase {
 
   public readonly type!: TokenType.CustomOperator;
 
-  constructor(
+  public constructor(
     public text: string,
     indentLevel: number,
     range: TextRange | null = null,
@@ -186,6 +194,24 @@ export class CustomOperator extends TokenBase {
 
   public getText(): string {
     return this.text;
+  }
+
+}
+
+export class Assignment extends TokenBase {
+
+  public readonly type!: TokenType.Assignment;
+
+  public constructor(
+    public text: string,
+    indentLevel: number,
+    range: TextRange | null = null,
+  ) {
+    super(TokenType.Assignment, indentLevel, range);
+  }
+
+  public getText(): string {
+    return this.text + '=';
   }
 
 }
@@ -217,12 +243,17 @@ const TOKEN_TEXT: Partial<Record<TokenType, string>> = {
   [TokenType.YieldKeyword]: 'yield',
   [TokenType.ResumeKeyword]: 'resume',
   [TokenType.StructKeyword]: 'struct',
+  [TokenType.MatchKeyword]: 'match',
+  [TokenType.ReturnKeyword]: 'return',
+  [TokenType.ImportKeyword]: 'import',
+  [TokenType.TypeKeyword]: 'type',
   [TokenType.DotSign]: '.',
   [TokenType.DotDotSign]: '..',
   [TokenType.ColonSign]: ':',
   [TokenType.TildeSign]: '~',
   [TokenType.RArrowSign]: '->',
   [TokenType.CommaSign]: ',',
+  [TokenType.BSlashSign]: '\\',
   [TokenType.EqualSign]: '=',
   [TokenType.LBracket]: '{',
   [TokenType.RBracket]: '}',
@@ -257,6 +288,7 @@ export type EqualSign = SimpleToken<TokenType.EqualSign>;
 export type TildeSign = SimpleToken<TokenType.TildeSign>;
 export type RArrowSign = SimpleToken<TokenType.RArrowSign>;
 export type CommaSign = SimpleToken<TokenType.CommaSign>;
+export type BSlashSign = SimpleToken<TokenType.BSlashSign>;
 export type LBracket = SimpleToken<TokenType.LBracket>;
 export type RBracket = SimpleToken<TokenType.RBracket>;
 export type LParen = SimpleToken<TokenType.LParen>;
@@ -265,6 +297,7 @@ export type LBrace = SimpleToken<TokenType.LBrace>;
 export type RBrace = SimpleToken<TokenType.RBrace>;
 
 export type ReturnKeyword = SimpleToken<TokenType.ReturnKeyword>;
+export type MatchKeyword = SimpleToken<TokenType.MatchKeyword>;
 export type StructKeyword = SimpleToken<TokenType.StructKeyword>;
 export type ImportKeyword = SimpleToken<TokenType.ImportKeyword>;
 export type PubKeyword = SimpleToken<TokenType.PubKeyword>;

@@ -1,6 +1,6 @@
 
 import { TextPosition } from "./text";
-import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger, CustomOperator } from "./token";
+import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger, CustomOperator, Assignment } from "./token";
 import { BufferedStream, hasOwnProperty } from "./util";
 
 const EOF = '\uFFFF';
@@ -69,6 +69,7 @@ const KEYWORDS: Record<string, TokenType> = {
   'perform': TokenType.PerformKeyword,
   'yield': TokenType.YieldKeyword,
   'resume': TokenType.ResumeKeyword,
+  'match': TokenType.MatchKeyword,
 }
 
 export class ScanError extends Error {
@@ -195,6 +196,7 @@ export class Scanner extends BufferedStream<Token> {
         case ':': return this.scanChar(TokenType.ColonSign);
         case '=': return this.scanChar(TokenType.EqualSign);
         case ',': return this.scanChar(TokenType.CommaSign);
+        case '\\': return this.scanChar(TokenType.BSlashSign);
       }
 
       if (isOperator(c0)) {
@@ -203,7 +205,7 @@ export class Scanner extends BufferedStream<Token> {
         const text = c0 + this.takeWhile(isOperator);
         const endPos = this.getPosition();
         if (text.endsWith('=') && text[text.length-2] !== '=') {
-          return new Assignment(text, this.currIndentLevel, [startPos, endPos]);
+          return new Assignment(text.substring(0, text.length-1), this.currIndentLevel, [startPos, endPos]);
         }
         return new CustomOperator(text, this.currIndentLevel, [startPos, endPos]);
       }
