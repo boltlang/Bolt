@@ -1,4 +1,7 @@
-import {Syntax, SyntaxKind} from "./cst";
+
+import chalk from "chalk"
+
+import { Syntax, SyntaxKind } from "./cst";
 import { formatExcerpt, TextFile } from "./text";
 import { describeTokenType, Token, TokenType } from "./token";
 import { CompareMode } from "./util";
@@ -46,7 +49,7 @@ export class UnexpectedTokenDiagnostic implements Diagnostic {
 
   public format(): string {
     let out = '';
-    out += this.getMessage() + '\n\n';
+    out += chalk.bold.red('error:') + ' ' + this.getMessage() + '\n\n';
     out += formatExcerpt(this.file.getText(), this.actual.range!)
     return out;
   }

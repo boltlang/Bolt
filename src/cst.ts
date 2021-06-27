@@ -1,4 +1,4 @@
-import { TextFile, TextPosition, TextRange, TextSpan } from "./text";
+import { PrintExcerptOptions, TextFile, TextPosition, TextRange, TextSpan } from "./text";
 import { ColonSign, DecimalInteger, DotSign, EqualSign, Identifier, LetKeyword, LParen, PubKeyword, RArrowSign, ReturnKeyword, RParen, StructKeyword, TildeSign, Token } from "./token";
 
 export enum SyntaxKind {
@@ -31,6 +31,8 @@ export enum SyntaxKind {
   ConstantExpression,
   MatchExpression,
   CallExpression,
+  BinaryExpression,
+  NestedExpression,
 
   // Statements
   ReturnStatement,
@@ -112,6 +114,64 @@ export type Expression
   = ReferenceExpression
   | ConstantExpression
   | CallExpression
+  | BinaryExpression
+  | NestedExpression
+
+export class NestedExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.NestedExpression;
+
+  public constructor(
+    public lparen: LParen,
+    public expression: Expression,
+    public rparen: RParen,
+  ) {
+    super(SyntaxKind.NestedExpression);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield this.lparen;
+    yield* this.expression.getTokens();
+    yield this.rparen;
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
+}
+
+export class BinaryExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.BinaryExpression;
+
+  public constructor(
+    public lhs: Expression,
+    public operator: Token,
+    public rhs: Expression,
+  ) {
+    super(SyntaxKind.BinaryExpression);
+  }
+
+  public *getTokens(): Iterable<Token> {
+    yield* this.lhs.getTokens();
+    yield this.operator;
+    yield* this.rhs.getTokens();
+  }
+
+  public getFirstToken(): Token {
+    return this.lhs.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.rhs.getLastToken();
+  }
+
+}
 
 export class ReferenceExpression extends SyntaxBase {
 
@@ -440,24 +500,21 @@ export class Parameter extends SyntaxBase {
   public readonly kind!: SyntaxKind.Parameter;
 
   public constructor(
-    public name: Identifier,
-    public defaultValue: ParameterDefaultValue | null = null,
+    public pattern: Pattern,
   ) {
     super(SyntaxKind.Parameter);
   }
 
   public *getTokens(): Iterable<Token> {
-    yield this.name;
+    yield* this.pattern.getTokens();
   }
 
   public getFirstToken(): Token {
-    return this.name;
+    return this.pattern.getFirstToken();
   }
 
   public getLastToken(): Token {
-    return this.defaultValue !== null
-      ? this.defaultValue.expression.getLastToken()
-      : this.name;
+    return this.pattern.getLastToken();
   }
 
 }
@@ -505,6 +562,7 @@ export class Declaration extends SyntaxBase {
 export type Pattern
   = BindPattern
   | TuplePattern
+  | ConstantExpression
 
 export class BindPattern extends SyntaxBase {
 

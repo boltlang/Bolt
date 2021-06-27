@@ -1,6 +1,6 @@
 
 import { TextPosition } from "./text";
-import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger } from "./token";
+import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger, CustomOperator } from "./token";
 import { BufferedStream, hasOwnProperty } from "./util";
 
 const EOF = '\uFFFF';
@@ -19,6 +19,10 @@ function isIdentPart(ch: string): boolean {
 
 function isDigit(ch: string): boolean {
   return /[0-9]/.test(ch);
+}
+
+function isOperator(ch: string): boolean {
+  return /[+\-*/%&^|<>=?!]/.test(ch);
 }
 
 function countLeadingChars(text: string, ch: string): number {
@@ -191,6 +195,17 @@ export class Scanner extends BufferedStream<Token> {
         case ':': return this.scanChar(TokenType.ColonSign);
         case '=': return this.scanChar(TokenType.EqualSign);
         case ',': return this.scanChar(TokenType.CommaSign);
+      }
+
+      if (isOperator(c0)) {
+        const startPos = this.getPosition();
+        this.getChar()
+        const text = c0 + this.takeWhile(isOperator);
+        const endPos = this.getPosition();
+        if (text.endsWith('=') && text[text.length-2] !== '=') {
+          return new Assignment(text, this.currIndentLevel, [startPos, endPos]);
+        }
+        return new CustomOperator(text, this.currIndentLevel, [startPos, endPos]);
       }
 
       if (isDigit(c0)) {

@@ -19,6 +19,9 @@ yargs
       const diagnostics = new ConsoleDiagnostics();
       const parser = new Parser(diagnostics);
       const sourceFile = parser.parseSourceFile(scanner, { enableDiagnostics: true, file, });
+      if (typeof(sourceFile) === 'number') {
+        return;
+      }
       console.log(util.inspect(sourceFile, { colors: true, depth: Infinity }));
     }
   })

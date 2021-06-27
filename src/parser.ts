@@ -21,7 +21,9 @@ import {
   FunctionDefinition,
   SyntaxKind,
   TuplePattern,
-  Pattern
+  Pattern,
+  BinaryExpression,
+  NestedExpression
 } from "./cst";
 import {
   Diagnostics,
@@ -66,15 +68,49 @@ interface ParseContext {
   file: TextFile;
 }
 
+function isOperator(token: Token): boolean {
+  return token.type === TokenType.CustomOperator
+}
+
 type ParseResult<T> = T | number;
 
 const MAY_BACKTRACK = 1;
 const NO_BACKTRACK  = 2;
 
+const enum OperatorMode {
+  Prefix = 1,
+  InfixL = 2,
+  InfixR = 3,
+  Suffix = 4,
+  Infix  = InfixL | InfixR,
+}
+
+interface OperatorInfo {
+  text: string;
+  mode: OperatorMode;
+  precedence: number;
+}
+
+const DEFAULT_OPERATORS: Array<[string, OperatorMode, number]> = [
+  ['*', OperatorMode.InfixL, 1],
+  ['/', OperatorMode.InfixL, 1],
+  ['+', OperatorMode.InfixL, 2],
+  ['-', OperatorMode.InfixL, 2],
+  ['$', OperatorMode.InfixR, 10],
+];
+
 export class Parser {
 
-  constructor(public diagnostics: Diagnostics) {
+  private exprOperatorTable: OperatorInfo[] = [];
 
+  constructor(public diagnostics: Diagnostics) {
+    for (const [text, mode, precedence] of DEFAULT_OPERATORS) {
+      this.exprOperatorTable.push({
+        text,
+        mode,
+        precedence,
+      });
+    }
   }
 
   public parseQualName(tokens: TokenStream, ctx: ParseContext): ParseResult<QualName> {
@@ -121,6 +157,21 @@ export class Parser {
       case TokenType.DecimalInteger:
         tokens.get();
         return new ConstantExpression(t0);
+      case TokenType.LParen:
+        tokens.get();
+        const expression = this.parseExpression(tokens, ctx);
+        if (typeof(expression) === 'number') {
+          return expression;
+        }
+        const t1 = tokens.peek()
+        if (t1.type !== TokenType.RParen) {
+          if (ctx.enableDiagnostics) {
+            this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, t1, [ TokenType.RParen ]));
+          }
+          return MAY_BACKTRACK;
+        }
+        tokens.get();
+        return new NestedExpression(t0, expression, t1);
       default:
         if (ctx.enableDiagnostics) {
           this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, t0, [ TokenType.Identifier ]));
@@ -129,7 +180,7 @@ export class Parser {
     }
   }
 
-  public parseExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<Expression> {
+  public parseCallExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<Expression> {
     const expr0 = this.parsePrimitiveExpression(tokens, ctx);
     if (typeof(expr0) === 'number') {
       return expr0;
@@ -137,7 +188,7 @@ export class Parser {
     const args = [];
     for (;;) {
       const t1 = tokens.peek();
-      if (t1.type === TokenType.EndOfIndent) {
+      if (t1.type === TokenType.RParen || isOperator(t1) || t1.type === TokenType.EndOfIndent) {
         break;
       }
       const arg = this.parsePrimitiveExpression(tokens, ctx)
@@ -150,6 +201,77 @@ export class Parser {
       return expr0;
     }
     return new CallExpression(expr0, args);
+  }
+
+  public parseUnaryExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<Expression> {
+    const stack = [];
+    for (;;) {
+      const t0 = tokens.peek()
+      if (!isOperator(t0)) {
+        break;
+      }
+      const info0 = this.getOperatorInfo(OperatorMode.Prefix, t0.getText());
+      if (info0 === null) {
+        break;
+      }
+      stack.push(t0);
+    }
+    // TODO create PrefixExpression using the operator stack
+    return this.parseCallExpression(tokens, ctx);
+  }
+
+  private getOperatorInfo(mode: OperatorMode, text: string): OperatorInfo | null {
+    for (const info of this.exprOperatorTable) {
+      if (info.mode & mode && info.text === text) {
+        return info;
+      }
+    }
+    return null;
+  }
+
+  public parseOperatorsAfterExpression(tokens: TokenStream, ctx: ParseContext, lhs: Expression, minPrecedence: number): ParseResult<Expression> {
+    for (;;) {
+      const t0 = tokens.peek()
+      if (!isOperator(t0)) {
+        break;
+      }
+      const info0 = this.getOperatorInfo(OperatorMode.Infix, t0.getText());
+      if (info0 === null || info0.precedence < minPrecedence) {
+        break;
+      }
+      tokens.get();
+      let rhs = this.parseUnaryExpression(tokens, ctx);
+      if (typeof(rhs) === 'number') {
+        return rhs
+      }
+      for (;;) {
+        const t1 = tokens.peek()
+        if (!isOperator(t1)) {
+          break;
+        }
+        const info1 = this.getOperatorInfo(OperatorMode.Infix, t1.getText());
+        if (info1 === null
+          || (info1.precedence > info0.precedence 
+            || (info1.precedence === info0.precedence && info1.mode === OperatorMode.InfixR))) {
+          break;
+        }
+        const result = this.parseOperatorsAfterExpression(tokens, ctx, lhs, info1.precedence);
+        if (typeof(result) === 'number') {
+          return result;
+        }
+        rhs = result;
+      }
+      lhs = new BinaryExpression(lhs, t0, rhs);
+    }
+    return lhs;
+  }
+
+  public parseExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<Expression> {
+    const lhs = this.parseUnaryExpression(tokens, ctx)
+    if (typeof(lhs) === 'number') {
+      return lhs;
+    }
+    return this.parseOperatorsAfterExpression(tokens, ctx, lhs, 0);
   }
 
   public parseTypeExpression(tokens: TokenStream, ctx: ParseContext): ParseResult<TypeExpression> {
@@ -321,9 +443,12 @@ export class Parser {
         return new BindPattern(t0);
       case TokenType.LParen:
         return this.parseTuplePattern(tokens, ctx);
+      case TokenType.DecimalInteger:
+        tokens.get();
+        return new ConstantExpression(t0);
       default:
         if (ctx.enableDiagnostics) {
-          this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, t0, [ TokenType.LParen, TokenType.Identifier ]));
+          this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, t0, [ TokenType.LParen, TokenType.DecimalInteger, TokenType.Identifier ]));
         }
         return MAY_BACKTRACK;
     }
@@ -383,12 +508,11 @@ export class Parser {
       if (t2.type === TokenType.EqualSign || t2.type === TokenType.DotSign) {
         break;
       }
-      if (t2.type !== TokenType.Identifier) {
-        this.diagnostics.add(new UnexpectedTokenDiagnostic(ctx.file, t2, [ TokenType.Identifier ]));
-        return NO_BACKTRACK;
+      const pattern = this.parsePattern(tokens, ctx);
+      if (typeof(pattern) === 'number') {
+        return pattern;
       }
-      tokens.get();
-      params.push(new Parameter(t2));
+      params.push(new Parameter(pattern));
     }
 
     // Parse the function's body
