@@ -158,8 +158,8 @@ export class LineFoldStart extends TokenBase {
 
   public readonly type!: TokenType.LineFoldStart;
 
-  public constructor() {
-    super(TokenType.LineFoldStart, 0, null);
+  public constructor(range: TextRange | null) {
+    super(TokenType.LineFoldStart, 0, range);
   }
 
   public getText(): string {
@@ -172,8 +172,8 @@ export class LineFoldEnd extends TokenBase {
 
   public readonly type!: TokenType.LineFoldEnd;
 
-  public constructor() {
-    super(TokenType.LineFoldEnd, 0, null);
+  public constructor(range: TextRange | null) {
+    super(TokenType.LineFoldEnd, 0, range);
   }
 
   public getText(): string {
@@ -192,6 +192,10 @@ export class BlockStart extends TokenBase {
     super(TokenType.BlockStart, 0, null);
   }
 
+  public getRange(): TextRange {
+    return this.dotSign.getRange();
+  }
+
   public getText(): string {
     return this.dotSign.getText();
   }
@@ -202,8 +206,8 @@ export class BlockEnd extends TokenBase {
 
   public readonly type!: TokenType.BlockEnd;
 
-  public constructor() {
-    super(TokenType.BlockEnd, 0, null);
+  public constructor(range: TextRange | null) {
+    super(TokenType.BlockEnd, 0, range);
   }
 
   public getText(): string {
@@ -385,8 +389,12 @@ export function describeTokenType(type: TokenType): string {
     case TokenType.CustomOperator: return 'an operator';
     case TokenType.DecimalInteger: return 'a decimal integer';
     case TokenType.EndOfIndent: return 'the end of a line fold';
+    case TokenType.BlockStart: return `a new indented block started with '.'`
+    case TokenType.BlockEnd: return `the end of an indented block`
+    case TokenType.LineFoldStart: return 'the start of a new line-fold';
+    case TokenType.LineFoldEnd: return 'the end of the current line-fold';
     default:
-      throw new Error(`Could not describe TokenType: value went by unhandled.`);
+      throw new Error(`Could not describe TokenType ${TokenType[type]}: value went by unhandled.`);
   }
 }
 

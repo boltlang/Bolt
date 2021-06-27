@@ -1,6 +1,18 @@
 
 import { TextPosition } from "./text";
-import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger, CustomOperator, Assignment, LineFoldEnd, BlockStart, LineFoldStart, BlockEnd } from "./token";
+import {
+  Token,
+  Identifier,
+  SimpleToken,
+  TokenType,
+  EndOfFile,
+  DecimalInteger,
+  CustomOperator,
+  Assignment,
+  LineFoldEnd,
+  BlockStart,
+  BlockEnd
+} from "./token";
 import { BufferedStream, hasOwnProperty, Stream } from "./util";
 
 const EOF = '\uFFFF';
@@ -215,9 +227,11 @@ export class Scanner extends BufferedStream<Token> {
         this.getChar()
         const digits = c0 + this.takeWhile(isDigit)
         const endPos = this.getPosition();
+        const numLeadingZeroes = countLeadingChars(digits, '0');
+        const value = BigInt(digits);
         return new DecimalInteger(
-          countLeadingChars(digits, '0'),
-          BigInt(digits),
+          value === BigInt(0) ? numLeadingZeroes-1 : numLeadingZeroes,
+          value,
           this.currIndentLevel,
           [ startPos, endPos ]
         );
@@ -248,7 +262,7 @@ const enum FrameType {
   LineFold,
 }
 
-const INIT_POS = { line: 1, column: 1, offset: 0 }
+const INIT_POS = { line: 0, column: 0, offset: 0 }
 
 export class Punctuator extends BufferedStream<Token> {
 
@@ -272,9 +286,9 @@ export class Punctuator extends BufferedStream<Token> {
       this.frameTypes.pop();
       switch (frameType) {
         case FrameType.LineFold:
-          return new LineFoldEnd();
+          return new LineFoldEnd(t0.range);
         case FrameType.Block:
-          return new BlockEnd();
+          return new BlockEnd(t0.range);
       }
     }
 
@@ -290,7 +304,7 @@ export class Punctuator extends BufferedStream<Token> {
           && t0.getStartColumn() <= refPos.column) {
           this.frameTypes.pop();
           this.referencePositions.pop();
-          return new LineFoldEnd();
+          return new LineFoldEnd(t0.range);
         }
 
         const t1 = this.tokens.peek(2);
@@ -309,29 +323,26 @@ export class Punctuator extends BufferedStream<Token> {
       case FrameType.Block:
       {
 
-        if (t0.getStartLine() > refPos.line
-          && t0.getStartColumn() <= refPos.column) {
-
-          // A token with an equal indentation to the reference token means
-          // that we need to start a new line-fold.
-          if (t0.getStartColumn() === refPos.column) {
-            this.referencePositions[this.referencePositions.length-1] = t0.getStartPos();
-            this.frameTypes.push(FrameType.LineFold);
-            return new LineFoldStart();
-          }
+        if (t0.getStartColumn() <= refPos.column) {
 
           // We only get here if the current token is less indented than the
-          // current reference token. Pop one reference token from the stack
-          // and leave the rest on it for whenever this method gets called again.
+          // current reference token. Pop the block indicator and leave the
+          // reference position be for the edge case where the parent line-fold
+          // continues after the block.
           this.frameTypes.pop();
-          this.referencePositions.pop();
-          return new BlockEnd();
+          return new BlockEnd(t0.range);
 
         }
 
         this.frameTypes.push(FrameType.LineFold);
         this.referencePositions.push(t0.getStartPos());
-        return new LineFoldStart();
+
+        // In theory, we could explictly issue a LineFoldStart and let all
+        // tokens be passed through in the FrameType.LineFold case. It does add
+        // more logic to the parser for no real benefit, which is why it was
+        // omitted.
+        this.tokens.get();
+        return t0;
       }
 
     }

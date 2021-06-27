@@ -40,11 +40,20 @@ export class UnexpectedTokenDiagnostic implements Diagnostic {
 
   public getMessage(): string {
     const expectedFragments = this.expected.map(describeTokenType);
-    if (this.actual.type === TokenType.EndOfIndent) {
-      return `got a wrongly indented '${this.actual.getText()}' while expecting ${formatSum(expectedFragments)}.`;
+    let actualText;
+    switch (this.actual.type) {
+      case TokenType.EndOfFile:
+      case TokenType.LineFoldStart:
+      case TokenType.LineFoldEnd:
+      case TokenType.BlockStart:
+      case TokenType.BlockEnd:
+        actualText = describeTokenType(this.actual.type);
+        break;
+      default:
+        actualText = `'${this.actual.getText()}'`;
+        break;
     }
-    const actualText = this.actual.type === TokenType.EndOfFile ? 'end-of-file' : `'${this.actual.getText()}'`;
-    return `got ${actualText} but expected ${formatSum(expectedFragments)}.`;
+    return `I expected ${formatSum(expectedFragments)} but got ${actualText}.`;
   }
 
   public format(): string {
