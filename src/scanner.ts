@@ -1,7 +1,7 @@
 
 import { TextPosition } from "./text";
-import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger, CustomOperator, Assignment } from "./token";
-import { BufferedStream, hasOwnProperty } from "./util";
+import { Token, Identifier, SimpleToken, TokenType, EndOfFile, DecimalInteger, CustomOperator, Assignment, LineFoldEnd, BlockStart, LineFoldStart, BlockEnd } from "./token";
+import { BufferedStream, hasOwnProperty, Stream } from "./util";
 
 const EOF = '\uFFFF';
 
@@ -243,4 +243,100 @@ export class Scanner extends BufferedStream<Token> {
 
 }
 
+const enum FrameType {
+  Block,
+  LineFold,
+}
+
+const INIT_POS = { line: 1, column: 1, offset: 0 }
+
+export class Punctuator extends BufferedStream<Token> {
+
+  private referencePositions: TextPosition[] = [ INIT_POS ];
+  private frameTypes: FrameType[] = [ FrameType.Block ];
+
+  constructor(private tokens: Stream<Token>) {
+    super();
+  }
+
+  public read(): Token {
+
+    const refPos = this.referencePositions[this.referencePositions.length-1];
+    const frameType = this.frameTypes[this.frameTypes.length-1];
+    const t0 = this.tokens.peek(1);
+
+    if (t0.type === TokenType.EndOfFile) {
+      if (this.frameTypes.length === 1) {
+        return t0;
+      }
+      this.frameTypes.pop();
+      switch (frameType) {
+        case FrameType.LineFold:
+          return new LineFoldEnd();
+        case FrameType.Block:
+          return new BlockEnd();
+      }
+    }
+
+    switch (frameType) {
+
+      case FrameType.LineFold:
+      {
+
+        // This important check verifies we're still inside the line-fold. If
+        // we aren't, we need to clean up the stack a bit and eventually return
+        // a token that indicates the line-fold ended.
+        if (t0.getStartLine() > refPos.line
+          && t0.getStartColumn() <= refPos.column) {
+          this.frameTypes.pop();
+          this.referencePositions.pop();
+          return new LineFoldEnd();
+        }
+
+        const t1 = this.tokens.peek(2);
+        if (t0.type === TokenType.DotSign && t0.getEndLine() < t1.getStartLine()) {
+          this.tokens.get();
+          this.frameTypes.push(FrameType.Block);
+          return new BlockStart(t0);
+        }
+
+        // If we got here, this is an ordinary token that is part of the
+        // line-fold. Make sure to consume it and return it to the caller.
+        this.tokens.get();
+        return t0;
+      }
+
+      case FrameType.Block:
+      {
+
+        if (t0.getStartLine() > refPos.line
+          && t0.getStartColumn() <= refPos.column) {
+
+          // A token with an equal indentation to the reference token means
+          // that we need to start a new line-fold.
+          if (t0.getStartColumn() === refPos.column) {
+            this.referencePositions[this.referencePositions.length-1] = t0.getStartPos();
+            this.frameTypes.push(FrameType.LineFold);
+            return new LineFoldStart();
+          }
+
+          // We only get here if the current token is less indented than the
+          // current reference token. Pop one reference token from the stack
+          // and leave the rest on it for whenever this method gets called again.
+          this.frameTypes.pop();
+          this.referencePositions.pop();
+          return new BlockEnd();
+
+        }
+
+        this.frameTypes.push(FrameType.LineFold);
+        this.referencePositions.push(t0.getStartPos());
+        return new LineFoldStart();
+      }
+
+    }
+
+  }
+
+}
 

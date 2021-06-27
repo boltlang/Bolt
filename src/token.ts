@@ -4,6 +4,10 @@ import { TextPosition, TextRange } from "./text";
 export enum TokenType {
   EndOfFile,
   EndOfIndent,
+  BlockStart,
+  BlockEnd,
+  LineFoldStart,
+  LineFoldEnd,
   Identifier,
   CustomOperator,
   Assignment,
@@ -38,6 +42,10 @@ export enum TokenType {
 export type Token
   = EndOfFile
   | EndOfIndent
+  | BlockStart
+  | BlockEnd
+  | LineFoldStart
+  | LineFoldEnd
   | Identifier
   | RArrowSign
   | DecimalInteger
@@ -145,6 +153,65 @@ export class EndOfFile extends TokenBase {
   }
 
 }
+
+export class LineFoldStart extends TokenBase {
+
+  public readonly type!: TokenType.LineFoldStart;
+
+  public constructor() {
+    super(TokenType.LineFoldStart, 0, null);
+  }
+
+  public getText(): string {
+    return '';
+  }
+
+}
+
+export class LineFoldEnd extends TokenBase {
+
+  public readonly type!: TokenType.LineFoldEnd;
+
+  public constructor() {
+    super(TokenType.LineFoldEnd, 0, null);
+  }
+
+  public getText(): string {
+    return '';
+  }
+
+}
+
+export class BlockStart extends TokenBase {
+
+  public readonly type!: TokenType.BlockStart;
+
+  public constructor(
+    public dotSign: DotSign,
+  ) {
+    super(TokenType.BlockStart, 0, null);
+  }
+
+  public getText(): string {
+    return this.dotSign.getText();
+  }
+
+}
+
+export class BlockEnd extends TokenBase {
+
+  public readonly type!: TokenType.BlockEnd;
+
+  public constructor() {
+    super(TokenType.BlockEnd, 0, null);
+  }
+
+  public getText(): string {
+    return '';
+  }
+
+}
+
 
 export class EndOfIndent extends TokenBase {
 

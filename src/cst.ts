@@ -1,4 +1,4 @@
-import { PrintExcerptOptions, TextFile, TextPosition, TextRange, TextSpan } from "./text";
+import { TextFile, TextPosition } from "./text";
 import { ColonSign, DecimalInteger, DotSign, EqualSign, Identifier, LetKeyword, LParen, MatchKeyword, PubKeyword, RArrowSign, ReturnKeyword, RParen, StructKeyword, TildeSign, Token } from "./token";
 
 export enum SyntaxKind {
