@@ -1,10 +1,9 @@
 
 import chalk from "chalk"
-import {Type} from "./checker";
+import {ArrowType, Type} from "./checker";
 
-import { Syntax, SyntaxKind } from "./cst";
+import { describeSyntaxKind, Token, Syntax, SyntaxKind } from "./cst";
 import { formatExcerpt, TextFile } from "./text";
-import { describeTokenType, Token, TokenType } from "./token";
 import { CompareMode } from "./util";
 
 interface Diagnostic {
@@ -27,7 +26,7 @@ export class ConsoleDiagnostics implements Diagnostics {
 
 }
 
-export type ExpectedParse = TokenType;
+export type ExpectedParse = SyntaxKind;
 
 export class UnexpectedTokenDiagnostic implements Diagnostic {
 
@@ -40,21 +39,21 @@ export class UnexpectedTokenDiagnostic implements Diagnostic {
   }
 
   public getMessage(): string {
-    const expectedFragments = this.expected.map(describeTokenType);
+    const expectedFragments = this.expected.map(describeSyntaxKind);
     let actualText;
-    switch (this.actual.type) {
-      case TokenType.EndOfFile:
-      case TokenType.LineFoldStart:
-      case TokenType.LineFoldEnd:
-      case TokenType.BlockStart:
-      case TokenType.BlockEnd:
-        actualText = describeTokenType(this.actual.type);
+    switch (this.actual.kind) {
+      case SyntaxKind.EndOfFile:
+      case SyntaxKind.LineFoldStart:
+      case SyntaxKind.LineFoldEnd:
+      case SyntaxKind.BlockStart:
+      case SyntaxKind.BlockEnd:
+        actualText = describeSyntaxKind(this.actual.kind);
         break;
       default:
         actualText = `'${this.actual.getText()}'`;
         break;
     }
-    return `I expected ${formatSum(expectedFragments)} but got ${actualText}.`;
+    return `Expected ${formatSum(expectedFragments)} but got ${actualText}.`;
   }
 
   public format(): string {
@@ -128,6 +127,32 @@ export class UnexpectedIndentationDiagnostic implements Diagnostic {
 
 }
 
+export class ParamCountMismatchDiagnostic implements Diagnostic {
+
+  public constructor(
+    public left: ArrowType,
+    public right: ArrowType,
+  ) {
+
+  }
+
+  public getMessage(): string {
+    let out = `Type ${this.left.format()} requires ${this.left.paramTypes.length} `;
+    out += this.left.paramTypes.length === 1 ? 'parameter' : 'parameters';
+    out += ` while ${this.right.format()} requires ${this.right.paramTypes.length}.`;
+    return out;
+  }
+
+  public format(): string {
+    let out = this.getMessage() + '\n\n';
+    if (this.left.node !== null) {
+      out += formatExcerpt(this.left.node.getSourceText(), this.left.node.getRange());
+    }
+    return out;
+  }
+
+}
+
 export class UnificationFailedDiagnostic implements Diagnostic {
 
   public constructor(
@@ -175,7 +200,7 @@ export class ExpectedEndOfLineFoldDiagnostic implements Diagnostic {
   }
 
   public getMessage(): string {
-    return `expected end of line-fold but got ${describeTokenType(this.actual.type)}.`;
+    return `expected end of line-fold but got ${describeSyntaxKind(this.actual.kind)}.`;
   }
 
   public format(): string {
@@ -197,7 +222,7 @@ export class NewLineRequiredDiagnostic implements Diagnostic {
   }
 
   public getMessage(): string {
-    return `expected ${describeTokenType(this.actual.type)} to be placed on a new line.`;
+    return `expected ${describeSyntaxKind(this.actual.kind)} to be placed on a new line.`;
   }
 
   public format() {

@@ -4,15 +4,16 @@ import {
   Token,
   Identifier,
   SimpleToken,
-  TokenType,
   EndOfFile,
   DecimalInteger,
   CustomOperator,
   Assignment,
   LineFoldEnd,
   BlockStart,
-  BlockEnd
-} from "./token";
+  BlockEnd,
+  SyntaxKind,
+  TokenSyntaxKind,
+} from "./cst";
 import { BufferedStream, hasOwnProperty, Stream } from "./util";
 
 const EOF = '\uFFFF';
@@ -70,18 +71,18 @@ function describeChar(ch: string): string {
   return `character '${ch}'`
 }
 
-const KEYWORDS: Record<string, TokenType> = {
-  'return': TokenType.ReturnKeyword,
-  'struct': TokenType.StructKeyword,
-  'type': TokenType.TypeKeyword,
-  'import': TokenType.ImportKeyword,
-  'pub': TokenType.PubKeyword,
-  'mut': TokenType.MutKeyword,
-  'let': TokenType.LetKeyword,
-  'perform': TokenType.PerformKeyword,
-  'yield': TokenType.YieldKeyword,
-  'resume': TokenType.ResumeKeyword,
-  'match': TokenType.MatchKeyword,
+const KEYWORDS: Record<string, TokenSyntaxKind> = {
+  'return': SyntaxKind.ReturnKeyword,
+  'struct': SyntaxKind.StructKeyword,
+  'type': SyntaxKind.TypeKeyword,
+  'import': SyntaxKind.ImportKeyword,
+  'pub': SyntaxKind.PubKeyword,
+  'mut': SyntaxKind.MutKeyword,
+  'let': SyntaxKind.LetKeyword,
+  'perform': SyntaxKind.PerformKeyword,
+  'yield': SyntaxKind.YieldKeyword,
+  'resume': SyntaxKind.ResumeKeyword,
+  'match': SyntaxKind.MatchKeyword,
 }
 
 export class ScanError extends Error {
@@ -178,12 +179,12 @@ export class Scanner extends BufferedStream<Token> {
     }
   }
 
-  private scanChar(kind: TokenType): Token {
+  private scanChar(kind: SyntaxKind): Token {
     const startPos = this.getPosition();
     this.getChar();
     const endPos = this.getPosition();
     // @ts-ignore Unification fails due to `kind` being ambiguous
-    return new SimpleToken(kind, this.currIndentLevel, [startPos, endPos]);
+    return new SimpleToken(kind, [startPos, endPos]);
   }
 
   public read(): Token {
@@ -199,16 +200,16 @@ export class Scanner extends BufferedStream<Token> {
       }
 
       switch (c0) {
-        case '(': return this.scanChar(TokenType.LParen);
-        case ')': return this.scanChar(TokenType.RParen);
-        case '{': return this.scanChar(TokenType.LBrace);
-        case '}': return this.scanChar(TokenType.RBrace);
-        case '[': return this.scanChar(TokenType.LBracket);
-        case ']': return this.scanChar(TokenType.RBracket);
-        case '.': return this.scanChar(TokenType.DotSign);
-        case ':': return this.scanChar(TokenType.ColonSign);
-        case ',': return this.scanChar(TokenType.CommaSign);
-        case '\\': return this.scanChar(TokenType.BSlashSign);
+        case '(': return this.scanChar(SyntaxKind.LParen);
+        case ')': return this.scanChar(SyntaxKind.RParen);
+        case '{': return this.scanChar(SyntaxKind.LBrace);
+        case '}': return this.scanChar(SyntaxKind.RBrace);
+        case '[': return this.scanChar(SyntaxKind.LBracket);
+        case ']': return this.scanChar(SyntaxKind.RBracket);
+        case '.': return this.scanChar(SyntaxKind.DotSign);
+        case ':': return this.scanChar(SyntaxKind.ColonSign);
+        case ',': return this.scanChar(SyntaxKind.CommaSign);
+        case '\\': return this.scanChar(SyntaxKind.BSlashSign);
       }
 
       if (isOperator(c0)) {
@@ -217,12 +218,12 @@ export class Scanner extends BufferedStream<Token> {
         const text = c0 + this.takeWhile(isOperator);
         const endPos = this.getPosition();
         if (text === '=') {
-          return new SimpleToken(TokenType.EqualSign, this.currIndentLevel, [ startPos, endPos ]);
+          return new SimpleToken(SyntaxKind.EqualSign, [ startPos, endPos ]);
         } else if (text.endsWith('=') && text[text.length-2] !== '=') {
           console.log('here')
-          return new Assignment(text.substring(0, text.length-1), this.currIndentLevel, [startPos, endPos]);
+          return new Assignment(text.substring(0, text.length-1), [startPos, endPos]);
         }
-        return new CustomOperator(text, this.currIndentLevel, [startPos, endPos]);
+        return new CustomOperator(text, [startPos, endPos]);
       }
 
       if (isDigit(c0)) {
@@ -235,7 +236,6 @@ export class Scanner extends BufferedStream<Token> {
         return new DecimalInteger(
           value === BigInt(0) ? numLeadingZeroes-1 : numLeadingZeroes,
           value,
-          this.currIndentLevel,
           [ startPos, endPos ]
         );
       }
@@ -247,9 +247,9 @@ export class Scanner extends BufferedStream<Token> {
         const endPos = this.getPosition();
         if (hasOwnProperty(KEYWORDS, name)) {
           // @ts-ignore Unification fails due to KEYWORDS[name] being ambiguous
-          return new SimpleToken(KEYWORDS[name], this.currIndentLevel, [startPos, endPos]);
+          return new SimpleToken(KEYWORDS[name], [startPos, endPos]);
         }
-        return new Identifier(name, this.currIndentLevel, [startPos, endPos]);
+        return new Identifier(name, [startPos, endPos]);
       }
 
       throw new ScanError(c0, this.textOffset);
@@ -282,7 +282,7 @@ export class Punctuator extends BufferedStream<Token> {
     const frameType = this.frameTypes[this.frameTypes.length-1];
     const t0 = this.tokens.peek(1);
 
-    if (t0.type === TokenType.EndOfFile) {
+    if (t0.kind === SyntaxKind.EndOfFile) {
       if (this.frameTypes.length === 1) {
         return t0;
       }
@@ -311,7 +311,7 @@ export class Punctuator extends BufferedStream<Token> {
         }
 
         const t1 = this.tokens.peek(2);
-        if (t0.type === TokenType.DotSign && t0.getEndLine() < t1.getStartLine()) {
+        if (t0.kind === SyntaxKind.DotSign && t0.getEndLine() < t1.getStartLine()) {
           this.tokens.get();
           this.frameTypes.push(FrameType.Block);
           return new BlockStart(t0);

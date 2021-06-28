@@ -1,7 +1,7 @@
 
 import test from "ava"
 import { Punctuator, Scanner } from "./scanner";
-import { Token, TokenType } from "./token";
+import { Token, SyntaxKind } from "./cst";
 
 function scan(text: string): Token[] {
   const scanner = new Scanner(text);
@@ -9,7 +9,7 @@ function scan(text: string): Token[] {
   const result = [];
   for (;;) {
     const t0 = tokens.get();
-    if (t0.type === TokenType.EndOfFile) {
+    if (t0.kind === SyntaxKind.EndOfFile) {
       break;
     }
     result.push(t0);
@@ -25,20 +25,20 @@ foo.
   c
 `)
   t.assert(tokens.length === 10);
-  //t.assert(tokens[0].type === TokenType.LineFoldStart);
-  t.assert(tokens[0].type === TokenType.Identifier);
-  t.assert(tokens[1].type === TokenType.BlockStart);
-  //t.assert(tokens[3].type === TokenType.LineFoldStart);
-  t.assert(tokens[2].type === TokenType.Identifier);
-  t.assert(tokens[3].type === TokenType.LineFoldEnd);
-  //t.assert(tokens[6].type === TokenType.LineFoldStart);
-  t.assert(tokens[4].type === TokenType.Identifier);
-  t.assert(tokens[5].type === TokenType.LineFoldEnd);
-  //t.assert(tokens[9].type === TokenType.LineFoldStart);
-  t.assert(tokens[6].type === TokenType.Identifier);
-  t.assert(tokens[7].type === TokenType.LineFoldEnd);
-  t.assert(tokens[8].type === TokenType.BlockEnd);
-  t.assert(tokens[9].type === TokenType.LineFoldEnd);
+  //t.assert(tokens[0].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[0].kind === SyntaxKind.Identifier);
+  t.assert(tokens[1].kind === SyntaxKind.BlockStart);
+  //t.assert(tokens[3].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[2].kind === SyntaxKind.Identifier);
+  t.assert(tokens[3].kind === SyntaxKind.LineFoldEnd);
+  //t.assert(tokens[6].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[4].kind === SyntaxKind.Identifier);
+  t.assert(tokens[5].kind === SyntaxKind.LineFoldEnd);
+  //t.assert(tokens[9].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[6].kind === SyntaxKind.Identifier);
+  t.assert(tokens[7].kind === SyntaxKind.LineFoldEnd);
+  t.assert(tokens[8].kind === SyntaxKind.BlockEnd);
+  t.assert(tokens[9].kind === SyntaxKind.LineFoldEnd);
 });
 
 test('a punctuator correctly punctuates nested blocks', t => {
@@ -50,24 +50,24 @@ a.
     e
 `)
   t.assert(tokens.length === 14);
-  //t.assert(tokens[0].type === TokenType.LineFoldStart);
-  t.assert(tokens[0].type === TokenType.Identifier);
-  t.assert(tokens[1].type === TokenType.BlockStart);
-  //t.assert(tokens[3].type === TokenType.LineFoldStart);
-  t.assert(tokens[2].type === TokenType.Identifier);
-  t.assert(tokens[3].type === TokenType.BlockStart);
-  //t.assert(tokens[6].type === TokenType.LineFoldStart);
-  t.assert(tokens[4].type === TokenType.Identifier);
-  t.assert(tokens[5].type === TokenType.LineFoldEnd);
-  //t.assert(tokens[9].type === TokenType.LineFoldStart);
-  t.assert(tokens[6].type === TokenType.Identifier);
-  t.assert(tokens[7].type === TokenType.LineFoldEnd);
-  //t.assert(tokens[12].type === TokenType.LineFoldStart);
-  t.assert(tokens[8].type === TokenType.Identifier);
-  t.assert(tokens[9].type === TokenType.LineFoldEnd);
-  t.assert(tokens[10].type === TokenType.BlockEnd);
-  t.assert(tokens[11].type === TokenType.LineFoldEnd);
-  t.assert(tokens[12].type === TokenType.BlockEnd);
-  t.assert(tokens[13].type === TokenType.LineFoldEnd);
+  //t.assert(tokens[0].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[0].kind === SyntaxKind.Identifier);
+  t.assert(tokens[1].kind === SyntaxKind.BlockStart);
+  //t.assert(tokens[3].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[2].kind === SyntaxKind.Identifier);
+  t.assert(tokens[3].kind === SyntaxKind.BlockStart);
+  //t.assert(tokens[6].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[4].kind === SyntaxKind.Identifier);
+  t.assert(tokens[5].kind === SyntaxKind.LineFoldEnd);
+  //t.assert(tokens[9].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[6].kind === SyntaxKind.Identifier);
+  t.assert(tokens[7].kind === SyntaxKind.LineFoldEnd);
+  //t.assert(tokens[12].kind === SyntaxKind.LineFoldStart);
+  t.assert(tokens[8].kind === SyntaxKind.Identifier);
+  t.assert(tokens[9].kind === SyntaxKind.LineFoldEnd);
+  t.assert(tokens[10].kind === SyntaxKind.BlockEnd);
+  t.assert(tokens[11].kind === SyntaxKind.LineFoldEnd);
+  t.assert(tokens[12].kind === SyntaxKind.BlockEnd);
+  t.assert(tokens[13].kind === SyntaxKind.LineFoldEnd);
 })
 

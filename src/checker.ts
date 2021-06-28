@@ -1,5 +1,5 @@
 import { Expression, Pattern, Syntax, SyntaxKind, TypeExpression } from "./cst";
-import {BindingNotFoundDiagnostic, Diagnostics, UnificationFailedDiagnostic} from "./diagnostics";
+import {BindingNotFoundDiagnostic, Diagnostics, ParamCountMismatchDiagnostic, UnificationFailedDiagnostic} from "./diagnostics";
 import {TokenType} from "./token";
 import {CustomMap, CustomSet} from "./util";
 
@@ -40,6 +40,12 @@ abstract class TypeBase {
 
   public flags: TypeFlags = TypeFlags.None;
 
+  public constructor(
+    public node: Syntax | null = null,
+  ) {
+
+  }
+
   public abstract substitute(mapping: TypeVarMap): Type;
 
   public abstract hasFreeVariable(typeVar: TypeVar): boolean;
@@ -56,11 +62,12 @@ export class TypeVar extends TypeBase {
   public constructor(
     public readonly id: number,
     public displayName: string,
+    node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
-  public getSolution(): Type {
+  public getFullySubstitutedType(): Type {
     let newType = this.fullSubstitution;
     while (newType !== null) {
       if (newType.kind !== TypeKind.TypeVar) {
@@ -72,11 +79,15 @@ export class TypeVar extends TypeBase {
     return newType === null ? this : newType;
   }
 
-  public isSolved(): boolean {
+  public getSolved(): Type {
+    return this.getFullySubstitutedType();
+  }
+
+  public hasSubstitution(): boolean {
     return this.directSubstitution !== null;
   }
 
-  public solveTo(targetType: Type): void {
+  public setSubstitution(targetType: Type): void {
     if (this.directSubstitution !== null) {
       throw new Error(`A type variable can only be solved once.`);
     }
@@ -107,8 +118,9 @@ export class BuiltinType extends TypeBase {
 
   public constructor(
     public id: BuiltinTypeID,
+    node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
   public substitute(mapping: TypeVarMap): BuiltinType {
@@ -117,6 +129,10 @@ export class BuiltinType extends TypeBase {
 
   public hasFreeVariable(typeVar: TypeVar): boolean {
     return false;
+  }
+
+  public getSolved(): Type {
+    return this;
   }
 
   public format(): string {
@@ -136,14 +152,16 @@ export class ArrowType extends TypeBase {
   public constructor(
     public paramTypes: Type[],
     public returnType: Type,
+    node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
   public substitute(mapping: TypeVarMap): ArrowType {
     return new ArrowType(
       this.paramTypes.map(t => t.substitute(mapping)),
       this.returnType.substitute(mapping),
+      this.node,
     );
   }
 
@@ -152,8 +170,16 @@ export class ArrowType extends TypeBase {
         || this.returnType.hasFreeVariable(typeVar);
   }
 
+  public getSolved(): ArrowType {
+    return new ArrowType(
+      this.paramTypes.map(t => t.getSolved()),
+      this.returnType.getSolved(),
+      this.node,
+    );
+  }
+
   public format(): string {
-    return `${this.paramTypes.map(t => t.format()).join('-> ')} -> ${this.returnType.format()}`;
+    return `${this.paramTypes.map(t => t.format()).join(' -> ')} -> ${this.returnType.format()}`;
   }
 
 }
@@ -162,8 +188,10 @@ export class AnyType extends TypeBase {
 
   public readonly kind = TypeKind.AnyType;
 
-  public constructor() {
-    super();
+  public constructor(
+    node: Syntax | null = null,
+  ) {
+    super(node);
   }
 
   public substitute(): AnyType {
@@ -176,6 +204,10 @@ export class AnyType extends TypeBase {
 
   public format(): string {
     return 'any';
+  }
+
+  public getSolved(): Type {
+    return this;
   }
 
 }
@@ -324,15 +356,6 @@ export class TypeEnv {
     return this.instantiate(scheme);
   }
 
-  public forceLookup(name: string): Type {
-    const type = this.lookup(name);
-    if (type === null) {
-      this.ctx.diagnostics.add(new BindingNotFoundDiagnostic(name));
-      return new AnyType();
-    }
-    return type;
-  }
-
 }
 
 export class TypeChecker {
@@ -390,7 +413,7 @@ export class TypeChecker {
           this.inferBindings(param.pattern, paramType, innerEnv, constraints)
         }
 
-        const type = new ArrowType(paramTypes, this.ctx.createTypeVar());
+        const type = new ArrowType(paramTypes, this.ctx.createTypeVar(), node);
         const scheme = new ForallScheme(typeVars, constraints, type);
 
         // Save the type and scoped type environment on the node so that
@@ -424,7 +447,7 @@ export class TypeChecker {
         const type = typeEnv.lookup(node.name.name.text);
         if (type === null) {
           this.diagnostics.add(new BindingNotFoundDiagnostic(node.name.name.text));
-          return new AnyType();
+          return new AnyType(node);
         }
         return type;
       }
@@ -567,9 +590,9 @@ export class TypeChecker {
 
       case SyntaxKind.ConstantExpression:
       {
-        switch (node.value.type) {
-          case TokenType.DecimalInteger:
-            return new BuiltinType(BuiltinTypeID.Int);
+        switch (node.value.kind) {
+          case SyntaxKind.DecimalInteger:
+            return new BuiltinType(BuiltinTypeID.Int, node);
         }
       }
 
@@ -579,7 +602,7 @@ export class TypeChecker {
         const argTypes = node.args.map(t => this.inferExpr(t, typeEnv, constraints));
         const returnType = this.ctx.createTypeVar();
         constraints.push(new EqualityConstraint(
-          new ArrowType(argTypes, returnType),
+          new ArrowType(argTypes, returnType, node),
           operatorType
         ));
         return returnType;
@@ -608,7 +631,7 @@ export class TypeChecker {
         const operatorType = typeEnv.lookup(node.operator.getText());
         if (operatorType === null) {
           this.diagnostics.add(new BindingNotFoundDiagnostic(node.operator.getText()));
-          return new AnyType();
+          return new AnyType(node);
         }
         const argTypes = [
           this.inferExpr(node.lhs, typeEnv, constraints),
@@ -616,7 +639,7 @@ export class TypeChecker {
         ];
         const returnType = this.ctx.createTypeVar();
         constraints.push(new EqualityConstraint(
-          new ArrowType(argTypes, returnType),
+          new ArrowType(argTypes, returnType, node),
           operatorType
         ));
         return returnType;
@@ -627,12 +650,13 @@ export class TypeChecker {
         const type = typeEnv.lookup(node.name.text);
         if (type === null) {
           this.diagnostics.add(new BindingNotFoundDiagnostic(node.name.text));
-          return new AnyType();
+          return new AnyType(node);
         }
         return type;
       }
 
       default:
+        // @ts-ignore TypeScript is too strict here
         throw new Error(`Could not infer type constraints for Expression: unhandled kind ${SyntaxKind[node.kind]}.`)
 
     }
@@ -649,25 +673,22 @@ export class TypeChecker {
 
   private unifyEquality(a: Type, b: Type): void {
 
-    const t1 = a;
-    const t2 = b;
-
     if (a === b) {
       return;
     }
 
     if (a.kind === TypeKind.TypeVar) {
-      if (!a.isSolved()) {
+      if (!a.hasSubstitution()) {
         if (b.hasFreeVariable(a)) {
-          this.diagnostics.add(new OccursCheckDiagnostic(a, b));
+          this.diagnostics.add(new OccursCheckDiagnostic(a.getSolved(), b.getSolved()));
           a.flags |= TypeFlags.UnificationFailed;
           b.flags |= TypeFlags.UnificationFailed;
           return;
         }
-        a.solveTo(b);
+        a.setSubstitution(b);
         return;
       }
-      a = a.getSolution();
+      a = a.getFullySubstitutedType();
     }
 
     if (b.kind === TypeKind.TypeVar) {
@@ -681,7 +702,7 @@ export class TypeChecker {
 
     if (a.kind === TypeKind.BuiltinType && b.kind === TypeKind.BuiltinType) {
       if (a.id !== b.id) {
-        this.diagnostics.add(new UnificationFailedDiagnostic(a, b));
+        this.diagnostics.add(new UnificationFailedDiagnostic(a.getSolved(), b.getSolved()));
       }
       return;
     }
@@ -689,7 +710,7 @@ export class TypeChecker {
     if (a.kind === TypeKind.ArrowType && b.kind === TypeKind.ArrowType) {
 
       if (a.paramTypes.length !== b.paramTypes.length) {
-        this.diagnostics.add(new ParamCountMismatchDiagnostic(a, b));
+        this.diagnostics.add(new ParamCountMismatchDiagnostic(a.getSolved(), b.getSolved()));
         return;
       }
 
@@ -701,7 +722,7 @@ export class TypeChecker {
       return;
     }
 
-    this.diagnostics.add(new UnificationFailedDiagnostic(a, b));
+    this.diagnostics.add(new UnificationFailedDiagnostic(a.getSolved(), b.getSolved()));
   }
 
 }

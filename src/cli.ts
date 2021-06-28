@@ -35,6 +35,7 @@ yargs
         }
         throw e;
       }
+      sourceFile.setParents()
       // console.log(util.inspect(sourceFile, { colors: true, depth: Infinity }));
       const ctx = new TypingContext(diagnostics);
       const typeEnv = new TypeEnv(ctx);
