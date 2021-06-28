@@ -31,6 +31,9 @@ import {
   Identifier,
   Token,
   TokenSyntaxKind,
+  Declaration,
+  RArrowSign,
+  TypeSignature,
 } from "./cst";
 import {
   Diagnostics,
@@ -424,7 +427,7 @@ export class Parser {
     }
   }
 
-  public parseDefinition(): FunctionDefinition | VariableDefinition {
+  public parseDefinition(): FunctionDefinition | VariableDefinition | Declaration {
 
     let pubKeyword = null;
     let body = null;
@@ -457,10 +460,10 @@ export class Parser {
 
     for (;;) {
       t2 = this.peekToken();
-      if (t2.kind === SyntaxKind.EndOfFile) {
-        this.raiseParseError(t2, [ SyntaxKind.Identifier, SyntaxKind.EqualSign, SyntaxKind.DotSign ]);
-      }
-      if (t2.kind === SyntaxKind.EqualSign || t2.kind === SyntaxKind.BlockStart) {
+      if (t2.kind === SyntaxKind.EqualSign
+        || t2.kind === SyntaxKind.BlockStart
+        || t2.kind === SyntaxKind.ColonSign
+        || t2.kind === SyntaxKind.LineFoldEnd) {
         break;
       }
       const pattern = this.parsePattern();
@@ -470,19 +473,40 @@ export class Parser {
       params.push(new Parameter(pattern));
     }
 
+    // Parse the type signature, if present
+
+    let typeSig = null;
+
+    if (t2.kind === SyntaxKind.ColonSign) {
+      this.getToken();
+      const paramTypes: Array<[TypeExpression, RArrowSign]> = [];
+      let returnType = this.parseTypeExpression();
+      for (;;) {
+        const t3 = this.peekToken()
+        if (t3.kind !== SyntaxKind.RArrowSign) {
+          break;
+        }
+        this.getToken()
+        const typeExpr = this.parseTypeExpression()
+        paramTypes.push([returnType, t3]);
+        returnType = typeExpr;
+      }
+      t2 = this.peekToken()
+      typeSig = new TypeSignature(paramTypes, returnType);
+    }
+
     // Parse the function's body
 
     switch (t2.kind) {
+
+      case SyntaxKind.LineFoldEnd:
+        break;
 
       case SyntaxKind.EqualSign:
       {
         this.getToken();
         const equalSign = t2;
         const expression = this.parseExpression();
-        const t3 = this.peekToken();
-        if (t3.kind !== SyntaxKind.LineFoldEnd) {
-          this.raiseParseError(t3, [ SyntaxKind.LineFoldEnd ]);
-        }
         body = new InlineDefinitionBody(
           equalSign,
           expression
@@ -524,13 +548,14 @@ export class Parser {
 
     if (params.length > 0) {
       if (pattern.kind !== SyntaxKind.BindPattern) {
-        this.raiseParseError(pattern);
+        this.raiseParseError(pattern.getFirstToken(), [ SyntaxKind.Identifier ]);
       }
       return new FunctionDefinition(
         pubKeyword,
         t0,
         pattern.name,
         params,
+        typeSig,
         body
       );
     }
@@ -539,6 +564,7 @@ export class Parser {
       pubKeyword,
       t0,
       pattern,
+      typeSig,
       body,
     );
 

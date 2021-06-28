@@ -15,7 +15,7 @@ import {
   TokenSyntaxKind,
 } from "./cst";
 import { BufferedStream, hasOwnProperty, Stream } from "./util";
-import { Diagnostic, UnexpectedCharacterDiagnostic } from "./diagnostics";
+import { UnexpectedCharacterDiagnostic } from "./diagnostics";
 
 function isWhiteSpace(ch: string): boolean {
   return /[\n\t\r ]/.test(ch);
@@ -34,7 +34,7 @@ function isDigit(ch: string): boolean {
 }
 
 function isOperator(ch: string): boolean {
-  return /[+\-*/%&^|<>=?!]/.test(ch);
+  return /[$+\-*/%&^|<>=?!]/.test(ch);
 }
 
 function countLeadingChars(text: string, ch: string): number {
@@ -197,9 +197,12 @@ export class Scanner extends BufferedStream<Token> {
         const endPos = this.getPosition();
         if (text === '=') {
           return new SimpleToken(SyntaxKind.EqualSign, [ startPos, endPos ]);
-        } else if (text.endsWith('=') && text[text.length-2] !== '=') {
-          console.log('here')
+        }
+        if (text.endsWith('=') && text[text.length-2] !== '=') {
           return new Assignment(text.substring(0, text.length-1), [startPos, endPos]);
+        }
+        switch (text) {
+          case '->': return new SimpleToken(SyntaxKind.RArrowSign, [startPos, endPos]);
         }
         return new CustomOperator(text, [startPos, endPos]);
       }

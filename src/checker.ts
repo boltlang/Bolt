@@ -1,6 +1,5 @@
 import { Expression, Pattern, Syntax, SyntaxKind, TypeExpression } from "./cst";
 import {BindingNotFoundDiagnostic, Diagnostics, ParamCountMismatchDiagnostic, UnificationFailedDiagnostic} from "./diagnostics";
-import {TokenType} from "./token";
 import {CustomMap, CustomSet} from "./util";
 
 export enum TypeKind {
@@ -30,8 +29,8 @@ const enum BuiltinTypeID {
 
 const BUILTIN_TYPES: Array<[BuiltinTypeID, string]> = [
   [BuiltinTypeID.Int, 'Int'],
-  [BuiltinTypeID.String, 'Int'],
-  [BuiltinTypeID.Bool, 'Int'],
+  [BuiltinTypeID.String, 'String'],
+  [BuiltinTypeID.Bool, 'Bool'],
 ]
 
 abstract class TypeBase {
@@ -400,20 +399,39 @@ export class TypeChecker {
         const constraints: Constraint[] = [];
 
         const paramTypes = [];
-        for (const param of node.params) {
-          let paramType: Type;
-          if (param.typeExpr === null) {
+        if (node.typeSig !== null) {
+          for (const [typeExpr, rarrowSign] of node.typeSig.paramTypes) {
+            paramTypes.push(this.inferTypeExpr(typeExpr, typeEnv));
+          }
+        }
+        for (let i = 0; i < node.params.length; i++) {
+          const param = node.params[i];
+          let paramType: Type = paramTypes[i] ;
+          if (param.typeExpr !== null) {
+            if (paramType === undefined) {
+              paramTypes.push(paramType);
+              paramType = this.inferTypeExpr(param.typeExpr, innerEnv);
+            } else {
+              constraints.push(new EqualityConstraint(paramType, this.inferTypeExpr(param.typeExpr, innerEnv)));
+            }
+          }
+          if (paramType === undefined) {
             const typeVar = this.ctx.createTypeVar();
             typeVars.add(typeVar);
             paramType = typeVar;
-          } else {
-            paramType = this.inferTypeExpr(param.typeExpr, innerEnv);
+            paramTypes.push(paramType);
           }
-          paramTypes.push(paramType);
           this.inferBindings(param.pattern, paramType, innerEnv, constraints)
         }
 
-        const type = new ArrowType(paramTypes, this.ctx.createTypeVar(), node);
+        let returnType
+        if (node.typeSig !== null) {
+          returnType = this.inferTypeExpr(node.typeSig.returnType, innerEnv)
+        } else {
+          returnType = this.ctx.createTypeVar();
+        }
+
+        const type = new ArrowType(paramTypes, returnType, node);
         const scheme = new ForallScheme(typeVars, constraints, type);
 
         // Save the type and scoped type environment on the node so that
@@ -427,7 +445,9 @@ export class TypeChecker {
 
         // Tail-recursive call where we iterate through the function's body,
         // looking for nested functions.
-        this.forwardDeclare(node.body, innerEnv);
+        if (node.body !== null) {
+          this.forwardDeclare(node.body, innerEnv);
+        }
 
         break;
       }
@@ -446,7 +466,7 @@ export class TypeChecker {
         // TODO Support fully qualified paths
         const type = typeEnv.lookup(node.name.name.text);
         if (type === null) {
-          this.diagnostics.add(new BindingNotFoundDiagnostic(node.name.name.text));
+          this.diagnostics.add(new BindingNotFoundDiagnostic(node.name.name));
           return new AnyType(node);
         }
         return type;
@@ -543,17 +563,26 @@ export class TypeChecker {
 
         }
 
-        if (node.body.kind === SyntaxKind.InlineDefinitionBody) {
-          // Generate constraints but do not add them to the current constraint
-          // list. Instead, add them to the scheme that represents this
-          // definition.
-          const resultType = this.inferExpr(node.body.expression, innerEnv, scheme.constraints);
-          constraints.push(new EqualityConstraint(type.returnType, resultType));
-        } else if (node.body.kind === SyntaxKind.BlockDefinitionBody) {
-          // TODO
-        } else {
-          // @ts-ignore TypeScript is too strict here
-           throw new Error(`Unexpected node of kind ${SyntaxKind[node.body.kind]}.`);
+        if (node.body !== null) {
+
+          switch (node.body.kind) {
+
+            case SyntaxKind.InlineDefinitionBody:
+            {
+              // Generate constraints but do not add them to the current constraint
+              // list. Instead, add them to the scheme that represents this
+              // definition.
+              const resultType = this.inferExpr(node.body.expression, innerEnv, scheme.constraints);
+              constraints.push(new EqualityConstraint(type.returnType, resultType));
+              break;
+            }
+
+            case SyntaxKind.BlockDefinitionBody:
+              // TODO
+              break;
+
+          }
+
         }
 
         break;
@@ -561,14 +590,16 @@ export class TypeChecker {
 
       case SyntaxKind.VariableDefinition:
       {
-        if (node.body.kind === SyntaxKind.InlineDefinitionBody) {
-          const type = this.inferExpr(node.body.expression, typeEnv, constraints);
-          this.inferBindings(node.pattern, type, typeEnv, constraints);
-        } else if (node.body.kind === SyntaxKind.BlockDefinitionBody) {
-          // TODO
-        } else {
-          // @ts-ignore TypeScript is too strict here
-           throw new Error(`Unexpected node of kind ${SyntaxKind[node.body.kind]}.`);
+        if (node.body !== null) {
+          if (node.body.kind === SyntaxKind.InlineDefinitionBody) {
+            const type = this.inferExpr(node.body.expression, typeEnv, constraints);
+            this.inferBindings(node.pattern, type, typeEnv, constraints);
+          } else if (node.body.kind === SyntaxKind.BlockDefinitionBody) {
+            // TODO
+          } else {
+            // @ts-ignore TypeScript is too strict here
+             throw new Error(`Unexpected node of kind ${SyntaxKind[node.body.kind]}.`);
+          }
         }
         break;
       }
@@ -630,7 +661,7 @@ export class TypeChecker {
       {
         const operatorType = typeEnv.lookup(node.operator.getText());
         if (operatorType === null) {
-          this.diagnostics.add(new BindingNotFoundDiagnostic(node.operator.getText()));
+          this.diagnostics.add(new BindingNotFoundDiagnostic(node.operator));
           return new AnyType(node);
         }
         const argTypes = [
@@ -649,7 +680,7 @@ export class TypeChecker {
       {
         const type = typeEnv.lookup(node.name.text);
         if (type === null) {
-          this.diagnostics.add(new BindingNotFoundDiagnostic(node.name.text));
+          this.diagnostics.add(new BindingNotFoundDiagnostic(node.name));
           return new AnyType(node);
         }
         return type;

@@ -5,8 +5,8 @@ import "source-map-support/register"
 import * as fs from "fs"
 import * as util from "util"
 import yargs from "yargs"
-import { ParseError, Parser } from "./parser";
-import { Punctuator, ScanError, Scanner } from "./scanner";
+import { Parser } from "./parser";
+import { Punctuator, Scanner } from "./scanner";
 import { ConsoleDiagnostics, Diagnostic } from "./diagnostics";
 import { TextFile } from "./text";
 import { TypeChecker, TypeEnv, TypingContext } from "./checker";

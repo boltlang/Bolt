@@ -57,6 +57,7 @@ export enum SyntaxKind {
   BlockDefinitionBody,
   InlineDefinitionBody,
   MatchArm,
+  TypeSignature,
 
   // Patterns
   BindPattern,
@@ -100,6 +101,7 @@ export type Syntax
   | Token
   | MatchArm
   | RecordDeclarationElement
+  | TypeSignature
 
 let nextNodeId = 0;
 
@@ -107,12 +109,13 @@ abstract class SyntaxBase {
 
   public readonly kind!: SyntaxKind;
 
-  public parentNode: Syntax | null = null;
+  public parentNode!: Syntax | null;
 
   constructor(kind: SyntaxKind) {
     Object.defineProperties(this, {
       id: { value: nextNodeId++ },
       kind: { value: kind },
+      parentNode: { value: null, writable: true },
     })
   }
 
@@ -856,7 +859,7 @@ export class TypeReferenceExpression extends SyntaxBase {
     public name: QualName,
     public typeArgs: TypeExpression[] = [],
   ) {
-    super(SyntaxKind.QualName);
+    super(SyntaxKind.TypeReferenceExpression);
   }
 
   public *getChildren(): Iterable<Syntax> {
@@ -1013,7 +1016,8 @@ export class MacroInvocation extends SyntaxBase {
 }
 
 export type SourceElement
-  = Statement
+  = Expression
+  | Statement
   | RecordDeclaration
   | Declaration
   | FunctionDefinition
@@ -1213,6 +1217,38 @@ export class InlineDefinitionBody extends SyntaxBase {
 
 }
 
+export class TypeSignature extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.TypeSignature;
+
+  public constructor(
+    public paramTypes: Array<[TypeExpression, RArrowSign]>,
+    public returnType: TypeExpression,
+  ) {
+    super(SyntaxKind.TypeSignature);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    for (const [typeExpr, rarrowSign] of this.paramTypes) {
+      yield typeExpr;
+      yield rarrowSign;
+    }
+    yield this.returnType;
+  }
+
+  public getFirstToken(): Token {
+    if (this.paramTypes.length > 0) {
+      return this.paramTypes[0][0].getFirstToken();
+    }
+    return this.returnType.getFirstToken()
+  }
+
+  public getLastToken(): Token {
+    return this.returnType.getLastToken()
+  }
+
+}
+
 export class FunctionDefinition extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.FunctionDefinition;
@@ -1225,7 +1261,8 @@ export class FunctionDefinition extends SyntaxBase {
     public letKeyword: LetKeyword,
     public name: Identifier,
     public params: Parameter[],
-    public body: DefinitionBody,
+    public typeSig: TypeSignature | null,
+    public body: DefinitionBody | null,
   ) {
     super(SyntaxKind.FunctionDefinition);
   }
@@ -1239,7 +1276,12 @@ export class FunctionDefinition extends SyntaxBase {
     for (const param of this.params) {
       yield param;
     }
-    yield this.body;
+    if (this.typeSig !== null) {
+      yield this.typeSig
+    }
+    if (this.body !== null) {
+      yield this.body;
+    }
   }
 
   public getFirstToken(): Token {
@@ -1250,7 +1292,16 @@ export class FunctionDefinition extends SyntaxBase {
   }
 
   public getLastToken(): Token {
-    return this.body.getLastToken();
+    if (this.body !== null) {
+      return this.body.getLastToken();
+    }
+    if (this.typeSig !== null) {
+      return this.typeSig.getLastToken()
+    }
+    if (this.params.length > 0) {
+      return this.params[this.params.length-1].getLastToken();
+    }
+    return this.name;
   }
 
 }
@@ -1264,7 +1315,8 @@ export class VariableDefinition extends SyntaxBase {
     public pubKeyword: PubKeyword | null,
     public letKeyword: LetKeyword,
     public pattern: Pattern,
-    public body: DefinitionBody,
+    public typeSig: TypeSignature | null,
+    public body: DefinitionBody | null,
   ) {
     super(SyntaxKind.VariableDefinition);
   }
@@ -1275,7 +1327,12 @@ export class VariableDefinition extends SyntaxBase {
     }
     yield this.letKeyword;
     yield this.pattern;
-    yield this.body;
+    if (this.typeSig !== null) {
+      yield this.typeSig;
+    }
+    if (this.body !== null) {
+      yield this.body;
+    }
   }
 
   public getFirstToken(): Token {
@@ -1286,7 +1343,13 @@ export class VariableDefinition extends SyntaxBase {
   }
 
   public getLastToken(): Token {
-    return this.body.getLastToken();
+    if (this.body !== null) {
+      return this.body.getLastToken();
+    }
+    if (this.typeSig !== null) {
+      return this.typeSig.getLastToken()
+    }
+    return this.pattern.getLastToken()
   }
 
 }
