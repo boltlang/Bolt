@@ -69,26 +69,6 @@ const DEFAULT_OPERATORS: Array<[string, OperatorMode, number]> = [
   ['$', OperatorMode.InfixR, 10],
 ];
 
-export class ParseError extends Error {
-
-  constructor(
-    public file: TextFile,
-    public actual: Token,
-    public expected: ExpectedParse[],
-  ) {
-    super(`Uncaught parse error`);
-  }
-
-  public getDiagnostic() {
-    return new UnexpectedTokenDiagnostic(
-      this.file,
-      this.actual,
-      this.expected
-    );
-  }
-
-}
-
 export class Parser {
 
   private exprOperatorTable: OperatorInfo[] = [];
@@ -116,7 +96,7 @@ export class Parser {
   }
 
   private raiseParseError(actual: Token, expected: ExpectedParse[]): never {
-    throw new ParseError(this.file, actual, expected);
+    throw new UnexpectedTokenDiagnostic(this.file, actual, expected);
   }
 
   private expectToken<T extends TokenSyntaxKind>(type: T): Token & { kind: T } {

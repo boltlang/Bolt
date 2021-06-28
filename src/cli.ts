@@ -6,8 +6,8 @@ import * as fs from "fs"
 import * as util from "util"
 import yargs from "yargs"
 import { ParseError, Parser } from "./parser";
-import { Punctuator, Scanner } from "./scanner";
-import { ConsoleDiagnostics } from "./diagnostics";
+import { Punctuator, ScanError, Scanner } from "./scanner";
+import { ConsoleDiagnostics, Diagnostic } from "./diagnostics";
 import { TextFile } from "./text";
 import { TypeChecker, TypeEnv, TypingContext } from "./checker";
 
@@ -18,7 +18,7 @@ yargs
     for (const fileName of toArray(args.file as string | string[])) {
       const text = fs.readFileSync(fileName, 'utf8');
       const file = new TextFile(fileName, text);
-      const scanner = new Scanner(text);
+      const scanner = new Scanner(file);
       const tokens = new Punctuator(scanner);
       const diagnostics = new ConsoleDiagnostics();
       const parser = new Parser(file, diagnostics, tokens);
@@ -26,11 +26,12 @@ yargs
       try {
         sourceFile = parser.parseSourceFile();
       } catch (e) {
-        if (e instanceof ParseError) {
-          diagnostics.add(e.getDiagnostic());
+        if (e instanceof Diagnostic) {
+          diagnostics.add(e);
           if (forceExceptions) {
             throw e;
           }
+          diagnostics.printAll()
           process.exit(1);
         }
         throw e;

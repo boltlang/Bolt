@@ -2,9 +2,11 @@
 import test from "ava"
 import { Punctuator, Scanner } from "./scanner";
 import { Token, SyntaxKind } from "./cst";
+import {TextFile} from "./text";
 
 function scan(text: string): Token[] {
-  const scanner = new Scanner(text);
+  const file = new TextFile("#<test-data>", text);
+  const scanner = new Scanner(file);
   const tokens = new Punctuator(scanner);
   const result = [];
   for (;;) {

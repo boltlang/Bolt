@@ -1,5 +1,5 @@
 
-import { TextPosition } from "./text";
+import { EOF, TextFile, TextPosition } from "./text";
 import {
   Token,
   Identifier,
@@ -15,8 +15,7 @@ import {
   TokenSyntaxKind,
 } from "./cst";
 import { BufferedStream, hasOwnProperty, Stream } from "./util";
-
-const EOF = '\uFFFF';
+import { Diagnostic, UnexpectedCharacterDiagnostic } from "./diagnostics";
 
 function isWhiteSpace(ch: string): boolean {
   return /[\n\t\r ]/.test(ch);
@@ -85,24 +84,12 @@ const KEYWORDS: Record<string, TokenSyntaxKind> = {
   'match': SyntaxKind.MatchKeyword,
 }
 
-export class ScanError extends Error {
-
-  constructor(
-    public actual: string,
-    public offset: number,
-  ) {
-    super(`Unexpected ${describeChar(actual)}`);
-  }
-
-}
-
 export class Scanner extends BufferedStream<Token> {
 
   constructor(
-    public text: string,
+    private file: TextFile,
+    public text: string = file.getText(),
     public textOffset = 0,
-    private atBlankLine = true,
-    private currIndentLevel = 0,
     private currLine = 1,
     private currColumn = 1,
   ) {
@@ -123,16 +110,7 @@ export class Scanner extends BufferedStream<Token> {
     if (ch === '\n') {
       ++this.currLine;
       this.currColumn = 1;
-      this.currIndentLevel = 0;
-      this.atBlankLine = true;
     } else {
-      if (this.atBlankLine) {
-        if (isWhiteSpace(ch)) {
-          ++this.currIndentLevel;
-        } else {
-          this.atBlankLine = false;
-        }
-      }
       ++this.currColumn;
     }
     return ch;
@@ -252,7 +230,7 @@ export class Scanner extends BufferedStream<Token> {
         return new Identifier(name, [startPos, endPos]);
       }
 
-      throw new ScanError(c0, this.textOffset);
+      throw new UnexpectedCharacterDiagnostic(this.file, c0, this.getPosition());
 
     }
 

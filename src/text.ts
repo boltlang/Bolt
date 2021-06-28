@@ -29,6 +29,8 @@ export interface TextPosition {
   column: number;
 }
 
+export const EOF = '\uFFFF';
+
 export type TextRange = [TextPosition, TextPosition];
 
 export type TextSpan = [number, number];
@@ -39,7 +41,7 @@ export interface PrintExcerptOptions {
   indentation?: string;
   highlightColor?: 'red' | 'blue' | 'yellow' | 'magenta' | 'green';
   highlightRange?: TextRange | null;
-  message: string | null;
+  message?: string | null;
 }
 
 export function formatExcerpt({
@@ -97,7 +99,7 @@ export function formatExcerpt({
         j = 0;
       }
 
-      if (i === highlightRange[1].line-1 && message !== undefined) {
+      if (i === highlightRange[1].line-1 && message !== null) {
         out += gutter+' '.repeat(j+skip)+chalk[highlightColor]('┬'+'─'.repeat(mark-j-1)) + '\n'
         out += gutter+' '.repeat(j+skip)+chalk[highlightColor]('└ ')+message+'\n';
       } else {

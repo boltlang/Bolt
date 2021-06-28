@@ -79,10 +79,6 @@ export class TypeVar extends TypeBase {
     return newType === null ? this : newType;
   }
 
-  public getSolved(): Type {
-    return this.getFullySubstitutedType();
-  }
-
   public hasSubstitution(): boolean {
     return this.directSubstitution !== null;
   }
@@ -93,6 +89,10 @@ export class TypeVar extends TypeBase {
     }
     this.directSubstitution = targetType;
     this.fullSubstitution = targetType;
+  }
+
+  public getSolved(): Type {
+    return this.getFullySubstitutedType();
   }
 
   public substitute(mapping: TypeVarMap): Type {

@@ -1,13 +1,16 @@
 
 import chalk from "chalk"
+import {EOF} from "dns";
 import {ArrowType, Type} from "./checker";
 
-import { describeSyntaxKind, Token, Syntax, SyntaxKind } from "./cst";
+import { describeSyntaxKind, Token, Syntax, SyntaxKind, Identifier } from "./cst";
 import { formatExcerpt, TextFile, TextPosition } from "./text";
 import { CompareMode } from "./util";
 
-export interface Diagnostic {
-  format(): string;
+export abstract class Diagnostic extends Error {
+
+  public abstract format(): string;
+
 }
 
 export interface Diagnostics {
@@ -37,14 +40,14 @@ export class ConsoleDiagnostics implements Diagnostics {
 
 export type ExpectedParse = SyntaxKind;
 
-export class UnexpectedTokenDiagnostic implements Diagnostic {
+export class UnexpectedTokenDiagnostic extends Diagnostic {
 
-  constructor(
+  public constructor(
     public file: TextFile,
     public actual: Token,
     public expected: ExpectedParse[],
   ) {
-
+    super();
   }
 
   public getMessage(): string {
@@ -65,84 +68,107 @@ export class UnexpectedTokenDiagnostic implements Diagnostic {
     return `Expected ${formatSum(expectedFragments)} but got ${actualText}.`;
   }
 
-  public format(): string {
+  public format({
+    addFilePositions = true,
+  } = {}): string {
     let out = '';
+    if (addFilePositions) {
+      out += formatPosition(this.file, this.actual.getStartPos()) + ' '
+    }
     out += chalk.bold.red('error:') + ' ' + this.getMessage() + '\n\n';
-    out += formatExcerpt(this.file.getText(), this.actual.range!)
+    out += formatExcerpt({
+      text: this.file.getText(), 
+      range: this.actual.range!,
+    })
     return out;
   }
 
 }
 
-export class UnexpectedConstructDiagnostic implements Diagnostic {
+export class UnexpectedCharacterDiagnostic extends Diagnostic {
 
   public constructor(
-    public node: Syntax,
-  ) {
-
-  }
-
-  public getMessage(): string {
-    return `unexpected ${SyntaxKind[this.node.kind]}.`;
-  }
-
-  public format(): string {
-    return this.getMessage();
-  }
-
-}
-
-export class UnexpectedIndentationDiagnostic implements Diagnostic {
-
-  constructor(
     public file: TextFile,
-    public compareMode: CompareMode,
-    public actualIndentLevel: number,
-    public expectedIndentLevel: number,
+    public actual: string,
+    public position: TextPosition,
   ) {
-
+    super();
   }
 
-  public getMessage(): string {
-    let out = `expected an indentation `
-    switch (this.compareMode) {
-      case CompareMode.Equal:
-        out += 'of exactly';
-        break;
-      case CompareMode.Lesser:
-        out += 'strictly less than'
-        break;
-      case CompareMode.LesserOrEqual:
-        out += 'less than or equal to';
-        break;
-      case CompareMode.Greater:
-        out += 'strictly greater than'
-        break;
-      case CompareMode.GreaterOrEqual:
-        out += 'greater than or equal to';
-        break;
+  public format({
+    addFilePositions = true
+  } = {}): string {
+    let out = '';
+    if (addFilePositions) {
+      out += formatPosition(this.file, this.position) + ' '
     }
-    out += ` ${this.expectedIndentLevel} `
-    out += this.expectedIndentLevel === 1 ? 'space' : 'spaces'
-    out += ` but found ${this.actualIndentLevel} `
-    out += this.actualIndentLevel === 1 ? 'space' : 'spaces'
-    out += `.`;
+    out += `${chalk.bold.red('error:')} Unexpected character ${formatChar(this.actual)}.\n\n`;
+    const nextPos = {
+      line: this.position.line,
+      column: this.position.column+1,
+      offset: this.position.offset+1,
+    }
+    out += formatExcerpt({
+      text: this.file.getText(),
+      range: [ this.position, nextPos ],
+    });
     return out;
   }
 
-  public format(): string {
-    return this.getMessage()
-  }
-
 }
 
-export class ParamCountMismatchDiagnostic implements Diagnostic {
+// export class UnexpectedIndentationDiagnostic extends Diagnostic {
+// 
+//   constructor(
+//     public file: TextFile,
+//     public compareMode: CompareMode,
+//     public actualIndentLevel: number,
+//     public expectedIndentLevel: number,
+//   ) {
+//     super();
+//   }
+// 
+//   public getMessage(): string {
+//     let out = '';
+//     out += `Expected an indentation `
+//     switch (this.compareMode) {
+//       case CompareMode.Equal:
+//         out += 'of exactly';
+//         break;
+//       case CompareMode.Lesser:
+//         out += 'strictly less than'
+//         break;
+//       case CompareMode.LesserOrEqual:
+//         out += 'less than or equal to';
+//         break;
+//       case CompareMode.Greater:
+//         out += 'strictly greater than'
+//         break;
+//       case CompareMode.GreaterOrEqual:
+//         out += 'greater than or equal to';
+//         break;
+//     }
+//     out += ` ${this.expectedIndentLevel} `
+//     out += this.expectedIndentLevel === 1 ? 'space' : 'spaces'
+//     out += ` but found ${this.actualIndentLevel} `
+//     out += this.actualIndentLevel === 1 ? 'space' : 'spaces'
+//     out += `.`;
+//     return out;
+//   }
+// 
+//   public format(): string {
+//     return this.getMessage()
+//   }
+// 
+// }
+
+export class ParamCountMismatchDiagnostic extends Diagnostic {
 
   public constructor(
     public left: ArrowType,
     public right: ArrowType,
   ) {
-
+    super();
   }
 
   public format(): string {
@@ -152,16 +178,14 @@ export class ParamCountMismatchDiagnostic implements Diagnostic {
     out += left.paramTypes.length === 1 ? 'parameter' : 'parameters';
     out += ` while ${chalk.yellow(formatType(right))} requires ${right.paramTypes.length}.`;
     if (left.node !== null) {
-      out += '\n\n';
-      out += formatExcerpt({
+      out += '\n\n' + formatExcerpt({
         text: left.node.getSourceText(),
         range: left.node.getRange(),
         message: chalk.yellow(formatType(left)),
       });
     }
     if (right.node !== null) {
-      out += '\n\n';
-      out += formatExcerpt({
+      out += '\n\n' + formatExcerpt({
         text: right.node.getSourceText(),
         range: right.node.getRange(),
         message: chalk.yellow(formatType(right))
@@ -172,13 +196,13 @@ export class ParamCountMismatchDiagnostic implements Diagnostic {
 
 }
 
-export class UnificationFailedDiagnostic implements Diagnostic {
+export class UnificationFailedDiagnostic extends Diagnostic {
 
   public constructor(
     public left: Type,
     public right: Type,
   ) {
-
+    super();
   }
 
   public format(): string {
@@ -186,17 +210,14 @@ export class UnificationFailedDiagnostic implements Diagnostic {
     const right = this.right.getSolved()
     let out = `${chalk.bold.red('error:')} The types ${chalk.yellow(formatType(left))} and ${chalk.yellow(formatType(right))} could not be unified.`;
     if (left.node !== null) {
-      out += '\n\n';
-      // out += `\n\n  Type ${chalk.yellow(formatType(left))} originated from the following expression.\n\n`;
-      out += formatExcerpt({
+      out += '\n\n' + formatExcerpt({
         text: left.node.getSourceText(),
         range: left.node.getRange(),
         message: chalk.yellow(formatType(left)),
       });
     }
     if (right.node !== null) {
-      out += '\n\n';
-      out += formatExcerpt({
+      out += '\n\n' + formatExcerpt({
         text: right.node.getSourceText(),
         range: right.node.getRange(),
         message: chalk.yellow(formatType(right)),
@@ -207,61 +228,27 @@ export class UnificationFailedDiagnostic implements Diagnostic {
 
 }
 
-export class BindingNotFoundDiagnostic implements Diagnostic {
+export class BindingNotFoundDiagnostic extends Diagnostic {
 
   public constructor(
-    public name: string,
+    public token: Token,
   ) {
-
+    super();
   }
 
-  public getMessage(): string {
-    return `A binding for '${this.name}' was not found.`;
-  }
-
-  public format(): string {
-    return this.getMessage();
-  }
-
-}
-
-export class ExpectedEndOfLineFoldDiagnostic implements Diagnostic {
-
-  constructor(
-    public file: TextFile,
-    public actual: Token
-  ) {
-
-  }
-
-  public getMessage(): string {
-    return `expected end of line-fold but got ${describeSyntaxKind(this.actual.kind)}.`;
-  }
-
-  public format(): string {
+  public format({
+    addFilePositions = true,
+  } = {}): string {
     let out = '';
-    out += this.getMessage() + '\n\n';
-    out += formatExcerpt(this.file.getText(), this.actual.getRange());
+    if (addFilePositions) {
+      out += formatPosition(this.token.getSourceFile().getFile(), this.token.getStartPos()) + ' '
+    }
+    out += `A binding for '${this.token.getText()}' was not found.\n\n`;
+    out += formatExcerpt({
+      text: this.token.getSourceText(),
+      range: this.token.getRange(),
+    });
     return out;
-  }
-
-}
-
-export class NewLineRequiredDiagnostic implements Diagnostic {
-
-  constructor(
-    public file: TextFile,
-    public actual: Token,
-  ) {
-
-  }
-
-  public getMessage(): string {
-    return `Expected ${describeSyntaxKind(this.actual.kind)} to be placed on a new line.`;
-  }
-
-  public format() {
-    return this.getMessage();
   }
 
 }
@@ -270,8 +257,29 @@ function formatType(type: Type): string {
   return type.format();
 }
 
+function formatChar(ch: string): string {
+  if (ch === EOF) {
+    return 'end-of-file'
+  }
+  let escaped;
+  switch (ch) {
+    case '\a': escaped = '\\n'; break;
+    case '\b': escaped = '\\b'; break;
+    case '\f': escaped = '\\f'; break;
+    case '\n': escaped = '\\n'; break;
+    case '\r': escaped = '\\r'; break;
+    case '\t': escaped = '\\t'; break;
+    case '\v': escaped = '\\v'; break;
+    case '\0': escaped = '\\0'; break;
+    case '\'': escaped = '\\\''; break;
+    case '\\': escaped = '\\\\'; break;
+    default:   escaped = ch; break;
+  }
+  return `'${escaped}'`;
+}
+
 function formatPosition(file: TextFile, position: TextPosition): string {
-  return chalk.bold.yellow(`${file.origPath}:${position.line}:${position.column}`)
+  return chalk.bold.blueBright(`${file.origPath}:${position.line}:${position.column}`)
 }
 
 function formatSum(elements: string[]) {
