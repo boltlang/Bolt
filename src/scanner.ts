@@ -151,7 +151,7 @@ export class Scanner extends BufferedStream<Token> {
   }
 
   private skipAllWhiteSpace() {
-    for (;;) {
+    outer: for (;;) {
       const c0 = this.peekChar()
       if (c0 === '#') {
         this.getChar();
@@ -161,6 +161,7 @@ export class Scanner extends BufferedStream<Token> {
             break;
           }
         }
+        continue outer;
       }
       if (!isWhiteSpace(c0)) {
         break;
@@ -206,7 +207,6 @@ export class Scanner extends BufferedStream<Token> {
         case ']': return this.scanChar(TokenType.RBracket);
         case '.': return this.scanChar(TokenType.DotSign);
         case ':': return this.scanChar(TokenType.ColonSign);
-        case '=': return this.scanChar(TokenType.EqualSign);
         case ',': return this.scanChar(TokenType.CommaSign);
         case '\\': return this.scanChar(TokenType.BSlashSign);
       }
@@ -216,7 +216,10 @@ export class Scanner extends BufferedStream<Token> {
         this.getChar()
         const text = c0 + this.takeWhile(isOperator);
         const endPos = this.getPosition();
-        if (text.endsWith('=') && text[text.length-2] !== '=') {
+        if (text === '=') {
+          return new SimpleToken(TokenType.EqualSign, this.currIndentLevel, [ startPos, endPos ]);
+        } else if (text.endsWith('=') && text[text.length-2] !== '=') {
+          console.log('here')
           return new Assignment(text.substring(0, text.length-1), this.currIndentLevel, [startPos, endPos]);
         }
         return new CustomOperator(text, this.currIndentLevel, [startPos, endPos]);

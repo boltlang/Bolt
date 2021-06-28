@@ -1,3 +1,4 @@
+import { Scheme, Type, TypeEnv} from "./checker";
 import { TextFile, TextPosition } from "./text";
 import { ColonSign, DecimalInteger, DotSign, EqualSign, Identifier, LetKeyword, LParen, MatchKeyword, PubKeyword, RArrowSign, ReturnKeyword, RParen, StructKeyword, TildeSign, Token } from "./token";
 
@@ -50,6 +51,7 @@ export enum SyntaxKind {
 export type Syntax
   = SourceFile
   | TypeParameter
+  | DefinitionBody
   | Parameter
   | QualName
   | Statement
@@ -57,6 +59,8 @@ export type Syntax
   | Expression
   | FunctionDefinition
   | VariableDefinition
+  | Declaration
+  | RecordDeclaration
 
 let nextNodeId = 0;
 
@@ -553,17 +557,18 @@ export type FunctionBodyElement
   = Statement
   | Expression
 
-export interface ParameterDefaultValue {
-  tildeSign: TildeSign;
-  expression: Expression;
-}
+export type ParameterDefaultValue = [TildeSign, Expression];
 
 export class Parameter extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.Parameter;
 
+  public type: Type | null = null;
+
   public constructor(
     public pattern: Pattern,
+    public typeExpr: TypeExpression | null = null,
+    public defaultValue: ParameterDefaultValue | null = null,
   ) {
     super(SyntaxKind.Parameter);
   }
@@ -745,6 +750,9 @@ export class InlineDefinitionBody extends SyntaxBase {
 export class FunctionDefinition extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.FunctionDefinition;
+
+  public typeEnv: TypeEnv | null = null;
+  public scheme: Scheme | null = null;
 
   public constructor(
     public pubKeyword: PubKeyword | null,

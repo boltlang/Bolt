@@ -7,8 +7,9 @@ import * as util from "util"
 import yargs from "yargs"
 import { ParseError, Parser } from "./parser";
 import { Punctuator, Scanner } from "./scanner";
-import {ConsoleDiagnostics} from "./diagnostics";
-import {TextFile} from "./text";
+import { ConsoleDiagnostics } from "./diagnostics";
+import { TextFile } from "./text";
+import { TypeChecker, TypeEnv, TypingContext } from "./checker";
 
 const forceExceptions = process.env['BOLT_FORCE_EXCEPTIONS']
 
@@ -34,7 +35,14 @@ yargs
         }
         throw e;
       }
-      console.log(util.inspect(sourceFile, { colors: true, depth: Infinity }));
+      // console.log(util.inspect(sourceFile, { colors: true, depth: Infinity }));
+      const ctx = new TypingContext(diagnostics);
+      const typeEnv = new TypeEnv(ctx);
+      typeEnv.addDefault()
+      const checker = new TypeChecker(diagnostics, ctx);
+      checker.forwardDeclare(sourceFile, typeEnv);
+      checker.infer(sourceFile, typeEnv, ctx.constraints);
+      checker.solve();
     }
   })
   .demandCommand()

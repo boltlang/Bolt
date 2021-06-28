@@ -1,5 +1,6 @@
 
 import chalk from "chalk"
+import {Type} from "./checker";
 
 import { Syntax, SyntaxKind } from "./cst";
 import { formatExcerpt, TextFile } from "./text";
@@ -123,6 +124,43 @@ export class UnexpectedIndentationDiagnostic implements Diagnostic {
 
   public format(): string {
     return this.getMessage()
+  }
+
+}
+
+export class UnificationFailedDiagnostic implements Diagnostic {
+
+  public constructor(
+    public left: Type,
+    public right: Type,
+  ) {
+
+  }
+
+  public getMessage(): string {
+    return `Unification between ${this.left.format()} and ${this.right.format()} did not succeed.`;
+  }
+
+  public format(): string {
+    return this.getMessage()
+  }
+
+}
+
+export class BindingNotFoundDiagnostic implements Diagnostic {
+
+  public constructor(
+    public name: string,
+  ) {
+
+  }
+
+  public getMessage(): string {
+    return `A binding for '${this.name}' was not found.`;
+  }
+
+  public format(): string {
+    return this.getMessage();
   }
 
 }
