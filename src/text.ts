@@ -33,33 +33,33 @@ export type TextRange = [TextPosition, TextPosition];
 
 export type TextSpan = [number, number];
 
-function printPosition(file: TextFile, position: TextPosition) {
-  return chalk.bold.yellow(`${file.origPath}:${position.line}:${position.column}`)
-}
-
 export interface PrintExcerptOptions {
+  text: string,
+  range: TextRange,
   indentation?: string;
-  highlightColor?: 'red' | 'blue' | 'yellow' | 'magenta' | 'green'
+  highlightColor?: 'red' | 'blue' | 'yellow' | 'magenta' | 'green';
   highlightRange?: TextRange | null;
+  message: string | null;
 }
 
-export function formatExcerpt(
-  content: string,
-  span: TextRange, {
+export function formatExcerpt({
+  text,
+  range,
   indentation = '  ',
   highlightRange,
-  highlightColor = 'red'
-}: PrintExcerptOptions = {}) {
+  highlightColor = 'red',
+  message = null,
+}: PrintExcerptOptions) {
 
   if (highlightRange === undefined) {
-    highlightRange = span;
+    highlightRange = range;
   }
 
   let out = '';
 
-  const startLine = Math.max(0, span[0].line-1-BOLT_DIAG_NUM_EXTRA_LINES)
-  const lines = content.split('\n')
-  const endLine = Math.min(lines.length, (span[1] !== undefined ? span[1].line : startLine)+BOLT_DIAG_NUM_EXTRA_LINES)
+  const startLine = Math.max(0, range[0].line-1-BOLT_DIAG_NUM_EXTRA_LINES)
+  const lines = text.split('\n')
+  const endLine = Math.min(lines.length, (range[1] !== undefined ? range[1].line : startLine)+BOLT_DIAG_NUM_EXTRA_LINES)
   const gutterWidth = Math.max(2, countDigits(endLine+1))
 
   for (let i = startLine; i < endLine; i++) {
@@ -68,11 +68,11 @@ export function formatExcerpt(
 
     let j = firstIndexOfNonEmpty(line);
 
-    out +=  indentation + '  '+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+line+'\n'
+    out +=  indentation+chalk.bgWhite.black(' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString())+' '+line+'\n'
 
     if (highlightRange) {
 
-      const gutter = indentation + '  '+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
+      const gutter = indentation+chalk.bgWhite.black(' '.repeat(gutterWidth))+' '
 
       let mark: number;
       let skip: number;
@@ -97,7 +97,13 @@ export function formatExcerpt(
         j = 0;
       }
 
-      out += gutter+' '.repeat(j+skip)+chalk[highlightColor]('~'.repeat(mark-j)) + '\n'
+      if (i === highlightRange[1].line-1 && message !== undefined) {
+        out += gutter+' '.repeat(j+skip)+chalk[highlightColor]('┬'+'─'.repeat(mark-j-1)) + '\n'
+        out += gutter+' '.repeat(j+skip)+chalk[highlightColor]('└ ')+message+'\n';
+      } else {
+        out += gutter+' '.repeat(j+skip)+chalk[highlightColor]('─'.repeat(mark-j)) + '\n'
+      }
+
     }
 
   }

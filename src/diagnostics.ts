@@ -3,11 +3,10 @@ import chalk from "chalk"
 import {ArrowType, Type} from "./checker";
 
 import { describeSyntaxKind, Token, Syntax, SyntaxKind } from "./cst";
-import { formatExcerpt, TextFile } from "./text";
+import { formatExcerpt, TextFile, TextPosition } from "./text";
 import { CompareMode } from "./util";
 
-interface Diagnostic {
-  getMessage(): string;
+export interface Diagnostic {
   format(): string;
 }
 
@@ -17,12 +16,22 @@ export interface Diagnostics {
 
 export class ConsoleDiagnostics implements Diagnostics {
 
+  private diagnostics: Diagnostic[] = [];
+
   public add(diagnostic: Diagnostic): void {
     if (process.env['BOLT_FORCE_EXCEPTION']) {
-      throw new Error(diagnostic.getMessage());
+      throw new Error(`Got a compile error while BOLT_FORCE_EXCEPTION is set.`);
     }
-    console.error(diagnostic.format());
+    this.diagnostics.push(diagnostic);
   }
+
+  public printAll(): void {
+    for (const diagnostic of this.diagnostics) {
+      console.error(diagnostic.format());
+    }
+
+  }
+
 
 }
 
@@ -136,17 +145,27 @@ export class ParamCountMismatchDiagnostic implements Diagnostic {
 
   }
 
-  public getMessage(): string {
-    let out = `Type ${this.left.format()} requires ${this.left.paramTypes.length} `;
-    out += this.left.paramTypes.length === 1 ? 'parameter' : 'parameters';
-    out += ` while ${this.right.format()} requires ${this.right.paramTypes.length}.`;
-    return out;
-  }
-
   public format(): string {
-    let out = this.getMessage() + '\n\n';
-    if (this.left.node !== null) {
-      out += formatExcerpt(this.left.node.getSourceText(), this.left.node.getRange());
+    const left = this.left.getSolved();
+    const right = this.right.getSolved();
+    let out = `${chalk.bold.red('error:')} Type ${chalk.yellow(formatType(left))} requires ${left.paramTypes.length} `;
+    out += left.paramTypes.length === 1 ? 'parameter' : 'parameters';
+    out += ` while ${chalk.yellow(formatType(right))} requires ${right.paramTypes.length}.`;
+    if (left.node !== null) {
+      out += '\n\n';
+      out += formatExcerpt({
+        text: left.node.getSourceText(),
+        range: left.node.getRange(),
+        message: chalk.yellow(formatType(left)),
+      });
+    }
+    if (right.node !== null) {
+      out += '\n\n';
+      out += formatExcerpt({
+        text: right.node.getSourceText(),
+        range: right.node.getRange(),
+        message: chalk.yellow(formatType(right))
+      });
     }
     return out;
   }
@@ -162,12 +181,28 @@ export class UnificationFailedDiagnostic implements Diagnostic {
 
   }
 
-  public getMessage(): string {
-    return `Unification between ${this.left.format()} and ${this.right.format()} did not succeed.`;
-  }
-
   public format(): string {
-    return this.getMessage()
+    const left = this.left.getSolved()
+    const right = this.right.getSolved()
+    let out = `${chalk.bold.red('error:')} The types ${chalk.yellow(formatType(left))} and ${chalk.yellow(formatType(right))} could not be unified.`;
+    if (left.node !== null) {
+      out += '\n\n';
+      // out += `\n\n  Type ${chalk.yellow(formatType(left))} originated from the following expression.\n\n`;
+      out += formatExcerpt({
+        text: left.node.getSourceText(),
+        range: left.node.getRange(),
+        message: chalk.yellow(formatType(left)),
+      });
+    }
+    if (right.node !== null) {
+      out += '\n\n';
+      out += formatExcerpt({
+        text: right.node.getSourceText(),
+        range: right.node.getRange(),
+        message: chalk.yellow(formatType(right)),
+      });
+    }
+    return out;
   }
 
 }
@@ -222,7 +257,7 @@ export class NewLineRequiredDiagnostic implements Diagnostic {
   }
 
   public getMessage(): string {
-    return `expected ${describeSyntaxKind(this.actual.kind)} to be placed on a new line.`;
+    return `Expected ${describeSyntaxKind(this.actual.kind)} to be placed on a new line.`;
   }
 
   public format() {
@@ -231,6 +266,13 @@ export class NewLineRequiredDiagnostic implements Diagnostic {
 
 }
 
+function formatType(type: Type): string {
+  return type.format();
+}
+
+function formatPosition(file: TextFile, position: TextPosition): string {
+  return chalk.bold.yellow(`${file.origPath}:${position.line}:${position.column}`)
+}
 
 function formatSum(elements: string[]) {
   if (elements.length === 0) {

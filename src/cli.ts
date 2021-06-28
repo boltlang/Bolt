@@ -44,6 +44,7 @@ yargs
       checker.forwardDeclare(sourceFile, typeEnv);
       checker.infer(sourceFile, typeEnv, ctx.constraints);
       checker.solve();
+      diagnostics.printAll();
     }
   })
   .demandCommand()

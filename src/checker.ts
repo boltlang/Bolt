@@ -680,7 +680,7 @@ export class TypeChecker {
     if (a.kind === TypeKind.TypeVar) {
       if (!a.hasSubstitution()) {
         if (b.hasFreeVariable(a)) {
-          this.diagnostics.add(new OccursCheckDiagnostic(a.getSolved(), b.getSolved()));
+          this.diagnostics.add(new OccursCheckDiagnostic(a, b));
           a.flags |= TypeFlags.UnificationFailed;
           b.flags |= TypeFlags.UnificationFailed;
           return;
@@ -702,7 +702,7 @@ export class TypeChecker {
 
     if (a.kind === TypeKind.BuiltinType && b.kind === TypeKind.BuiltinType) {
       if (a.id !== b.id) {
-        this.diagnostics.add(new UnificationFailedDiagnostic(a.getSolved(), b.getSolved()));
+        this.diagnostics.add(new UnificationFailedDiagnostic(a, b));
       }
       return;
     }
@@ -710,11 +710,10 @@ export class TypeChecker {
     if (a.kind === TypeKind.ArrowType && b.kind === TypeKind.ArrowType) {
 
       if (a.paramTypes.length !== b.paramTypes.length) {
-        this.diagnostics.add(new ParamCountMismatchDiagnostic(a.getSolved(), b.getSolved()));
-        return;
+        this.diagnostics.add(new ParamCountMismatchDiagnostic(a, b));
       }
 
-      for (let i = 0; i < a.paramTypes.length; i++) {
+      for (let i = 0; i < Math.min(a.paramTypes.length, b.paramTypes.length); i++) {
         this.unifyEquality(a.paramTypes[i], b.paramTypes[i]);
       }
 
@@ -722,7 +721,7 @@ export class TypeChecker {
       return;
     }
 
-    this.diagnostics.add(new UnificationFailedDiagnostic(a.getSolved(), b.getSolved()));
+    this.diagnostics.add(new UnificationFailedDiagnostic(a, b));
   }
 
 }
