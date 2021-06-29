@@ -1,5 +1,5 @@
 import { Expression, Pattern, Syntax, SyntaxKind, TypeExpression } from "./cst";
-import {BindingNotFoundDiagnostic, Diagnostics, ParamCountMismatchDiagnostic, UnificationFailedDiagnostic} from "./diagnostics";
+import {BindingNotFoundDiagnostic, Diagnostic, Diagnostics, ParamCountMismatchDiagnostic, UnificationFailedDiagnostic} from "./diagnostics";
 import {CustomMap, CustomSet} from "./util";
 
 export enum TypeKind {
@@ -17,8 +17,24 @@ export type Type
   | AnyType
 
 const enum TypeFlags {
-  None              = 0,
-  UnificationFailed = 1,
+
+  /**
+   * This is the default value for any new type being constructed.
+   */
+  None = 0,
+
+  /**
+   * A type that has been marked with this constant is assumed to have a
+   * diagnostic associated with it and preferably does not generate new
+   * diagnostics.
+   */
+  Fail = 1,
+
+  /**
+   * An opaque type never loses track of its associated node, not even when it
+   * is a type variable that has itself substituted with something else.
+   */
+  Opaque = 4,
 }
 
 const enum BuiltinTypeID {
@@ -33,17 +49,29 @@ const BUILTIN_TYPES: Array<[BuiltinTypeID, string]> = [
   [BuiltinTypeID.Bool, 'Bool'],
 ]
 
+class TypeHandle {
+
+  public constructor(
+    public type: Type,
+    public node: Syntax,
+  ) {
+
+  }
+
+}
+
 abstract class TypeBase {
 
   public abstract readonly kind: TypeKind;
 
-  public flags: TypeFlags = TypeFlags.None;
-
   public constructor(
     public node: Syntax | null = null,
+    public flags: TypeFlags = TypeFlags.None,
   ) {
 
   }
+
+  public abstract shallowClone(): Type;
 
   public abstract substitute(mapping: TypeVarMap): Type;
 
@@ -62,8 +90,9 @@ export class TypeVar extends TypeBase {
     public readonly id: number,
     public displayName: string,
     node: Syntax | null = null,
+    flags: TypeFlags = TypeFlags.None,
   ) {
-    super(node);
+    super(node, flags);
   }
 
   public getFullySubstitutedType(): Type {
@@ -109,6 +138,15 @@ export class TypeVar extends TypeBase {
     return this.displayName;
   }
 
+  public shallowClone(): TypeVar {
+    return new TypeVar(
+      this.id,
+      this.displayName,
+      this.node,
+      this.flags
+    );
+  }
+
 }
 
 export class BuiltinType extends TypeBase {
@@ -118,8 +156,9 @@ export class BuiltinType extends TypeBase {
   public constructor(
     public id: BuiltinTypeID,
     node: Syntax | null = null,
+    flags: TypeFlags = TypeFlags.None,
   ) {
-    super(node);
+    super(node, flags);
   }
 
   public substitute(mapping: TypeVarMap): BuiltinType {
@@ -142,6 +181,14 @@ export class BuiltinType extends TypeBase {
     }
   }
 
+  public shallowClone(): BuiltinType {
+    return new BuiltinType(
+      this.id,
+      this.node,
+      this.flags,
+    );
+  }
+
 }
 
 export class ArrowType extends TypeBase {
@@ -152,8 +199,9 @@ export class ArrowType extends TypeBase {
     public paramTypes: Type[],
     public returnType: Type,
     node: Syntax | null = null,
+    flags: TypeFlags = TypeFlags.None,
   ) {
-    super(node);
+    super(node, flags);
   }
 
   public substitute(mapping: TypeVarMap): ArrowType {
@@ -161,6 +209,7 @@ export class ArrowType extends TypeBase {
       this.paramTypes.map(t => t.substitute(mapping)),
       this.returnType.substitute(mapping),
       this.node,
+      this.flags,
     );
   }
 
@@ -174,11 +223,21 @@ export class ArrowType extends TypeBase {
       this.paramTypes.map(t => t.getSolved()),
       this.returnType.getSolved(),
       this.node,
+      this.flags,
     );
   }
 
   public format(): string {
     return `${this.paramTypes.map(t => t.format()).join(' -> ')} -> ${this.returnType.format()}`;
+  }
+
+  public shallowClone(): ArrowType {
+    return new ArrowType(
+      this.paramTypes,
+      this.returnType,
+      this.node,
+      this.flags,
+    );
   }
 
 }
@@ -189,8 +248,9 @@ export class AnyType extends TypeBase {
 
   public constructor(
     node: Syntax | null = null,
+    flags: TypeFlags = TypeFlags.None,
   ) {
-    super(node);
+    super(node, flags);
   }
 
   public substitute(): AnyType {
@@ -207,6 +267,13 @@ export class AnyType extends TypeBase {
 
   public getSolved(): Type {
     return this;
+  }
+
+  public shallowClone(): AnyType {
+    return new AnyType(
+      this.node,
+      this.flags,
+    );
   }
 
 }
@@ -280,14 +347,18 @@ export class TypingContext {
 
   }
 
-  public createTypeVar(displayName = 'a'): TypeVar {
+  public createTypeVar(
+    displayName = 'a',
+    node: Syntax | null = null,
+    flags: TypeFlags = TypeFlags.None,
+  ): TypeVar {
     if (!(displayName in this.typeVarPrefixCounts)) {
       this.typeVarPrefixCounts[displayName] = 2;
-      return new TypeVar(this.nextTypeVarId++, displayName + '1');
+      return new TypeVar(this.nextTypeVarId++, displayName + '1', node, flags);
     }
     const count = this.typeVarPrefixCounts[displayName];
     this.typeVarPrefixCounts[displayName] = count + 1;
-    return new TypeVar(this.nextTypeVarId++, displayName + count.toString());
+    return new TypeVar(this.nextTypeVarId++, displayName + count.toString(), node, flags);
   }
 
 }
@@ -338,7 +409,12 @@ export class TypeEnv {
   public instantiate(scheme: Scheme): Type {
     const mapping = new TypeVarMap();
     for (const typeVar of scheme.typeVars) {
-      const newTypeVar = this.ctx.createTypeVar(typeVar.displayName);
+      // TODO Generate a type variable that has the same prefix
+      const newTypeVar = this.ctx.createTypeVar(
+        undefined,
+        typeVar.node,
+        typeVar.flags,
+      );
       mapping.set(typeVar, newTypeVar);
     }
     for (const constraint of scheme.constraints) {
@@ -416,7 +492,7 @@ export class TypeChecker {
             }
           }
           if (paramType === undefined) {
-            const typeVar = this.ctx.createTypeVar();
+            const typeVar = this.ctx.createTypeVar(undefined, param);
             typeVars.add(typeVar);
             paramType = typeVar;
             paramTypes.push(paramType);
@@ -428,7 +504,7 @@ export class TypeChecker {
         if (node.typeSig !== null) {
           returnType = this.inferTypeExpr(node.typeSig.returnType, innerEnv)
         } else {
-          returnType = this.ctx.createTypeVar();
+          returnType = this.ctx.createTypeVar(undefined, node);
         }
 
         const type = new ArrowType(paramTypes, returnType, node);
@@ -464,11 +540,13 @@ export class TypeChecker {
       {
         // TODO Take into account type arguments.
         // TODO Support fully qualified paths
-        const type = typeEnv.lookup(node.name.name.text);
+        let type = typeEnv.lookup(node.name.name.text);
         if (type === null) {
           this.diagnostics.add(new BindingNotFoundDiagnostic(node.name.name));
           return new AnyType(node);
         }
+        type = type.shallowClone()
+        type.node = node;
         return type;
       }
 
@@ -631,10 +709,10 @@ export class TypeChecker {
       {
         const operatorType = this.inferExpr(node.operator, typeEnv, constraints);
         const argTypes = node.args.map(t => this.inferExpr(t, typeEnv, constraints));
-        const returnType = this.ctx.createTypeVar();
+        const returnType = this.ctx.createTypeVar(undefined, node);
         constraints.push(new EqualityConstraint(
+          operatorType,
           new ArrowType(argTypes, returnType, node),
-          operatorType
         ));
         return returnType;
       }
@@ -647,7 +725,7 @@ export class TypeChecker {
       case SyntaxKind.MatchExpression:
       {
         const valueType = this.inferExpr(node.expression, typeEnv, constraints)
-        const resultType = this.ctx.createTypeVar();
+        const resultType = this.ctx.createTypeVar(undefined, node);
         for (const arm of node.arms) {
           const innerEnv = new TypeEnv(typeEnv.ctx, typeEnv);
           this.inferBindings(arm.pattern, valueType, innerEnv, constraints);
@@ -659,16 +737,18 @@ export class TypeChecker {
 
       case SyntaxKind.BinaryExpression:
       {
-        const operatorType = typeEnv.lookup(node.operator.getText());
+        let operatorType = typeEnv.lookup(node.operator.getText());
         if (operatorType === null) {
           this.diagnostics.add(new BindingNotFoundDiagnostic(node.operator));
           return new AnyType(node);
         }
+        operatorType = operatorType.shallowClone();
+        operatorType.node = node;
         const argTypes = [
           this.inferExpr(node.lhs, typeEnv, constraints),
           this.inferExpr(node.rhs, typeEnv, constraints),
         ];
-        const returnType = this.ctx.createTypeVar();
+        const returnType = this.ctx.createTypeVar(undefined, node);
         constraints.push(new EqualityConstraint(
           new ArrowType(argTypes, returnType, node),
           operatorType
@@ -678,11 +758,13 @@ export class TypeChecker {
 
       case SyntaxKind.ReferenceExpression:
       {
-        const type = typeEnv.lookup(node.name.text);
+        let type = typeEnv.lookup(node.name.text);
         if (type === null) {
           this.diagnostics.add(new BindingNotFoundDiagnostic(node.name));
           return new AnyType(node);
         }
+        type = type.shallowClone();
+        type.node = node;
         return type;
       }
 
@@ -702,7 +784,21 @@ export class TypeChecker {
     }
   }
 
+  private failUnification(diagnostic: Diagnostic, deps: Type[]) {
+    if (deps.some(t => t.flags & TypeFlags.Fail)) {
+      return;
+    }
+    this.diagnostics.add(diagnostic);
+    for (const type of deps) {
+      type.flags |= TypeFlags.Fail;
+    }
+  }
+
   private unifyEquality(a: Type, b: Type): void {
+
+    if (a.flags & TypeFlags.Fail || b.flags & TypeFlags.Fail) {
+      return;
+    }
 
     if (a === b) {
       return;
@@ -711,12 +807,14 @@ export class TypeChecker {
     if (a.kind === TypeKind.TypeVar) {
       if (!a.hasSubstitution()) {
         if (b.hasFreeVariable(a)) {
-          this.diagnostics.add(new OccursCheckDiagnostic(a, b));
-          a.flags |= TypeFlags.UnificationFailed;
-          b.flags |= TypeFlags.UnificationFailed;
+          this.failUnification(new OccursCheckDiagnostic(a, b), [ a, b ]);
           return;
         }
         a.setSubstitution(b);
+        // FIXME
+        if (a.node !== null && (b.flags & TypeFlags.Opaque) === 0) {
+          b.node = a.node;
+        }
         return;
       }
       a = a.getFullySubstitutedType();
@@ -733,7 +831,7 @@ export class TypeChecker {
 
     if (a.kind === TypeKind.BuiltinType && b.kind === TypeKind.BuiltinType) {
       if (a.id !== b.id) {
-        this.diagnostics.add(new UnificationFailedDiagnostic(a, b));
+        this.failUnification(new UnificationFailedDiagnostic(a, b), [ a, b ]);
       }
       return;
     }
@@ -741,7 +839,7 @@ export class TypeChecker {
     if (a.kind === TypeKind.ArrowType && b.kind === TypeKind.ArrowType) {
 
       if (a.paramTypes.length !== b.paramTypes.length) {
-        this.diagnostics.add(new ParamCountMismatchDiagnostic(a, b));
+        this.failUnification(new ParamCountMismatchDiagnostic(a, b), [ a, b ]);
       }
 
       for (let i = 0; i < Math.min(a.paramTypes.length, b.paramTypes.length); i++) {
@@ -749,10 +847,17 @@ export class TypeChecker {
       }
 
       this.unifyEquality(a.returnType, b.returnType);
+
+      // if (a.flags & TypeFlags.Loose && (b.flags & TypeFlags.Loose) === 0) {
+      //   a.node = b.node;
+      // }
+      // if ((a.flags & TypeFlags.Loose) === 0 && b.flags & TypeFlags.Loose) {
+      //   b.node = a.node;
+      // }
       return;
     }
 
-    this.diagnostics.add(new UnificationFailedDiagnostic(a, b));
+    this.failUnification(new UnificationFailedDiagnostic(a, b), [ a, b ]);
   }
 
 }
