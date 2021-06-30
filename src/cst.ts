@@ -1,4 +1,4 @@
-import { Scheme, Type, TypeEnv} from "./checker";
+import { Constraint, Scheme, Type, TypeEnv } from "./checker";
 import { TextFile, TextPosition, TextRange } from "./text";
 
 export enum SyntaxKind {
@@ -13,6 +13,8 @@ export enum SyntaxKind {
   CustomOperator,
   Assignment,
   DecimalInteger,
+  ClassKeyword,
+  InstanceKeyword,
   StructKeyword,
   ReturnKeyword,
   ImportKeyword,
@@ -29,6 +31,7 @@ export enum SyntaxKind {
   ColonSign,
   EqualSign,
   RArrowSign,
+  RArrowAltSign,
   TildeSign,
   CommaSign,
   BSlashSign,
@@ -38,11 +41,6 @@ export enum SyntaxKind {
   RBrace,
   LParen,
   RParen,
-
-  // Module-level nodes
-  Declaration,
-  VariableDefinition,
-  FunctionDefinition,
 
   // Other nodes
   Module,
@@ -57,7 +55,7 @@ export enum SyntaxKind {
   BlockDefinitionBody,
   InlineDefinitionBody,
   MatchArm,
-  TypeSignature,
+  ConstraintSignature,
 
   // Patterns
   BindPattern,
@@ -78,10 +76,18 @@ export enum SyntaxKind {
 
   // Type expressions
   TypeReferenceExpression,
+  NestedTypeExpression,
+  ArrowTypeExpression,
+
+  // Constraint expressions
+  IsInstanceConstraintExpression,
 
   // Declarations
   RecordDeclaration,
-
+  ClassDeclaration,
+  InstanceDeclaration,
+  VariableDefinition,
+  FunctionDefinition,
 }
 
 export type Syntax
@@ -94,14 +100,15 @@ export type Syntax
   | Pattern
   | Expression
   | TypeExpression
-  | FunctionDefinition
-  | VariableDefinition
-  | Declaration
+  | Definition
   | RecordDeclaration
   | Token
   | MatchArm
   | RecordDeclarationElement
-  | TypeSignature
+  | ConstraintSignature
+  | ConstraintExpression
+  | ClassDeclaration
+  | InstanceDeclaration
 
 let nextNodeId = 0;
 
@@ -110,6 +117,9 @@ abstract class SyntaxBase {
   public readonly kind!: SyntaxKind;
 
   public parentNode!: Syntax | null;
+
+  public associatedType?: Type;
+  public associatedConstraints?: Constraint[];
 
   constructor(kind: SyntaxKind) {
     Object.defineProperties(this, {
@@ -182,6 +192,7 @@ export type Token
   | LineFoldEnd
   | Identifier
   | RArrowSign
+  | RArrowAltSign
   | DecimalInteger
   | CustomOperator
   | Assignment
@@ -196,6 +207,8 @@ export type Token
   | ResumeKeyword
   | MatchKeyword
   | YieldKeyword
+  | ClassKeyword
+  | InstanceKeyword
   | DotSign
   | DotDotSign
   | ColonSign
@@ -219,6 +232,7 @@ export function isToken(node: Syntax): node is Token {
       || node.kind === SyntaxKind.LineFoldEnd
       || node.kind === SyntaxKind.Identifier
       || node.kind === SyntaxKind.RArrowSign
+      || node.kind === SyntaxKind.RArrowAltSign
       || node.kind === SyntaxKind.DecimalInteger
       || node.kind === SyntaxKind.CustomOperator
       || node.kind === SyntaxKind.Assignment
@@ -233,6 +247,8 @@ export function isToken(node: Syntax): node is Token {
       || node.kind === SyntaxKind.ResumeKeyword
       || node.kind === SyntaxKind.MatchKeyword
       || node.kind === SyntaxKind.YieldKeyword
+      || node.kind === SyntaxKind.ClassKeyword
+      || node.kind === SyntaxKind.InstanceKeyword
       || node.kind === SyntaxKind.DotSign
       || node.kind === SyntaxKind.DotDotSign
       || node.kind === SyntaxKind.ColonSign
@@ -409,6 +425,13 @@ export class Identifier extends TokenBase {
 
 }
 
+export type Operator
+  = CustomOperator
+
+export function isOperator(node: Syntax): node is Operator {
+  return node.kind === SyntaxKind.CustomOperator;
+}
+
 export class CustomOperator extends TokenBase {
 
   public readonly kind!: SyntaxKind.CustomOperator;
@@ -472,12 +495,15 @@ const TOKEN_TEXT: Partial<Record<TokenSyntaxKind, string>> = {
   [SyntaxKind.MatchKeyword]: 'match',
   [SyntaxKind.ReturnKeyword]: 'return',
   [SyntaxKind.ImportKeyword]: 'import',
+  [SyntaxKind.ClassKeyword]: 'class',
+  [SyntaxKind.InstanceKeyword]: 'instance',
   [SyntaxKind.TypeKeyword]: 'type',
   [SyntaxKind.DotSign]: '.',
   [SyntaxKind.DotDotSign]: '..',
   [SyntaxKind.ColonSign]: ':',
   [SyntaxKind.TildeSign]: '~',
   [SyntaxKind.RArrowSign]: '->',
+  [SyntaxKind.RArrowAltSign]: '=>',
   [SyntaxKind.CommaSign]: ',',
   [SyntaxKind.BSlashSign]: '\\',
   [SyntaxKind.EqualSign]: '=',
@@ -512,6 +538,7 @@ export type ColonSign = SimpleToken<SyntaxKind.ColonSign>;
 export type EqualSign = SimpleToken<SyntaxKind.EqualSign>;
 export type TildeSign = SimpleToken<SyntaxKind.TildeSign>;
 export type RArrowSign = SimpleToken<SyntaxKind.RArrowSign>;
+export type RArrowAltSign = SimpleToken<SyntaxKind.RArrowAltSign>;
 export type CommaSign = SimpleToken<SyntaxKind.CommaSign>;
 export type BSlashSign = SimpleToken<SyntaxKind.BSlashSign>;
 export type LBracket = SimpleToken<SyntaxKind.LBracket>;
@@ -532,6 +559,8 @@ export type TypeKeyword = SimpleToken<SyntaxKind.TypeKeyword>;
 export type PerformKeyword = SimpleToken<SyntaxKind.PerformKeyword>;
 export type ResumeKeyword = SimpleToken<SyntaxKind.ResumeKeyword>;
 export type YieldKeyword = SimpleToken<SyntaxKind.YieldKeyword>;
+export type ClassKeyword = SimpleToken<SyntaxKind.ClassKeyword>;
+export type InstanceKeyword = SimpleToken<SyntaxKind.InstanceKeyword>;
 
 export function describeSyntaxKind(kind: SyntaxKind): string {
   if (kind in TOKEN_TEXT) {
@@ -850,6 +879,40 @@ export type Statement
 
 export type TypeExpression
   = TypeReferenceExpression
+  | NestedTypeExpression
+  | ArrowTypeExpression
+
+export class ArrowTypeExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ArrowTypeExpression;
+
+  public constructor(
+    public paramTypes: Array<[TypeExpression, RArrowSign]>,
+    public returnType: TypeExpression,
+  ) {
+    super(SyntaxKind.ArrowTypeExpression);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    for (const [param, rarrowSign] of this.paramTypes) {
+      yield param;
+      yield rarrowSign;
+    }
+    yield this.returnType;
+  }
+
+  public getFirstToken(): Token {
+    if (this.paramTypes.length > 0) {
+      return this.paramTypes[0][0].getFirstToken();
+    }
+    return this.returnType.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.returnType.getLastToken();
+  }
+
+}
 
 export class TypeReferenceExpression extends SyntaxBase {
 
@@ -877,6 +940,34 @@ export class TypeReferenceExpression extends SyntaxBase {
     return this.typeArgs.length > 0
       ? this.typeArgs[this.typeArgs.length-1].getLastToken()
       : this.name.getLastToken();
+  }
+
+}
+
+export class NestedTypeExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.NestedTypeExpression;
+
+  public constructor(
+    public lparen: LParen,
+    public expression: TypeExpression,
+    public rparen: RParen,
+  ) {
+    super(SyntaxKind.NestedTypeExpression);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    yield this.lparen;
+    yield this.expression;
+    yield this.rparen;
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
   }
 
 }
@@ -1019,21 +1110,20 @@ export type SourceElement
   = Expression
   | Statement
   | RecordDeclaration
-  | Declaration
-  | FunctionDefinition
-  | VariableDefinition
+  | Definition
+  | ClassDeclaration
+  | InstanceDeclaration
 
 export type FunctionBodyElement
   = Statement
   | Expression
+  | Definition
 
 export type ParameterDefaultValue = [TildeSign, Expression];
 
 export class Parameter extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.Parameter;
-
-  public type: Type | null = null;
 
   public constructor(
     public pattern: Pattern,
@@ -1053,46 +1143,6 @@ export class Parameter extends SyntaxBase {
 
   public getLastToken(): Token {
     return this.pattern.getLastToken();
-  }
-
-}
-
-export class Declaration extends SyntaxBase {
-
-  public readonly kind!: SyntaxKind.Declaration;
-
-  public constructor(
-    public pubKeyword: PubKeyword | null,
-    public name: Identifier,
-    public colonSign: ColonSign,
-    public paramTypes: Array<[TypeExpression, RArrowSign]>,
-    public returnType: TypeExpression,
-  ) {
-    super(SyntaxKind.Declaration);
-  }
-
-  public *getChildren(): Iterable<Syntax> {
-    if (this.pubKeyword !== null) {
-      yield this.pubKeyword;
-    }
-    yield this.name;
-    yield this.colonSign;
-    for (const [typeExpr, rarrow] of this.paramTypes) {
-      yield typeExpr;
-      yield rarrow;
-    }
-    yield this.returnType;
-  }
-
-  public getFirstToken(): Token {
-    if (this.pubKeyword !== null) {
-      return this.pubKeyword;
-    }
-    return this.name;
-  }
-
-  public getLastToken(): Token {
-    return this.returnType.getLastToken();
   }
 
 }
@@ -1217,51 +1267,23 @@ export class InlineDefinitionBody extends SyntaxBase {
 
 }
 
-export class TypeSignature extends SyntaxBase {
-
-  public readonly kind!: SyntaxKind.TypeSignature;
-
-  public constructor(
-    public paramTypes: Array<[TypeExpression, RArrowSign]>,
-    public returnType: TypeExpression,
-  ) {
-    super(SyntaxKind.TypeSignature);
-  }
-
-  public *getChildren(): Iterable<Syntax> {
-    for (const [typeExpr, rarrowSign] of this.paramTypes) {
-      yield typeExpr;
-      yield rarrowSign;
-    }
-    yield this.returnType;
-  }
-
-  public getFirstToken(): Token {
-    if (this.paramTypes.length > 0) {
-      return this.paramTypes[0][0].getFirstToken();
-    }
-    return this.returnType.getFirstToken()
-  }
-
-  public getLastToken(): Token {
-    return this.returnType.getLastToken()
-  }
-
-}
+export type Definition
+  = FunctionDefinition
+  | VariableDefinition
 
 export class FunctionDefinition extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.FunctionDefinition;
 
-  public typeEnv: TypeEnv | null = null;
-  public scheme: Scheme | null = null;
+  public typeEnv?: TypeEnv;
+  public scheme?: Scheme;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
     public letKeyword: LetKeyword,
-    public name: Identifier,
+    public name: Identifier | Operator,
     public params: Parameter[],
-    public typeSig: TypeSignature | null,
+    public typeExpr: TypeExpression | null,
     public body: DefinitionBody | null,
   ) {
     super(SyntaxKind.FunctionDefinition);
@@ -1276,8 +1298,8 @@ export class FunctionDefinition extends SyntaxBase {
     for (const param of this.params) {
       yield param;
     }
-    if (this.typeSig !== null) {
-      yield this.typeSig
+    if (this.typeExpr !== null) {
+      yield this.typeExpr
     }
     if (this.body !== null) {
       yield this.body;
@@ -1295,8 +1317,8 @@ export class FunctionDefinition extends SyntaxBase {
     if (this.body !== null) {
       return this.body.getLastToken();
     }
-    if (this.typeSig !== null) {
-      return this.typeSig.getLastToken()
+    if (this.typeExpr !== null) {
+      return this.typeExpr.getLastToken()
     }
     if (this.params.length > 0) {
       return this.params[this.params.length-1].getLastToken();
@@ -1314,8 +1336,9 @@ export class VariableDefinition extends SyntaxBase {
   public constructor(
     public pubKeyword: PubKeyword | null,
     public letKeyword: LetKeyword,
+    public mutKeyword: MutKeyword | null,
     public pattern: Pattern,
-    public typeSig: TypeSignature | null,
+    public typeExpr: TypeExpression | null,
     public body: DefinitionBody | null,
   ) {
     super(SyntaxKind.VariableDefinition);
@@ -1326,9 +1349,12 @@ export class VariableDefinition extends SyntaxBase {
       yield this.pubKeyword;
     }
     yield this.letKeyword;
+    if (this.mutKeyword !== null) {
+      yield this.mutKeyword;
+    }
     yield this.pattern;
-    if (this.typeSig !== null) {
-      yield this.typeSig;
+    if (this.typeExpr !== null) {
+      yield this.typeExpr;
     }
     if (this.body !== null) {
       yield this.body;
@@ -1346,10 +1372,162 @@ export class VariableDefinition extends SyntaxBase {
     if (this.body !== null) {
       return this.body.getLastToken();
     }
-    if (this.typeSig !== null) {
-      return this.typeSig.getLastToken()
+    if (this.typeExpr !== null) {
+      return this.typeExpr.getLastToken()
     }
     return this.pattern.getLastToken()
+  }
+
+}
+
+export type ConstraintExpression
+  = IsInstanceConstraintExpression
+
+export class IsInstanceConstraintExpression extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.IsInstanceConstraintExpression;
+
+  public constructor(
+    public name: QualName,
+    public types: TypeExpression[],
+  ) {
+    super(SyntaxKind.IsInstanceConstraintExpression);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    yield this.name;
+    for (const typeExpr of this.types) {
+      yield typeExpr;
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.name.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.types[this.types.length-1].getLastToken();
+  }
+
+}
+
+export class ConstraintSignature extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ConstraintSignature;
+
+  public constructor(
+    public expressions: Array<[ConstraintExpression, CommaSign | null]>,
+    public rarrowAltSign: RArrowAltSign,
+  ) {
+    super(SyntaxKind.ConstraintSignature);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    for (const [expression, commaSign] of this.expressions) {
+      yield expression;
+      if (commaSign !== null) {
+        yield commaSign;
+      }
+    }
+    yield this.rarrowAltSign;
+  }
+
+  public getFirstToken(): Token {
+    return this.expressions[0][0].getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.rarrowAltSign;
+  }
+
+}
+
+export class ClassDeclaration extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.ClassDeclaration;
+
+  public typeEnv?: TypeEnv;
+
+  public constructor(
+    public classKeyword: ClassKeyword,
+    public constraints: ConstraintSignature | null,
+    public name: Identifier,
+    public typeParams: TypeExpression[],
+    public dotSign: DotSign,
+    public definitions: Definition[],
+  ) {
+    super(SyntaxKind.ClassDeclaration);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    yield this.classKeyword;
+    if (this.constraints !== null) {
+      yield this.constraints;
+    }
+    yield this.name;
+    for (const typeExpr of this.typeParams) {
+      yield typeExpr;
+    }
+    yield this.dotSign;
+    for (const definition of this.definitions) {
+      yield definition;
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.classKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.definitions.length > 0) {
+      return this.definitions[this.definitions.length-1].getLastToken();
+    }
+    return this.dotSign;
+  }
+
+}
+
+export class InstanceDeclaration extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.InstanceDeclaration;
+
+  public typeEnv?: TypeEnv;
+
+  public constructor(
+    public instanceKeyword: InstanceKeyword,
+    public constraints: ConstraintSignature | null,
+    public name: Identifier,
+    public typeParams: TypeExpression[],
+    public dotSign: DotSign,
+    public definitions: Definition[],
+  ) {
+    super(SyntaxKind.InstanceDeclaration);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    yield this.instanceKeyword
+    if (this.constraints !== null) {
+      yield this.constraints;
+    }
+    yield this.name;
+    for (const typeExpr of this.typeParams) {
+      yield typeExpr;
+    }
+    yield this.dotSign;
+    for (const definition of this.definitions) {
+      yield definition;
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.instanceKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.definitions.length > 0) {
+      return this.definitions[this.definitions.length-1].getLastToken();
+    }
+    return this.dotSign;
   }
 
 }

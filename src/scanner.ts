@@ -82,6 +82,8 @@ const KEYWORDS: Record<string, TokenSyntaxKind> = {
   'yield': SyntaxKind.YieldKeyword,
   'resume': SyntaxKind.ResumeKeyword,
   'match': SyntaxKind.MatchKeyword,
+  'class': SyntaxKind.ClassKeyword,
+  'instance': SyntaxKind.InstanceKeyword,
 }
 
 export class Scanner extends BufferedStream<Token> {
