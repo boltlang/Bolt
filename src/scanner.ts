@@ -73,6 +73,7 @@ function describeChar(ch: string): string {
 const KEYWORDS: Record<string, TokenSyntaxKind> = {
   'return': SyntaxKind.ReturnKeyword,
   'struct': SyntaxKind.StructKeyword,
+  'enum': SyntaxKind.EnumKeyword,
   'type': SyntaxKind.TypeKeyword,
   'import': SyntaxKind.ImportKeyword,
   'pub': SyntaxKind.PubKeyword,

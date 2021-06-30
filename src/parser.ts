@@ -41,6 +41,8 @@ import {
   CommaSign,
   NestedTypeExpression,
   ArrowTypeExpression,
+  VariantDeclaration,
+  VariantDeclarationField,
 } from "./cst";
 import {
   Diagnostics,
@@ -342,24 +344,74 @@ export class Parser {
     return this.parseArrowTypeExpression();
   }
 
+  public parseEnumDeclaration(): VariantDeclaration {
+
+    let pubKeyword = null;
+
+    const t0 = this.peekToken()
+    if (t0.kind === SyntaxKind.PubKeyword) {
+      this.getToken()
+      pubKeyword = t0;
+    }
+
+    const structKeyword = this.expectToken(SyntaxKind.EnumKeyword);
+    const name = this.expectToken(SyntaxKind.Identifier);
+    const typeParams = [];
+
+    const t1 = this.peekToken()
+    if (t1.kind !== SyntaxKind.BlockStart
+      && t1.kind !== SyntaxKind.LineFoldEnd) {
+      for (;;) {
+        const t2 = this.peekToken()
+        if (t2.kind === SyntaxKind.BlockStart
+            || t2.kind === SyntaxKind.LineFoldEnd) {
+          break;
+        }
+        const name = this.expectToken(SyntaxKind.Identifier);
+        typeParams.push(new TypeParameter(name));
+      }
+    }
+
+    const blockStart = this.expectToken(SyntaxKind.BlockStart)
+
+    const elements = [];
+
+    for (;;) {
+      const t2 = this.peekToken()
+      if (t2.kind === SyntaxKind.BlockEnd) {
+        this.getToken()
+        break;
+      }
+      const name = this.expectToken(SyntaxKind.Identifier)
+      this.expectToken(SyntaxKind.LineFoldEnd)
+      elements.push(new VariantDeclarationField(name));
+    }
+
+    this.expectToken(SyntaxKind.LineFoldEnd);
+
+    return new VariantDeclaration(
+      pubKeyword,
+      structKeyword,
+      name,
+      typeParams,
+      blockStart.dotSign,
+      elements,
+    );
+  }
+
   public parseStructDeclaration(): RecordDeclaration {
 
     let pubKeyword = null;
     const typeParams = [];
     let body: RecordDeclarationBody | null = null;
 
-    let t0 = this.peekToken();
-
+    const t0 = this.peekToken();
     if (t0.kind === SyntaxKind.PubKeyword) {
       pubKeyword = t0;
       this.getToken();
-      t0 = this.peekToken();
     }
 
-    if (t0.kind !== SyntaxKind.StructKeyword) {
-      this.raiseParseError(t0, [ SyntaxKind.StructKeyword ]);
-    }
-    this.getToken();
+    const structKeyword = this.expectToken(SyntaxKind.StructKeyword);
 
     const name = this.expectToken(SyntaxKind.Identifier)
 
@@ -414,7 +466,7 @@ export class Parser {
 
     return new RecordDeclaration(
       pubKeyword,
-      t0,
+      structKeyword,
       name,
       typeParams,
       body,
@@ -707,6 +759,8 @@ export class Parser {
         return this.parseDefinition();
       case SyntaxKind.StructKeyword:
         return this.parseStructDeclaration()
+      case SyntaxKind.EnumKeyword:
+        return this.parseEnumDeclaration();
       case SyntaxKind.ClassKeyword:
         return this.parseClassDeclaration();
       case SyntaxKind.InstanceKeyword:

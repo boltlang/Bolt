@@ -1,4 +1,4 @@
-import { Constraint, Scheme, Type, TypeEnv } from "./checker";
+import { Type, TypeEnv } from "./checker";
 import { TextFile, TextPosition, TextRange } from "./text";
 
 export enum SyntaxKind {
@@ -16,6 +16,7 @@ export enum SyntaxKind {
   ClassKeyword,
   InstanceKeyword,
   StructKeyword,
+  EnumKeyword,
   ReturnKeyword,
   ImportKeyword,
   PubKeyword,
@@ -52,6 +53,7 @@ export enum SyntaxKind {
   Parameter,
   TypeParameter,
   RecordDeclarationField,
+  VariantDeclarationField,
   BlockDefinitionBody,
   InlineDefinitionBody,
   MatchArm,
@@ -84,6 +86,7 @@ export enum SyntaxKind {
 
   // Declarations
   RecordDeclaration,
+  VariantDeclaration,
   ClassDeclaration,
   InstanceDeclaration,
   VariableDefinition,
@@ -102,13 +105,16 @@ export type Syntax
   | TypeExpression
   | Definition
   | RecordDeclaration
+  | VariantDeclaration
   | Token
   | MatchArm
-  | RecordDeclarationElement
+  | RecordDeclarationField
+  | VariantDeclarationField
   | ConstraintSignature
   | ConstraintExpression
   | ClassDeclaration
   | InstanceDeclaration
+  | MacroInvocation
 
 let nextNodeId = 0;
 
@@ -119,7 +125,8 @@ abstract class SyntaxBase {
   public parentNode!: Syntax | null;
 
   public associatedType?: Type;
-  public associatedConstraints?: Constraint[];
+  public associatedConstraints: Constraint[] = [];
+  public typeEnv?: TypeEnv;
 
   constructor(kind: SyntaxKind) {
     Object.defineProperties(this, {
@@ -197,6 +204,7 @@ export type Token
   | CustomOperator
   | Assignment
   | StructKeyword
+  | EnumKeyword
   | ReturnKeyword
   | ImportKeyword
   | PubKeyword
@@ -237,6 +245,7 @@ export function isToken(node: Syntax): node is Token {
       || node.kind === SyntaxKind.CustomOperator
       || node.kind === SyntaxKind.Assignment
       || node.kind === SyntaxKind.StructKeyword
+      || node.kind === SyntaxKind.EnumKeyword
       || node.kind === SyntaxKind.ReturnKeyword
       || node.kind === SyntaxKind.ImportKeyword
       || node.kind === SyntaxKind.PubKeyword
@@ -492,6 +501,7 @@ const TOKEN_TEXT: Partial<Record<TokenSyntaxKind, string>> = {
   [SyntaxKind.YieldKeyword]: 'yield',
   [SyntaxKind.ResumeKeyword]: 'resume',
   [SyntaxKind.StructKeyword]: 'struct',
+  [SyntaxKind.EnumKeyword]: 'enum',
   [SyntaxKind.MatchKeyword]: 'match',
   [SyntaxKind.ReturnKeyword]: 'return',
   [SyntaxKind.ImportKeyword]: 'import',
@@ -551,6 +561,7 @@ export type RBrace = SimpleToken<SyntaxKind.RBrace>;
 export type ReturnKeyword = SimpleToken<SyntaxKind.ReturnKeyword>;
 export type MatchKeyword = SimpleToken<SyntaxKind.MatchKeyword>;
 export type StructKeyword = SimpleToken<SyntaxKind.StructKeyword>;
+export type EnumKeyword = SimpleToken<SyntaxKind.EnumKeyword>;
 export type ImportKeyword = SimpleToken<SyntaxKind.ImportKeyword>;
 export type PubKeyword = SimpleToken<SyntaxKind.PubKeyword>;
 export type LetKeyword = SimpleToken<SyntaxKind.LetKeyword>;
@@ -996,6 +1007,38 @@ export class TypeParameter extends SyntaxBase {
 
 }
 
+export type RecordDeclarationElement
+  = RecordDeclarationField
+  | MacroInvocation
+
+export class RecordDeclarationField extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.RecordDeclarationField;
+
+  public constructor(
+    public name: Identifier,
+    public colonSign: ColonSign,
+    public typeExpr: TypeExpression,
+  ) {
+    super(SyntaxKind.RecordDeclarationField);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    yield this.name;
+    yield this.colonSign;
+    yield this.typeExpr;
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpr.getLastToken();
+  }
+
+}
+
 export type RecordDeclarationBody = [DotSign, Array<RecordDeclarationElement>];
 
 export class RecordDeclaration extends SyntaxBase {
@@ -1050,26 +1093,18 @@ export class RecordDeclaration extends SyntaxBase {
 
 }
 
-export type RecordDeclarationElement
-  = RecordDeclarationField
-  | MacroInvocation
+export class VariantDeclarationField extends SyntaxBase {
 
-export class RecordDeclarationField extends SyntaxBase {
-
-  public readonly kind!: SyntaxKind.RecordDeclarationField;
+  public readonly kind!: SyntaxKind.VariantDeclarationField;
 
   public constructor(
     public name: Identifier,
-    public colonSign: ColonSign,
-    public typeExpr: TypeExpression,
   ) {
-    super(SyntaxKind.RecordDeclarationField);
+    super(SyntaxKind.VariantDeclarationField);
   }
 
   public *getChildren(): Iterable<Syntax> {
     yield this.name;
-    yield this.colonSign;
-    yield this.typeExpr;
   }
 
   public getFirstToken(): Token {
@@ -1077,7 +1112,56 @@ export class RecordDeclarationField extends SyntaxBase {
   }
 
   public getLastToken(): Token {
-    return this.typeExpr.getLastToken();
+    return this.name;
+  }
+
+}
+
+export type VariantDeclarationElement
+  = VariantDeclarationField
+  | MacroInvocation
+
+export class VariantDeclaration extends SyntaxBase {
+
+  public readonly kind!: SyntaxKind.VariantDeclaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null = null,
+    public enumKeyword: EnumKeyword,
+    public name: Identifier,
+    public typeParams: TypeParameter[] = [],
+    public dotSign: DotSign,
+    public elements: Array<VariantDeclarationElement>,
+  ) {
+    super(SyntaxKind.VariantDeclaration);
+  }
+
+  public *getChildren(): Iterable<Syntax> {
+    if (this.pubKeyword !== null) {
+      yield this.pubKeyword;
+    }
+    yield this.enumKeyword;
+    yield this.name;
+    for (const typeParam of this.typeParams) {
+      yield typeParam;
+    }
+    yield this.dotSign;
+    for (const element of this.elements) {
+      yield element;
+    }
+  }
+
+  public getFirstToken(): Token {
+    return this.pubKeyword !== null
+        ? this.pubKeyword
+        : this.enumKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+        this.elements[this.elements.length-1].getLastToken()
+    }
+    return this.dotSign;
   }
 
 }
@@ -1274,9 +1358,6 @@ export type Definition
 export class FunctionDefinition extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.FunctionDefinition;
-
-  public typeEnv?: TypeEnv;
-  public scheme?: Scheme;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
