@@ -1,5 +1,6 @@
-import { Type, TypeEnv } from "./checker";
+import { Type, Scope } from "./checker";
 import { TextFile, TextPosition, TextRange } from "./text";
+import { assert } from "./util";
 
 export enum SyntaxKind {
 
@@ -126,7 +127,8 @@ abstract class SyntaxBase {
 
   public associatedType?: Type;
   public associatedConstraints: Constraint[] = [];
-  public typeEnv?: TypeEnv;
+  public scope?: Scope;
+  public visited = false;
 
   constructor(kind: SyntaxKind) {
     Object.defineProperties(this, {
@@ -135,6 +137,35 @@ abstract class SyntaxBase {
       parentNode: { value: null, writable: true },
     })
   }
+
+  public getQualifiedName(): string {
+    let elements = [];
+    let currNode: Syntax | null = this as unknown as Syntax;
+    do {
+      switch (currNode.kind) {
+        case SyntaxKind.ReferenceExpression:
+        case SyntaxKind.TypeReferenceExpression:
+          for (let i = currNode.name.modulePath.length; i >= 0; i--) {
+            const [name, dotSign] = currNode.name.modulePath[i];
+            elements.unshift(name.text);
+          }
+          elements.unshift(currNode.name.name.text);
+          break;
+        case SyntaxKind.FunctionDefinition:
+        case SyntaxKind.RecordDeclaration:
+        case SyntaxKind.RecordDeclaration:
+          elements.unshift(currNode.name.text);
+          break;
+        case SyntaxKind.VariableDefinition:
+          assert(currNode.pattern.kind === SyntaxKind.BindPattern);
+          elements.unshift(currNode.pattern.name.text);
+          break;
+      }
+      currNode = currNode.parentNode;
+    } while (currNode !== null);
+    return elements.join('.');
+  }
+
 
   public abstract getChildren(): Iterable<Syntax>;
 
@@ -152,6 +183,20 @@ abstract class SyntaxBase {
     this.parentNode = parentNode;
     for (const child of this.getChildren()) {
       child.setParents(this as unknown as Syntax);
+    }
+  }
+
+  public *getLeafNodes(): Iterable<Syntax> {
+    if (isToken(this as unknown as Syntax)) {
+      return;
+    }
+    const children = [...this.getChildren()];
+    if (children.every(child => isToken(child))) {
+      yield this as unknown as Syntax;
+    } else {
+      for (const child of children) {
+        yield* child.getLeafNodes();
+      }
     }
   }
 
@@ -729,7 +774,7 @@ export class BinaryExpression extends SyntaxBase {
 
   public constructor(
     public lhs: Expression,
-    public operator: Token,
+    public operator: Operator,
     public rhs: Expression,
   ) {
     super(SyntaxKind.BinaryExpression);
@@ -756,7 +801,7 @@ export class ReferenceExpression extends SyntaxBase {
   public readonly kind!: SyntaxKind.ReferenceExpression;
 
   public constructor(
-    public name: Identifier,
+    public name: QualName,
   ) {
     super(SyntaxKind.ReferenceExpression);
   }
@@ -766,11 +811,11 @@ export class ReferenceExpression extends SyntaxBase {
   }
 
   public getFirstToken(): Token {
-    return this.name;
+    return this.name.getFirstToken();
   }
 
   public getLastToken(): Token {
-    return this.name;
+    return this.name.getLastToken();
   }
 
 }
@@ -1194,6 +1239,7 @@ export type SourceElement
   = Expression
   | Statement
   | RecordDeclaration
+  | VariantDeclaration
   | Definition
   | ClassDeclaration
   | InstanceDeclaration
@@ -1527,8 +1573,6 @@ export class ClassDeclaration extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.ClassDeclaration;
 
-  public typeEnv?: TypeEnv;
-
   public constructor(
     public classKeyword: ClassKeyword,
     public constraints: ConstraintSignature | null,
@@ -1571,8 +1615,6 @@ export class ClassDeclaration extends SyntaxBase {
 export class InstanceDeclaration extends SyntaxBase {
 
   public readonly kind!: SyntaxKind.InstanceDeclaration;
-
-  public typeEnv?: TypeEnv;
 
   public constructor(
     public instanceKeyword: InstanceKeyword,

@@ -43,6 +43,7 @@ import {
   ArrowTypeExpression,
   VariantDeclaration,
   VariantDeclarationField,
+  ReturnStatement,
 } from "./cst";
 import {
   Diagnostics,
@@ -198,7 +199,7 @@ export class Parser {
         return this.parseMatchExpression();
       case SyntaxKind.Identifier:
         this.getToken();
-        return new ReferenceExpression(t0);
+        return new ReferenceExpression(new QualName(undefined, t0));
       case SyntaxKind.DecimalInteger:
         this.getToken();
         return new ConstantExpression(t0);
@@ -474,13 +475,6 @@ export class Parser {
 
   }
 
-  public parseFunctionBodyElement(): FunctionBodyElement {
-    // FIXME Add support for return statements, etc.
-    const expression = this.parseExpression();
-    this.expectToken(SyntaxKind.LineFoldEnd);
-    return expression;
-  }
-
   public parseTuplePattern(): TuplePattern {
     const lparen = this.expectToken(SyntaxKind.LParen);
     let elements = [];
@@ -622,7 +616,6 @@ export class Parser {
           }
           const element = this.parseFunctionBodyElement();
           elements.push(element);
-          this.expectToken(SyntaxKind.LineFoldEnd)
         }
         body = new BlockDefinitionBody(
           dotSign,
@@ -638,7 +631,9 @@ export class Parser {
 
     this.expectToken(SyntaxKind.LineFoldEnd);
 
-    if (name !== null || params.length > 0) {
+    if (name !== null
+      || params.length > 0
+      || (body !== null && body.kind === SyntaxKind.BlockDefinitionBody)) {
       if (pattern.kind !== SyntaxKind.BindPattern) {
         this.raiseParseError(pattern.getFirstToken(), [ SyntaxKind.Identifier ]);
       }
@@ -752,11 +747,53 @@ export class Parser {
 
   }
 
-  public parseSourceElement(): SourceElement {
-    const t0 = this.peekToken();
+  public parseReturnStatement(): ReturnStatement {
+    const returnKeyword = this.expectToken(SyntaxKind.ReturnKeyword);
+    const t1 = this.peekToken()
+    let expression = null;
+    if (t1.kind !== SyntaxKind.LineFoldEnd) {
+      expression = this.parseExpression()
+    }
+    this.expectToken(SyntaxKind.LineFoldEnd)
+    return new ReturnStatement(
+      returnKeyword,
+      expression,
+    );
+  }
+
+  private peekTokenAfterModifiers(): Token {
+    let t0;
+    let i = 1;
+    for (;;) {
+      t0 = this.peekToken(i++)
+      if (t0.kind !== SyntaxKind.PubKeyword && t0.kind !== SyntaxKind.MutKeyword) {
+        break;
+      }
+    }
+    return t0;
+  }
+
+  public parseFunctionBodyElement(): FunctionBodyElement {
+    const t0 = this.peekTokenAfterModifiers()
     switch (t0.kind) {
       case SyntaxKind.LetKeyword:
         return this.parseDefinition();
+      case SyntaxKind.ReturnKeyword:
+        return this.parseReturnStatement();
+      default:
+        const expression = this.parseExpression();
+        this.expectToken(SyntaxKind.LineFoldEnd);
+        return expression;
+    }
+  }
+
+  public parseSourceElement(): SourceElement {
+    const t0 = this.peekTokenAfterModifiers ();
+    switch (t0.kind) {
+      case SyntaxKind.LetKeyword:
+        return this.parseDefinition();
+      case SyntaxKind.ReturnKeyword:
+        return this.parseReturnStatement();
       case SyntaxKind.StructKeyword:
         return this.parseStructDeclaration()
       case SyntaxKind.EnumKeyword:
@@ -766,7 +803,9 @@ export class Parser {
       case SyntaxKind.InstanceKeyword:
         return this.parseInstanceDeclaration();
       default:
-        return this.parseFunctionBodyElement();
+        const expression = this.parseExpression();
+        this.expectToken(SyntaxKind.LineFoldEnd);
+        return expression;
         // this.raiseParseError(t0, [ SyntaxKind.StructKeyword, SyntaxKind.LetKeyword ]);
     }
   }
