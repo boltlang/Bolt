@@ -206,6 +206,7 @@ export class Scanner extends BufferedStream<Token> {
         }
         switch (text) {
           case '->': return new SimpleToken(SyntaxKind.RArrowSign, [startPos, endPos]);
+          case '=>': return new SimpleToken(SyntaxKind.RArrowAltSign, [startPos, endPos]);
         }
         return new CustomOperator(text, [startPos, endPos]);
       }

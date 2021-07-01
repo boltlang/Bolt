@@ -44,6 +44,7 @@ import {
   VariantDeclaration,
   VariantDeclarationField,
   ReturnStatement,
+  InstanceDeclaration,
 } from "./cst";
 import {
   Diagnostics,
@@ -303,7 +304,13 @@ export class Parser {
     const name = this.parseQualName();
     for (;;) {
       const t1 = this.peekToken()
-      if (t1.kind !== SyntaxKind.Identifier) {
+      if (t1.kind === SyntaxKind.RArrowAltSign
+        || t1.kind === SyntaxKind.RArrowSign
+        || t1.kind === SyntaxKind.RParen
+        || t1.kind === SyntaxKind.BlockStart
+        || t1.kind === SyntaxKind.EqualSign
+        || t1.kind === SyntaxKind.CommaSign
+        || t1.kind === SyntaxKind.LineFoldEnd) {
         break;
       }
       const typeArg = this.parsePrimitiveTypeExpression();
@@ -324,6 +331,7 @@ export class Parser {
         || t0.kind === SyntaxKind.RParen
         || t0.kind === SyntaxKind.BlockStart
         || t0.kind === SyntaxKind.EqualSign
+        || t0.kind === SyntaxKind.CommaSign
         || t0.kind === SyntaxKind.LineFoldEnd) {
         break;
       }
@@ -663,9 +671,10 @@ export class Parser {
     for (;;) {
       const t0 = this.peekToken(i++)
       switch (t0.kind) {
-        case SyntaxKind.RArrowAltSign:
+        case kind:
           return true;
         case SyntaxKind.LineFoldEnd:
+        case SyntaxKind.BlockEnd:
         case SyntaxKind.BlockStart:
           return false;
       }
@@ -677,7 +686,8 @@ export class Parser {
     const typeArgs = [];
     for (;;) {
       const t0 = this.peekToken()
-      if (t0.kind === SyntaxKind.RArrowAltSign || t0.kind === SyntaxKind.CommaSign) {
+      if (t0.kind === SyntaxKind.RArrowAltSign
+        || t0.kind === SyntaxKind.CommaSign) {
         break;
       }
       typeArgs.push(this.parseTypeExpression());
@@ -708,6 +718,7 @@ export class Parser {
         this.getToken()
       }
       constraintSignature = new ConstraintSignature(constraints, t1);
+      this.getToken()
     }
 
     const name = this.expectToken(SyntaxKind.Identifier)
@@ -738,6 +749,69 @@ export class Parser {
 
     return new ClassDeclaration(
       classKeyword,
+      constraintSignature,
+      name,
+      typeArgs,
+      blockStart.dotSign,
+      definitions,
+    );
+
+  }
+
+  public parseInstanceDeclaration(): InstanceDeclaration {
+
+    const instanceKeyword = this.expectToken(SyntaxKind.InstanceKeyword);
+
+    let constraintSignature = null;
+
+    if (this.hasTokenBeforeBlock(SyntaxKind.RArrowAltSign)) {
+      const constraints: Array<[ConstraintExpression, CommaSign | null]> = [];
+      let t1;
+      for (;;) {
+        const typeArg = this.parseConstraintExpression()
+        t1 = this.peekToken()
+        if (t1.kind === SyntaxKind.RArrowAltSign) {
+          constraints.push([typeArg, null]);
+          break;
+        }
+        if (t1.kind !== SyntaxKind.CommaSign) {
+          this.raiseParseError(t1, [ SyntaxKind.RArrowAltSign, SyntaxKind.CommaSign ])
+        }
+        constraints.push([typeArg, t1]);
+        this.getToken()
+      }
+      constraintSignature = new ConstraintSignature(constraints, t1);
+      this.getToken()
+    }
+
+    const name = this.expectToken(SyntaxKind.Identifier)
+
+    const typeArgs = [];
+
+    for (;;) {
+      const t2 = this.peekToken();
+      if (t2.kind === SyntaxKind.BlockStart || t2.kind === SyntaxKind.LineFoldEnd) {
+        break;
+      }
+      typeArgs.push(this.parseTypeExpression());
+    }
+
+    const blockStart = this.expectToken(SyntaxKind.BlockStart)
+    const definitions = [];
+
+    for (;;) {
+      const t3 = this.peekToken()
+      if (t3.kind === SyntaxKind.BlockEnd) {
+        this.getToken()
+        break;
+      }
+      definitions.push(this.parseDefinition());
+    }
+
+    this.expectToken(SyntaxKind.LineFoldEnd);
+
+    return new InstanceDeclaration(
+      instanceKeyword,
       constraintSignature,
       name,
       typeArgs,
