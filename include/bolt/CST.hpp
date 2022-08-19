@@ -1,0 +1,734 @@
+#ifndef BOLT_CST_HPP
+#define BOLT_CST_HPP
+
+#include <vector>
+
+#include "bolt/Text.hpp"
+#include "bolt/Integer.hpp"
+#include "bolt/ByteString.hpp"
+
+namespace bolt {
+
+  enum class NodeType {
+    Equals,
+    Colon,
+    Dot,
+    DotDot,
+    LParen,
+    RParen,
+    LBracket,
+    RBracket,
+    LBrace,
+    RBrace,
+    LetKeyword,
+    MutKeyword,
+    PubKeyword,
+    TypeKeyword,
+    ReturnKeyword,
+    ModKeyword,
+    StructKeyword,
+    Invalid,
+    EndOfFile,
+    BlockStart,
+    BlockEnd,
+    LineFoldEnd,
+    CustomOperator,
+    Identifier,
+    StringLiteral,
+    IntegerLiteral,
+    QualifiedName,
+    ReferenceTypeExpression,
+    BindPattern,
+    ReferenceExpression,
+    ConstantExpression,
+    CallExpression,
+    ExpressionStatement,
+    ReturnStatement,
+    TypeAssert,
+    Param,
+    LetBlockBody,
+    LetExprBody,
+    LetDeclaration,
+    StructDeclField,
+    StructDecl,
+    SourceFile,
+  };
+
+
+  class Node {
+
+    unsigned refcount = 0;
+
+  public:
+
+    inline void ref() {
+      ++refcount;
+    }
+
+    inline void unref() {
+      --refcount;
+      if (refcount == 0) {
+        delete this;
+      }
+    }
+
+    const NodeType Type;
+
+    inline Node(NodeType Type):
+        Type(Type) {}
+
+
+    virtual ~Node();
+
+  };
+
+  class Token : public Node {
+
+    TextLoc StartLoc;
+
+  public:
+
+    Token(NodeType Type, TextLoc StartLoc): Node(Type), StartLoc(StartLoc) {}
+
+    virtual std::string getText() const = 0;
+
+    inline TextLoc getStartLoc() {
+      return StartLoc;
+    }
+
+    inline TextLoc getEndLoc() {
+      TextLoc EndLoc;
+      EndLoc.advance(getText());
+      return EndLoc;
+    }
+
+    inline size_t getStartLine() {
+      return StartLoc.Line;
+    }
+
+    inline size_t getStartColumn() {
+      return StartLoc.Column;
+    }
+
+    inline size_t getEndLine() {
+      return getEndLoc().Line;
+    }
+
+    inline size_t getEndColumn() {
+      return getEndLoc().Column;
+    }
+
+    ~Token();
+
+  };
+
+  class Equals : public Token {
+  public:
+
+    Equals(TextLoc StartLoc): Token(NodeType::Equals, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~Equals();
+
+  };
+
+  class Colon : public Token {
+  public:
+
+    Colon(TextLoc StartLoc): Token(NodeType::Colon, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~Colon();
+
+  };
+
+  class Dot : public Token {
+  public:
+
+    Dot(TextLoc StartLoc): Token(NodeType::Dot, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~Dot();
+
+  };
+
+  class DotDot : public Token {
+  public:
+
+    DotDot(TextLoc StartLoc): Token(NodeType::DotDot, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~DotDot();
+
+  };
+
+  class LParen : public Token {
+  public:
+
+    LParen(TextLoc StartLoc): Token(NodeType::LParen, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~LParen();
+
+  };
+
+  class RParen : public Token {
+  public:
+
+    RParen(TextLoc StartLoc): Token(NodeType::RParen, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~RParen();
+
+  };
+
+  class LBracket : public Token {
+  public:
+
+    LBracket(TextLoc StartLoc): Token(NodeType::LBracket, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~LBracket();
+
+  };
+
+  class RBracket : public Token {
+  public:
+
+    RBracket(TextLoc StartLoc): Token(NodeType::RBracket, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~RBracket();
+
+  };
+
+  class LBrace : public Token {
+  public:
+
+    LBrace(TextLoc StartLoc): Token(NodeType::LBrace, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~LBrace();
+
+  };
+
+  class RBrace : public Token {
+  public:
+
+    RBrace(TextLoc StartLoc): Token(NodeType::RBrace, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~RBrace();
+
+  };
+
+  class LetKeyword : public Token {
+  public:
+
+    LetKeyword(TextLoc StartLoc): Token(NodeType::LetKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~LetKeyword();
+
+  };
+
+  class MutKeyword : public Token {
+  public:
+
+    MutKeyword(TextLoc StartLoc): Token(NodeType::MutKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~MutKeyword();
+
+  };
+
+  class PubKeyword : public Token {
+  public:
+
+    PubKeyword(TextLoc StartLoc): Token(NodeType::PubKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~PubKeyword();
+
+  };
+
+  class TypeKeyword : public Token {
+  public:
+
+    TypeKeyword(TextLoc StartLoc): Token(NodeType::TypeKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~TypeKeyword();
+
+  };
+
+  class ReturnKeyword : public Token {
+  public:
+
+    ReturnKeyword(TextLoc StartLoc): Token(NodeType::ReturnKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~ReturnKeyword();
+
+  };
+
+  class ModKeyword : public Token {
+  public:
+
+    ModKeyword(TextLoc StartLoc): Token(NodeType::ModKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~ModKeyword();
+
+  };
+
+  class StructKeyword : public Token {
+  public:
+
+    StructKeyword(TextLoc StartLoc): Token(NodeType::StructKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~StructKeyword();
+
+  };
+
+  class Invalid : public Token {
+  public:
+
+    Invalid(TextLoc StartLoc): Token(NodeType::Invalid, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~Invalid();
+
+  };
+
+  class EndOfFile : public Token {
+  public:
+
+    EndOfFile(TextLoc StartLoc): Token(NodeType::EndOfFile, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~EndOfFile();
+
+  };
+
+  class BlockStart : public Token {
+  public:
+
+    BlockStart(TextLoc StartLoc): Token(NodeType::BlockStart, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~BlockStart();
+
+  };
+
+  class BlockEnd : public Token {
+  public:
+
+    BlockEnd(TextLoc StartLoc): Token(NodeType::BlockEnd, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~BlockEnd();
+
+  };
+
+  class LineFoldEnd : public Token {
+  public:
+
+    LineFoldEnd(TextLoc StartLoc): Token(NodeType::LineFoldEnd, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~LineFoldEnd();
+
+  };
+
+  class CustomOperator : public Token {
+  public:
+
+    ByteString Text;
+
+    CustomOperator(ByteString Text, TextLoc StartLoc): Token(NodeType::CustomOperator, StartLoc), Text(Text) {}
+
+    std::string getText() const override;
+
+    ~CustomOperator();
+
+  };
+
+  class Identifier : public Token {
+  public:
+
+    ByteString Text;
+
+    Identifier(ByteString Text, TextLoc StartLoc): Token(NodeType::Identifier, StartLoc), Text(Text) {}
+
+    std::string getText() const override;
+
+    ~Identifier();
+
+  };
+
+  class StringLiteral : public Token {
+  public:
+
+    ByteString Text;
+
+    StringLiteral(ByteString Text, TextLoc StartLoc): Token(NodeType::StringLiteral, StartLoc), Text(Text) {}
+
+    std::string getText() const override;
+
+    ~StringLiteral();
+
+  };
+
+  class IntegerLiteral : public Token {
+  public:
+
+    Integer Value;
+
+    IntegerLiteral(Integer Value, TextLoc StartLoc): Token(NodeType::IntegerLiteral, StartLoc), Value(Value) {}
+
+    std::string getText() const override;
+
+    ~IntegerLiteral();
+
+  };
+
+  class QualifiedName : public Node {
+  public:
+
+    std::vector<Identifier*> ModulePath;
+    Identifier* Name;
+
+    QualifiedName(
+      std::vector<Identifier*> ModulePath,
+      Identifier* Name
+    ): Node(NodeType::QualifiedName),
+       ModulePath(ModulePath),
+       Name(Name) {}
+
+    ~QualifiedName();
+
+  };
+
+  class SourceElement : public Node {
+  public:
+
+    SourceElement(NodeType Type): Node(Type) {}
+
+    ~SourceElement();
+
+  };
+
+  class LetBodyElement : public Node {
+  public:
+
+    LetBodyElement(NodeType Type): Node(Type) {}
+
+    ~LetBodyElement();
+
+  };
+
+  class TypeExpression : public Node {
+  public:
+
+    TypeExpression(NodeType Type): Node(Type) {}
+
+    ~TypeExpression();
+
+  };
+
+  class ReferenceTypeExpression : public TypeExpression {
+  public:
+
+    QualifiedName* Name;
+
+    ReferenceTypeExpression(
+      QualifiedName* Name
+    ): TypeExpression(NodeType::ReferenceTypeExpression),
+       Name(Name) {}
+
+    ~ReferenceTypeExpression();
+
+  };
+
+  class Pattern : public Node {
+  public:
+
+    Pattern(NodeType Type): Node(Type) {}
+
+    ~Pattern();
+
+  };
+
+  class BindPattern : public Pattern {
+  public:
+
+    Identifier* Name;
+
+    BindPattern(
+      Identifier* Name
+    ): Pattern(NodeType::BindPattern),
+       Name(Name) {}
+
+    ~BindPattern();
+
+  };
+
+  class Expression : public Node {
+  public:
+
+    Expression(NodeType Type): Node(Type) {}
+
+    ~Expression();
+
+  };
+
+  class ReferenceExpression : public Expression {
+  public:
+
+    Identifier* Name;
+
+    ReferenceExpression(
+      Identifier* Name
+    ): Expression(NodeType::ReferenceExpression),
+       Name(Name) {}
+
+    ~ReferenceExpression();
+
+  };
+
+  class ConstantExpression : public Expression {
+  public:
+
+    Token* Token;
+
+    ConstantExpression(
+      class Token* Token
+    ): Expression(NodeType::ConstantExpression),
+       Token(Token) {}
+
+    ~ConstantExpression();
+
+  };
+
+  class CallExpression : public Expression {
+  public:
+
+    CallExpression(Expression* Function, std::vector<Expression*> Args): Expression(NodeType::CallExpression), Function(Function), Args(Args) {}
+
+    Expression* Function;
+    std::vector<Expression*> Args;
+
+    ~CallExpression();
+
+  };
+
+  class Statement : public LetBodyElement {
+  public:
+
+    Statement(NodeType Type): LetBodyElement(Type) {}
+
+    ~Statement();
+
+  };
+
+  class ExpressionStatement : public Statement, public SourceElement {
+  public:
+
+    ExpressionStatement(Expression* Expression): Statement(NodeType::ExpressionStatement), SourceElement(NodeType::ExpressionStatement), Expression(Expression) {}
+
+    Expression* Expression;
+
+    ~ExpressionStatement();
+
+  };
+
+  class ReturnStatement : public Statement {
+  public:
+
+    ReturnStatement(ReturnKeyword* ReturnKeyword, Expression* Expression): Statement(NodeType::ReturnStatement), ReturnKeyword(ReturnKeyword), Expression(Expression) {}
+
+    ReturnKeyword* ReturnKeyword;
+    Expression* Expression;
+
+    ~ReturnStatement();
+
+  };
+
+  class TypeAssert : public Node {
+
+    public:
+
+    TypeAssert(Colon* Colon, TypeExpression* TypeExpression): Node(NodeType::TypeAssert), Colon(Colon), TypeExpression(TypeExpression) {}
+
+    Colon* Colon;
+    TypeExpression* TypeExpression;
+
+    ~TypeAssert();
+
+  };
+
+  class Param : public Node {
+  public:
+
+    Param(Pattern* Pattern, TypeAssert* TypeAssert): Node(NodeType::Param), Pattern(Pattern), TypeAssert(TypeAssert) {}
+
+    Pattern* Pattern;
+    TypeAssert* TypeAssert;
+
+    ~Param();
+
+  };
+
+  class LetBody : public Node {
+  public:
+
+    LetBody(NodeType Type): Node(Type) {}
+
+    ~LetBody();
+
+  };
+
+  class LetBlockBody : public LetBody {
+  public:
+
+    LetBlockBody(BlockStart* BlockStart, std::vector<LetBodyElement*> Elements): LetBody(NodeType::LetBlockBody), BlockStart(BlockStart), Elements(Elements) {}
+
+    BlockStart* BlockStart;
+    std::vector<LetBodyElement*> Elements;
+
+    ~LetBlockBody();
+
+  };
+
+  class LetExprBody : public LetBody {
+  public:
+
+    Equals* Equals;
+    Expression* Expression;
+
+    LetExprBody(
+      class Equals* Equals,
+      class Expression* Expression
+    ): LetBody(NodeType::LetExprBody),
+       Equals(Equals),
+       Expression(Expression) {}
+
+    ~LetExprBody();
+
+  };
+
+  class LetDeclaration : public SourceElement, public LetBodyElement {
+  public:
+
+    PubKeyword* PubKeyword;
+    LetKeyword* LetKeywod;
+    MutKeyword* MutKeyword;
+    Pattern* Pattern;
+    std::vector<Param*> Params;
+    TypeAssert* TypeAssert;
+    LetBody* Body;
+
+    LetDeclaration(
+      class PubKeyword* PubKeyword,
+      class LetKeyword* LetKeywod,
+      class MutKeyword* MutKeyword,
+      class Pattern* Pattern,
+      std::vector<Param*> Params,
+      class TypeAssert* TypeAssert,
+      LetBody* Body
+    ): SourceElement(NodeType::LetDeclaration),
+       LetBodyElement(NodeType::LetDeclaration),
+       PubKeyword(PubKeyword),
+       LetKeywod(LetKeywod),
+       MutKeyword(MutKeyword),
+       Pattern(Pattern),
+       Params(Params),
+       TypeAssert(TypeAssert),
+       Body(Body) {}
+
+    ~LetDeclaration();
+
+  };
+
+  class StructDeclField : public Node {
+  public:
+
+    StructDeclField(
+      Identifier* Name,
+      Colon* Colon,
+      TypeExpression* TypeExpression
+    ): Node(NodeType::StructDeclField),
+       Name(Name),
+       Colon(Colon),
+       TypeExpression(TypeExpression) {}
+
+    Identifier* Name;
+    Colon* Colon;
+    TypeExpression* TypeExpression;
+
+    ~StructDeclField();
+
+  };
+
+  class StructDecl : public SourceElement {
+  public:
+
+    StructDecl(
+        StructKeyword* StructKeyword,
+        Identifier* Name,
+        Dot* Dot,
+        std::vector<StructDeclField*> Fields
+      ): SourceElement(NodeType::StructDecl),
+         StructKeyword(StructKeyword),
+         Name(Name),
+         Dot(Dot),
+         Fields(Fields) {}
+
+    StructKeyword* StructKeyword;
+    Identifier* Name;
+    Dot* Dot;
+    std::vector<StructDeclField*> Fields;
+
+    ~StructDecl();
+
+  };
+
+  class SourceFile : public Node {
+
+    public:
+
+    SourceFile(std::vector<SourceElement*> Elements): Node(NodeType::SourceFile), Elements(Elements) {}
+
+    std::vector<SourceElement*> Elements;
+
+    ~SourceFile();
+
+  };
+
+}
+
+#endif
