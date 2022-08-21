@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "bolt/Diagnostics.hpp"
 #include "zen/config.hpp"
 
 #include "bolt/ByteString.hpp"
@@ -55,9 +56,10 @@ namespace bolt {
 
     const size_t Id;
     std::vector<Type*> Args;
+    ByteString DisplayName;
 
-    inline TCon(const size_t Id, std::vector<Type*> Args  ):
-      Type(TypeKind::Con), Id(Id), Args(Args) {}
+    inline TCon(const size_t Id, std::vector<Type*> Args, ByteString DisplayName):
+      Type(TypeKind::Con), Id(Id), Args(Args), DisplayName(DisplayName) {}
 
   };
 
@@ -107,8 +109,19 @@ namespace bolt {
   public:
 
     TVSet TVs;
-    std::vector<Constraint*> Constriants;
+    std::vector<Constraint*> Constraints;
     Type* Type;
+
+    inline Forall(class Type* Type):
+      Type(Type) {}
+
+    inline Forall(
+      TVSet TVs,
+      std::vector<Constraint*> Constraints,
+      class Type* Type
+    ): TVs(TVs),
+       Constraints(Constraints),
+       Type(Type) {}
 
   };
 
@@ -256,12 +269,16 @@ namespace bolt {
 
   class Checker {
 
+    DiagnosticEngine& DE;
+
+    size_t nextConTypeId = 0;
     size_t nextTypeVarId = 0;
 
     Type* inferExpression(Expression* Expression, InferContext& Env);
 
     void infer(Node* node, InferContext& Env);
 
+    TCon* createPrimConType();
     TVar* createTypeVar();
 
     Type* instantiate(Scheme& S);
@@ -271,6 +288,8 @@ namespace bolt {
     void solve(Constraint* Constraint);
 
   public:
+
+    Checker(DiagnosticEngine& DE);
 
     void check(SourceFile* SF);
 

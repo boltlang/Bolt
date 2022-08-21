@@ -1,6 +1,7 @@
 
 #include <stack>
 
+#include "bolt/Diagnostics.hpp"
 #include "zen/config.hpp"
 
 #include "bolt/CST.hpp"
@@ -26,6 +27,10 @@ namespace bolt {
     return F.Type;
   }
 
+  void TypeEnv::add(ByteString Name, Scheme S) {
+    Mapping.emplace(Name, S);
+  }
+
   bool Type::hasTypeVar(const TVar* TV) {
     switch (Kind) {
       case TypeKind::Var:
@@ -40,6 +45,18 @@ namespace bolt {
         }
         return Y->ReturnType->hasTypeVar(TV);
       }
+      case TypeKind::Con:
+      {
+        auto Y = static_cast<TCon*>(this);
+        for (auto Ty: Y->Args) {
+          if (Ty->hasTypeVar(TV)) {
+            return true;
+          }
+        }
+        return false;
+      }
+      case TypeKind::Any:
+        return false;
     }
   }
 
@@ -70,7 +87,7 @@ namespace bolt {
         for (auto Arg: Y->Args) {
           NewArgs.push_back(Arg->substitute(Sub));
         }
-        return new TCon(Y->Id, Y->Args);
+        return new TCon(Y->Id, Y->Args, Y->DisplayName);
       }
     }
   }
@@ -78,6 +95,9 @@ namespace bolt {
   void InferContext::addConstraint(Constraint *C) {
     Constraints.push_back(C);
   }
+
+  Checker::Checker(DiagnosticEngine& DE):
+    DE(DE) {}
 
   void Checker::infer(Node* X, InferContext& Ctx) {
 
@@ -143,14 +163,19 @@ namespace bolt {
       case NodeType::ConstantExpression:
       {
         auto Y = static_cast<ConstantExpression*>(X);
+        Type* Ty = nullptr;
         switch (Y->Token->Type) {
           case NodeType::IntegerLiteral:
-            return Ctx.Env.lookupMono("Int");
+            Ty = Ctx.Env.lookupMono("Int");
+            break;
           case NodeType::StringLiteral:
-            return Ctx.Env.lookupMono("String");
+            Ty = Ctx.Env.lookupMono("String");
+            break;
           default:
             ZEN_UNREACHABLE
         }
+        ZEN_ASSERT(Ty != nullptr);
+        return Ty;
       }
 
       case NodeType::ReferenceExpression:
@@ -158,7 +183,7 @@ namespace bolt {
         auto Y = static_cast<ReferenceExpression*>(X);
         auto Scm = Ctx.Env.lookup(Y->Name->Text);
         if (Scm == nullptr) {
-          // TODO add diagnostic
+          DE.add<BindingNotFoundDiagnostic>(Y->Name->Text, Y->Name);
           return new TAny();
         }
         return instantiate(*Scm);
@@ -169,7 +194,7 @@ namespace bolt {
         auto Y = static_cast<InfixExpression*>(X);
         auto Scm = Ctx.Env.lookup(Y->Operator->getText());
         if (Scm == nullptr) {
-          // TODO add diagnostic
+          DE.add<BindingNotFoundDiagnostic>(Y->Operator->getText(), Y->Operator);
           return new TAny();
         }
         auto OpTy = instantiate(*Scm);
@@ -190,6 +215,11 @@ namespace bolt {
 
   void Checker::check(SourceFile *SF) {
     TypeEnv Global;
+    auto StringTy = new TCon(nextConTypeId++, {}, "String");
+    Global.add("String", Forall(StringTy));
+    auto IntTy = new TCon(nextConTypeId++, {}, "Int");
+    Global.add("Int", Forall(IntTy));
+    Global.add("+", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
     ConstraintSet Constraints;
     InferContext Toplevel { Constraints, Global };
     infer(SF, Toplevel);
@@ -199,6 +229,7 @@ namespace bolt {
   void Checker::solve(Constraint* Constraint) {
 
     std::stack<class Constraint*> Queue;
+    Queue.push(Constraint);
     TVSub Sub;
 
     while (!Queue.empty()) {
@@ -225,8 +256,7 @@ namespace bolt {
         {
           auto Y = static_cast<CEqual*>(Constraint);
           if (!unify(Y->Left, Y->Right, Sub)) {
-            // TODO diagnostic
-            fprintf(stderr, "unification error\n");
+            DE.add<UnificationErrorDiagnostic>(Y->Left, Y->Right);
           }
           break;
         }

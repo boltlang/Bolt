@@ -1,6 +1,7 @@
 #ifndef BOLT_TEXT_HPP
 #define BOLT_TEXT_HPP
 
+#include "ByteString.hpp"
 #include <stddef.h>
 
 #include <string>
@@ -13,7 +14,7 @@ namespace bolt {
     size_t Line = 1;
     size_t Column = 1;
 
-    void advance(const std::string& Text) {
+    inline void advance(const std::string& Text) {
       for (auto Chr: Text) {
         if (Chr == '\n') {
           Line++;
@@ -30,6 +31,11 @@ namespace bolt {
   public:
     TextLoc Start;
     TextLoc End;
+  };
+
+  class TextFile {
+  public:
+    ByteString getText();
   };
 
 }
