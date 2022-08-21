@@ -13,6 +13,7 @@ add_executable(
   src/Diagnostics.cc
   src/Scanner.cc
   src/Parser.cc
+  src/Checker.cc
   src/main.cc
 )
 target_compile_options(

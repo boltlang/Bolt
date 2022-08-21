@@ -3,11 +3,54 @@
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
 #include "bolt/Diagnostics.hpp" 
+#include <vector>
 
 namespace bolt {
 
+  std::optional<OperatorInfo> OperatorTable::getInfix(Token* T) {
+    auto Match = Mapping.find(T->getText());
+    if (Match == Mapping.end() || !Match->second.isInfix()) {
+      return {};
+    }
+    return Match->second;
+  }
+
+  bool OperatorTable::isInfix(Token* T) {
+    auto Match = Mapping.find(T->getText());
+    return Match != Mapping.end() && Match->second.isInfix();
+  }
+
+  bool OperatorTable::isPrefix(Token* T) {
+    auto Match = Mapping.find(T->getText());
+    return Match != Mapping.end() && Match->second.isPrefix();
+  }
+
+  bool OperatorTable::isSuffix(Token* T) {
+    auto Match = Mapping.find(T->getText());
+    return Match != Mapping.end() && Match->second.isSuffix();
+  }
+
+  void OperatorTable::add(std::string Name, unsigned Flags, int Precedence) { 
+    Mapping.emplace(Name, OperatorInfo { Precedence, Flags });
+  }
+
   Parser::Parser(Stream<Token*>& S):
-    Tokens(S) {}
+    Tokens(S) {
+      ExprOperators.add("**", OperatorFlags_InfixR, 10);
+      ExprOperators.add("*", OperatorFlags_InfixL, 5);
+      ExprOperators.add("/", OperatorFlags_InfixL, 5);
+      ExprOperators.add("+", OperatorFlags_InfixL, 4);
+      ExprOperators.add("-", OperatorFlags_InfixL, 4);
+      ExprOperators.add("<", OperatorFlags_InfixL, 3);
+      ExprOperators.add(">", OperatorFlags_InfixL, 3);
+      ExprOperators.add("<=", OperatorFlags_InfixL, 3);
+      ExprOperators.add(">=", OperatorFlags_InfixL, 3);
+      ExprOperators.add("==", OperatorFlags_InfixL, 3);
+      ExprOperators.add("!=", OperatorFlags_InfixL, 3);
+      ExprOperators.add(":", OperatorFlags_InfixL, 2);
+      ExprOperators.add("<|>", OperatorFlags_InfixL, 1);
+      ExprOperators.add("$", OperatorFlags_InfixR, 0);
+    }
 
   Token* Parser::peekFirstTokenAfterModifiers() {
     std::size_t I = 0;
@@ -73,7 +116,7 @@ namespace bolt {
     }
   }
 
-  Expression* Parser::parseExpression() {
+  Expression* Parser::parsePrimitiveExpression() {
     auto T0 = Tokens.peek();
     switch (T0->Type) {
       case NodeType::Identifier:
@@ -86,6 +129,65 @@ namespace bolt {
       default:
         throw UnexpectedTokenDiagnostic(T0, std::vector { NodeType::Identifier, NodeType::IntegerLiteral });
     }
+  }
+
+  Expression* Parser::parseCallExpression() {
+    auto Operator = parsePrimitiveExpression();
+    std::vector<Expression*> Args;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      if (T1->Type == NodeType::LineFoldEnd || ExprOperators.isInfix(T1)) {
+        break;
+      }
+      Args.push_back(parsePrimitiveExpression());
+    }
+    if (Args.empty()) {
+      return Operator;
+    }
+    return new CallExpression(Operator, Args);
+  }
+
+  Expression* Parser::parseUnaryExpression() {
+    std::vector<Token*> Prefix;
+    for (;;) {
+      auto T0 = Tokens.peek();
+      if (!ExprOperators.isPrefix(T0)) {
+        break;
+      }
+      Tokens.get();
+      Prefix.push_back(T0);
+    }
+    auto E = parseCallExpression();
+    for (auto Iter = Prefix.rbegin(); Iter != Prefix.rend(); Iter++) {
+      E = new UnaryExpression(*Iter, E);
+    }
+    return E;
+  }
+
+  Expression* Parser::parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence) {
+    for (;;) {
+      auto T0 = Tokens.peek();
+      auto Info0 = ExprOperators.getInfix(T0);
+      if (!Info0 || Info0->Precedence < MinPrecedence) {
+        break;
+      }
+      Tokens.get();
+      auto RHS = parseUnaryExpression();
+      for (;;) {
+        auto T1 = Tokens.peek();
+        auto Info1 = ExprOperators.getInfix(T1);
+        if (!Info1 || Info1->Precedence < Info0->Precedence && (Info1->Precedence > Info0->Precedence || Info1->isRightAssoc())) {
+          break;
+        }
+        RHS = parseInfixOperatorAfterExpression(RHS, Info1->Precedence);
+      }
+      LHS = new InfixExpression(LHS, T0, RHS);
+    }
+    return LHS;
+  }
+
+  Expression* Parser::parseExpression() {
+    return parseInfixOperatorAfterExpression(parseUnaryExpression(), 0);
   }
 
   ExpressionStatement* Parser::parseExpressionStatement() {
@@ -146,7 +248,7 @@ after_params:
       case NodeType::BlockStart:
       {
         Tokens.get();
-        std::vector<LetBodyElement*> Elements;
+        std::vector<Node*> Elements;
         for (;;) {
           auto T3 = Tokens.peek();
           if (T3->Type == NodeType::BlockEnd) {
@@ -189,7 +291,7 @@ after_params:
     );
   }
 
-  LetBodyElement* Parser::parseLetBodyElement() {
+  Node* Parser::parseLetBodyElement() {
     auto T0 = peekFirstTokenAfterModifiers();
     switch (T0->Type) {
       case NodeType::LetKeyword:
@@ -199,7 +301,7 @@ after_params:
     }
   }
 
-  SourceElement* Parser::parseSourceElement() {
+  Node* Parser::parseSourceElement() {
     auto T0 = peekFirstTokenAfterModifiers();
     switch (T0->Type) {
       case NodeType::LetKeyword:
@@ -210,7 +312,7 @@ after_params:
   }
 
   SourceFile* Parser::parseSourceFile() {
-    std::vector<SourceElement*> Elements;
+    std::vector<Node*> Elements;
     for (;;) {
       auto T0 = Tokens.peek();
       if (T0->Type == NodeType::EndOfFile) {

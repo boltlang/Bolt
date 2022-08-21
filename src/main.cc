@@ -10,6 +10,7 @@
 #include "bolt/Diagnostics.hpp"
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
+#include "bolt/Checker.hpp"
 
 using namespace bolt;
 
@@ -123,6 +124,9 @@ int main(int argc, const char* argv[]) {
 #else
   SF = P.parseSourceFile();
 #endif
+
+  Checker TheChecker;
+  TheChecker.check(SF);
 
   return 0;
 }

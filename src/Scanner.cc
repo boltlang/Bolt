@@ -22,6 +22,28 @@ namespace bolt {
     }
   }
 
+  static inline bool isOperatorPart(Char Chr) {
+    switch (Chr) { 
+      case '+':
+      case '-':
+      case '*':
+      case '/':
+      case '^':
+      case '&':
+      case '|':
+      case '%':
+      case '$':
+      case '!':
+      case '?':
+      case '>':
+      case '<':
+      case '=':
+        return true;
+      default:
+        return false;
+    }
+  }
+
   static bool isIdentifierPart(Char Chr) {
     return (Chr >= 65 && Chr <= 90) // Uppercase letter
         || (Chr >= 96 && Chr <= 122) // Lowercase letter
@@ -48,17 +70,16 @@ namespace bolt {
 
   Token* Scanner::read() {
 
+    TextLoc StartLoc;
     Char C0;
 
     for (;;) {
-      C0 = peekChar();
+      StartLoc = getCurrentLoc();
+      C0 = getChar();
       if (!isWhiteSpace(C0)) {
         break;
       }
-      getChar();
     }
-
-    auto StartLoc = getCurrentLoc();
 
     switch (C0) {
 
@@ -76,7 +97,6 @@ namespace bolt {
       case '8':
       case '9':
       {
-        getChar();
         Integer I = toDigit(C0);
         for (;;) {
           auto C1 = peekChar();
@@ -156,7 +176,6 @@ digit_finish:
       case 'Z':
       case '_':
       {
-        getChar();
         ByteString Text { static_cast<char>(C0) };
         for (;;) {
           auto C1 = peekChar();
@@ -188,7 +207,6 @@ digit_finish:
 
       case '"':
       {
-        getChar();
         ByteString Text;
         bool Escaping = false;
         for (;;) {
@@ -229,7 +247,6 @@ after_string_contents:
 
       case '.':
       {
-        getChar();
         auto C1 = peekChar();
         if (C1 == '.') {
           getChar();
@@ -242,8 +259,42 @@ after_string_contents:
         return new Dot(StartLoc);
       }
 
-#define BOLT_SIMPLE_TOKEN(ch, name) case ch: getChar(); return new name(StartLoc);
+      case '+':
+      case '-':
+      case '*':
+      case '/':
+      case '^':
+      case '&':
+      case '|':
+      case '%':
+      case '$':
+      case '!':
+      case '?':
+      case '>':
+      case '<':
+      case '=':
+      {
+        ByteString Text { static_cast<char>(C0) };
+        for (;;) {
+          auto C1 = peekChar();
+          if (!isOperatorPart(C1)) {
+            break;
+          }
+          Text.push_back(static_cast<char>(C1));
+          getChar();
+        }
+        if (Text == "=") {
+          return new Equals(StartLoc);
+        } else if (Text.back() == '=' && Text[Text.size()-2] != '=') {
+          return new Assignment(Text.substr(0, Text.size()-1), StartLoc);
+        }
+        return new CustomOperator(Text, StartLoc);
+      }
+      
 
+#define BOLT_SIMPLE_TOKEN(ch, name) case ch: return new name(StartLoc);
+
+    //BOLT_SIMPLE_TOKEN(',', Comma)
     BOLT_SIMPLE_TOKEN(':', Colon)
     BOLT_SIMPLE_TOKEN('(', LParen)
     BOLT_SIMPLE_TOKEN(')', RParen)
@@ -251,12 +302,13 @@ after_string_contents:
     BOLT_SIMPLE_TOKEN(']', RBracket)
     BOLT_SIMPLE_TOKEN('{', LBrace)
     BOLT_SIMPLE_TOKEN('}', RBrace)
-    BOLT_SIMPLE_TOKEN('=', Equals)
 
     default:
 
+      throw UnexpectedStringDiagnostic(StartLoc, String { C0 });
+
       // TODO Add a diagnostic message indicating that scanning failed.
-      return new Invalid(StartLoc);
+      //return new Invalid(StartLoc);
 
     }
 

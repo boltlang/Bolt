@@ -33,6 +33,7 @@ namespace bolt {
     BlockEnd,
     LineFoldEnd,
     CustomOperator,
+    Assignment,
     Identifier,
     StringLiteral,
     IntegerLiteral,
@@ -42,6 +43,8 @@ namespace bolt {
     ReferenceExpression,
     ConstantExpression,
     CallExpression,
+    InfixExpression,
+    UnaryExpression,
     ExpressionStatement,
     ReturnStatement,
     TypeAssert,
@@ -377,6 +380,19 @@ namespace bolt {
 
   };
 
+  class Assignment : public Token {
+  public:
+
+    ByteString Text;
+
+    Assignment(ByteString Text, TextLoc StartLoc): Token(NodeType::Assignment, StartLoc), Text(Text) {}
+
+    std::string getText() const override;
+
+    ~Assignment();
+
+  };
+
   class Identifier : public Token {
   public:
 
@@ -430,24 +446,6 @@ namespace bolt {
        Name(Name) {}
 
     ~QualifiedName();
-
-  };
-
-  class SourceElement : public Node {
-  public:
-
-    SourceElement(NodeType Type): Node(Type) {}
-
-    ~SourceElement();
-
-  };
-
-  class LetBodyElement : public Node {
-  public:
-
-    LetBodyElement(NodeType Type): Node(Type) {}
-
-    ~LetBodyElement();
 
   };
 
@@ -546,19 +544,54 @@ namespace bolt {
 
   };
 
-  class Statement : public LetBodyElement {
+  class InfixExpression : public Expression {
   public:
 
-    Statement(NodeType Type): LetBodyElement(Type) {}
+    Expression* LHS;
+    Token* Operator;
+    Expression* RHS;
+
+    InfixExpression(Expression* LHS, Token* Operator, Expression* RHS):
+      Expression(NodeType::InfixExpression),
+      LHS(LHS),
+      Operator(Operator),
+      RHS(RHS) {}
+
+    ~InfixExpression();
+
+  };
+
+  class UnaryExpression : public Expression {
+  public:
+
+    Token* Operator;
+    Expression* Argument;
+
+    UnaryExpression(
+      Token* Operator,
+      Expression* Argument
+    ): Expression(NodeType::UnaryExpression),
+       Operator(Operator),
+       Argument(Argument) {}
+
+    ~UnaryExpression();
+
+  };
+
+  class Statement : public Node {
+  public:
+
+    Statement(NodeType Type): Node(Type) {}
 
     ~Statement();
 
   };
 
-  class ExpressionStatement : public Statement, public SourceElement {
+  class ExpressionStatement : public Statement {
   public:
 
-    ExpressionStatement(Expression* Expression): Statement(NodeType::ExpressionStatement), SourceElement(NodeType::ExpressionStatement), Expression(Expression) {}
+    ExpressionStatement(Expression* Expression):
+      Statement(NodeType::ExpressionStatement), Expression(Expression) {}
 
     Expression* Expression;
 
@@ -615,10 +648,15 @@ namespace bolt {
   class LetBlockBody : public LetBody {
   public:
 
-    LetBlockBody(BlockStart* BlockStart, std::vector<LetBodyElement*> Elements): LetBody(NodeType::LetBlockBody), BlockStart(BlockStart), Elements(Elements) {}
+    LetBlockBody(
+      BlockStart* BlockStart,
+      std::vector<Node*> Elements
+    ): LetBody(NodeType::LetBlockBody),
+       BlockStart(BlockStart),
+       Elements(Elements) {}
 
     BlockStart* BlockStart;
-    std::vector<LetBodyElement*> Elements;
+    std::vector<Node*> Elements;
 
     ~LetBlockBody();
 
@@ -641,7 +679,7 @@ namespace bolt {
 
   };
 
-  class LetDeclaration : public SourceElement, public LetBodyElement {
+  class LetDeclaration : public Node {
   public:
 
     PubKeyword* PubKeyword;
@@ -660,8 +698,7 @@ namespace bolt {
       std::vector<Param*> Params,
       class TypeAssert* TypeAssert,
       LetBody* Body
-    ): SourceElement(NodeType::LetDeclaration),
-       LetBodyElement(NodeType::LetDeclaration),
+    ): Node(NodeType::LetDeclaration),
        PubKeyword(PubKeyword),
        LetKeywod(LetKeywod),
        MutKeyword(MutKeyword),
@@ -694,7 +731,7 @@ namespace bolt {
 
   };
 
-  class StructDecl : public SourceElement {
+  class StructDecl : public Node {
   public:
 
     StructDecl(
@@ -702,7 +739,7 @@ namespace bolt {
         Identifier* Name,
         Dot* Dot,
         std::vector<StructDeclField*> Fields
-      ): SourceElement(NodeType::StructDecl),
+      ): Node(NodeType::StructDecl),
          StructKeyword(StructKeyword),
          Name(Name),
          Dot(Dot),
@@ -721,9 +758,10 @@ namespace bolt {
 
     public:
 
-    SourceFile(std::vector<SourceElement*> Elements): Node(NodeType::SourceFile), Elements(Elements) {}
+    SourceFile(std::vector<Node*> Elements):
+      Node(NodeType::SourceFile), Elements(Elements) {}
 
-    std::vector<SourceElement*> Elements;
+    std::vector<Node*> Elements;
 
     ~SourceFile();
 

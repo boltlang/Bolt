@@ -77,6 +77,9 @@ namespace bolt {
   CustomOperator::~CustomOperator() {
   }
 
+  Assignment::~Assignment() {
+  }
+
   Identifier::~Identifier() {
   }
 
@@ -91,12 +94,6 @@ namespace bolt {
       Element->unref();
     }
     Name->unref();
-  }
-
-  SourceElement::~SourceElement() {
-  }
-
-  LetBodyElement::~LetBodyElement() {
   }
 
   TypeExpression::~TypeExpression() {
@@ -129,6 +126,17 @@ namespace bolt {
     for (auto& Element: Args){
       Element->unref();
     }
+  }
+
+  InfixExpression::~InfixExpression() {
+    LHS->unref();
+    Operator->unref();
+    RHS->unref();
+  }
+
+  UnaryExpression::~UnaryExpression() {
+    Operator->unref();
+    Argument->unref();
   }
 
   Statement::~Statement() {
@@ -295,6 +303,10 @@ namespace bolt {
 
   std::string CustomOperator::getText() const {
     return Text;
+  }
+  
+  std::string Assignment::getText() const {
+    return Text + "=";
   }
 
   std::string Identifier::getText() const {
