@@ -7,36 +7,72 @@ set(CMAKE_CXX_STANDARD 17)
 
 add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
 
-add_executable(
-  bolt
+set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
+set(ICU_INCLUDE_DIRS "${ICU_DIR}/include")
+set(ICU_LIBRARY_DIRS "${ICU_DIR}/lib")
+
+add_library(
+  BoltCore
+  src/Text.cc
   src/CST.cc
   src/Diagnostics.cc
   src/Scanner.cc
   src/Parser.cc
   src/Checker.cc
-  src/main.cc
+)
+target_link_directories(
+  BoltCore
+  PUBLIC
+  ${ICU_LIBRARY_DIRS}
 )
 target_compile_options(
-  bolt
+  BoltCore
   PUBLIC
   -fstandalone-debug
 )
 target_include_directories(
-  bolt
+  BoltCore
   PUBLIC
   include
+  ${ICU_LIBRARY_DIRS}
+)
+target_link_libraries(
+  BoltCore
+  PUBLIC
+  zen
+  icuuc
+)
+
+add_executable(
+  bolt
+  src/main.cc
 )
 target_link_libraries(
   bolt
   PUBLIC
-  zen
+  BoltCore
 )
 
-add_custom_command(
-  OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/include/bolt/CST.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/CST.cc"
-  COMMAND scripts/gennodes.py --name=CST ./bolt-cst-spec.txt -Iinclude/ --include-root=bolt --source-root=src/ --namespace=bolt
-  DEPENDS scripts/gennodes.py
-  MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/bolt-cst-spec.txt"
-  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
+if (BOLT_ENABLE_TESTS)
+  add_subdirectory(deps/googletest EXCLUDE_FROM_ALL)
+  add_executable(
+    alltests
+    src/TestText.cc
+  )
+  target_link_libraries(
+    alltests
+    PUBLIC
+    BoltCore
+    gtest
+    gtest_main
+  )
+endif()
+
+#add_custom_command(
+#  OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/include/bolt/CST.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/CST.cc"
+#  COMMAND scripts/gennodes.py --name=CST ./bolt-cst-spec.txt -Iinclude/ --include-root=bolt --source-root=src/ --namespace=bolt
+#  DEPENDS scripts/gennodes.py
+#  MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/bolt-cst-spec.txt"
+#  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+#)
 

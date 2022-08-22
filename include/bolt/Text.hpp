@@ -1,10 +1,12 @@
-#ifndef BOLT_TEXT_HPP
-#define BOLT_TEXT_HPP
 
-#include "ByteString.hpp"
+#pragma once
+
 #include <stddef.h>
 
+#include <vector>
 #include <string>
+
+#include "bolt/ByteString.hpp"
 
 namespace bolt {
 
@@ -34,10 +36,25 @@ namespace bolt {
   };
 
   class TextFile {
+
+    ByteString Path;
+    ByteString Text;
+
+    std::vector<size_t> LineOffsets;
+
   public:
-    ByteString getText();
+
+    TextFile(ByteString Path, ByteString Text);
+
+    size_t getLine(size_t Offset);
+    size_t getColumn(size_t Offset);
+    size_t getStartOffset(size_t Line);
+
+    ByteString getPath() const;
+
+    ByteString getText() const;
+
   };
 
 }
 
-#endif // of #ifndef BOLT_TEXT_HPP
