@@ -39,10 +39,11 @@ int main(int argc, const char* argv[]) {
   ConsoleDiagnostics DE;
 
   auto Text = readFile(argv[1]);
+  TextFile File { argv[1], Text };
   VectorStream<String> Chars(Text, EOF);
   Scanner S(Chars);
   Punctuator PT(S);
-  Parser P(PT);
+  Parser P(File, PT);
 
   SourceFile* SF; 
 
@@ -55,6 +56,8 @@ int main(int argc, const char* argv[]) {
 #else
   SF = P.parseSourceFile();
 #endif
+
+  SF->setParents();
 
   Checker TheChecker { DE };
   TheChecker.check(SF);

@@ -181,9 +181,10 @@ namespace bolt {
       case NodeType::ReferenceExpression:
       {
         auto Y = static_cast<ReferenceExpression*>(X);
-        auto Scm = Ctx.Env.lookup(Y->Name->Text);
+        ZEN_ASSERT(Y->Name->ModulePath.empty());
+        auto Scm = Ctx.Env.lookup(Y->Name->Name->Text);
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Y->Name->Text, Y->Name);
+          DE.add<BindingNotFoundDiagnostic>(Y->Name->Name->Text, Y->Name);
           return new TAny();
         }
         return instantiate(*Scm);

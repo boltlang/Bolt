@@ -6,7 +6,7 @@
 
 namespace bolt {
 
-  TextFile::TextFile(ByteString Path, ByteString Text):
+  TextFile::TextFile(ByteString Path, String Text):
     Path(Path), Text(Text) {
       LineOffsets.push_back(0);
       for (size_t I = 0; I < Text.size(); I++) {
@@ -17,6 +17,10 @@ namespace bolt {
       }
       LineOffsets.push_back(Text.size());
     }
+
+  size_t TextFile::getLineCount() const {
+    return LineOffsets.size();
+  }
 
   size_t TextFile::getStartOffset(size_t Line) {
     return LineOffsets[Line-1];
@@ -42,7 +46,7 @@ namespace bolt {
     return Path;
   }
 
-  ByteString TextFile::getText() const {
+  String TextFile::getText() const {
     return Text;
   }
 

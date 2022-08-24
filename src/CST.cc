@@ -1,9 +1,168 @@
 
+#include "zen/config.hpp"
+
 #include "bolt/CST.hpp"
 
 namespace bolt {
 
-  Node::~Node() { }
+  SourceFile* Node::getSourceFile() {
+    auto CurrNode = this;
+    for (;;) {
+      if (CurrNode->Type == NodeType::SourceFile) {
+        return static_cast<SourceFile*>(this);
+      }
+      CurrNode = CurrNode->Parent;
+      ZEN_ASSERT(CurrNode != nullptr);
+    } 
+  }
+
+  TextRange Node::getRange() {
+    return TextRange {
+      getFirstToken()->getStartLoc(),
+      getLastToken()->getEndLoc(),
+    };
+  }
+
+  void Token::setParents() {
+  }
+
+  void QualifiedName::setParents() {
+    for (auto Name: ModulePath) {
+      Name->Parent = this;
+    }
+    Name->Parent = this;
+  }
+
+  void ReferenceTypeExpression::setParents() {
+    Name->Parent = this;
+    Name->setParents();
+  }
+
+  void BindPattern::setParents() {
+    Name->Parent = this;
+  }
+
+  void ReferenceExpression::setParents() {
+    Name->Parent = this;
+  }
+
+  void ConstantExpression::setParents() {
+    Token->Parent = this;
+  }
+
+  void CallExpression::setParents() {
+    Function->Parent = this;
+    Function->setParents();
+    for (auto Arg: Args) {
+      Arg->Parent = this;
+      Arg->setParents();
+    }
+  }
+
+  void InfixExpression::setParents() {
+    LHS->Parent = this;
+    LHS->setParents();
+    Operator->Parent = this;
+    RHS->Parent = this;
+    RHS->setParents();
+  }
+
+  void UnaryExpression::setParents() {
+    Operator->Parent = this;
+    Argument->Parent = this;
+    Argument->setParents();
+  }
+
+  void ExpressionStatement::setParents() {
+    Expression->Parent = this;
+    Expression->setParents();
+  }
+
+  void ReturnStatement::setParents() {
+    ReturnKeyword->Parent = this;
+    Expression->Parent = this;
+    Expression->setParents();
+  }
+
+  void TypeAssert::setParents() {
+    Colon->Parent = this;
+    TypeExpression->Parent = this;
+    TypeExpression->setParents();
+  }
+
+  void LetBlockBody::setParents() {
+    BlockStart->Parent = this;
+    for (auto Element: Elements) {
+      Element->Parent = this;
+      Element->setParents();
+    }
+  }
+
+  void LetExprBody::setParents() {
+    Equals->Parent = this;
+    Expression->Parent = this;
+    Expression->setParents();
+  }
+
+  void Param::setParents() {
+    Pattern->Parent = this;
+    Pattern->setParents();
+    if (TypeAssert) {
+      TypeAssert->Parent = this;
+      TypeAssert->setParents();
+    }
+  }
+
+  void LetDeclaration::setParents() {
+    if (PubKeyword) {
+      PubKeyword->Parent = this;
+    }
+    LetKeyword->Parent = this;
+    if (MutKeyword) {
+      MutKeyword->Parent = this;
+    }
+    Pattern->Parent = this;
+    Pattern->setParents();
+    for (auto Param: Params) {
+      Param->Parent = this;
+      Param->setParents();
+    }
+    if (TypeAssert) {
+      TypeAssert->Parent = this;
+      TypeAssert->setParents();
+    }
+    if (Body) {
+      Body->Parent = this;
+      Body->setParents();
+    }
+  }
+
+  void StructDeclField::setParents() {
+    Name->Parent = this;
+    Colon->Parent = this;
+    TypeExpression->Parent = this;
+    TypeExpression->setParents();
+  }
+
+  void StructDecl::setParents() {
+    StructKeyword->Parent = this;
+    Name->Parent = this;
+    BlockStart->Parent = this;
+    for (auto Field: Fields) {
+      Field->Parent = this;
+      Field->setParents();
+    }
+  }
+
+  void SourceFile::setParents() {
+    for (auto Element: Elements) {
+      Element->Parent = this;
+      Element->setParents();
+    }
+  }
+
+  Node::~Node() {
+  }
 
   Token::~Token() {
   }
@@ -180,7 +339,7 @@ namespace bolt {
     if (PubKeyword) {
       PubKeyword->unref();
     }
-    LetKeywod->unref();
+    LetKeyword->unref();
     if (MutKeyword) {
       MutKeyword->unref();
     }
@@ -205,7 +364,7 @@ namespace bolt {
   StructDecl::~StructDecl() {
     StructKeyword->unref();
     Name->unref();
-    Dot->unref();
+    BlockStart->unref();
     for (auto& Element: Fields){
       Element->unref();
     }
@@ -215,6 +374,189 @@ namespace bolt {
     for (auto& Element: Elements){
       Element->unref();
     }
+  }
+
+  Token* QualifiedName::getFirstToken() {
+    if (ModulePath.size()) {
+      return ModulePath.front();
+    }
+    return Name;
+  }
+
+  Token* QualifiedName::getLastToken() {
+    return Name;
+  }
+
+  Token* ReferenceTypeExpression::getFirstToken() {
+    return Name->getFirstToken();
+  }
+
+  Token* ReferenceTypeExpression::getLastToken() {
+    return Name->getFirstToken();
+  }
+
+  Token* BindPattern::getFirstToken() {
+    return Name;
+  }
+
+  Token* BindPattern::getLastToken() {
+    return Name;
+  }
+
+  Token* ReferenceExpression::getFirstToken() {
+    return Name->getFirstToken();
+  }
+
+  Token* ReferenceExpression::getLastToken() {
+    return Name->getLastToken();
+  }
+
+  Token* ConstantExpression::getFirstToken() {
+    return Token;
+  }
+
+  Token* ConstantExpression::getLastToken() {
+    return Token;
+  }
+
+  Token* CallExpression::getFirstToken() {
+    return Function->getFirstToken();
+  }
+
+  Token* CallExpression::getLastToken() {
+    if (Args.size()) {
+      return Args.back()->getLastToken();
+    }
+    return Function->getLastToken();
+  }
+
+  Token* InfixExpression::getFirstToken() {
+    return LHS->getFirstToken();
+  }
+
+  Token* InfixExpression::getLastToken() {
+    return RHS->getLastToken();
+  }
+
+  Token* UnaryExpression::getFirstToken() {
+    return Operator;
+  }
+
+  Token* UnaryExpression::getLastToken() {
+    return Argument->getLastToken();
+  }
+  
+  Token* ExpressionStatement::getFirstToken() {
+    return Expression->getFirstToken();
+  }
+
+  Token* ExpressionStatement::getLastToken() {
+    return Expression->getLastToken();
+  }
+
+  Token* ReturnStatement::getFirstToken() {
+    return ReturnKeyword;
+  }
+
+  Token* ReturnStatement::getLastToken() {
+    if (Expression) {
+      return Expression->getLastToken();
+    }
+    return ReturnKeyword;
+  }
+
+  Token* TypeAssert::getFirstToken() {
+    return Colon;
+  }
+
+  Token* TypeAssert::getLastToken() {
+    return TypeExpression->getLastToken();
+  }
+
+  Token* Param::getFirstToken() {
+    return Pattern->getFirstToken();
+  }
+
+  Token* Param::getLastToken() {
+    if (TypeAssert) {
+      return TypeAssert->getLastToken();
+    }
+    return Pattern->getLastToken();
+  }
+
+  Token* LetBlockBody::getFirstToken() {
+    return BlockStart;
+  }
+
+  Token* LetBlockBody::getLastToken() {
+    if (Elements.size()) {
+      return Elements.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* LetExprBody::getFirstToken() {
+    return Equals;
+  }
+
+  Token* LetExprBody::getLastToken() {
+    return Expression->getLastToken();
+  }
+
+  Token* LetDeclaration::getFirstToken() {
+    if (PubKeyword) {
+      return PubKeyword;
+    }
+    return LetKeyword;
+  }
+
+  Token* LetDeclaration::getLastToken() {
+    if (Body) {
+      return Body->getLastToken();
+    }
+    if (TypeAssert) {
+      return TypeAssert->getLastToken();
+    }
+    if (Params.size()) {
+      return Params.back()->getLastToken();
+    }
+    return Pattern->getLastToken();
+  }
+
+  Token* StructDeclField::getFirstToken() {
+    return Name;
+  }
+
+  Token* StructDeclField::getLastToken() {
+    return TypeExpression->getLastToken();
+  }
+
+  Token* StructDecl::getFirstToken() {
+    if (PubKeyword) {
+      return PubKeyword;
+    }
+    return StructKeyword;
+  }
+
+  Token* StructDecl::getLastToken() {
+    if (Fields.size()) {
+      Fields.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* SourceFile::getFirstToken() {
+    if (Elements.size()) {
+      return Elements.front()->getFirstToken();
+    }
+    return nullptr;
+  }
+
+  Token* SourceFile::getLastToken() {
+    if (Elements.size()) {
+      return Elements.back()->getLastToken();
+    }
+    return nullptr;
   }
 
   std::string Equals::getText() const {

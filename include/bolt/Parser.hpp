@@ -60,6 +60,8 @@ namespace bolt {
 
   class Parser {
 
+    TextFile& File;
+
     Stream<Token*>& Tokens;
 
     OperatorTable ExprOperators;
@@ -70,7 +72,7 @@ namespace bolt {
 
   public:
 
-    Parser(Stream<Token*>& S);
+    Parser(TextFile& File, Stream<Token*>& S);
 
     QualifiedName* parseQualifiedName();
 

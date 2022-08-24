@@ -34,8 +34,8 @@ namespace bolt {
     Mapping.emplace(Name, OperatorInfo { Precedence, Flags });
   }
 
-  Parser::Parser(Stream<Token*>& S):
-    Tokens(S) {
+  Parser::Parser(TextFile& File, Stream<Token*>& S):
+    File(File), Tokens(S) {
       ExprOperators.add("**", OperatorFlags_InfixR, 10);
       ExprOperators.add("*", OperatorFlags_InfixL, 5);
       ExprOperators.add("/", OperatorFlags_InfixL, 5);
@@ -120,8 +120,10 @@ namespace bolt {
     auto T0 = Tokens.peek();
     switch (T0->Type) {
       case NodeType::Identifier:
-        Tokens.get();
-        return new ReferenceExpression(static_cast<Identifier*>(T0));
+      {
+        auto Name = parseQualifiedName();
+        return new ReferenceExpression(Name);
+      }
       case NodeType::IntegerLiteral:
       case NodeType::StringLiteral:
         Tokens.get();
@@ -320,7 +322,7 @@ after_params:
       }
       Elements.push_back(parseSourceElement());
     }
-    return new SourceFile(Elements);
+    return new SourceFile(File, Elements);
   }
 
 }

@@ -1,5 +1,6 @@
 
 #include <sstream>
+#include <cmath>
 
 #include "zen/config.hpp"
 
@@ -30,6 +31,14 @@
 #define ANSI_BG_WHITE "\u001b[47m"
 
 namespace bolt {
+
+  template<typename T>
+  T countDigits(T number) {
+    if (number == 0) {
+      return 1;
+    }
+    return std::ceil(std::log10(number+1));
+  }
 
   Diagnostic::Diagnostic(DiagnosticKind Kind):
     std::runtime_error("a compiler error occurred without being caught"), Kind(Kind) {}
@@ -122,9 +131,168 @@ namespace bolt {
     }
   }
 
-
   ConsoleDiagnostics::ConsoleDiagnostics(std::ostream& Out):
     Out(Out) {}
+
+  void ConsoleDiagnostics::setForegroundColor(Color C) {
+    if (EnableColors) {
+      switch (C) {
+        case Color::None:
+          break;
+        case Color::Black:
+          Out << ANSI_FG_BLACK;
+          break;
+        case Color::White:
+          Out << ANSI_FG_WHITE;
+          break;
+        case Color::Red:
+          Out << ANSI_FG_RED;
+          break;
+        case Color::Yellow:
+          Out << ANSI_FG_YELLOW;
+          break;
+        case Color::Green:
+          Out << ANSI_FG_GREEN;
+          break;
+        case Color::Blue:
+          Out << ANSI_FG_BLUE;
+          break;
+        case Color::Cyan:
+          Out << ANSI_FG_CYAN;
+          break;
+        case Color::Magenta:
+          Out << ANSI_FG_MAGENTA;
+          break;
+      }
+    }
+  }
+
+
+  void ConsoleDiagnostics::setBackgroundColor(Color C) {
+    if (EnableColors) {
+      switch (C) {
+        case Color::None:
+          break;
+        case Color::Black:
+          Out << ANSI_BG_BLACK;
+          break;
+        case Color::White:
+          Out << ANSI_BG_WHITE;
+          break;
+        case Color::Red:
+          Out << ANSI_BG_RED;
+          break;
+        case Color::Yellow:
+          Out << ANSI_BG_YELLOW;
+          break;
+        case Color::Green:
+          Out << ANSI_BG_GREEN;
+          break;
+        case Color::Blue:
+          Out << ANSI_BG_BLUE;
+          break;
+        case Color::Cyan:
+          Out << ANSI_BG_CYAN;
+          break;
+        case Color::Magenta:
+          Out << ANSI_BG_MAGENTA;
+          break;
+      }
+    }
+  }
+
+  void ConsoleDiagnostics::resetStyles() {
+    if (EnableColors) {
+      Out << ANSI_RESET;
+    }
+  }
+
+  void ConsoleDiagnostics::writeGutter(
+    std::size_t GutterWidth,
+    std::size_t Line
+  ) {
+    auto LineNumberDigitCount = countDigits(Line);
+    auto LeadingSpaces = GutterWidth - LineNumberDigitCount;
+    Out << "  ";
+    setForegroundColor(Color::Black);
+    setBackgroundColor(Color::White);
+    for (std::size_t i = 0; i < LeadingSpaces; i++) {
+      Out << ' ';
+    }
+    Out << Line;
+    resetStyles();
+    Out << " ";
+  }
+
+  void ConsoleDiagnostics::writeHighlight(
+    std::size_t GutterWidth,
+    TextRange Range,
+    Color HighlightColor,
+    std::size_t Line,
+    std::size_t LineLength
+  ) {
+    if (Line < Range.Start.Line || Range.End.Line < Line) {
+      return;
+    }
+    Out << "  ";
+    setBackgroundColor(Color::White);
+    for (std::size_t i = 0; i < GutterWidth; i++) {
+      Out << ' ';
+    }
+    resetStyles();
+    Out << ' ';
+    std::size_t start_column = Range.Start.Line == Line ? Range.Start.Column : 1;
+    std::size_t end_column = Range.End.Line == Line ? Range.End.Column : LineLength+1;
+    for (std::size_t i = 1; i < start_column; i++) {
+      Out << ' ';
+    }
+    setForegroundColor(HighlightColor);
+    for (std::size_t i = start_column; i < end_column; i++) {
+      Out << '~';
+    }
+    resetStyles();
+    Out << '\n';
+  }
+
+ void ConsoleDiagnostics::writeExcerpt(
+    TextFile& File,
+    TextRange ToPrint,
+    TextRange ToHighlight,
+    Color HighlightColor
+  ) {
+
+    auto Text = File.getText();
+    auto StartPos = ToPrint.Start;
+    auto EndPos = ToPrint.End;
+    auto StartLine = StartPos.Line-1 > ExcerptLinesPre ? StartPos.Line - ExcerptLinesPost : 1;
+    auto StartOffset = File.getStartOffset(StartLine);
+    auto EndLine = std::min(File.getLineCount(), EndPos.Line + ExcerptLinesPost);
+    auto EndOffset = File.getStartOffset(EndLine+1);
+    auto GutterWidth = std::max<std::size_t>(2, countDigits(EndLine+1));
+    auto HighlightStart = ToHighlight.Start;
+    auto HighlightEnd = ToHighlight.End;
+    auto HighlightRange = TextRange { HighlightStart, HighlightEnd };
+
+    std::size_t CurrColumn = 1;
+    std::size_t CurrLine = StartLine;
+    writeGutter(GutterWidth, CurrLine);
+    for (std::size_t i = StartOffset; i < EndOffset; i++) {
+      auto C = Text[i];
+      Out << C;
+      if (C == '\n') {
+        writeHighlight(GutterWidth, HighlightRange, HighlightColor, CurrLine, CurrColumn);
+        if (CurrLine == EndLine && C == '\n') {
+          break;
+        }
+        CurrLine++;
+        writeGutter(GutterWidth, CurrLine);
+        CurrColumn = 1;
+      } else {
+        CurrColumn++;
+      }
+    }
+
+  }
 
   void ConsoleDiagnostics::addDiagnostic(const Diagnostic& D) {
 
@@ -163,6 +331,7 @@ namespace bolt {
             break;
         }
         Out << " but instead got '" << E.Actual->getText() << "'\n";
+        writeExcerpt(E.Actual->getSourceFile()->getTextFile(), E.Actual->getRange(), E.Actual->getRange(), Color::Red);
         break;
       }
 

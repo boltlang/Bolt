@@ -1,6 +1,7 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
+#include <iterator>
 #include <vector>
 
 #include "bolt/Text.hpp"
@@ -57,29 +58,41 @@ namespace bolt {
     SourceFile,
   };
 
+  class Token;
+  class SourceFile;
 
   class Node {
 
-    unsigned refcount = 0;
+    unsigned RefCount = 0;
 
   public:
 
+    Node* Parent = nullptr;
+
     inline void ref() {
-      ++refcount;
+      ++RefCount;
     }
 
     inline void unref() {
-      --refcount;
-      if (refcount == 0) {
+      --RefCount;
+      if (RefCount == 0) {
         delete this;
       }
     }
+
+    virtual void setParents() = 0;
+    
+    virtual Token* getFirstToken() = 0;
+    virtual Token* getLastToken() = 0;
+
+    TextRange getRange();
 
     const NodeType Type;
 
     inline Node(NodeType Type):
         Type(Type) {}
 
+    SourceFile* getSourceFile();
 
     virtual ~Node();
 
@@ -94,6 +107,16 @@ namespace bolt {
     Token(NodeType Type, TextLoc StartLoc): Node(Type), StartLoc(StartLoc) {}
 
     virtual std::string getText() const = 0;
+
+    void setParents() override;
+
+    inline Token* getFirstToken() override {
+      return this;
+    }
+
+    inline Token* getLastToken() override {
+      return this;
+    }
 
     inline TextLoc getStartLoc() {
       return StartLoc;
@@ -128,7 +151,8 @@ namespace bolt {
   class Equals : public Token {
   public:
 
-    Equals(TextLoc StartLoc): Token(NodeType::Equals, StartLoc) {}
+    Equals(TextLoc StartLoc):
+      Token(NodeType::Equals, StartLoc) {}
 
     std::string getText() const override;
 
@@ -139,7 +163,8 @@ namespace bolt {
   class Colon : public Token {
   public:
 
-    Colon(TextLoc StartLoc): Token(NodeType::Colon, StartLoc) {}
+    Colon(TextLoc StartLoc):
+      Token(NodeType::Colon, StartLoc) {}
 
     std::string getText() const override;
 
@@ -150,7 +175,8 @@ namespace bolt {
   class Dot : public Token {
   public:
 
-    Dot(TextLoc StartLoc): Token(NodeType::Dot, StartLoc) {}
+    Dot(TextLoc StartLoc):
+      Token(NodeType::Dot, StartLoc) {}
 
     std::string getText() const override;
 
@@ -161,7 +187,8 @@ namespace bolt {
   class DotDot : public Token {
   public:
 
-    DotDot(TextLoc StartLoc): Token(NodeType::DotDot, StartLoc) {}
+    DotDot(TextLoc StartLoc):
+      Token(NodeType::DotDot, StartLoc) {}
 
     std::string getText() const override;
 
@@ -172,7 +199,8 @@ namespace bolt {
   class LParen : public Token {
   public:
 
-    LParen(TextLoc StartLoc): Token(NodeType::LParen, StartLoc) {}
+    LParen(TextLoc StartLoc):
+      Token(NodeType::LParen, StartLoc) {}
 
     std::string getText() const override;
 
@@ -183,7 +211,8 @@ namespace bolt {
   class RParen : public Token {
   public:
 
-    RParen(TextLoc StartLoc): Token(NodeType::RParen, StartLoc) {}
+    RParen(TextLoc StartLoc):
+      Token(NodeType::RParen, StartLoc) {}
 
     std::string getText() const override;
 
@@ -194,7 +223,8 @@ namespace bolt {
   class LBracket : public Token {
   public:
 
-    LBracket(TextLoc StartLoc): Token(NodeType::LBracket, StartLoc) {}
+    LBracket(TextLoc StartLoc):
+      Token(NodeType::LBracket, StartLoc) {}
 
     std::string getText() const override;
 
@@ -205,7 +235,8 @@ namespace bolt {
   class RBracket : public Token {
   public:
 
-    RBracket(TextLoc StartLoc): Token(NodeType::RBracket, StartLoc) {}
+    RBracket(TextLoc StartLoc):
+      Token(NodeType::RBracket, StartLoc) {}
 
     std::string getText() const override;
 
@@ -216,7 +247,8 @@ namespace bolt {
   class LBrace : public Token {
   public:
 
-    LBrace(TextLoc StartLoc): Token(NodeType::LBrace, StartLoc) {}
+    LBrace(TextLoc StartLoc):
+      Token(NodeType::LBrace, StartLoc) {}
 
     std::string getText() const override;
 
@@ -227,7 +259,8 @@ namespace bolt {
   class RBrace : public Token {
   public:
 
-    RBrace(TextLoc StartLoc): Token(NodeType::RBrace, StartLoc) {}
+    RBrace(TextLoc StartLoc):
+      Token(NodeType::RBrace, StartLoc) {}
 
     std::string getText() const override;
 
@@ -238,7 +271,8 @@ namespace bolt {
   class LetKeyword : public Token {
   public:
 
-    LetKeyword(TextLoc StartLoc): Token(NodeType::LetKeyword, StartLoc) {}
+    LetKeyword(TextLoc StartLoc):
+      Token(NodeType::LetKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -249,7 +283,8 @@ namespace bolt {
   class MutKeyword : public Token {
   public:
 
-    MutKeyword(TextLoc StartLoc): Token(NodeType::MutKeyword, StartLoc) {}
+    MutKeyword(TextLoc StartLoc):
+      Token(NodeType::MutKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -260,7 +295,8 @@ namespace bolt {
   class PubKeyword : public Token {
   public:
 
-    PubKeyword(TextLoc StartLoc): Token(NodeType::PubKeyword, StartLoc) {}
+    PubKeyword(TextLoc StartLoc):
+      Token(NodeType::PubKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -271,7 +307,8 @@ namespace bolt {
   class TypeKeyword : public Token {
   public:
 
-    TypeKeyword(TextLoc StartLoc): Token(NodeType::TypeKeyword, StartLoc) {}
+    TypeKeyword(TextLoc StartLoc):
+      Token(NodeType::TypeKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -282,7 +319,8 @@ namespace bolt {
   class ReturnKeyword : public Token {
   public:
 
-    ReturnKeyword(TextLoc StartLoc): Token(NodeType::ReturnKeyword, StartLoc) {}
+    ReturnKeyword(TextLoc StartLoc):
+      Token(NodeType::ReturnKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -293,7 +331,8 @@ namespace bolt {
   class ModKeyword : public Token {
   public:
 
-    ModKeyword(TextLoc StartLoc): Token(NodeType::ModKeyword, StartLoc) {}
+    ModKeyword(TextLoc StartLoc):
+      Token(NodeType::ModKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -304,7 +343,8 @@ namespace bolt {
   class StructKeyword : public Token {
   public:
 
-    StructKeyword(TextLoc StartLoc): Token(NodeType::StructKeyword, StartLoc) {}
+    StructKeyword(TextLoc StartLoc):
+      Token(NodeType::StructKeyword, StartLoc) {}
 
     std::string getText() const override;
 
@@ -315,7 +355,8 @@ namespace bolt {
   class Invalid : public Token {
   public:
 
-    Invalid(TextLoc StartLoc): Token(NodeType::Invalid, StartLoc) {}
+    Invalid(TextLoc StartLoc):
+      Token(NodeType::Invalid, StartLoc) {}
 
     std::string getText() const override;
 
@@ -326,7 +367,8 @@ namespace bolt {
   class EndOfFile : public Token {
   public:
 
-    EndOfFile(TextLoc StartLoc): Token(NodeType::EndOfFile, StartLoc) {}
+    EndOfFile(TextLoc StartLoc):
+      Token(NodeType::EndOfFile, StartLoc) {}
 
     std::string getText() const override;
 
@@ -337,7 +379,8 @@ namespace bolt {
   class BlockStart : public Token {
   public:
 
-    BlockStart(TextLoc StartLoc): Token(NodeType::BlockStart, StartLoc) {}
+    BlockStart(TextLoc StartLoc):
+      Token(NodeType::BlockStart, StartLoc) {}
 
     std::string getText() const override;
 
@@ -348,7 +391,8 @@ namespace bolt {
   class BlockEnd : public Token {
   public:
 
-    BlockEnd(TextLoc StartLoc): Token(NodeType::BlockEnd, StartLoc) {}
+    BlockEnd(TextLoc StartLoc):
+      Token(NodeType::BlockEnd, StartLoc) {}
 
     std::string getText() const override;
 
@@ -359,7 +403,8 @@ namespace bolt {
   class LineFoldEnd : public Token {
   public:
 
-    LineFoldEnd(TextLoc StartLoc): Token(NodeType::LineFoldEnd, StartLoc) {}
+    LineFoldEnd(TextLoc StartLoc):
+      Token(NodeType::LineFoldEnd, StartLoc) {}
 
     std::string getText() const override;
 
@@ -372,7 +417,8 @@ namespace bolt {
 
     ByteString Text;
 
-    CustomOperator(ByteString Text, TextLoc StartLoc): Token(NodeType::CustomOperator, StartLoc), Text(Text) {}
+    CustomOperator(ByteString Text, TextLoc StartLoc):
+      Token(NodeType::CustomOperator, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
@@ -385,7 +431,8 @@ namespace bolt {
 
     ByteString Text;
 
-    Assignment(ByteString Text, TextLoc StartLoc): Token(NodeType::Assignment, StartLoc), Text(Text) {}
+    Assignment(ByteString Text, TextLoc StartLoc):
+      Token(NodeType::Assignment, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
@@ -398,7 +445,8 @@ namespace bolt {
 
     ByteString Text;
 
-    Identifier(ByteString Text, TextLoc StartLoc): Token(NodeType::Identifier, StartLoc), Text(Text) {}
+    Identifier(ByteString Text, TextLoc StartLoc):
+      Token(NodeType::Identifier, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
@@ -411,7 +459,8 @@ namespace bolt {
 
     ByteString Text;
 
-    StringLiteral(ByteString Text, TextLoc StartLoc): Token(NodeType::StringLiteral, StartLoc), Text(Text) {}
+    StringLiteral(ByteString Text, TextLoc StartLoc):
+      Token(NodeType::StringLiteral, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
@@ -424,7 +473,8 @@ namespace bolt {
 
     Integer Value;
 
-    IntegerLiteral(Integer Value, TextLoc StartLoc): Token(NodeType::IntegerLiteral, StartLoc), Value(Value) {}
+    IntegerLiteral(Integer Value, TextLoc StartLoc):
+      Token(NodeType::IntegerLiteral, StartLoc), Value(Value) {}
 
     std::string getText() const override;
 
@@ -444,6 +494,11 @@ namespace bolt {
     ): Node(NodeType::QualifiedName),
        ModulePath(ModulePath),
        Name(Name) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    void setParents() override;
 
     ~QualifiedName();
 
@@ -468,6 +523,11 @@ namespace bolt {
     ): TypeExpression(NodeType::ReferenceTypeExpression),
        Name(Name) {}
 
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
     ~ReferenceTypeExpression();
 
   };
@@ -491,6 +551,11 @@ namespace bolt {
     ): Pattern(NodeType::BindPattern),
        Name(Name) {}
 
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
     ~BindPattern();
 
   };
@@ -507,12 +572,17 @@ namespace bolt {
   class ReferenceExpression : public Expression {
   public:
 
-    Identifier* Name;
+    QualifiedName* Name;
 
     ReferenceExpression(
-      Identifier* Name
+      QualifiedName* Name
     ): Expression(NodeType::ReferenceExpression),
        Name(Name) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~ReferenceExpression();
 
@@ -528,6 +598,11 @@ namespace bolt {
     ): Expression(NodeType::ConstantExpression),
        Token(Token) {}
 
+    void setParents() override;
+
+    class Token* getFirstToken() override;
+    class Token* getLastToken() override;
+
     ~ConstantExpression();
 
   };
@@ -535,10 +610,20 @@ namespace bolt {
   class CallExpression : public Expression {
   public:
 
-    CallExpression(Expression* Function, std::vector<Expression*> Args): Expression(NodeType::CallExpression), Function(Function), Args(Args) {}
-
     Expression* Function;
     std::vector<Expression*> Args;
+
+    CallExpression(
+      Expression* Function,
+      std::vector<Expression*> Args
+    ): Expression(NodeType::CallExpression),
+       Function(Function),
+       Args(Args) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~CallExpression();
 
@@ -557,6 +642,11 @@ namespace bolt {
       Operator(Operator),
       RHS(RHS) {}
 
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
     ~InfixExpression();
 
   };
@@ -574,6 +664,11 @@ namespace bolt {
        Operator(Operator),
        Argument(Argument) {}
 
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
     ~UnaryExpression();
 
   };
@@ -590,10 +685,15 @@ namespace bolt {
   class ExpressionStatement : public Statement {
   public:
 
-    ExpressionStatement(Expression* Expression):
+    Expression* Expression;
+
+    ExpressionStatement(class Expression* Expression):
       Statement(NodeType::ExpressionStatement), Expression(Expression) {}
 
-    Expression* Expression;
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~ExpressionStatement();
 
@@ -602,23 +702,42 @@ namespace bolt {
   class ReturnStatement : public Statement {
   public:
 
-    ReturnStatement(ReturnKeyword* ReturnKeyword, Expression* Expression): Statement(NodeType::ReturnStatement), ReturnKeyword(ReturnKeyword), Expression(Expression) {}
-
     ReturnKeyword* ReturnKeyword;
     Expression* Expression;
+
+    ReturnStatement(
+      class ReturnKeyword* ReturnKeyword,
+      class Expression* Expression
+    ): Statement(NodeType::ReturnStatement),
+       ReturnKeyword(ReturnKeyword),
+       Expression(Expression) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~ReturnStatement();
 
   };
 
   class TypeAssert : public Node {
-
-    public:
-
-    TypeAssert(Colon* Colon, TypeExpression* TypeExpression): Node(NodeType::TypeAssert), Colon(Colon), TypeExpression(TypeExpression) {}
+  public:
 
     Colon* Colon;
     TypeExpression* TypeExpression;
+
+    TypeAssert(
+      class Colon* Colon,
+      class TypeExpression* TypeExpression
+    ): Node(NodeType::TypeAssert),
+       Colon(Colon),
+       TypeExpression(TypeExpression) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~TypeAssert();
 
@@ -631,6 +750,11 @@ namespace bolt {
 
     Pattern* Pattern;
     TypeAssert* TypeAssert;
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~Param();
 
@@ -648,15 +772,20 @@ namespace bolt {
   class LetBlockBody : public LetBody {
   public:
 
+    BlockStart* BlockStart;
+    std::vector<Node*> Elements;
+
     LetBlockBody(
-      BlockStart* BlockStart,
+      class BlockStart* BlockStart,
       std::vector<Node*> Elements
     ): LetBody(NodeType::LetBlockBody),
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    BlockStart* BlockStart;
-    std::vector<Node*> Elements;
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~LetBlockBody();
 
@@ -675,6 +804,11 @@ namespace bolt {
        Equals(Equals),
        Expression(Expression) {}
 
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
     ~LetExprBody();
 
   };
@@ -683,7 +817,7 @@ namespace bolt {
   public:
 
     PubKeyword* PubKeyword;
-    LetKeyword* LetKeywod;
+    LetKeyword* LetKeyword;
     MutKeyword* MutKeyword;
     Pattern* Pattern;
     std::vector<Param*> Params;
@@ -700,12 +834,17 @@ namespace bolt {
       LetBody* Body
     ): Node(NodeType::LetDeclaration),
        PubKeyword(PubKeyword),
-       LetKeywod(LetKeywod),
+       LetKeyword(LetKeywod),
        MutKeyword(MutKeyword),
        Pattern(Pattern),
        Params(Params),
        TypeAssert(TypeAssert),
        Body(Body) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~LetDeclaration();
 
@@ -727,6 +866,11 @@ namespace bolt {
     Colon* Colon;
     TypeExpression* TypeExpression;
 
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
     ~StructDeclField();
 
   };
@@ -734,34 +878,52 @@ namespace bolt {
   class StructDecl : public Node {
   public:
 
-    StructDecl(
-        StructKeyword* StructKeyword,
-        Identifier* Name,
-        Dot* Dot,
-        std::vector<StructDeclField*> Fields
-      ): Node(NodeType::StructDecl),
-         StructKeyword(StructKeyword),
-         Name(Name),
-         Dot(Dot),
-         Fields(Fields) {}
-
+    PubKeyword* PubKeyword;
     StructKeyword* StructKeyword;
     Identifier* Name;
-    Dot* Dot;
+    BlockStart* BlockStart;
     std::vector<StructDeclField*> Fields;
+
+    StructDecl(
+      class PubKeyword* PubKeyword,
+      class StructKeyword* StructKeyword,
+      Identifier* Name,
+      class BlockStart* BlockStart,
+      std::vector<StructDeclField*> Fields
+    ): Node(NodeType::StructDecl),
+       PubKeyword(PubKeyword),
+       StructKeyword(StructKeyword),
+       Name(Name),
+       BlockStart(BlockStart),
+       Fields(Fields) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~StructDecl();
 
   };
 
   class SourceFile : public Node {
-
-    public:
-
-    SourceFile(std::vector<Node*> Elements):
-      Node(NodeType::SourceFile), Elements(Elements) {}
+  public:
+    
+    TextFile& File;
 
     std::vector<Node*> Elements;
+
+    SourceFile(TextFile& File, std::vector<Node*> Elements):
+      Node(NodeType::SourceFile), File(File), Elements(Elements) {}
+
+    inline TextFile& getTextFile() {
+      return File;
+    }
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
     ~SourceFile();
 

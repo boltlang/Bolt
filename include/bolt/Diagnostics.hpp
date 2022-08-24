@@ -98,11 +98,54 @@ namespace bolt {
 
   };
 
+  enum class Color {
+    None,
+    Black,
+    White,
+    Red,
+    Yellow,
+    Green,
+    Blue,
+    Cyan,
+    Magenta,
+  };
+
   class ConsoleDiagnostics : public DiagnosticEngine {
 
     std::ostream& Out;
 
+    void setForegroundColor(Color C);
+    void setBackgroundColor(Color C);
+    void resetStyles();
+
+    void writeGutter(
+      std::size_t GutterWidth,
+      std::size_t Line
+    );
+
+    void writeHighlight(
+      std::size_t GutterWidth,
+      TextRange Range,
+      Color HighlightColor,
+      std::size_t Line,
+      std::size_t LineLength
+    );
+
+    void writeExcerpt(
+      TextFile& File,
+      TextRange ToPrint,
+      TextRange ToHighlight,
+      Color HighlightColor
+    );
+
   public:
+
+    unsigned ExcerptLinesPre = 2;
+    unsigned ExcerptLinesPost = 2;
+    std::size_t MaxTypeSubsitutionCount = 0;
+    bool PrintFilePosition = true;
+    bool PrintExcerpts = true;
+    bool EnableColors = true;
 
     void addDiagnostic(const Diagnostic& Diagnostic) override;
 

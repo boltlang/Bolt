@@ -7,6 +7,7 @@
 #include <string>
 
 #include "bolt/ByteString.hpp"
+#include "bolt/String.hpp"
 
 namespace bolt {
 
@@ -38,21 +39,23 @@ namespace bolt {
   class TextFile {
 
     ByteString Path;
-    ByteString Text;
+    String Text;
 
     std::vector<size_t> LineOffsets;
 
   public:
 
-    TextFile(ByteString Path, ByteString Text);
+    TextFile(ByteString Path, String Text);
 
     size_t getLine(size_t Offset);
     size_t getColumn(size_t Offset);
     size_t getStartOffset(size_t Line);
 
+    size_t getLineCount() const;
+
     ByteString getPath() const;
 
-    ByteString getText() const;
+    String getText() const;
 
   };
 
