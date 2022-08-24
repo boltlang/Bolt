@@ -17,7 +17,7 @@ namespace bolt {
     size_t Line = 1;
     size_t Column = 1;
 
-    inline void advance(const std::string& Text) {
+    inline void advance(const String& Text) {
       for (auto Chr: Text) {
         if (Chr == '\n') {
           Line++;
@@ -26,6 +26,12 @@ namespace bolt {
           Column++;
         }
       }
+    }
+
+    inline TextLoc operator+(const String& Text) const {
+      TextLoc Out { Line, Column };
+      Out.advance(Text);
+      return Out;
     }
 
   };
@@ -39,13 +45,13 @@ namespace bolt {
   class TextFile {
 
     ByteString Path;
-    String Text;
+    ByteString Text;
 
     std::vector<size_t> LineOffsets;
 
   public:
 
-    TextFile(ByteString Path, String Text);
+    TextFile(ByteString Path, ByteString Text);
 
     size_t getLine(size_t Offset);
     size_t getColumn(size_t Offset);
@@ -55,7 +61,7 @@ namespace bolt {
 
     ByteString getPath() const;
 
-    String getText() const;
+    ByteString getText() const;
 
   };
 

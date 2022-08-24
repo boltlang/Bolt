@@ -122,11 +122,7 @@ namespace bolt {
       return StartLoc;
     }
 
-    inline TextLoc getEndLoc() {
-      TextLoc EndLoc;
-      EndLoc.advance(getText());
-      return EndLoc;
-    }
+    TextLoc getEndLoc();
 
     inline size_t getStartLine() {
       return StartLoc.Line;

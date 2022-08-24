@@ -228,9 +228,10 @@ namespace bolt {
 
     Type* Left;
     Type* Right;
+    Node* Source;
 
-    inline CEqual(Type* Left, Type* Right):
-      Constraint(ConstraintKind::Equal), Left(Left), Right(Right) {}
+    inline CEqual(Type* Left, Type* Right, Node* Source = nullptr):
+      Constraint(ConstraintKind::Equal), Left(Left), Right(Right), Source(Source) {}
 
   };
 

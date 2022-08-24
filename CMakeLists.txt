@@ -8,8 +8,10 @@ set(CMAKE_CXX_STANDARD 17)
 add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
 
 set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
+set(ICU_CFLAGS "-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1")
 set(ICU_INCLUDE_DIRS "${ICU_DIR}/include")
 set(ICU_LIBRARY_DIRS "${ICU_DIR}/lib")
+set(ICU_LIBRARIES icuuc)
 
 add_library(
   BoltCore
@@ -29,6 +31,7 @@ target_compile_options(
   BoltCore
   PUBLIC
   -fstandalone-debug
+  ${ICU_CFLAGS}
 )
 target_include_directories(
   BoltCore

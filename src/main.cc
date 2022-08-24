@@ -14,10 +14,10 @@
 
 using namespace bolt;
 
-String readFile(std::string Path) {
+ByteString readFile(std::string Path) {
 
   std::ifstream File(Path);
-  String Out;
+  ByteString Out;
 
   File.seekg(0, std::ios::end);   
   Out.reserve(File.tellg());
@@ -40,22 +40,19 @@ int main(int argc, const char* argv[]) {
 
   auto Text = readFile(argv[1]);
   TextFile File { argv[1], Text };
-  VectorStream<String> Chars(Text, EOF);
-  Scanner S(Chars);
+  VectorStream<ByteString, Char> Chars(Text, EOF);
+  Scanner S(File, Chars);
   Punctuator PT(S);
   Parser P(File, PT);
 
   SourceFile* SF; 
 
-#ifdef NDEBUG
   try {
     SF = P.parseSourceFile();
   } catch (Diagnostic& D) {
     DE.addDiagnostic(D);
+    return 1;
   }
-#else
-  SF = P.parseSourceFile();
-#endif
 
   SF->setParents();
 

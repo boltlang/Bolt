@@ -40,22 +40,24 @@ namespace bolt {
   class UnexpectedTokenDiagnostic : public Diagnostic {
   public:
 
+    TextFile& File;
     Token* Actual;
     std::vector<NodeType> Expected;
 
-    inline UnexpectedTokenDiagnostic(Token* Actual, std::vector<NodeType> Expected):
-      Diagnostic(DiagnosticKind::UnexpectedToken), Actual(Actual), Expected(Expected) {}
+    inline UnexpectedTokenDiagnostic(TextFile& File, Token* Actual, std::vector<NodeType> Expected):
+      Diagnostic(DiagnosticKind::UnexpectedToken), File(File), Actual(Actual), Expected(Expected) {}
 
   };
 
   class UnexpectedStringDiagnostic : public Diagnostic {
   public:
 
+    TextFile& File;
     TextLoc Location;
     String Actual;
 
-    inline UnexpectedStringDiagnostic(TextLoc Location, String Actual):
-      Diagnostic(DiagnosticKind::UnexpectedString), Location(Location), Actual(Actual) {}
+    inline UnexpectedStringDiagnostic(TextFile& File, TextLoc Location, String Actual):
+      Diagnostic(DiagnosticKind::UnexpectedString), File(File), Location(Location), Actual(Actual) {}
 
   };
 
@@ -75,9 +77,10 @@ namespace bolt {
     
     Type* Left;
     Type* Right;
+    Node* Source;
 
-    inline UnificationErrorDiagnostic(Type* Left, Type* Right):
-      Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right) {}
+    inline UnificationErrorDiagnostic(Type* Left, Type* Right, Node* Source):
+      Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right), Source(Source) {}
 
   };
 
@@ -116,6 +119,9 @@ namespace bolt {
 
     void setForegroundColor(Color C);
     void setBackgroundColor(Color C);
+    void setBold(bool Enable);
+    void setItalic(bool Enable);
+    void setUnderline(bool Enable);
     void resetStyles();
 
     void writeGutter(

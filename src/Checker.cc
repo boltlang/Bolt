@@ -203,7 +203,7 @@ namespace bolt {
         std::vector<Type*> ArgTys;
         ArgTys.push_back(inferExpression(Y->LHS, Ctx));
         ArgTys.push_back(inferExpression(Y->RHS, Ctx));
-        Ctx.addConstraint(new CEqual { new TArrow(ArgTys, RetTy), OpTy });
+        Ctx.addConstraint(new CEqual { new TArrow(ArgTys, RetTy), OpTy, X });
         return RetTy;
       }
 
@@ -257,7 +257,7 @@ namespace bolt {
         {
           auto Y = static_cast<CEqual*>(Constraint);
           if (!unify(Y->Left, Y->Right, Sub)) {
-            DE.add<UnificationErrorDiagnostic>(Y->Left, Y->Right);
+            DE.add<UnificationErrorDiagnostic>(Y->Left, Y->Right, Y->Source);
           }
           break;
         }

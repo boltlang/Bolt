@@ -5,9 +5,9 @@
 
 namespace bolt {
 
-  using Char = char32_t;
+  using Char = int;
 
-  using String = std::basic_string<Char>;
+  using String = std::string;
 
 }
 

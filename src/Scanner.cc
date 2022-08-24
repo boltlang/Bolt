@@ -3,6 +3,7 @@
 
 #include "zen/config.hpp"
 
+#include "bolt/Text.hpp"
 #include "bolt/Integer.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Diagnostics.hpp"
@@ -65,8 +66,8 @@ namespace bolt {
     { "mod", NodeType::ModKeyword },
   };
 
-  Scanner::Scanner(Stream<Char>& Chars):
-    Chars(Chars) {}
+  Scanner::Scanner(TextFile& File, Stream<Char>& Chars):
+    File(File), Chars(Chars) {}
 
   Token* Scanner::read() {
 
@@ -225,7 +226,7 @@ digit_finish:
               case '\'': Text.push_back('\''); break;
               case '"': Text.push_back('"'); break;
               default:
-                throw UnexpectedStringDiagnostic(Loc, String { C1 });
+                throw UnexpectedStringDiagnostic(File, Loc, String { static_cast<char>(C1) });
             }
             Escaping = false;
           } else {
@@ -252,7 +253,7 @@ after_string_contents:
           getChar();
           auto C2 = peekChar();
           if (C2 == '.') {
-            throw UnexpectedStringDiagnostic(getCurrentLoc(), String { C2 });
+            throw UnexpectedStringDiagnostic(File, getCurrentLoc(), String { static_cast<char>(C2) });
           }
           return new DotDot(StartLoc);
         }
@@ -304,11 +305,7 @@ after_string_contents:
     BOLT_SIMPLE_TOKEN('}', RBrace)
 
     default:
-
-      throw UnexpectedStringDiagnostic(StartLoc, String { C0 });
-
-      // TODO Add a diagnostic message indicating that scanning failed.
-      //return new Invalid(StartLoc);
+      throw UnexpectedStringDiagnostic(File, StartLoc, String { static_cast<char>(C0) });
 
     }
 

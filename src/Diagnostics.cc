@@ -2,6 +2,7 @@
 #include <sstream>
 #include <cmath>
 
+#include "bolt/CST.hpp"
 #include "zen/config.hpp"
 
 #include "bolt/Diagnostics.hpp"
@@ -201,6 +202,24 @@ namespace bolt {
     }
   }
 
+  void ConsoleDiagnostics::setBold(bool Enable) {
+    if (Enable) {
+      Out << ANSI_BOLD;
+    }
+  }
+
+  void ConsoleDiagnostics::setItalic(bool Enable) {
+    if (Enable) {
+      // TODO
+    }
+  }
+
+  void ConsoleDiagnostics::setUnderline(bool Enable) {
+    if (Enable) {
+      Out << ANSI_UNDERLINE;
+    }
+  }
+
   void ConsoleDiagnostics::resetStyles() {
     if (EnableColors) {
       Out << ANSI_RESET;
@@ -311,7 +330,14 @@ namespace bolt {
       case DiagnosticKind::UnexpectedToken:
       {
         auto E = static_cast<const UnexpectedTokenDiagnostic&>(D);
-        Out << "<unknown.bolt>:" << E.Actual->getStartLine() << ":" << E.Actual->getStartColumn() << ": expected ";
+        setForegroundColor(Color::Red);
+        setBold(true);
+        Out << "error: ";
+        resetStyles();
+        setForegroundColor(Color::Yellow);
+        Out << E.File.getPath() << ":" << E.Actual->getStartLine() << ":" << E.Actual->getStartColumn() << ":";
+        resetStyles();
+        Out << " expected ";
         switch (E.Expected.size()) {
           case 0:
             Out << "nothing";
@@ -322,7 +348,7 @@ namespace bolt {
           default:
             auto Iter = E.Expected.begin();
             Out << describe(*Iter++);
-            NodeType Prev;
+            NodeType Prev = *Iter++;
             while (Iter != E.Expected.end()) {
               Out << ", " << describe(Prev);
               Prev = *Iter++;
@@ -330,15 +356,20 @@ namespace bolt {
             Out << " or " << describe(Prev);
             break;
         }
-        Out << " but instead got '" << E.Actual->getText() << "'\n";
-        writeExcerpt(E.Actual->getSourceFile()->getTextFile(), E.Actual->getRange(), E.Actual->getRange(), Color::Red);
+        Out << " but instead got '" << E.Actual->getText() << "'\n\n";
+        writeExcerpt(E.File, E.Actual->getRange(), E.Actual->getRange(), Color::Red);
+        Out << "\n";
         break;
       }
 
       case DiagnosticKind::UnexpectedString:
       {
         auto E = static_cast<const UnexpectedStringDiagnostic&>(D);
-        Out << "<unknown.bolt>:" << E.Location.Line << ":" << E.Location.Column << ": unexpected '";
+        setForegroundColor(Color::Red);
+        setBold(true);
+        Out << "error: ";
+        resetStyles();
+        Out << E.File.getPath() << ":" << E.Location.Line << ":" << E.Location.Column << ": unexpected '";
         for (auto Chr: E.Actual) {
           switch (Chr) {
             case '\\':
@@ -352,14 +383,28 @@ namespace bolt {
               break;
           }
         }
+        Out << "'\n\n";
+        TextRange Range { E.Location, E.Location + E.Actual };
+        writeExcerpt(E.File, Range, Range, Color::Red);
+        Out << "\n";
         break;
       }
 
       case DiagnosticKind::UnificationError:
       {
         auto E = static_cast<const UnificationErrorDiagnostic&>(D);
-        Out << ANSI_FG_RED << ANSI_BOLD << "error: " << ANSI_RESET << "the types " << ANSI_FG_GREEN << describe(E.Left) << ANSI_RESET
-            << " and " << ANSI_FG_GREEN << describe(E.Right) << ANSI_RESET << " failed to match\n";
+        setForegroundColor(Color::Red);
+        setBold(true);
+        Out << "error: ";
+        resetStyles();
+        Out << "the types " << ANSI_FG_GREEN << describe(E.Left) << ANSI_RESET
+            << " and " << ANSI_FG_GREEN << describe(E.Right) << ANSI_RESET << " failed to match\n\n";
+        if (E.Source) {
+          auto Range = E.Source->getRange();
+          //std::cerr << Range.Start.Line << ":" << Range.Start.Column << "-" << Range.End.Line << ":" << Range.End.Column << "\n";
+          writeExcerpt(E.Source->getSourceFile()->getTextFile(), Range, Range, Color::Red);
+          Out << "\n";
+        }
         break;
       }
 

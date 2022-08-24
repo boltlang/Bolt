@@ -9,7 +9,7 @@ namespace bolt {
     auto CurrNode = this;
     for (;;) {
       if (CurrNode->Type == NodeType::SourceFile) {
-        return static_cast<SourceFile*>(this);
+        return static_cast<SourceFile*>(CurrNode);
       }
       CurrNode = CurrNode->Parent;
       ZEN_ASSERT(CurrNode != nullptr);
@@ -21,6 +21,12 @@ namespace bolt {
       getFirstToken()->getStartLoc(),
       getLastToken()->getEndLoc(),
     };
+  }
+
+  TextLoc Token::getEndLoc() {
+    auto EndLoc = StartLoc;
+    EndLoc.advance(getText());
+    return EndLoc;
   }
 
   void Token::setParents() {

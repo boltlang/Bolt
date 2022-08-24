@@ -24,11 +24,11 @@ namespace bolt {
 
   };
 
-  template<typename ContainerT>
-  class VectorStream : public Stream<typename ContainerT::value_type> {
+  template<typename ContainerT, typename T = typename ContainerT::value_type>
+  class VectorStream : public Stream<T> {
   public:
 
-    using value_type = typename ContainerT::value_type;
+    using value_type = T;
 
     ContainerT& Data;
     value_type Sentry;
@@ -82,6 +82,8 @@ namespace bolt {
 
   class Scanner : public BufferedStream<Token*> {
 
+    TextFile& File;
+
     Stream<Char>& Chars;
 
     TextLoc CurrLoc;
@@ -111,7 +113,7 @@ namespace bolt {
 
   public:
 
-    Scanner(Stream<Char>& Chars);
+    Scanner(TextFile& File, Stream<Char>& Chars);
 
   };
 

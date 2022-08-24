@@ -70,7 +70,7 @@ namespace bolt {
   { \
     auto __Token = Tokens.get(); \
     if (__Token->Type != NodeType::name) { \
-      throw UnexpectedTokenDiagnostic(__Token, std::vector<NodeType> { NodeType::name }); \
+      throw UnexpectedTokenDiagnostic(File, __Token, std::vector<NodeType> { NodeType::name }); \
     } \
   }
 
@@ -81,7 +81,7 @@ namespace bolt {
         Tokens.get();
         return new BindPattern(static_cast<Identifier*>(T0));
       default:
-        throw UnexpectedTokenDiagnostic(T0, std::vector { NodeType::Identifier });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier });
     }
   }
 
@@ -89,18 +89,18 @@ namespace bolt {
     std::vector<Identifier*> ModulePath;
     auto Name = Tokens.get();
     if (Name->Type != NodeType::Identifier) {
-      throw UnexpectedTokenDiagnostic(Name, std::vector { NodeType::Identifier });
+      throw UnexpectedTokenDiagnostic(File, Name, std::vector { NodeType::Identifier });
     }
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->Type == NodeType::Dot) {
+      if (T1->Type != NodeType::Dot) {
         break;
       }
       Tokens.get();
       ModulePath.push_back(static_cast<Identifier*>(Name));
       Name = Tokens.get();
       if (Name->Type != NodeType::Identifier) {
-        throw UnexpectedTokenDiagnostic(Name, std::vector { NodeType::Identifier });
+        throw UnexpectedTokenDiagnostic(File, Name, std::vector { NodeType::Identifier });
       }
     }
     return new QualifiedName(ModulePath, static_cast<Identifier*>(Name));
@@ -112,7 +112,7 @@ namespace bolt {
       case NodeType::Identifier:
         return new ReferenceTypeExpression(parseQualifiedName());
       default:
-        throw UnexpectedTokenDiagnostic(T0, std::vector { NodeType::Identifier });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier });
     }
   }
 
@@ -129,7 +129,7 @@ namespace bolt {
         Tokens.get();
         return new ConstantExpression(T0);
       default:
-        throw UnexpectedTokenDiagnostic(T0, std::vector { NodeType::Identifier, NodeType::IntegerLiteral });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier, NodeType::IntegerLiteral, NodeType::StringLiteral });
     }
   }
 
@@ -200,16 +200,16 @@ namespace bolt {
 
   LetDeclaration* Parser::parseLetDeclaration() {
 
-    PubKeyword* Pub;
+    PubKeyword* Pub = nullptr;
     LetKeyword* Let;
-    MutKeyword* Mut;
+    MutKeyword* Mut = nullptr;
     auto T0 = Tokens.get();
     if (T0->Type == NodeType::PubKeyword) {
       Pub = static_cast<PubKeyword*>(T0);
       T0 = Tokens.get();
     }
     if (T0->Type != NodeType::LetKeyword) {
-      throw UnexpectedTokenDiagnostic(T0, std::vector { NodeType::LetKeyword });
+      throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::LetKeyword });
     }
     Let = static_cast<LetKeyword*>(T0);
     auto T1 = Tokens.peek();
@@ -277,7 +277,7 @@ after_params:
           // First tokens of Pattern
           Expected.push_back(NodeType::Identifier);
         }
-        throw UnexpectedTokenDiagnostic(T2, Expected);
+        throw UnexpectedTokenDiagnostic(File, T2, Expected);
     }
 
     BOLT_EXPECT_TOKEN(LineFoldEnd);
