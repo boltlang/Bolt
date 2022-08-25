@@ -64,6 +64,9 @@ namespace bolt {
     { "return", NodeType::ReturnKeyword },
     { "type", NodeType::TypeKeyword },
     { "mod", NodeType::ModKeyword },
+    { "if", NodeType::IfKeyword },
+    { "else", NodeType::ElseKeyword },
+    { "elif", NodeType::ElifKeyword },
   };
 
   Scanner::Scanner(TextFile& File, Stream<Char>& Chars):
@@ -209,6 +212,12 @@ digit_finish:
               return new TypeKeyword(StartLoc);
             case NodeType::ReturnKeyword:
               return new ReturnKeyword(StartLoc);
+            case NodeType::IfKeyword:
+              return new IfKeyword(StartLoc);
+            case NodeType::ElifKeyword:
+              return new ElifKeyword(StartLoc);
+            case NodeType::ElseKeyword:
+              return new ElseKeyword(StartLoc);
             default:
               ZEN_UNREACHABLE
           }

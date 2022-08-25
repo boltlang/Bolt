@@ -29,6 +29,9 @@ namespace bolt {
     ReturnKeyword,
     ModKeyword,
     StructKeyword,
+    ElifKeyword,
+    IfKeyword,
+    ElseKeyword,
     Invalid,
     EndOfFile,
     BlockStart,
@@ -50,6 +53,8 @@ namespace bolt {
     UnaryExpression,
     ExpressionStatement,
     ReturnStatement,
+    IfStatement,
+    IfStatementPart,
     TypeAssert,
     Param,
     LetBlockBody,
@@ -335,6 +340,42 @@ namespace bolt {
     std::string getText() const override;
 
     ~ReturnKeyword();
+
+  };
+
+  class ElseKeyword : public Token {
+  public:
+
+    ElseKeyword(TextLoc StartLoc):
+      Token(NodeType::ElseKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~ElseKeyword();
+
+  };
+
+  class ElifKeyword : public Token {
+  public:
+
+    ElifKeyword(TextLoc StartLoc):
+      Token(NodeType::ElifKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~ElifKeyword();
+
+  };
+
+  class IfKeyword : public Token {
+  public:
+
+    IfKeyword(TextLoc StartLoc):
+      Token(NodeType::IfKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~IfKeyword();
 
   };
 
@@ -728,6 +769,51 @@ namespace bolt {
     Token* getLastToken() override;
 
     ~ExpressionStatement();
+
+  };
+
+  class IfStatementPart : public Node {
+  public:
+
+    Token* Keyword;
+    Expression* Test;
+    BlockStart* BlockStart;
+    std::vector<Node*> Elements;
+
+    inline IfStatementPart(
+      Token* Keyword,
+      Expression* Test,
+      class BlockStart* BlockStart,
+      std::vector<Node*> Elements
+    ): Node(NodeType::IfStatementPart),
+       Keyword(Keyword),
+       Test(Test),
+       BlockStart(BlockStart),
+       Elements(Elements) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    ~IfStatementPart();
+
+  };
+
+  class IfStatement : public Statement {
+  public:
+ 
+    std::vector<IfStatementPart*> Parts;
+
+    inline IfStatement(std::vector<IfStatementPart*> Parts):
+      Statement(NodeType::IfStatement), Parts(Parts) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    ~IfStatement();
 
   };
 

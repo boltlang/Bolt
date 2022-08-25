@@ -68,6 +68,8 @@ namespace bolt {
 
     Token* peekFirstTokenAfterModifiers();
 
+    Token* expectToken(NodeType Ty);
+
     Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
     TypeExpression* parsePrimitiveTypeExpression();
@@ -93,6 +95,10 @@ namespace bolt {
     Expression* parseExpression();
 
     Expression* parseCallExpression();
+
+    IfStatement* parseIfStatement();
+
+    ReturnStatement* parseReturnStatement();
 
     ExpressionStatement* parseExpressionStatement();
 

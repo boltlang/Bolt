@@ -1,11 +1,11 @@
 
 #pragma once
 
-#include "bolt/Diagnostics.hpp"
 #include "zen/config.hpp"
 
 #include "bolt/ByteString.hpp"
 
+#include <stack>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -13,8 +13,11 @@
 
 namespace bolt {
 
+  class DiagnosticEngine;
   class Node;
   class Expression;
+  class TypeExpression;
+  class Pattern;
   class SourceFile;
 
   class Type;
@@ -28,6 +31,7 @@ namespace bolt {
     Con,
     Arrow,
     Any,
+    Tuple,
   };
 
   class Type {
@@ -88,6 +92,16 @@ namespace bolt {
 
   };
 
+  class TTuple : public Type {
+  public:
+
+    std::vector<Type*> ElementTypes;
+
+    inline TTuple(std::vector<Type*> ElementTypes):
+      Type(TypeKind::Tuple), ElementTypes(ElementTypes) {}
+
+  };
+
   class TAny : public Type {
   public:
 
@@ -115,7 +129,7 @@ namespace bolt {
     Type* Type;
 
     inline Forall(class Type* Type):
-      TVs(nullptr), Constraints(nullptr), Type(Type) {}
+      TVs(new TVSet), Constraints(new ConstraintSet), Type(Type) {}
 
     inline Forall(
       TVSet& TVs,
@@ -228,10 +242,10 @@ namespace bolt {
   class CMany : public Constraint {
   public:
 
-    ConstraintSet& Constraints;
+    ConstraintSet& Elements;
 
     inline CMany(ConstraintSet& Constraints):
-      Constraint(ConstraintKind::Many), Constraints(Constraints) {}
+      Constraint(ConstraintKind::Many), Elements(Constraints) {}
 
   };
 
@@ -249,14 +263,15 @@ namespace bolt {
     TVSet TVs;
     ConstraintSet Constraints;
     TypeEnv Env;
+    Type* ReturnType;
 
     InferContext* Parent;
 
-    inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env):
-      Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env) {}
+    inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env, Type* ReturnType):
+      Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env), ReturnType(ReturnType) {}
 
     inline InferContext(InferContext* Parent = nullptr):
-      Parent(Parent) {}
+      Parent(Parent), ReturnType(nullptr) {}
 
     void addConstraint(Constraint* C);
 
@@ -274,6 +289,14 @@ namespace bolt {
 
     size_t nextConTypeId = 0;
     size_t nextTypeVarId = 0;
+
+    Type* BoolType;
+    Type* IntType;
+    Type* StringType;
+
+    std::stack<InferContext> Contexts;
+
+    void addConstraint(Constraint* Constraint);
 
     Type* inferExpression(Expression* Expression, InferContext& Ctx);
     Type* inferTypeExpression(TypeExpression* TE, InferContext& Ctx);

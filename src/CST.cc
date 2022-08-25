@@ -99,6 +99,26 @@ namespace bolt {
     Expression->setParents();
   }
 
+  void IfStatementPart::setParents() {
+    Keyword->Parent = this;
+    if (Test) {
+      Test->Parent = this;
+      Test->setParents();
+    }
+    BlockStart->Parent = this;
+    for (auto Element: Elements) {
+      Element->Parent = this;
+      Element->setParents();
+    }
+  }
+
+  void IfStatement::setParents() {
+    for (auto Part: Parts) {
+      Part->Parent = this;
+      Part->setParents();
+    }
+  }
+
   void TypeAssert::setParents() {
     Colon->Parent = this;
     TypeExpression->Parent = this;
@@ -230,6 +250,15 @@ namespace bolt {
   ReturnKeyword::~ReturnKeyword() {
   }
 
+  IfKeyword::~IfKeyword() {
+  }
+
+  ElifKeyword::~ElifKeyword() {
+  }
+
+  ElseKeyword::~ElseKeyword() {
+  }
+
   ModKeyword::~ModKeyword() {
   }
 
@@ -333,6 +362,23 @@ namespace bolt {
   ReturnStatement::~ReturnStatement() {
     ReturnKeyword->unref();
     Expression->unref();
+  }
+
+  IfStatementPart::~IfStatementPart() {
+    Keyword->unref();
+    if (Test) {
+      Test->unref();
+    }
+    BlockStart->unref();
+    for (auto Element: Elements) {
+      Element->unref();
+    }
+  }
+
+  IfStatement::~IfStatement() {
+    for (auto Part: Parts) {
+      Part->unref();
+    }
   }
 
   TypeAssert::~TypeAssert() {
@@ -501,6 +547,27 @@ namespace bolt {
     return ReturnKeyword;
   }
 
+  Token* IfStatementPart::getFirstToken() {
+    return Keyword;
+  }
+
+  Token* IfStatementPart::getLastToken() {
+    if (Elements.size()) {
+      return Elements.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* IfStatement::getFirstToken() {
+    ZEN_ASSERT(Parts.size());
+    return Parts.front()->getFirstToken();
+  }
+
+  Token* IfStatement::getLastToken() {
+    ZEN_ASSERT(Parts.size());
+    return Parts.back()->getLastToken();
+  }
+
   Token* TypeAssert::getFirstToken() {
     return Colon;
   }
@@ -653,6 +720,18 @@ namespace bolt {
 
   std::string ReturnKeyword::getText() const {
     return "return";
+  }
+
+  std::string IfKeyword::getText() const {
+    return "if";
+  }
+
+  std::string ElseKeyword::getText() const {
+    return "else";
+  }
+
+  std::string ElifKeyword::getText() const {
+    return "elif";
   }
 
   std::string ModKeyword::getText() const {

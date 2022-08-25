@@ -3,6 +3,7 @@
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
 #include "bolt/Diagnostics.hpp" 
+#include <exception>
 #include <vector>
 
 namespace bolt {
@@ -74,6 +75,14 @@ namespace bolt {
     } \
   }
 
+  Token* Parser::expectToken(NodeType Type) {
+    auto T = Tokens.get();
+    if (T->Type != Type) {
+      throw UnexpectedTokenDiagnostic(File, T, std::vector<NodeType> { Type }); \
+    }
+    return T;
+  }
+
   Pattern* Parser::parsePattern() {
     auto T0 = Tokens.peek();
     switch (T0->Type) {
@@ -87,10 +96,7 @@ namespace bolt {
 
   QualifiedName* Parser::parseQualifiedName() {
     std::vector<Identifier*> ModulePath;
-    auto Name = Tokens.get();
-    if (Name->Type != NodeType::Identifier) {
-      throw UnexpectedTokenDiagnostic(File, Name, std::vector { NodeType::Identifier });
-    }
+    auto Name = expectToken(NodeType::Identifier);
     for (;;) {
       auto T1 = Tokens.peek();
       if (T1->Type != NodeType::Dot) {
@@ -156,7 +162,7 @@ namespace bolt {
     std::vector<Expression*> Args;
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->Type == NodeType::LineFoldEnd || ExprOperators.isInfix(T1)) {
+      if (T1->Type == NodeType::LineFoldEnd || T1->Type == NodeType::BlockStart || ExprOperators.isInfix(T1)) {
         break;
       }
       Args.push_back(parsePrimitiveExpression());
@@ -214,6 +220,52 @@ namespace bolt {
     auto E = parseExpression();
     BOLT_EXPECT_TOKEN(LineFoldEnd);
     return new ExpressionStatement(E);
+  }
+
+  ReturnStatement* Parser::parseReturnStatement() {
+    auto T0 = static_cast<ReturnKeyword*>(expectToken(NodeType::ReturnKeyword));
+    Expression* Expression = nullptr;
+    auto T1 = Tokens.peek();
+    if (T1->Type != NodeType::LineFoldEnd) {
+      Expression = parseExpression();
+    }
+    BOLT_EXPECT_TOKEN(LineFoldEnd);
+    return new ReturnStatement(static_cast<ReturnKeyword*>(T0), Expression);
+  }
+
+  IfStatement* Parser::parseIfStatement() {
+    std::vector<IfStatementPart*> Parts;
+    auto T0 = expectToken(NodeType::IfKeyword);
+    auto Test = parseExpression();
+    auto T1 = static_cast<BlockStart*>(expectToken(NodeType::BlockStart));
+    std::vector<Node*> Then;
+    for (;;) {
+      auto T2 = Tokens.peek();
+      if (T2->Type == NodeType::BlockEnd) {
+        Tokens.get();
+        break;
+      }
+      Then.push_back(parseLetBodyElement());
+    }
+    Parts.push_back(new IfStatementPart(T0, Test, T1, Then));
+    BOLT_EXPECT_TOKEN(LineFoldEnd)
+    auto T3 = Tokens.peek();
+    if (T3->Type == NodeType::ElseKeyword) {
+      Tokens.get();
+      auto T4 = static_cast<BlockStart*>(expectToken(NodeType::BlockStart));
+      std::vector<Node*> Else;
+      for (;;) {
+        auto T5 = Tokens.peek();
+        if (T5->Type == NodeType::BlockEnd) {
+          Tokens.get();
+          break;
+        }
+        Else.push_back(parseLetBodyElement());
+      }
+      Parts.push_back(new IfStatementPart(T3, nullptr, T4, Else));
+      BOLT_EXPECT_TOKEN(LineFoldEnd)
+    }
+    return new IfStatement(Parts);
   }
 
   LetDeclaration* Parser::parseLetDeclaration() {
@@ -316,6 +368,10 @@ after_params:
     switch (T0->Type) {
       case NodeType::LetKeyword:
         return parseLetDeclaration();
+      case NodeType::ReturnKeyword:
+        return parseReturnStatement();
+      case NodeType::IfKeyword:
+        return parseIfStatement();
       default:
         return parseExpressionStatement();
     }
@@ -326,6 +382,8 @@ after_params:
     switch (T0->Type) {
       case NodeType::LetKeyword:
         return parseLetDeclaration();
+      case NodeType::IfKeyword:
+        return parseIfStatement();
       default:
         return parseExpressionStatement();
     }

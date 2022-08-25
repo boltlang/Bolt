@@ -129,6 +129,21 @@ namespace bolt {
         }
         return Out.str();
       }
+      case TypeKind::Tuple:
+      {
+        std::ostringstream Out;
+        auto Y = static_cast<const TTuple*>(Ty);
+        Out << "(";
+        if (Y->ElementTypes.size()) {
+          auto Iter = Y->ElementTypes.begin();
+          Out << describe(*Iter++);
+          while (Iter != Y->ElementTypes.end()) {
+            Out << ", " << describe(*Iter++);
+          }
+        }
+        Out << ")";
+        return Out.str();
+      }
     }
   }
 

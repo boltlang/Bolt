@@ -35,6 +35,16 @@ namespace bolt {
         }
         return false;
       }
+      case TypeKind::Tuple:
+      {
+        auto Y = static_cast<TTuple*>(this);
+        for (auto Ty: Y->ElementTypes) {
+          if (Ty->hasTypeVar(TV)) {
+            return true;
+          }
+        }
+        return false;
+      }
       case TypeKind::Any:
         return false;
     }
@@ -68,6 +78,15 @@ namespace bolt {
           NewArgs.push_back(Arg->substitute(Sub));
         }
         return new TCon(Y->Id, NewArgs, Y->DisplayName);
+      }
+      case TypeKind::Tuple:
+      {
+        auto Y = static_cast<TTuple*>(this);
+        std::vector<Type*> NewElementTypes;
+        for (auto Ty: Y->ElementTypes) {
+          NewElementTypes.push_back(Ty->substitute(Sub));
+        }
+        return new TTuple(NewElementTypes);
       }
     }
   }
@@ -126,7 +145,11 @@ namespace bolt {
   }
 
   Checker::Checker(DiagnosticEngine& DE):
-    DE(DE) {}
+    DE(DE) {
+      BoolType = new TCon(nextConTypeId++, {}, "Bool");
+      IntType = new TCon(nextConTypeId++, {}, "Int");
+      StringType = new TCon(nextConTypeId++, {}, "String");
+    }
 
   void Checker::infer(Node* X, InferContext& Ctx) {
 
@@ -137,6 +160,20 @@ namespace bolt {
         auto Y = static_cast<SourceFile*>(X);
         for (auto Element: Y->Elements) {
           infer(Element, Ctx);
+        }
+        break;
+      }
+
+      case NodeType::IfStatement:
+      {
+        auto Y = static_cast<IfStatement*>(X);
+        for (auto Part: Y->Parts) {
+          if (Part->Test != nullptr) {
+            Ctx.addConstraint(new CEqual { BoolType, inferExpression(Part->Test, Ctx), Part->Test });
+          }
+          for (auto Element: Part->Elements) {
+            infer(Element, Ctx);
+          }
         }
         break;
       }
@@ -178,6 +215,7 @@ namespace bolt {
             {
               auto Z = static_cast<LetBlockBody*>(Y->Body);
               RetType = createTypeVar(*NewCtx);
+              NewCtx->ReturnType = RetType;
               for (auto Element: Z->Elements) {
                 infer(Element, *NewCtx);
               }
@@ -197,6 +235,19 @@ namespace bolt {
         break;
       }
 
+      case NodeType::ReturnStatement:
+      {
+        auto Y = static_cast<ReturnStatement*>(X);
+        Type* ReturnType;
+        if (Y->Expression) {
+          ReturnType = inferExpression(Y->Expression, Ctx);
+        } else {
+          ReturnType = new TTuple({});
+        }
+        ZEN_ASSERT(Ctx.ReturnType != nullptr);
+        Ctx.addConstraint(new CEqual { ReturnType, Ctx.ReturnType, X });
+        break;
+      }
 
       case NodeType::ExpressionStatement:
       {
@@ -375,16 +426,15 @@ namespace bolt {
 
   void Checker::check(SourceFile *SF) {
     InferContext Toplevel;
-    auto StringTy = new TCon(nextConTypeId++, {}, "String");
-    auto IntTy = new TCon(nextConTypeId++, {}, "Int");
-    auto BoolTy = new TCon(nextConTypeId++, {}, "Bool");
-    Toplevel.addBinding("String", Forall(StringTy));
-    Toplevel.addBinding("Int", Forall(IntTy));
-    Toplevel.addBinding("Bool", Forall(BoolTy));
-    Toplevel.addBinding("+", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
-    Toplevel.addBinding("-", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
-    Toplevel.addBinding("*", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
-    Toplevel.addBinding("/", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
+    Toplevel.addBinding("String", Forall(StringType));
+    Toplevel.addBinding("Int", Forall(IntType));
+    Toplevel.addBinding("Bool", Forall(BoolType));
+    Toplevel.addBinding("True", Forall(BoolType));
+    Toplevel.addBinding("False", Forall(BoolType));
+    Toplevel.addBinding("+", Forall(new TArrow({ IntType, IntType }, IntType)));
+    Toplevel.addBinding("-", Forall(new TArrow({ IntType, IntType }, IntType)));
+    Toplevel.addBinding("*", Forall(new TArrow({ IntType, IntType }, IntType)));
+    Toplevel.addBinding("/", Forall(new TArrow({ IntType, IntType }, IntType)));
     infer(SF, Toplevel);
     solve(new CMany(Toplevel.Constraints));
   }
@@ -478,6 +528,22 @@ namespace bolt {
         }
       }
       return unify(Y->ReturnType, Z->ReturnType, Solution);
+    }
+
+    if (A->getKind() == TypeKind::Tuple && B->getKind() == TypeKind::Tuple) {
+      auto Y = static_cast<TTuple*>(A);
+      auto Z = static_cast<TTuple*>(B);
+      if (Y->ElementTypes.size() != Z->ElementTypes.size()) {
+        return false;
+      }
+      auto Count = Y->ElementTypes.size();
+      bool Success = true;
+      for (size_t I = 0; I < Count; I++) {
+        if (!unify(Y->ElementTypes[I], Z->ElementTypes[I], Solution)) {
+          Success = false;
+        }
+      }
+      return Success;
     }
 
     if (A->getKind() == TypeKind::Con && B->getKind() == TypeKind::Con) {
