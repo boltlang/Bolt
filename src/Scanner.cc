@@ -77,9 +77,19 @@ namespace bolt {
     for (;;) {
       StartLoc = getCurrentLoc();
       C0 = getChar();
-      if (!isWhiteSpace(C0)) {
-        break;
+      if (isWhiteSpace(C0)) {
+        continue;
       }
+      if (C0 == '#') {
+        for (;;) {
+          C0 = getChar();
+          if (C0 == '\n' || C0 == EOF) {
+            break;
+          }
+        }
+        continue;
+      }
+      break;
     }
 
     switch (C0) {
