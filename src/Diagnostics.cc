@@ -95,7 +95,7 @@ namespace bolt {
     }
   }
 
-  static std::string describe(const Type* Ty) {
+  std::string describe(const Type* Ty) {
     switch (Ty->getKind()) {
       case TypeKind::Any:
         return "any";
@@ -320,10 +320,13 @@ namespace bolt {
       case DiagnosticKind::BindingNotFound:
       {
         auto E = static_cast<const BindingNotFoundDiagnostic&>(D);
-        Out << ANSI_BOLD ANSI_FG_RED "error: " ANSI_RESET "binding '" << E.Name << "' was not found\n";
-        //if (E.Initiator != nullptr) {
-        //  writeExcerpt(E.Initiator->getRange());
-        //}
+        Out << ANSI_BOLD ANSI_FG_RED "error: " ANSI_RESET "binding '" << E.Name << "' was not found\n\n";
+        if (E.Initiator != nullptr) {
+          auto Range = E.Initiator->getRange();
+          //std::cerr << Range.Start.Line << ":" << Range.Start.Column << "-" << Range.End.Line << ":" << Range.End.Column << "\n";
+          writeExcerpt(E.Initiator->getSourceFile()->getTextFile(), Range, Range, Color::Red);
+          Out << "\n";
+        }
         break;
       }
 

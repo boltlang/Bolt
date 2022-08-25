@@ -105,22 +105,24 @@ namespace bolt {
 
   class Constraint;
 
+  using ConstraintSet = std::vector<Constraint*>;
+
   class Forall {
   public:
 
-    TVSet TVs;
-    std::vector<Constraint*> Constraints;
+    TVSet* TVs;
+    ConstraintSet* Constraints;
     Type* Type;
 
     inline Forall(class Type* Type):
-      Type(Type) {}
+      TVs(nullptr), Constraints(nullptr), Type(Type) {}
 
     inline Forall(
-      TVSet TVs,
-      std::vector<Constraint*> Constraints,
+      TVSet& TVs,
+      ConstraintSet& Constraints,
       class Type* Type
-    ): TVs(TVs),
-       Constraints(Constraints),
+    ): TVs(&TVs),
+       Constraints(&Constraints),
        Type(Type) {}
 
   };
@@ -184,19 +186,7 @@ namespace bolt {
 
   };
 
-  class TypeEnv {
-
-    std::unordered_map<ByteString, Scheme> Mapping;
-
-  public:
-
-    void add(ByteString Name, Scheme S);
-
-    Scheme* lookup(ByteString Name);
-
-    Type* lookupMono(ByteString Name);
-
-  };
+  using TypeEnv = std::unordered_map<ByteString, Scheme>;
 
   enum class ConstraintKind {
     Equal,
@@ -217,11 +207,11 @@ namespace bolt {
       return Kind;
     }
 
+    Constraint* substitute(const TVSub& Sub);
+
     virtual ~Constraint() {}
 
   };
-
-  using ConstraintSet = std::vector<Constraint*>;
 
   class CEqual : public Constraint {
   public:
@@ -238,9 +228,9 @@ namespace bolt {
   class CMany : public Constraint {
   public:
 
-    ConstraintSet Constraints;
+    ConstraintSet& Constraints;
 
-    inline CMany(ConstraintSet Constraints):
+    inline CMany(ConstraintSet& Constraints):
       Constraint(ConstraintKind::Many), Constraints(Constraints) {}
 
   };
@@ -254,17 +244,27 @@ namespace bolt {
   };
 
   class InferContext {
-
-    ConstraintSet& Constraints;
-
   public:
 
-    TypeEnv& Env;
+    TVSet TVs;
+    ConstraintSet Constraints;
+    TypeEnv Env;
 
-    inline InferContext(ConstraintSet& Constraints, TypeEnv& Env):
-      Constraints(Constraints), Env(Env) {}
+    InferContext* Parent;
+
+    inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env):
+      Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env) {}
+
+    inline InferContext(InferContext* Parent = nullptr):
+      Parent(Parent) {}
 
     void addConstraint(Constraint* C);
+
+    void addBinding(ByteString Name, Scheme Scm);
+
+    Type* lookupMono(ByteString Name);
+
+    Scheme* lookup(ByteString Name);
 
   };
 
@@ -275,14 +275,18 @@ namespace bolt {
     size_t nextConTypeId = 0;
     size_t nextTypeVarId = 0;
 
-    Type* inferExpression(Expression* Expression, InferContext& Env);
+    Type* inferExpression(Expression* Expression, InferContext& Ctx);
+    Type* inferTypeExpression(TypeExpression* TE, InferContext& Ctx);
 
-    void infer(Node* node, InferContext& Env);
+    void inferBindings(Pattern* Pattern, Type* T, InferContext& Ctx, ConstraintSet& Constraints, TVSet& Tvs);
+
+    void infer(Node* node, InferContext& Ctx);
 
     TCon* createPrimConType();
-    TVar* createTypeVar();
 
-    Type* instantiate(Scheme& S);
+    TVar* createTypeVar(InferContext& Ctx);
+
+    Type* instantiate(Scheme& S, InferContext& Ctx, Node* Source);
 
     bool unify(Type* A, Type* B, TVSub& Solution);
 

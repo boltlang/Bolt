@@ -70,6 +70,10 @@ namespace bolt {
 
     Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
+    TypeExpression* parsePrimitiveTypeExpression();
+
+    Expression* parsePrimitiveExpression();
+
   public:
 
     Parser(TextFile& File, Stream<Token*>& S);
@@ -85,8 +89,6 @@ namespace bolt {
     ReferenceExpression* parseReferenceExpression();
 
     Expression* parseUnaryExpression();
-
-    Expression* parsePrimitiveExpression();
 
     Expression* parseExpression();
 

@@ -106,7 +106,7 @@ namespace bolt {
     return new QualifiedName(ModulePath, static_cast<Identifier*>(Name));
   }
 
-  TypeExpression* Parser::parseTypeExpression() {
+  TypeExpression* Parser::parsePrimitiveTypeExpression() {
     auto T0 = Tokens.peek();
     switch (T0->Type) {
       case NodeType::Identifier:
@@ -114,6 +114,24 @@ namespace bolt {
       default:
         throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier });
     }
+  }
+
+  TypeExpression* Parser::parseTypeExpression() {
+    auto RetType = parsePrimitiveTypeExpression();
+    std::vector<TypeExpression*> ParamTypes;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      if (T1->Type != NodeType::RArrow) {
+        break;
+      }
+      Tokens.get();
+      ParamTypes.push_back(RetType);
+      RetType = parsePrimitiveTypeExpression();
+    }
+    if (ParamTypes.size()) {
+      return new ArrowTypeExpression(ParamTypes, RetType);
+    }
+    return RetType;
   }
 
   Expression* Parser::parsePrimitiveExpression() {

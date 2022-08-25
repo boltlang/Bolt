@@ -9,27 +9,7 @@
 
 namespace bolt {
 
-  Scheme* TypeEnv::lookup(ByteString Name) {
-    auto Match = Mapping.find(Name);
-    if (Match == Mapping.end()) {
-      return {};
-    }
-    return &Match->second;
-  }
-
-  Type* TypeEnv::lookupMono(ByteString Name) {
-    auto Match = Mapping.find(Name);
-    if (Match == Mapping.end()) {
-      return nullptr;
-    }
-    auto& F = Match->second.as<Forall>();
-    ZEN_ASSERT(F.TVs.empty());
-    return F.Type;
-  }
-
-  void TypeEnv::add(ByteString Name, Scheme S) {
-    Mapping.emplace(Name, S);
-  }
+  std::string describe(const Type* Ty);
 
   bool Type::hasTypeVar(const TVar* TV) {
     switch (Kind) {
@@ -66,7 +46,7 @@ namespace bolt {
       {
         auto Y = static_cast<TVar*>(this);
         auto Match = Sub.find(Y);
-        return Match != Sub.end() ? Match->second : Y;
+        return Match != Sub.end() ? Match->second->substitute(Sub) : Y;
       }
       case TypeKind::Arrow:
       {
@@ -87,9 +67,58 @@ namespace bolt {
         for (auto Arg: Y->Args) {
           NewArgs.push_back(Arg->substitute(Sub));
         }
-        return new TCon(Y->Id, Y->Args, Y->DisplayName);
+        return new TCon(Y->Id, NewArgs, Y->DisplayName);
       }
     }
+  }
+
+  Constraint* Constraint::substitute(const TVSub &Sub) {
+    switch (Kind) {
+      case ConstraintKind::Equal:
+      {
+        auto Y = static_cast<CEqual*>(this);
+        return new CEqual(Y->Left->substitute(Sub), Y->Right->substitute(Sub), Y->Source);
+      }
+      case ConstraintKind::Many:
+      {
+        auto Y = static_cast<CMany*>(this);
+        auto NewConstraints = new ConstraintSet();
+        for (auto Element: Y->Constraints) {
+          NewConstraints->push_back(Element->substitute(Sub));
+        }
+        return new CMany(*NewConstraints);
+      }
+      case ConstraintKind::Empty:
+        return this;
+    }
+  }
+
+  Scheme* InferContext::lookup(ByteString Name) {
+    InferContext* Curr = this;
+    for (;;) {
+      auto Match = Curr->Env.find(Name);
+      if (Match != Curr->Env.end()) {
+        return &Match->second;
+      }
+      Curr = Curr->Parent;
+      if (Curr == nullptr) {
+        return nullptr;
+      }
+    }
+  }
+
+  Type* InferContext::lookupMono(ByteString Name) {
+    auto Scm = lookup(Name);
+    if (Scm == nullptr) {
+      return nullptr;
+    }
+    auto& F = Scm->as<Forall>();
+    ZEN_ASSERT(F.TVs == nullptr || F.TVs->empty());
+    return F.Type;
+  }
+
+  void InferContext::addBinding(ByteString Name, Scheme S) {
+    Env.emplace(Name, S);
   }
 
   void InferContext::addConstraint(Constraint *C) {
@@ -114,7 +143,57 @@ namespace bolt {
 
       case NodeType::LetDeclaration:
       {
-        // TODO
+        auto Y = static_cast<LetDeclaration*>(X);
+
+        auto NewCtx = new InferContext { Ctx };
+
+        Type* Ty;
+        if (Y->TypeAssert) {
+          Ty = inferTypeExpression(Y->TypeAssert->TypeExpression, *NewCtx);
+        } else {
+          Ty = createTypeVar(*NewCtx);
+        }
+
+        std::vector<Type*> ParamTypes;
+        Type* RetType;
+
+        for (auto Param: Y->Params) {
+          // TODO incorporate Param->TypeAssert or make it a kind of pattern
+          TVar* TV = createTypeVar(*NewCtx);
+          TVSet NoTVs;
+          ConstraintSet NoConstraints;
+          inferBindings(Param->Pattern, TV, *NewCtx, NoConstraints, NoTVs);
+          ParamTypes.push_back(TV);
+        }
+
+        if (Y->Body) {
+          switch (Y->Body->Type) {
+            case NodeType::LetExprBody:
+            {
+              auto Z = static_cast<LetExprBody*>(Y->Body);
+              RetType = inferExpression(Z->Expression, *NewCtx);
+              break;
+            }
+            case NodeType::LetBlockBody:
+            {
+              auto Z = static_cast<LetBlockBody*>(Y->Body);
+              RetType = createTypeVar(*NewCtx);
+              for (auto Element: Z->Elements) {
+                infer(Element, *NewCtx);
+              }
+              break;
+            }
+            default:
+              ZEN_UNREACHABLE
+          }
+        } else {
+          RetType = createTypeVar(*NewCtx);
+        }
+
+        NewCtx->addConstraint(new CEqual { Ty, new TArrow(ParamTypes, RetType), X });
+
+        inferBindings(Y->Pattern, Ty, Ctx, NewCtx->Constraints, NewCtx->TVs);
+
         break;
       }
 
@@ -133,21 +212,43 @@ namespace bolt {
 
   }
 
-  TVar* Checker::createTypeVar() {
-    return new TVar(nextTypeVarId++);
+  TVar* Checker::createTypeVar(InferContext& Ctx) {
+    auto TV = new TVar(nextTypeVarId++);
+    Ctx.TVs.emplace(TV);
+    return TV;
   }
 
-  Type* Checker::instantiate(Scheme& S) {
+  Type* Checker::instantiate(Scheme& S, InferContext& Ctx, Node* Source) {
 
     switch (S.getKind()) {
 
       case SchemeKind::Forall:
       {
         auto& F = S.as<Forall>();
+
         TVSub Sub;
-        for (auto TV: F.TVs) {
-          Sub[TV] = createTypeVar();
+        if (F.TVs) {
+          for (auto TV: *F.TVs) {
+            Sub[TV] = createTypeVar(Ctx);
+          }
         }
+
+        if (F.Constraints) {
+
+          for (auto Constraint: *F.Constraints) {
+
+            auto NewConstraint = Constraint->substitute(Sub);
+
+            // This makes error messages prettier by relating the typing failure
+            // to the call site rather than the definition.
+            if (NewConstraint->getKind() == ConstraintKind::Equal) {
+                static_cast<CEqual *>(NewConstraint)->Source = Source;
+            }
+
+            Ctx.addConstraint(NewConstraint);
+          }
+        }
+
         return F.Type->substitute(Sub);
       }
 
@@ -155,6 +256,37 @@ namespace bolt {
 
   }
 
+  Type* Checker::inferTypeExpression(TypeExpression* X, InferContext& Ctx) {
+
+    switch (X->Type) {
+
+      case NodeType::ReferenceTypeExpression:
+      {
+        auto Y = static_cast<ReferenceTypeExpression*>(X);
+        auto Ty = Ctx.lookupMono(Y->Name->Name->Text);
+        if (Ty == nullptr) {
+          DE.add<BindingNotFoundDiagnostic>(Y->Name->Name->Text, Y->Name->Name);
+          return new TAny();
+        }
+        return Ty;
+      }
+
+      case NodeType::ArrowTypeExpression:
+      {
+        auto Y = static_cast<ArrowTypeExpression*>(X);
+        std::vector<Type*> ParamTypes;
+        for (auto ParamType: Y->ParamTypes) {
+          ParamTypes.push_back(inferTypeExpression(ParamType, Ctx));
+        }
+        auto ReturnType = inferTypeExpression(Y->ReturnType, Ctx);
+        return new TArrow(ParamTypes, ReturnType);
+      }
+
+      default:
+        ZEN_UNREACHABLE
+
+    }
+  }
 
   Type* Checker::inferExpression(Expression* X, InferContext& Ctx) {
 
@@ -166,10 +298,10 @@ namespace bolt {
         Type* Ty = nullptr;
         switch (Y->Token->Type) {
           case NodeType::IntegerLiteral:
-            Ty = Ctx.Env.lookupMono("Int");
+            Ty = Ctx.lookupMono("Int");
             break;
           case NodeType::StringLiteral:
-            Ty = Ctx.Env.lookupMono("String");
+            Ty = Ctx.lookupMono("String");
             break;
           default:
             ZEN_UNREACHABLE
@@ -182,24 +314,37 @@ namespace bolt {
       {
         auto Y = static_cast<ReferenceExpression*>(X);
         ZEN_ASSERT(Y->Name->ModulePath.empty());
-        auto Scm = Ctx.Env.lookup(Y->Name->Name->Text);
+        auto Scm = Ctx.lookup(Y->Name->Name->Text);
         if (Scm == nullptr) {
           DE.add<BindingNotFoundDiagnostic>(Y->Name->Name->Text, Y->Name);
           return new TAny();
         }
-        return instantiate(*Scm);
+        return instantiate(*Scm, Ctx, X);
+      }
+
+      case NodeType::CallExpression:
+      {
+        auto Y = static_cast<CallExpression*>(X);
+        auto OpTy = inferExpression(Y->Function, Ctx);
+        auto RetType = createTypeVar(Ctx);
+        std::vector<Type*> ArgTypes;
+        for (auto Arg: Y->Args) {
+          ArgTypes.push_back(inferExpression(Arg, Ctx));
+        }
+        Ctx.addConstraint(new CEqual { OpTy, new TArrow(ArgTypes, RetType), X });
+        return RetType;
       }
 
       case NodeType::InfixExpression:
       {
         auto Y = static_cast<InfixExpression*>(X);
-        auto Scm = Ctx.Env.lookup(Y->Operator->getText());
+        auto Scm = Ctx.lookup(Y->Operator->getText());
         if (Scm == nullptr) {
           DE.add<BindingNotFoundDiagnostic>(Y->Operator->getText(), Y->Operator);
           return new TAny();
         }
-        auto OpTy = instantiate(*Scm);
-        auto RetTy = createTypeVar();
+        auto OpTy = instantiate(*Scm, Ctx, Y->Operator);
+        auto RetTy = createTypeVar(Ctx);
         std::vector<Type*> ArgTys;
         ArgTys.push_back(inferExpression(Y->LHS, Ctx));
         ArgTys.push_back(inferExpression(Y->RHS, Ctx));
@@ -214,24 +359,41 @@ namespace bolt {
 
   }
 
+  void Checker::inferBindings(Pattern* Pattern, Type* Type, InferContext& Ctx, ConstraintSet& Constraints, TVSet& TVs) {
+
+    switch (Pattern->Type) {
+
+      case NodeType::BindPattern:
+        Ctx.addBinding(static_cast<BindPattern*>(Pattern)->Name->Text, Forall(TVs, Constraints, Type));
+        break;
+
+      default:
+        ZEN_UNREACHABLE
+
+    }
+  }
+
   void Checker::check(SourceFile *SF) {
-    TypeEnv Global;
+    InferContext Toplevel;
     auto StringTy = new TCon(nextConTypeId++, {}, "String");
-    Global.add("String", Forall(StringTy));
     auto IntTy = new TCon(nextConTypeId++, {}, "Int");
-    Global.add("Int", Forall(IntTy));
-    Global.add("+", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
-    ConstraintSet Constraints;
-    InferContext Toplevel { Constraints, Global };
+    auto BoolTy = new TCon(nextConTypeId++, {}, "Bool");
+    Toplevel.addBinding("String", Forall(StringTy));
+    Toplevel.addBinding("Int", Forall(IntTy));
+    Toplevel.addBinding("Bool", Forall(BoolTy));
+    Toplevel.addBinding("+", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
+    Toplevel.addBinding("-", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
+    Toplevel.addBinding("*", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
+    Toplevel.addBinding("/", Forall(new TArrow({ IntTy, IntTy }, IntTy)));
     infer(SF, Toplevel);
-    solve(new CMany(Constraints));
+    solve(new CMany(Toplevel.Constraints));
   }
 
   void Checker::solve(Constraint* Constraint) {
 
     std::stack<class Constraint*> Queue;
     Queue.push(Constraint);
-    TVSub Sub;
+    TVSub Solution;
 
     while (!Queue.empty()) {
 
@@ -256,8 +418,9 @@ namespace bolt {
         case ConstraintKind::Equal:
         {
           auto Y = static_cast<CEqual*>(Constraint);
-          if (!unify(Y->Left, Y->Right, Sub)) {
-            DE.add<UnificationErrorDiagnostic>(Y->Left, Y->Right, Y->Source);
+          std::cerr << describe(Y->Left) << " ~ " << describe(Y->Right) << std::endl;
+          if (!unify(Y->Left, Y->Right, Solution)) {
+            DE.add<UnificationErrorDiagnostic>(Y->Left->substitute(Solution), Y->Right->substitute(Solution), Y->Source);
           }
           break;
         }
@@ -288,6 +451,7 @@ namespace bolt {
       auto Y = static_cast<TVar*>(A);
       if (B->hasTypeVar(Y)) {
         // TODO occurs check
+        return false;
       }
       Solution[Y] = B;
       return true;
@@ -297,11 +461,14 @@ namespace bolt {
       return unify(B, A, Solution);
     }
 
+    if (A->getKind() == TypeKind::Any || B->getKind() == TypeKind::Any) {
+      return true;
+    }
+
     if (A->getKind() == TypeKind::Arrow && B->getKind() == TypeKind::Arrow) {
       auto Y = static_cast<TArrow*>(A);
       auto Z = static_cast<TArrow*>(B);
       if (Y->ParamTypes.size() != Z->ParamTypes.size()) {
-        // TODO diagnostic
         return false;
       }
       auto Count = Y->ParamTypes.size();
@@ -313,11 +480,10 @@ namespace bolt {
       return unify(Y->ReturnType, Z->ReturnType, Solution);
     }
 
-    if (A->getKind() == TypeKind::Con && B->getKind() == TypeKind::Arrow) {
+    if (A->getKind() == TypeKind::Con && B->getKind() == TypeKind::Con) {
       auto Y = static_cast<TCon*>(A);
       auto Z = static_cast<TCon*>(B);
       if (Y->Id != Z->Id) {
-        // TODO diagnostic
         return false;
       }
       ZEN_ASSERT(Y->Args.size() == Z->Args.size());
@@ -330,7 +496,6 @@ namespace bolt {
       return true;
     }
 
-    // TODO diagnostic
     return false;
   }
 

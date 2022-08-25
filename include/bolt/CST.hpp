@@ -21,6 +21,7 @@ namespace bolt {
     RBracket,
     LBrace,
     RBrace,
+    RArrow,
     LetKeyword,
     MutKeyword,
     PubKeyword,
@@ -40,6 +41,7 @@ namespace bolt {
     IntegerLiteral,
     QualifiedName,
     ReferenceTypeExpression,
+    ArrowTypeExpression,
     BindPattern,
     ReferenceExpression,
     ConstantExpression,
@@ -165,6 +167,18 @@ namespace bolt {
     std::string getText() const override;
 
     ~Colon();
+
+  };
+
+  class RArrow : public Token {
+  public:
+
+    RArrow(TextLoc StartLoc):
+      Token(NodeType::RArrow, StartLoc) {}
+
+    std::string getText() const override;
+
+    ~RArrow();
 
   };
 
@@ -525,6 +539,28 @@ namespace bolt {
     Token* getLastToken() override;
 
     ~ReferenceTypeExpression();
+
+  };
+
+  class ArrowTypeExpression : public TypeExpression {
+  public:
+
+    std::vector<TypeExpression*> ParamTypes;
+    TypeExpression* ReturnType;
+
+    inline ArrowTypeExpression(
+      std::vector<TypeExpression*> ParamTypes,
+      TypeExpression* ReturnType
+    ): TypeExpression(NodeType::ArrowTypeExpression),
+       ParamTypes(ParamTypes),
+       ReturnType(ReturnType) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    ~ArrowTypeExpression();
 
   };
 

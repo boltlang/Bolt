@@ -294,7 +294,9 @@ after_string_contents:
           Text.push_back(static_cast<char>(C1));
           getChar();
         }
-        if (Text == "=") {
+        if (Text == "->") {
+          return new RArrow(StartLoc);
+        } else if (Text == "=") {
           return new Equals(StartLoc);
         } else if (Text.back() == '=' && Text[Text.size()-2] != '=') {
           return new Assignment(Text.substr(0, Text.size()-1), StartLoc);

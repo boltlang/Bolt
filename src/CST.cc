@@ -43,6 +43,15 @@ namespace bolt {
     Name->Parent = this;
     Name->setParents();
   }
+  
+  void ArrowTypeExpression::setParents() {
+    for (auto ParamType: ParamTypes) {
+      ParamType->Parent = this;
+      ParamType->setParents();
+    }
+    ReturnType->Parent = this;
+    ReturnType->setParents();
+  }
 
   void BindPattern::setParents() {
     Name->Parent = this;
@@ -179,6 +188,9 @@ namespace bolt {
   Colon::~Colon() {
   }
 
+  RArrow::~RArrow() {
+  }
+
   Dot::~Dot() {
   }
 
@@ -266,6 +278,13 @@ namespace bolt {
 
   ReferenceTypeExpression::~ReferenceTypeExpression() {
     Name->unref();
+  }
+
+  ArrowTypeExpression::~ArrowTypeExpression() {
+    for (auto ParamType: ParamTypes) {
+      ParamType->unref();
+    }
+    ReturnType->unref();
   }
 
   Pattern::~Pattern() {
@@ -399,6 +418,17 @@ namespace bolt {
 
   Token* ReferenceTypeExpression::getLastToken() {
     return Name->getFirstToken();
+  }
+
+  Token* ArrowTypeExpression::getFirstToken() {
+    if (ParamTypes.size()) {
+      return ParamTypes.front()->getFirstToken();
+    }
+    return ReturnType->getFirstToken();
+  }
+
+  Token* ArrowTypeExpression::getLastToken() {
+    return ReturnType->getLastToken();
   }
 
   Token* BindPattern::getFirstToken() {
@@ -571,6 +601,10 @@ namespace bolt {
 
   std::string Colon::getText() const {
     return ":";
+  }
+
+  std::string RArrow::getText() const {
+    return "->";
   }
 
   std::string Dot::getText() const {
