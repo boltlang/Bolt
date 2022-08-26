@@ -1,7 +1,9 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
+#include <istream>
 #include <iterator>
+#include <unordered_map>
 #include <vector>
 
 #include "bolt/Text.hpp"
@@ -9,6 +11,10 @@
 #include "bolt/ByteString.hpp"
 
 namespace bolt {
+
+  class Token;
+  class SourceFile;
+  class Scope;
 
   enum class NodeType {
     Equals,
@@ -47,6 +53,7 @@ namespace bolt {
     ArrowTypeExpression,
     BindPattern,
     ReferenceExpression,
+    NestedExpression,
     ConstantExpression,
     CallExpression,
     InfixExpression,
@@ -65,8 +72,10 @@ namespace bolt {
     SourceFile,
   };
 
-  class Token;
-  class SourceFile;
+  struct SymbolPath {
+    std::vector<ByteString> Modules;
+    ByteString Name;
+  };
 
   class Node {
 
@@ -101,7 +110,25 @@ namespace bolt {
 
     SourceFile* getSourceFile();
 
+    virtual Scope* getScope();
+
     virtual ~Node();
+
+  };
+
+  class Scope {
+
+    Node* Source;
+    std::unordered_map<ByteString, Node*> Mapping;
+
+  public:
+
+    inline Scope(Node* Source):
+      Source(Source) {}
+
+    Node* lookup(SymbolPath Path);
+
+    Scope* getParentScope();
 
   };
 
@@ -551,6 +578,8 @@ namespace bolt {
 
     void setParents() override;
 
+    SymbolPath getSymbolPath() const;
+
     ~QualifiedName();
 
   };
@@ -658,6 +687,31 @@ namespace bolt {
     Token* getLastToken() override;
 
     ~ReferenceExpression();
+
+  };
+
+  class NestedExpression : public Expression {
+  public:
+
+    LParen* LParen;
+    Expression* Inner;
+    RParen* RParen;
+
+    inline NestedExpression(
+      class LParen* LParen,
+      Expression* Inner,
+      class RParen* RParen
+    ): Expression(NodeType::NestedExpression),
+       LParen(LParen),
+       Inner(Inner),
+       RParen(RParen) {}
+
+    void setParents() override;
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    ~NestedExpression();
 
   };
 
@@ -931,8 +985,17 @@ namespace bolt {
 
   };
 
+  class Type;
+  class InferContext;
+
   class LetDeclaration : public Node {
+
+    Scope TheScope;
+
   public:
+
+    InferContext* Ctx;
+    class Type* Ty;
 
     PubKeyword* PubKeyword;
     LetKeyword* LetKeyword;
@@ -951,6 +1014,7 @@ namespace bolt {
       class TypeAssert* TypeAssert,
       LetBody* Body
     ): Node(NodeType::LetDeclaration),
+       TheScope(this),
        PubKeyword(PubKeyword),
        LetKeyword(LetKeywod),
        MutKeyword(MutKeyword),
@@ -958,6 +1022,10 @@ namespace bolt {
        Params(Params),
        TypeAssert(TypeAssert),
        Body(Body) {}
+
+    inline Scope* getScope() override {
+      return &TheScope;
+    }
 
     void setParents() override;
 
@@ -1025,6 +1093,9 @@ namespace bolt {
   };
 
   class SourceFile : public Node {
+
+    Scope TheScope;
+
   public:
     
     TextFile& File;
@@ -1032,7 +1103,7 @@ namespace bolt {
     std::vector<Node*> Elements;
 
     SourceFile(TextFile& File, std::vector<Node*> Elements):
-      Node(NodeType::SourceFile), File(File), Elements(Elements) {}
+      Node(NodeType::SourceFile), TheScope(this), File(File), Elements(Elements) {}
 
     inline TextFile& getTextFile() {
       return File;
@@ -1042,6 +1113,10 @@ namespace bolt {
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
+
+    inline Scope* getScope() override {
+      return &TheScope;
+    }
 
     ~SourceFile();
 

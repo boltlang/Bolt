@@ -148,6 +148,13 @@ namespace bolt {
         auto Name = parseQualifiedName();
         return new ReferenceExpression(Name);
       }
+      case NodeType::LParen:
+      {
+        Tokens.get();
+        auto E = parseExpression();
+        auto T2 = static_cast<RParen*>(expectToken(NodeType::RParen));
+        return new NestedExpression(static_cast<LParen*>(T0), E, T2);
+      }
       case NodeType::IntegerLiteral:
       case NodeType::StringLiteral:
         Tokens.get();
@@ -162,7 +169,7 @@ namespace bolt {
     std::vector<Expression*> Args;
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->Type == NodeType::LineFoldEnd || T1->Type == NodeType::BlockStart || ExprOperators.isInfix(T1)) {
+      if (T1->Type == NodeType::LineFoldEnd || T1->Type == NodeType::RParen || T1->Type == NodeType::BlockStart || ExprOperators.isInfix(T1)) {
         break;
       }
       Args.push_back(parsePrimitiveExpression());

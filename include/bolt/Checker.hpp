@@ -4,8 +4,9 @@
 #include "zen/config.hpp"
 
 #include "bolt/ByteString.hpp"
+#include "bolt/CST.hpp"
 
-#include <stack>
+#include <istream>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -15,10 +16,6 @@ namespace bolt {
 
   class DiagnosticEngine;
   class Node;
-  class Expression;
-  class TypeExpression;
-  class Pattern;
-  class SourceFile;
 
   class Type;
   class TVar;
@@ -46,6 +43,14 @@ namespace bolt {
   public:
 
     bool hasTypeVar(const TVar* TV);
+
+    void addTypeVars(TVSet& TVs);
+
+    inline TVSet getTypeVars() {
+      TVSet Out;
+      addTypeVars(Out);
+      return Out;
+    }
 
     Type* substitute(const TVSub& Sub);
 
@@ -273,14 +278,6 @@ namespace bolt {
     inline InferContext(InferContext* Parent = nullptr):
       Parent(Parent), ReturnType(nullptr) {}
 
-    void addConstraint(Constraint* C);
-
-    void addBinding(ByteString Name, Scheme Scm);
-
-    Type* lookupMono(ByteString Name);
-
-    Scheme* lookup(ByteString Name);
-
   };
 
   class Checker {
@@ -290,36 +287,66 @@ namespace bolt {
     size_t nextConTypeId = 0;
     size_t nextTypeVarId = 0;
 
+    std::unordered_map<Node*, Type*> Mapping;
+
+    std::unordered_map<Node*, InferContext*> CallGraph;
+
     Type* BoolType;
     Type* IntType;
     Type* StringType;
 
-    std::stack<InferContext> Contexts;
+    std::vector<InferContext*> Contexts;
 
     void addConstraint(Constraint* Constraint);
 
-    Type* inferExpression(Expression* Expression, InferContext& Ctx);
-    Type* inferTypeExpression(TypeExpression* TE, InferContext& Ctx);
+    void forwardDeclare(Node* Node);
 
-    void inferBindings(Pattern* Pattern, Type* T, InferContext& Ctx, ConstraintSet& Constraints, TVSet& Tvs);
+    Type* inferExpression(Expression* Expression);
+    Type* inferTypeExpression(TypeExpression* TE);
 
-    void infer(Node* node, InferContext& Ctx);
+    void inferBindings(Pattern* Pattern, Type* T, ConstraintSet& Constraints, TVSet& Tvs);
+
+    void infer(Node* node);
 
     TCon* createPrimConType();
 
-    TVar* createTypeVar(InferContext& Ctx);
+    TVar* createTypeVar();
 
-    Type* instantiate(Scheme& S, InferContext& Ctx, Node* Source);
+    void addBinding(ByteString Name, Scheme Scm);
+
+    Type* lookupMono(ByteString Name);
+
+    InferContext* lookupCall(Node* Source, SymbolPath Path);
+
+    Type* getReturnType();
+
+    Scheme* lookup(ByteString Name);
+
+    Type* instantiate(Scheme& S, Node* Source);
 
     bool unify(Type* A, Type* B, TVSub& Solution);
 
-    void solve(Constraint* Constraint);
+    void solve(Constraint* Constraint, TVSub& Solution);
 
   public:
 
     Checker(DiagnosticEngine& DE);
 
-    void check(SourceFile* SF);
+    TVSub check(SourceFile* SF);
+
+    inline Type* getBoolType() {
+      return BoolType;
+    }
+
+    inline Type* getStringType() {
+      return StringType;
+    }
+
+    inline Type* getIntType() {
+      return IntType;
+    }
+
+    Type* getType(Node* Node, const TVSub& Solution);
 
   };
 

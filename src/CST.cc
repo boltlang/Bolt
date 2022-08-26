@@ -5,6 +5,25 @@
 
 namespace bolt {
 
+  Node* Scope::lookup(SymbolPath Path) {
+    auto Curr = this;
+    do {
+      auto Match = Curr->Mapping.find(Path.Name);
+      if (Match != Curr->Mapping.end()) {
+        return Match->second;
+      }
+      Curr = Curr->getParentScope();
+    } while (Curr != nullptr);
+    return nullptr;
+  }
+
+  Scope* Scope::getParentScope() {
+    if (Source->Parent == nullptr) {
+      return nullptr;
+    }
+    return Source->Parent->getScope();
+  }
+
   SourceFile* Node::getSourceFile() {
     auto CurrNode = this;
     for (;;) {
@@ -21,6 +40,10 @@ namespace bolt {
       getFirstToken()->getStartLoc(),
       getLastToken()->getEndLoc(),
     };
+  }
+
+  Scope* Node::getScope() {
+    return this->Parent->getScope();
   }
 
   TextLoc Token::getEndLoc() {
@@ -59,6 +82,13 @@ namespace bolt {
 
   void ReferenceExpression::setParents() {
     Name->Parent = this;
+  }
+
+  void NestedExpression::setParents() {
+    LParen->Parent = this;
+    Inner->Parent = this;
+    Inner->setParents();
+    RParen->Parent = this;
   }
 
   void ConstantExpression::setParents() {
@@ -330,6 +360,12 @@ namespace bolt {
     Name->unref();
   }
 
+  NestedExpression::~NestedExpression() {
+    LParen->unref();
+    Inner->unref();
+    RParen->unref();
+  }
+
   ConstantExpression::~ConstantExpression() {
     Token->unref();
   }
@@ -491,6 +527,14 @@ namespace bolt {
 
   Token* ReferenceExpression::getLastToken() {
     return Name->getLastToken();
+  }
+
+  Token* NestedExpression::getFirstToken() {
+    return LParen;
+  }
+
+  Token* NestedExpression::getLastToken() {
+    return RParen;
   }
 
   Token* ConstantExpression::getFirstToken() {
@@ -784,6 +828,14 @@ namespace bolt {
 
   std::string DotDot::getText() const {
     return "..";
+  }
+
+  SymbolPath QualifiedName::getSymbolPath() const { 
+    std::vector<ByteString> ModuleNames;
+    for (auto Ident: ModulePath) {
+      ModuleNames.push_back(Ident->Text);
+    }
+    return SymbolPath { ModuleNames, Name->Text };
   }
 
 }
