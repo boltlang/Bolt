@@ -1,4 +1,13 @@
 
+export function assert(test: boolean): asserts test {
+  if (!test) {
+    throw new Error(`Assertion failed. See the stack trace for more information.`);
+  }
+}
+
+export type JSONValue = null | boolean | number | string | JSONArray | JSONObject
+export type JSONArray = Array<JSONValue>;
+export type JSONObject = { [key: string]: JSONValue };
 
 export class MultiDict<K, V> {
 

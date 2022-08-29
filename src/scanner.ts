@@ -23,12 +23,19 @@ import {
   LBracket,
   RBrace,
   RBracket,
+  ReturnKeyword,
   CustomOperator,
+  Constructor,
+  Integer,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
-import { Stream, BufferedStream } from "./util";
+import { Stream, BufferedStream, assert } from "./util";
 
 const EOF = '\uFFFF'
+
+function isUpper(ch: string): boolean {
+  return ch.toUpperCase() === ch;
+}
 
 function isWhiteSpace(ch: string): boolean {
   return /[\r\n\t ]/.test(ch);
@@ -40,6 +47,16 @@ function isIdentPart(ch: string): boolean {
 
 function isIdentStart(ch: string): boolean {
   return /[a-zA-Z_]/.test(ch)
+}
+
+function isDecimalDigit(ch: string): boolean {
+  return /[0-9]/.test(ch);
+}
+
+function toDecimal(ch: string): number {
+  const code = ch.charCodeAt(0);
+  assert(code >= 48 && code <= 57);
+  return code - 48;
 }
 
 function isOperatorPart(ch: string): boolean {
@@ -208,6 +225,37 @@ export class Scanner extends BufferedStream<Token> {
           }
         }
 
+        case '0':
+        {
+          const c1 = this.peekChar();
+          switch (c1) {
+            case 'x': // TODO
+            case 'o': // TODO
+            case 'b': // TODO
+          }
+        }
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+        case '8':
+        case '9':
+        {
+          let value = BigInt(toDecimal(c0));
+          for (;;) {
+            const c1 = this.peekChar();
+            if (!isDecimalDigit(c1)) {
+              break;
+            }
+            this.getChar();
+            value = value * BigInt(10) + BigInt(toDecimal(c1));
+          }
+          return new Integer(value, 10, startPos);
+        }
+
         case 'a':
         case 'b':
         case 'c':
@@ -272,7 +320,11 @@ export class Scanner extends BufferedStream<Token> {
             case 'return': return new ReturnKeyword(startPos);
             case 'type': return new TypeKeyword(startPos);
             default:
-              return new Identifier(text, startPos);
+              if (isUpper(text[0])) {
+                return new Constructor(text, startPos);
+              } else {
+                return new Identifier(text, startPos);
+              }
           }
         }
 

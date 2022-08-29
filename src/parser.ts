@@ -1,5 +1,5 @@
 
-import { kMaxLength } from "buffer";
+import { privateDecrypt } from "crypto";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -19,7 +19,6 @@ import {
   PrefixExpression,
   ExpressionStatement,
   ImportDeclaration,
-  FunctionDeclaration,
   Param,
   Pattern,
   BindPattern,
@@ -27,6 +26,15 @@ import {
   TypeAssert,
   ExprBody,
   BlockBody,
+  QualifiedName,
+  NestedExpression,
+  NamedTuplePattern,
+  StructPattern,
+  VariadicStructPatternElement,
+  PunnedFieldStructPatternElement,
+  FieldStructPatternElement,
+  TuplePattern,
+  InfixExpression,
 } from "./cst"
 import { Stream, MultiDict } from "./util";
 
@@ -91,28 +99,60 @@ function isConstructor(token: Token): boolean {
       && token.text[0].toUpperCase() === token.text[0];
 }
 
+function isBinaryOperatorLike(token: Token): boolean {
+  return token.kind === SyntaxKind.CustomOperator;
+}
+
+function isPrefixOperatorLike(token: Token): boolean {
+  return token.kind === SyntaxKind.CustomOperator;
+}
+
 const enum OperatorMode {
   None   = 0,
   Prefix = 1,
   InfixL = 2,
   InfixR = 4,
+  Infix = 6,
   Suffix = 8,
 }
 
 interface OperatorInfo {
   name: string,
   mode: OperatorMode,
-  precedence?: number,
+  precedence: number,
 }
+
+const EXPR_OPERATOR_TABLE: Array<[string, OperatorMode, number]> = [
+  ["**", OperatorMode.InfixR, 11],
+  ["*", OperatorMode.InfixL, 8],
+  ["/", OperatorMode.InfixL, 8],
+  ["+", OperatorMode.InfixL, 7],
+  ["-", OperatorMode.InfixL, 7],
+  ["<", OperatorMode.InfixL, 6],
+  [">", OperatorMode.InfixL, 6],
+  ["<=", OperatorMode.InfixL, 5],
+  [">=", OperatorMode.InfixL, 5],
+  ["==", OperatorMode.InfixL, 5],
+  ["!=", OperatorMode.InfixL, 5],
+  ["<*", OperatorMode.InfixL, 4],
+  [":", OperatorMode.InfixL, 3],
+  ["<|>", OperatorMode.InfixL, 2],
+  ["<?>", OperatorMode.InfixL, 1],
+  ["$", OperatorMode.InfixR, 0]
+];
 
 export class Parser {
 
-  private exprOperators = new MultiDict<string, OperatorInfo>();
+  private prefixExprOperators = new Set<string>();
+  private binaryExprOperators = new Map<string, OperatorInfo>();
+  private suffixExprOperators = new Set<string>();
 
   public constructor(
     public tokens: Stream<Token>,
   ) {
-
+    for (const [name, mode, precedence] of EXPR_OPERATOR_TABLE) {
+      this.binaryExprOperators.set(name, { name, mode, precedence });
+    }
   }
 
   private getToken(): Token {
@@ -152,20 +192,6 @@ export class Parser {
     return t0;
   }
 
-  private isPrefixOperator(token: Token): boolean {
-    const name = token.text;
-    for (const operator of this.exprOperators.get(name)) {
-      if (operator.mode & OperatorMode.Prefix) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private isBinaryOperator(token: Token): boolean {
-    return token.kind === SyntaxKind.CustomOperator;
-  }
-
   public parseReferenceTypeExpression(): ReferenceTypeExpression {
     const name = this.expectToken(SyntaxKind.Identifier);
     return new ReferenceTypeExpression([], name);
@@ -190,7 +216,7 @@ export class Parser {
     return new ConstantExpression(token);
   }
 
-  public parseReferenceExpression(): ReferenceExpression {
+  public parseQualifiedName(): QualifiedName {
     const modulePath: Array<[Identifier, Dot]> = [];
     let name = this.expectToken(SyntaxKind.Identifier)
     for (;;) {
@@ -201,18 +227,24 @@ export class Parser {
       modulePath.push([name, t1]);
       name = this.expectToken(SyntaxKind.Identifier)
     }
-    return new ReferenceExpression(modulePath, name);
+    return new QualifiedName(modulePath, name);
+  }
+
+  public parseReferenceExpression(): ReferenceExpression {
+    return new ReferenceExpression(this.parseQualifiedName());
   }
 
   private parseExpressionWithParens(): Expression {
-    const t0 = this.expectToken(SyntaxKind.LParen)
+    const lparen = this.expectToken(SyntaxKind.LParen)
     const t1 = this.peekToken();
     if (t1.kind === SyntaxKind.RParen) {
       this.getToken();
-      return new TupleExpression(t0, [], t1);
-    }
-    if (isConstructor(t1)) {
-
+      return new TupleExpression(lparen, [], t1);
+    } else if (t1.kind === SyntaxKind.Constructor) {
+    } else {
+      const expression = this.parseExpression();
+      const t2 = this.expectToken(SyntaxKind.RParen);
+      return new NestedExpression(lparen, expression, t2);
     }
   }
 
@@ -237,36 +269,59 @@ export class Parser {
   }
 
   private parseUnaryExpression(): Expression {
-    let out = this.parseExpressionNoOperators()
-    const prefixOperators = [];
+    let result = this.parseExpressionNoOperators()
+    const prefixes = [];
     for (;;) {
       const t0 = this.peekToken();
-      if (!this.isPrefixOperator(t0)) {
+      if (!isPrefixOperatorLike(t0)) {
         break;
       }
-      prefixOperators.push(t0);
+      if (!this.prefixExprOperators.has(t0.text)) {
+        break;
+      }
+      prefixes.push(t0);
       this.getToken()
     }
-    for (let i = prefixOperators.length-1; i >= 0; i--) {
-      const op = prefixOperators[i];
-      out = new PrefixExpression(op, out);
+    for (let i = prefixes.length-1; i >= 0; i--) {
+      const operator = prefixes[i];
+      result = new PrefixExpression(operator, result);
     }
-    return out;
+    return result;
   }
 
-  private parseExpressionWithBinaryOperator(lhs: Expression, minPrecedence: number) {
+  private parseBinaryOperatorAfterExpr(lhs: Expression, minPrecedence: number) {
     for (;;) {
       const t0 = this.peekToken();
-      if (!this.isBinaryOperator(t0)) {
+      if (!isBinaryOperatorLike(t0)) {
         break;
       }
+      const info0 = this.binaryExprOperators.get(t0.text);
+      if (info0 === undefined || info0.precedence < minPrecedence) {
+        break;
+      }
+      this.getToken();
+      let rhs = this.parseUnaryExpression();
+      for (;;) {
+        const t1 = this.peekToken();
+        if (!isBinaryOperatorLike(t1)) {
+          break;
+        }
+        const info1 = this.binaryExprOperators.get(t1.text);
+        if (info1 === undefined
+          || info1.precedence < info0.precedence
+          || (info1.precedence === info0.precedence && (info1.mode & OperatorMode.InfixR) === 0)) {
+          break;
+        }
+        rhs = this.parseBinaryOperatorAfterExpr(rhs, info0.precedence);
+      }
+      lhs = new InfixExpression(lhs, t0, rhs);
     }
     return lhs;
   }
 
   public parseExpression(): Expression {
     const lhs = this.parseUnaryExpression();
-    return this.parseExpressionWithBinaryOperator(lhs, 0);
+    return this.parseBinaryOperatorAfterExpr(lhs, 0);
   }
 
   public parseStructDeclaration(): StructDeclaration {
@@ -290,9 +345,96 @@ export class Parser {
     return new StructDeclaration(structKeyword, name, members);
   }
 
+  private parsePatternStartingWithConstructor() {
+    const name = this.expectToken(SyntaxKind.Constructor);
+    const t2 = this.peekToken();
+    if (t2.kind === SyntaxKind.LBrace) {
+      this.getToken();
+      const fields = [];
+      let rbrace;
+      for (;;) {
+        const t3 = this.peekToken();
+        if (t3.kind === SyntaxKind.RBrace) {
+          rbrace = t3;
+          break;
+        } else if (t3.kind === SyntaxKind.Identifier) {
+          this.getToken();
+          const t4 = this.peekToken();
+          if (t4.kind === SyntaxKind.Equals) {
+            this.getToken();
+            const pattern = this.parsePattern();
+            fields.push(new FieldStructPatternElement(t3, t4, pattern));
+          } else {
+            fields.push(new PunnedFieldStructPatternElement(t3));
+          }
+        } else if (t3.kind === SyntaxKind.DotDot) {
+          this.getToken();
+          fields.push(new VariadicStructPatternElement(t3, null));
+        } else {
+          this.raiseParseError(t3, [ SyntaxKind.Identifier, SyntaxKind.DotDot ]);
+        }
+        const t5 = this.peekToken();
+        if (t5.kind === SyntaxKind.Comma) {
+          this.getToken();
+        } else if (t5.kind === SyntaxKind.RBrace) {
+          rbrace = t5;
+          break;
+        } else {
+          this.raiseParseError(t5, [ SyntaxKind.Comma, SyntaxKind.RBrace ]);
+        }
+      }
+      return new StructPattern(name, t2, fields, rbrace);
+    } else {
+      const patterns = [];
+      for (;;) {
+        const t3 = this.peekToken();
+        if (t3.kind === SyntaxKind.RParen) {
+          break;
+        }
+        patterns.push(this.parsePattern());
+      }
+      return new NamedTuplePattern(name, patterns);
+    }
+  }
+
+  public parseTuplePattern(): TuplePattern {
+    const lparen = this.expectToken(SyntaxKind.LParen);
+    const elements = [];
+    let rparen;
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.RParen) {
+        rparen = t1;
+        break;
+      }
+      elements.push(this.parsePattern());
+      const t2 = this.peekToken();
+      if (t2.kind === SyntaxKind.Comma) {
+        this.getToken();
+      } else if (t2.kind === SyntaxKind.RParen) {
+        rparen = t2;
+        break;
+      } else {
+        this.raiseParseError(t2, [ SyntaxKind.Comma, SyntaxKind.RParen ]);
+      }
+    }
+    this.getToken();
+    return new TuplePattern(lparen, elements, rparen);
+  }
+
   public parsePattern(): Pattern {
     const t0 = this.peekToken();
     switch (t0.kind) {
+      case SyntaxKind.LParen:
+      {
+        this.getToken();
+        const t1 = this.peekToken();
+        if (t1.kind === SyntaxKind.Constructor) {
+          return this.parsePatternStartingWithConstructor();
+        } else {
+          return this.parseTuplePattern();
+        }
+      }
       case SyntaxKind.Identifier:
         this.getToken();
         return new BindPattern(t0);
@@ -410,15 +552,17 @@ export class Parser {
 
   public parseSourceFile(): SourceFile {
     const elements = [];
+    let eof;
     for (;;) {
       const t0 = this.peekToken();
       if (t0.kind === SyntaxKind.EndOfFile) {
+        eof = t0;
         break;
       }
       const element = this.parseSourceFileElement();
       elements.push(element);
     }
-    return new SourceFile(elements);
+    return new SourceFile(elements, eof);
   }
 
 }

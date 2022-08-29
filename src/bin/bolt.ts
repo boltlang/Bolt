@@ -2,6 +2,7 @@
 
 import "source-map-support/register"
 
+import util from "util"
 import path from "path"
 import fs from "fs"
 import yargs from "yargs"
@@ -9,6 +10,10 @@ import yargs from "yargs"
 import { Diagnostics } from "../diagnostics"
 import { Punctuator, Scanner } from "../scanner"
 import { Parser } from "../parser"
+
+function debug(value: any) {
+  console.error(util.inspect(value, { colors: true, depth: Infinity }));
+}
 
 yargs
   .string('work-dir')
@@ -33,7 +38,7 @@ yargs
       const parser = new Parser(punctuated);
       const sourceFile = parser.parseSourceFile();
 
-      console.log(sourceFile);
+      debug(sourceFile.toJSON());
 
     }
   )

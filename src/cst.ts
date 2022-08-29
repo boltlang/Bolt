@@ -1,3 +1,4 @@
+import { JSONObject, JSONValue } from "./util";
 
 export type TextSpan = [number, number];
 
@@ -67,6 +68,7 @@ export const enum SyntaxKind {
 
   // Tokens
   Identifier,
+  Constructor,
   CustomOperator,
   LParen,
   RParen,
@@ -88,6 +90,11 @@ export const enum SyntaxKind {
   ImportKeyword,
   StructKeyword,
   TypeKeyword,
+  ReturnKeyword,
+  MatchKeyword,
+  IfKeyword,
+  ElifKeyword,
+  ElseKeyword,
   LineFoldEnd,
   BlockEnd,
   BlockStart,
@@ -99,6 +106,14 @@ export const enum SyntaxKind {
   // Patterns
   BindPattern,
   TuplePattern,
+  StructPattern,
+  NestedPattern,
+  NamedTuplePattern,
+
+  // Struct pattern elements
+  FieldStructPatternElement,
+  PunnedFieldStructPatternElement,
+  VariadicStructPatternElement,
 
   // Expressions
   ReferenceExpression,
@@ -122,10 +137,16 @@ export const enum SyntaxKind {
   ImportDeclaration,
   TypeAliasDeclaration,
 
-  // Other nodes
-  StructDeclarationField,
+  // Let declaration body members
   ExprBody,
   BlockBody,
+
+  // Structure declaration members
+  StructDeclarationField,
+
+  // Other nodes
+  Initializer,
+  QualifiedName,
   TypeAssert,
   Param,
   Module,
@@ -147,6 +168,39 @@ abstract class SyntaxBase {
 
   public abstract readonly kind: SyntaxKind;
 
+  public abstract getFirstToken(): Token;
+
+  public abstract getLastToken(): Token;
+
+  public toJSON(): JSONObject {
+
+    const obj: JSONObject = {};
+
+    obj['type'] = this.constructor.name;
+
+    for (const key of Object.getOwnPropertyNames(this)) {
+      if (key === 'kind') {
+        continue;
+      }
+      obj[key] = encode((this as any)[key]);
+    }
+
+    return obj;
+
+    function encode(value: any): JSONValue {
+      if (value === null) {
+        return null;
+      } else if (Array.isArray(value)) {
+        return value.map(encode);
+      } else if (value instanceof SyntaxBase) {
+        return value.toJSON();
+      } else {
+        return value;
+      }
+    }
+
+  }
+
 }
 
 abstract class TokenBase extends SyntaxBase {
@@ -157,6 +211,14 @@ abstract class TokenBase extends SyntaxBase {
     private startPos: TextPosition,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    throw new Error(`Trying to get the first token of an object that is a token itself.`);
+  }
+
+  public getLastToken(): Token {
+    throw new Error(`Trying to get the last token of an object that is a token itself.`);
   }
 
   public getStartPosition(): TextPosition {
@@ -221,7 +283,7 @@ export class Integer extends TokenBase {
   public constructor(
     public value: bigint,
     public radix: number,
-    private startPos: TextPosition,
+    startPos: TextPosition,
   ) {
     super(startPos);
   }
@@ -249,7 +311,7 @@ export class StringLiteral extends TokenBase {
 
   public constructor(
     public contents: string,
-    private startPos: TextPosition,
+    startPos: TextPosition,
   ) {
     super(startPos);
   }
@@ -272,13 +334,26 @@ export class StringLiteral extends TokenBase {
 
 }
 
+export class Constructor extends TokenBase {
+
+  public readonly kind = SyntaxKind.Constructor;
+
+  public constructor(
+    public text: string,
+    startPos: TextPosition,
+  ) {
+    super(startPos);
+  }
+
+}
+
 export class Identifier extends TokenBase {
 
   public readonly kind = SyntaxKind.Identifier;
 
   public constructor(
     public text: string,
-    private startPos: TextPosition,
+    startPos: TextPosition,
   ) {
     super(startPos);
   }
@@ -291,7 +366,7 @@ export class CustomOperator extends TokenBase {
 
   public constructor(
     public text: string,
-    private startPos: TextPosition,
+    startPos: TextPosition,
   ) {
     super(startPos);
   }
@@ -418,6 +493,26 @@ export class StructKeyword extends TokenBase {
 
 }
 
+export class ReturnKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.ReturnKeyword;
+
+  public get text(): string {
+    return 'return';
+  }
+
+}
+
+export class MatchKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.MatchKeyword;
+
+  public get text(): string {
+    return 'match';
+  }
+
+}
+
 export class ModKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ModKeyword;
@@ -486,6 +581,7 @@ export type Token
   | LBracket
   | RBracket
   | Identifier
+  | Constructor
   | CustomOperator
   | Integer
   | StringLiteral
@@ -501,6 +597,8 @@ export type Token
   | ImportKeyword
   | TypeKeyword
   | StructKeyword
+  | ReturnKeyword
+  | MatchKeyword
   | EndOfFile
   | BlockStart
   | BlockEnd
@@ -518,6 +616,17 @@ export class ReferenceTypeExpression extends SyntaxBase {
     public name: Identifier,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.modulePath.length > 0) {
+      return this.modulePath[0][0];
+    }
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
   }
 
 }
@@ -539,6 +648,14 @@ export class BindPattern extends SyntaxBase {
     return this.name.text == '_';
   }
 
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
 }
 
 export class TuplePattern extends SyntaxBase {
@@ -546,15 +663,168 @@ export class TuplePattern extends SyntaxBase {
   public readonly kind = SyntaxKind.TuplePattern;
 
   public constructor(
+    public lparen: LParen,
+    public elements: Pattern[],
+    public rparen: RParen,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
+}
+
+export class NamedTuplePattern extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.NamedTuplePattern;
+
+  public constructor(
+    public name: Constructor,
     public elements: Pattern[],
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.name;
+  }
+
+}
+
+export class FieldStructPatternElement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.FieldStructPatternElement;
+
+  public constructor(
+    public name: Identifier,
+    public equals: Equals,
+    public pattern: Pattern,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.pattern.getLastToken();
+  }
+
+}
+
+export class VariadicStructPatternElement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.VariadicStructPatternElement;
+
+  public constructor(
+    public dotdot: DotDot,
+    public pattern: Pattern | null,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.dotdot;
+  }
+
+  public getLastToken(): Token {
+    if (this.pattern !== null) {
+      return this.pattern.getLastToken();
+    }
+    return this.dotdot;
+  }
+
+}
+
+export class PunnedFieldStructPatternElement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.PunnedFieldStructPatternElement;
+
+  public constructor(
+    public name: Identifier,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
+}
+
+export type StructPatternElement
+  = VariadicStructPatternElement
+  | PunnedFieldStructPatternElement
+  | FieldStructPatternElement
+
+export class StructPattern extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.StructPattern;
+
+  public constructor(
+    public name: Constructor,
+    public lbrace: LBrace,
+    public elements: StructPatternElement[],
+    public rbrace: RBrace,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.rbrace;
+  }
+
+}
+
+export class NestedPattern extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.NestedPattern;
+
+  public constructor(
+    public lparen: LParen,
+    public pattern: Pattern,
+    public rparen: RParen,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
   }
 
 }
 
 export type Pattern
   = BindPattern
+  | NestedPattern
+  | StructPattern
+  | NamedTuplePattern
   | TuplePattern
 
 export class TupleExpression extends SyntaxBase {
@@ -567,6 +837,14 @@ export class TupleExpression extends SyntaxBase {
     public rparen: RParen,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
   }
 
 }
@@ -583,6 +861,14 @@ export class NestedExpression extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
 }
 
 export class ConstantExpression extends SyntaxBase {
@@ -595,6 +881,38 @@ export class ConstantExpression extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    return this.token;
+  }
+
+  public getLastToken(): Token {
+    return this.token;
+  }
+
+}
+
+export class QualifiedName extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.QualifiedName;
+
+  public constructor(
+    public modulePath: Array<[Identifier, Dot]>,
+    public name: Identifier,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.modulePath.length > 0) {
+      return this.modulePath[0][0];
+    }
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
 }
 
 export class ReferenceExpression extends SyntaxBase {
@@ -602,10 +920,17 @@ export class ReferenceExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.ReferenceExpression;
 
   public constructor(
-    public modulePath: Array<[Identifier, Dot]>,
-    public name: Identifier
+    public name: QualifiedName,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+     return this.name.getLastToken();
   }
 
 }
@@ -621,6 +946,14 @@ export class PrefixExpression extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    return this.operator;
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
 }
 
 export class PostfixExpression extends SyntaxBase {
@@ -632,6 +965,14 @@ export class PostfixExpression extends SyntaxBase {
     public operator: Token,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.expression.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.operator;
   }
 
 }
@@ -646,6 +987,14 @@ export class InfixExpression extends SyntaxBase {
     public right: Expression,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.left.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.right.getLastToken();
   }
 
 }
@@ -664,9 +1013,21 @@ export class ReturnStatement extends SyntaxBase {
   public readonly kind = SyntaxKind.ReturnStatement;
 
   public constructor(
-    public expr: Expression
+    public returnKeyword: ReturnKeyword,
+    public expression: Expression
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.returnKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.expression !== null) {
+      return this.expression.getLastToken();
+    }
+    return this.returnKeyword;
   }
 
 }
@@ -676,9 +1037,17 @@ export class ExpressionStatement extends SyntaxBase {
   public readonly kind = SyntaxKind.ExpressionStatement;
 
   public constructor(
-    public expresion: Expression,
+    public expression: Expression,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.expression.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
   }
 
 }
@@ -697,6 +1066,14 @@ export class Param extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    return this.pattern.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.pattern.getLastToken();
+  }
+
 }
 
 export class StructDeclarationField extends SyntaxBase {
@@ -709,6 +1086,14 @@ export class StructDeclarationField extends SyntaxBase {
     public typeExpr: TypeExpression,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpr.getLastToken();
   }
 
 }
@@ -725,6 +1110,17 @@ export class StructDeclaration extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    return this.structKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.members && this.members.length > 0) {
+      return this.members[this.members.length-1].getLastToken();
+    }
+    return this.name;
+  }
+
 }
 
 export class TypeAssert extends SyntaxBase {
@@ -736,6 +1132,14 @@ export class TypeAssert extends SyntaxBase {
     public typeExpression: TypeExpression,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.colon;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpression.getLastToken();
   }
 
 }
@@ -755,6 +1159,14 @@ export class ExprBody extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    return this.equals;
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
 }
 
 export type LetBodyElement 
@@ -770,6 +1182,17 @@ export class BlockBody extends SyntaxBase {
     public elements: LetBodyElement[],
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    return this.blockStart;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.blockStart;
   }
 
 }
@@ -789,6 +1212,26 @@ export class LetDeclaration extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.letKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.body !== null) {
+      return this.body.getLastToken();
+    }
+    if (this.typeAssert !== null) {
+      return this.typeAssert.getLastToken();
+    }
+    if (this.params.length > 0) {
+      return this.params[this.params.length-1].getLastToken();
+    }
+    return this.pattern.getLastToken();
+  }
+
 }
 
 export class ImportDeclaration extends SyntaxBase {
@@ -802,6 +1245,14 @@ export class ImportDeclaration extends SyntaxBase {
     super();
   }
 
+  public getFirstToken(): Token {
+     return this.importKeyword;
+  }
+
+  public getLastToken(): Token {
+    return this.importSource;
+  }
+
 }
 
 export type Declaration
@@ -809,16 +1260,49 @@ export type Declaration
   | ImportDeclaration
   | StructDeclaration
 
+export class Initializer extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.Initializer;
+
+  public constructor(
+    public equals: Equals,
+    public expression: Expression
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.equals;
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
+}
+
 export class Module extends SyntaxBase {
 
   public readonly kind = SyntaxKind.Module;
 
   public constructor(
+    public pubKeyword: PubKeyword | null,
     public modKeyword: ModKeyword,
     public name: Identifier,
     public body: Body,
   ) {
     super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.modKeyword;
+  }
+
+  public getLastToken(): Token {
+    return this.body.getLastToken();
   }
 
 }
@@ -833,15 +1317,24 @@ export class SourceFile extends SyntaxBase {
   public readonly kind = SyntaxKind.SourceFile;
 
   public constructor(
-    public elements: SourceFileElement[]
+    public elements: SourceFileElement[],
+    public eof: EndOfFile,
   ) {
     super();
   }
 
-  public *getChildNodes(): Iterable<Syntax> {
-    for (const element in this.elements) {
-      yield element;
+  public getFirstToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[0].getFirstToken();
     }
+    return this.eof;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.eof;
   }
 
 }
