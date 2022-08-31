@@ -5,6 +5,10 @@ export function assert(test: boolean): asserts test {
   }
 }
 
+export function countDigits(x: number, base: number = 10) {
+  return x === 0 ? 1 : Math.ceil(Math.log(x+1) / Math.log(base))
+}
+
 export type JSONValue = null | boolean | number | string | JSONArray | JSONObject
 export type JSONArray = Array<JSONValue>;
 export type JSONObject = { [key: string]: JSONValue };

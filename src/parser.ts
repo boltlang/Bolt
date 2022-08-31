@@ -1,5 +1,4 @@
 
-import { privateDecrypt } from "crypto";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -35,68 +34,22 @@ import {
   FieldStructPatternElement,
   TuplePattern,
   InfixExpression,
+  TextFile,
+  CallExpression,
+  NamedTupleExpression,
 } from "./cst"
-import { Stream, MultiDict } from "./util";
+import { Stream } from "./util";
 
-const DESCRIPTIONS: Record<SyntaxKind, string> = {
-  [SyntaxKind.StringLiteral]: 'a string literal',
-  [SyntaxKind.Identifier]: "an identifier",
-  [SyntaxKind.Comma]: "','",
-  [SyntaxKind.Colon]: "':'",
-  [SyntaxKind.Integer]: "an integer",
-  [SyntaxKind.LParen]: "'('",
-  [SyntaxKind.RParen]: "')'",
-  [SyntaxKind.LBrace]: "'{'",
-  [SyntaxKind.RBrace]: "'}'",
-  [SyntaxKind.LBracket]: "'['",
-  [SyntaxKind.RBracket]: "']'",
-  [SyntaxKind.ConstantExpression]: 'a constant expression',
-  [SyntaxKind.ReferenceExpression]: 'a reference expression',
-  [SyntaxKind.LineFoldEnd]: 'the end of the current line-fold',
-  [SyntaxKind.TupleExpression]: 'a tuple expression such as (1, 2)',
-  [SyntaxKind.ReferenceExpression]: 'a reference to some variable',
-  [SyntaxKind.NestedExpression]: 'an expression nested with parentheses',
-  [SyntaxKind.ConstantExpression]: 'a constant expression such as 1 or "foo"',
-}
-
-function describeSyntaxKind(kind: SyntaxKind): string {
-  const desc = DESCRIPTIONS[kind];
-  if (desc === undefined) {
-    throw new Error(`Could not describe SyntaxKind '${kind}'`);
-  }
-  return desc
-}
-
-function describeExpected(expected: SyntaxKind[]) {
-  if (expected.length === 0) {
-    return 'nothing';
-  }
-  let out = describeSyntaxKind(expected[0]);
-  if (expected.length === 1) {
-    return out;
-  }
-  for (let i = 1; i < expected.length-1; i++) {
-    const kind = expected[i];
-    out += ', ' + describeSyntaxKind(kind);
-  }
-  out += ' or ' + describeSyntaxKind(expected[expected.length-1])
-  return out;
-}
-
-class ParseError extends Error {
+export class ParseError extends Error {
 
   public constructor(
+    public file: TextFile,
     public actual: Token,
     public expected: SyntaxKind[],
   ) {
-    super(`got '${actual.text}' but expected ${describeExpected(expected)}`);
+    super(`Uncaught parse error`);
   }
 
-}
-
-function isConstructor(token: Token): boolean {
-  return token.kind === SyntaxKind.Identifier
-      && token.text[0].toUpperCase() === token.text[0];
 }
 
 function isBinaryOperatorLike(token: Token): boolean {
@@ -148,6 +101,7 @@ export class Parser {
   private suffixExprOperators = new Set<string>();
 
   public constructor(
+    public file: TextFile,
     public tokens: Stream<Token>,
   ) {
     for (const [name, mode, precedence] of EXPR_OPERATOR_TABLE) {
@@ -178,7 +132,7 @@ export class Parser {
   }
 
   private raiseParseError(actual: Token, expected: SyntaxKind[]): never {
-    throw new ParseError(actual, expected);
+    throw new ParseError(this.file, actual, expected);
   }
 
   private peekTokenAfterModifiers(): Token {
@@ -203,7 +157,7 @@ export class Parser {
       case SyntaxKind.Identifier:
         return this.parseReferenceTypeExpression();
       default:
-        throw new ParseError(t0, [ SyntaxKind.Identifier ]);
+        this.raiseParseError(t0, [ SyntaxKind.Identifier ]);
     }
   }
 
@@ -237,10 +191,10 @@ export class Parser {
   private parseExpressionWithParens(): Expression {
     const lparen = this.expectToken(SyntaxKind.LParen)
     const t1 = this.peekToken();
+    // FIXME should be able to parse tuples
     if (t1.kind === SyntaxKind.RParen) {
       this.getToken();
       return new TupleExpression(lparen, [], t1);
-    } else if (t1.kind === SyntaxKind.Constructor) {
     } else {
       const expression = this.parseExpression();
       const t2 = this.expectToken(SyntaxKind.RParen);
@@ -248,24 +202,70 @@ export class Parser {
     }
   }
 
-  private parseExpressionNoOperators(): Expression {
+  private parsePrimitiveExpression(): Expression {
     const t0 = this.peekToken();
     switch (t0.kind) {
       case SyntaxKind.LParen:
         return this.parseExpressionWithParens();
       case SyntaxKind.Identifier:
         return this.parseReferenceExpression();
+      case SyntaxKind.Constructor:
+      {
+        this.getToken();
+        const t1 = this.peekToken();
+        if (t1.kind === SyntaxKind.LBrace) {
+          this.getToken();
+          const fields = [];
+          let rparen;
+          for (;;) {
+            
+          }
+          return new StructExpression(t0, t1, fields, rparen);
+        }
+        const elements = [];
+        for (;;) {
+          const t2 = this.peekToken();
+          if (t2.kind === SyntaxKind.LineFoldEnd
+            || t2.kind === SyntaxKind.RParen
+            || isBinaryOperatorLike(t2)
+            || isPrefixOperatorLike(t2)) {
+            break;
+          }
+          elements.push(this.parseExpression());
+        }
+        return new NamedTupleExpression(t0, elements);
+      }
       case SyntaxKind.Integer:
       case SyntaxKind.StringLiteral:
         return this.parseConstantExpression();
       default:
         this.raiseParseError(t0, [
+          SyntaxKind.NamedTupleExpression,
           SyntaxKind.TupleExpression,
           SyntaxKind.NestedExpression,
           SyntaxKind.ConstantExpression,
           SyntaxKind.ReferenceExpression
         ]);
     }
+  }
+
+  private parseExpressionNoOperators(): Expression {
+    const func = this.parsePrimitiveExpression();
+    const args = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.LineFoldEnd
+        || t1.kind === SyntaxKind.RParen
+        || isBinaryOperatorLike(t1)
+        || isPrefixOperatorLike(t1)) {
+        break;
+      }
+      args.push(this.parsePrimitiveExpression());
+    }
+    if (args.length === 0) {
+      return func
+    }
+    return new CallExpression(func, args);
   }
 
   private parseUnaryExpression(): Expression {
@@ -562,7 +562,7 @@ export class Parser {
       const element = this.parseSourceFileElement();
       elements.push(element);
     }
-    return new SourceFile(elements, eof);
+    return new SourceFile(this.file, elements, eof);
   }
 
 }

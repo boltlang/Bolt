@@ -7,9 +7,11 @@ import path from "path"
 import fs from "fs"
 import yargs from "yargs"
 
-import { Diagnostics } from "../diagnostics"
+import { Diagnostics, UnexpectedCharDiagnostic, UnexpectedTokenDiagnostic } from "../diagnostics"
 import { Punctuator, Scanner } from "../scanner"
-import { Parser } from "../parser"
+import { ParseError, Parser } from "../parser"
+import { Checker } from "../checker"
+import { TextFile } from "../cst"
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
@@ -31,14 +33,27 @@ yargs
 
       const cwd = args.C;
       const filename = path.resolve(cwd, args.file);
+
       const diagnostics = new Diagnostics();
       const text = fs.readFileSync(filename, 'utf8')
-      const scanner = new Scanner(text, 0, diagnostics);
+      const file = new TextFile(filename, text);
+      const scanner = new Scanner(text, 0, diagnostics, file);
       const punctuated = new Punctuator(scanner);
-      const parser = new Parser(punctuated);
-      const sourceFile = parser.parseSourceFile();
-
-      debug(sourceFile.toJSON());
+      const parser = new Parser(file, punctuated);
+      let sourceFile;
+      try {
+        sourceFile = parser.parseSourceFile();
+      } catch (error) {
+        if (!(error instanceof ParseError)) {
+          throw error;
+        }
+        diagnostics.add(new UnexpectedTokenDiagnostic(error.file, error.actual, error.expected));
+        return;
+      }
+      sourceFile.setParents();
+      //debug(sourceFile.toJSON());
+      const checker = new Checker(diagnostics);
+      checker.check(sourceFile);
 
     }
   )

@@ -27,6 +27,7 @@ import {
   CustomOperator,
   Constructor,
   Integer,
+  TextFile,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -74,6 +75,7 @@ export class Scanner extends BufferedStream<Token> {
     public text: string,
     public textOffset: number = 0,
     public diagnostics: Diagnostics,
+    private file: TextFile,
   ) {
     super();
   }
@@ -157,8 +159,9 @@ export class Scanner extends BufferedStream<Token> {
           let contents = '';
           let escaping = false;
           for (;;) {
-            const c1 = this.getChar();
             if (escaping) {
+              const startPos = this.getCurrentPosition();
+              const c1 = this.getChar();
               switch (c1) {
                 case 'a': contents += '\a'; break;
                 case 'b': contents += '\b'; break;
@@ -171,11 +174,12 @@ export class Scanner extends BufferedStream<Token> {
                 case '\'': contents += '\''; break;
                 case '\"': contents += '\"'; break;
                 default:
-                  this.diagnostics.add(new UnexpectedCharDiagnostic(this.text, this.textOffset, c1));
+                  this.diagnostics.add(new UnexpectedCharDiagnostic(this.file, startPos, c1));
                   throw new ScanError();
               }
               escaping = false;
             } else {
+              const c1 = this.getChar();
               if (c1 === '"') {
                 break;
               } else {
@@ -199,6 +203,7 @@ export class Scanner extends BufferedStream<Token> {
         case '}': return new RBrace(startPos);
         case ',': return new Comma(startPos);
         case ':': return new Colon(startPos);
+        case '.': return new Dot(startPos);
 
         case '+':
         case '-':
@@ -331,7 +336,7 @@ export class Scanner extends BufferedStream<Token> {
         default:
 
           // Nothing matched, so the current character is unrecognisable
-          this.diagnostics.add(new UnexpectedCharDiagnostic(this.text, this.textOffset, c0));
+          this.diagnostics.add(new UnexpectedCharDiagnostic(this.file, startPos, c0));
           throw new ScanError();
         }
 

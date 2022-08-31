@@ -1,4 +1,5 @@
 import { JSONObject, JSONValue } from "./util";
+import type { InferContext, Type } from "./checker"
 
 export type TextSpan = [number, number];
 
@@ -116,7 +117,10 @@ export const enum SyntaxKind {
   VariadicStructPatternElement,
 
   // Expressions
+  CallExpression,
   ReferenceExpression,
+  NamedTupleExpression,
+  StructExpression,
   TupleExpression,
   NestedExpression,
   ConstantExpression,
@@ -156,7 +160,10 @@ export const enum SyntaxKind {
 
 export type Syntax
   = SourceFile
+  | Module
+  | Token
   | Param
+  | Body
   | StructDeclarationField
   | Declaration
   | Statement
@@ -164,13 +171,63 @@ export type Syntax
   | TypeExpression
   | Pattern
 
+function isIgnoredProperty(key: string): boolean {
+  return key === 'kind' || key === 'parent';
+}
+
 abstract class SyntaxBase {
+
+  public parent: Syntax | null = null;
 
   public abstract readonly kind: SyntaxKind;
 
   public abstract getFirstToken(): Token;
 
   public abstract getLastToken(): Token;
+
+  public getRange(): TextRange {
+    return new TextRange(
+      this.getFirstToken().getStartPosition(),
+      this.getLastToken().getEndPosition(),
+    );
+  }
+
+  public getSourceFile(): SourceFile {
+    let curr = this as any;
+    do {
+      if (curr.kind === SyntaxKind.SourceFile) {
+        return curr;
+      }
+      curr = curr.parent;
+    } while (curr != null);
+    throw new Error(`Could not find a SourceFile in any of the parent nodes of ${this}`);
+  }
+
+  public setParents(): void {
+
+    const visit = (value: any) => {
+      if (value === null) {
+        return;
+      }
+      if (Array.isArray(value)) {
+        value.forEach(visit);
+        return;
+      }
+      if (value instanceof SyntaxBase) {
+        value.parent = this as any;
+        value.setParents();
+        return;
+      }
+    }
+
+    for (const key of Object.getOwnPropertyNames(this)) {
+      if (isIgnoredProperty(key)) {
+        continue;
+      }
+      visit((this as any)[key]);
+    }
+
+  }
 
   public toJSON(): JSONObject {
 
@@ -179,7 +236,7 @@ abstract class SyntaxBase {
     obj['type'] = this.constructor.name;
 
     for (const key of Object.getOwnPropertyNames(this)) {
-      if (key === 'kind') {
+      if (isIgnoredProperty(key)) {
         continue;
       }
       obj[key] = encode((this as any)[key]);
@@ -207,7 +264,7 @@ abstract class TokenBase extends SyntaxBase {
 
   private endPos: TextPosition | null = null;
 
-  constructor(
+  public constructor(
     private startPos: TextPosition,
   ) {
     super();
@@ -219,6 +276,13 @@ abstract class TokenBase extends SyntaxBase {
 
   public getLastToken(): Token {
     throw new Error(`Trying to get the last token of an object that is a token itself.`);
+  }
+
+  public getRange(): TextRange {
+    return new TextRange(
+      this.getStartPosition(),
+      this.getEndPosition(),
+    );
   }
 
   public getStartPosition(): TextPosition {
@@ -915,6 +979,54 @@ export class QualifiedName extends SyntaxBase {
 
 }
 
+export class CallExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.CallExpression;
+
+  public constructor(
+    public func: Expression,
+    public args: Expression[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.func.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    if (this.args.length > 0) {
+      return this.args[this.args.length-1].getLastToken();
+    }
+    return this.func.getLastToken();
+  }
+
+}
+
+export class NamedTupleExpression extends SyntaxBase {
+  
+  public readonly kind = SyntaxKind.NamedTupleExpression;
+
+  public constructor(
+    public name: Constructor,
+    public elements: Expression[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.name;
+  }
+
+}
+
 export class ReferenceExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReferenceExpression;
@@ -1000,7 +1112,9 @@ export class InfixExpression extends SyntaxBase {
 }
 
 export type Expression
-  = ReferenceExpression
+  = CallExpression
+  | NamedTupleExpression
+  | ReferenceExpression
   | ConstantExpression
   | TupleExpression
   | NestedExpression
@@ -1200,6 +1314,9 @@ export class LetDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.LetDeclaration;
 
+  public type?: Type;
+  public context?: InferContext;
+
   public constructor(
     public pubKeyword: PubKeyword | null,
     public letKeyword: LetKeyword,
@@ -1317,6 +1434,7 @@ export class SourceFile extends SyntaxBase {
   public readonly kind = SyntaxKind.SourceFile;
 
   public constructor(
+    private file: TextFile,
     public elements: SourceFileElement[],
     public eof: EndOfFile,
   ) {
@@ -1335,6 +1453,10 @@ export class SourceFile extends SyntaxBase {
       return this.elements[this.elements.length-1].getLastToken();
     }
     return this.eof;
+  }
+
+  public getFile() {
+    return this.file;
   }
 
 }
