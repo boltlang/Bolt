@@ -1,4 +1,5 @@
 
+import { kill } from "process";
 import { TypeKind, Type } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { countDigits } from "./util";
@@ -67,6 +68,10 @@ const DESCRIPTIONS: Record<SyntaxKind, string> = {
   [SyntaxKind.ConstantExpression]: 'a constant expression such as 1 or "foo"',
   [SyntaxKind.NamedTupleExpression]: 'a named tuple expression',
   [SyntaxKind.StructExpression]: 'a struct expression',
+  [SyntaxKind.BlockStart]: 'the start of an indented block',
+  [SyntaxKind.BlockEnd]: 'the end of an indented block',
+  [SyntaxKind.LineFoldEnd]: 'the end of the current line-fold',
+  [SyntaxKind.EndOfFile]: 'end-of-file',
 }
 
 function describeSyntaxKind(kind: SyntaxKind): string {
@@ -93,6 +98,18 @@ function describeExpected(expected: SyntaxKind[]) {
   return out;
 }
 
+function describeActual(token: Token): string {
+  switch (token.kind) {
+    case SyntaxKind.BlockStart:
+    case SyntaxKind.BlockEnd:
+    case SyntaxKind.LineFoldEnd:
+    case SyntaxKind.EndOfFile:
+      return describeSyntaxKind(token.kind);
+    default:
+      return `'${token.text}'`;
+  }
+}
+
 export class UnexpectedTokenDiagnostic {
 
   public constructor(
@@ -105,7 +122,7 @@ export class UnexpectedTokenDiagnostic {
 
   public format(): string {
     return ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET
-         + `expected ${describeExpected(this.expected)} but got '${this.actual.text}'\n\n`
+         + `expected ${describeExpected(this.expected)} but got ${describeActual(this.actual)}\n\n`
          + printExcerpt(this.file, this.actual.getRange()) + '\n';
   }
 
