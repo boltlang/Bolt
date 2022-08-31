@@ -1128,7 +1128,7 @@ export class ReturnStatement extends SyntaxBase {
 
   public constructor(
     public returnKeyword: ReturnKeyword,
-    public expression: Expression
+    public expression: Expression | null
   ) {
     super();
   }
