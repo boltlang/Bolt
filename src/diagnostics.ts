@@ -40,7 +40,7 @@ export class UnexpectedCharDiagnostic {
     const endPos = this.position.clone();
     endPos.advance(this.actual);
     return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
-         + `unexpeced character '${this.actual}'.\n\n`
+         + `unexpeced character sequence '${this.actual}'.\n\n`
          + printExcerpt(this.file, new TextRange(this.position, endPos)) + '\n';
   }
 

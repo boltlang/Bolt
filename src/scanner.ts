@@ -28,6 +28,8 @@ import {
   Constructor,
   Integer,
   TextFile,
+  Dot,
+  DotDot,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -64,7 +66,17 @@ function isOperatorPart(ch: string): boolean {
   return /\+-*\/%^&|$<>!?=/.test(ch);
 }
 
-class ScanError extends Error {}
+export class ScanError extends Error {
+
+  public constructor(
+    public file: TextFile,
+    public position: TextPosition,
+    public actual: string,
+  ) {
+    super(`Uncaught scanner error`);
+  }
+
+}
 
 export class Scanner extends BufferedStream<Token> {
 
@@ -174,8 +186,7 @@ export class Scanner extends BufferedStream<Token> {
                 case '\'': contents += '\''; break;
                 case '\"': contents += '\"'; break;
                 default:
-                  this.diagnostics.add(new UnexpectedCharDiagnostic(this.file, startPos, c1));
-                  throw new ScanError();
+                  throw new ScanError(this.file, startPos, c1);
               }
               escaping = false;
             } else {
@@ -203,7 +214,16 @@ export class Scanner extends BufferedStream<Token> {
         case '}': return new RBrace(startPos);
         case ',': return new Comma(startPos);
         case ':': return new Colon(startPos);
-        case '.': return new Dot(startPos);
+        case '.': {
+          const dots = c0 + this.takeWhile(ch => ch === '.');
+          if (dots === '.') {
+            return new Dot(startPos);
+          } else if (dots === '..') {
+            return new DotDot(startPos);
+          } else {
+            throw new ScanError(this.file, startPos, dots);
+          }
+        }
 
         case '+':
         case '-':
@@ -336,8 +356,7 @@ export class Scanner extends BufferedStream<Token> {
         default:
 
           // Nothing matched, so the current character is unrecognisable
-          this.diagnostics.add(new UnexpectedCharDiagnostic(this.file, startPos, c0));
-          throw new ScanError();
+          throw new ScanError(this.file, startPos, c0);
         }
 
     }

@@ -8,7 +8,7 @@ import fs from "fs"
 import yargs from "yargs"
 
 import { Diagnostics, UnexpectedCharDiagnostic, UnexpectedTokenDiagnostic } from "../diagnostics"
-import { Punctuator, Scanner } from "../scanner"
+import { Punctuator, ScanError, Scanner } from "../scanner"
 import { ParseError, Parser } from "../parser"
 import { Checker } from "../checker"
 import { TextFile } from "../cst"
@@ -44,11 +44,15 @@ yargs
       try {
         sourceFile = parser.parseSourceFile();
       } catch (error) {
-        if (!(error instanceof ParseError)) {
-          throw error;
+        if (error instanceof ParseError) {
+          diagnostics.add(new UnexpectedTokenDiagnostic(error.file, error.actual, error.expected));
+          return;
         }
-        diagnostics.add(new UnexpectedTokenDiagnostic(error.file, error.actual, error.expected));
-        return;
+        if (error instanceof ScanError) {
+          diagnostics.add(new UnexpectedCharDiagnostic(error.file, error.position, error.actual));
+          return;
+        }
+        throw error;
       }
       sourceFile.setParents();
       //debug(sourceFile.toJSON());
