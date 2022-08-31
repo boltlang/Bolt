@@ -37,6 +37,8 @@ import {
   TextFile,
   CallExpression,
   NamedTupleExpression,
+  LetBodyElement,
+  ReturnStatement,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -448,7 +450,20 @@ export class Parser {
     return new Param(pattern);
   }
 
-  public parseDeclartionWithLetKeyword(): LetDeclaration {
+  public parseLetBodyElement(): LetBodyElement {
+    const t0 = this.peekTokenAfterModifiers();
+    switch (t0.kind) {
+      case SyntaxKind.LetKeyword:
+        return this.parseLetDeclaration();
+      case SyntaxKind.ReturnKeyword:
+        return this.parseReturnStatement();
+      default:
+        // TODO convert parse errors to include LetKeyword and ReturnKeyword
+        return this.parseExpressionStatement();
+    }
+  }
+
+  public parseLetDeclaration(): LetDeclaration {
     let t0 = this.getToken();
     let pubKeyword = null;
     let mutKeyword = null;
@@ -530,6 +545,17 @@ export class Parser {
     return new ExpressionStatement(expression);
   }
 
+  public parseReturnStatement(): ReturnStatement {
+    const returnKeyword = this.expectToken(SyntaxKind.ReturnKeyword);
+    let expression = null;
+    const t1 = this.peekToken();
+    if (t1.kind !== SyntaxKind.LineFoldEnd) {
+      expression = this.parseExpression();
+    }
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    return new ReturnStatement(returnKeyword, expression);
+  }
+
   public parseImportDeclaration(): ImportDeclaration {
     const importKeyword = this.expectToken(SyntaxKind.ImportKeyword);
     const importSource = this.expectToken(SyntaxKind.StringLiteral);
@@ -541,7 +567,7 @@ export class Parser {
     const t0 = this.peekTokenAfterModifiers();
     switch (t0.kind) {
       case SyntaxKind.LetKeyword:
-        return this.parseDeclartionWithLetKeyword();
+        return this.parseLetDeclaration();
       case SyntaxKind.ImportKeyword:
         return this.parseImportDeclaration();
       case SyntaxKind.StructKeyword:
