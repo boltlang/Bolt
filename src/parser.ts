@@ -491,6 +491,7 @@ export class Parser {
         for (;;) {
           const t4 = this.peekToken();
           if (t4.kind === SyntaxKind.BlockEnd) {
+            this.getToken();
             break;
           }
           elements.push(this.parseLetBodyElement());
