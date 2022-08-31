@@ -524,9 +524,11 @@ export class Checker {
             }
             case SyntaxKind.BlockBody:
             {
+              this.returnTypes.push(returnType);
               for (const element of node.body.elements) {
                 this.infer(element);
               }
+              this.returnTypes.pop();
               break;
             }
           }
