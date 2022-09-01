@@ -30,6 +30,10 @@ import {
   TextFile,
   Dot,
   DotDot,
+  Assignment,
+  ElifKeyword,
+  ElseKeyword,
+  IfKeyword,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -63,7 +67,7 @@ function toDecimal(ch: string): number {
 }
 
 function isOperatorPart(ch: string): boolean {
-  return /\+-*\/%^&|$<>!?=/.test(ch);
+  return /[+\-*\/%^&|$<>!?=]/.test(ch);
 }
 
 export class ScanError extends Error {
@@ -244,7 +248,7 @@ export class Scanner extends BufferedStream<Token> {
           if (text === '=') {
             return new Equals(startPos);
           } else if (text.endsWith('=') && text[text.length-2] !== '=') {
-            return new Assignment(startPos);
+            return new Assignment(text, startPos);
           } else {
             return new CustomOperator(text, startPos);
           }
@@ -344,6 +348,9 @@ export class Scanner extends BufferedStream<Token> {
             case 'import': return new ImportKeyword(startPos);
             case 'return': return new ReturnKeyword(startPos);
             case 'type': return new TypeKeyword(startPos);
+            case 'if': return new IfKeyword(startPos);
+            case 'else': return new ElseKeyword(startPos);
+            case 'elif': return new ElifKeyword(startPos);
             default:
               if (isUpper(text[0])) {
                 return new Constructor(text, startPos);

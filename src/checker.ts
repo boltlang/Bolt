@@ -1,12 +1,15 @@
 import {
   Expression,
+  LetDeclaration,
   Pattern,
+  SourceFile,
   Syntax,
   SyntaxKind,
   TypeExpression
 } from "./cst";
-import { BindingNotFoudDiagnostic, Diagnostics, UnificationFailedDiagnostic } from "./diagnostics";
+import { ArityMismatchDiagnostic, BindingNotFoudDiagnostic, Diagnostics, UnificationFailedDiagnostic } from "./diagnostics";
 import { assert } from "./util";
+import { LabeledDirectedHashGraph, LabeledGraph, strongconnect, toposort } from "yagl"
 
 export enum TypeKind {
   Arrow,
@@ -55,7 +58,7 @@ class TVar extends TypeBase {
 
 }
 
-class TArrow extends TypeBase {
+export class TArrow extends TypeBase {
 
   public readonly kind = TypeKind.Arrow;
 
@@ -185,6 +188,19 @@ class TVSet {
   public add(tv: TVar): void {
     this.mapping.set(tv.id, tv);
   }
+  
+  public has(tv: TVar): boolean {
+    return this.mapping.has(tv.id);
+  }
+
+  public intersectsType(type: Type): boolean {
+    for (const tv of type.getTypeVars()) {
+      if (this.has(tv)) {
+        return true; 
+      }
+    }
+    return false;
+  }
 
   public delete(tv: TVar): void {
     this.mapping.delete(tv.id);
@@ -307,12 +323,16 @@ export interface InferContext {
   typeVars: TVSet;
   env: TypeEnv;
   constraints: ConstraintSet;
+  returnType: Type;
 }
 
 export class Checker {
 
   private nextTypeVarId = 0;
   private nextConTypeId = 0;
+
+  private graph?: LabeledGraph<Syntax, Syntax>;
+  private currentCycle?: Map<Syntax, Type>;
 
   private stringType = new TCon(this.nextConTypeId++, [], 'String');
   private intType = new TCon(this.nextConTypeId++, [], 'Int');
@@ -348,7 +368,29 @@ export class Checker {
   }
 
   private addConstraint(constraint: Constraint): void {
-    this.constraints[this.constraints.length-1].push(constraint);
+    switch (constraint.kind) {
+      case ConstraintKind.Many:
+      {
+        for (const element of constraint.elements) {
+          this.addConstraint(element);
+        }
+        return;
+      }
+      case ConstraintKind.Equal:
+      {
+        const count = this.constraints.length;
+        for (let i = count-1; i > 0; i--) {
+          const typeVars = this.typeVars[i];
+          const constraints = this.constraints[i];
+          if (typeVars.intersectsType(constraint.left) || typeVars.intersectsType(constraint.right)) {
+            constraints.push(constraint);
+            return;
+          }
+        }
+        this.constraints[0].push(constraint);
+        return;
+      }
+    }
   }
 
   private pushContext(context: InferContext) {
@@ -361,6 +403,9 @@ export class Checker {
     if (context.constraints !== null) {
       this.constraints.push(context.constraints);
     }
+    if (context.returnType !== null) {
+      this.returnTypes.push(context.returnType);
+    }
   }
 
   private popContext(context: InferContext) {
@@ -372,6 +417,9 @@ export class Checker {
     }
     if (context.constraints !== null) {
       this.constraints.pop();
+    }
+    if (context.returnType !== null) {
+      this.returnTypes.pop();
     }
   }
 
@@ -430,7 +478,8 @@ export class Checker {
         const typeVars = new TVSet();
         const env = new TypeEnv();
         const constraints = new ConstraintSet();
-        const context = { typeVars, env, constraints };
+        const returnType = this.createTypeVar();
+        const context = { typeVars, env, constraints, returnType };
         node.context = context;
 
         this.pushContext(context);
@@ -450,6 +499,8 @@ export class Checker {
         }
 
         this.popContext(context);
+
+        this.inferBindings(node.pattern, type, context.typeVars, context.constraints);
 
         break;
       }
@@ -472,6 +523,25 @@ export class Checker {
       case SyntaxKind.ExpressionStatement:
       {
         this.inferExpression(node.expression);
+        break;
+      }
+
+      case SyntaxKind.IfStatement:
+      {
+        for (const cs of node.cases) {
+          if (cs.test !== null) {
+            this.addConstraint(
+              new CEqual(
+                this.inferExpression(cs.test),
+                this.getBoolType(),
+                cs.test
+              )
+            );
+          }
+          for (const element of cs.elements) {
+            this.infer(element);
+          }
+        }
         break;
       }
 
@@ -502,7 +572,7 @@ export class Checker {
         this.pushContext(context);
 
         const paramTypes = [];
-        const returnType = this.createTypeVar();
+        const returnType = context.returnType;
         for (const param of node.params) {
           const paramType = this.createTypeVar()
           this.inferBindings(param.pattern, paramType, [], []);
@@ -524,11 +594,9 @@ export class Checker {
             }
             case SyntaxKind.BlockBody:
             {
-              this.returnTypes.push(returnType);
               for (const element of node.body.elements) {
                 this.infer(element);
               }
-              this.returnTypes.pop();
               break;
             }
           }
@@ -538,12 +606,9 @@ export class Checker {
 
         this.popContext(context);
 
-        this.inferBindings(node.pattern, type, context.typeVars, context.constraints);
-
         // FIXME these two may need to go below inferBindings
         //this.typeVars.pop();
         //this.constraints.pop();
-
 
         break;
 
@@ -560,15 +625,28 @@ export class Checker {
 
     switch (node.kind) {
 
+      case SyntaxKind.NestedExpression:
+        return this.inferExpression(node.expression);
+
       case SyntaxKind.ReferenceExpression:
       {
         assert(node.name.modulePath.length === 0);
+        const target = node.getScope().lookup(node.name.name.text) as LetDeclaration;
+        if (target === node.getScope().node) {
+          return target.type!;
+        }
+        const targetType = this.currentCycle.get(target);
+        if (targetType) {
+          return targetType;
+        }
         const scheme = this.lookup(node.name.name.text);
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.name.text, node.name.name));
           return new TAny();
         }
-        return this.instantiate(scheme);
+        const type = this.instantiate(scheme);
+        this.currentCycle.set(target, type);
+        return type;
       }
 
       case SyntaxKind.CallExpression:
@@ -641,7 +719,7 @@ export class Checker {
       }
 
       default:
-        throw new Error(`Unexpected ${node}`);
+        throw new Error(`Unexpected ${node.constructor.name}`);
 
     }
 
@@ -682,9 +760,124 @@ export class Checker {
 
   }
 
-  public check(node: Syntax): void {
+  private computeReferenceGraph(node: SourceFile): LabeledGraph<Syntax, Syntax> {
+    const graph = new LabeledDirectedHashGraph<Syntax, Syntax>();
+    const visit = (node: Syntax, source: Syntax | null) => {
+      switch (node.kind) {
+        case SyntaxKind.ConstantExpression:
+          break;
+        case SyntaxKind.SourceFile:
+        {
+          for (const element of node.elements) {
+            visit(element, source);
+          }
+          break;
+        }
+        case SyntaxKind.ReferenceExpression:
+        {
+          // TODO only add references to nodes on the same level
+          assert(node.name.modulePath.length === 0);
+          const target = node.getScope().lookup(node.name.name.text);
+          if (source !== null && target !== null && target.kind === SyntaxKind.LetDeclaration) {
+            graph.addEdge(source, target, node);
+          }
+          break;
+        }
+        case SyntaxKind.NamedTupleExpression:
+        {
+          for (const arg of node.elements) {
+            visit(arg, source);
+          }
+          break;
+        }
+        case SyntaxKind.NestedExpression:
+        {
+          visit(node.expression, source);
+          break;
+        }
+        case SyntaxKind.InfixExpression:
+        {
+          visit(node.left, source);
+          visit(node.right, source);
+          break;
+        }
+        case SyntaxKind.CallExpression:
+        {
+          visit(node.func, source);
+          for (const arg of node.args) {
+            visit(arg, source);
+          }
+          break;
+        }
+        case SyntaxKind.IfStatement:
+        {
+          for (const cs of node.cases) {
+            if (cs.test !== null) {
+              visit(cs.test, source);
+            }
+            for (const element of cs.elements) {
+              visit(element, source);
+            }
+          }
+          break;
+        }
+        case SyntaxKind.ExpressionStatement:
+        {
+          visit(node.expression, source);
+          break;
+        }
+        case SyntaxKind.ReturnStatement:
+        {
+          if (node.expression !== null) {
+            visit(node.expression, source);
+          }
+          break;
+        }
+        case SyntaxKind.LetDeclaration:
+        {
+          graph.addVertex(node);
+          if (node.body !== null) {
+            switch (node.body.kind) {
+              case SyntaxKind.ExprBody:
+              {
+                visit(node.body.expression, node);
+                break;
+              }
+              case SyntaxKind.BlockBody:
+              {
+                for (const element of node.body.elements) {
+                  visit(element, node);
+                }
+                break;
+              }
+            }
+          }
+          break;
+        }
+        default:
+          throw new Error(`Unexpected ${node.constructor.name}`);
+      }
+    }
+    visit(node, null);
+    return graph;
+  }
+
+  public check(node: SourceFile): void {
+
+    this.graph = this.computeReferenceGraph(node);
+
+    const typeVars = new TVSet();
     const constraints = new ConstraintSet();
     const env = new TypeEnv();
+
+    this.typeVars.push(typeVars);
+    this.constraints.push(constraints);
+    this.typeEnvs.push(env);
+
+    const a = this.createTypeVar();
+    const b = this.createTypeVar();
+    const d = this.createTypeVar();
+
     env.set('String', new Forall([], [], this.stringType));
     env.set('Int', new Forall([], [], this.intType));
     env.set('True', new Forall([], [], this.boolType));
@@ -693,15 +886,35 @@ export class Checker {
     env.set('-', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)));
     env.set('*', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)));
     env.set('/', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)));
-    this.typeVars.push(new TVSet);
-    this.constraints.push(constraints);
-    this.typeEnvs.push(env);
-    this.forwardDeclare(node);
-    this.infer(node);
-    this.solve(new CMany(constraints));
+    env.set('==', new Forall([ a ], [], new TArrow([ a, a ], this.boolType)));
+    env.set('not', new Forall([], [], new TArrow([ this.boolType ], this.boolType)));
+
+    //this.infer(node);
+    for (const node of this.graph.getVertices()) {
+      this.forwardDeclare(node);
+    }
+    for (const nodes of strongconnect(this.graph)) {
+      this.currentCycle = new Map();
+      for (const node of nodes) {
+        for (const node of nodes) {
+          this.currentCycle.set(node, null);
+        }
+        this.infer(node);
+      }
+    }
+    this.currentCycle = new Map();
+    for (const element of node.elements) {
+      if (element.kind !== SyntaxKind.LetDeclaration) {
+        //this.forwardDeclare(element);
+        this.infer(element);
+      }
+    }
+
     this.typeVars.pop();
     this.constraints.pop();
     this.typeEnvs.pop();
+
+    this.solve(new CMany(constraints));
   }
 
   private solve(constraint: Constraint): TVSub {
@@ -756,6 +969,7 @@ export class Checker {
     if (left.kind === TypeKind.Var) {
       if (right.hasTypeVar(left)) {
         // TODO occurs check diagnostic
+        return false;
       }
       solution.set(left, right);
       return true;
@@ -763,6 +977,10 @@ export class Checker {
 
     if (right.kind === TypeKind.Var) {
       return this.unify(right, left, solution);
+    }
+
+    if (left.kind === TypeKind.Any || right.kind === TypeKind.Any) {
+      return true;
     }
 
     if (left.kind === TypeKind.Arrow && right.kind === TypeKind.Arrow) {

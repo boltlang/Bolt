@@ -1,6 +1,5 @@
 
-import { kill } from "process";
-import { TypeKind, Type } from "./checker";
+import { TypeKind, type Type, type TArrow } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { countDigits } from "./util";
 
@@ -47,7 +46,7 @@ export class UnexpectedCharDiagnostic {
 
 }
 
-const DESCRIPTIONS: Record<SyntaxKind, string> = {
+const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.StringLiteral]: 'a string literal',
   [SyntaxKind.Identifier]: "an identifier",
   [SyntaxKind.Comma]: "','",
@@ -206,11 +205,32 @@ export class UnificationFailedDiagnostic {
 
 }
 
+export class ArityMismatchDiagnostic {
+
+  public constructor(
+    public left: TArrow,
+    public right: TArrow,
+  ) {
+
+  }
+
+  public format(): string {
+    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
+         + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET
+         + ` has ${this.left.paramTypes.length} `
+         + (this.left.paramTypes.length === 1 ? 'parameter' : 'parameters')
+         + ' while ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET
+         + ` has ${this.right.paramTypes.length}.\n\n`
+  }
+
+}
+
 export type Diagnostic
   = UnexpectedCharDiagnostic
   | BindingNotFoudDiagnostic
   | UnificationFailedDiagnostic
   | UnexpectedTokenDiagnostic
+  | ArityMismatchDiagnostic
 
 export class Diagnostics {
 

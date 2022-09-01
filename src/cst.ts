@@ -71,6 +71,7 @@ export const enum SyntaxKind {
   Identifier,
   Constructor,
   CustomOperator,
+  Assignment,
   LParen,
   RParen,
   LBrace,
@@ -111,9 +112,13 @@ export const enum SyntaxKind {
   NestedPattern,
   NamedTuplePattern,
 
+  // Struct expression elements
+  StructExpressionField,
+  PunnedStructExpressionField,
+
   // Struct pattern elements
-  FieldStructPatternElement,
-  PunnedFieldStructPatternElement,
+  StructPatternField,
+  PunnedStructPatternField,
   VariadicStructPatternElement,
 
   // Expressions
@@ -131,6 +136,7 @@ export const enum SyntaxKind {
   // Statements
   ReturnStatement,
   ExpressionStatement,
+  IfStatement,
 
   // Declarations
   VariableDeclaration,
@@ -149,6 +155,7 @@ export const enum SyntaxKind {
   StructDeclarationField,
 
   // Other nodes
+  IfStatementCase,
   Initializer,
   QualifiedName,
   TypeAssert,
@@ -174,6 +181,89 @@ export type Syntax
 function isIgnoredProperty(key: string): boolean {
   return key === 'kind' || key === 'parent';
 }
+
+type NodeWithScope
+  = SourceFile
+  | LetDeclaration
+
+function isNodeWithScope(node: Syntax): node is NodeWithScope {
+  return node.kind === SyntaxKind.SourceFile
+      || node.kind === SyntaxKind.LetDeclaration;
+}
+
+export class Scope {
+
+  private mapping = new Map<string, Syntax>();
+
+  public constructor(
+    public node: NodeWithScope,
+  ) {
+    this.scan(node);
+  }
+
+  private getParent(): Scope | null {
+    let curr = this.node.parent;
+    while (curr !== null) {
+      if (isNodeWithScope(curr)) {
+        return curr.getScope();
+      }
+    }
+    return null;
+  }
+
+  private scan(node: Syntax): void {
+    switch (node.kind) {
+      case SyntaxKind.SourceFile:
+      {
+        for (const element of node.elements) {
+          this.scan(element);
+        }
+        break;
+      }
+      case SyntaxKind.ExpressionStatement:
+      case SyntaxKind.ReturnStatement:
+        break;
+      case SyntaxKind.LetDeclaration:
+      {
+        for (const param of node.params) {
+          this.scanPattern(param.pattern, param);
+        }
+        if (node !== this.node) {
+          this.scanPattern(node.pattern, node);
+        }
+        break;
+      }
+      default:
+        throw new Error(`Unexpected ${node.constructor.name}`);
+    }
+  }
+
+  private scanPattern(node: Pattern, decl: Syntax): void {
+    switch (node.kind) {
+      case SyntaxKind.BindPattern:
+      {
+        this.mapping.set(node.name.text, decl);
+        break;
+      }
+      default:
+        throw new Error(`Unexpected ${node}`);
+    }
+  }
+
+  public lookup(name: string): Syntax | null {
+    let curr: Scope | null = this;
+    do {
+      const decl = curr.mapping.get(name);
+      if (decl !== undefined) {
+        return decl;
+      }
+      curr = curr.getParent();
+    } while (curr !== null);
+    return null;
+  }
+
+}
+
 
 abstract class SyntaxBase {
 
@@ -201,6 +291,20 @@ abstract class SyntaxBase {
       curr = curr.parent;
     } while (curr != null);
     throw new Error(`Could not find a SourceFile in any of the parent nodes of ${this}`);
+  }
+
+  public getScope(): Scope {
+    let curr: Syntax | null = this as any;
+    do {
+      if (isNodeWithScope(curr!)) {
+        if (curr.scope === undefined) {
+          curr.scope = new Scope(curr);
+        }
+        return curr.scope;
+      }
+      curr = curr!.parent;
+    } while (curr !== null);
+    throw new Error(`Could not find a scope for ${this}. Maybe the parent links are not set?`);
   }
 
   public setParents(): void {
@@ -437,6 +541,19 @@ export class CustomOperator extends TokenBase {
 
 }
 
+export class Assignment extends TokenBase {
+
+  public readonly kind = SyntaxKind.Assignment;
+
+  public constructor(
+    public text: string,
+    startPos: TextPosition,
+  ) {
+    super(startPos);
+  }
+
+}
+
 export class LParen extends TokenBase {
 
   public readonly kind = SyntaxKind.LParen;
@@ -543,6 +660,36 @@ export class Equals extends TokenBase {
 
   public get text(): string {
     return '=';
+  }
+
+}
+
+export class IfKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.IfKeyword;
+
+  public get text(): string {
+    return 'if';
+  }
+
+}
+
+export class ElseKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.ElseKeyword;
+
+  public get text(): string {
+    return 'else';
+  }
+
+}
+
+export class ElifKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.ElifKeyword;
+
+  public get text(): string {
+    return 'elif';
   }
 
 }
@@ -667,6 +814,10 @@ export type Token
   | BlockStart
   | BlockEnd
   | LineFoldEnd
+  | Assignment
+  | IfKeyword
+  | ElseKeyword
+  | ElifKeyword
 
 export type TokenKind
   = Token['kind']
@@ -768,9 +919,9 @@ export class NamedTuplePattern extends SyntaxBase {
 
 }
 
-export class FieldStructPatternElement extends SyntaxBase {
+export class StructPatternField extends SyntaxBase {
 
-  public readonly kind = SyntaxKind.FieldStructPatternElement;
+  public readonly kind = SyntaxKind.StructPatternField;
 
   public constructor(
     public name: Identifier,
@@ -814,9 +965,9 @@ export class VariadicStructPatternElement extends SyntaxBase {
 
 }
 
-export class PunnedFieldStructPatternElement extends SyntaxBase {
+export class PunnedStructPatternField extends SyntaxBase {
 
-  public readonly kind = SyntaxKind.PunnedFieldStructPatternElement;
+  public readonly kind = SyntaxKind.PunnedStructPatternField;
 
   public constructor(
     public name: Identifier,
@@ -836,8 +987,8 @@ export class PunnedFieldStructPatternElement extends SyntaxBase {
 
 export type StructPatternElement
   = VariadicStructPatternElement
-  | PunnedFieldStructPatternElement
-  | FieldStructPatternElement
+  | PunnedStructPatternField
+  | StructPatternField
 
 export class StructPattern extends SyntaxBase {
 
@@ -1003,6 +1154,75 @@ export class CallExpression extends SyntaxBase {
 
 }
 
+export class StructExpressionField extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.StructExpressionField;
+
+  public constructor(
+    public name: Identifier,
+    public equals: Equals,
+    public expression: Expression,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
+}
+
+export class PunnedStructExpressionField extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.PunnedStructExpressionField;
+
+  public constructor(
+    public name: Identifier,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
+}
+
+export type StructExpressionElement
+  = StructExpressionField
+  | PunnedStructExpressionField;
+
+export class StructExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.StructExpression;
+
+  public constructor(
+    public name: Constructor,
+    public lbrace: LBrace,
+    public elements: StructExpressionElement[],
+    public rbrace: RBrace,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.rbrace;
+  }
+
+}
+
 export class NamedTupleExpression extends SyntaxBase {
   
   public readonly kind = SyntaxKind.NamedTupleExpression;
@@ -1113,6 +1333,7 @@ export class InfixExpression extends SyntaxBase {
 
 export type Expression
   = CallExpression
+  | StructExpression
   | NamedTupleExpression
   | ReferenceExpression
   | ConstantExpression
@@ -1121,6 +1342,52 @@ export type Expression
   | PrefixExpression
   | InfixExpression
   | PostfixExpression
+
+export class IfStatementCase extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.IfStatementCase;
+
+  public constructor(
+    public keyword: IfKeyword | ElseKeyword | ElifKeyword,
+    public test: Expression | null,
+    public blockStart: BlockStart,
+    public elements: LetBodyElement[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.keyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.blockStart;
+  }
+
+}
+
+export class IfStatement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.IfStatement;
+
+  public constructor(
+    public cases: IfStatementCase[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.cases[0].getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.cases[this.cases.length-1].getLastToken();
+  }
+
+}
 
 export class ReturnStatement extends SyntaxBase {
 
@@ -1169,6 +1436,7 @@ export class ExpressionStatement extends SyntaxBase {
 export type Statement
   = ReturnStatement
   | ExpressionStatement
+  | IfStatement
 
 export class Param extends SyntaxBase {
 
@@ -1314,6 +1582,7 @@ export class LetDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.LetDeclaration;
 
+  public scope?: Scope;
   public type?: Type;
   public context?: InferContext;
 
@@ -1432,6 +1701,8 @@ export type SourceFileElement
 export class SourceFile extends SyntaxBase {
 
   public readonly kind = SyntaxKind.SourceFile;
+
+  public scope?: Scope;
 
   public constructor(
     private file: TextFile,

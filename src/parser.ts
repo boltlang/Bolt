@@ -1,4 +1,6 @@
 
+import { warn } from "console";
+import { argv0 } from "process";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -30,8 +32,8 @@ import {
   NamedTuplePattern,
   StructPattern,
   VariadicStructPatternElement,
-  PunnedFieldStructPatternElement,
-  FieldStructPatternElement,
+  PunnedStructPatternField,
+  StructPatternField,
   TuplePattern,
   InfixExpression,
   TextFile,
@@ -39,6 +41,11 @@ import {
   NamedTupleExpression,
   LetBodyElement,
   ReturnStatement,
+  StructExpression,
+  StructExpressionField,
+  PunnedStructExpressionField,
+  IfStatementCase,
+  IfStatement,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -218,11 +225,39 @@ export class Parser {
         if (t1.kind === SyntaxKind.LBrace) {
           this.getToken();
           const fields = [];
-          let rparen;
+          let rbrace;
           for (;;) {
-            
+            const t2 = this.peekToken();
+            if (t2.kind === SyntaxKind.RBrace) {
+              rbrace = t2;
+              break;
+            }
+            let field;
+            const t3 = this.getToken();
+            if (t3.kind === SyntaxKind.Identifier) {
+              const t4 = this.peekToken();
+              if (t4.kind === SyntaxKind.Equals) {
+                this.getToken();
+                const expression = this.parseExpression();
+                field = new StructExpressionField(t3, t4, expression);
+              } else {
+                field = new PunnedStructExpressionField(t3);
+              }
+            } else {
+              // TODO add spread fields
+              this.raiseParseError(t3, [ SyntaxKind.Identifier ]);
+            }
+            fields.push(field);
+            const t5 = this.peekToken();
+            if (t5.kind === SyntaxKind.Comma) {
+              this.getToken();
+              continue;
+            } else if (t5.kind === SyntaxKind.RBrace) {
+              rbrace = t5;
+              break;
+            }
           }
-          return new StructExpression(t0, t1, fields, rparen);
+          return new StructExpression(t0, t1, fields, rbrace);
         }
         const elements = [];
         for (;;) {
@@ -258,6 +293,7 @@ export class Parser {
       const t1 = this.peekToken();
       if (t1.kind === SyntaxKind.LineFoldEnd
         || t1.kind === SyntaxKind.RParen
+        || t1.kind === SyntaxKind.BlockStart
         || isBinaryOperatorLike(t1)
         || isPrefixOperatorLike(t1)) {
         break;
@@ -365,9 +401,9 @@ export class Parser {
           if (t4.kind === SyntaxKind.Equals) {
             this.getToken();
             const pattern = this.parsePattern();
-            fields.push(new FieldStructPatternElement(t3, t4, pattern));
+            fields.push(new StructPatternField(t3, t4, pattern));
           } else {
-            fields.push(new PunnedFieldStructPatternElement(t3));
+            fields.push(new PunnedStructPatternField(t3));
           }
         } else if (t3.kind === SyntaxKind.DotDot) {
           this.getToken();
@@ -457,6 +493,8 @@ export class Parser {
         return this.parseLetDeclaration();
       case SyntaxKind.ReturnKeyword:
         return this.parseReturnStatement();
+      case SyntaxKind.IfKeyword:
+        return this.parseIfStatement();
       default:
         // TODO convert parse errors to include LetKeyword and ReturnKeyword
         return this.parseExpressionStatement();
@@ -545,6 +583,63 @@ export class Parser {
     return new ExpressionStatement(expression);
   }
 
+  public parseIfStatement(): IfStatement {
+    const ifKeyword = this.expectToken(SyntaxKind.IfKeyword);
+    const test = this.parseExpression();
+    const blockStart = this.expectToken(SyntaxKind.BlockStart);
+    const elements = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.BlockEnd) {
+        this.getToken();
+        break;
+      }
+      elements.push(this.parseLetBodyElement());
+    }
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    const cases = [];
+    cases.push(new IfStatementCase(ifKeyword, test, blockStart, elements));
+    for (;;) {
+      const t2 = this.peekToken();
+      if (t2.kind === SyntaxKind.ElseKeyword) {
+        this.getToken();
+        const blockStart = this.expectToken(SyntaxKind.BlockStart);
+        const elements = [];
+        for (;;) {
+          const t3 = this.peekToken();
+          if (t3.kind === SyntaxKind.BlockEnd) {
+            this.getToken();
+            break;
+          }
+          elements.push(this.parseLetBodyElement());
+        }
+        this.expectToken(SyntaxKind.LineFoldEnd);
+        cases.push(new IfStatementCase(t2, null, blockStart, elements));
+        break;
+      } else if (t2.kind === SyntaxKind.ElifKeyword) {
+        this.getToken();
+        const test = this.parseExpression();
+        const blockStart = this.expectToken(SyntaxKind.BlockStart);
+        for (;;) {
+          const t4 = this.peekToken();
+          if (t4.kind === SyntaxKind.BlockEnd) {
+            this.getToken();
+            break;
+          }
+          elements.push(this.parseLetBodyElement());
+        }
+        this.expectToken(SyntaxKind.LineFoldEnd);
+        cases.push(new IfStatementCase(t2, test, blockStart, elements));
+      } else if (t2.kind === SyntaxKind.LineFoldEnd) {
+        this.getToken();
+        break;
+      } else {
+        this.raiseParseError(t2, [ SyntaxKind.ElifKeyword, SyntaxKind.ElseKeyword, SyntaxKind.LineFoldEnd ]); 
+      }
+    }
+    return new IfStatement(cases);
+  }
+
   public parseReturnStatement(): ReturnStatement {
     const returnKeyword = this.expectToken(SyntaxKind.ReturnKeyword);
     let expression = null;
@@ -563,7 +658,6 @@ export class Parser {
   }
 
   public parseSourceFileElement(): SourceFileElement {
-
     const t0 = this.peekTokenAfterModifiers();
     switch (t0.kind) {
       case SyntaxKind.LetKeyword:
@@ -572,6 +666,8 @@ export class Parser {
         return this.parseImportDeclaration();
       case SyntaxKind.StructKeyword:
         return this.parseStructDeclaration();
+      case SyntaxKind.IfKeyword:
+        return this.parseIfStatement();
       default:
         return this.parseExpressionStatement();
     }
