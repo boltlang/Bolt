@@ -25,7 +25,7 @@ import {
   RBracket,
   ReturnKeyword,
   CustomOperator,
-  Constructor,
+  IdentifierAlt,
   Integer,
   TextFile,
   Dot,
@@ -353,7 +353,7 @@ export class Scanner extends BufferedStream<Token> {
             case 'elif': return new ElifKeyword(startPos);
             default:
               if (isUpper(text[0])) {
-                return new Constructor(text, startPos);
+                return new IdentifierAlt(text, startPos);
               } else {
                 return new Identifier(text, startPos);
               }

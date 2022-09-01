@@ -9,7 +9,7 @@ import {
 } from "./cst";
 import { ArityMismatchDiagnostic, BindingNotFoudDiagnostic, Diagnostics, UnificationFailedDiagnostic } from "./diagnostics";
 import { assert } from "./util";
-import { LabeledDirectedHashGraph, LabeledGraph, strongconnect, toposort } from "yagl"
+import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
 
 export enum TypeKind {
   Arrow,
@@ -999,6 +999,14 @@ export class Checker {
         success = false;
       }
       return success;
+    }
+
+    if (left.kind === TypeKind.Arrow && left.paramTypes.length === 0) {
+      return this.unify(left.returnType, right, solution);
+    }
+
+    if (right.kind === TypeKind.Arrow) {
+      return this.unify(right, left, solution);
     }
 
     if (left.kind === TypeKind.Con && right.kind === TypeKind.Con) {

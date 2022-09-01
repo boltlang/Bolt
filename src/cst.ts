@@ -69,7 +69,7 @@ export const enum SyntaxKind {
 
   // Tokens
   Identifier,
-  Constructor,
+  IdentifierAlt,
   CustomOperator,
   Assignment,
   LParen,
@@ -207,6 +207,7 @@ export class Scope {
       if (isNodeWithScope(curr)) {
         return curr.getScope();
       }
+      curr = curr.parent;
     }
     return null;
   }
@@ -502,9 +503,9 @@ export class StringLiteral extends TokenBase {
 
 }
 
-export class Constructor extends TokenBase {
+export class IdentifierAlt extends TokenBase {
 
-  public readonly kind = SyntaxKind.Constructor;
+  public readonly kind = SyntaxKind.IdentifierAlt;
 
   public constructor(
     public text: string,
@@ -792,7 +793,7 @@ export type Token
   | LBracket
   | RBracket
   | Identifier
-  | Constructor
+  | IdentifierAlt
   | CustomOperator
   | Integer
   | StringLiteral
@@ -828,7 +829,7 @@ export class ReferenceTypeExpression extends SyntaxBase {
 
   public constructor(
     public modulePath: Array<[Identifier, Dot]>,
-    public name: Identifier,
+    public name: IdentifierAlt,
   ) {
     super();
   }
@@ -900,7 +901,7 @@ export class NamedTuplePattern extends SyntaxBase {
   public readonly kind = SyntaxKind.NamedTuplePattern;
 
   public constructor(
-    public name: Constructor,
+    public name: IdentifierAlt,
     public elements: Pattern[],
   ) {
     super();
@@ -995,7 +996,7 @@ export class StructPattern extends SyntaxBase {
   public readonly kind = SyntaxKind.StructPattern;
 
   public constructor(
-    public name: Constructor,
+    public name: IdentifierAlt,
     public lbrace: LBrace,
     public elements: StructPatternElement[],
     public rbrace: RBrace,
@@ -1205,7 +1206,7 @@ export class StructExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.StructExpression;
 
   public constructor(
-    public name: Constructor,
+    public name: IdentifierAlt,
     public lbrace: LBrace,
     public elements: StructExpressionElement[],
     public rbrace: RBrace,
@@ -1228,7 +1229,7 @@ export class NamedTupleExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.NamedTupleExpression;
 
   public constructor(
-    public name: Constructor,
+    public name: IdentifierAlt,
     public elements: Expression[],
   ) {
     super();

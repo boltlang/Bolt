@@ -156,17 +156,17 @@ export class Parser {
   }
 
   public parseReferenceTypeExpression(): ReferenceTypeExpression {
-    const name = this.expectToken(SyntaxKind.Identifier);
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
     return new ReferenceTypeExpression([], name);
   }
 
   public parseTypeExpression(): TypeExpression {
     const t0 = this.peekToken();
     switch (t0.kind) {
-      case SyntaxKind.Identifier:
+      case SyntaxKind.IdentifierAlt:
         return this.parseReferenceTypeExpression();
       default:
-        this.raiseParseError(t0, [ SyntaxKind.Identifier ]);
+        this.raiseParseError(t0, [ SyntaxKind.IdentifierAlt ]);
     }
   }
 
@@ -218,7 +218,7 @@ export class Parser {
         return this.parseExpressionWithParens();
       case SyntaxKind.Identifier:
         return this.parseReferenceExpression();
-      case SyntaxKind.Constructor:
+      case SyntaxKind.IdentifierAlt:
       {
         this.getToken();
         const t1 = this.peekToken();
@@ -384,7 +384,7 @@ export class Parser {
   }
 
   private parsePatternStartingWithConstructor() {
-    const name = this.expectToken(SyntaxKind.Constructor);
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
     const t2 = this.peekToken();
     if (t2.kind === SyntaxKind.LBrace) {
       this.getToken();
@@ -467,7 +467,7 @@ export class Parser {
       {
         this.getToken();
         const t1 = this.peekToken();
-        if (t1.kind === SyntaxKind.Constructor) {
+        if (t1.kind === SyntaxKind.IdentifierAlt) {
           return this.parsePatternStartingWithConstructor();
         } else {
           return this.parseTuplePattern();
