@@ -1,5 +1,5 @@
 import { JSONObject, JSONValue } from "./util";
-import type { InferContext, Type } from "./checker"
+import type { InferContext, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
 
@@ -230,7 +230,13 @@ export class Scope {
         for (const param of node.params) {
           this.scanPattern(param.pattern, param);
         }
-        if (node !== this.node) {
+        if (node === this.node) {
+          if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
+            for (const element of node.body.elements) {
+              this.scan(element);
+            }
+          }
+        } else {
           this.scanPattern(node.pattern, node);
         }
         break;
@@ -1586,6 +1592,8 @@ export class LetDeclaration extends SyntaxBase {
 
   public scope?: Scope;
   public type?: Type;
+  public active?: boolean;
+  public typeEnv?: TypeEnv;
   public context?: InferContext;
 
   public constructor(
