@@ -172,6 +172,7 @@ export type Syntax
   | Param
   | Body
   | StructDeclarationField
+  | TypeAssert
   | Declaration
   | Statement
   | Expression

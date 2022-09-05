@@ -145,7 +145,7 @@ export class BindingNotFoudDiagnostic {
 
 }
 
-function describeType(type: Type): string {
+export function describeType(type: Type): string {
   switch (type.kind) {
     case TypeKind.Any:
       return 'Any';
