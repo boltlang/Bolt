@@ -190,17 +190,25 @@ export class UnificationFailedDiagnostic {
   public constructor(
     public left: Type,
     public right: Type,
-    public node: Syntax,
+    public nodes: Syntax[],
   ) {
 
   }
 
   public format(): string {
-    const file = this.node.getSourceFile().getFile();
-    return ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET
+    const node = this.nodes[0];
+    const file = node.getSourceFile().getFile();
+    let out = ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET
         + `unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET
         + ' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed.\n\n'
-        + printExcerpt(file, this.node.getRange()) + '\n';
+        + printExcerpt(file, node.getRange()) + '\n';
+    for (let i = 1; i < this.nodes.length; i++) {
+      const node = this.nodes[i];
+      const file = node.getSourceFile().getFile();
+      out += '  ... in an instantiation of the following expression\n\n'
+      out += printExcerpt(file, node.getRange(), { indentation: i === 0 ? '  ' : '    ' }) + '\n';
+    }
+    return out;
   }
 
 }

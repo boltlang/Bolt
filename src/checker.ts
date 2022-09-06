@@ -2,6 +2,7 @@ import {
   Expression,
   LetDeclaration,
   Pattern,
+  ReferenceExpression,
   SourceFile,
   Syntax,
   SyntaxKind,
@@ -249,6 +250,23 @@ abstract class ConstraintBase {
 
   public abstract substitute(sub: TVSub): Constraint;
 
+  public constructor(
+    public node: Syntax | null = null
+  ) {
+  }
+
+  public prevInstantiation: Constraint | null = null;
+
+  public *getNodes(): Iterable<Syntax> {
+    let curr: Constraint | null = this as any;
+    while (curr !== null) {
+      if (curr.node !== null) {
+        yield curr.node;
+      }
+      curr = curr.prevInstantiation;
+    }
+  }
+
 }
 
 class CEqual extends ConstraintBase {
@@ -441,14 +459,16 @@ export class Checker {
     return context.returnType;
   }
 
-  private instantiate(scheme: Scheme): Type {
+  private instantiate(scheme: Scheme, node: Syntax | null): Type {
     const sub = new TVSub();
     for (const tv of scheme.tvs) {
       sub.set(tv, this.createTypeVar());
     }
     for (const constraint of scheme.constraints) {
-      this.addConstraint(constraint.substitute(sub));
-      // TODO keep record of a 'chain' of instantiations so that the diagnostics tool can output it on type error
+      const substituted = constraint.substitute(sub);
+      substituted.node = node;
+      substituted.prevInstantiation = constraint;
+      this.addConstraint(substituted);
     }
     return scheme.type.substitute(sub);
   }
@@ -568,7 +588,7 @@ export class Checker {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.name.text, node.name.name));
           return new TAny();
         }
-        return this.instantiate(scheme);
+        return this.instantiate(scheme, node);
       }
 
       case SyntaxKind.CallExpression:
@@ -610,7 +630,7 @@ export class Checker {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           return new TAny();
         }
-        const type = this.instantiate(scheme);
+        const type = this.instantiate(scheme, node.name);
         assert(type.kind === TypeKind.Con);
         const argTypes = [];
         for (const element of node.elements) {
@@ -626,7 +646,7 @@ export class Checker {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.operator.text, node.operator));
           return new TAny();
         }
-        const opType = this.instantiate(scheme);
+        const opType = this.instantiate(scheme, node.operator);
         const retType = this.createTypeVar();
         const leftType = this.inferExpression(node.left);
         const rightType = this.inferExpression(node.right);
@@ -658,7 +678,7 @@ export class Checker {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           return new TAny();
         }
-        return this.instantiate(scheme);
+        return this.instantiate(scheme, node.name);
       }
 
       default:
@@ -984,7 +1004,7 @@ export class Checker {
               new UnificationFailedDiagnostic(
                 constraint.left.substitute(solution),
                 constraint.right.substitute(solution),
-                constraint.node
+                [...constraint.getNodes()],
               )
             );
           }
