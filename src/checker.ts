@@ -801,6 +801,7 @@ export class Checker {
         break;
       }
 
+      case SyntaxKind.IfStatement:
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.ExpressionStatement:
         break;
@@ -835,6 +836,7 @@ export class Checker {
         break;
       }
 
+      case SyntaxKind.IfStatement:
       case SyntaxKind.ExpressionStatement:
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.StructDeclaration:

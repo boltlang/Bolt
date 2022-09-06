@@ -224,6 +224,7 @@ export class Scope {
       }
       case SyntaxKind.ExpressionStatement:
       case SyntaxKind.ReturnStatement:
+      case SyntaxKind.IfStatement:
         break;
       case SyntaxKind.LetDeclaration:
       {
