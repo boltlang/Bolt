@@ -2,15 +2,22 @@ import {
   Expression,
   LetDeclaration,
   Pattern,
-  ReferenceExpression,
   SourceFile,
   Syntax,
   SyntaxKind,
   TypeExpression
 } from "./cst";
 import { ArityMismatchDiagnostic, BindingNotFoudDiagnostic, describeType, Diagnostics, UnificationFailedDiagnostic } from "./diagnostics";
-import { assert } from "./util";
-import { DirectedHashGraph, Graph, strongconnect } from "yagl"
+import { assert, isEmpty } from "./util";
+import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
+
+// FIXME Duplicate definitions are not checked
+
+const MAX_TYPE_ERROR_COUNT = 5;
+
+type NodeWithBindings = SourceFile | LetDeclaration;
+
+type ReferenceGraph = LabeledGraph<NodeWithBindings, boolean>;
 
 export enum TypeKind {
   Arrow,
@@ -386,7 +393,6 @@ export class Checker {
   private boolType = new TCon(this.nextConTypeId++, [], 'Bool');
 
   private contexts: InferContext[] = [];
-  private constraints: Constraint[] = [];
 
   private solution = new TVSub();
 
@@ -416,10 +422,7 @@ export class Checker {
   }
 
   private addConstraint(constraint: Constraint): void {
-    this.constraints.push(constraint);
-    if (this.contexts.length > 0) {
-      this.contexts[this.contexts.length-1].constraints.push(constraint);
-    }
+    this.contexts[this.contexts.length-1].constraints.push(constraint);
   }
 
   private pushContext(context: InferContext) {
@@ -459,31 +462,6 @@ export class Checker {
   private addBinding(name: string, scheme: Scheme): void {
     const context = this.contexts[this.contexts.length-1];
     context.env.add(name, scheme);
-  }
-
-  private forwardDeclare(node: Syntax): void {
-
-    switch (node.kind) {
-
-      case SyntaxKind.SourceFile:
-      {
-        for (const element of node.elements) {
-          this.forwardDeclare(element);
-        }
-        break;
-      }
-
-      case SyntaxKind.ExpressionStatement:
-      case SyntaxKind.ReturnStatement:
-      {
-        // TODO This should be updated if block-scoped expressions are allowed.
-        break;
-      }
-
-      case SyntaxKind.LetDeclaration:
-        break;
-
-    }
   }
 
   public infer(node: Syntax): void {
@@ -685,7 +663,7 @@ export class Checker {
 
   }
 
-  private addReferences(graph: Graph<LetDeclaration>, node: Syntax, source: LetDeclaration | null) {
+  private addReferencesToGraph(graph: ReferenceGraph, node: Syntax, source: LetDeclaration | SourceFile) {
 
     switch (node.kind) {
 
@@ -695,7 +673,7 @@ export class Checker {
       case SyntaxKind.SourceFile:
       {
         for (const element of node.elements) {
-          this.addReferences(graph, element, source);
+          this.addReferencesToGraph(graph, element, source);
         }
         break;
       }
@@ -704,38 +682,40 @@ export class Checker {
       {
         assert(node.name.modulePath.length === 0);
         const target = node.getScope().lookup(node.name.name.text);
-        if (source !== null && target !== null && target.kind === SyntaxKind.LetDeclaration) {
-          graph.addEdge(source, target);
+        if (target === null || target.kind === SyntaxKind.Param) {
+          break;
         }
+        assert(target.kind === SyntaxKind.LetDeclaration || target.kind === SyntaxKind.SourceFile);
+        graph.addEdge(source, target, true);
         break;
       }
 
       case SyntaxKind.NamedTupleExpression:
       {
         for (const arg of node.elements) {
-          this.addReferences(graph, arg, source);
+          this.addReferencesToGraph(graph, arg, source);
         }
         break;
       }
 
       case SyntaxKind.NestedExpression:
       {
-        this.addReferences(graph, node.expression, source);
+        this.addReferencesToGraph(graph, node.expression, source);
         break;
       }
 
       case SyntaxKind.InfixExpression:
       {
-        this.addReferences(graph, node.left, source);
-        this.addReferences(graph, node.right, source);
+        this.addReferencesToGraph(graph, node.left, source);
+        this.addReferencesToGraph(graph, node.right, source);
         break;
       }
 
       case SyntaxKind.CallExpression:
       {
-        this.addReferences(graph, node.func, source);
+        this.addReferencesToGraph(graph, node.func, source);
         for (const arg of node.args) {
-          this.addReferences(graph, arg, source);
+          this.addReferencesToGraph(graph, arg, source);
         }
         break;
       }
@@ -744,10 +724,10 @@ export class Checker {
       {
         for (const cs of node.cases) {
           if (cs.test !== null) {
-            this.addReferences(graph, cs.test, source);
+            this.addReferencesToGraph(graph, cs.test, source);
           }
           for (const element of cs.elements) {
-            this.addReferences(graph, element, source);
+            this.addReferencesToGraph(graph, element, source);
           }
         }
         break;
@@ -755,13 +735,13 @@ export class Checker {
 
       case SyntaxKind.ExpressionStatement:
       {
-        this.addReferences(graph, node.expression, source);
+        this.addReferencesToGraph(graph, node.expression, source);
         break;
       }
       case SyntaxKind.ReturnStatement:
       {
         if (node.expression !== null) {
-          this.addReferences(graph, node.expression, source);
+          this.addReferencesToGraph(graph, node.expression, source);
         }
         break;
       }
@@ -772,13 +752,13 @@ export class Checker {
           switch (node.body.kind) {
             case SyntaxKind.ExprBody:
             {
-              this.addReferences(graph, node.body.expression, node);
+              this.addReferencesToGraph(graph, node.body.expression, node);
               break;
             }
             case SyntaxKind.BlockBody:
             {
               for (const element of node.body.elements) {
-                this.addReferences(graph, element, node);
+                this.addReferencesToGraph(graph, element, node);
               }
               break;
             }
@@ -789,6 +769,44 @@ export class Checker {
 
       default:
         throw new Error(`Unexpected ${node.constructor.name}`);
+
+    }
+
+  }
+
+  private completeReferenceGraph(graph: ReferenceGraph, node: Syntax): void {
+
+    switch (node.kind) {
+
+      case SyntaxKind.SourceFile:
+      {
+        for (const element of node.elements) {
+          this.completeReferenceGraph(graph, element);
+        }
+        break;
+      }
+
+      case SyntaxKind.LetDeclaration:
+      {
+        if (isEmpty(graph.getSourceVertices(node))) {
+          const source = node.parent!.getScope().node;
+          assert(source.kind === SyntaxKind.LetDeclaration || source.kind === SyntaxKind.SourceFile);
+          graph.addEdge(source, node, false);
+        }
+        if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
+          for (const element of node.body.elements) {
+            this.completeReferenceGraph(graph, element);
+          }
+        }
+        break;
+      }
+
+      case SyntaxKind.ReturnStatement:
+      case SyntaxKind.ExpressionStatement:
+        break;
+
+      default:
+        throw new Error(`Unexpected ${node}`);
 
     }
 
@@ -851,8 +869,9 @@ export class Checker {
     env.add('==', new Forall([ a ], [], new TArrow([ a, a ], this.boolType)));
     env.add('not', new Forall([], [], new TArrow([ this.boolType ], this.boolType)));
 
-    const graph = new DirectedHashGraph<LetDeclaration>();
-    this.addReferences(graph, node, null);
+    const graph = new LabeledDirectedHashGraph<NodeWithBindings, boolean>();
+    this.addReferencesToGraph(graph, node, node);
+    this.completeReferenceGraph(graph, node);
 
     this.initialize(node, env);
 
@@ -860,10 +879,17 @@ export class Checker {
 
     for (const nodes of sccs) {
 
+      if (nodes.some(n => n.kind === SyntaxKind.SourceFile)) {
+        assert(nodes.length === 1);
+        continue;
+      }
+
       const typeVars = new TVSet();
       const constraints = new ConstraintSet();
 
       for (const node of nodes) {
+
+        assert(node.kind === SyntaxKind.LetDeclaration);
 
         const env = node.typeEnv!;
         const context: InferContext = {
@@ -907,11 +933,19 @@ export class Checker {
 
     for (const nodes of sccs) {
 
+      if (nodes.some(n => n.kind === SyntaxKind.SourceFile)) {
+        assert(nodes.length === 1);
+        continue;
+      }
+
       for (const node of nodes) {
+        assert(node.kind === SyntaxKind.LetDeclaration);
         node.active = true;
       }
 
       for (const node of nodes) {
+
+        assert(node.kind === SyntaxKind.LetDeclaration);
 
         const context = node.context!;
         const returnType = context.returnType!;
@@ -933,7 +967,13 @@ export class Checker {
             case SyntaxKind.BlockBody:
             {
               for (const element of node.body.elements) {
-                if (element.kind !== SyntaxKind.LetDeclaration) {
+                if (element.kind === SyntaxKind.LetDeclaration
+                    && element.pattern.kind === SyntaxKind.BindPattern
+                    && graph.hasEdge(node, element, false)) {
+                  const scheme = this.lookup(element.pattern.name.text);
+                  assert(scheme !== null);
+                  this.instantiate(scheme, null);
+                } else {
                   this.infer(element);
                 }
               }
@@ -946,25 +986,34 @@ export class Checker {
       }
 
       for (const node of nodes) {
+        assert(node.kind === SyntaxKind.LetDeclaration);
         node.active = false;
       }
 
     }
 
     for (const element of node.elements) {
-      if (element.kind !== SyntaxKind.LetDeclaration) {
+      if (element.kind === SyntaxKind.LetDeclaration
+          && element.pattern.kind === SyntaxKind.BindPattern
+          && graph.hasEdge(node, element, false)) {
+        const scheme = this.lookup(element.pattern.name.text);
+        assert(scheme !== null);
+        this.instantiate(scheme, null);
+      } else {
         this.infer(element);
       }
     }
 
     this.popContext(context);
 
-    this.solve(new CMany(this.constraints), this.solution);
+    this.solve(new CMany(constraints), this.solution);
   }
 
   private solve(constraint: Constraint, solution: TVSub): void {
 
     const queue = [ constraint ];
+
+    let errorCount = 0;
 
     while (queue.length > 0) {
 
@@ -982,8 +1031,12 @@ export class Checker {
 
         case ConstraintKind.Equal:
         {
+          //constraint.dump();
           if (!this.unify(constraint.left, constraint.right, solution, constraint)) {
-            // TODO break or continue?
+            errorCount++;
+            if (errorCount === MAX_TYPE_ERROR_COUNT) {
+              return;
+            }
           }
           break;
         }
