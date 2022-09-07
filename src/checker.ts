@@ -2,7 +2,9 @@ import {
   Expression,
   LetDeclaration,
   Pattern,
+  Scope,
   SourceFile,
+  StructDeclaration,
   Syntax,
   SyntaxKind,
   TypeExpression
@@ -25,6 +27,8 @@ export enum TypeKind {
   Con,
   Any,
   Tuple,
+  Labeled,
+  Record,
 }
 
 abstract class TypeBase {
@@ -183,13 +187,82 @@ class TTuple extends TypeBase {
 
 }
 
+class TLabeled extends TypeBase {
+
+  public readonly kind = TypeKind.Labeled;
+
+  public fields?: Map<string, Type>;
+  public parent: TLabeled | null = null;
+
+  public constructor(
+    public name: string,
+    public type: Type,
+  ) {
+    super();
+  }
+
+  public find(): TLabeled {
+    let curr: TLabeled | null = this;
+    while (curr.parent !== null) {
+      curr = curr.parent;
+    }
+    this.parent = curr;
+    return curr;
+  }
+
+  public getTypeVars(): Iterable<TVar> {
+    return this.type.getTypeVars();
+  }
+
+  public substitute(sub: TVSub): Type {
+    const newType = this.type.substitute(sub);
+    return newType !== this.type ? new TLabeled(this.name, newType) : this;
+  }
+
+}
+
+class TRecord extends TypeBase {
+
+  public readonly kind = TypeKind.Record;
+
+  public nextRecord: TRecord | null = null;
+
+  public constructor(
+    public decl: StructDeclaration,
+    public fields: Map<string, Type>,
+  ) {
+    super();
+  }
+
+  public *getTypeVars(): Iterable<TVar> {
+    for (const type of this.fields.values()) {
+      yield* type.getTypeVars();
+    }
+  }
+
+  public substitute(sub: TVSub): Type {
+    let changed = false;
+    const newFields = new Map();
+    for (const [key, type] of this.fields) {
+      const newType = type.substitute(sub);
+      if (newType !== type) {
+        changed = true;
+      }
+      newFields.set(key, newType);
+    }
+    return changed ? new TRecord(this.decl, newFields) : this;
+  }
+
+}
+
 export type Type
   = TCon
   | TArrow
   | TVar
   | TAny
   | TTuple
-
+  | TLabeled
+  | TRecord
 
 class TVSet {
 
@@ -251,6 +324,7 @@ class TVSub {
 const enum ConstraintKind {
   Equal,
   Many,
+  Shaped,
 }
 
 abstract class ConstraintBase {
@@ -272,6 +346,26 @@ abstract class ConstraintBase {
       }
       curr = curr.prevInstantiation;
     }
+  }
+
+}
+
+class CShaped extends ConstraintBase {
+
+  public readonly kind = ConstraintKind.Shaped;
+
+  public constructor(
+    public recordType: TLabeled,
+    public type: Type,
+  ) {
+    super();
+  }
+
+  public substitute(sub: TVSub): Constraint {
+    return new CShaped(
+      this.recordType.substitute(sub) as TLabeled,
+      this.type.substitute(sub),
+    );
   }
 
 }
@@ -325,6 +419,7 @@ class CMany extends ConstraintBase {
 type Constraint
   = CEqual
   | CMany
+  | CShaped
 
 class ConstraintSet extends Array<Constraint> {
 }
@@ -384,6 +479,7 @@ export class Checker {
 
   private nextTypeVarId = 0;
   private nextConTypeId = 0;
+  private nextRecordTypeId = 0;
 
   //private graph?: Graph<Syntax>;
   //private currentCycle?: Map<Syntax, Type>;
@@ -520,10 +616,49 @@ export class Checker {
       }
 
       case SyntaxKind.LetDeclaration:
+      {
+        if (node.pattern.kind === SyntaxKind.BindPattern) {
+          break;
+        }
+        const type = this.inferBindings(node.pattern, [], []);
+        if (node.typeAssert !== null) {
+          this.addConstraint(
+            new CEqual(
+              this.inferTypeExpression(node.typeAssert.typeExpression),
+              type,
+              node
+            )
+          );
+        }
+        if (node.body !== null) {
+          switch (node.body.kind) {
+            case SyntaxKind.ExprBody:
+            {
+              const type2 = this.inferExpression(node.body.expression);
+              this.addConstraint(
+                new CEqual(
+                  type,
+                  type2,
+                  node
+                )
+              );
+              break;
+            }
+            case SyntaxKind.BlockBody:
+            {
+              // TODO
+              assert(false);
+            }
+          }
+        }
+        break;
+      }
+
+      case SyntaxKind.StructDeclaration:
         break;
 
       default:
-        throw new Error(`Unexpected ${node}`);
+        throw new Error(`Unexpected ${node.constructor.name}`);
 
     }
 
@@ -600,6 +735,64 @@ export class Checker {
         return new TCon(type.id, argTypes, type.displayName);
       }
 
+      case SyntaxKind.StructExpression:
+      {
+        const scheme = this.lookup(node.name.text);
+        if (scheme === null) {
+          this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+          return new TAny();
+        }
+        const recordType = this.instantiate(scheme, node);
+        const type = this.createTypeVar();
+        for (const member of node.members) {
+          switch (member.kind) {
+            case SyntaxKind.StructExpressionField:
+            {
+              this.addConstraint(
+                new CEqual(
+                  new TLabeled(
+                    member.name.text,
+                    this.inferExpression(member.expression)
+                  ),
+                  type,
+                  member,
+                )
+              );
+              break;
+            }
+            case SyntaxKind.PunnedStructExpressionField:
+            {
+              const scheme = this.lookup(member.name.text);
+              let fieldType;
+              if (scheme === null) {
+                this.diagnostics.add(new BindingNotFoudDiagnostic(member.name.text, member.name));
+                fieldType = new TAny();
+              } else {
+                fieldType = this.instantiate(scheme, member);
+              }
+              this.addConstraint(
+                new CEqual(
+                  fieldType,
+                  type,
+                  member
+                )
+              );
+              break;
+            }
+            default:
+              throw new Error(`Unexpected ${member}`);
+          }
+        }
+        this.addConstraint(
+          new CEqual(
+            recordType,
+            type,
+            node,
+          )
+        );
+        return type;
+      }
+
       case SyntaxKind.InfixExpression:
       {
         const scheme = this.lookup(node.operator.text);
@@ -649,21 +842,86 @@ export class Checker {
 
   }
 
-  public inferBindings(pattern: Pattern, type: Type, tvs: TVar[], constraints: Constraint[]): void {
+  public inferBindings(pattern: Pattern, typeVars: TVar[], constraints: Constraint[]): Type {
 
     switch (pattern.kind) {
 
       case SyntaxKind.BindPattern:
       {
-        this.addBinding(pattern.name.text, new Forall(tvs, constraints, type));
-        break;
+        const type = this.createTypeVar();
+        this.addBinding(pattern.name.text, new Forall(typeVars, constraints, type));
+        return type;
       }
+
+      case SyntaxKind.StructPattern:
+      {
+        const scheme = this.lookup(pattern.name.text);
+        let recordType;
+        if (scheme === null) {
+          this.diagnostics.add(new BindingNotFoudDiagnostic(pattern.name.text, pattern.name));
+          recordType = new TAny();
+        } else {
+          recordType = this.instantiate(scheme, pattern.name);
+        }
+        const type = this.createTypeVar();
+        for (const member of pattern.members) {
+          switch (member.kind) {
+            case SyntaxKind.StructPatternField:
+            {
+              const fieldType = this.inferBindings(member.pattern, typeVars, constraints);
+              this.addConstraint(
+                new CEqual(
+                  new TLabeled(member.name.text, fieldType),
+                  type,
+                  member
+                )
+              );
+              break;
+            }
+            case SyntaxKind.PunnedStructPatternField:
+            {
+              const fieldType = this.createTypeVar();
+              this.addBinding(member.name.text, new Forall([], [], fieldType));
+              this.addConstraint(
+                new CEqual(
+                  new TLabeled(member.name.text, fieldType),
+                  type,
+                  member
+                )
+              );
+              break;
+            }
+            default:
+              throw new Error(`Unexpected ${member.constructor.name}`);
+          }
+        }
+        this.addConstraint(
+          new CEqual(
+            recordType,
+            type,
+            pattern
+          )
+        );
+        return type;
+      }
+
+      default:
+        throw new Error(`Unexpected ${pattern.constructor.name}`);
 
     }
 
   }
 
   private addReferencesToGraph(graph: ReferenceGraph, node: Syntax, source: LetDeclaration | SourceFile) {
+
+    const addReference = (scope: Scope, name: string) => {
+      const target = scope.lookup(name);
+      if (target === null || target.kind === SyntaxKind.Param) {
+        return;
+      }
+      assert(target.kind === SyntaxKind.LetDeclaration || target.kind === SyntaxKind.SourceFile);
+      graph.addEdge(source, target, true);
+    }
 
     switch (node.kind) {
 
@@ -681,12 +939,7 @@ export class Checker {
       case SyntaxKind.ReferenceExpression:
       {
         assert(node.name.modulePath.length === 0);
-        const target = node.getScope().lookup(node.name.name.text);
-        if (target === null || target.kind === SyntaxKind.Param) {
-          break;
-        }
-        assert(target.kind === SyntaxKind.LetDeclaration || target.kind === SyntaxKind.SourceFile);
-        graph.addEdge(source, target, true);
+        addReference(node.getScope(), node.name.name.text);
         break;
       }
 
@@ -694,6 +947,25 @@ export class Checker {
       {
         for (const arg of node.elements) {
           this.addReferencesToGraph(graph, arg, source);
+        }
+        break;
+      }
+
+      case SyntaxKind.StructExpression:
+      {
+        for (const member of node.members) {
+          switch (member.kind) {
+            case SyntaxKind.PunnedStructExpressionField:
+            {
+              addReference(node.getScope(), node.name.text);
+              break;
+            }
+            case SyntaxKind.StructExpressionField:
+            {
+              this.addReferencesToGraph(graph, member.expression, source);
+              break;
+            };
+          }
         }
         break;
       }
@@ -738,6 +1010,7 @@ export class Checker {
         this.addReferencesToGraph(graph, node.expression, source);
         break;
       }
+
       case SyntaxKind.ReturnStatement:
       {
         if (node.expression !== null) {
@@ -745,6 +1018,7 @@ export class Checker {
         }
         break;
       }
+
       case SyntaxKind.LetDeclaration:
       {
         graph.addVertex(node);
@@ -766,6 +1040,9 @@ export class Checker {
         }
         break;
       }
+
+      case SyntaxKind.StructDeclaration:
+        break;
 
       default:
         throw new Error(`Unexpected ${node.constructor.name}`);
@@ -804,6 +1081,7 @@ export class Checker {
       case SyntaxKind.IfStatement:
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.ExpressionStatement:
+      case SyntaxKind.StructDeclaration:
         break;
 
       default:
@@ -813,14 +1091,15 @@ export class Checker {
 
   }
 
-  private initialize(node: Syntax, parentEnv: TypeEnv | null): void {
+  private initialize(node: Syntax, parentEnv: TypeEnv): void {
 
     switch (node.kind) {
 
       case SyntaxKind.SourceFile:
       {
+        const env = node.typeEnv = new TypeEnv(parentEnv);
         for (const element of node.elements) {
-          this.initialize(element, parentEnv);
+          this.initialize(element, env);
         }
         break;
       }
@@ -839,8 +1118,20 @@ export class Checker {
       case SyntaxKind.IfStatement:
       case SyntaxKind.ExpressionStatement:
       case SyntaxKind.ReturnStatement:
-      case SyntaxKind.StructDeclaration:
         break;
+
+      case SyntaxKind.StructDeclaration:
+      {
+        const fields = new Map<string, Type>();
+        if (node.members !== null) {
+          for (const member of node.members) {
+            fields.set(member.name.text, this.inferTypeExpression(member.typeExpr));
+          }
+        }
+        const type = new TRecord(node, fields);
+        parentEnv.add(node.name.text, new Forall([], [], type));
+        break;
+      }
 
       default:
         throw new Error(`Unexpected ${node}`);
@@ -877,6 +1168,13 @@ export class Checker {
 
     this.initialize(node, env);
 
+    this.pushContext({
+      typeVars,
+      constraints,
+      env: node.typeEnv!,
+      returnType: null
+    });
+
     const sccs = [...strongconnect(graph)];
 
     for (const nodes of sccs) {
@@ -909,8 +1207,7 @@ export class Checker {
 
         const paramTypes = [];
         for (const param of node.params) {
-          const paramType = this.createTypeVar()
-          this.inferBindings(param.pattern, paramType, [], []);
+          const paramType = this.inferBindings(param.pattern, [], []);
           paramTypes.push(paramType);
         }
 
@@ -928,7 +1225,18 @@ export class Checker {
 
         this.contexts.pop();
 
-        this.inferBindings(node.pattern, type, typeVars, constraints);
+        // FIXME get rid of all this useless stack manipulation
+        const parentDecl = node.parent!.getScope().node;
+        const bindCtx = {
+          typeVars: context.typeVars,
+          constraints: context.constraints,
+          env: parentDecl.typeEnv!,
+          returnType: null,
+        };
+        this.contexts.push(bindCtx)
+        const ty2 = this.inferBindings(node.pattern, typeVars, constraints);
+        this.addConstraint(new CEqual(ty2, type, node));
+        this.contexts.pop();
       }
 
     }
@@ -1006,6 +1314,7 @@ export class Checker {
       }
     }
 
+    this.contexts.pop();
     this.popContext(context);
 
     this.solve(new CMany(constraints), this.solution);
@@ -1033,7 +1342,6 @@ export class Checker {
 
         case ConstraintKind.Equal:
         {
-          //constraint.dump();
           if (!this.unify(constraint.left, constraint.right, solution, constraint)) {
             errorCount++;
             if (errorCount === MAX_TYPE_ERROR_COUNT) {
@@ -1112,6 +1420,60 @@ export class Checker {
         }
         return success;
       }
+    }
+
+    if (left.kind === TypeKind.Labeled && right.kind === TypeKind.Labeled) {
+      //const remaining = new Set(right.fields.keys());
+      let success = false;
+
+      const root = left.find();
+      right.parent = root;
+      if (root.fields === undefined) {
+        root.fields = new Map([ [ root.name, root.type ] ]);
+      }
+      if (right.fields === undefined) {
+        right.fields = new Map([ [ right.name, right.type ] ]);
+      }
+      for (const [fieldName, fieldType] of right.fields) {
+        if (root.fields.has(fieldName)) {
+          if (!this.unify(root.fields.get(fieldName)!, fieldType, solution, constraint)) {
+            success = false;
+          }
+        } else {
+          root.fields.set(fieldName, fieldType);
+        }
+      }
+      delete right.fields;
+      return success;
+    }
+
+
+    if (left.kind === TypeKind.Record && right.kind === TypeKind.Labeled) {
+      let success = true;
+      if (right.fields === undefined) {
+        right.fields = new Map([ [ right.name, right.type ] ]);
+      }
+      const remaining = new Set(right.fields.keys());
+      for (const [fieldName, fieldType] of left.fields) {
+        if (right.fields.has(fieldName)) {
+          if (!this.unify(fieldType, right.fields.get(fieldName)!, solution, constraint)) {
+            success = false;
+          }
+          remaining.delete(fieldName);
+        }
+      }
+      for (const fieldName of remaining) {
+        if (left.fields.has(fieldName)) {
+          if (!this.unify(left.fields.get(fieldName)!, right.fields.get(fieldName)!, solution, constraint)) {
+            success = false;
+          }
+        }
+      }
+      return success;
+    }
+
+    if (left.kind === TypeKind.Labeled && right.kind === TypeKind.Record) {
+      return this.unify(right, left, solution, constraint);
     }
 
     this.diagnostics.add(

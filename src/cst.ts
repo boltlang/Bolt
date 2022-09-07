@@ -178,6 +178,8 @@ export type Syntax
   | Expression
   | TypeExpression
   | Pattern
+  | StructExpressionElement
+  | StructPatternElement
 
 function isIgnoredProperty(key: string): boolean {
   return key === 'kind' || key === 'parent';
@@ -226,6 +228,8 @@ export class Scope {
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.IfStatement:
         break;
+      case SyntaxKind.StructDeclaration:
+        break;
       case SyntaxKind.LetDeclaration:
       {
         for (const param of node.params) {
@@ -252,6 +256,24 @@ export class Scope {
       case SyntaxKind.BindPattern:
       {
         this.mapping.set(node.name.text, decl);
+        break;
+      }
+      case SyntaxKind.StructPattern:
+      {
+        for (const member of node.members) {
+          switch (member.kind) {
+            case SyntaxKind.StructPatternField:
+            {
+              this.scanPattern(member.pattern, decl);
+              break;
+            }
+            case SyntaxKind.PunnedStructPatternField:
+            {
+              this.mapping.set(node.name.text, decl);
+              break;
+            }
+          }
+        }
         break;
       }
       default:
@@ -1006,7 +1028,7 @@ export class StructPattern extends SyntaxBase {
   public constructor(
     public name: IdentifierAlt,
     public lbrace: LBrace,
-    public elements: StructPatternElement[],
+    public members: StructPatternElement[],
     public rbrace: RBrace,
   ) {
     super();
@@ -1216,7 +1238,7 @@ export class StructExpression extends SyntaxBase {
   public constructor(
     public name: IdentifierAlt,
     public lbrace: LBrace,
-    public elements: StructExpressionElement[],
+    public members: StructExpressionElement[],
     public rbrace: RBrace,
   ) {
     super();
@@ -1495,7 +1517,7 @@ export class StructDeclaration extends SyntaxBase {
 
   public constructor(
     public structKeyword: StructKeyword,
-    public name: Identifier,
+    public name: IdentifierAlt,
     public members: StructDeclarationField[] | null,
   ) {
     super();
@@ -1714,6 +1736,7 @@ export class SourceFile extends SyntaxBase {
   public readonly kind = SyntaxKind.SourceFile;
 
   public scope?: Scope;
+  public typeEnv?: TypeEnv;
 
   public constructor(
     private file: TextFile,

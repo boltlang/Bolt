@@ -229,6 +229,7 @@ export class Parser {
           for (;;) {
             const t2 = this.peekToken();
             if (t2.kind === SyntaxKind.RBrace) {
+              this.getToken();
               rbrace = t2;
               break;
             }
@@ -253,6 +254,7 @@ export class Parser {
               this.getToken();
               continue;
             } else if (t5.kind === SyntaxKind.RBrace) {
+              this.getToken();
               rbrace = t5;
               break;
             }
@@ -264,6 +266,8 @@ export class Parser {
           const t2 = this.peekToken();
           if (t2.kind === SyntaxKind.LineFoldEnd
             || t2.kind === SyntaxKind.RParen
+            || t2.kind === SyntaxKind.RBrace
+            || t2.kind === SyntaxKind.RBracket
             || isBinaryOperatorLike(t2)
             || isPrefixOperatorLike(t2)) {
             break;
@@ -292,8 +296,11 @@ export class Parser {
     for (;;) {
       const t1 = this.peekToken();
       if (t1.kind === SyntaxKind.LineFoldEnd
+        || t1.kind === SyntaxKind.RBrace
+        || t1.kind === SyntaxKind.RBracket
         || t1.kind === SyntaxKind.RParen
         || t1.kind === SyntaxKind.BlockStart
+        || t1.kind === SyntaxKind.Comma
         || isBinaryOperatorLike(t1)
         || isPrefixOperatorLike(t1)) {
         break;
@@ -364,22 +371,27 @@ export class Parser {
 
   public parseStructDeclaration(): StructDeclaration {
     const structKeyword = this.expectToken(SyntaxKind.StructKeyword);
-    const name = this.expectToken(SyntaxKind.Identifier);
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
     const t2 = this.peekToken()
     let members = null;
     if (t2.kind === SyntaxKind.BlockStart) {
       this.getToken();
       members = [];
       for (;;) {
+        const t3 = this.peekToken();
+        if (t3.kind === SyntaxKind.BlockEnd) {
+          this.getToken();
+          break;
+        }
         const name = this.expectToken(SyntaxKind.Identifier);
         const colon = this.expectToken(SyntaxKind.Colon);
         const typeExpr = this.parseTypeExpression();
+        this.expectToken(SyntaxKind.LineFoldEnd);
         const member = new StructDeclarationField(name, colon, typeExpr);
         members.push(member);
       }
-    } else {
-      this.assertToken(t2, SyntaxKind.LineFoldEnd);
     }
+    this.expectToken(SyntaxKind.LineFoldEnd);
     return new StructDeclaration(structKeyword, name, members);
   }
 
@@ -393,6 +405,7 @@ export class Parser {
       for (;;) {
         const t3 = this.peekToken();
         if (t3.kind === SyntaxKind.RBrace) {
+          this.getToken();
           rbrace = t3;
           break;
         } else if (t3.kind === SyntaxKind.Identifier) {
@@ -415,6 +428,7 @@ export class Parser {
         if (t5.kind === SyntaxKind.Comma) {
           this.getToken();
         } else if (t5.kind === SyntaxKind.RBrace) {
+          this.getToken();
           rbrace = t5;
           break;
         } else {
@@ -473,6 +487,8 @@ export class Parser {
           return this.parseTuplePattern();
         }
       }
+      case SyntaxKind.IdentifierAlt:
+        return this.parsePatternStartingWithConstructor();
       case SyntaxKind.Identifier:
         this.getToken();
         return new BindPattern(t0);

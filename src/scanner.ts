@@ -34,6 +34,7 @@ import {
   ElifKeyword,
   ElseKeyword,
   IfKeyword,
+  StructKeyword,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -351,6 +352,7 @@ export class Scanner extends BufferedStream<Token> {
             case 'if': return new IfKeyword(startPos);
             case 'else': return new ElseKeyword(startPos);
             case 'elif': return new ElifKeyword(startPos);
+            case 'struct': return new StructKeyword(startPos);
             default:
               if (isUpper(text[0])) {
                 return new IdentifierAlt(text, startPos);
