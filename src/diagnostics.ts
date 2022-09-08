@@ -136,7 +136,7 @@ export class UnexpectedTokenDiagnostic {
   public format(): string {
     return ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET
          + `expected ${describeExpected(this.expected)} but got ${describeActual(this.actual)}\n\n`
-         + printNode(this.actual) + '\n';
+         + printExcerpt(this.file, this.actual.getRange()) + '\n';
   }
 
 }
