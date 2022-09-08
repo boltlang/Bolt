@@ -1358,10 +1358,10 @@ export class Checker {
 
   private unify(left: Type, right: Type, solution: TVSub, constraint: CEqual): boolean {
 
-    if (left.kind === TypeKind.Var && solution.has(left)) {
+    while (left.kind === TypeKind.Var && solution.has(left)) {
       left = solution.get(left)!;
     }
-    if (right.kind === TypeKind.Var && solution.has(right)) {
+    while (right.kind === TypeKind.Var && solution.has(right)) {
       right = solution.get(right)!;
     }
 
