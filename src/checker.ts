@@ -9,7 +9,7 @@ import {
   SyntaxKind,
   TypeExpression
 } from "./cst";
-import { ArityMismatchDiagnostic, BindingNotFoudDiagnostic, describeType, Diagnostics, UnificationFailedDiagnostic } from "./diagnostics";
+import { ArityMismatchDiagnostic, BindingNotFoudDiagnostic, describeType, Diagnostics, FieldDoesNotExistDiagnostic, FieldMissingDiagnostic, UnificationFailedDiagnostic } from "./diagnostics";
 import { assert, isEmpty } from "./util";
 import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
 
@@ -743,21 +743,13 @@ export class Checker {
           return new TAny();
         }
         const recordType = this.instantiate(scheme, node);
-        const type = this.createTypeVar();
+        assert(recordType.kind === TypeKind.Record);
+        const fields = new Map();
         for (const member of node.members) {
           switch (member.kind) {
             case SyntaxKind.StructExpressionField:
             {
-              this.addConstraint(
-                new CEqual(
-                  new TLabeled(
-                    member.name.text,
-                    this.inferExpression(member.expression)
-                  ),
-                  type,
-                  member,
-                )
-              );
+              fields.set(member.name.text, this.inferExpression(member.expression));
               break;
             }
             case SyntaxKind.PunnedStructExpressionField:
@@ -770,19 +762,14 @@ export class Checker {
               } else {
                 fieldType = this.instantiate(scheme, member);
               }
-              this.addConstraint(
-                new CEqual(
-                  fieldType,
-                  type,
-                  member
-                )
-              );
+              fields.set(member.name.text, fieldType);
               break;
             }
             default:
               throw new Error(`Unexpected ${member}`);
           }
         }
+        const type = new TRecord(recordType.decl, fields);
         this.addConstraint(
           new CEqual(
             recordType,
@@ -1342,6 +1329,7 @@ export class Checker {
 
         case ConstraintKind.Equal:
         {
+          // constraint.dump();
           if (!this.unify(constraint.left, constraint.right, solution, constraint)) {
             errorCount++;
             if (errorCount === MAX_TYPE_ERROR_COUNT) {
@@ -1423,9 +1411,10 @@ export class Checker {
     }
 
     if (left.kind === TypeKind.Labeled && right.kind === TypeKind.Labeled) {
-      //const remaining = new Set(right.fields.keys());
       let success = false;
-
+      // This works like an ordinary union-find algorithm where an additional
+      // property 'fields' is carried over from the child nodes to the
+      // ever-changing root node.
       const root = left.find();
       right.parent = root;
       if (root.fields === undefined) {
@@ -1447,12 +1436,12 @@ export class Checker {
       return success;
     }
 
-
-    if (left.kind === TypeKind.Record && right.kind === TypeKind.Labeled) {
-      let success = true;
-      if (right.fields === undefined) {
-        right.fields = new Map([ [ right.name, right.type ] ]);
+    if (left.kind === TypeKind.Record && right.kind === TypeKind.Record) {
+      if (left.decl !== right.decl) {
+        this.diagnostics.add(new UnificationFailedDiagnostic(left, right, [...constraint.getNodes()]));
+        return false;
       }
+      let success = true;
       const remaining = new Set(right.fields.keys());
       for (const [fieldName, fieldType] of left.fields) {
         if (right.fields.has(fieldName)) {
@@ -1460,13 +1449,29 @@ export class Checker {
             success = false;
           }
           remaining.delete(fieldName);
+        } else {
+          this.diagnostics.add(new FieldMissingDiagnostic(right, fieldName));
+          success = false;
         }
       }
       for (const fieldName of remaining) {
+        this.diagnostics.add(new FieldDoesNotExistDiagnostic(left, fieldName));
+      }
+      return success;
+    }
+
+    if (left.kind === TypeKind.Record && right.kind === TypeKind.Labeled) {
+      let success = true;
+      if (right.fields === undefined) {
+        right.fields = new Map([ [ right.name, right.type ] ]);
+      }
+      for (const [fieldName, fieldType] of left.fields) {
         if (left.fields.has(fieldName)) {
-          if (!this.unify(left.fields.get(fieldName)!, right.fields.get(fieldName)!, solution, constraint)) {
+          if (!this.unify(fieldType, left.fields.get(fieldName)!, solution, constraint)) {
             success = false;
           }
+        } else {
+          this.diagnostics.add(new FieldMissingDiagnostic(right, fieldName));
         }
       }
       return success;

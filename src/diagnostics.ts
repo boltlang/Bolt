@@ -1,4 +1,5 @@
 
+import { describe } from "yargs";
 import { TypeKind, type Type, type TArrow } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { countDigits } from "./util";
@@ -135,7 +136,7 @@ export class UnexpectedTokenDiagnostic {
   public format(): string {
     return ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET
          + `expected ${describeExpected(this.expected)} but got ${describeActual(this.actual)}\n\n`
-         + printExcerpt(this.file, this.actual.getRange()) + '\n';
+         + printNode(this.actual) + '\n';
   }
 
 }
@@ -152,10 +153,9 @@ export class BindingNotFoudDiagnostic {
   }
 
   public format(): string {
-    const file = this.node.getSourceFile().getFile();
     return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
          + `binding '${this.name}' was not found.\n\n`
-         + printExcerpt(file, this.node.getRange()) + '\n';
+         + printNode(this.node) + '\n';
   }
 
 }
@@ -229,16 +229,14 @@ export class UnificationFailedDiagnostic {
 
   public format(): string {
     const node = this.nodes[0];
-    const file = node.getSourceFile().getFile();
     let out = ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET
         + `unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET
         + ' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed.\n\n'
-        + printExcerpt(file, node.getRange()) + '\n';
+        + printNode(node) + '\n';
     for (let i = 1; i < this.nodes.length; i++) {
       const node = this.nodes[i];
-      const file = node.getSourceFile().getFile();
       out += '  ... in an instantiation of the following expression\n\n'
-      out += printExcerpt(file, node.getRange(), { indentation: i === 0 ? '  ' : '    ' }) + '\n';
+      out += printNode(node, { indentation: i === 0 ? '  ' : '    ' }) + '\n';
     }
     return out;
   }
@@ -267,12 +265,52 @@ export class ArityMismatchDiagnostic {
 
 }
 
+export class FieldMissingDiagnostic {
+
+  public readonly level = Level.Error;
+
+  public constructor(
+    public recordType: TRecord,
+    public fieldName: string,
+  ) {
+
+  }
+
+  public format(): string {
+    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
+         + `field '${this.fieldName}' is missing from `
+         + describeType(this.recordType) + '\n\n';
+  }
+
+}
+
+export class FieldDoesNotExistDiagnostic {
+
+  public readonly level = Level.Error;
+
+  public constructor(
+    public recordType: TRecord,
+    public fieldName: string,
+  ) {
+
+  }
+
+  public format(): string {
+    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
+        + `field '${this.fieldName}' does not exist on type `
+        +  describeType(this.recordType) + '\n\n';
+  }
+
+}
+
 export type Diagnostic
   = UnexpectedCharDiagnostic
   | BindingNotFoudDiagnostic
   | UnificationFailedDiagnostic
   | UnexpectedTokenDiagnostic
   | ArityMismatchDiagnostic
+  | FieldMissingDiagnostic
+  | FieldDoesNotExistDiagnostic
 
 export interface Diagnostics {
   add(diagnostic: Diagnostic): void;
@@ -307,6 +345,16 @@ export class ConsoleDiagnostics {
     process.stderr.write(diagnostic.format());
   }
 
+}
+
+interface PrintExcerptOptions {
+  indentation?: string;
+  extraLineCount?: number;
+}
+
+function printNode(node: Syntax, options?: PrintExcerptOptions): string {
+  const file = node.getSourceFile().getFile();
+  return printExcerpt(file, node.getRange(), options);
 }
 
 function printExcerpt(file: TextFile, span: TextRange, { indentation = '  ', extraLineCount = 2 } = {}): string {
