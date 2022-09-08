@@ -7,7 +7,7 @@
     "bolt": "lib/bin/bolt.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node ./lib/bin/bolt-selftest.js run"
   },
   "repository": {
     "type": "git",
@@ -29,6 +29,8 @@
   },
   "devDependencies": {
     "@types/node": "^18.7.15",
-    "@types/yargs": "^17.0.12"
+    "@types/yargs": "^17.0.12",
+    "commonmark": "^0.30.0",
+    "glob": "^8.0.3"
   }
 }

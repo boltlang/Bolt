@@ -7,11 +7,12 @@ import path from "path"
 import fs from "fs"
 import yargs from "yargs"
 
-import { Diagnostics, UnexpectedCharDiagnostic, UnexpectedTokenDiagnostic } from "../diagnostics"
+import { ConsoleDiagnostics, Diagnostics, UnexpectedCharDiagnostic, UnexpectedTokenDiagnostic } from "../diagnostics"
 import { Punctuator, ScanError, Scanner } from "../scanner"
 import { ParseError, Parser } from "../parser"
 import { Checker } from "../checker"
 import { TextFile } from "../cst"
+import { parseSourceFile } from ".."
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
@@ -34,27 +35,13 @@ yargs
       const cwd = args.C;
       const filename = path.resolve(cwd, args.file);
 
-      const diagnostics = new Diagnostics();
+      const diagnostics = new ConsoleDiagnostics();
       const text = fs.readFileSync(filename, 'utf8')
       const file = new TextFile(filename, text);
-      const scanner = new Scanner(text, 0, diagnostics, file);
-      const punctuated = new Punctuator(scanner);
-      const parser = new Parser(file, punctuated);
-      let sourceFile;
-      try {
-        sourceFile = parser.parseSourceFile();
-      } catch (error) {
-        if (error instanceof ParseError) {
-          diagnostics.add(new UnexpectedTokenDiagnostic(error.file, error.actual, error.expected));
-          return;
-        }
-        if (error instanceof ScanError) {
-          diagnostics.add(new UnexpectedCharDiagnostic(error.file, error.position, error.actual));
-          return;
-        }
-        throw error;
+      const sourceFile = parseSourceFile(file, diagnostics);
+      if (sourceFile === null) {
+        process.exit(1);
       }
-      sourceFile.setParents();
       //debug(sourceFile.toJSON());
       const checker = new Checker(diagnostics);
       checker.check(sourceFile);

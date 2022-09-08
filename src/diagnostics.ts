@@ -26,7 +26,18 @@ const ANSI_BG_CYAN = "\u001b[45m"
 const ANSI_BG_MAGENTA = "\u001b[46m"
 const ANSI_BG_WHITE = "\u001b[47m"
 
+const enum Level {
+  Debug,
+  Verbose,
+  Info,
+  Warning,
+  Error,
+  Fatal,
+}
+
 export class UnexpectedCharDiagnostic {
+
+  public readonly level = Level.Error;
 
   public constructor(
     public file: TextFile,
@@ -111,6 +122,8 @@ function describeActual(token: Token): string {
 
 export class UnexpectedTokenDiagnostic {
 
+  public readonly level = Level.Error;
+
   public constructor(
     public file: TextFile,
     public actual: Token,
@@ -128,6 +141,8 @@ export class UnexpectedTokenDiagnostic {
 }
 
 export class BindingNotFoudDiagnostic {
+
+  public readonly level = Level.Error;
 
   public constructor(
     public name: string,
@@ -202,6 +217,8 @@ export function describeType(type: Type): string {
 
 export class UnificationFailedDiagnostic {
 
+  public readonly level = Level.Error;
+
   public constructor(
     public left: Type,
     public right: Type,
@@ -230,6 +247,8 @@ export class UnificationFailedDiagnostic {
 
 export class ArityMismatchDiagnostic {
 
+  public readonly level = Level.Error;
+
   public constructor(
     public left: TArrow,
     public right: TArrow,
@@ -255,12 +274,36 @@ export type Diagnostic
   | UnexpectedTokenDiagnostic
   | ArityMismatchDiagnostic
 
-export class Diagnostics {
+export interface Diagnostics {
+  add(diagnostic: Diagnostic): void;
+}
 
-  private savedDiagnostics: Diagnostic[] = [];
+export class DiagnosticStore {
+
+  private storage: Diagnostic[] = [];
+  
+  public hasError = false;
+  public hasFatal = false;
 
   public add(diagnostic: Diagnostic): void {
-    this.savedDiagnostics.push(diagnostic);
+    this.storage.push(diagnostic);
+    if (diagnostic.level >= Level.Error) {
+      this.hasError = true;
+    }
+    if (diagnostic.level >= Level.Fatal) {
+      this.hasFatal = true;
+    }
+  }
+
+  public getDiagnostics(): Iterable<Diagnostic> {
+    return this.storage;
+  }
+
+}
+
+export class ConsoleDiagnostics {
+
+  public add(diagnostic: Diagnostic): void {
     process.stderr.write(diagnostic.format());
   }
 
