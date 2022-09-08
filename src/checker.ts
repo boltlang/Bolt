@@ -687,6 +687,23 @@ export class Checker {
         return this.instantiate(scheme, node);
       }
 
+      case SyntaxKind.MemberExpression:
+      {
+        let type = this.inferExpression(node.expression);
+        for (const [_dot, name] of node.path) {
+          const newType = this.createTypeVar();
+          this.addConstraint(
+            new CEqual(
+              type,
+              new TLabeled(name.text, newType),
+              node,
+            )
+          );
+          type = newType;
+        }
+        return type;
+      }
+
       case SyntaxKind.CallExpression:
       {
         const opType = this.inferExpression(node.func);
@@ -927,6 +944,12 @@ export class Checker {
       {
         assert(node.name.modulePath.length === 0);
         addReference(node.getScope(), node.name.name.text);
+        break;
+      }
+
+      case SyntaxKind.MemberExpression:
+      {
+        this.addReferencesToGraph(graph, node.expression, source);
         break;
       }
 
@@ -1465,13 +1488,13 @@ export class Checker {
       if (right.fields === undefined) {
         right.fields = new Map([ [ right.name, right.type ] ]);
       }
-      for (const [fieldName, fieldType] of left.fields) {
+      for (const [fieldName, fieldType] of right.fields) {
         if (left.fields.has(fieldName)) {
           if (!this.unify(fieldType, left.fields.get(fieldName)!, solution, constraint)) {
             success = false;
           }
         } else {
-          this.diagnostics.add(new FieldMissingDiagnostic(right, fieldName));
+          this.diagnostics.add(new FieldMissingDiagnostic(left, fieldName));
         }
       }
       return success;

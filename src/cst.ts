@@ -122,6 +122,7 @@ export const enum SyntaxKind {
   VariadicStructPatternElement,
 
   // Expressions
+  MemberExpression,
   CallExpression,
   ReferenceExpression,
   NamedTupleExpression,
@@ -1142,7 +1143,7 @@ export class QualifiedName extends SyntaxBase {
   public readonly kind = SyntaxKind.QualifiedName;
 
   public constructor(
-    public modulePath: Array<[Identifier, Dot]>,
+    public modulePath: Array<[IdentifierAlt, Dot]>,
     public name: Identifier,
   ) {
     super();
@@ -1298,6 +1299,27 @@ export class ReferenceExpression extends SyntaxBase {
 
 }
 
+export class MemberExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.MemberExpression;
+
+  public constructor(
+    public expression: Expression,
+    public path: [Dot, Identifier][],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.expression.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.path[this.path.length-1][1];
+  }
+
+}
+
 export class PrefixExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.PrefixExpression;
@@ -1363,7 +1385,8 @@ export class InfixExpression extends SyntaxBase {
 }
 
 export type Expression
-  = CallExpression
+  = MemberExpression
+  | CallExpression
   | StructExpression
   | NamedTupleExpression
   | ReferenceExpression

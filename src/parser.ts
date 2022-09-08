@@ -1,6 +1,4 @@
 
-import { warn } from "console";
-import { argv0 } from "process";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -46,6 +44,8 @@ import {
   PunnedStructExpressionField,
   IfStatementCase,
   IfStatement,
+  MemberExpression,
+  IdentifierAlt,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -180,16 +180,16 @@ export class Parser {
   }
 
   public parseQualifiedName(): QualifiedName {
-    const modulePath: Array<[Identifier, Dot]> = [];
-    let name = this.expectToken(SyntaxKind.Identifier)
+    const modulePath: Array<[IdentifierAlt, Dot]> = [];
     for (;;) {
-      const t1 = this.peekToken()
-      if (t1.kind !== SyntaxKind.Dot) {
+      const t0 = this.peekToken(1);
+      const t1 = this.peekToken(2);
+      if (t0.kind !== SyntaxKind.IdentifierAlt || t1.kind !== SyntaxKind.Dot) {
         break;
       }
-      modulePath.push([name, t1]);
-      name = this.expectToken(SyntaxKind.Identifier)
+      modulePath.push([t0, t1]);
     }
+    const name = this.expectToken(SyntaxKind.Identifier);
     return new QualifiedName(modulePath, name);
   }
 
@@ -290,8 +290,26 @@ export class Parser {
     }
   }
 
-  private parseExpressionNoOperators(): Expression {
-    const func = this.parsePrimitiveExpression();
+  private tryParseMemberExpression(): Expression {
+    const expression = this.parsePrimitiveExpression();
+    const path: Array<[Dot, Identifier]> = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind !== SyntaxKind.Dot) {
+        break;
+      }
+      this.getToken();
+      const name = this.expectToken(SyntaxKind.Identifier);
+      path.push([t1, name]);
+    }
+    if (path.length === 0) {
+      return expression;
+    }
+    return new MemberExpression(expression, path);
+  }
+
+  private tryParseCallExpression(): Expression {
+    const func = this.tryParseMemberExpression();
     const args = [];
     for (;;) {
       const t1 = this.peekToken();
@@ -305,7 +323,7 @@ export class Parser {
         || isPrefixOperatorLike(t1)) {
         break;
       }
-      args.push(this.parsePrimitiveExpression());
+      args.push(this.tryParseMemberExpression());
     }
     if (args.length === 0) {
       return func
@@ -314,7 +332,7 @@ export class Parser {
   }
 
   private parseUnaryExpression(): Expression {
-    let result = this.parseExpressionNoOperators()
+    let result = this.tryParseCallExpression()
     const prefixes = [];
     for (;;) {
       const t0 = this.peekToken();
