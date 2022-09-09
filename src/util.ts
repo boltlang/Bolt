@@ -1,4 +1,40 @@
 
+import stream from "stream"
+
+export class IndentWriter {
+
+  private atBlankLine = true;
+  private indentLevel = 0;
+
+  public constructor(
+    private output: stream.Writable,
+    private indentation = '  ',
+  ) {
+    
+  }
+
+  public write(text: string): void {
+    for (const ch of text) {
+      if (ch === '\n') {
+        this.atBlankLine = true;
+      } else if (!/[\t ]/.test(ch) && this.atBlankLine) {
+        this.output.write(this.indentation.repeat(this.indentLevel));
+        this.atBlankLine = false;
+      }
+      this.output.write(ch);
+    }
+  }
+
+  public indent(): void {
+    this.indentLevel++;
+  }
+
+  public dedent(): void {
+    this.indentLevel--;
+  }
+
+}
+
 export function assert(test: boolean): asserts test {
   if (!test) {
     throw new Error(`Assertion failed. See the stack trace for more information.`);

@@ -311,7 +311,6 @@ export type Type
   = TCon
   | TArrow
   | TVar
-  | TAny
   | TTuple
   | TLabeled
   | TRecord

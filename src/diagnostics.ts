@@ -2,7 +2,7 @@
 import { describe } from "yargs";
 import { TypeKind, type Type, type TArrow, TRecord } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
-import { countDigits } from "./util";
+import { countDigits, IndentWriter } from "./util";
 
 const ANSI_RESET = "\u001b[0m"
 const ANSI_BOLD = "\u001b[1m"
@@ -48,12 +48,12 @@ export class UnexpectedCharDiagnostic {
 
   }
 
-  public format(): string {
+  public format(out: IndentWriter): void {
     const endPos = this.position.clone();
     endPos.advance(this.actual);
-    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
-         + `unexpeced character sequence '${this.actual}'.\n\n`
-         + printExcerpt(this.file, new TextRange(this.position, endPos)) + '\n';
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+    out.write(`unexpeced character sequence '${this.actual}'.\n\n`);
+    out.write(printExcerpt(this.file, new TextRange(this.position, endPos)) + '\n');
   }
 
 }
@@ -133,10 +133,10 @@ export class UnexpectedTokenDiagnostic {
 
   }
 
-  public format(): string {
-    return ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET
-         + `expected ${describeExpected(this.expected)} but got ${describeActual(this.actual)}\n\n`
-         + printExcerpt(this.file, this.actual.getRange()) + '\n';
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET);
+    out.write(`expected ${describeExpected(this.expected)} but got ${describeActual(this.actual)}\n\n`);
+    out.write(printExcerpt(this.file, this.actual.getRange()) + '\n');
   }
 
 }
@@ -152,18 +152,16 @@ export class BindingNotFoudDiagnostic {
 
   }
 
-  public format(): string {
-    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
-         + `binding '${this.name}' was not found.\n\n`
-         + printNode(this.node) + '\n';
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET); 
+    out.write(`binding '${this.name}' was not found.\n\n`);
+    out.write(printNode(this.node) + '\n');
   }
 
 }
 
 export function describeType(type: Type): string {
   switch (type.kind) {
-    case TypeKind.Any:
-      return 'Any';
     case TypeKind.Con:
     {
       let out = type.displayName;
@@ -235,30 +233,33 @@ export class UnificationFailedDiagnostic {
 
   }
 
-  public format(): string {
+  public format(out: IndentWriter): void {
     const leftNode = getFirstNodeInTypeChain(this.left);
     const rightNode = getFirstNodeInTypeChain(this.right);
     const node = this.nodes[0];
-    let out = ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET
-        + `unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET
-        + ' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed.\n\n'
-        + printNode(node) + '\n';
+    out.write(ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET);
+    out.write(`unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET);
+    out.write(' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed.\n\n');
+    out.write(printNode(node) + '\n');
     for (let i = 1; i < this.nodes.length; i++) {
       const node = this.nodes[i];
-      out += '  ... in an instantiation of the following expression\n\n'
-      out += printNode(node, { indentation: i === 0 ? '  ' : '    ' }) + '\n';
+      out.write('  ... in an instantiation of the following expression\n\n');
+      out.write(printNode(node, { indentation: i === 0 ? '  ' : '    ' }) + '\n');
     }
     if (leftNode !== null) {
-      out += ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET
-          + `type ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET + ` was inferred from this expression:\n\n`
-          + printNode(leftNode) + '\n';
+      out.indent();
+      out.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
+      out.write(`type ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET + ` was inferred from this expression:\n\n`);
+      out.write(printNode(leftNode) + '\n');
+      out.dedent();
     }
     if (rightNode !== null) {
-      out += ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET
-          + `type ` + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ` was inferred from this expression:\n\n`
-          + printNode(rightNode) + '\n';
+      out.indent();
+      out.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
+      out.write(`type ` + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ` was inferred from this expression:\n\n`);
+      out.write(printNode(rightNode) + '\n');
+      out.dedent();
     }
-    return out;
   }
 
 }
@@ -274,13 +275,13 @@ export class ArityMismatchDiagnostic {
 
   }
 
-  public format(): string {
-    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
-         + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET
-         + ` has ${this.left.paramTypes.length} `
-         + (this.left.paramTypes.length === 1 ? 'parameter' : 'parameters')
-         + ' while ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET
-         + ` has ${this.right.paramTypes.length}.\n\n`
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+    out.write(ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET);
+    out.write(` has ${this.left.paramTypes.length} `);
+    out.write(this.left.paramTypes.length === 1 ? 'parameter' : 'parameters');
+    out.write(' while ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET);
+    out.write(` has ${this.right.paramTypes.length}.\n\n`);
   }
 
 }
@@ -296,14 +297,13 @@ export class FieldMissingDiagnostic {
 
   }
 
-  public format(): string {
-    let out = ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
-         + `field '${this.fieldName}' is missing from `
-         + describeType(this.recordType) + '\n\n';
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+    out.write(`field '${this.fieldName}' is missing from `);
+    out.write(describeType(this.recordType) + '\n\n');
     if (this.recordType.node !== null) {
-      out += printNode(this.recordType.node) + '\n';
+      out.write(printNode(this.recordType.node) + '\n');
     }
-    return out
   }
 
 }
@@ -313,14 +313,15 @@ export class FieldDoesNotExistDiagnostic {
   public readonly level = Level.Error;
 
   public constructor(
+    public recordType: TRecord,
+    public fieldName: string,
   ) {
-
   }
 
-  public format(): string {
-    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
-        + `field '${this.fieldName}' does not exist on type `
-        +  describeType(this.recordType) + '\n\n';
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+    out.write(`field '${this.fieldName}' does not exist on type `);
+    out.write(describeType(this.recordType) + '\n\n');
   }
 
 }
@@ -364,7 +365,8 @@ export class DiagnosticStore {
 export class ConsoleDiagnostics {
 
   public add(diagnostic: Diagnostic): void {
-    process.stderr.write(diagnostic.format());
+    const writer = new IndentWriter(process.stderr);
+    diagnostic.format(writer);
   }
 
 }
