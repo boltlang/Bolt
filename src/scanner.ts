@@ -35,6 +35,7 @@ import {
   ElseKeyword,
   IfKeyword,
   StructKeyword,
+  RArrow,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -246,7 +247,9 @@ export class Scanner extends BufferedStream<Token> {
         case '?':
         {
           const text = c0 + this.takeWhile(isOperatorPart);
-          if (text === '=') {
+          if (text === '->') {
+            return new RArrow(startPos);
+          } else if (text === '=') {
             return new Equals(startPos);
           } else if (text.endsWith('=') && text[text.length-2] !== '=') {
             return new Assignment(text, startPos);

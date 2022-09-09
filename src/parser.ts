@@ -46,6 +46,8 @@ import {
   IfStatement,
   MemberExpression,
   IdentifierAlt,
+  WrappedOperator,
+  ArrowTypeExpression,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -160,7 +162,7 @@ export class Parser {
     return new ReferenceTypeExpression([], name);
   }
 
-  public parseTypeExpression(): TypeExpression {
+  public parsePrimitiveTypeExpression(): TypeExpression {
     const t0 = this.peekToken();
     switch (t0.kind) {
       case SyntaxKind.IdentifierAlt:
@@ -168,6 +170,24 @@ export class Parser {
       default:
         this.raiseParseError(t0, [ SyntaxKind.IdentifierAlt ]);
     }
+  }
+
+  public parseTypeExpression(): TypeExpression {
+    let returnType = this.parsePrimitiveTypeExpression();
+    const paramTypes = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind !== SyntaxKind.RArrow) {
+        break;
+      }
+      this.getToken();
+      paramTypes.push(returnType);
+      returnType = this.parsePrimitiveTypeExpression();
+    }
+    if (paramTypes.length === 0) {
+      return returnType;
+    }
+    return new ArrowTypeExpression(paramTypes, returnType);
   }
 
   public parseConstantExpression(): ConstantExpression {
@@ -497,9 +517,9 @@ export class Parser {
     switch (t0.kind) {
       case SyntaxKind.LParen:
       {
-        this.getToken();
         const t1 = this.peekToken();
         if (t1.kind === SyntaxKind.IdentifierAlt) {
+          this.getToken();
           return this.parsePatternStartingWithConstructor();
         } else {
           return this.parseTuplePattern();
@@ -551,7 +571,18 @@ export class Parser {
       this.getToken();
       mutKeyword = t1;
     }
-    const pattern = this.parsePattern();
+    const t2 = this.peekToken();
+    const t3 = this.peekToken(2);
+    const t4 = this.peekToken(3);
+    let pattern;
+    if (t2.kind === SyntaxKind.LParen && t3.kind === SyntaxKind.CustomOperator && t4.kind === SyntaxKind.RParen) {
+      this.getToken()
+      this.getToken();
+      this.getToken();
+      pattern = new WrappedOperator(t2, t3, t4);
+    } else {
+      pattern = this.parsePattern();
+    }
     const params = [];
     for (;;) {
       const t2 = this.peekToken();
@@ -564,14 +595,14 @@ export class Parser {
       params.push(this.parseParam());
     }
     let typeAssert = null;
-    let t3 = this.getToken();
-    if (t3.kind === SyntaxKind.Colon) {
+    let t5 = this.getToken();
+    if (t5.kind === SyntaxKind.Colon) {
       const typeExpression = this.parseTypeExpression();
-      typeAssert = new TypeAssert(t3, typeExpression);
-      t3 = this.getToken();
+      typeAssert = new TypeAssert(t5, typeExpression);
+      t5 = this.getToken();
     }
     let body = null;
-    switch (t3.kind) {
+    switch (t5.kind) {
       case SyntaxKind.BlockStart:
       {
         const elements = [];
@@ -583,22 +614,22 @@ export class Parser {
           }
           elements.push(this.parseLetBodyElement());
         }
-        body = new BlockBody(t3, elements);
-        t3 = this.getToken();
+        body = new BlockBody(t5, elements);
+        t5 = this.getToken();
         break;
       }
       case SyntaxKind.Equals:
       {
         const expression = this.parseExpression();
-        body = new ExprBody(t3, expression);
-        t3 = this.getToken();
+        body = new ExprBody(t5, expression);
+        t5 = this.getToken();
         break;
       }
       case SyntaxKind.LineFoldEnd:
         break;
     }
-    if (t3.kind !== SyntaxKind.LineFoldEnd) {
-      this.raiseParseError(t3, [ SyntaxKind.LineFoldEnd ]);
+    if (t5.kind !== SyntaxKind.LineFoldEnd) {
+      this.raiseParseError(t5, [ SyntaxKind.LineFoldEnd ]);
     }
     return new LetDeclaration(
       pubKeyword,

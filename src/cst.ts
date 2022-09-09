@@ -78,6 +78,7 @@ export const enum SyntaxKind {
   RBrace,
   LBracket,
   RBracket,
+  RArrow,
   Dot,
   DotDot,
   Comma,
@@ -104,6 +105,7 @@ export const enum SyntaxKind {
 
   // Type expressions
   ReferenceTypeExpression,
+  ArrowTypeExpression,
 
   // Patterns
   BindPattern,
@@ -139,6 +141,9 @@ export const enum SyntaxKind {
   ExpressionStatement,
   IfStatement,
 
+  // If statement elements
+  IfStatementCase,
+
   // Declarations
   VariableDeclaration,
   PrefixFuncDecl,
@@ -156,7 +161,7 @@ export const enum SyntaxKind {
   StructDeclarationField,
 
   // Other nodes
-  IfStatementCase,
+  WrappedOperator,
   Initializer,
   QualifiedName,
   TypeAssert,
@@ -243,7 +248,11 @@ export class Scope {
             }
           }
         } else {
-          this.scanPattern(node.pattern, node);
+          if (node.pattern.kind === SyntaxKind.WrappedOperator) {
+            this.mapping.set(node.pattern.operator.text, node);
+          } else {
+            this.scanPattern(node.pattern, node);
+          }
         }
         break;
       }
@@ -816,8 +825,19 @@ export class LetKeyword extends TokenBase {
 
 }
 
+export class RArrow extends TokenBase {
+
+  public readonly kind = SyntaxKind.RArrow;
+
+  public get text(): string {
+    return '->';
+  }
+
+}
+
 export type Token
-  = LParen
+  = RArrow
+  | LParen
   | RParen
   | LBrace
   | RBrace
@@ -854,6 +874,30 @@ export type Token
 export type TokenKind
   = Token['kind']
 
+export class ArrowTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.ArrowTypeExpression;
+
+  public constructor(
+    public paramTypeExprs: TypeExpression[],
+    public returnTypeExpr: TypeExpression
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.paramTypeExprs.length > 0) {
+      return this.paramTypeExprs[0].getFirstToken();
+    }
+    return this.returnTypeExpr.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.returnTypeExpr.getLastToken();
+  }
+
+}
+
 export class ReferenceTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReferenceTypeExpression;
@@ -880,6 +924,7 @@ export class ReferenceTypeExpression extends SyntaxBase {
 
 export type TypeExpression
   = ReferenceTypeExpression
+  | ArrowTypeExpression
 
 export class BindPattern extends SyntaxBase {
 
@@ -1632,6 +1677,29 @@ export class BlockBody extends SyntaxBase {
   }
 
 }
+
+export class WrappedOperator extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.WrappedOperator;
+
+  public constructor(
+    public lparen: LParen,
+    public operator: CustomOperator,
+    public rparen: RParen,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
+}
+
 export class LetDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.LetDeclaration;
@@ -1646,7 +1714,7 @@ export class LetDeclaration extends SyntaxBase {
     public pubKeyword: PubKeyword | null,
     public letKeyword: LetKeyword,
     public mutKeyword: MutKeyword | null,
-    public pattern: Pattern,
+    public pattern: Pattern | WrappedOperator,
     public params: Param[],
     public typeAssert: TypeAssert | null,
     public body: Body | null,

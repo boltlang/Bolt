@@ -4,6 +4,7 @@ import {
   Pattern,
   Scope,
   SourceFile,
+  SourceFileElement,
   StructDeclaration,
   Syntax,
   SyntaxKind,
@@ -526,11 +527,15 @@ export interface InferContext {
   returnType: Type | null;
 }
 
+function isFunctionDeclarationLike(node: LetDeclaration): boolean {
+  return node.pattern.kind === SyntaxKind.BindPattern
+      && (node.params.length > 0 || (node.body !== null && node.body.kind === SyntaxKind.BlockBody));
+}
+
 export class Checker {
 
   private nextTypeVarId = 0;
   private nextConTypeId = 0;
-  private nextRecordTypeId = 0;
 
   //private graph?: Graph<Syntax>;
   //private currentCycle?: Map<Syntax, Type>;
@@ -668,10 +673,16 @@ export class Checker {
 
       case SyntaxKind.LetDeclaration:
       {
-        if (node.pattern.kind === SyntaxKind.BindPattern) {
+        if (isFunctionDeclarationLike(node)) {
           break;
         }
-        const type = this.inferBindings(node.pattern, [], []);
+        let type;
+        if (node.pattern.kind === SyntaxKind.WrappedOperator) {
+          type = this.createTypeVar();
+          this.addBinding(node.pattern.operator.text, new Forall([], [], type));
+        } else {
+          type = this.inferBindings(node.pattern, [], []);
+        }
         if (node.typeAssert !== null) {
           this.addConstraint(
             new CEqual(
@@ -733,7 +744,7 @@ export class Checker {
         const scheme = this.lookup(node.name.name.text);
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.name.text, node.name.name));
-          return new TAny();
+          return this.createTypeVar();
         }
         const type = this.instantiate(scheme, node);
         type.node = node;
@@ -812,7 +823,7 @@ export class Checker {
         const scheme = this.lookup(node.name.text);
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-          return new TAny();
+          return this.createTypeVar();
         }
         const recordType = this.instantiate(scheme, node);
         assert(recordType.kind === TypeKind.Record);
@@ -830,7 +841,7 @@ export class Checker {
               let fieldType;
               if (scheme === null) {
                 this.diagnostics.add(new BindingNotFoudDiagnostic(member.name.text, member.name));
-                fieldType = new TAny();
+                fieldType = this.createTypeVar();
               } else {
                 fieldType = this.instantiate(scheme, member);
               }
@@ -857,7 +868,7 @@ export class Checker {
         const scheme = this.lookup(node.operator.text);
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.operator.text, node.operator));
-          return new TAny();
+          return this.createTypeVar();
         }
         const opType = this.instantiate(scheme, node.operator);
         const retType = this.createTypeVar();
@@ -889,11 +900,21 @@ export class Checker {
         const scheme = this.lookup(node.name.text);
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-          return new TAny();
+          return this.createTypeVar();
         }
         const type = this.instantiate(scheme, node.name);
         type.node = node;
         return type;
+      }
+
+      case SyntaxKind.ArrowTypeExpression:
+      {
+        const paramTypes = [];
+        for (const paramTypeExpr of node.paramTypeExprs) {
+          paramTypes.push(this.inferTypeExpression(paramTypeExpr));
+        }
+        const returnType = this.inferTypeExpression(node.returnTypeExpr);
+        return new TArrow(paramTypes, returnType, node);
       }
 
       default:
@@ -920,7 +941,7 @@ export class Checker {
         let recordType;
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(pattern.name.text, pattern.name));
-          recordType = new TAny();
+          recordType = this.createTypeVar();
         } else {
           recordType = this.instantiate(scheme, pattern.name);
         }
@@ -1258,6 +1279,10 @@ export class Checker {
 
         assert(node.kind === SyntaxKind.LetDeclaration);
 
+        if (!isFunctionDeclarationLike(node)) {
+          continue;
+        }
+
         const env = node.typeEnv!;
         const context: InferContext = {
           typeVars,
@@ -1301,11 +1326,32 @@ export class Checker {
           returnType: null,
         };
         this.contexts.push(bindCtx)
-        const ty2 = this.inferBindings(node.pattern, typeVars, constraints);
+        let ty2;
+        if (node.pattern.kind === SyntaxKind.WrappedOperator) {
+          ty2 = this.createTypeVar();
+          this.addBinding(node.pattern.operator.text, new Forall([], [], ty2));
+        } else {
+          ty2 = this.inferBindings(node.pattern, typeVars, constraints);
+        }
         this.addConstraint(new CEqual(ty2, type, node));
         this.contexts.pop();
       }
 
+    }
+
+    const visitElements = (elements: Syntax[]) => {
+      for (const element of elements) {
+        if (element.kind === SyntaxKind.LetDeclaration
+            && isFunctionDeclarationLike(element)
+            && graph.hasEdge(node, element, false)) {
+          assert(element.pattern.kind === SyntaxKind.BindPattern);
+          const scheme = this.lookup(element.pattern.name.text);
+          assert(scheme !== null);
+          this.instantiate(scheme, null);
+        } else {
+          this.infer(element);
+        }
+      }
     }
 
     for (const nodes of sccs) {
@@ -1323,6 +1369,10 @@ export class Checker {
       for (const node of nodes) {
 
         assert(node.kind === SyntaxKind.LetDeclaration);
+
+        if (!isFunctionDeclarationLike(node)) {
+          continue;
+        }
 
         const context = node.context!;
         const returnType = context.returnType!;
@@ -1343,17 +1393,7 @@ export class Checker {
             }
             case SyntaxKind.BlockBody:
             {
-              for (const element of node.body.elements) {
-                if (element.kind === SyntaxKind.LetDeclaration
-                    && element.pattern.kind === SyntaxKind.BindPattern
-                    && graph.hasEdge(node, element, false)) {
-                  const scheme = this.lookup(element.pattern.name.text);
-                  assert(scheme !== null);
-                  this.instantiate(scheme, null);
-                } else {
-                  this.infer(element);
-                }
-              }
+              visitElements(node.body.elements);
               break;
             }
           }
@@ -1368,18 +1408,8 @@ export class Checker {
       }
 
     }
-
-    for (const element of node.elements) {
-      if (element.kind === SyntaxKind.LetDeclaration
-          && element.pattern.kind === SyntaxKind.BindPattern
-          && graph.hasEdge(node, element, false)) {
-        const scheme = this.lookup(element.pattern.name.text);
-        assert(scheme !== null);
-        this.instantiate(scheme, null);
-      } else {
-        this.infer(element);
-      }
-    }
+ 
+    visitElements(node.elements);
 
     this.contexts.pop();
     this.popContext(context);
@@ -1445,11 +1475,6 @@ export class Checker {
 
     if (right.kind === TypeKind.Var) {
       return this.unify(right, left, solution, constraint);
-    }
-
-    if (left.kind === TypeKind.Any || right.kind === TypeKind.Any) {
-      TypeBase.join(left, right);
-      return true;
     }
 
     if (left.kind === TypeKind.Arrow && right.kind === TypeKind.Arrow) {

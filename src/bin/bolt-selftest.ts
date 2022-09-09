@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import "source-map-support/register"
+
 import * as commonmark from "commonmark"
 import { sync as globSync } from "glob"
 import fs from "fs";
