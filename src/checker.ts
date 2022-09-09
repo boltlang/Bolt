@@ -35,7 +35,23 @@ abstract class TypeBase {
 
   public abstract readonly kind: TypeKind;
 
+  public next: Type = this as any;
+
+  public constructor(
+    public node: Syntax | null = null
+  ) {
+
+  }
+
+  public static join(a: Type, b: Type): void {
+    const keep = a.next;
+    a.next = b;
+    b.next = keep;
+  }
+
   public abstract getTypeVars(): Iterable<TVar>;
+
+  public abstract shallowClone(): Type;
 
   public abstract substitute(sub: TVSub): Type;
 
@@ -56,12 +72,17 @@ class TVar extends TypeBase {
 
   public constructor(
     public id: number,
+    public node: Syntax | null = null,
   ) {
     super();
   }
 
   public *getTypeVars(): Iterable<TVar> {
     yield this;
+  }
+
+  public shallowClone(): TVar {
+    return new TVar(this.id, this.node);
   }
 
   public substitute(sub: TVSub): Type {
@@ -79,6 +100,7 @@ export class TArrow extends TypeBase {
   public constructor(
     public paramTypes: Type[],
     public returnType: Type,
+    public node: Syntax | null = null,
   ) {
     super();
   }
@@ -88,6 +110,14 @@ export class TArrow extends TypeBase {
       yield* paramType.getTypeVars();
     }
     yield* this.returnType.getTypeVars();
+  }
+
+  public shallowClone(): TArrow {
+    return new TArrow(
+      this.paramTypes,
+      this.returnType,
+      this.node,
+    )
   }
 
   public substitute(sub: TVSub): Type {
@@ -104,12 +134,12 @@ export class TArrow extends TypeBase {
     if (newReturnType !== this.returnType) {
       changed = true;
     }
-    return changed ? new TArrow(newParamTypes, newReturnType) : this;
+    return changed ? new TArrow(newParamTypes, newReturnType, this.node) : this;
   }
 
 }
 
-class TCon extends TypeBase {
+export class TCon extends TypeBase {
 
   public readonly kind = TypeKind.Con;
 
@@ -117,14 +147,24 @@ class TCon extends TypeBase {
     public id: number,
     public argTypes: Type[],
     public displayName: string,
+    public node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
   public *getTypeVars(): Iterable<TVar> {
     for (const argType of this.argTypes) {
       yield* argType.getTypeVars();
     }
+  }
+
+  public shallowClone(): TCon {
+    return new TCon(
+      this.id,
+      this.argTypes,
+      this.displayName,
+      this.node,
+    );
   }
 
   public substitute(sub: TVSub): Type {
@@ -137,21 +177,7 @@ class TCon extends TypeBase {
       }
       newArgTypes.push(newArgType);
     }
-    return changed ? new TCon(this.id, newArgTypes, this.displayName) : this;
-  }
-
-}
-
-class TAny extends TypeBase {
-
-  public readonly kind = TypeKind.Any;
-
-  public *getTypeVars(): Iterable<TVar> {
-    
-  }
-
-  public substitute(sub: TVSub): Type {
-    return this;
+    return changed ? new TCon(this.id, newArgTypes, this.displayName, this.node) : this;
   }
 
 }
@@ -162,14 +188,22 @@ class TTuple extends TypeBase {
 
   public constructor(
     public elementTypes: Type[],
+    public node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
   public *getTypeVars(): Iterable<TVar> {
     for (const elementType of this.elementTypes) {
       yield* elementType.getTypeVars();
     }
+  }
+
+  public shallowClone(): TTuple {
+    return new TTuple(
+      this.elementTypes,
+      this.node,
+    );
   }
 
   public substitute(sub: TVSub): Type {
@@ -182,12 +216,12 @@ class TTuple extends TypeBase {
       }
       newElementTypes.push(newElementType);
     }
-    return changed ? new TTuple(newElementTypes) : this;
+    return changed ? new TTuple(newElementTypes, this.node) : this;
   }
 
 }
 
-class TLabeled extends TypeBase {
+export class TLabeled extends TypeBase {
 
   public readonly kind = TypeKind.Labeled;
 
@@ -197,8 +231,9 @@ class TLabeled extends TypeBase {
   public constructor(
     public name: string,
     public type: Type,
+    public node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
   public find(): TLabeled {
@@ -214,14 +249,22 @@ class TLabeled extends TypeBase {
     return this.type.getTypeVars();
   }
 
+  public shallowClone(): TLabeled {
+    return new TLabeled(
+      this.name,
+      this.type,
+      this.node,
+    );
+  }
+
   public substitute(sub: TVSub): Type {
     const newType = this.type.substitute(sub);
-    return newType !== this.type ? new TLabeled(this.name, newType) : this;
+    return newType !== this.type ? new TLabeled(this.name, newType, this.node) : this;
   }
 
 }
 
-class TRecord extends TypeBase {
+export class TRecord extends TypeBase {
 
   public readonly kind = TypeKind.Record;
 
@@ -230,14 +273,23 @@ class TRecord extends TypeBase {
   public constructor(
     public decl: StructDeclaration,
     public fields: Map<string, Type>,
+    public node: Syntax | null = null,
   ) {
-    super();
+    super(node);
   }
 
   public *getTypeVars(): Iterable<TVar> {
     for (const type of this.fields.values()) {
       yield* type.getTypeVars();
     }
+  }
+
+  public shallowClone(): TRecord {
+    return new TRecord(
+      this.decl,
+      this.fields,
+      this.node
+    );
   }
 
   public substitute(sub: TVSub): Type {
@@ -250,7 +302,7 @@ class TRecord extends TypeBase {
       }
       newFields.set(key, newType);
     }
-    return changed ? new TRecord(this.decl, newFields) : this;
+    return changed ? new TRecord(this.decl, newFields, this.node) : this;
   }
 
 }
@@ -684,7 +736,9 @@ export class Checker {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.name.text, node.name.name));
           return new TAny();
         }
-        return this.instantiate(scheme, node);
+        const type = this.instantiate(scheme, node);
+        type.node = node;
+        return type;
       }
 
       case SyntaxKind.MemberExpression:
@@ -733,6 +787,8 @@ export class Checker {
             ty = this.getIntType();
             break;
         }
+        ty = ty.shallowClone();
+        ty.node = node;
         return ty;
       }
 
@@ -741,7 +797,7 @@ export class Checker {
         const scheme = this.lookup(node.name.text);
         if (scheme === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-          return new TAny();
+          return this.createTypeVar();
         }
         const type = this.instantiate(scheme, node.name);
         assert(type.kind === TypeKind.Con);
@@ -749,7 +805,7 @@ export class Checker {
         for (const element of node.elements) {
           argTypes.push(this.inferExpression(element));
         }
-        return new TCon(type.id, argTypes, type.displayName);
+        return new TCon(type.id, argTypes, type.displayName, node);
       }
 
       case SyntaxKind.StructExpression:
@@ -786,7 +842,7 @@ export class Checker {
               throw new Error(`Unexpected ${member}`);
           }
         }
-        const type = new TRecord(recordType.decl, fields);
+        const type = new TRecord(recordType.decl, fields, node);
         this.addConstraint(
           new CEqual(
             recordType,
@@ -836,7 +892,9 @@ export class Checker {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           return new TAny();
         }
-        return this.instantiate(scheme, node.name);
+        const type = this.instantiate(scheme, node.name);
+        type.node = node;
+        return type;
       }
 
       default:
@@ -1338,7 +1396,7 @@ export class Checker {
 
     while (queue.length > 0) {
 
-      const constraint = queue.pop()!;
+      const constraint = queue.shift()!;
 
       switch (constraint.kind) {
 
@@ -1382,6 +1440,7 @@ export class Checker {
         return false;
       }
       solution.set(left, right);
+      TypeBase.join(left, right);
       return true;
     }
 
@@ -1390,6 +1449,7 @@ export class Checker {
     }
 
     if (left.kind === TypeKind.Any || right.kind === TypeKind.Any) {
+      TypeBase.join(left, right);
       return true;
     }
 
@@ -1407,6 +1467,9 @@ export class Checker {
       }
       if (!this.unify(left.returnType, right.returnType, solution, constraint)) {
         success = false;
+      }
+      if (success) {
+        TypeBase.join(left, right);
       }
       return success;
     }
@@ -1428,6 +1491,9 @@ export class Checker {
           if (!this.unify(left.argTypes[i], right.argTypes[i], solution, constraint)) {
             success = false;
           }
+        }
+        if (success) {
+          TypeBase.join(left, right);
         }
         return success;
       }
@@ -1456,6 +1522,9 @@ export class Checker {
         }
       }
       delete right.fields;
+      if (success) {
+        TypeBase.join(left, right);
+      }
       return success;
     }
 
@@ -1480,6 +1549,9 @@ export class Checker {
       for (const fieldName of remaining) {
         this.diagnostics.add(new FieldDoesNotExistDiagnostic(left, fieldName));
       }
+      if (success) {
+        TypeBase.join(left, right);
+      }
       return success;
     }
 
@@ -1496,6 +1568,9 @@ export class Checker {
         } else {
           this.diagnostics.add(new FieldMissingDiagnostic(left, fieldName));
         }
+      }
+      if (success) {
+        TypeBase.join(left, right);
       }
       return success;
     }

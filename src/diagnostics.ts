@@ -1,6 +1,6 @@
 
 import { describe } from "yargs";
-import { TypeKind, type Type, type TArrow } from "./checker";
+import { TypeKind, type Type, type TArrow, TRecord } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { countDigits } from "./util";
 
@@ -215,6 +215,14 @@ export function describeType(type: Type): string {
   }
 }
 
+function getFirstNodeInTypeChain(type: Type): Syntax | null {
+  let curr = type.next;
+  while (curr !== type && (curr.kind === TypeKind.Var || curr.node === null)) {
+    curr = curr.next;
+  }
+  return curr.node;
+}
+
 export class UnificationFailedDiagnostic {
 
   public readonly level = Level.Error;
@@ -228,6 +236,8 @@ export class UnificationFailedDiagnostic {
   }
 
   public format(): string {
+    const leftNode = getFirstNodeInTypeChain(this.left);
+    const rightNode = getFirstNodeInTypeChain(this.right);
     const node = this.nodes[0];
     let out = ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET
         + `unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET
@@ -237,6 +247,16 @@ export class UnificationFailedDiagnostic {
       const node = this.nodes[i];
       out += '  ... in an instantiation of the following expression\n\n'
       out += printNode(node, { indentation: i === 0 ? '  ' : '    ' }) + '\n';
+    }
+    if (leftNode !== null) {
+      out += ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET
+          + `type ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET + ` was inferred from this expression:\n\n`
+          + printNode(leftNode) + '\n';
+    }
+    if (rightNode !== null) {
+      out += ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET
+          + `type ` + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ` was inferred from this expression:\n\n`
+          + printNode(rightNode) + '\n';
     }
     return out;
   }
@@ -277,9 +297,13 @@ export class FieldMissingDiagnostic {
   }
 
   public format(): string {
-    return ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
+    let out = ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET 
          + `field '${this.fieldName}' is missing from `
          + describeType(this.recordType) + '\n\n';
+    if (this.recordType.node !== null) {
+      out += printNode(this.recordType.node) + '\n';
+    }
+    return out
   }
 
 }
@@ -289,8 +313,6 @@ export class FieldDoesNotExistDiagnostic {
   public readonly level = Level.Error;
 
   public constructor(
-    public recordType: TRecord,
-    public fieldName: string,
   ) {
 
   }
