@@ -107,6 +107,7 @@ export const enum SyntaxKind {
   // Type expressions
   ReferenceTypeExpression,
   ArrowTypeExpression,
+  VarTypeExpression,
 
   // Patterns
   BindPattern,
@@ -240,6 +241,7 @@ export class Scope {
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.IfStatement:
         break;
+      case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
         break;
       case SyntaxKind.LetDeclaration:
@@ -409,6 +411,32 @@ abstract class SyntaxBase {
 
   }
 
+}
+
+export function forEachChild(node: Syntax, callback: (node: Syntax) => void): void {
+
+  for (const key of Object.getOwnPropertyNames(node)) {
+    if (isIgnoredProperty(key)) {
+      continue;
+    }
+    visitField((node as any)[key]);
+  }
+
+  function visitField(field: any): void {
+    if (field === null) {
+      return;
+    }
+    if (Array.isArray(field)) {
+      for (const element of field) {
+        visitField(element);
+      }
+      return;
+    }
+    if (field instanceof SyntaxBase) {
+      callback(field as Syntax);
+    }
+  }
+  
 }
 
 abstract class TokenBase extends SyntaxBase {
@@ -939,9 +967,30 @@ export class ReferenceTypeExpression extends SyntaxBase {
 
 }
 
+export class VarTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.VarTypeExpression;
+
+  public constructor(
+    public name: Identifier
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.name;
+  }
+
+}
+
 export type TypeExpression
   = ReferenceTypeExpression
   | ArrowTypeExpression
+  | VarTypeExpression
 
 export class BindPattern extends SyntaxBase {
 
@@ -1686,6 +1735,7 @@ export class StructDeclaration extends SyntaxBase {
     public pubKeyword: PubKeyword | null,
     public structKeyword: StructKeyword,
     public name: IdentifierAlt,
+    public typeVars: Identifier[],
     public members: StructDeclarationField[] | null,
   ) {
     super();

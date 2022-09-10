@@ -51,6 +51,7 @@ import {
   EnumDeclarationStructElement,
   EnumDeclaration,
   EnumDeclarationTupleElement,
+  VarTypeExpression,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -168,6 +169,11 @@ export class Parser {
   public parsePrimitiveTypeExpression(): TypeExpression {
     const t0 = this.peekToken();
     switch (t0.kind) {
+      case SyntaxKind.Identifier:
+      {
+        this.getToken();
+        return new VarTypeExpression(t0);
+      }
       case SyntaxKind.IdentifierAlt:
         return this.parseReferenceTypeExpression();
       default:
@@ -288,6 +294,7 @@ export class Parser {
         for (;;) {
           const t2 = this.peekToken();
           if (t2.kind === SyntaxKind.LineFoldEnd
+            || t2.kind === SyntaxKind.Comma
             || t2.kind === SyntaxKind.RParen
             || t2.kind === SyntaxKind.RBrace
             || t2.kind === SyntaxKind.RBracket
@@ -481,10 +488,14 @@ export class Parser {
       this.raiseParseError(t0, [ SyntaxKind.StructKeyword ]);
     }
     const name = this.expectToken(SyntaxKind.IdentifierAlt);
-    const t2 = this.peekToken()
+    let t2 = this.getToken();
+    const typeVars = [];
+    while (t2.kind === SyntaxKind.Identifier) {
+      typeVars.push(t2);
+      t2 = this.getToken();
+    }
     let members = null;
     if (t2.kind === SyntaxKind.BlockStart) {
-      this.getToken();
       members = [];
       for (;;) {
         const t3 = this.peekToken();
@@ -499,9 +510,12 @@ export class Parser {
         const member = new StructDeclarationField(name, colon, typeExpr);
         members.push(member);
       }
+      t2 = this.getToken();
     }
-    this.expectToken(SyntaxKind.LineFoldEnd);
-    return new StructDeclaration(pubKeyword, t0, name, members);
+    if (t2.kind !== SyntaxKind.LineFoldEnd) {
+      this.raiseParseError(t2, [ SyntaxKind.LineFoldEnd, SyntaxKind.BlockStart, SyntaxKind.Identifier ]);
+    }
+    return new StructDeclaration(pubKeyword, t0, name, typeVars, members);
   }
 
   private parsePatternStartingWithConstructor() {

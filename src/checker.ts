@@ -482,7 +482,7 @@ abstract class SchemeBase {
 class Forall extends SchemeBase {
 
   public constructor(
-    public tvs: TVar[],
+    public typeVars: TVar[],
     public constraints: Constraint[],
     public type: Type,
   ) {
@@ -599,7 +599,7 @@ export class Checker {
 
   private instantiate(scheme: Scheme, node: Syntax | null): Type {
     const sub = new TVSub();
-    for (const tv of scheme.tvs) {
+    for (const tv of scheme.typeVars) {
       sub.set(tv, this.createTypeVar());
     }
     for (const constraint of scheme.constraints) {
@@ -891,7 +891,7 @@ export class Checker {
 
   }
 
-  public inferTypeExpression(node: TypeExpression): Type {
+  public inferTypeExpression(node: TypeExpression, introduceTypeVars = false): Type {
 
     switch (node.kind) {
 
@@ -905,6 +905,22 @@ export class Checker {
         const type = this.instantiate(scheme, node.name);
         type.node = node;
         return type;
+      }
+
+      case SyntaxKind.VarTypeExpression:
+      {
+        const scheme = this.lookup(node.name.text);
+        if (scheme === null) {
+          if (!introduceTypeVars) {
+            this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+          }
+          const type = this.createTypeVar();
+          this.addBinding(node.name.text, new Forall([], [], type));
+          return type;
+        }
+        assert(scheme.typeVars.length === 0);
+        assert(scheme.constraints.length === 0);
+        return scheme.type;
       }
 
       case SyntaxKind.ArrowTypeExpression:
@@ -1129,6 +1145,7 @@ export class Checker {
         break;
       }
 
+      case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
         break;
 
@@ -1169,6 +1186,7 @@ export class Checker {
       case SyntaxKind.IfStatement:
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.ExpressionStatement:
+      case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
         break;
 
@@ -1208,16 +1226,36 @@ export class Checker {
       case SyntaxKind.ReturnStatement:
         break;
 
+      case SyntaxKind.EnumDeclaration:
+      {
+        // TODO complete this
+        break;
+      }
+
       case SyntaxKind.StructDeclaration:
       {
+        const env = node.typeEnv = new TypeEnv(parentEnv);
+        const typeVars = new TVSet();
+        const constraints = new ConstraintSet();
+        const context: InferContext = {
+          constraints,
+          typeVars,
+          env,
+          returnType: null,
+        };
+        this.pushContext(context);
+        for (const varExpr of node.typeVars) {
+          env.add(varExpr.text, new Forall([], [], this.createTypeVar()));
+        }
         const fields = new Map<string, Type>();
         if (node.members !== null) {
           for (const member of node.members) {
             fields.set(member.name.text, this.inferTypeExpression(member.typeExpr));
           }
         }
+        this.popContext(context);
         const type = new TRecord(node, fields);
-        parentEnv.add(node.name.text, new Forall([], [], type));
+        parentEnv.add(node.name.text, new Forall(typeVars, constraints, type));
         break;
       }
 
