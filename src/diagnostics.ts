@@ -70,6 +70,7 @@ const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.RBrace]: "'}'",
   [SyntaxKind.LBracket]: "'['",
   [SyntaxKind.RBracket]: "']'",
+  [SyntaxKind.IdentifierAlt]: 'an identifier starting with an uppercase letter',
   [SyntaxKind.ConstantExpression]: 'a constant expression',
   [SyntaxKind.ReferenceExpression]: 'a reference expression',
   [SyntaxKind.LineFoldEnd]: 'the end of the current line-fold',

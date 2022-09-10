@@ -92,6 +92,7 @@ export const enum SyntaxKind {
   ModKeyword,
   ImportKeyword,
   StructKeyword,
+  EnumKeyword,
   TypeKeyword,
   ReturnKeyword,
   MatchKeyword,
@@ -150,6 +151,7 @@ export const enum SyntaxKind {
   SuffixFuncDecl,
   LetDeclaration,
   StructDeclaration,
+  EnumDeclaration,
   ImportDeclaration,
   TypeAliasDeclaration,
 
@@ -159,6 +161,10 @@ export const enum SyntaxKind {
 
   // Structure declaration members
   StructDeclarationField,
+
+  // Enum declaration elements
+  EnumDeclarationStructElement,
+  EnumDeclarationTupleElement,
 
   // Other nodes
   WrappedOperator,
@@ -745,6 +751,16 @@ export class StructKeyword extends TokenBase {
 
 }
 
+export class EnumKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.EnumKeyword;
+
+  public get text(): string {
+    return 'enum';
+  }
+
+}
+
 export class ReturnKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ReturnKeyword;
@@ -870,6 +886,7 @@ export type Token
   | IfKeyword
   | ElseKeyword
   | ElifKeyword
+  | EnumKeyword
 
 export type TokenKind
   = Token['kind']
@@ -1557,6 +1574,88 @@ export class Param extends SyntaxBase {
 
 }
 
+export class EnumDeclarationStructElement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.EnumDeclarationStructElement;
+
+  public constructor(
+    public name: IdentifierAlt,
+    public blockStart: BlockStart,
+    public members: StructDeclarationField[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    if (this.members.length > 0) {
+      return this.members[this.members.length-1].getLastToken();
+    }
+    return this.blockStart;
+  }
+
+}
+
+export class EnumDeclarationTupleElement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.EnumDeclarationTupleElement;
+
+  public constructor(
+    public name: IdentifierAlt,
+    public elements: TypeExpression[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.name;
+  }
+
+}
+
+export type EnumDeclarationElement
+  = EnumDeclarationStructElement
+  | EnumDeclarationTupleElement
+
+export class EnumDeclaration extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.EnumDeclaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public enumKeyword: EnumKeyword,
+    public name: IdentifierAlt,
+    public members: EnumDeclarationElement[] | null,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.enumKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.members !== null && this.members.length > 0) {
+      return this.members[this.members.length-1].getLastToken();
+    }
+    return this.name;
+  }
+
+}
+
 export class StructDeclarationField extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructDeclarationField;
@@ -1584,6 +1683,7 @@ export class StructDeclaration extends SyntaxBase {
   public readonly kind = SyntaxKind.StructDeclaration;
 
   public constructor(
+    public pubKeyword: PubKeyword | null,
     public structKeyword: StructKeyword,
     public name: IdentifierAlt,
     public members: StructDeclarationField[] | null,
@@ -1592,6 +1692,9 @@ export class StructDeclaration extends SyntaxBase {
   }
 
   public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
     return this.structKeyword;
   }
 
@@ -1769,6 +1872,7 @@ export type Declaration
   = LetDeclaration
   | ImportDeclaration
   | StructDeclaration
+  | EnumDeclaration
 
 export class Initializer extends SyntaxBase {
 
