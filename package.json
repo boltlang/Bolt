@@ -28,6 +28,8 @@
     "yargs": "^17.5.1"
   },
   "devDependencies": {
+    "@types/commonmark": "^0.27.5",
+    "@types/glob": "^8.0.0",
     "@types/node": "^18.7.15",
     "@types/yargs": "^17.0.12",
     "commonmark": "^0.30.0",
