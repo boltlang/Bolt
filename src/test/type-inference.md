@@ -70,8 +70,7 @@ let is_odd x.
 not (is_even True)
 ```
 
-
-### Polymorphic records can be partially typed
+## Polymorphic records can be partially typed
 
 ```
 struct Timestamped a b.
@@ -84,4 +83,32 @@ type Foo = Timestamped Int
 type Bar = Foo Int
 
 let t : Bar = Timestamped { first = "bar", second = 1, timestamp = 12345 }
+```
+
+## Extensible records work
+
+```
+struct Timestamped a.
+  data: a
+  timestamp: Int
+
+let t = Timestamped { data = "foo", timestamp = 12345 }
+
+t.data == 1
+t.data == "foo"
+
+let u = Timestamped { data = True, timestamp = 12345 }
+
+u.data == "foo"
+u.data == False
+```
+
+## A recursive function is automatically instantiated
+
+```
+let fac n.
+  if n == 0.
+    return 1
+  else.
+    return n * fac (n-"foo")
 ```
