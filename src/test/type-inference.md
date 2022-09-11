@@ -70,3 +70,18 @@ let is_odd x.
 not (is_even True)
 ```
 
+
+### Polymorphic records can be partially typed
+
+```
+struct Timestamped a b.
+  first: a
+  second: b
+  timestamp: Int
+
+type Foo = Timestamped Int
+
+type Bar = Foo Int
+
+let t : Bar = Timestamped { first = "bar", second = 1, timestamp = 12345 }
+```
