@@ -4,13 +4,21 @@ import {
   Pattern,
   Scope,
   SourceFile,
-  SourceFileElement,
-  StructDeclaration,
+  Symkind,
   Syntax,
   SyntaxKind,
   TypeExpression
 } from "./cst";
-import { ArityMismatchDiagnostic, BindingNotFoudDiagnostic, describeType, Diagnostics, FieldDoesNotExistDiagnostic, FieldMissingDiagnostic, UnificationFailedDiagnostic } from "./diagnostics";
+import {
+  describeType,
+  ArityMismatchDiagnostic,
+  BindingNotFoudDiagnostic,
+  Diagnostics,
+  FieldDoesNotExistDiagnostic,
+  FieldMissingDiagnostic,
+  UnificationFailedDiagnostic,
+  KindMismatchDiagnostic
+} from "./diagnostics";
 import { assert, isEmpty } from "./util";
 import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
 
@@ -30,6 +38,7 @@ export enum TypeKind {
   Tuple,
   Labeled,
   Record,
+  App,
 }
 
 abstract class TypeBase {
@@ -272,7 +281,7 @@ export class TRecord extends TypeBase {
   public nextRecord: TRecord | null = null;
 
   public constructor(
-    public decl: StructDeclaration,
+    public decl: Syntax,
     public fields: Map<string, Type>,
     public node: Syntax | null = null,
   ) {
@@ -308,6 +317,68 @@ export class TRecord extends TypeBase {
 
 }
 
+export class TApp extends TypeBase {
+
+  public readonly kind = TypeKind.App;
+
+  public constructor(
+    public operatorType: Type,
+    public argType: Type,
+    public node: Syntax | null = null
+  ) {
+    super(node);
+  }
+
+  public static build(operatorType: Type, argTypes: Type[], node: Syntax | null = null): TApp {
+    let count = argTypes.length;
+    let result = argTypes[count-1];
+    for (let i = count-2; i >= 0; i--) {
+      result = new TApp(argTypes[i], result, node);
+    }
+    return new TApp(operatorType, result, node);
+  }
+
+  public *getSequence(): Iterable<Type> {
+    if (this.operatorType.kind === TypeKind.App) {
+      yield* this.operatorType.getSequence();
+    } else {
+      yield this.operatorType;
+    }
+    if (this.argType.kind === TypeKind.App) {
+      yield* this.argType.getSequence();
+    } else {
+      yield this.argType;
+    }
+  }
+
+  public *getTypeVars(): Iterable<TVar> {
+     yield* this.operatorType.getTypeVars();
+     yield* this.argType.getTypeVars();
+  }
+
+  public shallowClone() {
+    return new TApp(
+      this.operatorType,
+      this.argType,
+      this.node
+    );
+  }
+
+  public substitute(sub: TVSub): Type {
+    let changed = false;
+    const newOperatorType = this.operatorType.substitute(sub);
+    if (newOperatorType !== this.operatorType) {
+      changed = true;
+    }
+    const newArgType = this.argType.substitute(sub);
+    if (newArgType !== this.argType) {
+      changed = true;
+    }
+    return changed ? new TApp(newOperatorType, newArgType, this.node) : this;
+  }
+
+}
+
 export type Type
   = TCon
   | TArrow
@@ -315,6 +386,7 @@ export type Type
   | TTuple
   | TLabeled
   | TRecord
+  | TApp
 
 class TVSet {
 
@@ -597,11 +669,15 @@ export class Checker {
     return context.returnType;
   }
 
-  private instantiate(scheme: Scheme, node: Syntax | null): Type {
+  private createSubstitution(scheme: Scheme): TVSub {
     const sub = new TVSub();
     for (const tv of scheme.typeVars) {
       sub.set(tv, this.createTypeVar());
     }
+    return sub;
+  }
+
+  private instantiate(scheme: Scheme, node: Syntax | null, sub = this.createSubstitution(scheme)): Type {
     for (const constraint of scheme.constraints) {
       const substituted = constraint.substitute(sub);
       substituted.node = node;
@@ -716,6 +792,8 @@ export class Checker {
         break;
       }
 
+      case SyntaxKind.TypeDeclaration:
+      case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
         break;
 
@@ -820,13 +898,20 @@ export class Checker {
 
       case SyntaxKind.StructExpression:
       {
-        const scheme = this.lookup(node.name.text);
-        if (scheme === null) {
+        const scope = node.getScope();
+        const decl = scope.lookup(node.name.text, Symkind.Constructor);
+        if (decl === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           return this.createTypeVar();
         }
-        const recordType = this.instantiate(scheme, node);
-        assert(recordType.kind === TypeKind.Record);
+        assert(decl.kind === SyntaxKind.StructDeclaration || decl.kind === SyntaxKind.EnumDeclarationStructElement);
+        const scheme = decl.scheme;
+        const sub = this.createSubstitution(scheme);
+        const declType = this.instantiate(scheme, node, sub);
+        const argTypes = [];
+        for (const typeVar of decl.tvs) {
+          argTypes.push(sub.get(typeVar)!);
+        }
         const fields = new Map();
         for (const member of node.members) {
           switch (member.kind) {
@@ -852,10 +937,10 @@ export class Checker {
               throw new Error(`Unexpected ${member}`);
           }
         }
-        const type = new TRecord(recordType.decl, fields, node);
+        const type = TApp.build(new TRecord(decl, fields, node), argTypes, node);
         this.addConstraint(
           new CEqual(
-            recordType,
+            TApp.build(declType, argTypes, node),
             type,
             node,
           )
@@ -921,6 +1006,16 @@ export class Checker {
         assert(scheme.typeVars.length === 0);
         assert(scheme.constraints.length === 0);
         return scheme.type;
+      }
+
+      case SyntaxKind.AppTypeExpression:
+      {
+        const operatorType = this.inferTypeExpression(node.operator);
+        const argTypes = [];
+        for (const argTypeExpr of node.args) {
+          argTypes.push(this.inferTypeExpression(argTypeExpr));
+        }
+        return TApp.build(operatorType, argTypes);
       }
 
       case SyntaxKind.ArrowTypeExpression:
@@ -1145,6 +1240,7 @@ export class Checker {
         break;
       }
 
+      case SyntaxKind.TypeDeclaration:
       case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
         break;
@@ -1186,6 +1282,7 @@ export class Checker {
       case SyntaxKind.IfStatement:
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.ExpressionStatement:
+      case SyntaxKind.TypeDeclaration:
       case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
         break;
@@ -1232,6 +1329,29 @@ export class Checker {
         break;
       }
 
+      case SyntaxKind.TypeDeclaration:
+      {
+        const env = node.typeEnv = new TypeEnv(parentEnv);
+        const constraints = new ConstraintSet();
+        const typeVars = new TVSet();
+        const context: InferContext = {
+          constraints,
+          typeVars,
+          env,
+          returnType: null,
+        };
+        this.pushContext(context);
+        for (const varExpr of node.typeVars) {
+          env.add(varExpr.text, new Forall([], [], this.createTypeVar()));
+        }
+        const type = this.inferTypeExpression(node.typeExpression);
+        this.popContext(context);
+        const scheme = new Forall(typeVars, constraints, type);
+        parentEnv.add(node.name.text, scheme); 
+        node.scheme = scheme;
+        break;
+      }
+
       case SyntaxKind.StructDeclaration:
       {
         const env = node.typeEnv = new TypeEnv(parentEnv);
@@ -1244,8 +1364,11 @@ export class Checker {
           returnType: null,
         };
         this.pushContext(context);
+        const argTypes = [];
         for (const varExpr of node.typeVars) {
-          env.add(varExpr.text, new Forall([], [], this.createTypeVar()));
+          const type = this.createTypeVar();
+          env.add(varExpr.text, new Forall([], [], type));
+          argTypes.push(type);
         }
         const fields = new Map<string, Type>();
         if (node.members !== null) {
@@ -1254,8 +1377,11 @@ export class Checker {
           }
         }
         this.popContext(context);
-        const type = new TRecord(node, fields);
-        parentEnv.add(node.name.text, new Forall(typeVars, constraints, type));
+        const type = new TRecord(node, fields, node);
+        const scheme = new Forall(typeVars, constraints, type);
+        parentEnv.add(node.name.text, scheme);
+        node.tvs = argTypes;
+        node.scheme = scheme; //new Forall(typeVars, constraints, new TApp(type, argTypes));
         break;
       }
 
@@ -1561,6 +1687,23 @@ export class Checker {
       }
     }
 
+    if (left.kind === TypeKind.App && right.kind === TypeKind.App) {
+      let leftElements = [...left.getSequence()];
+      let rightElements = [...right.getSequence()];
+      if (leftElements.length !== rightElements.length) {
+        this.diagnostics.add(new KindMismatchDiagnostic(leftElements.length-1, rightElements.length-1, constraint.node));
+        return false;
+      }
+      const count = leftElements.length;
+      let success = true;
+      for (let i = 0; i < count; i++) {
+        if (!this.unify(leftElements[i], rightElements[i], solution, constraint)) {
+          success = false;
+        }
+      }
+      return success;
+    }
+
     if (left.kind === TypeKind.Labeled && right.kind === TypeKind.Labeled) {
       let success = false;
       // This works like an ordinary union-find algorithm where an additional
@@ -1604,12 +1747,12 @@ export class Checker {
           }
           remaining.delete(fieldName);
         } else {
-          this.diagnostics.add(new FieldMissingDiagnostic(right, fieldName));
+          this.diagnostics.add(new FieldMissingDiagnostic(right, fieldName, constraint.node));
           success = false;
         }
       }
       for (const fieldName of remaining) {
-        this.diagnostics.add(new FieldDoesNotExistDiagnostic(left, fieldName));
+        this.diagnostics.add(new FieldDoesNotExistDiagnostic(left, fieldName, constraint.node));
       }
       if (success) {
         TypeBase.join(left, right);

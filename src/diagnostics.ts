@@ -198,18 +198,24 @@ export function describeType(type: Type): string {
     }
     case TypeKind.Record:
     {
-      let out = type.decl.name.text + ' { ';
-      let first = true;
-      for (const [fieldName, fieldType] of type.fields) {
-        if (first) first = false;
-        else out += ', ';
-        out += fieldName + ': ' + describeType(fieldType);
-      }
-      return out + ' }';
+      return type.decl.name.text;
+      // let out = type.decl.name.text + ' { ';
+      // let first = true;
+      // for (const [fieldName, fieldType] of type.fields) {
+      //   if (first) first = false;
+      //   else out += ', ';
+      //   out += fieldName + ': ' + describeType(fieldType);
+      // }
+      // return out + ' }';
     }
     case TypeKind.Labeled:
     {
+      // FIXME may need to include fields that were added during unification
       return '{ ' + type.name + ': ' + describeType(type.type) + ' }';
+    }
+    case TypeKind.App:
+    {
+      return describeType(type.operatorType) + ' ' + describeType(type.argType);
     }
   }
 }
@@ -294,6 +300,7 @@ export class FieldMissingDiagnostic {
   public constructor(
     public recordType: TRecord,
     public fieldName: string,
+    public node: Syntax | null,
   ) {
 
   }
@@ -302,8 +309,8 @@ export class FieldMissingDiagnostic {
     out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
     out.write(`field '${this.fieldName}' is missing from `);
     out.write(describeType(this.recordType) + '\n\n');
-    if (this.recordType.node !== null) {
-      out.write(printNode(this.recordType.node) + '\n');
+    if (this.node !== null) {
+      out.write(printNode(this.node) + '\n');
     }
   }
 
@@ -316,13 +323,48 @@ export class FieldDoesNotExistDiagnostic {
   public constructor(
     public recordType: TRecord,
     public fieldName: string,
+    public node: Syntax | null,
   ) {
+
   }
 
   public format(out: IndentWriter): void {
     out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
     out.write(`field '${this.fieldName}' does not exist on type `);
     out.write(describeType(this.recordType) + '\n\n');
+    if (this.node !== null) {
+      out.write(printNode(this.node) + '\n');
+    }
+  }
+
+}
+
+export class KindMismatchDiagnostic {
+
+  public readonly level = Level.Error;
+
+  public constructor(
+    public leftSize: number,
+    public rightSize: number,
+    public node: Syntax | null,
+  ) {
+  
+  }
+
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+    out.write(`kind `);
+    for (let i = 0; i < this.leftSize-1; i++) {
+      out.write(`* -> `);
+    }
+    out.write(`* does not match with `);
+    for (let i = 0; i < this.rightSize-1; i++) {
+      out.write(`* -> `);
+    }
+    out.write(`*\n\n`);
+    if (this.node !== null) {
+      out.write(printNode(this.node) + '\n');
+    }
   }
 
 }
@@ -335,6 +377,7 @@ export type Diagnostic
   | ArityMismatchDiagnostic
   | FieldMissingDiagnostic
   | FieldDoesNotExistDiagnostic
+  | KindMismatchDiagnostic
 
 export interface Diagnostics {
   add(diagnostic: Diagnostic): void;

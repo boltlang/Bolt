@@ -52,6 +52,8 @@ import {
   EnumDeclaration,
   EnumDeclarationTupleElement,
   VarTypeExpression,
+  TypeDeclaration,
+  AppTypeExpression,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -181,8 +183,30 @@ export class Parser {
     }
   }
 
+  private tryParseAppTypeExpression(): TypeExpression {
+    const operator = this.parsePrimitiveTypeExpression();
+    const args = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.RParen
+          || t1.kind === SyntaxKind.RBrace
+          || t1.kind === SyntaxKind.RBracket
+          || t1.kind === SyntaxKind.Equals
+          || t1.kind === SyntaxKind.BlockStart
+          || t1.kind === SyntaxKind.LineFoldEnd
+          || t1.kind === SyntaxKind.RArrow) {
+        break;
+      }
+      args.push(this.parsePrimitiveTypeExpression());
+    }
+    if (args.length === 0) {
+      return operator;
+    }
+    return new AppTypeExpression(operator, args);
+  }
+
   public parseTypeExpression(): TypeExpression {
-    let returnType = this.parsePrimitiveTypeExpression();
+    let returnType = this.tryParseAppTypeExpression();
     const paramTypes = [];
     for (;;) {
       const t1 = this.peekToken();
@@ -191,7 +215,7 @@ export class Parser {
       }
       this.getToken();
       paramTypes.push(returnType);
-      returnType = this.parsePrimitiveTypeExpression();
+      returnType = this.tryParseAppTypeExpression();
     }
     if (paramTypes.length === 0) {
       return returnType;
@@ -415,6 +439,31 @@ export class Parser {
   public parseExpression(): Expression {
     const lhs = this.parseUnaryExpression();
     return this.parseBinaryOperatorAfterExpr(lhs, 0);
+  }
+
+  public parseTypeDeclaration(): TypeDeclaration {
+    let pubKeyword = null;
+    let t0 = this.getToken();
+    if (t0.kind === SyntaxKind.PubKeyword) {
+      pubKeyword = t0;
+      t0 = this.getToken();
+    }
+    if (t0.kind !== SyntaxKind.TypeKeyword) {
+      this.raiseParseError(t0, [ SyntaxKind.TypeKeyword ]);
+    }
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
+    const typeVars = [];
+    let t1 = this.getToken();
+    while (t1.kind === SyntaxKind.Identifier) {
+      typeVars.push(t1);
+      t1 = this.getToken();
+    }
+    if (t1.kind !== SyntaxKind.Equals) {
+      this.raiseParseError(t1, [ SyntaxKind.Equals ]);
+    }
+    const typeExpr = this.parseTypeExpression();
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    return new TypeDeclaration(pubKeyword, t0, name, typeVars, t1, typeExpr);
   }
 
   public parseEnumDeclaration(): EnumDeclaration {
@@ -817,7 +866,9 @@ export class Parser {
       case SyntaxKind.StructKeyword:
         return this.parseStructDeclaration();
       case SyntaxKind.EnumKeyword:
-        return this.parseEnumDeclaration();
+        return this.parseStructDeclaration();
+      case SyntaxKind.TypeKeyword:
+        return this.parseTypeDeclaration();
       case SyntaxKind.IfKeyword:
         return this.parseIfStatement();
       default:

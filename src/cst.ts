@@ -108,6 +108,7 @@ export const enum SyntaxKind {
   ReferenceTypeExpression,
   ArrowTypeExpression,
   VarTypeExpression,
+  AppTypeExpression,
 
   // Patterns
   BindPattern,
@@ -147,14 +148,11 @@ export const enum SyntaxKind {
   IfStatementCase,
 
   // Declarations
-  VariableDeclaration,
-  PrefixFuncDecl,
-  SuffixFuncDecl,
   LetDeclaration,
   StructDeclaration,
   EnumDeclaration,
   ImportDeclaration,
-  TypeAliasDeclaration,
+  TypeDeclaration,
 
   // Let declaration body members
   ExprBody,
@@ -185,6 +183,7 @@ export type Syntax
   | Param
   | Body
   | StructDeclarationField
+  | EnumDeclarationElement
   | TypeAssert
   | Declaration
   | Statement
@@ -207,9 +206,16 @@ function isNodeWithScope(node: Syntax): node is NodeWithScope {
       || node.kind === SyntaxKind.LetDeclaration;
 }
 
+export const enum Symkind {
+  Var = 1,
+  Type = 2,
+  Constructor = 4,
+  Any = Var | Type | Constructor
+}
+
 export class Scope {
 
-  private mapping = new Map<string, Syntax>();
+  private mapping = new Map<string, [Symkind, Syntax]>();
 
   public constructor(
     public node: NodeWithScope,
@@ -228,6 +234,10 @@ export class Scope {
     return null;
   }
 
+  private add(name: string, node: Syntax, kind: Symkind): void {
+    this.mapping.set(name, [kind, node]);
+  }
+
   private scan(node: Syntax): void {
     switch (node.kind) {
       case SyntaxKind.SourceFile:
@@ -241,9 +251,17 @@ export class Scope {
       case SyntaxKind.ReturnStatement:
       case SyntaxKind.IfStatement:
         break;
+      case SyntaxKind.TypeDeclaration:
+      {
+        this.add(node.name.text, node, Symkind.Type);
+        break;
+      }
       case SyntaxKind.EnumDeclaration:
       case SyntaxKind.StructDeclaration:
+      {
+        this.add(node.name.text, node, Symkind.Constructor);
         break;
+      }
       case SyntaxKind.LetDeclaration:
       {
         for (const param of node.params) {
@@ -257,7 +275,7 @@ export class Scope {
           }
         } else {
           if (node.pattern.kind === SyntaxKind.WrappedOperator) {
-            this.mapping.set(node.pattern.operator.text, node);
+            this.add(node.pattern.operator.text, node, Symkind.Var);
           } else {
             this.scanPattern(node.pattern, node);
           }
@@ -273,7 +291,7 @@ export class Scope {
     switch (node.kind) {
       case SyntaxKind.BindPattern:
       {
-        this.mapping.set(node.name.text, decl);
+        this.add(node.name.text, decl, Symkind.Var);
         break;
       }
       case SyntaxKind.StructPattern:
@@ -287,7 +305,7 @@ export class Scope {
             }
             case SyntaxKind.PunnedStructPatternField:
             {
-              this.mapping.set(node.name.text, decl);
+              this.add(node.name.text, decl, Symkind.Var);
               break;
             }
           }
@@ -299,12 +317,15 @@ export class Scope {
     }
   }
 
-  public lookup(name: string): Syntax | null {
+  public lookup(name: string, expectedKind = Symkind.Any): Syntax | null {
     let curr: Scope | null = this;
     do {
-      const decl = curr.mapping.get(name);
-      if (decl !== undefined) {
-        return decl;
+      const match = curr.mapping.get(name);
+      if (match !== undefined) {
+        const [kind, decl] = match;
+        if (kind & expectedKind) {
+          return decl;
+        }
       }
       curr = curr.getParent();
     } while (curr !== null);
@@ -967,6 +988,30 @@ export class ReferenceTypeExpression extends SyntaxBase {
 
 }
 
+export class AppTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.AppTypeExpression;
+
+  public constructor(
+    public operator: TypeExpression,
+    public args: TypeExpression[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.operator.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    if (this.args.length > 0) {
+      return this.args[this.args.length-1].getLastToken();
+    }
+    return this.operator.getLastToken();
+  }
+
+}
+
 export class VarTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.VarTypeExpression;
@@ -991,6 +1036,7 @@ export type TypeExpression
   = ReferenceTypeExpression
   | ArrowTypeExpression
   | VarTypeExpression
+  | AppTypeExpression
 
 export class BindPattern extends SyntaxBase {
 
@@ -1853,6 +1899,34 @@ export class WrappedOperator extends SyntaxBase {
 
 }
 
+export class TypeDeclaration extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.TypeDeclaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public typeKeyword: TypeKeyword,
+    public name: IdentifierAlt,
+    public typeVars: Identifier[],
+    public equals: Equals,
+    public typeExpression: TypeExpression
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.typeKeyword;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpression.getLastToken();
+  }
+
+}
+
 export class LetDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.LetDeclaration;
@@ -1923,6 +1997,7 @@ export type Declaration
   | ImportDeclaration
   | StructDeclaration
   | EnumDeclaration
+  | TypeDeclaration
 
 export class Initializer extends SyntaxBase {
 
