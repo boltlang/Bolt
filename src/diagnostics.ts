@@ -204,14 +204,6 @@ export function describeType(type: Type): string {
     case TypeKind.Record:
     {
       return type.decl.name.text;
-      // let out = type.decl.name.text + ' { ';
-      // let first = true;
-      // for (const [fieldName, fieldType] of type.fields) {
-      //   if (first) first = false;
-      //   else out += ', ';
-      //   out += fieldName + ': ' + describeType(fieldType);
-      // }
-      // return out + ' }';
     }
     case TypeKind.Labeled:
     {
@@ -220,7 +212,7 @@ export function describeType(type: Type): string {
     }
     case TypeKind.App:
     {
-      return describeType(type.operatorType) + ' ' + describeType(type.argType);
+      return describeType(type.right) + ' ' + describeType(type.left);
     }
   }
 }

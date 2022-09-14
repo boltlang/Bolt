@@ -1758,6 +1758,8 @@ export class EnumDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.EnumDeclaration;
 
+  public typeEnv?: TypeEnv;
+
   public constructor(
     public pubKeyword: PubKeyword | null,
     public enumKeyword: EnumKeyword,
@@ -1809,6 +1811,8 @@ export class StructDeclarationField extends SyntaxBase {
 export class StructDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructDeclaration;
+
+  public typeEnv?: TypeEnv;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -1935,6 +1939,8 @@ export class WrappedOperator extends SyntaxBase {
 export class TypeDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TypeDeclaration;
+
+  public typeEnv?: TypeEnv;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
