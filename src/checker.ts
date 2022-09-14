@@ -4,6 +4,7 @@ import {
   Pattern,
   Scope,
   SourceFile,
+  StructDeclaration,
   Symkind,
   Syntax,
   SyntaxKind,
@@ -459,6 +460,95 @@ function isKindedType(type: Type): type is KindedType {
       || type.kind === TypeKind.Record;
 }
 
+export const enum KindType {
+  Star,
+  Arrow,
+  Var,
+}
+
+class KVSub {
+
+  private mapping = new Map<number, Kind>();
+
+  public set(kv: KVar, kind: Kind): void {
+    this.mapping.set(kv.id, kind);
+  }
+
+  public get(kv: KVar): Kind | undefined {
+    return this.mapping.get(kv.id);
+  }
+
+  public has(kv: KVar): boolean {
+    return this.mapping.has(kv.id);
+  }
+
+  public values(): Iterable<Kind> {
+    return this.mapping.values();
+  }
+
+}
+
+abstract class KindBase {
+  
+  public abstract readonly type: KindType;
+
+  public abstract substitute(sub: KVSub): Kind;
+
+}
+
+class KVar extends KindBase {
+
+  public readonly type = KindType.Var;
+
+  public constructor(
+    public id: number,
+  ) {
+    super();
+  }
+
+  public substitute(sub: KVSub): Kind {
+    const other = sub.get(this);
+    return other === undefined
+      ? this : other.substitute(sub);
+  }
+
+}
+
+class KStar extends KindBase {
+
+  public readonly type = KindType.Star;
+
+  public substitute(_sub: KVSub): Kind {
+    return this;
+  }
+
+}
+
+class KArrow extends KindBase {
+
+  public readonly type = KindType.Arrow;
+
+  public constructor(
+    public left: Kind,
+    public right: Kind,
+  ) {
+    super();
+  }
+
+  public substitute(sub: KVSub): Kind {
+    return new KArrow(
+      this.left.substitute(sub),
+      this.right.substitute(sub),
+    );
+  }
+
+}
+
+export type Kind
+  = KStar
+  | KArrow
+  | KVar
+
 class TVSet {
 
   private mapping = new Map<number, TVar>();
@@ -663,6 +753,43 @@ export class TypeEnv {
 
 }
 
+class KindEnv {
+
+  private mapping1 = new Map<string, Kind>();
+  private mapping2 = new Map<number, Kind>();
+
+  public constructor(public parent: KindEnv | null = null) {
+
+  }
+
+  public setNamed(name: string, kind: Kind): void {
+    assert(!this.mapping1.has(name));
+    this.mapping1.set(name, kind);
+  }
+
+  public setVar(tv: TVar, kind: Kind): void {
+    assert(!this.mapping2.has(tv.id));
+    this.mapping2.set(tv.id, kind);
+  }
+
+  public lookupNamed(name: string): Kind | null {
+    let curr: KindEnv | null = this;
+    do {
+      const kind = curr.mapping1.get(name);
+      if (kind !== undefined) {
+        return kind;
+      }
+      curr = curr.parent;
+    } while (curr !== null);
+    return null;
+  }
+
+  public lookupVar(tv: TVar): Kind | null {
+    return this.mapping2.get(tv.id) ?? null;
+  }
+
+}
+
 export interface InferContext {
   typeVars: TVSet;
   env: TypeEnv;
@@ -678,10 +805,8 @@ function isFunctionDeclarationLike(node: LetDeclaration): boolean {
 export class Checker {
 
   private nextTypeVarId = 0;
+  private nextKindVarId = 0;
   private nextConTypeId = 0;
-
-  //private graph?: Graph<Syntax>;
-  //private currentCycle?: Map<Syntax, Type>;
 
   private stringType = new TCon(this.nextConTypeId++, [], 'String');
   private intType = new TCon(this.nextConTypeId++, [], 'Int');
@@ -690,6 +815,7 @@ export class Checker {
   private contexts: InferContext[] = [];
 
   private solution = new TVSub();
+  private kindSolution = new KVSub();
 
   public constructor(
     private diagnostics: Diagnostics
@@ -763,7 +889,221 @@ export class Checker {
     context.env.add(name, scheme);
   }
 
-  public infer(node: Syntax): void {
+  private inferKindFromTypeExpression(node: TypeExpression, env: KindEnv): Kind {
+    switch (node.kind) {
+      case SyntaxKind.VarTypeExpression:
+      case SyntaxKind.ReferenceTypeExpression:
+      {
+        const kind = env.lookupNamed(node.name.text);
+        if (kind === null) {
+          this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+          // Create a filler kind variable that still will be able to catch other errors.
+          return this.createKindVar();
+        }
+        return kind;
+      }
+      case SyntaxKind.AppTypeExpression:
+      {
+        let operator = this.inferKindFromTypeExpression(node.operator, env);
+        const args = node.args.map(arg => this.inferKindFromTypeExpression(arg, env));
+        let result = operator;
+        for (const arg of args) {
+          result = this.applyKind(result, arg, node);
+        }
+        return result;
+      }
+      case SyntaxKind.NestedTypeExpression:
+      {
+        return this.inferKindFromTypeExpression(node.typeExpr, env);
+      }
+      default:
+        throw new Error(`Unexpected ${node}`);
+    }
+  }
+
+  private createKindVar(): KVar {
+    return new KVar(this.nextKindVarId++);
+  }
+
+  private applyKind(operator: Kind, arg: Kind, node: Syntax): Kind {
+    switch (operator.type) {
+      case KindType.Var:
+      {
+        const a1 = this.createKindVar();
+        const a2 = this.createKindVar();
+        const arrow = new KArrow(a1, a2);
+        this.unifyKind(arrow, operator, node);
+        this.unifyKind(a1, arg, node);
+        return a2;
+      }
+      case KindType.Arrow:
+      {
+        // Unify the argument to the operator's argument kind and return
+        // whatever the operator returns.
+        this.unifyKind(operator.left, arg, node);
+        return operator.right;
+      }
+      case KindType.Star:
+      {
+        this.diagnostics.add(
+          new KindMismatchDiagnostic(
+            operator,
+            new KArrow(
+              this.createKindVar(),
+              this.createKindVar()
+            ),
+            node
+          )
+        );
+        // Create a filler kind variable that still will be able to catch other errors.
+        return this.createKindVar();
+      }
+    }
+  }
+
+  private forwardDeclareKind(node: Syntax, env: KindEnv): void {
+
+    switch (node.kind) {
+
+      case SyntaxKind.SourceFile:
+      {
+        for (const element of node.elements) {
+          this.forwardDeclareKind(element, env);
+        }
+        break;
+      }
+
+      case SyntaxKind.StructDeclaration:
+      case SyntaxKind.EnumDeclaration:
+      {
+        env.setNamed(node.name.text, this.createKindVar());
+        if (node.members !== null) {
+          for (const member of node.members) {
+            env.setNamed(member.name.text, this.createKindVar());
+          }
+        }
+        break;
+      }
+
+    }
+
+  }
+
+  private inferKind(node: Syntax, env: KindEnv): void {
+    switch (node.kind) {
+      case SyntaxKind.SourceFile:
+      {
+        for (const element of node.elements) {
+          this.inferKind(element, env);
+        }
+        break;
+      }
+      case SyntaxKind.StructDeclaration:
+      {
+        // TODO
+        break;
+      }
+      case SyntaxKind.EnumDeclaration:
+      {
+        const declKind = env.lookupNamed(node.name.text)!;
+        const innerEnv = new KindEnv(env);
+        let kind: Kind = new KStar();
+        // FIXME should I go from right to left or left to right?
+        for (let i = node.varExps.length-1; i >= 0; i--) {
+          const varExpr = node.varExps[i];
+          const paramKind = this.createKindVar();
+          innerEnv.setNamed(varExpr.text, paramKind);
+          kind = new KArrow(paramKind, kind);
+        }
+        this.unifyKind(declKind, kind, node);
+        if (node.members !== null) {
+          for (const member of node.members) {
+            switch (member.kind) {
+              case SyntaxKind.EnumDeclarationTupleElement:
+              {
+                for (const element of member.elements) {
+                  this.unifyKind(this.inferKindFromTypeExpression(element, innerEnv), new KStar(), element);
+                }
+                break;
+              }
+              // TODO
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+
+  private unifyKind(a: Kind, b: Kind, node: Syntax): boolean {
+
+    const find = (kind: Kind): Kind => {
+      let curr = kind;
+      while (curr.type === KindType.Var && this.kindSolution.has(curr)) {
+        curr = this.kindSolution.get(curr)!;
+      }
+      // if (kind.type === KindType.Var && ) {
+      //   this.kindSolution.set(kind.id, curr);
+      // }
+      return curr;
+    }
+
+    const solve = (kind: Kind) => kind.substitute(this.kindSolution);
+
+    a = find(a);
+    b = find(b);
+
+    if (a.type === KindType.Var) {
+      this.kindSolution.set(a, b);
+      return true;
+    }
+
+    if (b.type === KindType.Var) {
+      return this.unifyKind(b, a, node);
+    }
+
+    if (a.type === KindType.Star && b.type === KindType.Star) {
+      return true;
+    }
+
+    if (a.type === KindType.Arrow && b.type === KindType.Arrow) {
+      return this.unifyKind(a.left, b.left, node)
+          || this.unifyKind(a.right, b.right, node);
+      // let success = true;
+      // const leftStack = [];
+      // const rightStack = [];
+      // let leftCurr: Kind = a;
+      // let rightCurr: Kind = b;
+      // for (;;) {
+      //   while (leftCurr.type === KindType.Arrow) {
+      //     leftStack.push(leftCurr);
+      //     leftCurr = find(leftCurr.left);
+      //   }
+      //   while (rightCurr.type === KindType.Arrow) {
+      //     rightStack.push(rightCurr);
+      //     rightCurr = find(rightCurr.left);
+      //   }
+      //   if (!this.unifyKind(leftCurr, rightCurr, node)) {
+      //     success = false;
+      //   }
+      //   if (leftStack.length === 0 || rightStack.length === 0) {
+      //     if (leftStack.length > 0 || rightStack.length > 0) {
+      //       this.diagnostics.add(new KindMismatchDiagnostic(solve(a), solve(b), node));
+      //       success = false;
+      //     }
+      //     break;
+      //   }
+      //   rightCurr = find(rightStack.pop()!.right);
+      //   leftCurr = find(leftStack.pop()!.right);
+      // }
+      // return success;
+    }
+
+    this.diagnostics.add(new KindMismatchDiagnostic(solve(a), solve(b), node));
+    return false;
+  }
+
+  private infer(node: Syntax): void {
 
     switch (node.kind) {
 
@@ -1010,7 +1350,20 @@ export class Checker {
               throw new Error(`Unexpected ${member}`);
           }
         }
-        const type = new TRecord(decl, argTypes, fields, node);
+        let type = new TRecord(decl, argTypes, fields, node);
+        if (decl.kind === SyntaxKind.EnumDeclarationStructElement) {
+          const elementTypes = [];
+          for (const element of decl.parent!.elements) {
+            let elementType;
+            if (element === decl) {
+              elementType = type;
+            } else {
+              elementType = this.createTypeVar();
+            }
+            elementTypes.push(elementType);
+          }
+          type = new TVariant(typeVars, elementTypes);
+        }
         this.addConstraint(
           new CEqual(
             declType,
@@ -1467,6 +1820,13 @@ export class Checker {
 
   public check(node: SourceFile): void {
 
+    const kenv = new KindEnv();
+    kenv.setNamed('Int', new KStar());
+    kenv.setNamed('String', new KStar());
+    kenv.setNamed('Bool', new KStar());
+    this.forwardDeclareKind(node, kenv);
+    this.inferKind(node, kenv);
+
     const typeVars = new TVSet();
     const constraints = new ConstraintSet();
     const env = new TypeEnv();
@@ -1475,7 +1835,10 @@ export class Checker {
     this.pushContext(context);
 
     const a = this.createTypeVar();
+    const b = this.createTypeVar();
+    const f = this.createTypeVar();
 
+    env.add('$', new Forall([ f, a ], [], new TArrow([ new TArrow([ a ], b), a ], b)));
     env.add('String', new Forall([], [], this.stringType));
     env.add('Int', new Forall([], [], this.intType));
     env.add('True', new Forall([], [], this.boolType));

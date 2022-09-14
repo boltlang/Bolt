@@ -54,6 +54,8 @@ import {
   VarTypeExpression,
   TypeDeclaration,
   AppTypeExpression,
+  NestedPattern,
+  NestedTypeExpression,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -175,6 +177,13 @@ export class Parser {
       {
         this.getToken();
         return new VarTypeExpression(t0);
+      }
+      case SyntaxKind.LParen:
+      {
+        this.getToken();
+        const typeExpr = this.parseTypeExpression();
+        const t2 = this.expectToken(SyntaxKind.RParen);
+        return new NestedTypeExpression(t0, typeExpr, t2);
       }
       case SyntaxKind.IdentifierAlt:
         return this.parseReferenceTypeExpression();
@@ -477,11 +486,15 @@ export class Parser {
       this.raiseParseError(t0, [ SyntaxKind.EnumKeyword ]);
     }
     const name = this.expectToken(SyntaxKind.IdentifierAlt);
-    const t1 = this.peekToken();
+    let t1 = this.getToken();
+    const varExps = [];
+    while (t1.kind === SyntaxKind.Identifier) {
+      varExps.push(t1);
+      t1 = this.getToken();
+    }
     let members = null;
     if (t1.kind === SyntaxKind.BlockStart) {
       members = [];
-      this.getToken();
       for (;;) {
         const t2 = this.peekToken();
         if (t2.kind === SyntaxKind.BlockEnd) {
@@ -498,6 +511,7 @@ export class Parser {
             const name = this.expectToken(SyntaxKind.Identifier);
             const colon = this.expectToken(SyntaxKind.Colon);
             const typeExpr = this.parseTypeExpression();
+            this.expectToken(SyntaxKind.LineFoldEnd);
             members.push(new StructDeclarationField(name, colon, typeExpr));
             const t4 = this.peekToken();
             if (t4.kind === SyntaxKind.BlockEnd) {
@@ -521,9 +535,12 @@ export class Parser {
         members.push(member);
         this.expectToken(SyntaxKind.LineFoldEnd);
       }
+      t1 = this.getToken();
     }
-    this.expectToken(SyntaxKind.LineFoldEnd);
-    return new EnumDeclaration(pubKeyword, t0, name, members);
+    if (t1.kind !== SyntaxKind.LineFoldEnd) {
+      this.raiseParseError(t1, [ SyntaxKind.Identifier, SyntaxKind.BlockStart, SyntaxKind.LineFoldEnd ]);
+    }
+    return new EnumDeclaration(pubKeyword, t0, name, varExps, members);
   }
 
   public parseStructDeclaration(): StructDeclaration {
@@ -651,19 +668,26 @@ export class Parser {
     switch (t0.kind) {
       case SyntaxKind.LParen:
       {
-        const t1 = this.peekToken();
+        const t1 = this.peekToken(2);
         if (t1.kind === SyntaxKind.IdentifierAlt) {
           this.getToken();
-          return this.parsePatternStartingWithConstructor();
+          const pattern = this.parsePatternStartingWithConstructor();
+          const t3 = this.expectToken(SyntaxKind.RParen);
+          return new NestedPattern(t0, pattern, t3);
         } else {
           return this.parseTuplePattern();
         }
       }
       case SyntaxKind.IdentifierAlt:
-        return this.parsePatternStartingWithConstructor();
+      {
+        this.getToken();
+        return new NamedTuplePattern(t0, []);
+      }
       case SyntaxKind.Identifier:
+      {
         this.getToken();
         return new BindPattern(t0);
+      }
       default:
         this.raiseParseError(t0, [ SyntaxKind.Identifier ]);
     }
@@ -866,7 +890,7 @@ export class Parser {
       case SyntaxKind.StructKeyword:
         return this.parseStructDeclaration();
       case SyntaxKind.EnumKeyword:
-        return this.parseStructDeclaration();
+        return this.parseEnumDeclaration();
       case SyntaxKind.TypeKeyword:
         return this.parseTypeDeclaration();
       case SyntaxKind.IfKeyword:

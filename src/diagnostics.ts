@@ -1,6 +1,6 @@
 
 import { describe } from "yargs";
-import { TypeKind, type Type, type TArrow, TRecord } from "./checker";
+import { TypeKind, type Type, type TArrow, TRecord, Kind, KindType } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { countDigits, IndentWriter } from "./util";
 
@@ -70,6 +70,10 @@ const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.RBrace]: "'}'",
   [SyntaxKind.LBracket]: "'['",
   [SyntaxKind.RBracket]: "']'",
+  [SyntaxKind.StructKeyword]: "'struct'",
+  [SyntaxKind.EnumKeyword]: "'enum'",
+  [SyntaxKind.MatchKeyword]: "'match'",
+  [SyntaxKind.TypeKeyword]: "'type'",
   [SyntaxKind.IdentifierAlt]: 'an identifier starting with an uppercase letter',
   [SyntaxKind.ConstantExpression]: 'a constant expression',
   [SyntaxKind.ReferenceExpression]: 'a reference expression',
@@ -196,6 +200,7 @@ export function describeType(type: Type): string {
       }
       return out;
     }
+    case TypeKind.Variant:
     case TypeKind.Record:
     {
       return type.decl.name.text;
@@ -217,6 +222,17 @@ export function describeType(type: Type): string {
     {
       return describeType(type.operatorType) + ' ' + describeType(type.argType);
     }
+  }
+}
+
+function describeKind(kind: Kind): string {
+  switch (kind.type) {
+    case KindType.Var:
+      return `a${kind.id}`;
+    case KindType.Arrow:
+      return describeKind(kind.left) + ' -> ' + describeKind(kind.right);
+    case KindType.Star:
+      return '*';
   }
 }
 
@@ -344,8 +360,8 @@ export class KindMismatchDiagnostic {
   public readonly level = Level.Error;
 
   public constructor(
-    public leftSize: number,
-    public rightSize: number,
+    public left: Kind,
+    public right: Kind,
     public node: Syntax | null,
   ) {
   
@@ -353,15 +369,7 @@ export class KindMismatchDiagnostic {
 
   public format(out: IndentWriter): void {
     out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`kind `);
-    for (let i = 0; i < this.leftSize-1; i++) {
-      out.write(`* -> `);
-    }
-    out.write(`* does not match with `);
-    for (let i = 0; i < this.rightSize-1; i++) {
-      out.write(`* -> `);
-    }
-    out.write(`*\n\n`);
+    out.write(`kind ${describeKind(this.left)} does not match with ${describeKind(this.right)}\n\n`);
     if (this.node !== null) {
       out.write(printNode(this.node) + '\n');
     }

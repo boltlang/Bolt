@@ -109,6 +109,7 @@ export const enum SyntaxKind {
   ArrowTypeExpression,
   VarTypeExpression,
   AppTypeExpression,
+  NestedTypeExpression,
 
   // Patterns
   BindPattern,
@@ -257,9 +258,17 @@ export class Scope {
         break;
       }
       case SyntaxKind.EnumDeclaration:
+      {
+        this.add(node.name.text, node, Symkind.Type);
+        if (node.members !== null) {
+          for (const member of node.members) {
+            this.add(member.name.text, member, Symkind.Constructor);
+          }
+        }
+      }
       case SyntaxKind.StructDeclaration:
       {
-        this.add(node.name.text, node, Symkind.Constructor);
+        this.add(node.name.text, node, Symkind.Constructor | Symkind.Type);
         break;
       }
       case SyntaxKind.LetDeclaration:
@@ -1032,11 +1041,34 @@ export class VarTypeExpression extends SyntaxBase {
 
 }
 
+export class NestedTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.NestedTypeExpression;
+
+  public constructor(
+    public lparen: LParen,
+    public typeExpr: TypeExpression,
+    public rparen: RParen,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
+}
+
 export type TypeExpression
   = ReferenceTypeExpression
   | ArrowTypeExpression
   | VarTypeExpression
   | AppTypeExpression
+  | NestedTypeExpression
 
 export class BindPattern extends SyntaxBase {
 
@@ -1730,6 +1762,7 @@ export class EnumDeclaration extends SyntaxBase {
     public pubKeyword: PubKeyword | null,
     public enumKeyword: EnumKeyword,
     public name: IdentifierAlt,
+    public varExps: Identifier[],
     public members: EnumDeclarationElement[] | null,
   ) {
     super();
