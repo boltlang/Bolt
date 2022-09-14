@@ -702,8 +702,8 @@ abstract class SchemeBase {
 class Forall extends SchemeBase {
 
   public constructor(
-    public typeVars: TVar[],
-    public constraints: Constraint[],
+    public typeVars: Iterable<TVar>,
+    public constraints: Iterable<Constraint>,
     public type: Type,
   ) {
     super();
@@ -1423,16 +1423,15 @@ export class Checker {
           this.addBinding(node.name.text, new Forall([], [], type));
           return type;
         }
-        assert(scheme.typeVars.length === 0);
-        assert(scheme.constraints.length === 0);
+        assert(isEmpty(scheme.typeVars));
+        assert(isEmpty(scheme.constraints));
         return scheme.type;
       }
 
       case SyntaxKind.AppTypeExpression:
       {
-        const argTypes = node.args.map(arg => this.inferTypeExpression(arg, introduceTypeVars));
         return TApp.build([
-          ...argTypes,
+          ...node.args.map(arg => this.inferTypeExpression(arg, introduceTypeVars)),
           this.inferTypeExpression(node.operator, introduceTypeVars),
         ]);
       }
@@ -1770,7 +1769,7 @@ export class Checker {
               {
                 const argTypes = member.elements.map(el => this.inferTypeExpression(el));
                 elementType = new TArrow(argTypes, TApp.build([ ...kindArgs, type ]));
-                parentEnv.add(member.name.text, new Forall([], [], elementType));
+                parentEnv.add(member.name.text, new Forall(typeVars, constraints, elementType));
                 break;
               }
               // TODO
