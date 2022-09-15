@@ -1434,7 +1434,6 @@ export class StructExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.StructExpression;
 
   public constructor(
-    public name: IdentifierAlt,
     public lbrace: LBrace,
     public members: StructExpressionElement[],
     public rbrace: RBrace,
@@ -1443,7 +1442,7 @@ export class StructExpression extends SyntaxBase {
   }
 
   public getFirstToken(): Token {
-    return this.name;
+    return this.lbrace;
   }
 
   public getLastToken(): Token {
@@ -1481,17 +1480,21 @@ export class ReferenceExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.ReferenceExpression;
 
   public constructor(
-    public name: QualifiedName,
+    public modulePath: Array<[IdentifierAlt, Dot]>,
+    public name: Identifier | IdentifierAlt,
   ) {
     super();
   }
 
   public getFirstToken(): Token {
-    return this.name.getFirstToken();
+    if (this.modulePath.length > 0) {
+      return this.modulePath[0][0];
+    }
+    return this.name;
   }
 
   public getLastToken(): Token {
-     return this.name.getLastToken();
+     return this.name;
   }
 
 }
@@ -1718,7 +1721,7 @@ export class EnumDeclarationStructElement extends SyntaxBase {
   public constructor(
     public name: IdentifierAlt,
     public blockStart: BlockStart,
-    public members: StructDeclarationField[],
+    public fields: StructDeclarationField[],
   ) {
     super();
   }
@@ -1728,8 +1731,8 @@ export class EnumDeclarationStructElement extends SyntaxBase {
   }
 
   public getLastToken(): Token {
-    if (this.members.length > 0) {
-      return this.members[this.members.length-1].getLastToken();
+    if (this.fields.length > 0) {
+      return this.fields[this.fields.length-1].getLastToken();
     }
     return this.blockStart;
   }
@@ -1830,7 +1833,7 @@ export class StructDeclaration extends SyntaxBase {
     public structKeyword: StructKeyword,
     public name: IdentifierAlt,
     public varExps: Identifier[],
-    public members: StructDeclarationField[] | null,
+    public fields: StructDeclarationField[] | null,
   ) {
     super();
   }
@@ -1843,8 +1846,8 @@ export class StructDeclaration extends SyntaxBase {
   }
 
   public getLastToken(): Token {
-    if (this.members && this.members.length > 0) {
-      return this.members[this.members.length-1].getLastToken();
+    if (this.fields && this.fields.length > 0) {
+      return this.fields[this.fields.length-1].getLastToken();
     }
     return this.name;
   }

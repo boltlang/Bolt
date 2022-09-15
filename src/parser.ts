@@ -241,7 +241,7 @@ export class Parser {
     return new ConstantExpression(token);
   }
 
-  public parseQualifiedName(): QualifiedName {
+  public parseReferenceExpression(): ReferenceExpression {
     const modulePath: Array<[IdentifierAlt, Dot]> = [];
     for (;;) {
       const t0 = this.peekToken(1);
@@ -251,12 +251,11 @@ export class Parser {
       }
       modulePath.push([t0, t1]);
     }
-    const name = this.expectToken(SyntaxKind.Identifier);
-    return new QualifiedName(modulePath, name);
-  }
-
-  public parseReferenceExpression(): ReferenceExpression {
-    return new ReferenceExpression(this.parseQualifiedName());
+    const name = this.getToken();
+    if (name.kind !== SyntaxKind.Identifier && name.kind !== SyntaxKind.IdentifierAlt) {
+      this.raiseParseError(name, [ SyntaxKind.Identifier, SyntaxKind.IdentifierAlt ]);
+    }
+    return new ReferenceExpression(modulePath, name);
   }
 
   private parseExpressionWithParens(): Expression {
@@ -279,65 +278,47 @@ export class Parser {
       case SyntaxKind.LParen:
         return this.parseExpressionWithParens();
       case SyntaxKind.Identifier:
-        return this.parseReferenceExpression();
       case SyntaxKind.IdentifierAlt:
+        return this.parseReferenceExpression();
+      case SyntaxKind.LBrace:
       {
         this.getToken();
-        const t1 = this.peekToken();
-        if (t1.kind === SyntaxKind.LBrace) {
-          this.getToken();
-          const fields = [];
-          let rbrace;
-          for (;;) {
-            const t2 = this.peekToken();
-            if (t2.kind === SyntaxKind.RBrace) {
-              this.getToken();
-              rbrace = t2;
-              break;
-            }
-            let field;
-            const t3 = this.getToken();
-            if (t3.kind === SyntaxKind.Identifier) {
-              const t4 = this.peekToken();
-              if (t4.kind === SyntaxKind.Equals) {
-                this.getToken();
-                const expression = this.parseExpression();
-                field = new StructExpressionField(t3, t4, expression);
-              } else {
-                field = new PunnedStructExpressionField(t3);
-              }
-            } else {
-              // TODO add spread fields
-              this.raiseParseError(t3, [ SyntaxKind.Identifier ]);
-            }
-            fields.push(field);
-            const t5 = this.peekToken();
-            if (t5.kind === SyntaxKind.Comma) {
-              this.getToken();
-              continue;
-            } else if (t5.kind === SyntaxKind.RBrace) {
-              this.getToken();
-              rbrace = t5;
-              break;
-            }
-          }
-          return new StructExpression(t0, t1, fields, rbrace);
-        }
-        const elements = [];
+        const fields = [];
+        let rbrace;
         for (;;) {
           const t2 = this.peekToken();
-          if (t2.kind === SyntaxKind.LineFoldEnd
-            || t2.kind === SyntaxKind.Comma
-            || t2.kind === SyntaxKind.RParen
-            || t2.kind === SyntaxKind.RBrace
-            || t2.kind === SyntaxKind.RBracket
-            || isBinaryOperatorLike(t2)
-            || isPrefixOperatorLike(t2)) {
+          if (t2.kind === SyntaxKind.RBrace) {
+            this.getToken();
+            rbrace = t2;
             break;
           }
-          elements.push(this.parseExpression());
+          let field;
+          const t3 = this.getToken();
+          if (t3.kind === SyntaxKind.Identifier) {
+            const t4 = this.peekToken();
+            if (t4.kind === SyntaxKind.Equals) {
+              this.getToken();
+              const expression = this.parseExpression();
+              field = new StructExpressionField(t3, t4, expression);
+            } else {
+              field = new PunnedStructExpressionField(t3);
+            }
+          } else {
+            // TODO add spread fields
+            this.raiseParseError(t3, [ SyntaxKind.Identifier ]);
+          }
+          fields.push(field);
+          const t5 = this.peekToken();
+          if (t5.kind === SyntaxKind.Comma) {
+            this.getToken();
+            continue;
+          } else if (t5.kind === SyntaxKind.RBrace) {
+            this.getToken();
+            rbrace = t5;
+            break;
+          }
         }
-        return new NamedTupleExpression(t0, elements);
+        return new StructExpression(t0, fields, rbrace);
       }
       case SyntaxKind.Integer:
       case SyntaxKind.StringLiteral:

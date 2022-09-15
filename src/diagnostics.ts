@@ -1,5 +1,4 @@
 
-import { describe } from "yargs";
 import { TypeKind, type Type, type TArrow, TRecord, Kind, KindType } from "./checker";
 import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { countDigits, IndentWriter } from "./util";
@@ -200,10 +199,20 @@ export function describeType(type: Type): string {
       }
       return out;
     }
-    case TypeKind.Variant:
-    case TypeKind.Record:
+    case TypeKind.Nominal:
     {
       return type.decl.name.text;
+    }
+    case TypeKind.Record:
+    {
+      let out = '{ ';
+      let first = true;
+      for (const [fieldName, fieldType] of type.fields) {
+        if (first) first = false;
+        else out += ', ';
+        out += fieldName + ': ' + describeType(fieldType);
+      }
+      return out + ' }';
     }
     case TypeKind.Labeled:
     {
