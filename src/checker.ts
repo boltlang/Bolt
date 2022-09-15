@@ -1852,6 +1852,7 @@ export class Checker {
     env.add('$', new Forall([ f, a ], [], new TArrow([ new TArrow([ a ], b), a ], b)), Symkind.Var);
     env.add('String', new Forall([], [], this.stringType), Symkind.Type);
     env.add('Int', new Forall([], [], this.intType), Symkind.Type);
+    env.add('Bool', new Forall([], [], this.boolType), Symkind.Type);
     env.add('True', new Forall([], [], this.boolType), Symkind.Var);
     env.add('False', new Forall([], [], this.boolType), Symkind.Var);
     env.add('+', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)), Symkind.Var);
