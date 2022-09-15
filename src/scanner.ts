@@ -382,6 +382,7 @@ export class Scanner extends BufferedStream<Token> {
 const enum FrameType {
   Block,
   LineFold,
+  Fallthrough,
 }
 
 const INIT_POS = new TextPosition(0, 0, 0);
@@ -400,24 +401,40 @@ export class Punctuator extends BufferedStream<Token> {
 
   public read(): Token {
 
-    const refPos = this.referencePositions[this.referencePositions.length-1];
-    const frameType = this.frameTypes[this.frameTypes.length-1];
     const t0 = this.tokens.peek(1);
 
-    if (t0.kind === SyntaxKind.EndOfFile) {
-      if (this.frameTypes.length === 1) {
-        return t0;
-      }
-      this.frameTypes.pop();
-      switch (frameType) {
-        case FrameType.LineFold:
-          return new LineFoldEnd(t0.getStartPosition());
-        case FrameType.Block:
-          return new BlockEnd(t0.getStartPosition());
+    switch (t0.kind) {
+      case SyntaxKind.LBrace:
+        this.frameTypes.push(FrameType.Fallthrough);
+        break;
+      case SyntaxKind.EndOfFile:
+      {
+        if (this.frameTypes.length === 1) {
+          return t0;
+        }
+        const frameType = this.frameTypes.pop()!;
+        switch (frameType) {
+          case FrameType.LineFold:
+            return new LineFoldEnd(t0.getStartPosition());
+          case FrameType.Block:
+            return new BlockEnd(t0.getStartPosition());
+        }
       }
     }
 
+    const refPos = this.referencePositions[this.referencePositions.length-1];
+    const frameType = this.frameTypes[this.frameTypes.length-1];
+
     switch (frameType) {
+
+      case FrameType.Fallthrough:
+      {
+        if (t0.kind === SyntaxKind.RBrace) {
+          this.frameTypes.pop()!;
+        }
+        this.tokens.get();
+        return t0;
+      }
 
       case FrameType.LineFold:
       {
