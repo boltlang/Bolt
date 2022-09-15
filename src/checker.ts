@@ -1542,7 +1542,6 @@ export class Checker {
           env.add(varExpr.text, new Forall([], [], typeVar), Symkind.Type);
         }
         const type = this.inferTypeExpression(node.typeExpression);
-        console.log(describeType(type));
         this.popContext(context);
         const scheme = new Forall(typeVars, constraints, TApp.build(type, kindArgs));
         parentEnv.add(node.name.text, scheme, Symkind.Type); 
