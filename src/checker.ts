@@ -741,37 +741,27 @@ export class TypeEnv {
 
 class KindEnv {
 
-  private mapping1 = new Map<string, Kind>();
-  private mapping2 = new Map<number, Kind>();
+  private mapping = new Map<string, Kind>();
 
   public constructor(public parent: KindEnv | null = null) {
 
   }
 
   public setNamed(name: string, kind: Kind): void {
-    assert(!this.mapping1.has(name));
-    this.mapping1.set(name, kind);
+    assert(!this.mapping.has(name));
+    this.mapping.set(name, kind);
   }
 
-  public setVar(tv: TVar, kind: Kind): void {
-    assert(!this.mapping2.has(tv.id));
-    this.mapping2.set(tv.id, kind);
-  }
-
-  public lookupNamed(name: string): Kind | null {
+  public lookup(name: string): Kind | null {
     let curr: KindEnv | null = this;
     do {
-      const kind = curr.mapping1.get(name);
+      const kind = curr.mapping.get(name);
       if (kind !== undefined) {
         return kind;
       }
       curr = curr.parent;
     } while (curr !== null);
     return null;
-  }
-
-  public lookupVar(tv: TVar): Kind | null {
-    return this.mapping2.get(tv.id) ?? null;
   }
 
 }
@@ -880,7 +870,7 @@ export class Checker {
       case SyntaxKind.VarTypeExpression:
       case SyntaxKind.ReferenceTypeExpression:
       {
-        const kind = env.lookupNamed(node.name.text);
+        const kind = env.lookup(node.name.text);
         if (kind === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           // Create a filler kind variable that still will be able to catch other errors.
@@ -993,7 +983,7 @@ export class Checker {
       }
       case SyntaxKind.EnumDeclaration:
       {
-        const declKind = env.lookupNamed(node.name.text)!;
+        const declKind = env.lookup(node.name.text)!;
         const innerEnv = new KindEnv(env);
         let kind: Kind = new KStar();
         // FIXME should I go from right to left or left to right?
@@ -1026,9 +1016,9 @@ export class Checker {
           this.unifyKind(this.inferKindFromTypeExpression(node.typeAssert.typeExpression, env), new KStar(), node.typeAssert.typeExpression);
         }
         if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
+          const innerEnv = new KindEnv(env);
           for (const element of node.body.elements) {
-            // TODO fork `env` to support local type declarations
-            this.inferKind(element, env);
+            this.inferKind(element, innerEnv);
           }
         }
         break;
