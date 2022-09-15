@@ -870,8 +870,8 @@ export class Checker {
         const a2 = this.createKindVar();
         const arrow = new KArrow(a1, a2);
         this.unifyKind(arrow, operator, node);
-        this.unifyKind(a2, arg, node);
-        return a1;
+        this.unifyKind(a1, arg, node);
+        return a2;
       }
       case KindType.Arrow:
       {
@@ -1036,7 +1036,7 @@ export class Checker {
 
     if (a.type === KindType.Arrow && b.type === KindType.Arrow) {
       return this.unifyKind(a.left, b.left, node)
-          || this.unifyKind(a.right, b.right, node);
+          && this.unifyKind(a.right, b.right, node);
     }
 
     this.diagnostics.add(new KindMismatchDiagnostic(solve(a), solve(b), node));
