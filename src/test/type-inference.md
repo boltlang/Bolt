@@ -112,3 +112,43 @@ let fac n.
   else.
     return n * fac (n-"foo")
 ```
+
+## Enum-declarations are correctly typed
+
+```
+enum Maybe a.
+  Just a
+  Nothing
+
+let right_1 : Maybe Int = Just 1
+let right_2 : Maybe String = Just "foo"
+let wrong : Maybe Int = Just "foo"
+```
+
+## Kind inference works
+
+```
+enum Maybe a.
+  Just a
+  Nothing
+
+let foo_1 : Maybe
+let foo_2 : Maybe Int
+let foo_3 : Maybe Int Int
+```
+
+## Can indirectly apply a polymorphic datatype to some type
+
+```
+enum Maybe a.
+  Just a
+  Nothing
+
+enum App a b.
+  MkApp (a b)
+
+enum Foo.
+  MkFoo (App Maybe Int)
+
+let f : Foo = MkFoo (MkApp (Just 1))
+```

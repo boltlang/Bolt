@@ -118,3 +118,71 @@ export abstract class BufferedStream<T> {
 
 }
 
+export class MultiMap<K, V> {
+
+  private mapping = new Map<K, V[]>();
+
+  public get(key: K): V[] {
+    return this.mapping.get(key) ?? [];
+  }
+
+  public add(key: K, value: V): void {
+    let elements = this.mapping.get(key);
+    if (elements === undefined) {
+      elements = [];
+      this.mapping.set(key, elements);
+    }
+    elements.push(value);
+  }
+
+  public has(key: K, value?: V): boolean {
+    if (value === undefined) {
+      return this.mapping.has(key);
+    }
+    const elements = this.mapping.get(key);
+    if (elements === undefined) {
+      return false;
+    }
+    return elements.indexOf(value) !== -1;
+  }
+
+  public keys(): Iterable<K> {
+    return this.mapping.keys();
+  }
+
+  public *values(): Iterable<V> {
+    for (const elements of this.mapping.values()) {
+      yield* elements;
+    }
+  }
+
+  public *[Symbol.iterator](): Iterable<[K, V]> {
+    for (const [key, elements] of this.mapping) {
+      for (const value of elements) {
+        yield [key, value];
+      }
+    }
+  }
+
+  public delete(key: K, value?: V): number {
+    const elements = this.mapping.get(key);
+    if (elements === undefined) {
+      return 0;
+    }
+    if (value === undefined) {
+      this.mapping.delete(key);
+      return elements.length;
+    }
+    const i = elements.indexOf(value);
+    if (i !== -1) {
+      elements.splice(i, 1);
+      if (elements.length === 0) {
+        this.mapping.delete(key);
+      }
+      return 1;
+    }
+    return 0;
+  }
+
+}
+

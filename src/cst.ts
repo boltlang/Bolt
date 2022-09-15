@@ -1,4 +1,4 @@
-import { JSONObject, JSONValue } from "./util";
+import { JSONObject, JSONValue, MultiMap } from "./util";
 import type { InferContext, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
@@ -210,13 +210,12 @@ function isNodeWithScope(node: Syntax): node is NodeWithScope {
 export const enum Symkind {
   Var = 1,
   Type = 2,
-  Constructor = 4,
-  Any = Var | Type | Constructor
+  Any = Var | Type
 }
 
 export class Scope {
 
-  private mapping = new Map<string, [Symkind, Syntax]>();
+  private mapping = new MultiMap<string, [Symkind, Syntax]>();
 
   public constructor(
     public node: NodeWithScope,
@@ -236,7 +235,7 @@ export class Scope {
   }
 
   private add(name: string, node: Syntax, kind: Symkind): void {
-    this.mapping.set(name, [kind, node]);
+    this.mapping.add(name, [kind, node]);
   }
 
   private scan(node: Syntax): void {
@@ -262,13 +261,14 @@ export class Scope {
         this.add(node.name.text, node, Symkind.Type);
         if (node.members !== null) {
           for (const member of node.members) {
-            this.add(member.name.text, member, Symkind.Constructor);
+            this.add(member.name.text, member, Symkind.Var);
           }
         }
       }
       case SyntaxKind.StructDeclaration:
       {
-        this.add(node.name.text, node, Symkind.Constructor | Symkind.Type);
+        this.add(node.name.text, node, Symkind.Type);
+        this.add(node.name.text, node, Symkind.Var);
         break;
       }
       case SyntaxKind.LetDeclaration:
@@ -326,12 +326,10 @@ export class Scope {
     }
   }
 
-  public lookup(name: string, expectedKind = Symkind.Any): Syntax | null {
+  public lookup(name: string, expectedKind: Symkind = Symkind.Any): Syntax | null {
     let curr: Scope | null = this;
     do {
-      const match = curr.mapping.get(name);
-      if (match !== undefined) {
-        const [kind, decl] = match;
+      for (const [kind, decl] of curr.mapping.get(name)) {
         if (kind & expectedKind) {
           return decl;
         }
@@ -1818,7 +1816,7 @@ export class StructDeclaration extends SyntaxBase {
     public pubKeyword: PubKeyword | null,
     public structKeyword: StructKeyword,
     public name: IdentifierAlt,
-    public typeVars: Identifier[],
+    public varExps: Identifier[],
     public members: StructDeclarationField[] | null,
   ) {
     super();
@@ -1946,7 +1944,7 @@ export class TypeDeclaration extends SyntaxBase {
     public pubKeyword: PubKeyword | null,
     public typeKeyword: TypeKeyword,
     public name: IdentifierAlt,
-    public typeVars: Identifier[],
+    public varExps: Identifier[],
     public equals: Equals,
     public typeExpression: TypeExpression
   ) {

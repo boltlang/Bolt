@@ -306,7 +306,7 @@ export class FieldMissingDiagnostic {
   public readonly level = Level.Error;
 
   public constructor(
-    public recordType: TRecord,
+    public recordType: Type,
     public fieldName: string,
     public node: Syntax | null,
   ) {
