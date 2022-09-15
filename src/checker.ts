@@ -919,8 +919,8 @@ export class Checker {
         const a2 = this.createKindVar();
         const arrow = new KArrow(a1, a2);
         this.unifyKind(arrow, operator, node);
-        this.unifyKind(a1, arg, node);
-        return a2;
+        this.unifyKind(a2, arg, node);
+        return a1;
       }
       case KindType.Arrow:
       {
