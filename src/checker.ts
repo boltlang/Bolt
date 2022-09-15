@@ -425,7 +425,13 @@ class KVSub {
 
 }
 
+const enum KindFlags {
+  UnificationFailed = 1,
+}
+
 abstract class KindBase {
+
+  public flags: KindFlags = 0;
   
   public abstract readonly type: KindType;
 
@@ -449,6 +455,10 @@ class KVar extends KindBase {
       ? this : other.substitute(sub);
   }
 
+  public hasFailed(): boolean {
+    return true;
+  }
+
 }
 
 class KStar extends KindBase {
@@ -457,6 +467,10 @@ class KStar extends KindBase {
 
   public substitute(_sub: KVSub): Kind {
     return this;
+  }
+
+  public hasFailed(): boolean {
+    return (this.flags & KindFlags.UnificationFailed) > 0;
   }
 
 }
@@ -470,6 +484,12 @@ class KArrow extends KindBase {
     public right: Kind,
   ) {
     super();
+  }
+
+  public hasFailed(): boolean {
+    return this.flags & KindFlags.UnificationFailed
+        || this.left.hasFailed()
+        || this.right.hasFailed();
   }
 
   public substitute(sub: KVSub): Kind {
@@ -819,6 +839,7 @@ export class Checker {
   }
 
   private inferKindFromTypeExpression(node: TypeExpression, env: KindEnv): Kind {
+    let kind: Kind;
     switch (node.kind) {
       case SyntaxKind.ArrowTypeExpression:
       {
@@ -826,34 +847,40 @@ export class Checker {
           this.unifyKind(this.inferKindFromTypeExpression(param, env), new KStar(), node);
         }
         this.unifyKind(this.inferKindFromTypeExpression(node.returnTypeExpr, env), new KStar(), node);
-        return new KStar();
+        kind = new KStar();
+        break;
       }
       case SyntaxKind.VarTypeExpression:
       case SyntaxKind.ReferenceTypeExpression:
       {
-        const kind = env.lookup(node.name.text);
-        if (kind === null) {
+        const matchedKind = env.lookup(node.name.text);
+        if (matchedKind === null) {
           this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           // Create a filler kind variable that still will be able to catch other errors.
-          return this.createKindVar();
+          kind = this.createKindVar();
+        } else {
+          kind = matchedKind;
         }
-        return kind;
+        break;
       }
       case SyntaxKind.AppTypeExpression:
       {
-        let result = this.inferKindFromTypeExpression(node.operator, env);
+        kind = this.inferKindFromTypeExpression(node.operator, env);
         for (const arg of node.args) {
-          result = this.applyKind(result, this.inferKindFromTypeExpression(arg, env), node);
+          kind = this.applyKind(kind, this.inferKindFromTypeExpression(arg, env), node);
         }
-        return result;
+        break;
       }
       case SyntaxKind.NestedTypeExpression:
       {
-        return this.inferKindFromTypeExpression(node.typeExpr, env);
+        kind = this.inferKindFromTypeExpression(node.typeExpr, env);
+        break;
       }
       default:
         throw new Error(`Unexpected ${node}`);
     }
+    node.inferredKind = kind;
+    return kind;
   }
 
   private createKindVar(): KVar {
@@ -907,7 +934,19 @@ export class Checker {
         }
         break;
       }
-
+      case SyntaxKind.TypeDeclaration:
+      {
+        const innerEnv = new KindEnv(env);
+        let kind: Kind = new KStar();
+        for (let i = node.varExps.length-1; i >= 0; i--) {
+          const varExpr = node.varExps[i];
+          const paramKind = this.createKindVar();
+          innerEnv.setNamed(varExpr.text, paramKind);
+          kind = new KArrow(paramKind, kind);
+        }
+        env.setNamed(node.name.text, this.inferKindFromTypeExpression(node.typeExpression, innerEnv));
+        break;
+      }
       case SyntaxKind.StructDeclaration:
       {
         env.setNamed(node.name.text, this.createKindVar());
@@ -979,7 +1018,15 @@ export class Checker {
                 }
                 break;
               }
-              // TODO
+              case SyntaxKind.EnumDeclarationStructElement:
+              {
+                for (const field of member.fields) {
+                  this.unifyKind(this.inferKindFromTypeExpression(field.typeExpr, innerEnv), new KStar(), field.typeExpr);
+                }
+                break;
+              }
+              default:
+                throw new Error(`Unexpected ${member}`);
             }
           }
         }
@@ -1037,6 +1084,8 @@ export class Checker {
           && this.unifyKind(a.right, b.right, node);
     }
 
+    a.flags |= KindFlags.UnificationFailed;
+    b.flags |= KindFlags.UnificationFailed;
     this.diagnostics.add(new KindMismatchDiagnostic(solve(a), solve(b), node));
     return false;
   }
@@ -1166,7 +1215,7 @@ export class Checker {
         const scope = node.getScope();
         const target = scope.lookup(node.name.text);
         if (target !== null && target.kind === SyntaxKind.LetDeclaration && target.active) {
-          return target.type!;
+          return target.inferredType!;
         }
         const scheme = this.lookup(node.name.text, Symkind.Var);
         if (scheme === null) {
@@ -1229,31 +1278,6 @@ export class Checker {
         return ty;
       }
 
-      case SyntaxKind.NamedTupleExpression:
-      {
-        // TODO Only lookup constructors and skip other bindings
-        const scheme = this.lookup(node.name.text, Symkind.Var);
-        if (scheme === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-          return this.createTypeVar();
-        }
-        const operatorType = this.instantiate(scheme, node.name);
-        const argTypes = node.elements.map(el => this.inferExpression(el));
-        const retType = this.createTypeVar();
-        this.addConstraint(
-          new CEqual(
-            new TArrow(
-              argTypes,
-              retType,
-              node,
-            ),
-            operatorType,
-            node
-          )
-        );
-        return retType;
-      }
-
       case SyntaxKind.StructExpression:
       {
         const fields = new Map();
@@ -1314,62 +1338,79 @@ export class Checker {
 
   public inferTypeExpression(node: TypeExpression, introduceTypeVars = false): Type {
 
-    switch (node.kind) {
+    let type;
 
-      case SyntaxKind.ReferenceTypeExpression:
-      {
-        const scheme = this.lookup(node.name.text, Symkind.Type);
-        if (scheme === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-          return this.createTypeVar();
-        }
-        const type = this.instantiate(scheme, node.name);
-        // FIXME it is not guaranteed that `type` is copied, so the original type might get mutated
-        type.node = node;
-        return type;
-      }
+    if (node.inferredKind!.substitute(this.kindSolution).hasFailed()) {
 
-      case SyntaxKind.NestedTypeExpression:
-        return this.inferTypeExpression(node.typeExpr, introduceTypeVars);
+      type = this.createTypeVar();
 
-      case SyntaxKind.VarTypeExpression:
-      {
-        const scheme = this.lookup(node.name.text, Symkind.Type);
-        if (scheme === null) {
-          if (!introduceTypeVars) {
+    } else {
+
+      switch (node.kind) {
+
+        case SyntaxKind.ReferenceTypeExpression:
+        {
+          const scheme = this.lookup(node.name.text, Symkind.Type);
+          if (scheme === null) {
             this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+            return this.createTypeVar();
           }
-          const type = this.createTypeVar();
-          this.addBinding(node.name.text, new Forall([], [], type), Symkind.Type);
-          return type;
+          type = this.instantiate(scheme, node.name);
+          // FIXME it is not guaranteed that `type` is copied, so the original type might get mutated
+          type.node = node;
+          break;
         }
-        assert(isEmpty(scheme.typeVars));
-        assert(isEmpty(scheme.constraints));
-        return scheme.type;
-      }
 
-      case SyntaxKind.AppTypeExpression:
-      {
-        return TApp.build(
-          this.inferTypeExpression(node.operator, introduceTypeVars),
-          node.args.map(arg => this.inferTypeExpression(arg, introduceTypeVars)),
-        );
-      }
+        case SyntaxKind.NestedTypeExpression:
+          return this.inferTypeExpression(node.typeExpr, introduceTypeVars);
 
-      case SyntaxKind.ArrowTypeExpression:
-      {
-        const paramTypes = [];
-        for (const paramTypeExpr of node.paramTypeExprs) {
-          paramTypes.push(this.inferTypeExpression(paramTypeExpr, introduceTypeVars));
+        case SyntaxKind.VarTypeExpression:
+        {
+          const scheme = this.lookup(node.name.text, Symkind.Type);
+          if (scheme === null) {
+            if (!introduceTypeVars) {
+              this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+            }
+            type = this.createTypeVar();
+            this.addBinding(node.name.text, new Forall([], [], type), Symkind.Type);
+          } else {
+            assert(isEmpty(scheme.typeVars));
+            assert(isEmpty(scheme.constraints));
+            type = scheme.type;
+          }
+          break;
         }
-        const returnType = this.inferTypeExpression(node.returnTypeExpr, introduceTypeVars);
-        return new TArrow(paramTypes, returnType, node);
-      }
 
-      default:
-        throw new Error(`Unrecognised ${node}`);
+        case SyntaxKind.AppTypeExpression:
+        {
+          type = TApp.build(
+            this.inferTypeExpression(node.operator, introduceTypeVars),
+            node.args.map(arg => this.inferTypeExpression(arg, introduceTypeVars)),
+          );
+          break;
+        }
+
+        case SyntaxKind.ArrowTypeExpression:
+        {
+          const paramTypes = [];
+          for (const paramTypeExpr of node.paramTypeExprs) {
+            paramTypes.push(this.inferTypeExpression(paramTypeExpr, introduceTypeVars));
+          }
+          const returnType = this.inferTypeExpression(node.returnTypeExpr, introduceTypeVars);
+          type = new TArrow(paramTypes, returnType, node);
+          break;
+        }
+
+        default:
+          throw new Error(`Unrecognised ${node}`);
+
+      }
 
     }
+
+    node.inferredType = type;
+
+    return type;
 
   }
 
@@ -1568,15 +1609,14 @@ export class Checker {
         }
         const fields = new Map<string, Type>();
         if (node.fields !== null) {
-          for (const member of node.fields) {
-            fields.set(member.name.text, this.inferTypeExpression(member.typeExpr));
+          for (const field of node.fields) {
+            fields.set(field.name.text, this.inferTypeExpression(field.typeExpr));
           }
         }
         this.popContext(context);
         const type = new TNominal(node);
         parentEnv.add(node.name.text, new Forall(typeVars, constraints, type), Symkind.Type);
         parentEnv.add(node.name.text, new Forall(typeVars, constraints, new TArrow([ new TRecord(fields, node) ], TApp.build(type, kindArgs))), Symkind.Var);
-        //node.scheme = new Forall(typeVars, constraints, );
         break;
       }
 
@@ -1679,7 +1719,7 @@ export class Checker {
             )
           );
         }
-        node.type = type;
+        node.inferredType = type;
 
         this.contexts.pop();
 

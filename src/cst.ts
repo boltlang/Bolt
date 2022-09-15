@@ -1,5 +1,5 @@
 import { JSONObject, JSONValue, MultiMap } from "./util";
-import type { InferContext, Scheme, Type, TypeEnv } from "./checker"
+import type { InferContext, Kind, Scheme, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
 
@@ -351,12 +351,12 @@ export class Scope {
 
 }
 
-
 abstract class SyntaxBase {
 
   public parent: Syntax | null = null;
 
-  public abstract readonly kind: SyntaxKind;
+  public inferredKind?: Kind;
+  public inferredType?: Type;
 
   public abstract getFirstToken(): Token;
 
@@ -1826,7 +1826,6 @@ export class StructDeclaration extends SyntaxBase {
   public readonly kind = SyntaxKind.StructDeclaration;
 
   public typeEnv?: TypeEnv;
-  public scheme?: Scheme;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -1954,7 +1953,6 @@ export class TypeDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TypeDeclaration;
 
-  public scheme?: Scheme;
   public typeEnv?: TypeEnv;
 
   public constructor(
@@ -1986,9 +1984,9 @@ export class LetDeclaration extends SyntaxBase {
   public readonly kind = SyntaxKind.LetDeclaration;
 
   public scope?: Scope;
-  public type?: Type;
-  public active?: boolean;
   public typeEnv?: TypeEnv;
+
+  public active?: boolean;
   public context?: InferContext;
 
   public constructor(
