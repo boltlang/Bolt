@@ -867,6 +867,14 @@ export class Checker {
 
   private inferKindFromTypeExpression(node: TypeExpression, env: KindEnv): Kind {
     switch (node.kind) {
+      case SyntaxKind.ArrowTypeExpression:
+      {
+        for (const param of node.paramTypeExprs) {
+          this.unifyKind(this.inferKindFromTypeExpression(param, env), new KStar(), node);
+        }
+        this.unifyKind(this.inferKindFromTypeExpression(node.returnTypeExpr, env), new KStar(), node);
+        return new KStar();
+      }
       case SyntaxKind.VarTypeExpression:
       case SyntaxKind.ReferenceTypeExpression:
       {
