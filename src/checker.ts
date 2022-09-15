@@ -1,12 +1,10 @@
 import {
-    EnumDeclaration,
-  EnumDeclarationElement,
+  EnumDeclaration,
   Expression,
   LetDeclaration,
   Pattern,
   Scope,
   SourceFile,
-  StructDeclaration,
   Symkind,
   Syntax,
   SyntaxKind,
@@ -20,7 +18,7 @@ import {
   FieldDoesNotExistDiagnostic,
   FieldMissingDiagnostic,
   UnificationFailedDiagnostic,
-  KindMismatchDiagnostic
+  KindMismatchDiagnostic,
 } from "./diagnostics";
 import { assert, isEmpty, MultiMap } from "./util";
 import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
@@ -892,7 +890,7 @@ export class Checker {
       }
       case SyntaxKind.AppTypeExpression:
       {
-        let result = this.inferKindFromTypeExpression(node.operator, env);;
+        let result = this.inferKindFromTypeExpression(node.operator, env);
         for (const arg of node.args) {
           result = this.applyKind(result, this.inferKindFromTypeExpression(arg, env), node);
         }
