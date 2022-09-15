@@ -135,6 +135,7 @@ enum Maybe a.
 let foo_1 : Maybe
 let foo_2 : Maybe Int
 let foo_3 : Maybe Int Int
+let foo_4 : Maybe Int Int Int
 ```
 
 ## Can indirectly apply a polymorphic datatype to some type
@@ -151,4 +152,20 @@ enum Foo.
   MkFoo (App Maybe Int)
 
 let f : Foo = MkFoo (MkApp (Just 1))
+```
+
+## Record-declarations inside enum-declarations work
+
+```
+enum Shape.
+  Circle.
+    radius: Int 
+  Rect.
+    width: Int
+    height: Int
+
+let z = Circle { radius = 12 }
+let a = Rect { width = 12, height = 12 }
+
+a == z
 ```
