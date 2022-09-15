@@ -1,11 +1,9 @@
 import {
   Declaration,
   EnumDeclaration,
-  EnumDeclarationStructElement,
   Expression,
   LetDeclaration,
   Pattern,
-  Scope,
   SourceFile,
   StructDeclaration,
   Symkind,
@@ -366,7 +364,7 @@ export class TNominal extends TypeBase {
   public readonly kind = TypeKind.Nominal;
 
   public constructor(
-    public decl: Declaration,
+    public decl: StructDeclaration | EnumDeclaration,
     public node: Syntax | null = null,
   ) {
     super(node);
@@ -383,7 +381,7 @@ export class TNominal extends TypeBase {
     );
   }
 
-  public substitute(sub: TVSub): Type {
+  public substitute(_sub: TVSub): Type {
     return this;
   }
 
@@ -1912,11 +1910,11 @@ export class Checker {
             }
 
             if (left.kind === TypeKind.Nominal && right.kind === TypeKind.Nominal) {
-              if (left.decl !== right.decl) {
-                this.diagnostics.add(new UnificationFailedDiagnostic(left, right, [...constraint.getNodes()]));
-                return false;
+              if (left.decl === right.decl) {
+                return true;
               }
-              return true;
+              this.diagnostics.add(new UnificationFailedDiagnostic(left, right, [...constraint.getNodes()]));
+              return false;
             }
 
             if (left.kind === TypeKind.App && right.kind === TypeKind.App) {
@@ -1925,10 +1923,6 @@ export class Checker {
             }
 
             if (left.kind === TypeKind.Record && right.kind === TypeKind.Record) {
-              if (left.decl !== right.decl) {
-                this.diagnostics.add(new UnificationFailedDiagnostic(left, right, [...constraint.getNodes()]));
-                return false;
-              }
               let success = true;
               const remaining = new Set(right.fields.keys());
               for (const [fieldName, fieldType] of left.fields) {
