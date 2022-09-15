@@ -1356,7 +1356,12 @@ export class Checker {
             return this.createTypeVar();
           }
           type = this.instantiate(scheme, node.name);
-          // FIXME it is not guaranteed that `type` is copied, so the original type might get mutated
+          // It is not guaranteed that `type` is copied during instantiation,
+          // so the following check ensures that we really are holding a copy
+          // that we can mutate.
+          if (type === scheme.type) {
+            type = type.shallowClone();
+          }
           type.node = node;
           break;
         }
