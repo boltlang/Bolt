@@ -1,5 +1,5 @@
 import { JSONObject, JSONValue, MultiMap } from "./util";
-import type { InferContext, Type, TypeEnv } from "./checker"
+import type { InferContext, Scheme, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
 
@@ -1713,6 +1713,8 @@ export class EnumDeclarationStructElement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.EnumDeclarationStructElement;
 
+  public scheme?: Scheme;
+
   public constructor(
     public name: IdentifierAlt,
     public blockStart: BlockStart,
@@ -1821,6 +1823,7 @@ export class StructDeclaration extends SyntaxBase {
   public readonly kind = SyntaxKind.StructDeclaration;
 
   public typeEnv?: TypeEnv;
+  public scheme?: Scheme;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -1948,6 +1951,7 @@ export class TypeDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TypeDeclaration;
 
+  public scheme?: Scheme;
   public typeEnv?: TypeEnv;
 
   public constructor(

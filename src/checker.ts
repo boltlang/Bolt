@@ -1,10 +1,12 @@
 import {
   EnumDeclaration,
+  EnumDeclarationStructElement,
   Expression,
   LetDeclaration,
   Pattern,
   Scope,
   SourceFile,
+  StructDeclaration,
   Symkind,
   Syntax,
   SyntaxKind,
@@ -21,14 +23,9 @@ import {
   KindMismatchDiagnostic,
 } from "./diagnostics";
 import { assert, isEmpty, MultiMap } from "./util";
-import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
 import { Analyser } from "./analysis";
 
 const MAX_TYPE_ERROR_COUNT = 5;
-
-type NodeWithBindings = SourceFile | LetDeclaration;
-
-type ReferenceGraph = LabeledGraph<NodeWithBindings, boolean>;
 
 export enum TypeKind {
   Arrow,
@@ -280,7 +277,7 @@ export class TRecord extends TypeBase {
   public readonly kind = TypeKind.Record;
 
   public constructor(
-    public decl: Syntax,
+    public decl: StructDeclaration | EnumDeclarationStructElement,
     public kindArgs: TVar[],
     public fields: Map<string, Type>,
     public node: Syntax | null = null,
@@ -380,7 +377,7 @@ export class TVariant extends TypeBase {
   public readonly kind = TypeKind.Variant;
 
   public constructor(
-    public decl: Syntax,
+    public decl: EnumDeclaration,
     public kindArgs: Type[],
     public elementTypes: Type[],
     public node: Syntax | null = null,
@@ -710,7 +707,7 @@ class Forall extends SchemeBase {
 
 }
 
-type Scheme
+export type Scheme
   = Forall
 
 export class TypeEnv {
@@ -1298,7 +1295,7 @@ export class Checker {
           return this.createTypeVar();
         }
         assert(decl.kind === SyntaxKind.StructDeclaration || decl.kind === SyntaxKind.EnumDeclarationStructElement);
-        const scheme = decl.scheme;
+        const scheme = decl.scheme!;
         const declType = this.instantiate(scheme, node);
         const kindArgs = [];
         const varExps = decl.kind === SyntaxKind.StructDeclaration
@@ -1435,7 +1432,7 @@ export class Checker {
 
   }
 
-  public inferBindings(pattern: Pattern, typeVars: TVar[], constraints: Constraint[]): Type {
+  public inferBindings(pattern: Pattern, typeVars: Iterable<TVar>, constraints: Iterable<Constraint>): Type {
 
     switch (pattern.kind) {
 
