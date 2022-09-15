@@ -11,8 +11,9 @@ import { ConsoleDiagnostics, Diagnostics, UnexpectedCharDiagnostic, UnexpectedTo
 import { Punctuator, ScanError, Scanner } from "../scanner"
 import { ParseError, Parser } from "../parser"
 import { Checker } from "../checker"
-import { TextFile } from "../cst"
+import { SourceFile, TextFile } from "../cst"
 import { parseSourceFile } from ".."
+import { Analyser } from "../analysis"
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
@@ -43,7 +44,9 @@ yargs
         process.exit(1);
       }
       //debug(sourceFile.toJSON());
-      const checker = new Checker(diagnostics);
+      const analyser = new Analyser();
+      analyser.addSourceFile(sourceFile);
+      const checker = new Checker(analyser, diagnostics);
       checker.check(sourceFile);
 
     }

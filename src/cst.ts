@@ -223,6 +223,16 @@ export class Scope {
     this.scan(node);
   }
 
+  public get depth(): number {
+    let out = 0;
+    let curr = this.getParent();
+    while (curr !== null) {
+      out++;
+      curr = curr.getParent();
+    }
+    return out;
+  }
+
   private getParent(): Scope | null {
     let curr = this.node.parent;
     while (curr !== null) {

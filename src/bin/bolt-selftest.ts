@@ -11,6 +11,7 @@ import { Checker } from "../checker";
 import { TextFile } from "../cst";
 import { ConsoleDiagnostics } from "../diagnostics";
 import { parseSourceFile } from "..";
+import { Analyser } from "../analysis";
 
 const projectDir = path.resolve(__dirname, '..', '..');
 
@@ -28,7 +29,9 @@ yargs
       let sourceFile = parseSourceFile(file, diagnostics);
       if (sourceFile !== null) {
         sourceFile.setParents();
-        const checker = new Checker(diagnostics);
+        const analyser = new Analyser();
+        analyser.addSourceFile(sourceFile);
+        const checker = new Checker(analyser, diagnostics);
         checker.check(sourceFile);
       }
     }

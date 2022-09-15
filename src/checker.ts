@@ -22,6 +22,7 @@ import {
 } from "./diagnostics";
 import { assert, isEmpty, MultiMap } from "./util";
 import { LabeledDirectedHashGraph, LabeledGraph, strongconnect } from "yagl"
+import { Analyser } from "./analysis";
 
 const MAX_TYPE_ERROR_COUNT = 5;
 
@@ -794,6 +795,7 @@ export class Checker {
   private kindSolution = new KVSub();
 
   public constructor(
+    private analyser: Analyser,
     private diagnostics: Diagnostics
   ) {
 
@@ -1503,195 +1505,6 @@ export class Checker {
 
   }
 
-  private addReferencesToGraph(graph: ReferenceGraph, node: Syntax, source: LetDeclaration | SourceFile) {
-
-    const addReference = (scope: Scope, name: string) => {
-      const target = scope.lookup(name);
-      if (target === null || target.kind === SyntaxKind.Param) {
-        return;
-      }
-      assert(target.kind === SyntaxKind.LetDeclaration || target.kind === SyntaxKind.SourceFile);
-      graph.addEdge(source, target, true);
-    }
-
-    switch (node.kind) {
-
-      case SyntaxKind.ConstantExpression:
-        break;
-
-      case SyntaxKind.SourceFile:
-      {
-        for (const element of node.elements) {
-          this.addReferencesToGraph(graph, element, source);
-        }
-        break;
-      }
-
-      case SyntaxKind.ReferenceExpression:
-      {
-        assert(node.name.modulePath.length === 0);
-        addReference(node.getScope(), node.name.name.text);
-        break;
-      }
-
-      case SyntaxKind.MemberExpression:
-      {
-        this.addReferencesToGraph(graph, node.expression, source);
-        break;
-      }
-
-      case SyntaxKind.NamedTupleExpression:
-      {
-        for (const arg of node.elements) {
-          this.addReferencesToGraph(graph, arg, source);
-        }
-        break;
-      }
-
-      case SyntaxKind.StructExpression:
-      {
-        for (const member of node.members) {
-          switch (member.kind) {
-            case SyntaxKind.PunnedStructExpressionField:
-            {
-              addReference(node.getScope(), node.name.text);
-              break;
-            }
-            case SyntaxKind.StructExpressionField:
-            {
-              this.addReferencesToGraph(graph, member.expression, source);
-              break;
-            };
-          }
-        }
-        break;
-      }
-
-      case SyntaxKind.NestedExpression:
-      {
-        this.addReferencesToGraph(graph, node.expression, source);
-        break;
-      }
-
-      case SyntaxKind.InfixExpression:
-      {
-        this.addReferencesToGraph(graph, node.left, source);
-        this.addReferencesToGraph(graph, node.right, source);
-        break;
-      }
-
-      case SyntaxKind.CallExpression:
-      {
-        this.addReferencesToGraph(graph, node.func, source);
-        for (const arg of node.args) {
-          this.addReferencesToGraph(graph, arg, source);
-        }
-        break;
-      }
-
-      case SyntaxKind.IfStatement:
-      {
-        for (const cs of node.cases) {
-          if (cs.test !== null) {
-            this.addReferencesToGraph(graph, cs.test, source);
-          }
-          for (const element of cs.elements) {
-            this.addReferencesToGraph(graph, element, source);
-          }
-        }
-        break;
-      }
-
-      case SyntaxKind.ExpressionStatement:
-      {
-        this.addReferencesToGraph(graph, node.expression, source);
-        break;
-      }
-
-      case SyntaxKind.ReturnStatement:
-      {
-        if (node.expression !== null) {
-          this.addReferencesToGraph(graph, node.expression, source);
-        }
-        break;
-      }
-
-      case SyntaxKind.LetDeclaration:
-      {
-        graph.addVertex(node);
-        if (node.body !== null) {
-          switch (node.body.kind) {
-            case SyntaxKind.ExprBody:
-            {
-              this.addReferencesToGraph(graph, node.body.expression, node);
-              break;
-            }
-            case SyntaxKind.BlockBody:
-            {
-              for (const element of node.body.elements) {
-                this.addReferencesToGraph(graph, element, node);
-              }
-              break;
-            }
-          }
-        }
-        break;
-      }
-
-      case SyntaxKind.TypeDeclaration:
-      case SyntaxKind.EnumDeclaration:
-      case SyntaxKind.StructDeclaration:
-        break;
-
-      default:
-        throw new Error(`Unexpected ${node.constructor.name}`);
-
-    }
-
-  }
-
-  private completeReferenceGraph(graph: ReferenceGraph, node: Syntax): void {
-
-    switch (node.kind) {
-
-      case SyntaxKind.SourceFile:
-      {
-        for (const element of node.elements) {
-          this.completeReferenceGraph(graph, element);
-        }
-        break;
-      }
-
-      case SyntaxKind.LetDeclaration:
-      {
-        if (isEmpty(graph.getSourceVertices(node))) {
-          const source = node.parent!.getScope().node;
-          assert(source.kind === SyntaxKind.LetDeclaration || source.kind === SyntaxKind.SourceFile);
-          graph.addEdge(source, node, false);
-        }
-        if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
-          for (const element of node.body.elements) {
-            this.completeReferenceGraph(graph, element);
-          }
-        }
-        break;
-      }
-
-      case SyntaxKind.IfStatement:
-      case SyntaxKind.ReturnStatement:
-      case SyntaxKind.ExpressionStatement:
-      case SyntaxKind.TypeDeclaration:
-      case SyntaxKind.EnumDeclaration:
-      case SyntaxKind.StructDeclaration:
-        break;
-
-      default:
-        throw new Error(`Unexpected ${node}`);
-
-    }
-
-  }
-
   private initialize(node: Syntax, parentEnv: TypeEnv): void {
 
     switch (node.kind) {
@@ -1858,10 +1671,6 @@ export class Checker {
     env.add('==', new Forall([ a ], [], new TArrow([ a, a ], this.boolType)), Symkind.Var);
     env.add('not', new Forall([], [], new TArrow([ this.boolType ], this.boolType)), Symkind.Var);
 
-    const graph = new LabeledDirectedHashGraph<NodeWithBindings, boolean>();
-    this.addReferencesToGraph(graph, node, node);
-    this.completeReferenceGraph(graph, node);
-
     this.initialize(node, env);
 
     this.pushContext({
@@ -1871,7 +1680,7 @@ export class Checker {
       returnType: null
     });
 
-    const sccs = [...strongconnect(graph)];
+    const sccs = [...this.analyser.getSortedDeclarations()];
 
     for (const nodes of sccs) {
 
@@ -1950,12 +1759,13 @@ export class Checker {
     const visitElements = (elements: Syntax[]) => {
       for (const element of elements) {
         if (element.kind === SyntaxKind.LetDeclaration
-            && isFunctionDeclarationLike(element)
-            && graph.hasEdge(node, element, false)) {
-          assert(element.pattern.kind === SyntaxKind.BindPattern);
-          const scheme = this.lookup(element.pattern.name.text, Symkind.Var);
-          assert(scheme !== null);
-          this.instantiate(scheme, null);
+            && isFunctionDeclarationLike(element)) {
+          if (!this.analyser.isReferencedInParentScope(element)) {
+            assert(element.pattern.kind === SyntaxKind.BindPattern);
+            const scheme = this.lookup(element.pattern.name.text, Symkind.Var);
+            assert(scheme !== null);
+            this.instantiate(scheme, null);
+          }
         } else {
           this.infer(element);
         }
