@@ -220,7 +220,7 @@ export function describeType(type: Type): string {
 function describeKind(kind: Kind): string {
   switch (kind.type) {
     case KindType.Var:
-      return `a${kind.id}`;
+      return `k${kind.id}`;
     case KindType.Arrow:
       return describeKind(kind.left) + ' -> ' + describeKind(kind.right);
     case KindType.Star:
