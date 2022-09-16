@@ -58,6 +58,7 @@ import {
   MatchExpression,
   LiteralPattern,
   DisjunctivePattern,
+  TupleTypeExpression,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -185,9 +186,30 @@ export class Parser {
       case SyntaxKind.LParen:
       {
         this.getToken();
-        const typeExpr = this.parseTypeExpression();
-        const t2 = this.expectToken(SyntaxKind.RParen);
-        return new NestedTypeExpression(t0, typeExpr, t2);
+        const elements = [];
+        let rparen;
+        for (;;) {
+          const t2 = this.peekToken();
+          if (t2.kind === SyntaxKind.RParen) {
+            rparen = t2;
+            break;
+          }
+          const typeExpr = this.parseTypeExpression();
+          elements.push(typeExpr);
+          const t3 = this.getToken();
+          if (t3.kind === SyntaxKind.RParen) {
+            rparen = t3;
+            break;
+          } else if (t3.kind === SyntaxKind.Comma) {
+            continue;
+          } else {
+            this.raiseParseError(t3, [ SyntaxKind.Comma, SyntaxKind.RParen ]);
+          }
+        }
+        if (elements.length === 1) {
+          return new NestedTypeExpression(t0, elements[0], rparen);
+        }
+        return new TupleTypeExpression(t0, elements, rparen);
       }
       case SyntaxKind.IdentifierAlt:
         return this.parseReferenceTypeExpression();
@@ -204,6 +226,7 @@ export class Parser {
       if (t1.kind === SyntaxKind.RParen
           || t1.kind === SyntaxKind.RBrace
           || t1.kind === SyntaxKind.RBracket
+          || t1.kind === SyntaxKind.Comma
           || t1.kind === SyntaxKind.Equals
           || t1.kind === SyntaxKind.BlockStart
           || t1.kind === SyntaxKind.LineFoldEnd

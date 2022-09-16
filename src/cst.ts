@@ -112,6 +112,7 @@ export const enum SyntaxKind {
   VarTypeExpression,
   AppTypeExpression,
   NestedTypeExpression,
+  TupleTypeExpression,
 
   // Patterns
   BindPattern,
@@ -1007,6 +1008,28 @@ export class ArrowTypeExpression extends SyntaxBase {
 
 }
 
+export class TupleTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.TupleTypeExpression;
+
+  public constructor(
+    public lparen: LParen,
+    public elements: TypeExpression[],
+    public rparen: RParen,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.lparen;
+  }
+
+  public getLastToken(): Token {
+    return this.rparen;
+  }
+
+}
+
 export class ReferenceTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReferenceTypeExpression;
@@ -1103,6 +1126,7 @@ export type TypeExpression
   | VarTypeExpression
   | AppTypeExpression
   | NestedTypeExpression
+  | TupleTypeExpression
 
 export class BindPattern extends SyntaxBase {
 

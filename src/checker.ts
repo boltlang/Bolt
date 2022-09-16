@@ -841,6 +841,14 @@ export class Checker {
   private inferKindFromTypeExpression(node: TypeExpression, env: KindEnv): Kind {
     let kind: Kind;
     switch (node.kind) {
+      case SyntaxKind.TupleTypeExpression:
+      {
+        for (const element of node.elements) {
+          this.unifyKind(this.inferKindFromTypeExpression(element, env), new KStar(), node);
+        }
+        kind = new KStar();
+        break;
+      }
       case SyntaxKind.ArrowTypeExpression:
       {
         for (const param of node.paramTypeExprs) {
@@ -1250,6 +1258,9 @@ export class Checker {
         return resultType;
       }
 
+      case SyntaxKind.TupleExpression:
+        return new TTuple(node.elements.map(el => this.inferExpression(el)), node);
+
       case SyntaxKind.ReferenceExpression:
       {
         assert(node.modulePath.length === 0);
@@ -1404,6 +1415,12 @@ export class Checker {
             type = type.shallowClone();
           }
           type.node = node;
+          break;
+        }
+
+        case SyntaxKind.TupleTypeExpression:
+        {
+          type = new TTuple(node.elements.map(el => this.inferTypeExpression(el)), node);
           break;
         }
 
@@ -1969,8 +1986,20 @@ export class Checker {
               return success;
             }
 
-            if (right.kind === TypeKind.Arrow) {
-              return unify(right, left);
+            if (left.kind === TypeKind.Tuple && right.kind === TypeKind.Tuple) {
+              if (left.elementTypes.length === right.elementTypes.length) {
+                let success = false;
+                const count = left.elementTypes.length;
+                for (let i = 0; i < count; i++) {
+                  if (!unify(left.elementTypes[i], right.elementTypes[i])) {
+                    success = false;
+                  }
+                }
+                if (success) {
+                  TypeBase.join(left, right);
+                }
+                return success;
+              }
             }
 
             if (left.kind === TypeKind.Con && right.kind === TypeKind.Con) {

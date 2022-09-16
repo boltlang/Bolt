@@ -190,7 +190,7 @@ export function describeType(type: Type): string {
         else out += ', ';
         out += describeType(elementType);
       }
-      return out;
+      return out + ')';
     }
     case TypeKind.Nominal:
     {

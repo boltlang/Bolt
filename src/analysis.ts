@@ -59,6 +59,14 @@ export class Analyser {
           break;
         }
 
+        case SyntaxKind.TupleExpression:
+        {
+          for (const element of node.elements) {
+            visit(element, source);
+          }
+          break;
+        }
+
         case SyntaxKind.StructExpression:
         {
           for (const member of node.members) {
