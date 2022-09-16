@@ -487,7 +487,7 @@ class KArrow extends KindBase {
   }
 
   public hasFailed(): boolean {
-    return this.flags & KindFlags.UnificationFailed
+    return (this.flags & KindFlags.UnificationFailed) > 0
         || this.left.hasFailed()
         || this.right.hasFailed();
   }
