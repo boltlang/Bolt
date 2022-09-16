@@ -169,3 +169,11 @@ let a = Rect { width = 12, height = 12 }
 
 a == z
 ```
+
+## Tuple types are correctly inferred and unified
+
+```
+let foo_1 : (Int, Int, Int) = (1, 2, 3)
+let foo_2 : (Int, Int, Int) = (1, 2, "foo")
+```
+
