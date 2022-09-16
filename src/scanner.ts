@@ -37,6 +37,9 @@ import {
   StructKeyword,
   RArrow,
   EnumKeyword,
+  MatchKeyword,
+  RArrowAlt,
+  VBar,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -250,6 +253,10 @@ export class Scanner extends BufferedStream<Token> {
           const text = c0 + this.takeWhile(isOperatorPart);
           if (text === '->') {
             return new RArrow(startPos);
+          } else if (text === '=>') {
+            return new RArrowAlt(startPos);
+          } else if (text === '|') {
+            return new VBar(startPos);
           } else if (text === '=') {
             return new Equals(startPos);
           } else if (text.endsWith('=') && text[text.length-2] !== '=') {
@@ -358,6 +365,7 @@ export class Scanner extends BufferedStream<Token> {
             case 'elif': return new ElifKeyword(startPos);
             case 'struct': return new StructKeyword(startPos);
             case 'enum': return new EnumKeyword(startPos);
+            case 'match': return new MatchKeyword(startPos);
             default:
               if (isUpper(text[0])) {
                 return new IdentifierAlt(text, startPos);

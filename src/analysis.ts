@@ -28,6 +28,14 @@ export class Analyser {
         case SyntaxKind.ConstantExpression:
           break;
 
+        case SyntaxKind.MatchExpression:
+        {
+          for (const arm of node.arms) {
+            visit(arm.expression, source);
+          }
+          break;
+        }
+
         case SyntaxKind.SourceFile:
         {
           for (const element of node.elements) {

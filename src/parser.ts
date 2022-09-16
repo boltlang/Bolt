@@ -25,7 +25,6 @@ import {
   TypeAssert,
   ExprBody,
   BlockBody,
-  QualifiedName,
   NestedExpression,
   NamedTuplePattern,
   StructPattern,
@@ -36,7 +35,6 @@ import {
   InfixExpression,
   TextFile,
   CallExpression,
-  NamedTupleExpression,
   LetBodyElement,
   ReturnStatement,
   StructExpression,
@@ -56,6 +54,10 @@ import {
   AppTypeExpression,
   NestedPattern,
   NestedTypeExpression,
+  MatchArm,
+  MatchExpression,
+  LiteralPattern,
+  DisjunctivePattern,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -72,11 +74,13 @@ export class ParseError extends Error {
 }
 
 function isBinaryOperatorLike(token: Token): boolean {
-  return token.kind === SyntaxKind.CustomOperator;
+  return token.kind === SyntaxKind.CustomOperator
+      || token.kind === SyntaxKind.VBar;
 }
 
 function isPrefixOperatorLike(token: Token): boolean {
-  return token.kind === SyntaxKind.CustomOperator;
+  return token.kind === SyntaxKind.CustomOperator
+      || token.kind === SyntaxKind.VBar;
 }
 
 const enum OperatorMode {
@@ -295,6 +299,33 @@ export class Parser {
       case SyntaxKind.Identifier:
       case SyntaxKind.IdentifierAlt:
         return this.parseReferenceExpression();
+      case SyntaxKind.Integer:
+      case SyntaxKind.StringLiteral:
+        return this.parseConstantExpression();
+      case SyntaxKind.MatchKeyword:
+      {
+        this.getToken();
+        let expression = null
+        const t1 = this.peekToken();
+        if (t1.kind !== SyntaxKind.BlockStart) {
+          expression = this.parseExpression();
+        }
+        this.expectToken(SyntaxKind.BlockStart);
+        const arms = [];
+        for (;;) {
+          const t2 = this.peekToken();
+          if (t2.kind === SyntaxKind.BlockEnd) {
+            this.getToken();
+            break;
+          }
+          const pattern = this.parsePattern();
+          const rarrowAlt = this.expectToken(SyntaxKind.RArrowAlt);
+          const expression = this.parseExpression();
+          arms.push(new MatchArm(pattern, rarrowAlt, expression));
+          this.expectToken(SyntaxKind.LineFoldEnd);
+        }
+        return new MatchExpression(t0, expression, arms);
+      }
       case SyntaxKind.LBrace:
       {
         this.getToken();
@@ -335,9 +366,6 @@ export class Parser {
         }
         return new StructExpression(t0, fields, rbrace);
       }
-      case SyntaxKind.Integer:
-      case SyntaxKind.StringLiteral:
-        return this.parseConstantExpression();
       default:
         this.raiseParseError(t0, [
           SyntaxKind.NamedTupleExpression,
@@ -659,7 +687,7 @@ export class Parser {
     return new TuplePattern(lparen, elements, rparen);
   }
 
-  public parsePattern(): Pattern {
+  public parsePrimitivePattern(): Pattern {
     const t0 = this.peekToken();
     switch (t0.kind) {
       case SyntaxKind.LParen:
@@ -684,9 +712,29 @@ export class Parser {
         this.getToken();
         return new BindPattern(t0);
       }
+      case SyntaxKind.StringLiteral:
+      case SyntaxKind.Integer:
+      {
+        this.getToken();
+        return new LiteralPattern(t0);
+      }
       default:
         this.raiseParseError(t0, [ SyntaxKind.Identifier ]);
     }
+  }
+
+  public parsePattern(): Pattern {
+    let result: Pattern = this.parsePrimitivePattern();
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind !== SyntaxKind.VBar) {
+        break;
+      }
+      this.getToken();
+      const right = this.parsePrimitivePattern();
+      result = new DisjunctivePattern(result, t1, right);
+    }
+    return result;
   }
 
   public parseParam(): Param {

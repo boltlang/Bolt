@@ -79,6 +79,8 @@ export const enum SyntaxKind {
   LBracket,
   RBracket,
   RArrow,
+  RArrowAlt,
+  VBar,
   Dot,
   DotDot,
   Comma,
@@ -117,6 +119,8 @@ export const enum SyntaxKind {
   StructPattern,
   NestedPattern,
   NamedTuplePattern,
+  LiteralPattern,
+  DisjunctivePattern,
 
   // Struct expression elements
   StructExpressionField,
@@ -128,6 +132,7 @@ export const enum SyntaxKind {
   VariadicStructPatternElement,
 
   // Expressions
+  MatchExpression,
   MemberExpression,
   CallExpression,
   ReferenceExpression,
@@ -168,6 +173,7 @@ export const enum SyntaxKind {
 
   // Other nodes
   WrappedOperator,
+  MatchArm,
   Initializer,
   QualifiedName,
   TypeAssert,
@@ -917,8 +923,30 @@ export class RArrow extends TokenBase {
 
 }
 
+export class RArrowAlt extends TokenBase {
+
+  public readonly kind = SyntaxKind.RArrowAlt;
+
+  public get text(): string {
+    return '=>';
+  }
+
+}
+
+export class VBar extends TokenBase {
+
+  public readonly kind = SyntaxKind.VBar;
+
+  public get text(): string {
+    return '|';
+  }
+
+}
+
 export type Token
   = RArrow
+  | RArrowAlt
+  | VBar
   | LParen
   | RParen
   | LBrace
@@ -1264,12 +1292,57 @@ export class NestedPattern extends SyntaxBase {
 
 }
 
+export class DisjunctivePattern extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.DisjunctivePattern;
+
+  public constructor(
+    public left: Pattern,
+    public operator: VBar,
+    public right: Pattern,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.left.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.right.getLastToken();
+  }
+
+}
+
+
+export class LiteralPattern extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.LiteralPattern;
+
+  public constructor(
+    public token: StringLiteral | Integer
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.token;
+  }
+
+  public getLastToken(): Token {
+    return this.token;
+  }
+
+}
+
 export type Pattern
   = BindPattern
   | NestedPattern
   | StructPattern
   | NamedTuplePattern
   | TuplePattern
+  | DisjunctivePattern
+  | LiteralPattern
 
 export class TupleExpression extends SyntaxBase {
 
@@ -1475,6 +1548,56 @@ export class NamedTupleExpression extends SyntaxBase {
 
 }
 
+export class MatchArm extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.MatchArm;
+
+  public constructor(
+    public pattern: Pattern,
+    public rarrowAlt: RArrowAlt,
+    public expression: Expression,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.pattern.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
+}
+
+export class MatchExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.MatchExpression;
+
+  public constructor(
+    public matchKeyword: MatchKeyword,
+    public expression: Expression | null,
+    public arms: MatchArm[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.matchKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.arms.length > 0) {
+      return this.arms[this.arms.length-1].getLastToken();
+    }
+    if (this.expression !== null) {
+      return this.expression.getLastToken();
+    }
+    return this.matchKeyword;
+  }
+
+}
+
 export class ReferenceExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReferenceExpression;
@@ -1592,6 +1715,7 @@ export type Expression
   | ReferenceExpression
   | ConstantExpression
   | TupleExpression
+  | MatchExpression
   | NestedExpression
   | PrefixExpression
   | InfixExpression

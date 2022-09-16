@@ -87,6 +87,8 @@ const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.BlockEnd]: 'the end of an indented block',
   [SyntaxKind.LineFoldEnd]: 'the end of the current line-fold',
   [SyntaxKind.EndOfFile]: 'end-of-file',
+  [SyntaxKind.RArrowAlt]: '"=>"',
+  [SyntaxKind.VBar]: "'|'",
 }
 
 function describeSyntaxKind(kind: SyntaxKind): string {

@@ -786,13 +786,16 @@ export class Checker {
 
   private createTypeVar(): TVar {
     const typeVar = new TVar(this.nextTypeVarId++);
-    const context = this.contexts[this.contexts.length-1];
-    context.typeVars.add(typeVar);
+    this.getContext().typeVars.add(typeVar);
     return typeVar;
   }
 
+  public getContext(): InferContext {
+    return this.contexts[this.contexts.length-1];
+  }
+
   private addConstraint(constraint: Constraint): void {
-    this.contexts[this.contexts.length-1].constraints.push(constraint);
+    this.getContext().constraints.push(constraint);
   }
 
   private pushContext(context: InferContext) {
@@ -805,13 +808,12 @@ export class Checker {
   }
 
   private lookup(name: string, kind: Symkind): Scheme | null {
-    const context = this.contexts[this.contexts.length-1];
-    return context.env.lookup(name, kind);
+    return this.getContext().env.lookup(name, kind);
   }
 
   private getReturnType(): Type {
-    const context = this.contexts[this.contexts.length-1];
-    assert(context && context.returnType !== null);
+    const context = this.getContext();
+    assert(context.returnType !== null);
     return context.returnType;
   }
 
@@ -1209,6 +1211,47 @@ export class Checker {
       case SyntaxKind.NestedExpression:
         return this.inferExpression(node.expression);
 
+      case SyntaxKind.MatchExpression:
+      {
+        let exprType;
+        if (node.expression !== null) {
+          exprType = this.inferExpression(node.expression);
+        } else {
+          exprType = this.createTypeVar();
+        }
+        let resultType: Type = this.createTypeVar();
+        for (const arm of node.arms) {
+          const context = this.getContext();
+          const newEnv = new TypeEnv(context.env);
+          const newContext: InferContext = {
+            constraints: context.constraints,
+            typeVars: context.typeVars,
+            env: newEnv,
+            returnType: context.returnType,
+          };
+          this.pushContext(newContext);
+          this.addConstraint(
+            new CEqual(
+              this.inferBindings(arm.pattern, [], []),
+              exprType,
+              arm.pattern,
+            )
+          );
+          this.addConstraint(
+            new CEqual(
+              resultType,
+              this.inferExpression(arm.expression),
+              arm.expression
+            )
+          );
+          this.popContext(newContext);
+        }
+        if (node === null) {
+          resultType = new TArrow([ exprType ], resultType);
+        }
+        return resultType;
+      }
+
       case SyntaxKind.ReferenceExpression:
       {
         assert(node.modulePath.length === 0);
@@ -1427,6 +1470,42 @@ export class Checker {
       {
         const type = this.createTypeVar();
         this.addBinding(pattern.name.text, new Forall(typeVars, constraints, type), Symkind.Var);
+        return type;
+      }
+
+      case SyntaxKind.LiteralPattern:
+      {
+        let type;
+        switch (pattern.token.kind) {
+          case SyntaxKind.Integer:
+            type = this.getIntType();
+            break;
+          case SyntaxKind.StringLiteral:
+            type = this.getStringType();
+            break;
+        }
+        type = type.shallowClone();
+        type.node = pattern;
+        return type;
+      }
+
+      case SyntaxKind.DisjunctivePattern:
+      {
+        const type = this.createTypeVar();
+        this.addConstraint(
+          new CEqual(
+            this.inferBindings(pattern.left, typeVars, constraints),
+            type,
+            pattern.left
+          )
+        );
+        this.addConstraint(
+          new CEqual(
+            this.inferBindings(pattern.right, typeVars, constraints),
+            type,
+            pattern.left
+          )
+        );
         return type;
       }
 
