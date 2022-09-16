@@ -368,7 +368,6 @@ export class Parser {
       }
       default:
         this.raiseParseError(t0, [
-          SyntaxKind.NamedTupleExpression,
           SyntaxKind.TupleExpression,
           SyntaxKind.NestedExpression,
           SyntaxKind.ConstantExpression,

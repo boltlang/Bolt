@@ -179,15 +179,7 @@ export function describeType(type: Type): string {
       return 'a' + type.id;
     case TypeKind.Arrow:
     {
-      let out = '(';
-      let first = true;
-      for (const paramType of type.paramTypes) {
-        if (first) first = false;
-        else out += ', ';
-        out += describeType(paramType);
-      }
-      out += ') -> ' + describeType(type.returnType);
-      return out;
+      return describeType(type.paramType) + ' -> ' + describeType(type.returnType);
     }
     case TypeKind.Tuple:
     {
@@ -289,28 +281,6 @@ export class UnificationFailedDiagnostic {
 
 }
 
-export class ArityMismatchDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public left: TArrow,
-    public right: TArrow,
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET);
-    out.write(` has ${this.left.paramTypes.length} `);
-    out.write(this.left.paramTypes.length === 1 ? 'parameter' : 'parameters');
-    out.write(' while ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET);
-    out.write(` has ${this.right.paramTypes.length}.\n\n`);
-  }
-
-}
-
 export class FieldMissingDiagnostic {
 
   public readonly level = Level.Error;
@@ -384,7 +354,6 @@ export type Diagnostic
   | BindingNotFoudDiagnostic
   | UnificationFailedDiagnostic
   | UnexpectedTokenDiagnostic
-  | ArityMismatchDiagnostic
   | FieldMissingDiagnostic
   | FieldDoesNotExistDiagnostic
   | KindMismatchDiagnostic

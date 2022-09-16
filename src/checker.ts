@@ -1,5 +1,4 @@
 import {
-  Declaration,
   EnumDeclaration,
   Expression,
   LetDeclaration,
@@ -13,7 +12,6 @@ import {
 } from "./cst";
 import {
   describeType,
-  ArityMismatchDiagnostic,
   BindingNotFoudDiagnostic,
   Diagnostics,
   FieldDoesNotExistDiagnostic,
@@ -23,8 +21,6 @@ import {
 } from "./diagnostics";
 import { assert, isEmpty, MultiMap } from "./util";
 import { Analyser } from "./analysis";
-
-// TODO check that the order by which kindArgs are inserted is correct
 
 const MAX_TYPE_ERROR_COUNT = 5;
 
@@ -107,23 +103,29 @@ export class TArrow extends TypeBase {
   public readonly kind = TypeKind.Arrow;
 
   public constructor(
-    public paramTypes: Type[],
+    public paramType: Type,
     public returnType: Type,
     public node: Syntax | null = null,
   ) {
     super();
   }
 
-  public *getTypeVars(): Iterable<TVar> {
-    for (const paramType of this.paramTypes) {
-      yield* paramType.getTypeVars();
+  public static build(paramTypes: Type[], returnType: Type, node: Syntax | null = null): Type {
+    let result = returnType;
+    for (let i = paramTypes.length-1; i >= 0; i--) {
+      result = new TArrow(paramTypes[i], result, node);
     }
+    return result;
+  }
+
+  public *getTypeVars(): Iterable<TVar> {
+    yield* this.paramType.getTypeVars();
     yield* this.returnType.getTypeVars();
   }
 
   public shallowClone(): TArrow {
     return new TArrow(
-      this.paramTypes,
+      this.paramType,
       this.returnType,
       this.node,
     )
@@ -131,19 +133,15 @@ export class TArrow extends TypeBase {
 
   public substitute(sub: TVSub): Type {
     let changed = false;
-    const newParamTypes = [];
-    for (const paramType of this.paramTypes) {
-      const newParamType = paramType.substitute(sub);
-      if (newParamType !== paramType) {
-        changed = true;
-      }
-      newParamTypes.push(newParamType);
+    const newParamType = this.paramType.substitute(sub);
+    if (newParamType !== this.paramType) {
+      changed = true;
     }
     const newReturnType = this.returnType.substitute(sub);
     if (newReturnType !== this.returnType) {
       changed = true;
     }
-    return changed ? new TArrow(newParamTypes, newReturnType, this.node) : this;
+    return changed ? new TArrow(newParamType, newReturnType, this.node) : this;
   }
 
 }
@@ -1247,7 +1245,7 @@ export class Checker {
           this.popContext(newContext);
         }
         if (node.expression === null) {
-          resultType = new TArrow([ exprType ], resultType);
+          resultType = new TArrow(exprType, resultType);
         }
         return resultType;
       }
@@ -1298,7 +1296,7 @@ export class Checker {
         this.addConstraint(
           new CEqual(
             opType,
-            new TArrow(paramTypes, retType),
+            TArrow.build(paramTypes, retType),
             node
           )
         );
@@ -1364,7 +1362,7 @@ export class Checker {
         const rightType = this.inferExpression(node.right);
         this.addConstraint(
           new CEqual(
-            new TArrow([ leftType, rightType ], retType),
+            new TArrow(leftType, new TArrow(rightType, retType)),
             opType,
             node,
           ),
@@ -1445,7 +1443,7 @@ export class Checker {
             paramTypes.push(this.inferTypeExpression(paramTypeExpr, introduceTypeVars));
           }
           const returnType = this.inferTypeExpression(node.returnTypeExpr, introduceTypeVars);
-          type = new TArrow(paramTypes, returnType, node);
+          type = TArrow.build(paramTypes, returnType, node);
           break;
         }
 
@@ -1624,7 +1622,7 @@ export class Checker {
               case SyntaxKind.EnumDeclarationTupleElement:
               {
                 const argTypes = member.elements.map(el => this.inferTypeExpression(el));
-                elementType = new TArrow(argTypes, TApp.build(type, kindArgs));
+                elementType = TArrow.build(argTypes, TApp.build(type, kindArgs), member);
                 break;
               }
               case SyntaxKind.EnumDeclarationStructElement:
@@ -1633,7 +1631,7 @@ export class Checker {
                 for (const field of member.fields) {
                   fields.set(field.name.text, this.inferTypeExpression(field.typeExpr));
                 }
-                elementType = new TArrow([ new TRecord(fields, member) ], TApp.build(type, kindArgs));
+                elementType = new TArrow(new TRecord(fields, member), TApp.build(type, kindArgs));
                 break;
               }
               default:
@@ -1700,7 +1698,7 @@ export class Checker {
         this.popContext(context);
         const type = new TNominal(node);
         parentEnv.add(node.name.text, new Forall(typeVars, constraints, type), Symkind.Type);
-        parentEnv.add(node.name.text, new Forall(typeVars, constraints, new TArrow([ new TRecord(fields, node) ], TApp.build(type, kindArgs))), Symkind.Var);
+        parentEnv.add(node.name.text, new Forall(typeVars, constraints, new TArrow(new TRecord(fields, node), TApp.build(type, kindArgs))), Symkind.Var);
         break;
       }
 
@@ -1731,18 +1729,18 @@ export class Checker {
     const b = this.createTypeVar();
     const f = this.createTypeVar();
 
-    env.add('$', new Forall([ f, a ], [], new TArrow([ new TArrow([ a ], b), a ], b)), Symkind.Var);
+    env.add('$', new Forall([ f, a ], [], TArrow.build([ a, b, a ], b)), Symkind.Var);
     env.add('String', new Forall([], [], this.stringType), Symkind.Type);
     env.add('Int', new Forall([], [], this.intType), Symkind.Type);
     env.add('Bool', new Forall([], [], this.boolType), Symkind.Type);
     env.add('True', new Forall([], [], this.boolType), Symkind.Var);
     env.add('False', new Forall([], [], this.boolType), Symkind.Var);
-    env.add('+', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('-', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('*', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('/', new Forall([], [], new TArrow([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('==', new Forall([ a ], [], new TArrow([ a, a ], this.boolType)), Symkind.Var);
-    env.add('not', new Forall([], [], new TArrow([ this.boolType ], this.boolType)), Symkind.Var);
+    env.add('+', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    env.add('-', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    env.add('*', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    env.add('/', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    env.add('==', new Forall([ a ], [], TArrow.build([ a, a ], this.boolType)), Symkind.Var);
+    env.add('not', new Forall([], [], new TArrow(this.boolType, this.boolType)), Symkind.Var);
 
     this.initialize(node, env);
 
@@ -1793,7 +1791,7 @@ export class Checker {
           paramTypes.push(paramType);
         }
 
-        let type = new TArrow(paramTypes, returnType);
+        let type = TArrow.build(paramTypes, returnType, node);
         if (node.typeAssert !== null) {
           this.addConstraint(
             new CEqual(
@@ -1958,16 +1956,9 @@ export class Checker {
             }
 
             if (left.kind === TypeKind.Arrow && right.kind === TypeKind.Arrow) {
-              if (left.paramTypes.length !== right.paramTypes.length) {
-                this.diagnostics.add(new ArityMismatchDiagnostic(left, right));
-                return false;
-              }
               let success = true;
-              const count = left.paramTypes.length;
-              for (let i = 0; i < count; i++) {
-                if (!unify(left.paramTypes[i], right.paramTypes[i])) {
-                  success = false;
-                }
+              if (!unify(left.paramType, right.paramType)) {
+                success = false;
               }
               if (!unify(left.returnType, right.returnType)) {
                 success = false;
@@ -1976,10 +1967,6 @@ export class Checker {
                 TypeBase.join(left, right);
               }
               return success;
-            }
-
-            if (left.kind === TypeKind.Arrow && left.paramTypes.length === 0) {
-              return unify(left.returnType, right);
             }
 
             if (right.kind === TypeKind.Arrow) {
