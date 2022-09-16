@@ -6,8 +6,16 @@ struct Person.
   email: String
   age: Int
 
-let bert = Person { email = "bar@boo.com", age = 32 }
-let bob = Person { email = "boo", age = 43 }
+let bert
+  = Person {
+    email = "bar@boo.com",
+    age = 32
+  }
+let bob
+  = Person {
+    email = "boo",
+    age = 43
+  }
 
 bert == bob
 ```
