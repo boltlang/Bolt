@@ -136,7 +136,6 @@ export const enum SyntaxKind {
   MemberExpression,
   CallExpression,
   ReferenceExpression,
-  NamedTupleExpression,
   StructExpression,
   TupleExpression,
   NestedExpression,
@@ -175,7 +174,6 @@ export const enum SyntaxKind {
   WrappedOperator,
   MatchArm,
   Initializer,
-  QualifiedName,
   TypeAssert,
   Param,
   Module,
@@ -1408,30 +1406,6 @@ export class ConstantExpression extends SyntaxBase {
 
 }
 
-export class QualifiedName extends SyntaxBase {
-
-  public readonly kind = SyntaxKind.QualifiedName;
-
-  public constructor(
-    public modulePath: Array<[IdentifierAlt, Dot]>,
-    public name: Identifier,
-  ) {
-    super();
-  }
-
-  public getFirstToken(): Token {
-    if (this.modulePath.length > 0) {
-      return this.modulePath[0][0];
-    }
-    return this.name;
-  }
-
-  public getLastToken(): Token {
-    return this.name;
-  }
-
-}
-
 export class CallExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.CallExpression;
@@ -1520,30 +1494,6 @@ export class StructExpression extends SyntaxBase {
 
   public getLastToken(): Token {
     return this.rbrace;
-  }
-
-}
-
-export class NamedTupleExpression extends SyntaxBase {
-  
-  public readonly kind = SyntaxKind.NamedTupleExpression;
-
-  public constructor(
-    public name: IdentifierAlt,
-    public elements: Expression[],
-  ) {
-    super();
-  }
-
-  public getFirstToken(): Token {
-    return this.name;
-  }
-
-  public getLastToken(): Token {
-    if (this.elements.length > 0) {
-      return this.elements[this.elements.length-1].getLastToken();
-    }
-    return this.name;
   }
 
 }
@@ -1711,7 +1661,6 @@ export type Expression
   = MemberExpression
   | CallExpression
   | StructExpression
-  | NamedTupleExpression
   | ReferenceExpression
   | ConstantExpression
   | TupleExpression

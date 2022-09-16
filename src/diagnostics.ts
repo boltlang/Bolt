@@ -81,7 +81,6 @@ const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.ReferenceExpression]: 'a reference to some variable',
   [SyntaxKind.NestedExpression]: 'an expression nested with parentheses',
   [SyntaxKind.ConstantExpression]: 'a constant expression such as 1 or "foo"',
-  [SyntaxKind.NamedTupleExpression]: 'a named tuple expression',
   [SyntaxKind.StructExpression]: 'a struct expression',
   [SyntaxKind.BlockStart]: 'the start of an indented block',
   [SyntaxKind.BlockEnd]: 'the end of an indented block',
