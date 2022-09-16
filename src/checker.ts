@@ -1246,7 +1246,7 @@ export class Checker {
           );
           this.popContext(newContext);
         }
-        if (node === null) {
+        if (node.expression === null) {
           resultType = new TArrow([ exprType ], resultType);
         }
         return resultType;
