@@ -102,6 +102,7 @@ export const enum SyntaxKind {
   TypeKeyword,
   ReturnKeyword,
   MatchKeyword,
+  ForeignKeyword,
   IfKeyword,
   ElifKeyword,
   ElseKeyword,
@@ -864,6 +865,16 @@ export class MatchKeyword extends TokenBase {
 
 }
 
+export class ForeignKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.ForeignKeyword;
+
+  public get text(): string {
+    return 'foreign';
+  }
+
+}
+
 export class ModKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ModKeyword;
@@ -992,6 +1003,7 @@ export type Token
   | ElseKeyword
   | ElifKeyword
   | EnumKeyword
+  | ForeignKeyword
 
 export type TokenKind
   = Token['kind']
@@ -2101,6 +2113,7 @@ export class LetDeclaration extends SyntaxBase {
   public constructor(
     public pubKeyword: PubKeyword | null,
     public letKeyword: LetKeyword,
+    public foreignKeyword: ForeignKeyword | null,
     public mutKeyword: MutKeyword | null,
     public pattern: Pattern | WrappedOperator,
     public params: Param[],

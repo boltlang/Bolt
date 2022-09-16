@@ -784,6 +784,7 @@ export class Parser {
     let t0 = this.getToken();
     let pubKeyword = null;
     let mutKeyword = null;
+    let foreignKeyword = null;
     if (t0.kind === SyntaxKind.PubKeyword) {
       pubKeyword = t0;
       t0 = this.getToken();
@@ -791,20 +792,25 @@ export class Parser {
     if (t0.kind !== SyntaxKind.LetKeyword) {
       this.raiseParseError(t0, [ SyntaxKind.LetKeyword ]);
     }
-    const t1 = this.peekToken();
+    let t1 = this.peekToken();
+    if (t1.kind === SyntaxKind.ForeignKeyword) {
+      this.getToken();
+      foreignKeyword = t1;
+      t1 = this.peekToken();
+    }
     if (t1.kind === SyntaxKind.MutKeyword) {
       this.getToken();
       mutKeyword = t1;
+      t1 = this.peekToken();
     }
-    const t2 = this.peekToken();
-    const t3 = this.peekToken(2);
-    const t4 = this.peekToken(3);
+    const t2 = this.peekToken(2);
+    const t3 = this.peekToken(3);
     let pattern;
-    if (t2.kind === SyntaxKind.LParen && t3.kind === SyntaxKind.CustomOperator && t4.kind === SyntaxKind.RParen) {
+    if (t1.kind === SyntaxKind.LParen && t2.kind === SyntaxKind.CustomOperator && t3.kind === SyntaxKind.RParen) {
       this.getToken()
       this.getToken();
       this.getToken();
-      pattern = new WrappedOperator(t2, t3, t4);
+      pattern = new WrappedOperator(t1, t2, t3);
     } else {
       pattern = this.parsePattern();
     }
@@ -859,6 +865,7 @@ export class Parser {
     return new LetDeclaration(
       pubKeyword,
       t0,
+      foreignKeyword,
       mutKeyword,
       pattern,
       params,
