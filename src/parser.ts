@@ -191,6 +191,7 @@ export class Parser {
         for (;;) {
           const t2 = this.peekToken();
           if (t2.kind === SyntaxKind.RParen) {
+            this.getToken();
             rparen = t2;
             break;
           }
