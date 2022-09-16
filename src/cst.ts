@@ -3,6 +3,10 @@ import type { InferContext, Kind, Scheme, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
 
+export type Value
+  = bigint
+  | string
+
 export class TextPosition {
 
   public constructor(
@@ -574,6 +578,10 @@ export class Integer extends TokenBase {
     super(startPos);
   }
 
+  public getValue(): Value {
+    return this.value;
+  }
+
   public get text(): string {
     switch (this.radix) {
       case 16:
@@ -600,6 +608,10 @@ export class StringLiteral extends TokenBase {
     startPos: TextPosition,
   ) {
     super(startPos);
+  }
+
+  public getValue(): Value {
+    return this.contents;
   }
 
   public get text(): string {

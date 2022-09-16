@@ -14,6 +14,7 @@ import { Checker } from "../checker"
 import { SourceFile, TextFile } from "../cst"
 import { parseSourceFile } from ".."
 import { Analyser } from "../analysis"
+import { Program } from "../program"
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
@@ -37,18 +38,18 @@ yargs
       const filename = path.resolve(cwd, args.file);
 
       const diagnostics = new ConsoleDiagnostics();
-      const text = fs.readFileSync(filename, 'utf8')
-      const file = new TextFile(filename, text);
-      const sourceFile = parseSourceFile(file, diagnostics);
-      if (sourceFile === null) {
+      const program = new Program([ filename ]);
+      if (program.diagnostics.hasError) {
         process.exit(1);
       }
-      //debug(sourceFile.toJSON());
-      const analyser = new Analyser();
-      analyser.addSourceFile(sourceFile);
-      const checker = new Checker(analyser, diagnostics);
-      checker.check(sourceFile);
-
+      program.check();
+      if (program.diagnostics.hasError) {
+        process.exit(1);
+      }
+      program.emit();
+      if (program.diagnostics.hasError) {
+        process.exit(1);
+      }
     }
   )
   .help()

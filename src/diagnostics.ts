@@ -359,6 +359,8 @@ export type Diagnostic
   | KindMismatchDiagnostic
 
 export interface Diagnostics {
+  readonly hasError: boolean;
+  readonly hasFatal: boolean;
   add(diagnostic: Diagnostic): void;
 }
 
@@ -386,10 +388,20 @@ export class DiagnosticStore {
 }
 
 export class ConsoleDiagnostics {
+  
+  private writer = new IndentWriter(process.stderr);
+
+  public hasError = false;
+  public hasFatal = false;
 
   public add(diagnostic: Diagnostic): void {
-    const writer = new IndentWriter(process.stderr);
-    diagnostic.format(writer);
+    diagnostic.format(this.writer);
+    if (diagnostic.level >= Level.Error) {
+      this.hasError = true;
+    }
+    if (diagnostic.level >= Level.Fatal) {
+      this.hasFatal = true;
+    }
   }
 
 }
