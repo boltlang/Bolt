@@ -259,17 +259,32 @@ export class Parser {
   }
 
   private parseExpressionWithParens(): Expression {
+    const elements = [];
     const lparen = this.expectToken(SyntaxKind.LParen)
-    const t1 = this.peekToken();
-    // FIXME should be able to parse tuples
-    if (t1.kind === SyntaxKind.RParen) {
-      this.getToken();
-      return new TupleExpression(lparen, [], t1);
-    } else {
+    let rparen;
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.RParen) {
+        rparen = t1;
+        this.getToken();
+        break;
+      }
       const expression = this.parseExpression();
-      const t2 = this.expectToken(SyntaxKind.RParen);
-      return new NestedExpression(lparen, expression, t2);
+      elements.push(expression);
+      const t2 = this.getToken();
+      if (t2.kind === SyntaxKind.Comma) {
+        continue;
+      } else if (t2.kind === SyntaxKind.RParen) {
+        rparen = t2;
+        break;
+      } else {
+        this.raiseParseError(t2, [ SyntaxKind.Comma, SyntaxKind.RParen ]);
+      }
     }
+    if (elements.length === 1) {
+      return new NestedExpression(lparen, elements[0], rparen);
+    }
+    return new TupleExpression(lparen, elements, rparen);
   }
 
   private parsePrimitiveExpression(): Expression {
