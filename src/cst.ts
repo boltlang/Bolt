@@ -1068,7 +1068,7 @@ export class ReferenceTypeExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.ReferenceTypeExpression;
 
   public constructor(
-    public modulePath: Array<[Identifier, Dot]>,
+    public modulePath: Array<[IdentifierAlt, Dot]>,
     public name: IdentifierAlt,
   ) {
     super();

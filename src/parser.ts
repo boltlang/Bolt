@@ -1,4 +1,5 @@
 
+import { warn } from "console";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -172,8 +173,19 @@ export class Parser {
   }
 
   public parseReferenceTypeExpression(): ReferenceTypeExpression {
+    const modulePath = [];
+    for (;;) {
+      const t1 = this.peekToken(1);
+      const t2 = this.peekToken(2);
+      if (t1.kind !== SyntaxKind.IdentifierAlt || t2.kind !== SyntaxKind.Dot) {
+        break;
+      }
+      this.getToken();
+      this.getToken();
+      modulePath.push([t1, t2] as [IdentifierAlt, Dot]);
+    }
     const name = this.expectToken(SyntaxKind.IdentifierAlt);
-    return new ReferenceTypeExpression([], name);
+    return new ReferenceTypeExpression(modulePath, name);
   }
 
   public parsePrimitiveTypeExpression(): TypeExpression {
