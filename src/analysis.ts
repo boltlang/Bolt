@@ -37,6 +37,7 @@ export class Analyser {
         }
 
         case SyntaxKind.SourceFile:
+        case SyntaxKind.ModuleDeclaration:
         {
           for (const element of node.elements) {
             visit(element, source);

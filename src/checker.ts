@@ -1103,6 +1103,7 @@ export class Checker {
     switch (node.kind) {
 
       case SyntaxKind.SourceFile:
+      case SyntaxKind.ModuleDeclaration:
       {
         for (const element of node.elements) {
           this.infer(element);
@@ -1588,6 +1589,7 @@ export class Checker {
     switch (node.kind) {
 
       case SyntaxKind.SourceFile:
+      case SyntaxKind.ModuleDeclaration:
       {
         const env = node.typeEnv = new TypeEnv(parentEnv);
         for (const element of node.elements) {

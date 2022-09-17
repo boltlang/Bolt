@@ -182,14 +182,14 @@ export const enum SyntaxKind {
   Initializer,
   TypeAssert,
   Param,
-  Module,
+  ModuleDeclaration,
   SourceFile,
 
 }
 
 export type Syntax
   = SourceFile
-  | Module
+  | ModuleDeclaration
   | Token
   | Param
   | Body
@@ -220,7 +220,8 @@ function isNodeWithScope(node: Syntax): node is NodeWithScope {
 export const enum Symkind {
   Var = 1,
   Type = 2,
-  Any = Var | Type
+  Module = 4,
+  Any = Var | Type | Module
 }
 
 export class Scope {
@@ -262,6 +263,14 @@ export class Scope {
     switch (node.kind) {
       case SyntaxKind.SourceFile:
       {
+        for (const element of node.elements) {
+          this.scan(element);
+        }
+        break;
+      }
+      case SyntaxKind.ModuleDeclaration:
+      {
+        this.add(node.name.text, node, Symkind.Module);
         for (const element of node.elements) {
           this.scan(element);
         }
@@ -2194,15 +2203,18 @@ export class Initializer extends SyntaxBase {
 
 }
 
-export class Module extends SyntaxBase {
+export class ModuleDeclaration extends SyntaxBase {
 
-  public readonly kind = SyntaxKind.Module;
+  public readonly kind = SyntaxKind.ModuleDeclaration;
+
+  public typeEnv?: TypeEnv;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
     public modKeyword: ModKeyword,
-    public name: Identifier,
-    public body: Body,
+    public name: IdentifierAlt,
+    public blockStart: BlockStart,
+    public elements: SourceFileElement[],
   ) {
     super();
   }
@@ -2215,7 +2227,10 @@ export class Module extends SyntaxBase {
   }
 
   public getLastToken(): Token {
-    return this.body.getLastToken();
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.blockStart;
   }
 
 }
@@ -2223,7 +2238,7 @@ export class Module extends SyntaxBase {
 export type SourceFileElement
   = Statement
   | Declaration
-  | Module
+  | ModuleDeclaration
 
 export class SourceFile extends SyntaxBase {
 

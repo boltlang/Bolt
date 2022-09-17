@@ -59,6 +59,7 @@ import {
   LiteralPattern,
   DisjunctivePattern,
   TupleTypeExpression,
+  ModuleDeclaration,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -954,11 +955,38 @@ export class Parser {
     return new ImportDeclaration(importKeyword, importSource);
   }
 
+  public parseModuleDeclaration(): ModuleDeclaration {
+    let pubKeyword = null;
+    let t0 = this.getToken();
+    if (t0.kind === SyntaxKind.PubKeyword) {
+      pubKeyword = t0;
+      t0 = this.getToken();
+    }
+    if (t0.kind !== SyntaxKind.ModKeyword) {
+      this.raiseParseError(t0, [ SyntaxKind.ModKeyword ]);
+    }
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
+    const blockStart = this.expectToken(SyntaxKind.BlockStart);
+    const elements = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.BlockEnd) {
+        this.getToken();
+        break;
+      }
+      elements.push(this.parseSourceFileElement());
+    }
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    return new ModuleDeclaration(pubKeyword, t0, name, blockStart, elements);
+  }
+
   public parseSourceFileElement(): SourceFileElement {
     const t0 = this.peekTokenAfterModifiers();
     switch (t0.kind) {
       case SyntaxKind.LetKeyword:
         return this.parseLetDeclaration();
+      case SyntaxKind.ModKeyword:
+        return this.parseModuleDeclaration();
       case SyntaxKind.ImportKeyword:
         return this.parseImportDeclaration();
       case SyntaxKind.StructKeyword:

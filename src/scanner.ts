@@ -41,6 +41,7 @@ import {
   RArrowAlt,
   VBar,
   ForeignKeyword,
+  ModKeyword,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -368,6 +369,7 @@ export class Scanner extends BufferedStream<Token> {
             case 'enum': return new EnumKeyword(startPos);
             case 'match': return new MatchKeyword(startPos);
             case 'foreign': return new ForeignKeyword(startPos);
+            case 'mod': return new ModKeyword(startPos);
             default:
               if (isUpper(text[0])) {
                 return new IdentifierAlt(text, startPos);
