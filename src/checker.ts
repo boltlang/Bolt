@@ -1,5 +1,4 @@
 import {
-    CustomOperator,
   EnumDeclaration,
   Expression,
   ExprOperator,
@@ -728,7 +727,11 @@ class KindEnv {
 
   }
 
-  public setNamed(name: string, kind: Kind): void {
+  public get(name: string): Kind | null {
+    return this.mapping.get(name) ?? null;
+  }
+
+  public set(name: string, kind: Kind): void {
     assert(!this.mapping.has(name));
     this.mapping.set(name, kind);
   }
@@ -745,6 +748,19 @@ class KindEnv {
     return null;
   }
 
+}
+
+function splitReferences(node: NodeWithReference): [IdentifierAlt[], Identifier | IdentifierAlt | ExprOperator] {
+  let modulePath: IdentifierAlt[];
+  let name: Identifier | IdentifierAlt | ExprOperator;
+  if (node.kind === SyntaxKind.ReferenceExpression || node.kind === SyntaxKind.ReferenceTypeExpression) {
+    modulePath = node.modulePath.map(([name, _dot]) => name);
+    name = node.name;
+  } else {
+    modulePath = [];
+    name = node;
+  }
+  return [modulePath, name]
 }
 
 export interface InferContext {
@@ -816,16 +832,67 @@ export class Checker {
     this.contexts.pop();
   }
 
-  private lookup(node: NodeWithReference, expectedKind: Symkind): Scheme | null {
-    let modulePath: IdentifierAlt[];
-    let name: Identifier | IdentifierAlt | ExprOperator;
-    if (node.kind === SyntaxKind.ReferenceExpression || node.kind === SyntaxKind.ReferenceTypeExpression) {
-      modulePath = node.modulePath.map(([name, _dot]) => name);
-      name = node.name;
+  private lookupKind(env: KindEnv, node: NodeWithReference): Kind | null {
+    const [modulePath, name] = splitReferences(node);
+    if (modulePath.length > 0) {
+      let maxIndex = 0;
+      let currUp = node.getEnclosingModule();
+      outer: for (;;) {
+        let currDown: SourceFile | ModuleDeclaration = currUp;
+        for (let i = 0; i < modulePath.length; i++) {
+          const moduleName = modulePath[i];
+          const nextDown = currDown.resolveModule(moduleName.text);
+          if (nextDown === null) {
+            if (currUp.kind === SyntaxKind.SourceFile) {
+              this.diagnostics.add(
+                new ModuleNotFoundDiagnostic(
+                  modulePath.slice(maxIndex).map(id => id.text),
+                  modulePath[maxIndex],
+                )
+              );
+              return null;
+            }
+            currUp = currUp.getEnclosingModule();
+            continue outer;
+          }
+          maxIndex = Math.max(maxIndex, i+1);
+          currDown = nextDown;
+        }
+        const found = currDown.kindEnv!.get(name.text);
+        if (found !== null) {
+          return found;
+        }
+        this.diagnostics.add(
+          new BindingNotFoudDiagnostic(
+            modulePath.map(id => id.text),
+            name.text,
+            name,
+          )
+        );
+        return null;
+      }
     } else {
-      modulePath = [];
-      name = node;
+      let curr: KindEnv | null = env;
+      do {
+        const found = curr.get(name.text);
+        if (found !== null) {
+          return found;
+        }
+        curr = curr.parent;
+      } while(curr !== null);
+      this.diagnostics.add(
+        new BindingNotFoudDiagnostic(
+          [],
+          name.text,
+          name,
+        )
+      );
+      return null;
     }
+  }
+
+  private lookup(node: NodeWithReference, expectedKind: Symkind): Scheme | null {
+    const [modulePath, name] = splitReferences(node);
     if (modulePath.length > 0) {
       let maxIndex = 0;
       let currUp = node.getEnclosingModule();
@@ -872,8 +939,15 @@ export class Checker {
         }
         curr = curr.parent;
       } while(curr !== null);
+      this.diagnostics.add(
+        new BindingNotFoudDiagnostic(
+          [],
+          name.text,
+          name,
+        )
+      );
+      return null;
     }
-    return null;
   }
 
   private getReturnType(): Type {
@@ -926,9 +1000,9 @@ export class Checker {
       }
       case SyntaxKind.ReferenceTypeExpression:
       {
-        const matchedKind = env.lookup(node.name.text);
+        const matchedKind = this.lookupKind(env, node);
         if (matchedKind === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
+          // this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
           // Create a filler kind variable that still will be able to catch other errors.
           kind = this.createKindVar();
           kind.flags |= KindFlags.UnificationFailed;
@@ -939,9 +1013,9 @@ export class Checker {
       }
       case SyntaxKind.VarTypeExpression:
       {
-        const matchedKind = env.lookup(node.name.text);
+        const matchedKind = this.lookupKind(env, node.name);
         if (matchedKind === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
+          // this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
           // Create a filler kind variable that still will be able to catch other errors.
           kind = this.createKindVar();
           kind.flags |= KindFlags.UnificationFailed;
@@ -1005,7 +1079,9 @@ export class Checker {
           )
         );
         // Create a filler kind variable that still will be able to catch other errors.
-        return this.createKindVar();
+        const kind = this.createKindVar();
+        kind.flags |= KindFlags.UnificationFailed;
+        return kind;
       }
     }
   }
@@ -1034,23 +1110,23 @@ export class Checker {
         for (let i = node.varExps.length-1; i >= 0; i--) {
           const varExpr = node.varExps[i];
           const paramKind = this.createKindVar();
-          innerEnv.setNamed(varExpr.text, paramKind);
+          innerEnv.set(varExpr.text, paramKind);
           kind = new KArrow(paramKind, kind);
         }
-        env.setNamed(node.name.text, this.inferKindFromTypeExpression(node.typeExpression, innerEnv));
+        env.set(node.name.text, this.inferKindFromTypeExpression(node.typeExpression, innerEnv));
         break;
       }
       case SyntaxKind.StructDeclaration:
       {
-        env.setNamed(node.name.text, this.createKindVar());
+        env.set(node.name.text, this.createKindVar());
         break;
       }
       case SyntaxKind.EnumDeclaration:
       {
-        env.setNamed(node.name.text, this.createKindVar());
+        env.set(node.name.text, this.createKindVar());
         if (node.members !== null) {
           for (const member of node.members) {
-            env.setNamed(member.name.text, this.createKindVar());
+            env.set(member.name.text, this.createKindVar());
           }
         }
         break;
@@ -1083,7 +1159,7 @@ export class Checker {
         for (let i = node.varExps.length-1; i >= 0; i--) {
           const varExpr = node.varExps[i];
           const paramKind = this.createKindVar();
-          innerEnv.setNamed(varExpr.text, paramKind);
+          innerEnv.set(varExpr.text, paramKind);
           kind = new KArrow(paramKind, kind);
         }
         this.unifyKind(declKind, kind, node);
@@ -1103,7 +1179,7 @@ export class Checker {
         for (let i = node.varExps.length-1; i >= 0; i--) {
           const varExpr = node.varExps[i];
           const paramKind = this.createKindVar();
-          innerEnv.setNamed(varExpr.text, paramKind);
+          innerEnv.set(varExpr.text, paramKind);
           kind = new KArrow(paramKind, kind);
         }
         this.unifyKind(declKind, kind, node);
@@ -1483,7 +1559,7 @@ export class Checker {
 
     let type;
 
-    if (node.inferredKind!.substitute(this.kindSolution).hasFailed()) {
+    if (node.inferredKind!.hasFailed()) {
 
       type = this.createTypeVar();
 
@@ -1821,9 +1897,9 @@ export class Checker {
   public check(node: SourceFile): void {
 
     const kenv = new KindEnv();
-    kenv.setNamed('Int', new KStar());
-    kenv.setNamed('String', new KStar());
-    kenv.setNamed('Bool', new KStar());
+    kenv.set('Int', new KStar());
+    kenv.set('String', new KStar());
+    kenv.set('Bool', new KStar());
     const skenv = new KindEnv(kenv);
     this.forwardDeclareKind(node, skenv);
     this.inferKind(node, skenv);

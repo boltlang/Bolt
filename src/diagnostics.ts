@@ -442,19 +442,28 @@ function printNode(node: Syntax, options?: PrintExcerptOptions): string {
 }
 
 function printExcerpt(file: TextFile, span: TextRange, { indentation = '  ', extraLineCount = 2 } = {}): string {
+
   let out = '';
+
   const content = file.text;
   const startLine = Math.max(0, span.start.line-1-extraLineCount)
   const lines = content.split('\n')
   const endLine = Math.min(lines.length, (span.end !== undefined ? span.end.line : startLine) + extraLineCount)
   const gutterWidth = Math.max(2, countDigits(endLine+1))
+
   for (let i = startLine; i < endLine; i++) {
+
     const line = lines[i];
+
     let j = firstIndexOfNonEmpty(line);
+
     out +=  indentation + '  ' + ANSI_FG_BLACK + ANSI_BG_WHITE + ' '.repeat(gutterWidth-countDigits(i+1))+(i+1).toString() + ANSI_RESET + ' ' + line + '\n'
+
     const gutter = indentation + '  ' + ANSI_FG_BLACK + ANSI_BG_WHITE + ' '.repeat(gutterWidth) + ANSI_RESET + ' '
+
     let mark: number;
     let skip: number;
+
     if (i === span.start.line-1 && i === span.end.line-1) {
       skip = span.start.column-1;
       mark = span.end.column-span.start.column;
@@ -470,11 +479,15 @@ function printExcerpt(file: TextFile, span: TextRange, { indentation = '  ', ext
     } else {
       continue;
     }
+
     if (j <= skip) {
       j = 0;
     }
+
     out += gutter + ' '.repeat(j+skip) + ANSI_FG_RED + '~'.repeat(mark-j) + ANSI_RESET + '\n'
+
   }
+
   return out;
 }
 
