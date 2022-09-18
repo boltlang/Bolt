@@ -185,3 +185,13 @@ let foo_1 : (Int, Int, Int) = (1, 2, 3)
 let foo_2 : (Int, Int, Int) = (1, 2, "foo")
 ```
 
+## Module references work
+
+```
+mod CD.
+  mod A.
+    struct Foo
+  mod B.
+    let alpha: A.Foo
+```
+
