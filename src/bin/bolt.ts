@@ -14,7 +14,7 @@ import { Checker } from "../checker"
 import { SourceFile, TextFile } from "../cst"
 import { parseSourceFile } from ".."
 import { Analyser } from "../analysis"
-import { Program } from "../program"
+import { Program, TargetType } from "../program"
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
@@ -37,7 +37,6 @@ yargs
       const cwd = args.C;
       const filename = path.resolve(cwd, args.file);
 
-      const diagnostics = new ConsoleDiagnostics();
       const program = new Program([ filename ]);
       if (program.diagnostics.hasError) {
         process.exit(1);
@@ -46,7 +45,7 @@ yargs
       if (program.diagnostics.hasError) {
         process.exit(1);
       }
-      program.emit();
+      program.emit({ type: TargetType.JS });
       if (program.diagnostics.hasError) {
         process.exit(1);
       }

@@ -5,8 +5,39 @@ import { SourceFile, TextFile } from "./cst";
 import { ConsoleDiagnostics, Diagnostics } from "./diagnostics";
 import { Checker } from "./checker";
 import { Analyser } from "./analysis";
-import { generateCode } from "./codegen";
-import { CEmitter } from "./cast";
+import { Newable, Pass } from "./types";
+import BoltToC from "./passes/BoltToC";
+import BoltToJS from "./passes/BoltToJS";
+
+type AnyPass = Pass<any, any>;
+
+export enum TargetType {
+  C,
+  JS,
+  WebAssembly,
+  LLVM,
+}
+
+interface TargetSpec {
+  type: TargetType;
+}
+
+export class PassManager {
+
+  private registeredPasses: AnyPass[] = [];
+
+  public add(pass: Newable<AnyPass>) {
+    this.registeredPasses.push(new pass());
+  }
+
+  public apply<In>(input: In): unknown {
+    for (const pass of this.registeredPasses) {
+      input = pass.apply(input);
+    }
+    return input;
+  }
+
+}
 
 export class Program {
 
@@ -41,11 +72,23 @@ export class Program {
     }
   }
 
-  public emit(): void {
+  public emit(target: TargetSpec): void {
+    let suffix;
+    const passes = new PassManager();
+    switch (target.type) {
+      case TargetType.C:
+        suffix = '.c';
+        passes.add(BoltToC);
+        break;
+      case TargetType.JS:
+        suffix = '.js'
+        passes.add(BoltToJS);
+        break;
+    }
     for (const [filePath, sourceFile] of this.sourceFilesByPath) {
-      const file = fs.createWriteStream(stripExtension(filePath) + '.c', 'utf-8'); 
-      const emitter = new CEmitter(file);
-      emitter.emit(generateCode(sourceFile));
+      const code = passes.apply(sourceFile) as any;
+      const file = fs.createWriteStream(stripExtension(filePath) + suffix, 'utf-8'); 
+      code.emit(file);
     }
   }
 
