@@ -1,4 +1,4 @@
-import { JSONObject, JSONValue, MultiMap } from "./util";
+import { assert, JSONObject, JSONValue, MultiMap } from "./util";
 import type { InferContext, Kind, Scheme, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
@@ -413,6 +413,17 @@ abstract class SyntaxBase {
     throw new Error(`Could not find a scope for ${this}. Maybe the parent links are not set?`);
   }
 
+  public getEnclosingModule(): ModuleDeclaration | SourceFile {
+    let curr = this.parent!;
+    while (curr !== null) {
+      if (curr.kind === SyntaxKind.SourceFile || curr.kind === SyntaxKind.ModuleDeclaration) {
+        return curr;
+      }
+      curr = curr.parent!;
+    }
+    throw new Error(`Unable to find an enclosing module for ${this.constructor.name}. Perhaps the parent-links are not set?`);
+  }
+
   public setParents(): void {
 
     const visit = (value: any) => {
@@ -466,6 +477,29 @@ abstract class SyntaxBase {
       }
     }
 
+  }
+
+  public resolveModule(name: string): ModuleDeclaration | null {
+    const node = this as unknown as Syntax;
+    assert(node.kind === SyntaxKind.ModuleDeclaration || node.kind === SyntaxKind.SourceFile);
+    for (const element of node.elements) {
+      if (element.kind === SyntaxKind.ModuleDeclaration && element.name.text === name) {
+        return element;
+      }
+    }
+    return null;
+  }
+
+  public getModulePath(): string[] {
+    let curr = this.parent;
+    const modulePath = [];
+    while (curr !== null) {
+      if (curr.kind === SyntaxKind.ModuleDeclaration) {
+        modulePath.unshift(curr.name.text);
+      }
+      curr = curr.parent;
+    }
+    return modulePath;
   }
 
 }
@@ -679,6 +713,15 @@ export class CustomOperator extends TokenBase {
     super(startPos);
   }
 
+}
+
+export type ExprOperator
+  = CustomOperator
+  | VBar
+
+export function isExprOperator(node: Syntax): node is ExprOperator {
+  return node.kind === SyntaxKind.CustomOperator
+      || node.kind === SyntaxKind.VBar
 }
 
 export class Assignment extends TokenBase {
@@ -1655,7 +1698,7 @@ export class PrefixExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.PrefixExpression;
 
   public constructor(
-    public operator: Token,
+    public operator: ExprOperator,
     public expression: Expression,
   ) {
     super();
@@ -1677,7 +1720,7 @@ export class PostfixExpression extends SyntaxBase {
 
   public constructor(
     public expression: Expression,
-    public operator: Token,
+    public operator: ExprOperator,
   ) {
     super();
   }
@@ -1698,7 +1741,7 @@ export class InfixExpression extends SyntaxBase {
 
   public constructor(
     public left: Expression,
-    public operator: Token,
+    public operator: ExprOperator,
     public right: Expression,
   ) {
     super();
@@ -2116,7 +2159,7 @@ export class LetDeclaration extends SyntaxBase {
   public scope?: Scope;
   public typeEnv?: TypeEnv;
 
-  public active?: boolean;
+  public activeCycle?: boolean;
   public context?: InferContext;
 
   public constructor(

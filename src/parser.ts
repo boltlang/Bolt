@@ -1,5 +1,4 @@
 
-import { warn } from "console";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -61,6 +60,7 @@ import {
   DisjunctivePattern,
   TupleTypeExpression,
   ModuleDeclaration,
+  isExprOperator,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -74,16 +74,6 @@ export class ParseError extends Error {
     super(`Uncaught parse error`);
   }
 
-}
-
-function isBinaryOperatorLike(token: Token): boolean {
-  return token.kind === SyntaxKind.CustomOperator
-      || token.kind === SyntaxKind.VBar;
-}
-
-function isPrefixOperatorLike(token: Token): boolean {
-  return token.kind === SyntaxKind.CustomOperator
-      || token.kind === SyntaxKind.VBar;
 }
 
 const enum OperatorMode {
@@ -442,8 +432,7 @@ export class Parser {
         || t1.kind === SyntaxKind.RParen
         || t1.kind === SyntaxKind.BlockStart
         || t1.kind === SyntaxKind.Comma
-        || isBinaryOperatorLike(t1)
-        || isPrefixOperatorLike(t1)) {
+        || isExprOperator(t1)) {
         break;
       }
       args.push(this.tryParseMemberExpression());
@@ -459,7 +448,7 @@ export class Parser {
     const prefixes = [];
     for (;;) {
       const t0 = this.peekToken();
-      if (!isPrefixOperatorLike(t0)) {
+      if (!isExprOperator(t0)) {
         break;
       }
       if (!this.prefixExprOperators.has(t0.text)) {
@@ -478,7 +467,7 @@ export class Parser {
   private parseBinaryOperatorAfterExpr(lhs: Expression, minPrecedence: number) {
     for (;;) {
       const t0 = this.peekToken();
-      if (!isBinaryOperatorLike(t0)) {
+      if (!isExprOperator(t0)) {
         break;
       }
       const info0 = this.binaryExprOperators.get(t0.text);
@@ -489,7 +478,7 @@ export class Parser {
       let rhs = this.parseUnaryExpression();
       for (;;) {
         const t1 = this.peekToken();
-        if (!isBinaryOperatorLike(t1)) {
+        if (!isExprOperator(t1)) {
           break;
         }
         const info1 = this.binaryExprOperators.get(t1.text);

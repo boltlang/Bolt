@@ -1,14 +1,21 @@
 import {
+    CustomOperator,
   EnumDeclaration,
   Expression,
+  ExprOperator,
+  Identifier,
+  IdentifierAlt,
   LetDeclaration,
+  ModuleDeclaration,
   Pattern,
+  ReferenceExpression,
+  ReferenceTypeExpression,
   SourceFile,
   StructDeclaration,
   Symkind,
   Syntax,
   SyntaxKind,
-  TypeExpression
+  TypeExpression,
 } from "./cst";
 import {
   describeType,
@@ -18,6 +25,7 @@ import {
   FieldMissingDiagnostic,
   UnificationFailedDiagnostic,
   KindMismatchDiagnostic,
+  ModuleNotFoundDiagnostic,
 } from "./diagnostics";
 import { assert, isEmpty, MultiMap } from "./util";
 import { Analyser } from "./analysis";
@@ -682,6 +690,13 @@ class Forall extends SchemeBase {
 export type Scheme
   = Forall
 
+type NodeWithReference
+  = Identifier
+  | IdentifierAlt
+  | ExprOperator
+  | ReferenceExpression
+  | ReferenceTypeExpression
+
 export class TypeEnv {
 
   private mapping = new MultiMap<string, [Symkind, Scheme]>();
@@ -694,16 +709,12 @@ export class TypeEnv {
     this.mapping.add(name, [kind, scheme]);
   }
 
-  public lookup(name: string, expectedKind: Symkind): Scheme | null {
-    let curr: TypeEnv | null = this;
-    do {
-      for (const [kind, scheme] of curr.mapping.get(name)) {
-        if (kind & expectedKind) {
-          return scheme;
-        }
+  public get(name: string, expectedKind: Symkind): Scheme | null {
+    for (const [kind, scheme] of this.mapping.get(name)) {
+      if (kind & expectedKind) {
+        return scheme;
       }
-      curr = curr.parent;
-    } while(curr !== null);
+    }
     return null;
   }
 
@@ -805,8 +816,64 @@ export class Checker {
     this.contexts.pop();
   }
 
-  private lookup(name: string, kind: Symkind): Scheme | null {
-    return this.getContext().env.lookup(name, kind);
+  private lookup(node: NodeWithReference, expectedKind: Symkind): Scheme | null {
+    let modulePath: IdentifierAlt[];
+    let name: Identifier | IdentifierAlt | ExprOperator;
+    if (node.kind === SyntaxKind.ReferenceExpression || node.kind === SyntaxKind.ReferenceTypeExpression) {
+      modulePath = node.modulePath.map(([name, _dot]) => name);
+      name = node.name;
+    } else {
+      modulePath = [];
+      name = node;
+    }
+    if (modulePath.length > 0) {
+      let maxIndex = 0;
+      let currUp = node.getEnclosingModule();
+      outer: for (;;) {
+        let currDown: SourceFile | ModuleDeclaration = currUp;
+        for (let i = 0; i < modulePath.length; i++) {
+          const moduleName = modulePath[i];
+          const nextDown = currDown.resolveModule(moduleName.text);
+          if (nextDown === null) {
+            if (currUp.kind === SyntaxKind.SourceFile) {
+              this.diagnostics.add(
+                new ModuleNotFoundDiagnostic(
+                  modulePath.slice(maxIndex).map(id => id.text),
+                  modulePath[maxIndex],
+                )
+              );
+              return null;
+            }
+            currUp = currUp.getEnclosingModule();
+            continue outer;
+          }
+          maxIndex = Math.max(maxIndex, i+1);
+          currDown = nextDown;
+        }
+        const found = currDown.typeEnv!.get(name.text, expectedKind);
+        if (found !== null) {
+          return found;
+        }
+        this.diagnostics.add(
+          new BindingNotFoudDiagnostic(
+            modulePath.map(id => id.text),
+            name.text,
+            name,
+          )
+        );
+        return null;
+      }
+    } else {
+      let curr: TypeEnv | null = this.getContext().env;
+      do {
+        const found = curr.get(name.text, expectedKind);
+        if (found !== null) {
+          return found;
+        }
+        curr = curr.parent;
+      } while(curr !== null);
+    }
+    return null;
   }
 
   private getReturnType(): Type {
@@ -834,8 +901,7 @@ export class Checker {
   }
 
   private addBinding(name: string, scheme: Scheme, kind: Symkind): void {
-    const context = this.contexts[this.contexts.length-1];
-    context.env.add(name, scheme, kind);
+    this.getContext().env.add(name, scheme, kind);
   }
 
   private inferKindFromTypeExpression(node: TypeExpression, env: KindEnv): Kind {
@@ -858,14 +924,27 @@ export class Checker {
         kind = new KStar();
         break;
       }
-      case SyntaxKind.VarTypeExpression:
       case SyntaxKind.ReferenceTypeExpression:
       {
         const matchedKind = env.lookup(node.name.text);
         if (matchedKind === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+          this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
           // Create a filler kind variable that still will be able to catch other errors.
           kind = this.createKindVar();
+          kind.flags |= KindFlags.UnificationFailed;
+        } else {
+          kind = matchedKind;
+        }
+        break;
+      }
+      case SyntaxKind.VarTypeExpression:
+      {
+        const matchedKind = env.lookup(node.name.text);
+        if (matchedKind === null) {
+          this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
+          // Create a filler kind variable that still will be able to catch other errors.
+          kind = this.createKindVar();
+          kind.flags |= KindFlags.UnificationFailed;
         } else {
           kind = matchedKind;
         }
@@ -932,9 +1011,15 @@ export class Checker {
   }
 
   private forwardDeclareKind(node: Syntax, env: KindEnv): void {
-
     switch (node.kind) {
-
+      case SyntaxKind.ModuleDeclaration:
+      {
+        const innerEnv = node.kindEnv = new KindEnv(env);
+        for (const element of node.elements) {
+          this.forwardDeclareKind(element, innerEnv);
+        }
+        break;
+      }
       case SyntaxKind.SourceFile:
       {
         for (const element of node.elements) {
@@ -970,13 +1055,19 @@ export class Checker {
         }
         break;
       }
-
     }
-
   }
  
   private inferKind(node: Syntax, env: KindEnv): void {
     switch (node.kind) {
+      case SyntaxKind.ModuleDeclaration:
+      {
+        const innerEnv = node.kindEnv!;
+        for (const element of node.elements) {
+          this.inferKind(element, innerEnv);
+        }
+        break;
+      }
       case SyntaxKind.SourceFile:
       {
         for (const element of node.elements) {
@@ -1264,15 +1355,14 @@ export class Checker {
 
       case SyntaxKind.ReferenceExpression:
       {
-        assert(node.modulePath.length === 0);
         const scope = node.getScope();
         const target = scope.lookup(node.name.text);
-        if (target !== null && target.kind === SyntaxKind.LetDeclaration && target.active) {
+        if (target !== null && target.kind === SyntaxKind.LetDeclaration && target.activeCycle) {
           return target.inferredType!;
         }
-        const scheme = this.lookup(node.name.text, Symkind.Var);
+        const scheme = this.lookup(node, Symkind.Var);
         if (scheme === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+          // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           return this.createTypeVar();
         }
         const type = this.instantiate(scheme, node);
@@ -1343,10 +1433,10 @@ export class Checker {
             }
             case SyntaxKind.PunnedStructExpressionField:
             {
-              const scheme = this.lookup(member.name.text, Symkind.Var);
+              const scheme = this.lookup(member.name, Symkind.Var);
               let fieldType;
               if (scheme === null) {
-                this.diagnostics.add(new BindingNotFoudDiagnostic(member.name.text, member.name));
+                // this.diagnostics.add(new BindingNotFoudDiagnostic(member.name.text, member.name));
                 fieldType = this.createTypeVar();
               } else {
                 fieldType = this.instantiate(scheme, member);
@@ -1363,9 +1453,9 @@ export class Checker {
 
       case SyntaxKind.InfixExpression:
       {
-        const scheme = this.lookup(node.operator.text, Symkind.Var);
+        const scheme = this.lookup(node.operator, Symkind.Var);
         if (scheme === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic(node.operator.text, node.operator));
+          // this.diagnostics.add(new BindingNotFoudDiagnostic(node.operator.text, node.operator));
           return this.createTypeVar();
         }
         const opType = this.instantiate(scheme, node.operator);
@@ -1403,9 +1493,9 @@ export class Checker {
 
         case SyntaxKind.ReferenceTypeExpression:
         {
-          const scheme = this.lookup(node.name.text, Symkind.Type);
+          const scheme = this.lookup(node, Symkind.Type);
           if (scheme === null) {
-            this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+            // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
             return this.createTypeVar();
           }
           type = this.instantiate(scheme, node.name);
@@ -1430,10 +1520,10 @@ export class Checker {
 
         case SyntaxKind.VarTypeExpression:
         {
-          const scheme = this.lookup(node.name.text, Symkind.Type);
+          const scheme = this.lookup(node.name, Symkind.Type);
           if (scheme === null) {
             if (!introduceTypeVars) {
-              this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+              // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
             }
             type = this.createTypeVar();
             this.addBinding(node.name.text, new Forall([], [], type), Symkind.Type);
@@ -1527,10 +1617,10 @@ export class Checker {
 
       case SyntaxKind.StructPattern:
       {
-        const scheme = this.lookup(pattern.name.text, Symkind.Type);
+        const scheme = this.lookup(pattern.name, Symkind.Type);
         let recordType;
         if (scheme === null) {
-          this.diagnostics.add(new BindingNotFoudDiagnostic(pattern.name.text, pattern.name));
+          // this.diagnostics.add(new BindingNotFoudDiagnostic(pattern.name.text, pattern.name));
           recordType = this.createTypeVar();
         } else {
           recordType = this.instantiate(scheme, pattern.name);
@@ -1734,8 +1824,9 @@ export class Checker {
     kenv.setNamed('Int', new KStar());
     kenv.setNamed('String', new KStar());
     kenv.setNamed('Bool', new KStar());
-    this.forwardDeclareKind(node, kenv);
-    this.inferKind(node, kenv);
+    const skenv = new KindEnv(kenv);
+    this.forwardDeclareKind(node, skenv);
+    this.inferKind(node, skenv);
 
     const typeVars = new TVSet();
     const constraints = new ConstraintSet();
@@ -1852,7 +1943,7 @@ export class Checker {
             && isFunctionDeclarationLike(element)) {
           if (!this.analyser.isReferencedInParentScope(element)) {
             assert(element.pattern.kind === SyntaxKind.BindPattern);
-            const scheme = this.lookup(element.pattern.name.text, Symkind.Var);
+            const scheme = this.lookup(element.pattern.name, Symkind.Var);
             assert(scheme !== null);
             this.instantiate(scheme, null);
           }
@@ -1871,7 +1962,7 @@ export class Checker {
 
       for (const node of nodes) {
         assert(node.kind === SyntaxKind.LetDeclaration);
-        node.active = true;
+        node.activeCycle = true;
       }
 
       for (const node of nodes) {
@@ -1912,7 +2003,7 @@ export class Checker {
 
       for (const node of nodes) {
         assert(node.kind === SyntaxKind.LetDeclaration);
-        node.active = false;
+        node.activeCycle = false;
       }
 
     }

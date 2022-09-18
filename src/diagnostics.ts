@@ -151,6 +151,7 @@ export class BindingNotFoudDiagnostic {
   public readonly level = Level.Error;
 
   public constructor(
+    public modulePath: string[],
     public name: string,
     public node: Syntax,
   ) {
@@ -159,7 +160,11 @@ export class BindingNotFoudDiagnostic {
 
   public format(out: IndentWriter): void {
     out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET); 
-    out.write(`binding '${this.name}' was not found.\n\n`);
+    out.write(`binding '${this.name}' was not found`);
+    if (this.modulePath.length > 0) {
+      out.write(` in module ${ANSI_FG_BLUE + this.modulePath.join('.') + ANSI_RESET}`);
+    }
+    out.write(`.\n\n`);
     out.write(printNode(this.node) + '\n');
   }
 
@@ -349,6 +354,25 @@ export class KindMismatchDiagnostic {
 
 }
 
+export class ModuleNotFoundDiagnostic {
+
+  public readonly level = Level.Error;
+
+  public constructor(
+    public modulePath: string[],
+    public node: Syntax,
+  ) {
+
+  }
+
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+    out.write(`a module named ${ANSI_FG_BLUE + this.modulePath.join('.') + ANSI_RESET} was not found.\n\n`);
+    out.write(printNode(this.node) + '\n');
+  }
+
+}
+
 export type Diagnostic
   = UnexpectedCharDiagnostic
   | BindingNotFoudDiagnostic
@@ -357,6 +381,7 @@ export type Diagnostic
   | FieldMissingDiagnostic
   | FieldDoesNotExistDiagnostic
   | KindMismatchDiagnostic
+  | ModuleNotFoundDiagnostic
 
 export interface Diagnostics {
   readonly hasError: boolean;
