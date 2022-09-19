@@ -6,12 +6,12 @@ import * as commonmark from "commonmark"
 import { sync as globSync } from "glob"
 import fs from "fs";
 import path from "path";
-import yargs from "yargs";
 import { Checker } from "../checker";
 import { TextFile } from "../cst";
 import { ConsoleDiagnostics } from "../diagnostics";
 import { parseSourceFile } from "..";
 import { Analyser } from "../analysis";
+import { Command } from "commander";
 
 const projectDir = path.resolve(__dirname, '..', '..');
 
@@ -19,8 +19,13 @@ interface Test {
   code: string;
 }
 
-yargs
-  .command('run', 'Execute the current working tree and optionally save to disk', yargs => {}, async (args) => {
+const program = new Command()
+  .name('bolt-selftest');
+
+program
+  .command('run')
+  .option('-t', '--tag', 'Tag to add to test results')
+  .action(async (args) => {
     for await (const test of loadTests()) {
       console.log('--------');
       console.log(test.code);
@@ -35,8 +40,9 @@ yargs
         checker.check(sourceFile);
       }
     }
-  })
-  .argv;
+  });
+
+program.parse();
 
 async function* loadTests(): AsyncIterable<Test> {
   for (const filename of globSync(path.join(projectDir, 'src', 'test', '**', '*.md'))) {

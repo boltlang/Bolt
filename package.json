@@ -22,10 +22,10 @@
   "author": "Sam Vervaeck",
   "license": "MIT",
   "dependencies": {
+    "commander": "^9.4.0",
     "source-map-support": "^0.5.21",
     "tslib": "^2.4.0",
-    "yagl": "^0.5.1",
-    "yargs": "^17.5.1"
+    "yagl": "^0.5.1"
   },
   "devDependencies": {
     "@types/commonmark": "^0.27.5",
