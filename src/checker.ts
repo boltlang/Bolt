@@ -1572,16 +1572,17 @@ export class Checker {
           const scheme = this.lookup(node, Symkind.Type);
           if (scheme === null) {
             // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-            return this.createTypeVar();
+            type = this.createTypeVar();
+          } else {
+            type = this.instantiate(scheme, node.name);
+            // It is not guaranteed that `type` is copied during instantiation,
+            // so the following check ensures that we really are holding a copy
+            // that we can mutate.
+            if (type === scheme.type) {
+              type = type.shallowClone();
+            }
+            type.node = node;
           }
-          type = this.instantiate(scheme, node.name);
-          // It is not guaranteed that `type` is copied during instantiation,
-          // so the following check ensures that we really are holding a copy
-          // that we can mutate.
-          if (type === scheme.type) {
-            type = type.shallowClone();
-          }
-          type.node = node;
           break;
         }
 
@@ -1592,7 +1593,8 @@ export class Checker {
         }
 
         case SyntaxKind.NestedTypeExpression:
-          return this.inferTypeExpression(node.typeExpr, introduceTypeVars);
+          type = this.inferTypeExpression(node.typeExpr, introduceTypeVars);
+          break;
 
         case SyntaxKind.VarTypeExpression:
         {
