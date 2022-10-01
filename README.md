@@ -60,9 +60,9 @@ performance or correctness.
 
 ### Why should I choose Bolt over JavaScript?
 
-First of all, let me tell you that if you're a hard-core JavaScript developer
-and never heard of a functional programming language, you're going to have a
-tough time getting used to Bolt. However, I assure you that it is worth it.
+First of all, let me tell you that if you've never heard of a functional
+programming language, learning Bolt will take some time. However, I assure you
+that it is worth it.
 
  - Correctness, because Bolt has a type system that is far superior to
    JavaScript's. No more member accesses into `undefined` or other weird error
