@@ -5,7 +5,7 @@ Bolt
 
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
-![sample code](https://github.com/boltlang/bolt/blob/master/preview-fac.png?raw=true)
+![sample code](preview-fac.png)
 
 Bolt is a new strictly-evaluated functional programming language in the making
 that aims to make writing complex applications dead-simple. It ships with some
