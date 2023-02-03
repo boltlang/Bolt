@@ -51,7 +51,7 @@ export class UnexpectedCharDiagnostic {
     const endPos = this.position.clone();
     endPos.advance(this.actual);
     out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`unexpeced character sequence '${this.actual}'.\n\n`);
+    out.write(`unexpected character sequence '${this.actual}'.\n\n`);
     out.write(printExcerpt(this.file, new TextRange(this.position, endPos)) + '\n');
   }
 
@@ -146,7 +146,27 @@ export class UnexpectedTokenDiagnostic {
 
 }
 
-export class BindingNotFoudDiagnostic {
+export class TypeclassNotFoundDiagnostic {
+
+  public readonly level = Level.Error;
+
+  public constructor(
+    public name: string,
+    public node: Syntax,
+  ) {
+
+
+  }
+
+  public format(out: IndentWriter): void {
+    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET); 
+    out.write(`could not implement type class because class '${this.name}' was not found.\n\n`);
+    out.write(printNode(this.node) + '\n');
+  }
+
+}
+
+export class BindingNotFoundDiagnostic {
 
   public readonly level = Level.Error;
 
@@ -375,7 +395,8 @@ export class ModuleNotFoundDiagnostic {
 
 export type Diagnostic
   = UnexpectedCharDiagnostic
-  | BindingNotFoudDiagnostic
+  | TypeclassNotFoundDiagnostic
+  | BindingNotFoundDiagnostic
   | UnificationFailedDiagnostic
   | UnexpectedTokenDiagnostic
   | FieldMissingDiagnostic

@@ -23,20 +23,36 @@ program
 program
   .command('build', 'Build a set of Bolt sources')
   .argument('<file>', 'Path to the Bolt program to compile')
+  .option('-t, --target <target-id>', 'What to compile to', 'c')
   .action((file, opts) => {
 
     const cwd = opts.workDir;
     const filename = path.resolve(cwd, file);
 
+    let targetType: TargetType;
+    switch (opts.target) {
+      case 'js':
+        targetType = TargetType.JS;
+        break;
+      case 'c':
+        targetType = TargetType.C;
+        break;
+      default:
+        console.error(`Invalid target '${opts.target}' provided.`);
+        process.exit(1);
+    }
+
     const program = new Program([ filename ]);
     if (program.diagnostics.hasError) {
       process.exit(1);
     }
+
     program.check();
     if (program.diagnostics.hasError) {
       process.exit(1);
     }
-    program.emit({ type: TargetType.JS });
+
+    program.emit({ type: targetType });
     if (program.diagnostics.hasError) {
       process.exit(1);
     }

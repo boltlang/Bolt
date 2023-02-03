@@ -1,4 +1,5 @@
 import {
+  ClassDeclaration,
   EnumDeclaration,
   Expression,
   ExprOperator,
@@ -11,20 +12,21 @@ import {
   ReferenceTypeExpression,
   SourceFile,
   StructDeclaration,
-  Symkind,
   Syntax,
   SyntaxKind,
   TypeExpression,
 } from "./cst";
+import { Symkind } from "./scope"
 import {
   describeType,
-  BindingNotFoudDiagnostic,
+  BindingNotFoundDiagnostic,
   Diagnostics,
   FieldDoesNotExistDiagnostic,
   FieldMissingDiagnostic,
   UnificationFailedDiagnostic,
   KindMismatchDiagnostic,
   ModuleNotFoundDiagnostic,
+  TypeclassNotFoundDiagnostic,
 } from "./diagnostics";
 import { assert, isEmpty, MultiMap } from "./util";
 import { Analyser } from "./analysis";
@@ -696,7 +698,7 @@ type NodeWithReference
   | ReferenceExpression
   | ReferenceTypeExpression
 
-export class TypeEnv {
+class TypeEnv {
 
   private mapping = new MultiMap<string, [Symkind, Scheme]>();
 
@@ -749,6 +751,8 @@ class KindEnv {
   }
 
 }
+
+export type { KindEnv, TypeEnv };
 
 function splitReferences(node: NodeWithReference): [IdentifierAlt[], Identifier | IdentifierAlt | ExprOperator] {
   let modulePath: IdentifierAlt[];
@@ -832,7 +836,7 @@ export class Checker {
     this.contexts.pop();
   }
 
-  private lookupKind(env: KindEnv, node: NodeWithReference): Kind | null {
+  private lookupKind(env: KindEnv, node: NodeWithReference, emitDiagnostic = true): Kind | null {
     const [modulePath, name] = splitReferences(node);
     if (modulePath.length > 0) {
       let maxIndex = 0;
@@ -844,12 +848,14 @@ export class Checker {
           const nextDown = currDown.resolveModule(moduleName.text);
           if (nextDown === null) {
             if (currUp.kind === SyntaxKind.SourceFile) {
-              this.diagnostics.add(
-                new ModuleNotFoundDiagnostic(
-                  modulePath.slice(maxIndex).map(id => id.text),
-                  modulePath[maxIndex],
-                )
-              );
+              if (emitDiagnostic) {
+                this.diagnostics.add(
+                  new ModuleNotFoundDiagnostic(
+                    modulePath.slice(maxIndex).map(id => id.text),
+                    modulePath[maxIndex],
+                  )
+                );
+              }
               return null;
             }
             currUp = currUp.getEnclosingModule();
@@ -862,13 +868,15 @@ export class Checker {
         if (found !== null) {
           return found;
         }
-        this.diagnostics.add(
-          new BindingNotFoudDiagnostic(
-            modulePath.map(id => id.text),
-            name.text,
-            name,
-          )
-        );
+        if (emitDiagnostic) {
+          this.diagnostics.add(
+            new BindingNotFoundDiagnostic(
+              modulePath.map(id => id.text),
+              name.text,
+              name,
+            )
+          );
+        }
         return null;
       }
     } else {
@@ -880,13 +888,15 @@ export class Checker {
         }
         curr = curr.parent;
       } while(curr !== null);
-      this.diagnostics.add(
-        new BindingNotFoudDiagnostic(
-          [],
-          name.text,
-          name,
-        )
-      );
+      if (emitDiagnostic) {
+        this.diagnostics.add(
+          new BindingNotFoundDiagnostic(
+            [],
+            name.text,
+            name,
+          )
+        );
+      }
       return null;
     }
   }
@@ -922,7 +932,7 @@ export class Checker {
           return found;
         }
         this.diagnostics.add(
-          new BindingNotFoudDiagnostic(
+          new BindingNotFoundDiagnostic(
             modulePath.map(id => id.text),
             name.text,
             name,
@@ -940,7 +950,7 @@ export class Checker {
         curr = curr.parent;
       } while(curr !== null);
       this.diagnostics.add(
-        new BindingNotFoudDiagnostic(
+        new BindingNotFoundDiagnostic(
           [],
           name.text,
           name,
@@ -1013,12 +1023,13 @@ export class Checker {
       }
       case SyntaxKind.VarTypeExpression:
       {
-        const matchedKind = this.lookupKind(env, node.name);
+        const matchedKind = this.lookupKind(env, node.name, false);
         if (matchedKind === null) {
           // this.diagnostics.add(new BindingNotFoudDiagnostic([], node.name.text, node.name));
           // Create a filler kind variable that still will be able to catch other errors.
           kind = this.createKindVar();
-          kind.flags |= KindFlags.UnificationFailed;
+          env.set(node.name.text, kind);
+          // kind.flags |= KindFlags.UnificationFailed;
         } else {
           kind = matchedKind;
         }
@@ -1141,6 +1152,24 @@ export class Checker {
         const innerEnv = node.kindEnv!;
         for (const element of node.elements) {
           this.inferKind(element, innerEnv);
+        }
+        break;
+      }
+      case SyntaxKind.ClassDeclaration:
+      case SyntaxKind.InstanceDeclaration:
+      {
+        if (node.constraints !== null) {
+          for (const constraint of node.constraints.constraints) {
+            for (const typeExpr of constraint.types) {
+              this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), new KStar(), typeExpr);
+            }
+          }
+        }
+        for (const typeExpr of node.constraint.types) {
+          this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), new KStar(), typeExpr);
+        }
+        for (const element of node.elements) {
+          this.inferKind(element, env);
         }
         break;
       }
@@ -1272,6 +1301,26 @@ export class Checker {
       case SyntaxKind.SourceFile:
       case SyntaxKind.ModuleDeclaration:
       {
+        for (const element of node.elements) {
+          this.infer(element);
+        }
+        break;
+      }
+
+      case SyntaxKind.ClassDeclaration:
+      {
+        for (const element of node.elements) {
+          this.infer(element);
+        }
+        break;
+      }
+
+      case SyntaxKind.InstanceDeclaration:
+      {
+        const cls = node.getScope().lookup(node.constraint.name.text, Symkind.Typeclass) as ClassDeclaration | null;
+        if (cls === null) {
+          this.diagnostics.add(new TypeclassNotFoundDiagnostic(node.constraint.name.text, node.constraint.name));
+        }
         for (const element of node.elements) {
           this.infer(element);
         }
@@ -1657,6 +1706,20 @@ export class Checker {
         return type;
       }
 
+      case SyntaxKind.NamedTuplePattern:
+      {
+        const scheme = this.lookup(pattern.name, Symkind.Type);
+        if (scheme === null) {
+          return this.createTypeVar();
+        }
+        let tupleType = pattern.elements.map(p => this.inferBindings(p, typeVars, constraints));
+        // FIXME not tested
+        return TApp.build(
+          new TNominal(scheme.type.node as StructDeclaration | EnumDeclaration, pattern),
+          tupleType
+        );
+      }
+
       case SyntaxKind.LiteralPattern:
       {
         let type;
@@ -1762,6 +1825,15 @@ export class Checker {
         const env = node.typeEnv = new TypeEnv(parentEnv);
         for (const element of node.elements) {
           this.initialize(element, env);
+        }
+        break;
+      }
+
+      case SyntaxKind.InstanceDeclaration:
+      case SyntaxKind.ClassDeclaration:
+      {
+        for (const element of node.elements) {
+          this.initialize(element, parentEnv);
         }
         break;
       }
@@ -1973,23 +2045,29 @@ export class Checker {
         const returnType = this.createTypeVar();
         context.returnType = returnType;
 
-        const paramTypes = [];
-        for (const param of node.params) {
-          const paramType = this.inferBindings(param.pattern, [], []);
-          paramTypes.push(paramType);
-        }
+        const paramTypes = node.params.map(
+          param => this.inferBindings(param.pattern, [], [])
+        );
 
         let type = TArrow.build(paramTypes, returnType, node);
         if (node.typeAssert !== null) {
           this.addConstraint(
             new CEqual(
-              this.inferTypeExpression(node.typeAssert.typeExpression),
+              this.inferTypeExpression(node.typeAssert.typeExpression, true),
               type,
               node
             )
           );
         }
         node.inferredType = type;
+
+        // if (node.parent!.kind === SyntaxKind.InstanceDeclaration) {
+        //   const inst = node.parent!;
+        //   const cls = inst.getScope().lookup(node.parent!.constraint.name.text, Symkind.Typeclass) as ClassDeclaration; 
+        //   const other = cls.lookup(node)! ;
+        //   console.log(describeType(type));
+        //   this.addConstraint(new CEqual(type, other.inferredType!, node));
+        // }
 
         this.contexts.pop();
 
@@ -2016,6 +2094,7 @@ export class Checker {
     }
 
     const visitElements = (elements: Syntax[]) => {
+
       for (const element of elements) {
         if (element.kind === SyntaxKind.LetDeclaration
             && isFunctionDeclarationLike(element)) {

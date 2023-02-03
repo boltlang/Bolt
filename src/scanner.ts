@@ -42,6 +42,8 @@ import {
   VBar,
   ForeignKeyword,
   ModKeyword,
+  ClassKeyword,
+  InstanceKeyword,
 } from "./cst"
 import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -355,6 +357,8 @@ export class Scanner extends BufferedStream<Token> {
         {
           const text = c0 + this.takeWhile(isIdentPart);
           switch (text) {
+            case 'trait': return new ClassKeyword(startPos);
+            case 'impl': return new InstanceKeyword(startPos);
             case 'import': return new ImportKeyword(startPos);
             case 'pub': return new PubKeyword(startPos);
             case 'mut': return new MutKeyword(startPos);

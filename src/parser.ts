@@ -61,6 +61,11 @@ import {
   TupleTypeExpression,
   ModuleDeclaration,
   isExprOperator,
+  ClassConstraint,
+  ClassDeclaration,
+  ClassKeyword,
+  InstanceDeclaration,
+  ClassConstraintClause,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -133,7 +138,7 @@ export class Parser {
     return this.tokens.peek(offset);
   }
 
-  private assertToken<K extends Token['kind']>(token: Token, expectedKind: K): void {
+  private assertToken<K extends Token['kind']>(token: Token, expectedKind: K): asserts token is Token & { kind: K } {
     if (token.kind !== expectedKind) {
       this.raiseParseError(token, [ expectedKind ]);
     }
@@ -280,6 +285,8 @@ export class Parser {
       if (t0.kind !== SyntaxKind.IdentifierAlt || t1.kind !== SyntaxKind.Dot) {
         break;
       }
+      this.getToken();
+      this.getToken();
       modulePath.push([t0, t1]);
     }
     const name = this.getToken();
@@ -981,6 +988,134 @@ export class Parser {
     return new ModuleDeclaration(pubKeyword, t0, name, blockStart, elements);
   }
 
+  private currentLineFoldHasToken(expectedKind: SyntaxKind): boolean {
+    for (let i = 1;; i++) {
+      const t0 = this.peekToken(i);
+      switch (t0.kind) { 
+        case SyntaxKind.BlockStart:
+        case SyntaxKind.LineFoldEnd:
+        case SyntaxKind.EndOfFile:
+          return false;
+        case expectedKind:
+          return true;
+      }
+    }
+  }
+
+  private parseClassConstraint(): ClassConstraint {
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
+    const types = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.Comma
+        || t1.kind === SyntaxKind.RArrowAlt
+        || t1.kind === SyntaxKind.BlockStart
+        || t1.kind === SyntaxKind.LineFoldEnd) {
+          break;
+      }
+      types.push(this.parsePrimitiveTypeExpression());
+    }
+    return new ClassConstraint(name, types);
+  }
+
+  public parseInstanceDeclaration(): InstanceDeclaration {
+    let pubKeyword = null;
+    let t0 = this.getToken();
+    if (t0.kind === SyntaxKind.PubKeyword) {
+      pubKeyword = t0;
+      t0 = this.getToken();
+    }
+    this.assertToken(t0, SyntaxKind.InstanceKeyword);
+    let clause = null;
+    if (this.currentLineFoldHasToken(SyntaxKind.RArrowAlt)) {
+      let rarrowAlt;
+      const constraints = [];
+      for (;;) {
+        constraints.push(this.parseClassConstraint());
+        const t2 = this.getToken();
+        if (t2.kind === SyntaxKind.RArrowAlt) {
+          rarrowAlt = t2;
+          break;
+        } else if (t2.kind !== SyntaxKind.Comma) {
+          this.raiseParseError(t2, [ SyntaxKind.RArrowAlt, SyntaxKind.Comma ])
+        }
+      }
+      clause = new ClassConstraintClause(constraints, rarrowAlt);
+    }
+    const constraint = this.parseClassConstraint();
+    this.expectToken(SyntaxKind.BlockStart);
+    const elements = [];
+    loop: for (;;) {
+      const t3 = this.peekToken();
+      let element;
+      switch (t3.kind) {
+        case SyntaxKind.BlockEnd:
+          this.getToken();
+          break loop;
+        case SyntaxKind.LetKeyword:
+          element = this.parseLetDeclaration();
+          break;
+        case SyntaxKind.TypeKeyword:
+          element = this.parseTypeDeclaration();
+          break;
+        default:
+          this.raiseParseError(t3, [ SyntaxKind.LetKeyword, SyntaxKind.TypeKeyword, SyntaxKind.BlockEnd ]);
+      }
+      elements.push(element);
+    }
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    return new InstanceDeclaration(pubKeyword, t0, clause, constraint, elements);
+  }
+
+  public parseClassDeclaration(): ClassDeclaration {
+    let pubKeyword = null;
+    let t0 = this.getToken();
+    if (t0.kind === SyntaxKind.PubKeyword) {
+      pubKeyword = t0;
+      t0 = this.getToken();
+    }
+    this.assertToken(t0, SyntaxKind.ClassKeyword);
+    let clause = null;
+    if (this.currentLineFoldHasToken(SyntaxKind.RArrowAlt)) {
+      let rarrowAlt;
+      const constraints = [];
+      for (;;) {
+        constraints.push(this.parseClassConstraint());
+        const t2 = this.getToken();
+        if (t2.kind === SyntaxKind.RArrowAlt) {
+          rarrowAlt = t2;
+          break;
+        } else if (t2.kind !== SyntaxKind.Comma) {
+          this.raiseParseError(t2, [ SyntaxKind.RArrowAlt, SyntaxKind.Comma ])
+        }
+      }
+      clause = new ClassConstraintClause(constraints, rarrowAlt);
+    }
+    const constraint = this.parseClassConstraint();
+    this.expectToken(SyntaxKind.BlockStart);
+    const elements = [];
+    loop: for (;;) {
+      const t3 = this.peekToken();
+      let element;
+      switch (t3.kind) {
+        case SyntaxKind.BlockEnd:
+          this.getToken();
+          break loop;
+        case SyntaxKind.LetKeyword:
+          element = this.parseLetDeclaration();
+          break;
+        case SyntaxKind.TypeKeyword:
+          element = this.parseTypeDeclaration();
+          break;
+        default:
+          this.raiseParseError(t3, [ SyntaxKind.LetKeyword, SyntaxKind.TypeKeyword, SyntaxKind.BlockEnd ]);
+      }
+      elements.push(element);
+    }
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    return new ClassDeclaration(pubKeyword, t0 as ClassKeyword, clause, constraint, elements);
+  }
+
   public parseSourceFileElement(): SourceFileElement {
     const t0 = this.peekTokenAfterModifiers();
     switch (t0.kind) {
@@ -992,6 +1127,10 @@ export class Parser {
         return this.parseImportDeclaration();
       case SyntaxKind.StructKeyword:
         return this.parseStructDeclaration();
+      case SyntaxKind.InstanceKeyword:
+        return this.parseInstanceDeclaration();
+      case SyntaxKind.ClassKeyword:
+        return this.parseClassDeclaration();
       case SyntaxKind.EnumKeyword:
         return this.parseEnumDeclaration();
       case SyntaxKind.TypeKeyword:

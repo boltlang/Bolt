@@ -85,9 +85,10 @@ export class Program {
         passes.add(BoltToJS);
         break;
     }
-    for (const [filePath, sourceFile] of this.sourceFilesByPath) {
+    for (const [sourceFilePath, sourceFile] of this.sourceFilesByPath) {
       const code = passes.apply(sourceFile) as any;
-      const file = fs.createWriteStream(stripExtension(filePath) + suffix, 'utf-8'); 
+      const targetFilePath = stripExtension(sourceFilePath) + suffix;
+      const file = fs.createWriteStream(targetFilePath, 'utf-8'); 
       code.emit(file);
     }
   }

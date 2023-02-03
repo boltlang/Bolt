@@ -1,5 +1,6 @@
-import { assert, JSONObject, JSONValue, MultiMap } from "./util";
-import type { InferContext, Kind, Scheme, Type, TypeEnv } from "./checker"
+import { assert, JSONObject, JSONValue } from "./util";
+import { isNodeWithScope, Scope } from "./scope"
+import type { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
 
 export type TextSpan = [number, number];
 
@@ -97,6 +98,8 @@ export const enum SyntaxKind {
   MutKeyword,
   ModKeyword,
   ImportKeyword,
+  ClassKeyword,
+  InstanceKeyword,
   StructKeyword,
   EnumKeyword,
   TypeKeyword,
@@ -164,6 +167,9 @@ export const enum SyntaxKind {
   EnumDeclaration,
   ImportDeclaration,
   TypeDeclaration,
+  ClassDeclaration,
+  InstanceDeclaration,
+  ModuleDeclaration,
 
   // Let declaration body members
   ExprBody,
@@ -182,14 +188,17 @@ export const enum SyntaxKind {
   Initializer,
   TypeAssert,
   Param,
-  ModuleDeclaration,
   SourceFile,
-
+  ClassConstraint,
+  ClassConstraintClause,
 }
 
 export type Syntax
   = SourceFile
   | ModuleDeclaration
+  | ClassDeclaration
+  | InstanceDeclaration
+  | ClassConstraint
   | Token
   | Param
   | Body
@@ -206,168 +215,6 @@ export type Syntax
 
 function isIgnoredProperty(key: string): boolean {
   return key === 'kind' || key === 'parent';
-}
-
-type NodeWithScope
-  = SourceFile
-  | LetDeclaration
-
-function isNodeWithScope(node: Syntax): node is NodeWithScope {
-  return node.kind === SyntaxKind.SourceFile
-      || node.kind === SyntaxKind.LetDeclaration;
-}
-
-export const enum Symkind {
-  Var = 1,
-  Type = 2,
-  Module = 4,
-  Any = Var | Type | Module
-}
-
-export class Scope {
-
-  private mapping = new MultiMap<string, [Symkind, Syntax]>();
-
-  public constructor(
-    public node: NodeWithScope,
-  ) {
-    this.scan(node);
-  }
-
-  public get depth(): number {
-    let out = 0;
-    let curr = this.getParent();
-    while (curr !== null) {
-      out++;
-      curr = curr.getParent();
-    }
-    return out;
-  }
-
-  private getParent(): Scope | null {
-    let curr = this.node.parent;
-    while (curr !== null) {
-      if (isNodeWithScope(curr)) {
-        return curr.getScope();
-      }
-      curr = curr.parent;
-    }
-    return null;
-  }
-
-  private add(name: string, node: Syntax, kind: Symkind): void {
-    this.mapping.add(name, [kind, node]);
-  }
-
-  private scan(node: Syntax): void {
-    switch (node.kind) {
-      case SyntaxKind.SourceFile:
-      {
-        for (const element of node.elements) {
-          this.scan(element);
-        }
-        break;
-      }
-      case SyntaxKind.ModuleDeclaration:
-      {
-        this.add(node.name.text, node, Symkind.Module);
-        for (const element of node.elements) {
-          this.scan(element);
-        }
-        break;
-      }
-      case SyntaxKind.ExpressionStatement:
-      case SyntaxKind.ReturnStatement:
-      case SyntaxKind.IfStatement:
-        break;
-      case SyntaxKind.TypeDeclaration:
-      {
-        this.add(node.name.text, node, Symkind.Type);
-        break;
-      }
-      case SyntaxKind.EnumDeclaration:
-      {
-        this.add(node.name.text, node, Symkind.Type);
-        if (node.members !== null) {
-          for (const member of node.members) {
-            this.add(member.name.text, member, Symkind.Var);
-          }
-        }
-      }
-      case SyntaxKind.StructDeclaration:
-      {
-        this.add(node.name.text, node, Symkind.Type);
-        this.add(node.name.text, node, Symkind.Var);
-        break;
-      }
-      case SyntaxKind.LetDeclaration:
-      {
-        for (const param of node.params) {
-          this.scanPattern(param.pattern, param);
-        }
-        if (node === this.node) {
-          if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
-            for (const element of node.body.elements) {
-              this.scan(element);
-            }
-          }
-        } else {
-          if (node.pattern.kind === SyntaxKind.WrappedOperator) {
-            this.add(node.pattern.operator.text, node, Symkind.Var);
-          } else {
-            this.scanPattern(node.pattern, node);
-          }
-        }
-        break;
-      }
-      default:
-        throw new Error(`Unexpected ${node.constructor.name}`);
-    }
-  }
-
-  private scanPattern(node: Pattern, decl: Syntax): void {
-    switch (node.kind) {
-      case SyntaxKind.BindPattern:
-      {
-        this.add(node.name.text, decl, Symkind.Var);
-        break;
-      }
-      case SyntaxKind.StructPattern:
-      {
-        for (const member of node.members) {
-          switch (member.kind) {
-            case SyntaxKind.StructPatternField:
-            {
-              this.scanPattern(member.pattern, decl);
-              break;
-            }
-            case SyntaxKind.PunnedStructPatternField:
-            {
-              this.add(node.name.text, decl, Symkind.Var);
-              break;
-            }
-          }
-        }
-        break;
-      }
-      default:
-        throw new Error(`Unexpected ${node}`);
-    }
-  }
-
-  public lookup(name: string, expectedKind: Symkind = Symkind.Any): Syntax | null {
-    let curr: Scope | null = this;
-    do {
-      for (const [kind, decl] of curr.mapping.get(name)) {
-        if (kind & expectedKind) {
-          return decl;
-        }
-      }
-      curr = curr.getParent();
-    } while (curr !== null);
-    return null;
-  }
-
 }
 
 abstract class SyntaxBase {
@@ -957,6 +804,27 @@ export class ImportKeyword extends TokenBase {
 
 }
 
+export class ClassKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.ClassKeyword;
+
+  public get text(): string {
+    return 'trait';
+  }
+
+}
+
+export class InstanceKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.InstanceKeyword;
+
+  public get text(): string {
+    return 'impl';
+  }
+
+}
+
+
 export class TypeKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.TypeKeyword;
@@ -1042,6 +910,8 @@ export type Token
   | MutKeyword
   | ModKeyword
   | ImportKeyword
+  | ClassKeyword
+  | InstanceKeyword
   | TypeKeyword
   | StructKeyword
   | ReturnKeyword
@@ -2246,11 +2116,154 @@ export class Initializer extends SyntaxBase {
 
 }
 
+export class ClassConstraint extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.ClassConstraint;
+
+  public constructor(
+    public name: IdentifierAlt,
+    public types: TypeExpression[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    return this.name;
+  }
+
+  public getLastToken(): Token {
+    return this.types[this.types.length-1].getLastToken();
+  }
+
+}
+
+export class ClassConstraintClause extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.ClassConstraintClause;
+
+  public constructor(
+    public constraints: ClassConstraint[],
+    public rarrowAlt: RArrowAlt,
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.constraints.length > 0) {
+      return this.constraints[0].getFirstToken();
+    }
+    return this.rarrowAlt;
+  }
+
+  public getLastToken(): Token {
+    return this.rarrowAlt;
+  }
+
+}
+
+export type ClassDeclarationElement
+  = LetDeclaration
+  | TypeDeclaration
+
+export class ClassDeclaration extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.ClassDeclaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public classKeyword: ClassKeyword,
+    public constraints: ClassConstraintClause | null,
+    public constraint: ClassConstraint,
+    public elements: ClassDeclarationElement[],
+  ) {
+    super();
+  }
+
+  public lookup(element: InstanceDeclarationElement): ClassDeclarationElement | null {
+
+    switch (element.kind) {
+
+      case SyntaxKind.LetDeclaration:
+        assert(element.pattern.kind === SyntaxKind.BindPattern);
+        for (const other of this.elements) {
+          if (other.kind === SyntaxKind.LetDeclaration
+              && other.pattern.kind === SyntaxKind.BindPattern
+              && other.pattern.name.text === element.pattern.name.text) {
+            return other;
+          }
+        }
+        break;
+
+      case SyntaxKind.TypeDeclaration:
+        for (const other of this.elements) {
+          if (other.kind === SyntaxKind.TypeDeclaration
+              && other.name.text === element.name.text) {
+            return other;
+          }
+        }
+        break;
+
+    }
+
+    return null;
+
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.classKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.constraint.getLastToken();
+  }
+
+}
+
+export type InstanceDeclarationElement
+  = LetDeclaration
+  | TypeDeclaration
+
+export class InstanceDeclaration extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.InstanceDeclaration;
+
+  public constructor(
+    public pubKeyword: PubKeyword | null,
+    public classKeyword: InstanceKeyword,
+    public constraints: ClassConstraintClause | null,
+    public constraint: ClassConstraint,
+    public elements: InstanceDeclarationElement[],
+  ) {
+    super();
+  }
+
+  public getFirstToken(): Token {
+    if (this.pubKeyword !== null) {
+      return this.pubKeyword;
+    }
+    return this.classKeyword;
+  }
+
+  public getLastToken(): Token {
+    if (this.elements.length > 0) {
+      return this.elements[this.elements.length-1].getLastToken();
+    }
+    return this.constraint.getLastToken();
+  }
+
+}
 export class ModuleDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ModuleDeclaration;
 
   public typeEnv?: TypeEnv;
+  public kindEnv?: KindEnv;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -2281,6 +2294,8 @@ export class ModuleDeclaration extends SyntaxBase {
 export type SourceFileElement
   = Statement
   | Declaration
+  | ClassDeclaration
+  | InstanceDeclaration
   | ModuleDeclaration
 
 export class SourceFile extends SyntaxBase {
@@ -2289,6 +2304,7 @@ export class SourceFile extends SyntaxBase {
 
   public scope?: Scope;
   public typeEnv?: TypeEnv;
+  public kindEnv?: KindEnv;
 
   public constructor(
     private file: TextFile,

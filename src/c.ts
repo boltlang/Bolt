@@ -43,7 +43,14 @@ export const enum CBuiltinTypeKind {
 }
 
 abstract class CNodeBase {
+
   public abstract readonly kind: CNodeKind;
+
+  public emit(file: stream.Writable): void {
+    const emitter = new CEmitter(file);
+    emitter.emit(this as any);
+  }
+
 }
 
 export class CBuiltinType extends CNodeBase {
@@ -204,6 +211,7 @@ export class CProgram extends CNodeBase {
   ) {
     super();
   }
+
 }
 
 export type CNode

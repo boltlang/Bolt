@@ -1,6 +1,7 @@
 import { DirectedHashGraph, strongconnect } from "yagl";
 import { assert } from "./util";
-import { Syntax, LetDeclaration, Scope, SourceFile, SyntaxKind } from "./cst";
+import { Syntax, LetDeclaration, SourceFile, SyntaxKind } from "./cst";
+import type { Scope } from "./scope"
 
 type NodeWithBlock
   = LetDeclaration
@@ -36,6 +37,8 @@ export class Analyser {
           break;
         }
 
+        case SyntaxKind.InstanceDeclaration:
+        case SyntaxKind.ClassDeclaration:
         case SyntaxKind.SourceFile:
         case SyntaxKind.ModuleDeclaration:
         {
