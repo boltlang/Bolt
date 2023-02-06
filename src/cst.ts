@@ -1,6 +1,8 @@
 import { assert, JSONObject, JSONValue } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
 import type { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
+import { array, middleware } from "yargs";
+import { warn } from "console";
 
 export type TextSpan = [number, number];
 
@@ -91,6 +93,7 @@ export const enum SyntaxKind {
   Comma,
   Colon,
   Equals,
+  Backslash,
   Integer,
   StringLiteral,
   LetKeyword,
@@ -152,6 +155,7 @@ export const enum SyntaxKind {
   PrefixExpression,
   PostfixExpression,
   InfixExpression,
+  FunctionExpression,
 
   // Statements
   ReturnStatement,
@@ -199,9 +203,14 @@ export type Syntax
   | ClassDeclaration
   | InstanceDeclaration
   | ClassConstraint
+  | ClassConstraintClause
   | Token
   | Param
   | Body
+  | MatchArm
+  | WrappedOperator
+  | Initializer
+  | IfStatementCase
   | StructDeclarationField
   | EnumDeclarationElement
   | TypeAssert
@@ -227,6 +236,8 @@ abstract class SyntaxBase {
   public abstract getFirstToken(): Token;
 
   public abstract getLastToken(): Token;
+
+  public abstract clone(): Syntax;
 
   public getRange(): TextRange {
     return new TextRange(
@@ -382,7 +393,7 @@ abstract class TokenBase extends SyntaxBase {
   private endPos: TextPosition | null = null;
 
   public constructor(
-    private startPos: TextPosition,
+    public startPos: TextPosition | null = null,
   ) {
     super();
   }
@@ -403,6 +414,7 @@ abstract class TokenBase extends SyntaxBase {
   }
 
   public getStartPosition(): TextPosition {
+    assert(this.startPos !== null);
     return this.startPos;
   }
 
@@ -442,19 +454,43 @@ abstract class VirtualTokenBase extends TokenBase {
 }
 
 export class EndOfFile extends VirtualTokenBase {
+
   public readonly kind = SyntaxKind.EndOfFile;
+
+  public clone(): EndOfFile {
+    return new EndOfFile(this.startPos);
+  }
+
 }
 
 export class BlockEnd extends VirtualTokenBase {
+
   public readonly kind = SyntaxKind.BlockEnd;
+
+  public clone(): BlockEnd {
+    return new BlockEnd(this.startPos);
+  }
+
 }
 
 export class BlockStart extends VirtualTokenBase {
+
   public readonly kind = SyntaxKind.BlockStart;
+
+  public clone(): BlockStart {
+    return new BlockStart(this.startPos);
+  }
+
 }
 
 export class LineFoldEnd extends VirtualTokenBase {
+
   public readonly kind = SyntaxKind.LineFoldEnd;
+
+  public clone(): LineFoldEnd {
+    return new LineFoldEnd(this.startPos);
+  }
+
 }
 
 export class Integer extends TokenBase {
@@ -464,13 +500,21 @@ export class Integer extends TokenBase {
   public constructor(
     public value: bigint,
     public radix: number,
-    startPos: TextPosition,
+    startPos: TextPosition | null = null,
   ) {
     super(startPos);
   }
 
   public getValue(): Value {
     return this.value;
+  }
+
+  public clone(): Integer {
+    return new Integer(
+      this.value,
+      this.radix,
+      this.startPos
+    );
   }
 
   public get text(): string {
@@ -496,13 +540,20 @@ export class StringLiteral extends TokenBase {
 
   public constructor(
     public contents: string,
-    startPos: TextPosition,
+    startPos: TextPosition | null = null,
   ) {
     super(startPos);
   }
 
   public getValue(): Value {
     return this.contents;
+  }
+
+  public clone(): StringLiteral {
+    return new StringLiteral(
+      this.contents,
+      this.startPos
+    );
   }
 
   public get text(): string {
@@ -529,9 +580,16 @@ export class IdentifierAlt extends TokenBase {
 
   public constructor(
     public text: string,
-    startPos: TextPosition,
+    startPos: TextPosition | null = null,
   ) {
     super(startPos);
+  }
+
+  public clone(): IdentifierAlt {
+    return new IdentifierAlt(
+      this.text,
+      this.startPos
+    );
   }
 
 }
@@ -542,9 +600,16 @@ export class Identifier extends TokenBase {
 
   public constructor(
     public text: string,
-    startPos: TextPosition,
+    startPos: TextPosition | null = null,
   ) {
     super(startPos);
+  }
+
+  public clone(): Identifier {
+    return new Identifier(
+      this.text,
+      this.startPos
+    );
   }
 
 }
@@ -555,9 +620,16 @@ export class CustomOperator extends TokenBase {
 
   public constructor(
     public text: string,
-    startPos: TextPosition,
+    startPos: TextPosition | null = null,
   ) {
     super(startPos);
+  }
+
+  public clone(): CustomOperator {
+    return new CustomOperator(
+      this.text,
+      this.startPos,
+    );
   }
 
 }
@@ -577,9 +649,16 @@ export class Assignment extends TokenBase {
 
   public constructor(
     public text: string,
-    startPos: TextPosition,
+    startPos: TextPosition | null = null,
   ) {
     super(startPos);
+  }
+
+  public clone(): Assignment {
+    return new Assignment(
+      this.text,
+      this.startPos
+    );
   }
 
 }
@@ -592,6 +671,10 @@ export class LParen extends TokenBase {
     return '(';
   }
 
+  public clone(): LParen {
+    return new LParen(this.startPos);
+  }
+
 }
 
 export class RParen extends TokenBase {
@@ -600,6 +683,10 @@ export class RParen extends TokenBase {
 
   public get text(): string {
     return ')';
+  }
+
+  public clone(): RParen {
+    return new RParen(this.startPos);
   }
 
 }
@@ -612,6 +699,10 @@ export class LBrace extends TokenBase {
     return '{';
   }
 
+  public clone(): LBrace {
+    return new LBrace(this.startPos);
+  }
+
 }
 
 export class RBrace extends TokenBase {
@@ -620,6 +711,10 @@ export class RBrace extends TokenBase {
 
   public get text(): string {
     return '}';
+  }
+
+  public clone(): RBrace {
+    return new RBrace(this.startPos);
   }
 
 }
@@ -632,6 +727,10 @@ export class LBracket extends TokenBase {
     return '[';
   }
 
+  public clone(): LBracket {
+    return new LBracket(this.startPos);
+  }
+
 }
 
 export class RBracket extends TokenBase {
@@ -640,6 +739,10 @@ export class RBracket extends TokenBase {
 
   public get text(): string {
     return ']';
+  }
+
+  public clone(): RBracket {
+    return new RBracket(this.startPos);
   }
 
 }
@@ -652,6 +755,10 @@ export class Dot extends TokenBase {
     return '.';
   }
 
+  public clone(): Dot {
+    return new Dot(this.startPos);
+  }
+
 }
 
 export class Comma extends TokenBase {
@@ -660,6 +767,10 @@ export class Comma extends TokenBase {
 
   public get text(): string {
     return ',';
+  }
+
+  public clone(): Comma {
+    return new Comma(this.startPos);
   }
 
 }
@@ -672,6 +783,10 @@ export class DotDot extends TokenBase {
     return '..';
   }
 
+  public clone(): DotDot {
+    return new DotDot(this.startPos);
+  }
+
 }
 
 export class Colon extends TokenBase {
@@ -680,6 +795,10 @@ export class Colon extends TokenBase {
 
   public get text(): string {
     return ':';
+  }
+
+  public clone(): Colon {
+    return new Colon(this.startPos);
   }
 
 }
@@ -692,6 +811,24 @@ export class Equals extends TokenBase {
     return '=';
   }
 
+  public clone(): Equals {
+    return new Equals(this.startPos);
+  }
+
+}
+
+export class Backslash extends TokenBase {
+
+  public readonly kind = SyntaxKind.Equals;
+
+  public get text(): string {
+    return '\\';
+  }
+
+  public clone(): Backslash {
+    return new Backslash(this.startPos);
+  }
+
 }
 
 export class IfKeyword extends TokenBase {
@@ -700,6 +837,10 @@ export class IfKeyword extends TokenBase {
 
   public get text(): string {
     return 'if';
+  }
+
+  public clone(): IfKeyword {
+    return new IfKeyword(this.startPos);
   }
 
 }
@@ -712,6 +853,10 @@ export class ElseKeyword extends TokenBase {
     return 'else';
   }
 
+  public clone(): ElseKeyword {
+    return new ElseKeyword(this.startPos);
+  }
+
 }
 
 export class ElifKeyword extends TokenBase {
@@ -720,6 +865,10 @@ export class ElifKeyword extends TokenBase {
 
   public get text(): string {
     return 'elif';
+  }
+
+  public clone(): ElifKeyword {
+    return new ElifKeyword(this.startPos);
   }
 
 }
@@ -732,6 +881,10 @@ export class StructKeyword extends TokenBase {
     return 'struct';
   }
 
+  public clone(): StructKeyword {
+    return new StructKeyword(this.startPos);
+  }
+
 }
 
 export class EnumKeyword extends TokenBase {
@@ -740,6 +893,10 @@ export class EnumKeyword extends TokenBase {
 
   public get text(): string {
     return 'enum';
+  }
+
+  public clone(): EnumKeyword {
+    return new EnumKeyword(this.startPos);
   }
 
 }
@@ -752,6 +909,10 @@ export class ReturnKeyword extends TokenBase {
     return 'return';
   }
 
+  public clone(): ReturnKeyword {
+    return new ReturnKeyword(this.startPos);
+  }
+
 }
 
 export class MatchKeyword extends TokenBase {
@@ -760,6 +921,10 @@ export class MatchKeyword extends TokenBase {
 
   public get text(): string {
     return 'match';
+  }
+
+  public clone(): MatchKeyword {
+    return new MatchKeyword(this.startPos);
   }
 
 }
@@ -772,6 +937,10 @@ export class ForeignKeyword extends TokenBase {
     return 'foreign';
   }
 
+  public clone(): ForeignKeyword {
+    return new ForeignKeyword(this.startPos);
+  }
+
 }
 
 export class ModKeyword extends TokenBase {
@@ -780,6 +949,10 @@ export class ModKeyword extends TokenBase {
 
   public get text(): string {
     return 'mod';
+  }
+
+  public clone(): ModKeyword {
+    return new ModKeyword(this.startPos);
   }
 
 }
@@ -792,6 +965,10 @@ export class MutKeyword extends TokenBase {
     return 'mut';
   }
 
+  public clone(): MutKeyword {
+    return new MutKeyword(this.startPos);
+  }
+
 }
 
 export class ImportKeyword extends TokenBase {
@@ -800,6 +977,10 @@ export class ImportKeyword extends TokenBase {
 
   public get text(): string {
     return 'import'
+  }
+
+  public clone(): ImportKeyword {
+    return new ImportKeyword(this.startPos);
   }
 
 }
@@ -812,6 +993,10 @@ export class ClassKeyword extends TokenBase {
     return 'trait';
   }
 
+  public clone(): ClassKeyword {
+    return new ClassKeyword(this.startPos);
+  }
+
 }
 
 export class InstanceKeyword extends TokenBase {
@@ -820,6 +1005,10 @@ export class InstanceKeyword extends TokenBase {
 
   public get text(): string {
     return 'impl';
+  }
+
+  public clone(): InstanceKeyword {
+    return new InstanceKeyword(this.startPos);
   }
 
 }
@@ -833,6 +1022,10 @@ export class TypeKeyword extends TokenBase {
     return 'type';
   }
 
+  public clone(): TypeKeyword {
+    return new TypeKeyword(this.startPos);
+  }
+
 }
 
 export class PubKeyword extends TokenBase {
@@ -841,6 +1034,10 @@ export class PubKeyword extends TokenBase {
 
   public get text(): string {
     return 'pub';
+  }
+
+  public clone(): PubKeyword {
+    return new PubKeyword();
   }
 
 }
@@ -853,6 +1050,10 @@ export class LetKeyword extends TokenBase {
     return 'let';
   }
 
+  public clone(): LetKeyword {
+    return new LetKeyword();
+  }
+
 }
 
 export class RArrow extends TokenBase {
@@ -861,6 +1062,10 @@ export class RArrow extends TokenBase {
 
   public get text(): string {
     return '->';
+  }
+
+  public clone(): RArrow {
+    return new RArrow(this.startPos);
   }
 
 }
@@ -873,6 +1078,10 @@ export class RArrowAlt extends TokenBase {
     return '=>';
   }
 
+  public clone(): RArrowAlt {
+    return new RArrowAlt(this.startPos);
+  }
+
 }
 
 export class VBar extends TokenBase {
@@ -881,6 +1090,10 @@ export class VBar extends TokenBase {
 
   public get text(): string {
     return '|';
+  }
+
+  public clone(): VBar {
+    return new VBar(this.startPos);
   }
 
 }
@@ -905,6 +1118,7 @@ export type Token
   | DotDot
   | Colon
   | Equals
+  | Backslash
   | LetKeyword
   | PubKeyword
   | MutKeyword
@@ -941,6 +1155,13 @@ export class ArrowTypeExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): ArrowTypeExpression {
+    return new ArrowTypeExpression(
+      this.paramTypeExprs.map(te => te.clone()),
+      this.returnTypeExpr.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     if (this.paramTypeExprs.length > 0) {
       return this.paramTypeExprs[0].getFirstToken();
@@ -966,6 +1187,14 @@ export class TupleTypeExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): TupleTypeExpression {
+    return new TupleTypeExpression(
+      this.lparen.clone(),
+      this.elements.map(element => element.clone()),
+      this.rparen.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.lparen;
   }
@@ -985,6 +1214,13 @@ export class ReferenceTypeExpression extends SyntaxBase {
     public name: IdentifierAlt,
   ) {
     super();
+  }
+
+  public clone(): ReferenceTypeExpression {
+    return new ReferenceTypeExpression(
+      this.modulePath.map(([name, dot]) => [name.clone(), dot.clone()]),
+      this.name.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1011,6 +1247,13 @@ export class AppTypeExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): AppTypeExpression {
+    return new AppTypeExpression(
+      this.operator.clone(),
+      this.args.map(arg => arg.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.operator.getFirstToken();
   }
@@ -1034,6 +1277,10 @@ export class VarTypeExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): VarTypeExpression {
+    return new VarTypeExpression( this.name.clone() );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -1054,6 +1301,14 @@ export class NestedTypeExpression extends SyntaxBase {
     public rparen: RParen,
   ) {
     super();
+  }
+
+  public clone(): NestedTypeExpression {
+    return new NestedTypeExpression(
+      this.lparen.clone(),
+      this.typeExpr.clone(),
+      this.rparen.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1084,6 +1339,10 @@ export class BindPattern extends SyntaxBase {
     super();
   }
 
+  public clone(): BindPattern {
+    return new BindPattern( this.name.clone() );
+  }
+
   public get isHole(): boolean {
     return this.name.text == '_';
   }
@@ -1110,6 +1369,14 @@ export class TuplePattern extends SyntaxBase {
     super();
   }
 
+  public clone(): TuplePattern {
+    return new TuplePattern(
+      this.lparen.clone(),
+      this.elements.map(element => element.clone()),
+      this.rparen.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.lparen;
   }
@@ -1129,6 +1396,13 @@ export class NamedTuplePattern extends SyntaxBase {
     public elements: Pattern[],
   ) {
     super();
+  }
+
+  public clone(): NamedTuplePattern {
+    return new NamedTuplePattern(
+      this.name.clone(),
+      this.elements.map(element => element.clone()),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1156,6 +1430,14 @@ export class StructPatternField extends SyntaxBase {
     super();
   }
 
+  public clone(): StructPatternField {
+    return new StructPatternField(
+      this.name.clone(),
+      this.equals.clone(),
+      this.pattern.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -1175,6 +1457,13 @@ export class VariadicStructPatternElement extends SyntaxBase {
     public pattern: Pattern | null,
   ) {
     super();
+  }
+
+  public clone(): VariadicStructPatternElement {
+    return new VariadicStructPatternElement(
+      this.dotdot.clone(),
+      this.pattern !== null ? this.pattern.clone() : null,
+    );
   }
 
   public getFirstToken(): Token {
@@ -1198,6 +1487,10 @@ export class PunnedStructPatternField extends SyntaxBase {
     public name: Identifier,
   ) {
     super();
+  }
+
+  public clone(): PunnedStructPatternField {
+    return new PunnedStructPatternField( this.name.clone() );
   }
 
   public getFirstToken(): Token {
@@ -1228,6 +1521,15 @@ export class StructPattern extends SyntaxBase {
     super();
   }
 
+  public clone(): StructPattern {
+    return new StructPattern(
+      this.name.clone(),
+      this.lbrace.clone(),
+      this.members.map(member => member.clone()),
+      this.rbrace.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -1248,6 +1550,14 @@ export class NestedPattern extends SyntaxBase {
     public rparen: RParen,
   ) {
     super();
+  }
+
+  public clone(): NestedPattern {
+    return new NestedPattern(
+      this.lparen.clone(),
+      this.pattern.clone(),
+      this.rparen.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1272,6 +1582,14 @@ export class DisjunctivePattern extends SyntaxBase {
     super();
   }
 
+  public clone(): DisjunctivePattern {
+    return new DisjunctivePattern(
+      this.left.clone(),
+      this.operator.clone(),
+      this.right.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.left.getFirstToken();
   }
@@ -1291,6 +1609,10 @@ export class LiteralPattern extends SyntaxBase {
     public token: StringLiteral | Integer
   ) {
     super();
+  }
+
+  public clone(): LiteralPattern {
+    return new LiteralPattern( this.token.clone() );
   }
 
   public getFirstToken(): Token {
@@ -1324,6 +1646,14 @@ export class TupleExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): TupleExpression {
+    return new TupleExpression(
+      this.lparen.clone(),
+      this.elements.map(element => element.clone()),
+      this.rparen.clone()
+    );
+  }
+
   public getFirstToken(): Token {
     return this.lparen;
   }
@@ -1346,6 +1676,14 @@ export class NestedExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): NestedExpression {
+    return new NestedExpression(
+      this.lparen.clone(),
+      this.expression.clone(),
+      this.rparen.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.lparen;
   }
@@ -1364,6 +1702,10 @@ export class ConstantExpression extends SyntaxBase {
     public token: Integer | StringLiteral,
   ) {
     super();
+  }
+
+  public clone(): ConstantExpression {
+    return new ConstantExpression( this.token.clone() );
   }
 
   public getFirstToken(): Token {
@@ -1385,6 +1727,13 @@ export class CallExpression extends SyntaxBase {
     public args: Expression[],
   ) {
     super();
+  }
+
+  public clone(): CallExpression {
+    return new CallExpression(
+      this.func.clone(),
+      this.args.map(arg => arg.clone()),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1412,6 +1761,14 @@ export class StructExpressionField extends SyntaxBase {
     super();
   }
 
+  public clone(): StructExpressionField {
+    return new StructExpressionField(
+      this.name.clone(),
+      this.equals.clone(),
+      this.expression.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -1430,6 +1787,10 @@ export class PunnedStructExpressionField extends SyntaxBase {
     public name: Identifier,
   ) {
     super();
+  }
+
+  public clone(): PunnedStructExpressionField {
+    return new PunnedStructExpressionField( this.name.clone() );
   }
 
   public getFirstToken(): Token {
@@ -1458,6 +1819,14 @@ export class StructExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): StructExpression {
+    return new StructExpression(
+      this.lbrace.clone(),
+      this.members.map(member => member.clone()),
+      this.rbrace.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.lbrace;
   }
@@ -1480,6 +1849,14 @@ export class MatchArm extends SyntaxBase {
     super();
   }
 
+  public clone(): MatchArm {
+    return new MatchArm(
+      this.pattern.clone(),
+      this.rarrowAlt.clone(),
+      this.expression.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.pattern.getFirstToken();
   }
@@ -1487,6 +1864,37 @@ export class MatchArm extends SyntaxBase {
   public getLastToken(): Token {
     return this.expression.getLastToken();
   }
+
+}
+
+export class FunctionExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.FunctionExpression;
+
+  public constructor(
+    public backslash: Backslash,
+    public params: Param[],
+    public body: Body,
+  ) {
+    super();
+  }
+
+  public clone(): FunctionExpression {
+    return new FunctionExpression(
+      this.backslash.clone(),
+      this.params.map(param => param.clone()),
+      this.body.clone(),
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.backslash;
+  }
+
+  public getLastToken(): Token {
+    return this.body.getLastToken();
+  }
+
 
 }
 
@@ -1500,6 +1908,14 @@ export class MatchExpression extends SyntaxBase {
     public arms: MatchArm[],
   ) {
     super();
+  }
+
+  public clone(): MatchExpression {
+    return new MatchExpression(
+      this.matchKeyword.clone(),
+      this.expression !== null ? this.expression.clone() : null,
+      this.arms.map(arm => arm.clone()),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1529,6 +1945,13 @@ export class ReferenceExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): ReferenceExpression {
+    return new ReferenceExpression(
+      this.modulePath.map(([name, dot]) => [name.clone(), dot.clone()]),
+      this.name.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     if (this.modulePath.length > 0) {
       return this.modulePath[0][0];
@@ -1553,6 +1976,13 @@ export class MemberExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): MemberExpression {
+    return new MemberExpression(
+      this.expression.clone(),
+      this.path.map(([dot, name]) => [dot.clone(), name.clone()]),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.expression.getFirstToken();
   }
@@ -1574,6 +2004,13 @@ export class PrefixExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): PrefixExpression {
+    return new PrefixExpression(
+      this.operator.clone(),
+      this.expression.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.operator;
   }
@@ -1593,6 +2030,13 @@ export class PostfixExpression extends SyntaxBase {
     public operator: ExprOperator,
   ) {
     super();
+  }
+
+  public clone(): PostfixExpression {
+    return new PostfixExpression(
+      this.expression.clone(),
+      this.operator.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1617,6 +2061,14 @@ export class InfixExpression extends SyntaxBase {
     super();
   }
 
+  public clone(): InfixExpression {
+    return new InfixExpression(
+      this.left.clone(),
+      this.operator.clone(),
+      this.right.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.left.getFirstToken();
   }
@@ -1639,6 +2091,7 @@ export type Expression
   | PrefixExpression
   | InfixExpression
   | PostfixExpression
+  | FunctionExpression
 
 export class IfStatementCase extends SyntaxBase {
 
@@ -1651,6 +2104,15 @@ export class IfStatementCase extends SyntaxBase {
     public elements: LetBodyElement[],
   ) {
     super();
+  }
+
+  public clone(): IfStatementCase {
+    return new IfStatementCase(
+      this.keyword.clone(),
+      this.test !== null ? this.test.clone() : null,
+      this.blockStart.clone(),
+      this.elements.map(element => element.clone()),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1676,6 +2138,12 @@ export class IfStatement extends SyntaxBase {
     super();
   }
 
+  public clone(): IfStatement {
+    return new IfStatement(
+      this.cases.map(caze => caze.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.cases[0].getFirstToken();
   }
@@ -1695,6 +2163,13 @@ export class ReturnStatement extends SyntaxBase {
     public expression: Expression | null
   ) {
     super();
+  }
+
+  public clone(): ReturnStatement {
+    return new ReturnStatement(
+      this.returnKeyword.clone(),
+      this.expression !== null ? this.expression.clone() : null,
+    );
   }
 
   public getFirstToken(): Token {
@@ -1718,6 +2193,10 @@ export class ExpressionStatement extends SyntaxBase {
     public expression: Expression,
   ) {
     super();
+  }
+
+  public clone(): ExpressionStatement { 
+    return new ExpressionStatement( this.expression.clone() );
   }
 
   public getFirstToken(): Token {
@@ -1745,6 +2224,12 @@ export class Param extends SyntaxBase {
     super();
   }
 
+  public clone(): Param {
+    return new Param(
+      this.pattern.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.pattern.getFirstToken();
   }
@@ -1769,6 +2254,14 @@ export class EnumDeclarationStructElement extends SyntaxBase {
     super();
   }
 
+  public clone(): EnumDeclarationStructElement {
+    return new EnumDeclarationStructElement(
+      this.name.clone(),
+      this.blockStart.clone(),
+      this.fields.map(field => field.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -1791,6 +2284,13 @@ export class EnumDeclarationTupleElement extends SyntaxBase {
     public elements: TypeExpression[],
   ) {
     super();
+  }
+
+  public clone(): EnumDeclarationElement {
+    return new EnumDeclarationTupleElement(
+      this.name.clone(),
+      this.elements.map(element => element.clone()),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1826,6 +2326,16 @@ export class EnumDeclaration extends SyntaxBase {
     super();
   }
 
+  public clone(): EnumDeclaration {
+    return new EnumDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.enumKeyword.clone(),
+      this.name.clone(),
+      this.varExps.map(ve => ve.clone()),
+      this.members !== null ? this.members.map(member => member.clone()) : null,
+    );
+  }
+
   public getFirstToken(): Token {
     if (this.pubKeyword !== null) {
       return this.pubKeyword;
@@ -1854,6 +2364,14 @@ export class StructDeclarationField extends SyntaxBase {
     super();
   }
 
+  public clone(): StructDeclarationField {
+    return new StructDeclarationField(
+      this.name.clone(),
+      this.colon.clone(),
+      this.typeExpr.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -1878,6 +2396,16 @@ export class StructDeclaration extends SyntaxBase {
     public fields: StructDeclarationField[] | null,
   ) {
     super();
+  }
+
+  public clone(): StructDeclaration {
+    return new StructDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.structKeyword.clone(),
+      this.name.clone(),
+      this.varExps.map(ve => ve.clone()),
+      this.fields !== null ? this.fields.map(field => field.clone()) : null,
+    );
   }
 
   public getFirstToken(): Token {
@@ -1907,6 +2435,13 @@ export class TypeAssert extends SyntaxBase {
     super();
   }
 
+  public clone(): TypeAssert {
+    return new TypeAssert(
+      this.colon.clone(),
+      this.typeExpression.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.colon;
   }
@@ -1926,10 +2461,17 @@ export class ExprBody extends SyntaxBase {
   public readonly kind = SyntaxKind.ExprBody;
 
   public constructor(
-    public equals: Equals,
+    public equals: Equals | RArrow,
     public expression: Expression,
   ) {
     super();
+  }
+
+  public clone(): ExprBody {
+    return new ExprBody(
+      this.equals.clone(),
+      this.expression.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -1957,6 +2499,13 @@ export class BlockBody extends SyntaxBase {
     super();
   }
 
+  public clone(): BlockBody {
+    return new BlockBody(
+      this.blockStart.clone(),
+      this.elements.map(element => element.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.blockStart;
   }
@@ -1980,6 +2529,14 @@ export class WrappedOperator extends SyntaxBase {
     public rparen: RParen,
   ) {
     super();
+  }
+
+  public clone(): WrappedOperator {
+    return new WrappedOperator(
+      this.lparen.clone(),
+      this.operator.clone(),
+      this.rparen.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -2007,6 +2564,17 @@ export class TypeDeclaration extends SyntaxBase {
     public typeExpression: TypeExpression
   ) {
     super();
+  }
+
+  public clone(): TypeDeclaration {
+    return new TypeDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.typeKeyword.clone(),
+      this.name.clone(),
+      this.varExps.map(ve => ve.clone()),
+      this.equals.clone(),
+      this.typeExpression.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -2045,6 +2613,19 @@ export class LetDeclaration extends SyntaxBase {
     super();
   }
 
+  public clone(): LetDeclaration {
+    return new LetDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.letKeyword.clone(),
+      this.foreignKeyword !== null ? this.foreignKeyword.clone() : null,
+      this.mutKeyword !== null ? this.mutKeyword.clone() : null,
+      this.pattern.clone(),
+      this.params.map(param => param.clone()),
+      this.typeAssert !== null ? this.typeAssert.clone() : null,
+      this.body !== null ? this.body.clone() : null,
+    );
+  }
+
   public getFirstToken(): Token {
     if (this.pubKeyword !== null) {
       return this.pubKeyword;
@@ -2078,6 +2659,13 @@ export class ImportDeclaration extends SyntaxBase {
     super();
   }
 
+  public clone(): ImportDeclaration {
+    return new ImportDeclaration(
+      this.importKeyword.clone(),
+      this.importSource.clone(),
+    );
+  }
+
   public getFirstToken(): Token {
      return this.importKeyword;
   }
@@ -2106,6 +2694,13 @@ export class Initializer extends SyntaxBase {
     super();
   }
 
+  public clone(): Initializer {
+    return new Initializer(
+      this.equals.clone(),
+      this.expression.clone()
+    );
+  }
+
   public getFirstToken(): Token {
     return this.equals;
   }
@@ -2127,6 +2722,13 @@ export class ClassConstraint extends SyntaxBase {
     super();
   }
 
+  public clone(): ClassConstraint {
+    return new ClassConstraint(
+      this.name.clone(),
+      this.types.map(ty => ty.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     return this.name;
   }
@@ -2146,6 +2748,13 @@ export class ClassConstraintClause extends SyntaxBase {
     public rarrowAlt: RArrowAlt,
   ) {
     super();
+  }
+
+  public clone(): ClassConstraintClause {
+    return new ClassConstraintClause(
+      this.constraints.map(constraint => constraint.clone()),
+      this.rarrowAlt.clone(),
+    );
   }
 
   public getFirstToken(): Token {
@@ -2209,6 +2818,16 @@ export class ClassDeclaration extends SyntaxBase {
 
   }
 
+  public clone(): ClassDeclaration {
+    return new ClassDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.classKeyword.clone(),
+      this.constraints !== null ? this.constraints.clone() : null,
+      this.constraint.clone(),
+      this.elements.map(element => element.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     if (this.pubKeyword !== null) {
       return this.pubKeyword;
@@ -2243,6 +2862,16 @@ export class InstanceDeclaration extends SyntaxBase {
     super();
   }
 
+  public clone(): InstanceDeclaration {
+    return new InstanceDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.classKeyword.clone(),
+      this.constraints !== null ? this.constraints.clone() : null,
+      this.constraint.clone(),
+      this.elements.map(element => element.clone()),
+    );
+  }
+
   public getFirstToken(): Token {
     if (this.pubKeyword !== null) {
       return this.pubKeyword;
@@ -2273,6 +2902,16 @@ export class ModuleDeclaration extends SyntaxBase {
     public elements: SourceFileElement[],
   ) {
     super();
+  }
+
+  public clone(): ModuleDeclaration {
+    return new ModuleDeclaration(
+      this.pubKeyword !== null ? this.pubKeyword.clone() : null,
+      this.modKeyword.clone(),
+      this.name.clone(),
+      this.blockStart.clone(),
+      this.elements.map(element => element.clone())
+    );
   }
 
   public getFirstToken(): Token {
@@ -2312,6 +2951,14 @@ export class SourceFile extends SyntaxBase {
     public eof: EndOfFile,
   ) {
     super();
+  }
+
+  public clone(): SourceFile {
+    return new SourceFile(
+      this.file,
+      this.elements.map(element => element.clone()),
+      this.eof,
+    );
   }
 
   public getFirstToken(): Token {
