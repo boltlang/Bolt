@@ -20,7 +20,7 @@ import {
   ImportDeclaration,
   Param,
   Pattern,
-  BindPattern,
+  NamedPattern,
   LetDeclaration,
   TypeAssert,
   ExprBody,
@@ -642,56 +642,15 @@ export class Parser {
 
   private parsePatternStartingWithConstructor() {
     const name = this.expectToken(SyntaxKind.IdentifierAlt);
-    const t2 = this.peekToken();
-    if (t2.kind === SyntaxKind.LBrace) {
-      this.getToken();
-      const fields = [];
-      let rbrace;
-      for (;;) {
-        const t3 = this.peekToken();
-        if (t3.kind === SyntaxKind.RBrace) {
-          this.getToken();
-          rbrace = t3;
-          break;
-        } else if (t3.kind === SyntaxKind.Identifier) {
-          this.getToken();
-          const t4 = this.peekToken();
-          if (t4.kind === SyntaxKind.Equals) {
-            this.getToken();
-            const pattern = this.parsePattern();
-            fields.push(new StructPatternField(t3, t4, pattern));
-          } else {
-            fields.push(new PunnedStructPatternField(t3));
-          }
-        } else if (t3.kind === SyntaxKind.DotDot) {
-          this.getToken();
-          fields.push(new VariadicStructPatternElement(t3, null));
-        } else {
-          this.raiseParseError(t3, [ SyntaxKind.Identifier, SyntaxKind.DotDot ]);
-        }
-        const t5 = this.peekToken();
-        if (t5.kind === SyntaxKind.Comma) {
-          this.getToken();
-        } else if (t5.kind === SyntaxKind.RBrace) {
-          this.getToken();
-          rbrace = t5;
-          break;
-        } else {
-          this.raiseParseError(t5, [ SyntaxKind.Comma, SyntaxKind.RBrace ]);
-        }
+    const patterns = [];
+    for (;;) {
+      const t3 = this.peekToken();
+      if (t3.kind === SyntaxKind.RParen) {
+        break;
       }
-      return new StructPattern(name, t2, fields, rbrace);
-    } else {
-      const patterns = [];
-      for (;;) {
-        const t3 = this.peekToken();
-        if (t3.kind === SyntaxKind.RParen) {
-          break;
-        }
-        patterns.push(this.parsePattern());
-      }
-      return new NamedTuplePattern(name, patterns);
+      patterns.push(this.parsePattern());
     }
+    return new NamedTuplePattern(name, patterns);
   }
 
   public parseTuplePattern(): TuplePattern {
@@ -719,9 +678,56 @@ export class Parser {
     return new TuplePattern(lparen, elements, rparen);
   }
 
+  public parseStructPattern(): StructPattern {
+    const t2 = this.expectToken(SyntaxKind.LBrace);
+    const fields = [];
+    let rbrace;
+    for (;;) {
+      const t3 = this.peekToken();
+      if (t3.kind === SyntaxKind.RBrace) {
+        this.getToken();
+        rbrace = t3;
+        break;
+      } else if (t3.kind === SyntaxKind.Identifier) {
+        this.getToken();
+        const t4 = this.peekToken();
+        if (t4.kind === SyntaxKind.Equals) {
+          this.getToken();
+          const pattern = this.parsePattern();
+          fields.push(new StructPatternField(t3, t4, pattern));
+        } else {
+          fields.push(new PunnedStructPatternField(t3));
+        }
+      } else if (t3.kind === SyntaxKind.DotDot) {
+        this.getToken();
+        const t4 = this.peekToken();
+        let rest = null;
+        if (t4.kind !== SyntaxKind.RBrace) {
+          rest = this.parsePattern();
+        }
+        fields.push(new VariadicStructPatternElement(t3, rest));
+      } else {
+        this.raiseParseError(t3, [ SyntaxKind.Identifier, SyntaxKind.DotDot ]);
+      }
+      const t5 = this.peekToken();
+      if (t5.kind === SyntaxKind.Comma) {
+        this.getToken();
+      } else if (t5.kind === SyntaxKind.RBrace) {
+        this.getToken();
+        rbrace = t5;
+        break;
+      } else {
+        this.raiseParseError(t5, [ SyntaxKind.Comma, SyntaxKind.RBrace ]);
+      }
+    }
+    return new StructPattern(t2, fields, rbrace);
+  }
+
   public parsePrimitivePattern(): Pattern {
     const t0 = this.peekToken();
     switch (t0.kind) {
+      case SyntaxKind.LBrace:
+        return this.parseStructPattern();
       case SyntaxKind.LParen:
       {
         const t1 = this.peekToken(2);
@@ -742,7 +748,7 @@ export class Parser {
       case SyntaxKind.Identifier:
       {
         this.getToken();
-        return new BindPattern(t0);
+        return new NamedPattern(t0);
       }
       case SyntaxKind.StringLiteral:
       case SyntaxKind.Integer:

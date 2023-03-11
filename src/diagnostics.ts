@@ -221,26 +221,30 @@ export function describeType(type: Type): string {
     {
       return type.decl.name.text;
     }
-    case TypeKind.Record:
+    case TypeKind.Field:
     {
-      let out = '{ ';
-      let first = true;
-      for (const [fieldName, fieldType] of type.fields) {
-        if (first) first = false;
-        else out += ', ';
-        out += fieldName + ': ' + describeType(fieldType);
+      let out = '{ ' + type.name + ': ' + describeType(type.type);
+      type = type.restType;
+      while (type.kind === TypeKind.Field) {
+        out += '; ' + type.name + ': ' + describeType(type.type);
+        type = type.restType;
       }
-      return out + ' }';
-    }
-    case TypeKind.Labeled:
-    {
-      // FIXME may need to include fields that were added during unification
-      return '{ ' + type.name + ': ' + describeType(type.type) + ' }';
+
+      if (type.kind !== TypeKind.Nil) {
+        out += '; ' + describeType(type);
+      }
+      return out + ' }'
     }
     case TypeKind.App:
     {
       return describeType(type.right) + ' ' + describeType(type.left);
     }
+    case TypeKind.Nil:
+      return '{}';
+    case TypeKind.Absent:
+      return 'Abs';
+    case TypeKind.Present:
+      return describeType(type.type);
   }
 }
 
@@ -271,6 +275,7 @@ export class UnificationFailedDiagnostic {
     public left: Type,
     public right: Type,
     public nodes: Syntax[],
+    public path: string[],
   ) {
 
   }
@@ -281,7 +286,11 @@ export class UnificationFailedDiagnostic {
     const node = this.nodes[0];
     out.write(ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET);
     out.write(`unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET);
-    out.write(' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed.\n\n');
+    out.write(' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed');
+    if (this.path.length > 0) {
+      out.write(` in field '${this.path.join('.')}'`);
+    }
+    out.write('.\n\n');
     out.write(printNode(node) + '\n');
     for (let i = 1; i < this.nodes.length; i++) {
       const node = this.nodes[i];
@@ -311,43 +320,34 @@ export class FieldMissingDiagnostic {
   public readonly level = Level.Error;
 
   public constructor(
-    public recordType: Type,
     public fieldName: string,
-    public node: Syntax | null,
+    public missing: Syntax | null,
+    public present: Syntax | null,
+    public cause: Syntax | null = null,
   ) {
 
   }
 
   public format(out: IndentWriter): void {
     out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`field '${this.fieldName}' is missing from `);
-    out.write(describeType(this.recordType) + '\n\n');
-    if (this.node !== null) {
-      out.write(printNode(this.node) + '\n');
+    out.write(`field '${this.fieldName}' is required in one type but missing in another\n\n`);
+    out.indent();
+    if (this.missing !== null) {
+      out.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+      out.write(`field '${this.fieldName}' is missing in this construct\n\n`);
+      out.write(printNode(this.missing) + '\n');
     }
-  }
-
-}
-
-export class FieldDoesNotExistDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public recordType: TRecord,
-    public fieldName: string,
-    public node: Syntax | null,
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`field '${this.fieldName}' does not exist on type `);
-    out.write(describeType(this.recordType) + '\n\n');
-    if (this.node !== null) {
-      out.write(printNode(this.node) + '\n');
+    if (this.present !== null) {
+      out.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+      out.write(`field '${this.fieldName}' is required in this construct\n\n`);
+      out.write(printNode(this.present) + '\n');
     }
+    if (this.cause !== null) {
+      out.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+      out.write(`because of a constraint on this node:\n\n`);
+      out.write(printNode(this.cause) + '\n');
+    }
+    out.dedent();
   }
 
 }
@@ -400,7 +400,6 @@ export type Diagnostic
   | UnificationFailedDiagnostic
   | UnexpectedTokenDiagnostic
   | FieldMissingDiagnostic
-  | FieldDoesNotExistDiagnostic
   | KindMismatchDiagnostic
   | ModuleNotFoundDiagnostic
 

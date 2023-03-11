@@ -128,11 +128,14 @@ export class Scope {
     switch (node.kind) {
       case SyntaxKind.LiteralPattern:
         break;
-      case SyntaxKind.BindPattern:
+      case SyntaxKind.NamedPattern:
       {
         this.add(node.name.text, decl, Symkind.Var);
         break;
       }
+      case SyntaxKind.NestedPattern:
+        this.scanPattern(node.pattern, decl);
+        break;
       case SyntaxKind.NamedTuplePattern:
       {
         for (const element of node.elements) {
@@ -151,7 +154,7 @@ export class Scope {
             }
             case SyntaxKind.PunnedStructPatternField:
             {
-              this.add(node.name.text, decl, Symkind.Var);
+              this.add(member.name.text, decl, Symkind.Var);
               break;
             }
           }

@@ -1,5 +1,30 @@
 
+import path from "path"
 import stream from "stream"
+
+export function first<T>(iter: Iterator<T>): T | undefined {
+  return iter.next().value;
+}
+
+export function last<T>(iter: Iterator<T>): T | undefined {
+  let prevValue;
+  for (;;) {
+    const { done, value } = iter.next();
+    if (done) {
+      return prevValue;
+    }
+    prevValue = value;
+  }
+}
+
+export function stripExtension(filepath: string): string {
+  const basename = path.basename(filepath);
+  const i = basename.lastIndexOf('.');
+  if (i === -1) {
+    return filepath;
+  }
+  return path.join(path.dirname(filepath), basename.substring(0, i));
+}
 
 export class IndentWriter {
 
@@ -39,6 +64,11 @@ export function assert(test: boolean): asserts test {
   if (!test) {
     throw new Error(`Assertion failed. See the stack trace for more information.`);
   }
+}
+
+export function assertNever(value: never): never {
+  console.error(value);
+  throw new Error(`Assertion failed. See the stack trace for more information.`);
 }
 
 export function countDigits(x: number, base: number = 10) {

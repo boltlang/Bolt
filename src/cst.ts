@@ -1,8 +1,11 @@
-import { assert, JSONObject, JSONValue } from "./util";
+
+import type stream from "stream";
+import path from "path"
+
+import { assert, IndentWriter, JSONObject, JSONValue } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
-import type { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
-import { array, middleware } from "yargs";
-import { warn } from "console";
+import { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
+import { Emitter } from "./emitter";
 
 export type TextSpan = [number, number];
 
@@ -70,6 +73,10 @@ export class TextFile {
 
   }
 
+  public getFullPath(): string {
+    return path.resolve(this.origPath);
+  }
+
 }
 
 export const enum SyntaxKind {
@@ -126,7 +133,7 @@ export const enum SyntaxKind {
   TupleTypeExpression,
 
   // Patterns
-  BindPattern,
+  NamedPattern,
   TuplePattern,
   StructPattern,
   NestedPattern,
@@ -308,19 +315,64 @@ abstract class SyntaxBase {
 
   }
 
+  public *getTokens(): Iterable<Token> {
+    for (const [_, value] of this.getFields()) {
+      yield* filter(value);
+    }
+    function* filter(value: any): Iterable<Token> {
+      if (isToken(value)) {
+        yield value;
+      } else if (Array.isArray(value)) {
+        for (const element of value) {
+          yield* filter(element);
+        }
+      } else if (isSyntax(value)) {
+        yield* value.getTokens();
+      }
+    }
+  }
+
+  public *getFields(): Iterable<[string, any]> {
+    for (const key of Object.getOwnPropertyNames(this)) {
+      if (!isIgnoredProperty(key)) {
+        yield [key, (this as any)[key]];
+      }
+    }
+  }
+
+  public *getChildNodes(): Iterable<Syntax> {
+    function* visit(value: any): Iterable<Syntax> {
+      if (value === null) {
+        return;
+      }
+      if (Array.isArray(value)) {
+        for (const element of value) {
+          yield* visit(element);
+        }
+      } else if (isSyntax(value)) {
+        yield value;
+      }
+    }
+    for (const [_key, value] of this.getFields()) {
+      yield* visit(value);
+    }
+  }
+
+  public emit(file: stream.Writable): void {
+    const emitter = new Emitter(new IndentWriter(file));
+    emitter.emit(this as any);
+  }
+
   public toJSON(): JSONObject {
 
     const obj: JSONObject = {};
-
     obj['type'] = this.constructor.name;
-
-    for (const key of Object.getOwnPropertyNames(this)) {
+    for (const [key, value] of this.getFields()) {
       if (isIgnoredProperty(key)) {
         continue;
       }
-      obj[key] = encode((this as any)[key]);
+      obj[key] = encode(value);
     }
-
     return obj;
 
     function encode(value: any): JSONValue {
@@ -328,7 +380,7 @@ abstract class SyntaxBase {
         return null;
       } else if (Array.isArray(value)) {
         return value.map(encode);
-      } else if (value instanceof SyntaxBase) {
+      } else if (isSyntax(value)) {
         return value.toJSON();
       } else {
         return value;
@@ -1329,9 +1381,9 @@ export type TypeExpression
   | NestedTypeExpression
   | TupleTypeExpression
 
-export class BindPattern extends SyntaxBase {
+export class NamedPattern extends SyntaxBase {
 
-  public readonly kind = SyntaxKind.BindPattern;
+  public readonly kind = SyntaxKind.NamedPattern;
 
   public constructor(
     public name: Identifier,
@@ -1339,8 +1391,8 @@ export class BindPattern extends SyntaxBase {
     super();
   }
 
-  public clone(): BindPattern {
-    return new BindPattern( this.name.clone() );
+  public clone(): NamedPattern {
+    return new NamedPattern( this.name.clone() );
   }
 
   public get isHole(): boolean {
@@ -1513,7 +1565,6 @@ export class StructPattern extends SyntaxBase {
   public readonly kind = SyntaxKind.StructPattern;
 
   public constructor(
-    public name: IdentifierAlt,
     public lbrace: LBrace,
     public members: StructPatternElement[],
     public rbrace: RBrace,
@@ -1523,7 +1574,6 @@ export class StructPattern extends SyntaxBase {
 
   public clone(): StructPattern {
     return new StructPattern(
-      this.name.clone(),
       this.lbrace.clone(),
       this.members.map(member => member.clone()),
       this.rbrace.clone(),
@@ -1531,7 +1581,7 @@ export class StructPattern extends SyntaxBase {
   }
 
   public getFirstToken(): Token {
-    return this.name;
+    return this.lbrace;
   }
 
   public getLastToken(): Token {
@@ -1626,7 +1676,7 @@ export class LiteralPattern extends SyntaxBase {
 }
 
 export type Pattern
-  = BindPattern
+  = NamedPattern
   | NestedPattern
   | StructPattern
   | NamedTuplePattern
@@ -2793,10 +2843,10 @@ export class ClassDeclaration extends SyntaxBase {
     switch (element.kind) {
 
       case SyntaxKind.LetDeclaration:
-        assert(element.pattern.kind === SyntaxKind.BindPattern);
+        assert(element.pattern.kind === SyntaxKind.NamedPattern);
         for (const other of this.elements) {
           if (other.kind === SyntaxKind.LetDeclaration
-              && other.pattern.kind === SyntaxKind.BindPattern
+              && other.pattern.kind === SyntaxKind.NamedPattern
               && other.pattern.name.text === element.pattern.name.text) {
             return other;
           }
@@ -2816,6 +2866,20 @@ export class ClassDeclaration extends SyntaxBase {
 
     return null;
 
+  }
+
+  public *getInstances(): Iterable<InstanceDeclaration> {
+    let curr = this.parent!;
+    for (;;) {
+      if (!canHaveInstanceDeclaration(curr)) {
+        curr = curr.parent!;
+      }
+      for (const element of getElements(curr)) {
+        if (element.kind === SyntaxKind.InstanceDeclaration && element.constraint.name === this.constraint.name) {
+          yield element;
+        }
+      }
+    }
   }
 
   public clone(): ClassDeclaration {
@@ -2979,4 +3043,78 @@ export class SourceFile extends SyntaxBase {
     return this.file;
   }
 
+}
+
+export function isSyntax(value: any): value is Syntax {
+  return typeof value === 'object'
+      && value !== null 
+      && value instanceof SyntaxBase;
+}
+
+export function isToken(value: any): value is Token {
+  return typeof value === 'object'
+      && value !== null 
+      && value instanceof TokenBase;
+}
+
+export function vistEachChild<T extends Syntax>(node: T, proc: (node: Syntax) => Syntax | undefined): Syntax {
+
+  const newArgs = [];
+  let changed = false;
+
+  const traverse = (value: any): any => {
+    if (Array.isArray(value)) {
+      const newElements = [];
+      let changed = false;
+      for (const element of value) {
+        const newElement = traverse(element);
+        if (newElement !== element) {
+          changed = true;
+        }
+        newElements.push(newElement);
+      }
+      return changed ? newElements : value;
+    } else if (isSyntax(value)) {
+      let newValue = proc(value);
+      if (newValue === undefined) {
+        newValue = value;
+      }
+      if (newValue !== value) {
+        changed = true;
+      }
+      return newValue;
+    } else {
+      return value;
+    }
+  }
+
+  for (const [_key, value] of node.getFields()) {
+    newArgs.push(traverse(value));
+  }
+
+  if (!changed) {
+    return node;
+  }
+  return new node.constructor(...newArgs);
+}
+
+export function canHaveInstanceDeclaration(node: Syntax): boolean {
+  return node.kind === SyntaxKind.SourceFile
+      || node.kind === SyntaxKind.ModuleDeclaration
+      || node.kind === SyntaxKind.LetDeclaration;
+}
+
+export function getElements(node: Syntax): Iterable<Syntax> {
+  switch (node.kind) {
+    case SyntaxKind.SourceFile:
+    case SyntaxKind.ModuleDeclaration:
+      return node.elements;
+    case SyntaxKind.LetDeclaration:
+      if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
+        return node.body.elements;
+      }
+      // falls through
+    default:
+      return [];
+  }
 }

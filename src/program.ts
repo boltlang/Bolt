@@ -6,20 +6,15 @@ import { ConsoleDiagnostics, Diagnostics } from "./diagnostics";
 import { Checker } from "./checker";
 import { Analyser } from "./analysis";
 import { Newable, Pass } from "./types";
-import BoltToC from "./passes/BoltToC";
-import BoltToJS from "./passes/BoltToJS";
 
 type AnyPass = Pass<any, any>;
 
 export enum TargetType {
+  Bolt,
   C,
   JS,
   WebAssembly,
   LLVM,
-}
-
-interface TargetSpec {
-  type: TargetType;
 }
 
 export class PassManager {
@@ -30,7 +25,7 @@ export class PassManager {
     this.registeredPasses.push(new pass());
   }
 
-  public apply<In>(input: In): unknown {
+  public apply(input: any): any {
     for (const pass of this.registeredPasses) {
       input = pass.apply(input);
     }
@@ -72,34 +67,4 @@ export class Program {
     }
   }
 
-  public emit(target: TargetSpec): void {
-    let suffix;
-    const passes = new PassManager();
-    switch (target.type) {
-      case TargetType.C:
-        suffix = '.c';
-        passes.add(BoltToC);
-        break;
-      case TargetType.JS:
-        suffix = '.js'
-        passes.add(BoltToJS);
-        break;
-    }
-    for (const [sourceFilePath, sourceFile] of this.sourceFilesByPath) {
-      const code = passes.apply(sourceFile) as any;
-      const targetFilePath = stripExtension(sourceFilePath) + suffix;
-      const file = fs.createWriteStream(targetFilePath, 'utf-8'); 
-      code.emit(file);
-    }
-  }
-
-}
-
-function stripExtension(filepath: string): string {
-  const basename = path.basename(filepath);
-  const i = basename.lastIndexOf('.');
-  if (i === -1) {
-    return filepath;
-  }
-  return path.join(path.dirname(filepath), basename.substring(0, i));
 }
