@@ -183,14 +183,18 @@ export class Parser {
     return new ReferenceTypeExpression(modulePath, name);
   }
 
+  public parseVarTypeExpression(): VarTypeExpression {
+    const name = this.expectToken(SyntaxKind.Identifier);
+    return new VarTypeExpression(name);
+  }
+
   public parsePrimitiveTypeExpression(): TypeExpression {
     const t0 = this.peekToken();
     switch (t0.kind) {
       case SyntaxKind.Identifier:
-      {
-        this.getToken();
-        return new VarTypeExpression(t0);
-      }
+        return this.parseVarTypeExpression();
+      case SyntaxKind.IdentifierAlt:
+        return this.parseReferenceTypeExpression();
       case SyntaxKind.LParen:
       {
         this.getToken();
@@ -220,14 +224,12 @@ export class Parser {
         }
         return new TupleTypeExpression(t0, elements, rparen);
       }
-      case SyntaxKind.IdentifierAlt:
-        return this.parseReferenceTypeExpression();
       default:
         this.raiseParseError(t0, [ SyntaxKind.IdentifierAlt ]);
     }
   }
 
-  private tryParseAppTypeExpression(): TypeExpression {
+  private parseAppTypeExpressionOrBelow(): TypeExpression {
     const operator = this.parsePrimitiveTypeExpression();
     const args = [];
     for (;;) {
@@ -251,7 +253,7 @@ export class Parser {
   }
 
   public parseTypeExpression(): TypeExpression {
-    let returnType = this.tryParseAppTypeExpression();
+    let returnType = this.parseAppTypeExpressionOrBelow();
     const paramTypes = [];
     for (;;) {
       const t1 = this.peekToken();
@@ -260,7 +262,7 @@ export class Parser {
       }
       this.getToken();
       paramTypes.push(returnType);
-      returnType = this.tryParseAppTypeExpression();
+      returnType = this.parseAppTypeExpressionOrBelow();
     }
     if (paramTypes.length === 0) {
       return returnType;
@@ -1048,13 +1050,22 @@ export class Parser {
       }
       clause = new ClassConstraintClause(constraints, rarrowAlt);
     }
-    const constraint = this.parseClassConstraint();
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
+    const types = [];
+    for (;;) {
+      const t3 = this.peekToken();
+      if (t3.kind === SyntaxKind.BlockStart || t3.kind === SyntaxKind.LineFoldEnd) {
+        break;
+      }
+      const type = this.parseTypeExpression();
+      types.push(type);
+    }
     this.expectToken(SyntaxKind.BlockStart);
     const elements = [];
     loop: for (;;) {
-      const t3 = this.peekToken();
+      const t4 = this.peekToken();
       let element;
-      switch (t3.kind) {
+      switch (t4.kind) {
         case SyntaxKind.BlockEnd:
           this.getToken();
           break loop;
@@ -1065,12 +1076,12 @@ export class Parser {
           element = this.parseTypeDeclaration();
           break;
         default:
-          this.raiseParseError(t3, [ SyntaxKind.LetKeyword, SyntaxKind.TypeKeyword, SyntaxKind.BlockEnd ]);
+          this.raiseParseError(t4, [ SyntaxKind.LetKeyword, SyntaxKind.TypeKeyword, SyntaxKind.BlockEnd ]);
       }
       elements.push(element);
     }
     this.expectToken(SyntaxKind.LineFoldEnd);
-    return new InstanceDeclaration(pubKeyword, t0, clause, constraint, elements);
+    return new InstanceDeclaration(pubKeyword, t0, clause, name, types, elements);
   }
 
   public parseClassDeclaration(): ClassDeclaration {
@@ -1097,7 +1108,17 @@ export class Parser {
       }
       clause = new ClassConstraintClause(constraints, rarrowAlt);
     }
-    const constraint = this.parseClassConstraint();
+    const name = this.expectToken(SyntaxKind.IdentifierAlt);
+    const types = [];
+    for (;;) {
+      const t1 = this.peekToken();
+      if (t1.kind === SyntaxKind.Identifier) {
+        const type = this.parseVarTypeExpression();
+        types.push(type);
+      } else {
+        break;
+      }
+    }
     this.expectToken(SyntaxKind.BlockStart);
     const elements = [];
     loop: for (;;) {
@@ -1119,7 +1140,7 @@ export class Parser {
       elements.push(element);
     }
     this.expectToken(SyntaxKind.LineFoldEnd);
-    return new ClassDeclaration(pubKeyword, t0 as ClassKeyword, clause, constraint, elements);
+    return new ClassDeclaration(pubKeyword, t0 as ClassKeyword, clause, name, types, elements);
   }
 
   public parseSourceFileElement(): SourceFileElement {

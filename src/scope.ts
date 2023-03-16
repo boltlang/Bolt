@@ -57,7 +57,7 @@ export class Scope {
     switch (node.kind) {
       case SyntaxKind.ClassDeclaration:
       {
-        this.add(node.constraint.name.text, node, Symkind.Typeclass);
+        this.add(node.name.text, node, Symkind.Typeclass);
       }
       case SyntaxKind.InstanceDeclaration:
       case SyntaxKind.SourceFile:

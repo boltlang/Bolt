@@ -2,7 +2,7 @@
 import type stream from "stream";
 import path from "path"
 
-import { assert, IndentWriter, JSONObject, JSONValue } from "./util";
+import { assert, implementationLimitation, IndentWriter, JSONObject, JSONValue } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
 import { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
 import { Emitter } from "./emitter";
@@ -2828,14 +2828,25 @@ export class ClassDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ClassDeclaration;
 
+  public typeEnv?: TypeEnv;
+
   public constructor(
     public pubKeyword: PubKeyword | null,
     public classKeyword: ClassKeyword,
-    public constraints: ClassConstraintClause | null,
-    public constraint: ClassConstraint,
+    public constraintClause: ClassConstraintClause | null,
+    public name: IdentifierAlt,
+    public types: VarTypeExpression[],
     public elements: ClassDeclarationElement[],
   ) {
     super();
+  }
+
+  public *getSupers(): Iterable<IdentifierAlt> {
+    if (this.constraintClause !== null) {
+      for (const constraint of this.constraintClause.constraints) {
+        yield constraint.name;
+      }
+    }
   }
 
   public lookup(element: InstanceDeclarationElement): ClassDeclarationElement | null {
@@ -2843,7 +2854,7 @@ export class ClassDeclaration extends SyntaxBase {
     switch (element.kind) {
 
       case SyntaxKind.LetDeclaration:
-        assert(element.pattern.kind === SyntaxKind.NamedPattern);
+        implementationLimitation(element.pattern.kind === SyntaxKind.NamedPattern);
         for (const other of this.elements) {
           if (other.kind === SyntaxKind.LetDeclaration
               && other.pattern.kind === SyntaxKind.NamedPattern
@@ -2875,7 +2886,7 @@ export class ClassDeclaration extends SyntaxBase {
         curr = curr.parent!;
       }
       for (const element of getElements(curr)) {
-        if (element.kind === SyntaxKind.InstanceDeclaration && element.constraint.name === this.constraint.name) {
+        if (element.kind === SyntaxKind.InstanceDeclaration && element.name.text === this.name.text) {
           yield element;
         }
       }
@@ -2886,8 +2897,9 @@ export class ClassDeclaration extends SyntaxBase {
     return new ClassDeclaration(
       this.pubKeyword !== null ? this.pubKeyword.clone() : null,
       this.classKeyword.clone(),
-      this.constraints !== null ? this.constraints.clone() : null,
-      this.constraint.clone(),
+      this.constraintClause !== null ? this.constraintClause.clone() : null,
+      this.name.clone(),
+      this.types.map(t => t.clone()),
       this.elements.map(element => element.clone()),
     );
   }
@@ -2903,7 +2915,10 @@ export class ClassDeclaration extends SyntaxBase {
     if (this.elements.length > 0) {
       return this.elements[this.elements.length-1].getLastToken();
     }
-    return this.constraint.getLastToken();
+    if (this.types.length > 0) {
+      return this.types[this.types.length-1].getLastToken();
+    }
+    return this.name;
   }
 
 }
@@ -2916,11 +2931,14 @@ export class InstanceDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.InstanceDeclaration;
 
+  public typeEnv?: TypeEnv;
+
   public constructor(
     public pubKeyword: PubKeyword | null,
     public classKeyword: InstanceKeyword,
-    public constraints: ClassConstraintClause | null,
-    public constraint: ClassConstraint,
+    public constraintClause: ClassConstraintClause | null,
+    public name: IdentifierAlt,
+    public types: TypeExpression[],
     public elements: InstanceDeclarationElement[],
   ) {
     super();
@@ -2930,8 +2948,9 @@ export class InstanceDeclaration extends SyntaxBase {
     return new InstanceDeclaration(
       this.pubKeyword !== null ? this.pubKeyword.clone() : null,
       this.classKeyword.clone(),
-      this.constraints !== null ? this.constraints.clone() : null,
-      this.constraint.clone(),
+      this.constraintClause !== null ? this.constraintClause.clone() : null,
+      this.name.clone(),
+      this.types.map(t => t.clone()),
       this.elements.map(element => element.clone()),
     );
   }
@@ -2947,7 +2966,10 @@ export class InstanceDeclaration extends SyntaxBase {
     if (this.elements.length > 0) {
       return this.elements[this.elements.length-1].getLastToken();
     }
-    return this.constraint.getLastToken();
+    if (this.types.length > 0) {
+      return this.types[this.types.length-1].getLastToken();
+    }
+    return this.name;
   }
 
 }
@@ -3095,7 +3117,7 @@ export function vistEachChild<T extends Syntax>(node: T, proc: (node: Syntax) =>
   if (!changed) {
     return node;
   }
-  return new node.constructor(...newArgs);
+  return new (node as any).constructor(...newArgs);
 }
 
 export function canHaveInstanceDeclaration(node: Syntax): boolean {

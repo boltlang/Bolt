@@ -45,7 +45,7 @@ function lcfirst(text: string): string {
 export class TypeclassDictPassing implements Pass<SourceFile, SourceFile> {
 
   private mangleInstance(node: InstanceDeclaration): string {
-    return lcfirst(node.constraint.name.text) + '_' + node.constraint.types.map(encode).join('');
+    return lcfirst(node.name.text) + '_' + node.types.map(encode).join('');
   }
 
   private visit(node: Syntax): Syntax {

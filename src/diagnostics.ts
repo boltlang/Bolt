@@ -1,7 +1,7 @@
 
-import { TypeKind, type Type, type TArrow, TRecord, Kind, KindType } from "./checker";
-import { Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
-import { countDigits, IndentWriter } from "./util";
+import { TypeKind, type Type, Kind, KindType } from "./checker";
+import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
+import { assertNever, countDigits, IndentWriter } from "./util";
 
 const ANSI_RESET = "\u001b[0m"
 const ANSI_BOLD = "\u001b[1m"
@@ -35,9 +35,28 @@ const enum Level {
   Fatal,
 }
 
-export class UnexpectedCharDiagnostic {
+const enum DiagnosticKind {
+  UnexpectedChar,
+  UnexpectedToken,
+  KindMismatch,
+  TypeMismatch,
+  TypeclassNotFound,
+  TypeclassDecaredTwice,
+  BindingNotFound,
+  ModuleNotFound,
+  FieldNotFound,
+}
 
-  public readonly level = Level.Error;
+interface DiagnosticBase {
+  level: Level;
+  readonly kind: DiagnosticKind;
+}
+
+export class UnexpectedCharDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.UnexpectedChar;
+
+  public level = Level.Error;
 
   public constructor(
     public file: TextFile,
@@ -47,12 +66,322 @@ export class UnexpectedCharDiagnostic {
 
   }
 
-  public format(out: IndentWriter): void {
-    const endPos = this.position.clone();
-    endPos.advance(this.actual);
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`unexpected character sequence '${this.actual}'.\n\n`);
-    out.write(printExcerpt(this.file, new TextRange(this.position, endPos)) + '\n');
+}
+
+
+export class UnexpectedTokenDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.UnexpectedToken;
+
+  public level = Level.Error;
+
+  public constructor(
+    public file: TextFile,
+    public actual: Token,
+    public expected: SyntaxKind[],
+  ) {
+
+  }
+
+}
+
+export class TypeclassDeclaredTwiceDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.TypeclassDecaredTwice;
+  
+  public level = Level.Error;
+
+  public constructor(
+    public name: IdentifierAlt,
+    public origDecl: ClassDeclaration,
+  ) {
+
+  } 
+
+}
+
+export class TypeclassNotFoundDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.TypeclassNotFound;
+
+  public level = Level.Error;
+
+  public constructor(
+    public name: IdentifierAlt,
+    public origin: InstanceDeclaration | ClassConstraint | null = null,
+  ) {
+
+  }
+
+}
+
+export class BindingNotFoundDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.BindingNotFound;
+
+  public level = Level.Error;
+
+  public constructor(
+    public modulePath: string[],
+    public name: string,
+    public node: Syntax,
+  ) {
+
+  }
+
+}
+
+export class TypeMismatchDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.TypeMismatch;
+
+  public level = Level.Error;
+
+  public constructor(
+    public left: Type,
+    public right: Type,
+    public trace: Syntax[],
+    public fieldPath: string[],
+  ) {
+
+  }
+
+}
+
+export class FieldNotFoundDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.FieldNotFound;
+
+  public level = Level.Error;
+
+  public constructor(
+    public fieldName: string,
+    public missing: Syntax | null,
+    public present: Syntax | null,
+    public cause: Syntax | null = null,
+  ) {
+
+  }
+
+}
+
+export class KindMismatchDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.KindMismatch;
+
+  public level = Level.Error;
+
+  public constructor(
+    public left: Kind,
+    public right: Kind,
+    public origin: Syntax | null,
+  ) {
+  
+  }
+
+}
+
+export class ModuleNotFoundDiagnostic implements DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.ModuleNotFound;
+
+  public level = Level.Error;
+
+  public constructor(
+    public modulePath: string[],
+    public node: Syntax,
+  ) {
+
+  }
+
+}
+
+export type Diagnostic
+  = UnexpectedCharDiagnostic
+  | TypeclassNotFoundDiagnostic
+  | TypeclassDeclaredTwiceDiagnostic
+  | BindingNotFoundDiagnostic
+  | TypeMismatchDiagnostic
+  | UnexpectedTokenDiagnostic
+  | FieldNotFoundDiagnostic
+  | KindMismatchDiagnostic
+  | ModuleNotFoundDiagnostic
+
+export interface Diagnostics {
+  readonly hasError: boolean;
+  readonly hasFatal: boolean;
+  add(diagnostic: Diagnostic): void;
+}
+
+export class DiagnosticStore implements Diagnostics {
+
+  private storage: Diagnostic[] = [];
+  
+  public hasError = false;
+  public hasFatal = false;
+
+  public add(diagnostic: Diagnostic): void {
+    this.storage.push(diagnostic);
+    if (diagnostic.level >= Level.Error) {
+      this.hasError = true;
+    }
+    if (diagnostic.level >= Level.Fatal) {
+      this.hasFatal = true;
+    }
+  }
+
+  public getDiagnostics(): Iterable<Diagnostic> {
+    return this.storage;
+  }
+
+}
+
+export class ConsoleDiagnostics implements Diagnostics {
+  
+  private writer = new IndentWriter(process.stderr);
+
+  public hasError = false;
+  public hasFatal = false;
+
+  public add(diagnostic: Diagnostic): void {
+
+    if (diagnostic.level >= Level.Error) {
+      this.hasError = true;
+    }
+    if (diagnostic.level >= Level.Fatal) {
+      this.hasFatal = true;
+    }
+
+    switch (diagnostic.level) {
+      case Level.Fatal: 
+        this.writer.write(ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET);
+        break;
+      case Level.Error:
+        this.writer.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
+        break;
+      case Level.Warning:
+        this.writer.write(ANSI_FG_RED + ANSI_BOLD + 'warning: ' + ANSI_RESET);
+        break;
+      case Level.Info:
+        this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+        break;
+      case Level.Verbose:
+        this.writer.write(ANSI_FG_CYAN + ANSI_BOLD + 'verbose: ' + ANSI_RESET);
+        break;
+    }
+
+    switch (diagnostic.kind) {
+
+      case DiagnosticKind.UnexpectedChar:
+        const endPos = diagnostic.position.clone();
+        endPos.advance(diagnostic.actual);
+        this.writer.write(`unexpected character sequence '${diagnostic.actual}'.\n\n`);
+        this.writer.write(printExcerpt(diagnostic.file, new TextRange(diagnostic.position, endPos)) + '\n');
+        break;
+
+      case DiagnosticKind.UnexpectedToken:
+        this.writer.write(`expected ${describeExpected(diagnostic.expected)} but got ${describeActual(diagnostic.actual)}\n\n`);
+        this.writer.write(printExcerpt(diagnostic.file, diagnostic.actual.getRange()) + '\n');
+        break;
+
+      case DiagnosticKind.TypeclassDecaredTwice:
+        this.writer.write(`type class '${diagnostic.name.text}' was already declared somewhere else.\n\n`);
+        this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+        this.writer.write(`type class '${diagnostic.name.text}' is already declared here\n\n`);
+        this.writer.write(printNode(diagnostic.origDecl) + '\n');
+        break;
+
+      case DiagnosticKind.TypeclassNotFound:
+        this.writer.write(`the type class ${ANSI_FG_MAGENTA + diagnostic.name.text + ANSI_RESET} was not found.\n\n`);
+        this.writer.write(printNode(diagnostic.name) + '\n');
+        if (diagnostic.origin !== null) {
+          this.writer.indent();
+          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+          this.writer.write(`${ANSI_FG_MAGENTA + diagnostic.name.text + ANSI_RESET} is required by ${ANSI_FG_MAGENTA + diagnostic.origin.name.text + ANSI_RESET}\n\n`);
+          this.writer.write(printNode(diagnostic.origin.name) + '\n');
+          this.writer.dedent();
+        }
+        break;
+
+      case DiagnosticKind.BindingNotFound:
+        this.writer.write(`binding '${diagnostic.name}' was not found`);
+        if (diagnostic.modulePath.length > 0) {
+          this.writer.write(` in module ${ANSI_FG_BLUE + diagnostic.modulePath.join('.') + ANSI_RESET}`);
+        }
+        this.writer.write(`.\n\n`);
+        this.writer.write(printNode(diagnostic.node) + '\n');
+        break;
+
+      case DiagnosticKind.TypeMismatch:
+        const leftNode = getFirstNodeInTypeChain(diagnostic.left);
+        const rightNode = getFirstNodeInTypeChain(diagnostic.right);
+        const node = diagnostic.trace[0];
+        this.writer.write(`unification of ` + ANSI_FG_GREEN + describeType(diagnostic.left) + ANSI_RESET);
+        this.writer.write(' and ' + ANSI_FG_GREEN + describeType(diagnostic.right) + ANSI_RESET + ' failed');
+        if (diagnostic.fieldPath.length > 0) {
+          this.writer.write(` in field '${diagnostic.fieldPath.join('.')}'`);
+        }
+        this.writer.write('.\n\n');
+        this.writer.write(printNode(node) + '\n');
+        for (let i = 1; i < diagnostic.trace.length; i++) {
+          const node = diagnostic.trace[i];
+          this.writer.write('  ... in an instantiation of the following expression\n\n');
+          this.writer.write(printNode(node, { indentation: i === 0 ? '  ' : '    ' }) + '\n');
+        }
+        if (leftNode !== null) {
+          this.writer.indent();
+          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
+          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.left) + ANSI_RESET + ` was inferred from diagnostic expression:\n\n`);
+          this.writer.write(printNode(leftNode) + '\n');
+          this.writer.dedent();
+        }
+        if (rightNode !== null) {
+          this.writer.indent();
+          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
+          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.right) + ANSI_RESET + ` was inferred from diagnostic expression:\n\n`);
+          this.writer.write(printNode(rightNode) + '\n');
+          this.writer.dedent();
+        }
+        break;
+
+      case DiagnosticKind.KindMismatch:
+        this.writer.write(`kind ${describeKind(diagnostic.left)} does not match with ${describeKind(diagnostic.right)}\n\n`);
+        if (diagnostic.origin !== null) {
+          this.writer.write(printNode(diagnostic.origin) + '\n');
+        }
+        break;
+
+      case DiagnosticKind.ModuleNotFound:
+        this.writer.write(`a module named ${ANSI_FG_BLUE + diagnostic.modulePath.join('.') + ANSI_RESET} was not found.\n\n`);
+        this.writer.write(printNode(diagnostic.node) + '\n');
+        break;
+
+      case DiagnosticKind.FieldNotFound:
+        this.writer.write(`field '${diagnostic.fieldName}' is required in one type but missing in another\n\n`);
+        this.writer.indent();
+        if (diagnostic.missing !== null) {
+          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+          this.writer.write(`field '${diagnostic.fieldName}' is missing in diagnostic construct\n\n`);
+          this.writer.write(printNode(diagnostic.missing) + '\n');
+        }
+        if (diagnostic.present !== null) {
+          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+          this.writer.write(`field '${diagnostic.fieldName}' is required in diagnostic construct\n\n`);
+          this.writer.write(printNode(diagnostic.present) + '\n');
+        }
+        if (diagnostic.cause !== null) {
+          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+          this.writer.write(`because of a constraint on diagnostic node:\n\n`);
+          this.writer.write(printNode(diagnostic.cause) + '\n');
+        }
+        this.writer.dedent();
+        break;
+
+      default:
+        assertNever(diagnostic);
+
+    }
+
   }
 
 }
@@ -60,6 +389,9 @@ export class UnexpectedCharDiagnostic {
 const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.StringLiteral]: 'a string literal',
   [SyntaxKind.Identifier]: "an identifier",
+  [SyntaxKind.RArrow]: "'->'",
+  [SyntaxKind.RArrowAlt]: '"=>"',
+  [SyntaxKind.VBar]: "'|'",
   [SyntaxKind.Comma]: "','",
   [SyntaxKind.Colon]: "':'",
   [SyntaxKind.Integer]: "an integer",
@@ -86,8 +418,6 @@ const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.BlockEnd]: 'the end of an indented block',
   [SyntaxKind.LineFoldEnd]: 'the end of the current line-fold',
   [SyntaxKind.EndOfFile]: 'end-of-file',
-  [SyntaxKind.RArrowAlt]: '"=>"',
-  [SyntaxKind.VBar]: "'|'",
 }
 
 function describeSyntaxKind(kind: SyntaxKind): string {
@@ -124,70 +454,6 @@ function describeActual(token: Token): string {
     default:
       return `'${token.text}'`;
   }
-}
-
-export class UnexpectedTokenDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public file: TextFile,
-    public actual: Token,
-    public expected: SyntaxKind[],
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'fatal: ' + ANSI_RESET);
-    out.write(`expected ${describeExpected(this.expected)} but got ${describeActual(this.actual)}\n\n`);
-    out.write(printExcerpt(this.file, this.actual.getRange()) + '\n');
-  }
-
-}
-
-export class TypeclassNotFoundDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public name: string,
-    public node: Syntax,
-  ) {
-
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET); 
-    out.write(`could not implement type class because class '${this.name}' was not found.\n\n`);
-    out.write(printNode(this.node) + '\n');
-  }
-
-}
-
-export class BindingNotFoundDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public modulePath: string[],
-    public name: string,
-    public node: Syntax,
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET); 
-    out.write(`binding '${this.name}' was not found`);
-    if (this.modulePath.length > 0) {
-      out.write(` in module ${ANSI_FG_BLUE + this.modulePath.join('.') + ANSI_RESET}`);
-    }
-    out.write(`.\n\n`);
-    out.write(printNode(this.node) + '\n');
-  }
-
 }
 
 export function describeType(type: Type): string {
@@ -267,196 +533,14 @@ function getFirstNodeInTypeChain(type: Type): Syntax | null {
   return curr.node;
 }
 
-export class UnificationFailedDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public left: Type,
-    public right: Type,
-    public nodes: Syntax[],
-    public path: string[],
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    const leftNode = getFirstNodeInTypeChain(this.left);
-    const rightNode = getFirstNodeInTypeChain(this.right);
-    const node = this.nodes[0];
-    out.write(ANSI_FG_RED + ANSI_BOLD + `error: ` + ANSI_RESET);
-    out.write(`unification of ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET);
-    out.write(' and ' + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ' failed');
-    if (this.path.length > 0) {
-      out.write(` in field '${this.path.join('.')}'`);
-    }
-    out.write('.\n\n');
-    out.write(printNode(node) + '\n');
-    for (let i = 1; i < this.nodes.length; i++) {
-      const node = this.nodes[i];
-      out.write('  ... in an instantiation of the following expression\n\n');
-      out.write(printNode(node, { indentation: i === 0 ? '  ' : '    ' }) + '\n');
-    }
-    if (leftNode !== null) {
-      out.indent();
-      out.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
-      out.write(`type ` + ANSI_FG_GREEN + describeType(this.left) + ANSI_RESET + ` was inferred from this expression:\n\n`);
-      out.write(printNode(leftNode) + '\n');
-      out.dedent();
-    }
-    if (rightNode !== null) {
-      out.indent();
-      out.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
-      out.write(`type ` + ANSI_FG_GREEN + describeType(this.right) + ANSI_RESET + ` was inferred from this expression:\n\n`);
-      out.write(printNode(rightNode) + '\n');
-      out.dedent();
-    }
-  }
-
-}
-
-export class FieldMissingDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public fieldName: string,
-    public missing: Syntax | null,
-    public present: Syntax | null,
-    public cause: Syntax | null = null,
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`field '${this.fieldName}' is required in one type but missing in another\n\n`);
-    out.indent();
-    if (this.missing !== null) {
-      out.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-      out.write(`field '${this.fieldName}' is missing in this construct\n\n`);
-      out.write(printNode(this.missing) + '\n');
-    }
-    if (this.present !== null) {
-      out.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-      out.write(`field '${this.fieldName}' is required in this construct\n\n`);
-      out.write(printNode(this.present) + '\n');
-    }
-    if (this.cause !== null) {
-      out.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-      out.write(`because of a constraint on this node:\n\n`);
-      out.write(printNode(this.cause) + '\n');
-    }
-    out.dedent();
-  }
-
-}
-
-export class KindMismatchDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public left: Kind,
-    public right: Kind,
-    public node: Syntax | null,
-  ) {
-  
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`kind ${describeKind(this.left)} does not match with ${describeKind(this.right)}\n\n`);
-    if (this.node !== null) {
-      out.write(printNode(this.node) + '\n');
-    }
-  }
-
-}
-
-export class ModuleNotFoundDiagnostic {
-
-  public readonly level = Level.Error;
-
-  public constructor(
-    public modulePath: string[],
-    public node: Syntax,
-  ) {
-
-  }
-
-  public format(out: IndentWriter): void {
-    out.write(ANSI_FG_RED + ANSI_BOLD + 'error: ' + ANSI_RESET);
-    out.write(`a module named ${ANSI_FG_BLUE + this.modulePath.join('.') + ANSI_RESET} was not found.\n\n`);
-    out.write(printNode(this.node) + '\n');
-  }
-
-}
-
-export type Diagnostic
-  = UnexpectedCharDiagnostic
-  | TypeclassNotFoundDiagnostic
-  | BindingNotFoundDiagnostic
-  | UnificationFailedDiagnostic
-  | UnexpectedTokenDiagnostic
-  | FieldMissingDiagnostic
-  | KindMismatchDiagnostic
-  | ModuleNotFoundDiagnostic
-
-export interface Diagnostics {
-  readonly hasError: boolean;
-  readonly hasFatal: boolean;
-  add(diagnostic: Diagnostic): void;
-}
-
-export class DiagnosticStore {
-
-  private storage: Diagnostic[] = [];
-  
-  public hasError = false;
-  public hasFatal = false;
-
-  public add(diagnostic: Diagnostic): void {
-    this.storage.push(diagnostic);
-    if (diagnostic.level >= Level.Error) {
-      this.hasError = true;
-    }
-    if (diagnostic.level >= Level.Fatal) {
-      this.hasFatal = true;
-    }
-  }
-
-  public getDiagnostics(): Iterable<Diagnostic> {
-    return this.storage;
-  }
-
-}
-
-export class ConsoleDiagnostics {
-  
-  private writer = new IndentWriter(process.stderr);
-
-  public hasError = false;
-  public hasFatal = false;
-
-  public add(diagnostic: Diagnostic): void {
-    diagnostic.format(this.writer);
-    if (diagnostic.level >= Level.Error) {
-      this.hasError = true;
-    }
-    if (diagnostic.level >= Level.Fatal) {
-      this.hasFatal = true;
-    }
-  }
-
-}
-
 interface PrintExcerptOptions {
   indentation?: string;
   extraLineCount?: number;
 }
 
-function printNode(node: Syntax, options?: PrintExcerptOptions): string {
+interface PrintNodeOptions extends PrintExcerptOptions { }
+
+function printNode(node: Syntax, options?: PrintNodeOptions): string {
   const file = node.getSourceFile().getFile();
   return printExcerpt(file, node.getRange(), options);
 }

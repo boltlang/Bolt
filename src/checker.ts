@@ -1,3 +1,7 @@
+
+// TODO support rigid vs free variables
+//      https://www.reddit.com/r/haskell/comments/d4v83/comment/c0xmc3r/
+
 import {
   ClassDeclaration,
   EnumDeclaration,
@@ -23,14 +27,14 @@ import {
   describeType,
   BindingNotFoundDiagnostic,
   Diagnostics,
-  FieldMissingDiagnostic,
-  UnificationFailedDiagnostic,
+  FieldNotFoundDiagnostic,
+  TypeMismatchDiagnostic,
   KindMismatchDiagnostic,
   ModuleNotFoundDiagnostic,
   TypeclassNotFoundDiagnostic,
-  FieldTypeMismatchDiagnostic,
+  TypeclassDeclaredTwiceDiagnostic,
 } from "./diagnostics";
-import { assert, assertNever, first, isEmpty, last, MultiMap } from "./util";
+import { assert, isDebug, assertNever, first, isEmpty, last, MultiMap } from "./util";
 import { Analyser } from "./analysis";
 
 const MAX_TYPE_ERROR_COUNT = 5;
@@ -440,6 +444,49 @@ export type Type
   | TPresent
   | TAbsent
 
+export class Qual {
+
+  public constructor(
+    public preds: Pred[],
+    public type: Type,
+  ) {
+
+  }
+
+  public substitute(sub: TVSub): Qual {
+    return new Qual(
+      this.preds.map(pred => pred.substitute(sub)),
+      this.type.substitute(sub),
+    );
+  }
+
+  public *getTypeVars() {
+    for (const pred of this.preds) {
+      yield* pred.type.getTypeVars();
+    }
+    yield* this.type.getTypeVars();
+  }
+
+}
+
+class IsInPred {
+
+  public constructor(
+    public id: string,
+    public type: Type,
+  ) {
+
+  }
+
+  public substitute(sub: TVSub): Pred {
+    return new IsInPred(this.id, this.type.substitute(sub));
+
+  }
+
+}
+
+type Pred = IsInPred;
+
 export const enum KindType {
   Star,
   Arrow,
@@ -552,6 +599,14 @@ class TVSet {
 
   private mapping = new Map<number, TVar>();
 
+  public constructor(iterable?: Iterable<TVar>) {
+    if (iterable !== undefined) {
+      for (const tv of iterable) {
+        this.add(tv);
+      }
+    }
+  }
+
   public add(tv: TVar): void {
     this.mapping.set(tv.id, tv);
   }
@@ -571,6 +626,10 @@ class TVSet {
 
   public delete(tv: TVar): void {
     this.mapping.delete(tv.id);
+  }
+
+  public get size(): number {
+    return this.mapping.size;
   }
 
   public [Symbol.iterator](): Iterator<TVar> {
@@ -690,10 +749,6 @@ class CMany extends ConstraintBase {
 
 }
 
-interface InstanceRef {
-  node: InstanceDeclaration | null;
-}
-
 type Constraint
   = CEqual
   | CMany
@@ -706,12 +761,19 @@ abstract class SchemeBase {
 
 class Forall extends SchemeBase {
 
+  public typeVars: TVSet;
+
   public constructor(
-    public typeVars: Iterable<TVar>,
+    typeVars: Iterable<TVar>,
     public constraints: Iterable<Constraint>,
     public type: Type,
   ) {
     super();
+    if (typeVars instanceof TVSet) {
+      this.typeVars = typeVars;
+    } else { 
+      this.typeVars = new TVSet(typeVars);
+    }
   }
 
 }
@@ -726,6 +788,23 @@ type NodeWithReference
   | ReferenceExpression
   | ReferenceTypeExpression
 
+function validateScheme(scheme: Scheme): void {
+  const isMonoVar = scheme.type.kind === TypeKind.Var && scheme.typeVars.size === 0;
+  if (!isMonoVar) {
+    const tvs = new TVSet(scheme.type.getTypeVars())
+    for (const tv of tvs) {
+      if (!scheme.typeVars.has(tv)) {
+        throw new Error(`Type variable ${describeType(tv)} is free because does not appear in the scheme's type variable list`);
+      }
+    }
+    for (const tv of scheme.typeVars) {
+      if (!tvs.has(tv)) {
+        throw new Error(`Polymorphic type variable ${describeType(tv)} does not occur anywhere in scheme's type ${describeType(scheme.type)}`);
+      }
+    }
+  }
+}
+
 class TypeEnv {
 
   private mapping = new MultiMap<string, [Symkind, Scheme]>();
@@ -735,6 +814,9 @@ class TypeEnv {
   }
 
   public add(name: string, scheme: Scheme, kind: Symkind): void {
+    if (isDebug) {
+      validateScheme(scheme);
+    }
     this.mapping.add(name, [kind, scheme]);
   }
 
@@ -819,6 +901,10 @@ export class Checker {
 
   private contexts: InferContext[] = [];
 
+  private classDecls = new Map<string, ClassDeclaration>();
+  private globalKindEnv = new KindEnv();
+  private globalTypeEnv = new TypeEnv();
+
   private solution = new TVSub();
   private kindSolution = new KVSub();
 
@@ -826,6 +912,26 @@ export class Checker {
     private analyser: Analyser,
     private diagnostics: Diagnostics
   ) {
+
+    this.globalKindEnv.set('Int', new KType());
+    this.globalKindEnv.set('String', new KType());
+    this.globalKindEnv.set('Bool', new KType());
+
+    const a = new TVar(this.nextTypeVarId++);
+    const b = new TVar(this.nextTypeVarId++);
+
+    this.globalTypeEnv.add('$', new Forall([ a, b ], [], new TArrow(new TArrow(new TArrow(a, b), a), b)), Symkind.Var);
+    this.globalTypeEnv.add('String', new Forall([], [], this.stringType), Symkind.Type);
+    this.globalTypeEnv.add('Int', new Forall([], [], this.intType), Symkind.Type);
+    this.globalTypeEnv.add('Bool', new Forall([], [], this.boolType), Symkind.Type);
+    this.globalTypeEnv.add('True', new Forall([], [], this.boolType), Symkind.Var);
+    this.globalTypeEnv.add('False', new Forall([], [], this.boolType), Symkind.Var);
+    this.globalTypeEnv.add('+', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('-', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('*', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('/', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('==', new Forall([ a ], [], TArrow.build([ a, a ], this.boolType)), Symkind.Var);
+    this.globalTypeEnv.add('not', new Forall([], [], new TArrow(this.boolType, this.boolType)), Symkind.Var);
 
   }
 
@@ -874,7 +980,7 @@ export class Checker {
       let maxIndex = 0;
       let currUp = node.getEnclosingModule();
       outer: for (;;) {
-        let currDown: SourceFile | ModuleDeclaration = currUp;
+        let currDown = currUp;
         for (let i = 0; i < modulePath.length; i++) {
           const moduleName = modulePath[i];
           const nextDown = currDown.resolveModule(moduleName.text);
@@ -939,7 +1045,7 @@ export class Checker {
       let maxIndex = 0;
       let currUp = node.getEnclosingModule();
       outer: for (;;) {
-        let currDown: SourceFile | ModuleDeclaration = currUp;
+        let currDown = currUp;
         for (let i = 0; i < modulePath.length; i++) {
           const moduleName = modulePath[i];
           const nextDown = currDown.resolveModule(moduleName.text);
@@ -1000,7 +1106,8 @@ export class Checker {
 
   private createSubstitution(scheme: Scheme): TVSub {
     const sub = new TVSub();
-    for (const tv of scheme.typeVars) {
+  const tvs = [...scheme.typeVars]
+    for (const tv of tvs) {
       sub.set(tv, this.createTypeVar());
     }
     return sub;
@@ -1211,14 +1318,14 @@ export class Checker {
       case SyntaxKind.ClassDeclaration:
       case SyntaxKind.InstanceDeclaration:
       {
-        if (node.constraints !== null) {
-          for (const constraint of node.constraints.constraints) {
+        if (node.constraintClause !== null) {
+          for (const constraint of node.constraintClause.constraints) {
             for (const typeExpr of constraint.types) {
               this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), new KType(), typeExpr);
             }
           }
         }
-        for (const typeExpr of node.constraint.types) {
+        for (const typeExpr of node.types) {
           this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), new KType(), typeExpr);
         }
         for (const element of node.elements) {
@@ -1374,9 +1481,9 @@ export class Checker {
 
       case SyntaxKind.InstanceDeclaration:
       {
-        const cls = node.getScope().lookup(node.constraint.name.text, Symkind.Typeclass) as ClassDeclaration | null;
+        const cls = node.getScope().lookup(node.name.text, Symkind.Typeclass) as ClassDeclaration | null;
         if (cls === null) {
-          this.diagnostics.add(new TypeclassNotFoundDiagnostic(node.constraint.name.text, node.constraint.name));
+          this.diagnostics.add(new TypeclassNotFoundDiagnostic(node.name));
         }
         for (const element of node.elements) {
           this.infer(element);
@@ -1695,7 +1802,7 @@ export class Checker {
 
         case SyntaxKind.TupleTypeExpression:
         {
-          type = new TTuple(node.elements.map(el => this.inferTypeExpression(el)), node);
+          type = new TTuple(node.elements.map(el => this.inferTypeExpression(el, introduceTypeVars)), node);
           break;
         }
 
@@ -1708,7 +1815,7 @@ export class Checker {
           const scheme = this.lookup(node.name, Symkind.Type);
           if (scheme === null) {
             if (!introduceTypeVars) {
-              // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+              this.diagnostics.add(new BindingNotFoundDiagnostic([], node.name.text, node.name));
             }
             type = this.createTypeVar();
             this.addBinding(node.name.text, new Forall([], [], type), Symkind.Type);
@@ -1873,11 +1980,37 @@ export class Checker {
         break;
       }
 
-      case SyntaxKind.InstanceDeclaration:
       case SyntaxKind.ClassDeclaration:
       {
+        const other = this.classDecls.get(node.name.text);
+        if (other !== undefined) {
+          this.diagnostics.add(new TypeclassDeclaredTwiceDiagnostic(node.name, other));
+        } else {
+          if (node.constraintClause !== null) {
+            for (const constraint of node.constraintClause.constraints) {
+              if (!this.classDecls.has(constraint.name.text)) {
+                this.diagnostics.add(new TypeclassNotFoundDiagnostic(constraint.name));
+              }
+            }
+          }
+          this.classDecls.set(node.name.text, node);
+        }
+        const env = node.typeEnv = new TypeEnv(parentEnv);
+        for (const tv of node.types) {
+          assert(tv.kind === SyntaxKind.VarTypeExpression);
+          env.add(tv.name.text, new Forall([], [], this.createTypeVar(tv)), Symkind.Type);
+        }
         for (const element of node.elements) {
-          this.initialize(element, parentEnv);
+          this.initialize(element, env);
+        }
+        break;
+      }
+
+      case SyntaxKind.InstanceDeclaration:
+      {
+        const env = node.typeEnv = new TypeEnv(parentEnv);
+        for (const element of node.elements) {
+          this.initialize(element, env);
         }
         break;
       }
@@ -1911,41 +2044,44 @@ export class Checker {
         }
         this.pushContext(context);
         const kindArgs = [];
-        for (const varExpr of node.varExps) {
+        for (const name of node.varExps) {
           const kindArg = this.createTypeVar();
-          env.add(varExpr.text, new Forall([], [], kindArg), Symkind.Type);
+          env.add(name.text, new Forall([], [], kindArg), Symkind.Type);
           kindArgs.push(kindArg);
         }
+        const type = TApp.build(new TNominal(node, node), kindArgs);
+        parentEnv.add(node.name.text, new Forall(typeVars, constraints, type), Symkind.Type);
         let elementTypes: Type[] = [];
-        const type = new TNominal(node, node);
         if (node.members !== null) {
           for (const member of node.members) {
-            let ctorType;
+            let ctorType, elementType;
             switch (member.kind) {
               case SyntaxKind.EnumDeclarationTupleElement:
               {
-                const argTypes = member.elements.map(el => this.inferTypeExpression(el));
-                ctorType = TArrow.build(argTypes, TApp.build(type, kindArgs), member);
+                const argTypes = member.elements.map(el => this.inferTypeExpression(el, false));
+                elementType = new TTuple(argTypes, member);
+                ctorType = TArrow.build(argTypes, type, member);
                 break;
               }
               case SyntaxKind.EnumDeclarationStructElement:
               {
-                ctorType = new TNil(member);
+                elementType = new TNil(member);
                 for (const field of member.fields) {
-                  ctorType = new TField(field.name.text, new TPresent(this.inferTypeExpression(field.typeExpr)), ctorType, member);
+                  elementType = new TField(field.name.text, new TPresent(this.inferTypeExpression(field.typeExpr, false)), elementType, member);
                 }
-                ctorType = new TArrow(TField.sort(ctorType), TApp.build(type, kindArgs));
+                elementType = TField.sort(elementType);
+                ctorType = new TArrow(elementType, type);
                 break;
               }
               default:
                 throw new Error(`Unexpected ${member}`);
             }
+            // FIXME `typeVars` may contain too much irrelevant type variables
             parentEnv.add(member.name.text, new Forall(typeVars, constraints, ctorType), Symkind.Var);
-            elementTypes.push(ctorType);
+            elementTypes.push(elementType);
           }
         }
         this.popContext(context);
-        parentEnv.add(node.name.text, new Forall(typeVars, constraints, type), Symkind.Type);
         break;
       }
 
@@ -2013,36 +2149,16 @@ export class Checker {
 
   public check(node: SourceFile): void {
 
-    const kenv = new KindEnv();
-    kenv.set('Int', new KType());
-    kenv.set('String', new KType());
-    kenv.set('Bool', new KType());
-    const skenv = new KindEnv(kenv);
-    this.forwardDeclareKind(node, skenv);
-    this.inferKind(node, skenv);
+    const kenv = new KindEnv(this.globalKindEnv);
+    this.forwardDeclareKind(node, kenv);
+    this.inferKind(node, kenv);
 
     const typeVars = new TVSet();
     const constraints = new ConstraintSet();
-    const env = new TypeEnv();
+    const env = new TypeEnv(this.globalTypeEnv);
     const context: InferContext = { typeVars, constraints, env, returnType: null };
 
     this.pushContext(context);
-
-    const a = this.createTypeVar();
-    const b = this.createTypeVar();
-
-    env.add('$', new Forall([ a, b ], [], new TArrow(new TArrow(new TArrow(a, b), a), b)), Symkind.Var);
-    env.add('String', new Forall([], [], this.stringType), Symkind.Type);
-    env.add('Int', new Forall([], [], this.intType), Symkind.Type);
-    env.add('Bool', new Forall([], [], this.boolType), Symkind.Type);
-    env.add('True', new Forall([], [], this.boolType), Symkind.Var);
-    env.add('False', new Forall([], [], this.boolType), Symkind.Var);
-    env.add('+', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('-', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('*', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('/', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    env.add('==', new Forall([ a ], [], TArrow.build([ a, a ], this.boolType)), Symkind.Var);
-    env.add('not', new Forall([], [], new TArrow(this.boolType, this.boolType)), Symkind.Var);
 
     this.initialize(node, env);
 
@@ -2141,7 +2257,6 @@ export class Checker {
     }
 
     const visitElements = (elements: Syntax[]) => {
-
       for (const element of elements) {
         if (element.kind === SyntaxKind.LetDeclaration
             && isFunctionDeclarationLike(element)) {
@@ -2152,14 +2267,21 @@ export class Checker {
             this.instantiate(scheme, null);
           }
         } else {
+          const elementHasTypeEnv = hasTypeEnv(element);
+          if (elementHasTypeEnv) {
+            this.pushContext({ ...this.getContext(), env: element.typeEnv! });
+          }
           this.infer(element);
+          if(elementHasTypeEnv) {
+            this.contexts.pop();
+          }
         }
       }
     }
 
     for (const nodes of sccs) {
 
-      if (nodes.some(n => n.kind === SyntaxKind.SourceFile)) {
+      if (nodes[0].kind === SyntaxKind.SourceFile) {
         assert(nodes.length === 1);
         continue;
       }
@@ -2221,24 +2343,30 @@ export class Checker {
  
 
   }
+  
+  private lookupClass(name: string): ClassDeclaration | null {
+    return this.classDecls.get(name) ?? null;
+  }
 
   private *findInstanceContext(type: TCon, clazz: ClassDeclaration): Iterable<ClassDeclaration[]> {
     for (const instance of clazz.getInstances()) {
-      assert(instance.constraint.types.length === 1);
-      const instTy0 = instance.constraint.types[0];
-      if (instTy0.kind === SyntaxKind.AppTypeExpression
+      assert(instance.types.length === 1);
+      const instTy0 = instance.types[0];
+      if ((instTy0.kind === SyntaxKind.AppTypeExpression
           && instTy0.operator.kind === SyntaxKind.ReferenceTypeExpression
-          && instTy0.operator.name.text === type.displayName) {
-        if (instance.constraints === null) {
+          && instTy0.operator.name.text === type.displayName)
+         || (instTy0.kind === SyntaxKind.ReferenceTypeExpression
+          && instTy0.name.text === type.displayName)) {
+        if (instance.constraintClause === null) {
           return;
         }
         for (const argType of type.argTypes) {
           const classes = [];
-          for (const constraint of instance.constraints.constraints) {
+          for (const constraint of instance.constraintClause.constraints) {
             assert(constraint.types.length === 1);
-            const classDecl = this.lookupClass(constraint.name);
+            const classDecl = this.lookupClass(constraint.name.text);
             if (classDecl === null) {
-              this.diagnostics.add(new TypeclassNotFoundDiagnostic(constraint.name.text, constraint.name));
+              this.diagnostics.add(new TypeclassNotFoundDiagnostic(constraint.name));
             } else {
               classes.push(classDecl);
             }
@@ -2296,13 +2424,20 @@ export class Checker {
               assert(right.kind === TypeKind.Present);
               const fieldName = path[path.length-1];
               this.diagnostics.add(
-                new FieldMissingDiagnostic(fieldName, left.node, right.type.node, constraint.firstNode)
+                new FieldNotFoundDiagnostic(fieldName, left.node, right.type.node, constraint.firstNode)
               );
               return false;
             }
 
             assert(left.kind === TypeKind.Present && right.kind === TypeKind.Present);
             return unify(left.type, right.type);
+          }
+
+          const unifyPred = (left: Pred, right: Pred) => {
+            if (left.id === right.id) {
+              return unify(left.type, right.type);
+            }
+            throw new Error(`Classes do not match and no diagnostic defined`);
           }
 
           const unify = (left: Type, right: Type): boolean => {
@@ -2342,6 +2477,7 @@ export class Checker {
                     propagateClassTCon(constraint, type);
                   }
                 } else {
+                  //assert(false);
                   //this.diagnostics.add(new );
                 }
               }
@@ -2475,7 +2611,7 @@ export class Checker {
             }
 
             this.diagnostics.add(
-              new UnificationFailedDiagnostic(
+              new TypeMismatchDiagnostic(
                 left.substitute(solution),
                 right.substitute(solution),
                 [...constraint.getNodes()],
@@ -2510,5 +2646,20 @@ function getVariadicMember(node: StructPattern) {
     }
   }
   return null;
+}
+
+type HasTypeEnv
+  = ClassDeclaration
+  | InstanceDeclaration
+  | LetDeclaration
+  | ModuleDeclaration
+  | SourceFile
+
+function hasTypeEnv(node: Syntax): node is HasTypeEnv {
+  return node.kind === SyntaxKind.ClassDeclaration
+      || node.kind === SyntaxKind.InstanceDeclaration
+      || node.kind === SyntaxKind.LetDeclaration
+      || node.kind === SyntaxKind.ModuleDeclaration
+      || node.kind === SyntaxKind.SourceFile
 }
 

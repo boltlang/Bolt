@@ -2,6 +2,8 @@
 import path from "path"
 import stream from "stream"
 
+export const isDebug = true;
+
 export function first<T>(iter: Iterator<T>): T | undefined {
   return iter.next().value;
 }
@@ -60,9 +62,17 @@ export class IndentWriter {
 
 }
 
+const GITHUB_ISSUE_URL = 'https://github.com/boltlang/bolt/issues/'
+
 export function assert(test: boolean): asserts test {
   if (!test) {
-    throw new Error(`Assertion failed. See the stack trace for more information.`);
+    throw new Error(`Assertion failed. See the stack trace for more information. You are invited to search this issue on GitHub or to create a new one at ${GITHUB_ISSUE_URL} .`);
+  }
+}
+
+export function implementationLimitation(test: boolean): asserts test {
+  if (!test) {
+    throw new Error(`We encountered a limitation to the implementation of this compiler. You are invited to search this issue on GitHub or to create a new one at ${GITHUB_ISSUE_URL} .`);
   }
 }
 

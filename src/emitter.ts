@@ -167,14 +167,18 @@ export class Emitter {
           this.writer.write('pub ');
         }
         this.writer.write(`class `);
-        if (node.constraints) {
-          for (const constraint of node.constraints.constraints) {
+        if (node.constraintClause) {
+          for (const constraint of node.constraintClause.constraints) {
             this.emit(constraint);
             this.writer.write(`, `);
           }
           this.writer.write(' => ');
         }
-        this.emit(node.constraint);
+        this.emit(node.name);
+        for (const type of node.types) {
+          this.writer.write(' ');
+          this.emit(type);
+        }
         if (node.elements !== null) {
           this.writer.write('.\n');
           this.writer.indent();
