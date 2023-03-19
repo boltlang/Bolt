@@ -168,6 +168,7 @@ export const enum SyntaxKind {
   ReturnStatement,
   ExpressionStatement,
   IfStatement,
+  AssignStatement,
 
   // If statement elements
   IfStatementCase,
@@ -2235,6 +2236,36 @@ export class ReturnStatement extends SyntaxBase {
 
 }
 
+export class AssignStatement extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.AssignStatement;
+
+  public constructor(
+    public pattern: Pattern,
+    public operator: Assignment,
+    public expression: Expression,
+  ) {
+    super();
+  }
+
+  public clone(): AssignStatement {
+    return new AssignStatement(
+      this.pattern.clone(),
+      this.operator.clone(),
+      this.expression.clone()
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.pattern.getFirstToken();
+  }
+
+  public getLastToken(): Token {
+    return this.expression.getLastToken();
+  }
+
+}
+
 export class ExpressionStatement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ExpressionStatement;
@@ -2263,6 +2294,7 @@ export type Statement
   = ReturnStatement
   | ExpressionStatement
   | IfStatement
+  | AssignStatement
 
 export class Param extends SyntaxBase {
 

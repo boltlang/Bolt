@@ -229,7 +229,15 @@ export class Scanner extends BufferedStream<Token> {
         case '{': return new LBrace(startPos);
         case '}': return new RBrace(startPos);
         case ',': return new Comma(startPos);
-        case ':': return new Colon(startPos);
+        case ':':
+          const text = this.takeWhile(isOperatorPart);
+          if (text === '') {
+            return new Colon(startPos);
+          } else if (text === '=') {
+            return new Assignment(':', startPos);
+          } else {
+            throw new ScanError(this.file, startPos, ':' + text);
+          }
         case '.': {
           const dots = c0 + this.takeWhile(ch => ch === '.');
           if (dots === '.') {
@@ -266,7 +274,7 @@ export class Scanner extends BufferedStream<Token> {
           } else if (text === '=') {
             return new Equals(startPos);
           } else if (text.endsWith('=') && text[text.length-2] !== '=') {
-            return new Assignment(text, startPos);
+            return new Assignment(text.substring(0, text.length-1), startPos);
           } else {
             return new CustomOperator(text, startPos);
           }

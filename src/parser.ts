@@ -66,6 +66,7 @@ import {
   ClassKeyword,
   InstanceDeclaration,
   ClassConstraintClause,
+  AssignStatement,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -782,6 +783,27 @@ export class Parser {
     return new Param(pattern);
   }
 
+  private lookaheadIsAssignment(): boolean {
+    for (let i = 1;; i++) {
+      const t0 = this.peekToken(i);
+      switch (t0.kind) {
+        case SyntaxKind.LineFoldEnd:
+        case SyntaxKind.BlockStart:
+          return false;
+        case SyntaxKind.Assignment:
+          return true;
+      }
+    }
+  }
+
+  public parseAssignStatement(): AssignStatement {
+    const pattern = this.parsePattern();
+    const operator = this.expectToken(SyntaxKind.Assignment);
+    const expression = this.parseExpression();
+    this.expectToken(SyntaxKind.LineFoldEnd);
+    return new AssignStatement(pattern, operator, expression);
+  }
+
   public parseLetBodyElement(): LetBodyElement {
     const t0 = this.peekTokenAfterModifiers();
     switch (t0.kind) {
@@ -792,6 +814,9 @@ export class Parser {
       case SyntaxKind.IfKeyword:
         return this.parseIfStatement();
       default:
+        if (this.lookaheadIsAssignment()) {
+          return this.parseAssignStatement();
+        }
         // TODO convert parse errors to include LetKeyword and ReturnKeyword
         return this.parseExpressionStatement();
     }
@@ -1165,6 +1190,9 @@ export class Parser {
       case SyntaxKind.IfKeyword:
         return this.parseIfStatement();
       default:
+        if (this.lookaheadIsAssignment()) {
+          return this.parseAssignStatement();
+        }
         return this.parseExpressionStatement();
     }
   }
