@@ -195,3 +195,15 @@ mod CD.
     let alpha: A.Foo
 ```
 
+## Rest-expressions on extensible records work
+
+```
+struct Point.
+  x: Int
+  y: Int
+  z: Int
+
+let foo { x, y, .. } : Point -> Int = x + y
+
+foo { x = 1, y = 2 }
+```
