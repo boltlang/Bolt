@@ -1,8 +1,13 @@
 
 import path from "path"
 import stream from "stream"
+import { inspect } from "util";
 
-export const isDebug = true;
+export const isDebug = process.env['NODE_ENV'] === 'development';
+
+export const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom') 
+
+export type InspectFn = typeof inspect;
 
 export function first<T>(iter: Iterator<T>): T | undefined {
   return iter.next().value;
