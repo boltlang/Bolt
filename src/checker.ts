@@ -838,10 +838,12 @@ class Forall extends SchemeBase {
     public type: Type,
   ) {
     super();
-    if (typeVars instanceof TVSet) {
-      this.typeVars = typeVars;
-    } else { 
-      this.typeVars = new TVSet(typeVars);
+    this.typeVars = new TVSet();
+    const allowed = new TVSet(type.getTypeVars());
+    for (const tv of typeVars) {
+      if (allowed.has(tv)) {
+        this.typeVars.add(tv);
+      }
     }
   }
 
