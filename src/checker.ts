@@ -34,8 +34,9 @@ import {
   TypeclassNotFoundDiagnostic,
   TypeclassDeclaredTwiceDiagnostic,
 } from "./diagnostics";
-import { assert, isDebug, assertNever, first, isEmpty, last, MultiMap } from "./util";
+import { assert, isDebug, assertNever, first, isEmpty, last, MultiMap, customInspectSymbol, InspectFn } from "./util";
 import { Analyser } from "./analysis";
+import { CustomInspectFunction, inspect, InspectOptions } from "util";
 
 const MAX_TYPE_ERROR_COUNT = 5;
 
@@ -85,6 +86,10 @@ abstract class TypeBase {
     return false;
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return describeType(this as any);
+  }
+
 }
 
 class TVar extends TypeBase {
@@ -114,6 +119,10 @@ class TVar extends TypeBase {
       ? this : other.substitute(sub);
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return 'a' + this.id;
+  }
+
 }
 
 export class TNil extends TypeBase {
@@ -132,6 +141,10 @@ export class TNil extends TypeBase {
     
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return '{}'
+  }
+
 }
 
 export class TAbsent extends TypeBase {
@@ -148,6 +161,10 @@ export class TAbsent extends TypeBase {
 
   public *getTypeVars(): Iterable<TVar> {
     
+  }
+
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return 'Abs';
   }
 
 }
@@ -173,6 +190,10 @@ export class TPresent extends TypeBase {
 
   public shallowClone(): Type {
     return new TPresent(this.type, this.node);
+  }
+
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return inspect(this.type);
   }
 
 }
@@ -223,6 +244,10 @@ export class TArrow extends TypeBase {
     return changed ? new TArrow(newParamType, newReturnType, this.node) : this;
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return inspect(this.paramType) + ' -> ' + inspect(this.returnType);
+  }
+
 }
 
 export class TCon extends TypeBase {
@@ -266,6 +291,14 @@ export class TCon extends TypeBase {
     return changed ? new TCon(this.id, newArgTypes, this.displayName, this.node) : this;
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    let out = this.displayName;
+    for (const argType of this.argTypes) {
+      out += ' ' + inspect(argType);
+    }
+    return out;
+  }
+
 }
 
 class TTuple extends TypeBase {
@@ -303,6 +336,17 @@ class TTuple extends TypeBase {
       newElementTypes.push(newElementType);
     }
     return changed ? new TTuple(newElementTypes, this.node) : this;
+  }
+
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    let out = '(';
+    let first = true;
+    for (const elementType of this.elementTypes) {
+      if (first) first = false;
+      else out += ', ';
+      out += inspect(elementType);
+    }
+    return out + ')';
   }
 
 }
@@ -355,6 +399,19 @@ export class TField extends TypeBase {
       ? new TField(this.name, newType, newRestType, this.node) : this;
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    let out = '{ ' + this.name + ': ' + inspect(this.type);
+    let type = this.restType;
+    while (type.kind === TypeKind.Field) {
+      out += '; ' + type.name + ': ' + inspect(type.type);
+      type = type.restType;
+    }
+    if (type.kind !== TypeKind.Nil) {
+      out += '; ' + inspect(type);
+    }
+    return out + ' }'
+  }
+
 }
 
 export class TApp extends TypeBase {
@@ -402,6 +459,10 @@ export class TApp extends TypeBase {
     return changed ? new TApp(newOperatorType, newArgType, this.node) : this;
   }
 
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return inspect(this.left) + ' ' + inspect(this.right);
+  }
+
 }
 
 export class TNominal extends TypeBase {
@@ -428,6 +489,10 @@ export class TNominal extends TypeBase {
 
   public substitute(_sub: TVSub): Type {
     return this;
+  }
+
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return this.decl.name.text;
   }
 
 }
@@ -723,8 +788,8 @@ class CEqual extends ConstraintBase {
     );
   }
 
-  public dump(): void {
-    console.error(`${describeType(this.left)} ~ ${describeType(this.right)}`);
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return `${inspect(this.left)} ~ ${inspect(this.right)}`;
   }
 
 }
@@ -745,6 +810,10 @@ class CMany extends ConstraintBase {
       newElements.push(element.substitute(sub));
     }
     return new CMany(newElements);
+  }
+
+  public [customInspectSymbol](depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return this.elements.map(el => inspect(el)).join('\n');
   }
 
 }
@@ -774,6 +843,15 @@ class Forall extends SchemeBase {
     } else { 
       this.typeVars = new TVSet(typeVars);
     }
+  }
+
+  protected [customInspectSymbol](depth: number, inspectOptions: InspectOptions, inspect: InspectFn): string {
+     let out = 'forall';
+     if (this.typeVars.size > 0) {
+       out += ' ' + [...this.typeVars].map(tv => inspect(tv)).join(' ');
+     }
+     out += '. ' + inspect(this.type);
+     return out;
   }
 
 }
@@ -1106,7 +1184,7 @@ export class Checker {
 
   private createSubstitution(scheme: Scheme): TVSub {
     const sub = new TVSub();
-  const tvs = [...scheme.typeVars]
+    const tvs = [...scheme.typeVars]
     for (const tv of tvs) {
       sub.set(tv, this.createTypeVar());
     }
@@ -2333,17 +2411,16 @@ export class Checker {
       }
 
     }
- 
+
     visitElements(node.elements);
 
     this.contexts.pop();
     this.popContext(context);
 
     this.solve(new CMany(constraints), this.solution);
- 
 
   }
-  
+
   private lookupClass(name: string): ClassDeclaration | null {
     return this.classDecls.get(name) ?? null;
   }
