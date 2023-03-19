@@ -331,14 +331,14 @@ export class ConsoleDiagnostics implements Diagnostics {
         if (leftNode !== null) {
           this.writer.indent();
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
-          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.left) + ANSI_RESET + ` was inferred from diagnostic expression:\n\n`);
+          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.left) + ANSI_RESET + ` was inferred from this expression:\n\n`);
           this.writer.write(printNode(leftNode) + '\n');
           this.writer.dedent();
         }
         if (rightNode !== null) {
           this.writer.indent();
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
-          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.right) + ANSI_RESET + ` was inferred from diagnostic expression:\n\n`);
+          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.right) + ANSI_RESET + ` was inferred from this expression:\n\n`);
           this.writer.write(printNode(rightNode) + '\n');
           this.writer.dedent();
         }
@@ -361,17 +361,17 @@ export class ConsoleDiagnostics implements Diagnostics {
         this.writer.indent();
         if (diagnostic.missing !== null) {
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`field '${diagnostic.fieldName}' is missing in diagnostic construct\n\n`);
+          this.writer.write(`field '${diagnostic.fieldName}' is missing in this construct\n\n`);
           this.writer.write(printNode(diagnostic.missing) + '\n');
         }
         if (diagnostic.present !== null) {
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`field '${diagnostic.fieldName}' is required in diagnostic construct\n\n`);
+          this.writer.write(`field '${diagnostic.fieldName}' is required in this construct\n\n`);
           this.writer.write(printNode(diagnostic.present) + '\n');
         }
         if (diagnostic.cause !== null) {
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`because of a constraint on diagnostic node:\n\n`);
+          this.writer.write(`because of a constraint on this node:\n\n`);
           this.writer.write(printNode(diagnostic.cause) + '\n');
         }
         this.writer.dedent();
@@ -495,7 +495,6 @@ export function describeType(type: Type): string {
         out += '; ' + type.name + ': ' + describeType(type.type);
         type = type.restType;
       }
-
       if (type.kind !== TypeKind.Nil) {
         out += '; ' + describeType(type);
       }
@@ -511,6 +510,8 @@ export function describeType(type: Type): string {
       return 'Abs';
     case TypeKind.Present:
       return describeType(type.type);
+    default:
+      assertNever(type);
   }
 }
 
@@ -522,6 +523,8 @@ function describeKind(kind: Kind): string {
       return describeKind(kind.left) + ' -> ' + describeKind(kind.right);
     case KindType.Star:
       return '*';
+    default:
+      assertNever(kind);
   }
 }
 
