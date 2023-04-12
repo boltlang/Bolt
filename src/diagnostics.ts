@@ -361,17 +361,17 @@ export class ConsoleDiagnostics implements Diagnostics {
         this.writer.indent();
         if (diagnostic.missing !== null) {
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`field '${diagnostic.fieldName}' is missing in diagnostic construct\n\n`);
+          this.writer.write(`field '${diagnostic.fieldName}' is missing in this construct\n\n`);
           this.writer.write(printNode(diagnostic.missing) + '\n');
         }
         if (diagnostic.present !== null) {
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`field '${diagnostic.fieldName}' is required in diagnostic construct\n\n`);
+          this.writer.write(`field '${diagnostic.fieldName}' is required in this construct\n\n`);
           this.writer.write(printNode(diagnostic.present) + '\n');
         }
         if (diagnostic.cause !== null) {
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`because of a constraint on diagnostic node:\n\n`);
+          this.writer.write(`because of a constraint on this node:\n\n`);
           this.writer.write(printNode(diagnostic.cause) + '\n');
         }
         this.writer.dedent();
