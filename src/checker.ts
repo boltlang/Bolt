@@ -1481,10 +1481,6 @@ export class Checker {
 
       case SyntaxKind.InstanceDeclaration:
       {
-        const cls = node.getScope().lookup(node.name.text, Symkind.Typeclass) as ClassDeclaration | null;
-        if (cls === null) {
-          this.diagnostics.add(new TypeclassNotFoundDiagnostic(node.name));
-        }
         for (const element of node.elements) {
           this.infer(element);
         }
@@ -2008,6 +2004,9 @@ export class Checker {
 
       case SyntaxKind.InstanceDeclaration:
       {
+        if (!this.classDecls.has(node.name.text)) {
+          this.diagnostics.add(new TypeclassNotFoundDiagnostic(node.name));
+        }
         const env = node.typeEnv = new TypeEnv(parentEnv);
         for (const element of node.elements) {
           this.initialize(element, env);
