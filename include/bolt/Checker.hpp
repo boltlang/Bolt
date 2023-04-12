@@ -272,8 +272,8 @@ namespace bolt {
 
     InferContext* Parent;
 
-    inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env, Type* ReturnType):
-      Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env), ReturnType(ReturnType) {}
+    //inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env, Type* ReturnType):
+    //  Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env), ReturnType(ReturnType) {}
 
     inline InferContext(InferContext* Parent = nullptr):
       Parent(Parent), ReturnType(nullptr) {}

@@ -21,6 +21,7 @@ add_library(
   src/Scanner.cc
   src/Parser.cc
   src/Checker.cc
+  src/IPRGraph.cc
 )
 target_link_directories(
   BoltCore

@@ -15,6 +15,7 @@ namespace bolt {
   class Token;
   class SourceFile;
   class Scope;
+  class Pattern;
 
   enum class NodeType {
     Equals,
@@ -121,10 +122,13 @@ namespace bolt {
     Node* Source;
     std::unordered_map<ByteString, Node*> Mapping;
 
+    void scan(Node* X);
+
+    void addBindings(Pattern* X, Node* ToInsert);
+
   public:
 
-    inline Scope(Node* Source):
-      Source(Source) {}
+    Scope(Node* Source);
 
     Node* lookup(SymbolPath Path);
 
@@ -990,7 +994,7 @@ namespace bolt {
 
   class LetDeclaration : public Node {
 
-    Scope TheScope;
+    Scope* TheScope = nullptr;
 
   public:
 
@@ -1014,7 +1018,6 @@ namespace bolt {
       class TypeAssert* TypeAssert,
       LetBody* Body
     ): Node(NodeType::LetDeclaration),
-       TheScope(this),
        PubKeyword(PubKeyword),
        LetKeyword(LetKeywod),
        MutKeyword(MutKeyword),
@@ -1024,7 +1027,10 @@ namespace bolt {
        Body(Body) {}
 
     inline Scope* getScope() override {
-      return &TheScope;
+      if (TheScope == nullptr) {
+        TheScope = new Scope(this);
+      }
+      return TheScope;
     }
 
     void setParents() override;
@@ -1094,7 +1100,7 @@ namespace bolt {
 
   class SourceFile : public Node {
 
-    Scope TheScope;
+    Scope* TheScope = nullptr;
 
   public:
     
@@ -1103,7 +1109,7 @@ namespace bolt {
     std::vector<Node*> Elements;
 
     SourceFile(TextFile& File, std::vector<Node*> Elements):
-      Node(NodeType::SourceFile), TheScope(this), File(File), Elements(Elements) {}
+      Node(NodeType::SourceFile), File(File), Elements(Elements) {}
 
     inline TextFile& getTextFile() {
       return File;
@@ -1115,7 +1121,10 @@ namespace bolt {
     Token* getLastToken() override;
 
     inline Scope* getScope() override {
-      return &TheScope;
+      if (TheScope == nullptr) {
+        TheScope = new Scope(this);
+      }
+      return TheScope;
     }
 
     ~SourceFile();

@@ -5,6 +5,49 @@
 
 namespace bolt {
 
+  Scope::Scope(Node* Source):
+    Source(Source) {
+      scan(Source);
+    }
+
+  void Scope::scan(Node* X) {
+    switch (X->Type) {
+      case NodeType::ExpressionStatement:
+      case NodeType::ReturnStatement:
+      case NodeType::IfStatement:
+        break;
+      case NodeType::SourceFile:
+      {
+        auto Y = static_cast<SourceFile*>(X);
+        for (auto Element: Y->Elements) {
+          scan(Element);
+        }
+        break;
+      }
+      case NodeType::LetDeclaration:
+      {
+        auto Y = static_cast<LetDeclaration*>(X);
+        addBindings(Y->Pattern, Y);
+        break;
+      }
+      default:
+        ZEN_UNREACHABLE
+    }
+  }
+
+  void Scope::addBindings(Pattern* X, Node* ToInsert) {
+    switch (X->Type) {
+      case NodeType::BindPattern:
+      {
+        auto Y = static_cast<BindPattern*>(X);
+        Mapping.emplace(Y->Name->Text, ToInsert);
+        break;
+      }
+      default:
+        ZEN_UNREACHABLE
+    }
+  }
+
   Node* Scope::lookup(SymbolPath Path) {
     auto Curr = this;
     do {

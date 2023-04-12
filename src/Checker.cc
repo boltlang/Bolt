@@ -268,7 +268,6 @@ namespace bolt {
 
         auto NewCtx = new InferContext();
         Y->Ctx = NewCtx;
-        std::cerr << Y << std::endl;
 
         Contexts.push_back(NewCtx);
 
@@ -287,6 +286,7 @@ namespace bolt {
             case NodeType::LetBlockBody:
             {
               auto Z = static_cast<LetBlockBody*>(Y->Body);
+              NewCtx->ReturnType = createTypeVar();
               for (auto Element: Z->Elements) {
                 forwardDeclare(Element);
               }
@@ -369,8 +369,7 @@ namespace bolt {
             case NodeType::LetBlockBody:
             {
               auto Z = static_cast<LetBlockBody*>(Y->Body);
-              RetType = createTypeVar();
-              NewCtx->ReturnType = RetType;
+              RetType = Y->Ty;
               for (auto Element: Z->Elements) {
                 infer(Element);
               }
@@ -523,6 +522,8 @@ namespace bolt {
         ZEN_ASSERT(Y->Name->ModulePath.empty());
         auto Ctx = lookupCall(Y, Y->Name->getSymbolPath());
         if (Ctx) {
+          /* std::cerr << "recursive call!\n"; */
+          ZEN_ASSERT(Ctx->ReturnType != nullptr);
           return Ctx->ReturnType;
         }
         auto Scm = lookup(Y->Name->Name->Text);
@@ -645,7 +646,7 @@ namespace bolt {
         case ConstraintKind::Equal:
         {
           auto Y = static_cast<CEqual*>(Constraint);
-          //std::cerr << describe(Y->Left) << " ~ " << describe(Y->Right) << std::endl;
+          /* std::cerr << describe(Y->Left) << " ~ " << describe(Y->Right) << std::endl; */
           if (!unify(Y->Left, Y->Right, Solution)) {
             DE.add<UnificationErrorDiagnostic>(Y->Left->substitute(Solution), Y->Right->substitute(Solution), Y->Source);
           }
