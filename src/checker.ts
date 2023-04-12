@@ -1106,7 +1106,7 @@ export class Checker {
 
   private createSubstitution(scheme: Scheme): TVSub {
     const sub = new TVSub();
-  const tvs = [...scheme.typeVars]
+    const tvs = [...scheme.typeVars]
     for (const tv of tvs) {
       sub.set(tv, this.createTypeVar());
     }
@@ -2339,7 +2339,6 @@ export class Checker {
     this.popContext(context);
 
     this.solve(new CMany(constraints), this.solution);
- 
 
   }
   
