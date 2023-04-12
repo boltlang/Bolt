@@ -331,14 +331,14 @@ export class ConsoleDiagnostics implements Diagnostics {
         if (leftNode !== null) {
           this.writer.indent();
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
-          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.left) + ANSI_RESET + ` was inferred from diagnostic expression:\n\n`);
+          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.left) + ANSI_RESET + ` was inferred from this expression:\n\n`);
           this.writer.write(printNode(leftNode) + '\n');
           this.writer.dedent();
         }
         if (rightNode !== null) {
           this.writer.indent();
           this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + `info: ` + ANSI_RESET);
-          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.right) + ANSI_RESET + ` was inferred from diagnostic expression:\n\n`);
+          this.writer.write(`type ` + ANSI_FG_GREEN + describeType(diagnostic.right) + ANSI_RESET + ` was inferred from this expression:\n\n`);
           this.writer.write(printNode(rightNode) + '\n');
           this.writer.dedent();
         }

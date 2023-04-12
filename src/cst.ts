@@ -39,9 +39,8 @@ export class TextPosition {
       } else {
         this.column++;
       }
-      this.offset += text.length;
     }
-
+    this.offset += text.length;
   }
 
 }
@@ -617,7 +616,7 @@ export class StringLiteral extends TokenBase {
       } else if (code <= 127) {
         out += '\\x' + code.toString(16).padStart(2, '0');
       } else {
-        out += '\\u' + code.toString(17).padStart(4, '0');
+        out += '\\u' + code.toString(16).padStart(4, '0');
       }
     }
     out += '"';
