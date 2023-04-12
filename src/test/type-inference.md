@@ -195,3 +195,17 @@ mod CD.
     let alpha: A.Foo
 ```
 
+
+## A polymorphic function is properly generalized when assigned to a new variable
+
+```
+let id x = x
+let id2 = id
+let id3 = id
+
+id3 1
+id3 "bla"
+
+id2 1
+id2 "bla"
+````
