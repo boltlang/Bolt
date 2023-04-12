@@ -34,8 +34,9 @@ import {
   TypeclassNotFoundDiagnostic,
   TypeclassDeclaredTwiceDiagnostic,
 } from "./diagnostics";
-import { assert, isDebug, assertNever, first, isEmpty, last, MultiMap } from "./util";
+import { assert, assertNever, first, isEmpty, last, MultiMap, toStringTag, InspectFn } from "./util";
 import { Analyser } from "./analysis";
+import { InspectOptions } from "util";
 
 const MAX_TYPE_ERROR_COUNT = 5;
 
@@ -114,6 +115,10 @@ class TVar extends TypeBase {
       ? this : other.substitute(sub);
   }
 
+  public [toStringTag]() {
+    return 'a' + this.id;
+  }
+
 }
 
 export class TNil extends TypeBase {
@@ -132,6 +137,10 @@ export class TNil extends TypeBase {
     
   }
 
+  public [toStringTag]() {
+    return '∂Abs';
+  }
+
 }
 
 export class TAbsent extends TypeBase {
@@ -148,6 +157,10 @@ export class TAbsent extends TypeBase {
 
   public *getTypeVars(): Iterable<TVar> {
     
+  }
+
+  public [toStringTag]() {
+    return 'Abs';
   }
 
 }
@@ -173,6 +186,10 @@ export class TPresent extends TypeBase {
 
   public shallowClone(): Type {
     return new TPresent(this.type, this.node);
+  }
+
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    return 'Pre ' + inspect(this.type, options);
   }
 
 }
@@ -223,6 +240,10 @@ export class TArrow extends TypeBase {
     return changed ? new TArrow(newParamType, newReturnType, this.node) : this;
   }
 
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    return inspect(this.paramType, options) + ' -> ' + inspect(this.returnType, options);
+  }
+
 }
 
 export class TCon extends TypeBase {
@@ -266,6 +287,10 @@ export class TCon extends TypeBase {
     return changed ? new TCon(this.id, newArgTypes, this.displayName, this.node) : this;
   }
 
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    return this.displayName + ' ' + this.argTypes.map(t => inspect(t, options)).join(' ');
+  }
+
 }
 
 class TTuple extends TypeBase {
@@ -303,6 +328,10 @@ class TTuple extends TypeBase {
       newElementTypes.push(newElementType);
     }
     return changed ? new TTuple(newElementTypes, this.node) : this;
+  }
+
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    return this.elementTypes.map(t => inspect(t, options)).join(' × ');
   }
 
 }
@@ -355,6 +384,10 @@ export class TField extends TypeBase {
       ? new TField(this.name, newType, newRestType, this.node) : this;
   }
 
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    return '{ ' + this.name + ' : ' + inspect(this.type, options) + ' | ' + inspect(this.restType, options) + ' }';
+  }
+
 }
 
 export class TApp extends TypeBase {
@@ -402,6 +435,10 @@ export class TApp extends TypeBase {
     return changed ? new TApp(newOperatorType, newArgType, this.node) : this;
   }
 
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    return inspect(this.left, options) + ' ' + inspect(this.right, options);
+  }
+
 }
 
 export class TNominal extends TypeBase {
@@ -428,6 +465,10 @@ export class TNominal extends TypeBase {
 
   public substitute(_sub: TVSub): Type {
     return this;
+  }
+
+  public [toStringTag]() {
+    return this.decl.name.text;
   }
 
 }
@@ -636,6 +677,17 @@ class TVSet {
     return this.mapping.values();
   }
 
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
+    let out = '{ ';
+    let first = true;
+    for (const tv of this) {
+      if (first) first = false;
+      else out += ', ';
+      out += inspect(tv, options);
+    }
+    return out + ' }';
+  }
+
 }
 
 class TVSub {
@@ -667,13 +719,10 @@ class TVSub {
 const enum ConstraintKind {
   Equal,
   Many,
-  Shaped,
-  Class,
+  Empty,
 }
 
 abstract class ConstraintBase {
-
-  public abstract substitute(sub: TVSub): Constraint;
 
   public constructor(
     public node: Syntax | null = null
@@ -701,6 +750,10 @@ abstract class ConstraintBase {
     return first(this.getNodes()[Symbol.iterator]()) ?? null;
   }
 
+  public abstract freeTypeVars(): Iterable<TVar>;
+
+  public abstract substitute(sub: TVSub, node: Syntax | null): Constraint;
+
 }
 
 class CEqual extends ConstraintBase {
@@ -710,21 +763,26 @@ class CEqual extends ConstraintBase {
   public constructor(
     public left: Type,
     public right: Type,
-    public node: Syntax,
+    public node: Syntax | null,
   ) {
     super();
   }
 
-  public substitute(sub: TVSub): Constraint {
+  public substitute(sub: TVSub, node: Syntax | null = null): CEqual {
     return new CEqual(
       this.left.substitute(sub),
       this.right.substitute(sub),
-      this.node,
+      node,
     );
   }
 
-  public dump(): void {
-    console.error(`${describeType(this.left)} ~ ${describeType(this.right)}`);
+  public *freeTypeVars(): Iterable<TVar> {
+    yield* this.left.getTypeVars();
+    yield* this.right.getTypeVars();
+  }
+
+  public [toStringTag](_currentDepth: number, options: InspectOptions, inspect: InspectFn): string {
+    return inspect(this.left, options) + ' ~ ' + inspect(this.right, options);
   }
 
 }
@@ -739,12 +797,47 @@ class CMany extends ConstraintBase {
     super();
   }
 
-  public substitute(sub: TVSub): Constraint {
+  public substitute(sub: TVSub, node: Syntax | null = null): CMany {
     const newElements = [];
     for (const element of this.elements) {
-      newElements.push(element.substitute(sub));
+      newElements.push(element.substitute(sub, node));
     }
     return new CMany(newElements);
+  }
+
+  public *freeTypeVars(): Iterable<TVar> {
+    for (const element of this.elements) {
+      yield* element.freeTypeVars();
+    }
+  }
+
+  public [toStringTag](currentDepth: number, { depth = 2, ...options }: InspectOptions, inspect: InspectFn): string {
+    if (this.elements.length === 0) {
+      return '[]';
+    }
+    let out = '[\n';
+    const newOptions = { ...options, depth: depth === null ? null : depth - 1 };
+    out += this.elements.map(constraint => '  ' + inspect(constraint, newOptions)).join('\n');
+    out += '\n]';
+    return out;
+  }
+
+}
+
+class CEmpty extends ConstraintBase {
+
+  public readonly kind = ConstraintKind.Empty;
+
+  public substitute(_sub: TVSub, _node: Syntax | null = null): Constraint {
+    return this;
+  }
+
+  public *freeTypeVars(): Iterable<TVar> {
+    
+  }
+
+  public [toStringTag]() {
+    return 'ε';
   }
 
 }
@@ -752,6 +845,7 @@ class CMany extends ConstraintBase {
 type Constraint
   = CEqual
   | CMany
+  | CEmpty
 
 class ConstraintSet extends Array<Constraint> {
 }
@@ -761,19 +855,33 @@ abstract class SchemeBase {
 
 class Forall extends SchemeBase {
 
-  public typeVars: TVSet;
-
   public constructor(
-    typeVars: Iterable<TVar>,
-    public constraints: Iterable<Constraint>,
+    public typeVars: TVSet,
+    public constraint: Constraint,
     public type: Type,
   ) {
     super();
-    if (typeVars instanceof TVSet) {
-      this.typeVars = typeVars;
-    } else { 
-      this.typeVars = new TVSet(typeVars);
+  }
+
+  public *freeTypeVars(): Iterable<TVar> {
+    for (const tv of this.constraint.freeTypeVars()) {
+      if (!this.typeVars.has(tv)) {
+        yield tv;
+      }
     }
+    for (const tv of this.type.getTypeVars()) {
+      if (!this.typeVars.has(tv)) {
+        yield tv;
+      }
+    }
+  }
+
+  public static mono(type: Type): Forall {
+    return new Forall(new TVSet, new CEmpty, type);
+  }
+
+  public static fromArrays(typeVars: TVar[], constraints: Constraint[], type: Type): Forall {
+    return new Forall(new TVSet(typeVars), new CMany(constraints), type);
   }
 
 }
@@ -814,9 +922,6 @@ class TypeEnv {
   }
 
   public add(name: string, scheme: Scheme, kind: Symkind): void {
-    if (isDebug) {
-      validateScheme(scheme);
-    }
     this.mapping.add(name, [kind, scheme]);
   }
 
@@ -827,6 +932,17 @@ class TypeEnv {
       }
     }
     return null;
+  }
+
+  public hasTypeVar(seek: TVar): boolean {
+    for (const [_name, [_kind, scheme]] of this.mapping) {
+      for (const tv of scheme.freeTypeVars()) {
+        if (tv.id === seek.id) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
 }
@@ -885,7 +1001,7 @@ export interface InferContext {
 }
 
 function isFunctionDeclarationLike(node: LetDeclaration): boolean {
-  return node.pattern.kind === SyntaxKind.NamedPattern
+  return (node.pattern.kind === SyntaxKind.NamedPattern || node.pattern.kind === SyntaxKind.NestedPattern && node.pattern.pattern.kind === SyntaxKind.NamedPattern)
       && (node.params.length > 0 || (node.body !== null && node.body.kind === SyntaxKind.BlockBody));
 }
 
@@ -920,18 +1036,18 @@ export class Checker {
     const a = new TVar(this.nextTypeVarId++);
     const b = new TVar(this.nextTypeVarId++);
 
-    this.globalTypeEnv.add('$', new Forall([ a, b ], [], new TArrow(new TArrow(new TArrow(a, b), a), b)), Symkind.Var);
-    this.globalTypeEnv.add('String', new Forall([], [], this.stringType), Symkind.Type);
-    this.globalTypeEnv.add('Int', new Forall([], [], this.intType), Symkind.Type);
-    this.globalTypeEnv.add('Bool', new Forall([], [], this.boolType), Symkind.Type);
-    this.globalTypeEnv.add('True', new Forall([], [], this.boolType), Symkind.Var);
-    this.globalTypeEnv.add('False', new Forall([], [], this.boolType), Symkind.Var);
-    this.globalTypeEnv.add('+', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    this.globalTypeEnv.add('-', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    this.globalTypeEnv.add('*', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    this.globalTypeEnv.add('/', new Forall([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
-    this.globalTypeEnv.add('==', new Forall([ a ], [], TArrow.build([ a, a ], this.boolType)), Symkind.Var);
-    this.globalTypeEnv.add('not', new Forall([], [], new TArrow(this.boolType, this.boolType)), Symkind.Var);
+    this.globalTypeEnv.add('$', Forall.fromArrays([ a, b ], [], new TArrow(new TArrow(new TArrow(a, b), a), b)), Symkind.Var);
+    this.globalTypeEnv.add('String', Forall.fromArrays([], [], this.stringType), Symkind.Type);
+    this.globalTypeEnv.add('Int', Forall.fromArrays([], [], this.intType), Symkind.Type);
+    this.globalTypeEnv.add('Bool', Forall.fromArrays([], [], this.boolType), Symkind.Type);
+    this.globalTypeEnv.add('True', Forall.fromArrays([], [], this.boolType), Symkind.Var);
+    this.globalTypeEnv.add('False', Forall.fromArrays([], [], this.boolType), Symkind.Var);
+    this.globalTypeEnv.add('+', Forall.fromArrays([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('-', Forall.fromArrays([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('*', Forall.fromArrays([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('/', Forall.fromArrays([], [], TArrow.build([ this.intType, this.intType ], this.intType)), Symkind.Var);
+    this.globalTypeEnv.add('==', Forall.fromArrays([ a ], [], TArrow.build([ a, a ], this.boolType)), Symkind.Var);
+    this.globalTypeEnv.add('not', Forall.fromArrays([], [], new TArrow(this.boolType, this.boolType)), Symkind.Var);
 
   }
 
@@ -972,6 +1088,23 @@ export class Checker {
   private popContext(context: InferContext) {
     assert(this.contexts[this.contexts.length-1] === context);
     this.contexts.pop();
+  }
+
+  private generalize(type: Type, constraints: Constraint[], env: TypeEnv): Scheme {
+    const tvs = new TVSet();
+    for (const tv of type.getTypeVars()) {
+      if  (!env.hasTypeVar(tv)) {
+        tvs.add(tv);
+      }
+    }
+    for (const constraint of constraints) {
+      for (const tv of constraint.freeTypeVars()) {
+        if (!env.hasTypeVar(tv)) {
+          tvs.add(tv);
+        }
+      }
+    }
+    return new Forall(tvs, new CMany(constraints), type);
   }
 
   private lookupKind(env: KindEnv, node: NodeWithReference, emitDiagnostic = true): Kind | null {
@@ -1104,6 +1237,10 @@ export class Checker {
     return context.returnType;
   }
 
+  private getTypeEnv(): TypeEnv {
+    return this.getContext().env;
+  }
+
   private createSubstitution(scheme: Scheme): TVSub {
     const sub = new TVSub();
     const tvs = [...scheme.typeVars]
@@ -1114,12 +1251,27 @@ export class Checker {
   }
 
   private instantiate(scheme: Scheme, node: Syntax | null, sub = this.createSubstitution(scheme)): Type {
-    for (const constraint of scheme.constraints) {
-      const substituted = constraint.substitute(sub);
-      substituted.node = node;
-      substituted.prevInstantiation = constraint;
-      this.addConstraint(substituted);
+    const update = (constraint: CEqual) => {
+      constraint.node = node;
+      constraint.prevInstantiation = scheme.constraint;
     }
+    const transform = (constraint: Constraint): Constraint => {
+      switch (constraint.kind) {
+        case ConstraintKind.Many:
+          const newConstraints: Constraint[] = [];
+          for (const element of constraint.elements) {
+            newConstraints.push(transform(element));
+          }
+          return new CMany(newConstraints);
+        case ConstraintKind.Empty:
+          return constraint;
+        case ConstraintKind.Equal:
+          const newConstraint = constraint.substitute(sub);
+          update(newConstraint);
+          return newConstraint;
+      }
+    }
+    this.addConstraint(transform(scheme.constraint));
     return scheme.type.substitute(sub);
   }
 
@@ -1535,34 +1687,23 @@ export class Checker {
         if (isFunctionDeclarationLike(node)) {
           break;
         }
+        const ctx = this.getContext();
+        const constraints: ConstraintSet = [];
+        const innerCtx: InferContext = {
+          ...ctx,
+          constraints,
+        };
+        this.pushContext(innerCtx);
         let type;
-        if (node.pattern.kind === SyntaxKind.WrappedOperator) {
-          type = this.createTypeVar();
-          this.addBinding(node.pattern.operator.text, new Forall([], [], type), Symkind.Var);
-        } else {
-          type = this.inferBindings(node.pattern, [], []);
-        }
         if (node.typeAssert !== null) {
-          this.addConstraint(
-            new CEqual(
-              this.inferTypeExpression(node.typeAssert.typeExpression),
-              type,
-              node
-            )
-          );
+          type = this.inferTypeExpression(node.typeAssert.typeExpression);
         }
         if (node.body !== null) {
+          let bodyType;
           switch (node.body.kind) {
             case SyntaxKind.ExprBody:
             {
-              const type2 = this.inferExpression(node.body.expression);
-              this.addConstraint(
-                new CEqual(
-                  type,
-                  type2,
-                  node
-                )
-              );
+              bodyType = this.inferExpression(node.body.expression);
               break;
             }
             case SyntaxKind.BlockBody:
@@ -1571,7 +1712,23 @@ export class Checker {
               assert(false);
             }
           }
+          if (type === undefined) {
+            type = bodyType;
+          } else {
+            constraints.push(
+              new CEqual(
+                type,
+                bodyType,
+                node.body
+              )
+            );
+          }
         }
+        if (type === undefined) {
+          type = this.createTypeVar();
+        }
+        this.popContext(innerCtx);
+        this.inferBindings(node.pattern, type, undefined, constraints, true);
         break;
       }
 
@@ -1613,9 +1770,11 @@ export class Checker {
             returnType: context.returnType,
           };
           this.pushContext(newContext);
+          const armPatternType = this.createTypeVar();
+          this.inferBindings(arm.pattern, armPatternType);
           this.addConstraint(
             new CEqual(
-              this.inferBindings(arm.pattern, [], []),
+              armPatternType,
               exprType,
               arm.pattern,
             )
@@ -1814,10 +1973,10 @@ export class Checker {
               this.diagnostics.add(new BindingNotFoundDiagnostic([], node.name.text, node.name));
             }
             type = this.createTypeVar();
-            this.addBinding(node.name.text, new Forall([], [], type), Symkind.Type);
+            this.addBinding(node.name.text, Forall.mono(type), Symkind.Type);
           } else {
             assert(isEmpty(scheme.typeVars));
-            assert(isEmpty(scheme.constraints));
+            assert(scheme.constraint.kind === ConstraintKind.Empty);
             type = scheme.type;
           }
           break;
@@ -1856,94 +2015,99 @@ export class Checker {
 
   }
 
-  public inferBindings(pattern: Pattern, typeVars: Iterable<TVar>, constraints: Iterable<Constraint>): Type {
+  public inferBindings(pattern: Pattern, type: Type, typeVars = new TVSet, constraints: Constraint[] = [], generalize = false): void {
 
     switch (pattern.kind) {
 
       case SyntaxKind.NamedPattern:
       {
-        const type = this.createTypeVar();
-        this.addBinding(pattern.name.text, new Forall(typeVars, constraints, type), Symkind.Var);
-        return type;
+        let scheme;
+        const env = this.getTypeEnv();
+        if (generalize) {
+          scheme = this.generalize(type, constraints, env);
+        } else {
+          scheme = new Forall(typeVars, new CMany(constraints), type);
+        }
+        this.addBinding(pattern.name.text, scheme, Symkind.Var);
+        break;
       }
 
       case SyntaxKind.NestedPattern:
-        return this.inferBindings(pattern.pattern, typeVars, constraints);
+        this.inferBindings(pattern.pattern, type, typeVars, constraints);
+        break;
 
-      case SyntaxKind.NamedTuplePattern:
-      {
-        const scheme = this.lookup(pattern.name, Symkind.Type);
-        if (scheme === null) {
-          return this.createTypeVar();
-        }
-        let tupleType = pattern.elements.map(p => this.inferBindings(p, typeVars, constraints));
-        // FIXME not tested
-        return TApp.build(
-          new TNominal(scheme.type.node as StructDeclaration | EnumDeclaration, pattern),
-          tupleType
-        );
-      }
+      // case SyntaxKind.NamedTuplePattern:
+      // {
+      //   const scheme = this.lookup(pattern.name, Symkind.Type);
+      //   if (scheme === null) {
+      //     return this.createTypeVar();
+      //   }
+      //   let tupleType = new TTuple(pattern.elements.map(p =>
+      //     this.inferBindings(p, this.createTypeVar(), typeVars, constraints));
+      //   // FIXME not tested
+      //   this.addConstraint(new CEqual(tupleType, type, pattern));
+      //   return TApp.build(
+      //     new TNominal(scheme.type.node as StructDeclaration | EnumDeclaration, pattern),
+      //     tupleType
+      //   );
+      // }
 
       case SyntaxKind.LiteralPattern:
       {
-        let type;
+        let literalType;
         switch (pattern.token.kind) {
           case SyntaxKind.Integer:
-            type = this.getIntType();
+            literalType = this.getIntType();
             break;
           case SyntaxKind.StringLiteral:
-            type = this.getStringType();
+            literalType = this.getStringType();
             break;
         }
-        type = type.shallowClone();
-        type.node = pattern;
-        return type;
+        literalType = literalType.shallowClone();
+        literalType.node = pattern;
+        this.addConstraint(
+          new CEqual(
+            literalType,
+            type,
+            pattern,
+          )
+        );
+        break;
       }
 
       case SyntaxKind.DisjunctivePattern:
       {
-        const type = this.createTypeVar();
-        this.addConstraint(
-          new CEqual(
-            this.inferBindings(pattern.left, typeVars, constraints),
-            type,
-            pattern.left
-          )
-        );
-        this.addConstraint(
-          new CEqual(
-            this.inferBindings(pattern.right, typeVars, constraints),
-            type,
-            pattern.left
-          )
-        );
-        return type;
+        this.inferBindings(pattern.left, type, typeVars, constraints),
+        this.inferBindings(pattern.right, type, typeVars, constraints);
+        break;
       }
 
       case SyntaxKind.StructPattern:
       {
         const variadicMember = getVariadicMember(pattern);
-        let type: Type;
+        let structType: Type;
         if (variadicMember === null) {
-          type = new TNil(pattern);
-        } else if (variadicMember.pattern === null) {
-          type = this.createTypeVar();
+          structType = new TNil(pattern);
         } else {
-          type = this.inferBindings(variadicMember.pattern, typeVars, constraints);
+          structType = this.createTypeVar();
+          if (variadicMember.pattern !== null) {
+            this.inferBindings(variadicMember.pattern, structType, typeVars, constraints);
+          }
         }
         for (const member of pattern.members) {
           switch (member.kind) {
             case SyntaxKind.StructPatternField:
             {
-              const fieldType = this.inferBindings(member.pattern, typeVars, constraints);
-              type = new TField(member.name.text, new TPresent(fieldType), type, pattern);
+              const fieldType = this.createTypeVar();
+              this.inferBindings(member.pattern, fieldType, typeVars, constraints);
+              structType = new TField(member.name.text, new TPresent(fieldType), fieldType, pattern);
               break;
             }
             case SyntaxKind.PunnedStructPatternField:
             {
               const fieldType = this.createTypeVar();
-              this.addBinding(member.name.text, new Forall([], [], fieldType), Symkind.Var);
-              type = new TField(member.name.text, new TPresent(fieldType), type, pattern);
+              this.addBinding(member.name.text, Forall.mono(fieldType), Symkind.Var);
+              structType = new TField(member.name.text, new TPresent(fieldType), fieldType, pattern);
               break;
             }
             case SyntaxKind.VariadicStructPatternElement:
@@ -1952,7 +2116,14 @@ export class Checker {
               assertNever(member);
           }
         }
-        return TField.sort(type);
+        this.addConstraint(
+          new CEqual(
+            type,
+            TField.sort(structType),
+            pattern,
+          )
+        );
+        break;
       }
 
       default:
@@ -1994,7 +2165,7 @@ export class Checker {
         const env = node.typeEnv = new TypeEnv(parentEnv);
         for (const tv of node.types) {
           assert(tv.kind === SyntaxKind.VarTypeExpression);
-          env.add(tv.name.text, new Forall([], [], this.createTypeVar(tv)), Symkind.Type);
+          env.add(tv.name.text, Forall.mono(this.createTypeVar(tv)), Symkind.Type);
         }
         for (const element of node.elements) {
           this.initialize(element, env);
@@ -2045,11 +2216,11 @@ export class Checker {
         const kindArgs = [];
         for (const name of node.varExps) {
           const kindArg = this.createTypeVar();
-          env.add(name.text, new Forall([], [], kindArg), Symkind.Type);
+          env.add(name.text, Forall.mono(kindArg), Symkind.Type);
           kindArgs.push(kindArg);
         }
         const type = TApp.build(new TNominal(node, node), kindArgs);
-        parentEnv.add(node.name.text, new Forall(typeVars, constraints, type), Symkind.Type);
+        parentEnv.add(node.name.text, new Forall(typeVars, new CMany(constraints), type), Symkind.Type);
         let elementTypes: Type[] = [];
         if (node.members !== null) {
           for (const member of node.members) {
@@ -2076,7 +2247,7 @@ export class Checker {
                 throw new Error(`Unexpected ${member}`);
             }
             // FIXME `typeVars` may contain too much irrelevant type variables
-            parentEnv.add(member.name.text, new Forall(typeVars, constraints, ctorType), Symkind.Var);
+            parentEnv.add(member.name.text, new Forall(typeVars, new CMany(constraints), ctorType), Symkind.Var);
             elementTypes.push(elementType);
           }
         }
@@ -2100,11 +2271,11 @@ export class Checker {
         for (const varExpr of node.varExps) {
           const typeVar = this.createTypeVar();
           kindArgs.push(typeVar);
-          env.add(varExpr.text, new Forall([], [], typeVar), Symkind.Type);
+          env.add(varExpr.text, Forall.mono(typeVar), Symkind.Type);
         }
         const type = this.inferTypeExpression(node.typeExpression);
         this.popContext(context);
-        const scheme = new Forall(typeVars, constraints, TApp.build(type, kindArgs));
+        const scheme = new Forall(typeVars, new CMany(constraints), TApp.build(type, kindArgs));
         parentEnv.add(node.name.text, scheme, Symkind.Type); 
         break;
       }
@@ -2124,7 +2295,7 @@ export class Checker {
         const kindArgs = [];
         for (const varExpr of node.varExps) {
           const kindArg = this.createTypeVar();
-          env.add(varExpr.text, new Forall([], [], kindArg), Symkind.Type);
+          env.add(varExpr.text, Forall.mono(kindArg), Symkind.Type);
           kindArgs.push(kindArg);
         }
         let type: Type = new TNil(node);
@@ -2134,7 +2305,7 @@ export class Checker {
           }
         }
         this.popContext(context);
-        parentEnv.add(node.name.text, new Forall(typeVars, constraints, TField.sort(type)), Symkind.Type);
+        parentEnv.add(node.name.text, new Forall(typeVars, new CMany(constraints), TField.sort(type)), Symkind.Type);
         //parentEnv.add(node.name.text, new Forall(typeVars, constraints, new TArrow(type, TApp.build(type, kindArgs))), Symkind.Var);
         break;
       }
@@ -2189,24 +2360,27 @@ export class Checker {
         }
 
         const env = node.typeEnv!;
-        const inner: InferContext = {
+        const innerCtx: InferContext = {
           typeVars,
           constraints,
           env,
           returnType: null,
         };
-        node.context = inner;
+        node.context = innerCtx;
 
-        this.contexts.push(inner);
+        this.contexts.push(innerCtx);
 
         const returnType = this.createTypeVar();
-        inner.returnType = returnType;
+        innerCtx.returnType = returnType;
 
-        const paramTypes = node.params.map(
-          param => this.inferBindings(param.pattern, [], [])
-        );
+        const paramTypes = node.params.map(param => {
+          const paramType = this.createTypeVar();
+          this.inferBindings(param.pattern, paramType)
+          return paramType;
+        });
 
         let type = TArrow.build(paramTypes, returnType, node);
+
         if (node.typeAssert !== null) {
           this.addConstraint(
             new CEqual(
@@ -2235,20 +2409,13 @@ export class Checker {
         if (node.parent!.kind !== SyntaxKind.InstanceDeclaration) {
           const scopeDecl = node.parent!.getScope().node;
           const outer = {
-            typeVars: inner.typeVars,
-            constraints: inner.constraints,
+            typeVars: innerCtx.typeVars,
+            constraints: innerCtx.constraints,
             env: scopeDecl.typeEnv!,
             returnType: null,
           };
           this.contexts.push(outer)
-          let ty2;
-          if (node.pattern.kind === SyntaxKind.WrappedOperator) {
-            ty2 = this.createTypeVar();
-            this.addBinding(node.pattern.operator.text, new Forall([], [], ty2), Symkind.Var);
-          } else {
-            ty2 = this.inferBindings(node.pattern, typeVars, constraints);
-          }
-          this.addConstraint(new CEqual(ty2, type, node));
+          this.inferBindings(node.pattern, type, typeVars, constraints);
           this.contexts.pop();
         }
       }
@@ -2260,18 +2427,17 @@ export class Checker {
         if (element.kind === SyntaxKind.LetDeclaration
             && isFunctionDeclarationLike(element)) {
           if (!this.analyser.isReferencedInParentScope(element)) {
-            assert(element.pattern.kind === SyntaxKind.NamedPattern);
-            const scheme = this.lookup(element.pattern.name, Symkind.Var);
+            const scheme = this.lookup(element.name, Symkind.Var);
             assert(scheme !== null);
             this.instantiate(scheme, null);
           }
         } else {
-          const elementHasTypeEnv = hasTypeEnv(element);
-          if (elementHasTypeEnv) {
+          const shouldChangeTypeEnv = shouldChangeTypeEnvDuringVisit(element);
+          if (shouldChangeTypeEnv) {
             this.pushContext({ ...this.getContext(), env: element.typeEnv! });
           }
           this.infer(element);
-          if(elementHasTypeEnv) {
+          if(shouldChangeTypeEnv) {
             this.contexts.pop();
           }
         }
@@ -2443,7 +2609,7 @@ export class Checker {
             left = find(left);
             right = find(right);
 
-            //console.log(`unify ${describeType(left)} ~ ${describeType(right)}`);
+            // console.log(`unify ${describeType(left)} @ ${left.node && left.node.constructor && left.node.constructor.name} ~ ${describeType(right)} @ ${right.node && right.node.constructor && right.node.constructor.name}`);
 
             const swap = () => { [right, left] = [left, right]; }
 
@@ -2497,9 +2663,9 @@ export class Checker {
               // into a special chain.
               TypeBase.join(left, right);
 
-              if (left.node !== undefined) {
-                right.node = left.node;
-              }
+              // if (left.node !== null) {
+              //   right.node = left.node;
+              // }
 
               return true;
             }
@@ -2637,7 +2803,7 @@ export class Checker {
 
 }
 
-function getVariadicMember(node: StructPattern) {
+function getVariadicMember(node: StructPattern) {1713
   for (const member of node.members) { 
     if (member.kind === SyntaxKind.VariadicStructPatternElement) {
       return member;
@@ -2653,10 +2819,9 @@ type HasTypeEnv
   | ModuleDeclaration
   | SourceFile
 
-function hasTypeEnv(node: Syntax): node is HasTypeEnv {
+function shouldChangeTypeEnvDuringVisit(node: Syntax): node is HasTypeEnv {
   return node.kind === SyntaxKind.ClassDeclaration
       || node.kind === SyntaxKind.InstanceDeclaration
-      || node.kind === SyntaxKind.LetDeclaration
       || node.kind === SyntaxKind.ModuleDeclaration
       || node.kind === SyntaxKind.SourceFile
 }

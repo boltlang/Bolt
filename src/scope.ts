@@ -111,11 +111,7 @@ export class Scope {
             }
           }
         } else {
-          if (node.pattern.kind === SyntaxKind.WrappedOperator) {
-            this.add(node.pattern.operator.text, node, Symkind.Var);
-          } else {
-            this.scanPattern(node.pattern, node);
-          }
+          this.scanPattern(node.pattern, node);
         }
         break;
       }
