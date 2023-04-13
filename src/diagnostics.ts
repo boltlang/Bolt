@@ -529,11 +529,10 @@ function describeKind(kind: Kind): string {
 }
 
 function getFirstNodeInTypeChain(type: Type): Syntax | null {
-  let curr = type.next;
-  while (curr !== type && (curr.kind === TypeKind.Var || curr.node === null)) {
-    curr = curr.next;
+  while (type !== type && (type.kind === TypeKind.Var || type.node === null)) {
+    type = type.next;
   }
-  return curr.node;
+  return type.node;
 }
 
 interface PrintExcerptOptions {
