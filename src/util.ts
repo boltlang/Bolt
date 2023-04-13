@@ -1,13 +1,20 @@
 
 import path from "path"
 import stream from "stream"
-import { inspect } from "util";
+import { InspectOptions } from "util";
 
 export const isDebug = process.env['NODE_ENV'] === 'development';
 
-export const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom') 
+export const toStringTag = Symbol.for('nodejs.util.inspect.custom');
 
-export type InspectFn = typeof inspect;
+export type InspectFn = (value: any, options: InspectOptions) => string;
+
+export function isIterable(value: any): value is Iterable<any> {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  return typeof(value[Symbol.iterator]) === 'function';
+}
 
 export function first<T>(iter: Iterator<T>): T | undefined {
   return iter.next().value;
@@ -79,6 +86,10 @@ export function implementationLimitation(test: boolean): asserts test {
   if (!test) {
     throw new Error(`We encountered a limitation to the implementation of this compiler. You are invited to search this issue on GitHub or to create a new one at ${GITHUB_ISSUE_URL} .`);
   }
+}
+
+export function unreachable(): never {
+  throw new Error(`Code that should never be executed was reached during operation.`);
 }
 
 export function assertNever(value: never): never {
@@ -201,7 +212,7 @@ export class MultiMap<K, V> {
     }
   }
 
-  public *[Symbol.iterator](): Iterable<[K, V]> {
+  public *[Symbol.iterator](): Iterator<[K, V]> {
     for (const [key, elements] of this.mapping) {
       for (const value of elements) {
         yield [key, value];

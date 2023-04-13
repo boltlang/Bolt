@@ -852,7 +852,7 @@ export class Parser {
       this.getToken()
       this.getToken();
       this.getToken();
-      pattern = new WrappedOperator(t1, t2, t3);
+      pattern = new NestedPattern(t1, new NamedPattern(t2), t3);
     } else {
       pattern = this.parsePattern();
     }

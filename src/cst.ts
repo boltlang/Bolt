@@ -2,7 +2,7 @@
 import type stream from "stream";
 import path from "path"
 
-import { assert, implementationLimitation, IndentWriter, JSONObject, JSONValue } from "./util";
+import { assert, implementationLimitation, IndentWriter, JSONObject, JSONValue, unreachable } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
 import { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
 import { Emitter } from "./emitter";
@@ -39,9 +39,8 @@ export class TextPosition {
       } else {
         this.column++;
       }
-      this.offset += text.length;
     }
-
+    this.offset += text.length;
   }
 
 }
@@ -618,7 +617,7 @@ export class StringLiteral extends TokenBase {
       } else if (code <= 127) {
         out += '\\x' + code.toString(16).padStart(2, '0');
       } else {
-        out += '\\u' + code.toString(17).padStart(4, '0');
+        out += '\\u' + code.toString(16).padStart(4, '0');
       }
     }
     out += '"';
@@ -1387,7 +1386,7 @@ export class NamedPattern extends SyntaxBase {
   public readonly kind = SyntaxKind.NamedPattern;
 
   public constructor(
-    public name: Identifier,
+    public name: Identifier | CustomOperator,
   ) {
     super();
   }
@@ -2687,12 +2686,24 @@ export class LetDeclaration extends SyntaxBase {
     public letKeyword: LetKeyword,
     public foreignKeyword: ForeignKeyword | null,
     public mutKeyword: MutKeyword | null,
-    public pattern: Pattern | WrappedOperator,
+    public pattern: Pattern,
     public params: Param[],
     public typeAssert: TypeAssert | null,
     public body: Body | null,
   ) {
     super();
+  }
+
+  public get name(): Identifier | CustomOperator {
+    switch (this.pattern.kind) {
+      case SyntaxKind.NamedPattern:
+        return this.pattern.name;
+      case SyntaxKind.NestedPattern:
+        assert(this.pattern.pattern.kind === SyntaxKind.NamedPattern);
+        return this.pattern.pattern.name;
+      default:
+        unreachable();
+    }
   }
 
   public clone(): LetDeclaration {

@@ -46,7 +46,7 @@ import {
   InstanceKeyword,
   Backslash,
 } from "./cst"
-import { Diagnostics, UnexpectedCharDiagnostic } from "./diagnostics"
+import { Diagnostics } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
 
 const EOF = '\uFFFF'
@@ -182,7 +182,6 @@ export class Scanner extends BufferedStream<Token> {
 
         case '"':
         {
-          const startPos = this.getCurrentPosition();
           let contents = '';
           let escaping = false;
           for (;;) {

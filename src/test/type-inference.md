@@ -195,6 +195,7 @@ mod CD.
     let alpha: A.Foo
 ```
 
+<<<<<<< HEAD
 ## Rest-expressions on extensible records work
 
 ```
@@ -207,3 +208,19 @@ let foo { x, y, .. } : Point -> Int = x + y
 
 foo { x = 1, y = 2 }
 ```
+=======
+
+## A polymorphic function is properly generalized when assigned to a new variable
+
+```
+let id x = x
+let id2 = id
+let id3 = id
+
+id3 1
+id3 "bla"
+
+id2 1
+id2 "bla"
+````
+>>>>>>> 11bae0fed0d58eafebd863b4e3bf117176176cb1
