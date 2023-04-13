@@ -2120,14 +2120,14 @@ export class Checker {
             {
               const fieldType = this.createTypeVar();
               this.inferBindings(member.pattern, fieldType, typeVars, constraints);
-              structType = new TField(member.name.text, new TPresent(fieldType), fieldType, pattern);
+              structType = new TField(member.name.text, new TPresent(fieldType), structType, pattern);
               break;
             }
             case SyntaxKind.PunnedStructPatternField:
             {
               const fieldType = this.createTypeVar();
               this.addBinding(member.name.text, Forall.mono(fieldType), Symkind.Var);
-              structType = new TField(member.name.text, new TPresent(fieldType), fieldType, pattern);
+              structType = new TField(member.name.text, new TPresent(fieldType), structType, pattern);
               break;
             }
             case SyntaxKind.VariadicStructPatternElement:
