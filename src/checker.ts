@@ -763,7 +763,7 @@ abstract class ConstraintBase {
 
   public abstract freeTypeVars(): Iterable<TVar>;
 
-  public abstract substitute(sub: TVSub, node: Syntax | null): Constraint;
+  public abstract substitute(sub: TVSub): Constraint;
 
 }
 
@@ -779,11 +779,11 @@ class CEqual extends ConstraintBase {
     super();
   }
 
-  public substitute(sub: TVSub, node: Syntax | null = null): CEqual {
+  public substitute(sub: TVSub): CEqual {
     return new CEqual(
       this.left.substitute(sub),
       this.right.substitute(sub),
-      node,
+      this.node,
     );
   }
 
@@ -808,10 +808,10 @@ class CMany extends ConstraintBase {
     super();
   }
 
-  public substitute(sub: TVSub, node: Syntax | null = null): CMany {
+  public substitute(sub: TVSub): CMany {
     const newElements = [];
     for (const element of this.elements) {
-      newElements.push(element.substitute(sub, node));
+      newElements.push(element.substitute(sub));
     }
     return new CMany(newElements);
   }
@@ -839,7 +839,7 @@ class CEmpty extends ConstraintBase {
 
   public readonly kind = ConstraintKind.Empty;
 
-  public substitute(_sub: TVSub, _node: Syntax | null = null): Constraint {
+  public substitute(_sub: TVSub): Constraint {
     return this;
   }
 
@@ -1271,10 +1271,6 @@ export class Checker {
   }
 
   private instantiate(scheme: Scheme, node: Syntax | null, sub = this.createSubstitution(scheme)): Type {
-    const update = (constraint: CEqual) => {
-      constraint.node = node;
-      constraint.prevInstantiation = scheme.constraint;
-    }
     const transform = (constraint: Constraint): Constraint => {
       switch (constraint.kind) {
         case ConstraintKind.Many:
@@ -1287,7 +1283,8 @@ export class Checker {
           return constraint;
         case ConstraintKind.Equal:
           const newConstraint = constraint.substitute(sub);
-          update(newConstraint);
+          newConstraint.node = node;
+          newConstraint.prevInstantiation = constraint;
           return newConstraint;
       }
     }
