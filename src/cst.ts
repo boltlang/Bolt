@@ -2,7 +2,7 @@
 import type stream from "stream";
 import path from "path"
 
-import { assert, implementationLimitation, IndentWriter, JSONObject, JSONValue, unreachable } from "./util";
+import { assert, deserializable, implementationLimitation, IndentWriter, JSONObject, JSONValue, nonenumerable, unreachable } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
 import { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
 import { Emitter } from "./emitter";
@@ -13,6 +13,7 @@ export type Value
   = bigint
   | string
 
+@deserializable()
 export class TextPosition {
 
   public constructor(
@@ -45,6 +46,7 @@ export class TextPosition {
 
 }
 
+@deserializable()
 export class TextRange {
 
   constructor(
@@ -63,6 +65,7 @@ export class TextRange {
 
 }
 
+@deserializable()
 export class TextFile {
 
   public constructor(
@@ -229,15 +232,21 @@ export type Syntax
   | StructExpressionElement
   | StructPatternElement
 
-function isIgnoredProperty(key: string): boolean {
+function isnonenumerabledProperty(key: string): boolean {
   return key === 'kind' || key === 'parent';
 }
 
 abstract class SyntaxBase {
 
+  @nonenumerable
+  public abstract readonly kind: SyntaxKind;
+
+  @nonenumerable
   public parent: Syntax | null = null;
 
+  @nonenumerable
   public inferredKind?: Kind;
+  @nonenumerable
   public inferredType?: Type;
 
   public abstract getFirstToken(): Token;
@@ -307,7 +316,7 @@ abstract class SyntaxBase {
     }
 
     for (const key of Object.getOwnPropertyNames(this)) {
-      if (isIgnoredProperty(key)) {
+      if (isnonenumerabledProperty(key)) {
         continue;
       }
       visit((this as any)[key]);
@@ -334,7 +343,7 @@ abstract class SyntaxBase {
 
   public *getFields(): Iterable<[string, any]> {
     for (const key of Object.getOwnPropertyNames(this)) {
-      if (!isIgnoredProperty(key)) {
+      if (!isnonenumerabledProperty(key)) {
         yield [key, (this as any)[key]];
       }
     }
@@ -368,7 +377,7 @@ abstract class SyntaxBase {
     const obj: JSONObject = {};
     obj['type'] = this.constructor.name;
     for (const [key, value] of this.getFields()) {
-      if (isIgnoredProperty(key)) {
+      if (isnonenumerabledProperty(key)) {
         continue;
       }
       obj[key] = encode(value);
@@ -417,7 +426,7 @@ abstract class SyntaxBase {
 export function forEachChild(node: Syntax, callback: (node: Syntax) => void): void {
 
   for (const key of Object.getOwnPropertyNames(node)) {
-    if (isIgnoredProperty(key)) {
+    if (isnonenumerabledProperty(key)) {
       continue;
     }
     visitField((node as any)[key]);
@@ -442,6 +451,7 @@ export function forEachChild(node: Syntax, callback: (node: Syntax) => void): vo
 
 abstract class TokenBase extends SyntaxBase {
 
+  @nonenumerable
   private endPos: TextPosition | null = null;
 
   public constructor(
@@ -505,6 +515,7 @@ abstract class VirtualTokenBase extends TokenBase {
   }
 }
 
+@deserializable()
 export class EndOfFile extends VirtualTokenBase {
 
   public readonly kind = SyntaxKind.EndOfFile;
@@ -515,6 +526,7 @@ export class EndOfFile extends VirtualTokenBase {
 
 }
 
+@deserializable()
 export class BlockEnd extends VirtualTokenBase {
 
   public readonly kind = SyntaxKind.BlockEnd;
@@ -525,6 +537,7 @@ export class BlockEnd extends VirtualTokenBase {
 
 }
 
+@deserializable()
 export class BlockStart extends VirtualTokenBase {
 
   public readonly kind = SyntaxKind.BlockStart;
@@ -535,6 +548,7 @@ export class BlockStart extends VirtualTokenBase {
 
 }
 
+@deserializable()
 export class LineFoldEnd extends VirtualTokenBase {
 
   public readonly kind = SyntaxKind.LineFoldEnd;
@@ -545,14 +559,15 @@ export class LineFoldEnd extends VirtualTokenBase {
 
 }
 
+@deserializable()
 export class Integer extends TokenBase {
 
   public readonly kind = SyntaxKind.Integer;
 
   public constructor(
+    startPos: TextPosition | null = null,
     public value: bigint,
     public radix: number,
-    startPos: TextPosition | null = null,
   ) {
     super(startPos);
   }
@@ -563,9 +578,9 @@ export class Integer extends TokenBase {
 
   public clone(): Integer {
     return new Integer(
+      this.startPos,
       this.value,
       this.radix,
-      this.startPos
     );
   }
 
@@ -586,13 +601,14 @@ export class Integer extends TokenBase {
 
 }
 
+@deserializable()
 export class StringLiteral extends TokenBase {
 
   public readonly kind = SyntaxKind.StringLiteral;
 
   public constructor(
-    public contents: string,
     startPos: TextPosition | null = null,
+    public contents: string,
   ) {
     super(startPos);
   }
@@ -603,8 +619,8 @@ export class StringLiteral extends TokenBase {
 
   public clone(): StringLiteral {
     return new StringLiteral(
+      this.startPos,
       this.contents,
-      this.startPos
     );
   }
 
@@ -626,61 +642,64 @@ export class StringLiteral extends TokenBase {
 
 }
 
+@deserializable()
 export class IdentifierAlt extends TokenBase {
 
   public readonly kind = SyntaxKind.IdentifierAlt;
 
   public constructor(
-    public text: string,
     startPos: TextPosition | null = null,
+    public text: string,
   ) {
     super(startPos);
   }
 
   public clone(): IdentifierAlt {
     return new IdentifierAlt(
+      this.startPos,
       this.text,
-      this.startPos
     );
   }
 
 }
 
+@deserializable()
 export class Identifier extends TokenBase {
 
   public readonly kind = SyntaxKind.Identifier;
 
   public constructor(
-    public text: string,
     startPos: TextPosition | null = null,
+    public text: string,
   ) {
     super(startPos);
   }
 
   public clone(): Identifier {
     return new Identifier(
+      this.startPos,
       this.text,
-      this.startPos
     );
   }
 
 }
 
+@deserializable()
 export class CustomOperator extends TokenBase {
 
   public readonly kind = SyntaxKind.CustomOperator;
 
   public constructor(
-    public text: string,
     startPos: TextPosition | null = null,
+    public text: string,
   ) {
     super(startPos);
   }
 
   public clone(): CustomOperator {
     return new CustomOperator(
-      this.text,
       this.startPos,
+      this.text,
     );
   }
 
@@ -695,26 +714,28 @@ export function isExprOperator(node: Syntax): node is ExprOperator {
       || node.kind === SyntaxKind.VBar
 }
 
+@deserializable()
 export class Assignment extends TokenBase {
 
   public readonly kind = SyntaxKind.Assignment;
 
   public constructor(
-    public text: string,
     startPos: TextPosition | null = null,
+    public text: string,
   ) {
     super(startPos);
   }
 
   public clone(): Assignment {
     return new Assignment(
+      this.startPos,
       this.text,
-      this.startPos
     );
   }
 
 }
 
+@deserializable()
 export class LParen extends TokenBase {
 
   public readonly kind = SyntaxKind.LParen;
@@ -729,6 +750,7 @@ export class LParen extends TokenBase {
 
 }
 
+@deserializable()
 export class RParen extends TokenBase {
 
   public readonly kind = SyntaxKind.RParen;
@@ -743,6 +765,7 @@ export class RParen extends TokenBase {
 
 }
 
+@deserializable()
 export class LBrace extends TokenBase {
 
   public readonly kind = SyntaxKind.LBrace;
@@ -757,6 +780,7 @@ export class LBrace extends TokenBase {
 
 }
 
+@deserializable()
 export class RBrace extends TokenBase {
 
   public readonly kind = SyntaxKind.RBrace;
@@ -771,6 +795,7 @@ export class RBrace extends TokenBase {
 
 }
 
+@deserializable()
 export class LBracket extends TokenBase {
 
   public readonly kind = SyntaxKind.LBracket;
@@ -785,6 +810,7 @@ export class LBracket extends TokenBase {
 
 }
 
+@deserializable()
 export class RBracket extends TokenBase {
 
   public readonly kind = SyntaxKind.RBracket;
@@ -799,6 +825,7 @@ export class RBracket extends TokenBase {
 
 }
 
+@deserializable()
 export class Dot extends TokenBase {
 
   public readonly kind = SyntaxKind.Dot;
@@ -813,6 +840,7 @@ export class Dot extends TokenBase {
 
 }
 
+@deserializable()
 export class Comma extends TokenBase {
 
   public readonly kind = SyntaxKind.Comma;
@@ -827,6 +855,7 @@ export class Comma extends TokenBase {
 
 }
 
+@deserializable()
 export class DotDot extends TokenBase {
 
   public readonly kind = SyntaxKind.DotDot;
@@ -841,6 +870,7 @@ export class DotDot extends TokenBase {
 
 }
 
+@deserializable()
 export class Colon extends TokenBase {
 
   public readonly kind = SyntaxKind.Colon;
@@ -855,6 +885,7 @@ export class Colon extends TokenBase {
 
 }
 
+@deserializable()
 export class Equals extends TokenBase {
 
   public readonly kind = SyntaxKind.Equals;
@@ -869,6 +900,7 @@ export class Equals extends TokenBase {
 
 }
 
+@deserializable()
 export class Backslash extends TokenBase {
 
   public readonly kind = SyntaxKind.Equals;
@@ -883,6 +915,7 @@ export class Backslash extends TokenBase {
 
 }
 
+@deserializable()
 export class IfKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.IfKeyword;
@@ -897,6 +930,7 @@ export class IfKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ElseKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ElseKeyword;
@@ -911,6 +945,7 @@ export class ElseKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ElifKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ElifKeyword;
@@ -925,6 +960,7 @@ export class ElifKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class StructKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.StructKeyword;
@@ -939,6 +975,7 @@ export class StructKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class EnumKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.EnumKeyword;
@@ -953,6 +990,7 @@ export class EnumKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ReturnKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ReturnKeyword;
@@ -967,6 +1005,7 @@ export class ReturnKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class MatchKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.MatchKeyword;
@@ -981,6 +1020,7 @@ export class MatchKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ForeignKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ForeignKeyword;
@@ -995,6 +1035,7 @@ export class ForeignKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ModKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ModKeyword;
@@ -1009,6 +1050,7 @@ export class ModKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class MutKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.MutKeyword;
@@ -1023,6 +1065,7 @@ export class MutKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ImportKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ImportKeyword;
@@ -1037,6 +1080,7 @@ export class ImportKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class ClassKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.ClassKeyword;
@@ -1051,6 +1095,7 @@ export class ClassKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class InstanceKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.InstanceKeyword;
@@ -1066,6 +1111,7 @@ export class InstanceKeyword extends TokenBase {
 }
 
 
+@deserializable()
 export class TypeKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.TypeKeyword;
@@ -1080,6 +1126,7 @@ export class TypeKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class PubKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.PubKeyword;
@@ -1094,6 +1141,7 @@ export class PubKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class LetKeyword extends TokenBase {
 
   public readonly kind = SyntaxKind.LetKeyword;
@@ -1108,6 +1156,7 @@ export class LetKeyword extends TokenBase {
 
 }
 
+@deserializable()
 export class RArrow extends TokenBase {
 
   public readonly kind = SyntaxKind.RArrow;
@@ -1122,6 +1171,7 @@ export class RArrow extends TokenBase {
 
 }
 
+@deserializable()
 export class RArrowAlt extends TokenBase {
 
   public readonly kind = SyntaxKind.RArrowAlt;
@@ -1136,6 +1186,7 @@ export class RArrowAlt extends TokenBase {
 
 }
 
+@deserializable()
 export class VBar extends TokenBase {
 
   public readonly kind = SyntaxKind.VBar;
@@ -1196,6 +1247,7 @@ export type Token
 export type TokenKind
   = Token['kind']
 
+@deserializable()
 export class ArrowTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ArrowTypeExpression;
@@ -1227,6 +1279,7 @@ export class ArrowTypeExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class TupleTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TupleTypeExpression;
@@ -1257,6 +1310,7 @@ export class TupleTypeExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ReferenceTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReferenceTypeExpression;
@@ -1288,6 +1342,7 @@ export class ReferenceTypeExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class AppTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.AppTypeExpression;
@@ -1319,6 +1374,7 @@ export class AppTypeExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class VarTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.VarTypeExpression;
@@ -1343,6 +1399,7 @@ export class VarTypeExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class NestedTypeExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.NestedTypeExpression;
@@ -1381,6 +1438,7 @@ export type TypeExpression
   | NestedTypeExpression
   | TupleTypeExpression
 
+@deserializable()
 export class NamedPattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.NamedPattern;
@@ -1409,6 +1467,7 @@ export class NamedPattern extends SyntaxBase {
 
 }
 
+@deserializable()
 export class TuplePattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TuplePattern;
@@ -1439,6 +1498,7 @@ export class TuplePattern extends SyntaxBase {
 
 }
 
+@deserializable()
 export class NamedTuplePattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.NamedTuplePattern;
@@ -1470,6 +1530,7 @@ export class NamedTuplePattern extends SyntaxBase {
 
 }
 
+@deserializable()
 export class StructPatternField extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructPatternField;
@@ -1500,6 +1561,7 @@ export class StructPatternField extends SyntaxBase {
 
 }
 
+@deserializable()
 export class VariadicStructPatternElement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.VariadicStructPatternElement;
@@ -1531,6 +1593,7 @@ export class VariadicStructPatternElement extends SyntaxBase {
 
 }
 
+@deserializable()
 export class PunnedStructPatternField extends SyntaxBase {
 
   public readonly kind = SyntaxKind.PunnedStructPatternField;
@@ -1560,6 +1623,7 @@ export type StructPatternElement
   | PunnedStructPatternField
   | StructPatternField
 
+@deserializable()
 export class StructPattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructPattern;
@@ -1590,6 +1654,7 @@ export class StructPattern extends SyntaxBase {
 
 }
 
+@deserializable()
 export class NestedPattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.NestedPattern;
@@ -1620,6 +1685,7 @@ export class NestedPattern extends SyntaxBase {
 
 }
 
+@deserializable()
 export class DisjunctivePattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.DisjunctivePattern;
@@ -1651,6 +1717,7 @@ export class DisjunctivePattern extends SyntaxBase {
 }
 
 
+@deserializable()
 export class LiteralPattern extends SyntaxBase {
 
   public readonly kind = SyntaxKind.LiteralPattern;
@@ -1684,6 +1751,7 @@ export type Pattern
   | DisjunctivePattern
   | LiteralPattern
 
+@deserializable()
 export class TupleExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TupleExpression;
@@ -1714,6 +1782,7 @@ export class TupleExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class NestedExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.NestedExpression;
@@ -1744,6 +1813,7 @@ export class NestedExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ConstantExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ConstantExpression;
@@ -1768,6 +1838,7 @@ export class ConstantExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class CallExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.CallExpression;
@@ -1799,6 +1870,7 @@ export class CallExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class StructExpressionField extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructExpressionField;
@@ -1829,6 +1901,7 @@ export class StructExpressionField extends SyntaxBase {
 
 }
 
+@deserializable()
 export class PunnedStructExpressionField extends SyntaxBase {
 
   public readonly kind = SyntaxKind.PunnedStructExpressionField;
@@ -1857,6 +1930,7 @@ export type StructExpressionElement
   = StructExpressionField
   | PunnedStructExpressionField;
 
+@deserializable()
 export class StructExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructExpression;
@@ -1887,6 +1961,7 @@ export class StructExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class MatchArm extends SyntaxBase {
 
   public readonly kind = SyntaxKind.MatchArm;
@@ -1917,6 +1992,7 @@ export class MatchArm extends SyntaxBase {
 
 }
 
+@deserializable()
 export class FunctionExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.FunctionExpression;
@@ -1948,6 +2024,7 @@ export class FunctionExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class MatchExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.MatchExpression;
@@ -1984,6 +2061,7 @@ export class MatchExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ReferenceExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReferenceExpression;
@@ -2015,6 +2093,7 @@ export class ReferenceExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class MemberExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.MemberExpression;
@@ -2043,6 +2122,7 @@ export class MemberExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class PrefixExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.PrefixExpression;
@@ -2071,6 +2151,7 @@ export class PrefixExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class PostfixExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.PostfixExpression;
@@ -2099,6 +2180,7 @@ export class PostfixExpression extends SyntaxBase {
 
 }
 
+@deserializable()
 export class InfixExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.InfixExpression;
@@ -2143,6 +2225,7 @@ export type Expression
   | PostfixExpression
   | FunctionExpression
 
+@deserializable()
 export class IfStatementCase extends SyntaxBase {
 
   public readonly kind = SyntaxKind.IfStatementCase;
@@ -2178,6 +2261,7 @@ export class IfStatementCase extends SyntaxBase {
 
 }
 
+@deserializable()
 export class IfStatement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.IfStatement;
@@ -2204,6 +2288,7 @@ export class IfStatement extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ReturnStatement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ReturnStatement;
@@ -2235,6 +2320,7 @@ export class ReturnStatement extends SyntaxBase {
 
 }
 
+@deserializable()
 export class AssignStatement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.AssignStatement;
@@ -2265,6 +2351,7 @@ export class AssignStatement extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ExpressionStatement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ExpressionStatement;
@@ -2295,6 +2382,7 @@ export type Statement
   | IfStatement
   | AssignStatement
 
+@deserializable()
 export class Param extends SyntaxBase {
 
   public readonly kind = SyntaxKind.Param;
@@ -2321,6 +2409,7 @@ export class Param extends SyntaxBase {
 
 }
 
+@deserializable()
 export class EnumDeclarationStructElement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.EnumDeclarationStructElement;
@@ -2356,6 +2445,7 @@ export class EnumDeclarationStructElement extends SyntaxBase {
 
 }
 
+@deserializable()
 export class EnumDeclarationTupleElement extends SyntaxBase {
 
   public readonly kind = SyntaxKind.EnumDeclarationTupleElement;
@@ -2391,10 +2481,12 @@ export type EnumDeclarationElement
   = EnumDeclarationStructElement
   | EnumDeclarationTupleElement
 
+@deserializable()
 export class EnumDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.EnumDeclaration;
 
+  @nonenumerable
   public typeEnv?: TypeEnv;
 
   public constructor(
@@ -2433,6 +2525,7 @@ export class EnumDeclaration extends SyntaxBase {
 
 }
 
+@deserializable()
 export class StructDeclarationField extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructDeclarationField;
@@ -2463,10 +2556,12 @@ export class StructDeclarationField extends SyntaxBase {
 
 }
 
+@deserializable()
 export class StructDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructDeclaration;
 
+  @nonenumerable
   public typeEnv?: TypeEnv;
 
   public constructor(
@@ -2505,6 +2600,7 @@ export class StructDeclaration extends SyntaxBase {
 
 }
 
+@deserializable()
 export class TypeAssert extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TypeAssert;
@@ -2537,6 +2633,7 @@ export type Body
   = ExprBody
   | BlockBody
 
+@deserializable()
 export class ExprBody extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ExprBody;
@@ -2569,6 +2666,7 @@ export type LetBodyElement
   = LetDeclaration
   | Statement
 
+@deserializable()
 export class BlockBody extends SyntaxBase {
 
   public readonly kind = SyntaxKind.BlockBody;
@@ -2600,6 +2698,7 @@ export class BlockBody extends SyntaxBase {
 
 }
 
+@deserializable()
 export class WrappedOperator extends SyntaxBase {
 
   public readonly kind = SyntaxKind.WrappedOperator;
@@ -2630,10 +2729,12 @@ export class WrappedOperator extends SyntaxBase {
 
 }
 
+@deserializable()
 export class TypeDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TypeDeclaration;
 
+  @nonenumerable
   public typeEnv?: TypeEnv;
 
   public constructor(
@@ -2671,14 +2772,21 @@ export class TypeDeclaration extends SyntaxBase {
 
 }
 
+@deserializable()
 export class LetDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.LetDeclaration;
 
+  @nonenumerable
   public scope?: Scope;
+
+  @nonenumerable
   public typeEnv?: TypeEnv;
 
+  @nonenumerable
   public activeCycle?: boolean;
+
+  @nonenumerable
   public context?: InferContext;
 
   public constructor(
@@ -2741,6 +2849,7 @@ export class LetDeclaration extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ImportDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ImportDeclaration;
@@ -2776,6 +2885,7 @@ export type Declaration
   | EnumDeclaration
   | TypeDeclaration
 
+@deserializable()
 export class Initializer extends SyntaxBase {
 
   public readonly kind = SyntaxKind.Initializer;
@@ -2804,6 +2914,7 @@ export class Initializer extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ClassConstraint extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ClassConstraint;
@@ -2832,6 +2943,7 @@ export class ClassConstraint extends SyntaxBase {
 
 }
 
+@deserializable()
 export class ClassConstraintClause extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ClassConstraintClause;
@@ -2867,10 +2979,12 @@ export type ClassDeclarationElement
   = LetDeclaration
   | TypeDeclaration
 
+@deserializable()
 export class ClassDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ClassDeclaration;
 
+  @nonenumerable
   public typeEnv?: TypeEnv;
 
   public constructor(
@@ -2970,10 +3084,12 @@ export type InstanceDeclarationElement
   = LetDeclaration
   | TypeDeclaration
 
+@deserializable()
 export class InstanceDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.InstanceDeclaration;
 
+  @nonenumerable
   public typeEnv?: TypeEnv;
 
   public constructor(
@@ -3016,11 +3132,14 @@ export class InstanceDeclaration extends SyntaxBase {
   }
 
 }
+@deserializable()
 export class ModuleDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ModuleDeclaration;
 
+  @nonenumerable
   public typeEnv?: TypeEnv;
+  @nonenumerable
   public kindEnv?: KindEnv;
 
   public constructor(
@@ -3066,12 +3185,16 @@ export type SourceFileElement
   | InstanceDeclaration
   | ModuleDeclaration
 
+@deserializable()
 export class SourceFile extends SyntaxBase {
 
   public readonly kind = SyntaxKind.SourceFile;
 
+  @nonenumerable
   public scope?: Scope;
+  @nonenumerable
   public typeEnv?: TypeEnv;
+  @nonenumerable
   public kindEnv?: KindEnv;
 
   public constructor(

@@ -1,7 +1,7 @@
 
 import { TypeKind, type Type, Kind, KindType } from "./checker";
 import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
-import { assertNever, countDigits, IndentWriter } from "./util";
+import { assertNever, countDigits, deserializable, IndentWriter } from "./util";
 
 const ANSI_RESET = "\u001b[0m"
 const ANSI_BOLD = "\u001b[1m"
@@ -47,12 +47,16 @@ const enum DiagnosticKind {
   FieldNotFound,
 }
 
-interface DiagnosticBase {
-  level: Level;
-  readonly kind: DiagnosticKind;
+abstract class DiagnosticBase {
+
+  public abstract readonly kind: DiagnosticKind;
+
+  public abstract level: Level;
+
 }
 
-export class UnexpectedCharDiagnostic implements DiagnosticBase {
+@deserializable()
+export class UnexpectedCharDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.UnexpectedChar;
 
@@ -63,13 +67,14 @@ export class UnexpectedCharDiagnostic implements DiagnosticBase {
     public position: TextPosition,
     public actual: string,
   ) {
-
+    super();
   }
 
 }
 
 
-export class UnexpectedTokenDiagnostic implements DiagnosticBase {
+@deserializable()
+export class UnexpectedTokenDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.UnexpectedToken;
 
@@ -80,12 +85,13 @@ export class UnexpectedTokenDiagnostic implements DiagnosticBase {
     public actual: Token,
     public expected: SyntaxKind[],
   ) {
-
+    super();
   }
 
 }
 
-export class TypeclassDeclaredTwiceDiagnostic implements DiagnosticBase {
+@deserializable()
+export class TypeclassDeclaredTwiceDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeclassDecaredTwice;
   
@@ -95,12 +101,13 @@ export class TypeclassDeclaredTwiceDiagnostic implements DiagnosticBase {
     public name: IdentifierAlt,
     public origDecl: ClassDeclaration,
   ) {
-
+    super();
   } 
 
 }
 
-export class TypeclassNotFoundDiagnostic implements DiagnosticBase {
+@deserializable()
+export class TypeclassNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeclassNotFound;
 
@@ -110,12 +117,13 @@ export class TypeclassNotFoundDiagnostic implements DiagnosticBase {
     public name: IdentifierAlt,
     public origin: InstanceDeclaration | ClassConstraint | null = null,
   ) {
-
+    super();
   }
 
 }
 
-export class BindingNotFoundDiagnostic implements DiagnosticBase {
+@deserializable()
+export class BindingNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.BindingNotFound;
 
@@ -126,12 +134,13 @@ export class BindingNotFoundDiagnostic implements DiagnosticBase {
     public name: string,
     public node: Syntax,
   ) {
-
+    super();
   }
 
 }
 
-export class TypeMismatchDiagnostic implements DiagnosticBase {
+@deserializable()
+export class TypeMismatchDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeMismatch;
 
@@ -143,12 +152,13 @@ export class TypeMismatchDiagnostic implements DiagnosticBase {
     public trace: Syntax[],
     public fieldPath: string[],
   ) {
-
+    super();
   }
 
 }
 
-export class FieldNotFoundDiagnostic implements DiagnosticBase {
+@deserializable()
+export class FieldNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.FieldNotFound;
 
@@ -160,12 +170,13 @@ export class FieldNotFoundDiagnostic implements DiagnosticBase {
     public present: Syntax | null,
     public cause: Syntax | null = null,
   ) {
-
+    super();
   }
 
 }
 
-export class KindMismatchDiagnostic implements DiagnosticBase {
+@deserializable()
+export class KindMismatchDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.KindMismatch;
 
@@ -176,12 +187,13 @@ export class KindMismatchDiagnostic implements DiagnosticBase {
     public right: Kind,
     public origin: Syntax | null,
   ) {
-  
+    super();
   }
 
 }
 
-export class ModuleNotFoundDiagnostic implements DiagnosticBase {
+@deserializable()
+export class ModuleNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.ModuleNotFound;
 
@@ -191,7 +203,7 @@ export class ModuleNotFoundDiagnostic implements DiagnosticBase {
     public modulePath: string[],
     public node: Syntax,
   ) {
-
+    super();
   }
 
 }

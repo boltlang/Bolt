@@ -34,9 +34,10 @@ import {
   TypeclassNotFoundDiagnostic,
   TypeclassDeclaredTwiceDiagnostic,
 } from "./diagnostics";
-import { assert, assertNever, first, isEmpty, last, MultiMap, toStringTag, InspectFn } from "./util";
+import { assert, assertNever, first, isEmpty, last, MultiMap, toStringTag, InspectFn, JSONValue, ignore, deserializable } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
+import { deserialize } from "v8";
 
 const MAX_TYPE_ERROR_COUNT = 5;
 
@@ -55,15 +56,13 @@ export enum TypeKind {
 
 abstract class TypeBase {
 
+  @ignore
   public abstract readonly kind: TypeKind;
 
+  @ignore
   public next: Type = this as any;
 
-  public constructor(
-    public node: Syntax | null = null
-  ) {
-
-  }
+  public abstract node: Syntax | null;
 
   public static join(a: Type, b: Type): void {
     const keep = a.next;
@@ -90,10 +89,18 @@ abstract class TypeBase {
 
 }
 
+export function isType(value: any): value is Type {
+  return value !== undefined
+      && value !== null
+      && value instanceof TypeBase;
+}
+
+@deserializable()
 class TVar extends TypeBase {
 
   public readonly kind = TypeKind.Var;
 
+  @ignore
   public context = new Set<ClassDeclaration>();
 
   public constructor(
@@ -127,6 +134,12 @@ export class TNil extends TypeBase {
 
   public readonly kind = TypeKind.Nil;
 
+  public constructor(
+    public node: Syntax | null = null
+  ) {
+    super();
+  }
+
   public substitute(_sub: TVSub): Type {
     return this;
   }
@@ -145,9 +158,16 @@ export class TNil extends TypeBase {
 
 }
 
+@deserializable()
 export class TAbsent extends TypeBase {
 
   public readonly kind = TypeKind.Absent;
+
+  public constructor(
+    public node: Syntax | null = null,
+  ) {
+    super();
+  }
 
   public substitute(_sub: TVSub): Type {
     return this;
@@ -167,15 +187,16 @@ export class TAbsent extends TypeBase {
 
 }
 
+@deserializable()
 export class TPresent extends TypeBase {
 
   public readonly kind = TypeKind.Present;
 
   public constructor(
     public type: Type,
-    node: Syntax | null = null,
+    public node: Syntax | null = null,
   ) {
-    super(node);
+    super();
   }
 
   public substitute(sub: TVSub): Type {
@@ -196,6 +217,7 @@ export class TPresent extends TypeBase {
 
 }
 
+@deserializable()
 export class TArrow extends TypeBase {
 
   public readonly kind = TypeKind.Arrow;
@@ -203,9 +225,9 @@ export class TArrow extends TypeBase {
   public constructor(
     public paramType: Type,
     public returnType: Type,
-    node: Syntax | null = null,
+    public node: Syntax | null = null,
   ) {
-    super(node);
+    super();
   }
 
   public static build(paramTypes: Type[], returnType: Type, node: Syntax | null = null): Type {
@@ -248,6 +270,7 @@ export class TArrow extends TypeBase {
 
 }
 
+@deserializable()
 export class TCon extends TypeBase {
 
   public readonly kind = TypeKind.Con;
@@ -258,7 +281,7 @@ export class TCon extends TypeBase {
     public displayName: string,
     public node: Syntax | null = null,
   ) {
-    super(node);
+    super();
   }
 
   public *getTypeVars(): Iterable<TVar> {
@@ -295,6 +318,7 @@ export class TCon extends TypeBase {
 
 }
 
+@deserializable()
 class TTuple extends TypeBase {
 
   public readonly kind = TypeKind.Tuple;
@@ -303,7 +327,7 @@ class TTuple extends TypeBase {
     public elementTypes: Type[],
     public node: Syntax | null = null,
   ) {
-    super(node);
+    super();
   }
 
   public *getTypeVars(): Iterable<TVar> {
@@ -338,6 +362,7 @@ class TTuple extends TypeBase {
 
 }
 
+@deserializable()
 export class TField extends TypeBase {
 
   public readonly kind = TypeKind.Field;
@@ -348,7 +373,7 @@ export class TField extends TypeBase {
     public restType: Type,
     public node: Syntax | null = null,
   ) {
-    super(node);
+    super();
   }
 
   public getTypeVars(): Iterable<TVar> {
@@ -401,6 +426,7 @@ export class TField extends TypeBase {
 
 }
 
+@deserializable()
 export class TApp extends TypeBase {
 
   public readonly kind = TypeKind.App;
@@ -410,7 +436,7 @@ export class TApp extends TypeBase {
     public right: Type,
     public node: Syntax | null = null
   ) {
-    super(node);
+    super();
   }
 
   public static build(resultType: Type, types: Type[], node: Syntax | null = null): Type {
@@ -452,6 +478,7 @@ export class TApp extends TypeBase {
 
 }
 
+@deserializable()
 export class TNominal extends TypeBase {
 
   public readonly kind = TypeKind.Nominal;
@@ -460,7 +487,7 @@ export class TNominal extends TypeBase {
     public decl: StructDeclaration | EnumDeclaration,
     public node: Syntax | null = null,
   ) {
-    super(node);
+    super();
   }
 
   public *getTypeVars(): Iterable<TVar> {

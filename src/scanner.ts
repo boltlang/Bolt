@@ -212,7 +212,7 @@ export class Scanner extends BufferedStream<Token> {
               }
             }
           }
-          return new StringLiteral(contents, startPos);
+          return new StringLiteral(startPos, contents);
         }
 
         case EOF:
@@ -233,7 +233,7 @@ export class Scanner extends BufferedStream<Token> {
           if (text === '') {
             return new Colon(startPos);
           } else if (text === '=') {
-            return new Assignment(':', startPos);
+            return new Assignment(startPos, ':');
           } else {
             throw new ScanError(this.file, startPos, ':' + text);
           }
@@ -273,9 +273,9 @@ export class Scanner extends BufferedStream<Token> {
           } else if (text === '=') {
             return new Equals(startPos);
           } else if (text.endsWith('=') && text[text.length-2] !== '=') {
-            return new Assignment(text.substring(0, text.length-1), startPos);
+            return new Assignment(startPos, text.substring(0, text.length-1));
           } else {
-            return new CustomOperator(text, startPos);
+            return new CustomOperator(startPos, text);
           }
         }
 
@@ -307,7 +307,7 @@ export class Scanner extends BufferedStream<Token> {
             this.getChar();
             value = value * BigInt(10) + BigInt(toDecimal(c1));
           }
-          return new Integer(value, 10, startPos);
+          return new Integer(startPos, value, 10);
         }
 
         case 'a':
@@ -385,9 +385,9 @@ export class Scanner extends BufferedStream<Token> {
             case 'mod': return new ModKeyword(startPos);
             default:
               if (isUpper(text[0])) {
-                return new IdentifierAlt(text, startPos);
+                return new IdentifierAlt(startPos, text);
               } else {
-                return new Identifier(text, startPos);
+                return new Identifier(startPos, text);
               }
           }
         }

@@ -4,10 +4,11 @@
   "description": "A new programming language for the web",
   "main": "lib/index.js",
   "bin": {
-    "bolt": "lib/bin/bolt.js"
+    "bolt": "lib/bin/bolt.js",
+    "bolt-self": "lib/bin/bolt-self.js"
   },
   "scripts": {
-    "test": "node ./lib/bin/bolt-selftest.js run"
+    "test": "node ./lib/bin/bolt-self.js check"
   },
   "repository": {
     "type": "git",
@@ -23,16 +24,12 @@
   "license": "MIT",
   "dependencies": {
     "commander": "^10.0.0",
+    "reflect-metadata": "^0.1.13",
     "source-map-support": "^0.5.21",
     "tslib": "^2.5.0",
     "yagl": "^0.5.1"
   },
   "devDependencies": {
-    "@types/commonmark": "^0.27.6",
-    "@types/glob": "^8.1.0",
-    "@types/node": "^18.15.11",
-    "@types/yargs": "^17.0.24",
-    "commonmark": "^0.30.0",
-    "glob": "^10.0.0"
+    "@types/node": "^18.15.11"
   }
 }
