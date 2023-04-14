@@ -1,0 +1,11 @@
+
+# populated by npm
+node_modules/
+
+# compiled TypeScript code from src/
+/lib/
+
+# local development helpers
+Makefile
+/*.bolt
+/*.c
