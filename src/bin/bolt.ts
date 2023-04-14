@@ -12,9 +12,57 @@ import { TypeclassDictPassing } from "../passes/TypeclassDictPass"
 import BoltToC from "../passes/BoltToC"
 import BoltToJS from "../passes/BoltToJS"
 import { stripExtension } from "../util"
+import { sync as which } from "which"
+import { spawnSync } from "child_process"
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
+}
+
+// The positions of all program arguments which are not flags will be parsed
+// into this structure.
+const commandIndices = [];
+
+for (let i = 2; i < process.argv.length; i++) {
+  const arg = process.argv[i];
+  if (!arg.startsWith('-')) {
+    commandIndices.push(i);
+    break;
+  }
+}
+
+// Iterate in reverse over the command indices, such that bolt-self-test-run
+// gets precedence over bolt-self-test
+for (let i = commandIndices.length-1; i >= 0; i--) {
+
+  const argvIndex = commandIndices[i];
+
+  // Construct the binary name from the parts of which we stored the locations in `commandIndices`.
+  // Build from the first command up until the command at index `i`
+  const binaryName = 'bolt-' + commandIndices.slice(0, i+1).map(index => process.argv[index]).join('-');
+
+  const binaryPath = which(binaryName, { nothrow: true });
+
+  // Reconstruct the args list without the commands in `binaryName`
+  const argv = [];
+  for (let i = 2; i < argvIndex; i++) {
+    const arg = process.argv[i];
+    if (arg.startsWith('-')) {
+      argv.push(arg);
+    }
+  }
+  for (let i = argvIndex+1; i < process.argv.length; i++) {
+    argv.push(process.argv[i]);
+  }
+
+  // Only execute and return if the command was actually found. Otherwise, try
+  // the other possible commands or execute the default program if this was the
+  // last iteration.
+  if (binaryPath) {
+    const exitCode = spawnSync(binaryPath, argv, { stdio: 'inherit' }).status;
+    process.exit(exitCode || 0);
+  }
+
 }
 
 const program = new Command();
@@ -25,8 +73,7 @@ program
   .version('0.0.1')
   .option('-C, --work-dir', 'Act as if run from this directory', '.');
 
-program
-  .command('build', 'Build a set of Bolt sources')
+program.command('build', 'Build a set of Bolt sources')
   .argument('<file>', 'Path to the Bolt program to compile')
   .option('--no-typecheck', 'Skip type-checking')
   .option('--no-emit', 'Do not output compiled files')
