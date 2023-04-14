@@ -23,10 +23,12 @@
   "author": "Sam Vervaeck",
   "license": "MIT",
   "dependencies": {
+    "@types/which": "^3.0.0",
     "commander": "^10.0.0",
     "reflect-metadata": "^0.1.13",
     "source-map-support": "^0.5.21",
     "tslib": "^2.5.0",
+    "which": "^3.0.0",
     "yagl": "^0.5.1"
   },
   "devDependencies": {
