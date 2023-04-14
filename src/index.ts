@@ -25,3 +25,12 @@ export function parseSourceFile(file: TextFile, diagnostics: Diagnostics): Sourc
   return sourceFile;
 }
 
+export * from "./util"
+export * from "./diagnostics"
+export * from "./scanner"
+export * from "./parser"
+export * from "./cst"
+export * from "./analysis"
+export * from "./checker"
+export * from "./program"
+
