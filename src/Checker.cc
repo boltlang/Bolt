@@ -18,25 +18,25 @@ namespace bolt {
         break;
       case TypeKind::Arrow:
       {
-        auto Y = static_cast<TArrow*>(this);
-        for (auto Ty: Y->ParamTypes) {
+        auto Arrow = static_cast<TArrow*>(this);
+        for (auto Ty: Arrow->ParamTypes) {
           Ty->addTypeVars(TVs);
         }
-        Y->ReturnType->addTypeVars(TVs);
+        Arrow->ReturnType->addTypeVars(TVs);
         break;
       }
       case TypeKind::Con:
       {
-        auto Y = static_cast<TCon*>(this);
-        for (auto Ty: Y->Args) {
+        auto Con = static_cast<TCon*>(this);
+        for (auto Ty: Con->Args) {
           Ty->addTypeVars(TVs);
         }
         break;
       }
       case TypeKind::Tuple:
       {
-        auto Y = static_cast<TTuple*>(this);
-        for (auto Ty: Y->ElementTypes) {
+        auto Tuple = static_cast<TTuple*>(this);
+        for (auto Ty: Tuple->ElementTypes) {
           Ty->addTypeVars(TVs);
         }
         break;
@@ -52,18 +52,18 @@ namespace bolt {
         return static_cast<TVar*>(this)->Id == TV->Id;
       case TypeKind::Arrow:
       {
-        auto Y = static_cast<TArrow*>(this);
-        for (auto Ty: Y->ParamTypes) {
+        auto Arrow = static_cast<TArrow*>(this);
+        for (auto Ty: Arrow->ParamTypes) {
           if (Ty->hasTypeVar(TV)) {
             return true;
           }
         }
-        return Y->ReturnType->hasTypeVar(TV);
+        return Arrow->ReturnType->hasTypeVar(TV);
       }
       case TypeKind::Con:
       {
-        auto Y = static_cast<TCon*>(this);
-        for (auto Ty: Y->Args) {
+        auto Con = static_cast<TCon*>(this);
+        for (auto Ty: Con->Args) {
           if (Ty->hasTypeVar(TV)) {
             return true;
           }
@@ -72,8 +72,8 @@ namespace bolt {
       }
       case TypeKind::Tuple:
       {
-        auto Y = static_cast<TTuple*>(this);
-        for (auto Ty: Y->ElementTypes) {
+        auto Tuple = static_cast<TTuple*>(this);
+        for (auto Ty: Tuple->ElementTypes) {
           if (Ty->hasTypeVar(TV)) {
             return true;
           }
@@ -89,24 +89,24 @@ namespace bolt {
     switch (Kind) {
       case TypeKind::Var:
       {
-        auto Y = static_cast<TVar*>(this);
-        auto Match = Sub.find(Y);
-        return Match != Sub.end() ? Match->second->substitute(Sub) : Y;
+        auto TV = static_cast<TVar*>(this);
+        auto Match = Sub.find(TV);
+        return Match != Sub.end() ? Match->second->substitute(Sub) : this;
       }
       case TypeKind::Arrow:
       {
-        auto Y = static_cast<TArrow*>(this);
+        auto Arrow = static_cast<TArrow*>(this);
         bool Changed = false;
         std::vector<Type*> NewParamTypes;
-        for (auto Ty: Y->ParamTypes) {
+        for (auto Ty: Arrow->ParamTypes) {
           auto NewParamType = Ty->substitute(Sub);
           if (NewParamType != Ty) {
             Changed = true;
           }
           NewParamTypes.push_back(NewParamType);
         }
-        auto NewRetTy = Y->ReturnType->substitute(Sub) ;
-        if (NewRetTy != Y->ReturnType) {
+        auto NewRetTy = Arrow->ReturnType->substitute(Sub) ;
+        if (NewRetTy != Arrow->ReturnType) {
           Changed = true;
         }
         return Changed ? new TArrow(NewParamTypes, NewRetTy) : this;
@@ -115,24 +115,24 @@ namespace bolt {
         return this;
       case TypeKind::Con:
       {
-        auto Y = static_cast<TCon*>(this);
+        auto Con = static_cast<TCon*>(this);
         bool Changed = false;
         std::vector<Type*> NewArgs;
-        for (auto Arg: Y->Args) {
+        for (auto Arg: Con->Args) {
           auto NewArg = Arg->substitute(Sub);
           if (NewArg != Arg) {
             Changed = true;
           }
           NewArgs.push_back(NewArg);
         }
-        return Changed ? new TCon(Y->Id, NewArgs, Y->DisplayName) : this;
+        return Changed ? new TCon(Con->Id, NewArgs, Con->DisplayName) : this;
       }
       case TypeKind::Tuple:
       {
-        auto Y = static_cast<TTuple*>(this);
+        auto Tuple = static_cast<TTuple*>(this);
         bool Changed = false;
         std::vector<Type*> NewElementTypes;
-        for (auto Ty: Y->ElementTypes) {
+        for (auto Ty: Tuple->ElementTypes) {
           auto NewElementType = Ty->substitute(Sub);
           if (NewElementType != Ty) {
             Changed = true;
@@ -148,14 +148,14 @@ namespace bolt {
     switch (Kind) {
       case ConstraintKind::Equal:
       {
-        auto Y = static_cast<CEqual*>(this);
-        return new CEqual(Y->Left->substitute(Sub), Y->Right->substitute(Sub), Y->Source);
+        auto Equal = static_cast<CEqual*>(this);
+        return new CEqual(Equal->Left->substitute(Sub), Equal->Right->substitute(Sub), Equal->Source);
       }
       case ConstraintKind::Many:
       {
-        auto Y = static_cast<CMany*>(this);
+        auto Many = static_cast<CMany*>(this);
         auto NewConstraints = new ConstraintSet();
-        for (auto Element: Y->Elements) {
+        for (auto Element: Many->Elements) {
           NewConstraints->push_back(Element->substitute(Sub));
         }
         return new CMany(*NewConstraints);
@@ -212,19 +212,19 @@ namespace bolt {
     return false;
   }
 
-  void Checker::addConstraint(Constraint* Constraint) {
-    switch (Constraint->getKind()) {
+  void Checker::addConstraint(Constraint* C) {
+    switch (C->getKind()) {
       case ConstraintKind::Equal:
       {
-        auto Y = static_cast<CEqual*>(Constraint);
+        auto Y = static_cast<CEqual*>(C);
         for (auto Iter = Contexts.rbegin(); Iter != Contexts.rend(); Iter++) {
           auto& Ctx = **Iter;
           if (hasTypeVar(Ctx.TVs, Y->Left) || hasTypeVar(Ctx.TVs, Y->Right)) {
-            Ctx.Constraints.push_back(Constraint);
+            Ctx.Constraints.push_back(C);
             return;
           }
         }
-        Contexts.front()->Constraints.push_back(Constraint);
+        Contexts.front()->Constraints.push_back(C);
         //auto I = std::max(Y->Left->MaxDepth, Y->Right->MaxDepth);
         //ZEN_ASSERT(I < Contexts.size());
         //auto Ctx = Contexts[I];
@@ -233,7 +233,7 @@ namespace bolt {
       }
       case ConstraintKind::Many:
       {
-        auto Y = static_cast<CMany*>(Constraint);
+        auto Y = static_cast<CMany*>(C);
         for (auto Element: Y->Elements) {
           addConstraint(Element);
         }
@@ -255,8 +255,8 @@ namespace bolt {
 
       case NodeType::SourceFile:
       {
-        auto Y = static_cast<SourceFile*>(X);
-        for (auto Element: Y->Elements) {
+        auto File = static_cast<SourceFile*>(X);
+        for (auto Element: File->Elements) {
           forwardDeclare(Element) ;
         }
         break;
@@ -264,30 +264,30 @@ namespace bolt {
 
       case NodeType::LetDeclaration:
       {
-        auto Y = static_cast<LetDeclaration*>(X);
+        auto Let = static_cast<LetDeclaration*>(X);
 
         auto NewCtx = new InferContext();
-        Y->Ctx = NewCtx;
+        Let->Ctx = NewCtx;
 
         Contexts.push_back(NewCtx);
 
         Type* Ty;
-        if (Y->TypeAssert) {
-          Ty = inferTypeExpression(Y->TypeAssert->TypeExpression);
+        if (Let->TypeAssert) {
+          Ty = inferTypeExpression(Let->TypeAssert->TypeExpression);
         } else {
           Ty = createTypeVar();
         }
-        Y->Ty = Ty;
+        Let->Ty = Ty;
 
-        if (Y->Body) {
-          switch (Y->Body->Type) {
+        if (Let->Body) {
+          switch (Let->Body->Type) {
             case NodeType::LetExprBody:
               break;
             case NodeType::LetBlockBody:
             {
-              auto Z = static_cast<LetBlockBody*>(Y->Body);
+              auto Block = static_cast<LetBlockBody*>(Let->Body);
               NewCtx->ReturnType = createTypeVar();
-              for (auto Element: Z->Elements) {
+              for (auto Element: Block->Elements) {
                 forwardDeclare(Element);
               }
               break;
@@ -299,7 +299,7 @@ namespace bolt {
 
         Contexts.pop_back();
 
-        inferBindings(Y->Pattern, Ty, NewCtx->Constraints, NewCtx->TVs);
+        inferBindings(Let->Pattern, Ty, NewCtx->Constraints, NewCtx->TVs);
 
 
         break;
@@ -318,8 +318,8 @@ namespace bolt {
 
       case NodeType::SourceFile:
       {
-        auto Y = static_cast<SourceFile*>(X);
-        for (auto Element: Y->Elements) {
+        auto File = static_cast<SourceFile*>(X);
+        for (auto Element: File->Elements) {
           infer(Element);
         }
         break;
@@ -327,8 +327,8 @@ namespace bolt {
 
       case NodeType::IfStatement:
       {
-        auto Y = static_cast<IfStatement*>(X);
-        for (auto Part: Y->Parts) {
+        auto IfStmt = static_cast<IfStatement*>(X);
+        for (auto Part: IfStmt->Parts) {
           if (Part->Test != nullptr) {
             addConstraint(new CEqual { BoolType, inferExpression(Part->Test), Part->Test });
           }
@@ -341,15 +341,15 @@ namespace bolt {
 
       case NodeType::LetDeclaration:
       {
-        auto Y = static_cast<LetDeclaration*>(X);
+        auto LetDecl = static_cast<LetDeclaration*>(X);
 
-        auto NewCtx = Y->Ctx;
+        auto NewCtx = LetDecl->Ctx;
         Contexts.push_back(NewCtx);
 
         std::vector<Type*> ParamTypes;
         Type* RetType;
 
-        for (auto Param: Y->Params) {
+        for (auto Param: LetDecl->Params) {
           // TODO incorporate Param->TypeAssert or make it a kind of pattern
           TVar* TV = createTypeVar();
           TVSet NoTVs;
@@ -358,19 +358,19 @@ namespace bolt {
           ParamTypes.push_back(TV);
         }
 
-        if (Y->Body) {
-          switch (Y->Body->Type) {
+        if (LetDecl->Body) {
+          switch (LetDecl->Body->Type) {
             case NodeType::LetExprBody:
             {
-              auto Z = static_cast<LetExprBody*>(Y->Body);
-              RetType = inferExpression(Z->Expression);
+              auto Expr = static_cast<LetExprBody*>(LetDecl->Body);
+              RetType = inferExpression(Expr->Expression);
               break;
             }
             case NodeType::LetBlockBody:
             {
-              auto Z = static_cast<LetBlockBody*>(Y->Body);
-              RetType = Y->Ty;
-              for (auto Element: Z->Elements) {
+              auto Block = static_cast<LetBlockBody*>(LetDecl->Body);
+              RetType = createTypeVar();
+              for (auto Element: Block->Elements) {
                 infer(Element);
               }
               break;
@@ -382,7 +382,7 @@ namespace bolt {
           RetType = createTypeVar();
         }
 
-        addConstraint(new CEqual { Y->Ty, new TArrow(ParamTypes, RetType), X });
+        addConstraint(new CEqual { LetDecl->Ty, new TArrow(ParamTypes, RetType), X });
 
         Contexts.pop_back();
 
@@ -391,10 +391,10 @@ namespace bolt {
 
       case NodeType::ReturnStatement:
       {
-        auto Y = static_cast<ReturnStatement*>(X);
+        auto RetStmt = static_cast<ReturnStatement*>(X);
         Type* ReturnType;
-        if (Y->Expression) {
-          ReturnType = inferExpression(Y->Expression);
+        if (RetStmt->Expression) {
+          ReturnType = inferExpression(RetStmt->Expression);
         } else {
           ReturnType = new TTuple({});
         }
@@ -404,8 +404,8 @@ namespace bolt {
 
       case NodeType::ExpressionStatement:
       {
-        auto Y = static_cast<ExpressionStatement*>(X);
-        inferExpression(Y->Expression);
+        auto ExprStmt = static_cast<ExpressionStatement*>(X);
+        inferExpression(ExprStmt->Expression);
         break;
       }
 
@@ -464,10 +464,10 @@ namespace bolt {
 
       case NodeType::ReferenceTypeExpression:
       {
-        auto Y = static_cast<ReferenceTypeExpression*>(X);
-        auto Ty = lookupMono(Y->Name->Name->Text);
+        auto RefTE = static_cast<ReferenceTypeExpression*>(X);
+        auto Ty = lookupMono(RefTE->Name->Name->Text);
         if (Ty == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Y->Name->Name->Text, Y->Name->Name);
+          DE.add<BindingNotFoundDiagnostic>(RefTE->Name->Name->Text, RefTE->Name->Name);
           return new TAny();
         }
         Mapping[X] = Ty;
@@ -476,12 +476,12 @@ namespace bolt {
 
       case NodeType::ArrowTypeExpression:
       {
-        auto Y = static_cast<ArrowTypeExpression*>(X);
+        auto ArrowTE = static_cast<ArrowTypeExpression*>(X);
         std::vector<Type*> ParamTypes;
-        for (auto ParamType: Y->ParamTypes) {
+        for (auto ParamType: ArrowTE->ParamTypes) {
           ParamTypes.push_back(inferTypeExpression(ParamType));
         }
-        auto ReturnType = inferTypeExpression(Y->ReturnType);
+        auto ReturnType = inferTypeExpression(ArrowTE->ReturnType);
         auto Ty = new TArrow(ParamTypes, ReturnType);
         Mapping[X] = Ty;
         return Ty;
@@ -499,9 +499,9 @@ namespace bolt {
 
       case NodeType::ConstantExpression:
       {
-        auto Y = static_cast<ConstantExpression*>(X);
+        auto Const = static_cast<ConstantExpression*>(X);
         Type* Ty = nullptr;
-        switch (Y->Token->Type) {
+        switch (Const->Token->Type) {
           case NodeType::IntegerLiteral:
             Ty = lookupMono("Int");
             break;
@@ -518,17 +518,17 @@ namespace bolt {
 
       case NodeType::ReferenceExpression:
       {
-        auto Y = static_cast<ReferenceExpression*>(X);
-        ZEN_ASSERT(Y->Name->ModulePath.empty());
-        auto Ctx = lookupCall(Y, Y->Name->getSymbolPath());
+        auto Ref = static_cast<ReferenceExpression*>(X);
+        ZEN_ASSERT(Ref->Name->ModulePath.empty());
+        auto Ctx = lookupCall(Ref, Ref->Name->getSymbolPath());
         if (Ctx) {
           /* std::cerr << "recursive call!\n"; */
           ZEN_ASSERT(Ctx->ReturnType != nullptr);
           return Ctx->ReturnType;
         }
-        auto Scm = lookup(Y->Name->Name->Text);
+        auto Scm = lookup(Ref->Name->Name->Text);
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Y->Name->Name->Text, Y->Name);
+          DE.add<BindingNotFoundDiagnostic>(Ref->Name->Name->Text, Ref->Name);
           return new TAny();
         }
         auto Ty = instantiate(*Scm, X);
@@ -538,11 +538,11 @@ namespace bolt {
 
       case NodeType::CallExpression:
       {
-        auto Y = static_cast<CallExpression*>(X);
-        auto OpTy = inferExpression(Y->Function);
+        auto Call = static_cast<CallExpression*>(X);
+        auto OpTy = inferExpression(Call->Function);
         auto RetType = createTypeVar();
         std::vector<Type*> ArgTypes;
-        for (auto Arg: Y->Args) {
+        for (auto Arg: Call->Args) {
           ArgTypes.push_back(inferExpression(Arg));
         }
         addConstraint(new CEqual { OpTy, new TArrow(ArgTypes, RetType), X });
@@ -552,17 +552,17 @@ namespace bolt {
 
       case NodeType::InfixExpression:
       {
-        auto Y = static_cast<InfixExpression*>(X);
-        auto Scm = lookup(Y->Operator->getText());
+        auto Infix = static_cast<InfixExpression*>(X);
+        auto Scm = lookup(Infix->Operator->getText());
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Y->Operator->getText(), Y->Operator);
+          DE.add<BindingNotFoundDiagnostic>(Infix->Operator->getText(), Infix->Operator);
           return new TAny();
         }
-        auto OpTy = instantiate(*Scm, Y->Operator);
+        auto OpTy = instantiate(*Scm, Infix->Operator);
         auto RetTy = createTypeVar();
         std::vector<Type*> ArgTys;
-        ArgTys.push_back(inferExpression(Y->LHS));
-        ArgTys.push_back(inferExpression(Y->RHS));
+        ArgTys.push_back(inferExpression(Infix->LHS));
+        ArgTys.push_back(inferExpression(Infix->RHS));
         addConstraint(new CEqual { new TArrow(ArgTys, RetTy), OpTy, X });
         Mapping[X] = RetTy;
         return RetTy;
@@ -570,8 +570,8 @@ namespace bolt {
 
       case NodeType::NestedExpression:
       {
-        auto Y = static_cast<NestedExpression*>(X);
-        return inferExpression(Y->Inner);
+        auto Nested = static_cast<NestedExpression*>(X);
+        return inferExpression(Nested->Inner);
       }
 
       default:
@@ -636,8 +636,8 @@ namespace bolt {
 
         case ConstraintKind::Many:
         {
-          auto Y = static_cast<CMany*>(Constraint);
-          for (auto Constraint: Y->Elements) {
+          auto Many = static_cast<CMany*>(Constraint);
+          for (auto Constraint: Many->Elements) {
             Queue.push(Constraint);
           }
           break;
@@ -645,10 +645,10 @@ namespace bolt {
 
         case ConstraintKind::Equal:
         {
-          auto Y = static_cast<CEqual*>(Constraint);
-          /* std::cerr << describe(Y->Left) << " ~ " << describe(Y->Right) << std::endl; */
-          if (!unify(Y->Left, Y->Right, Solution)) {
-            DE.add<UnificationErrorDiagnostic>(Y->Left->substitute(Solution), Y->Right->substitute(Solution), Y->Source);
+          auto Equal = static_cast<CEqual*>(Constraint);
+          std::cerr << describe(Equal->Left) << " ~ " << describe(Equal->Right) << std::endl;
+          if (!unify(Equal->Left, Equal->Right, Solution)) {
+            DE.add<UnificationErrorDiagnostic>(Equal->Left->substitute(Solution), Equal->Right->substitute(Solution), Equal->Source);
           }
           break;
         }
@@ -661,27 +661,29 @@ namespace bolt {
 
   bool Checker::unify(Type* A, Type* B, TVSub& Solution) {
 
-    if (A->getKind() == TypeKind::Var) {
+    while (A->getKind() == TypeKind::Var) {
       auto Match = Solution.find(static_cast<TVar*>(A));
-      if (Match != Solution.end()) {
-        A = Match->second;
+      if (Match == Solution.end()) {
+        break;
       }
+      A = Match->second;
     }
 
-    if (B->getKind() == TypeKind::Var) {
+    while (B->getKind() == TypeKind::Var) {
       auto Match = Solution.find(static_cast<TVar*>(B));
-      if (Match != Solution.end()) {
-        B = Match->second;
+      if (Match == Solution.end()) {
+        break;
       }
+      B = Match->second;
     }
 
     if (A->getKind() == TypeKind::Var) {
-      auto Y = static_cast<TVar*>(A);
-      if (B->hasTypeVar(Y)) {
+      auto TV = static_cast<TVar*>(A);
+      if (B->hasTypeVar(TV)) {
         // TODO occurs check
         return false;
       }
-      Solution[Y] = B;
+      Solution[TV] = B;
       return true;
     }
 
@@ -694,24 +696,24 @@ namespace bolt {
     }
 
     if (A->getKind() == TypeKind::Arrow && B->getKind() == TypeKind::Arrow) {
-      auto Y = static_cast<TArrow*>(A);
-      auto Z = static_cast<TArrow*>(B);
-      if (Y->ParamTypes.size() != Z->ParamTypes.size()) {
+      auto Arr1 = static_cast<TArrow*>(A);
+      auto Arr2 = static_cast<TArrow*>(B);
+      if (Arr1->ParamTypes.size() != Arr2->ParamTypes.size()) {
         return false;
       }
-      auto Count = Y->ParamTypes.size();
+      auto Count = Arr1->ParamTypes.size();
       for (std::size_t I = 0; I < Count; I++) {
-        if (!unify(Y->ParamTypes[I], Z->ParamTypes[I], Solution)) {
+        if (!unify(Arr1->ParamTypes[I], Arr2->ParamTypes[I], Solution)) {
           return false;
         }
       }
-      return unify(Y->ReturnType, Z->ReturnType, Solution);
+      return unify(Arr1->ReturnType, Arr2->ReturnType, Solution);
     }
 
     if (A->getKind() == TypeKind::Arrow) {
-      auto Y = static_cast<TArrow*>(A);
-      if (Y->ParamTypes.empty()) {
-        return unify(Y->ReturnType, B, Solution);
+      auto Arr = static_cast<TArrow*>(A);
+      if (Arr->ParamTypes.empty()) {
+        return unify(Arr->ReturnType, B, Solution);
       }
     }
 
@@ -720,15 +722,15 @@ namespace bolt {
     }
 
     if (A->getKind() == TypeKind::Tuple && B->getKind() == TypeKind::Tuple) {
-      auto Y = static_cast<TTuple*>(A);
-      auto Z = static_cast<TTuple*>(B);
-      if (Y->ElementTypes.size() != Z->ElementTypes.size()) {
+      auto Tuple1 = static_cast<TTuple*>(A);
+      auto Tuple2 = static_cast<TTuple*>(B);
+      if (Tuple1->ElementTypes.size() != Tuple2->ElementTypes.size()) {
         return false;
       }
-      auto Count = Y->ElementTypes.size();
+      auto Count = Tuple1->ElementTypes.size();
       bool Success = true;
       for (size_t I = 0; I < Count; I++) {
-        if (!unify(Y->ElementTypes[I], Z->ElementTypes[I], Solution)) {
+        if (!unify(Tuple1->ElementTypes[I], Tuple2->ElementTypes[I], Solution)) {
           Success = false;
         }
       }
@@ -736,15 +738,15 @@ namespace bolt {
     }
 
     if (A->getKind() == TypeKind::Con && B->getKind() == TypeKind::Con) {
-      auto Y = static_cast<TCon*>(A);
-      auto Z = static_cast<TCon*>(B);
-      if (Y->Id != Z->Id) {
+      auto Con1 = static_cast<TCon*>(A);
+      auto Con2 = static_cast<TCon*>(B);
+      if (Con1->Id != Con2->Id) {
         return false;
       }
-      ZEN_ASSERT(Y->Args.size() == Z->Args.size());
-      auto Count = Y->Args.size();
+      ZEN_ASSERT(Con1->Args.size() == Con2->Args.size());
+      auto Count = Con1->Args.size();
       for (std::size_t I = 0; I < Count; I++) {
-        if (!unify(Y->Args[I], Z->Args[I], Solution)) {
+        if (!unify(Con1->Args[I], Con2->Args[I], Solution)) {
           return false;
         }
       }
