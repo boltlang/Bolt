@@ -13,12 +13,30 @@
 namespace bolt {
 
   class Type;
+  class TCon;
+  class TVar;
+
+  using TypeclassId = ByteString;
+
+  struct TypeclassSignature {
+
+    using TypeclassId = ByteString;
+    TypeclassId Id;
+    std::vector<TVar*> Params;
+
+    bool operator<(const TypeclassSignature& Other) const;
+    bool operator==(const TypeclassSignature& Other) const;
+
+  };
 
   enum class DiagnosticKind : unsigned char {
     UnexpectedToken,
     UnexpectedString,
     BindingNotFound,
     UnificationError,
+    TypeclassMissing,
+    InstanceNotFound,
+    ClassNotFound,
   };
 
   class Diagnostic : std::runtime_error {
@@ -31,7 +49,7 @@ namespace bolt {
   
   public:
 
-    DiagnosticKind getKind() const noexcept {
+    inline DiagnosticKind getKind() const noexcept {
       return Kind;
     }
 
@@ -42,9 +60,9 @@ namespace bolt {
 
     TextFile& File;
     Token* Actual;
-    std::vector<NodeType> Expected;
+    std::vector<NodeKind> Expected;
 
-    inline UnexpectedTokenDiagnostic(TextFile& File, Token* Actual, std::vector<NodeType> Expected):
+    inline UnexpectedTokenDiagnostic(TextFile& File, Token* Actual, std::vector<NodeKind> Expected):
       Diagnostic(DiagnosticKind::UnexpectedToken), File(File), Actual(Actual), Expected(Expected) {}
 
   };
@@ -81,6 +99,39 @@ namespace bolt {
 
     inline UnificationErrorDiagnostic(Type* Left, Type* Right, Node* Source):
       Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right), Source(Source) {}
+
+  };
+
+  class TypeclassMissingDiagnostic : public Diagnostic {
+  public:
+
+    TypeclassSignature Sig;
+    LetDeclaration* Decl;
+
+    inline TypeclassMissingDiagnostic(TypeclassSignature Sig, LetDeclaration* Decl):
+      Diagnostic(DiagnosticKind::TypeclassMissing), Sig(Sig), Decl(Decl) {}
+
+  };
+
+  class InstanceNotFoundDiagnostic : public Diagnostic {
+  public:
+
+    ByteString TypeclassName;
+    TCon* Ty;
+    Node* Source;
+
+    inline InstanceNotFoundDiagnostic(ByteString TypeclassName, TCon* Ty, Node* Source):
+      Diagnostic(DiagnosticKind::InstanceNotFound), TypeclassName(TypeclassName), Ty(Ty), Source(Source) {}
+
+  };
+
+  class ClassNotFoundDiagnostic : public Diagnostic {
+  public:
+
+    ByteString Name;
+
+    inline ClassNotFoundDiagnostic(ByteString Name):
+      Diagnostic(DiagnosticKind::ClassNotFound), Name(Name) {}
 
   };
 

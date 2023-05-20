@@ -1,10 +1,13 @@
 
+#include <exception>
+#include <vector>
+
+#include "llvm/Support/Casting.h"
+
 #include "bolt/CST.hpp"
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
 #include "bolt/Diagnostics.hpp" 
-#include <exception>
-#include <vector>
 
 namespace bolt {
 
@@ -57,9 +60,9 @@ namespace bolt {
     std::size_t I = 0;
     for (;;) {
       auto T0 = Tokens.peek(I++);
-      switch (T0->Type) {
-        case NodeType::PubKeyword:
-        case NodeType::MutKeyword:
+      switch (T0->getKind()) {
+        case NodeKind::PubKeyword:
+        case NodeKind::MutKeyword:
           continue;
         default:
           return T0;
@@ -70,71 +73,141 @@ namespace bolt {
 #define BOLT_EXPECT_TOKEN(name) \
   { \
     auto __Token = Tokens.get(); \
-    if (__Token->Type != NodeType::name) { \
-      throw UnexpectedTokenDiagnostic(File, __Token, std::vector<NodeType> { NodeType::name }); \
+    if (!llvm::isa<name>(__Token)) { \
+      throw UnexpectedTokenDiagnostic(File, __Token, std::vector<NodeKind> { NodeKind::name }); \
     } \
   }
 
-  Token* Parser::expectToken(NodeType Type) {
+  Token* Parser::expectToken(NodeKind Kind) {
     auto T = Tokens.get();
-    if (T->Type != Type) {
-      throw UnexpectedTokenDiagnostic(File, T, std::vector<NodeType> { Type }); \
+    if (T->getKind() != Kind) {
+      throw UnexpectedTokenDiagnostic(File, T, std::vector<NodeKind> { Kind }); \
     }
     return T;
   }
 
   Pattern* Parser::parsePattern() {
     auto T0 = Tokens.peek();
-    switch (T0->Type) {
-      case NodeType::Identifier:
+    switch (T0->getKind()) {
+      case NodeKind::Identifier:
         Tokens.get();
         return new BindPattern(static_cast<Identifier*>(T0));
       default:
-        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier });
     }
   }
 
   QualifiedName* Parser::parseQualifiedName() {
     std::vector<Identifier*> ModulePath;
-    auto Name = expectToken(NodeType::Identifier);
+    auto Name = expectToken(NodeKind::Identifier);
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->Type != NodeType::Dot) {
+      if (T1->getKind() != NodeKind::Dot) {
         break;
       }
       Tokens.get();
       ModulePath.push_back(static_cast<Identifier*>(Name));
       Name = Tokens.get();
-      if (Name->Type != NodeType::Identifier) {
-        throw UnexpectedTokenDiagnostic(File, Name, std::vector { NodeType::Identifier });
+      if (Name->getKind() != NodeKind::Identifier) {
+        throw UnexpectedTokenDiagnostic(File, Name, std::vector { NodeKind::Identifier });
       }
     }
     return new QualifiedName(ModulePath, static_cast<Identifier*>(Name));
   }
 
+  TypeExpression* Parser::parseTypeExpression() {
+    return parseQualifiedTypeExpression();
+  }
+
+  TypeExpression* Parser::parseQualifiedTypeExpression() {
+    bool HasConstraints = false;
+    auto T0 = Tokens.peek();
+    if (llvm::isa<LParen>(T0)) {
+      std::size_t I = 1;
+      for (;;) {
+        auto T0 = Tokens.peek(I++);
+        switch (T0->getKind()) {
+          case NodeKind::RArrowAlt:
+            HasConstraints = true;
+            goto after_scan;
+          case NodeKind::Equals:
+          case NodeKind::BlockStart:
+          case NodeKind::LineFoldEnd:
+          case NodeKind::EndOfFile:
+            goto after_scan;
+          default:
+            break;
+        }
+      }
+    }
+after_scan:
+    if (!HasConstraints) {
+      return parseArrowTypeExpression();
+    }
+    Tokens.get();
+    LParen* LParen = static_cast<class LParen*>(T0);
+    std::vector<std::tuple<ConstraintExpression*, Comma*>> Constraints;
+    RParen* RParen;
+    RArrowAlt* RArrowAlt;
+    for (;;) {
+      ConstraintExpression* C;
+      auto T0 = Tokens.peek();
+      switch (T0->getKind()) {
+        case NodeKind::RParen:
+          Tokens.get();
+          RParen = static_cast<class RParen*>(T0);
+          RArrowAlt = expectToken<class RArrowAlt>();
+          goto after_constraints;
+        default:
+          C = parseConstraintExpression();
+          break;
+      }
+      Comma* Comma = nullptr;
+      auto T1 = Tokens.get();
+      switch (T1->getKind()) {
+        case NodeKind::Comma:
+          Constraints.push_back(std::make_tuple(C, static_cast<class Comma*>(T1)));
+          continue;
+        case NodeKind::RParen:
+          RArrowAlt = static_cast<class RArrowAlt*>(T1);
+          Constraints.push_back(std::make_tuple(C, nullptr));
+          RArrowAlt = expectToken<class RArrowAlt>();
+          goto after_constraints;
+        default:
+          throw UnexpectedTokenDiagnostic(File, T1, std::vector { NodeKind::Comma, NodeKind::RArrowAlt });
+      }
+    }
+after_constraints:
+    auto TE = parseArrowTypeExpression();
+    return new QualifiedTypeExpression(Constraints, RArrowAlt, TE);
+  }
+
   TypeExpression* Parser::parsePrimitiveTypeExpression() {
     auto T0 = Tokens.peek();
-    switch (T0->Type) {
-      case NodeType::Identifier:
+    switch (T0->getKind()) {
+      case NodeKind::Identifier:
+        if (static_cast<Identifier*>(T0)->isTypeVar()) {
+          return parseVarTypeExpression();
+        }
         return new ReferenceTypeExpression(parseQualifiedName());
       default:
-        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier });
     }
   }
 
-  TypeExpression* Parser::parseTypeExpression() {
+  TypeExpression* Parser::parseArrowTypeExpression() {
     auto RetType = parsePrimitiveTypeExpression();
     std::vector<TypeExpression*> ParamTypes;
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->Type != NodeType::RArrow) {
+      if (T1->getKind() != NodeKind::RArrow) {
         break;
       }
       Tokens.get();
       ParamTypes.push_back(RetType);
       RetType = parsePrimitiveTypeExpression();
     }
-    if (ParamTypes.size()) {
+    if (!ParamTypes.empty()) {
       return new ArrowTypeExpression(ParamTypes, RetType);
     }
     return RetType;
@@ -142,25 +215,25 @@ namespace bolt {
 
   Expression* Parser::parsePrimitiveExpression() {
     auto T0 = Tokens.peek();
-    switch (T0->Type) {
-      case NodeType::Identifier:
+    switch (T0->getKind()) {
+      case NodeKind::Identifier:
       {
         auto Name = parseQualifiedName();
         return new ReferenceExpression(Name);
       }
-      case NodeType::LParen:
+      case NodeKind::LParen:
       {
         Tokens.get();
         auto E = parseExpression();
-        auto T2 = static_cast<RParen*>(expectToken(NodeType::RParen));
+        auto T2 = static_cast<RParen*>(expectToken(NodeKind::RParen));
         return new NestedExpression(static_cast<LParen*>(T0), E, T2);
       }
-      case NodeType::IntegerLiteral:
-      case NodeType::StringLiteral:
+      case NodeKind::IntegerLiteral:
+      case NodeKind::StringLiteral:
         Tokens.get();
         return new ConstantExpression(T0);
       default:
-        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::Identifier, NodeType::IntegerLiteral, NodeType::StringLiteral });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
     }
   }
 
@@ -169,7 +242,7 @@ namespace bolt {
     std::vector<Expression*> Args;
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->Type == NodeType::LineFoldEnd || T1->Type == NodeType::RParen || T1->Type == NodeType::BlockStart || ExprOperators.isInfix(T1)) {
+      if (T1->getKind() == NodeKind::LineFoldEnd || T1->getKind() == NodeKind::RParen || T1->getKind() == NodeKind::BlockStart || ExprOperators.isInfix(T1)) {
         break;
       }
       Args.push_back(parsePrimitiveExpression());
@@ -192,7 +265,7 @@ namespace bolt {
     }
     auto E = parseCallExpression();
     for (auto Iter = Prefix.rbegin(); Iter != Prefix.rend(); Iter++) {
-      E = new UnaryExpression(*Iter, E);
+      E = new PrefixExpression(*Iter, E);
     }
     return E;
   }
@@ -230,10 +303,10 @@ namespace bolt {
   }
 
   ReturnStatement* Parser::parseReturnStatement() {
-    auto T0 = static_cast<ReturnKeyword*>(expectToken(NodeType::ReturnKeyword));
+    auto T0 = static_cast<ReturnKeyword*>(expectToken(NodeKind::ReturnKeyword));
     Expression* Expression = nullptr;
     auto T1 = Tokens.peek();
-    if (T1->Type != NodeType::LineFoldEnd) {
+    if (T1->getKind() != NodeKind::LineFoldEnd) {
       Expression = parseExpression();
     }
     BOLT_EXPECT_TOKEN(LineFoldEnd);
@@ -242,13 +315,13 @@ namespace bolt {
 
   IfStatement* Parser::parseIfStatement() {
     std::vector<IfStatementPart*> Parts;
-    auto T0 = expectToken(NodeType::IfKeyword);
+    auto T0 = expectToken(NodeKind::IfKeyword);
     auto Test = parseExpression();
-    auto T1 = static_cast<BlockStart*>(expectToken(NodeType::BlockStart));
+    auto T1 = static_cast<BlockStart*>(expectToken(NodeKind::BlockStart));
     std::vector<Node*> Then;
     for (;;) {
       auto T2 = Tokens.peek();
-      if (T2->Type == NodeType::BlockEnd) {
+      if (T2->getKind() == NodeKind::BlockEnd) {
         Tokens.get();
         break;
       }
@@ -257,13 +330,13 @@ namespace bolt {
     Parts.push_back(new IfStatementPart(T0, Test, T1, Then));
     BOLT_EXPECT_TOKEN(LineFoldEnd)
     auto T3 = Tokens.peek();
-    if (T3->Type == NodeType::ElseKeyword) {
+    if (T3->getKind() == NodeKind::ElseKeyword) {
       Tokens.get();
-      auto T4 = static_cast<BlockStart*>(expectToken(NodeType::BlockStart));
+      auto T4 = static_cast<BlockStart*>(expectToken(NodeKind::BlockStart));
       std::vector<Node*> Else;
       for (;;) {
         auto T5 = Tokens.peek();
-        if (T5->Type == NodeType::BlockEnd) {
+        if (T5->getKind() == NodeKind::BlockEnd) {
           Tokens.get();
           break;
         }
@@ -281,41 +354,41 @@ namespace bolt {
     LetKeyword* Let;
     MutKeyword* Mut = nullptr;
     auto T0 = Tokens.get();
-    if (T0->Type == NodeType::PubKeyword) {
+    if (T0->getKind() == NodeKind::PubKeyword) {
       Pub = static_cast<PubKeyword*>(T0);
       T0 = Tokens.get();
     }
-    if (T0->Type != NodeType::LetKeyword) {
-      throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeType::LetKeyword });
+    if (T0->getKind() != NodeKind::LetKeyword) {
+      throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::LetKeyword });
     }
     Let = static_cast<LetKeyword*>(T0);
     auto T1 = Tokens.peek();
-    if (T1->Type == NodeType::MutKeyword) {
+    if (T1->getKind() == NodeKind::MutKeyword) {
       Mut = static_cast<MutKeyword*>(T1);
       Tokens.get();
     }
 
     auto Patt = parsePattern();
 
-    std::vector<Param*> Params;
+    std::vector<Parameter*> Params;
     Token* T2;
     for (;;) {
       T2 = Tokens.peek();
-      switch (T2->Type) {
-        case NodeType::LineFoldEnd:
-        case NodeType::BlockStart:
-        case NodeType::Equals:
-        case NodeType::Colon:
+      switch (T2->getKind()) {
+        case NodeKind::LineFoldEnd:
+        case NodeKind::BlockStart:
+        case NodeKind::Equals:
+        case NodeKind::Colon:
           goto after_params;
         default:
-          Params.push_back(new Param(parsePattern(), nullptr));
+          Params.push_back(new Parameter(parsePattern(), nullptr));
       }
     }
 
 after_params:
 
     TypeAssert* TA = nullptr;
-    if (T2->Type == NodeType::Colon) {
+    if (T2->getKind() == NodeKind::Colon) {
       Tokens.get();
       auto TE = parseTypeExpression();
       TA = new TypeAssert(static_cast<Colon*>(T2), TE);
@@ -323,14 +396,14 @@ after_params:
     }
 
     LetBody* Body;
-    switch (T2->Type) {
-      case NodeType::BlockStart:
+    switch (T2->getKind()) {
+      case NodeKind::BlockStart:
       {
         Tokens.get();
         std::vector<Node*> Elements;
         for (;;) {
           auto T3 = Tokens.peek();
-          if (T3->Type == NodeType::BlockEnd) {
+          if (T3->getKind() == NodeKind::BlockEnd) {
             break;
           }
           Elements.push_back(parseLetBodyElement());
@@ -339,20 +412,20 @@ after_params:
         Body = new LetBlockBody(static_cast<BlockStart*>(T2), Elements);
         break;
       }
-      case NodeType::Equals:
+      case NodeKind::Equals:
         Tokens.get();
         Body = new LetExprBody(static_cast<Equals*>(T2), parseExpression());
         break;
-      case NodeType::LineFoldEnd:
+      case NodeKind::LineFoldEnd:
         Body = nullptr;
         break;
       default:
-        std::vector<NodeType> Expected { NodeType::BlockStart, NodeType::LineFoldEnd, NodeType::Equals };
+        std::vector<NodeKind> Expected { NodeKind::BlockStart, NodeKind::LineFoldEnd, NodeKind::Equals };
         if (TA == nullptr) {
           // First tokens of TypeAssert
-          Expected.push_back(NodeType::Colon);
+          Expected.push_back(NodeKind::Colon);
           // First tokens of Pattern
-          Expected.push_back(NodeType::Identifier);
+          Expected.push_back(NodeKind::Identifier);
         }
         throw UnexpectedTokenDiagnostic(File, T2, Expected);
     }
@@ -372,25 +445,161 @@ after_params:
 
   Node* Parser::parseLetBodyElement() {
     auto T0 = peekFirstTokenAfterModifiers();
-    switch (T0->Type) {
-      case NodeType::LetKeyword:
+    switch (T0->getKind()) {
+      case NodeKind::LetKeyword:
         return parseLetDeclaration();
-      case NodeType::ReturnKeyword:
+      case NodeKind::ReturnKeyword:
         return parseReturnStatement();
-      case NodeType::IfKeyword:
+      case NodeKind::IfKeyword:
         return parseIfStatement();
       default:
         return parseExpressionStatement();
     }
   }
 
+  ConstraintExpression* Parser::parseConstraintExpression() {
+    bool HasTilde = false;
+    for (std::size_t I = 0; ; I++) {
+      auto Tok = Tokens.peek(I);
+      switch (Tok->getKind()) {
+        case NodeKind::Tilde:
+          HasTilde = true;
+          goto after_seek;
+        case NodeKind::RParen:
+        case NodeKind::Comma:
+        case NodeKind::RArrowAlt:
+        case NodeKind::EndOfFile:
+          goto after_seek;
+        default:
+          continue;
+      }
+    }
+after_seek:
+    if (HasTilde) {
+      auto Left = parseArrowTypeExpression();
+      auto Tilde = expectToken<class Tilde>();
+      auto Right = parseArrowTypeExpression();
+      return new EqualityConstraintExpression { Left, Tilde, Right };
+    }
+    auto Name = expectToken<Identifier>();
+    std::vector<VarTypeExpression*> TEs;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      switch (T1->getKind()) {
+        case NodeKind::RParen:
+        case NodeKind::RArrowAlt:
+        case NodeKind::Comma:
+          goto after_vars;
+        case NodeKind::Identifier:
+          Tokens.get();
+          TEs.push_back(new VarTypeExpression { static_cast<Identifier*>(T1) });
+          break;
+        default:
+          throw UnexpectedTokenDiagnostic(File, T1, std::vector { NodeKind::RParen, NodeKind::RArrowAlt, NodeKind::Comma, NodeKind::Identifier });
+      }
+    }
+after_vars:
+    return new TypeclassConstraintExpression { Name, TEs };
+  }
+
+  VarTypeExpression* Parser::parseVarTypeExpression() {
+    auto Name = expectToken<Identifier>();
+    // TODO reject constructor symbols (starting with a capital letter)
+    return new VarTypeExpression { Name };
+  }
+
+  InstanceDeclaration* Parser::parseInstanceDeclaration() {
+    auto InstanceKeyword = expectToken<class InstanceKeyword>();
+    auto Name = expectToken<Identifier>();
+    std::vector<TypeExpression*> TypeExps;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      if (T1->is<BlockStart>()) {
+        break;
+      }
+      TypeExps.push_back(parseTypeExpression());
+    }
+    auto BlockStart = expectToken<class BlockStart>();
+    std::vector<Node*> Elements;
+    for (;;) {
+      auto T2 = Tokens.peek();
+      if (T2->is<BlockEnd>()) {
+        Tokens.get();
+        break;
+      }
+      Elements.push_back(parseClassElement());
+    }
+    expectToken(NodeKind::LineFoldEnd);
+    return new InstanceDeclaration(
+      InstanceKeyword,
+      Name,
+      TypeExps,
+      BlockStart,
+      Elements
+    );
+  }
+
+  ClassDeclaration* Parser::parseClassDeclaration() {
+    PubKeyword* PubKeyword = nullptr;
+    auto T0 = Tokens.peek();
+    if (T0->getKind() == NodeKind::PubKeyword) {
+      Tokens.get();
+      PubKeyword = static_cast<class PubKeyword*>(T0);
+    }
+    auto ClassKeyword = expectToken<class ClassKeyword>();
+    auto Name = expectToken<Identifier>();
+    std::vector<VarTypeExpression*> TypeVars;
+    for (;;) {
+      auto T2 = Tokens.peek();
+      if (T2->getKind() == NodeKind::BlockStart) {
+        break;
+      }
+      TypeVars.push_back(parseVarTypeExpression());
+    }
+    auto BlockStart = expectToken<class BlockStart>();
+    std::vector<Node*> Elements;
+    for (;;) {
+      auto T2 = Tokens.peek();
+      if (T2->is<BlockEnd>()) {
+        Tokens.get();
+        break;
+      }
+      Elements.push_back(parseClassElement());
+    }
+    expectToken(NodeKind::LineFoldEnd);
+    return new ClassDeclaration(
+      PubKeyword,
+      ClassKeyword,
+      Name,
+      TypeVars,
+      BlockStart,
+      Elements
+    );
+  }
+
+  Node* Parser::parseClassElement() {
+    auto T0 = Tokens.peek();
+    switch (T0->getKind()) {
+      case NodeKind::LetKeyword:
+        return parseLetDeclaration();
+      case NodeKind::TypeKeyword:
+        // TODO
+      default:
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector<NodeKind> { NodeKind::LetKeyword, NodeKind::TypeKeyword });
+    }
+  }
+
   Node* Parser::parseSourceElement() {
     auto T0 = peekFirstTokenAfterModifiers();
-    switch (T0->Type) {
-      case NodeType::LetKeyword:
+    switch (T0->getKind()) {
+      case NodeKind::LetKeyword:
         return parseLetDeclaration();
-      case NodeType::IfKeyword:
+      case NodeKind::IfKeyword:
         return parseIfStatement();
+      case NodeKind::ClassKeyword:
+        return parseClassDeclaration();
+      case NodeKind::InstanceKeyword:
+        return parseInstanceDeclaration();
       default:
         return parseExpressionStatement();
     }
@@ -400,7 +609,7 @@ after_params:
     std::vector<Node*> Elements;
     for (;;) {
       auto T0 = Tokens.peek();
-      if (T0->Type == NodeType::EndOfFile) {
+      if (T0->is<EndOfFile>()) {
         break;
       }
       Elements.push_back(parseSourceElement());

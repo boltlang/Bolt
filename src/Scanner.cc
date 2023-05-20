@@ -3,6 +3,8 @@
 
 #include "zen/config.hpp"
 
+#include "llvm/Support/Casting.h"
+
 #include "bolt/Text.hpp"
 #include "bolt/Integer.hpp"
 #include "bolt/CST.hpp"
@@ -57,16 +59,18 @@ namespace bolt {
     return Chr - 48;
   }
 
-  std::unordered_map<ByteString, NodeType> Keywords = {
-    { "pub", NodeType::PubKeyword },
-    { "let", NodeType::LetKeyword },
-    { "mut", NodeType::MutKeyword },
-    { "return", NodeType::ReturnKeyword },
-    { "type", NodeType::TypeKeyword },
-    { "mod", NodeType::ModKeyword },
-    { "if", NodeType::IfKeyword },
-    { "else", NodeType::ElseKeyword },
-    { "elif", NodeType::ElifKeyword },
+  std::unordered_map<ByteString, NodeKind> Keywords = {
+    { "pub", NodeKind::PubKeyword },
+    { "let", NodeKind::LetKeyword },
+    { "mut", NodeKind::MutKeyword },
+    { "return", NodeKind::ReturnKeyword },
+    { "type", NodeKind::TypeKeyword },
+    { "mod", NodeKind::ModKeyword },
+    { "if", NodeKind::IfKeyword },
+    { "else", NodeKind::ElseKeyword },
+    { "elif", NodeKind::ElifKeyword },
+    { "class", NodeKind::ClassKeyword },
+    { "instance", NodeKind::InstanceKeyword },
   };
 
   Scanner::Scanner(TextFile& File, Stream<Char>& Chars):
@@ -202,22 +206,26 @@ digit_finish:
         auto Match = Keywords.find(Text);
         if (Match != Keywords.end()) {
           switch (Match->second) {
-            case NodeType::PubKeyword:
+            case NodeKind::PubKeyword:
               return new PubKeyword(StartLoc);
-            case NodeType::LetKeyword:
+            case NodeKind::LetKeyword:
               return new LetKeyword(StartLoc);
-            case NodeType::MutKeyword:
+            case NodeKind::MutKeyword:
               return new MutKeyword(StartLoc);
-            case NodeType::TypeKeyword:
+            case NodeKind::TypeKeyword:
               return new TypeKeyword(StartLoc);
-            case NodeType::ReturnKeyword:
+            case NodeKind::ReturnKeyword:
               return new ReturnKeyword(StartLoc);
-            case NodeType::IfKeyword:
+            case NodeKind::IfKeyword:
               return new IfKeyword(StartLoc);
-            case NodeType::ElifKeyword:
+            case NodeKind::ElifKeyword:
               return new ElifKeyword(StartLoc);
-            case NodeType::ElseKeyword:
+            case NodeKind::ElseKeyword:
               return new ElseKeyword(StartLoc);
+            case NodeKind::ClassKeyword:
+              return new ClassKeyword(StartLoc);
+            case NodeKind::InstanceKeyword:
+              return new InstanceKeyword(StartLoc);
             default:
               ZEN_UNREACHABLE
           }
@@ -305,6 +313,8 @@ after_string_contents:
         }
         if (Text == "->") {
           return new RArrow(StartLoc);
+        } else if (Text == "=>") {
+          return new RArrowAlt(StartLoc);
         } else if (Text == "=") {
           return new Equals(StartLoc);
         } else if (Text.back() == '=' && Text[Text.size()-2] != '=') {
@@ -316,7 +326,7 @@ after_string_contents:
 
 #define BOLT_SIMPLE_TOKEN(ch, name) case ch: return new name(StartLoc);
 
-    //BOLT_SIMPLE_TOKEN(',', Comma)
+    BOLT_SIMPLE_TOKEN(',', Comma)
     BOLT_SIMPLE_TOKEN(':', Colon)
     BOLT_SIMPLE_TOKEN('(', LParen)
     BOLT_SIMPLE_TOKEN(')', RParen)
@@ -324,6 +334,7 @@ after_string_contents:
     BOLT_SIMPLE_TOKEN(']', RBracket)
     BOLT_SIMPLE_TOKEN('{', LBrace)
     BOLT_SIMPLE_TOKEN('}', RBrace)
+    BOLT_SIMPLE_TOKEN('~', Tilde)
 
     default:
       throw UnexpectedStringDiagnostic(File, StartLoc, String { static_cast<char>(C0) });
@@ -342,7 +353,7 @@ after_string_contents:
 
     auto T0 = Tokens.peek();
 
-    if (T0->Type == NodeType::EndOfFile) {
+    if (llvm::isa<EndOfFile>(T0)) {
       if (Frames.size() == 1) {
         return T0;
       }
@@ -366,7 +377,7 @@ after_string_contents:
             Locations.pop();
             return new LineFoldEnd(T0->getStartLoc());
         }
-        if (T0->Type == NodeType::Dot) {
+        if (llvm::isa<Dot>(T0)) {
           auto T1 = Tokens.peek(1);
           if (T1->getStartLine() > T0->getEndLine()) {
               Tokens.get();

@@ -11,9 +11,9 @@ namespace bolt {
 
   void IPRGraph::populate(Node* X, Node* Decl) {
 
-    switch (X->Type) {
+    switch (X->getKind()) {
 
-      case NodeType::SourceFile:
+      case NodeKind::SourceFile:
       {
         auto Y = static_cast<SourceFile*>(X);
         for (auto Element: Y->Elements) {
@@ -22,7 +22,7 @@ namespace bolt {
         break;
       }
 
-      case NodeType::IfStatement:
+      case NodeKind::IfStatement:
       {
         auto Y = static_cast<IfStatement*>(X);
         for (auto Part: Y->Parts) {
@@ -33,12 +33,12 @@ namespace bolt {
         break;
       }
 
-      case NodeType::LetDeclaration:
+      case NodeKind::LetDeclaration:
       {
         auto Y = static_cast<LetDeclaration*>(X);
         if (Y->Body) {
-          switch (Y->Body->Type) {
-            case NodeType::LetBlockBody:
+          switch (Y->Body->getKind()) {
+            case NodeKind::LetBlockBody:
             {
               auto Z = static_cast<LetBlockBody*>(Y->Body);
               for (auto Element: Z->Elements) {
@@ -46,7 +46,7 @@ namespace bolt {
               }
               break;
             }
-            case NodeType::LetExprBody:
+            case NodeKind::LetExprBody:
             {
               auto Z = static_cast<LetExprBody*>(Y->Body);
               populate(Z->Expression, Y);
@@ -59,10 +59,10 @@ namespace bolt {
         break;
       }
 
-      case NodeType::ConstantExpression:
+      case NodeKind::ConstantExpression:
         break;
 
-      case NodeType::CallExpression:
+      case NodeKind::CallExpression:
       {
         auto Y = static_cast<CallExpression*>(X);
         populate(Y->Function, Decl);
@@ -72,7 +72,7 @@ namespace bolt {
         break;
       }
 
-      case NodeType::ReferenceExpression:
+      case NodeKind::ReferenceExpression:
       {
         auto Y = static_cast<ReferenceExpression*>(X);
         auto Def = Y->getScope()->lookup(Y->Name->getSymbolPath());

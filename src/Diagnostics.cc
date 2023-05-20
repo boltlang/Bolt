@@ -44,51 +44,61 @@ namespace bolt {
   Diagnostic::Diagnostic(DiagnosticKind Kind):
     std::runtime_error("a compiler error occurred without being caught"), Kind(Kind) {}
 
-  static std::string describe(NodeType Type) {
+  static std::string describe(NodeKind Type) {
     switch (Type) {
-      case NodeType::Identifier:
+      case NodeKind::Identifier:
         return "an identifier";
-      case NodeType::CustomOperator:
+      case NodeKind::CustomOperator:
         return "an operator";
-      case NodeType::IntegerLiteral:
+      case NodeKind::IntegerLiteral:
         return "an integer literal";
-      case NodeType::EndOfFile:
+      case NodeKind::EndOfFile:
         return "end-of-file";
-      case NodeType::BlockStart:
+      case NodeKind::BlockStart:
         return "the start of a new indented block";
-      case NodeType::BlockEnd:
+      case NodeKind::BlockEnd:
         return "the end of the current indented block";
-      case NodeType::LineFoldEnd:
+      case NodeKind::LineFoldEnd:
         return "the end of the current line-fold";
-      case NodeType::LParen:
+      case NodeKind::LParen:
         return "'('";
-      case NodeType::RParen:
+      case NodeKind::RParen:
         return "')'";
-      case NodeType::LBrace:
+      case NodeKind::LBrace:
         return "'['";
-      case NodeType::RBrace:
+      case NodeKind::RBrace:
         return "']'";
-      case NodeType::LBracket:
+      case NodeKind::LBracket:
         return "'{'";
-      case NodeType::RBracket:
+      case NodeKind::RBracket:
         return "'}'";
-      case NodeType::Colon:
+      case NodeKind::Colon:
         return "':'";
-      case NodeType::Equals:
+      case NodeKind::Comma:
+        return "','";
+      case NodeKind::Equals:
         return "'='";
-      case NodeType::StringLiteral:
+      case NodeKind::StringLiteral:
         return "a string literal";
-      case NodeType::Dot:
+      case NodeKind::Dot:
         return "'.'";
-      case NodeType::PubKeyword:
+      case NodeKind::DotDot:
+        return "'..'";
+      case NodeKind::Tilde:
+        return "'~'";
+      case NodeKind::RArrow:
+        return "'->'";
+      case NodeKind::RArrowAlt:
+        return "'=>'";
+      case NodeKind::PubKeyword:
         return "'pub'";
-      case NodeType::LetKeyword:
+      case NodeKind::LetKeyword:
         return "'let'";
-      case NodeType::MutKeyword:
+      case NodeKind::MutKeyword:
         return "'mut'";
-      case NodeType::ReturnKeyword:
+      case NodeKind::ReturnKeyword:
         return "'return'";
-      case NodeType::TypeKeyword:
+      case NodeKind::TypeKeyword:
         return "'type'";
       default:
         ZEN_UNREACHABLE
@@ -97,10 +107,14 @@ namespace bolt {
 
   std::string describe(const Type* Ty) {
     switch (Ty->getKind()) {
-      case TypeKind::Any:
-        return "any";
       case TypeKind::Var:
-        return "a" + std::to_string(static_cast<const TVar*>(Ty)->Id);
+      {
+        auto TV = static_cast<const TVar*>(Ty);
+        if (TV->getVarKind() == VarKind::Rigid) {
+          return static_cast<const TVarRigid*>(TV)->Name;
+        }
+        return "a" + std::to_string(TV->Id);
+      }
       case TypeKind::Arrow:
       {
         auto Y = static_cast<const TArrow*>(Ty);
@@ -342,7 +356,7 @@ namespace bolt {
           writeExcerpt(E.Initiator->getSourceFile()->getTextFile(), Range, Range, Color::Red);
           Out << "\n";
         }
-        break;
+        return;
       }
 
       case DiagnosticKind::UnexpectedToken:
@@ -366,7 +380,7 @@ namespace bolt {
           default:
             auto Iter = E.Expected.begin();
             Out << describe(*Iter++);
-            NodeType Prev = *Iter++;
+            NodeKind Prev = *Iter++;
             while (Iter != E.Expected.end()) {
               Out << ", " << describe(Prev);
               Prev = *Iter++;
@@ -377,7 +391,7 @@ namespace bolt {
         Out << " but instead got '" << E.Actual->getText() << "'\n\n";
         writeExcerpt(E.File, E.Actual->getRange(), E.Actual->getRange(), Color::Red);
         Out << "\n";
-        break;
+        return;
       }
 
       case DiagnosticKind::UnexpectedString:
@@ -405,7 +419,7 @@ namespace bolt {
         TextRange Range { E.Location, E.Location + E.Actual };
         writeExcerpt(E.File, Range, Range, Color::Red);
         Out << "\n";
-        break;
+        return;
       }
 
       case DiagnosticKind::UnificationError:
@@ -423,11 +437,56 @@ namespace bolt {
           writeExcerpt(E.Source->getSourceFile()->getTextFile(), Range, Range, Color::Red);
           Out << "\n";
         }
-        break;
+        return;
+      }
+
+      case DiagnosticKind::TypeclassMissing:
+      {
+        auto E = static_cast<const TypeclassMissingDiagnostic&>(D);
+        setForegroundColor(Color::Red);
+        setBold(true);
+        Out << "error: ";
+        resetStyles();
+        Out << "the type class " << ANSI_FG_YELLOW << E.Sig.Id;
+        for (auto TV: E.Sig.Params) {
+          Out << " " << describe(TV);
+        }
+        Out << ANSI_RESET << " is missing from the declaration's type signature\n\n";
+        auto Range = E.Decl->getRange();
+        writeExcerpt(E.Decl->getSourceFile()->getTextFile(), Range, Range, Color::Yellow);
+        Out << "\n\n";
+        return;
+      }
+
+      case DiagnosticKind::InstanceNotFound:
+      {
+        auto E = static_cast<const InstanceNotFoundDiagnostic&>(D);
+        setForegroundColor(Color::Red);
+        setBold(true);
+        Out << "error: ";
+        resetStyles();
+        Out << "a type class instance " << ANSI_FG_YELLOW << E.TypeclassName << " " << describe(E.Ty) << ANSI_RESET " was not found.\n\n";
+        auto Range = E.Source->getRange();
+        //std::cerr << Range.Start.Line << ":" << Range.Start.Column << "-" << Range.End.Line << ":" << Range.End.Column << "\n";
+        writeExcerpt(E.Source->getSourceFile()->getTextFile(), Range, Range, Color::Red);
+        Out << "\n";
+        return;
+      }
+
+      case DiagnosticKind::ClassNotFound:
+      {
+        auto E = static_cast<const ClassNotFoundDiagnostic&>(D);
+        setForegroundColor(Color::Red);
+        setBold(true);
+        Out << "error: ";
+        resetStyles();
+        Out << "the type class " << ANSI_FG_YELLOW << E.Name << ANSI_RESET " was not found.\n\n";
+        return;
       }
 
     }
 
+    ZEN_UNREACHABLE
   }
 
 }

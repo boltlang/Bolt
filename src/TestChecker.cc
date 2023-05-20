@@ -16,18 +16,18 @@ auto checkExpression(std::string Input) {
   Scanner S(T, Chars);
   Punctuator PT(S);
   Parser P(T, PT);
+  LanguageConfig Config;
   auto SF = P.parseSourceFile();
-  Checker C(DS);
-  auto Solution = C.check(SF);
+  Checker C(Config, DS);
+  C.check(SF);
   return std::make_tuple(
     static_cast<ExpressionStatement*>(SF->Elements[0])->Expression,
-    C,
-    Solution
+    C
   );
 }
 
 TEST(CheckerTest, InfersIntFromIntegerLiteral) {
-  auto [Expression, Checker, Solution] = checkExpression("1");
-  ASSERT_EQ(Checker.getType(Expression, Solution), Checker.getIntType());
+  auto [Expression, Checker] = checkExpression("1");
+  ASSERT_EQ(Checker.getType(Expression), Checker.getIntType());
 }
 

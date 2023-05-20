@@ -2,9 +2,10 @@
 #pragma once
 
 #include <unordered_map>
-#include <optional>  
+#include <optional>
 
 #include "bolt/CST.hpp"
+#include "bolt/Stream.hpp"
 
 namespace bolt {
 
@@ -68,13 +69,23 @@ namespace bolt {
 
     Token* peekFirstTokenAfterModifiers();
 
-    Token* expectToken(NodeType Ty);
+    Token* expectToken(NodeKind Ty);
+
+    template<typename T>
+    T* expectToken() {
+      return static_cast<T*>(expectToken(getNodeType<T>()));
+    }
 
     Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
-    TypeExpression* parsePrimitiveTypeExpression();
-
     Expression* parsePrimitiveExpression();
+
+    ConstraintExpression* parseConstraintExpression();
+
+    TypeExpression* parsePrimitiveTypeExpression();
+    TypeExpression* parseQualifiedTypeExpression();
+    TypeExpression* parseArrowTypeExpression();
+    VarTypeExpression* parseVarTypeExpression();
 
   public:
 
@@ -86,7 +97,7 @@ namespace bolt {
 
     Pattern* parsePattern();
 
-    Param* parseParam();
+    Parameter* parseParam();
 
     ReferenceExpression* parseReferenceExpression();
 
@@ -105,6 +116,12 @@ namespace bolt {
     Node* parseLetBodyElement();
 
     LetDeclaration* parseLetDeclaration();
+
+    Node* parseClassElement();
+
+    ClassDeclaration* parseClassDeclaration();
+
+    InstanceDeclaration* parseInstanceDeclaration();
 
     Node* parseSourceElement();
 

@@ -36,8 +36,7 @@ namespace bolt {
 
   };
 
-  class TextRange {
-  public:
+  struct TextRange {
     TextLoc Start;
     TextLoc End;
   };

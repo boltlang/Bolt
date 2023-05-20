@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/build/bolt",
-            "args": ["test.bolt"],
+            "args": [ "test.bolt" ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "CMake: build"
         }

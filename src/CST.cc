@@ -2,6 +2,7 @@
 #include "zen/config.hpp"
 
 #include "bolt/CST.hpp"
+#include "bolt/CSTVisitor.hpp"
 
 namespace bolt {
 
@@ -11,23 +12,34 @@ namespace bolt {
     }
 
   void Scope::scan(Node* X) {
-    switch (X->Type) {
-      case NodeType::ExpressionStatement:
-      case NodeType::ReturnStatement:
-      case NodeType::IfStatement:
+    switch (X->getKind()) {
+      case NodeKind::ExpressionStatement:
+      case NodeKind::ReturnStatement:
+      case NodeKind::IfStatement:
         break;
-      case NodeType::SourceFile:
+      case NodeKind::SourceFile:
       {
-        auto Y = static_cast<SourceFile*>(X);
-        for (auto Element: Y->Elements) {
+        auto File = static_cast<SourceFile*>(X);
+        for (auto Element: File->Elements) {
           scan(Element);
         }
         break;
       }
-      case NodeType::LetDeclaration:
+      case NodeKind::ClassDeclaration:
       {
-        auto Y = static_cast<LetDeclaration*>(X);
-        addBindings(Y->Pattern, Y);
+        auto Decl = static_cast<ClassDeclaration*>(X);
+        for (auto Element: Decl->Elements) {
+          scan(Element);
+        }
+        break;
+      }
+      case NodeKind::InstanceDeclaration:
+        // FIXME is this right?
+        break;
+      case NodeKind::LetDeclaration:
+      {
+        auto Decl = static_cast<LetDeclaration*>(X);
+        addBindings(Decl->Pattern, Decl);
         break;
       }
       default:
@@ -36,8 +48,8 @@ namespace bolt {
   }
 
   void Scope::addBindings(Pattern* X, Node* ToInsert) {
-    switch (X->Type) {
-      case NodeType::BindPattern:
+    switch (X->getKind()) {
+      case NodeKind::BindPattern:
       {
         auto Y = static_cast<BindPattern*>(X);
         Mapping.emplace(Y->Name->Text, ToInsert);
@@ -49,6 +61,7 @@ namespace bolt {
   }
 
   Node* Scope::lookup(SymbolPath Path) {
+    ZEN_ASSERT(Path.Modules.empty());
     auto Curr = this;
     do {
       auto Match = Curr->Mapping.find(Path.Name);
@@ -70,7 +83,7 @@ namespace bolt {
   SourceFile* Node::getSourceFile() {
     auto CurrNode = this;
     for (;;) {
-      if (CurrNode->Type == NodeType::SourceFile) {
+      if (CurrNode->Kind == NodeKind::SourceFile) {
         return static_cast<SourceFile*>(CurrNode);
       }
       CurrNode = CurrNode->Parent;
@@ -95,435 +108,49 @@ namespace bolt {
     return EndLoc;
   }
 
-  void Token::setParents() {
-  }
+  void Node::setParents() {
 
-  void QualifiedName::setParents() {
-    for (auto Name: ModulePath) {
-      Name->Parent = this;
-    }
-    Name->Parent = this;
-  }
+    struct SetParentsVisitor : public CSTVisitor<SetParentsVisitor> {
 
-  void ReferenceTypeExpression::setParents() {
-    Name->Parent = this;
-    Name->setParents();
-  }
-  
-  void ArrowTypeExpression::setParents() {
-    for (auto ParamType: ParamTypes) {
-      ParamType->Parent = this;
-      ParamType->setParents();
-    }
-    ReturnType->Parent = this;
-    ReturnType->setParents();
-  }
+      std::vector<Node*> Parents { nullptr };
 
-  void BindPattern::setParents() {
-    Name->Parent = this;
-  }
+      void visit(Node* N) {
+        N->Parent = Parents.back();
+        Parents.push_back(N);
+        visitEachChild(N);
+        Parents.pop_back();
+      }
 
-  void ReferenceExpression::setParents() {
-    Name->Parent = this;
-  }
+    };
 
-  void NestedExpression::setParents() {
-    LParen->Parent = this;
-    Inner->Parent = this;
-    Inner->setParents();
-    RParen->Parent = this;
-  }
+    SetParentsVisitor V;
+    V.visit(this);
 
-  void ConstantExpression::setParents() {
-    Token->Parent = this;
-  }
-
-  void CallExpression::setParents() {
-    Function->Parent = this;
-    Function->setParents();
-    for (auto Arg: Args) {
-      Arg->Parent = this;
-      Arg->setParents();
-    }
-  }
-
-  void InfixExpression::setParents() {
-    LHS->Parent = this;
-    LHS->setParents();
-    Operator->Parent = this;
-    RHS->Parent = this;
-    RHS->setParents();
-  }
-
-  void UnaryExpression::setParents() {
-    Operator->Parent = this;
-    Argument->Parent = this;
-    Argument->setParents();
-  }
-
-  void ExpressionStatement::setParents() {
-    Expression->Parent = this;
-    Expression->setParents();
-  }
-
-  void ReturnStatement::setParents() {
-    ReturnKeyword->Parent = this;
-    Expression->Parent = this;
-    Expression->setParents();
-  }
-
-  void IfStatementPart::setParents() {
-    Keyword->Parent = this;
-    if (Test) {
-      Test->Parent = this;
-      Test->setParents();
-    }
-    BlockStart->Parent = this;
-    for (auto Element: Elements) {
-      Element->Parent = this;
-      Element->setParents();
-    }
-  }
-
-  void IfStatement::setParents() {
-    for (auto Part: Parts) {
-      Part->Parent = this;
-      Part->setParents();
-    }
-  }
-
-  void TypeAssert::setParents() {
-    Colon->Parent = this;
-    TypeExpression->Parent = this;
-    TypeExpression->setParents();
-  }
-
-  void LetBlockBody::setParents() {
-    BlockStart->Parent = this;
-    for (auto Element: Elements) {
-      Element->Parent = this;
-      Element->setParents();
-    }
-  }
-
-  void LetExprBody::setParents() {
-    Equals->Parent = this;
-    Expression->Parent = this;
-    Expression->setParents();
-  }
-
-  void Param::setParents() {
-    Pattern->Parent = this;
-    Pattern->setParents();
-    if (TypeAssert) {
-      TypeAssert->Parent = this;
-      TypeAssert->setParents();
-    }
-  }
-
-  void LetDeclaration::setParents() {
-    if (PubKeyword) {
-      PubKeyword->Parent = this;
-    }
-    LetKeyword->Parent = this;
-    if (MutKeyword) {
-      MutKeyword->Parent = this;
-    }
-    Pattern->Parent = this;
-    Pattern->setParents();
-    for (auto Param: Params) {
-      Param->Parent = this;
-      Param->setParents();
-    }
-    if (TypeAssert) {
-      TypeAssert->Parent = this;
-      TypeAssert->setParents();
-    }
-    if (Body) {
-      Body->Parent = this;
-      Body->setParents();
-    }
-  }
-
-  void StructDeclField::setParents() {
-    Name->Parent = this;
-    Colon->Parent = this;
-    TypeExpression->Parent = this;
-    TypeExpression->setParents();
-  }
-
-  void StructDecl::setParents() {
-    StructKeyword->Parent = this;
-    Name->Parent = this;
-    BlockStart->Parent = this;
-    for (auto Field: Fields) {
-      Field->Parent = this;
-      Field->setParents();
-    }
-  }
-
-  void SourceFile::setParents() {
-    for (auto Element: Elements) {
-      Element->Parent = this;
-      Element->setParents();
-    }
   }
 
   Node::~Node() {
+
+    struct UnrefVisitor : public CSTVisitor<UnrefVisitor> {
+
+      void visit(Node* N) {
+        N->unref();
+        visitEachChild(N);
+      }
+
+    };
+
+    UnrefVisitor V;
+    V.visitEachChild(this);
+
   }
 
-  Token::~Token() {
-  }
-
-  Equals::~Equals() {
-  }
-
-  Colon::~Colon() {
-  }
-
-  RArrow::~RArrow() {
-  }
-
-  Dot::~Dot() {
-  }
-
-  DotDot::~DotDot() {
-  }
-
-  LParen::~LParen() {
-  }
-
-  RParen::~RParen() {
-  }
-
-  LBracket::~LBracket() {
-  }
-
-  RBracket::~RBracket() {
-  }
-
-  LBrace::~LBrace() {
-  }
-
-  RBrace::~RBrace() {
-  }
-
-  LetKeyword::~LetKeyword() {
-  }
-
-  MutKeyword::~MutKeyword() {
-  }
-
-  PubKeyword::~PubKeyword() {
-  }
-
-  TypeKeyword::~TypeKeyword() {
-  }
-
-  ReturnKeyword::~ReturnKeyword() {
-  }
-
-  IfKeyword::~IfKeyword() {
-  }
-
-  ElifKeyword::~ElifKeyword() {
-  }
-
-  ElseKeyword::~ElseKeyword() {
-  }
-
-  ModKeyword::~ModKeyword() {
-  }
-
-  StructKeyword::~StructKeyword() {
-  }
-
-  Invalid::~Invalid() {
-  }
-
-  EndOfFile::~EndOfFile() {
-  }
-
-  BlockStart::~BlockStart() {
-  }
-
-  BlockEnd::~BlockEnd() {
-  }
-
-  LineFoldEnd::~LineFoldEnd() {
-  }
-
-  CustomOperator::~CustomOperator() {
-  }
-
-  Assignment::~Assignment() {
-  }
-
-  Identifier::~Identifier() {
-  }
-
-  StringLiteral::~StringLiteral() {
-  }
-
-  IntegerLiteral::~IntegerLiteral() {
-  }
-
-  QualifiedName::~QualifiedName() {
-    for (auto& Element: ModulePath){
-      Element->unref();
+  bool Identifier::isTypeVar() const {
+    for (auto C: Text) {
+      if (!((C >= 97 && C <= 122) || C == '_')) {
+        return false;
+      }
     }
-    Name->unref();
-  }
-
-  TypeExpression::~TypeExpression() {
-  }
-
-  ReferenceTypeExpression::~ReferenceTypeExpression() {
-    Name->unref();
-  }
-
-  ArrowTypeExpression::~ArrowTypeExpression() {
-    for (auto ParamType: ParamTypes) {
-      ParamType->unref();
-    }
-    ReturnType->unref();
-  }
-
-  Pattern::~Pattern() {
-  }
-
-  BindPattern::~BindPattern() {
-    Name->unref();
-  }
-
-  Expression::~Expression() {
-  }
-
-  ReferenceExpression::~ReferenceExpression() {
-    Name->unref();
-  }
-
-  NestedExpression::~NestedExpression() {
-    LParen->unref();
-    Inner->unref();
-    RParen->unref();
-  }
-
-  ConstantExpression::~ConstantExpression() {
-    Token->unref();
-  }
-
-  CallExpression::~CallExpression() {
-    Function->unref();
-    for (auto& Element: Args){
-      Element->unref();
-    }
-  }
-
-  InfixExpression::~InfixExpression() {
-    LHS->unref();
-    Operator->unref();
-    RHS->unref();
-  }
-
-  UnaryExpression::~UnaryExpression() {
-    Operator->unref();
-    Argument->unref();
-  }
-
-  Statement::~Statement() {
-  }
-
-  ExpressionStatement::~ExpressionStatement() {
-    Expression->unref();
-  }
-
-  ReturnStatement::~ReturnStatement() {
-    ReturnKeyword->unref();
-    Expression->unref();
-  }
-
-  IfStatementPart::~IfStatementPart() {
-    Keyword->unref();
-    if (Test) {
-      Test->unref();
-    }
-    BlockStart->unref();
-    for (auto Element: Elements) {
-      Element->unref();
-    }
-  }
-
-  IfStatement::~IfStatement() {
-    for (auto Part: Parts) {
-      Part->unref();
-    }
-  }
-
-  TypeAssert::~TypeAssert() {
-    Colon->unref();
-    TypeExpression->unref();
-  }
-
-  Param::~Param() {
-    Pattern->unref();
-    TypeAssert->unref();
-  }
-
-  LetBody::~LetBody() {
-  }
-
-  LetBlockBody::~LetBlockBody() {
-    BlockStart->unref();
-    for (auto& Element: Elements){
-      Element->unref();
-    }
-  }
-
-  LetExprBody::~LetExprBody() {
-    Equals->unref();
-    Expression->unref();
-  }
-
-  LetDeclaration::~LetDeclaration() {
-    if (PubKeyword) {
-      PubKeyword->unref();
-    }
-    LetKeyword->unref();
-    if (MutKeyword) {
-      MutKeyword->unref();
-    }
-    Pattern->unref();
-    for (auto& Element: Params){
-      Element->unref();
-    }
-    if (TypeAssert) {
-      TypeAssert->unref();
-    }
-    if (Body) {
-      Body->unref();
-    }
-  }
-
-  StructDeclField::~StructDeclField() {
-    Name->unref();
-    Colon->unref();
-    TypeExpression->unref();
-  }
-
-  StructDecl::~StructDecl() {
-    StructKeyword->unref();
-    Name->unref();
-    BlockStart->unref();
-    for (auto& Element: Fields){
-      Element->unref();
-    }
-  }
-
-  SourceFile::~SourceFile() {
-    for (auto& Element: Elements){
-      Element->unref();
-    }
+    return true;
   }
 
   Token* QualifiedName::getFirstToken() {
@@ -535,6 +162,36 @@ namespace bolt {
 
   Token* QualifiedName::getLastToken() {
     return Name;
+  }
+
+  Token* TypeclassConstraintExpression::getFirstToken() {
+    return Name;
+  }
+
+  Token* TypeclassConstraintExpression::getLastToken() {
+    if (!TEs.empty()) {
+      return TEs.back()->getLastToken();
+    }
+    return Name;
+  }
+
+  Token* EqualityConstraintExpression::getFirstToken() {
+    return Left->getFirstToken();
+  }
+
+  Token* EqualityConstraintExpression::getLastToken() {
+    return Left->getLastToken();
+  }
+
+  Token* QualifiedTypeExpression::getFirstToken() {
+    if (!Constraints.empty()) {
+      return std::get<0>(Constraints.front())->getFirstToken();
+    }
+    return TE->getFirstToken();
+  }
+
+  Token* QualifiedTypeExpression::getLastToken() {
+    return TE->getLastToken();
   }
 
   Token* ReferenceTypeExpression::getFirstToken() {
@@ -554,6 +211,14 @@ namespace bolt {
 
   Token* ArrowTypeExpression::getLastToken() {
     return ReturnType->getLastToken();
+  }
+
+  Token* VarTypeExpression::getLastToken() {
+    return Name;
+  }
+
+  Token* VarTypeExpression::getFirstToken() {
+    return Name;
   }
 
   Token* BindPattern::getFirstToken() {
@@ -607,11 +272,11 @@ namespace bolt {
     return RHS->getLastToken();
   }
 
-  Token* UnaryExpression::getFirstToken() {
+  Token* PrefixExpression::getFirstToken() {
     return Operator;
   }
 
-  Token* UnaryExpression::getLastToken() {
+  Token* PrefixExpression::getLastToken() {
     return Argument->getLastToken();
   }
   
@@ -663,11 +328,11 @@ namespace bolt {
     return TypeExpression->getLastToken();
   }
 
-  Token* Param::getFirstToken() {
+  Token* Parameter::getFirstToken() {
     return Pattern->getFirstToken();
   }
 
-  Token* Param::getLastToken() {
+  Token* Parameter::getLastToken() {
     if (TypeAssert) {
       return TypeAssert->getLastToken();
     }
@@ -713,24 +378,49 @@ namespace bolt {
     return Pattern->getLastToken();
   }
 
-  Token* StructDeclField::getFirstToken() {
+  Token* StructDeclarationField::getFirstToken() {
     return Name;
   }
 
-  Token* StructDeclField::getLastToken() {
+  Token* StructDeclarationField::getLastToken() {
     return TypeExpression->getLastToken();
   }
 
-  Token* StructDecl::getFirstToken() {
+  Token* StructDeclaration::getFirstToken() {
     if (PubKeyword) {
       return PubKeyword;
     }
     return StructKeyword;
   }
 
-  Token* StructDecl::getLastToken() {
+  Token* StructDeclaration::getLastToken() {
     if (Fields.size()) {
       Fields.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* InstanceDeclaration::getFirstToken() {
+    return InstanceKeyword;
+  }
+
+  Token* InstanceDeclaration::getLastToken() {
+    if (!Elements.empty()) {
+      return Elements.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* ClassDeclaration::getFirstToken() {
+    if (PubKeyword != nullptr) {
+      return PubKeyword;
+    }
+    return ClassKeyword;
+  }
+
+  Token* ClassDeclaration::getLastToken() {
+    if (!Elements.empty()) {
+      return Elements.back()->getLastToken();
     }
     return BlockStart;
   }
@@ -757,8 +447,16 @@ namespace bolt {
     return ":";
   }
 
+  std::string Comma::getText() const {
+    return ",";
+  }
+
   std::string RArrow::getText() const {
     return "->";
+  }
+
+  std::string RArrowAlt::getText() const {
+    return "=>";
   }
 
   std::string Dot::getText() const {
@@ -871,6 +569,18 @@ namespace bolt {
 
   std::string DotDot::getText() const {
     return "..";
+  }
+
+  std::string Tilde::getText() const {
+    return "~";
+  }
+
+  std::string ClassKeyword::getText() const {
+    return "class";
+  }
+
+  std::string InstanceKeyword::getText() const {
+    return "instance";
   }
 
   SymbolPath QualifiedName::getSymbolPath() const { 

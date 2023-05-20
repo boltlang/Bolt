@@ -73,11 +73,11 @@ if (BOLT_ENABLE_TESTS)
   )
 endif()
 
-#add_custom_command(
-#  OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/include/bolt/CST.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/CST.cc"
-#  COMMAND scripts/gennodes.py --name=CST ./bolt-cst-spec.txt -Iinclude/ --include-root=bolt --source-root=src/ --namespace=bolt
-#  DEPENDS scripts/gennodes.py
-#  MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/bolt-cst-spec.txt"
-#  WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-#)
+# add_custom_command(
+#   OUTPUT "${CMAKE_CURRENT_SOURCE_DIR}/include/bolt/CST.hpp" "${CMAKE_CURRENT_SOURCE_DIR}/src/CST.cc"
+#   COMMAND scripts/gennodes.py --name=CST ./bolt-cst-spec.txt -Iinclude/ --include-root=bolt --source-root=src/ --namespace=bolt
+#   DEPENDS scripts/gennodes.py
+#   MAIN_DEPENDENCY "${CMAKE_CURRENT_SOURCE_DIR}/bolt-cst-spec.txt"
+#   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+# )
 

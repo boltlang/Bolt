@@ -37,6 +37,7 @@ int main(int argc, const char* argv[]) {
   }
 
   ConsoleDiagnostics DE;
+  LanguageConfig Config;
 
   auto Text = readFile(argv[1]);
   TextFile File { argv[1], Text };
@@ -56,7 +57,7 @@ int main(int argc, const char* argv[]) {
 
   SF->setParents();
 
-  Checker TheChecker { DE };
+  Checker TheChecker { Config, DE };
   TheChecker.check(SF);
 
   return 0;

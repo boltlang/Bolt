@@ -1,10 +1,13 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
+#include <cctype>
 #include <istream>
 #include <iterator>
 #include <unordered_map>
 #include <vector>
+
+#include "zen/config.hpp"
 
 #include "bolt/Text.hpp"
 #include "bolt/Integer.hpp"
@@ -12,16 +15,22 @@
 
 namespace bolt {
 
+  class Type;
+
   class Token;
   class SourceFile;
   class Scope;
   class Pattern;
+  class Expression;
+  class Statement;
 
-  enum class NodeType {
+  enum class NodeKind {
     Equals,
     Colon,
+    Comma,
     Dot,
     DotDot,
+    Tilde,
     LParen,
     RParen,
     LBracket,
@@ -29,6 +38,7 @@ namespace bolt {
     LBrace,
     RBrace,
     RArrow,
+    RArrowAlt,
     LetKeyword,
     MutKeyword,
     PubKeyword,
@@ -36,6 +46,8 @@ namespace bolt {
     ReturnKeyword,
     ModKeyword,
     StructKeyword,
+    ClassKeyword,
+    InstanceKeyword,
     ElifKeyword,
     IfKeyword,
     ElseKeyword,
@@ -50,26 +62,32 @@ namespace bolt {
     StringLiteral,
     IntegerLiteral,
     QualifiedName,
+    TypeclassConstraintExpression,
+    EqualityConstraintExpression,
+    QualifiedTypeExpression,
     ReferenceTypeExpression,
     ArrowTypeExpression,
+    VarTypeExpression,
     BindPattern,
     ReferenceExpression,
     NestedExpression,
     ConstantExpression,
     CallExpression,
     InfixExpression,
-    UnaryExpression,
+    PrefixExpression,
     ExpressionStatement,
     ReturnStatement,
     IfStatement,
     IfStatementPart,
     TypeAssert,
-    Param,
+    Parameter,
     LetBlockBody,
     LetExprBody,
     LetDeclaration,
-    StructDeclField,
-    StructDecl,
+    StructDeclarationField,
+    StructDeclaration,
+    ClassDeclaration,
+    InstanceDeclaration,
     SourceFile,
   };
 
@@ -78,9 +96,14 @@ namespace bolt {
     ByteString Name;
   };
 
+  template<typename T>
+  NodeKind getNodeType();
+
   class Node {
 
-    unsigned RefCount = 0;
+    unsigned RefCount = 1;
+
+    const NodeKind Kind;
 
   public:
 
@@ -97,17 +120,40 @@ namespace bolt {
       }
     }
 
-    virtual void setParents() = 0;
-    
+    void setParents();
+
     virtual Token* getFirstToken() = 0;
     virtual Token* getLastToken() = 0;
 
+    inline NodeKind getKind() const noexcept {
+      return Kind;
+    }
+
+    template<typename T>
+    bool is() const noexcept {
+      return Kind == getNodeType<T>();
+    }
+
+    template<>
+    bool is<Expression>() const noexcept {
+      return Kind == NodeKind::ReferenceExpression
+          || Kind == NodeKind::ConstantExpression
+          || Kind == NodeKind::PrefixExpression
+          || Kind == NodeKind::InfixExpression
+          || Kind == NodeKind::CallExpression
+          || Kind == NodeKind::NestedExpression;
+    }
+
+    template<typename T>
+    T* as() {
+      ZEN_ASSERT(is<T>());
+      return static_cast<T*>(this);
+    }
+
     TextRange getRange();
 
-    const NodeType Type;
-
-    inline Node(NodeType Type):
-        Type(Type) {}
+    inline Node(NodeKind Type):
+        Kind(Type) {}
 
     SourceFile* getSourceFile();
 
@@ -142,13 +188,11 @@ namespace bolt {
 
   public:
 
-    Token(NodeType Type, TextLoc StartLoc): Node(Type), StartLoc(StartLoc) {}
+    Token(NodeKind Type, TextLoc StartLoc): Node(Type), StartLoc(StartLoc) {}
 
     virtual std::string getText() const = 0;
 
-    void setParents() override;
-
-    inline Token* getFirstToken() override {
+        inline Token* getFirstToken() override {
       return this;
     }
 
@@ -178,319 +222,439 @@ namespace bolt {
       return getEndLoc().Column;
     }
 
-    ~Token();
-
   };
 
   class Equals : public Token {
   public:
 
-    Equals(TextLoc StartLoc):
-      Token(NodeType::Equals, StartLoc) {}
+    inline Equals(TextLoc StartLoc):
+      Token(NodeKind::Equals, StartLoc) {}
 
     std::string getText() const override;
 
-    ~Equals();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Equals;
+    }
 
   };
 
   class Colon : public Token {
   public:
 
-    Colon(TextLoc StartLoc):
-      Token(NodeType::Colon, StartLoc) {}
+    inline Colon(TextLoc StartLoc):
+      Token(NodeKind::Colon, StartLoc) {}
 
     std::string getText() const override;
 
-    ~Colon();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Colon;
+    }
 
   };
 
-  class RArrow : public Token {
+  class Comma : public Token {
   public:
 
-    RArrow(TextLoc StartLoc):
-      Token(NodeType::RArrow, StartLoc) {}
+    inline Comma(TextLoc StartLoc):
+      Token(NodeKind::Comma, StartLoc) {}
 
     std::string getText() const override;
 
-    ~RArrow();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Comma;
+    }
 
   };
 
   class Dot : public Token {
   public:
 
-    Dot(TextLoc StartLoc):
-      Token(NodeType::Dot, StartLoc) {}
+    inline Dot(TextLoc StartLoc):
+      Token(NodeKind::Dot, StartLoc) {}
 
     std::string getText() const override;
 
-    ~Dot();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Dot;
+    }
 
   };
 
   class DotDot : public Token {
   public:
 
-    DotDot(TextLoc StartLoc):
-      Token(NodeType::DotDot, StartLoc) {}
+    inline DotDot(TextLoc StartLoc):
+      Token(NodeKind::DotDot, StartLoc) {}
 
     std::string getText() const override;
 
-    ~DotDot();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::DotDot;
+    }
+
+  };
+
+  class Tilde : public Token {
+  public:
+
+    inline Tilde(TextLoc StartLoc):
+      Token(NodeKind::Tilde, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Tilde;
+    }
 
   };
 
   class LParen : public Token {
   public:
 
-    LParen(TextLoc StartLoc):
-      Token(NodeType::LParen, StartLoc) {}
+    inline LParen(TextLoc StartLoc):
+      Token(NodeKind::LParen, StartLoc) {}
 
     std::string getText() const override;
 
-    ~LParen();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LParen;
+    }
 
   };
 
   class RParen : public Token {
   public:
 
-    RParen(TextLoc StartLoc):
-      Token(NodeType::RParen, StartLoc) {}
+    inline RParen(TextLoc StartLoc):
+      Token(NodeKind::RParen, StartLoc) {}
 
     std::string getText() const override;
 
-    ~RParen();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::RParen;
+    }
 
   };
 
   class LBracket : public Token {
   public:
 
-    LBracket(TextLoc StartLoc):
-      Token(NodeType::LBracket, StartLoc) {}
+    inline LBracket(TextLoc StartLoc):
+      Token(NodeKind::LBracket, StartLoc) {}
 
     std::string getText() const override;
 
-    ~LBracket();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LBracket;
+    }
 
   };
 
   class RBracket : public Token {
   public:
 
-    RBracket(TextLoc StartLoc):
-      Token(NodeType::RBracket, StartLoc) {}
+    inline RBracket(TextLoc StartLoc):
+      Token(NodeKind::RBracket, StartLoc) {}
 
     std::string getText() const override;
 
-    ~RBracket();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::RBracket;
+    }
 
   };
 
   class LBrace : public Token {
   public:
 
-    LBrace(TextLoc StartLoc):
-      Token(NodeType::LBrace, StartLoc) {}
+    inline LBrace(TextLoc StartLoc):
+      Token(NodeKind::LBrace, StartLoc) {}
 
     std::string getText() const override;
 
-    ~LBrace();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LBrace;
+    }
 
   };
 
   class RBrace : public Token {
   public:
 
-    RBrace(TextLoc StartLoc):
-      Token(NodeType::RBrace, StartLoc) {}
+    inline RBrace(TextLoc StartLoc):
+      Token(NodeKind::RBrace, StartLoc) {}
 
     std::string getText() const override;
 
-    ~RBrace();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::RBrace;
+    }
+
+  };
+
+  class RArrow : public Token {
+  public:
+
+    inline RArrow(TextLoc StartLoc):
+      Token(NodeKind::RArrow, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::RArrow;
+    }
+
+  };
+
+  class RArrowAlt : public Token {
+  public:
+
+    inline RArrowAlt(TextLoc StartLoc):
+      Token(NodeKind::RArrowAlt, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::RArrowAlt;
+    }
 
   };
 
   class LetKeyword : public Token {
   public:
 
-    LetKeyword(TextLoc StartLoc):
-      Token(NodeType::LetKeyword, StartLoc) {}
+    inline LetKeyword(TextLoc StartLoc):
+      Token(NodeKind::LetKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~LetKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LetKeyword;
+    }
 
   };
 
   class MutKeyword : public Token {
   public:
 
-    MutKeyword(TextLoc StartLoc):
-      Token(NodeType::MutKeyword, StartLoc) {}
+    inline MutKeyword(TextLoc StartLoc):
+      Token(NodeKind::MutKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~MutKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::MutKeyword;
+    }
 
   };
 
   class PubKeyword : public Token {
   public:
 
-    PubKeyword(TextLoc StartLoc):
-      Token(NodeType::PubKeyword, StartLoc) {}
+    inline PubKeyword(TextLoc StartLoc):
+      Token(NodeKind::PubKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~PubKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::PubKeyword;
+    }
 
   };
 
   class TypeKeyword : public Token {
   public:
 
-    TypeKeyword(TextLoc StartLoc):
-      Token(NodeType::TypeKeyword, StartLoc) {}
+    inline TypeKeyword(TextLoc StartLoc):
+      Token(NodeKind::TypeKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~TypeKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::TypeKeyword;
+    }
 
   };
 
   class ReturnKeyword : public Token {
   public:
 
-    ReturnKeyword(TextLoc StartLoc):
-      Token(NodeType::ReturnKeyword, StartLoc) {}
+    inline ReturnKeyword(TextLoc StartLoc):
+      Token(NodeKind::ReturnKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~ReturnKeyword();
-
-  };
-
-  class ElseKeyword : public Token {
-  public:
-
-    ElseKeyword(TextLoc StartLoc):
-      Token(NodeType::ElseKeyword, StartLoc) {}
-
-    std::string getText() const override;
-
-    ~ElseKeyword();
-
-  };
-
-  class ElifKeyword : public Token {
-  public:
-
-    ElifKeyword(TextLoc StartLoc):
-      Token(NodeType::ElifKeyword, StartLoc) {}
-
-    std::string getText() const override;
-
-    ~ElifKeyword();
-
-  };
-
-  class IfKeyword : public Token {
-  public:
-
-    IfKeyword(TextLoc StartLoc):
-      Token(NodeType::IfKeyword, StartLoc) {}
-
-    std::string getText() const override;
-
-    ~IfKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ReturnKeyword;
+    }
 
   };
 
   class ModKeyword : public Token {
   public:
 
-    ModKeyword(TextLoc StartLoc):
-      Token(NodeType::ModKeyword, StartLoc) {}
+    inline ModKeyword(TextLoc StartLoc):
+      Token(NodeKind::ModKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~ModKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ModKeyword;
+    }
 
   };
 
   class StructKeyword : public Token {
   public:
 
-    StructKeyword(TextLoc StartLoc):
-      Token(NodeType::StructKeyword, StartLoc) {}
+    inline StructKeyword(TextLoc StartLoc):
+      Token(NodeKind::StructKeyword, StartLoc) {}
 
     std::string getText() const override;
 
-    ~StructKeyword();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::StructKeyword;
+    }
+
+  };
+
+  class ClassKeyword : public Token {
+  public:
+
+    inline ClassKeyword(TextLoc StartLoc):
+      Token(NodeKind::ClassKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ClassKeyword;
+    }
+
+  };
+
+  class InstanceKeyword : public Token {
+  public:
+
+    inline InstanceKeyword(TextLoc StartLoc):
+      Token(NodeKind::InstanceKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::InstanceKeyword;
+    }
+
+  };
+
+  class ElifKeyword : public Token {
+  public:
+
+    inline ElifKeyword(TextLoc StartLoc):
+      Token(NodeKind::ElifKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ElifKeyword;
+    }
+
+  };
+
+  class IfKeyword : public Token {
+  public:
+
+    inline IfKeyword(TextLoc StartLoc):
+      Token(NodeKind::IfKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::IfKeyword;
+    }
+
+  };
+
+  class ElseKeyword : public Token {
+  public:
+
+    inline ElseKeyword(TextLoc StartLoc):
+      Token(NodeKind::ElseKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ElseKeyword;
+    }
 
   };
 
   class Invalid : public Token {
   public:
 
-    Invalid(TextLoc StartLoc):
-      Token(NodeType::Invalid, StartLoc) {}
+    inline Invalid(TextLoc StartLoc):
+      Token(NodeKind::Invalid, StartLoc) {}
 
     std::string getText() const override;
 
-    ~Invalid();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Invalid;
+    }
 
   };
 
   class EndOfFile : public Token {
   public:
 
-    EndOfFile(TextLoc StartLoc):
-      Token(NodeType::EndOfFile, StartLoc) {}
+    inline EndOfFile(TextLoc StartLoc):
+      Token(NodeKind::EndOfFile, StartLoc) {}
 
     std::string getText() const override;
 
-    ~EndOfFile();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::EndOfFile;
+    }
 
   };
 
   class BlockStart : public Token {
   public:
 
-    BlockStart(TextLoc StartLoc):
-      Token(NodeType::BlockStart, StartLoc) {}
+    inline BlockStart(TextLoc StartLoc):
+      Token(NodeKind::BlockStart, StartLoc) {}
 
     std::string getText() const override;
 
-    ~BlockStart();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::BlockStart;
+    }
 
   };
 
   class BlockEnd : public Token {
   public:
 
-    BlockEnd(TextLoc StartLoc):
-      Token(NodeType::BlockEnd, StartLoc) {}
+    inline BlockEnd(TextLoc StartLoc):
+      Token(NodeKind::BlockEnd, StartLoc) {}
 
     std::string getText() const override;
 
-    ~BlockEnd();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::BlockEnd;
+    }
 
   };
 
   class LineFoldEnd : public Token {
   public:
 
-    LineFoldEnd(TextLoc StartLoc):
-      Token(NodeType::LineFoldEnd, StartLoc) {}
+    inline LineFoldEnd(TextLoc StartLoc):
+      Token(NodeKind::LineFoldEnd, StartLoc) {}
 
     std::string getText() const override;
 
-    ~LineFoldEnd();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LineFoldEnd;
+    }
 
   };
 
@@ -500,11 +664,13 @@ namespace bolt {
     ByteString Text;
 
     CustomOperator(ByteString Text, TextLoc StartLoc):
-      Token(NodeType::CustomOperator, StartLoc), Text(Text) {}
+      Token(NodeKind::CustomOperator, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
-    ~CustomOperator();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::CustomOperator;
+    }
 
   };
 
@@ -514,11 +680,13 @@ namespace bolt {
     ByteString Text;
 
     Assignment(ByteString Text, TextLoc StartLoc):
-      Token(NodeType::Assignment, StartLoc), Text(Text) {}
+      Token(NodeKind::Assignment, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
-    ~Assignment();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Assignment;
+    }
 
   };
 
@@ -528,11 +696,15 @@ namespace bolt {
     ByteString Text;
 
     Identifier(ByteString Text, TextLoc StartLoc):
-      Token(NodeType::Identifier, StartLoc), Text(Text) {}
+      Token(NodeKind::Identifier, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
-    ~Identifier();
+    bool isTypeVar() const;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Identifier;
+    }
 
   };
 
@@ -542,11 +714,13 @@ namespace bolt {
     ByteString Text;
 
     StringLiteral(ByteString Text, TextLoc StartLoc):
-      Token(NodeType::StringLiteral, StartLoc), Text(Text) {}
+      Token(NodeKind::StringLiteral, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
-    ~StringLiteral();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::StringLiteral;
+    }
 
   };
 
@@ -556,14 +730,15 @@ namespace bolt {
     Integer Value;
 
     IntegerLiteral(Integer Value, TextLoc StartLoc):
-      Token(NodeType::IntegerLiteral, StartLoc), Value(Value) {}
+      Token(NodeKind::IntegerLiteral, StartLoc), Value(Value) {}
 
     std::string getText() const override;
 
-    ~IntegerLiteral();
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::IntegerLiteral;
+    }
 
   };
-
   class QualifiedName : public Node {
   public:
 
@@ -573,27 +748,125 @@ namespace bolt {
     QualifiedName(
       std::vector<Identifier*> ModulePath,
       Identifier* Name
-    ): Node(NodeType::QualifiedName),
+    ): Node(NodeKind::QualifiedName),
        ModulePath(ModulePath),
        Name(Name) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    void setParents() override;
-
     SymbolPath getSymbolPath() const;
-
-    ~QualifiedName();
 
   };
 
-  class TypeExpression : public Node {
+  class TypedNode : public Node {
+  protected:
+
+    Type* Ty;
+
+    inline TypedNode(NodeKind Kind):
+      Node(Kind) {}
+
   public:
 
-    TypeExpression(NodeType Type): Node(Type) {}
+    inline void setType(Type* Ty2) {
+      Ty = Ty2;
+    }
 
-    ~TypeExpression();
+    inline Type* getType() const noexcept {
+      ZEN_ASSERT(Ty != nullptr);
+      return Ty;
+    }
+
+  };
+
+  class TypeExpression : public TypedNode {
+  protected:
+
+    TypeExpression(NodeKind Kind):
+      TypedNode(Kind) {}
+
+  };
+
+  class ConstraintExpression : public Node {
+  public:
+
+    inline ConstraintExpression(NodeKind Kind):
+      Node(Kind) {}
+
+  };
+
+  class VarTypeExpression;
+
+  class TypeclassConstraintExpression : public ConstraintExpression {
+  public:
+
+    Identifier* Name;
+    std::vector<VarTypeExpression*> TEs;
+
+    TypeclassConstraintExpression(
+      Identifier* Name,
+      std::vector<VarTypeExpression*> TEs
+    ): ConstraintExpression(NodeKind::TypeclassConstraintExpression),
+       Name(Name),
+       TEs(TEs) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::TypeclassConstraintExpression;
+    }
+
+  };
+
+  class EqualityConstraintExpression : public ConstraintExpression {
+  public:
+
+    TypeExpression* Left;
+    class Tilde* Tilde;
+    TypeExpression* Right;
+
+    inline EqualityConstraintExpression(
+    TypeExpression* Left,
+    class Tilde* Tilde,
+    TypeExpression* Right
+    ): ConstraintExpression(NodeKind::EqualityConstraintExpression),
+       Left(Left),
+       Tilde(Tilde),
+       Right(Right) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::EqualityConstraintExpression;
+    }
+
+  };
+
+  class QualifiedTypeExpression : public TypeExpression {
+  public:
+
+    std::vector<std::tuple<ConstraintExpression*, Comma*>> Constraints;
+    class RArrowAlt* RArrowAlt;
+    TypeExpression* TE;
+
+    QualifiedTypeExpression(
+      std::vector<std::tuple<ConstraintExpression*, Comma*>> Constraints,
+      class RArrowAlt* RArrowAlt,
+      TypeExpression* TE
+    ): TypeExpression(NodeKind::QualifiedTypeExpression),
+       Constraints(Constraints),
+       RArrowAlt(RArrowAlt),
+       TE(TE) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::QualifiedTypeExpression;
+    }
 
   };
 
@@ -604,15 +877,11 @@ namespace bolt {
 
     ReferenceTypeExpression(
       QualifiedName* Name
-    ): TypeExpression(NodeType::ReferenceTypeExpression),
+    ): TypeExpression(NodeKind::ReferenceTypeExpression),
        Name(Name) {}
-
-    void setParents() override;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~ReferenceTypeExpression();
 
   };
 
@@ -625,25 +894,33 @@ namespace bolt {
     inline ArrowTypeExpression(
       std::vector<TypeExpression*> ParamTypes,
       TypeExpression* ReturnType
-    ): TypeExpression(NodeType::ArrowTypeExpression),
+    ): TypeExpression(NodeKind::ArrowTypeExpression),
        ParamTypes(ParamTypes),
        ReturnType(ReturnType) {}
-
-    void setParents() override;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    ~ArrowTypeExpression();
+  };
+
+  class VarTypeExpression : public TypeExpression {
+  public:
+
+    Identifier* Name;
+
+    inline VarTypeExpression(Identifier* Name):
+      TypeExpression(NodeKind::VarTypeExpression), Name(Name) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
   };
 
   class Pattern : public Node {
-  public:
+  protected:
 
-    Pattern(NodeType Type): Node(Type) {}
-
-    ~Pattern();
+    inline Pattern(NodeKind Type):
+      Node(Type) {}
 
   };
 
@@ -654,24 +931,19 @@ namespace bolt {
 
     BindPattern(
       Identifier* Name
-    ): Pattern(NodeType::BindPattern),
+    ): Pattern(NodeKind::BindPattern),
        Name(Name) {}
-
-    void setParents() override;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    ~BindPattern();
-
   };
 
-  class Expression : public Node {
-  public:
+  class Expression : public TypedNode {
+  protected:
 
-    Expression(NodeType Type): Node(Type) {}
-
-    ~Expression();
+    inline Expression(NodeKind Kind):
+      TypedNode(Kind) {}
 
   };
 
@@ -682,59 +954,47 @@ namespace bolt {
 
     ReferenceExpression(
       QualifiedName* Name
-    ): Expression(NodeType::ReferenceExpression),
+    ): Expression(NodeKind::ReferenceExpression),
        Name(Name) {}
-
-    void setParents() override;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~ReferenceExpression();
 
   };
 
   class NestedExpression : public Expression {
   public:
 
-    LParen* LParen;
+    class LParen* LParen;
     Expression* Inner;
-    RParen* RParen;
+    class RParen* RParen;
 
     inline NestedExpression(
       class LParen* LParen,
       Expression* Inner,
       class RParen* RParen
-    ): Expression(NodeType::NestedExpression),
+    ): Expression(NodeKind::NestedExpression),
        LParen(LParen),
        Inner(Inner),
        RParen(RParen) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~NestedExpression();
 
   };
 
   class ConstantExpression : public Expression {
   public:
 
-    Token* Token;
+    class Token* Token;
 
     ConstantExpression(
       class Token* Token
-    ): Expression(NodeType::ConstantExpression),
+    ): Expression(NodeKind::ConstantExpression),
        Token(Token) {}
 
-    void setParents() override;
-
-    class Token* getFirstToken() override;
+        class Token* getFirstToken() override;
     class Token* getLastToken() override;
-
-    ~ConstantExpression();
 
   };
 
@@ -747,16 +1007,12 @@ namespace bolt {
     CallExpression(
       Expression* Function,
       std::vector<Expression*> Args
-    ): Expression(NodeType::CallExpression),
+    ): Expression(NodeKind::CallExpression),
        Function(Function),
        Args(Args) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~CallExpression();
 
   };
 
@@ -768,65 +1024,52 @@ namespace bolt {
     Expression* RHS;
 
     InfixExpression(Expression* LHS, Token* Operator, Expression* RHS):
-      Expression(NodeType::InfixExpression),
+      Expression(NodeKind::InfixExpression),
       LHS(LHS),
       Operator(Operator),
       RHS(RHS) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    ~InfixExpression();
-
   };
 
-  class UnaryExpression : public Expression {
+  class PrefixExpression : public Expression {
   public:
 
     Token* Operator;
     Expression* Argument;
 
-    UnaryExpression(
+    PrefixExpression(
       Token* Operator,
       Expression* Argument
-    ): Expression(NodeType::UnaryExpression),
+    ): Expression(NodeKind::PrefixExpression),
        Operator(Operator),
        Argument(Argument) {}
-
-    void setParents() override;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    ~UnaryExpression();
-
   };
 
   class Statement : public Node {
-  public:
+  protected:
 
-    Statement(NodeType Type): Node(Type) {}
-
-    ~Statement();
+    inline Statement(NodeKind Type):
+      Node(Type) {}
 
   };
 
   class ExpressionStatement : public Statement {
   public:
 
-    Expression* Expression;
+    class Expression* Expression;
 
     ExpressionStatement(class Expression* Expression):
-      Statement(NodeType::ExpressionStatement), Expression(Expression) {}
-
-    void setParents() override;
+      Statement(NodeKind::ExpressionStatement), Expression(Expression) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~ExpressionStatement();
 
   };
 
@@ -835,7 +1078,7 @@ namespace bolt {
 
     Token* Keyword;
     Expression* Test;
-    BlockStart* BlockStart;
+    class BlockStart* BlockStart;
     std::vector<Node*> Elements;
 
     inline IfStatementPart(
@@ -843,18 +1086,14 @@ namespace bolt {
       Expression* Test,
       class BlockStart* BlockStart,
       std::vector<Node*> Elements
-    ): Node(NodeType::IfStatementPart),
+    ): Node(NodeKind::IfStatementPart),
        Keyword(Keyword),
        Test(Test),
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~IfStatementPart();
 
   };
 
@@ -864,128 +1103,107 @@ namespace bolt {
     std::vector<IfStatementPart*> Parts;
 
     inline IfStatement(std::vector<IfStatementPart*> Parts):
-      Statement(NodeType::IfStatement), Parts(Parts) {}
-
-    void setParents() override;
+      Statement(NodeKind::IfStatement), Parts(Parts) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~IfStatement();
 
   };
 
   class ReturnStatement : public Statement {
   public:
 
-    ReturnKeyword* ReturnKeyword;
-    Expression* Expression;
+    class ReturnKeyword* ReturnKeyword;
+    class Expression* Expression;
 
     ReturnStatement(
       class ReturnKeyword* ReturnKeyword,
       class Expression* Expression
-    ): Statement(NodeType::ReturnStatement),
+    ): Statement(NodeKind::ReturnStatement),
        ReturnKeyword(ReturnKeyword),
        Expression(Expression) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~ReturnStatement();
 
   };
 
   class TypeAssert : public Node {
   public:
 
-    Colon* Colon;
-    TypeExpression* TypeExpression;
+    class Colon* Colon;
+    class TypeExpression* TypeExpression;
 
     TypeAssert(
       class Colon* Colon,
       class TypeExpression* TypeExpression
-    ): Node(NodeType::TypeAssert),
+    ): Node(NodeKind::TypeAssert),
        Colon(Colon),
        TypeExpression(TypeExpression) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~TypeAssert();
 
   };
 
-  class Param : public Node {
+  class Parameter : public Node {
   public:
 
-    Param(Pattern* Pattern, TypeAssert* TypeAssert): Node(NodeType::Param), Pattern(Pattern), TypeAssert(TypeAssert) {}
+    Parameter(
+      class Pattern* Pattern,
+      class TypeAssert* TypeAssert
+    ): Node(NodeKind::Parameter),
+       Pattern(Pattern),
+       TypeAssert(TypeAssert) {}
 
-    Pattern* Pattern;
-    TypeAssert* TypeAssert;
-
-    void setParents() override;
+    class Pattern* Pattern;
+    class TypeAssert* TypeAssert;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~Param();
 
   };
 
   class LetBody : public Node {
   public:
 
-    LetBody(NodeType Type): Node(Type) {}
-
-    ~LetBody();
+    LetBody(NodeKind Type): Node(Type) {}
 
   };
 
   class LetBlockBody : public LetBody {
   public:
 
-    BlockStart* BlockStart;
+    class BlockStart* BlockStart;
     std::vector<Node*> Elements;
 
     LetBlockBody(
       class BlockStart* BlockStart,
       std::vector<Node*> Elements
-    ): LetBody(NodeType::LetBlockBody),
+    ): LetBody(NodeKind::LetBlockBody),
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~LetBlockBody();
 
   };
 
   class LetExprBody : public LetBody {
   public:
 
-    Equals* Equals;
-    Expression* Expression;
+    class Equals* Equals;
+    class Expression* Expression;
 
     LetExprBody(
       class Equals* Equals,
       class Expression* Expression
-    ): LetBody(NodeType::LetExprBody),
+    ): LetBody(NodeKind::LetExprBody),
        Equals(Equals),
        Expression(Expression) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~LetExprBody();
 
   };
 
@@ -1001,12 +1219,12 @@ namespace bolt {
     InferContext* Ctx;
     class Type* Ty;
 
-    PubKeyword* PubKeyword;
-    LetKeyword* LetKeyword;
-    MutKeyword* MutKeyword;
-    Pattern* Pattern;
-    std::vector<Param*> Params;
-    TypeAssert* TypeAssert;
+    class PubKeyword* PubKeyword;
+    class LetKeyword* LetKeyword;
+    class MutKeyword* MutKeyword;
+    class Pattern* Pattern;
+    std::vector<Parameter*> Params;
+    class TypeAssert* TypeAssert;
     LetBody* Body;
 
     LetDeclaration(
@@ -1014,10 +1232,10 @@ namespace bolt {
       class LetKeyword* LetKeywod,
       class MutKeyword* MutKeyword,
       class Pattern* Pattern,
-      std::vector<Param*> Params,
+      std::vector<Parameter*> Params,
       class TypeAssert* TypeAssert,
       LetBody* Body
-    ): Node(NodeType::LetDeclaration),
+    ): Node(NodeKind::LetDeclaration),
        PubKeyword(PubKeyword),
        LetKeyword(LetKeywod),
        MutKeyword(MutKeyword),
@@ -1033,68 +1251,121 @@ namespace bolt {
       return TheScope;
     }
 
-    void setParents() override;
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LetDeclaration;
+    }
+
+  };
+
+  class InstanceDeclaration : public Node {
+  public:
+
+    class InstanceKeyword* InstanceKeyword;
+    Identifier* Name;
+    std::vector<TypeExpression*> TypeExps;
+    class BlockStart* BlockStart;
+    std::vector<Node*> Elements;
+
+    InstanceDeclaration(
+      class InstanceKeyword* InstanceKeyword,
+      Identifier* Name,
+      std::vector<TypeExpression*> TypeExps,
+      class BlockStart* BlockStart,
+      std::vector<Node*> Elements
+    ): Node(NodeKind::InstanceDeclaration),
+       InstanceKeyword(InstanceKeyword),
+       Name(Name),
+       TypeExps(TypeExps),
+       BlockStart(BlockStart),
+       Elements(Elements) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    ~LetDeclaration();
+  };
+
+  class ClassDeclaration : public Node {
+  public:
+
+    class PubKeyword* PubKeyword;
+    class ClassKeyword* ClassKeyword;
+    Identifier* Name;
+    std::vector<VarTypeExpression*> TypeVars;
+    class BlockStart* BlockStart;
+    std::vector<Node*> Elements;
+
+    ClassDeclaration(
+      class PubKeyword* PubKeyword,
+      class ClassKeyword* ClassKeyword,
+      Identifier* Name,
+      std::vector<VarTypeExpression*> TypeVars,
+      class BlockStart* BlockStart,
+      std::vector<Node*> Elements
+    ): Node(NodeKind::ClassDeclaration),
+       PubKeyword(PubKeyword),
+       ClassKeyword(ClassKeyword),
+       Name(Name),
+       TypeVars(TypeVars),
+       BlockStart(BlockStart),
+       Elements(Elements) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ClassDeclaration;
+    }
 
   };
 
-  class StructDeclField : public Node {
+  class StructDeclarationField : public Node {
   public:
 
-    StructDeclField(
+    StructDeclarationField(
       Identifier* Name,
-      Colon* Colon,
-      TypeExpression* TypeExpression
-    ): Node(NodeType::StructDeclField),
+      class Colon* Colon,
+      class TypeExpression* TypeExpression
+    ): Node(NodeKind::StructDeclarationField),
        Name(Name),
        Colon(Colon),
        TypeExpression(TypeExpression) {}
 
     Identifier* Name;
-    Colon* Colon;
-    TypeExpression* TypeExpression;
-
-    void setParents() override;
+    class Colon* Colon;
+    class TypeExpression* TypeExpression;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
-    ~StructDeclField();
-
   };
 
-  class StructDecl : public Node {
+  class StructDeclaration : public Node {
   public:
 
-    PubKeyword* PubKeyword;
-    StructKeyword* StructKeyword;
+    class PubKeyword* PubKeyword;
+    class StructKeyword* StructKeyword;
     Identifier* Name;
-    BlockStart* BlockStart;
-    std::vector<StructDeclField*> Fields;
+    class BlockStart* BlockStart;
+    std::vector<StructDeclarationField*> Fields;
 
-    StructDecl(
+    StructDeclaration(
       class PubKeyword* PubKeyword,
       class StructKeyword* StructKeyword,
       Identifier* Name,
       class BlockStart* BlockStart,
-      std::vector<StructDeclField*> Fields
-    ): Node(NodeType::StructDecl),
+      std::vector<StructDeclarationField*> Fields
+    ): Node(NodeKind::StructDeclaration),
        PubKeyword(PubKeyword),
        StructKeyword(StructKeyword),
        Name(Name),
        BlockStart(BlockStart),
        Fields(Fields) {}
 
-    void setParents() override;
-
     Token* getFirstToken() override;
     Token* getLastToken() override;
-
-    ~StructDecl();
 
   };
 
@@ -1103,19 +1374,17 @@ namespace bolt {
     Scope* TheScope = nullptr;
 
   public:
-    
+
     TextFile& File;
 
     std::vector<Node*> Elements;
 
     SourceFile(TextFile& File, std::vector<Node*> Elements):
-      Node(NodeType::SourceFile), File(File), Elements(Elements) {}
+      Node(NodeKind::SourceFile), File(File), Elements(Elements) {}
 
     inline TextFile& getTextFile() {
       return File;
     }
-
-    void setParents() override;
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
@@ -1127,9 +1396,68 @@ namespace bolt {
       return TheScope;
     }
 
-    ~SourceFile();
-
   };
+
+  template<> inline NodeKind getNodeType<Equals>() { return NodeKind::Equals; }
+  template<> inline NodeKind getNodeType<Colon>() { return NodeKind::Colon; }
+  template<> inline NodeKind getNodeType<Dot>() { return NodeKind::Dot; }
+  template<> inline NodeKind getNodeType<DotDot>() { return NodeKind::DotDot; }
+  template<> inline NodeKind getNodeType<Tilde>() { return NodeKind::Tilde; }
+  template<> inline NodeKind getNodeType<LParen>() { return NodeKind::LParen; }
+  template<> inline NodeKind getNodeType<RParen>() { return NodeKind::RParen; }
+  template<> inline NodeKind getNodeType<LBracket>() { return NodeKind::LBracket; }
+  template<> inline NodeKind getNodeType<RBracket>() { return NodeKind::RBracket; }
+  template<> inline NodeKind getNodeType<LBrace>() { return NodeKind::LBrace; }
+  template<> inline NodeKind getNodeType<RBrace>() { return NodeKind::RBrace; }
+  template<> inline NodeKind getNodeType<RArrow>() { return NodeKind::RArrow; }
+  template<> inline NodeKind getNodeType<RArrowAlt>() { return NodeKind::RArrowAlt; }
+  template<> inline NodeKind getNodeType<LetKeyword>() { return NodeKind::LetKeyword; }
+  template<> inline NodeKind getNodeType<MutKeyword>() { return NodeKind::MutKeyword; }
+  template<> inline NodeKind getNodeType<PubKeyword>() { return NodeKind::PubKeyword; }
+  template<> inline NodeKind getNodeType<TypeKeyword>() { return NodeKind::TypeKeyword; }
+  template<> inline NodeKind getNodeType<ReturnKeyword>() { return NodeKind::ReturnKeyword; }
+  template<> inline NodeKind getNodeType<ModKeyword>() { return NodeKind::ModKeyword; }
+  template<> inline NodeKind getNodeType<StructKeyword>() { return NodeKind::StructKeyword; }
+  template<> inline NodeKind getNodeType<ClassKeyword>() { return NodeKind::ClassKeyword; }
+  template<> inline NodeKind getNodeType<InstanceKeyword>() { return NodeKind::InstanceKeyword; }
+  template<> inline NodeKind getNodeType<ElifKeyword>() { return NodeKind::ElifKeyword; }
+  template<> inline NodeKind getNodeType<IfKeyword>() { return NodeKind::IfKeyword; }
+  template<> inline NodeKind getNodeType<ElseKeyword>() { return NodeKind::ElseKeyword; }
+  template<> inline NodeKind getNodeType<Invalid>() { return NodeKind::Invalid; }
+  template<> inline NodeKind getNodeType<EndOfFile>() { return NodeKind::EndOfFile; }
+  template<> inline NodeKind getNodeType<BlockStart>() { return NodeKind::BlockStart; }
+  template<> inline NodeKind getNodeType<BlockEnd>() { return NodeKind::BlockEnd; }
+  template<> inline NodeKind getNodeType<LineFoldEnd>() { return NodeKind::LineFoldEnd; }
+  template<> inline NodeKind getNodeType<CustomOperator>() { return NodeKind::CustomOperator; }
+  template<> inline NodeKind getNodeType<Assignment>() { return NodeKind::Assignment; }
+  template<> inline NodeKind getNodeType<Identifier>() { return NodeKind::Identifier; }
+  template<> inline NodeKind getNodeType<StringLiteral>() { return NodeKind::StringLiteral; }
+  template<> inline NodeKind getNodeType<IntegerLiteral>() { return NodeKind::IntegerLiteral; }
+  template<> inline NodeKind getNodeType<QualifiedName>() { return NodeKind::QualifiedName; }
+  template<> inline NodeKind getNodeType<QualifiedTypeExpression>() { return NodeKind::QualifiedTypeExpression; }
+  template<> inline NodeKind getNodeType<ReferenceTypeExpression>() { return NodeKind::ReferenceTypeExpression; }
+  template<> inline NodeKind getNodeType<ArrowTypeExpression>() { return NodeKind::ArrowTypeExpression; }
+  template<> inline NodeKind getNodeType<BindPattern>() { return NodeKind::BindPattern; }
+  template<> inline NodeKind getNodeType<ReferenceExpression>() { return NodeKind::ReferenceExpression; }
+  template<> inline NodeKind getNodeType<NestedExpression>() { return NodeKind::NestedExpression; }
+  template<> inline NodeKind getNodeType<ConstantExpression>() { return NodeKind::ConstantExpression; }
+  template<> inline NodeKind getNodeType<CallExpression>() { return NodeKind::CallExpression; }
+  template<> inline NodeKind getNodeType<InfixExpression>() { return NodeKind::InfixExpression; }
+  template<> inline NodeKind getNodeType<PrefixExpression>() { return NodeKind::PrefixExpression; }
+  template<> inline NodeKind getNodeType<ExpressionStatement>() { return NodeKind::ExpressionStatement; }
+  template<> inline NodeKind getNodeType<ReturnStatement>() { return NodeKind::ReturnStatement; }
+  template<> inline NodeKind getNodeType<IfStatement>() { return NodeKind::IfStatement; }
+  template<> inline NodeKind getNodeType<IfStatementPart>() { return NodeKind::IfStatementPart; }
+  template<> inline NodeKind getNodeType<TypeAssert>() { return NodeKind::TypeAssert; }
+  template<> inline NodeKind getNodeType<Parameter>() { return NodeKind::Parameter; }
+  template<> inline NodeKind getNodeType<LetBlockBody>() { return NodeKind::LetBlockBody; }
+  template<> inline NodeKind getNodeType<LetExprBody>() { return NodeKind::LetExprBody; }
+  template<> inline NodeKind getNodeType<LetDeclaration>() { return NodeKind::LetDeclaration; }
+  template<> inline NodeKind getNodeType<StructDeclarationField>() { return NodeKind::StructDeclarationField; }
+  template<> inline NodeKind getNodeType<StructDeclaration>() { return NodeKind::StructDeclaration; }
+  template<> inline NodeKind getNodeType<ClassDeclaration>() { return NodeKind::ClassDeclaration; }
+  template<> inline NodeKind getNodeType<InstanceDeclaration>() { return NodeKind::InstanceDeclaration; }
+  template<> inline NodeKind getNodeType<SourceFile>() { return NodeKind::SourceFile; }
 
 }
 
