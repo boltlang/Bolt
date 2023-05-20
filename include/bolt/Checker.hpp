@@ -4,6 +4,7 @@
 #include "zen/config.hpp"
 
 #include "bolt/ByteString.hpp"
+#include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Diagnostics.hpp"
 
@@ -14,30 +15,6 @@
 #include <optional>
 
 namespace bolt {
-
-  class LanguageConfig {
-
-    enum ConfigFlags {
-      ConfigFlags_TypeVarsRequireForall = 1 << 0,
-    };
-
-    unsigned Flags;
-
-  public:
-
-    void setTypeVarsRequireForall(bool Enable) {
-      if (Enable) {
-        Flags |= ConfigFlags_TypeVarsRequireForall;
-      } else {
-        Flags |= ~ConfigFlags_TypeVarsRequireForall;
-      }
-    }
-
-    bool typeVarsRequireForall() const noexcept {
-      return Flags & ConfigFlags_TypeVarsRequireForall;
-    }
-
-  };
 
   class DiagnosticEngine;
   class Node;
@@ -230,57 +207,6 @@ namespace bolt {
 
   };
 
-/*   class Scheme { */
-
-/*     const SchemeKind Kind; */
-
-/*   public: */
-
-/*     inline Scheme(Forall F): */
-/*       Kind(SchemeKind::Forall), F(F) {} */
-
-/*     inline Scheme(const Scheme& Other): */
-/*       Kind(Other.Kind) { */
-/*         switch (Kind) { */
-/*           case SchemeKind::Forall: */
-/*             F = Other.F; */
-/*             break; */
-/*         } */
-/*       } */
-
-
-/*     inline Scheme(Scheme&& Other): */
-/*       Kind(std::move(Other.Kind)) { */
-/*         switch (Kind) { */
-/*           case SchemeKind::Forall: */
-/*             F = std::move(Other.F); */
-/*             break; */
-/*         } */
-/*       } */
-
-/*     inline SchemeKind getKind() const noexcept { */
-/*       return Kind; */
-/*     } */
-
-/*     template<typename T> */
-/*     T& as(); */
-
-/*     template<> */
-/*     Forall& as<Forall>() { */
-/*       ZEN_ASSERT(Kind == SchemeKind::Forall); */
-/*       return F; */
-/*     } */
-
-/*     ~Scheme() { */
-/*       switch (Kind) { */
-/*         case SchemeKind::Forall: */
-/*           F.~Forall(); */
-/*           break; */
-/*       } */
-/*     } */
-
-/*   }; */
-
   using TypeEnv = std::unordered_map<ByteString, Scheme*>;
 
   enum class ConstraintKind {
@@ -420,11 +346,6 @@ namespace bolt {
 
     std::vector<InferContext*> Contexts;
 
-    /**
-     * Holds the current inferred type class contexts in a given LetDeclaration body.
-     */
-    // std::vector<TypeclassContext*> TCCs;
-
     InferContext& getContext();
 
     void addConstraint(Constraint* Constraint);
@@ -473,8 +394,6 @@ namespace bolt {
     Type* getReturnType();
 
     Type* instantiate(Scheme* S, Node* Source);
-
-    /* void addToTypeclassContexts(Node* N, std::vector<TypeclassContext>& Contexts); */
 
     std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
     std::vector<TypeclassContext> findInstanceContext(TCon* Ty, TypeclassId& Class, Node* Source);

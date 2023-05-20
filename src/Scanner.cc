@@ -140,32 +140,6 @@ digit_finish:
         return new IntegerLiteral(I, StartLoc);
       }
 
-      case 'a':
-      case 'b':
-      case 'c':
-      case 'd':
-      case 'e':
-      case 'f':
-      case 'g':
-      case 'h':
-      case 'i':
-      case 'j':
-      case 'k':
-      case 'l':
-      case 'm':
-      case 'n':
-      case 'o':
-      case 'p':
-      case 'q':
-      case 'r':
-      case 's':
-      case 't':
-      case 'u':
-      case 'v':
-      case 'w':
-      case 'x':
-      case 'y':
-      case 'z':
       case 'A':
       case 'B':
       case 'C':
@@ -192,6 +166,45 @@ digit_finish:
       case 'X':
       case 'Y':
       case 'Z':
+      {
+        ByteString Text { static_cast<char>(C0) };
+        for (;;) {
+          auto C1 = peekChar();
+          if (!isIdentifierPart(C1)) {
+            break;
+          }
+          Text.push_back(C1);
+          getChar();
+        }
+        return new IdentifierAlt(Text, StartLoc);
+      }
+
+      case 'a':
+      case 'b':
+      case 'c':
+      case 'd':
+      case 'e':
+      case 'f':
+      case 'g':
+      case 'h':
+      case 'i':
+      case 'j':
+      case 'k':
+      case 'l':
+      case 'm':
+      case 'n':
+      case 'o':
+      case 'p':
+      case 'q':
+      case 'r':
+      case 's':
+      case 't':
+      case 'u':
+      case 'v':
+      case 'w':
+      case 'x':
+      case 'y':
+      case 'z':
       case '_':
       {
         ByteString Text { static_cast<char>(C0) };

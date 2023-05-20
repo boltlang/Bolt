@@ -79,12 +79,12 @@ namespace bolt {
           return static_cast<D*>(this)->visitAssignment(static_cast<Assignment*>(N));
         case NodeKind::Identifier:
           return static_cast<D*>(this)->visitIdentifier(static_cast<Identifier*>(N));
+        case NodeKind::IdentifierAlt:
+          return static_cast<D*>(this)->visitIdentifierAlt(static_cast<IdentifierAlt*>(N));
         case NodeKind::StringLiteral:
           return static_cast<D*>(this)->visitStringLiteral(static_cast<StringLiteral*>(N));
         case NodeKind::IntegerLiteral:
           return static_cast<D*>(this)->visitIntegerLiteral(static_cast<IntegerLiteral*>(N));
-        case NodeKind::QualifiedName:
-          return static_cast<D*>(this)->visitQualifiedName(static_cast<QualifiedName*>(N));
         case NodeKind::TypeclassConstraintExpression:
           return static_cast<D*>(this)->visitTypeclassConstraintExpression(static_cast<TypeclassConstraintExpression*>(N));
         case NodeKind::EqualityConstraintExpression:
@@ -288,16 +288,16 @@ namespace bolt {
       visitToken(N);
     }
 
+    void visitIdentifierAlt(IdentifierAlt* N) {
+      visitToken(N);
+    }
+
     void visitStringLiteral(StringLiteral* N) {
       visitToken(N);
     }
 
     void visitIntegerLiteral(IntegerLiteral* N) {
       visitToken(N);
-    }
-
-    void visitQualifiedName(QualifiedName* N) {
-      visitNode(N);
     }
 
     void visitConstraintExpression(ConstraintExpression* N) {
@@ -538,14 +538,14 @@ namespace bolt {
         case NodeKind::Identifier:
           visitEachChild(static_cast<Identifier*>(N));
           break;
+        case NodeKind::IdentifierAlt:
+          visitEachChild(static_cast<IdentifierAlt*>(N));
+          break;
         case NodeKind::StringLiteral:
           visitEachChild(static_cast<StringLiteral*>(N));
           break;
         case NodeKind::IntegerLiteral:
           visitEachChild(static_cast<IntegerLiteral*>(N));
-          break;
-        case NodeKind::QualifiedName:
-          visitEachChild(static_cast<QualifiedName*>(N));
           break;
         case NodeKind::TypeclassConstraintExpression:
           visitEachChild(static_cast<TypeclassConstraintExpression*>(N));
@@ -737,17 +737,13 @@ namespace bolt {
     void visitEachChild(Identifier* N) {
     }
 
+    void visitEachChild(IdentifierAlt* N) {
+    }
+
     void visitEachChild(StringLiteral* N) {
     }
 
     void visitEachChild(IntegerLiteral* N) {
-    }
-
-    void visitEachChild(QualifiedName* N) {
-      for (auto Name: N->ModulePath) {
-        BOLT_VISIT(Name);
-      }
-      BOLT_VISIT(N->Name);
     }
 
     void visitEachChild(TypeclassConstraintExpression* N) {
@@ -775,6 +771,10 @@ namespace bolt {
     }
 
     void visitEachChild(ReferenceTypeExpression* N) {
+      for (auto [Name, Dot]: N->ModulePath) {
+        BOLT_VISIT(Name);
+        BOLT_VISIT(Dot);
+      }
       BOLT_VISIT(N->Name);
     }
 
@@ -794,6 +794,10 @@ namespace bolt {
     }
 
     void visitEachChild(ReferenceExpression* N) {
+       for (auto [Name, Dot]: N->ModulePath) {
+         BOLT_VISIT(Name);
+         BOLT_VISIT(Dot);
+       }
        BOLT_VISIT(N->Name);
     }
 

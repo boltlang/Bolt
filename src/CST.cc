@@ -153,17 +153,6 @@ namespace bolt {
     return true;
   }
 
-  Token* QualifiedName::getFirstToken() {
-    if (ModulePath.size()) {
-      return ModulePath.front();
-    }
-    return Name;
-  }
-
-  Token* QualifiedName::getLastToken() {
-    return Name;
-  }
-
   Token* TypeclassConstraintExpression::getFirstToken() {
     return Name;
   }
@@ -195,11 +184,14 @@ namespace bolt {
   }
 
   Token* ReferenceTypeExpression::getFirstToken() {
-    return Name->getFirstToken();
+    if (!ModulePath.empty()) {
+      return std::get<0>(ModulePath.front());
+    }
+    return Name;
   }
 
   Token* ReferenceTypeExpression::getLastToken() {
-    return Name->getFirstToken();
+    return Name;
   }
 
   Token* ArrowTypeExpression::getFirstToken() {
@@ -230,11 +222,14 @@ namespace bolt {
   }
 
   Token* ReferenceExpression::getFirstToken() {
-    return Name->getFirstToken();
+    if (!ModulePath.empty()) {
+      return std::get<0>(ModulePath.front());
+    }
+    return Name;
   }
 
   Token* ReferenceExpression::getLastToken() {
-    return Name->getLastToken();
+    return Name;
   }
 
   Token* NestedExpression::getFirstToken() {
@@ -559,6 +554,10 @@ namespace bolt {
     return Text;
   }
 
+  std::string IdentifierAlt::getText() const {
+    return Text;
+  }
+
   std::string StringLiteral::getText() const {
     return "\"" + Text + "\"";
   }
@@ -583,10 +582,10 @@ namespace bolt {
     return "instance";
   }
 
-  SymbolPath QualifiedName::getSymbolPath() const { 
+  SymbolPath ReferenceExpression::getSymbolPath() const {
     std::vector<ByteString> ModuleNames;
-    for (auto Ident: ModulePath) {
-      ModuleNames.push_back(Ident->Text);
+    for (auto [Name, Dot]: ModulePath) {
+      ModuleNames.push_back(Name->Text);
     }
     return SymbolPath { ModuleNames, Name->Text };
   }

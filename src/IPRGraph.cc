@@ -75,7 +75,7 @@ namespace bolt {
       case NodeKind::ReferenceExpression:
       {
         auto Y = static_cast<ReferenceExpression*>(X);
-        auto Def = Y->getScope()->lookup(Y->Name->getSymbolPath());
+        auto Def = Y->getScope()->lookup(Y->getSymbolPath());
         ZEN_ASSERT(Def != nullptr);
         if (Decl != nullptr) {
           Edges.emplace(Decl, Y);

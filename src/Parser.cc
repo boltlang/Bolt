@@ -97,24 +97,6 @@ namespace bolt {
     }
   }
 
-  QualifiedName* Parser::parseQualifiedName() {
-    std::vector<Identifier*> ModulePath;
-    auto Name = expectToken(NodeKind::Identifier);
-    for (;;) {
-      auto T1 = Tokens.peek();
-      if (T1->getKind() != NodeKind::Dot) {
-        break;
-      }
-      Tokens.get();
-      ModulePath.push_back(static_cast<Identifier*>(Name));
-      Name = Tokens.get();
-      if (Name->getKind() != NodeKind::Identifier) {
-        throw UnexpectedTokenDiagnostic(File, Name, std::vector { NodeKind::Identifier });
-      }
-    }
-    return new QualifiedName(ModulePath, static_cast<Identifier*>(Name));
-  }
-
   TypeExpression* Parser::parseTypeExpression() {
     return parseQualifiedTypeExpression();
   }
@@ -186,10 +168,22 @@ after_constraints:
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
       case NodeKind::Identifier:
-        if (static_cast<Identifier*>(T0)->isTypeVar()) {
           return parseVarTypeExpression();
+      case NodeKind::IdentifierAlt:
+      {
+        std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
+        auto Name = expectToken<IdentifierAlt>();
+        for (;;) {
+          auto T1 = Tokens.peek();
+          if (T1->getKind() != NodeKind::Dot) {
+            break;
+          }
+          Tokens.get();
+          ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(Name), static_cast<Dot*>(T1)));
+          Name = expectToken<IdentifierAlt>();
         }
-        return new ReferenceTypeExpression(parseQualifiedName());
+        return new ReferenceTypeExpression(ModulePath, static_cast<IdentifierAlt*>(Name));
+      }
       default:
         throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier });
     }
@@ -218,8 +212,17 @@ after_constraints:
     switch (T0->getKind()) {
       case NodeKind::Identifier:
       {
-        auto Name = parseQualifiedName();
-        return new ReferenceExpression(Name);
+        std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
+        for (;;) {
+          auto T1 = Tokens.peek();
+          if (T1->getKind() != NodeKind::IdentifierAlt) {
+            break;
+          }
+          Tokens.get();
+          auto Dot = expectToken<class Dot>();
+          ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), Dot));
+        }
+        return new ReferenceExpression(ModulePath, expectToken<Identifier>());
       }
       case NodeKind::LParen:
       {
@@ -510,7 +513,7 @@ after_vars:
 
   InstanceDeclaration* Parser::parseInstanceDeclaration() {
     auto InstanceKeyword = expectToken<class InstanceKeyword>();
-    auto Name = expectToken<Identifier>();
+    auto Name = expectToken<IdentifierAlt>();
     std::vector<TypeExpression*> TypeExps;
     for (;;) {
       auto T1 = Tokens.peek();
@@ -547,7 +550,7 @@ after_vars:
       PubKeyword = static_cast<class PubKeyword*>(T0);
     }
     auto ClassKeyword = expectToken<class ClassKeyword>();
-    auto Name = expectToken<Identifier>();
+    auto Name = expectToken<IdentifierAlt>();
     std::vector<VarTypeExpression*> TypeVars;
     for (;;) {
       auto T2 = Tokens.peek();

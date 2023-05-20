@@ -59,9 +59,9 @@ namespace bolt {
     CustomOperator,
     Assignment,
     Identifier,
+    IdentifierAlt,
     StringLiteral,
     IntegerLiteral,
-    QualifiedName,
     TypeclassConstraintExpression,
     EqualityConstraintExpression,
     QualifiedTypeExpression,
@@ -708,6 +708,22 @@ namespace bolt {
 
   };
 
+  class IdentifierAlt : public Token {
+  public:
+
+    ByteString Text;
+
+    IdentifierAlt(ByteString Text, TextLoc StartLoc):
+      Token(NodeKind::IdentifierAlt, StartLoc), Text(Text) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::IdentifierAlt;
+    }
+
+  };
+
   class StringLiteral : public Token {
   public:
 
@@ -737,25 +753,6 @@ namespace bolt {
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::IntegerLiteral;
     }
-
-  };
-  class QualifiedName : public Node {
-  public:
-
-    std::vector<Identifier*> ModulePath;
-    Identifier* Name;
-
-    QualifiedName(
-      std::vector<Identifier*> ModulePath,
-      Identifier* Name
-    ): Node(NodeKind::QualifiedName),
-       ModulePath(ModulePath),
-       Name(Name) {}
-
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
-
-    SymbolPath getSymbolPath() const;
 
   };
 
@@ -873,15 +870,20 @@ namespace bolt {
   class ReferenceTypeExpression : public TypeExpression {
   public:
 
-    QualifiedName* Name;
+    std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
+    IdentifierAlt* Name;
 
     ReferenceTypeExpression(
-      QualifiedName* Name
+      std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
+      IdentifierAlt* Name
     ): TypeExpression(NodeKind::ReferenceTypeExpression),
+       ModulePath(ModulePath),
        Name(Name) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
+
+    SymbolPath getSymbolPath() const;
 
   };
 
@@ -950,15 +952,20 @@ namespace bolt {
   class ReferenceExpression : public Expression {
   public:
 
-    QualifiedName* Name;
+    std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
+    Identifier* Name;
 
     ReferenceExpression(
-      QualifiedName* Name
+      std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
+      Identifier* Name
     ): Expression(NodeKind::ReferenceExpression),
+       ModulePath(ModulePath),
        Name(Name) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
+
+    SymbolPath getSymbolPath() const;
 
   };
 
@@ -1264,14 +1271,14 @@ namespace bolt {
   public:
 
     class InstanceKeyword* InstanceKeyword;
-    Identifier* Name;
+    IdentifierAlt* Name;
     std::vector<TypeExpression*> TypeExps;
     class BlockStart* BlockStart;
     std::vector<Node*> Elements;
 
     InstanceDeclaration(
       class InstanceKeyword* InstanceKeyword,
-      Identifier* Name,
+      IdentifierAlt* Name,
       std::vector<TypeExpression*> TypeExps,
       class BlockStart* BlockStart,
       std::vector<Node*> Elements
@@ -1292,7 +1299,7 @@ namespace bolt {
 
     class PubKeyword* PubKeyword;
     class ClassKeyword* ClassKeyword;
-    Identifier* Name;
+    IdentifierAlt* Name;
     std::vector<VarTypeExpression*> TypeVars;
     class BlockStart* BlockStart;
     std::vector<Node*> Elements;
@@ -1300,7 +1307,7 @@ namespace bolt {
     ClassDeclaration(
       class PubKeyword* PubKeyword,
       class ClassKeyword* ClassKeyword,
-      Identifier* Name,
+      IdentifierAlt* Name,
       std::vector<VarTypeExpression*> TypeVars,
       class BlockStart* BlockStart,
       std::vector<Node*> Elements
@@ -1431,9 +1438,9 @@ namespace bolt {
   template<> inline NodeKind getNodeType<CustomOperator>() { return NodeKind::CustomOperator; }
   template<> inline NodeKind getNodeType<Assignment>() { return NodeKind::Assignment; }
   template<> inline NodeKind getNodeType<Identifier>() { return NodeKind::Identifier; }
+  template<> inline NodeKind getNodeType<IdentifierAlt>() { return NodeKind::IdentifierAlt; }
   template<> inline NodeKind getNodeType<StringLiteral>() { return NodeKind::StringLiteral; }
   template<> inline NodeKind getNodeType<IntegerLiteral>() { return NodeKind::IntegerLiteral; }
-  template<> inline NodeKind getNodeType<QualifiedName>() { return NodeKind::QualifiedName; }
   template<> inline NodeKind getNodeType<QualifiedTypeExpression>() { return NodeKind::QualifiedTypeExpression; }
   template<> inline NodeKind getNodeType<ReferenceTypeExpression>() { return NodeKind::ReferenceTypeExpression; }
   template<> inline NodeKind getNodeType<ArrowTypeExpression>() { return NodeKind::ArrowTypeExpression; }

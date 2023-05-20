@@ -636,10 +636,10 @@ namespace bolt {
       case NodeKind::ReferenceTypeExpression:
       {
         auto RefTE = static_cast<ReferenceTypeExpression*>(N);
-        auto Ty = lookupMono(RefTE->Name->Name->Text);
+        auto Ty = lookupMono(RefTE->Name->Text);
         if (Ty == nullptr) {
-          if (!RefTE->Name->Name->isTypeVar() || Config.typeVarsRequireForall()) {
-            DE.add<BindingNotFoundDiagnostic>(RefTE->Name->Name->Text, RefTE->Name->Name);
+          if (Config.typeVarsRequireForall()) {
+            DE.add<BindingNotFoundDiagnostic>(RefTE->Name->Text, RefTE->Name);
           }
           Ty = createTypeVar();
         }
@@ -718,16 +718,16 @@ namespace bolt {
       case NodeKind::ReferenceExpression:
       {
         auto Ref = static_cast<ReferenceExpression*>(X);
-        ZEN_ASSERT(Ref->Name->ModulePath.empty());
-        auto Ctx = lookupCall(Ref, Ref->Name->getSymbolPath());
+        ZEN_ASSERT(Ref->ModulePath.empty());
+        auto Ctx = lookupCall(Ref, Ref->getSymbolPath());
         if (Ctx) {
           /* std::cerr << "recursive call!\n"; */
           ZEN_ASSERT(Ctx->ReturnType != nullptr);
           return Ctx->ReturnType;
         }
-        auto Scm = lookup(Ref->Name->Name->Text);
+        auto Scm = lookup(Ref->Name->Text);
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Ref->Name->Name->Text, Ref->Name);
+          DE.add<BindingNotFoundDiagnostic>(Ref->Name->Text, Ref->Name);
           return createTypeVar();
         }
         auto Ty = instantiate(Scm, X);
@@ -795,8 +795,7 @@ namespace bolt {
         break;
       }
 
-      default
-        :
+      default:
         ZEN_UNREACHABLE
 
     }

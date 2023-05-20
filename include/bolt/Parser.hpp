@@ -91,8 +91,6 @@ namespace bolt {
 
     Parser(TextFile& File, Stream<Token*>& S);
 
-    QualifiedName* parseQualifiedName();
-
     TypeExpression* parseTypeExpression();
 
     Pattern* parsePattern();
