@@ -707,13 +707,30 @@ namespace bolt {
 
   };
 
-  class Identifier : public Token {
+  class Symbol : public Token {
+  public:
+
+    inline Symbol(NodeKind Kind, TextLoc StartLoc):
+      Token(Kind, StartLoc) {}
+
+    virtual ByteString getCanonicalText() = 0;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::Identifier
+          || N->getKind() == NodeKind::IdentifierAlt;
+    }
+
+  };
+
+  class Identifier : public Symbol {
   public:
 
     ByteString Text;
 
     Identifier(ByteString Text, TextLoc StartLoc):
-      Token(NodeKind::Identifier, StartLoc), Text(Text) {}
+      Symbol(NodeKind::Identifier, StartLoc), Text(Text) {}
+
+    ByteString getCanonicalText() override;
 
     std::string getText() const override;
 
@@ -725,13 +742,15 @@ namespace bolt {
 
   };
 
-  class IdentifierAlt : public Token {
+  class IdentifierAlt : public Symbol {
   public:
 
     ByteString Text;
 
     IdentifierAlt(ByteString Text, TextLoc StartLoc):
-      Token(NodeKind::IdentifierAlt, StartLoc), Text(Text) {}
+      Symbol(NodeKind::IdentifierAlt, StartLoc), Text(Text) {}
+
+    ByteString getCanonicalText() override;
 
     std::string getText() const override;
 
@@ -970,11 +989,11 @@ namespace bolt {
   public:
 
     std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
-    Identifier* Name;
+    Symbol* Name;
 
     ReferenceExpression(
       std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
-      Identifier* Name
+      Symbol* Name
     ): Expression(NodeKind::ReferenceExpression),
        ModulePath(ModulePath),
        Name(Name) {}
@@ -1006,7 +1025,6 @@ namespace bolt {
     Token* getLastToken() override;
 
   };
-
 
   class MatchExpression : public Expression {
   public:

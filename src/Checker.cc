@@ -331,8 +331,8 @@ namespace bolt {
       {
         auto Class = static_cast<ClassDeclaration*>(X);
         for (auto TE: Class->TypeVars) {
-          auto TV = createRigidVar(TE->Name->Text);
-          TV->Contexts.emplace(Class->Name->Text);
+          auto TV = createRigidVar(TE->Name->getCanonicalText());
+          TV->Contexts.emplace(Class->Name->getCanonicalText());
           TE->setType(TV);
         }
         for (auto Element: Class->Elements) {
@@ -344,9 +344,9 @@ namespace bolt {
       case NodeKind::InstanceDeclaration:
       {
         auto Decl = static_cast<InstanceDeclaration*>(X);
-        auto Match = InstanceMap.find(Decl->Name->Text);
+        auto Match = InstanceMap.find(Decl->Name->getCanonicalText());
         if (Match == InstanceMap.end()) {
-          InstanceMap.emplace(Decl->Name->Text, std::vector { Decl });
+          InstanceMap.emplace(Decl->Name->getCanonicalText(), std::vector { Decl });
         } else {
           Match->second.push_back(Decl);
         }
@@ -376,7 +376,7 @@ namespace bolt {
           auto Decl = static_cast<ClassDeclaration*>(Let->Parent);
           for (auto TE: Decl->TypeVars) {
             auto TV = llvm::cast<TVar>(TE->getType());
-            NewCtx->Env.emplace(TE->Name->Text, new Forall(TV));
+            NewCtx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
             NewCtx->TVs->emplace(TV);
           }
         }
@@ -617,7 +617,7 @@ namespace bolt {
         for (auto TE: D->TEs) {
           Types.push_back(inferTypeExpression(TE));
         }
-        return new CClass(D->Name->Text, Types);
+        return new CClass(D->Name->getCanonicalText(), Types);
       }
       case NodeKind::EqualityConstraintExpression:
       {
@@ -636,10 +636,10 @@ namespace bolt {
       case NodeKind::ReferenceTypeExpression:
       {
         auto RefTE = static_cast<ReferenceTypeExpression*>(N);
-        auto Ty = lookupMono(RefTE->Name->Text);
+        auto Ty = lookupMono(RefTE->Name->getCanonicalText());
         if (Ty == nullptr) {
           if (Config.typeVarsRequireForall()) {
-            DE.add<BindingNotFoundDiagnostic>(RefTE->Name->Text, RefTE->Name);
+            DE.add<BindingNotFoundDiagnostic>(RefTE->Name->getCanonicalText(), RefTE->Name);
           }
           Ty = createTypeVar();
         }
@@ -650,13 +650,13 @@ namespace bolt {
       case NodeKind::VarTypeExpression:
       {
         auto VarTE = static_cast<VarTypeExpression*>(N);
-        auto Ty = lookupMono(VarTE->Name->Text);
+        auto Ty = lookupMono(VarTE->Name->getCanonicalText());
         if (Ty == nullptr) {
           if (Config.typeVarsRequireForall()) {
-            DE.add<BindingNotFoundDiagnostic>(VarTE->Name->Text, VarTE->Name);
+            DE.add<BindingNotFoundDiagnostic>(VarTE->Name->getCanonicalText(), VarTE->Name);
           }
-          Ty = createRigidVar(VarTE->Name->Text);
-          addBinding(VarTE->Name->Text, new Forall(Ty));
+          Ty = createRigidVar(VarTE->Name->getCanonicalText());
+          addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty));
         }
         N->setType(Ty);
         return Ty;
@@ -725,9 +725,9 @@ namespace bolt {
           ZEN_ASSERT(Ctx->ReturnType != nullptr);
           return Ctx->ReturnType;
         }
-        auto Scm = lookup(Ref->Name->Text);
+        auto Scm = lookup(Ref->Name->getCanonicalText());
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Ref->Name->Text, Ref->Name);
+          DE.add<BindingNotFoundDiagnostic>(Ref->Name->getCanonicalText(), Ref->Name);
           return createTypeVar();
         }
         auto Ty = instantiate(Scm, X);
@@ -791,7 +791,7 @@ namespace bolt {
 
       case NodeKind::BindPattern:
       {
-        addBinding(static_cast<BindPattern*>(Pattern)->Name->Text, new Forall(TVs, Constraints, Type));
+        addBinding(static_cast<BindPattern*>(Pattern)->Name->getCanonicalText(), new Forall(TVs, Constraints, Type));
         break;
       }
 
@@ -813,7 +813,7 @@ namespace bolt {
       for (auto TE: Class->TypeVars) {
         Tys.push_back(llvm::cast<TVar>(TE->getType()));
       }
-      Out.push_back(TypeclassSignature { Class->Name->Text, Tys });
+      Out.push_back(TypeclassSignature { Class->Name->getCanonicalText(), Tys });
     }
     if (Decl->TypeAssert != nullptr) {
       if (llvm::isa<QualifiedTypeExpression>(Decl->TypeAssert->TypeExpression)) {
@@ -827,7 +827,7 @@ namespace bolt {
               ZEN_ASSERT(llvm::isa<TVar>(TV));
               Tys.push_back(static_cast<TVar*>(TV));
             }
-            Out.push_back(TypeclassSignature { TCE->Name->Text, Tys });
+            Out.push_back(TypeclassSignature { TCE->Name->getCanonicalText(), Tys });
           }
         }
       }

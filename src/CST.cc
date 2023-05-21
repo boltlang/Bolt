@@ -605,12 +605,20 @@ namespace bolt {
     return "instance";
   }
 
+  ByteString Identifier::getCanonicalText() {
+    return Text;
+  }
+
+  ByteString IdentifierAlt::getCanonicalText() {
+    return Text;
+  }
+
   SymbolPath ReferenceExpression::getSymbolPath() const {
     std::vector<ByteString> ModuleNames;
     for (auto [Name, Dot]: ModulePath) {
-      ModuleNames.push_back(Name->Text);
+      ModuleNames.push_back(Name->getCanonicalText());
     }
-    return SymbolPath { ModuleNames, Name->Text };
+    return SymbolPath { ModuleNames, Name->getCanonicalText() };
   }
 
 }

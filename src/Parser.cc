@@ -211,18 +211,24 @@ after_constraints:
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
       case NodeKind::Identifier:
+      case NodeKind::IdentifierAlt:
       {
         std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
         for (;;) {
-          auto T1 = Tokens.peek();
-          if (T1->getKind() != NodeKind::IdentifierAlt) {
+          auto T1 = Tokens.peek(0);
+          auto T2 = Tokens.peek(1);
+          if (!llvm::isa<IdentifierAlt>(T1) || !llvm::isa<Dot>(T2)) {
             break;
           }
           Tokens.get();
           auto Dot = expectToken<class Dot>();
           ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), Dot));
         }
-        return new ReferenceExpression(ModulePath, expectToken<Identifier>());
+        auto T3 = Tokens.get();
+        if (!llvm::isa<Symbol>(T3)) {
+          throw UnexpectedTokenDiagnostic(File, T3, { NodeKind::Identifier, NodeKind::IdentifierAlt });
+        }
+        return new ReferenceExpression(ModulePath, static_cast<Symbol*>(T3));
       }
       case NodeKind::LParen:
       {

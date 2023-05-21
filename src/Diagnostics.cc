@@ -47,7 +47,9 @@ namespace bolt {
   static std::string describe(NodeKind Type) {
     switch (Type) {
       case NodeKind::Identifier:
-        return "an identifier";
+        return "an identifier starting with a lowercase letter";
+      case NodeKind::IdentifierAlt:
+        return "an identifier starting with a capital letter";
       case NodeKind::CustomOperator:
         return "an operator";
       case NodeKind::IntegerLiteral:
