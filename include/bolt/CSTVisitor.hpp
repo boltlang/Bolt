@@ -63,6 +63,8 @@ namespace bolt {
           return static_cast<D*>(this)->visitIfKeyword(static_cast<IfKeyword*>(N));
         case NodeKind::ElseKeyword:
           return static_cast<D*>(this)->visitElseKeyword(static_cast<ElseKeyword*>(N));
+        case NodeKind::MatchKeyword:
+          return static_cast<D*>(this)->visitMatchKeyword(static_cast<MatchKeyword*>(N));
         case NodeKind::Invalid:
           return static_cast<D*>(this)->visitInvalid(static_cast<Invalid*>(N));
         case NodeKind::EndOfFile:
@@ -101,6 +103,10 @@ namespace bolt {
           return static_cast<D*>(this)->visitBindPattern(static_cast<BindPattern*>(N));
         case NodeKind::ReferenceExpression:
           return static_cast<D*>(this)->visitReferenceExpression(static_cast<ReferenceExpression*>(N));
+        case NodeKind::MatchCase:
+          return static_cast<D*>(this)->visitMatchCase(static_cast<MatchCase*>(N));
+        case NodeKind::MatchExpression:
+          return static_cast<D*>(this)->visitMatchExpression(static_cast<MatchExpression*>(N));
         case NodeKind::NestedExpression:
           return static_cast<D*>(this)->visitNestedExpression(static_cast<NestedExpression*>(N));
         case NodeKind::ConstantExpression:
@@ -256,6 +262,10 @@ namespace bolt {
       visitToken(N);
     }
 
+    void visitMatchKeyword(MatchKeyword* N) {
+      visitToken(N);
+    }
+
     void visitInvalid(Invalid* N) {
       visitToken(N);
     }
@@ -345,6 +355,14 @@ namespace bolt {
     }
 
     void visitReferenceExpression(ReferenceExpression* N) {
+      visitExpression(N);
+    }
+
+    void visitMatchCase(MatchCase* N) {
+      visitNode(N);
+    }
+
+    void visitMatchExpression(MatchExpression* N) {
       visitExpression(N);
     }
 
@@ -514,6 +532,9 @@ namespace bolt {
         case NodeKind::ElseKeyword:
           visitEachChild(static_cast<ElseKeyword*>(N));
           break;
+        case NodeKind::MatchKeyword:
+          visitEachChild(static_cast<MatchKeyword*>(N));
+          break;
         case NodeKind::Invalid:
           visitEachChild(static_cast<Invalid*>(N));
           break;
@@ -570,6 +591,12 @@ namespace bolt {
           break;
         case NodeKind::ReferenceExpression:
           visitEachChild(static_cast<ReferenceExpression*>(N));
+          break;
+        case NodeKind::MatchCase:
+          visitEachChild(static_cast<MatchCase*>(N));
+          break;
+        case NodeKind::MatchExpression:
+          visitEachChild(static_cast<MatchExpression*>(N));
           break;
         case NodeKind::NestedExpression:
           visitEachChild(static_cast<NestedExpression*>(N));
@@ -713,6 +740,9 @@ namespace bolt {
     void visitEachChild(ElseKeyword* N) {
     }
 
+    void visitEachChild(MatchKeyword* N) {
+    }
+
     void visitEachChild(Invalid* N) {
     }
 
@@ -799,6 +829,23 @@ namespace bolt {
          BOLT_VISIT(Dot);
        }
        BOLT_VISIT(N->Name);
+    }
+
+    void visitEachChild(MatchCase* N) {
+      BOLT_VISIT(N->Pattern);
+      BOLT_VISIT(N->RArrowAlt);
+      BOLT_VISIT(N->Expression);
+    }
+
+    void visitEachChild(MatchExpression* N) {
+      BOLT_VISIT(N->MatchKeyword);
+      if (N->Value) {
+        BOLT_VISIT(N->Value);
+      }
+      BOLT_VISIT(N->BlockStart);
+      for (auto Case: N->Cases) {
+        BOLT_VISIT(Case);
+      }
     }
 
     void visitEachChild(NestedExpression* N) {

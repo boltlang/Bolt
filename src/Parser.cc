@@ -231,6 +231,33 @@ after_constraints:
         auto T2 = static_cast<RParen*>(expectToken(NodeKind::RParen));
         return new NestedExpression(static_cast<LParen*>(T0), E, T2);
       }
+      case NodeKind::MatchKeyword:
+      {
+        Tokens.get();
+        auto T1 = Tokens.peek();
+        Expression* Value = nullptr;
+        BlockStart* BlockStart;
+        if (llvm::isa<class BlockStart>(T1)) {
+          BlockStart = static_cast<class BlockStart*>(T1);
+        } else {
+          Value = parseExpression();
+          BlockStart = expectToken<class BlockStart>();
+        }
+        std::vector<MatchCase*> Cases;
+        for (;;) {
+          auto T2 = Tokens.peek();
+          if (llvm::isa<BlockEnd>(T2)) {
+            Tokens.get();
+            break;
+          }
+          auto Pattern = parsePattern();
+          auto RArrowAlt = expectToken<class RArrowAlt>();
+          auto Expression = parseExpression();
+          expectToken<LineFoldEnd>();
+          Cases.push_back(new MatchCase { Pattern, RArrowAlt, Expression });
+        }
+        return new MatchExpression(static_cast<MatchKeyword*>(T0), Value, BlockStart, Cases);
+      }
       case NodeKind::IntegerLiteral:
       case NodeKind::StringLiteral:
         Tokens.get();

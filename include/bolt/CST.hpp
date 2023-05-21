@@ -51,6 +51,7 @@ namespace bolt {
     ElifKeyword,
     IfKeyword,
     ElseKeyword,
+    MatchKeyword,
     Invalid,
     EndOfFile,
     BlockStart,
@@ -70,6 +71,8 @@ namespace bolt {
     VarTypeExpression,
     BindPattern,
     ReferenceExpression,
+    MatchCase,
+    MatchExpression,
     NestedExpression,
     ConstantExpression,
     CallExpression,
@@ -588,6 +591,20 @@ namespace bolt {
 
   };
 
+  class MatchKeyword : public Token {
+  public:
+
+    inline MatchKeyword(TextLoc StartLoc):
+      Token(NodeKind::MatchKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::MatchKeyword;
+    }
+
+  };
+
   class Invalid : public Token {
   public:
 
@@ -966,6 +983,52 @@ namespace bolt {
     Token* getLastToken() override;
 
     SymbolPath getSymbolPath() const;
+
+  };
+
+  class MatchCase : public Node { 
+  public:
+
+    class Pattern* Pattern;
+    class RArrowAlt* RArrowAlt;
+    class Expression* Expression;
+  
+    inline MatchCase(
+      class Pattern* Pattern,
+      class RArrowAlt* RArrowAlt,
+      class Expression* Expression
+    ): Node(NodeKind::MatchCase),
+       Pattern(Pattern),
+       RArrowAlt(RArrowAlt),
+       Expression(Expression) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+  };
+
+
+  class MatchExpression : public Expression {
+  public:
+
+    class MatchKeyword* MatchKeyword;
+    Expression* Value;
+    class BlockStart* BlockStart;
+    std::vector<MatchCase*> Cases;
+
+    inline MatchExpression(
+      class MatchKeyword* MatchKeyword,
+      Expression* Value,
+      class BlockStart* BlockStart,
+      std::vector<MatchCase*> Cases
+    ): Expression(NodeKind::MatchExpression),
+       MatchKeyword(MatchKeyword),
+       Value(Value),
+       BlockStart(BlockStart),
+       Cases(Cases) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
   };
 

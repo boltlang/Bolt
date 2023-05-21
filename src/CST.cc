@@ -232,6 +232,25 @@ namespace bolt {
     return Name;
   }
 
+  Token* MatchCase::getFirstToken() {
+    return Pattern->getFirstToken();
+  }
+
+  Token* MatchCase::getLastToken() {
+    return Expression->getLastToken();
+  }
+
+  Token* MatchExpression::getFirstToken() {
+    return MatchKeyword;
+  }
+
+  Token* MatchExpression::getLastToken() {
+    if (!Cases.empty()) {
+      return Cases.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
   Token* NestedExpression::getFirstToken() {
     return LParen;
   }
@@ -512,6 +531,10 @@ namespace bolt {
 
   std::string ElifKeyword::getText() const {
     return "elif";
+  }
+
+  std::string MatchKeyword::getText() const {
+    return "match";
   }
 
   std::string ModKeyword::getText() const {

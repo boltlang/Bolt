@@ -69,6 +69,7 @@ namespace bolt {
     { "if", NodeKind::IfKeyword },
     { "else", NodeKind::ElseKeyword },
     { "elif", NodeKind::ElifKeyword },
+    { "match", NodeKind::MatchKeyword },
     { "class", NodeKind::ClassKeyword },
     { "instance", NodeKind::InstanceKeyword },
   };
@@ -235,6 +236,8 @@ digit_finish:
               return new ElifKeyword(StartLoc);
             case NodeKind::ElseKeyword:
               return new ElseKeyword(StartLoc);
+            case NodeKind::MatchKeyword:
+              return new MatchKeyword(StartLoc);
             case NodeKind::ClassKeyword:
               return new ClassKeyword(StartLoc);
             case NodeKind::InstanceKeyword:
