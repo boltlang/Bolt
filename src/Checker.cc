@@ -843,34 +843,6 @@ namespace bolt {
     return Ty;
   }
 
-  void collectTypeclasses(LetDeclaration* Decl, std::vector<TypeclassSignature>& Out) {
-    if (llvm::isa<ClassDeclaration>(Decl->Parent)) {
-      auto Class = llvm::cast<ClassDeclaration>(Decl->Parent);
-      std::vector<TVar*> Tys;
-      for (auto TE: Class->TypeVars) {
-        Tys.push_back(llvm::cast<TVar>(TE->getType()));
-      }
-      Out.push_back(TypeclassSignature { Class->Name->getCanonicalText(), Tys });
-    }
-    if (Decl->TypeAssert != nullptr) {
-      if (llvm::isa<QualifiedTypeExpression>(Decl->TypeAssert->TypeExpression)) {
-        auto QTE = static_cast<QualifiedTypeExpression*>(Decl->TypeAssert->TypeExpression);
-        for (auto [C, Comma]: QTE->Constraints) {
-          if (llvm::isa<TypeclassConstraintExpression>(C)) {
-            auto TCE = static_cast<TypeclassConstraintExpression*>(C);
-            std::vector<TVar*> Tys;
-            for (auto TE: TCE->TEs) {
-              auto TV = TE->getType();
-              ZEN_ASSERT(llvm::isa<TVar>(TV));
-              Tys.push_back(static_cast<TVar*>(TV));
-            }
-            Out.push_back(TypeclassSignature { TCE->Name->getCanonicalText(), Tys });
-          }
-        }
-      }
-    }
-  }
-
   void Checker::checkTypeclassSigs(Node* N) {
 
     struct LetVisitor : CSTVisitor<LetVisitor> {
@@ -879,12 +851,54 @@ namespace bolt {
 
       void visitLetDeclaration(LetDeclaration* Decl) {
 
+        // Will contain the type classes that were specified in the type assertion by the user.
+        // There might be some other signatures as well, but those are an implementation detail.
         std::vector<TypeclassSignature> Expected;
-        collectTypeclasses(Decl, Expected);
+
+        // We must add the type class itself to Expected because in order for
+        // propagation to work the rigid type variables expect this class to be
+        // present even inside the current class. By adding it to Expected, we
+        // are effectively cancelling out the default behavior of requiring the
+        // presence of this type classes.
+        if (llvm::isa<ClassDeclaration>(Decl->Parent)) {
+            auto Class = llvm::cast<ClassDeclaration>(Decl->Parent);
+            std::vector<TVar *> Tys;
+            for (auto TE : Class->TypeVars) {
+                Tys.push_back(llvm::cast<TVar>(TE->getType()));
+            }
+            Expected.push_back(
+                TypeclassSignature{Class->Name->getCanonicalText(), Tys});
+        }
+
+        // Here we scan the type signature for type classes that user expects to be there.
+        if (Decl->TypeAssert != nullptr) {
+          if (llvm::isa<QualifiedTypeExpression>(Decl->TypeAssert->TypeExpression)) {
+            auto QTE = static_cast<QualifiedTypeExpression*>(Decl->TypeAssert->TypeExpression);
+            for (auto [C, Comma]: QTE->Constraints) {
+              if (llvm::isa<TypeclassConstraintExpression>(C)) {
+                auto TCE = static_cast<TypeclassConstraintExpression*>(C);
+                std::vector<TVar*> Tys;
+                for (auto TE: TCE->TEs) {
+                  auto TV = TE->getType();
+                  ZEN_ASSERT(llvm::isa<TVar>(TV));
+                  Tys.push_back(static_cast<TVar*>(TV));
+                }
+                Expected.push_back(TypeclassSignature { TCE->Name->getCanonicalText(), Tys });
+              }
+            }
+          }
+        }
+
+        // Sort them lexically and remove any duplicates
         std::sort(Expected.begin(), Expected.end());
         Expected.erase(std::unique(Expected.begin(), Expected.end()), Expected.end());
 
+        // Will contain the type class signatures that our program inferred that
+        // at the very least should be present to make the body work.
         std::vector<TypeclassSignature> Actual;
+
+        // This is ugly but it works. Scan all type variables local to this
+        // declaration and add the classes that they require to Actual.
         for (auto Ty: *Decl->Ctx->TVs) {
           auto S = Ty->substitute(C.Solution);
           if (llvm::isa<TVar>(S)) {
@@ -894,36 +908,55 @@ namespace bolt {
             }
           }
         }
+
+        // Sort them lexically and remove any duplicates
         std::sort(Actual.begin(), Actual.end());
         Actual.erase(std::unique(Actual.begin(), Actual.end()), Actual.end());
 
-        auto It1 = Actual.begin();
-        auto It2 = Expected.begin();
+        auto ActualIter = Actual.begin();
+        auto ExpectedIter = Expected.begin();
 
-        for (; It1 != Actual.end() || It2 != Expected.end() ;) {
-          if (It1 == Actual.end()) {
+        for (; ActualIter != Actual.end() || ExpectedIter != Expected.end() ;) {
+
+          // Our program inferred no more type classes that should be present,
+          // yet Expected still did find a few that the user declared in a
+          // signature. No errors should be reported, and we can quit this loop.
+          if (ActualIter == Actual.end()) {
             // TODO Maybe issue a warning that a type class went unused
             break;
           }
-          if (It2 == Expected.end()) {
-            for (; It1 != Actual.end(); It1++) {
-              C.DE.add<TypeclassMissingDiagnostic>(*It1, Decl);
+
+          // There are no more type classes that were expected, so any remaining
+          // type classes in Actual will not have a corresponding signature.
+          // This should be reported as an error.
+          if (ExpectedIter == Expected.end()) {
+            for (; ActualIter != Actual.end(); ActualIter++) {
+              C.DE.add<TypeclassMissingDiagnostic>(*ActualIter, Decl);
             }
             break;
           }
-          if (*It1 < *It2) {
-            // FIXME It1->Ty needs to be unified with potential candidate It2->Ty
-            C.DE.add<TypeclassMissingDiagnostic>(*It1, Decl);
-            It1++;
+
+          // If ExpectedIter is already at Show, but ActualIter is still at Eq,
+          // then we clearly missed the Eq in ExpectedIter. This clearly is an
+          // error, since the user missed something in a type signature.
+          if (*ActualIter < *ExpectedIter) {
+            C.DE.add<TypeclassMissingDiagnostic>(*ActualIter, Decl);
+            ActualIter++;
             continue;
           }
-          if (*It2 < *It1) {
+
+          // If ActualIter is Show but ExpectedIter is still Eq, then the user
+          // specified too much type classes in a type signature. This is no error,
+          // but it might be worthwhile to issue a warning.
+          if (*ExpectedIter < *ActualIter) {
             // DE.add<TypeclassMissingDiagnostic>(It2->Name, Decl);
-            It2++;
+            ExpectedIter++;
             continue;
           }
-          It1++;
-          It2++;
+
+          // Both type class signatures are equal, cancelling each other out.
+          ActualIter++;
+          ExpectedIter++;
         }
 
       }
