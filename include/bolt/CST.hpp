@@ -168,20 +168,26 @@ namespace bolt {
 
   };
 
+  enum class SymbolKind {
+    Var,
+    Class,
+    Type,
+  };
+
   class Scope {
 
     Node* Source;
-    std::unordered_map<ByteString, Node*> Mapping;
+    std::unordered_multimap<ByteString, std::tuple<Node*, SymbolKind>> Mapping;
 
     void scan(Node* X);
 
-    void addBindings(Pattern* X, Node* ToInsert);
+    void addBindings(Pattern* P, Node* ToInsert);
 
   public:
 
     Scope(Node* Source);
 
-    Node* lookup(SymbolPath Path);
+    Node* lookup(SymbolPath Path, SymbolKind Kind = SymbolKind::Var);
 
     Scope* getParentScope();
 
@@ -998,6 +1004,10 @@ namespace bolt {
     Token* getFirstToken() override;
     Token* getLastToken() override;
 
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::BindPattern;
+    }
+
   };
 
   class LiteralPattern : public Pattern {
@@ -1011,6 +1021,10 @@ namespace bolt {
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::LiteralPattern;
+    }
 
   };
 
@@ -1409,6 +1423,10 @@ namespace bolt {
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::InstanceDeclaration;
+    }
 
   };
 

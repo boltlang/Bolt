@@ -28,6 +28,7 @@ namespace bolt {
       case NodeKind::ClassDeclaration:
       {
         auto Decl = static_cast<ClassDeclaration*>(X);
+        Mapping.emplace(Decl->Name->getCanonicalText(), std::make_tuple(Decl, SymbolKind::Class));
         for (auto Element: Decl->Elements) {
           scan(Element);
         }
@@ -52,7 +53,7 @@ namespace bolt {
       case NodeKind::BindPattern:
       {
         auto Y = static_cast<BindPattern*>(X);
-        Mapping.emplace(Y->Name->Text, ToInsert);
+        Mapping.emplace(Y->Name->Text, std::make_tuple(ToInsert, SymbolKind::Var));
         break;
       }
       default:
@@ -60,13 +61,13 @@ namespace bolt {
     }
   }
 
-  Node* Scope::lookup(SymbolPath Path) {
+  Node* Scope::lookup(SymbolPath Path, SymbolKind Kind) {
     ZEN_ASSERT(Path.Modules.empty());
     auto Curr = this;
     do {
       auto Match = Curr->Mapping.find(Path.Name);
-      if (Match != Curr->Mapping.end()) {
-        return Match->second;
+      if (Match != Curr->Mapping.end() && std::get<1>(Match->second) == Kind) {
+        return std::get<0>(Match->second);
       }
       Curr = Curr->getParentScope();
     } while (Curr != nullptr);
@@ -99,8 +100,12 @@ namespace bolt {
   }
 
   Scope* Node::getScope() {
-    return this->Parent->getScope();
+    return Parent->getScope();
   }
+
+  /* ClassScope& Node::getClassScope() { */
+  /*   return Parent->getClassScope(); */
+  /* } */
 
   TextLoc Token::getEndLoc() {
     auto EndLoc = StartLoc;

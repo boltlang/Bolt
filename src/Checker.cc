@@ -344,18 +344,27 @@ namespace bolt {
       case NodeKind::InstanceDeclaration:
       {
         auto Decl = static_cast<InstanceDeclaration*>(X);
+
+        // Needed to set the associated Type on the CST node
+        for (auto TE: Decl->TypeExps) {
+          inferTypeExpression(TE);
+        }
+
         auto Match = InstanceMap.find(Decl->Name->getCanonicalText());
         if (Match == InstanceMap.end()) {
           InstanceMap.emplace(Decl->Name->getCanonicalText(), std::vector { Decl });
         } else {
           Match->second.push_back(Decl);
         }
+
+        // FIXME save Ctx on the node or dont do this at all
         auto Ctx = createInferContext();
         Contexts.push_back(Ctx);
         for (auto Element: Decl->Elements) {
           forwardDeclare(Element);
         }
         Contexts.pop_back();
+
         break;
       }
 
@@ -388,6 +397,25 @@ namespace bolt {
           Ty = createTypeVar();
         }
         Let->Ty = Ty;
+
+        if (llvm::isa<InstanceDeclaration>(Let->Parent)) {
+          auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
+          auto Class = llvm::cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
+          std::vector<TVar*> Params;
+          for (auto TE: Class->TypeVars) {
+            auto TV = createTypeVar();
+            NewCtx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
+            Params.push_back(TV);
+          }
+          // FIXME lookup should not go over parent envs
+          auto Let2 = llvm::cast<LetDeclaration>(Class->getScope()->lookup({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
+          if (Let2->TypeAssert) {
+            addConstraint(new CEqual(Ty, inferTypeExpression(Let2->TypeAssert->TypeExpression), Let));
+          }
+          for (auto [Param, TE]: zen::zip(Params, Instance->TypeExps)) {
+            addConstraint(new CEqual(Param, TE->getType()));
+          }
+        }
 
         if (Let->Body) {
           switch (Let->Body->getKind()) {
@@ -446,11 +474,6 @@ namespace bolt {
       case NodeKind::InstanceDeclaration:
       {
         auto Decl = static_cast<InstanceDeclaration*>(N);
-
-        // Needed to set the associated Type on the CST node
-        for (auto TE: Decl->TypeExps) {
-          inferTypeExpression(TE);
-        }
 
         for (auto Element: Decl->Elements) {
           infer(Element);
