@@ -221,6 +221,14 @@ namespace bolt {
     return Name;
   }
 
+  Token* LiteralPattern::getFirstToken() {
+    return Literal;
+  }
+
+  Token* LiteralPattern::getLastToken() {
+    return Literal;
+  }
+
   Token* ReferenceExpression::getFirstToken() {
     if (!ModulePath.empty()) {
       return std::get<0>(ModulePath.front());
@@ -586,7 +594,7 @@ namespace bolt {
   }
 
   std::string IntegerLiteral::getText() const {
-    return std::to_string(Value);
+    return std::to_string(V);
   }
 
   std::string DotDot::getText() const {
@@ -611,6 +619,14 @@ namespace bolt {
 
   ByteString IdentifierAlt::getCanonicalText() {
     return Text;
+  }
+
+  Value StringLiteral::getValue() {
+    return Text;
+  }
+
+  Value IntegerLiteral::getValue() {
+    return V;
   }
 
   SymbolPath ReferenceExpression::getSymbolPath() const {

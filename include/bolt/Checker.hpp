@@ -1,4 +1,5 @@
 
+
 #pragma once
 
 #include "zen/config.hpp"
@@ -355,6 +356,7 @@ namespace bolt {
 
     Type* inferExpression(Expression* Expression);
     Type* inferTypeExpression(TypeExpression* TE);
+    Type* inferLiteral(Literal* Lit);
 
     void inferBindings(Pattern* Pattern, Type* T, ConstraintSet* Constraints, TVSet* TVs);
     void inferBindings(Pattern* Pattern, Type* T);

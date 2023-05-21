@@ -89,11 +89,15 @@ namespace bolt {
   Pattern* Parser::parsePattern() {
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
+      case NodeKind::StringLiteral:
+      case NodeKind::IntegerLiteral:
+        Tokens.get();
+        return new LiteralPattern(static_cast<Literal*>(T0));
       case NodeKind::Identifier:
         Tokens.get();
         return new BindPattern(static_cast<Identifier*>(T0));
       default:
-        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier });
+        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier, NodeKind::StringLiteral, NodeKind::IntegerLiteral });
     }
   }
 
@@ -269,7 +273,7 @@ after_constraints:
       case NodeKind::IntegerLiteral:
       case NodeKind::StringLiteral:
         Tokens.get();
-        return new ConstantExpression(T0);
+        return new ConstantExpression(static_cast<Literal*>(T0));
       default:
         throw UnexpectedTokenDiagnostic(File, T0, { NodeKind::MatchKeyword, NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
     }

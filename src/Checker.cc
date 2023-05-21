@@ -723,18 +723,7 @@ namespace bolt {
       case NodeKind::ConstantExpression:
       {
         auto Const = static_cast<ConstantExpression*>(X);
-        Type* Ty = nullptr;
-        switch (Const->Token->getKind()) {
-          case NodeKind::IntegerLiteral:
-            Ty = lookupMono("Int");
-            break;
-          case NodeKind::StringLiteral:
-            Ty = lookupMono("String");
-            break;
-          default:
-            ZEN_UNREACHABLE
-        }
-        ZEN_ASSERT(Ty != nullptr);
+        auto Ty = inferLiteral(Const->Token);
         X->setType(Ty);
         return Ty;
       }
@@ -815,7 +804,15 @@ namespace bolt {
 
       case NodeKind::BindPattern:
       {
-        addBinding(static_cast<BindPattern*>(Pattern)->Name->getCanonicalText(), new Forall(TVs, Constraints, Type));
+        auto P = static_cast<BindPattern*>(Pattern);
+        addBinding(P->Name->getCanonicalText(), new Forall(TVs, Constraints, Type));
+        break;
+      }
+
+      case NodeKind::LiteralPattern:
+      {
+        auto P = static_cast<LiteralPattern*>(Pattern);
+        addConstraint(new CEqual(inferLiteral(P->Literal), Type, P));
         break;
       }
 
@@ -828,6 +825,22 @@ namespace bolt {
 
   void Checker::inferBindings(Pattern* Pattern, Type* Type) {
     inferBindings(Pattern, Type, new ConstraintSet, new TVSet);
+  }
+
+  Type* Checker::inferLiteral(Literal* L) {
+    Type* Ty;
+    switch (L->getKind()) {
+      case NodeKind::IntegerLiteral:
+        Ty = lookupMono("Int");
+        break;
+      case NodeKind::StringLiteral:
+        Ty = lookupMono("String");
+        break;
+      default:
+        ZEN_UNREACHABLE
+    }
+    ZEN_ASSERT(Ty != nullptr);
+    return Ty;
   }
 
   void collectTypeclasses(LetDeclaration* Decl, std::vector<TypeclassSignature>& Out) {

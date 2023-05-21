@@ -5,6 +5,7 @@
 #include <istream>
 #include <iterator>
 #include <unordered_map>
+#include <variant>
 #include <vector>
 
 #include "zen/config.hpp"
@@ -70,6 +71,7 @@ namespace bolt {
     ArrowTypeExpression,
     VarTypeExpression,
     BindPattern,
+    LiteralPattern,
     ReferenceExpression,
     MatchCase,
     MatchExpression,
@@ -760,15 +762,34 @@ namespace bolt {
 
   };
 
-  class StringLiteral : public Token {
+  using Value = std::variant<ByteString, Integer>;
+
+  class Literal : public Token {
+  public:
+
+    inline Literal(NodeKind Kind, TextLoc StartLoc):
+      Token(Kind, StartLoc) {}
+
+    virtual Value getValue() = 0;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::StringLiteral
+          || N->getKind() == NodeKind::IntegerLiteral;
+    }
+
+  };
+
+  class StringLiteral : public Literal {
   public:
 
     ByteString Text;
 
     StringLiteral(ByteString Text, TextLoc StartLoc):
-      Token(NodeKind::StringLiteral, StartLoc), Text(Text) {}
+      Literal(NodeKind::StringLiteral, StartLoc), Text(Text) {}
 
     std::string getText() const override;
+
+    Value getValue() override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::StringLiteral;
@@ -776,15 +797,17 @@ namespace bolt {
 
   };
 
-  class IntegerLiteral : public Token {
+  class IntegerLiteral : public Literal {
   public:
 
-    Integer Value;
+    Integer V;
 
     IntegerLiteral(Integer Value, TextLoc StartLoc):
-      Token(NodeKind::IntegerLiteral, StartLoc), Value(Value) {}
+      Literal(NodeKind::IntegerLiteral, StartLoc), V(Value) {}
 
     std::string getText() const override;
+
+    Value getValue() override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::IntegerLiteral;
@@ -977,6 +1000,20 @@ namespace bolt {
 
   };
 
+  class LiteralPattern : public Pattern {
+  public:
+
+    class Literal* Literal;
+
+    LiteralPattern(class Literal* Literal):
+      Pattern(NodeKind::LiteralPattern),
+      Literal(Literal) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+  };
+
   class Expression : public TypedNode {
   protected:
 
@@ -1074,10 +1111,10 @@ namespace bolt {
   class ConstantExpression : public Expression {
   public:
 
-    class Token* Token;
+    class Literal* Token;
 
     ConstantExpression(
-      class Token* Token
+      class Literal* Token
     ): Expression(NodeKind::ConstantExpression),
        Token(Token) {}
 

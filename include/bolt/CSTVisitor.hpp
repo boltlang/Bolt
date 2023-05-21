@@ -101,6 +101,8 @@ namespace bolt {
           return static_cast<D*>(this)->visitVarTypeExpression(static_cast<VarTypeExpression*>(N));
         case NodeKind::BindPattern:
           return static_cast<D*>(this)->visitBindPattern(static_cast<BindPattern*>(N));
+        case NodeKind::LiteralPattern:
+          return static_cast<D*>(this)->visitLiteralPattern(static_cast<LiteralPattern*>(N));
         case NodeKind::ReferenceExpression:
           return static_cast<D*>(this)->visitReferenceExpression(static_cast<ReferenceExpression*>(N));
         case NodeKind::MatchCase:
@@ -350,6 +352,10 @@ namespace bolt {
       visitPattern(N);
     }
 
+    void visitLiteralPattern(LiteralPattern* N) {
+      visitPattern(N);
+    }
+
     void visitExpression(Expression* N) {
       visitNode(N);
     }
@@ -589,6 +595,9 @@ namespace bolt {
         case NodeKind::BindPattern:
           visitEachChild(static_cast<BindPattern*>(N));
           break;
+        case NodeKind::LiteralPattern:
+          visitEachChild(static_cast<LiteralPattern*>(N));
+          break;
         case NodeKind::ReferenceExpression:
           visitEachChild(static_cast<ReferenceExpression*>(N));
           break;
@@ -821,6 +830,10 @@ namespace bolt {
 
     void visitEachChild(BindPattern* N) {
       BOLT_VISIT(N->Name);
+    }
+
+    void visitEachChild(LiteralPattern* N) {
+      BOLT_VISIT(N->Literal);
     }
 
     void visitEachChild(ReferenceExpression* N) {
