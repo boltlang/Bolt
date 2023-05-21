@@ -390,7 +390,11 @@ namespace bolt {
           }
         }
 
-        Type* Ty;
+        // Here we infer the primary type of the let declaration. If there's a
+        // type assert, that assert should be authoritative so we use that.
+        // Otherwise, the type is not further specified and we create a new
+        // unification variable.
+        Type *Ty;
         if (Let->TypeAssert) {
           Ty = inferTypeExpression(Let->TypeAssert->TypeExpression);
         } else {
@@ -398,21 +402,37 @@ namespace bolt {
         }
         Let->Ty = Ty;
 
+        // If declaring a let-declaration inside a type instance declaration,
+        // we need to perform some work to make sure the type asserts of the corresponding let-declaration in the type class declaration are accounted for.
         if (llvm::isa<InstanceDeclaration>(Let->Parent)) {
           auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
           auto Class = llvm::cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
-          std::vector<TVar*> Params;
+
+          // The type asserts in the type class declaration might make use of
+          // the type parameters of the type class declaration, so it is
+          // important to make them available in the type environment. Moreover,
+          // we will be unifying them with the actual types declared in the
+          // instance declaration, so we keep track of them.
+          std::vector<TVar *> Params;
           for (auto TE: Class->TypeVars) {
             auto TV = createTypeVar();
             NewCtx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
             Params.push_back(TV);
           }
-          // FIXME lookup should not go over parent envs
-          auto Let2 = llvm::cast<LetDeclaration>(Class->getScope()->lookup({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
+
+          auto Let2 = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
+
+          // It would be very strange if there was no type assert in the type
+          // class let-declaration but we rather not let the compiler crash if that happens.
           if (Let2->TypeAssert) {
             addConstraint(new CEqual(Ty, inferTypeExpression(Let2->TypeAssert->TypeExpression), Let));
           }
-          for (auto [Param, TE]: zen::zip(Params, Instance->TypeExps)) {
+
+          // Here we do the actual unification of e.g. Eq a with Eq Bool. The
+          // unification variables we created previously will be unified with
+          // e.g. Bool, which causes the type assert to also collapse to e.g.
+          // Bool -> Bool -> Bool.
+          for (auto [Param, TE] : zen::zip(Params, Instance->TypeExps)) {
             addConstraint(new CEqual(Param, TE->getType()));
           }
         }

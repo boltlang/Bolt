@@ -187,6 +187,22 @@ namespace bolt {
 
     Scope(Node* Source);
 
+    /**
+     * Performs a direct lookup in this scope for the given symbol.
+     *
+     * This method will never traverse to parent scopes and will always return a
+     * symbol that belongs to this scope, if any is found.
+     *
+     * \returns nullptr when no such symbol could be found in this scope.
+     */
+    Node* lookupDirect(SymbolPath Path, SymbolKind Kind = SymbolKind::Var);
+
+    /**
+     * Find the symbol with the given name, either in this scope or in any of
+     * the parent ones.
+     *
+     * \returns nullptr when no such symbol could be found in any of the scopes.
+     */
     Node* lookup(SymbolPath Path, SymbolKind Kind = SymbolKind::Var);
 
     Scope* getParentScope();

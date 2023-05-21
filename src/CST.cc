@@ -63,13 +63,22 @@ namespace bolt {
     }
   }
 
+  Node* Scope::lookupDirect(SymbolPath Path, SymbolKind Kind) {
+    ZEN_ASSERT(Path.Modules.empty());
+    auto Match = Mapping.find(Path.Name);
+    if (Match != Mapping.end() && std::get<1>(Match->second) == Kind) {
+      return std::get<0>(Match->second);
+    }
+    return nullptr;
+  }
+
   Node* Scope::lookup(SymbolPath Path, SymbolKind Kind) {
     ZEN_ASSERT(Path.Modules.empty());
     auto Curr = this;
     do {
-      auto Match = Curr->Mapping.find(Path.Name);
-      if (Match != Curr->Mapping.end() && std::get<1>(Match->second) == Kind) {
-        return std::get<0>(Match->second);
+      auto Found= Curr->lookupDirect(Path, Kind);
+      if (Found) {
+        return Found;
       }
       Curr = Curr->getParentScope();
     } while (Curr != nullptr);
