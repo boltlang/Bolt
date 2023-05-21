@@ -696,6 +696,30 @@ namespace bolt {
 
     switch (X->getKind()) {
 
+      case NodeKind::MatchExpression:
+      {
+        auto Match = static_cast<MatchExpression*>(X);
+        Type* ValTy;
+        if  (Match->Value) {
+          ValTy = inferExpression(Match->Value);
+        } else {
+          ValTy = createTypeVar();
+        }
+        auto ResTy = createTypeVar();
+        for (auto Case: Match->Cases) {
+          auto NewCtx = createInferContext();
+          Contexts.push_back(NewCtx);
+          inferBindings(Case->Pattern, ValTy);
+          auto Ty = inferExpression(Case->Expression);
+          addConstraint(new CEqual(Ty, ResTy, Case->Expression));
+          Contexts.pop_back();
+        }
+        if (!Match->Value) {
+          return new TArrow({ ValTy }, ResTy);
+        }
+        return ResTy;
+      }
+
       case NodeKind::ConstantExpression:
       {
         auto Const = static_cast<ConstantExpression*>(X);
