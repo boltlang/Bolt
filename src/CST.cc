@@ -56,6 +56,8 @@ namespace bolt {
         Mapping.emplace(Y->Name->Text, std::make_tuple(ToInsert, SymbolKind::Var));
         break;
       }
+      case NodeKind::LiteralPattern:
+        break;
       default:
         ZEN_UNREACHABLE
     }
