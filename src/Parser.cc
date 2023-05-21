@@ -241,10 +241,12 @@ after_constraints:
       {
         Tokens.get();
         auto T1 = Tokens.peek();
-        Expression* Value = nullptr;
+        Expression* Value;
         BlockStart* BlockStart;
         if (llvm::isa<class BlockStart>(T1)) {
+          Value = nullptr;
           BlockStart = static_cast<class BlockStart*>(T1);
+          Tokens.get();
         } else {
           Value = parseExpression();
           BlockStart = expectToken<class BlockStart>();
@@ -269,7 +271,7 @@ after_constraints:
         Tokens.get();
         return new ConstantExpression(T0);
       default:
-        throw UnexpectedTokenDiagnostic(File, T0, std::vector { NodeKind::Identifier, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
+        throw UnexpectedTokenDiagnostic(File, T0, { NodeKind::MatchKeyword, NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
     }
   }
 
