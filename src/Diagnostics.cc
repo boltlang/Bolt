@@ -162,6 +162,11 @@ namespace bolt {
         Out << ")";
         return Out.str();
       }
+      case TypeKind::TupleIndex:
+      {
+        auto Y = static_cast<const TTupleIndex*>(Ty);
+        return describe(Y->Ty) + "." + std::to_string(Y->I);
+      }
     }
   }
 

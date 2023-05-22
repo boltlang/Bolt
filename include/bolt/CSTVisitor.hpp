@@ -111,6 +111,8 @@ namespace bolt {
           return static_cast<D*>(this)->visitMatchExpression(static_cast<MatchExpression*>(N));
         case NodeKind::MemberExpression:
           return static_cast<D*>(this)->visitMemberExpression(static_cast<MemberExpression*>(N));
+        case NodeKind::TupleExpression:
+          return static_cast<D*>(this)->visitTupleExpression(static_cast<TupleExpression*>(N));
         case NodeKind::NestedExpression:
           return static_cast<D*>(this)->visitNestedExpression(static_cast<NestedExpression*>(N));
         case NodeKind::ConstantExpression:
@@ -378,6 +380,10 @@ namespace bolt {
       visitExpression(N);
     }
 
+    void visitTupleExpression(TupleExpression* N) {
+      visitExpression(N);
+    }
+
     void visitNestedExpression(NestedExpression* N) {
       visitExpression(N);
     }
@@ -615,6 +621,9 @@ namespace bolt {
           break;
         case NodeKind::MemberExpression:
           visitEachChild(static_cast<MemberExpression*>(N));
+          break;
+        case NodeKind::TupleExpression:
+          visitEachChild(static_cast<TupleExpression*>(N));
           break;
         case NodeKind::NestedExpression:
           visitEachChild(static_cast<NestedExpression*>(N));
@@ -874,6 +883,17 @@ namespace bolt {
       BOLT_VISIT(N->getExpression());
       BOLT_VISIT(N->Dot);
       BOLT_VISIT(N->Name);
+    }
+
+    void visitEachChild(TupleExpression* N) {
+      BOLT_VISIT(N->LParen);
+      for (auto [E, Comma]: N->Elements) {
+        BOLT_VISIT(E);
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+      }
+      BOLT_VISIT(N->RParen);
     }
 
     void visitEachChild(NestedExpression* N) {

@@ -76,6 +76,7 @@ namespace bolt {
     MatchCase,
     MatchExpression,
     MemberExpression,
+    TupleExpression,
     NestedExpression,
     ConstantExpression,
     CallExpression,
@@ -830,6 +831,10 @@ namespace bolt {
 
     std::string getText() const override;
 
+    inline Integer getInteger() const noexcept {
+      return V;
+    }
+
     Value getValue() override;
 
     static bool classof(const Node* N) {
@@ -1140,6 +1145,27 @@ namespace bolt {
     inline Expression* getExpression() const {
       return E;
     }
+
+  };
+
+  class TupleExpression : public Expression {
+  public:
+
+    class LParen* LParen;
+    std::vector<std::tuple<Expression*, Comma*>> Elements;
+    class RParen* RParen;
+
+    inline TupleExpression(
+      class LParen* LParen,
+      std::vector<std::tuple<Expression*, Comma*>> Elements,
+      class RParen* RParen
+    ): Expression(NodeKind::TupleExpression),
+       LParen(LParen),
+       Elements(Elements),
+       RParen(RParen) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
 
   };
 

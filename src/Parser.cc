@@ -237,9 +237,35 @@ after_constraints:
       case NodeKind::LParen:
       {
         Tokens.get();
-        auto E = parseExpression();
-        auto T2 = static_cast<RParen*>(expectToken(NodeKind::RParen));
-        return new NestedExpression(static_cast<LParen*>(T0), E, T2);
+        std::vector<std::tuple<Expression*, Comma*>> Elements;
+        auto LParen = static_cast<class LParen*>(T0);
+        RParen* RParen;
+        for (;;) {
+          auto T1 = Tokens.peek();
+          if (llvm::isa<class RParen>(T1)) {
+            Tokens.get();
+            RParen = static_cast<class RParen*>(T1);
+            break;
+          }
+          auto E = parseExpression();
+          auto T2 = Tokens.get();
+          switch (T2->getKind()) {
+            case NodeKind::RParen:
+              RParen = static_cast<class RParen*>(T2);
+              Elements.push_back({ E, nullptr });
+              goto finish;
+            case NodeKind::Comma:
+              Elements.push_back({ E, static_cast<class Comma*>(T2) });
+              break;
+            default:
+              throw UnexpectedTokenDiagnostic(File, T2, { NodeKind::RParen, NodeKind::Comma });
+          }
+        }
+finish:
+        if (Elements.size() == 1 && !std::get<1>(Elements.front())) {
+          return new NestedExpression(LParen, std::get<0>(Elements.front()), RParen);
+        }
+        return new TupleExpression { LParen, Elements, RParen };
       }
       case NodeKind::MatchKeyword:
       {
@@ -307,7 +333,7 @@ finish:
     std::vector<Expression*> Args;
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->getKind() == NodeKind::LineFoldEnd || T1->getKind() == NodeKind::RParen || T1->getKind() == NodeKind::BlockStart || ExprOperators.isInfix(T1)) {
+      if (T1->getKind() == NodeKind::LineFoldEnd || T1->getKind() == NodeKind::RParen || T1->getKind() == NodeKind::BlockStart || T1->getKind() == NodeKind::Comma || ExprOperators.isInfix(T1)) {
         break;
       }
       Args.push_back(parsePrimitiveExpression());

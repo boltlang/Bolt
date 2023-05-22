@@ -15,6 +15,7 @@ namespace bolt {
   class Type;
   class TCon;
   class TVar;
+  class TTuple;
 
   using TypeclassId = ByteString;
 
@@ -37,6 +38,8 @@ namespace bolt {
     TypeclassMissing,
     InstanceNotFound,
     ClassNotFound,
+    TupleIndexOutOfRange,
+    InvalidTypeToTypeclass,
   };
 
   class Diagnostic : std::runtime_error {
@@ -132,6 +135,27 @@ namespace bolt {
 
     inline ClassNotFoundDiagnostic(ByteString Name):
       Diagnostic(DiagnosticKind::ClassNotFound), Name(Name) {}
+
+  };
+
+  class TupleIndexOutOfRangeDiagnostic : public Diagnostic {
+  public:
+
+    TTuple* Tuple;
+    std::size_t I;
+
+    inline TupleIndexOutOfRangeDiagnostic(TTuple* Tuple, std::size_t I):
+      Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I) {}
+
+  };
+
+  class InvalidTypeToTypeclassDiagnostic : public Diagnostic {
+  public:
+
+    Type* Actual;
+
+    inline InvalidTypeToTypeclassDiagnostic(Type* Actual):
+      Diagnostic(DiagnosticKind::InvalidTypeToTypeclass) {}
 
   };
 

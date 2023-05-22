@@ -3,6 +3,10 @@
 
 // TODO (maybe) make unficiation work like union-find in find()
 
+// TODO make simplify() rewrite the types in-place such that a reference too (Bool, Int).0 becomes Bool
+
+// TODO Fix TVSub to use TVar.Id instead of the pointer address
+
 #include <algorithm>
 #include <iterator>
 #include <stack>
@@ -58,6 +62,12 @@ namespace bolt {
         }
         break;
       }
+      case TypeKind::TupleIndex:
+      {
+        auto Index = static_cast<TTupleIndex*>(this);
+        Index->Ty->addTypeVars(TVs);
+        break;
+      }
       case TypeKind::Tuple:
       {
         auto Tuple = static_cast<TTuple*>(this);
@@ -92,6 +102,11 @@ namespace bolt {
           }
         }
         return false;
+      }
+      case TypeKind::TupleIndex:
+      {
+        auto Index = static_cast<TTupleIndex*>(this);
+        return Index->Ty->hasTypeVar(TV);
       }
       case TypeKind::Tuple:
       {
@@ -145,6 +160,12 @@ namespace bolt {
           NewArgs.push_back(NewArg);
         }
         return Changed ? new TCon(Con->Id, NewArgs, Con->DisplayName) : this;
+      }
+      case TypeKind::TupleIndex:
+      {
+        auto Tuple = static_cast<TTupleIndex*>(this);
+        auto NewTy = Tuple->Ty->substitute(Sub);
+        return NewTy != Tuple->Ty ? new TTupleIndex(NewTy, Tuple->I) : Tuple;
       }
       case TypeKind::Tuple:
       {
@@ -821,6 +842,35 @@ namespace bolt {
         return RetTy;
       }
 
+      case NodeKind::TupleExpression:
+      {
+        auto Tuple = static_cast<TupleExpression*>(X);
+        std::vector<Type*> Types;
+        for (auto [E, Comma]: Tuple->Elements) {
+          Types.push_back(inferExpression(E));
+        }
+        return new TTuple(Types);
+      }
+
+      case NodeKind::MemberExpression:
+      {
+        auto Member = static_cast<MemberExpression*>(X);
+        switch (Member->Name->getKind()) {
+          case NodeKind::IntegerLiteral:
+          {
+            auto I = static_cast<IntegerLiteral*>(Member->Name);
+            return new TTupleIndex(inferExpression(Member->E), I->getInteger());
+          }
+          case NodeKind::Identifier:
+          {
+            // TODO
+            break;
+          }
+          default:
+            ZEN_UNREACHABLE
+        }
+      }
+
       case NodeKind::NestedExpression:
       {
         auto Nested = static_cast<NestedExpression*>(X);
@@ -1124,9 +1174,8 @@ namespace bolt {
       for (auto Class: Classes) {
         propagateClassTycon(Class, llvm::cast<TCon>(Ty), Source);
       }
-    } else {
-      ZEN_UNREACHABLE
-      // DE.add<InvalidArgumentToTypeclassDiagnostic>(Ty);
+    } else if (!Classes.empty()) {
+      DE.add<InvalidTypeToTypeclassDiagnostic>(Ty);
     }
   };
 
@@ -1174,28 +1223,139 @@ namespace bolt {
   };
 
   void Checker::solveCEqual(CEqual* C) {
-    /* std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl; */
+    std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl;
     if (!unify(C->Left, C->Right, C->Source)) {
-      DE.add<UnificationErrorDiagnostic>(C->Left->substitute(Solution), C->Right->substitute(Solution), C->Source);
+      DE.add<UnificationErrorDiagnostic>(simplify(C->Left), simplify(C->Right), C->Source);
     }
+  }
+
+  Type* Checker::simplify(Type* Ty) {
+
+    while (Ty->getKind() == TypeKind::Var) {
+      auto Match = Solution.find(static_cast<TVar*>(Ty));
+      if (Match == Solution.end()) {
+        break;
+      }
+      Ty = Match->second;
+    }
+
+    switch (Ty->getKind()) {
+
+      case TypeKind::Var:
+        break;
+
+      case TypeKind::Tuple:
+      {
+        auto Tuple = static_cast<TTuple*>(Ty);
+        bool Changed = false;
+        std::vector<Type*> NewElementTypes;
+        for (auto Ty: Tuple->ElementTypes) {
+          auto NewElementType = simplify(Ty);
+          if (NewElementType != Ty) {
+            Changed = true;
+          }
+          NewElementTypes.push_back(NewElementType);
+        }
+        return Changed ? new TTuple(NewElementTypes) : Ty;
+      }
+
+      case TypeKind::Arrow:
+      {
+        auto Arrow = static_cast<TArrow*>(Ty);
+        bool Changed = false;
+        std::vector<Type*> NewParamTys;
+        for (auto ParamTy: Arrow->ParamTypes) { 
+          auto NewParamTy = simplify(ParamTy);
+          if (NewParamTy != ParamTy) {
+            Changed = true;
+          }
+          NewParamTys.push_back(NewParamTy);
+        }
+        auto NewRetTy = simplify(Arrow->ReturnType);
+        if (NewRetTy != Arrow->ReturnType) {
+          Changed = true;
+        }
+        Ty = Changed ? new TArrow(NewParamTys, NewRetTy) : Arrow;
+        break;
+      }
+
+      case TypeKind::Con:
+      {
+        auto Con = static_cast<TCon*>(Ty);
+        bool Changed = false;
+        std::vector<Type*> NewArgs;
+        for (auto Arg: Con->Args) {
+          auto NewArg = simplify(Arg);
+          if (NewArg != Arg) {
+            Changed = true;
+          }
+          NewArgs.push_back(NewArg);
+        }
+        return Changed ? new TCon(Con->Id, NewArgs, Con->DisplayName) : Ty;
+      }
+
+      case TypeKind::TupleIndex:
+      {
+        auto Index = static_cast<TTupleIndex*>(Ty);
+        auto MaybeTuple = simplify(Index->Ty);
+        if (llvm::isa<TTuple>(MaybeTuple)) {
+          auto Tuple = static_cast<TTuple*>(MaybeTuple);
+          if (Index->I >= Tuple->ElementTypes.size()) {
+            DE.add<TupleIndexOutOfRangeDiagnostic>(Tuple, Index->I);
+          } else {
+            Ty = simplify(Tuple->ElementTypes[Index->I]);
+          }
+        }
+        break;
+      }
+
+    }
+
+    return Ty;
+  }
+
+  void Checker::join(TVar* TV, Type* Ty, Node* Source) {
+
+    Solution[TV] = Ty;
+
+    propagateClasses(TV->Contexts, Ty, Source);
+
+    // This is a very specific adjustment that is critical to the
+    // well-functioning of the infer/unify algorithm. When addConstraint() is
+    // called, it may decide to solve the constraint immediately during
+    // inference. If this happens, a type variable might get assigned a concrete
+    // type such as Int. We therefore never want the variable to be polymorphic
+    // and be instantiated with a fresh variable, as it has already been solved.
+    // Should it get assigned another unification variable, that's OK too
+    // because then the context of that variable is what matters and not anymore
+    // the context of this one.
+    if (!Contexts.empty()) {
+      Contexts.back()->TVs->erase(TV);
+    }
+
   }
 
   bool Checker::unify(Type* A, Type* B, Node* Source) {
 
     auto find = [&](auto OrigTy) {
       auto Ty = OrigTy;
-      while (Ty->getKind() == TypeKind::Var) {
-        auto Match = Solution.find(static_cast<TVar*>(Ty));
-        if (Match == Solution.end()) {
-          break;
-        }
-        Ty = Match->second;
+      if (llvm::isa<TVar>(Ty)) {
+        auto TV = static_cast<TVar*>(Ty);
+        do {
+          auto Match = Solution.find(static_cast<TVar*>(Ty));
+          if (Match == Solution.end()) {
+            break;
+          }
+          Ty = Match->second;
+        } while (Ty->getKind() == TypeKind::Var);
+        // FIXME does this actually improove performance?
+        Solution[TV] = Ty;
       }
       return Ty;
     };
 
-    A = find(A);
-    B = find(B);
+    A = simplify(A);
+    B = simplify(B);
 
     if (llvm::isa<TVar>(A) && llvm::isa<TVar>(B)) {
       auto Var1 = static_cast<TVar*>(A);
@@ -1206,19 +1366,19 @@ namespace bolt {
         }
         return true;
       }
-      TVar* Dest;
+      TVar* To;
       TVar* From;
       if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Unification) {
-        Dest = Var1;
+        To = Var1;
         From = Var2;
       } else {
         // Only cases left are Var1 = Unification, Var2 = Rigid and Var1 = Unification, Var2 = Unification
         // Either way, Var1 is a good candidate for being unified away
-        Dest = Var2;
+        To = Var2;
         From = Var1;
       }
-      Solution[From] = Dest;
-      propagateClasses(From->Contexts, Dest, Source);
+      join(From, To, Source);
+      propagateClasses(From->Contexts, To, Source);
       return true;
     }
 
@@ -1234,10 +1394,7 @@ namespace bolt {
         //      than obsure references to an occurs check
         return false;
       }
-      Solution[TV] = B;
-      if (!TV->Contexts.empty()) {
-        propagateClasses(TV->Contexts, B, Source);
-      }
+      join(TV, B, Source);
       return true;
     }
 
@@ -1300,6 +1457,12 @@ namespace bolt {
       }
       return Success;
     }
+
+    // if (llvm::isa<TTupleIndex>(A) && llvm::isa<TTupleIndex>(B)) {
+    //   auto Index1 = static_cast<TTupleIndex*>(A);  
+    //   auto Index2 = static_cast<TTupleIndex*>(B);
+    //   return unify(Index1->Ty, Index2->Ty, Source);
+    // }
 
     if (llvm::isa<TCon>(A) && llvm::isa<TCon>(B)) {
       auto Con1 = static_cast<TCon*>(A);

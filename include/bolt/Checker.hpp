@@ -32,6 +32,7 @@ namespace bolt {
     Con,
     Arrow,
     Tuple,
+    TupleIndex,
   };
 
   class Type {
@@ -144,6 +145,21 @@ namespace bolt {
 
     static bool classof(const Type* Ty) {
       return Ty->getKind() == TypeKind::Tuple;
+    }
+
+  };
+
+  class TTupleIndex : public Type {
+  public:
+
+    Type* Ty;
+    std::size_t I;
+
+    inline TTupleIndex(Type* Ty, std::size_t I):
+      Type(TypeKind::TupleIndex), Ty(Ty), I(I) {}
+
+    static bool classof(const Type* Ty) {
+      return Ty->getKind() == TypeKind::TupleIndex;
     }
 
   };
@@ -403,6 +419,8 @@ namespace bolt {
 
     void checkTypeclassSigs(Node* N);
 
+    Type* simplify(Type* Ty);
+    void join(TVar* A, Type* B, Node* Source);
     bool unify(Type* A, Type* B, Node* Source);
 
     void solveCEqual(CEqual* C);

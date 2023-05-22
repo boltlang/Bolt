@@ -283,6 +283,14 @@ namespace bolt {
     return Name;
   }
 
+  Token* TupleExpression::getFirstToken() {
+    return LParen;
+  }
+
+  Token* TupleExpression::getLastToken() {
+    return RParen;
+  }
+
   Token* NestedExpression::getFirstToken() {
     return LParen;
   }
