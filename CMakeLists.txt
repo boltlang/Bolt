@@ -20,6 +20,7 @@ add_library(
   src/Diagnostics.cc
   src/Scanner.cc
   src/Parser.cc
+  src/Types.cc
   src/Checker.cc
   src/IPRGraph.cc
 )

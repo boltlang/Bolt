@@ -438,13 +438,28 @@ namespace bolt {
         setBold(true);
         Out << "error: ";
         resetStyles();
-        Out << "the types " << ANSI_FG_GREEN << describe(E.Left) << ANSI_RESET
-            << " and " << ANSI_FG_GREEN << describe(E.Right) << ANSI_RESET << " failed to match\n\n";
+        auto Left = E.Left->resolve(E.LeftPath);
+        auto Right = E.Right->resolve(E.RightPath);
+        Out << "the types " << ANSI_FG_GREEN << describe(Left) << ANSI_RESET
+            << " and " << ANSI_FG_GREEN << describe(Right) << ANSI_RESET << " failed to match\n\n";
         if (E.Source) {
           auto Range = E.Source->getRange();
-          //std::cerr << Range.Start.Line << ":" << Range.Start.Column << "-" << Range.End.Line << ":" << Range.End.Column << "\n";
           writeExcerpt(E.Source->getSourceFile()->getTextFile(), Range, Range, Color::Red);
           Out << "\n";
+        }
+        if (!E.LeftPath.empty()) {
+          setForegroundColor(Color::Yellow);
+          setBold(true);
+          Out << "  info: ";
+          resetStyles();
+          Out << "type " << ANSI_FG_GREEN << describe(Left) << ANSI_RESET << " occurs in the full type " << ANSI_FG_GREEN << describe(E.Left) << ANSI_RESET << "\n\n";
+        }
+        if (!E.RightPath.empty()) {
+          setForegroundColor(Color::Yellow);
+          setBold(true);
+          Out << "  info: ";
+          resetStyles();
+          Out << "type " << ANSI_FG_GREEN << describe(Right) << ANSI_RESET << " occurs in the full type " << ANSI_FG_GREEN << describe(E.Right) << ANSI_RESET << "\n\n";
         }
         return;
       }

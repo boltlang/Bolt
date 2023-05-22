@@ -25,165 +25,6 @@ namespace bolt {
 
   std::string describe(const Type* Ty);
 
-  bool TypeclassSignature::operator<(const TypeclassSignature& Other) const {
-    if (Id < Other.Id) {
-      return true;
-    }
-    ZEN_ASSERT(Params.size() == 1);
-    ZEN_ASSERT(Other.Params.size() == 1);
-    return Params[0]->Id < Other.Params[0]->Id;
-  }
-
-  bool TypeclassSignature::operator==(const TypeclassSignature& Other) const {
-    ZEN_ASSERT(Params.size() == 1);
-    ZEN_ASSERT(Other.Params.size() == 1);
-    return Id == Other.Id && Params[0]->Id == Other.Params[0]->Id;
-  }
-
-  void Type::addTypeVars(TVSet& TVs) {
-    switch (Kind) {
-      case TypeKind::Var:
-        TVs.emplace(static_cast<TVar*>(this));
-        break;
-      case TypeKind::Arrow:
-      {
-        auto Arrow = static_cast<TArrow*>(this);
-        for (auto Ty: Arrow->ParamTypes) {
-          Ty->addTypeVars(TVs);
-        }
-        Arrow->ReturnType->addTypeVars(TVs);
-        break;
-      }
-      case TypeKind::Con:
-      {
-        auto Con = static_cast<TCon*>(this);
-        for (auto Ty: Con->Args) {
-          Ty->addTypeVars(TVs);
-        }
-        break;
-      }
-      case TypeKind::TupleIndex:
-      {
-        auto Index = static_cast<TTupleIndex*>(this);
-        Index->Ty->addTypeVars(TVs);
-        break;
-      }
-      case TypeKind::Tuple:
-      {
-        auto Tuple = static_cast<TTuple*>(this);
-        for (auto Ty: Tuple->ElementTypes) {
-          Ty->addTypeVars(TVs);
-        }
-        break;
-      }
-    }
-  }
-
-  bool Type::hasTypeVar(const TVar* TV) {
-    switch (Kind) {
-      case TypeKind::Var:
-        return static_cast<TVar*>(this)->Id == TV->Id;
-      case TypeKind::Arrow:
-      {
-        auto Arrow = static_cast<TArrow*>(this);
-        for (auto Ty: Arrow->ParamTypes) {
-          if (Ty->hasTypeVar(TV)) {
-            return true;
-          }
-        }
-        return Arrow->ReturnType->hasTypeVar(TV);
-      }
-      case TypeKind::Con:
-      {
-        auto Con = static_cast<TCon*>(this);
-        for (auto Ty: Con->Args) {
-          if (Ty->hasTypeVar(TV)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      case TypeKind::TupleIndex:
-      {
-        auto Index = static_cast<TTupleIndex*>(this);
-        return Index->Ty->hasTypeVar(TV);
-      }
-      case TypeKind::Tuple:
-      {
-        auto Tuple = static_cast<TTuple*>(this);
-        for (auto Ty: Tuple->ElementTypes) {
-          if (Ty->hasTypeVar(TV)) {
-            return true;
-          }
-        }
-        return false;
-      }
-    }
-  }
-
-  Type* Type::substitute(const TVSub &Sub) {
-    switch (Kind) {
-      case TypeKind::Var:
-      {
-        auto TV = static_cast<TVar*>(this);
-        auto Match = Sub.find(TV);
-        return Match != Sub.end() ? Match->second->substitute(Sub) : this;
-      }
-      case TypeKind::Arrow:
-      {
-        auto Arrow = static_cast<TArrow*>(this);
-        bool Changed = false;
-        std::vector<Type*> NewParamTypes;
-        for (auto Ty: Arrow->ParamTypes) {
-          auto NewParamType = Ty->substitute(Sub);
-          if (NewParamType != Ty) {
-            Changed = true;
-          }
-          NewParamTypes.push_back(NewParamType);
-        }
-        auto NewRetTy = Arrow->ReturnType->substitute(Sub) ;
-        if (NewRetTy != Arrow->ReturnType) {
-          Changed = true;
-        }
-        return Changed ? new TArrow(NewParamTypes, NewRetTy) : this;
-      }
-      case TypeKind::Con:
-      {
-        auto Con = static_cast<TCon*>(this);
-        bool Changed = false;
-        std::vector<Type*> NewArgs;
-        for (auto Arg: Con->Args) {
-          auto NewArg = Arg->substitute(Sub);
-          if (NewArg != Arg) {
-            Changed = true;
-          }
-          NewArgs.push_back(NewArg);
-        }
-        return Changed ? new TCon(Con->Id, NewArgs, Con->DisplayName) : this;
-      }
-      case TypeKind::TupleIndex:
-      {
-        auto Tuple = static_cast<TTupleIndex*>(this);
-        auto NewTy = Tuple->Ty->substitute(Sub);
-        return NewTy != Tuple->Ty ? new TTupleIndex(NewTy, Tuple->I) : Tuple;
-      }
-      case TypeKind::Tuple:
-      {
-        auto Tuple = static_cast<TTuple*>(this);
-        bool Changed = false;
-        std::vector<Type*> NewElementTypes;
-        for (auto Ty: Tuple->ElementTypes) {
-          auto NewElementType = Ty->substitute(Sub);
-          if (NewElementType != Ty) {
-            Changed = true;
-          }
-          NewElementTypes.push_back(NewElementType);
-        }
-        return Changed ? new TTuple(NewElementTypes) : this;
-      }
-    }
-  }
-
   Constraint* Constraint::substitute(const TVSub &Sub) {
     switch (Kind) {
       case ConstraintKind::Class:
@@ -1141,7 +982,7 @@ namespace bolt {
     ZEN_UNREACHABLE
   }
 
-  std::vector<TypeclassContext> Checker::findInstanceContext(TCon* Ty, TypeclassId& Class, Node* Source) {
+  std::vector<TypeclassContext> Checker::findInstanceContext(TCon* Ty, TypeclassId& Class) {
     auto Match = InstanceMap.find(Class);
     std::vector<TypeclassContext> S;
     if (Match != InstanceMap.end()) {
@@ -1164,7 +1005,7 @@ namespace bolt {
     return S;
   }
 
-  void Checker::propagateClasses(std::unordered_set<TypeclassId>& Classes, Type* Ty, Node* Source) {
+  void Checker::propagateClasses(std::unordered_set<TypeclassId>& Classes, Type* Ty) {
     if (llvm::isa<TVar>(Ty)) {
       auto TV = llvm::cast<TVar>(Ty);
       for (auto Class: Classes) {
@@ -1172,61 +1013,29 @@ namespace bolt {
       }
     } else if (llvm::isa<TCon>(Ty)) {
       for (auto Class: Classes) {
-        propagateClassTycon(Class, llvm::cast<TCon>(Ty), Source);
+        propagateClassTycon(Class, llvm::cast<TCon>(Ty));
       }
     } else if (!Classes.empty()) {
       DE.add<InvalidTypeToTypeclassDiagnostic>(Ty);
     }
   };
 
-  void Checker::propagateClassTycon(TypeclassId& Class, TCon* Ty, Node* Source) {
-    auto S = findInstanceContext(Ty, Class, Source);
+  void Checker::propagateClassTycon(TypeclassId& Class, TCon* Ty) {
+    auto S = findInstanceContext(Ty, Class);
     for (auto [Classes, Arg]: zen::zip(S, Ty->Args)) {
-      propagateClasses(Classes, Arg, Source);
+      propagateClasses(Classes, Arg);
     }
-  };
-
-  class ArrowCursor {
-
-    std::stack<std::tuple<TArrow*, std::size_t>> Path;
-
-  public:
-
-    ArrowCursor(TArrow* Arr) {
-      Path.push({ Arr, 0 });
-    }
-
-    Type* next() {
-      while (!Path.empty()) {
-        auto& [Arr, I] = Path.top();
-        Type* Ty;
-        if (I == -1) {
-          Path.pop();
-          continue;
-        }
-        if (I == Arr->ParamTypes.size()) {
-          I = -1;
-          Ty = Arr->ReturnType;
-        }  else {
-          Ty = Arr->ParamTypes[I];
-          I++;
-        }
-        if (llvm::isa<TArrow>(Ty)) {
-          Path.push({ static_cast<TArrow*>(Ty), 0 });
-        } else {
-          return Ty;
-        }
-      }
-      return nullptr;
-    }
-
   };
 
   void Checker::solveCEqual(CEqual* C) {
-    std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl;
-    if (!unify(C->Left, C->Right, C->Source)) {
-      DE.add<UnificationErrorDiagnostic>(simplify(C->Left), simplify(C->Right), C->Source);
-    }
+    /* std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl; */
+    OrigLeft = C->Left;
+    OrigRight = C->Right;
+    Source = C->Source;
+    unify(C->Left, C->Right);
+    LeftPath = {};
+    RightPath = {};
+    /* DE.add<UnificationErrorDiagnostic>(simplify(C->Left), simplify(C->Right), C->Source); */
   }
 
   Type* Checker::simplify(Type* Ty) {
@@ -1314,11 +1123,11 @@ namespace bolt {
     return Ty;
   }
 
-  void Checker::join(TVar* TV, Type* Ty, Node* Source) {
+  void Checker::join(TVar* TV, Type* Ty) {
 
     Solution[TV] = Ty;
 
-    propagateClasses(TV->Contexts, Ty, Source);
+    propagateClasses(TV->Contexts, Ty);
 
     // This is a very specific adjustment that is critical to the
     // well-functioning of the infer/unify algorithm. When addConstraint() is
@@ -1335,24 +1144,62 @@ namespace bolt {
 
   }
 
-  bool Checker::unify(Type* A, Type* B, Node* Source) {
+  void Checker::unifyError() {
+    DE.add<UnificationErrorDiagnostic>(
+      simplify(OrigLeft),
+      simplify(OrigRight),
+      LeftPath,
+      RightPath,
+      Source
+    );
+  }
 
-    auto find = [&](auto OrigTy) {
-      auto Ty = OrigTy;
-      if (llvm::isa<TVar>(Ty)) {
-        auto TV = static_cast<TVar*>(Ty);
-        do {
-          auto Match = Solution.find(static_cast<TVar*>(Ty));
-          if (Match == Solution.end()) {
-            break;
-          }
-          Ty = Match->second;
-        } while (Ty->getKind() == TypeKind::Var);
-        // FIXME does this actually improove performance?
-        Solution[TV] = Ty;
+  class ArrowCursor {
+
+    std::stack<std::tuple<TArrow*, bool>> Stack;
+    TypePath& Path;
+    std::size_t I;
+
+  public:
+
+    ArrowCursor(TArrow* Arr, TypePath& Path):
+      Path(Path) {
+        Stack.push({ Arr, true });
+        Path.push_back(Arr->getStartIndex());
       }
-      return Ty;
-    };
+
+    Type* next() {
+      while (!Stack.empty()) {
+        auto& [Arrow, First] = Stack.top();
+        auto& Index = Path.back();
+        if (!First) {
+          Index.advance(Arrow);
+        } else {
+          First = false;
+        }
+        Type* Ty;
+        if (Index == Arrow->getEndIndex()) {
+          Path.pop_back();
+          Stack.pop();
+          continue;
+        }
+        Ty = Arrow->resolve(Index);
+        if (llvm::isa<TArrow>(Ty)) {
+          auto NewIndex = Arrow->getStartIndex();
+          Stack.push({ static_cast<TArrow*>(Ty), true });
+          Path.push_back(NewIndex);
+        } else {
+          return Ty;
+        }
+      }
+      return nullptr;
+    }
+
+  };
+
+
+
+  bool Checker::unify(Type* A, Type* B) {
 
     A = simplify(A);
     B = simplify(B);
@@ -1362,6 +1209,7 @@ namespace bolt {
       auto Var2 = static_cast<TVar*>(B);
       if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Rigid) {
         if (Var1->Id != Var2->Id) {
+          unifyError();
           return false;
         }
         return true;
@@ -1373,38 +1221,47 @@ namespace bolt {
         From = Var2;
       } else {
         // Only cases left are Var1 = Unification, Var2 = Rigid and Var1 = Unification, Var2 = Unification
-        // Either way, Var1 is a good candidate for being unified away
+        // Either way, Var1, being Unification, is a good candidate for being unified away
         To = Var2;
         From = Var1;
       }
-      join(From, To, Source);
-      propagateClasses(From->Contexts, To, Source);
+      join(From, To);
       return true;
     }
 
     if (llvm::isa<TVar>(A)) {
+
       auto TV = static_cast<TVar*>(A);
+
+      // Rigid type variables can never unify with antything else than what we
+      // have already handled in the previous if-statement, so issue an error.
       if (TV->getVarKind() == VarKind::Rigid) {
+        unifyError();
         return false;
       }
+
       // Occurs check
       if (B->hasTypeVar(TV)) {
         // NOTE Just like GHC, we just display an error message indicating that
         //      A cannot match B, e.g. a cannot match [a]. It looks much better
         //      than obsure references to an occurs check
+        unifyError();
         return false;
       }
-      join(TV, B, Source);
+
+      join(TV, B);
+
       return true;
     }
 
     if (llvm::isa<TVar>(B)) {
-      return unify(B, A, Source);
+      return unify(B, A);
     }
 
     if (llvm::isa<TArrow>(A) && llvm::isa<TArrow>(B)) {
-      auto C1 = ArrowCursor(static_cast<TArrow*>(A));
-      auto C2 = ArrowCursor(static_cast<TArrow*>(B));
+      auto C1 = ArrowCursor(static_cast<TArrow*>(A), LeftPath);
+      auto C2 = ArrowCursor(static_cast<TArrow*>(B), RightPath);
+      bool Success = true;
       for (;;) {
         auto T1 = C1.next();
         auto T2 = C2.next();
@@ -1412,13 +1269,15 @@ namespace bolt {
           break;
         }
         if (T1 == nullptr || T2 == nullptr) {
-          return false;
+          unifyError();
+          Success = false;
+          break;
         }
-        if (!unify(T1, T2, Source)) {
-          return false;
+        if (!unify(T1, T2)) {
+          Success = false;
         }
       }
-      return true;
+      return Success;
       /* if (Arr1->ParamTypes.size() != Arr2->ParamTypes.size()) { */
       /*   return false; */
       /* } */
@@ -1434,26 +1293,31 @@ namespace bolt {
     if (llvm::isa<TArrow>(A)) {
       auto Arr = static_cast<TArrow*>(A);
       if (Arr->ParamTypes.empty()) {
-        return unify(Arr->ReturnType, B, Source);
+        return unify(Arr->ReturnType, B);
       }
     }
 
     if (llvm::isa<TArrow>(B)) {
-      return unify(B, A, Source);
+      return unify(B, A);
     }
 
     if (llvm::isa<TTuple>(A) && llvm::isa<TTuple>(B)) {
       auto Tuple1 = static_cast<TTuple*>(A);
       auto Tuple2 = static_cast<TTuple*>(B);
       if (Tuple1->ElementTypes.size() != Tuple2->ElementTypes.size()) {
+        unifyError();
         return false;
       }
       auto Count = Tuple1->ElementTypes.size();
       bool Success = true;
       for (size_t I = 0; I < Count; I++) {
-        if (!unify(Tuple1->ElementTypes[I], Tuple2->ElementTypes[I], Source)) {
+        LeftPath.push_back(TypeIndex::forTupleElement(I));
+        RightPath.push_back(TypeIndex::forTupleElement(I));
+        if (!unify(Tuple1->ElementTypes[I], Tuple2->ElementTypes[I])) {
           Success = false;
         }
+        LeftPath.pop_back();
+        RightPath.pop_back();
       }
       return Success;
     }
@@ -1468,18 +1332,25 @@ namespace bolt {
       auto Con1 = static_cast<TCon*>(A);
       auto Con2 = static_cast<TCon*>(B);
       if (Con1->Id != Con2->Id) {
+        unifyError();
         return false;
       }
       ZEN_ASSERT(Con1->Args.size() == Con2->Args.size());
       auto Count = Con1->Args.size();
+      bool Success = true;
       for (std::size_t I = 0; I < Count; I++) {
-        if (!unify(Con1->Args[I], Con2->Args[I], Source)) {
-          return false;
+        LeftPath.push_back(TypeIndex::forConArg(I));
+        RightPath.push_back(TypeIndex::forConArg(I));
+        if (!unify(Con1->Args[I], Con2->Args[I])) {
+          Success = false;
         }
+        LeftPath.pop_back();
+        RightPath.pop_back();
       }
-      return true;
+      return Success;
     }
 
+    unifyError();
     return false;
   }
 

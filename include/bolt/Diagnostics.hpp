@@ -9,26 +9,9 @@
 #include "bolt/ByteString.hpp"
 #include "bolt/String.hpp"
 #include "bolt/CST.hpp"
+#include "bolt/Type.hpp"
 
 namespace bolt {
-
-  class Type;
-  class TCon;
-  class TVar;
-  class TTuple;
-
-  using TypeclassId = ByteString;
-
-  struct TypeclassSignature {
-
-    using TypeclassId = ByteString;
-    TypeclassId Id;
-    std::vector<TVar*> Params;
-
-    bool operator<(const TypeclassSignature& Other) const;
-    bool operator==(const TypeclassSignature& Other) const;
-
-  };
 
   enum class DiagnosticKind : unsigned char {
     UnexpectedToken,
@@ -95,13 +78,15 @@ namespace bolt {
 
   class UnificationErrorDiagnostic : public Diagnostic {
   public:
-    
+
     Type* Left;
     Type* Right;
+    TypePath LeftPath;
+    TypePath RightPath;
     Node* Source;
 
-    inline UnificationErrorDiagnostic(Type* Left, Type* Right, Node* Source):
-      Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right), Source(Source) {}
+    inline UnificationErrorDiagnostic(Type* Left, Type* Right, TypePath LeftPath, TypePath RightPath, Node* Source):
+      Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
 
   };
 

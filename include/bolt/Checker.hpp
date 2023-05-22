@@ -6,170 +6,15 @@
 #include "bolt/ByteString.hpp"
 #include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
-#include "bolt/Diagnostics.hpp"
+#include "bolt/Type.hpp"
 
-#include <istream>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <optional>
 
 namespace bolt {
 
   class DiagnosticEngine;
-  class Node;
-
-  class Type;
-  class TVar;
-
-  using TVSub = std::unordered_map<TVar*, Type*>;
-  using TVSet = std::unordered_set<TVar*>;
-
-  using TypeclassContext = std::unordered_set<TypeclassId>;
-
-  enum class TypeKind : unsigned char {
-    Var,
-    Con,
-    Arrow,
-    Tuple,
-    TupleIndex,
-  };
-
-  class Type {
-
-    const TypeKind Kind;
-
-  protected:
-
-    inline Type(TypeKind Kind):
-      Kind(Kind) {}
-
-  public:
-
-    bool hasTypeVar(const TVar* TV);
-
-    void addTypeVars(TVSet& TVs);
-
-    inline TVSet getTypeVars() {
-      TVSet Out;
-      addTypeVars(Out);
-      return Out;
-    }
-
-    Type* substitute(const TVSub& Sub);
-
-    inline TypeKind getKind() const noexcept {
-      return Kind;
-    }
-
-  };
-
-  class TCon : public Type {
-  public:
-
-    const size_t Id;
-    std::vector<Type*> Args;
-    ByteString DisplayName;
-
-    inline TCon(const size_t Id, std::vector<Type*> Args, ByteString DisplayName):
-      Type(TypeKind::Con), Id(Id), Args(Args), DisplayName(DisplayName) {}
-
-    static bool classof(const Type* Ty) {
-      return Ty->getKind() == TypeKind::Con;
-    }
-
-  };
-
-  enum class VarKind {
-    Rigid,
-    Unification,
-  };
-
-  class TVar : public Type {
-  public:
-
-    const size_t Id;
-    VarKind VK;
-
-    TypeclassContext Contexts;
-
-    inline TVar(size_t Id, VarKind VK):
-      Type(TypeKind::Var), Id(Id), VK(VK) {}
-
-    inline VarKind getVarKind() const noexcept {
-      return VK;
-    }
-
-    static bool classof(const Type* Ty) {
-      return Ty->getKind() == TypeKind::Var;
-    }
-
-  };
-
-  class TVarRigid : public TVar {
-  public:
-
-    ByteString Name;
-
-    inline TVarRigid(size_t Id, ByteString Name):
-      TVar(Id, VarKind::Rigid), Name(Name) {}
-
-  };
-
-  class TArrow : public Type {
-  public:
-
-    std::vector<Type*> ParamTypes;
-    Type* ReturnType;
-
-    inline TArrow(
-      std::vector<Type*> ParamTypes,
-      Type* ReturnType
-    ): Type(TypeKind::Arrow),
-       ParamTypes(ParamTypes),
-       ReturnType(ReturnType) {}
-
-    static bool classof(const Type* Ty) {
-      return Ty->getKind() == TypeKind::Arrow;
-    }
-
-  };
-
-  class TTuple : public Type {
-  public:
-
-    std::vector<Type*> ElementTypes;
-
-    inline TTuple(std::vector<Type*> ElementTypes):
-      Type(TypeKind::Tuple), ElementTypes(ElementTypes) {}
-
-    static bool classof(const Type* Ty) {
-      return Ty->getKind() == TypeKind::Tuple;
-    }
-
-  };
-
-  class TTupleIndex : public Type {
-  public:
-
-    Type* Ty;
-    std::size_t I;
-
-    inline TTupleIndex(Type* Ty, std::size_t I):
-      Type(TypeKind::TupleIndex), Ty(Ty), I(I) {}
-
-    static bool classof(const Type* Ty) {
-      return Ty->getKind() == TypeKind::TupleIndex;
-    }
-
-  };
-
-  // template<typename T>
-  // struct DerefHash {
-  //   std::size_t operator()(const T& Value) const noexcept {
-  //     return std::hash<decltype(*Value)>{}(*Value);
-  //   }
-  // };
 
   class Constraint;
 
@@ -354,6 +199,8 @@ namespace bolt {
 
     std::unordered_map<Node*, InferContext*> CallGraph;
 
+    std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
+
     Type* BoolType;
     Type* IntType;
     Type* StringType;
@@ -412,19 +259,42 @@ namespace bolt {
 
     Type* instantiate(Scheme* S, Node* Source);
 
-    std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
-    std::vector<TypeclassContext> findInstanceContext(TCon* Ty, TypeclassId& Class, Node* Source);
-    void propagateClasses(TypeclassContext& Classes, Type* Ty, Node* Source);
-    void propagateClassTycon(TypeclassId& Class, TCon* Ty, Node* Source);
-
-    void checkTypeclassSigs(Node* N);
+    std::vector<TypeclassContext> findInstanceContext(TCon* Ty, TypeclassId& Class);
+    void propagateClasses(TypeclassContext& Classes, Type* Ty);
+    void propagateClassTycon(TypeclassId& Class, TCon* Ty);
 
     Type* simplify(Type* Ty);
-    void join(TVar* A, Type* B, Node* Source);
-    bool unify(Type* A, Type* B, Node* Source);
 
+    /**
+     * Assign a type to a unification variable.
+     *
+     * If there are class constraints, those are propagated.
+     *
+     * If this type variable is solved during inference, it will be removed from
+     * the inference context.
+     *
+     * Other side effects may occur.
+     */
+    void join(TVar* A, Type* B);
+
+    Type* OrigLeft;
+    Type* OrigRight;
+    TypePath LeftPath;
+    TypePath RightPath;
+    Node* Source;
+
+    bool unify(Type* A, Type* B);
+
+    void unifyError();
     void solveCEqual(CEqual* C);
+
     void solve(Constraint* Constraint, TVSub& Solution);
+
+    /**
+     * Verifies that type class signatures on type asserts in let-declarations
+     * correctly declare the right type classes.
+     */
+    void checkTypeclassSigs(Node* N);
 
   public:
 
