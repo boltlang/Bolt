@@ -98,6 +98,8 @@ namespace bolt {
         return "'let'";
       case NodeKind::MutKeyword:
         return "'mut'";
+      case NodeKind::MatchKeyword:
+        return "'match'";
       case NodeKind::ReturnKeyword:
         return "'return'";
       case NodeKind::TypeKeyword:
