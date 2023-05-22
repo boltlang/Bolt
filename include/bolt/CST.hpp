@@ -75,6 +75,7 @@ namespace bolt {
     ReferenceExpression,
     MatchCase,
     MatchExpression,
+    MemberExpression,
     NestedExpression,
     ConstantExpression,
     CallExpression,
@@ -1114,6 +1115,31 @@ namespace bolt {
 
     Token* getFirstToken() override;
     Token* getLastToken() override;
+
+  };
+
+  class MemberExpression : public Expression {
+  public:
+
+    Expression* E;
+    Dot* Dot;
+    Token* Name;
+
+    inline MemberExpression(
+      class Expression* E,
+      class Dot* Dot,
+      Token* Name
+    ): Expression(NodeKind::MemberExpression),
+       E(E),
+       Dot(Dot),
+       Name(Name) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+    inline Expression* getExpression() const {
+      return E;
+    }
 
   };
 

@@ -279,8 +279,31 @@ after_constraints:
     }
   }
 
+  Expression* Parser::parseMemberExpression() {
+    auto E = parsePrimitiveExpression();
+    for (;;) {
+      auto T1 = Tokens.peek(0);
+      auto T2 = Tokens.peek(1);
+      if (!llvm::isa<Dot>(T1)) {
+        break;
+      }
+      switch (T2->getKind()) {
+        case NodeKind::IntegerLiteral:
+        case NodeKind::Identifier:
+          Tokens.get();
+          Tokens.get();
+          E = new MemberExpression { E, static_cast<Dot*>(T1), T2 };
+          break;
+        default:
+          goto finish;
+      }
+    }
+finish:
+    return E;
+  }
+
   Expression* Parser::parseCallExpression() {
-    auto Operator = parsePrimitiveExpression();
+    auto Operator = parseMemberExpression();
     std::vector<Expression*> Args;
     for (;;) {
       auto T1 = Tokens.peek();

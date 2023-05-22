@@ -275,6 +275,14 @@ namespace bolt {
     return BlockStart;
   }
 
+  Token* MemberExpression::getFirstToken() {
+    return E->getFirstToken();
+  }
+
+  Token* MemberExpression::getLastToken() {
+    return Name;
+  }
+
   Token* NestedExpression::getFirstToken() {
     return LParen;
   }

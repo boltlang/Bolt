@@ -1,9 +1,7 @@
 
 // TODO Add list of CST variable names to TVar and unify them so that e.g. the typeclass checker may pick one when displaying a diagnostic
 
-// TODO make sure that if we have Eq Int, Eq a ~ Eq Int such that an instance binding eq has the correct type
-
-// TODO make unficiation work like union-find in find()
+// TODO (maybe) make unficiation work like union-find in find()
 
 #include <algorithm>
 #include <iterator>
@@ -1184,7 +1182,8 @@ namespace bolt {
 
   bool Checker::unify(Type* A, Type* B, Node* Source) {
 
-    auto find = [&](auto Ty) {
+    auto find = [&](auto OrigTy) {
+      auto Ty = OrigTy;
       while (Ty->getKind() == TypeKind::Var) {
         auto Match = Solution.find(static_cast<TVar*>(Ty));
         if (Match == Solution.end()) {

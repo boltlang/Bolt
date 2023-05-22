@@ -109,6 +109,8 @@ namespace bolt {
           return static_cast<D*>(this)->visitMatchCase(static_cast<MatchCase*>(N));
         case NodeKind::MatchExpression:
           return static_cast<D*>(this)->visitMatchExpression(static_cast<MatchExpression*>(N));
+        case NodeKind::MemberExpression:
+          return static_cast<D*>(this)->visitMemberExpression(static_cast<MemberExpression*>(N));
         case NodeKind::NestedExpression:
           return static_cast<D*>(this)->visitNestedExpression(static_cast<NestedExpression*>(N));
         case NodeKind::ConstantExpression:
@@ -372,6 +374,10 @@ namespace bolt {
       visitExpression(N);
     }
 
+    void visitMemberExpression(MemberExpression* N) {
+      visitExpression(N);
+    }
+
     void visitNestedExpression(NestedExpression* N) {
       visitExpression(N);
     }
@@ -606,6 +612,9 @@ namespace bolt {
           break;
         case NodeKind::MatchExpression:
           visitEachChild(static_cast<MatchExpression*>(N));
+          break;
+        case NodeKind::MemberExpression:
+          visitEachChild(static_cast<MemberExpression*>(N));
           break;
         case NodeKind::NestedExpression:
           visitEachChild(static_cast<NestedExpression*>(N));
@@ -859,6 +868,12 @@ namespace bolt {
       for (auto Case: N->Cases) {
         BOLT_VISIT(Case);
       }
+    }
+
+    void visitEachChild(MemberExpression* N) {
+      BOLT_VISIT(N->getExpression());
+      BOLT_VISIT(N->Dot);
+      BOLT_VISIT(N->Name);
     }
 
     void visitEachChild(NestedExpression* N) {

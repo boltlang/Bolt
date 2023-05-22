@@ -78,6 +78,7 @@ namespace bolt {
 
     Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
+    Expression* parseMemberExpression();
     Expression* parsePrimitiveExpression();
 
     ConstraintExpression* parseConstraintExpression();
