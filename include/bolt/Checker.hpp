@@ -138,24 +138,9 @@ namespace bolt {
 
   };
 
-  enum {
-    /**
-     * Indicates that the typing environment of the current context will not
-     * hold on to any bindings.
-     *
-     * Concretely, bindings that are assigned fall through to the parent
-     * context, where this process is repeated until an environment is found
-     * that is not pervious.
-     */
-    InferContextFlags_PerviousEnv = 1 << 0,
-  };
-
   using InferContextFlagsMask = unsigned;
 
   class InferContext {
-
-    InferContextFlagsMask Flags = 0;
-
   public:
 
     /**
@@ -172,18 +157,6 @@ namespace bolt {
 
     Type* ReturnType = nullptr;
     std::vector<TypeclassSignature> Classes;
-
-    inline void setIsEnvPervious(bool Enable) noexcept {
-      if (Enable) {
-        Flags |= InferContextFlags_PerviousEnv;
-      } else {
-        Flags &= ~InferContextFlags_PerviousEnv;
-      }
-    }
-
-    inline bool isEnvPervious() const noexcept {
-      return Flags & InferContextFlags_PerviousEnv;
-    }
 
     //inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env, Type* ReturnType):
     //  Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env), ReturnType(ReturnType) {}

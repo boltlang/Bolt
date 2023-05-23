@@ -86,14 +86,7 @@ namespace bolt {
   }
 
   void Checker::addBinding(ByteString Name, Scheme* Scm) {
-    for (auto Iter = Contexts.rbegin(); Iter != Contexts.rend(); Iter++) {
-      auto& Ctx = **Iter;
-      if (!Ctx.isEnvPervious()) {
-        Ctx.Env.emplace(Name, Scm);
-        return;
-      }
-    }
-    ZEN_UNREACHABLE
+    Contexts.back()->Env.emplace(Name, Scm);
   }
 
   Type* Checker::getReturnType() {
