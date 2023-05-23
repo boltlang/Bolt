@@ -120,14 +120,23 @@ namespace bolt {
       {
         auto Y = static_cast<CEqual*>(C);
 
-        std::size_t MaxLevel = 0;
+        std::size_t MaxLevelLeft = 0;
         for (std::size_t I = Contexts.size(); I-- > 0; ) {
           auto Ctx = Contexts[I];
-          if (hasTypeVar(*Ctx->TVs, Y->Left) || hasTypeVar(*Ctx->TVs, Y->Right)) {
-            MaxLevel = I;
+          if (hasTypeVar(*Ctx->TVs, Y->Left)) {
+            MaxLevelLeft = I;
             break;
           }
         }
+        std::size_t MaxLevelRight = 0;
+        for (std::size_t I = Contexts.size(); I-- > 0; ) {
+          auto Ctx = Contexts[I];
+          if (hasTypeVar(*Ctx->TVs, Y->Right)) {
+            MaxLevelRight = I;
+            break;
+          }
+        }
+        auto MaxLevel = std::max(MaxLevelLeft, MaxLevelRight);
 
         std::size_t MinLevel = MaxLevel;
         for (std::size_t I = 0; I < Contexts.size(); I++) {
@@ -139,7 +148,7 @@ namespace bolt {
         }
 
         // TODO detect if MaxLevelLeft == 0 or MaxLevelRight == 0
-        if (MaxLevel == MinLevel) {
+        if (MaxLevel == MinLevel || MaxLevelLeft == 0 || MaxLevelRight == 0) {
           solveCEqual(Y);
         } else {
           Contexts[MaxLevel]->Constraints->push_back(C);
