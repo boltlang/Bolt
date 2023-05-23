@@ -127,8 +127,6 @@ namespace bolt {
       {
         auto Y = static_cast<CEqual*>(C);
 
-        // FIXME this logic breaks id x
-
         std::size_t MaxLevel = 0;
         for (std::size_t I = Contexts.size(); I-- > 0; ) {
           auto Ctx = Contexts[I];
@@ -154,7 +152,6 @@ namespace bolt {
           Contexts[MaxLevel]->Constraints->push_back(C);
         }
 
-        // Contexts.back()->Constraints->push_back(C);
         break;
       }
       case ConstraintKind::Many:
@@ -196,7 +193,7 @@ namespace bolt {
       {
         auto Class = static_cast<ClassDeclaration*>(X);
         for (auto TE: Class->TypeVars) {
-          auto TV = createRigidVar(TE->Name->getCanonicalText());
+          auto TV = new TVarRigid(NextTypeVarId++, TE->Name->getCanonicalText());
           TV->Contexts.emplace(Class->Name->getCanonicalText());
           TE->setType(TV);
         }
@@ -222,13 +219,9 @@ namespace bolt {
           Match->second.push_back(Decl);
         }
 
-        // FIXME save Ctx on the node or dont do this at all
-        auto Ctx = createInferContext();
-        Contexts.push_back(Ctx);
         for (auto Element: Decl->Elements) {
           forwardDeclare(Element);
         }
-        Contexts.pop_back();
 
         break;
       }
@@ -236,25 +229,27 @@ namespace bolt {
       case NodeKind::LetDeclaration:
       {
         auto Let = static_cast<LetDeclaration*>(X);
+        bool IsFunc = !Let->Params.empty();
+        bool IsInstance = llvm::isa<InstanceDeclaration>(Let->Parent);
+        bool IsClass = llvm::isa<ClassDeclaration>(Let->Parent);
+        bool HasContext = IsFunc || IsInstance || IsClass;
 
-        if (!Let->Params.empty()) {
-
+        if (HasContext) {
           Let->Ctx = createInferContext();
           Contexts.push_back(Let->Ctx);
+        }
 
-          // If declaring a let-declaration inside a type class declaration,
-          // we need to mark that the let-declaration requires this class.
-          // This marking is set on the rigid type variables of the class, which
-          // are then added to this local type environment.
-          if (llvm::isa<ClassDeclaration>(Let->Parent)) {
-            auto Decl = static_cast<ClassDeclaration*>(Let->Parent);
-            for (auto TE: Decl->TypeVars) {
-              auto TV = llvm::cast<TVar>(TE->getType());
-              Let->Ctx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
-              Let->Ctx->TVs->emplace(TV);
-            }
+        // If declaring a let-declaration inside a type class declaration,
+        // we need to mark that the let-declaration requires this class.
+        // This marking is set on the rigid type variables of the class, which
+        // are then added to this local type environment.
+        if (IsClass) {
+          auto Class = static_cast<ClassDeclaration*>(Let->Parent);
+          for (auto TE: Class->TypeVars) {
+            auto TV = llvm::cast<TVar>(TE->getType());
+            Let->Ctx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
+            Let->Ctx->TVs->emplace(TV);
           }
-
         }
 
         // Here we infer the primary type of the let declaration. If there's a
@@ -270,8 +265,11 @@ namespace bolt {
         Let->Ty = Ty;
 
         // If declaring a let-declaration inside a type instance declaration,
-        // we need to perform some work to make sure the type asserts of the corresponding let-declaration in the type class declaration are accounted for.
-        if (llvm::isa<InstanceDeclaration>(Let->Parent)) {
+        // we need to perform some work to make sure the type asserts of the
+        // corresponding let-declaration in the type class declaration are
+        // accounted for.
+        if (IsInstance) {
+
           auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
           auto Class = llvm::cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
 
@@ -281,18 +279,19 @@ namespace bolt {
           // we will be unifying them with the actual types declared in the
           // instance declaration, so we keep track of them.
           std::vector<TVar *> Params;
+          TVSub Sub;
           for (auto TE: Class->TypeVars) {
             auto TV = createTypeVar();
-            Let->Ctx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
+            Sub.emplace(llvm::cast<TVar>(TE->getType()), TV);
             Params.push_back(TV);
           }
 
-          auto Let2 = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
+          auto SigLet = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
 
           // It would be very strange if there was no type assert in the type
           // class let-declaration but we rather not let the compiler crash if that happens.
-          if (Let2->TypeAssert) {
-            addConstraint(new CEqual(Ty, inferTypeExpression(Let2->TypeAssert->TypeExpression), Let));
+          if (SigLet->TypeAssert) {
+            addConstraint(new CEqual(Ty, inferTypeExpression(SigLet->TypeAssert->TypeExpression)->substitute(Sub), Let));
           }
 
           // Here we do the actual unification of e.g. Eq a with Eq Bool. The
@@ -302,6 +301,7 @@ namespace bolt {
           for (auto [Param, TE] : zen::zip(Params, Instance->TypeExps)) {
             addConstraint(new CEqual(Param, TE->getType()));
           }
+
         }
 
         if (Let->Body) {
@@ -311,7 +311,7 @@ namespace bolt {
             case NodeKind::LetBlockBody:
             {
               auto Block = static_cast<LetBlockBody*>(Let->Body);
-              if (!Let->Params.empty()) {
+              if (IsFunc) {
                 Let->Ctx->ReturnType = createTypeVar();
               }
               for (auto Element: Block->Elements) {
@@ -324,15 +324,12 @@ namespace bolt {
           }
         }
 
-        if (!Let->Params.empty()) {
+        if (HasContext) {
           Contexts.pop_back();
+          inferBindings(Let->Pattern, Ty, Let->Ctx->Constraints, Let->Ctx->TVs);
+        } else {
+          inferBindings(Let->Pattern, Ty);
         }
-
-      if (Let->Params.empty()) {
-        inferBindings(Let->Pattern, Ty);
-      } else {
-        inferBindings(Let->Pattern, Ty, Let->Ctx->Constraints, Let->Ctx->TVs);
-      }
 
         break;
       }
