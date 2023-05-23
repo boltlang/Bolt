@@ -7,7 +7,7 @@
 
 // TODO Fix TVSub to use TVar.Id instead of the pointer address
 
-// Optimise constraint solving by solving some constraints during inference
+// TODO Deferred diagnostics
 
 #include <algorithm>
 #include <iterator>
@@ -519,12 +519,11 @@ namespace bolt {
           addConstraint(NewConstraint);
         }
 
-        // Note the call to solve? This is because constraints may have already
+        // Note the call to simplify? This is because constraints may have already
         // been solved, with some unification variables being erased. To make
-        // sure we instantiate unification variables that are still in use 
+        // sure we instantiate unification variables that are still in use
         // we solve before substituting.
-        // TODO perform a full solve()
-        return find(F->Type)->substitute(Sub);
+        return simplify(F->Type)->substitute(Sub);
       }
 
     }
