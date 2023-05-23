@@ -393,8 +393,9 @@ namespace bolt {
       case NodeKind::LetDeclaration:
       {
         auto Decl = static_cast<LetDeclaration*>(N);
+        bool HasContext = !Decl->Params.empty();
 
-        if (!Decl->Params.empty()) {
+        if (HasContext) {
           Contexts.push_back(Decl->Ctx);
         }
 
@@ -419,7 +420,8 @@ namespace bolt {
             case NodeKind::LetBlockBody:
             {
               auto Block = static_cast<LetBlockBody*>(Decl->Body);
-              RetType = createTypeVar();
+              ZEN_ASSERT(HasContext);
+              RetType = Decl->Ctx->ReturnType;
               for (auto Element: Block->Elements) {
                 infer(Element);
               }
@@ -432,16 +434,13 @@ namespace bolt {
           RetType = createTypeVar();
         }
 
-        if (ParamTypes.empty()) {
-          // Declaration is a plain (typed) variable
-          addConstraint(new CEqual { Decl->Ty, RetType, N });
-        } else {
+        if (HasContext) {
           // Declaration is a function
           addConstraint(new CEqual { Decl->Ty, new TArrow(ParamTypes, RetType), N });
-        }
-
-        if (!Decl->Params.empty()) {
           Contexts.pop_back();
+        } else {
+          // Declaration is a plain (typed) variable
+          addConstraint(new CEqual { Decl->Ty, RetType, N });
         }
 
         break;
