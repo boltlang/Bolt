@@ -730,6 +730,7 @@ namespace bolt {
           default:
             ZEN_UNREACHABLE
         }
+        break;
       }
 
       case NodeKind::NestedExpression:
