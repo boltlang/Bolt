@@ -693,7 +693,7 @@ namespace bolt {
           return createTypeVar();
         }
         auto OpTy = instantiate(Scm, Infix->Operator);
-        auto Ty = createTypeVar();
+        Ty = createTypeVar();
         std::vector<Type*> ArgTys;
         ArgTys.push_back(inferExpression(Infix->LHS));
         ArgTys.push_back(inferExpression(Infix->RHS));
