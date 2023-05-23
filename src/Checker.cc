@@ -636,8 +636,8 @@ namespace bolt {
           auto NewCtx = createInferContext();
           Contexts.push_back(NewCtx);
           inferBindings(Case->Pattern, ValTy);
-          auto Ty = inferExpression(Case->Expression);
-          addConstraint(new CEqual(Ty, Ty, Case->Expression));
+          auto ResTy = inferExpression(Case->Expression);
+          addConstraint(new CEqual(ResTy, Ty, Case->Expression));
           Contexts.pop_back();
         }
         if (!Match->Value) {
