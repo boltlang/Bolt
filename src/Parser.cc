@@ -547,7 +547,7 @@ after_params:
         return parseExpressionStatement();
     }
   }
-
+#
   ConstraintExpression* Parser::parseConstraintExpression() {
     bool HasTilde = false;
     for (std::size_t I = 0; ; I++) {
@@ -572,7 +572,7 @@ after_seek:
       auto Right = parseArrowTypeExpression();
       return new EqualityConstraintExpression { Left, Tilde, Right };
     }
-    auto Name = expectToken<Identifier>();
+    auto Name = expectToken<IdentifierAlt>();
     std::vector<VarTypeExpression*> TEs;
     for (;;) {
       auto T1 = Tokens.peek();

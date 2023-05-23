@@ -885,11 +885,11 @@ namespace bolt {
   class TypeclassConstraintExpression : public ConstraintExpression {
   public:
 
-    Identifier* Name;
+    IdentifierAlt* Name;
     std::vector<VarTypeExpression*> TEs;
 
     TypeclassConstraintExpression(
-      Identifier* Name,
+      IdentifierAlt* Name,
       std::vector<VarTypeExpression*> TEs
     ): ConstraintExpression(NodeKind::TypeclassConstraintExpression),
        Name(Name),
