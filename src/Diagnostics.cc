@@ -1,4 +1,6 @@
 
+// FIXME writeExcerpt does not work well with the last line in a file
+
 #include <sstream>
 #include <cmath>
 

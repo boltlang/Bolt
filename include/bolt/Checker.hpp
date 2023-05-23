@@ -11,6 +11,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
+#include <deque>
 
 namespace bolt {
 
@@ -207,6 +208,16 @@ namespace bolt {
 
     TVSub Solution;
 
+    /**
+     * The queue that is used during solving to store any unsolved constraints.
+     */
+    std::deque<class Constraint*> Queue;
+
+    /**
+     * Pointer to the current constraint being unified.
+     */
+    CEqual* C;
+
     std::vector<InferContext*> Contexts;
 
     InferContext& getContext();
@@ -264,6 +275,8 @@ namespace bolt {
     void propagateClassTycon(TypeclassId& Class, TCon* Ty);
 
     Type* simplify(Type* Ty);
+
+    Type* find(Type* Ty);
 
     /**
      * Assign a type to a unification variable.
