@@ -99,6 +99,10 @@ namespace bolt {
           return static_cast<D*>(this)->visitArrowTypeExpression(static_cast<ArrowTypeExpression*>(N));
         case NodeKind::VarTypeExpression:
           return static_cast<D*>(this)->visitVarTypeExpression(static_cast<VarTypeExpression*>(N));
+        case NodeKind::NestedTypeExpression:
+          return static_cast<D*>(this)->visitNestedTypeExpression(static_cast<NestedTypeExpression*>(N));
+        case NodeKind::TupleTypeExpression:
+          return static_cast<D*>(this)->visitTupleTypeExpression(static_cast<TupleTypeExpression*>(N));
         case NodeKind::BindPattern:
           return static_cast<D*>(this)->visitBindPattern(static_cast<BindPattern*>(N));
         case NodeKind::LiteralPattern:
@@ -345,6 +349,14 @@ namespace bolt {
     }
 
     void visitVarTypeExpression(VarTypeExpression* N) {
+      visitTypeExpression(N);
+    }
+
+    void visitNestedTypeExpression(NestedTypeExpression* N) {
+      visitTypeExpression(N);
+    }
+
+    void visitTupleTypeExpression(TupleTypeExpression* N) {
       visitTypeExpression(N);
     }
 
@@ -604,6 +616,12 @@ namespace bolt {
         case NodeKind::VarTypeExpression:
           visitEachChild(static_cast<VarTypeExpression*>(N));
           break;
+        case NodeKind::NestedTypeExpression:
+          visitEachChild(static_cast<NestedTypeExpression*>(N));
+          break;
+        case NodeKind::TupleTypeExpression:
+          visitEachChild(static_cast<TupleTypeExpression*>(N));
+          break;
         case NodeKind::BindPattern:
           visitEachChild(static_cast<BindPattern*>(N));
           break;
@@ -844,6 +862,23 @@ namespace bolt {
 
     void visitEachChild(VarTypeExpression* N) {
       BOLT_VISIT(N->Name);
+    }
+
+    void visitEachChild(NestedTypeExpression* N) {
+      BOLT_VISIT(N->LParen);
+      BOLT_VISIT(N->TE);
+      BOLT_VISIT(N->RParen);
+    }
+
+    void visitEachChild(TupleTypeExpression* N) {
+      BOLT_VISIT(N->LParen);
+      for (auto [TE, Comma]: N->Elements) {
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+        BOLT_VISIT(TE);
+      }
+      BOLT_VISIT(N->RParen);
     }
 
     void visitEachChild(BindPattern* N) {

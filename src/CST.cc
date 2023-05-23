@@ -229,6 +229,22 @@ namespace bolt {
     return Name;
   }
 
+  Token* NestedTypeExpression::getLastToken() {
+    return LParen;
+  }
+
+  Token* NestedTypeExpression::getFirstToken() {
+    return RParen;
+  }
+
+  Token* TupleTypeExpression::getLastToken() {
+    return LParen;
+  }
+
+  Token* TupleTypeExpression::getFirstToken() {
+    return RParen;
+  }
+
   Token* BindPattern::getFirstToken() {
     return Name;
   }

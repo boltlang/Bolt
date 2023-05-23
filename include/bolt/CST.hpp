@@ -70,6 +70,8 @@ namespace bolt {
     ReferenceTypeExpression,
     ArrowTypeExpression,
     VarTypeExpression,
+    NestedTypeExpression,
+    TupleTypeExpression,
     BindPattern,
     LiteralPattern,
     ReferenceExpression,
@@ -999,6 +1001,48 @@ namespace bolt {
 
     inline VarTypeExpression(Identifier* Name):
       TypeExpression(NodeKind::VarTypeExpression), Name(Name) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+  };
+
+  class NestedTypeExpression : public TypeExpression {
+  public:
+
+    LParen* LParen;
+    TypeExpression* TE;
+    RParen* RParen;
+
+    inline NestedTypeExpression(
+      class LParen* LParen,
+      TypeExpression* TE,
+      class RParen* RParen
+    ): TypeExpression(NodeKind::NestedTypeExpression),
+       LParen(LParen),
+       TE(TE),
+       RParen(RParen) {}
+
+    Token* getFirstToken() override;
+    Token* getLastToken() override;
+
+  };
+
+  class TupleTypeExpression : public TypeExpression {
+  public:
+
+    LParen* LParen;
+    std::vector<std::tuple<TypeExpression*, Comma*>> Elements;
+    RParen* RParen;
+
+    inline TupleTypeExpression(
+      class LParen* LParen,
+      std::vector<std::tuple<TypeExpression*, Comma*>> Elements,
+      class RParen* RParen
+    ): TypeExpression(NodeKind::TupleTypeExpression),
+       LParen(LParen),
+       Elements(Elements),
+       RParen(RParen) {}
 
     Token* getFirstToken() override;
     Token* getLastToken() override;

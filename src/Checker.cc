@@ -585,6 +585,26 @@ namespace bolt {
         return Ty;
       }
 
+      case NodeKind::TupleTypeExpression:
+      {
+        auto TupleTE = static_cast<TupleTypeExpression*>(N);
+        std::vector<Type*> ElementTypes;
+        for (auto [TE, Comma]: TupleTE->Elements) {
+          ElementTypes.push_back(inferTypeExpression(TE));
+        }
+        auto Ty = new TTuple(ElementTypes);
+        N->setType(Ty);
+        return Ty;
+      }
+
+      case NodeKind::NestedTypeExpression:
+      {
+        auto NestedTE = static_cast<NestedTypeExpression*>(N);
+        auto Ty = inferTypeExpression(NestedTE->TE);
+        N->setType(Ty);
+        return Ty;
+      }
+
       case NodeKind::ArrowTypeExpression:
       {
         auto ArrowTE = static_cast<ArrowTypeExpression*>(N);

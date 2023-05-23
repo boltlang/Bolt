@@ -173,6 +173,39 @@ after_constraints:
     switch (T0->getKind()) {
       case NodeKind::Identifier:
           return parseVarTypeExpression();
+      case NodeKind::LParen:
+      {
+        Tokens.get();
+        auto LParen = static_cast<class LParen*>(T0);
+        std::vector<std::tuple<TypeExpression*, Comma*>> Elements;
+        RParen* RParen;
+        for (;;) {
+          auto T1 = Tokens.peek();
+          if (llvm::isa<class RParen>(T1)) {
+            Tokens.get();
+            RParen = static_cast<class RParen*>(T1);
+            break;
+          }
+          auto TE = parseTypeExpression();
+          auto T2 = Tokens.get();
+          switch (T2->getKind()) {
+            case NodeKind::RParen:
+              RParen = static_cast<class RParen*>(T1);
+              Elements.push_back({ TE, nullptr });
+              goto after_tuple_element;
+            case NodeKind::Comma:
+              Elements.push_back({ TE, static_cast<Comma*>(T2) });
+              continue;
+            default:
+              throw UnexpectedTokenDiagnostic(File, T2, { NodeKind::Comma, NodeKind::RParen });
+          }
+        }
+after_tuple_element:
+        if (Elements.size() == 1) {
+          return new NestedTypeExpression { LParen, std::get<0>(Elements.front()), RParen };
+        }
+        return new TupleTypeExpression { LParen, Elements, RParen };
+      }
       case NodeKind::IdentifierAlt:
       {
         std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
@@ -547,7 +580,7 @@ after_params:
         return parseExpressionStatement();
     }
   }
-#
+
   ConstraintExpression* Parser::parseConstraintExpression() {
     bool HasTilde = false;
     for (std::size_t I = 0; ; I++) {
