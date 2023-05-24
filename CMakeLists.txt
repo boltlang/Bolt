@@ -33,6 +33,7 @@ target_compile_options(
   BoltCore
   PUBLIC
   -fstandalone-debug
+  -Werror
   ${ICU_CFLAGS}
 )
 target_include_directories(
