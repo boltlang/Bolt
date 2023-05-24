@@ -217,7 +217,7 @@ namespace bolt {
       return static_cast<T*>(this);
     }
 
-    TextRange getRange() const;
+    virtual TextRange getRange() const;
 
     inline Node(NodeKind Type):
         Kind(Type) {}
@@ -290,26 +290,30 @@ namespace bolt {
       ZEN_UNREACHABLE
     }
 
-    inline TextLoc getStartLoc() {
+    inline TextLoc getStartLoc() const {
       return StartLoc;
     }
 
-    TextLoc getEndLoc();
+    TextLoc getEndLoc() const;
 
-    inline size_t getStartLine() {
+    inline size_t getStartLine() const override {
       return StartLoc.Line;
     }
 
-    inline size_t getStartColumn() {
+    inline size_t getStartColumn() const override {
       return StartLoc.Column;
     }
 
-    inline size_t getEndLine() {
+    inline size_t getEndLine() const override {
       return getEndLoc().Line;
     }
 
-    inline size_t getEndColumn() {
+    inline size_t getEndColumn() const override {
       return getEndLoc().Column;
+    }
+
+    TextRange getRange() const override {
+      return { getStartLoc(), getEndLoc() };
     }
 
   };

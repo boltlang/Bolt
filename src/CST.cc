@@ -188,7 +188,7 @@ namespace bolt {
   /*   return Parent->getClassScope(); */
   /* } */
 
-  TextLoc Token::getEndLoc() {
+  TextLoc Token::getEndLoc() const {
     auto Loc = StartLoc;
     Loc.advance(getText());
     return Loc;
