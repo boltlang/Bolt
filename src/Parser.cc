@@ -38,8 +38,8 @@ namespace bolt {
     Mapping.emplace(Name, OperatorInfo { Precedence, Flags });
   }
 
-  Parser::Parser(TextFile& File, Stream<Token*>& S):
-    File(File), Tokens(S) {
+  Parser::Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE):
+    File(File), Tokens(S), DE(DE) {
       ExprOperators.add("**", OperatorFlags_InfixR, 10);
       ExprOperators.add("*", OperatorFlags_InfixL, 5);
       ExprOperators.add("/", OperatorFlags_InfixL, 5);

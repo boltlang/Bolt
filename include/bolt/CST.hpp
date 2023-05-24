@@ -131,8 +131,13 @@ namespace bolt {
 
     void setParents();
 
-    virtual Token* getFirstToken() = 0;
-    virtual Token* getLastToken() = 0;
+    virtual Token* getFirstToken() const = 0;
+    virtual Token* getLastToken() const = 0;
+
+    virtual std::size_t getStartLine() const;
+    virtual std::size_t getStartColumn() const;
+    virtual std::size_t getEndLine() const;
+    virtual std::size_t getEndColumn() const;
 
     inline NodeKind getKind() const noexcept {
       return Kind;
@@ -159,11 +164,12 @@ namespace bolt {
       return static_cast<T*>(this);
     }
 
-    TextRange getRange();
+    TextRange getRange() const;
 
     inline Node(NodeKind Type):
         Kind(Type) {}
 
+    const SourceFile* getSourceFile() const;
     SourceFile* getSourceFile();
 
     virtual Scope* getScope();
@@ -223,12 +229,12 @@ namespace bolt {
 
     virtual std::string getText() const = 0;
 
-        inline Token* getFirstToken() override {
-      return this;
+    inline Token* getFirstToken() const override {
+      ZEN_UNREACHABLE
     }
 
-    inline Token* getLastToken() override {
-      return this;
+    inline Token* getLastToken() const override {
+      ZEN_UNREACHABLE
     }
 
     inline TextLoc getStartLoc() {
@@ -897,8 +903,8 @@ namespace bolt {
        Name(Name),
        TEs(TEs) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::TypeclassConstraintExpression;
@@ -922,8 +928,8 @@ namespace bolt {
        Tilde(Tilde),
        Right(Right) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::EqualityConstraintExpression;
@@ -947,8 +953,8 @@ namespace bolt {
        RArrowAlt(RArrowAlt),
        TE(TE) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::QualifiedTypeExpression;
@@ -969,8 +975,8 @@ namespace bolt {
        ModulePath(ModulePath),
        Name(Name) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     SymbolPath getSymbolPath() const;
 
@@ -989,8 +995,8 @@ namespace bolt {
        ParamTypes(ParamTypes),
        ReturnType(ReturnType) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1002,8 +1008,8 @@ namespace bolt {
     inline VarTypeExpression(Identifier* Name):
       TypeExpression(NodeKind::VarTypeExpression), Name(Name) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1023,8 +1029,8 @@ namespace bolt {
        TE(TE),
        RParen(RParen) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1044,8 +1050,8 @@ namespace bolt {
        Elements(Elements),
        RParen(RParen) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1067,8 +1073,8 @@ namespace bolt {
     ): Pattern(NodeKind::BindPattern),
        Name(Name) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::BindPattern;
@@ -1085,8 +1091,8 @@ namespace bolt {
       Pattern(NodeKind::LiteralPattern),
       Literal(Literal) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::LiteralPattern;
@@ -1115,8 +1121,8 @@ namespace bolt {
        ModulePath(ModulePath),
        Name(Name) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     SymbolPath getSymbolPath() const;
 
@@ -1138,8 +1144,8 @@ namespace bolt {
        RArrowAlt(RArrowAlt),
        Expression(Expression) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1162,8 +1168,8 @@ namespace bolt {
        BlockStart(BlockStart),
        Cases(Cases) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1183,8 +1189,8 @@ namespace bolt {
        Dot(Dot),
        Name(Name) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     inline Expression* getExpression() const {
       return E;
@@ -1208,8 +1214,8 @@ namespace bolt {
        Elements(Elements),
        RParen(RParen) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1229,8 +1235,8 @@ namespace bolt {
        Inner(Inner),
        RParen(RParen) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1244,8 +1250,8 @@ namespace bolt {
     ): Expression(NodeKind::ConstantExpression),
        Token(Token) {}
 
-        class Token* getFirstToken() override;
-    class Token* getLastToken() override;
+        class Token* getFirstToken() const override;
+    class Token* getLastToken() const override;
 
   };
 
@@ -1262,8 +1268,8 @@ namespace bolt {
        Function(Function),
        Args(Args) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1280,8 +1286,8 @@ namespace bolt {
       Operator(Operator),
       RHS(RHS) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1298,8 +1304,8 @@ namespace bolt {
        Operator(Operator),
        Argument(Argument) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1319,8 +1325,8 @@ namespace bolt {
     ExpressionStatement(class Expression* Expression):
       Statement(NodeKind::ExpressionStatement), Expression(Expression) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1343,8 +1349,8 @@ namespace bolt {
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1356,8 +1362,8 @@ namespace bolt {
     inline IfStatement(std::vector<IfStatementPart*> Parts):
       Statement(NodeKind::IfStatement), Parts(Parts) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1374,8 +1380,8 @@ namespace bolt {
        ReturnKeyword(ReturnKeyword),
        Expression(Expression) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1392,8 +1398,8 @@ namespace bolt {
        Colon(Colon),
        TypeExpression(TypeExpression) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1410,8 +1416,8 @@ namespace bolt {
     class Pattern* Pattern;
     class TypeAssert* TypeAssert;
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1435,8 +1441,8 @@ namespace bolt {
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1453,8 +1459,8 @@ namespace bolt {
        Equals(Equals),
        Expression(Expression) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1502,8 +1508,8 @@ namespace bolt {
       return TheScope;
     }
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::LetDeclaration;
@@ -1533,8 +1539,8 @@ namespace bolt {
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::InstanceDeclaration;
@@ -1567,8 +1573,8 @@ namespace bolt {
        BlockStart(BlockStart),
        Elements(Elements) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::ClassDeclaration;
@@ -1592,8 +1598,8 @@ namespace bolt {
     class Colon* Colon;
     class TypeExpression* TypeExpression;
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1619,8 +1625,8 @@ namespace bolt {
        BlockStart(BlockStart),
        Fields(Fields) {}
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1641,8 +1647,12 @@ namespace bolt {
       return File;
     }
 
-    Token* getFirstToken() override;
-    Token* getLastToken() override;
+    inline const TextFile& getTextFile() const {
+      return File;
+    }
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
     inline Scope* getScope() override {
       if (TheScope == nullptr) {

@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <fstream>
+#include <algorithm>
 
 #include "zen/config.hpp"
 
@@ -44,21 +45,38 @@ int main(int argc, const char* argv[]) {
   VectorStream<ByteString, Char> Chars(Text, EOF);
   Scanner S(File, Chars);
   Punctuator PT(S);
-  Parser P(File, PT);
+  Parser P(File, PT, DE);
 
-  SourceFile* SF; 
-
-  try {
-    SF = P.parseSourceFile();
-  } catch (Diagnostic& D) {
-    DE.addDiagnostic(D);
+  auto SF = P.parseSourceFile();
+  if (SF == nullptr) {
     return 1;
   }
 
   SF->setParents();
 
-  Checker TheChecker { Config, DE };
+  DiagnosticStore DS;
+  Checker TheChecker { Config, DS };
   TheChecker.check(SF);
+
+  auto LT = [](const Diagnostic* L, const Diagnostic* R) {
+    auto N1 = L->getNode();
+    auto N2 = R->getNode();
+    if (N1 == nullptr && N2 == nullptr) {
+      return false;
+    }
+    if (N1 == nullptr) {
+      return true;
+    }
+    if (N2 == nullptr) {
+      return false;
+    }
+    return N1->getStartLine() < N2->getStartLine() || N1->getStartColumn() < N2->getStartColumn();
+  };
+  std::sort(DS.Diagnostics.begin(), DS.Diagnostics.end(), LT);
+
+  for (auto D: DS.Diagnostics) {
+    DE.addDiagnostic(D);
+  }
 
   return 0;
 }

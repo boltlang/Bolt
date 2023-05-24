@@ -4,11 +4,11 @@
 #include <sstream>
 #include <cmath>
 
-#include "bolt/CST.hpp"
 #include "zen/config.hpp"
 
+#include "bolt/CST.hpp"
+#include "bolt/Type.hpp"
 #include "bolt/Diagnostics.hpp"
-#include "bolt/Checker.hpp"
 
 #define ANSI_RESET "\u001b[0m"
 #define ANSI_BOLD "\u001b[1m"
@@ -314,7 +314,7 @@ namespace bolt {
   }
 
  void ConsoleDiagnostics::writeExcerpt(
-    TextFile& File,
+    const TextFile& File,
     TextRange ToPrint,
     TextRange ToHighlight,
     Color HighlightColor
@@ -353,166 +353,259 @@ namespace bolt {
 
   }
 
-  void ConsoleDiagnostics::addDiagnostic(const Diagnostic& D) {
+  void ConsoleDiagnostics::write(const std::string_view& S) {
+    Out << S;
+  }
 
-    switch (D.getKind()) {
+  void ConsoleDiagnostics::write(std::size_t I) {
+    Out << I;
+  }
+
+  void ConsoleDiagnostics::writeBinding(const ByteString& Name) {
+    write("'");
+    write(Name);
+    write("'");
+  }
+
+  void ConsoleDiagnostics::writeType(const Type* Ty) {
+    setForegroundColor(Color::Green);
+    write(describe(Ty));
+    resetStyles();
+  }
+
+  void ConsoleDiagnostics::writeType(std::size_t I) {
+    setForegroundColor(Color::Green);
+    write(I);
+    resetStyles();
+  }
+
+  void ConsoleDiagnostics::writeNode(const Node* N) {
+    auto Range = N->getRange();
+    writeExcerpt(N->getSourceFile()->getTextFile(), Range, Range, Color::Red);
+  }
+
+  void ConsoleDiagnostics::writeLoc(const TextFile& File, const TextLoc& Loc) {
+    setForegroundColor(Color::Yellow);
+    write(File.getPath());
+    write(":");
+    write(Loc.Line);
+    write(":");
+    write(Loc.Column);
+    write(":");
+    resetStyles();
+  }
+
+  void ConsoleDiagnostics::writePrefix(const Diagnostic& D) {
+    setForegroundColor(Color::Red);
+    setBold(true);
+    write("error: ");
+    resetStyles();
+  }
+
+  void ConsoleDiagnostics::writeTypeclassName(const ByteString& Name) {
+    setForegroundColor(Color::Magenta);
+    write(Name);
+    resetStyles();
+  }
+
+  void ConsoleDiagnostics::writeTypeclassSignature(const TypeclassSignature& Sig) {
+    setForegroundColor(Color::Magenta);
+    write(Sig.Id);
+    for (auto TV: Sig.Params) {
+      write(" ");
+      write(describe(TV));
+    }
+    resetStyles();
+  }
+
+  void ConsoleDiagnostics::addDiagnostic(Diagnostic* D) {
+
+    switch (D->getKind()) {
 
       case DiagnosticKind::BindingNotFound:
       {
-        auto E = static_cast<const BindingNotFoundDiagnostic&>(D);
-        Out << ANSI_BOLD ANSI_FG_RED "error: " ANSI_RESET "binding '" << E.Name << "' was not found\n\n";
+        auto E = static_cast<const BindingNotFoundDiagnostic&>(*D);
+        writePrefix(E);
+        write("binding '");
+        writeBinding(E.Name);
+        write(" was not found\n\n");
         if (E.Initiator != nullptr) {
           auto Range = E.Initiator->getRange();
           //std::cerr << Range.Start.Line << ":" << Range.Start.Column << "-" << Range.End.Line << ":" << Range.End.Column << "\n";
           writeExcerpt(E.Initiator->getSourceFile()->getTextFile(), Range, Range, Color::Red);
           Out << "\n";
         }
-        return;
+        break;
       }
 
       case DiagnosticKind::UnexpectedToken:
       {
-        auto E = static_cast<const UnexpectedTokenDiagnostic&>(D);
-        setForegroundColor(Color::Red);
-        setBold(true);
-        Out << "error: ";
-        resetStyles();
-        setForegroundColor(Color::Yellow);
-        Out << E.File.getPath() << ":" << E.Actual->getStartLine() << ":" << E.Actual->getStartColumn() << ":";
-        resetStyles();
-        Out << " expected ";
+        auto E = static_cast<const UnexpectedTokenDiagnostic&>(*D);
+        writePrefix(E);
+        writeLoc(E.File, E.Actual->getStartLoc());
+        write(" expected ");
         switch (E.Expected.size()) {
           case 0:
-            Out << "nothing";
+            write("nothing");
             break;
           case 1:
-            Out << describe(E.Expected[0]);
+            write(describe(E.Expected[0]));
             break;
           default:
             auto Iter = E.Expected.begin();
             Out << describe(*Iter++);
             NodeKind Prev = *Iter++;
             while (Iter != E.Expected.end()) {
-              Out << ", " << describe(Prev);
+              write(", ");
+              write(describe(Prev));
               Prev = *Iter++;
             }
-            Out << " or " << describe(Prev);
+            write(" or ");
+            write(describe(Prev));
             break;
         }
-        Out << " but instead got '" << E.Actual->getText() << "'\n\n";
+        write(" but instead got '");
+        write(E.Actual->getText());
+        write("'\n\n");
         writeExcerpt(E.File, E.Actual->getRange(), E.Actual->getRange(), Color::Red);
-        Out << "\n";
-        return;
+        write("\n");
+        break;
       }
 
       case DiagnosticKind::UnexpectedString:
       {
-        auto E = static_cast<const UnexpectedStringDiagnostic&>(D);
-        setForegroundColor(Color::Red);
-        setBold(true);
-        Out << "error: ";
-        resetStyles();
-        Out << E.File.getPath() << ":" << E.Location.Line << ":" << E.Location.Column << ": unexpected '";
+        auto E = static_cast<const UnexpectedStringDiagnostic&>(*D);
+        writePrefix(E);
+        writeLoc(E.File, E.Location);
+        write(" unexpected '");
         for (auto Chr: E.Actual) {
           switch (Chr) {
             case '\\':
-              Out << "\\\\";
+              write("\\\\");
               break;
             case '\'':
-              Out << "\\'";
+              write("\\'");
               break;
             default:
-              Out << Chr;
+              write(Chr);
               break;
           }
         }
-        Out << "'\n\n";
+        write("'\n\n");
         TextRange Range { E.Location, E.Location + E.Actual };
         writeExcerpt(E.File, Range, Range, Color::Red);
-        Out << "\n";
-        return;
+        write("\n");
+        break;
       }
 
       case DiagnosticKind::UnificationError:
       {
-        auto E = static_cast<const UnificationErrorDiagnostic&>(D);
-        setForegroundColor(Color::Red);
-        setBold(true);
-        Out << "error: ";
-        resetStyles();
+        auto E = static_cast<const UnificationErrorDiagnostic&>(*D);
+        writePrefix(E);
         auto Left = E.Left->resolve(E.LeftPath);
         auto Right = E.Right->resolve(E.RightPath);
-        Out << "the types " << ANSI_FG_GREEN << describe(Left) << ANSI_RESET
-            << " and " << ANSI_FG_GREEN << describe(Right) << ANSI_RESET << " failed to match\n\n";
+        write("the types ");
+        writeType(Left);
+        write(" and ");
+        writeType(Right);
+        write(" failed to match\n\n");
         if (E.Source) {
-          auto Range = E.Source->getRange();
-          writeExcerpt(E.Source->getSourceFile()->getTextFile(), Range, Range, Color::Red);
+          writeNode(E.Source);
           Out << "\n";
         }
         if (!E.LeftPath.empty()) {
           setForegroundColor(Color::Yellow);
           setBold(true);
-          Out << "  info: ";
+          write("  info: ");
           resetStyles();
-          Out << "type " << ANSI_FG_GREEN << describe(Left) << ANSI_RESET << " occurs in the full type " << ANSI_FG_GREEN << describe(E.Left) << ANSI_RESET << "\n\n";
+          write("the type ");
+          writeType(Left);
+          write(" occurs in the full type ");
+          writeType(E.Left);
+          write("\n\n");
         }
         if (!E.RightPath.empty()) {
           setForegroundColor(Color::Yellow);
           setBold(true);
-          Out << "  info: ";
+          write("  info: ");
           resetStyles();
-          Out << "type " << ANSI_FG_GREEN << describe(Right) << ANSI_RESET << " occurs in the full type " << ANSI_FG_GREEN << describe(E.Right) << ANSI_RESET << "\n\n";
+          write("the type ");
+          writeType(Right);
+          write(" occurs in the full type ");
+          writeType(E.Right);
+          write("\n\n");
         }
-        return;
+        break;
       }
 
       case DiagnosticKind::TypeclassMissing:
       {
-        auto E = static_cast<const TypeclassMissingDiagnostic&>(D);
-        setForegroundColor(Color::Red);
-        setBold(true);
-        Out << "error: ";
-        resetStyles();
-        Out << "the type class " << ANSI_FG_YELLOW << E.Sig.Id;
-        for (auto TV: E.Sig.Params) {
-          Out << " " << describe(TV);
-        }
-        Out << ANSI_RESET << " is missing from the declaration's type signature\n\n";
-        auto Range = E.Decl->getRange();
-        writeExcerpt(E.Decl->getSourceFile()->getTextFile(), Range, Range, Color::Yellow);
-        Out << "\n\n";
-        return;
+        auto E = static_cast<const TypeclassMissingDiagnostic&>(*D);
+        writePrefix(E);
+        write("the type class ");
+        writeTypeclassSignature(E.Sig);
+        write(" is missing from the declaration's type signature\n\n");
+        writeNode(E.Decl);
+        write("\n\n");
+        break;
       }
 
       case DiagnosticKind::InstanceNotFound:
       {
-        auto E = static_cast<const InstanceNotFoundDiagnostic&>(D);
-        setForegroundColor(Color::Red);
-        setBold(true);
-        Out << "error: ";
-        resetStyles();
-        Out << "a type class instance " << ANSI_FG_YELLOW << E.TypeclassName << " " << describe(E.Ty) << ANSI_RESET " was not found.\n\n";
-        auto Range = E.Source->getRange();
-        //std::cerr << Range.Start.Line << ":" << Range.Start.Column << "-" << Range.End.Line << ":" << Range.End.Column << "\n";
-        writeExcerpt(E.Source->getSourceFile()->getTextFile(), Range, Range, Color::Red);
-        Out << "\n";
-        return;
+        auto E = static_cast<const InstanceNotFoundDiagnostic&>(*D);
+        writePrefix(E);
+        write("a type class instance ");
+        writeTypeclassName(E.TypeclassName);
+        writeType(E.Ty);
+        write(" was not found.\n\n");
+        writeNode(E.Source);
+        write("\n");
+        break;
       }
 
       case DiagnosticKind::ClassNotFound:
       {
-        auto E = static_cast<const ClassNotFoundDiagnostic&>(D);
-        setForegroundColor(Color::Red);
-        setBold(true);
-        Out << "error: ";
-        resetStyles();
-        Out << "the type class " << ANSI_FG_YELLOW << E.Name << ANSI_RESET " was not found.\n\n";
-        return;
+        auto E = static_cast<const ClassNotFoundDiagnostic&>(*D);
+        writePrefix(E);
+        write("the type class ");
+        writeTypeclassName(E.Name);
+        write(" was not found.\n\n");
+        break;
+      }
+
+      case DiagnosticKind::TupleIndexOutOfRange:
+      {
+        auto E = static_cast<const TupleIndexOutOfRangeDiagnostic&>(*D);
+        writePrefix(E);
+        write("the index ");
+        writeType(E.I);
+        write(" is out of range for tuple ");
+        writeType(E.Tuple);
+        break;
+      }
+
+      case DiagnosticKind::InvalidTypeToTypeclass:
+      {
+        auto E = static_cast<const InvalidTypeToTypeclassDiagnostic&>(*D);
+        writePrefix(E);
+        write("the type ");
+        writeType(E.Actual);
+        write(" was applied to type class names ");
+        bool First = true;
+        for (auto Class: E.Classes) {
+          if (First) First = false;
+          else write(", ");
+          writeTypeclassName(Class);
+        }
+        write(" but this is invalid\n\n");
+        break;
       }
 
     }
 
-    ZEN_UNREACHABLE
+    // Since this DiagnosticEngine is expected to own the diagnostic, we simply
+    // destroy the processed diagnostic so that there are no memory leaks.
+    delete D;
   }
 
 }

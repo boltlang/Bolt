@@ -1064,7 +1064,7 @@ namespace bolt {
         propagateClassTycon(Class, llvm::cast<TCon>(Ty));
       }
     } else if (!Classes.empty()) {
-      DE.add<InvalidTypeToTypeclassDiagnostic>(Ty);
+      DE.add<InvalidTypeToTypeclassDiagnostic>(Ty, std::vector(Classes.begin(), Classes.end()), Source);
     }
   };
 

@@ -92,18 +92,44 @@ namespace bolt {
     return Source->Parent->getScope();
   }
 
+  const SourceFile* Node::getSourceFile() const {
+    const  Node* CurrNode = this;
+    for (;;) {
+      if (CurrNode->Kind == NodeKind::SourceFile) {
+        return static_cast<const SourceFile*>(CurrNode);
+      }
+      CurrNode = CurrNode->Parent;
+      ZEN_ASSERT(CurrNode != nullptr);
+    }
+  }
   SourceFile* Node::getSourceFile() {
-    auto CurrNode = this;
+    Node* CurrNode = this;
     for (;;) {
       if (CurrNode->Kind == NodeKind::SourceFile) {
         return static_cast<SourceFile*>(CurrNode);
       }
       CurrNode = CurrNode->Parent;
       ZEN_ASSERT(CurrNode != nullptr);
-    } 
+    }
   }
 
-  TextRange Node::getRange() {
+  std::size_t Node::getStartLine() const {
+    return getFirstToken()->getStartLine();
+  }
+
+  std::size_t Node::getStartColumn() const {
+    return getFirstToken()->getStartColumn();
+  }
+
+  std::size_t Node::getEndLine() const {
+    return getLastToken()->getEndLine();
+  }
+
+  std::size_t Node::getEndColumn() const {
+    return getLastToken()->getEndColumn();
+  }
+
+  TextRange Node::getRange() const {
     return TextRange {
       getFirstToken()->getStartLoc(),
       getLastToken()->getEndLoc(),
@@ -169,273 +195,273 @@ namespace bolt {
     return true;
   }
 
-  Token* TypeclassConstraintExpression::getFirstToken() {
+  Token* TypeclassConstraintExpression::getFirstToken() const {
     return Name;
   }
 
-  Token* TypeclassConstraintExpression::getLastToken() {
+  Token* TypeclassConstraintExpression::getLastToken() const {
     if (!TEs.empty()) {
       return TEs.back()->getLastToken();
     }
     return Name;
   }
 
-  Token* EqualityConstraintExpression::getFirstToken() {
+  Token* EqualityConstraintExpression::getFirstToken() const {
     return Left->getFirstToken();
   }
 
-  Token* EqualityConstraintExpression::getLastToken() {
+  Token* EqualityConstraintExpression::getLastToken() const {
     return Left->getLastToken();
   }
 
-  Token* QualifiedTypeExpression::getFirstToken() {
+  Token* QualifiedTypeExpression::getFirstToken() const {
     if (!Constraints.empty()) {
       return std::get<0>(Constraints.front())->getFirstToken();
     }
     return TE->getFirstToken();
   }
 
-  Token* QualifiedTypeExpression::getLastToken() {
+  Token* QualifiedTypeExpression::getLastToken() const {
     return TE->getLastToken();
   }
 
-  Token* ReferenceTypeExpression::getFirstToken() {
+  Token* ReferenceTypeExpression::getFirstToken() const {
     if (!ModulePath.empty()) {
       return std::get<0>(ModulePath.front());
     }
     return Name;
   }
 
-  Token* ReferenceTypeExpression::getLastToken() {
+  Token* ReferenceTypeExpression::getLastToken() const {
     return Name;
   }
 
-  Token* ArrowTypeExpression::getFirstToken() {
+  Token* ArrowTypeExpression::getFirstToken() const {
     if (ParamTypes.size()) {
       return ParamTypes.front()->getFirstToken();
     }
     return ReturnType->getFirstToken();
   }
 
-  Token* ArrowTypeExpression::getLastToken() {
+  Token* ArrowTypeExpression::getLastToken() const {
     return ReturnType->getLastToken();
   }
 
-  Token* VarTypeExpression::getLastToken() {
+  Token* VarTypeExpression::getLastToken() const {
     return Name;
   }
 
-  Token* VarTypeExpression::getFirstToken() {
+  Token* VarTypeExpression::getFirstToken() const {
     return Name;
   }
 
-  Token* NestedTypeExpression::getLastToken() {
+  Token* NestedTypeExpression::getLastToken() const {
     return LParen;
   }
 
-  Token* NestedTypeExpression::getFirstToken() {
+  Token* NestedTypeExpression::getFirstToken() const {
     return RParen;
   }
 
-  Token* TupleTypeExpression::getLastToken() {
+  Token* TupleTypeExpression::getLastToken() const {
     return LParen;
   }
 
-  Token* TupleTypeExpression::getFirstToken() {
+  Token* TupleTypeExpression::getFirstToken() const {
     return RParen;
   }
 
-  Token* BindPattern::getFirstToken() {
+  Token* BindPattern::getFirstToken() const {
     return Name;
   }
 
-  Token* BindPattern::getLastToken() {
+  Token* BindPattern::getLastToken() const {
     return Name;
   }
 
-  Token* LiteralPattern::getFirstToken() {
+  Token* LiteralPattern::getFirstToken() const {
     return Literal;
   }
 
-  Token* LiteralPattern::getLastToken() {
+  Token* LiteralPattern::getLastToken() const {
     return Literal;
   }
 
-  Token* ReferenceExpression::getFirstToken() {
+  Token* ReferenceExpression::getFirstToken() const {
     if (!ModulePath.empty()) {
       return std::get<0>(ModulePath.front());
     }
     return Name;
   }
 
-  Token* ReferenceExpression::getLastToken() {
+  Token* ReferenceExpression::getLastToken() const {
     return Name;
   }
 
-  Token* MatchCase::getFirstToken() {
+  Token* MatchCase::getFirstToken() const {
     return Pattern->getFirstToken();
   }
 
-  Token* MatchCase::getLastToken() {
+  Token* MatchCase::getLastToken() const {
     return Expression->getLastToken();
   }
 
-  Token* MatchExpression::getFirstToken() {
+  Token* MatchExpression::getFirstToken() const {
     return MatchKeyword;
   }
 
-  Token* MatchExpression::getLastToken() {
+  Token* MatchExpression::getLastToken() const {
     if (!Cases.empty()) {
       return Cases.back()->getLastToken();
     }
     return BlockStart;
   }
 
-  Token* MemberExpression::getFirstToken() {
+  Token* MemberExpression::getFirstToken() const {
     return E->getFirstToken();
   }
 
-  Token* MemberExpression::getLastToken() {
+  Token* MemberExpression::getLastToken() const {
     return Name;
   }
 
-  Token* TupleExpression::getFirstToken() {
+  Token* TupleExpression::getFirstToken() const {
     return LParen;
   }
 
-  Token* TupleExpression::getLastToken() {
+  Token* TupleExpression::getLastToken() const {
     return RParen;
   }
 
-  Token* NestedExpression::getFirstToken() {
+  Token* NestedExpression::getFirstToken() const {
     return LParen;
   }
 
-  Token* NestedExpression::getLastToken() {
+  Token* NestedExpression::getLastToken() const {
     return RParen;
   }
 
-  Token* ConstantExpression::getFirstToken() {
+  Token* ConstantExpression::getFirstToken() const {
     return Token;
   }
 
-  Token* ConstantExpression::getLastToken() {
+  Token* ConstantExpression::getLastToken() const {
     return Token;
   }
 
-  Token* CallExpression::getFirstToken() {
+  Token* CallExpression::getFirstToken() const {
     return Function->getFirstToken();
   }
 
-  Token* CallExpression::getLastToken() {
+  Token* CallExpression::getLastToken() const {
     if (Args.size()) {
       return Args.back()->getLastToken();
     }
     return Function->getLastToken();
   }
 
-  Token* InfixExpression::getFirstToken() {
+  Token* InfixExpression::getFirstToken() const {
     return LHS->getFirstToken();
   }
 
-  Token* InfixExpression::getLastToken() {
+  Token* InfixExpression::getLastToken() const {
     return RHS->getLastToken();
   }
 
-  Token* PrefixExpression::getFirstToken() {
+  Token* PrefixExpression::getFirstToken() const {
     return Operator;
   }
 
-  Token* PrefixExpression::getLastToken() {
+  Token* PrefixExpression::getLastToken() const {
     return Argument->getLastToken();
   }
   
-  Token* ExpressionStatement::getFirstToken() {
+  Token* ExpressionStatement::getFirstToken() const {
     return Expression->getFirstToken();
   }
 
-  Token* ExpressionStatement::getLastToken() {
+  Token* ExpressionStatement::getLastToken() const {
     return Expression->getLastToken();
   }
 
-  Token* ReturnStatement::getFirstToken() {
+  Token* ReturnStatement::getFirstToken() const {
     return ReturnKeyword;
   }
 
-  Token* ReturnStatement::getLastToken() {
+  Token* ReturnStatement::getLastToken() const {
     if (Expression) {
       return Expression->getLastToken();
     }
     return ReturnKeyword;
   }
 
-  Token* IfStatementPart::getFirstToken() {
+  Token* IfStatementPart::getFirstToken() const {
     return Keyword;
   }
 
-  Token* IfStatementPart::getLastToken() {
+  Token* IfStatementPart::getLastToken() const {
     if (Elements.size()) {
       return Elements.back()->getLastToken();
     }
     return BlockStart;
   }
 
-  Token* IfStatement::getFirstToken() {
+  Token* IfStatement::getFirstToken() const {
     ZEN_ASSERT(Parts.size());
     return Parts.front()->getFirstToken();
   }
 
-  Token* IfStatement::getLastToken() {
+  Token* IfStatement::getLastToken() const {
     ZEN_ASSERT(Parts.size());
     return Parts.back()->getLastToken();
   }
 
-  Token* TypeAssert::getFirstToken() {
+  Token* TypeAssert::getFirstToken() const {
     return Colon;
   }
 
-  Token* TypeAssert::getLastToken() {
+  Token* TypeAssert::getLastToken() const {
     return TypeExpression->getLastToken();
   }
 
-  Token* Parameter::getFirstToken() {
+  Token* Parameter::getFirstToken() const {
     return Pattern->getFirstToken();
   }
 
-  Token* Parameter::getLastToken() {
+  Token* Parameter::getLastToken() const {
     if (TypeAssert) {
       return TypeAssert->getLastToken();
     }
     return Pattern->getLastToken();
   }
 
-  Token* LetBlockBody::getFirstToken() {
+  Token* LetBlockBody::getFirstToken() const {
     return BlockStart;
   }
 
-  Token* LetBlockBody::getLastToken() {
+  Token* LetBlockBody::getLastToken() const {
     if (Elements.size()) {
       return Elements.back()->getLastToken();
     }
     return BlockStart;
   }
 
-  Token* LetExprBody::getFirstToken() {
+  Token* LetExprBody::getFirstToken() const {
     return Equals;
   }
 
-  Token* LetExprBody::getLastToken() {
+  Token* LetExprBody::getLastToken() const {
     return Expression->getLastToken();
   }
 
-  Token* LetDeclaration::getFirstToken() {
+  Token* LetDeclaration::getFirstToken() const {
     if (PubKeyword) {
       return PubKeyword;
     }
     return LetKeyword;
   }
 
-  Token* LetDeclaration::getLastToken() {
+  Token* LetDeclaration::getLastToken() const {
     if (Body) {
       return Body->getLastToken();
     }
@@ -448,61 +474,61 @@ namespace bolt {
     return Pattern->getLastToken();
   }
 
-  Token* StructDeclarationField::getFirstToken() {
+  Token* StructDeclarationField::getFirstToken() const {
     return Name;
   }
 
-  Token* StructDeclarationField::getLastToken() {
+  Token* StructDeclarationField::getLastToken() const {
     return TypeExpression->getLastToken();
   }
 
-  Token* StructDeclaration::getFirstToken() {
+  Token* StructDeclaration::getFirstToken() const {
     if (PubKeyword) {
       return PubKeyword;
     }
     return StructKeyword;
   }
 
-  Token* StructDeclaration::getLastToken() {
+  Token* StructDeclaration::getLastToken() const {
     if (Fields.size()) {
       Fields.back()->getLastToken();
     }
     return BlockStart;
   }
 
-  Token* InstanceDeclaration::getFirstToken() {
+  Token* InstanceDeclaration::getFirstToken() const {
     return InstanceKeyword;
   }
 
-  Token* InstanceDeclaration::getLastToken() {
+  Token* InstanceDeclaration::getLastToken() const {
     if (!Elements.empty()) {
       return Elements.back()->getLastToken();
     }
     return BlockStart;
   }
 
-  Token* ClassDeclaration::getFirstToken() {
+  Token* ClassDeclaration::getFirstToken() const {
     if (PubKeyword != nullptr) {
       return PubKeyword;
     }
     return ClassKeyword;
   }
 
-  Token* ClassDeclaration::getLastToken() {
+  Token* ClassDeclaration::getLastToken() const {
     if (!Elements.empty()) {
       return Elements.back()->getLastToken();
     }
     return BlockStart;
   }
 
-  Token* SourceFile::getFirstToken() {
+  Token* SourceFile::getFirstToken() const {
     if (Elements.size()) {
       return Elements.front()->getFirstToken();
     }
     return nullptr;
   }
 
-  Token* SourceFile::getLastToken() {
+  Token* SourceFile::getLastToken() const {
     if (Elements.size()) {
       return Elements.back()->getLastToken();
     }

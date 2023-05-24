@@ -39,6 +39,11 @@ namespace bolt {
       return Kind;
     }
 
+    virtual Node* getNode() const {
+      return nullptr;
+    }
+
+
   };
 
   class UnexpectedTokenDiagnostic : public Diagnostic {
@@ -74,6 +79,10 @@ namespace bolt {
     inline BindingNotFoundDiagnostic(ByteString Name, Node* Initiator):
       Diagnostic(DiagnosticKind::BindingNotFound), Name(Name), Initiator(Initiator) {}
 
+    inline Node* getNode() const override {
+      return Initiator;
+    }
+
   };
 
   class UnificationErrorDiagnostic : public Diagnostic {
@@ -88,6 +97,10 @@ namespace bolt {
     inline UnificationErrorDiagnostic(Type* Left, Type* Right, TypePath LeftPath, TypePath RightPath, Node* Source):
       Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
 
+    inline Node* getNode() const override {
+      return Source;
+    }
+
   };
 
   class TypeclassMissingDiagnostic : public Diagnostic {
@@ -98,6 +111,10 @@ namespace bolt {
 
     inline TypeclassMissingDiagnostic(TypeclassSignature Sig, LetDeclaration* Decl):
       Diagnostic(DiagnosticKind::TypeclassMissing), Sig(Sig), Decl(Decl) {}
+
+    inline Node* getNode() const override {
+      return Decl;
+    }
 
   };
 
@@ -110,6 +127,10 @@ namespace bolt {
 
     inline InstanceNotFoundDiagnostic(ByteString TypeclassName, TCon* Ty, Node* Source):
       Diagnostic(DiagnosticKind::InstanceNotFound), TypeclassName(TypeclassName), Ty(Ty), Source(Source) {}
+
+    inline Node* getNode() const override {
+      return Source;
+    }
 
   };
 
@@ -138,26 +159,53 @@ namespace bolt {
   public:
 
     Type* Actual;
+    std::vector<TypeclassId> Classes;
+    Node* Source;
 
-    inline InvalidTypeToTypeclassDiagnostic(Type* Actual):
-      Diagnostic(DiagnosticKind::InvalidTypeToTypeclass) {}
+    inline InvalidTypeToTypeclassDiagnostic(Type* Actual, std::vector<TypeclassId> Classes, Node* Source):
+      Diagnostic(DiagnosticKind::InvalidTypeToTypeclass), Actual(Actual), Classes(Classes), Source(Source) {}
+
+    inline Node* getNode() const override {
+      return Source;
+    }
 
   };
 
   class DiagnosticEngine {
-  protected:
-
   public:
 
-    virtual void addDiagnostic(const Diagnostic& Diagnostic) = 0;
+    virtual void addDiagnostic(Diagnostic* Diagnostic) = 0;
 
     template<typename D, typename ...Ts>
     void add(Ts&&... Args) {
-      D Diag { std::forward<Ts>(Args)... };
-      addDiagnostic(Diag);
+      addDiagnostic(new D { std::forward<Ts>(Args)... });
     }
 
     virtual ~DiagnosticEngine() {}
+
+  };
+
+  /**
+   * Keeps diagnostics alive in-memory until a seperate procedure processes them.
+   */
+  class DiagnosticStore : public DiagnosticEngine {
+  public:
+
+    std::vector<Diagnostic*> Diagnostics;
+
+    void addDiagnostic(Diagnostic* Diagnostic) {
+      Diagnostics.push_back(Diagnostic);
+    }
+
+    void clear() {
+      Diagnostics.clear();
+    }
+
+    ~DiagnosticStore() {
+      for (auto D: Diagnostics) {
+        delete D;
+      }
+    }
 
   };
 
@@ -198,11 +246,24 @@ namespace bolt {
     );
 
     void writeExcerpt(
-      TextFile& File,
+      const TextFile& File,
       TextRange ToPrint,
       TextRange ToHighlight,
       Color HighlightColor
     );
+
+    void writeNode(const Node* N);
+
+    void writePrefix(const Diagnostic& D);
+    void writeBinding(const ByteString& Name);
+    void writeType(std::size_t I);
+    void writeType(const Type* Ty);
+    void writeLoc(const TextFile& File, const TextLoc& Loc);
+    void writeTypeclassName(const ByteString& Name);
+    void writeTypeclassSignature(const TypeclassSignature& Sig);
+
+    void write(const std::string_view& S);
+    void write(std::size_t N);
 
   public:
 
@@ -213,9 +274,10 @@ namespace bolt {
     bool PrintExcerpts = true;
     bool EnableColors = true;
 
-    void addDiagnostic(const Diagnostic& Diagnostic) override;
-
     ConsoleDiagnostics(std::ostream& Out = std::cerr);
 
+    void addDiagnostic(Diagnostic* Diagnostic) override;
+
   };
+
 }

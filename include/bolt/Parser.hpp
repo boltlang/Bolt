@@ -9,6 +9,7 @@
 
 namespace bolt {
 
+  class DiagnosticEngine;
   class Scanner;
 
   enum OperatorFlags {
@@ -62,6 +63,7 @@ namespace bolt {
   class Parser {
 
     TextFile& File;
+    DiagnosticEngine& DE;
 
     Stream<Token*>& Tokens;
 
@@ -90,7 +92,7 @@ namespace bolt {
 
   public:
 
-    Parser(TextFile& File, Stream<Token*>& S);
+    Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE);
 
     TypeExpression* parseTypeExpression();
 

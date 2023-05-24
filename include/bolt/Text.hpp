@@ -52,9 +52,9 @@ namespace bolt {
 
     TextFile(ByteString Path, ByteString Text);
 
-    size_t getLine(size_t Offset);
-    size_t getColumn(size_t Offset);
-    size_t getStartOffset(size_t Line);
+    size_t getLine(size_t Offset) const;
+    size_t getColumn(size_t Offset) const;
+    size_t getStartOffset(size_t Line) const;
 
     size_t getLineCount() const;
 

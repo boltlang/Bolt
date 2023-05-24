@@ -22,11 +22,11 @@ namespace bolt {
     return LineOffsets.size();
   }
 
-  size_t TextFile::getStartOffset(size_t Line) {
+  size_t TextFile::getStartOffset(size_t Line) const {
     return LineOffsets[Line-1];
   }
 
-  size_t TextFile::getLine(size_t Offset) {
+  size_t TextFile::getLine(size_t Offset) const {
     ZEN_ASSERT(Offset < Text.size());
     for (size_t I = 0; I < LineOffsets.size(); ++I) {
       if (LineOffsets[I] > Offset) {
@@ -36,7 +36,7 @@ namespace bolt {
     ZEN_UNREACHABLE
   }
 
-  size_t TextFile::getColumn(size_t Offset) {
+  size_t TextFile::getColumn(size_t Offset) const {
     auto Line = getLine(Offset);
     auto StartOffset = getStartOffset(Line);
     return Offset - StartOffset + 1 ;
