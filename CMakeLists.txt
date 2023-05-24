@@ -15,7 +15,7 @@ set(ICU_LIBRARIES icuuc)
 
 add_library(
   BoltCore
-  src/Text.cc
+  #src/Text.cc
   src/CST.cc
   src/Diagnostics.cc
   src/Scanner.cc

@@ -8,6 +8,7 @@
 
 #include "bolt/CST.hpp"
 #include "bolt/Type.hpp"
+#include "bolt/DiagnosticEngine.hpp"
 #include "bolt/Diagnostics.hpp"
 
 #define ANSI_RESET "\u001b[0m"
@@ -169,6 +170,12 @@ namespace bolt {
         auto Y = static_cast<const TTupleIndex*>(Ty);
         return describe(Y->Ty) + "." + std::to_string(Y->I);
       }
+    }
+  }
+
+  DiagnosticStore::~DiagnosticStore() {
+    for (auto D: Diagnostics) {
+      delete D;
     }
   }
 
@@ -420,11 +427,20 @@ namespace bolt {
 
   void ConsoleDiagnostics::addDiagnostic(Diagnostic* D) {
 
-    switch (D->getKind()) {
+    printDiagnostic(*D);
+
+    // Since this DiagnosticEngine is expected to own the diagnostic, we simply
+    // destroy the processed diagnostic so that there are no memory leaks.
+    delete D;
+  }
+
+  void ConsoleDiagnostics::printDiagnostic(const Diagnostic& D) {
+
+    switch (D.getKind()) {
 
       case DiagnosticKind::BindingNotFound:
       {
-        auto E = static_cast<const BindingNotFoundDiagnostic&>(*D);
+        auto E = static_cast<const BindingNotFoundDiagnostic&>(D);
         writePrefix(E);
         write("binding '");
         writeBinding(E.Name);
@@ -440,7 +456,7 @@ namespace bolt {
 
       case DiagnosticKind::UnexpectedToken:
       {
-        auto E = static_cast<const UnexpectedTokenDiagnostic&>(*D);
+        auto E = static_cast<const UnexpectedTokenDiagnostic&>(D);
         writePrefix(E);
         writeLoc(E.File, E.Actual->getStartLoc());
         write(" expected ");
@@ -474,7 +490,7 @@ namespace bolt {
 
       case DiagnosticKind::UnexpectedString:
       {
-        auto E = static_cast<const UnexpectedStringDiagnostic&>(*D);
+        auto E = static_cast<const UnexpectedStringDiagnostic&>(D);
         writePrefix(E);
         writeLoc(E.File, E.Location);
         write(" unexpected '");
@@ -500,7 +516,7 @@ namespace bolt {
 
       case DiagnosticKind::UnificationError:
       {
-        auto E = static_cast<const UnificationErrorDiagnostic&>(*D);
+        auto E = static_cast<const UnificationErrorDiagnostic&>(D);
         writePrefix(E);
         auto Left = E.Left->resolve(E.LeftPath);
         auto Right = E.Right->resolve(E.RightPath);
@@ -540,7 +556,7 @@ namespace bolt {
 
       case DiagnosticKind::TypeclassMissing:
       {
-        auto E = static_cast<const TypeclassMissingDiagnostic&>(*D);
+        auto E = static_cast<const TypeclassMissingDiagnostic&>(D);
         writePrefix(E);
         write("the type class ");
         writeTypeclassSignature(E.Sig);
@@ -552,7 +568,7 @@ namespace bolt {
 
       case DiagnosticKind::InstanceNotFound:
       {
-        auto E = static_cast<const InstanceNotFoundDiagnostic&>(*D);
+        auto E = static_cast<const InstanceNotFoundDiagnostic&>(D);
         writePrefix(E);
         write("a type class instance ");
         writeTypeclassName(E.TypeclassName);
@@ -566,7 +582,7 @@ namespace bolt {
 
       case DiagnosticKind::ClassNotFound:
       {
-        auto E = static_cast<const ClassNotFoundDiagnostic&>(*D);
+        auto E = static_cast<const ClassNotFoundDiagnostic&>(D);
         writePrefix(E);
         write("the type class ");
         writeTypeclassName(E.Name);
@@ -576,7 +592,7 @@ namespace bolt {
 
       case DiagnosticKind::TupleIndexOutOfRange:
       {
-        auto E = static_cast<const TupleIndexOutOfRangeDiagnostic&>(*D);
+        auto E = static_cast<const TupleIndexOutOfRangeDiagnostic&>(D);
         writePrefix(E);
         write("the index ");
         writeType(E.I);
@@ -587,7 +603,7 @@ namespace bolt {
 
       case DiagnosticKind::InvalidTypeToTypeclass:
       {
-        auto E = static_cast<const InvalidTypeToTypeclassDiagnostic&>(*D);
+        auto E = static_cast<const InvalidTypeToTypeclassDiagnostic&>(D);
         writePrefix(E);
         write("the type ");
         writeType(E.Actual);
@@ -604,9 +620,6 @@ namespace bolt {
 
     }
 
-    // Since this DiagnosticEngine is expected to own the diagnostic, we simply
-    // destroy the processed diagnostic so that there are no memory leaks.
-    delete D;
   }
 
 }

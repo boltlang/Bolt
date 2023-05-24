@@ -8,6 +8,7 @@
 #include "zen/config.hpp"
 
 #include "bolt/CST.hpp"
+#include "bolt/DiagnosticEngine.hpp"
 #include "bolt/Diagnostics.hpp"
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
@@ -75,7 +76,7 @@ int main(int argc, const char* argv[]) {
   std::sort(DS.Diagnostics.begin(), DS.Diagnostics.end(), LT);
 
   for (auto D: DS.Diagnostics) {
-    DE.addDiagnostic(D);
+    DE.printDiagnostic(*D);
   }
 
   return 0;

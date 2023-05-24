@@ -19,6 +19,7 @@
 #include "zen/range.hpp"
 
 #include "bolt/CSTVisitor.hpp"
+#include "bolt/DiagnosticEngine.hpp"
 #include "bolt/Diagnostics.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Checker.hpp"

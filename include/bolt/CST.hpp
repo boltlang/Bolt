@@ -10,8 +10,8 @@
 
 #include "zen/config.hpp"
 
-#include "bolt/Text.hpp"
 #include "bolt/Integer.hpp"
+#include "bolt/String.hpp"
 #include "bolt/ByteString.hpp"
 
 namespace bolt {
@@ -24,6 +24,59 @@ namespace bolt {
   class Pattern;
   class Expression;
   class Statement;
+
+  class TextLoc {
+  public:
+
+    size_t Line = 1;
+    size_t Column = 1;
+
+    inline void advance(const ByteString& Text) {
+      for (auto Chr: Text) {
+        if (Chr == '\n') {
+          Line++;
+          Column = 1;
+        } else {
+          Column++;
+        }
+      }
+    }
+
+    inline TextLoc operator+(const ByteString& Text) const {
+      TextLoc Out { Line, Column };
+      Out.advance(Text);
+      return Out;
+    }
+
+  };
+
+  struct TextRange {
+    TextLoc Start;
+    TextLoc End;
+  };
+
+  class TextFile {
+
+    ByteString Path;
+    ByteString Text;
+
+    std::vector<size_t> LineOffsets;
+
+  public:
+
+    TextFile(ByteString Path, ByteString Text);
+
+    size_t getLine(size_t Offset) const;
+    size_t getColumn(size_t Offset) const;
+    size_t getStartOffset(size_t Line) const;
+
+    size_t getLineCount() const;
+
+    ByteString getPath() const;
+
+    ByteString getText() const;
+
+  };
 
   enum class NodeKind {
     Equals,
