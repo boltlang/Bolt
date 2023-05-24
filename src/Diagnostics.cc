@@ -556,6 +556,7 @@ namespace bolt {
         writePrefix(E);
         write("a type class instance ");
         writeTypeclassName(E.TypeclassName);
+        write(" ");
         writeType(E.Ty);
         write(" was not found.\n\n");
         writeNode(E.Source);
