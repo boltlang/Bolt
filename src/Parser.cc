@@ -1062,7 +1062,9 @@ after_vars:
       case NodeKind::TypeKeyword:
         // TODO
       default:
-        throw UnexpectedTokenDiagnostic(File, T0, std::vector<NodeKind> { NodeKind::LetKeyword, NodeKind::TypeKeyword });
+        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector<NodeKind> { NodeKind::LetKeyword, NodeKind::TypeKeyword });
+        skipToLineFoldEnd();
+        return nullptr;
     }
   }
 
