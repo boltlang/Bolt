@@ -230,116 +230,179 @@ namespace bolt {
       }
 
       case NodeKind::LetDeclaration:
-      {
-        auto Let = static_cast<LetDeclaration*>(X);
-        bool IsFunc = !Let->Params.empty();
-        bool IsInstance = llvm::isa<InstanceDeclaration>(Let->Parent);
-        bool IsClass = llvm::isa<ClassDeclaration>(Let->Parent);
-        bool HasContext = IsFunc || IsInstance || IsClass;
-
-        if (HasContext) {
-          Let->Ctx = createInferContext();
-          Contexts.push_back(Let->Ctx);
-        }
-
-        // If declaring a let-declaration inside a type class declaration,
-        // we need to mark that the let-declaration requires this class.
-        // This marking is set on the rigid type variables of the class, which
-        // are then added to this local type environment.
-        if (IsClass) {
-          auto Class = static_cast<ClassDeclaration*>(Let->Parent);
-          for (auto TE: Class->TypeVars) {
-            auto TV = llvm::cast<TVar>(TE->getType());
-            Let->Ctx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
-            Let->Ctx->TVs->emplace(TV);
-          }
-        }
-
-        // Here we infer the primary type of the let declaration. If there's a
-        // type assert, that assert should be authoritative so we use that.
-        // Otherwise, the type is not further specified and we create a new
-        // unification variable.
-        Type* Ty;
-        if (Let->TypeAssert) {
-          Ty = inferTypeExpression(Let->TypeAssert->TypeExpression);
-        } else {
-          Ty = createTypeVar();
-        }
-        Let->Ty = Ty;
-
-        // If declaring a let-declaration inside a type instance declaration,
-        // we need to perform some work to make sure the type asserts of the
-        // corresponding let-declaration in the type class declaration are
-        // accounted for.
-        if (IsInstance) {
-
-          auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
-          auto Class = llvm::cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
-
-          // The type asserts in the type class declaration might make use of
-          // the type parameters of the type class declaration, so it is
-          // important to make them available in the type environment. Moreover,
-          // we will be unifying them with the actual types declared in the
-          // instance declaration, so we keep track of them.
-          std::vector<TVar *> Params;
-          TVSub Sub;
-          for (auto TE: Class->TypeVars) {
-            auto TV = createTypeVar();
-            Sub.emplace(llvm::cast<TVar>(TE->getType()), TV);
-            Params.push_back(TV);
-          }
-
-          auto SigLet = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
-
-          // It would be very strange if there was no type assert in the type
-          // class let-declaration but we rather not let the compiler crash if that happens.
-          if (SigLet->TypeAssert) {
-            addConstraint(new CEqual(Ty, inferTypeExpression(SigLet->TypeAssert->TypeExpression)->substitute(Sub), Let));
-          }
-
-          // Here we do the actual unification of e.g. Eq a with Eq Bool. The
-          // unification variables we created previously will be unified with
-          // e.g. Bool, which causes the type assert to also collapse to e.g.
-          // Bool -> Bool -> Bool.
-          for (auto [Param, TE] : zen::zip(Params, Instance->TypeExps)) {
-            addConstraint(new CEqual(Param, TE->getType()));
-          }
-
-        }
-
-        if (Let->Body) {
-          switch (Let->Body->getKind()) {
-            case NodeKind::LetExprBody:
-              break;
-            case NodeKind::LetBlockBody:
-            {
-              auto Block = static_cast<LetBlockBody*>(Let->Body);
-              if (IsFunc) {
-                Let->Ctx->ReturnType = createTypeVar();
-              }
-              for (auto Element: Block->Elements) {
-                forwardDeclare(Element);
-              }
-              break;
-            }
-            default:
-              ZEN_UNREACHABLE
-          }
-        }
-
-        if (HasContext) {
-          Contexts.pop_back();
-          inferBindings(Let->Pattern, Ty, Let->Ctx->Constraints, Let->Ctx->TVs);
-        } else {
-          inferBindings(Let->Pattern, Ty);
-        }
-
+        // These declarations will be handled separately in check()
         break;
-      }
 
       default:
         ZEN_UNREACHABLE
 
+    }
+
+  }
+
+  void Checker::forwardDeclareLetDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints) {
+
+    auto Let = static_cast<LetDeclaration*>(N);
+    bool IsFunc = !Let->Params.empty();
+    bool IsInstance = llvm::isa<InstanceDeclaration>(Let->Parent);
+    bool IsClass = llvm::isa<ClassDeclaration>(Let->Parent);
+    bool HasContext = IsFunc || IsInstance || IsClass;
+
+    if (HasContext) {
+      Let->Ctx = createInferContext(TVs, Constraints);
+      Contexts.push_back(Let->Ctx);
+    }
+
+    // If declaring a let-declaration inside a type class declaration,
+    // we need to mark that the let-declaration requires this class.
+    // This marking is set on the rigid type variables of the class, which
+    // are then added to this local type environment.
+    if (IsClass) {
+      auto Class = static_cast<ClassDeclaration*>(Let->Parent);
+      for (auto TE: Class->TypeVars) {
+        auto TV = llvm::cast<TVar>(TE->getType());
+        Let->Ctx->Env.emplace(TE->Name->getCanonicalText(), new Forall(TV));
+        Let->Ctx->TVs->emplace(TV);
+      }
+    }
+
+    // Here we infer the primary type of the let declaration. If there's a
+    // type assert, that assert should be authoritative so we use that.
+    // Otherwise, the type is not further specified and we create a new
+    // unification variable.
+    Type* Ty;
+    if (Let->TypeAssert) {
+      Ty = inferTypeExpression(Let->TypeAssert->TypeExpression);
+    } else {
+      Ty = createTypeVar();
+    }
+    Let->Ty = Ty;
+
+    // If declaring a let-declaration inside a type instance declaration,
+    // we need to perform some work to make sure the type asserts of the
+    // corresponding let-declaration in the type class declaration are
+    // accounted for.
+    if (IsInstance) {
+
+      auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
+      auto Class = llvm::cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
+
+      // The type asserts in the type class declaration might make use of
+      // the type parameters of the type class declaration, so it is
+      // important to make them available in the type environment. Moreover,
+      // we will be unifying them with the actual types declared in the
+      // instance declaration, so we keep track of them.
+      std::vector<TVar *> Params;
+      TVSub Sub;
+      for (auto TE: Class->TypeVars) {
+        auto TV = createTypeVar();
+        Sub.emplace(llvm::cast<TVar>(TE->getType()), TV);
+        Params.push_back(TV);
+      }
+
+      auto SigLet = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
+
+      // It would be very strange if there was no type assert in the type
+      // class let-declaration but we rather not let the compiler crash if that happens.
+      if (SigLet->TypeAssert) {
+        addConstraint(new CEqual(Ty, inferTypeExpression(SigLet->TypeAssert->TypeExpression)->substitute(Sub), Let));
+      }
+
+      // Here we do the actual unification of e.g. Eq a with Eq Bool. The
+      // unification variables we created previously will be unified with
+      // e.g. Bool, which causes the type assert to also collapse to e.g.
+      // Bool -> Bool -> Bool.
+      for (auto [Param, TE] : zen::zip(Params, Instance->TypeExps)) {
+        addConstraint(new CEqual(Param, TE->getType()));
+      }
+
+    }
+
+    if (Let->Body) {
+      switch (Let->Body->getKind()) {
+        case NodeKind::LetExprBody:
+          break;
+        case NodeKind::LetBlockBody:
+        {
+          auto Block = static_cast<LetBlockBody*>(Let->Body);
+          if (IsFunc) {
+            Let->Ctx->ReturnType = createTypeVar();
+          }
+          for (auto Element: Block->Elements) {
+            forwardDeclare(Element);
+          }
+          break;
+        }
+        default:
+          ZEN_UNREACHABLE
+      }
+    }
+
+    if (HasContext) {
+      Contexts.pop_back();
+      inferBindings(Let->Pattern, Ty, Let->Ctx->Constraints, Let->Ctx->TVs);
+    } else {
+      inferBindings(Let->Pattern, Ty);
+    }
+
+  }
+
+  void Checker::inferLetDeclaration(LetDeclaration* N) {
+
+    auto Decl = static_cast<LetDeclaration*>(N);
+    bool IsFunc = !Decl->Params.empty();
+    bool IsInstance = llvm::isa<InstanceDeclaration>(Decl->Parent);
+    bool IsClass = llvm::isa<ClassDeclaration>(Decl->Parent);
+    bool HasContext = IsFunc || IsInstance || IsClass;
+
+    if (HasContext) {
+      Contexts.push_back(Decl->Ctx);
+    }
+
+    std::vector<Type*> ParamTypes;
+    Type* RetType;
+
+    for (auto Param: Decl->Params) {
+      // TODO incorporate Param->TypeAssert or make it a kind of pattern
+      TVar* TV = createTypeVar();
+      inferBindings(Param->Pattern, TV);
+      ParamTypes.push_back(TV);
+    }
+
+    if (Decl->Body) {
+      switch (Decl->Body->getKind()) {
+        case NodeKind::LetExprBody:
+        {
+          auto Expr = static_cast<LetExprBody*>(Decl->Body);
+          RetType = inferExpression(Expr->Expression);
+          break;
+        }
+        case NodeKind::LetBlockBody:
+        {
+          auto Block = static_cast<LetBlockBody*>(Decl->Body);
+          ZEN_ASSERT(HasContext);
+          RetType = Decl->Ctx->ReturnType;
+          for (auto Element: Block->Elements) {
+            infer(Element);
+          }
+          break;
+        }
+        default:
+          ZEN_UNREACHABLE
+      }
+    } else {
+      RetType = createTypeVar();
+    }
+
+    if (HasContext) {
+      Contexts.pop_back();
+    }
+
+    if (IsFunc) {
+      addConstraint(new CEqual { Decl->Ty, new TArrow(ParamTypes, RetType), N });
+    } else {
+      // Declaration is a plain (typed) variable
+      addConstraint(new CEqual { Decl->Ty, RetType, N });
     }
 
   }
@@ -369,11 +432,9 @@ namespace bolt {
       case NodeKind::InstanceDeclaration:
       {
         auto Decl = static_cast<InstanceDeclaration*>(N);
-
         for (auto Element: Decl->Elements) {
           infer(Element);
         }
-
         break;
       }
 
@@ -392,71 +453,18 @@ namespace bolt {
       }
 
       case NodeKind::LetDeclaration:
-      {
-        auto Decl = static_cast<LetDeclaration*>(N);
-        bool HasContext = !Decl->Params.empty();
-
-        if (HasContext) {
-          Contexts.push_back(Decl->Ctx);
-        }
-
-        std::vector<Type*> ParamTypes;
-        Type* RetType;
-
-        for (auto Param: Decl->Params) {
-          // TODO incorporate Param->TypeAssert or make it a kind of pattern
-          TVar* TV = createTypeVar();
-          inferBindings(Param->Pattern, TV);
-          ParamTypes.push_back(TV);
-        }
-
-        if (Decl->Body) {
-          switch (Decl->Body->getKind()) {
-            case NodeKind::LetExprBody:
-            {
-              auto Expr = static_cast<LetExprBody*>(Decl->Body);
-              RetType = inferExpression(Expr->Expression);
-              break;
-            }
-            case NodeKind::LetBlockBody:
-            {
-              auto Block = static_cast<LetBlockBody*>(Decl->Body);
-              ZEN_ASSERT(HasContext);
-              RetType = Decl->Ctx->ReturnType;
-              for (auto Element: Block->Elements) {
-                infer(Element);
-              }
-              break;
-            }
-            default:
-              ZEN_UNREACHABLE
-          }
-        } else {
-          RetType = createTypeVar();
-        }
-
-        if (HasContext) {
-          // Declaration is a function
-          addConstraint(new CEqual { Decl->Ty, new TArrow(ParamTypes, RetType), N });
-          Contexts.pop_back();
-        } else {
-          // Declaration is a plain (typed) variable
-          addConstraint(new CEqual { Decl->Ty, RetType, N });
-        }
-
         break;
-      }
 
       case NodeKind::ReturnStatement:
       {
         auto RetStmt = static_cast<ReturnStatement*>(N);
         Type* ReturnType;
         if (RetStmt->Expression) {
-          ReturnType = inferExpression(RetStmt->Expression);
+          addConstraint(new CEqual { inferExpression(RetStmt->Expression), getReturnType(), RetStmt->Expression });
         } else {
           ReturnType = new TTuple({});
+          addConstraint(new CEqual { new TTuple({}), getReturnType(), N });
         }
-        addConstraint(new CEqual { ReturnType, getReturnType(), N });
         break;
       }
 
@@ -486,7 +494,7 @@ namespace bolt {
     return TV;
   }
 
-  InferContext* Checker::createInferContext() {
+  InferContext* Checker::createInferContext(TVSet* TVs, ConstraintSet* Constraints) {
     auto Ctx = new InferContext;
     Ctx->TVs = new TVSet;
     Ctx->Constraints = new ConstraintSet;
@@ -677,11 +685,12 @@ namespace bolt {
       {
         auto Ref = static_cast<ReferenceExpression*>(X);
         ZEN_ASSERT(Ref->ModulePath.empty());
-        auto Ctx = lookupCall(Ref, Ref->getSymbolPath());
-        if (Ctx) {
-          /* std::cerr << "recursive call!\n"; */
-          ZEN_ASSERT(Ctx->ReturnType != nullptr);
-          return Ctx->ReturnType;
+        auto Target = Ref->getScope()->lookup(Ref->getSymbolPath());
+        if (Target && llvm::isa<LetDeclaration>(Target)) {
+          auto Let = static_cast<LetDeclaration*>(Target);
+          if (Let->IsCycleActive) {
+            return Let->Ty;
+          }
         }
         auto Scm = lookup(Ref->Name->getCanonicalText());
         if (Scm == nullptr) {
@@ -819,6 +828,43 @@ namespace bolt {
     }
     ZEN_ASSERT(Ty != nullptr);
     return Ty;
+  }
+
+  void Checker::populate(SourceFile* SF) {
+
+    struct Visitor : public CSTVisitor<Visitor> {
+
+      Graph<Node*>& RefGraph;
+
+      std::stack<Node*> Stack;
+
+      void visitLetDeclaration(LetDeclaration* N) {
+        RefGraph.addVertex(N);
+        Stack.push(N);
+        visitEachChild(N);
+        Stack.pop();
+      }
+
+      void visitReferenceExpression(ReferenceExpression* N) {
+        auto Y = static_cast<ReferenceExpression*>(N);
+        auto Def = Y->getScope()->lookup(Y->getSymbolPath());
+        // Name lookup failures will be reported directly in inferExpression().
+        // Parameters are clearly no let-decarations. They never have their own
+        // inference context, so we have to skip them.
+        if (Def == nullptr || Def->getKind() == NodeKind::Parameter) {
+          return;
+        }
+        ZEN_ASSERT(Def->getKind() == NodeKind::LetDeclaration || Def->getKind() == NodeKind::SourceFile);
+        RefGraph.addEdge(Stack.top(), Def);
+      }
+
+    };
+
+    RefGraph.addVertex(SF);
+    Visitor V { {}, RefGraph };
+    V.Stack.push(SF);
+    V.visit(SF);
+
   }
 
   void Checker::checkTypeclassSigs(Node* N) {
@@ -965,7 +1011,37 @@ namespace bolt {
     addBinding("-", new Forall(new TArrow({ IntType, IntType }, IntType)));
     addBinding("*", new Forall(new TArrow({ IntType, IntType }, IntType)));
     addBinding("/", new Forall(new TArrow({ IntType, IntType }, IntType)));
+    populate(SF);
     forwardDeclare(SF);
+    auto SCCs = RefGraph.strongconnect();
+    for (auto Nodes: SCCs) {
+      if (Nodes.size() == 1 && llvm::isa<SourceFile>(Nodes[0])) {
+        continue;
+      }
+      auto TVs = new TVSet;
+      auto Constraints = new ConstraintSet;
+      for (auto N: Nodes) {
+        auto Decl = static_cast<LetDeclaration*>(N);
+        forwardDeclareLetDeclaration(Decl, TVs, Constraints);
+      }
+    }
+    for (auto Nodes: SCCs) {
+      if (Nodes.size() == 1 && llvm::isa<SourceFile>(Nodes[0])) {
+        continue;
+      }
+      for (auto N: Nodes) {
+        auto Decl = static_cast<LetDeclaration*>(N);
+        Decl->IsCycleActive = true;
+      }
+      for (auto N: Nodes) {
+        auto Decl = static_cast<LetDeclaration*>(N);
+        inferLetDeclaration(Decl);
+      }
+      for (auto N: Nodes) {
+        auto Decl = static_cast<LetDeclaration*>(N);
+        Decl->IsCycleActive = false;
+      }
+    }
     infer(SF);
     Contexts.pop_back();
     solve(new CMany(*RootContext->Constraints), Solution);
@@ -1280,7 +1356,9 @@ namespace bolt {
         To = Var2;
         From = Var1;
       }
-      join(From, To);
+      if (From->Id != To->Id) {
+        join(From, To);
+      }
       return true;
     }
 

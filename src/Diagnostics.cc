@@ -442,7 +442,7 @@ namespace bolt {
       {
         auto E = static_cast<const BindingNotFoundDiagnostic&>(D);
         writePrefix(E);
-        write("binding '");
+        write("binding ");
         writeBinding(E.Name);
         write(" was not found\n\n");
         if (E.Initiator != nullptr) {

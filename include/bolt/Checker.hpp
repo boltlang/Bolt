@@ -7,6 +7,7 @@
 #include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Type.hpp"
+#include "bolt/Support/Graph.hpp"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -171,13 +172,17 @@ namespace bolt {
     size_t NextConTypeId = 0;
     size_t NextTypeVarId = 0;
 
+    Type* BoolType;
+    Type* IntType;
+    Type* StringType;
+
+    Graph<Node*> RefGraph;
+
     std::unordered_map<Node*, InferContext*> CallGraph;
 
     std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
 
-    Type* BoolType;
-    Type* IntType;
-    Type* StringType;
+    std::vector<InferContext*> Contexts;
 
     TVSub Solution;
 
@@ -191,14 +196,13 @@ namespace bolt {
      */
     CEqual* C;
 
-    std::vector<InferContext*> Contexts;
-
     InferContext& getContext();
 
     void addConstraint(Constraint* Constraint);
     void addClass(TypeclassSignature Sig);
 
     void forwardDeclare(Node* Node);
+    void forwardDeclareLetDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
 
     Type* inferExpression(Expression* Expression);
     Type* inferTypeExpression(TypeExpression* TE);
@@ -208,13 +212,14 @@ namespace bolt {
     void inferBindings(Pattern* Pattern, Type* T);
 
     void infer(Node* node);
+    void inferLetDeclaration(LetDeclaration* N);
 
     Constraint* convertToConstraint(ConstraintExpression* C);
 
     TCon* createPrimConType();
     TVar* createTypeVar();
     TVarRigid* createRigidVar(ByteString Name);
-    InferContext* createInferContext();
+    InferContext* createInferContext(TVSet* TVs = new TVSet, ConstraintSet* Constraints = new ConstraintSet);
 
     void addBinding(ByteString Name, Scheme* Scm);
 
@@ -275,6 +280,8 @@ namespace bolt {
     void solveCEqual(CEqual* C);
 
     void solve(Constraint* Constraint, TVSub& Solution);
+
+    void populate(SourceFile* SF);
 
     /**
      * Verifies that type class signatures on type asserts in let-declarations

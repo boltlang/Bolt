@@ -1530,6 +1530,7 @@ namespace bolt {
 
   public:
 
+    bool IsCycleActive = false;
     InferContext* Ctx;
     class Type* Ty;
 
@@ -1716,6 +1717,10 @@ namespace bolt {
         TheScope = new Scope(this);
       }
       return TheScope;
+    }
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::SourceFile;
     }
 
   };
