@@ -514,22 +514,22 @@ namespace bolt {
     return Pattern->getLastToken();
   }
 
-  Token* StructDeclarationField::getFirstToken() const {
+  Token* RecordDeclarationField::getFirstToken() const {
     return Name;
   }
 
-  Token* StructDeclarationField::getLastToken() const {
+  Token* RecordDeclarationField::getLastToken() const {
     return TypeExpression->getLastToken();
   }
 
-  Token* StructDeclaration::getFirstToken() const {
+  Token* RecordDeclaration::getFirstToken() const {
     if (PubKeyword) {
       return PubKeyword;
     }
     return StructKeyword;
   }
 
-  Token* StructDeclaration::getLastToken() const {
+  Token* RecordDeclaration::getLastToken() const {
     if (Fields.size()) {
       Fields.back()->getLastToken();
     }

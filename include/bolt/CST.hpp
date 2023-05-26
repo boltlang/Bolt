@@ -137,6 +137,8 @@ namespace bolt {
     CallExpression,
     InfixExpression,
     PrefixExpression,
+    RecordExpressionField,
+    RecordExpression,
     ExpressionStatement,
     ReturnStatement,
     IfStatement,
@@ -146,8 +148,8 @@ namespace bolt {
     LetBlockBody,
     LetExprBody,
     LetDeclaration,
-    StructDeclarationField,
-    StructDeclaration,
+    RecordDeclarationField,
+    RecordDeclaration,
     ClassDeclaration,
     InstanceDeclaration,
     SourceFile,
@@ -1366,6 +1368,49 @@ namespace bolt {
 
   };
 
+  class RecordExpressionField : public Node {
+  public:
+
+    Identifier* Name;
+    Equals* Equals;
+    Expression* E;
+
+    inline RecordExpressionField(
+      Identifier* Name,
+      class Equals* Equals,
+      Expression* E
+    ): Node(NodeKind::RecordExpressionField),
+       Name(Name),
+       Equals(Equals),
+       E(E) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+    inline Expression* getExpression() const {
+      return E;
+    }
+
+  };
+
+  class RecordExpression : public Expression {
+  public:
+
+    LBrace* LBrace;
+    std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields;
+    RBrace* RBrace;
+
+    inline RecordExpression(
+      class LBrace* LBrace,
+      std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields,
+      class RBrace* RBrace
+    ): Expression(NodeKind::RecordExpression),
+       LBrace(LBrace),
+       Fields(Fields),
+       RBrace(RBrace) {}
+
+  };
+
   class Statement : public Node {
   protected:
 
@@ -1640,14 +1685,14 @@ namespace bolt {
 
   };
 
-  class StructDeclarationField : public Node {
+  class RecordDeclarationField : public Node {
   public:
 
-    StructDeclarationField(
+    RecordDeclarationField(
       Identifier* Name,
       class Colon* Colon,
       class TypeExpression* TypeExpression
-    ): Node(NodeKind::StructDeclarationField),
+    ): Node(NodeKind::RecordDeclarationField),
        Name(Name),
        Colon(Colon),
        TypeExpression(TypeExpression) {}
@@ -1661,22 +1706,22 @@ namespace bolt {
 
   };
 
-  class StructDeclaration : public Node {
+  class RecordDeclaration : public Node {
   public:
 
     class PubKeyword* PubKeyword;
     class StructKeyword* StructKeyword;
     Identifier* Name;
     class BlockStart* BlockStart;
-    std::vector<StructDeclarationField*> Fields;
+    std::vector<RecordDeclarationField*> Fields;
 
-    StructDeclaration(
+    RecordDeclaration(
       class PubKeyword* PubKeyword,
       class StructKeyword* StructKeyword,
       Identifier* Name,
       class BlockStart* BlockStart,
-      std::vector<StructDeclarationField*> Fields
-    ): Node(NodeKind::StructDeclaration),
+      std::vector<RecordDeclarationField*> Fields
+    ): Node(NodeKind::RecordDeclaration),
        PubKeyword(PubKeyword),
        StructKeyword(StructKeyword),
        Name(Name),
@@ -1780,8 +1825,8 @@ namespace bolt {
   template<> inline NodeKind getNodeType<LetBlockBody>() { return NodeKind::LetBlockBody; }
   template<> inline NodeKind getNodeType<LetExprBody>() { return NodeKind::LetExprBody; }
   template<> inline NodeKind getNodeType<LetDeclaration>() { return NodeKind::LetDeclaration; }
-  template<> inline NodeKind getNodeType<StructDeclarationField>() { return NodeKind::StructDeclarationField; }
-  template<> inline NodeKind getNodeType<StructDeclaration>() { return NodeKind::StructDeclaration; }
+  template<> inline NodeKind getNodeType<RecordDeclarationField>() { return NodeKind::RecordDeclarationField; }
+  template<> inline NodeKind getNodeType<RecordDeclaration>() { return NodeKind::RecordDeclaration; }
   template<> inline NodeKind getNodeType<ClassDeclaration>() { return NodeKind::ClassDeclaration; }
   template<> inline NodeKind getNodeType<InstanceDeclaration>() { return NodeKind::InstanceDeclaration; }
   template<> inline NodeKind getNodeType<SourceFile>() { return NodeKind::SourceFile; }

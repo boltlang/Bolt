@@ -127,6 +127,10 @@ namespace bolt {
           return static_cast<D*>(this)->visitInfixExpression(static_cast<InfixExpression*>(N));
         case NodeKind::PrefixExpression:
           return static_cast<D*>(this)->visitPrefixExpression(static_cast<PrefixExpression*>(N));
+        case NodeKind::RecordExpressionField:
+          return static_cast<D*>(this)->visitRecordExpressionField(static_cast<RecordExpressionField*>(N));
+        case NodeKind::RecordExpression:
+          return static_cast<D*>(this)->visitRecordExpression(static_cast<RecordExpression*>(N));
         case NodeKind::ExpressionStatement:
           return static_cast<D*>(this)->visitExpressionStatement(static_cast<ExpressionStatement*>(N));
         case NodeKind::ReturnStatement:
@@ -145,10 +149,10 @@ namespace bolt {
           return static_cast<D*>(this)->visitLetExprBody(static_cast<LetExprBody*>(N));
         case NodeKind::LetDeclaration:
           return static_cast<D*>(this)->visitLetDeclaration(static_cast<LetDeclaration*>(N));
-        case NodeKind::StructDeclarationField:
-          return static_cast<D*>(this)->visitStructDeclarationField(static_cast<StructDeclarationField*>(N));
-        case NodeKind::StructDeclaration:
-          return static_cast<D*>(this)->visitStructDeclaration(static_cast<StructDeclaration*>(N));
+        case NodeKind::RecordDeclarationField:
+          return static_cast<D*>(this)->visitStructDeclarationField(static_cast<RecordDeclarationField*>(N));
+        case NodeKind::RecordDeclaration:
+          return static_cast<D*>(this)->visitStructDeclaration(static_cast<RecordDeclaration*>(N));
         case NodeKind::ClassDeclaration:
           return static_cast<D*>(this)->visitClassDeclaration(static_cast<ClassDeclaration*>(N));
         case NodeKind::InstanceDeclaration:
@@ -416,6 +420,14 @@ namespace bolt {
       visitExpression(N);
     }
 
+    void visitRecordExpressionField(RecordExpressionField* N) {
+      visitNode(N);
+    }
+
+    void visitRecordExpression(RecordExpression* N) {
+      visitExpression(N);
+    }
+
     void visitStatement(Statement* N) {
       visitNode(N);
     }
@@ -460,11 +472,11 @@ namespace bolt {
       visitNode(N);
     }
 
-    void visitStructDeclarationField(StructDeclarationField* N) {
+    void visitStructDeclarationField(RecordDeclarationField* N) {
       visitNode(N);
     }
 
-    void visitStructDeclaration(StructDeclaration* N) {
+    void visitStructDeclaration(RecordDeclaration* N) {
       visitNode(N);
     }
 
@@ -658,6 +670,12 @@ namespace bolt {
         case NodeKind::PrefixExpression:
           visitEachChild(static_cast<PrefixExpression*>(N));
           break;
+        case NodeKind::RecordExpressionField:
+          visitEachChild(static_cast<RecordExpressionField*>(N));
+          break;
+        case NodeKind::RecordExpression:
+          visitEachChild(static_cast<RecordExpression*>(N));
+          break;
         case NodeKind::ExpressionStatement:
           visitEachChild(static_cast<ExpressionStatement*>(N));
           break;
@@ -685,11 +703,11 @@ namespace bolt {
         case NodeKind::LetDeclaration:
           visitEachChild(static_cast<LetDeclaration*>(N));
           break;
-        case NodeKind::StructDeclaration:
-          visitEachChild(static_cast<StructDeclaration*>(N));
+        case NodeKind::RecordDeclaration:
+          visitEachChild(static_cast<RecordDeclaration*>(N));
           break;
-        case NodeKind::StructDeclarationField:
-          visitEachChild(static_cast<StructDeclarationField*>(N));
+        case NodeKind::RecordDeclarationField:
+          visitEachChild(static_cast<RecordDeclarationField*>(N));
           break;
         case NodeKind::ClassDeclaration:
           visitEachChild(static_cast<ClassDeclaration*>(N));
@@ -959,6 +977,23 @@ namespace bolt {
       BOLT_VISIT(N->Argument);
     }
 
+    void visitEachChild(RecordExpressionField* N) {
+      BOLT_VISIT(N->Name);
+      BOLT_VISIT(N->Equals);
+      BOLT_VISIT(N->E);
+    }
+
+    void visitEachChild(RecordExpression* N) {
+      BOLT_VISIT(N->LBrace);
+      for (auto [Field, Comma]: N->Fields) {
+        BOLT_VISIT(Field);
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+      }
+      BOLT_VISIT(N->RBrace);
+    }
+
     void visitEachChild(ExpressionStatement* N) {
       BOLT_VISIT(N->Expression);
     }
@@ -1029,13 +1064,13 @@ namespace bolt {
       }
     }
 
-    void visitEachChild(StructDeclarationField* N) {
+    void visitEachChild(RecordDeclarationField* N) {
       BOLT_VISIT(N->Name);
       BOLT_VISIT(N->Colon);
       BOLT_VISIT(N->TypeExpression);
     }
 
-    void visitEachChild(StructDeclaration* N) {
+    void visitEachChild(RecordDeclaration* N) {
       if (N->PubKeyword) {
         BOLT_VISIT(N->PubKeyword);
       }
