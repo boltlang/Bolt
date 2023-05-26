@@ -72,6 +72,7 @@ namespace bolt {
     { "match", NodeKind::MatchKeyword },
     { "class", NodeKind::ClassKeyword },
     { "instance", NodeKind::InstanceKeyword },
+    { "struct", NodeKind::StructKeyword },
   };
 
   Scanner::Scanner(TextFile& File, Stream<Char>& Chars):
@@ -242,6 +243,8 @@ digit_finish:
               return new ClassKeyword(StartLoc);
             case NodeKind::InstanceKeyword:
               return new InstanceKeyword(StartLoc);
+            case NodeKind::StructKeyword:
+              return new StructKeyword(StartLoc);
             default:
               ZEN_UNREACHABLE
           }

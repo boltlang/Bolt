@@ -6,9 +6,9 @@
 #include <deque>
 #include <stack>
 
-#include "bolt/Text.hpp"
 #include "bolt/String.hpp"
 #include "bolt/Stream.hpp"
+#include "bolt/CST.hpp"
 
 namespace bolt {
 

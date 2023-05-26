@@ -80,6 +80,7 @@ namespace bolt {
 
     Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
+    MatchExpression* parseMatchExpression();
     Expression* parseMemberExpression();
     Expression* parsePrimitiveExpression();
 
@@ -89,6 +90,10 @@ namespace bolt {
     TypeExpression* parseQualifiedTypeExpression();
     TypeExpression* parseArrowTypeExpression();
     VarTypeExpression* parseVarTypeExpression();
+    ReferenceTypeExpression* parseReferenceTypeExpression();
+
+    void checkLineFoldEnd();
+    void skipToLineFoldEnd();
 
   public:
 

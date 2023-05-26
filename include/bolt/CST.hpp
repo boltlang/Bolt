@@ -31,6 +31,10 @@ namespace bolt {
     size_t Line = 1;
     size_t Column = 1;
 
+    inline bool isEmpty() const noexcept {
+      return Line == 0 && Column == 0;
+    }
+
     inline void advance(const ByteString& Text) {
       for (auto Chr: Text) {
         if (Chr == '\n') {
@@ -46,6 +50,10 @@ namespace bolt {
       TextLoc Out { Line, Column };
       Out.advance(Text);
       return Out;
+    }
+
+    static TextLoc empty() {
+      return TextLoc { 0, 0 };
     }
 
   };
@@ -820,7 +828,7 @@ namespace bolt {
 
     ByteString Text;
 
-    Identifier(ByteString Text, TextLoc StartLoc):
+    Identifier(ByteString Text, TextLoc StartLoc = TextLoc::empty()):
       Symbol(NodeKind::Identifier, StartLoc), Text(Text) {}
 
     ByteString getCanonicalText() override;
@@ -1794,6 +1802,7 @@ namespace bolt {
   template<> inline NodeKind getNodeType<InstanceKeyword>() { return NodeKind::InstanceKeyword; }
   template<> inline NodeKind getNodeType<ElifKeyword>() { return NodeKind::ElifKeyword; }
   template<> inline NodeKind getNodeType<IfKeyword>() { return NodeKind::IfKeyword; }
+  template<> inline NodeKind getNodeType<MatchKeyword>() { return NodeKind::MatchKeyword; }
   template<> inline NodeKind getNodeType<ElseKeyword>() { return NodeKind::ElseKeyword; }
   template<> inline NodeKind getNodeType<Invalid>() { return NodeKind::Invalid; }
   template<> inline NodeKind getNodeType<EndOfFile>() { return NodeKind::EndOfFile; }

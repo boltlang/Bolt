@@ -1,4 +1,6 @@
 
+// TODO make a more elegant mechanism to ref() and unref() items in a buffered stream
+
 #pragma once
 
 #include <cstddef>
@@ -60,13 +62,16 @@ namespace bolt {
       } else {
         auto Keep = Buffer.front();
         Buffer.pop_front();
+        Keep->unref();
         return Keep;
       }
     }
 
     value_type peek(std::size_t Offset = 0) override {
       while (Buffer.size() <= Offset) {
-        Buffer.push_back(read());
+        auto Item = read();
+        Item->ref();
+        Buffer.push_back(Item);
       }
       return Buffer[Offset];
     }
