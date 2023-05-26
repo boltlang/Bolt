@@ -112,6 +112,18 @@ namespace bolt {
     }
   }
 
+  static std::string describe(Token* T) {
+    switch (T->getKind()) {
+      case NodeKind::LineFoldEnd:
+      case NodeKind::BlockStart:
+      case NodeKind::BlockEnd:
+      case NodeKind::EndOfFile:
+        return describe(T->getKind());
+      default:
+        return "'" + T->getText() + "'";
+    }
+  }
+
   std::string describe(const Type* Ty) {
     switch (Ty->getKind()) {
       case TypeKind::Var:
@@ -480,9 +492,9 @@ namespace bolt {
             write(describe(Prev));
             break;
         }
-        write(" but instead got '");
-        write(E.Actual->getText());
-        write("'\n\n");
+        write(" but instead got ");
+        write(describe(E.Actual));
+        write("\n\n");
         writeExcerpt(E.File, E.Actual->getRange(), E.Actual->getRange(), Color::Red);
         write("\n");
         break;
