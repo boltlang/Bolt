@@ -1054,6 +1054,86 @@ after_vars:
     );
   }
 
+  RecordDeclaration* Parser::parseRecordDeclaration() {
+    auto T0 = Tokens.peek();
+    PubKeyword* Pub = nullptr;
+    if (T0->getKind() == NodeKind::MutKeyword) {
+      Tokens.get();
+      Pub = static_cast<PubKeyword*>(T0);
+    }
+    auto Struct = expectToken<StructKeyword>();
+    if (!Struct) {
+      if (Pub) {
+        Pub->unref();
+      }
+      skipToLineFoldEnd();
+      return nullptr;
+    }
+    auto Name = expectToken<IdentifierAlt>();
+    if (!Name) {
+      if (Pub) {
+        Pub->unref();
+      }
+      Struct->unref();
+      skipToLineFoldEnd();
+      return nullptr;
+    }
+    auto BS = expectToken<BlockStart>();
+    if (!BS) {
+      if (Pub) {
+        Pub->unref();
+      }
+      Struct->unref();
+      Name->unref();
+      skipToLineFoldEnd();
+      return nullptr;
+    }
+    std::vector<RecordDeclarationField*> Fields;
+    for (;;) {
+      auto T1 = Tokens.get();
+      if (T1->getKind() == NodeKind::BlockEnd) {
+        break;
+      }
+      if (T1->getKind() != NodeKind::Identifier) {
+        DE.add<UnexpectedTokenDiagnostic>(File, T1, std::vector { NodeKind::Identifier });
+        if (Pub) {
+          Pub->unref();
+        }
+        Struct->unref();
+        Name->unref();
+        T1->unref();
+        skipToLineFoldEnd();
+        return nullptr;
+      }
+      auto Colon = expectToken<class Colon>();
+      if (!Colon) {
+        if (Pub) {
+          Pub->unref();
+        }
+        Struct->unref();
+        Name->unref();
+        T1->unref();
+        skipToLineFoldEnd();
+        return nullptr;
+      }
+      auto TE = parseTypeExpression();
+      if (!TE) {
+        if (Pub) {
+          Pub->unref();
+        }
+        Struct->unref();
+        Name->unref();
+        T1->unref();
+        Colon->unref();
+        skipToLineFoldEnd();
+        return nullptr;
+      }
+      checkLineFoldEnd();
+    }
+    Tokens.get(); // Always a LineFoldEnd
+    return new RecordDeclaration { Pub, Struct, Name, BS, Fields };
+  }
+
   Node* Parser::parseClassElement() {
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
@@ -1079,6 +1159,8 @@ after_vars:
         return parseClassDeclaration();
       case NodeKind::InstanceKeyword:
         return parseInstanceDeclaration();
+      case NodeKind::StructKeyword:
+        return parseRecordDeclaration();
       default:
         return parseExpressionStatement();
     }

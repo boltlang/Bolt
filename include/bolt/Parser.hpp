@@ -129,6 +129,8 @@ namespace bolt {
 
     InstanceDeclaration* parseInstanceDeclaration();
 
+    RecordDeclaration* parseRecordDeclaration();
+
     Node* parseSourceElement();
 
     SourceFile* parseSourceFile();

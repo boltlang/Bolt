@@ -1719,14 +1719,14 @@ namespace bolt {
 
     class PubKeyword* PubKeyword;
     class StructKeyword* StructKeyword;
-    Identifier* Name;
+    IdentifierAlt* Name;
     class BlockStart* BlockStart;
     std::vector<RecordDeclarationField*> Fields;
 
     RecordDeclaration(
       class PubKeyword* PubKeyword,
       class StructKeyword* StructKeyword,
-      Identifier* Name,
+      IdentifierAlt* Name,
       class BlockStart* BlockStart,
       std::vector<RecordDeclarationField*> Fields
     ): Node(NodeKind::RecordDeclaration),
