@@ -325,8 +325,12 @@ namespace bolt {
       Out << ' ';
     }
     setForegroundColor(HighlightColor);
-    for (std::size_t i = start_column; i < end_column; i++) {
-      Out << '~';
+    if (start_column == end_column) {
+      Out << "↖";
+    } else {
+      for (std::size_t i = start_column; i < end_column; i++) {
+        Out << '~';
+      }
     }
     resetStyles();
     Out << '\n';
