@@ -12,6 +12,23 @@
 #include "bolt/Diagnostics.hpp" 
 #include "bolt/DiagnosticEngine.hpp"
 
+// ## Some rules
+//
+// 1. Only Tokens.get() if you are certain the token is valid. If not, you
+//    should first Tokens.peek() and only call Tokens.get() if all checks
+//    succeeded.
+//
+// 2. Do not consume a token when emitting an error. It is up to
+//    skipToLineFoldEnd() to skip the actual tokens. Because that function skips
+//    over blocks, it is important it knows when a block started.
+//
+// 3. Always unref() whatever CST node that has been allocated on error. That
+//    includes tokens. This avoids memory leaks. And yes, they matter when the
+//    compiler is permanently on such as in a language server.
+//
+// 5. Always unref() a LineFoldEnd obtained via Tokens.get(), since it will
+//    never be stored somewhere
+
 namespace bolt {
 
   std::optional<OperatorInfo> OperatorTable::getInfix(Token* T) {
@@ -648,7 +665,7 @@ finish:
         Then.push_back(Element);
       }
     }
-    Tokens.get(); // Always a LineFoldEnd
+    Tokens.get()->unref(); // Always a LineFoldEnd
     Parts.push_back(new IfStatementPart(IfKeyword, Test, T1, Then));
     auto T3 = Tokens.peek();
     if (T3->getKind() == NodeKind::ElseKeyword) {
@@ -672,7 +689,7 @@ finish:
           Else.push_back(Element);
         }
       }
-      Tokens.get(); // Always a LineFoldEnd
+      Tokens.get()->unref(); // Always a LineFoldEnd
       Parts.push_back(new IfStatementPart(T3, nullptr, T4, Else));
     }
     return new IfStatement(Parts);
@@ -1035,7 +1052,7 @@ after_vars:
         Elements.push_back(Element);
       }
     }
-    Tokens.get(); // Always a LineFoldEnd
+    Tokens.get()->unref(); // Always a LineFoldEnd
     return new ClassDeclaration(
       PubKeyword,
       ClassKeyword,
@@ -1204,7 +1221,7 @@ after_vars:
   void Parser::checkLineFoldEnd() {
     auto T0 = Tokens.peek();
     if (T0->getKind() == NodeKind::LineFoldEnd) {
-      Tokens.get();
+      Tokens.get()->unref();
     } else {
       DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::LineFoldEnd });
       skipToLineFoldEnd();
