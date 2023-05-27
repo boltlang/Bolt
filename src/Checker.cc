@@ -570,9 +570,7 @@ namespace bolt {
         auto RefTE = static_cast<ReferenceTypeExpression*>(N);
         auto Ty = lookupMono(RefTE->Name->getCanonicalText());
         if (Ty == nullptr) {
-          if (Config.typeVarsRequireForall()) {
-            DE.add<BindingNotFoundDiagnostic>(RefTE->Name->getCanonicalText(), RefTE->Name);
-          }
+          DE.add<BindingNotFoundDiagnostic>(RefTE->Name->getCanonicalText(), RefTE->Name);
           Ty = createTypeVar();
         }
         N->setType(Ty);
