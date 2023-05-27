@@ -94,7 +94,7 @@ namespace bolt {
         Tokens.get();
         return new BindPattern(static_cast<Identifier*>(T0));
       default:
-        Tokens.get();
+        // Tokens.get();
         DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::Identifier, NodeKind::StringLiteral, NodeKind::IntegerLiteral });
         return nullptr;
     }
@@ -244,7 +244,7 @@ after_tuple_element:
       case NodeKind::IdentifierAlt:
         return parseReferenceTypeExpression();
       default:
-        Tokens.get();
+        // Tokens.get();
         DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::LParen });
         return nullptr;
     }
@@ -464,7 +464,7 @@ after_tuple_elements:
         Tokens.get();
         return new ConstantExpression(static_cast<Literal*>(T0));
       default:
-        Tokens.get();
+        // Tokens.get();
         DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::MatchKeyword, NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::LParen, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
         return nullptr;
     }
@@ -1202,8 +1202,10 @@ after_vars:
   }
 
   void Parser::checkLineFoldEnd() {
-    auto T0 = Tokens.get();
-    if (T0->getKind() != NodeKind::LineFoldEnd) {
+    auto T0 = Tokens.peek();
+    if (T0->getKind() == NodeKind::LineFoldEnd) {
+      Tokens.get();
+    } else {
       DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::LineFoldEnd });
       skipToLineFoldEnd();
     }
