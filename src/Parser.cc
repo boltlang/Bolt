@@ -73,14 +73,6 @@ namespace bolt {
     }
   }
 
-#define BOLT_EXPECT_TOKEN(name) \
-  { \
-    auto __Token = Tokens.get(); \
-    if (!llvm::isa<name>(__Token)) { \
-      throw UnexpectedTokenDiagnostic(File, __Token, std::vector<NodeKind> { NodeKind::name }); \
-    } \
-  }
-
   Token* Parser::expectToken(NodeKind Kind) {
     auto T = Tokens.peek();
     if (T->getKind() != Kind) {
