@@ -108,6 +108,7 @@ namespace bolt {
     ReturnKeyword,
     ModKeyword,
     StructKeyword,
+    EnumKeyword,
     ClassKeyword,
     InstanceKeyword,
     ElifKeyword,
@@ -130,11 +131,14 @@ namespace bolt {
     QualifiedTypeExpression,
     ReferenceTypeExpression,
     ArrowTypeExpression,
+    AppTypeExpression,
     VarTypeExpression,
     NestedTypeExpression,
     TupleTypeExpression,
     BindPattern,
     LiteralPattern,
+    NamedPattern,
+    NestedPattern,
     ReferenceExpression,
     MatchCase,
     MatchExpression,
@@ -158,6 +162,9 @@ namespace bolt {
     LetDeclaration,
     RecordDeclarationField,
     RecordDeclaration,
+    VariantDeclaration,
+    TupleVariantDeclarationMember,
+    RecordVariantDeclarationMember,
     ClassDeclaration,
     InstanceDeclaration,
     SourceFile,
@@ -252,9 +259,11 @@ namespace bolt {
     Node* Source;
     std::unordered_multimap<ByteString, std::tuple<Node*, SymbolKind>> Mapping;
 
+    void addSymbol(ByteString Name, Node* Decl, SymbolKind Kind);
+
     void scan(Node* X);
 
-    void addBindings(Pattern* P, Node* ToInsert);
+    void visitPattern(Pattern* P, Node* ToInsert);
 
   public:
 
@@ -618,6 +627,20 @@ namespace bolt {
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::StructKeyword;
+    }
+
+  };
+
+  class EnumKeyword : public Token {
+  public:
+
+    inline EnumKeyword(TextLoc StartLoc):
+      Token(NodeKind::EnumKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::EnumKeyword;
     }
 
   };
@@ -1067,6 +1090,24 @@ namespace bolt {
 
   };
 
+  class AppTypeExpression : public TypeExpression {
+  public:
+
+    TypeExpression* Op;
+    std::vector<TypeExpression*> Args;
+
+    inline AppTypeExpression(
+      TypeExpression* Op,
+      std::vector<TypeExpression*> Args
+    ): TypeExpression(NodeKind::AppTypeExpression),
+       Op(Op),
+       Args(Args) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
   class VarTypeExpression : public TypeExpression {
   public:
 
@@ -1164,6 +1205,45 @@ namespace bolt {
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::LiteralPattern;
     }
+
+  };
+
+  class NamedPattern : public Pattern {
+  public:
+
+    IdentifierAlt* Name;
+    std::vector<Pattern*> Patterns;
+
+    inline NamedPattern(
+      IdentifierAlt* Name,
+      std::vector<Pattern*> Patterns
+    ): Pattern(NodeKind::NamedPattern),
+       Name(Name),
+       Patterns(Patterns) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class NestedPattern : public Pattern {
+  public:
+
+    class LParen* LParen;
+    Pattern* P;
+    class RParen* RParen;
+
+    inline NestedPattern(
+      class LParen* LParen,
+      Pattern* P,
+      class RParen* RParen
+    ): Pattern(NodeKind::NestedPattern),
+       LParen(LParen),
+       P(P),
+       RParen(RParen) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -1741,6 +1821,83 @@ namespace bolt {
 
   };
 
+  class VariantDeclarationMember : public Node {
+  public:
+
+    inline VariantDeclarationMember(NodeKind Kind):
+      Node(Kind) {}
+
+  };
+
+  class TupleVariantDeclarationMember : public VariantDeclarationMember {
+  public:
+
+    IdentifierAlt* Name;
+    std::vector<TypeExpression*> Elements;
+
+    inline TupleVariantDeclarationMember(
+      IdentifierAlt* Name,
+      std::vector<TypeExpression*> Elements
+    ): VariantDeclarationMember(NodeKind::TupleVariantDeclarationMember),
+       Name(Name),
+       Elements(Elements) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class RecordVariantDeclarationMember : public VariantDeclarationMember {
+  public:
+
+    IdentifierAlt* Name;
+    BlockStart* BlockStart;
+    std::vector<RecordDeclarationField*> Fields;
+
+    inline RecordVariantDeclarationMember(
+      IdentifierAlt* Name,
+      class BlockStart* BlockStart,
+      std::vector<RecordDeclarationField*> Fields
+    ): VariantDeclarationMember(NodeKind::RecordVariantDeclarationMember),
+       Name(Name),
+       BlockStart(BlockStart),
+       Fields(Fields) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class VariantDeclaration : public Node {
+  public:
+
+    class PubKeyword* PubKeyword;
+    class EnumKeyword* EnumKeyword;
+    class IdentifierAlt* Name;
+    std::vector<VarTypeExpression*> TVs;
+    class BlockStart* BlockStart;
+    std::vector<VariantDeclarationMember*> Members;
+
+    inline VariantDeclaration(
+      class PubKeyword* PubKeyword,
+      class EnumKeyword* EnumKeyword,
+      class IdentifierAlt* Name,
+      std::vector<VarTypeExpression*> TVs,
+      class BlockStart* BlockStart,
+      std::vector<VariantDeclarationMember*> Members
+    ): Node(NodeKind::VariantDeclaration),
+       PubKeyword(PubKeyword),
+       EnumKeyword(EnumKeyword),
+       Name(Name),
+       TVs(TVs),
+       BlockStart(BlockStart),
+       Members(Members) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
   class SourceFile : public Node {
 
     Scope* TheScope = nullptr;
@@ -1798,6 +1955,7 @@ namespace bolt {
   template<> inline NodeKind getNodeType<ReturnKeyword>() { return NodeKind::ReturnKeyword; }
   template<> inline NodeKind getNodeType<ModKeyword>() { return NodeKind::ModKeyword; }
   template<> inline NodeKind getNodeType<StructKeyword>() { return NodeKind::StructKeyword; }
+  template<> inline NodeKind getNodeType<EnumKeyword>() { return NodeKind::EnumKeyword; }
   template<> inline NodeKind getNodeType<ClassKeyword>() { return NodeKind::ClassKeyword; }
   template<> inline NodeKind getNodeType<InstanceKeyword>() { return NodeKind::InstanceKeyword; }
   template<> inline NodeKind getNodeType<ElifKeyword>() { return NodeKind::ElifKeyword; }

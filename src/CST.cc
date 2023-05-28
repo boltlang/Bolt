@@ -55,6 +55,10 @@ namespace bolt {
       scan(Source);
     }
 
+  void Scope::addSymbol(ByteString Name, Node* Decl, SymbolKind Kind) {
+    Mapping.emplace(Name, std::make_tuple(Decl, Kind));
+  }
+
   void Scope::scan(Node* X) {
     switch (X->getKind()) {
       case NodeKind::ExpressionStatement:
@@ -72,7 +76,7 @@ namespace bolt {
       case NodeKind::ClassDeclaration:
       {
         auto Decl = static_cast<ClassDeclaration*>(X);
-        Mapping.emplace(Decl->Name->getCanonicalText(), std::make_tuple(Decl, SymbolKind::Class));
+        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Class);
         for (auto Element: Decl->Elements) {
           scan(Element);
         }
@@ -84,7 +88,19 @@ namespace bolt {
       case NodeKind::LetDeclaration:
       {
         auto Decl = static_cast<LetDeclaration*>(X);
-        addBindings(Decl->Pattern, Decl);
+        visitPattern(Decl->Pattern, Decl);
+        break;
+      }
+      case NodeKind::RecordDeclaration:
+      {
+        auto Decl = static_cast<RecordDeclaration*>(X);
+        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Type);
+        break;
+      }
+      case NodeKind::VariantDeclaration:
+      {
+        auto Decl = static_cast<VariantDeclaration*>(X);
+        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Type);
         break;
       }
       default:
@@ -92,12 +108,26 @@ namespace bolt {
     }
   }
 
-  void Scope::addBindings(Pattern* X, Node* ToInsert) {
+  void Scope::visitPattern(Pattern* X, Node* Decl) {
     switch (X->getKind()) {
       case NodeKind::BindPattern:
       {
         auto Y = static_cast<BindPattern*>(X);
-        Mapping.emplace(Y->Name->Text, std::make_tuple(ToInsert, SymbolKind::Var));
+        addSymbol(Y->Name->Text, Decl, SymbolKind::Var);
+        break;
+      }
+      case NodeKind::NamedPattern:
+      {
+        auto Y = static_cast<NamedPattern*>(X);
+        for (auto P: Y->Patterns) {
+          visitPattern(P, Decl);
+        }
+        break;
+      }
+      case NodeKind::NestedPattern:
+      {
+        auto Y = static_cast<NestedPattern*>(X);
+        visitPattern(Y->P, Decl);
         break;
       }
       case NodeKind::LiteralPattern:
@@ -287,6 +317,17 @@ namespace bolt {
     return ReturnType->getLastToken();
   }
 
+  Token* AppTypeExpression::getFirstToken() const {
+    return Op->getFirstToken();
+  }
+
+  Token* AppTypeExpression::getLastToken() const {
+    if (Args.size()) {
+      return Args.back()->getLastToken();
+    }
+    return Op->getLastToken();
+  }
+
   Token* VarTypeExpression::getLastToken() const {
     return Name;
   }
@@ -325,6 +366,25 @@ namespace bolt {
 
   Token* LiteralPattern::getLastToken() const {
     return Literal;
+  }
+
+  Token* NamedPattern::getFirstToken() const {
+    return Name;
+  }
+
+  Token* NamedPattern::getLastToken() const {
+    if (Patterns.size()) {
+      return Patterns.back()->getLastToken();
+    }
+    return Name;
+  }
+
+  Token* NestedPattern::getFirstToken() const {
+    return LParen;
+  }
+
+  Token* NestedPattern::getLastToken() const {
+    return RParen;
   }
 
   Token* ReferenceExpression::getFirstToken() const {
@@ -531,7 +591,43 @@ namespace bolt {
 
   Token* RecordDeclaration::getLastToken() const {
     if (Fields.size()) {
-      Fields.back()->getLastToken();
+      return Fields.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* VariantDeclaration::getFirstToken() const {
+    if (PubKeyword) {
+      return PubKeyword;
+    }
+    return EnumKeyword;
+  }
+
+  Token* VariantDeclaration::getLastToken() const {
+    if (Members.size()) {
+      return Members.back()->getLastToken();
+    }
+    return BlockStart;
+  }
+
+  Token* TupleVariantDeclarationMember::getFirstToken() const {
+    return Name;
+  }
+
+  Token* TupleVariantDeclarationMember::getLastToken() const {
+    if (Elements.size()) {
+      return Elements.back()->getLastToken();
+    }
+    return Name;
+  }
+
+  Token* RecordVariantDeclarationMember::getFirstToken() const {
+    return Name;
+  }
+
+  Token* RecordVariantDeclarationMember::getLastToken() const {
+    if (Fields.size()) {
+      return Fields.back()->getLastToken();
     }
     return BlockStart;
   }
@@ -665,6 +761,10 @@ namespace bolt {
 
   std::string StructKeyword::getText() const {
     return "struct";
+  }
+
+  std::string EnumKeyword::getText() const {
+    return "enum";
   }
 
   std::string Invalid::getText() const {

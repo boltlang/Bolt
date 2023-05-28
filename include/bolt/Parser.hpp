@@ -53,9 +53,7 @@ namespace bolt {
     std::optional<OperatorInfo> getInfix(Token* T);
 
     bool isInfix(Token* T);
-
     bool isPrefix(Token* T);
-
     bool isSuffix(Token* T);
 
   };
@@ -73,6 +71,8 @@ namespace bolt {
 
     Token* expectToken(NodeKind Ty);
 
+    std::vector<RecordDeclarationField*> parseRecordFields();
+
     template<typename T>
     T* expectToken() {
       return static_cast<T*>(expectToken(getNodeType<T>()));
@@ -86,6 +86,7 @@ namespace bolt {
 
     ConstraintExpression* parseConstraintExpression();
 
+    TypeExpression* parseAppTypeExpression();
     TypeExpression* parsePrimitiveTypeExpression();
     TypeExpression* parseQualifiedTypeExpression();
     TypeExpression* parseArrowTypeExpression();
@@ -101,6 +102,7 @@ namespace bolt {
 
     TypeExpression* parseTypeExpression();
 
+    Pattern* parsePrimitivePattern();
     Pattern* parsePattern();
 
     Parameter* parseParam();
@@ -130,6 +132,8 @@ namespace bolt {
     InstanceDeclaration* parseInstanceDeclaration();
 
     RecordDeclaration* parseRecordDeclaration();
+
+    VariantDeclaration* parseVariantDeclaration();
 
     Node* parseSourceElement();
 

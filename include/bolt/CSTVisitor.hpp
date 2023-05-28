@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "zen/config.hpp"
+
 #include "bolt/CST.hpp"
 
 namespace bolt {
@@ -53,6 +55,8 @@ namespace bolt {
           return static_cast<D*>(this)->visitModKeyword(static_cast<ModKeyword*>(N));
         case NodeKind::StructKeyword:
           return static_cast<D*>(this)->visitStructKeyword(static_cast<StructKeyword*>(N));
+        case NodeKind::EnumKeyword:
+          return static_cast<D*>(this)->visitEnumKeyword(static_cast<EnumKeyword*>(N));
         case NodeKind::ClassKeyword:
           return static_cast<D*>(this)->visitClassKeyword(static_cast<ClassKeyword*>(N));
         case NodeKind::InstanceKeyword:
@@ -97,6 +101,8 @@ namespace bolt {
           return static_cast<D*>(this)->visitReferenceTypeExpression(static_cast<ReferenceTypeExpression*>(N));
         case NodeKind::ArrowTypeExpression:
           return static_cast<D*>(this)->visitArrowTypeExpression(static_cast<ArrowTypeExpression*>(N));
+        case NodeKind::AppTypeExpression:
+          return static_cast<D*>(this)->visitAppTypeExpression(static_cast<AppTypeExpression*>(N));
         case NodeKind::VarTypeExpression:
           return static_cast<D*>(this)->visitVarTypeExpression(static_cast<VarTypeExpression*>(N));
         case NodeKind::NestedTypeExpression:
@@ -107,6 +113,10 @@ namespace bolt {
           return static_cast<D*>(this)->visitBindPattern(static_cast<BindPattern*>(N));
         case NodeKind::LiteralPattern:
           return static_cast<D*>(this)->visitLiteralPattern(static_cast<LiteralPattern*>(N));
+        case NodeKind::NamedPattern:
+          return static_cast<D*>(this)->visitNamedPattern(static_cast<NamedPattern*>(N));
+        case NodeKind::NestedPattern:
+          return static_cast<D*>(this)->visitNestedPattern(static_cast<NestedPattern*>(N));
         case NodeKind::ReferenceExpression:
           return static_cast<D*>(this)->visitReferenceExpression(static_cast<ReferenceExpression*>(N));
         case NodeKind::MatchCase:
@@ -153,6 +163,12 @@ namespace bolt {
           return static_cast<D*>(this)->visitStructDeclarationField(static_cast<RecordDeclarationField*>(N));
         case NodeKind::RecordDeclaration:
           return static_cast<D*>(this)->visitStructDeclaration(static_cast<RecordDeclaration*>(N));
+        case NodeKind::VariantDeclaration:
+          return static_cast<D*>(this)->visitVariantDeclaration(static_cast<VariantDeclaration*>(N));
+        case NodeKind::TupleVariantDeclarationMember:
+          return static_cast<D*>(this)->visitTupleVariantDeclarationMember(static_cast<TupleVariantDeclarationMember*>(N));
+        case NodeKind::RecordVariantDeclarationMember:
+          return static_cast<D*>(this)->visitRecordVariantDeclarationMember(static_cast<RecordVariantDeclarationMember*>(N));
         case NodeKind::ClassDeclaration:
           return static_cast<D*>(this)->visitClassDeclaration(static_cast<ClassDeclaration*>(N));
         case NodeKind::InstanceDeclaration:
@@ -256,6 +272,10 @@ namespace bolt {
       visitToken(N);
     }
 
+    void visitEnumKeyword(EnumKeyword* N) {
+      visitToken(N);
+    }
+
     void visitClassKeyword(ClassKeyword* N) {
       visitToken(N);
     }
@@ -352,6 +372,10 @@ namespace bolt {
       visitTypeExpression(N);
     }
 
+    void visitAppTypeExpression(AppTypeExpression* N) {
+      visitTypeExpression(N);
+    }
+
     void visitVarTypeExpression(VarTypeExpression* N) {
       visitTypeExpression(N);
     }
@@ -373,6 +397,14 @@ namespace bolt {
     }
 
     void visitLiteralPattern(LiteralPattern* N) {
+      visitPattern(N);
+    }
+
+    void visitNamedPattern(NamedPattern* N) {
+      visitPattern(N);
+    }
+
+    void visitNestedPattern(NestedPattern* N) {
       visitPattern(N);
     }
 
@@ -480,6 +512,22 @@ namespace bolt {
       visitNode(N);
     }
 
+    void visitVariantDeclaration(VariantDeclaration* N) {
+      visitNode(N);
+    }
+
+    void visitVariantDeclarationMember(VariantDeclarationMember* N) {
+      visitNode(N);
+    }
+
+    void visitTupleVariantDeclarationMember(TupleVariantDeclarationMember* N) {
+      visitVariantDeclarationMember(N);
+    }
+
+    void visitRecordVariantDeclarationMember(RecordVariantDeclarationMember* N) {
+      visitVariantDeclarationMember(N);
+    }
+
     void visitClassDeclaration(ClassDeclaration* N) {
       visitNode(N);
     }
@@ -559,6 +607,9 @@ namespace bolt {
         case NodeKind::StructKeyword:
           visitEachChild(static_cast<StructKeyword*>(N));
           break;
+        case NodeKind::EnumKeyword:
+          visitEachChild(static_cast<EnumKeyword*>(N));
+          break;
         case NodeKind::ClassKeyword:
           visitEachChild(static_cast<ClassKeyword*>(N));
           break;
@@ -625,6 +676,9 @@ namespace bolt {
         case NodeKind::ArrowTypeExpression:
           visitEachChild(static_cast<ArrowTypeExpression*>(N));
           break;
+        case NodeKind::AppTypeExpression:
+          visitEachChild(static_cast<AppTypeExpression*>(N));
+          break;
         case NodeKind::VarTypeExpression:
           visitEachChild(static_cast<VarTypeExpression*>(N));
           break;
@@ -639,6 +693,12 @@ namespace bolt {
           break;
         case NodeKind::LiteralPattern:
           visitEachChild(static_cast<LiteralPattern*>(N));
+          break;
+        case NodeKind::NamedPattern:
+          visitEachChild(static_cast<NamedPattern*>(N));
+          break;
+        case NodeKind::NestedPattern:
+          visitEachChild(static_cast<NestedPattern*>(N));
           break;
         case NodeKind::ReferenceExpression:
           visitEachChild(static_cast<ReferenceExpression*>(N));
@@ -708,6 +768,15 @@ namespace bolt {
           break;
         case NodeKind::RecordDeclarationField:
           visitEachChild(static_cast<RecordDeclarationField*>(N));
+          break;
+        case NodeKind::VariantDeclaration:
+          visitEachChild(static_cast<VariantDeclaration*>(N));
+          break;
+        case NodeKind::TupleVariantDeclarationMember:
+          visitEachChild(static_cast<TupleVariantDeclarationMember*>(N));
+          break;
+        case NodeKind::RecordVariantDeclarationMember:
+          visitEachChild(static_cast<RecordVariantDeclarationMember*>(N));
           break;
         case NodeKind::ClassDeclaration:
           visitEachChild(static_cast<ClassDeclaration*>(N));
@@ -786,6 +855,9 @@ namespace bolt {
     }
 
     void visitEachChild(StructKeyword* N) {
+    }
+
+    void visitEachChild(EnumKeyword* N) {
     }
 
     void visitEachChild(ClassKeyword* N) {
@@ -878,6 +950,13 @@ namespace bolt {
       BOLT_VISIT(N->ReturnType);
     }
 
+    void visitEachChild(AppTypeExpression* N) {
+      BOLT_VISIT(N->Op);
+      for (auto Arg: N->Args) {
+        BOLT_VISIT(Arg);
+      }
+    }
+
     void visitEachChild(VarTypeExpression* N) {
       BOLT_VISIT(N->Name);
     }
@@ -905,6 +984,19 @@ namespace bolt {
 
     void visitEachChild(LiteralPattern* N) {
       BOLT_VISIT(N->Literal);
+    }
+
+    void visitEachChild(NamedPattern* N) {
+      BOLT_VISIT(N->Name);
+      for (auto P: N->Patterns) {
+        BOLT_VISIT(P);
+      }
+    }
+
+    void visitEachChild(NestedPattern* N) {
+      BOLT_VISIT(N->LParen);
+      BOLT_VISIT(N->P);
+      BOLT_VISIT(N->RParen);
     }
 
     void visitEachChild(ReferenceExpression* N) {
@@ -1077,6 +1169,36 @@ namespace bolt {
       BOLT_VISIT(N->StructKeyword);
       BOLT_VISIT(N->Name);
       BOLT_VISIT(N->StructKeyword);
+      for (auto Field: N->Fields) {
+        BOLT_VISIT(Field);
+      }
+    }
+
+    void visitEachChild(VariantDeclaration* N) {
+      if (N->PubKeyword) {
+        BOLT_VISIT(N->PubKeyword);
+      }
+      BOLT_VISIT(N->EnumKeyword);
+      BOLT_VISIT(N->Name);
+      for (auto TV: N->TVs) {
+        BOLT_VISIT(TV);
+      }
+      BOLT_VISIT(N->BlockStart);
+      for (auto Member: N->Members) {
+        BOLT_VISIT(Member);
+      }
+    }
+
+    void visitEachChild(TupleVariantDeclarationMember* N) {
+      BOLT_VISIT(N->Name);
+      for (auto Element: N->Elements) {
+        BOLT_VISIT(Element);
+      }
+    }
+
+    void visitEachChild(RecordVariantDeclarationMember* N) {
+      BOLT_VISIT(N->Name);
+      BOLT_VISIT(N->BlockStart);
       for (auto Field: N->Fields) {
         BOLT_VISIT(Field);
       }

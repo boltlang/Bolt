@@ -26,8 +26,10 @@
 //    includes tokens. This avoids memory leaks. And yes, they matter when the
 //    compiler is permanently on such as in a language server.
 //
-// 5. Always unref() a LineFoldEnd obtained via Tokens.get(), since it will
-//    never be stored somewhere
+// 5. Always unref() a LineFoldEnd or BlockEnd obtained via Tokens.get(), since
+//    it will never be stored somewhere
+//
+// 6. Maintain the invariant that a wrong parse will never advance the input stream.
 
 namespace bolt {
 
@@ -100,7 +102,7 @@ namespace bolt {
     return T;
   }
 
-  Pattern* Parser::parsePattern() {
+  Pattern* Parser::parsePrimitivePattern() {
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
       case NodeKind::StringLiteral:
@@ -110,11 +112,61 @@ namespace bolt {
       case NodeKind::Identifier:
         Tokens.get();
         return new BindPattern(static_cast<Identifier*>(T0));
+      case NodeKind::IdentifierAlt:
+        Tokens.get();
+        return new NamedPattern(static_cast<IdentifierAlt*>(T0), {});
+      case NodeKind::LParen:
+      {
+        Tokens.get();
+        auto LParen = static_cast<class LParen*>(T0);
+        auto T1 = Tokens.peek();
+        RParen* RParen;
+        if (T1->getKind() == NodeKind::IdentifierAlt) {
+          Tokens.get();
+          auto Name = static_cast<IdentifierAlt*>(T1);
+          std::vector<Pattern*> Patterns;
+          for (;;) {
+            auto T2 = Tokens.peek();
+            if (T2->getKind() == NodeKind::RParen) {
+              Tokens.get();
+              RParen = static_cast<class RParen*>(T2);
+              break;
+            }
+            auto P = parsePrimitivePattern();
+            if (!P) {
+              LParen->unref();
+              for (auto P: Patterns) {
+                P->unref();
+              }
+              return nullptr;
+            }
+            Patterns.push_back(P);
+          }
+          return new NestedPattern { LParen, new NamedPattern { Name, Patterns }, RParen };
+        } else {
+          auto P = parsePattern();
+          if (!P) {
+            LParen->unref();
+            return nullptr;
+          }
+          auto RParen = expectToken<class RParen>();
+          if (!RParen) {
+            LParen->unref();
+            P->unref();
+            return nullptr;
+          }
+          return new NestedPattern { LParen, P, RParen };
+        }
+      }
       default:
         // Tokens.get();
         DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::Identifier, NodeKind::StringLiteral, NodeKind::IntegerLiteral });
         return nullptr;
     }
+  }
+
+  Pattern* Parser::parsePattern() {
+    return parsePrimitivePattern();
   }
 
   TypeExpression* Parser::parseTypeExpression() {
@@ -292,8 +344,39 @@ after_tuple_element:
     return new ReferenceTypeExpression(ModulePath, static_cast<IdentifierAlt*>(Name));
   }
 
+  TypeExpression* Parser::parseAppTypeExpression() {
+    auto OpTy = parsePrimitiveTypeExpression();
+    if (!OpTy) {
+      return nullptr;
+    }
+    std::vector<TypeExpression*> ArgTys;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      auto Kind = T1->getKind();
+      if (Kind == NodeKind::RArrow || Kind == NodeKind::Equals || Kind == NodeKind::BlockStart || Kind == NodeKind::LineFoldEnd || Kind == NodeKind::EndOfFile || Kind == NodeKind::RParen) {
+        break;
+      }
+      auto TE = parsePrimitiveTypeExpression();
+      if (!TE) {
+        OpTy->unref();
+        for (auto Arg: ArgTys) {
+          Arg->unref();
+        }
+        return nullptr;
+      }
+      ArgTys.push_back(TE);
+    }
+    if (ArgTys.empty()) {
+      return OpTy;
+    }
+    return new AppTypeExpression { OpTy, ArgTys };
+  }
+
   TypeExpression* Parser::parseArrowTypeExpression() {
-    auto RetType = parsePrimitiveTypeExpression();
+    auto RetType = parseAppTypeExpression();
+    if (RetType == nullptr) {
+      return nullptr;
+    }
     std::vector<TypeExpression*> ParamTypes;
     for (;;) {
       auto T1 = Tokens.peek();
@@ -302,7 +385,7 @@ after_tuple_element:
       }
       Tokens.get();
       ParamTypes.push_back(RetType);
-      RetType = parsePrimitiveTypeExpression();
+      RetType = parseAppTypeExpression();
       if (!RetType) {
         for (auto ParamType: ParamTypes) {
           ParamType->unref();
@@ -321,7 +404,6 @@ after_tuple_element:
     if (!T0) {
       return nullptr;
     }
-    Tokens.get();
     auto T1 = Tokens.peek();
     Expression* Value;
     BlockStart* BlockStart;
@@ -346,7 +428,7 @@ after_tuple_element:
     for (;;) {
       auto T2 = Tokens.peek();
       if (llvm::isa<BlockEnd>(T2)) {
-        Tokens.get();
+        Tokens.get()->unref();
         break;
       }
       auto Pattern = parsePattern();
@@ -657,7 +739,7 @@ finish:
     for (;;) {
       auto T2 = Tokens.peek();
       if (T2->getKind() == NodeKind::BlockEnd) {
-        Tokens.get();
+        Tokens.get()->unref();
         break;
       }
       auto Element = parseLetBodyElement();
@@ -681,7 +763,7 @@ finish:
       for (;;) {
         auto T5 = Tokens.peek();
         if (T5->getKind() == NodeKind::BlockEnd) {
-          Tokens.get();
+          Tokens.get()->unref();
           break;
         }
         auto Element = parseLetBodyElement();
@@ -784,7 +866,7 @@ after_params:
             Elements.push_back(Element);
           }
         }
-        Tokens.get();
+        Tokens.get()->unref(); // Always a BlockEnd
         Body = new LetBlockBody(static_cast<BlockStart*>(T2), Elements);
         break;
       }
@@ -966,7 +1048,7 @@ after_vars:
     for (;;) {
       auto T2 = Tokens.peek();
       if (T2->is<BlockEnd>()) {
-        Tokens.get();
+        Tokens.get()->unref();
         break;
       }
       auto Element = parseClassElement();
@@ -1044,7 +1126,7 @@ after_vars:
     for (;;) {
       auto T2 = Tokens.peek();
       if (T2->is<BlockEnd>()) {
-        Tokens.get();
+        Tokens.get()->unref();
         break;
       }
       auto Element = parseClassElement();
@@ -1061,6 +1143,38 @@ after_vars:
       BlockStart,
       Elements
     );
+  }
+
+  std::vector<RecordDeclarationField*> Parser::parseRecordFields() {
+    std::vector<RecordDeclarationField*> Fields;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      if (T1->getKind() == NodeKind::BlockEnd) {
+        Tokens.get()->unref();
+        break;
+      }
+      auto Name = expectToken<Identifier>();
+      if (!Name) {
+        skipToLineFoldEnd();
+        continue;
+      }
+      auto Colon = expectToken<class Colon>();
+      if (!Colon) {
+        Name->unref();
+        skipToLineFoldEnd();
+        continue;
+      }
+      auto TE = parseTypeExpression();
+      if (!TE) {
+        Name->unref();
+        Colon->unref();
+        skipToLineFoldEnd();
+        continue;
+      }
+      checkLineFoldEnd();
+      Fields.push_back(new RecordDeclarationField { Name, Colon, TE });
+    }
+    return Fields;
   }
 
   RecordDeclaration* Parser::parseRecordDeclaration() {
@@ -1087,6 +1201,17 @@ after_vars:
       skipToLineFoldEnd();
       return nullptr;
     }
+    std::vector<VarTypeExpression*> Vars;
+    for (;;) {
+      auto T1 = Tokens.peek();
+      if (T1->getKind() == NodeKind::BlockStart) {
+        break;
+      }
+      auto Var = parseVarTypeExpression();
+      if (Var) {
+        Vars.push_back(Var);
+      }
+    }
     auto BS = expectToken<BlockStart>();
     if (!BS) {
       if (Pub) {
@@ -1097,50 +1222,99 @@ after_vars:
       skipToLineFoldEnd();
       return nullptr;
     }
-    std::vector<RecordDeclarationField*> Fields;
+    auto Fields = parseRecordFields();
+    Tokens.get()->unref(); // Always a LineFoldEnd
+    return new RecordDeclaration { Pub, Struct, Name, Vars, BS, Fields };
+  }
+
+  VariantDeclaration* Parser::parseVariantDeclaration() {
+    auto T0 = Tokens.peek();
+    PubKeyword* Pub = nullptr;
+    if (T0->getKind() == NodeKind::MutKeyword) {
+      Tokens.get();
+      Pub = static_cast<PubKeyword*>(T0);
+    }
+    auto Enum = expectToken<EnumKeyword>();
+    if (!Enum) {
+      if (Pub) {
+        Pub->unref();
+      }
+      skipToLineFoldEnd();
+      return nullptr;
+    }
+    auto Name = expectToken<IdentifierAlt>();
+    if (!Name) {
+      if (Pub) {
+        Pub->unref();
+      }
+      Enum->unref();
+      skipToLineFoldEnd();
+      return nullptr;
+    }
+    std::vector<VarTypeExpression*> TVs;
     for (;;) {
-      auto T1 = Tokens.get();
-      if (T1->getKind() == NodeKind::BlockEnd) {
+      auto T0 = Tokens.peek();
+      if (T0->getKind() == NodeKind::BlockStart) {
         break;
       }
-      if (T1->getKind() != NodeKind::Identifier) {
-        DE.add<UnexpectedTokenDiagnostic>(File, T1, std::vector { NodeKind::Identifier });
-        if (Pub) {
-          Pub->unref();
-        }
-        Struct->unref();
-        Name->unref();
-        T1->unref();
-        skipToLineFoldEnd();
-        return nullptr;
+      auto Var = parseVarTypeExpression();
+      if (Var) {
+        TVs.push_back(Var);
       }
-      auto Colon = expectToken<class Colon>();
-      if (!Colon) {
-        if (Pub) {
-          Pub->unref();
-        }
-        Struct->unref();
-        Name->unref();
-        T1->unref();
-        skipToLineFoldEnd();
-        return nullptr;
-      }
-      auto TE = parseTypeExpression();
-      if (!TE) {
-        if (Pub) {
-          Pub->unref();
-        }
-        Struct->unref();
-        Name->unref();
-        T1->unref();
-        Colon->unref();
-        skipToLineFoldEnd();
-        return nullptr;
-      }
-      checkLineFoldEnd();
     }
-    Tokens.get(); // Always a LineFoldEnd
-    return new RecordDeclaration { Pub, Struct, Name, BS, Fields };
+    auto BS = expectToken<BlockStart>();
+    if (!BS) {
+      if (Pub) {
+        Pub->unref();
+      }
+      Enum->unref();
+      Name->unref();
+      skipToLineFoldEnd();
+      return nullptr;
+    }
+    std::vector<VariantDeclarationMember*> Members;
+    for (;;) {
+next_member:
+      auto T0 = Tokens.peek();
+      if (T0->getKind() == NodeKind::BlockEnd) {
+        Tokens.get()->unref();
+        break;
+      }
+      auto Name = expectToken<IdentifierAlt>();
+      if (!Name) {
+        skipToLineFoldEnd();
+        continue;
+      }
+      auto T1 = Tokens.peek();
+      if (T1->getKind() == NodeKind::BlockStart) {
+        Tokens.get();
+        auto BS = static_cast<BlockStart*>(T1);
+        auto Fields = parseRecordFields();
+        // TODO continue; on error in Fields
+        Members.push_back(new RecordVariantDeclarationMember { Name, BS, Fields });
+      } else {
+        std::vector<TypeExpression*> Elements;
+        for (;;) {
+          auto T2 = Tokens.peek();
+          if (T2->getKind() == NodeKind::LineFoldEnd) {
+            Tokens.get()->unref();
+            break;
+          }
+          auto TE = parsePrimitiveTypeExpression();
+          if (!TE) {
+            Name->unref();
+            for (auto El: Elements) {
+              El->unref();
+            }
+            goto next_member;
+          }
+          Elements.push_back(TE);
+        }
+        Members.push_back(new TupleVariantDeclarationMember { Name, Elements });
+      }
+    }
+    checkLineFoldEnd();
+    return new VariantDeclaration { Pub, Enum, Name, TVs, BS, Members };
   }
 
   Node* Parser::parseClassElement() {
@@ -1170,6 +1344,8 @@ after_vars:
         return parseInstanceDeclaration();
       case NodeKind::StructKeyword:
         return parseRecordDeclaration();
+      case NodeKind::EnumKeyword:
+        return parseVariantDeclaration();
       default:
         return parseExpressionStatement();
     }
