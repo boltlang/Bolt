@@ -473,6 +473,75 @@ after_tuple_element:
     return new MatchExpression(static_cast<MatchKeyword*>(T0), Value, BlockStart, Cases);
   }
 
+  RecordExpression* Parser::parseRecordExpression() {
+    auto LBrace = expectToken<class LBrace>();
+    if (!LBrace) {
+      return nullptr;
+    }
+    RBrace* RBrace;
+    auto T1 = Tokens.peek();
+    std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields;
+    if (T1->getKind() == NodeKind::RBrace) {
+      Tokens.get();
+      RBrace = static_cast<class RBrace*>(T1);
+    } else {
+      for (;;) {
+        auto Name = expectToken<Identifier>();
+        if (!Name) {
+          LBrace->unref();
+          for (auto [Field, Comma]: Fields) {
+            Field->unref();
+            Comma->unref();
+          }
+          return nullptr;
+        }
+        auto Equals = expectToken<class Equals>();
+        if (!Equals) {
+          LBrace->unref();
+          for (auto [Field, Comma]: Fields) {
+            Field->unref();
+            Comma->unref();
+          }
+          Name->unref();
+          return nullptr;
+        }
+        auto E = parseExpression();
+        if (!E) {
+          LBrace->unref();
+          for (auto [Field, Comma]: Fields) {
+            Field->unref();
+            Comma->unref();
+          }
+          Name->unref();
+          Equals->unref();
+          return nullptr;
+        }
+        auto T2 = Tokens.peek();
+        if (T2->getKind() == NodeKind::Comma) {
+          Tokens.get();
+          Fields.push_back(std::make_tuple(new RecordExpressionField { Name, Equals, E }, static_cast<Comma*>(T2)));
+        } else if (T2->getKind() == NodeKind::RBrace) {
+          Tokens.get();
+          RBrace = static_cast<class RBrace*>(T2);
+          Fields.push_back(std::make_tuple(new RecordExpressionField { Name, Equals, E }, nullptr));
+          break;
+        } else {
+          DE.add<UnexpectedTokenDiagnostic>(File, T2, std::vector { NodeKind::Comma, NodeKind::RBrace });
+          LBrace->unref();
+          for (auto [Field, Comma]: Fields) {
+            Field->unref();
+            Comma->unref();
+          }
+          Name->unref();
+          Equals->unref();
+          E->unref();
+          return nullptr;
+        }
+      }
+    }
+    return new RecordExpression { LBrace, Fields, RBrace };
+  }
+
   Expression* Parser::parsePrimitiveExpression() {
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
@@ -562,9 +631,11 @@ after_tuple_elements:
       case NodeKind::StringLiteral:
         Tokens.get();
         return new ConstantExpression(static_cast<Literal*>(T0));
+      case NodeKind::LBrace:
+        return parseRecordExpression();
       default:
         // Tokens.get();
-        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::MatchKeyword, NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::LParen, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
+        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::MatchKeyword, NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::LParen, NodeKind::LBrace, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
         return nullptr;
     }
   }
@@ -603,7 +674,12 @@ finish:
     std::vector<Expression*> Args;
     for (;;) {
       auto T1 = Tokens.peek();
-      if (T1->getKind() == NodeKind::LineFoldEnd || T1->getKind() == NodeKind::RParen || T1->getKind() == NodeKind::BlockStart || T1->getKind() == NodeKind::Comma || ExprOperators.isInfix(T1)) {
+      if (T1->getKind() == NodeKind::LineFoldEnd
+          || T1->getKind() == NodeKind::RParen
+          || T1->getKind() == NodeKind::RBrace
+          || T1->getKind() == NodeKind::BlockStart
+          || T1->getKind() == NodeKind::Comma
+          || ExprOperators.isInfix(T1)) {
         break;
       }
       auto Arg = parsePrimitiveExpression();

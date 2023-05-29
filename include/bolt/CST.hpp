@@ -1497,6 +1497,9 @@ namespace bolt {
        Fields(Fields),
        RBrace(RBrace) {}
 
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
   };
 
   class Statement : public Node {
@@ -1800,6 +1803,7 @@ namespace bolt {
     class PubKeyword* PubKeyword;
     class StructKeyword* StructKeyword;
     IdentifierAlt* Name;
+    std::vector<VarTypeExpression*> Vars;
     class BlockStart* BlockStart;
     std::vector<RecordDeclarationField*> Fields;
 
@@ -1807,12 +1811,14 @@ namespace bolt {
       class PubKeyword* PubKeyword,
       class StructKeyword* StructKeyword,
       IdentifierAlt* Name,
+      std::vector<VarTypeExpression*> Vars,
       class BlockStart* BlockStart,
       std::vector<RecordDeclarationField*> Fields
     ): Node(NodeKind::RecordDeclaration),
        PubKeyword(PubKeyword),
        StructKeyword(StructKeyword),
        Name(Name),
+       Vars(Vars),
        BlockStart(BlockStart),
        Fields(Fields) {}
 

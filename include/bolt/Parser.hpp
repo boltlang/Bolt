@@ -82,6 +82,7 @@ namespace bolt {
 
     MatchExpression* parseMatchExpression();
     Expression* parseMemberExpression();
+    RecordExpression* parseRecordExpression();
     Expression* parsePrimitiveExpression();
 
     ConstraintExpression* parseConstraintExpression();

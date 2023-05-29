@@ -3,18 +3,23 @@
 
 // TODO (maybe) make unficiation work like union-find in find()
 
+// TODO remove Args in TCon and just use it as a constant
+// TODO make TApp traversable with TupleIndex
+
 // TODO make simplify() rewrite the types in-place such that a reference too (Bool, Int).0 becomes Bool
 
-// TODO Fix TVSub to use TVar.Id instead of the pointer address
+// TODO Add a check for datatypes that create infinite structures.
 
-// TODO Deferred diagnostics
+// TODO see if we can merge UnificationError diagnostics so that we get a list of **all** types that were wrong on a given node
 
 #include <algorithm>
 #include <iterator>
 #include <stack>
+#include <map>
 
 #include "llvm/Support/Casting.h"
 
+#include "bolt/Type.hpp"
 #include "zen/config.hpp"
 #include "zen/range.hpp"
 
@@ -58,11 +63,38 @@ namespace bolt {
     }
   }
 
+  Type* Checker::simplifyType(Type* Ty) {
+
+    return Ty->rewrite([&](auto Ty) {
+
+      if (Ty->getKind() == TypeKind::Var) {
+        Ty = static_cast<TVar*>(Ty)->find();
+      }
+
+      if (Ty->getKind() == TypeKind::TupleIndex) {
+        auto Index = static_cast<TTupleIndex*>(Ty);
+        auto MaybeTuple = simplifyType(Index->Ty);
+        if (MaybeTuple->getKind() == TypeKind::Tuple) {
+          auto Tuple = static_cast<TTuple*>(MaybeTuple);
+          if (Index->I >= Tuple->ElementTypes.size()) {
+            DE.add<TupleIndexOutOfRangeDiagnostic>(Tuple, Index->I);
+          } else {
+            Ty = simplifyType(Tuple->ElementTypes[Index->I]);
+          }
+        }
+      }
+
+      return Ty;
+
+    }, /*Recursive=*/true);
+
+  }
+
   Checker::Checker(const LanguageConfig& Config, DiagnosticEngine& DE):
     Config(Config), DE(DE) {
-      BoolType = new TCon(NextConTypeId++, {}, "Bool");
-      IntType = new TCon(NextConTypeId++, {}, "Int");
-      StringType = new TCon(NextConTypeId++, {}, "String");
+      BoolType = createConType("Bool");
+      IntType = createConType("Int");
+      StringType = createConType("String");
     }
 
   Scheme* Checker::lookup(ByteString Name) {
@@ -233,6 +265,92 @@ namespace bolt {
         // These declarations will be handled separately in check()
         break;
 
+      case NodeKind::VariantDeclaration:
+      {
+        auto Decl = static_cast<VariantDeclaration*>(X);
+
+        auto& ParentCtx = getContext();
+        auto Ctx = createInferContext();
+        Contexts.push_back(Ctx);
+
+        std::vector<TVar*> Vars;
+        for (auto TE: Decl->TVs) {
+          auto TV = createRigidVar(TE->Name->getCanonicalText());
+          Ctx->TVs->emplace(TV);
+          Vars.push_back(TV);
+        }
+
+        Type* Ty = createConType(Decl->Name->getCanonicalText());
+
+        // Must be added early so we can create recursive types
+        ParentCtx.Env.emplace(Decl->Name->getCanonicalText(), new Forall(Ty));
+
+        for (auto Member: Decl->Members) {
+          switch (Member->getKind()) {
+            case NodeKind::TupleVariantDeclarationMember:
+            {
+              auto TupleMember = static_cast<TupleVariantDeclarationMember*>(Member);
+              auto RetTy = Ty;
+              for (auto Var: Vars) {
+                RetTy = new TApp(RetTy, Var);
+              }
+              std::vector<Type*> ParamTypes;
+              for (auto Element: TupleMember->Elements) {
+                ParamTypes.push_back(inferTypeExpression(Element));
+              }
+              ParentCtx.Env.emplace(TupleMember->Name->getCanonicalText(), new Forall(Ctx->TVs, Ctx->Constraints, new TArrow(ParamTypes, RetTy)));
+              break;
+            }
+            case NodeKind::RecordVariantDeclarationMember:
+            {
+              // TODO
+              break;
+            }
+            default:
+              ZEN_UNREACHABLE
+          }
+        }
+
+        Contexts.pop_back();
+
+        break;
+      }
+
+      case NodeKind::RecordDeclaration:
+      {
+        auto Decl = static_cast<RecordDeclaration*>(X);
+
+        auto& ParentCtx = getContext();
+        auto Ctx = createInferContext();
+        Contexts.push_back(Ctx);
+        std::vector<TVar*> Vars;
+        for (auto TE: Decl->Vars) {
+          auto TV = createRigidVar(TE->Name->getCanonicalText());
+          Ctx->TVs->emplace(TV);
+          Vars.push_back(TV);
+        }
+
+        auto Name = Decl->Name->getCanonicalText();
+        auto Ty = createConType(Name);
+
+        // Must be added early so we can create recursive types
+        ParentCtx.Env.emplace(Name, new Forall(Ty));
+
+        // Corresponds to the logic of one branch of a VaraintDeclarationMember
+        Type* FieldsTy = new TNil();
+        for (auto Field: Decl->Fields) {
+          FieldsTy = new TField(Field->Name->getCanonicalText(), new TPresent(inferTypeExpression(Field->TypeExpression)), FieldsTy);
+        }
+        Type* RetTy = Ty;
+        for (auto TV: Vars) {
+          RetTy = new TApp(RetTy, TV);
+        }
+        Contexts.pop_back();
+        addBinding(Name, new Forall(Ctx->TVs, Ctx->Constraints, new TArrow({ FieldsTy }, RetTy)));
+
+        break;
+      }
+
       default:
         ZEN_UNREACHABLE
 
@@ -313,7 +431,7 @@ namespace bolt {
       // e.g. Bool, which causes the type assert to also collapse to e.g.
       // Bool -> Bool -> Bool.
       for (auto [Param, TE] : zen::zip(Params, Instance->TypeExps)) {
-        addConstraint(new CEqual(Param, TE->getType()));
+        addConstraint(new CEqual(Param, TE->getType(), TE));
       }
 
     }
@@ -338,12 +456,14 @@ namespace bolt {
       }
     }
 
+    Type* BindTy;
     if (HasContext) {
       Contexts.pop_back();
-      inferBindings(Let->Pattern, Ty, Let->Ctx->Constraints, Let->Ctx->TVs);
+      BindTy = inferPattern(Let->Pattern, Let->Ctx->Constraints, Let->Ctx->TVs);
     } else {
-      inferBindings(Let->Pattern, Ty);
+      BindTy = inferPattern(Let->Pattern);
     }
+    addConstraint(new CEqual(BindTy, Ty, Let));
 
   }
 
@@ -364,9 +484,7 @@ namespace bolt {
 
     for (auto Param: Decl->Params) {
       // TODO incorporate Param->TypeAssert or make it a kind of pattern
-      TVar* TV = createTypeVar();
-      inferBindings(Param->Pattern, TV);
-      ParamTypes.push_back(TV);
+      ParamTypes.push_back(inferPattern(Param->Pattern));
     }
 
     if (Decl->Body) {
@@ -438,6 +556,11 @@ namespace bolt {
         break;
       }
 
+      case NodeKind::VariantDeclaration:
+      case NodeKind::RecordDeclaration:
+        // Nothing to do for a type-level declaration
+        break;
+
       case NodeKind::IfStatement:
       {
         auto IfStmt = static_cast<IfStatement*>(N);
@@ -480,6 +603,10 @@ namespace bolt {
 
     }
 
+  }
+
+  TCon* Checker::createConType(ByteString Name) {
+    return new TCon(NextConTypeId++, Name);
   }
 
   TVarRigid* Checker::createRigidVar(ByteString Name) {
@@ -533,7 +660,7 @@ namespace bolt {
         // been solved, with some unification variables being erased. To make
         // sure we instantiate unification variables that are still in use
         // we solve before substituting.
-        return simplify(F->Type)->substitute(Sub);
+        return simplifyType(F->Type)->substitute(Sub);
       }
 
     }
@@ -568,12 +695,25 @@ namespace bolt {
       case NodeKind::ReferenceTypeExpression:
       {
         auto RefTE = static_cast<ReferenceTypeExpression*>(N);
-        auto Ty = lookupMono(RefTE->Name->getCanonicalText());
-        if (Ty == nullptr) {
+        auto Scm = lookup(RefTE->Name->getCanonicalText());
+        Type* Ty;
+        if (Scm == nullptr) {
           DE.add<BindingNotFoundDiagnostic>(RefTE->Name->getCanonicalText(), RefTE->Name);
           Ty = createTypeVar();
+        } else {
+          Ty = instantiate(Scm, RefTE);
         }
         N->setType(Ty);
+        return Ty;
+      }
+
+      case NodeKind::AppTypeExpression:
+      {
+        auto AppTE = static_cast<AppTypeExpression*>(N);
+        Type* Ty = inferTypeExpression(AppTE->Op);
+        for (auto Arg: AppTE->Args) {
+          Ty = new TApp(Ty, inferTypeExpression(Arg));
+        }
         return Ty;
       }
 
@@ -588,8 +728,9 @@ namespace bolt {
           Ty = createRigidVar(VarTE->Name->getCanonicalText());
           addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty));
         }
+        ZEN_ASSERT(Ty->getKind() == TypeKind::Var);
         N->setType(Ty);
-        return Ty;
+        return static_cast<TVar*>(Ty);
       }
 
       case NodeKind::TupleTypeExpression:
@@ -642,6 +783,19 @@ namespace bolt {
     }
   }
 
+  Type* sortRow(Type* Ty) {
+    std::map<ByteString, TField*> Fields;
+    while (Ty->getKind() == TypeKind::Field) {
+      auto Field = static_cast<TField*>(Ty);
+      Fields.emplace(Field->Name, Field);
+      Ty = Field->RestTy;
+    }
+    for (auto [Name, Field]: Fields) {
+      Ty = new TField(Name, Field->Ty, Ty);
+    }
+    return Ty;
+  }
+
   Type* Checker::inferExpression(Expression* X) {
 
     Type* Ty;
@@ -661,14 +815,26 @@ namespace bolt {
         for (auto Case: Match->Cases) {
           auto NewCtx = createInferContext();
           Contexts.push_back(NewCtx);
-          inferBindings(Case->Pattern, ValTy);
-          auto ResTy = inferExpression(Case->Expression);
-          addConstraint(new CEqual(ResTy, Ty, Case->Expression));
+          auto PattTy = inferPattern(Case->Pattern);
+          addConstraint(new CEqual(PattTy, ValTy, X));
+          auto ExprTy = inferExpression(Case->Expression);
+          addConstraint(new CEqual(ExprTy, Ty, Case->Expression));
           Contexts.pop_back();
         }
         if (!Match->Value) {
           Ty = new TArrow({ ValTy }, Ty);
         }
+        break;
+      }
+
+      case NodeKind::RecordExpression:
+      {
+        auto Record = static_cast<RecordExpression*>(X);
+        Ty = new TNil();
+        for (auto [Field, Comma]: Record->Fields) {
+          Ty = new TField(Field->Name->getCanonicalText(), new TPresent(inferExpression(Field->getExpression())), Ty);
+        }
+        Ty = sortRow(Ty);
         break;
       }
 
@@ -743,16 +909,20 @@ namespace bolt {
       case NodeKind::MemberExpression:
       {
         auto Member = static_cast<MemberExpression*>(X);
+        auto ExprTy = inferExpression(Member->E);
         switch (Member->Name->getKind()) {
           case NodeKind::IntegerLiteral:
           {
             auto I = static_cast<IntegerLiteral*>(Member->Name);
-            Ty = new TTupleIndex(inferExpression(Member->E), I->getInteger());
+            Ty = new TTupleIndex(ExprTy, I->getInteger());
             break;
           }
           case NodeKind::Identifier:
           {
-            // TODO
+            auto K = static_cast<Identifier*>(Member->Name);
+            Ty = createTypeVar();
+            auto RestTy = createTypeVar();
+            addConstraint(new CEqual(new TField(K->getCanonicalText(), Ty, RestTy), ExprTy, Member));
             break;
           }
           default:
@@ -778,9 +948,8 @@ namespace bolt {
     return Ty;
   }
 
-  void Checker::inferBindings(
+  Type* Checker::inferPattern(
     Pattern* Pattern,
-    Type* Type,
     ConstraintSet* Constraints,
     TVSet* TVs
   ) {
@@ -790,15 +959,39 @@ namespace bolt {
       case NodeKind::BindPattern:
       {
         auto P = static_cast<BindPattern*>(Pattern);
-        addBinding(P->Name->getCanonicalText(), new Forall(TVs, Constraints, Type));
-        break;
+        auto Ty = createTypeVar();
+        addBinding(P->Name->getCanonicalText(), new Forall(TVs, Constraints, Ty));
+        return Ty;
+      }
+
+      case NodeKind::NamedPattern:
+      {
+        auto P = static_cast<NamedPattern*>(Pattern);
+        auto Scm = lookup(P->Name->getCanonicalText());
+        std::vector<Type*> ParamTypes;
+        for (auto P2: P->Patterns) {
+          ParamTypes.push_back(inferPattern(P2, Constraints, TVs));
+        }
+        if (!Scm) {
+          DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
+          return createTypeVar();
+        }
+        auto Ty = instantiate(Scm, P);
+        auto RetTy = createTypeVar();
+        addConstraint(new CEqual(Ty, new TArrow(ParamTypes, RetTy), P));
+        return RetTy;
+      }
+
+      case NodeKind::NestedPattern:
+      {
+        auto P = static_cast<NestedPattern*>(Pattern);
+        return inferPattern(P->P, Constraints, TVs);
       }
 
       case NodeKind::LiteralPattern:
       {
         auto P = static_cast<LiteralPattern*>(Pattern);
-        addConstraint(new CEqual(inferLiteral(P->Literal), Type, P));
-        break;
+        return inferLiteral(P->Literal);
       }
 
       default:
@@ -806,10 +999,6 @@ namespace bolt {
 
     }
 
-  }
-
-  void Checker::inferBindings(Pattern* Pattern, Type* Type) {
-    inferBindings(Pattern, Type, new ConstraintSet, new TVSet);
   }
 
   Type* Checker::inferLiteral(Literal* L) {
@@ -927,7 +1116,7 @@ namespace bolt {
         // This is ugly but it works. Scan all type variables local to this
         // declaration and add the classes that they require to Actual.
         for (auto Ty: *Decl->Ctx->TVs) {
-          auto S = Ty->substitute(C.Solution);
+          auto S = Ty->solve();
           if (llvm::isa<TVar>(S)) {
             auto TV = static_cast<TVar*>(S);
             for (auto Class: TV->Contexts) {
@@ -995,6 +1184,10 @@ namespace bolt {
 
   }
 
+  Type* Checker::getType(TypedNode *Node) {
+    return Node->getType()->solve();
+  }
+
   void Checker::check(SourceFile *SF) {
     auto RootContext = createInferContext();
     Contexts.push_back(RootContext);
@@ -1042,11 +1235,11 @@ namespace bolt {
     }
     infer(SF);
     Contexts.pop_back();
-    solve(new CMany(*RootContext->Constraints), Solution);
+    solve(new CMany(*RootContext->Constraints));
     checkTypeclassSigs(SF);
   }
 
-  void Checker::solve(Constraint* Constraint, TVSub& Solution) {
+  void Checker::solve(Constraint* Constraint) {
 
     Queue.push_back(Constraint);
 
@@ -1094,12 +1287,13 @@ namespace bolt {
       if (Con1->Id != Con2-> Id) {
         return false;
       }
-      ZEN_ASSERT(Con1->Args.size() == Con2->Args.size());
-      for (auto [T1, T2]: zen::zip(Con1->Args, Con2->Args)) {
-        if (!assignableTo(T1, T2)) {
-          return false;
-        }
-      }
+      // TODO must handle a TApp
+      // ZEN_ASSERT(Con1->Args.size() == Con2->Args.size());
+      // for (auto [T1, T2]: zen::zip(Con1->Args, Con2->Args)) {
+      //   if (!assignableTo(T1, T2)) {
+      //     return false;
+      //   }
+      // }
       return true;
     }
     ZEN_UNREACHABLE
@@ -1112,19 +1306,21 @@ namespace bolt {
       for (auto Instance: Match->second) {
         if (assignableTo(Ty, Instance->TypeExps[0]->getType())) {
           std::vector<TypeclassContext> S;
-          for (auto Arg: Ty->Args) {
-            TypeclassContext Classes;
-            // TODO
-            S.push_back(Classes);
-          }
+          // TODO handle TApp
+          // for (auto Arg: Ty->Args) {
+          //   TypeclassContext Classes;
+          //   // TODO
+          //   S.push_back(Classes);
+          // }
           return S;
         }
       }
     }
     DE.add<InstanceNotFoundDiagnostic>(Class, Ty, Source);
-    for (auto Arg: Ty->Args) {
-      S.push_back({});
-    }
+    // TODO handle TApp
+    // for (auto Arg: Ty->Args) {
+    //   S.push_back({});
+    // }
     return S;
   }
 
@@ -1145,114 +1341,15 @@ namespace bolt {
 
   void Checker::propagateClassTycon(TypeclassId& Class, TCon* Ty) {
     auto S = findInstanceContext(Ty, Class);
-    for (auto [Classes, Arg]: zen::zip(S, Ty->Args)) {
-      propagateClasses(Classes, Arg);
-    }
+    // TODO handle TApp
+    // for (auto [Classes, Arg]: zen::zip(S, Ty->Args)) {
+    //   propagateClasses(Classes, Arg);
+    // }
   };
-
-  void Checker::solveCEqual(CEqual* C) {
-    // std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl;
-    OrigLeft = C->Left;
-    OrigRight = C->Right;
-    Source = C->Source;
-    unify(C->Left, C->Right);
-    LeftPath = {};
-    RightPath = {};
-  }
-
-  Type* Checker::find(Type* Ty) {
-    while (Ty->getKind() == TypeKind::Var) {
-      auto Match = Solution.find(static_cast<TVar*>(Ty));
-      if (Match == Solution.end()) {
-        break;
-      }
-      Ty = Match->second;
-    }
-    return Ty;
-  }
-
-  Type* Checker::simplify(Type* Ty) {
-
-    Ty = find(Ty);
-
-    switch (Ty->getKind()) {
-
-      case TypeKind::Var:
-        break;
-
-      case TypeKind::Tuple:
-      {
-        auto Tuple = static_cast<TTuple*>(Ty);
-        bool Changed = false;
-        std::vector<Type*> NewElementTypes;
-        for (auto Ty: Tuple->ElementTypes) {
-          auto NewElementType = simplify(Ty);
-          if (NewElementType != Ty) {
-            Changed = true;
-          }
-          NewElementTypes.push_back(NewElementType);
-        }
-        return Changed ? new TTuple(NewElementTypes) : Ty;
-      }
-
-      case TypeKind::Arrow:
-      {
-        auto Arrow = static_cast<TArrow*>(Ty);
-        bool Changed = false;
-        std::vector<Type*> NewParamTys;
-        for (auto ParamTy: Arrow->ParamTypes) { 
-          auto NewParamTy = simplify(ParamTy);
-          if (NewParamTy != ParamTy) {
-            Changed = true;
-          }
-          NewParamTys.push_back(NewParamTy);
-        }
-        auto NewRetTy = simplify(Arrow->ReturnType);
-        if (NewRetTy != Arrow->ReturnType) {
-          Changed = true;
-        }
-        Ty = Changed ? new TArrow(NewParamTys, NewRetTy) : Arrow;
-        break;
-      }
-
-      case TypeKind::Con:
-      {
-        auto Con = static_cast<TCon*>(Ty);
-        bool Changed = false;
-        std::vector<Type*> NewArgs;
-        for (auto Arg: Con->Args) {
-          auto NewArg = simplify(Arg);
-          if (NewArg != Arg) {
-            Changed = true;
-          }
-          NewArgs.push_back(NewArg);
-        }
-        return Changed ? new TCon(Con->Id, NewArgs, Con->DisplayName) : Ty;
-      }
-
-      case TypeKind::TupleIndex:
-      {
-        auto Index = static_cast<TTupleIndex*>(Ty);
-        auto MaybeTuple = simplify(Index->Ty);
-        if (llvm::isa<TTuple>(MaybeTuple)) {
-          auto Tuple = static_cast<TTuple*>(MaybeTuple);
-          if (Index->I >= Tuple->ElementTypes.size()) {
-            DE.add<TupleIndexOutOfRangeDiagnostic>(Tuple, Index->I);
-          } else {
-            Ty = simplify(Tuple->ElementTypes[Index->I]);
-          }
-        }
-        break;
-      }
-
-    }
-
-    return Ty;
-  }
 
   void Checker::join(TVar* TV, Type* Ty) {
 
-    Solution[TV] = Ty;
+    TV->set(Ty);
 
     propagateClasses(TV->Contexts, Ty);
 
@@ -1273,16 +1370,6 @@ namespace bolt {
       TVs->erase(TV);
     }
 
-  }
-
-  void Checker::unifyError() {
-    DE.add<UnificationErrorDiagnostic>(
-      simplify(OrigLeft),
-      simplify(OrigRight),
-      LeftPath,
-      RightPath,
-      Source
-    );
   }
 
   class ArrowCursor {
@@ -1328,180 +1415,356 @@ namespace bolt {
 
   };
 
-  bool Checker::unify(Type* A, Type* B) {
+  struct Unifier {
 
-    A = simplify(A);
-    B = simplify(B);
+    Checker& C;
+    CEqual* Constraint;
 
-    if (llvm::isa<TVar>(A) && llvm::isa<TVar>(B)) {
-      auto Var1 = static_cast<TVar*>(A);
-      auto Var2 = static_cast<TVar*>(B);
-      if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Rigid) {
-        if (Var1->Id != Var2->Id) {
+    // Internal state used by the unifier
+    ByteString CurrentFieldName;
+    TypePath LeftPath;
+    TypePath RightPath;
+
+    Type* getLeft() const {
+      return Constraint->Left;
+    }
+
+    Type* getRight() const {
+      return Constraint->Right;
+    }
+
+    Node* getSource() const {
+      return Constraint->Source;
+    }
+
+    bool unify(Type* A, Type* B);
+
+    bool unifyField(Type* A, Type* B);
+
+    bool unify() {
+      return unify(Constraint->Left, Constraint->Right);
+    }
+
+  };
+
+  class UnificationFrame {
+
+    Unifier& U;
+    Type* A;
+    Type* B;
+    bool DidSwap = false;
+
+  public:
+
+    UnificationFrame(Unifier& U, Type* A, Type* B):
+      U(U), A(U.C.simplifyType(A)), B(U.C.simplifyType(B)) {}
+
+    void unifyError() {
+      U.C.DE.add<UnificationErrorDiagnostic>(
+        U.C.simplifyType(U.Constraint->Left),
+        U.C.simplifyType(U.Constraint->Right),
+        U.LeftPath,
+        U.RightPath,
+        U.Constraint->Source
+      );
+    }
+
+    void pushLeft(TypeIndex I) {
+      if (DidSwap) {
+        U.RightPath.push_back(I);
+      } else {
+        U.LeftPath.push_back(I);
+      }
+    }
+
+    void popLeft() {
+      if (DidSwap) {
+        U.RightPath.pop_back();
+      } else {
+        U.LeftPath.pop_back();
+      }
+    }
+
+    void pushRight(TypeIndex I) {
+      if (DidSwap) {
+        U.LeftPath.push_back(I);
+      } else {
+        U.RightPath.push_back(I);
+      }
+    }
+
+    void popRight() {
+      if (DidSwap) {
+        U.LeftPath.pop_back();
+      } else {
+        U.RightPath.pop_back();
+      }
+    }
+
+    void swap() {
+      std::swap(A, B);
+      DidSwap = !DidSwap;
+    }
+
+    bool unifyField() {
+      if (llvm::isa<TAbsent>(A) && llvm::isa<TAbsent>(B)) {
+        return true;
+      }
+      if (llvm::isa<TAbsent>(B)) {
+        swap();
+      }
+      if (llvm::isa<TAbsent>(A)) {
+        auto Present = static_cast<TPresent*>(B);
+        U.C.DE.add<FieldNotFoundDiagnostic>(U.CurrentFieldName, U.C.simplifyType(U.getLeft()), U.LeftPath, U.getSource());
+        return false;
+      }
+      auto Present1 = static_cast<TPresent*>(A);
+      auto Present2 = static_cast<TPresent*>(B);
+      return U.unify(Present1->Ty, Present2->Ty);
+    }
+
+    bool unify() {
+
+      if (llvm::isa<TVar>(A) && llvm::isa<TVar>(B)) {
+        auto Var1 = static_cast<TVar*>(A);
+        auto Var2 = static_cast<TVar*>(B);
+        if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Rigid) {
+          if (Var1->Id != Var2->Id) {
+            unifyError();
+            return false;
+          }
+          return true;
+        }
+        TVar* To;
+        TVar* From;
+        if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Unification) {
+          To = Var1;
+          From = Var2;
+        } else {
+          // Only cases left are Var1 = Unification, Var2 = Rigid and Var1 = Unification, Var2 = Unification
+          // Either way, Var1, being Unification, is a good candidate for being unified away
+          To = Var2;
+          From = Var1;
+        }
+        if (From->Id != To->Id) {
+          U.C.join(From, To);
+        }
+        return true;
+      }
+
+      if (llvm::isa<TVar>(B)) {
+        swap();
+      }
+
+      if (llvm::isa<TVar>(A)) {
+
+        auto TV = static_cast<TVar*>(A);
+
+        // Rigid type variables can never unify with antything else than what we
+        // have already handled in the previous if-statement, so issue an error.
+        if (TV->getVarKind() == VarKind::Rigid) {
+          unifyError();
+          return false;
+        }
+
+        // Occurs check
+        if (B->hasTypeVar(TV)) {
+          // NOTE Just like GHC, we just display an error message indicating that
+          //      A cannot match B, e.g. a cannot match [a]. It looks much better
+          //      than obsure references to an occurs check
+          unifyError();
+          return false;
+        }
+
+        U.C.join(TV, B);
+
+        return true;
+      }
+
+      if (llvm::isa<TArrow>(A) && llvm::isa<TArrow>(B)) {
+        auto C1 = ArrowCursor(static_cast<TArrow*>(A), DidSwap ? U.RightPath : U.LeftPath);
+        auto C2 = ArrowCursor(static_cast<TArrow*>(B), DidSwap ? U.LeftPath : U.RightPath);
+        bool Success = true;
+        for (;;) {
+          auto T1 = C1.next();
+          auto T2 = C2.next();
+          if (T1 == nullptr && T2 == nullptr) {
+            break;
+          }
+          if (T1 == nullptr || T2 == nullptr) {
+            unifyError();
+            Success = false;
+            break;
+          }
+          if (!U.unify(T1, T2)) {
+            Success = false;
+          }
+        }
+        return Success;
+        /* if (Arr1->ParamTypes.size() != Arr2->ParamTypes.size()) { */
+        /*   return false; */
+        /* } */
+        /* auto Count = Arr1->ParamTypes.size(); */
+        /* for (std::size_t I = 0; I < Count; I++) { */
+        /*   if (!unify(Arr1->ParamTypes[I], Arr2->ParamTypes[I], Solution)) { */
+        /*     return false; */
+        /*   } */
+        /* } */
+        /* return unify(Arr1->ReturnType, Arr2->ReturnType, Solution); */
+      }
+
+      if (llvm::isa<TApp>(A) && llvm::isa<TApp>(B)) {
+        auto App1 = static_cast<TApp*>(A);
+        auto App2 = static_cast<TApp*>(B);
+        bool Success = true;
+        if (!U.unify(App1->Op, App2->Op)) {
+          Success = false;
+        }
+        if (!U.unify(App1->Arg, App2->Arg)) {
+          Success = false;
+        }
+        return Success;
+      }
+
+      if (llvm::isa<TArrow>(B)) {
+        swap();
+      }
+
+      if (llvm::isa<TArrow>(A)) {
+        auto Arr = static_cast<TArrow*>(A);
+        if (Arr->ParamTypes.empty()) {
+          auto Success = U.unify(Arr->ReturnType, B);
+          return Success;
+        }
+      }
+
+      if (llvm::isa<TTuple>(A) && llvm::isa<TTuple>(B)) {
+        auto Tuple1 = static_cast<TTuple*>(A);
+        auto Tuple2 = static_cast<TTuple*>(B);
+        if (Tuple1->ElementTypes.size() != Tuple2->ElementTypes.size()) {
+          unifyError();
+          return false;
+        }
+        auto Count = Tuple1->ElementTypes.size();
+        bool Success = true;
+        for (size_t I = 0; I < Count; I++) {
+          U.LeftPath.push_back(TypeIndex::forTupleElement(I));
+          U.RightPath.push_back(TypeIndex::forTupleElement(I));
+          if (!U.unify(Tuple1->ElementTypes[I], Tuple2->ElementTypes[I])) {
+            Success = false;
+          }
+          U.LeftPath.pop_back();
+          U.RightPath.pop_back();
+        }
+        return Success;
+      }
+
+      if (llvm::isa<TTupleIndex>(A) || llvm::isa<TTupleIndex>(B)) {
+        // Type(s) could not be simplified at the beginning of this function,
+        // so we have to re-visit the constraint when there is more information.
+        U.C.Queue.push_back(U.Constraint);
+        return true;
+      }
+
+      // if (llvm::isa<TTupleIndex>(A) && llvm::isa<TTupleIndex>(B)) {
+      //   auto Index1 = static_cast<TTupleIndex*>(A);  
+      //   auto Index2 = static_cast<TTupleIndex*>(B);
+      //   return unify(Index1->Ty, Index2->Ty, Source);
+      // }
+
+      if (llvm::isa<TCon>(A) && llvm::isa<TCon>(B)) {
+        auto Con1 = static_cast<TCon*>(A);
+        auto Con2 = static_cast<TCon*>(B);
+        if (Con1->Id != Con2->Id) {
           unifyError();
           return false;
         }
         return true;
       }
-      TVar* To;
-      TVar* From;
-      if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Unification) {
-        To = Var1;
-        From = Var2;
-      } else {
-        // Only cases left are Var1 = Unification, Var2 = Rigid and Var1 = Unification, Var2 = Unification
-        // Either way, Var1, being Unification, is a good candidate for being unified away
-        To = Var2;
-        From = Var1;
-      }
-      if (From->Id != To->Id) {
-        join(From, To);
-      }
-      return true;
-    }
 
-    if (llvm::isa<TVar>(A)) {
-
-      auto TV = static_cast<TVar*>(A);
-
-      // Rigid type variables can never unify with antything else than what we
-      // have already handled in the previous if-statement, so issue an error.
-      if (TV->getVarKind() == VarKind::Rigid) {
-        unifyError();
-        return false;
+      if (llvm::isa<TNil>(A) && llvm::isa<TNil>(B)) {
+        return true;
       }
 
-      // Occurs check
-      if (B->hasTypeVar(TV)) {
-        // NOTE Just like GHC, we just display an error message indicating that
-        //      A cannot match B, e.g. a cannot match [a]. It looks much better
-        //      than obsure references to an occurs check
-        unifyError();
-        return false;
-      }
-
-      join(TV, B);
-
-      return true;
-    }
-
-    if (llvm::isa<TVar>(B)) {
-      return unify(B, A);
-    }
-
-    if (llvm::isa<TArrow>(A) && llvm::isa<TArrow>(B)) {
-      auto C1 = ArrowCursor(static_cast<TArrow*>(A), LeftPath);
-      auto C2 = ArrowCursor(static_cast<TArrow*>(B), RightPath);
-      bool Success = true;
-      for (;;) {
-        auto T1 = C1.next();
-        auto T2 = C2.next();
-        if (T1 == nullptr && T2 == nullptr) {
-          break;
+      if (llvm::isa<TField>(A) && llvm::isa<TField>(B)) {
+        auto Field1 = static_cast<TField*>(A);
+        auto Field2 = static_cast<TField*>(B);
+        bool Success = true;
+        if (Field1->Name == Field2->Name) {
+          U.LeftPath.push_back(TypeIndex::forFieldType());
+          U.RightPath.push_back(TypeIndex::forFieldType());
+          U.CurrentFieldName = Field1->Name;
+          if (!U.unifyField(Field1->Ty, Field2->Ty)) {
+            Success = false;
+          }
+          U.LeftPath.pop_back();
+          U.RightPath.pop_back();
+          U.LeftPath.push_back(TypeIndex::forFieldRest());
+          U.RightPath.push_back(TypeIndex::forFieldRest());
+          if (!U.unify(Field1->RestTy, Field2->RestTy)) {
+            Success = false;
+          }
+          U.LeftPath.pop_back();
+          U.RightPath.pop_back();
+          return Success;
         }
-        if (T1 == nullptr || T2 == nullptr) {
-          unifyError();
-          Success = false;
-          break;
-        }
-        if (!unify(T1, T2)) {
+        auto NewRestTy = new TVar(U.C.NextTypeVarId++, VarKind::Unification);
+        pushLeft(TypeIndex::forFieldRest());
+        if (!U.unify(Field1->RestTy, new TField(Field2->Name, Field2->Ty, NewRestTy))) {
           Success = false;
         }
-      }
-      return Success;
-      /* if (Arr1->ParamTypes.size() != Arr2->ParamTypes.size()) { */
-      /*   return false; */
-      /* } */
-      /* auto Count = Arr1->ParamTypes.size(); */
-      /* for (std::size_t I = 0; I < Count; I++) { */
-      /*   if (!unify(Arr1->ParamTypes[I], Arr2->ParamTypes[I], Solution)) { */
-      /*     return false; */
-      /*   } */
-      /* } */
-      /* return unify(Arr1->ReturnType, Arr2->ReturnType, Solution); */
-    }
-
-    if (llvm::isa<TArrow>(A)) {
-      auto Arr = static_cast<TArrow*>(A);
-      if (Arr->ParamTypes.empty()) {
-        return unify(Arr->ReturnType, B);
-      }
-    }
-
-    if (llvm::isa<TArrow>(B)) {
-      return unify(B, A);
-    }
-
-    if (llvm::isa<TTuple>(A) && llvm::isa<TTuple>(B)) {
-      auto Tuple1 = static_cast<TTuple*>(A);
-      auto Tuple2 = static_cast<TTuple*>(B);
-      if (Tuple1->ElementTypes.size() != Tuple2->ElementTypes.size()) {
-        unifyError();
-        return false;
-      }
-      auto Count = Tuple1->ElementTypes.size();
-      bool Success = true;
-      for (size_t I = 0; I < Count; I++) {
-        LeftPath.push_back(TypeIndex::forTupleElement(I));
-        RightPath.push_back(TypeIndex::forTupleElement(I));
-        if (!unify(Tuple1->ElementTypes[I], Tuple2->ElementTypes[I])) {
+        popLeft();
+        pushRight(TypeIndex::forFieldRest());
+        if (!U.unify(new TField(Field1->Name, Field1->Ty, NewRestTy), Field2->RestTy)) {
           Success = false;
         }
-        LeftPath.pop_back();
-        RightPath.pop_back();
+        popRight();
+        return Success;
       }
-      return Success;
-    }
 
-    if (llvm::isa<TTupleIndex>(A) || llvm::isa<TTupleIndex>(B)) {
-      Queue.push_back(C);
-      return true;
-    }
-
-    // if (llvm::isa<TTupleIndex>(A) && llvm::isa<TTupleIndex>(B)) {
-    //   auto Index1 = static_cast<TTupleIndex*>(A);  
-    //   auto Index2 = static_cast<TTupleIndex*>(B);
-    //   return unify(Index1->Ty, Index2->Ty, Source);
-    // }
-
-    if (llvm::isa<TCon>(A) && llvm::isa<TCon>(B)) {
-      auto Con1 = static_cast<TCon*>(A);
-      auto Con2 = static_cast<TCon*>(B);
-      if (Con1->Id != Con2->Id) {
-        unifyError();
-        return false;
+      if (llvm::isa<TNil>(A) && llvm::isa<TField>(B)) {
+        swap();
       }
-      ZEN_ASSERT(Con1->Args.size() == Con2->Args.size());
-      auto Count = Con1->Args.size();
-      bool Success = true;
-      for (std::size_t I = 0; I < Count; I++) {
-        LeftPath.push_back(TypeIndex::forConArg(I));
-        RightPath.push_back(TypeIndex::forConArg(I));
-        if (!unify(Con1->Args[I], Con2->Args[I])) {
+
+      if (llvm::isa<TField>(A) && llvm::isa<TNil>(B)) {
+        auto Field = static_cast<TField*>(A);
+        bool Success = true;
+        pushLeft(TypeIndex::forFieldType());
+        U.CurrentFieldName = Field->Name;
+        if (!U.unifyField(Field->Ty, new TAbsent)) {
           Success = false;
         }
-        LeftPath.pop_back();
-        RightPath.pop_back();
+        popLeft();
+        pushLeft(TypeIndex::forFieldRest());
+        if (!U.unify(Field->RestTy, B)) {
+          Success = false;
+        }
+        popLeft();
+        return Success;
       }
-      return Success;
+
+      unifyError();
+      return false;
     }
 
-    unifyError();
-    return false;
+  };
+
+  bool Unifier::unify(Type* A, Type* B) {
+    UnificationFrame Frame { *this, A, B };
+    return Frame.unify();
   }
 
-  InferContext* Checker::lookupCall(Node* Source, SymbolPath Path) {
-    auto Def = Source->getScope()->lookup(Path);
-    auto Match = CallGraph.find(Def);
-    if (Match == CallGraph.end()) {
-      return nullptr;
-    }
-    return Match->second;
+  bool Unifier::unifyField(Type* A, Type* B) {
+    UnificationFrame Frame { *this, A, B };
+    return Frame.unifyField();
   }
 
-  Type* Checker::getType(TypedNode *Node) {
-    return Node->getType()->substitute(Solution);
+  void Checker::solveCEqual(CEqual* C) {
+    // std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl;
+    Unifier A { *this, C };
+    A.unify();
   }
+
 
 }
 

@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <functional>
+#include <type_traits>
 #include <vector>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,10 +30,15 @@ namespace bolt {
   };
 
   enum class TypeIndexKind {
+    AppOpType,
+    AppArgType,
     ArrowParamType,
     ArrowReturnType,
-    ConArg,
     TupleElement,
+    FieldType,
+    FieldRestType,
+    TupleIndexType,
+    PresentType,
     End,
   };
 
@@ -59,20 +66,40 @@ namespace bolt {
 
     void advance(const Type* Ty);
 
-    static TypeIndex forArrowReturnType() {
-      return { TypeIndexKind::ArrowReturnType };
+    static TypeIndex forFieldType() {
+      return { TypeIndexKind::FieldType };
+    }
+
+    static TypeIndex forFieldRest() {
+      return { TypeIndexKind::FieldRestType };
     }
 
     static TypeIndex forArrowParamType(std::size_t I) {
       return { TypeIndexKind::ArrowParamType, I };
     }
 
-    static TypeIndex forConArg(std::size_t I) {
-      return { TypeIndexKind::ConArg, I };
+    static TypeIndex forArrowReturnType() {
+      return { TypeIndexKind::ArrowReturnType };
     }
 
     static TypeIndex forTupleElement(std::size_t I) {
       return { TypeIndexKind::TupleElement, I };
+    }
+
+    static TypeIndex forAppOpType() {
+      return { TypeIndexKind::AppOpType };
+    }
+
+    static TypeIndex forAppArgType() {
+      return { TypeIndexKind::AppArgType };
+    }
+
+    static TypeIndex forTupleIndexType() {
+      return { TypeIndexKind::TupleIndexType };
+    }
+
+    static TypeIndex forPresentType() {
+      return { TypeIndexKind::PresentType };
     }
 
   };
@@ -116,9 +143,14 @@ namespace bolt {
   enum class TypeKind : unsigned char {
     Var,
     Con,
+    App,
     Arrow,
     Tuple,
     TupleIndex,
+    Field,
+    Nil,
+    Absent,
+    Present,
   };
 
   class Type {
@@ -146,7 +178,17 @@ namespace bolt {
       return Out;
     }
 
+    /**
+     * Rewrites the entire substructure of a type to another one.
+     *
+     * \param Recursive If true, a succesfull local rewritten type will be again
+     *                  rewriten until it encounters some terminals.
+     */
+    Type* rewrite(std::function<Type*(Type*)> Fn, bool Recursive = false);
+
     Type* substitute(const TVSub& Sub);
+
+    Type* solve();
 
     TypeIterator begin();
     TypeIterator end();
@@ -176,14 +218,28 @@ namespace bolt {
   public:
 
     const size_t Id;
-    std::vector<Type*> Args;
     ByteString DisplayName;
 
-    inline TCon(const size_t Id, std::vector<Type*> Args, ByteString DisplayName):
-      Type(TypeKind::Con), Id(Id), Args(Args), DisplayName(DisplayName) {}
+    inline TCon(const size_t Id, ByteString DisplayName):
+      Type(TypeKind::Con), Id(Id), DisplayName(DisplayName) {}
 
     static bool classof(const Type* Ty) {
       return Ty->getKind() == TypeKind::Con;
+    }
+
+  };
+
+  class TApp : public Type {
+  public:
+
+    Type* Op;
+    Type* Arg;
+
+    inline TApp(Type* Op, Type* Arg):
+      Type(TypeKind::App), Op(Op), Arg(Arg) {}
+
+    static bool classof(const Type* Ty) {
+      return Ty->getKind() == TypeKind::App;
     }
 
   };
@@ -194,6 +250,9 @@ namespace bolt {
   };
 
   class TVar : public Type {
+
+    Type* Parent = this;
+
   public:
 
     const size_t Id;
@@ -207,6 +266,10 @@ namespace bolt {
     inline VarKind getVarKind() const noexcept {
       return VK;
     }
+
+    Type* find();
+
+    void set(Type* Ty);
 
     static bool classof(const Type* Ty) {
       return Ty->getKind() == TypeKind::Var;
@@ -271,6 +334,215 @@ namespace bolt {
     }
 
   };
+
+  class TNil : public Type {
+  public:
+
+    inline TNil():
+      Type(TypeKind::Nil) {}
+
+    static bool classof(const Type* Ty) {
+      return Ty->getKind() == TypeKind::Nil;
+    }
+
+  };
+
+  class TField : public Type {
+  public:
+
+    ByteString Name;
+    Type* Ty;
+    Type* RestTy;
+
+    inline TField(
+      ByteString Name,
+      Type* Ty,
+      Type* RestTy
+    ): Type(TypeKind::Field),
+       Name(Name),
+       Ty(Ty),
+       RestTy(RestTy) {}
+
+    static bool classof(const Type* Ty) {
+      return Ty->getKind() == TypeKind::Field;
+    }
+
+  };
+
+  class TAbsent : public Type {
+  public:
+
+    inline TAbsent():
+      Type(TypeKind::Absent) {}
+
+    static bool classof(const Type* Ty) {
+      return Ty->getKind() == TypeKind::Absent;
+    }
+
+  };
+
+  class TPresent : public Type {
+  public:
+
+    Type* Ty;
+
+    inline TPresent(Type* Ty):
+      Type(TypeKind::Present), Ty(Ty) {}
+
+    static bool classof(const Type* Ty) {
+      return Ty->getKind() == TypeKind::Present;
+    }
+
+  };
+
+  template<bool IsConst>
+  class TypeVisitorBase {
+  protected:
+
+    template<typename T>
+    using C = std::conditional<IsConst, const T, T>::type;
+
+    virtual void enterType(C<Type>* Ty) {}
+    virtual void exitType(C<Type>* Ty) {}
+
+    virtual void visitVarType(C<TVar>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitAppType(C<TApp>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitPresentType(C<TPresent>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitConType(C<TCon>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitArrowType(C<TArrow>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitTupleType(C<TTuple>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitTupleIndexType(C<TTupleIndex>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitAbsentType(C<TAbsent>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitFieldType(C<TField>* Ty) {
+      visitEachChild(Ty);
+    }
+
+    virtual void visitNilType(C<TNil>* Ty) {
+      visitEachChild(Ty);
+    }
+
+  public:
+
+    void visitEachChild(C<Type>* Ty) {
+      switch (Ty->getKind()) {
+        case TypeKind::Var:
+        case TypeKind::Absent:
+        case TypeKind::Nil:
+        case TypeKind::Con:
+          break;
+        case TypeKind::Arrow:
+        {
+          auto Arrow = static_cast<C<TArrow>*>(Ty);
+          for (auto I = 0; I < Arrow->ParamTypes.size(); ++I) {
+            visit(Arrow->ParamTypes[I]);
+          }
+          visit(Arrow->ReturnType);
+          break;
+        }
+        case TypeKind::Tuple:
+        {
+          auto Tuple = static_cast<C<TTuple>*>(Ty);
+          for (auto I = 0; I < Tuple->ElementTypes.size(); ++I) {
+            visit(Tuple->ElementTypes[I]);
+          }
+          break;
+        }
+        case TypeKind::App:
+        {
+          auto App = static_cast<C<TApp>*>(Ty);
+          visit(App->Op);
+          visit(App->Arg);
+          break;
+        }
+        case TypeKind::Field:
+        {
+          auto Field = static_cast<C<TField>*>(Ty);
+          visit(Field->Ty);
+          visit(Field->RestTy);
+          break;
+        }
+        case TypeKind::Present:
+        {
+          auto Present = static_cast<C<TPresent>*>(Ty);
+          visit(Present->Ty);
+          break;
+        }
+        case TypeKind::TupleIndex:
+        {
+          auto Index = static_cast<C<TTupleIndex>*>(Ty);
+          visit(Index->Ty);
+          break;
+        }
+      }
+    }
+
+    void visit(C<Type>* Ty) {
+      enterType(Ty);
+      switch (Ty->getKind()) {
+        case TypeKind::Present:
+          visitPresentType(static_cast<C<TPresent>*>(Ty));
+          break;
+        case TypeKind::Absent:
+          visitAbsentType(static_cast<C<TAbsent>*>(Ty));
+          break;
+        case TypeKind::Nil:
+          visitNilType(static_cast<C<TNil>*>(Ty));
+          break;
+        case TypeKind::Field:
+          visitFieldType(static_cast<C<TField>*>(Ty));
+          break;
+        case TypeKind::Con:
+          visitConType(static_cast<C<TCon>*>(Ty));
+          break;
+        case TypeKind::Arrow:
+          visitArrowType(static_cast<C<TArrow>*>(Ty));
+          break;
+        case TypeKind::Var:
+          visitVarType(static_cast<C<TVar>*>(Ty));
+          break;
+        case TypeKind::Tuple:
+          visitTupleType(static_cast<C<TTuple>*>(Ty));
+          break;
+        case TypeKind::App:
+          visitAppType(static_cast<C<TApp>*>(Ty));
+          break;
+        case TypeKind::TupleIndex:
+          visitTupleIndexType(static_cast<C<TTupleIndex>*>(Ty));
+          break;
+      }
+      exitType(Ty);
+    }
+
+    virtual ~TypeVisitorBase() {}
+
+  };
+
+  using TypeVisitor = TypeVisitorBase<false>;
+  using ConstTypeVisitor = TypeVisitorBase<true>;
 
   // template<typename T>
   // struct DerefHash {

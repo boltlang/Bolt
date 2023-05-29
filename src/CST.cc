@@ -417,6 +417,22 @@ namespace bolt {
     return BlockStart;
   }
 
+  Token* RecordExpressionField::getFirstToken() const {
+    return Name;
+  }
+
+  Token* RecordExpressionField::getLastToken() const {
+    return E->getLastToken();
+  }
+
+  Token* RecordExpression::getFirstToken() const {
+    return LBrace;
+  }
+
+  Token* RecordExpression::getLastToken() const {
+    return RBrace;
+  }
+
   Token* MemberExpression::getFirstToken() const {
     return E->getFirstToken();
   }

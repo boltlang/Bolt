@@ -166,6 +166,9 @@ namespace bolt {
 
   class Checker {
 
+    friend class Unifier;
+    friend class UnificationFrame;
+
     const LanguageConfig& Config;
     DiagnosticEngine& DE;
 
@@ -178,13 +181,9 @@ namespace bolt {
 
     Graph<Node*> RefGraph;
 
-    std::unordered_map<Node*, InferContext*> CallGraph;
-
     std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
 
     std::vector<InferContext*> Contexts;
-
-    TVSub Solution;
 
     /**
      * The queue that is used during solving to store any unsolved constraints.
@@ -208,15 +207,14 @@ namespace bolt {
     Type* inferTypeExpression(TypeExpression* TE);
     Type* inferLiteral(Literal* Lit);
 
-    void inferBindings(Pattern* Pattern, Type* T, ConstraintSet* Constraints, TVSet* TVs);
-    void inferBindings(Pattern* Pattern, Type* T);
+    Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
 
     void infer(Node* node);
     void inferLetDeclaration(LetDeclaration* N);
 
     Constraint* convertToConstraint(ConstraintExpression* C);
 
-    TCon* createPrimConType();
+    TCon* createConType(ByteString Name);
     TVar* createTypeVar();
     TVarRigid* createRigidVar(ByteString Name);
     InferContext* createInferContext(TVSet* TVs = new TVSet, ConstraintSet* Constraints = new ConstraintSet);
@@ -239,8 +237,6 @@ namespace bolt {
      */
     Type* lookupMono(ByteString Name);
 
-    InferContext* lookupCall(Node* Source, SymbolPath Path);
-
     /**
      * Get the return type for the current context. If none could be found, the program will abort.
      */
@@ -251,10 +247,6 @@ namespace bolt {
     std::vector<TypeclassContext> findInstanceContext(TCon* Ty, TypeclassId& Class);
     void propagateClasses(TypeclassContext& Classes, Type* Ty);
     void propagateClassTycon(TypeclassId& Class, TCon* Ty);
-
-    Type* simplify(Type* Ty);
-
-    Type* find(Type* Ty);
 
     /**
      * Assign a type to a unification variable.
@@ -268,18 +260,21 @@ namespace bolt {
      */
     void join(TVar* A, Type* B);
 
+    // Unification parameters
     Type* OrigLeft;
     Type* OrigRight;
     TypePath LeftPath;
     TypePath RightPath;
+    ByteString CurrentFieldName;
     Node* Source;
 
     bool unify(Type* A, Type* B);
 
     void unifyError();
+
     void solveCEqual(CEqual* C);
 
-    void solve(Constraint* Constraint, TVSub& Solution);
+    void solve(Constraint* Constraint);
 
     void populate(SourceFile* SF);
 
@@ -293,17 +288,22 @@ namespace bolt {
 
     Checker(const LanguageConfig& Config, DiagnosticEngine& DE);
 
+    /**
+     * \internal
+     */
+    Type* simplifyType(Type* Ty);
+
     void check(SourceFile* SF);
 
-    inline Type* getBoolType() {
+    inline Type* getBoolType() const {
       return BoolType;
     }
 
-    inline Type* getStringType() {
+    inline Type* getStringType() const {
       return StringType;
     }
 
-    inline Type* getIntType() {
+    inline Type* getIntType() const {
       return IntType;
     }
 

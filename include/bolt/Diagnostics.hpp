@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <cwchar>
 #include <vector>
 #include <stdexcept>
 #include <memory>
@@ -23,6 +24,7 @@ namespace bolt {
     ClassNotFound,
     TupleIndexOutOfRange,
     InvalidTypeToTypeclass,
+    FieldNotFound,
   };
 
   class Diagnostic : std::runtime_error {
@@ -88,14 +90,14 @@ namespace bolt {
   class UnificationErrorDiagnostic : public Diagnostic {
   public:
 
-    Type* Left;
-    Type* Right;
+    Type* OrigLeft;
+    Type* OrigRight;
     TypePath LeftPath;
     TypePath RightPath;
     Node* Source;
 
-    inline UnificationErrorDiagnostic(Type* Left, Type* Right, TypePath LeftPath, TypePath RightPath, Node* Source):
-      Diagnostic(DiagnosticKind::UnificationError), Left(Left), Right(Right), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
+    inline UnificationErrorDiagnostic(Type* OrigLeft, Type* OrigRight, TypePath LeftPath, TypePath RightPath, Node* Source):
+      Diagnostic(DiagnosticKind::UnificationError), OrigLeft(OrigLeft), OrigRight(OrigRight), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
 
     inline Node* getNode() const override {
       return Source;
@@ -168,6 +170,19 @@ namespace bolt {
     inline Node* getNode() const override {
       return Source;
     }
+
+  };
+
+  class FieldNotFoundDiagnostic : public Diagnostic {
+  public:
+
+    ByteString Name;
+    Type* Ty;
+    TypePath Path;
+    Node* Source;
+
+    inline FieldNotFoundDiagnostic(ByteString Name, Type* Ty, TypePath Path, Node* Source):
+      Diagnostic(DiagnosticKind::FieldNotFound), Name(Name), Ty(Ty), Path(Path), Source(Source) {}
 
   };
 

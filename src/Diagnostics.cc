@@ -13,6 +13,7 @@
 
 #define ANSI_RESET "\u001b[0m"
 #define ANSI_BOLD "\u001b[1m"
+#define ANSI_ITALIC "\u001b[3m"
 #define ANSI_UNDERLINE "\u001b[4m"
 #define ANSI_REVERSED "\u001b[7m"
 
@@ -107,6 +108,16 @@ namespace bolt {
         return "'return'";
       case NodeKind::TypeKeyword:
         return "'type'";
+      case NodeKind::LetDeclaration:
+        return "a let-declaration";
+      case NodeKind::CallExpression:
+        return "a call-expression";
+      case NodeKind::InfixExpression:
+        return "an infix-expression";
+      case NodeKind::ReferenceExpression:
+        return "a function or variable reference";
+      case NodeKind::MatchExpression:
+        return "a match-expression";
       default:
         ZEN_UNREACHABLE
     }
@@ -151,16 +162,12 @@ namespace bolt {
       case TypeKind::Con:
       {
         auto Y = static_cast<const TCon*>(Ty);
-        std::ostringstream Out;
-        if (!Y->DisplayName.empty()) {
-          Out << Y->DisplayName;
-        } else {
-          Out << "C" << Y->Id;
-        }
-        for (auto Arg: Y->Args) {
-          Out << " " << describe(Arg);
-        }
-        return Out.str();
+        return Y->DisplayName;
+      }
+      case TypeKind::App:
+      {
+        auto Y = static_cast<const TApp*>(Ty);
+        return describe(Y->Op) + " " + describe(Y->Arg);
       }
       case TypeKind::Tuple:
       {
@@ -182,6 +189,94 @@ namespace bolt {
         auto Y = static_cast<const TTupleIndex*>(Ty);
         return describe(Y->Ty) + "." + std::to_string(Y->I);
       }
+      case TypeKind::Nil:
+        return "{}";
+      case TypeKind::Absent:
+        return "Abs";
+      case TypeKind::Present:
+      {
+        auto Y = static_cast<const TPresent*>(Ty);
+        return describe(Y->Ty);
+      }
+      case TypeKind::Field:
+      {
+        auto Y = static_cast<const TField*>(Ty);
+        std::ostringstream out;
+        out << "{ " << Y->Name << ": " << describe(Y->Ty);
+        Ty = Y->RestTy;
+        while (Ty->getKind() == TypeKind::Field) {
+          auto Y = static_cast<const TField*>(Ty);
+          out << "; " + Y->Name + ": " + describe(Y->Ty);
+          Ty = Y->RestTy;
+        }
+        if (Ty->getKind() != TypeKind::Nil) {
+          out << "; " + describe(Ty);
+        }
+        out << " }";
+        return out.str();
+      }
+    }
+  }
+
+  void writeForegroundANSI(Color C, std::ostream& Out) {
+    switch (C) {
+      case Color::None:
+        break;
+      case Color::Black:
+        Out << ANSI_FG_BLACK;
+        break;
+      case Color::White:
+        Out << ANSI_FG_WHITE;
+        break;
+      case Color::Red:
+        Out << ANSI_FG_RED;
+        break;
+      case Color::Yellow:
+        Out << ANSI_FG_YELLOW;
+        break;
+      case Color::Green:
+        Out << ANSI_FG_GREEN;
+        break;
+      case Color::Blue:
+        Out << ANSI_FG_BLUE;
+        break;
+      case Color::Cyan:
+        Out << ANSI_FG_CYAN;
+        break;
+      case Color::Magenta:
+        Out << ANSI_FG_MAGENTA;
+        break;
+    }
+  }
+
+  void writeBackgroundANSI(Color C, std::ostream& Out) {
+    switch (C) {
+      case Color::None:
+        break;
+      case Color::Black:
+        Out << ANSI_BG_BLACK;
+        break;
+      case Color::White:
+        Out << ANSI_BG_WHITE;
+        break;
+      case Color::Red:
+        Out << ANSI_BG_RED;
+        break;
+      case Color::Yellow:
+        Out << ANSI_BG_YELLOW;
+        break;
+      case Color::Green:
+        Out << ANSI_BG_GREEN;
+        break;
+      case Color::Blue:
+        Out << ANSI_BG_BLUE;
+        break;
+      case Color::Cyan:
+        Out << ANSI_BG_CYAN;
+        break;
+      case Color::Magenta:
+        Out << ANSI_BG_MAGENTA;
+        break;
     }
   }
 
@@ -195,91 +290,84 @@ namespace bolt {
     Out(Out) {}
 
   void ConsoleDiagnostics::setForegroundColor(Color C) {
-    if (EnableColors) {
-      switch (C) {
-        case Color::None:
-          break;
-        case Color::Black:
-          Out << ANSI_FG_BLACK;
-          break;
-        case Color::White:
-          Out << ANSI_FG_WHITE;
-          break;
-        case Color::Red:
-          Out << ANSI_FG_RED;
-          break;
-        case Color::Yellow:
-          Out << ANSI_FG_YELLOW;
-          break;
-        case Color::Green:
-          Out << ANSI_FG_GREEN;
-          break;
-        case Color::Blue:
-          Out << ANSI_FG_BLUE;
-          break;
-        case Color::Cyan:
-          Out << ANSI_FG_CYAN;
-          break;
-        case Color::Magenta:
-          Out << ANSI_FG_MAGENTA;
-          break;
-      }
+    ActiveStyle.setForegroundColor(C);
+    if (!EnableColors) {
+      return;
     }
+    writeForegroundANSI(C, Out);
   }
 
-
   void ConsoleDiagnostics::setBackgroundColor(Color C) {
-    if (EnableColors) {
-      switch (C) {
-        case Color::None:
-          break;
-        case Color::Black:
-          Out << ANSI_BG_BLACK;
-          break;
-        case Color::White:
-          Out << ANSI_BG_WHITE;
-          break;
-        case Color::Red:
-          Out << ANSI_BG_RED;
-          break;
-        case Color::Yellow:
-          Out << ANSI_BG_YELLOW;
-          break;
-        case Color::Green:
-          Out << ANSI_BG_GREEN;
-          break;
-        case Color::Blue:
-          Out << ANSI_BG_BLUE;
-          break;
-        case Color::Cyan:
-          Out << ANSI_BG_CYAN;
-          break;
-        case Color::Magenta:
-          Out << ANSI_BG_MAGENTA;
-          break;
-      }
+    ActiveStyle.setBackgroundColor(C);
+    if (!EnableColors) {
+      return;
+    }
+    if (C == Color::None) {
+      Out << ANSI_RESET;
+      applyStyles();
+    }
+    writeBackgroundANSI(C, Out);
+  }
+
+  void ConsoleDiagnostics::applyStyles() {
+    if (ActiveStyle.isBold()) {
+      Out << ANSI_BOLD;
+    }
+    if (ActiveStyle.isUnderline()) {
+      Out << ANSI_UNDERLINE;
+    }
+    if (ActiveStyle.isItalic()) {
+      Out << ANSI_ITALIC;
+    }
+    if (ActiveStyle.hasBackgroundColor()) {
+      setBackgroundColor(ActiveStyle.getBackgroundColor());
+    }
+    if (ActiveStyle.hasForegroundColor()) {
+      setForegroundColor(ActiveStyle.getForegroundColor());
     }
   }
 
   void ConsoleDiagnostics::setBold(bool Enable) {
+    ActiveStyle.setBold(Enable);
+    if (!EnableColors) {
+      return;
+    }
     if (Enable) {
       Out << ANSI_BOLD;
+    } else {
+      Out << ANSI_RESET;
+      applyStyles();
     }
   }
 
   void ConsoleDiagnostics::setItalic(bool Enable) {
+    ActiveStyle.setItalic(Enable);
+    if (!EnableColors) {
+      return;
+    }
     if (Enable) {
-      // TODO
+      Out << ANSI_ITALIC;
+    } else {
+      Out << ANSI_RESET;
+      applyStyles();
     }
   }
 
   void ConsoleDiagnostics::setUnderline(bool Enable) {
+    ActiveStyle.setItalic(Enable);
+    if (!EnableColors) {
+      return;
+    }
     if (Enable) {
       Out << ANSI_UNDERLINE;
+    } else {
+      Out << ANSI_RESET;
+      applyStyles();
     }
   }
 
   void ConsoleDiagnostics::resetStyles() {
+    ActiveStyle.reset();
     if (EnableColors) {
       Out << ANSI_RESET;
     }
@@ -391,8 +479,159 @@ namespace bolt {
   }
 
   void ConsoleDiagnostics::writeType(const Type* Ty) {
+    TypePath Path;
+    writeType(Ty, Path);
+  }
+
+  void ConsoleDiagnostics::writeType(const Type* Ty, const TypePath& Underline) {
+
     setForegroundColor(Color::Green);
-    write(describe(Ty));
+
+    class TypePrinter : public ConstTypeVisitor {
+
+      TypePath Path;
+      ConsoleDiagnostics& W;
+      const TypePath& Underline;
+
+    public:
+
+      TypePrinter(ConsoleDiagnostics& W, const TypePath& Underline):
+        W(W), Underline(Underline) {}
+
+      bool shouldUnderline() const {
+        return !Underline.empty() && Path == Underline;
+      }
+
+      void enterType(const Type* Ty) override {
+        if (shouldUnderline()) {
+          W.setUnderline(true);
+        }
+      }
+
+      void exitType(const Type* Ty) override {
+        if (shouldUnderline()) {
+          W.setUnderline(false);
+        }
+      }
+
+      void visitAppType(const TApp *Ty) override {
+        auto Y = static_cast<const TApp*>(Ty);
+        Path.push_back(TypeIndex::forAppOpType());
+        visit(Y->Op);
+        Path.pop_back();
+        W.write(" ");
+        Path.push_back(TypeIndex::forAppArgType());
+        visit(Y->Arg);
+        Path.pop_back();
+      }
+
+      void visitVarType(const TVar* Ty) override {
+        if (Ty->getVarKind() == VarKind::Rigid) {
+          W.write(static_cast<const TVarRigid*>(Ty)->Name);
+          return;
+        }
+        W.write("a");
+        W.write(Ty->Id);
+      }
+
+      void visitConType(const TCon *Ty) override {
+        W.write(Ty->DisplayName);
+      }
+
+      void visitArrowType(const TArrow* Ty) override {
+        W.write("(");
+        bool First = true;
+        std::size_t I = 0;
+        for (auto PT: Ty->ParamTypes) {
+          if (First) First = false;
+          else W.write(", ");
+          Path.push_back(TypeIndex::forArrowParamType(I++));
+          visit(PT);
+          Path.pop_back();
+        }
+        W.write(") -> ");
+        Path.push_back(TypeIndex::forArrowReturnType());
+        visit(Ty->ReturnType);
+        Path.pop_back();
+      }
+
+      void visitTupleType(const TTuple *Ty) override {
+        W.write("(");
+        if (Ty->ElementTypes.size()) {
+          auto Iter = Ty->ElementTypes.begin();
+          Path.push_back(TypeIndex::forTupleElement(0));
+          visit(*Iter++);
+          Path.pop_back();
+          std::size_t I = 1;
+          while (Iter != Ty->ElementTypes.end()) {
+            W.write(", ");
+            Path.push_back(TypeIndex::forTupleElement(I++));
+            visit(*Iter++);
+            Path.pop_back();
+          }
+        }
+        W.write(")");
+      }
+
+      void visitTupleIndexType(const TTupleIndex *Ty) override {
+        Path.push_back(TypeIndex::forTupleIndexType());
+        visit(Ty->Ty);
+        Path.pop_back();
+        W.write(".");
+        W.write(Ty->I);
+      }
+
+      void visitNilType(const TNil *Ty) override {
+        W.write("{}");
+      }
+
+      void visitAbsentType(const TAbsent *Ty) override {
+        W.write("Abs");
+      }
+
+      void visitPresentType(const TPresent *Ty) override {
+        Path.push_back(TypeIndex::forPresentType());
+        visit(Ty->Ty);
+        Path.pop_back();
+      }
+
+      void visitFieldType(const TField* Ty) override {
+        W.write("{ ");
+        W.write(Ty->Name);
+        W.write(": ");
+        Path.push_back(TypeIndex::forFieldType());
+        visit(Ty->Ty);
+        Path.pop_back();
+        auto Ty2 = Ty->RestTy;
+        Path.push_back(TypeIndex::forFieldRest());
+        std::size_t I = 1;
+        while (Ty2->getKind() == TypeKind::Field) {
+          auto Y = static_cast<const TField*>(Ty2);
+          W.write("; ");
+          W.write(Y->Name);
+          W.write(": ");
+          Path.push_back(TypeIndex::forFieldType());
+          visit(Y->Ty);
+          Path.pop_back();
+          Ty2 = Y->RestTy;
+          Path.push_back(TypeIndex::forFieldRest());
+          ++I;
+        }
+        if (Ty2->getKind() != TypeKind::Nil) {
+          W.write("; ");
+          visit(Ty);
+        }
+        W.write(" }");
+        for (auto K = 0; K < I; K++) {
+          Path.pop_back();
+        }
+      }
+
+    };
+
+    TypePrinter P { *this, Underline };
+    P.visit(Ty);
+
     resetStyles();
   }
 
@@ -533,40 +772,51 @@ namespace bolt {
       case DiagnosticKind::UnificationError:
       {
         auto E = static_cast<const UnificationErrorDiagnostic&>(D);
+        auto Left = E.OrigLeft->resolve(E.LeftPath);
+        auto Right = E.OrigRight->resolve(E.RightPath);
         writePrefix(E);
-        auto Left = E.Left->resolve(E.LeftPath);
-        auto Right = E.Right->resolve(E.RightPath);
         write("the types ");
         writeType(Left);
         write(" and ");
         writeType(Right);
         write(" failed to match\n\n");
-        if (E.Source) {
-          writeNode(E.Source);
-          Out << "\n";
-        }
-        if (!E.LeftPath.empty()) {
-          setForegroundColor(Color::Yellow);
-          setBold(true);
-          write("  info: ");
-          resetStyles();
-          write("the type ");
-          writeType(Left);
-          write(" occurs in the full type ");
-          writeType(E.Left);
-          write("\n\n");
-        }
-        if (!E.RightPath.empty()) {
-          setForegroundColor(Color::Yellow);
-          setBold(true);
-          write("  info: ");
-          resetStyles();
-          write("the type ");
-          writeType(Right);
-          write(" occurs in the full type ");
-          writeType(E.Right);
-          write("\n\n");
-        }
+        setForegroundColor(Color::Yellow);
+        setBold(true);
+        write("  info: ");
+        resetStyles();
+        write("due to an equality constraint on ");
+        write(describe(E.Source->getKind()));
+        write(":\n\n");
+        write(" - left type ");
+        writeType(E.OrigLeft, E.LeftPath);
+        write("\n");
+        write(" - right type ");
+        writeType(E.OrigRight, E.RightPath);
+        write("\n\n");
+        writeNode(E.Source);
+        write("\n");
+        // if (E.Left != E.OrigLeft) {
+        //   setForegroundColor(Color::Yellow);
+        //   setBold(true);
+        //   write("  info: ");
+        //   resetStyles();
+        //   write("the type ");
+        //   writeType(E.Left);
+        //   write(" occurs in the full type ");
+        //   writeType(E.OrigLeft);
+        //   write("\n\n");
+        // }
+        // if (E.Right != E.OrigRight) {
+        //   setForegroundColor(Color::Yellow);
+        //   setBold(true);
+        //   write("  info: ");
+        //   resetStyles();
+        //   write("the type ");
+        //   writeType(E.Right);
+        //   write(" occurs in the full type ");
+        //   writeType(E.OrigRight);
+        //   write("\n\n");
+        // }
         break;
       }
 
@@ -631,6 +881,18 @@ namespace bolt {
           writeTypeclassName(Class);
         }
         write(" but this is invalid\n\n");
+        break;
+      }
+
+      case DiagnosticKind::FieldNotFound:
+      {
+        auto E = static_cast<const FieldNotFoundDiagnostic&>(D);
+        writePrefix(E);
+        write("the field '");
+        write(E.Name);
+        write("' was required in one type but not found in another\n\n");
+        writeNode(E.Source);
+        write("\n");
         break;
       }
 
