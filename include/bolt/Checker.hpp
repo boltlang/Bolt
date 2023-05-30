@@ -157,10 +157,8 @@ namespace bolt {
     TypeEnv Env;
 
     Type* ReturnType = nullptr;
-    std::vector<TypeclassSignature> Classes;
 
-    //inline InferContext(InferContext* Parent, TVSet& TVs, ConstraintSet& Constraints, TypeEnv& Env, Type* ReturnType):
-    //  Parent(Parent), TVs(TVs), Constraints(Constraints), Env(Env), ReturnType(ReturnType) {}
+    InferContext* Parent = nullptr;
 
   };
 
@@ -183,22 +181,20 @@ namespace bolt {
 
     std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
 
-    std::vector<InferContext*> Contexts;
+    // std::vector<InferContext*> Contexts;
+    
+    InferContext* ActiveContext;
+
+    InferContext& getContext();
+    void pushContext(InferContext* Ctx);
+    void popContext();
 
     /**
      * The queue that is used during solving to store any unsolved constraints.
      */
     std::deque<class Constraint*> Queue;
 
-    /**
-     * Pointer to the current constraint being unified.
-     */
-    CEqual* C;
-
-    InferContext& getContext();
-
     void addConstraint(Constraint* Constraint);
-    void addClass(TypeclassSignature Sig);
 
     void forwardDeclare(Node* Node);
     void forwardDeclareLetDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
@@ -217,11 +213,17 @@ namespace bolt {
     TCon* createConType(ByteString Name);
     TVar* createTypeVar();
     TVarRigid* createRigidVar(ByteString Name);
-    InferContext* createInferContext(TVSet* TVs = new TVSet, ConstraintSet* Constraints = new ConstraintSet);
+    InferContext* createInferContext(
+      InferContext* Parent = nullptr,
+      TVSet* TVs = new TVSet,
+      ConstraintSet* Constraints = new ConstraintSet
+    );
 
     void addBinding(ByteString Name, Scheme* Scm);
 
     Scheme* lookup(ByteString Name);
+
+    void initialize(Node* N);
 
     /**
      * Looks up a type/variable and  ensures that it is a monomorphic type.
@@ -248,6 +250,9 @@ namespace bolt {
     void propagateClasses(TypeclassContext& Classes, Type* Ty);
     void propagateClassTycon(TypeclassId& Class, TCon* Ty);
 
+    // TODO Remove this
+    Node* Source;
+
     /**
      * Assign a type to a unification variable.
      *
@@ -259,14 +264,6 @@ namespace bolt {
      * Other side effects may occur.
      */
     void join(TVar* A, Type* B);
-
-    // Unification parameters
-    Type* OrigLeft;
-    Type* OrigRight;
-    TypePath LeftPath;
-    TypePath RightPath;
-    ByteString CurrentFieldName;
-    Node* Source;
 
     bool unify(Type* A, Type* B);
 

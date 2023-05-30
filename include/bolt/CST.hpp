@@ -17,6 +17,7 @@
 namespace bolt {
 
   class Type;
+  class InferContext;
 
   class Token;
   class SourceFile;
@@ -1279,6 +1280,8 @@ namespace bolt {
   class MatchCase : public Node { 
   public:
 
+    InferContext* Ctx;
+
     class Pattern* Pattern;
     class RArrowAlt* RArrowAlt;
     class Expression* Expression;
@@ -1658,9 +1661,6 @@ namespace bolt {
 
   };
 
-  class Type;
-  class InferContext;
-
   class LetDeclaration : public Node {
 
     Scope* TheScope = nullptr;
@@ -1701,6 +1701,22 @@ namespace bolt {
         TheScope = new Scope(this);
       }
       return TheScope;
+    }
+
+    bool isFunc() const noexcept { 
+      return !Params.empty();
+    }
+
+    bool isVar() const noexcept { 
+      return !isFunc();
+    }
+
+    bool isInstance() const noexcept {
+      return Parent->getKind() == NodeKind::InstanceDeclaration;
+    }
+
+    bool isClass() const noexcept {
+      return Parent->getKind() == NodeKind::ClassDeclaration;
     }
 
     Token* getFirstToken() const override;
@@ -1801,6 +1817,8 @@ namespace bolt {
   class RecordDeclaration : public Node {
   public:
 
+    InferContext* Ctx;
+
     class PubKeyword* PubKeyword;
     class StructKeyword* StructKeyword;
     IdentifierAlt* Name;
@@ -1878,6 +1896,8 @@ namespace bolt {
   class VariantDeclaration : public Node {
   public:
 
+    InferContext* Ctx;
+
     class PubKeyword* PubKeyword;
     class EnumKeyword* EnumKeyword;
     class IdentifierAlt* Name;
@@ -1912,6 +1932,7 @@ namespace bolt {
   public:
 
     TextFile& File;
+    InferContext* Ctx;
 
     std::vector<Node*> Elements;
 
