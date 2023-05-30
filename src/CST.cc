@@ -61,15 +61,41 @@ namespace bolt {
 
   void Scope::scan(Node* X) {
     switch (X->getKind()) {
-      case NodeKind::ExpressionStatement:
-      case NodeKind::ReturnStatement:
-      case NodeKind::IfStatement:
-        break;
       case NodeKind::SourceFile:
       {
         auto File = static_cast<SourceFile*>(X);
         for (auto Element: File->Elements) {
-          scan(Element);
+          scanChild(Element);
+        }
+        break;
+      }
+      case NodeKind::LetDeclaration:
+      {
+        auto Decl = static_cast<LetDeclaration*>(X);
+        for (auto Param: Decl->Params) {
+          visitPattern(Param->Pattern, Param);
+        }
+        if (Decl->Body) {
+          scanChild(Decl->Body);
+        }
+        break;
+      }
+      default:
+        ZEN_UNREACHABLE
+    }
+  }
+
+  void Scope::scanChild(Node* X) {
+    switch (X->getKind()) {
+      case NodeKind::LetExprBody:
+      case NodeKind::ExpressionStatement:
+      case NodeKind::ReturnStatement:
+        break;
+      case NodeKind::LetBlockBody:
+      {
+        auto Block = static_cast<LetBlockBody*>(X);
+        for (auto Element: Block->Elements) {
+          scanChild(Element);
         }
         break;
       }
@@ -78,13 +104,10 @@ namespace bolt {
         auto Decl = static_cast<ClassDeclaration*>(X);
         addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Class);
         for (auto Element: Decl->Elements) {
-          scan(Element);
+          scanChild(Element);
         }
         break;
       }
-      case NodeKind::InstanceDeclaration:
-        // FIXME is this right?
-        break;
       case NodeKind::LetDeclaration:
       {
         auto Decl = static_cast<LetDeclaration*>(X);
@@ -150,7 +173,7 @@ namespace bolt {
     ZEN_ASSERT(Path.Modules.empty());
     auto Curr = this;
     do {
-      auto Found= Curr->lookupDirect(Path, Kind);
+      auto Found = Curr->lookupDirect(Path, Kind);
       if (Found) {
         return Found;
       }

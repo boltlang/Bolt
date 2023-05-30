@@ -262,6 +262,7 @@ namespace bolt {
     void addSymbol(ByteString Name, Node* Decl, SymbolKind Kind);
 
     void scan(Node* X);
+    void scanChild(Node* X);
 
     void visitPattern(Pattern* P, Node* ToInsert);
 
