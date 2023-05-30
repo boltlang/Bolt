@@ -9,7 +9,7 @@ namespace bolt {
       ConfigFlags_TypeVarsRequireForall = 1 << 0,
     };
 
-    unsigned Flags;
+    unsigned Flags = 0;
 
   public:
 

@@ -12,6 +12,12 @@
 
 // TODO see if we can merge UnificationError diagnostics so that we get a list of **all** types that were wrong on a given node
 
+// TODO When a forall variable is missing, do not just insert a blank one into the env. It will result in too few diagnostics being emitted.
+//      Same goes for reference expressions.
+//      If running the compiler as a language server, this matters.
+
+// TODO Add a pattern that only performs a type assert
+
 #include <algorithm>
 #include <iterator>
 #include <stack>
@@ -296,8 +302,12 @@ namespace bolt {
         break;
       }
 
-      case NodeKind::LetDeclaration:
+      case NodeKind::FunctionDeclaration:
         // These declarations will be handled separately in check()
+        break;
+
+      case NodeKind::VariableDeclaration:
+        // All of this node's semantics will be handled in infer()
         break;
 
       case NodeKind::VariantDeclaration:
@@ -376,8 +386,8 @@ namespace bolt {
         for (auto TV: Vars) {
           RetTy = new TApp(RetTy, TV);
         }
+        Decl->Ctx->Parent->Env.emplace(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow({ FieldsTy }, RetTy)));
         popContext();
-        addBinding(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow({ FieldsTy }, RetTy)));
 
         break;
       }
@@ -423,17 +433,17 @@ namespace bolt {
         Contexts.pop();
       }
 
-      void visitLetDeclaration(LetDeclaration* Let) {
-        if (Let->isFunc()) {
-          Let->Ctx = createDerivedContext();
-          Contexts.push(Let->Ctx);
-          visitEachChild(Let);
-          Contexts.pop();
-        } else {
-          Let->Ctx = Contexts.top();
-          visitEachChild(Let);
-        }
+      void visitFunctionDeclaration(FunctionDeclaration* Let) {
+        Let->Ctx = createDerivedContext();
+        Contexts.push(Let->Ctx);
+        visitEachChild(Let);
+        Contexts.pop();
       }
+
+      // void visitVariableDeclaration(VariableDeclaration* Var) {
+      //   Var->Ctx = Contexts.top();
+      //   visitEachChild(Var);
+      // }
 
     };
 
@@ -442,9 +452,7 @@ namespace bolt {
 
   }
 
-  void Checker::forwardDeclareLetDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints) {
-
-    auto Let = static_cast<LetDeclaration*>(N);
+  void Checker::forwardDeclareFunctionDeclaration(FunctionDeclaration* Let, TVSet* TVs, ConstraintSet* Constraints) {
 
     setContext(Let->Ctx);
 
@@ -495,7 +503,7 @@ namespace bolt {
         Params.push_back(TV);
       }
 
-      auto SigLet = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, llvm::cast<BindPattern>(Let->Pattern)->Name->getCanonicalText() }, SymbolKind::Var));
+      auto SigLet = llvm::cast<FunctionDeclaration>(Class->getScope()->lookupDirect({ {}, Let->Name->getCanonicalText() }, SymbolKind::Var));
 
       // It would be very strange if there was no type assert in the type
       // class let-declaration but we rather not let the compiler crash if that happens.
@@ -520,9 +528,7 @@ namespace bolt {
         case NodeKind::LetBlockBody:
         {
           auto Block = static_cast<LetBlockBody*>(Let->Body);
-          if (Let->isFunc()) {
-            Let->Ctx->ReturnType = createTypeVar();
-          }
+          Let->Ctx->ReturnType = createTypeVar();
           for (auto Element: Block->Elements) {
             forwardDeclare(Element);
           }
@@ -533,19 +539,11 @@ namespace bolt {
       }
     }
 
-
-    Type* BindTy;
-    if (Let->isFunc()) {
-      popContext();
-      BindTy = inferPattern(Let->Pattern, Let->Ctx->Constraints, Let->Ctx->TVs);
-    } else {
-      BindTy = inferPattern(Let->Pattern);
-    }
-    addConstraint(new CEqual(BindTy, Ty, Let));
+    Let->Ctx->Parent->Env.emplace(Let->Name->getCanonicalText(), new Forall(Let->Ctx->TVs, Let->Ctx->Constraints, Ty));
 
   }
 
-  void Checker::inferLetDeclaration(LetDeclaration* Decl) {
+  void Checker::inferFunctionDeclaration(FunctionDeclaration* Decl) {
 
     setContext(Decl->Ctx);
 
@@ -553,7 +551,6 @@ namespace bolt {
     Type* RetType;
 
     for (auto Param: Decl->Params) {
-      // TODO incorporate Param->TypeAssert or make it a kind of pattern
       ParamTypes.push_back(inferPattern(Param->Pattern));
     }
 
@@ -568,7 +565,6 @@ namespace bolt {
         case NodeKind::LetBlockBody:
         {
           auto Block = static_cast<LetBlockBody*>(Decl->Body);
-          ZEN_ASSERT(Decl->isFunc());
           RetType = Decl->Ctx->ReturnType;
           for (auto Element: Block->Elements) {
             infer(Element);
@@ -582,13 +578,7 @@ namespace bolt {
       RetType = createTypeVar();
     }
 
-    if (Decl->isFunc()) {
-      popContext();
-      addConstraint(new CEqual { Decl->Ty, new TArrow(ParamTypes, RetType), Decl });
-    } else {
-      // Declaration is a plain (typed) variable
-      addConstraint(new CEqual { Decl->Ty, RetType, Decl });
-    }
+    addConstraint(new CEqual { Decl->Ty, new TArrow(ParamTypes, RetType), Decl });
 
   }
 
@@ -642,7 +632,7 @@ namespace bolt {
         break;
       }
 
-      case NodeKind::LetDeclaration:
+      case NodeKind::FunctionDeclaration:
         break;
 
       case NodeKind::ReturnStatement:
@@ -655,6 +645,33 @@ namespace bolt {
           ReturnType = new TTuple({});
           addConstraint(new CEqual { new TTuple({}), getReturnType(), N });
         }
+        break;
+      }
+
+      case NodeKind::VariableDeclaration:
+      {
+        auto Decl = static_cast<VariableDeclaration*>(N);
+        Type* Ty = nullptr;
+        if (Decl->TypeAssert) {
+          Ty = inferTypeExpression(Decl->TypeAssert->TypeExpression, false);
+        }
+        if (Decl->Body) {
+          ZEN_ASSERT(Decl->Body->getKind() == NodeKind::LetExprBody);
+          auto E = static_cast<LetExprBody*>(Decl->Body);
+          auto Ty2 = inferExpression(E->Expression);
+          if (Ty) {
+            addConstraint(new CEqual(Ty, Ty2, Decl));
+          } else {
+            Ty = Ty2;
+          }
+        }
+        auto Ty3 = inferPattern(Decl->Pattern);
+        if (Ty) {
+          addConstraint(new CEqual(Ty, Ty3, Decl));
+        } else {
+          Ty = Ty3;
+        }
+        Decl->setType(Ty);
         break;
       }
 
@@ -764,7 +781,7 @@ namespace bolt {
     }
   }
 
-  Type* Checker::inferTypeExpression(TypeExpression* N) {
+  Type* Checker::inferTypeExpression(TypeExpression* N, bool IsPoly) {
 
     switch (N->getKind()) {
 
@@ -786,9 +803,9 @@ namespace bolt {
       case NodeKind::AppTypeExpression:
       {
         auto AppTE = static_cast<AppTypeExpression*>(N);
-        Type* Ty = inferTypeExpression(AppTE->Op);
+        Type* Ty = inferTypeExpression(AppTE->Op, IsPoly);
         for (auto Arg: AppTE->Args) {
-          Ty = new TApp(Ty, inferTypeExpression(Arg));
+          Ty = new TApp(Ty, inferTypeExpression(Arg, IsPoly));
         }
         return Ty;
       }
@@ -798,10 +815,10 @@ namespace bolt {
         auto VarTE = static_cast<VarTypeExpression*>(N);
         auto Ty = lookupMono(VarTE->Name->getCanonicalText());
         if (Ty == nullptr) {
-          if (Config.typeVarsRequireForall()) {
+          if (IsPoly && Config.typeVarsRequireForall()) {
             DE.add<BindingNotFoundDiagnostic>(VarTE->Name->getCanonicalText(), VarTE->Name);
           }
-          Ty = createRigidVar(VarTE->Name->getCanonicalText());
+          Ty = IsPoly ? createRigidVar(VarTE->Name->getCanonicalText()) : createTypeVar();
           addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty));
         }
         ZEN_ASSERT(Ty->getKind() == TypeKind::Var);
@@ -814,7 +831,7 @@ namespace bolt {
         auto TupleTE = static_cast<TupleTypeExpression*>(N);
         std::vector<Type*> ElementTypes;
         for (auto [TE, Comma]: TupleTE->Elements) {
-          ElementTypes.push_back(inferTypeExpression(TE));
+          ElementTypes.push_back(inferTypeExpression(TE, IsPoly));
         }
         auto Ty = new TTuple(ElementTypes);
         N->setType(Ty);
@@ -824,7 +841,7 @@ namespace bolt {
       case NodeKind::NestedTypeExpression:
       {
         auto NestedTE = static_cast<NestedTypeExpression*>(N);
-        auto Ty = inferTypeExpression(NestedTE->TE);
+        auto Ty = inferTypeExpression(NestedTE->TE, IsPoly);
         N->setType(Ty);
         return Ty;
       }
@@ -834,9 +851,9 @@ namespace bolt {
         auto ArrowTE = static_cast<ArrowTypeExpression*>(N);
         std::vector<Type*> ParamTypes;
         for (auto ParamType: ArrowTE->ParamTypes) {
-          ParamTypes.push_back(inferTypeExpression(ParamType));
+          ParamTypes.push_back(inferTypeExpression(ParamType, IsPoly));
         }
-        auto ReturnType = inferTypeExpression(ArrowTE->ReturnType);
+        auto ReturnType = inferTypeExpression(ArrowTE->ReturnType, IsPoly);
         auto Ty = new TArrow(ParamTypes, ReturnType);
         N->setType(Ty);
         return Ty;
@@ -848,7 +865,7 @@ namespace bolt {
         for (auto [C, Comma]: QTE->Constraints) {
           addConstraint(convertToConstraint(C));
         }
-        auto Ty = inferTypeExpression(QTE->TE);
+        auto Ty = inferTypeExpression(QTE->TE, IsPoly);
         N->setType(Ty);
         return Ty;
       }
@@ -889,12 +906,13 @@ namespace bolt {
         }
         Ty = createTypeVar();
         for (auto Case: Match->Cases) {
+          auto OldCtx = &getContext();
           setContext(Case->Ctx);
           auto PattTy = inferPattern(Case->Pattern);
           addConstraint(new CEqual(PattTy, ValTy, Case));
           auto ExprTy = inferExpression(Case->Expression);
           addConstraint(new CEqual(ExprTy, Ty, Case->Expression));
-          popContext();
+          setContext(OldCtx);
         }
         if (!Match->Value) {
           Ty = new TArrow({ ValTy }, Ty);
@@ -925,8 +943,8 @@ namespace bolt {
         auto Ref = static_cast<ReferenceExpression*>(X);
         ZEN_ASSERT(Ref->ModulePath.empty());
         auto Target = Ref->getScope()->lookup(Ref->getSymbolPath());
-        if (Target && llvm::isa<LetDeclaration>(Target)) {
-          auto Let = static_cast<LetDeclaration*>(Target);
+        if (Target && llvm::isa<FunctionDeclaration>(Target)) {
+          auto Let = static_cast<FunctionDeclaration*>(Target);
           if (Let->IsCycleActive) {
             return Let->Ty;
           }
@@ -1100,7 +1118,7 @@ namespace bolt {
 
       std::stack<Node*> Stack;
 
-      void visitLetDeclaration(LetDeclaration* N) {
+      void visitFunctionDeclaration(FunctionDeclaration* N) {
         RefGraph.addVertex(N);
         Stack.push(N);
         visitEachChild(N);
@@ -1121,7 +1139,7 @@ namespace bolt {
           RefGraph.addEdge(Stack.top(), Def->Parent);
           return;
         }
-        ZEN_ASSERT(Def->getKind() == NodeKind::LetDeclaration);
+        ZEN_ASSERT(Def->getKind() == NodeKind::FunctionDeclaration || Def->getKind() == NodeKind::VariableDeclaration);
         if (!Stack.empty()) {
           RefGraph.addEdge(Def, Stack.top());
         }
@@ -1140,7 +1158,7 @@ namespace bolt {
 
       Checker& C;
 
-      void visitLetDeclaration(LetDeclaration* Decl) {
+      void visitLetDeclaration(FunctionDeclaration* Decl) {
 
         // Only inspect those let-declarations that look like a function
         if (Decl->Params.empty()) {
@@ -1289,26 +1307,26 @@ namespace bolt {
       auto TVs = new TVSet;
       auto Constraints = new ConstraintSet;
       for (auto N: Nodes) {
-        auto Decl = static_cast<LetDeclaration*>(N);
-        forwardDeclareLetDeclaration(Decl, TVs, Constraints);
+        auto Decl = static_cast<FunctionDeclaration*>(N);
+        forwardDeclareFunctionDeclaration(Decl, TVs, Constraints);
       }
     }
     for (auto Nodes: SCCs) {
       for (auto N: Nodes) {
-        auto Decl = static_cast<LetDeclaration*>(N);
+        auto Decl = static_cast<FunctionDeclaration*>(N);
         Decl->IsCycleActive = true;
       }
       for (auto N: Nodes) {
-        auto Decl = static_cast<LetDeclaration*>(N);
-        inferLetDeclaration(Decl);
+        auto Decl = static_cast<FunctionDeclaration*>(N);
+        inferFunctionDeclaration(Decl);
       }
       for (auto N: Nodes) {
-        auto Decl = static_cast<LetDeclaration*>(N);
+        auto Decl = static_cast<FunctionDeclaration*>(N);
         Decl->IsCycleActive = false;
       }
     }
+    setContext(SF->Ctx);
     infer(SF);
-    popContext();
     solve(new CMany(*SF->Ctx->Constraints));
     checkTypeclassSigs(SF);
   }

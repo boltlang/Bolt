@@ -197,16 +197,16 @@ namespace bolt {
     void addConstraint(Constraint* Constraint);
 
     void forwardDeclare(Node* Node);
-    void forwardDeclareLetDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
+    void forwardDeclareFunctionDeclaration(FunctionDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
 
     Type* inferExpression(Expression* Expression);
-    Type* inferTypeExpression(TypeExpression* TE);
+    Type* inferTypeExpression(TypeExpression* TE, bool IsPoly = true);
     Type* inferLiteral(Literal* Lit);
 
     Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
 
     void infer(Node* node);
-    void inferLetDeclaration(LetDeclaration* N);
+    void inferFunctionDeclaration(FunctionDeclaration* N);
 
     Constraint* convertToConstraint(ConstraintExpression* C);
 

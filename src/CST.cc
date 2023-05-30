@@ -69,9 +69,9 @@ namespace bolt {
         }
         break;
       }
-      case NodeKind::LetDeclaration:
+      case NodeKind::FunctionDeclaration:
       {
-        auto Decl = static_cast<LetDeclaration*>(X);
+        auto Decl = static_cast<FunctionDeclaration*>(X);
         for (auto Param: Decl->Params) {
           visitPattern(Param->Pattern, Param);
         }
@@ -112,10 +112,16 @@ namespace bolt {
         }
         break;
       }
-      case NodeKind::LetDeclaration:
+      case NodeKind::VariableDeclaration:
       {
-        auto Decl = static_cast<LetDeclaration*>(X);
+        auto Decl = static_cast<VariableDeclaration*>(X);
         visitPattern(Decl->Pattern, Decl);
+        break;
+      }
+      case NodeKind::FunctionDeclaration:
+      {
+        auto Decl = static_cast<FunctionDeclaration*>(X);
+        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Var);
         break;
       }
       case NodeKind::RecordDeclaration:
@@ -597,14 +603,14 @@ namespace bolt {
     return Expression->getLastToken();
   }
 
-  Token* LetDeclaration::getFirstToken() const {
+  Token* FunctionDeclaration::getFirstToken() const {
     if (PubKeyword) {
       return PubKeyword;
     }
-    return LetKeyword;
+    return FnKeyword;
   }
 
-  Token* LetDeclaration::getLastToken() const {
+  Token* FunctionDeclaration::getLastToken() const {
     if (Body) {
       return Body->getLastToken();
     }
@@ -613,6 +619,23 @@ namespace bolt {
     }
     if (Params.size()) {
       return Params.back()->getLastToken();
+    }
+    return Name;
+  }
+
+  Token* VariableDeclaration::getFirstToken() const {
+    if (PubKeyword) {
+      return PubKeyword;
+    }
+    return LetKeyword;
+  }
+
+  Token* VariableDeclaration::getLastToken() const {
+    if (Body) {
+      return Body->getLastToken();
+    }
+    if (TypeAssert) {
+      return TypeAssert->getLastToken();
     }
     return Pattern->getLastToken();
   }
@@ -764,6 +787,10 @@ namespace bolt {
 
   std::string LetKeyword::getText() const {
     return "let";
+  }
+
+  std::string FnKeyword::getText() const {
+    return "fn";
   }
 
   std::string MutKeyword::getText() const {

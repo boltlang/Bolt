@@ -12,170 +12,96 @@ namespace bolt {
   public:
 
     void visit(Node* N) {
+
+#define BOLT_GEN_CASE(name) \
+        case NodeKind::name: \
+          return static_cast<D*>(this)->visit ## name(static_cast<name*>(N));
+
       switch (N->getKind()) {
-        case NodeKind::Equals:
-          return static_cast<D*>(this)->visitEquals(static_cast<Equals*>(N));
-        case NodeKind::Colon:
-          return static_cast<D*>(this)->visitColon(static_cast<Colon*>(N));
-        case NodeKind::Comma:
-          return static_cast<D*>(this)->visitComma(static_cast<Comma*>(N));
-        case NodeKind::Dot:
-          return static_cast<D*>(this)->visitDot(static_cast<Dot*>(N));
-        case NodeKind::DotDot:
-          return static_cast<D*>(this)->visitDotDot(static_cast<DotDot*>(N));
-        case NodeKind::Tilde:
-          return static_cast<D*>(this)->visitTilde(static_cast<Tilde*>(N));
-        case NodeKind::LParen:
-          return static_cast<D*>(this)->visitLParen(static_cast<LParen*>(N));
-        case NodeKind::RParen:
-          return static_cast<D*>(this)->visitRParen(static_cast<RParen*>(N));
-        case NodeKind::LBracket:
-          return static_cast<D*>(this)->visitLBracket(static_cast<LBracket*>(N));
-        case NodeKind::RBracket:
-          return static_cast<D*>(this)->visitRBracket(static_cast<RBracket*>(N));
-        case NodeKind::LBrace:
-          return static_cast<D*>(this)->visitLBrace(static_cast<LBrace*>(N));
-        case NodeKind::RBrace:
-          return static_cast<D*>(this)->visitRBrace(static_cast<RBrace*>(N));
-        case NodeKind::RArrow:
-          return static_cast<D*>(this)->visitRArrow(static_cast<RArrow*>(N));
-        case NodeKind::RArrowAlt:
-          return static_cast<D*>(this)->visitRArrowAlt(static_cast<RArrowAlt*>(N));
-        case NodeKind::LetKeyword:
-          return static_cast<D*>(this)->visitLetKeyword(static_cast<LetKeyword*>(N));
-        case NodeKind::MutKeyword:
-          return static_cast<D*>(this)->visitMutKeyword(static_cast<MutKeyword*>(N));
-        case NodeKind::PubKeyword:
-          return static_cast<D*>(this)->visitPubKeyword(static_cast<PubKeyword*>(N));
-        case NodeKind::TypeKeyword:
-          return static_cast<D*>(this)->visitTypeKeyword(static_cast<TypeKeyword*>(N));
-        case NodeKind::ReturnKeyword:
-          return static_cast<D*>(this)->visitReturnKeyword(static_cast<ReturnKeyword*>(N));
-        case NodeKind::ModKeyword:
-          return static_cast<D*>(this)->visitModKeyword(static_cast<ModKeyword*>(N));
-        case NodeKind::StructKeyword:
-          return static_cast<D*>(this)->visitStructKeyword(static_cast<StructKeyword*>(N));
-        case NodeKind::EnumKeyword:
-          return static_cast<D*>(this)->visitEnumKeyword(static_cast<EnumKeyword*>(N));
-        case NodeKind::ClassKeyword:
-          return static_cast<D*>(this)->visitClassKeyword(static_cast<ClassKeyword*>(N));
-        case NodeKind::InstanceKeyword:
-          return static_cast<D*>(this)->visitInstanceKeyword(static_cast<InstanceKeyword*>(N));
-        case NodeKind::ElifKeyword:
-          return static_cast<D*>(this)->visitElifKeyword(static_cast<ElifKeyword*>(N));
-        case NodeKind::IfKeyword:
-          return static_cast<D*>(this)->visitIfKeyword(static_cast<IfKeyword*>(N));
-        case NodeKind::ElseKeyword:
-          return static_cast<D*>(this)->visitElseKeyword(static_cast<ElseKeyword*>(N));
-        case NodeKind::MatchKeyword:
-          return static_cast<D*>(this)->visitMatchKeyword(static_cast<MatchKeyword*>(N));
-        case NodeKind::Invalid:
-          return static_cast<D*>(this)->visitInvalid(static_cast<Invalid*>(N));
-        case NodeKind::EndOfFile:
-          return static_cast<D*>(this)->visitEndOfFile(static_cast<EndOfFile*>(N));
-        case NodeKind::BlockStart:
-          return static_cast<D*>(this)->visitBlockStart(static_cast<BlockStart*>(N));
-        case NodeKind::BlockEnd:
-          return static_cast<D*>(this)->visitBlockEnd(static_cast<BlockEnd*>(N));
-        case NodeKind::LineFoldEnd:
-          return static_cast<D*>(this)->visitLineFoldEnd(static_cast<LineFoldEnd*>(N));
-        case NodeKind::CustomOperator:
-          return static_cast<D*>(this)->visitCustomOperator(static_cast<CustomOperator*>(N));
-        case NodeKind::Assignment:
-          return static_cast<D*>(this)->visitAssignment(static_cast<Assignment*>(N));
-        case NodeKind::Identifier:
-          return static_cast<D*>(this)->visitIdentifier(static_cast<Identifier*>(N));
-        case NodeKind::IdentifierAlt:
-          return static_cast<D*>(this)->visitIdentifierAlt(static_cast<IdentifierAlt*>(N));
-        case NodeKind::StringLiteral:
-          return static_cast<D*>(this)->visitStringLiteral(static_cast<StringLiteral*>(N));
-        case NodeKind::IntegerLiteral:
-          return static_cast<D*>(this)->visitIntegerLiteral(static_cast<IntegerLiteral*>(N));
-        case NodeKind::TypeclassConstraintExpression:
-          return static_cast<D*>(this)->visitTypeclassConstraintExpression(static_cast<TypeclassConstraintExpression*>(N));
-        case NodeKind::EqualityConstraintExpression:
-          return static_cast<D*>(this)->visitEqualityConstraintExpression(static_cast<EqualityConstraintExpression*>(N));
-        case NodeKind::QualifiedTypeExpression:
-          return static_cast<D*>(this)->visitQualifiedTypeExpression(static_cast<QualifiedTypeExpression*>(N));
-        case NodeKind::ReferenceTypeExpression:
-          return static_cast<D*>(this)->visitReferenceTypeExpression(static_cast<ReferenceTypeExpression*>(N));
-        case NodeKind::ArrowTypeExpression:
-          return static_cast<D*>(this)->visitArrowTypeExpression(static_cast<ArrowTypeExpression*>(N));
-        case NodeKind::AppTypeExpression:
-          return static_cast<D*>(this)->visitAppTypeExpression(static_cast<AppTypeExpression*>(N));
-        case NodeKind::VarTypeExpression:
-          return static_cast<D*>(this)->visitVarTypeExpression(static_cast<VarTypeExpression*>(N));
-        case NodeKind::NestedTypeExpression:
-          return static_cast<D*>(this)->visitNestedTypeExpression(static_cast<NestedTypeExpression*>(N));
-        case NodeKind::TupleTypeExpression:
-          return static_cast<D*>(this)->visitTupleTypeExpression(static_cast<TupleTypeExpression*>(N));
-        case NodeKind::BindPattern:
-          return static_cast<D*>(this)->visitBindPattern(static_cast<BindPattern*>(N));
-        case NodeKind::LiteralPattern:
-          return static_cast<D*>(this)->visitLiteralPattern(static_cast<LiteralPattern*>(N));
-        case NodeKind::NamedPattern:
-          return static_cast<D*>(this)->visitNamedPattern(static_cast<NamedPattern*>(N));
-        case NodeKind::NestedPattern:
-          return static_cast<D*>(this)->visitNestedPattern(static_cast<NestedPattern*>(N));
-        case NodeKind::ReferenceExpression:
-          return static_cast<D*>(this)->visitReferenceExpression(static_cast<ReferenceExpression*>(N));
-        case NodeKind::MatchCase:
-          return static_cast<D*>(this)->visitMatchCase(static_cast<MatchCase*>(N));
-        case NodeKind::MatchExpression:
-          return static_cast<D*>(this)->visitMatchExpression(static_cast<MatchExpression*>(N));
-        case NodeKind::MemberExpression:
-          return static_cast<D*>(this)->visitMemberExpression(static_cast<MemberExpression*>(N));
-        case NodeKind::TupleExpression:
-          return static_cast<D*>(this)->visitTupleExpression(static_cast<TupleExpression*>(N));
-        case NodeKind::NestedExpression:
-          return static_cast<D*>(this)->visitNestedExpression(static_cast<NestedExpression*>(N));
-        case NodeKind::ConstantExpression:
-          return static_cast<D*>(this)->visitConstantExpression(static_cast<ConstantExpression*>(N));
-        case NodeKind::CallExpression:
-          return static_cast<D*>(this)->visitCallExpression(static_cast<CallExpression*>(N));
-        case NodeKind::InfixExpression:
-          return static_cast<D*>(this)->visitInfixExpression(static_cast<InfixExpression*>(N));
-        case NodeKind::PrefixExpression:
-          return static_cast<D*>(this)->visitPrefixExpression(static_cast<PrefixExpression*>(N));
-        case NodeKind::RecordExpressionField:
-          return static_cast<D*>(this)->visitRecordExpressionField(static_cast<RecordExpressionField*>(N));
-        case NodeKind::RecordExpression:
-          return static_cast<D*>(this)->visitRecordExpression(static_cast<RecordExpression*>(N));
-        case NodeKind::ExpressionStatement:
-          return static_cast<D*>(this)->visitExpressionStatement(static_cast<ExpressionStatement*>(N));
-        case NodeKind::ReturnStatement:
-          return static_cast<D*>(this)->visitReturnStatement(static_cast<ReturnStatement*>(N));
-        case NodeKind::IfStatement:
-          return static_cast<D*>(this)->visitIfStatement(static_cast<IfStatement*>(N));
-        case NodeKind::IfStatementPart:
-          return static_cast<D*>(this)->visitIfStatementPart(static_cast<IfStatementPart*>(N));
-        case NodeKind::TypeAssert:
-          return static_cast<D*>(this)->visitTypeAssert(static_cast<TypeAssert*>(N));
-        case NodeKind::Parameter:
-          return static_cast<D*>(this)->visitParameter(static_cast<Parameter*>(N));
-        case NodeKind::LetBlockBody:
-          return static_cast<D*>(this)->visitLetBlockBody(static_cast<LetBlockBody*>(N));
-        case NodeKind::LetExprBody:
-          return static_cast<D*>(this)->visitLetExprBody(static_cast<LetExprBody*>(N));
-        case NodeKind::LetDeclaration:
-          return static_cast<D*>(this)->visitLetDeclaration(static_cast<LetDeclaration*>(N));
-        case NodeKind::RecordDeclarationField:
-          return static_cast<D*>(this)->visitRecordDeclarationField(static_cast<RecordDeclarationField*>(N));
-        case NodeKind::RecordDeclaration:
-          return static_cast<D*>(this)->visitRecordDeclaration(static_cast<RecordDeclaration*>(N));
-        case NodeKind::VariantDeclaration:
-          return static_cast<D*>(this)->visitVariantDeclaration(static_cast<VariantDeclaration*>(N));
-        case NodeKind::TupleVariantDeclarationMember:
-          return static_cast<D*>(this)->visitTupleVariantDeclarationMember(static_cast<TupleVariantDeclarationMember*>(N));
-        case NodeKind::RecordVariantDeclarationMember:
-          return static_cast<D*>(this)->visitRecordVariantDeclarationMember(static_cast<RecordVariantDeclarationMember*>(N));
-        case NodeKind::ClassDeclaration:
-          return static_cast<D*>(this)->visitClassDeclaration(static_cast<ClassDeclaration*>(N));
-        case NodeKind::InstanceDeclaration:
-          return static_cast<D*>(this)->visitInstanceDeclaration(static_cast<InstanceDeclaration*>(N));
-        case NodeKind::SourceFile:
-          return static_cast<D*>(this)->visitSourceFile(static_cast<SourceFile*>(N));
-     }
+        BOLT_GEN_CASE(Equals)
+        BOLT_GEN_CASE(Colon)
+        BOLT_GEN_CASE(Comma)
+        BOLT_GEN_CASE(Dot)
+        BOLT_GEN_CASE(DotDot)
+        BOLT_GEN_CASE(Tilde)
+        BOLT_GEN_CASE(LParen)
+        BOLT_GEN_CASE(RParen)
+        BOLT_GEN_CASE(LBracket)
+        BOLT_GEN_CASE(RBracket)
+        BOLT_GEN_CASE(LBrace)
+        BOLT_GEN_CASE(RBrace)
+        BOLT_GEN_CASE(RArrow)
+        BOLT_GEN_CASE(RArrowAlt)
+        BOLT_GEN_CASE(LetKeyword)
+        BOLT_GEN_CASE(FnKeyword)
+        BOLT_GEN_CASE(MutKeyword)
+        BOLT_GEN_CASE(PubKeyword)
+        BOLT_GEN_CASE(TypeKeyword)
+        BOLT_GEN_CASE(ReturnKeyword)
+        BOLT_GEN_CASE(ModKeyword)
+        BOLT_GEN_CASE(StructKeyword)
+        BOLT_GEN_CASE(EnumKeyword)
+        BOLT_GEN_CASE(ClassKeyword)
+        BOLT_GEN_CASE(InstanceKeyword)
+        BOLT_GEN_CASE(ElifKeyword)
+        BOLT_GEN_CASE(IfKeyword)
+        BOLT_GEN_CASE(ElseKeyword)
+        BOLT_GEN_CASE(MatchKeyword)
+        BOLT_GEN_CASE(Invalid)
+        BOLT_GEN_CASE(EndOfFile)
+        BOLT_GEN_CASE(BlockStart)
+        BOLT_GEN_CASE(BlockEnd)
+        BOLT_GEN_CASE(LineFoldEnd)
+        BOLT_GEN_CASE(CustomOperator)
+        BOLT_GEN_CASE(Assignment)
+        BOLT_GEN_CASE(Identifier)
+        BOLT_GEN_CASE(IdentifierAlt)
+        BOLT_GEN_CASE(StringLiteral)
+        BOLT_GEN_CASE(IntegerLiteral)
+        BOLT_GEN_CASE(TypeclassConstraintExpression)
+        BOLT_GEN_CASE(EqualityConstraintExpression)
+        BOLT_GEN_CASE(QualifiedTypeExpression)
+        BOLT_GEN_CASE(ReferenceTypeExpression)
+        BOLT_GEN_CASE(ArrowTypeExpression)
+        BOLT_GEN_CASE(AppTypeExpression)
+        BOLT_GEN_CASE(VarTypeExpression)
+        BOLT_GEN_CASE(NestedTypeExpression)
+        BOLT_GEN_CASE(TupleTypeExpression)
+        BOLT_GEN_CASE(BindPattern)
+        BOLT_GEN_CASE(LiteralPattern)
+        BOLT_GEN_CASE(NamedPattern)
+        BOLT_GEN_CASE(NestedPattern)
+        BOLT_GEN_CASE(ReferenceExpression)
+        BOLT_GEN_CASE(MatchCase)
+        BOLT_GEN_CASE(MatchExpression)
+        BOLT_GEN_CASE(MemberExpression)
+        BOLT_GEN_CASE(TupleExpression)
+        BOLT_GEN_CASE(NestedExpression)
+        BOLT_GEN_CASE(ConstantExpression)
+        BOLT_GEN_CASE(CallExpression)
+        BOLT_GEN_CASE(InfixExpression)
+        BOLT_GEN_CASE(PrefixExpression)
+        BOLT_GEN_CASE(RecordExpressionField)
+        BOLT_GEN_CASE(RecordExpression)
+        BOLT_GEN_CASE(ExpressionStatement)
+        BOLT_GEN_CASE(ReturnStatement)
+        BOLT_GEN_CASE(IfStatement)
+        BOLT_GEN_CASE(IfStatementPart)
+        BOLT_GEN_CASE(TypeAssert)
+        BOLT_GEN_CASE(Parameter)
+        BOLT_GEN_CASE(LetBlockBody)
+        BOLT_GEN_CASE(LetExprBody)
+        BOLT_GEN_CASE(FunctionDeclaration)
+        BOLT_GEN_CASE(VariableDeclaration)
+        BOLT_GEN_CASE(RecordDeclaration)
+        BOLT_GEN_CASE(RecordDeclarationField)
+        BOLT_GEN_CASE(VariantDeclaration)
+        BOLT_GEN_CASE(TupleVariantDeclarationMember)
+        BOLT_GEN_CASE(RecordVariantDeclarationMember)
+        BOLT_GEN_CASE(ClassDeclaration)
+        BOLT_GEN_CASE(InstanceDeclaration)
+        BOLT_GEN_CASE(SourceFile)
+      }
     }
 
   protected:
@@ -245,6 +171,10 @@ namespace bolt {
     }
 
     void visitLetKeyword(LetKeyword* N) {
+      visitToken(N);
+    }
+
+    void visitFnKeyword(FnKeyword* N) {
       visitToken(N);
     }
 
@@ -500,7 +430,11 @@ namespace bolt {
       visitLetBody(N);
     }
 
-    void visitLetDeclaration(LetDeclaration* N) {
+    void visitFunctionDeclaration(FunctionDeclaration* N) {
+      visitNode(N);
+    }
+
+    void visitVariableDeclaration(VariableDeclaration* N) {
       visitNode(N);
     }
 
@@ -543,252 +477,96 @@ namespace bolt {
   public:
 
     void visitEachChild(Node* N) {
+
+#define BOLT_GEN_CHILD_CASE(name) \
+      case NodeKind::name: \
+        visitEachChild(static_cast<name*>(N)); \
+        break;
+
       switch (N->getKind()) {
-        case NodeKind::Equals:
-          visitEachChild(static_cast<Equals*>(N));
-          break;
-        case NodeKind::Colon:
-          visitEachChild(static_cast<Colon*>(N));
-          break;
-        case NodeKind::Comma:
-          visitEachChild(static_cast<Comma*>(N));
-          break;
-        case NodeKind::Dot:
-          visitEachChild(static_cast<Dot*>(N));
-          break;
-        case NodeKind::DotDot:
-          visitEachChild(static_cast<DotDot*>(N));
-          break;
-        case NodeKind::Tilde:
-          visitEachChild(static_cast<Tilde*>(N));
-          break;
-        case NodeKind::LParen:
-          visitEachChild(static_cast<LParen*>(N));
-          break;
-        case NodeKind::RParen:
-          visitEachChild(static_cast<RParen*>(N));
-          break;
-        case NodeKind::LBracket:
-          visitEachChild(static_cast<LBracket*>(N));
-          break;
-        case NodeKind::RBracket:
-          visitEachChild(static_cast<RBracket*>(N));
-          break;
-        case NodeKind::LBrace:
-          visitEachChild(static_cast<LBrace*>(N));
-          break;
-        case NodeKind::RBrace:
-          visitEachChild(static_cast<RBrace*>(N));
-          break;
-        case NodeKind::RArrow:
-          visitEachChild(static_cast<RArrow*>(N));
-          break;
-        case NodeKind::RArrowAlt:
-          visitEachChild(static_cast<RArrowAlt*>(N));
-          break;
-        case NodeKind::LetKeyword:
-          visitEachChild(static_cast<LetKeyword*>(N));
-          break;
-        case NodeKind::MutKeyword:
-          visitEachChild(static_cast<MutKeyword*>(N));
-          break;
-        case NodeKind::PubKeyword:
-          visitEachChild(static_cast<PubKeyword*>(N));
-          break;
-        case NodeKind::TypeKeyword:
-          visitEachChild(static_cast<TypeKeyword*>(N));
-          break;
-        case NodeKind::ReturnKeyword:
-          visitEachChild(static_cast<ReturnKeyword*>(N));
-          break;
-        case NodeKind::ModKeyword:
-          visitEachChild(static_cast<ModKeyword*>(N));
-          break;
-        case NodeKind::StructKeyword:
-          visitEachChild(static_cast<StructKeyword*>(N));
-          break;
-        case NodeKind::EnumKeyword:
-          visitEachChild(static_cast<EnumKeyword*>(N));
-          break;
-        case NodeKind::ClassKeyword:
-          visitEachChild(static_cast<ClassKeyword*>(N));
-          break;
-        case NodeKind::InstanceKeyword:
-          visitEachChild(static_cast<InstanceKeyword*>(N));
-          break;
-        case NodeKind::ElifKeyword:
-          visitEachChild(static_cast<ElifKeyword*>(N));
-          break;
-        case NodeKind::IfKeyword:
-          visitEachChild(static_cast<IfKeyword*>(N));
-          break;
-        case NodeKind::ElseKeyword:
-          visitEachChild(static_cast<ElseKeyword*>(N));
-          break;
-        case NodeKind::MatchKeyword:
-          visitEachChild(static_cast<MatchKeyword*>(N));
-          break;
-        case NodeKind::Invalid:
-          visitEachChild(static_cast<Invalid*>(N));
-          break;
-        case NodeKind::EndOfFile:
-          visitEachChild(static_cast<EndOfFile*>(N));
-          break;
-        case NodeKind::BlockStart:
-          visitEachChild(static_cast<BlockStart*>(N));
-          break;
-        case NodeKind::BlockEnd:
-          visitEachChild(static_cast<BlockEnd*>(N));
-          break;
-        case NodeKind::LineFoldEnd:
-          visitEachChild(static_cast<LineFoldEnd*>(N));
-          break;
-        case NodeKind::CustomOperator:
-          visitEachChild(static_cast<CustomOperator*>(N));
-          break;
-        case NodeKind::Assignment:
-          visitEachChild(static_cast<Assignment*>(N));
-          break;
-        case NodeKind::Identifier:
-          visitEachChild(static_cast<Identifier*>(N));
-          break;
-        case NodeKind::IdentifierAlt:
-          visitEachChild(static_cast<IdentifierAlt*>(N));
-          break;
-        case NodeKind::StringLiteral:
-          visitEachChild(static_cast<StringLiteral*>(N));
-          break;
-        case NodeKind::IntegerLiteral:
-          visitEachChild(static_cast<IntegerLiteral*>(N));
-          break;
-        case NodeKind::TypeclassConstraintExpression:
-          visitEachChild(static_cast<TypeclassConstraintExpression*>(N));
-          break;
-        case NodeKind::EqualityConstraintExpression:
-          visitEachChild(static_cast<EqualityConstraintExpression*>(N));
-          break;
-        case NodeKind::QualifiedTypeExpression:
-          visitEachChild(static_cast<QualifiedTypeExpression*>(N));
-          break;
-        case NodeKind::ReferenceTypeExpression:
-          visitEachChild(static_cast<ReferenceTypeExpression*>(N));
-          break;
-        case NodeKind::ArrowTypeExpression:
-          visitEachChild(static_cast<ArrowTypeExpression*>(N));
-          break;
-        case NodeKind::AppTypeExpression:
-          visitEachChild(static_cast<AppTypeExpression*>(N));
-          break;
-        case NodeKind::VarTypeExpression:
-          visitEachChild(static_cast<VarTypeExpression*>(N));
-          break;
-        case NodeKind::NestedTypeExpression:
-          visitEachChild(static_cast<NestedTypeExpression*>(N));
-          break;
-        case NodeKind::TupleTypeExpression:
-          visitEachChild(static_cast<TupleTypeExpression*>(N));
-          break;
-        case NodeKind::BindPattern:
-          visitEachChild(static_cast<BindPattern*>(N));
-          break;
-        case NodeKind::LiteralPattern:
-          visitEachChild(static_cast<LiteralPattern*>(N));
-          break;
-        case NodeKind::NamedPattern:
-          visitEachChild(static_cast<NamedPattern*>(N));
-          break;
-        case NodeKind::NestedPattern:
-          visitEachChild(static_cast<NestedPattern*>(N));
-          break;
-        case NodeKind::ReferenceExpression:
-          visitEachChild(static_cast<ReferenceExpression*>(N));
-          break;
-        case NodeKind::MatchCase:
-          visitEachChild(static_cast<MatchCase*>(N));
-          break;
-        case NodeKind::MatchExpression:
-          visitEachChild(static_cast<MatchExpression*>(N));
-          break;
-        case NodeKind::MemberExpression:
-          visitEachChild(static_cast<MemberExpression*>(N));
-          break;
-        case NodeKind::TupleExpression:
-          visitEachChild(static_cast<TupleExpression*>(N));
-          break;
-        case NodeKind::NestedExpression:
-          visitEachChild(static_cast<NestedExpression*>(N));
-          break;
-        case NodeKind::ConstantExpression:
-          visitEachChild(static_cast<ConstantExpression*>(N));
-          break;
-        case NodeKind::CallExpression:
-          visitEachChild(static_cast<CallExpression*>(N));
-          break;
-        case NodeKind::InfixExpression:
-          visitEachChild(static_cast<InfixExpression*>(N));
-          break;
-        case NodeKind::PrefixExpression:
-          visitEachChild(static_cast<PrefixExpression*>(N));
-          break;
-        case NodeKind::RecordExpressionField:
-          visitEachChild(static_cast<RecordExpressionField*>(N));
-          break;
-        case NodeKind::RecordExpression:
-          visitEachChild(static_cast<RecordExpression*>(N));
-          break;
-        case NodeKind::ExpressionStatement:
-          visitEachChild(static_cast<ExpressionStatement*>(N));
-          break;
-        case NodeKind::ReturnStatement:
-          visitEachChild(static_cast<ReturnStatement*>(N));
-          break;
-        case NodeKind::IfStatement:
-          visitEachChild(static_cast<IfStatement*>(N));
-          break;
-        case NodeKind::IfStatementPart:
-          visitEachChild(static_cast<IfStatementPart*>(N));
-          break;
-        case NodeKind::TypeAssert:
-          visitEachChild(static_cast<TypeAssert*>(N));
-          break;
-        case NodeKind::Parameter:
-          visitEachChild(static_cast<Parameter*>(N));
-          break;
-        case NodeKind::LetBlockBody:
-          visitEachChild(static_cast<LetBlockBody*>(N));
-          break;
-        case NodeKind::LetExprBody:
-          visitEachChild(static_cast<LetExprBody*>(N));
-          break;
-        case NodeKind::LetDeclaration:
-          visitEachChild(static_cast<LetDeclaration*>(N));
-          break;
-        case NodeKind::RecordDeclaration:
-          visitEachChild(static_cast<RecordDeclaration*>(N));
-          break;
-        case NodeKind::RecordDeclarationField:
-          visitEachChild(static_cast<RecordDeclarationField*>(N));
-          break;
-        case NodeKind::VariantDeclaration:
-          visitEachChild(static_cast<VariantDeclaration*>(N));
-          break;
-        case NodeKind::TupleVariantDeclarationMember:
-          visitEachChild(static_cast<TupleVariantDeclarationMember*>(N));
-          break;
-        case NodeKind::RecordVariantDeclarationMember:
-          visitEachChild(static_cast<RecordVariantDeclarationMember*>(N));
-          break;
-        case NodeKind::ClassDeclaration:
-          visitEachChild(static_cast<ClassDeclaration*>(N));
-          break;
-        case NodeKind::InstanceDeclaration:
-          visitEachChild(static_cast<InstanceDeclaration*>(N));
-          break;
-        case NodeKind::SourceFile:
-          visitEachChild(static_cast<SourceFile*>(N));
-          break;
-        default:
-          ZEN_UNREACHABLE
+        BOLT_GEN_CHILD_CASE(Equals)
+        BOLT_GEN_CHILD_CASE(Colon)
+        BOLT_GEN_CHILD_CASE(Comma)
+        BOLT_GEN_CHILD_CASE(Dot)
+        BOLT_GEN_CHILD_CASE(DotDot)
+        BOLT_GEN_CHILD_CASE(Tilde)
+        BOLT_GEN_CHILD_CASE(LParen)
+        BOLT_GEN_CHILD_CASE(RParen)
+        BOLT_GEN_CHILD_CASE(LBracket)
+        BOLT_GEN_CHILD_CASE(RBracket)
+        BOLT_GEN_CHILD_CASE(LBrace)
+        BOLT_GEN_CHILD_CASE(RBrace)
+        BOLT_GEN_CHILD_CASE(RArrow)
+        BOLT_GEN_CHILD_CASE(RArrowAlt)
+        BOLT_GEN_CHILD_CASE(LetKeyword)
+        BOLT_GEN_CHILD_CASE(FnKeyword)
+        BOLT_GEN_CHILD_CASE(MutKeyword)
+        BOLT_GEN_CHILD_CASE(PubKeyword)
+        BOLT_GEN_CHILD_CASE(TypeKeyword)
+        BOLT_GEN_CHILD_CASE(ReturnKeyword)
+        BOLT_GEN_CHILD_CASE(ModKeyword)
+        BOLT_GEN_CHILD_CASE(StructKeyword)
+        BOLT_GEN_CHILD_CASE(EnumKeyword)
+        BOLT_GEN_CHILD_CASE(ClassKeyword)
+        BOLT_GEN_CHILD_CASE(InstanceKeyword)
+        BOLT_GEN_CHILD_CASE(ElifKeyword)
+        BOLT_GEN_CHILD_CASE(IfKeyword)
+        BOLT_GEN_CHILD_CASE(ElseKeyword)
+        BOLT_GEN_CHILD_CASE(MatchKeyword)
+        BOLT_GEN_CHILD_CASE(Invalid)
+        BOLT_GEN_CHILD_CASE(EndOfFile)
+        BOLT_GEN_CHILD_CASE(BlockStart)
+        BOLT_GEN_CHILD_CASE(BlockEnd)
+        BOLT_GEN_CHILD_CASE(LineFoldEnd)
+        BOLT_GEN_CHILD_CASE(CustomOperator)
+        BOLT_GEN_CHILD_CASE(Assignment)
+        BOLT_GEN_CHILD_CASE(Identifier)
+        BOLT_GEN_CHILD_CASE(IdentifierAlt)
+        BOLT_GEN_CHILD_CASE(StringLiteral)
+        BOLT_GEN_CHILD_CASE(IntegerLiteral)
+        BOLT_GEN_CHILD_CASE(TypeclassConstraintExpression)
+        BOLT_GEN_CHILD_CASE(EqualityConstraintExpression)
+        BOLT_GEN_CHILD_CASE(QualifiedTypeExpression)
+        BOLT_GEN_CHILD_CASE(ReferenceTypeExpression)
+        BOLT_GEN_CHILD_CASE(ArrowTypeExpression)
+        BOLT_GEN_CHILD_CASE(AppTypeExpression)
+        BOLT_GEN_CHILD_CASE(VarTypeExpression)
+        BOLT_GEN_CHILD_CASE(NestedTypeExpression)
+        BOLT_GEN_CHILD_CASE(TupleTypeExpression)
+        BOLT_GEN_CHILD_CASE(BindPattern)
+        BOLT_GEN_CHILD_CASE(LiteralPattern)
+        BOLT_GEN_CHILD_CASE(NamedPattern)
+        BOLT_GEN_CHILD_CASE(NestedPattern)
+        BOLT_GEN_CHILD_CASE(ReferenceExpression)
+        BOLT_GEN_CHILD_CASE(MatchCase)
+        BOLT_GEN_CHILD_CASE(MatchExpression)
+        BOLT_GEN_CHILD_CASE(MemberExpression)
+        BOLT_GEN_CHILD_CASE(TupleExpression)
+        BOLT_GEN_CHILD_CASE(NestedExpression)
+        BOLT_GEN_CHILD_CASE(ConstantExpression)
+        BOLT_GEN_CHILD_CASE(CallExpression)
+        BOLT_GEN_CHILD_CASE(InfixExpression)
+        BOLT_GEN_CHILD_CASE(PrefixExpression)
+        BOLT_GEN_CHILD_CASE(RecordExpressionField)
+        BOLT_GEN_CHILD_CASE(RecordExpression)
+        BOLT_GEN_CHILD_CASE(ExpressionStatement)
+        BOLT_GEN_CHILD_CASE(ReturnStatement)
+        BOLT_GEN_CHILD_CASE(IfStatement)
+        BOLT_GEN_CHILD_CASE(IfStatementPart)
+        BOLT_GEN_CHILD_CASE(TypeAssert)
+        BOLT_GEN_CHILD_CASE(Parameter)
+        BOLT_GEN_CHILD_CASE(LetBlockBody)
+        BOLT_GEN_CHILD_CASE(LetExprBody)
+        BOLT_GEN_CHILD_CASE(FunctionDeclaration)
+        BOLT_GEN_CHILD_CASE(VariableDeclaration)
+        BOLT_GEN_CHILD_CASE(RecordDeclaration)
+        BOLT_GEN_CHILD_CASE(RecordDeclarationField)
+        BOLT_GEN_CHILD_CASE(VariantDeclaration)
+        BOLT_GEN_CHILD_CASE(TupleVariantDeclarationMember)
+        BOLT_GEN_CHILD_CASE(RecordVariantDeclarationMember)
+        BOLT_GEN_CHILD_CASE(ClassDeclaration)
+        BOLT_GEN_CHILD_CASE(InstanceDeclaration)
+        BOLT_GEN_CHILD_CASE(SourceFile)
       }
     }
 
@@ -837,6 +615,9 @@ namespace bolt {
     }
 
     void visitEachChild(LetKeyword* N) {
+    }
+
+    void visitEachChild(FnKeyword* N) {
     }
 
     void visitEachChild(MutKeyword* N) {
@@ -1136,18 +917,29 @@ namespace bolt {
       BOLT_VISIT(N->Expression);
     }
 
-    void visitEachChild(LetDeclaration* N) {
+    void visitEachChild(FunctionDeclaration* N) {
+      if (N->PubKeyword) {
+        BOLT_VISIT(N->PubKeyword);
+      }
+      BOLT_VISIT(N->FnKeyword);
+      BOLT_VISIT(N->Name);
+      for (auto Param: N->Params) {
+        BOLT_VISIT(Param);
+      }
+      if (N->TypeAssert) {
+        BOLT_VISIT(N->TypeAssert);
+      }
+      if (N->Body) {
+        BOLT_VISIT(N->Body);
+      }
+    }
+
+    void visitEachChild(VariableDeclaration* N) {
       if (N->PubKeyword) {
         BOLT_VISIT(N->PubKeyword);
       }
       BOLT_VISIT(N->LetKeyword);
-      if (N->MutKeyword) {
-        BOLT_VISIT(N->MutKeyword);
-      }
       BOLT_VISIT(N->Pattern);
-      for (auto Param: N->Params) {
-        BOLT_VISIT(Param);
-      }
       if (N->TypeAssert) {
         BOLT_VISIT(N->TypeAssert);
       }
