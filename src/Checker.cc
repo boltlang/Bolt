@@ -141,7 +141,7 @@ namespace bolt {
     return false;
   }
 
-  void Checker::pushContext(InferContext* Ctx) {
+  void Checker::setContext(InferContext* Ctx) {
     ActiveContext = Ctx;
   }
 
@@ -304,7 +304,7 @@ namespace bolt {
       {
         auto Decl = static_cast<VariantDeclaration*>(X);
 
-        pushContext(Decl->Ctx);
+        setContext(Decl->Ctx);
 
         std::vector<TVar*> Vars;
         for (auto TE: Decl->TVs) {
@@ -353,7 +353,7 @@ namespace bolt {
       {
         auto Decl = static_cast<RecordDeclaration*>(X);
 
-        pushContext(Decl->Ctx);
+        setContext(Decl->Ctx);
 
         std::vector<TVar*> Vars;
         for (auto TE: Decl->Vars) {
@@ -446,7 +446,7 @@ namespace bolt {
 
     auto Let = static_cast<LetDeclaration*>(N);
 
-    pushContext(Let->Ctx);
+    setContext(Let->Ctx);
 
     // If declaring a let-declaration inside a type class declaration,
     // we need to mark that the let-declaration requires this class.
@@ -547,7 +547,7 @@ namespace bolt {
 
   void Checker::inferLetDeclaration(LetDeclaration* Decl) {
 
-    pushContext(Decl->Ctx);
+    setContext(Decl->Ctx);
 
     std::vector<Type*> ParamTypes;
     Type* RetType;
@@ -889,7 +889,7 @@ namespace bolt {
         }
         Ty = createTypeVar();
         for (auto Case: Match->Cases) {
-          pushContext(Case->Ctx);
+          setContext(Case->Ctx);
           auto PattTy = inferPattern(Case->Pattern);
           addConstraint(new CEqual(PattTy, ValTy, Case));
           auto ExprTy = inferExpression(Case->Expression);
@@ -1270,7 +1270,7 @@ namespace bolt {
 
   void Checker::check(SourceFile *SF) {
     initialize(SF);
-    pushContext(SF->Ctx);
+    setContext(SF->Ctx);
     addBinding("String", new Forall(StringType));
     addBinding("Int", new Forall(IntType));
     addBinding("Bool", new Forall(BoolType));

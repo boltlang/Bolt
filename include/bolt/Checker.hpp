@@ -186,7 +186,7 @@ namespace bolt {
     InferContext* ActiveContext;
 
     InferContext& getContext();
-    void pushContext(InferContext* Ctx);
+    void setContext(InferContext* Ctx);
     void popContext();
 
     /**
