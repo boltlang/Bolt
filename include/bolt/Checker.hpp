@@ -9,6 +9,7 @@
 #include "bolt/Type.hpp"
 #include "bolt/Support/Graph.hpp"
 
+#include <cstdlib>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -181,20 +182,23 @@ namespace bolt {
 
     std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
 
-    // std::vector<InferContext*> Contexts;
-    
+    /// Inference context management
+
     InferContext* ActiveContext;
 
     InferContext& getContext();
     void setContext(InferContext* Ctx);
     void popContext();
 
-    /**
-     * The queue that is used during solving to store any unsolved constraints.
-     */
-    std::deque<class Constraint*> Queue;
-
     void addConstraint(Constraint* Constraint);
+
+    /**
+     * Get the return type for the current context. If none could be found, the
+     * program will abort.
+     */
+    Type* getReturnType();
+
+    /// Type inference
 
     void forwardDeclare(Node* Node);
     void forwardDeclareFunctionDeclaration(FunctionDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
@@ -210,6 +214,8 @@ namespace bolt {
 
     Constraint* convertToConstraint(ConstraintExpression* C);
 
+    /// Factory methods 
+
     TCon* createConType(ByteString Name);
     TVar* createTypeVar();
     TVarRigid* createRigidVar(ByteString Name);
@@ -219,11 +225,9 @@ namespace bolt {
       ConstraintSet* Constraints = new ConstraintSet
     );
 
-    void addBinding(ByteString Name, Scheme* Scm);
+    /// Environment manipulation
 
     Scheme* lookup(ByteString Name);
-
-    void initialize(Node* N);
 
     /**
      * Looks up a type/variable and  ensures that it is a monomorphic type.
@@ -239,39 +243,20 @@ namespace bolt {
      */
     Type* lookupMono(ByteString Name);
 
-    /**
-     * Get the return type for the current context. If none could be found, the program will abort.
-     */
-    Type* getReturnType();
+    void addBinding(ByteString Name, Scheme* Scm);
 
-    Type* instantiate(Scheme* S, Node* Source);
-
-    std::vector<TypeclassContext> findInstanceContext(TCon* Ty, TypeclassId& Class);
-    void propagateClasses(TypeclassContext& Classes, Type* Ty);
-    void propagateClassTycon(TypeclassId& Class, TCon* Ty);
-
-    // TODO Remove this
-    Node* Source;
+    /// Constraint solving
 
     /**
-     * Assign a type to a unification variable.
-     *
-     * If there are class constraints, those are propagated.
-     *
-     * If this type variable is solved during inference, it will be removed from
-     * the inference context.
-     *
-     * Other side effects may occur.
+     * The queue that is used during solving to store any unsolved constraints.
      */
-    void join(TVar* A, Type* B);
+    std::deque<class Constraint*> Queue;
 
-    bool unify(Type* A, Type* B);
-
-    void unifyError();
-
-    void solveCEqual(CEqual* C);
+    void solveEqual(CEqual* C);
 
     void solve(Constraint* Constraint);
+
+    /// Helpers
 
     void populate(SourceFile* SF);
 
@@ -280,6 +265,10 @@ namespace bolt {
      * correctly declare the right type classes.
      */
     void checkTypeclassSigs(Node* N);
+
+    Type* instantiate(Scheme* S, Node* Source);
+
+    void initialize(Node* N);
 
   public:
 
