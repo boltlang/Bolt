@@ -73,7 +73,10 @@
         "cfenv": "cpp",
         "typeindex": "cpp",
         "variant": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "__config": "cpp",
+        "__debug": "cpp",
+        "stack": "cpp"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }
