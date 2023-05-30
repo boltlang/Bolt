@@ -118,6 +118,12 @@ namespace bolt {
         return "a function or variable reference";
       case NodeKind::MatchExpression:
         return "a match-expression";
+      case NodeKind::ConstantExpression:
+        return "a literal expression";
+      case NodeKind::IfStatement:
+        return "an if-statement";
+      case NodeKind::IfStatementPart:
+        return "a branch of an if-statement";
       default:
         ZEN_UNREACHABLE
     }

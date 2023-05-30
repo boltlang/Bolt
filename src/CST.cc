@@ -89,6 +89,7 @@ namespace bolt {
     switch (X->getKind()) {
       case NodeKind::LetExprBody:
       case NodeKind::ExpressionStatement:
+      case NodeKind::IfStatement:
       case NodeKind::ReturnStatement:
         break;
       case NodeKind::LetBlockBody:
@@ -99,6 +100,9 @@ namespace bolt {
         }
         break;
       }
+      case NodeKind::InstanceDeclaration:
+        // We ignore let-declarations inside instance-declarations for now
+        break;
       case NodeKind::ClassDeclaration:
       {
         auto Decl = static_cast<ClassDeclaration*>(X);

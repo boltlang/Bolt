@@ -160,9 +160,9 @@ namespace bolt {
         case NodeKind::LetDeclaration:
           return static_cast<D*>(this)->visitLetDeclaration(static_cast<LetDeclaration*>(N));
         case NodeKind::RecordDeclarationField:
-          return static_cast<D*>(this)->visitStructDeclarationField(static_cast<RecordDeclarationField*>(N));
+          return static_cast<D*>(this)->visitRecordDeclarationField(static_cast<RecordDeclarationField*>(N));
         case NodeKind::RecordDeclaration:
-          return static_cast<D*>(this)->visitStructDeclaration(static_cast<RecordDeclaration*>(N));
+          return static_cast<D*>(this)->visitRecordDeclaration(static_cast<RecordDeclaration*>(N));
         case NodeKind::VariantDeclaration:
           return static_cast<D*>(this)->visitVariantDeclaration(static_cast<VariantDeclaration*>(N));
         case NodeKind::TupleVariantDeclarationMember:
@@ -504,11 +504,11 @@ namespace bolt {
       visitNode(N);
     }
 
-    void visitStructDeclarationField(RecordDeclarationField* N) {
+    void visitRecordDeclarationField(RecordDeclarationField* N) {
       visitNode(N);
     }
 
-    void visitStructDeclaration(RecordDeclaration* N) {
+    void visitRecordDeclaration(RecordDeclaration* N) {
       visitNode(N);
     }
 
