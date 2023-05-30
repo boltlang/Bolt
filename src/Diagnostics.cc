@@ -797,12 +797,12 @@ namespace bolt {
         write("due to an equality constraint on ");
         write(describe(E.Source->getKind()));
         write(":\n\n");
-        write(" - left type ");
-        writeType(E.OrigLeft, E.LeftPath);
-        write("\n");
-        write(" - right type ");
-        writeType(E.OrigRight, E.RightPath);
-        write("\n\n");
+        // write(" - left type ");
+        // writeType(E.OrigLeft, E.LeftPath);
+        // write("\n");
+        // write(" - right type ");
+        // writeType(E.OrigRight, E.RightPath);
+        // write("\n\n");
         writeNode(E.Source);
         write("\n");
         // if (E.Left != E.OrigLeft) {
