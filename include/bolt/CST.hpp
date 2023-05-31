@@ -197,12 +197,7 @@ namespace bolt {
       ++RefCount;
     }
 
-    inline void unref() {
-      --RefCount;
-      if (RefCount == 0) {
-        delete this;
-      }
-    }
+    void unref();
 
     void setParents();
 
@@ -249,7 +244,7 @@ namespace bolt {
 
     virtual Scope* getScope();
 
-    virtual ~Node();
+    virtual ~Node() {}
 
   };
 

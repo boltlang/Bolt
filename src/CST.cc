@@ -289,19 +289,26 @@ namespace bolt {
 
   }
 
-  Node::~Node() {
+  void Node::unref() {
 
-    struct UnrefVisitor : public CSTVisitor<UnrefVisitor> {
+    --RefCount;
 
-      void visit(Node* N) {
-        visitEachChild(N);
-        N->unref();
-      }
+    if (RefCount == 0) {
 
-    };
+      // You may be wondering why we aren't unreffing the children in the
+      // destructor. This is due to a behaviour in Clang where a top-level
+      // destructor ~Node() wont get access to the fields in derived classes
+      // because they may already have been destroyed.
+      struct UnrefVisitor : public CSTVisitor<UnrefVisitor> {
+        void visit(Node* N) {
+          N->unref();
+        }
+      };
+      UnrefVisitor V;
+      V.visitEachChild(this);
 
-    UnrefVisitor V;
-    V.visitEachChild(this);
+      delete this;
+    }
 
   }
 
