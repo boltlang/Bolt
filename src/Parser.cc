@@ -160,7 +160,7 @@ namespace bolt {
       }
       default:
         // Tokens.get();
-        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::Identifier, NodeKind::StringLiteral, NodeKind::IntegerLiteral });
+        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::StringLiteral, NodeKind::IntegerLiteral });
         return nullptr;
     }
   }
