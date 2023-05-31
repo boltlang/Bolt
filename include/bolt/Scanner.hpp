@@ -54,6 +54,7 @@ namespace bolt {
   enum class FrameType {
     Block,
     LineFold,
+    Fallthrough,
   };
 
   class Punctuator : public BufferedStream<Token*> {

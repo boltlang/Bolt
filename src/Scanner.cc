@@ -378,22 +378,40 @@ after_string_contents:
 
     auto T0 = Tokens.peek();
 
-    if (llvm::isa<EndOfFile>(T0)) {
-      if (Frames.size() == 1) {
-        return T0;
+    switch (T0->getKind()) {
+      case NodeKind::LBrace:
+        Frames.push(FrameType::Fallthrough);
+        break;
+      case NodeKind::EndOfFile:
+      {
+        if (Frames.size() == 1) {
+          return T0;
+        }
+        auto Frame = Frames.top();
+        Frames.pop();
+        switch (Frame) {
+          case FrameType::Fallthrough:
+            break;
+          case FrameType::Block:
+            return new BlockEnd(T0->getStartLoc());
+          case FrameType::LineFold:
+            return new LineFoldEnd(T0->getStartLoc());
+        }
       }
-      auto Frame = Frames.top();
-      Frames.pop();
-      switch (Frame) {
-        case FrameType::Block:
-          return new BlockEnd(T0->getStartLoc());
-        case FrameType::LineFold:
-          return new LineFoldEnd(T0->getStartLoc());
-      }
+      default:
+        break;
     }
 
     auto RefLoc = Locations.top();
     switch (Frames.top()) {
+      case FrameType::Fallthrough:
+      {
+        if (T0->getKind() == NodeKind::RBrace) {
+          Frames.pop();
+        }
+        Tokens.get();
+        return T0;
+      }
       case FrameType::LineFold:
       {
         if (T0->getStartLine() > RefLoc.Line
