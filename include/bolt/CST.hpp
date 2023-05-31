@@ -77,7 +77,8 @@ namespace bolt {
 
     size_t getLine(size_t Offset) const;
     size_t getColumn(size_t Offset) const;
-    size_t getStartOffset(size_t Line) const;
+    size_t getStartOffsetOfLine(size_t Line) const;
+    size_t getEndOffsetOfLine(size_t Line) const;
 
     size_t getLineCount() const;
 

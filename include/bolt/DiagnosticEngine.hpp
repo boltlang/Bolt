@@ -174,7 +174,7 @@ namespace bolt {
 
     void writeGutter(
       std::size_t GutterWidth,
-      std::size_t Line
+      std::string Text
     );
 
     void writeHighlight(

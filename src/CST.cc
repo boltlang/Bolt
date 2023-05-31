@@ -19,11 +19,20 @@ namespace bolt {
     }
 
   size_t TextFile::getLineCount() const {
-    return LineOffsets.size();
+    return LineOffsets.size()-1;
   }
 
-  size_t TextFile::getStartOffset(size_t Line) const {
+  size_t TextFile::getStartOffsetOfLine(size_t Line) const {
+    ZEN_ASSERT(Line-1 < LineOffsets.size());
     return LineOffsets[Line-1];
+  }
+
+  size_t TextFile::getEndOffsetOfLine(size_t Line) const {
+    ZEN_ASSERT(Line <= LineOffsets.size());
+    if (Line == LineOffsets.size()) {
+      return Text.size();
+    }
+    return LineOffsets[Line];
   }
 
   size_t TextFile::getLine(size_t Offset) const {
@@ -38,7 +47,7 @@ namespace bolt {
 
   size_t TextFile::getColumn(size_t Offset) const {
     auto Line = getLine(Offset);
-    auto StartOffset = getStartOffset(Line);
+    auto StartOffset = getStartOffsetOfLine(Line);
     return Offset - StartOffset + 1 ;
   }
 

@@ -387,17 +387,17 @@ namespace bolt {
 
   void ConsoleDiagnostics::writeGutter(
     std::size_t GutterWidth,
-    std::size_t Line
+    std::string Text
   ) {
-    auto LineNumberDigitCount = countDigits(Line);
-    auto LeadingSpaces = GutterWidth - LineNumberDigitCount;
+    ZEN_ASSERT(Text.size() <= GutterWidth);
+    auto LeadingSpaces = GutterWidth - Text.size();
     Out << "  ";
     setForegroundColor(Color::Black);
     setBackgroundColor(Color::White);
     for (std::size_t i = 0; i < LeadingSpaces; i++) {
       Out << ' ';
     }
-    Out << Line;
+    Out << Text;
     resetStyles();
     Out << " ";
   }
@@ -443,13 +443,14 @@ namespace bolt {
     Color HighlightColor
   ) {
 
+    auto LineCount = File.getLineCount();
     auto Text = File.getText();
     auto StartPos = ToPrint.Start;
     auto EndPos = ToPrint.End;
-    auto StartLine = StartPos.Line-1 > ExcerptLinesPre ? StartPos.Line - ExcerptLinesPost : 1;
-    auto StartOffset = File.getStartOffset(StartLine);
-    auto EndLine = std::min(File.getLineCount(), EndPos.Line + ExcerptLinesPost);
-    auto EndOffset = File.getStartOffset(EndLine+1);
+    auto StartLine = StartPos.Line-1 > ExcerptLinesPre ? StartPos.Line - ExcerptLinesPre : 1;
+    auto StartOffset = File.getStartOffsetOfLine(StartLine);
+    auto EndLine = std::min(LineCount, EndPos.Line + ExcerptLinesPost);
+    auto EndOffset = File.getEndOffsetOfLine(EndLine);
     auto GutterWidth = std::max<std::size_t>(2, countDigits(EndLine+1));
     auto HighlightStart = ToHighlight.Start;
     auto HighlightEnd = ToHighlight.End;
@@ -457,19 +458,21 @@ namespace bolt {
 
     std::size_t CurrColumn = 1;
     std::size_t CurrLine = StartLine;
-    writeGutter(GutterWidth, CurrLine);
-    for (std::size_t i = StartOffset; i < EndOffset; i++) {
-      auto C = Text[i];
-      Out << C;
+    bool AtBlankLine = true;
+    for (std::size_t I = StartOffset; I < EndOffset; I++) {
+      auto C = Text[I];
+      if (AtBlankLine) {
+        writeGutter(GutterWidth, std::to_string(CurrLine));
+      }
       if (C == '\n') {
+        Out << C;
         writeHighlight(GutterWidth, HighlightRange, HighlightColor, CurrLine, CurrColumn);
-        if (CurrLine == EndLine && C == '\n') {
-          break;
-        }
         CurrLine++;
-        writeGutter(GutterWidth, CurrLine);
         CurrColumn = 1;
+        AtBlankLine = true;
       } else {
+        AtBlankLine = false;
+        Out << C;
         CurrColumn++;
       }
     }
