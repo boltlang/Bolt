@@ -433,35 +433,17 @@ after_tuple_element:
       }
       auto Pattern = parsePattern();
       if (!Pattern) {
-        T0->unref();
-        Value->unref();
-        BlockStart->unref();
-        for (auto Case: Cases) {
-          Case->unref();
-        }
         skipToLineFoldEnd();
         continue;
       }
       auto RArrowAlt = expectToken<class RArrowAlt>();
       if (!RArrowAlt) {
-        T0->unref();
-        Value->unref();
-        BlockStart->unref();
-        for (auto Case: Cases) {
-          Case->unref();
-        }
         Pattern->unref();
         skipToLineFoldEnd();
         continue;
       }
       auto Expression = parseExpression();
       if (!Expression) {
-        T0->unref();
-        Value->unref();
-        BlockStart->unref();
-        for (auto Case: Cases) {
-          Case->unref();
-        }
         Pattern->unref();
         RArrowAlt->unref();
         skipToLineFoldEnd();
@@ -1013,6 +995,7 @@ finish:
         default:
           auto P = parsePattern();
           if (!P) {
+            Tokens.get();
             P = new BindPattern(new Identifier("_"));
           }
           Params.push_back(new Parameter(P, nullptr));
