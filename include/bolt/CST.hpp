@@ -140,7 +140,9 @@ namespace bolt {
     BindPattern,
     LiteralPattern,
     NamedPattern,
+    TuplePattern,
     NestedPattern,
+    ListPattern,
     ReferenceExpression,
     MatchCase,
     MatchExpression,
@@ -1244,6 +1246,27 @@ namespace bolt {
 
   };
 
+  class TuplePattern : public Pattern {
+  public:
+
+    LParen* LParen;
+    std::vector<std::tuple<Pattern*, Comma*>> Elements;
+    RParen* RParen;
+  
+    inline TuplePattern(
+      class LParen* LParen,
+      std::vector<std::tuple<Pattern*, Comma*>> Elements,
+      class RParen* RParen
+    ): Pattern(NodeKind::TuplePattern),
+       LParen(LParen),
+       Elements(Elements),
+       RParen(RParen) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
   class NestedPattern : public Pattern {
   public:
 
@@ -1264,6 +1287,28 @@ namespace bolt {
     Token* getLastToken() const override;
 
   };
+
+  class ListPattern : public Pattern {
+  public:
+
+    class LBracket* LBracket;
+    std::vector<std::tuple<Pattern*, Comma*>> Elements;
+    class RBracket* RBracket;
+
+    inline ListPattern(
+      class LBracket* LBracket,
+      std::vector<std::tuple<Pattern*, Comma*>> Elements,
+      class RBracket* RBracket
+    ): Pattern(NodeKind::ListPattern),
+       LBracket(LBracket),
+       Elements(Elements),
+       RBracket(RBracket) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
 
   class Expression : public TypedNode {
   protected:

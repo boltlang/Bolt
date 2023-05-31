@@ -70,7 +70,9 @@ namespace bolt {
         BOLT_GEN_CASE(BindPattern)
         BOLT_GEN_CASE(LiteralPattern)
         BOLT_GEN_CASE(NamedPattern)
+        BOLT_GEN_CASE(TuplePattern)
         BOLT_GEN_CASE(NestedPattern)
+        BOLT_GEN_CASE(ListPattern)
         BOLT_GEN_CASE(ReferenceExpression)
         BOLT_GEN_CASE(MatchCase)
         BOLT_GEN_CASE(MatchExpression)
@@ -334,7 +336,15 @@ namespace bolt {
       visitPattern(N);
     }
 
+    void visitTuplePattern(TuplePattern* N) {
+      visitPattern(N);
+    }
+
     void visitNestedPattern(NestedPattern* N) {
+      visitPattern(N);
+    }
+
+    void visitListPattern(ListPattern* N) {
       visitPattern(N);
     }
 
@@ -536,7 +546,9 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(BindPattern)
         BOLT_GEN_CHILD_CASE(LiteralPattern)
         BOLT_GEN_CHILD_CASE(NamedPattern)
+        BOLT_GEN_CHILD_CASE(TuplePattern)
         BOLT_GEN_CHILD_CASE(NestedPattern)
+        BOLT_GEN_CHILD_CASE(ListPattern)
         BOLT_GEN_CHILD_CASE(ReferenceExpression)
         BOLT_GEN_CHILD_CASE(MatchCase)
         BOLT_GEN_CHILD_CASE(MatchExpression)
@@ -774,10 +786,32 @@ namespace bolt {
       }
     }
 
+    void visitEachChild(TuplePattern* N) {
+      BOLT_VISIT(N->LParen);
+      for (auto [P, Comma]: N->Elements) {
+        BOLT_VISIT(P);
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+      }
+      BOLT_VISIT(N->RParen);
+    }
+
     void visitEachChild(NestedPattern* N) {
       BOLT_VISIT(N->LParen);
       BOLT_VISIT(N->P);
       BOLT_VISIT(N->RParen);
+    }
+
+    void visitEachChild(ListPattern* N) {
+      BOLT_VISIT(N->LBracket);
+      for (auto [Element, Separator]: N->Elements) {
+        BOLT_VISIT(Element);
+        if (Separator) {
+          BOLT_VISIT(Separator);
+        }
+      }
+      BOLT_VISIT(N->RBracket);
     }
 
     void visitEachChild(ReferenceExpression* N) {

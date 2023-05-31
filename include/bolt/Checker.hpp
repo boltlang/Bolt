@@ -175,6 +175,7 @@ namespace bolt {
     size_t NextTypeVarId = 0;
 
     Type* BoolType;
+    Type* ListType;
     Type* IntType;
     Type* StringType;
 

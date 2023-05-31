@@ -163,6 +163,22 @@ namespace bolt {
         visitPattern(Y->P, Decl);
         break;
       }
+      case NodeKind::TuplePattern:
+      {
+        auto Y = static_cast<TuplePattern*>(X);
+        for (auto [Element, Comma]: Y->Elements) {
+          visitPattern(Element, Decl);
+        }
+        break;
+      }
+      case NodeKind::ListPattern:
+      {
+        auto Y = static_cast<ListPattern*>(X);
+        for (auto [Element, Separator]: Y->Elements) {
+          visitPattern(Element, Decl);
+        }
+        break;
+      }
       case NodeKind::LiteralPattern:
         break;
       default:
@@ -278,8 +294,8 @@ namespace bolt {
     struct UnrefVisitor : public CSTVisitor<UnrefVisitor> {
 
       void visit(Node* N) {
-        N->unref();
         visitEachChild(N);
+        N->unref();
       }
 
     };
@@ -412,12 +428,28 @@ namespace bolt {
     return Name;
   }
 
+  Token* TuplePattern::getFirstToken() const {
+    return LParen;
+  }
+
+  Token* TuplePattern::getLastToken() const {
+    return RParen;
+  }
+
   Token* NestedPattern::getFirstToken() const {
     return LParen;
   }
 
   Token* NestedPattern::getLastToken() const {
     return RParen;
+  }
+
+  Token* ListPattern::getFirstToken() const {
+    return LBracket;
+  }
+
+  Token* ListPattern::getLastToken() const {
+    return RBracket;
   }
 
   Token* ReferenceExpression::getFirstToken() const {

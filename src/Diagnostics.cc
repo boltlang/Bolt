@@ -128,6 +128,8 @@ namespace bolt {
         return "an if-statement";
       case NodeKind::IfStatementPart:
         return "a branch of an if-statement";
+      case NodeKind::ListPattern:
+        return "a list pattern";
       default:
         ZEN_UNREACHABLE
     }

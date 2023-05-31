@@ -103,8 +103,10 @@ namespace bolt {
 
     TypeExpression* parseTypeExpression();
 
-    Pattern* parsePrimitivePattern();
-    Pattern* parsePattern();
+    ListPattern* parseListPattern();
+    Pattern* parsePrimitivePattern(bool IsNarrow);
+    Pattern* parseWidePattern();
+    Pattern* parseNarrowPattern();
 
     Parameter* parseParam();
 

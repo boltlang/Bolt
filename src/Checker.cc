@@ -18,6 +18,8 @@
 
 // TODO Add a pattern that only performs a type assert
 
+// TODO create the constraint in addConstraint, not the other way round
+
 #include <algorithm>
 #include <iterator>
 #include <stack>
@@ -101,6 +103,7 @@ namespace bolt {
       BoolType = createConType("Bool");
       IntType = createConType("Int");
       StringType = createConType("String");
+      ListType = createConType("List");
     }
 
   Scheme* Checker::lookup(ByteString Name) {
@@ -1075,6 +1078,26 @@ namespace bolt {
         return RetTy;
       }
 
+      case NodeKind::TuplePattern:
+      {
+        auto P = static_cast<TuplePattern*>(Pattern);
+        std::vector<Type*> ElementTypes;
+        for (auto [Element, Comma]: P->Elements) {
+          ElementTypes.push_back(inferPattern(Element));
+        }
+        return new TTuple(ElementTypes);
+      }
+
+      case NodeKind::ListPattern:
+      {
+        auto P = static_cast<ListPattern*>(Pattern);
+        auto ElementType = createTypeVar();
+        for (auto [Element, Separator]: P->Elements) {
+          addConstraint(new CEqual(ElementType, inferPattern(Element), P));
+        }
+        return new TApp(ListType, ElementType);
+      }
+
       case NodeKind::NestedPattern:
       {
         auto P = static_cast<NestedPattern*>(Pattern);
@@ -1292,6 +1315,7 @@ namespace bolt {
     addBinding("String", new Forall(StringType));
     addBinding("Int", new Forall(IntType));
     addBinding("Bool", new Forall(BoolType));
+    addBinding("List", new Forall(ListType));
     addBinding("True", new Forall(BoolType));
     addBinding("False", new Forall(BoolType));
     auto A = createTypeVar();
