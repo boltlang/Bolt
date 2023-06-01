@@ -110,6 +110,8 @@ namespace bolt {
         return "'return'";
       case NodeKind::TypeKeyword:
         return "'type'";
+      case NodeKind::ReferenceTypeExpression:
+        return "a type reference";
       case NodeKind::FunctionDeclaration:
         return "a function declaration";
       case NodeKind::VariableDeclaration:

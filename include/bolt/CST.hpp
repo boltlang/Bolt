@@ -1765,6 +1765,10 @@ namespace bolt {
       return Parent->getKind() == NodeKind::ClassDeclaration;
     }
 
+    bool isSignature() const noexcept {
+      return !Body;
+    }
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 

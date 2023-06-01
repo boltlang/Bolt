@@ -109,9 +109,9 @@ namespace bolt {
   public:
 
     TypeclassSignature Sig;
-    FunctionDeclaration* Decl;
+    Node* Decl;
 
-    inline TypeclassMissingDiagnostic(TypeclassSignature Sig, FunctionDeclaration* Decl):
+    inline TypeclassMissingDiagnostic(TypeclassSignature Sig, Node* Decl):
       Diagnostic(DiagnosticKind::TypeclassMissing), Sig(Sig), Decl(Decl) {}
 
     inline Node* getNode() const override {
@@ -124,10 +124,10 @@ namespace bolt {
   public:
 
     ByteString TypeclassName;
-    TCon* Ty;
+    Type* Ty;
     Node* Source;
 
-    inline InstanceNotFoundDiagnostic(ByteString TypeclassName, TCon* Ty, Node* Source):
+    inline InstanceNotFoundDiagnostic(ByteString TypeclassName, Type* Ty, Node* Source):
       Diagnostic(DiagnosticKind::InstanceNotFound), TypeclassName(TypeclassName), Ty(Ty), Source(Source) {}
 
     inline Node* getNode() const override {

@@ -13,6 +13,7 @@ namespace bolt {
 
   class Type;
   class TVar;
+  class TCon;
 
   using TypeclassId = ByteString;
 
@@ -27,6 +28,12 @@ namespace bolt {
     bool operator<(const TypeclassSignature& Other) const;
     bool operator==(const TypeclassSignature& Other) const;
 
+  };
+
+  struct TypeSig {
+    Type* Orig;
+    Type* Op;
+    std::vector<Type*> Args;
   };
 
   enum class TypeIndexKind {
@@ -267,6 +274,10 @@ namespace bolt {
       return VK;
     }
 
+    inline bool isRigid() const noexcept {
+      return VK == VarKind::Rigid;
+    }
+
     Type* find();
 
     void set(Type* Ty);
@@ -281,6 +292,8 @@ namespace bolt {
   public:
 
     ByteString Name;
+
+    TypeclassContext Provided;
 
     inline TVarRigid(size_t Id, ByteString Name):
       TVar(Id, VarKind::Rigid), Name(Name) {}
@@ -405,44 +418,48 @@ namespace bolt {
     virtual void enterType(C<Type>* Ty) {}
     virtual void exitType(C<Type>* Ty) {}
 
-    virtual void visitVarType(C<TVar>* Ty) {
+    virtual void visitType(C<Type>* Ty) {
       visitEachChild(Ty);
+    }
+
+    virtual void visitVarType(C<TVar>* Ty) {
+      visitType(Ty);
     }
 
     virtual void visitAppType(C<TApp>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitPresentType(C<TPresent>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitConType(C<TCon>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitArrowType(C<TArrow>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitTupleType(C<TTuple>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitTupleIndexType(C<TTupleIndex>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitAbsentType(C<TAbsent>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitFieldType(C<TField>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
     virtual void visitNilType(C<TNil>* Ty) {
-      visitEachChild(Ty);
+      visitType(Ty);
     }
 
   public:

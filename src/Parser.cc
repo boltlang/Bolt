@@ -1029,7 +1029,6 @@ finish:
 
     PubKeyword* Pub = nullptr;
     FnKeyword* Fn;
-    MutKeyword* Mut = nullptr;
     TypeAssert* TA = nullptr;
     LetBody* Body = nullptr;
 
@@ -1047,11 +1046,6 @@ finish:
       return nullptr;
     }
     Fn = static_cast<FnKeyword*>(T0);
-    auto T1 = Tokens.peek();
-    if (T1->getKind() == NodeKind::MutKeyword) {
-      Mut = static_cast<MutKeyword*>(T1);
-      Tokens.get();
-    }
 
     auto Name = expectToken<Identifier>();
     if (!Name) {
@@ -1059,9 +1053,6 @@ finish:
         Pub->unref();
       }
       Fn->unref();
-      if (Mut) {
-        Mut->unref();
-      }
       skipToLineFoldEnd();
       return nullptr;
     }
@@ -1146,6 +1137,7 @@ after_params:
     checkLineFoldEnd();
 
 finish:
+
     return new FunctionDeclaration(
       Pub,
       Fn,
