@@ -188,24 +188,26 @@ namespace bolt {
           }
         }
 
+        std::size_t Global = Contexts.size()-1;
+
         // If no MaxLevelLeft was found, that means that not a single
         // corresponding type variable was found in the contexts. We set it to
-        // 0, which corresponds to the global inference context.
-        std::size_t MaxLevelLeft = 0;
-        for (std::size_t I = 0; I < Contexts.size(); I++) {
+        // Contexts.size()-1, which corresponds to the global inference context.
+        std::size_t MaxLevelLeft = Global;
+        for (std::size_t I = 0; I < Global; I++) {
           auto Ctx = Contexts[I];
           if (hasTypeVar(*Ctx->TVs, Y->Left)) {
-            MaxLevelLeft = Contexts.size() - I - 1;
+            MaxLevelLeft = I;
             break;
           }
         }
 
         // Same as above but now mirrored for Y->Right
-        std::size_t MaxLevelRight = 0;
-        for (std::size_t I = 0; I < Contexts.size(); I++) {
+        std::size_t MaxLevelRight = Global;
+        for (std::size_t I = 0; I < Global; I++) {
           auto Ctx = Contexts[I];
           if (hasTypeVar(*Ctx->TVs, Y->Right)) {
-            MaxLevelRight = Contexts.size() - I - 1;
+            MaxLevelRight = I;
             break;
           }
         }
@@ -213,26 +215,24 @@ namespace bolt {
         // The lowest index is determined by the one that has no type variables
         // in Y->Left AND in Y->Right. This implies max() must be used, so that
         // the very first enounter of a type variable matters.
-        auto MaxLevel = std::max(MaxLevelLeft, MaxLevelRight);
+        auto UpperLevel = std::max(MaxLevelLeft, MaxLevelRight);
 
-        // Now find the highest index I such that all the contexts that are more
+        // Now find the lowest index LowerLevel such that all the contexts that are more
         // local do not contain any type variables that are present in the
         // equality constraint.
-        std::size_t MinLevel = MaxLevel;
-        for (std::size_t I = Contexts.size(); I-- > 0; ) {
+        std::size_t LowerLevel = UpperLevel;
+        for (std::size_t I = Global; I-- > 0; ) {
           auto Ctx = Contexts[I];
           if (hasTypeVar(*Ctx->TVs, Y->Left) || hasTypeVar(*Ctx->TVs, Y->Right)) {
-            // No need to reverse because even though Contexts is reversed, we
-            // are also iterating in reverse.
-            MinLevel = I;
+            LowerLevel = I;
             break;
           }
         }
 
-        if (MaxLevel == MinLevel || MaxLevelLeft == 0 || MaxLevelRight == 0) {
+        if (UpperLevel == LowerLevel || MaxLevelLeft == Global || MaxLevelRight == Global) {
           solveEqual(Y);
         } else {
-          Contexts[Contexts.size() - MaxLevel - 1]->Constraints->push_back(C);
+          Contexts[UpperLevel]->Constraints->push_back(C);
         }
 
         break;
