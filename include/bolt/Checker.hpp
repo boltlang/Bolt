@@ -75,7 +75,6 @@ namespace bolt {
 
   enum class ConstraintKind {
     Equal,
-    Class,
     Many,
     Empty,
   };
@@ -126,17 +125,6 @@ namespace bolt {
 
     inline CEmpty():
       Constraint(ConstraintKind::Empty) {}
-
-  };
-
-  class CClass : public Constraint {
-  public:
-
-    ByteString Name;
-    std::vector<Type*> Types;
-
-    inline CClass(ByteString Name, std::vector<Type*> Types):
-      Constraint(ConstraintKind::Class), Name(Name), Types(Types) {}
 
   };
 
@@ -207,13 +195,11 @@ namespace bolt {
     Type* inferExpression(Expression* Expression);
     Type* inferTypeExpression(TypeExpression* TE, bool IsPoly = true);
     Type* inferLiteral(Literal* Lit);
-
     Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
 
     void infer(Node* node);
     void inferFunctionDeclaration(FunctionDeclaration* N);
-
-    Constraint* convertToConstraint(ConstraintExpression* C);
+    void inferConstraintExpression(ConstraintExpression* C);
 
     /// Factory methods 
 

@@ -1,26 +1,5 @@
 
-// TODO Add list of CST variable names to TVar and unify them so that e.g. the typeclass checker may pick one when displaying a diagnostic
-
-// TODO (maybe) make unficiation work like union-find in find()
-
-// TODO remove Args in TCon and just use it as a constant
-// TODO make TApp traversable with TupleIndex
-
-// TODO make simplify() rewrite the types in-place such that a reference too (Bool, Int).0 becomes Bool
-
-// TODO Add a check for datatypes that create infinite structures.
-
-// TODO see if we can merge UnificationError diagnostics so that we get a list of **all** types that were wrong on a given node
-
-// TODO When a forall variable is missing, do not just insert a blank one into the env. It will result in too few diagnostics being emitted.
-//      Same goes for reference expressions.
-//      If running the compiler as a language server, this matters.
-
-// TODO Add a pattern that only performs a type assert
-
 // TODO create the constraint in addConstraint, not the other way round
-
-// TODO Find a way to create a match expression in between ( and )
 
 #include <algorithm>
 #include <iterator>
@@ -45,15 +24,6 @@ namespace bolt {
 
   Constraint* Constraint::substitute(const TVSub &Sub) {
     switch (Kind) {
-      case ConstraintKind::Class:
-      {
-        auto Class = static_cast<CClass*>(this);
-        std::vector<Type*> NewTypes;
-        for (auto Ty: Class->Types) {
-          NewTypes.push_back(Ty->substitute(Sub));
-        }
-        return new CClass(Class->Name, NewTypes);
-      }
       case ConstraintKind::Equal:
       {
         auto Equal = static_cast<CEqual*>(this);
@@ -168,11 +138,6 @@ namespace bolt {
 
   void Checker::addConstraint(Constraint* C) {
     switch (C->getKind()) {
-      case ConstraintKind::Class:
-      {
-        getContext().Constraints->push_back(C);
-        break;
-      }
       case ConstraintKind::Equal:
       {
         auto Y = static_cast<CEqual*>(C);
@@ -785,7 +750,7 @@ namespace bolt {
 
   }
 
-  Constraint* Checker::convertToConstraint(ConstraintExpression* C) {
+  void Checker::inferConstraintExpression(ConstraintExpression* C) {
     switch (C->getKind()) {
       case NodeKind::TypeclassConstraintExpression:
       {
@@ -796,12 +761,13 @@ namespace bolt {
           TV->Provided.emplace(D->Name->getCanonicalText());
           Types.push_back(TV);
         }
-        return new CClass(D->Name->getCanonicalText(), Types);
+        break;
       }
       case NodeKind::EqualityConstraintExpression:
       {
         auto D = static_cast<EqualityConstraintExpression*>(C);
-        return new CEqual(inferTypeExpression(D->Left), inferTypeExpression(D->Right), C);
+        addConstraint(new CEqual(inferTypeExpression(D->Left), inferTypeExpression(D->Right), C));
+        break;
       }
       default:
         ZEN_UNREACHABLE
@@ -890,7 +856,7 @@ namespace bolt {
       {
         auto QTE = static_cast<QualifiedTypeExpression*>(N);
         for (auto [C, Comma]: QTE->Constraints) {
-          addConstraint(convertToConstraint(C));
+          inferConstraintExpression(C);
         }
         auto Ty = inferTypeExpression(QTE->TE, IsPoly);
         N->setType(Ty);
@@ -1274,12 +1240,6 @@ namespace bolt {
       Queue.pop_front();
 
       switch (Constraint->getKind()) {
-
-        case ConstraintKind::Class:
-        {
-          // TODO
-          break;
-        }
 
         case ConstraintKind::Empty:
           break;
