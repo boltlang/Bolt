@@ -126,6 +126,8 @@ namespace bolt {
         return "a match-expression";
       case NodeKind::ConstantExpression:
         return "a literal expression";
+      case NodeKind::MemberExpression:
+        return "an accessor of a member";
       case NodeKind::IfStatement:
         return "an if-statement";
       case NodeKind::IfStatementPart:
@@ -636,7 +638,7 @@ namespace bolt {
         }
         if (Ty2->getKind() != TypeKind::Nil) {
           W.write("; ");
-          visit(Ty);
+          visit(Ty2);
         }
         W.write(" }");
         for (auto K = 0; K < I; K++) {
