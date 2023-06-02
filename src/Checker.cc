@@ -137,7 +137,7 @@ namespace bolt {
   }
 
   void Checker::makeEqual(Type* A, Type* B, Node* Source) {
-    makeEqual(A, B, Source);
+    addConstraint(new CEqual(A, B, Source));
   }
 
   void Checker::addConstraint(Constraint* C) {
@@ -572,7 +572,7 @@ namespace bolt {
       RetType = createTypeVar();
     }
 
-    addConstraint(new CEqual { Decl->Ty, new TArrow(ParamTypes, RetType), Decl });
+    makeEqual(Decl->Ty, new TArrow(ParamTypes, RetType), Decl);
 
   }
 
@@ -617,7 +617,7 @@ namespace bolt {
         auto IfStmt = static_cast<IfStatement*>(N);
         for (auto Part: IfStmt->Parts) {
           if (Part->Test != nullptr) {
-            addConstraint(new CEqual { BoolType, inferExpression(Part->Test), Part->Test });
+            makeEqual(BoolType, inferExpression(Part->Test), Part->Test);
           }
           for (auto Element: Part->Elements) {
             infer(Element);
@@ -634,10 +634,10 @@ namespace bolt {
         auto RetStmt = static_cast<ReturnStatement*>(N);
         Type* ReturnType;
         if (RetStmt->Expression) {
-          addConstraint(new CEqual { inferExpression(RetStmt->Expression), getReturnType(), RetStmt->Expression });
+          makeEqual(inferExpression(RetStmt->Expression), getReturnType(), RetStmt->Expression);
         } else {
           ReturnType = new TTuple({});
-          addConstraint(new CEqual { new TTuple({}), getReturnType(), N });
+          makeEqual(new TTuple({}), getReturnType(), N);
         }
         break;
       }
@@ -964,7 +964,7 @@ namespace bolt {
         for (auto Arg: Call->Args) {
           ArgTypes.push_back(inferExpression(Arg));
         }
-        addConstraint(new CEqual { OpTy, new TArrow(ArgTypes, Ty), X });
+        makeEqual(OpTy, new TArrow(ArgTypes, Ty), X);
         break;
       }
 
@@ -981,7 +981,7 @@ namespace bolt {
         std::vector<Type*> ArgTys;
         ArgTys.push_back(inferExpression(Infix->LHS));
         ArgTys.push_back(inferExpression(Infix->RHS));
-        addConstraint(new CEqual { new TArrow(ArgTys, Ty), OpTy, X });
+        makeEqual(new TArrow(ArgTys, Ty), OpTy, X);
         break;
       }
 
