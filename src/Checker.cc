@@ -1347,9 +1347,9 @@ namespace bolt {
       return Constraint->Source;
     }
 
-    bool unify(Type* A, Type* B, bool DidSwap);
+    bool unifyField(Type* A, Type* B, bool DidSwap);
 
-    bool unifyField(Type* A, Type* B);
+    bool unify(Type* A, Type* B, bool DidSwap);
 
     bool unify() {
       return unify(Constraint->Left, Constraint->Right, false);
@@ -1468,6 +1468,24 @@ namespace bolt {
 
   };
 
+  bool Unifier::unifyField(Type* A, Type* B, bool DidSwap) {
+    if (llvm::isa<TAbsent>(A) && llvm::isa<TAbsent>(B)) {
+      return true;
+    }
+    if (llvm::isa<TAbsent>(B)) {
+      std::swap(A, B);
+      DidSwap = !DidSwap;
+    }
+    if (llvm::isa<TAbsent>(A)) {
+      auto Present = static_cast<TPresent*>(B);
+      C.DE.add<FieldNotFoundDiagnostic>(CurrentFieldName, C.simplifyType(getLeft()), LeftPath, getSource());
+      return false;
+    }
+    auto Present1 = static_cast<TPresent*>(A);
+    auto Present2 = static_cast<TPresent*>(B);
+    return unify(Present1->Ty, Present2->Ty, DidSwap);
+  };
+
   bool Unifier::unify(Type* A, Type* B, bool DidSwap) {
 
     A = C.simplifyType(A);
@@ -1518,23 +1536,6 @@ namespace bolt {
     auto swap = [&]() {
       std::swap(A, B);
       DidSwap = !DidSwap;
-    };
-
-    auto unifyField = [&](Type* A, Type* B) {
-      if (llvm::isa<TAbsent>(A) && llvm::isa<TAbsent>(B)) {
-        return true;
-      }
-      if (llvm::isa<TAbsent>(B)) {
-        swap();
-      }
-      if (llvm::isa<TAbsent>(A)) {
-        auto Present = static_cast<TPresent*>(B);
-        C.DE.add<FieldNotFoundDiagnostic>(CurrentFieldName, C.simplifyType(getLeft()), LeftPath, getSource());
-        return false;
-      }
-      auto Present1 = static_cast<TPresent*>(A);
-      auto Present2 = static_cast<TPresent*>(B);
-      return unify(Present1->Ty, Present2->Ty, DidSwap);
     };
 
     if (llvm::isa<TVar>(A) && llvm::isa<TVar>(B)) {
@@ -1706,7 +1707,7 @@ namespace bolt {
         LeftPath.push_back(TypeIndex::forFieldType());
         RightPath.push_back(TypeIndex::forFieldType());
         CurrentFieldName = Field1->Name;
-        if (!unifyField(Field1->Ty, Field2->Ty)) {
+        if (!unifyField(Field1->Ty, Field2->Ty, DidSwap)) {
           Success = false;
         }
         LeftPath.pop_back();
@@ -1743,7 +1744,7 @@ namespace bolt {
       bool Success = true;
       pushLeft(TypeIndex::forFieldType());
       CurrentFieldName = Field->Name;
-      if (!unifyField(Field->Ty, new TAbsent)) {
+      if (!unifyField(Field->Ty, new TAbsent, DidSwap)) {
         Success = false;
       }
       popLeft();
