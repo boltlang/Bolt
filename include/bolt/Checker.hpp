@@ -179,6 +179,8 @@ namespace bolt {
     void setContext(InferContext* Ctx);
     void popContext();
 
+    void makeEqual(Type* A, Type* B, Node* Source);
+
     void addConstraint(Constraint* Constraint);
 
     /**
