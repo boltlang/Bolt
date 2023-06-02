@@ -1,6 +1,4 @@
 
-// TODO create the constraint in addConstraint, not the other way round
-
 #include <algorithm>
 #include <iterator>
 #include <stack>
