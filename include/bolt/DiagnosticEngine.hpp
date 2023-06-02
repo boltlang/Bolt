@@ -17,12 +17,20 @@ namespace bolt {
   class Node;
 
   class DiagnosticEngine {
+
+    bool HasError = false;
+
   public:
+
+    inline bool hasError() const noexcept {
+      return HasError;
+    }
 
     virtual void addDiagnostic(Diagnostic* Diagnostic) = 0;
 
     template<typename D, typename ...Ts>
     void add(Ts&&... Args) {
+      HasError = true;
       addDiagnostic(new D { std::forward<Ts>(Args)... });
     }
 
