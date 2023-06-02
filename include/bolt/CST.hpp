@@ -900,7 +900,7 @@ namespace bolt {
 
   };
 
-  using Value = std::variant<ByteString, Integer>;
+  using LiteralValue = std::variant<ByteString, Integer>;
 
   class Literal : public Token {
   public:
@@ -908,7 +908,7 @@ namespace bolt {
     inline Literal(NodeKind Kind, TextLoc StartLoc):
       Token(Kind, StartLoc) {}
 
-    virtual Value getValue() = 0;
+    virtual LiteralValue getValue() = 0;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::StringLiteral
@@ -927,7 +927,7 @@ namespace bolt {
 
     std::string getText() const override;
 
-    Value getValue() override;
+    LiteralValue getValue() override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::StringLiteral;
@@ -949,7 +949,7 @@ namespace bolt {
       return V;
     }
 
-    Value getValue() override;
+    LiteralValue getValue() override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::IntegerLiteral;

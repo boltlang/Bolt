@@ -953,11 +953,11 @@ namespace bolt {
     return Text;
   }
 
-  Value StringLiteral::getValue() {
+  LiteralValue StringLiteral::getValue() {
     return Text;
   }
 
-  Value IntegerLiteral::getValue() {
+  LiteralValue IntegerLiteral::getValue() {
     return V;
   }
 
