@@ -241,7 +241,7 @@ namespace bolt {
       case TypeKind::App:
       {
         auto App = static_cast<TApp*>(this);
-        return App->Op->hasTypeVar(TV) && App->Arg->hasTypeVar(TV);
+        return App->Op->hasTypeVar(TV) || App->Arg->hasTypeVar(TV);
       }
       case TypeKind::TupleIndex:
       {
