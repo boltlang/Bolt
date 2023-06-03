@@ -313,7 +313,7 @@ namespace bolt {
               for (auto Element: TupleMember->Elements) {
                 ParamTypes.push_back(inferTypeExpression(Element));
               }
-              Decl->Ctx->Parent->Env.emplace(TupleMember->Name->getCanonicalText(), new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow(ParamTypes, RetTy)));
+              Decl->Ctx->Parent->Env.emplace(TupleMember->Name->getCanonicalText(), new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, TArrow::build(ParamTypes, RetTy)));
               break;
             }
             case NodeKind::RecordVariantDeclarationMember:
@@ -358,7 +358,7 @@ namespace bolt {
         for (auto TV: Vars) {
           RetTy = new TApp(RetTy, TV);
         }
-        Decl->Ctx->Parent->Env.emplace(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow({ FieldsTy }, RetTy)));
+        Decl->Ctx->Parent->Env.emplace(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow(FieldsTy, RetTy)));
         popContext();
 
         break;
@@ -570,7 +570,7 @@ namespace bolt {
       RetType = createTypeVar();
     }
 
-    makeEqual(Decl->Ty, new TArrow(ParamTypes, RetType), Decl);
+    makeEqual(Decl->Ty, TArrow::build(ParamTypes, RetType), Decl);
 
   }
 
@@ -849,7 +849,7 @@ namespace bolt {
           ParamTypes.push_back(inferTypeExpression(ParamType, IsPoly));
         }
         auto ReturnType = inferTypeExpression(ArrowTE->ReturnType, IsPoly);
-        auto Ty = new TArrow(ParamTypes, ReturnType);
+        auto Ty = TArrow::build(ParamTypes, ReturnType);
         N->setType(Ty);
         return Ty;
       }
@@ -910,7 +910,7 @@ namespace bolt {
           setContext(OldCtx);
         }
         if (!Match->Value) {
-          Ty = new TArrow({ ValTy }, Ty);
+          Ty = new TArrow(ValTy, Ty);
         }
         break;
       }
@@ -962,7 +962,7 @@ namespace bolt {
         for (auto Arg: Call->Args) {
           ArgTypes.push_back(inferExpression(Arg));
         }
-        makeEqual(OpTy, new TArrow(ArgTypes, Ty), X);
+        makeEqual(OpTy, TArrow::build(ArgTypes, Ty), X);
         break;
       }
 
@@ -979,7 +979,7 @@ namespace bolt {
         std::vector<Type*> ArgTys;
         ArgTys.push_back(inferExpression(Infix->LHS));
         ArgTys.push_back(inferExpression(Infix->RHS));
-        makeEqual(new TArrow(ArgTys, Ty), OpTy, X);
+        makeEqual(TArrow::build(ArgTys, Ty), OpTy, X);
         break;
       }
 
@@ -1066,7 +1066,7 @@ namespace bolt {
         }
         auto Ty = instantiate(Scm, P);
         auto RetTy = createTypeVar();
-        makeEqual(Ty, new TArrow(ParamTypes, RetTy), P);
+        makeEqual(Ty, TArrow::build(ParamTypes, RetTy), P);
         return RetTy;
       }
 
@@ -1181,11 +1181,11 @@ namespace bolt {
     addBinding("True", new Forall(BoolType));
     addBinding("False", new Forall(BoolType));
     auto A = createTypeVar();
-    addBinding("==", new Forall(new TVSet { A }, new ConstraintSet, new TArrow({ A, A }, BoolType)));
-    addBinding("+", new Forall(new TArrow({ IntType, IntType }, IntType)));
-    addBinding("-", new Forall(new TArrow({ IntType, IntType }, IntType)));
-    addBinding("*", new Forall(new TArrow({ IntType, IntType }, IntType)));
-    addBinding("/", new Forall(new TArrow({ IntType, IntType }, IntType)));
+    addBinding("==", new Forall(new TVSet { A }, new ConstraintSet, TArrow::build({ A, A }, BoolType)));
+    addBinding("+", new Forall(TArrow::build({ IntType, IntType }, IntType)));
+    addBinding("-", new Forall(TArrow::build({ IntType, IntType }, IntType)));
+    addBinding("*", new Forall(TArrow::build({ IntType, IntType }, IntType)));
+    addBinding("/", new Forall(TArrow::build({ IntType, IntType }, IntType)));
     populate(SF);
     forwardDeclare(SF);
     auto SCCs = RefGraph.strongconnect();
@@ -1593,60 +1593,45 @@ namespace bolt {
     }
 
     if (llvm::isa<TArrow>(A) && llvm::isa<TArrow>(B)) {
-      auto C1 = ArrowCursor(static_cast<TArrow*>(A), DidSwap ? RightPath : LeftPath);
-      auto C2 = ArrowCursor(static_cast<TArrow*>(B), DidSwap ? LeftPath : RightPath);
+      auto Arrow1 = static_cast<TArrow*>(A);
+      auto Arrow2 = static_cast<TArrow*>(B);
       bool Success = true;
-      for (;;) {
-        auto T1 = C1.next();
-        auto T2 = C2.next();
-        if (T1 == nullptr && T2 == nullptr) {
-          break;
-        }
-        if (T1 == nullptr || T2 == nullptr) {
-          unifyError();
-          Success = false;
-          break;
-        }
-        if (!unify(T1, T2, DidSwap)) {
-          Success = false;
-        }
+      LeftPath.push_back(TypeIndex::forArrowParamType());
+      RightPath.push_back(TypeIndex::forArrowParamType());
+      if (!unify(Arrow1->ParamType, Arrow2->ParamType, DidSwap)) {
+        Success = false;
       }
+      LeftPath.pop_back();
+      RightPath.pop_back();
+      LeftPath.push_back(TypeIndex::forArrowReturnType());
+      RightPath.push_back(TypeIndex::forArrowReturnType());
+      if  (!unify(Arrow1->ReturnType, Arrow2->ReturnType, DidSwap)) {
+        Success = false;
+      }
+      LeftPath.pop_back();
+      RightPath.pop_back();
       return Success;
-      /* if (Arr1->ParamTypes.size() != Arr2->ParamTypes.size()) { */
-      /*   return false; */
-      /* } */
-      /* auto Count = Arr1->ParamTypes.size(); */
-      /* for (std::size_t I = 0; I < Count; I++) { */
-      /*   if (!unify(Arr1->ParamTypes[I], Arr2->ParamTypes[I], Solution)) { */
-      /*     return false; */
-      /*   } */
-      /* } */
-      /* return unify(Arr1->ReturnType, Arr2->ReturnType, Solution); */
     }
 
     if (llvm::isa<TApp>(A) && llvm::isa<TApp>(B)) {
       auto App1 = static_cast<TApp*>(A);
       auto App2 = static_cast<TApp*>(B);
       bool Success = true;
+      LeftPath.push_back(TypeIndex::forAppOpType());
+      RightPath.push_back(TypeIndex::forAppOpType());
       if (!unify(App1->Op, App2->Op, DidSwap)) {
         Success = false;
       }
+      LeftPath.pop_back();
+      RightPath.pop_back();
+      LeftPath.push_back(TypeIndex::forAppArgType());
+      RightPath.push_back(TypeIndex::forAppArgType());
       if (!unify(App1->Arg, App2->Arg, DidSwap)) {
         Success = false;
       }
+      LeftPath.pop_back();
+      RightPath.pop_back();
       return Success;
-    }
-
-    if (llvm::isa<TArrow>(B)) {
-      swap();
-    }
-
-    if (llvm::isa<TArrow>(A)) {
-      auto Arr = static_cast<TArrow*>(A);
-      if (Arr->ParamTypes.empty()) {
-        auto Success = unify(Arr->ReturnType, B, DidSwap);
-        return Success;
-      }
     }
 
     if (llvm::isa<TTuple>(A) && llvm::isa<TTuple>(B)) {

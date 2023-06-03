@@ -165,14 +165,7 @@ namespace bolt {
       {
         auto Y = static_cast<const TArrow*>(Ty);
         std::ostringstream Out;
-        Out << "(";
-        bool First = true;
-        for (auto PT: Y->ParamTypes) {
-          if (First) First = false;
-          else Out << ", ";
-          Out << describe(PT);
-        }
-        Out << ") -> " << describe(Y->ReturnType);
+        Out << describe(Y->ParamType) << " -> " << describe(Y->ReturnType);
         return Out.str();
       }
       case TypeKind::Con:
@@ -558,17 +551,10 @@ namespace bolt {
       }
 
       void visitArrowType(const TArrow* Ty) override {
-        W.write("(");
-        bool First = true;
-        std::size_t I = 0;
-        for (auto PT: Ty->ParamTypes) {
-          if (First) First = false;
-          else W.write(", ");
-          Path.push_back(TypeIndex::forArrowParamType(I++));
-          visit(PT);
-          Path.pop_back();
-        }
-        W.write(") -> ");
+        Path.push_back(TypeIndex::forArrowParamType());
+        visit(Ty->ParamType);
+        Path.pop_back();
+        W.write(" -> ");
         Path.push_back(TypeIndex::forArrowReturnType());
         visit(Ty->ReturnType);
         Path.pop_back();

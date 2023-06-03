@@ -44,15 +44,11 @@ namespace bolt {
         Kind = TypeIndexKind::AppArgType;
         break;
       case TypeIndexKind::ArrowParamType:
-      {
-        auto Arrow = llvm::cast<TArrow>(Ty);
-        if (I+1 < Arrow->ParamTypes.size()) {
-          ++I;
-        } else {
-          Kind = TypeIndexKind::ArrowReturnType;
-        }
+        Kind = TypeIndexKind::ArrowReturnType;
         break;
-      }
+      case TypeIndexKind::ArrowReturnType:
+        Kind = TypeIndexKind::End;
+        break;
       case TypeIndexKind::FieldType:
         Kind = TypeIndexKind::FieldRestType;
         break;
@@ -60,9 +56,6 @@ namespace bolt {
       case TypeIndexKind::TupleIndexType:
       case TypeIndexKind::PresentType:
       case TypeIndexKind::AppArgType:
-      case TypeIndexKind::ArrowReturnType:
-        Kind = TypeIndexKind::End;
-        break;
       case TypeIndexKind::TupleElement:
       {
         auto Tuple = llvm::cast<TTuple>(Ty);
@@ -88,19 +81,15 @@ namespace bolt {
       {
         auto Arrow = static_cast<TArrow*>(Ty2);
         bool Changed = false;
-        std::vector<Type*> NewParamTypes;
-        for (auto Ty: Arrow->ParamTypes) {
-          auto NewParamType = Ty->rewrite(Fn);
-          if (NewParamType != Ty) {
-            Changed = true;
-          }
-          NewParamTypes.push_back(NewParamType);
+        Type* NewParamType = Arrow->ParamType->rewrite(Fn);
+        if (NewParamType != Arrow->ParamType) {
+          Changed = true;
         }
         auto NewRetTy = Arrow->ReturnType->rewrite(Fn);
         if (NewRetTy != Arrow->ReturnType) {
           Changed = true;
         }
-        return Changed ? new TArrow(NewParamTypes, NewRetTy) : Ty2;
+        return Changed ? new TArrow(NewParamType, NewRetTy) : Ty2;
       }
       case TypeKind::Con:
         return Ty2;
@@ -173,9 +162,7 @@ namespace bolt {
       case TypeKind::Arrow:
       {
         auto Arrow = static_cast<TArrow*>(this);
-        for (auto Ty: Arrow->ParamTypes) {
-          Ty->addTypeVars(TVs);
-        }
+        Arrow->ParamType->addTypeVars(TVs);
         Arrow->ReturnType->addTypeVars(TVs);
         break;
       }
@@ -229,12 +216,7 @@ namespace bolt {
       case TypeKind::Arrow:
       {
         auto Arrow = static_cast<TArrow*>(this);
-        for (auto Ty: Arrow->ParamTypes) {
-          if (Ty->hasTypeVar(TV)) {
-            return true;
-          }
-        }
-        return Arrow->ReturnType->hasTypeVar(TV);
+        return Arrow->ParamType->hasTypeVar(TV) || Arrow->ReturnType->hasTypeVar(TV);
       }
       case TypeKind::Con:
         return false;
@@ -308,7 +290,7 @@ namespace bolt {
       case TypeIndexKind::TupleElement:
         return llvm::cast<TTuple>(this)->ElementTypes[Index.I];
       case TypeIndexKind::ArrowParamType:
-        return llvm::cast<TArrow>(this)->ParamTypes[Index.I];
+        return llvm::cast<TArrow>(this)->ParamType;
       case TypeIndexKind::ArrowReturnType:
         return llvm::cast<TArrow>(this)->ReturnType;
       case TypeIndexKind::FieldType:
@@ -445,13 +427,7 @@ namespace bolt {
   TypeIndex Type::getStartIndex() {
     switch (Kind) {
       case TypeKind::Arrow:
-      {
-        auto Arrow = static_cast<TArrow*>(this);
-        if (Arrow->ParamTypes.empty()) {
-          return TypeIndex::forArrowReturnType();
-        }
-        return TypeIndex::forArrowParamType(0);
-      }
+        return TypeIndex::forArrowParamType();
       case TypeKind::Tuple:
       {
         auto Tuple = static_cast<TTuple*>(this);

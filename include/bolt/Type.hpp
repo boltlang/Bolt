@@ -81,8 +81,8 @@ namespace bolt {
       return { TypeIndexKind::FieldRestType };
     }
 
-    static TypeIndex forArrowParamType(std::size_t I) {
-      return { TypeIndexKind::ArrowParamType, I };
+    static TypeIndex forArrowParamType() {
+      return { TypeIndexKind::ArrowParamType };
     }
 
     static TypeIndex forArrowReturnType() {
@@ -303,15 +303,24 @@ namespace bolt {
   class TArrow : public Type {
   public:
 
-    std::vector<Type*> ParamTypes;
+    Type* ParamType;
     Type* ReturnType;
 
     inline TArrow(
-      std::vector<Type*> ParamTypes,
+      Type* ParamType,
       Type* ReturnType
     ): Type(TypeKind::Arrow),
-       ParamTypes(ParamTypes),
+       ParamType(ParamType),
        ReturnType(ReturnType) {}
+
+    static Type* build(std::vector<Type*> ParamTypes, Type* ReturnType) {
+      Type* Curr = ReturnType;
+      for (auto Iter = ParamTypes.rbegin(); Iter != ParamTypes.rend(); ++Iter) {
+        Curr = new TArrow(*Iter, Curr);
+      }
+      return Curr;
+    }
+
 
     static bool classof(const Type* Ty) {
       return Ty->getKind() == TypeKind::Arrow;
@@ -474,9 +483,7 @@ namespace bolt {
         case TypeKind::Arrow:
         {
           auto Arrow = static_cast<C<TArrow>*>(Ty);
-          for (auto I = 0; I < Arrow->ParamTypes.size(); ++I) {
-            visit(Arrow->ParamTypes[I]);
-          }
+          visit(Arrow->ParamType);
           visit(Arrow->ReturnType);
           break;
         }
