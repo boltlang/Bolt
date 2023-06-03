@@ -22,6 +22,7 @@ add_library(
   src/Parser.cc
   src/Types.cc
   src/Checker.cc
+  src/Evaluator.cc
 )
 target_link_directories(
   BoltCore

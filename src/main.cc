@@ -13,6 +13,7 @@
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
 #include "bolt/Checker.hpp"
+#include "bolt/Evaluator.hpp"
 
 using namespace bolt;
 
@@ -56,7 +57,7 @@ int main(int argc, const char* argv[]) {
   SF->setParents();
 
   DiagnosticStore DS;
-  Checker TheChecker { Config, DS };
+  Checker TheChecker { Config, DE }; // TODO set this to DS in production
   TheChecker.check(SF);
 
   auto LT = [](const Diagnostic* L, const Diagnostic* R) {
@@ -78,6 +79,19 @@ int main(int argc, const char* argv[]) {
   for (auto D: DS.Diagnostics) {
     DE.printDiagnostic(*D);
   }
+
+  if (DE.hasError()) {
+    return 1;
+  }
+
+  Evaluator E;
+  Env TheEnv;
+  TheEnv.add("print", Value::binding([](auto Args) {
+    ZEN_ASSERT(Args.size() == 1)
+    std::cerr << Args[0].asString() << "\n";
+    return Value::unit();
+  }));
+  E.evaluate(SF, TheEnv);
 
   return 0;
 }

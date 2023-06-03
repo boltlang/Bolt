@@ -25,6 +25,11 @@ namespace bolt {
       return Flags & ConfigFlags_TypeVarsRequireForall;
     }
 
+    bool hasImmediateDiagnostics() const noexcept {
+      // TODO make this a configuration flag
+      return true;
+    }
+
   };
 
 }
