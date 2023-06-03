@@ -78,9 +78,10 @@ namespace bolt {
         }
         break;
       }
-      case NodeKind::FunctionDeclaration:
+      case NodeKind::LetDeclaration:
       {
-        auto Decl = static_cast<FunctionDeclaration*>(X);
+        auto Decl = static_cast<LetDeclaration*>(X);
+        ZEN_ASSERT(Decl->isFunction());
         for (auto Param: Decl->Params) {
           visitPattern(Param->Pattern, Param);
         }
@@ -121,16 +122,12 @@ namespace bolt {
         }
         break;
       }
-      case NodeKind::VariableDeclaration:
+      case NodeKind::LetDeclaration:
       {
-        auto Decl = static_cast<VariableDeclaration*>(X);
+        auto Decl = static_cast<LetDeclaration*>(X);
+        // No matter if it  is a function or a variable, by visiting the pattern
+        // we add all relevant bindings to the current scope.
         visitPattern(Decl->Pattern, Decl);
-        break;
-      }
-      case NodeKind::FunctionDeclaration:
-      {
-        auto Decl = static_cast<FunctionDeclaration*>(X);
-        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Var);
         break;
       }
       case NodeKind::RecordDeclaration:
@@ -651,14 +648,17 @@ namespace bolt {
     return Expression->getLastToken();
   }
 
-  Token* FunctionDeclaration::getFirstToken() const {
+  Token* LetDeclaration::getFirstToken() const {
     if (PubKeyword) {
       return PubKeyword;
     }
-    return FnKeyword;
+    if (ForeignKeyword) {
+      return ForeignKeyword;
+    }
+    return LetKeyword;
   }
 
-  Token* FunctionDeclaration::getLastToken() const {
+  Token* LetDeclaration::getLastToken() const {
     if (Body) {
       return Body->getLastToken();
     }
@@ -667,23 +667,6 @@ namespace bolt {
     }
     if (Params.size()) {
       return Params.back()->getLastToken();
-    }
-    return Name;
-  }
-
-  Token* VariableDeclaration::getFirstToken() const {
-    if (PubKeyword) {
-      return PubKeyword;
-    }
-    return LetKeyword;
-  }
-
-  Token* VariableDeclaration::getLastToken() const {
-    if (Body) {
-      return Body->getLastToken();
-    }
-    if (TypeAssert) {
-      return TypeAssert->getLastToken();
     }
     return Pattern->getLastToken();
   }
@@ -837,8 +820,8 @@ namespace bolt {
     return "let";
   }
 
-  std::string FnKeyword::getText() const {
-    return "fn";
+  std::string ForeignKeyword::getText() const {
+    return "foreign";
   }
 
   std::string MutKeyword::getText() const {

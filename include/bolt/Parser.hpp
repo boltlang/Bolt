@@ -126,9 +126,7 @@ namespace bolt {
 
     Node* parseLetBodyElement();
 
-    FunctionDeclaration* parseFunctionDeclaration();
-
-    VariableDeclaration* parseVariableDeclaration();
+    LetDeclaration* parseLetDeclaration();
 
     Node* parseClassElement();
 

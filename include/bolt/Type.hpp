@@ -321,7 +321,6 @@ namespace bolt {
       return Curr;
     }
 
-
     static bool classof(const Type* Ty) {
       return Ty->getKind() == TypeKind::Arrow;
     }

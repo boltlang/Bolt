@@ -62,7 +62,7 @@ namespace bolt {
   std::unordered_map<ByteString, NodeKind> Keywords = {
     { "pub", NodeKind::PubKeyword },
     { "let", NodeKind::LetKeyword },
-    { "fn", NodeKind::FnKeyword },
+    { "foreign", NodeKind::ForeignKeyword },
     { "mut", NodeKind::MutKeyword },
     { "return", NodeKind::ReturnKeyword },
     { "type", NodeKind::TypeKeyword },
@@ -227,8 +227,8 @@ digit_finish:
               return new PubKeyword(StartLoc);
             case NodeKind::LetKeyword:
               return new LetKeyword(StartLoc);
-            case NodeKind::FnKeyword:
-              return new FnKeyword(StartLoc);
+            case NodeKind::ForeignKeyword:
+              return new ForeignKeyword(StartLoc);
             case NodeKind::MutKeyword:
               return new MutKeyword(StartLoc);
             case NodeKind::TypeKeyword:

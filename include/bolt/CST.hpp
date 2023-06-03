@@ -104,9 +104,9 @@ namespace bolt {
     RArrow,
     RArrowAlt,
     LetKeyword,
-    FnKeyword,
     MutKeyword,
     PubKeyword,
+    ForeignKeyword,
     TypeKeyword,
     ReturnKeyword,
     ModKeyword,
@@ -164,8 +164,7 @@ namespace bolt {
     Parameter,
     LetBlockBody,
     LetExprBody,
-    FunctionDeclaration,
-    VariableDeclaration,
+    LetDeclaration,
     RecordDeclarationField,
     RecordDeclaration,
     VariantDeclaration,
@@ -549,20 +548,6 @@ namespace bolt {
 
   };
 
-  class FnKeyword : public Token {
-  public:
-
-    inline FnKeyword(TextLoc StartLoc):
-      Token(NodeKind::FnKeyword, StartLoc) {}
-
-    std::string getText() const override;
-
-    static bool classof(const Node* N) {
-      return N->getKind() == NodeKind::FnKeyword;
-    }
-
-  };
-
   class MutKeyword : public Token {
   public:
 
@@ -587,6 +572,20 @@ namespace bolt {
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::PubKeyword;
+    }
+
+  };
+
+  class ForeignKeyword : public Token {
+  public:
+
+    inline ForeignKeyword(TextLoc StartLoc):
+      Token(NodeKind::ForeignKeyword, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::ForeignKeyword;
     }
 
   };
@@ -1718,7 +1717,7 @@ namespace bolt {
 
   };
 
-  class FunctionDeclaration : public Node {
+  class LetDeclaration : public TypedNode {
 
     Scope* TheScope = nullptr;
 
@@ -1726,26 +1725,31 @@ namespace bolt {
 
     bool IsCycleActive = false;
     InferContext* Ctx;
-    class Type* Ty;
 
     class PubKeyword* PubKeyword;
-    class FnKeyword* FnKeyword;
-    class Identifier* Name;
+    class ForeignKeyword* ForeignKeyword;
+    class LetKeyword* LetKeyword;
+    class MutKeyword* MutKeyword;
+    class Pattern* Pattern;
     std::vector<Parameter*> Params;
     class TypeAssert* TypeAssert;
     LetBody* Body;
 
-    FunctionDeclaration(
+    LetDeclaration(
       class PubKeyword* PubKeyword,
-      class FnKeyword* FnKeyword,
-      class Identifier* Name,
+      class ForeignKeyword* ForeignKeyword,
+      class LetKeyword* LetKeyword,
+      class MutKeyword* MutKeyword,
+      class Pattern* Pattern,
       std::vector<Parameter*> Params,
       class TypeAssert* TypeAssert,
       LetBody* Body
-    ): Node(NodeKind::FunctionDeclaration),
+    ): TypedNode(NodeKind::LetDeclaration),
        PubKeyword(PubKeyword),
-       FnKeyword(FnKeyword),
-       Name(Name),
+       ForeignKeyword(ForeignKeyword),
+       LetKeyword(LetKeyword),
+       MutKeyword(MutKeyword),
+       Pattern(Pattern),
        Params(Params),
        TypeAssert(TypeAssert),
        Body(Body) {}
@@ -1766,51 +1770,33 @@ namespace bolt {
     }
 
     bool isSignature() const noexcept {
-      return !Body;
+      return ForeignKeyword;
+    }
+
+    bool isVariable() const noexcept {
+      // Variables in classes and instances are never possible, so we reflect this by excluding them here.
+      return !isSignature() && !isClass() && !isInstance() && (Pattern->getKind() != NodeKind::BindPattern || !Body);
+    }
+
+    bool isFunction() const noexcept {
+      return !isSignature() && !isVariable();
+    }
+
+    Identifier* getName() const noexcept {
+      ZEN_ASSERT(Pattern->getKind() == NodeKind::BindPattern);
+      return static_cast<BindPattern*>(Pattern)->Name;
+    }
+
+    ByteString getNameAsString() const noexcept {
+      return getName()->getCanonicalText();
     }
 
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
     static bool classof(const Node* N) {
-      return N->getKind() == NodeKind::FunctionDeclaration;
+      return N->getKind() == NodeKind::LetDeclaration;
     }
-
-  };
-
-  class VariableDeclaration : public TypedNode {
-
-    Scope* TheScope = nullptr;
-
-  public:
-
-    bool IsCycleActive = false;
-
-    class PubKeyword* PubKeyword;
-    class LetKeyword* LetKeyword;
-    class MutKeyword* MutKeyword;
-    class Pattern* Pattern;
-    std::vector<Parameter*> Params;
-    class TypeAssert* TypeAssert;
-    LetBody* Body;
-
-    VariableDeclaration(
-      class PubKeyword* PubKeyword,
-      class LetKeyword* LetKeyword,
-      class MutKeyword* MutKeyword,
-      class Pattern* Pattern,
-      class TypeAssert* TypeAssert,
-      LetBody* Body
-    ): TypedNode(NodeKind::VariableDeclaration),
-       PubKeyword(PubKeyword),
-       LetKeyword(LetKeyword),
-       MutKeyword(MutKeyword),
-       Pattern(Pattern),
-       TypeAssert(TypeAssert),
-       Body(Body) {}
-
-    Token* getFirstToken() const override;
-    Token* getLastToken() const override;
 
   };
 
@@ -2063,7 +2049,7 @@ namespace bolt {
   template<> inline NodeKind getNodeType<RArrow>() { return NodeKind::RArrow; }
   template<> inline NodeKind getNodeType<RArrowAlt>() { return NodeKind::RArrowAlt; }
   template<> inline NodeKind getNodeType<LetKeyword>() { return NodeKind::LetKeyword; }
-  template<> inline NodeKind getNodeType<FnKeyword>() { return NodeKind::FnKeyword; }
+  template<> inline NodeKind getNodeType<ForeignKeyword>() { return NodeKind::ForeignKeyword; }
   template<> inline NodeKind getNodeType<MutKeyword>() { return NodeKind::MutKeyword; }
   template<> inline NodeKind getNodeType<PubKeyword>() { return NodeKind::PubKeyword; }
   template<> inline NodeKind getNodeType<TypeKeyword>() { return NodeKind::TypeKeyword; }
@@ -2106,8 +2092,7 @@ namespace bolt {
   template<> inline NodeKind getNodeType<Parameter>() { return NodeKind::Parameter; }
   template<> inline NodeKind getNodeType<LetBlockBody>() { return NodeKind::LetBlockBody; }
   template<> inline NodeKind getNodeType<LetExprBody>() { return NodeKind::LetExprBody; }
-  template<> inline NodeKind getNodeType<FunctionDeclaration>() { return NodeKind::FunctionDeclaration; }
-  template<> inline NodeKind getNodeType<VariableDeclaration>() { return NodeKind::VariableDeclaration; }
+  template<> inline NodeKind getNodeType<LetDeclaration>() { return NodeKind::LetDeclaration; }
   template<> inline NodeKind getNodeType<RecordDeclarationField>() { return NodeKind::RecordDeclarationField; }
   template<> inline NodeKind getNodeType<RecordDeclaration>() { return NodeKind::RecordDeclaration; }
   template<> inline NodeKind getNodeType<ClassDeclaration>() { return NodeKind::ClassDeclaration; }

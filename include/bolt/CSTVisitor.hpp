@@ -33,7 +33,7 @@ namespace bolt {
         BOLT_GEN_CASE(RArrow)
         BOLT_GEN_CASE(RArrowAlt)
         BOLT_GEN_CASE(LetKeyword)
-        BOLT_GEN_CASE(FnKeyword)
+        BOLT_GEN_CASE(ForeignKeyword)
         BOLT_GEN_CASE(MutKeyword)
         BOLT_GEN_CASE(PubKeyword)
         BOLT_GEN_CASE(TypeKeyword)
@@ -93,8 +93,7 @@ namespace bolt {
         BOLT_GEN_CASE(Parameter)
         BOLT_GEN_CASE(LetBlockBody)
         BOLT_GEN_CASE(LetExprBody)
-        BOLT_GEN_CASE(FunctionDeclaration)
-        BOLT_GEN_CASE(VariableDeclaration)
+        BOLT_GEN_CASE(LetDeclaration)
         BOLT_GEN_CASE(RecordDeclaration)
         BOLT_GEN_CASE(RecordDeclarationField)
         BOLT_GEN_CASE(VariantDeclaration)
@@ -176,7 +175,7 @@ namespace bolt {
       visitToken(N);
     }
 
-    void visitFnKeyword(FnKeyword* N) {
+    void visitForeignKeyword(ForeignKeyword* N) {
       visitToken(N);
     }
 
@@ -440,11 +439,7 @@ namespace bolt {
       visitLetBody(N);
     }
 
-    void visitFunctionDeclaration(FunctionDeclaration* N) {
-      visitNode(N);
-    }
-
-    void visitVariableDeclaration(VariableDeclaration* N) {
+    void visitLetDeclaration(LetDeclaration* N) {
       visitNode(N);
     }
 
@@ -509,7 +504,7 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(RArrow)
         BOLT_GEN_CHILD_CASE(RArrowAlt)
         BOLT_GEN_CHILD_CASE(LetKeyword)
-        BOLT_GEN_CHILD_CASE(FnKeyword)
+        BOLT_GEN_CHILD_CASE(ForeignKeyword)
         BOLT_GEN_CHILD_CASE(MutKeyword)
         BOLT_GEN_CHILD_CASE(PubKeyword)
         BOLT_GEN_CHILD_CASE(TypeKeyword)
@@ -569,8 +564,7 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(Parameter)
         BOLT_GEN_CHILD_CASE(LetBlockBody)
         BOLT_GEN_CHILD_CASE(LetExprBody)
-        BOLT_GEN_CHILD_CASE(FunctionDeclaration)
-        BOLT_GEN_CHILD_CASE(VariableDeclaration)
+        BOLT_GEN_CHILD_CASE(LetDeclaration)
         BOLT_GEN_CHILD_CASE(RecordDeclaration)
         BOLT_GEN_CHILD_CASE(RecordDeclarationField)
         BOLT_GEN_CHILD_CASE(VariantDeclaration)
@@ -629,7 +623,7 @@ namespace bolt {
     void visitEachChild(LetKeyword* N) {
     }
 
-    void visitEachChild(FnKeyword* N) {
+    void visitEachChild(ForeignKeyword* N) {
     }
 
     void visitEachChild(MutKeyword* N) {
@@ -951,29 +945,18 @@ namespace bolt {
       BOLT_VISIT(N->Expression);
     }
 
-    void visitEachChild(FunctionDeclaration* N) {
+    void visitEachChild(LetDeclaration* N) {
       if (N->PubKeyword) {
         BOLT_VISIT(N->PubKeyword);
       }
-      BOLT_VISIT(N->FnKeyword);
-      BOLT_VISIT(N->Name);
-      for (auto Param: N->Params) {
-        BOLT_VISIT(Param);
-      }
-      if (N->TypeAssert) {
-        BOLT_VISIT(N->TypeAssert);
-      }
-      if (N->Body) {
-        BOLT_VISIT(N->Body);
-      }
-    }
-
-    void visitEachChild(VariableDeclaration* N) {
-      if (N->PubKeyword) {
-        BOLT_VISIT(N->PubKeyword);
+      if (N->ForeignKeyword) {
+        BOLT_VISIT(N->ForeignKeyword);
       }
       BOLT_VISIT(N->LetKeyword);
       BOLT_VISIT(N->Pattern);
+      for (auto Param: N->Params) {
+        BOLT_VISIT(Param);
+      }
       if (N->TypeAssert) {
         BOLT_VISIT(N->TypeAssert);
       }

@@ -919,9 +919,10 @@ finish:
     return new IfStatement(Parts);
   }
 
-VariableDeclaration* Parser::parseVariableDeclaration() {
+  LetDeclaration* Parser::parseLetDeclaration() {
 
     PubKeyword* Pub = nullptr;
+    ForeignKeyword* Foreign = nullptr;
     LetKeyword* Let;
     MutKeyword* Mut = nullptr;
     TypeAssert* TA = nullptr;
@@ -932,10 +933,17 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
       Pub = static_cast<PubKeyword*>(T0);
       T0 = Tokens.get();
     }
+    if (T0->getKind() == NodeKind::ForeignKeyword) {
+      Foreign = static_cast<ForeignKeyword*>(T0);
+      T0 = Tokens.get();
+    }
     if (T0->getKind() != NodeKind::LetKeyword) {
       DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::LetKeyword });
       if (Pub) {
         Pub->unref();
+      }
+      if (Foreign) {
+        Foreign->unref();
       }
       skipToLineFoldEnd();
       return nullptr;
@@ -943,116 +951,22 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
     Let = static_cast<LetKeyword*>(T0);
     auto T1 = Tokens.peek();
     if (T1->getKind() == NodeKind::MutKeyword) {
-      Mut = static_cast<MutKeyword*>(T1);
       Tokens.get();
+      Mut = static_cast<MutKeyword*>(T1);
     }
 
-    auto P = parseWidePattern();
-    if (!P) {
+    auto Pattern = parseNarrowPattern();
+    if (!Pattern) {
       if (Pub) {
         Pub->unref();
+      }
+      if (Foreign) {
+        Foreign->unref();
       }
       Let->unref();
       if (Mut) {
         Mut->unref();
       }
-      skipToLineFoldEnd();
-      return nullptr;
-    }
-
-    auto T2 = Tokens.peek();
-    if (T2->getKind() == NodeKind::Colon) {
-      Tokens.get();
-      auto TE = parseTypeExpression();
-      if (TE) {
-        TA = new TypeAssert(static_cast<Colon*>(T2), TE);
-      } else {
-        skipToLineFoldEnd();
-        goto finish;
-      }
-      T2 = Tokens.peek();
-    }
-
-    switch (T2->getKind()) {
-      case NodeKind::BlockStart:
-      {
-        Tokens.get();
-        std::vector<Node*> Elements;
-        for (;;) {
-          auto T3 = Tokens.peek();
-          if (T3->getKind() == NodeKind::BlockEnd) {
-            break;
-          }
-          auto Element = parseLetBodyElement();
-          if (Element) {
-            Elements.push_back(Element);
-          }
-        }
-        Tokens.get()->unref(); // Always a BlockEnd
-        Body = new LetBlockBody(static_cast<BlockStart*>(T2), Elements);
-        break;
-      }
-      case NodeKind::Equals:
-      {
-        Tokens.get();
-        auto E = parseExpression();
-        if (E == nullptr) {
-          skipToLineFoldEnd();
-          goto finish;
-        }
-        if (E) {
-          Body = new LetExprBody(static_cast<Equals*>(T2), E);
-        }
-        break;
-      }
-      case NodeKind::LineFoldEnd:
-        break;
-      default:
-        std::vector<NodeKind> Expected { NodeKind::BlockStart, NodeKind::LineFoldEnd, NodeKind::Equals };
-        if (TA == nullptr) {
-          // First tokens of TypeAssert
-          Expected.push_back(NodeKind::Colon);
-          // First tokens of Pattern
-          Expected.push_back(NodeKind::Identifier);
-        }
-        DE.add<UnexpectedTokenDiagnostic>(File, T2, Expected);
-    }
-
-    checkLineFoldEnd();
-
-finish:
-
-    return new VariableDeclaration { Pub, Let, Mut, P, TA, Body };
-  }
-
-  FunctionDeclaration* Parser::parseFunctionDeclaration() {
-
-    PubKeyword* Pub = nullptr;
-    FnKeyword* Fn;
-    TypeAssert* TA = nullptr;
-    LetBody* Body = nullptr;
-
-    auto T0 = Tokens.get();
-    if (T0->getKind() == NodeKind::PubKeyword) {
-      Pub = static_cast<PubKeyword*>(T0);
-      T0 = Tokens.get();
-    }
-    if (T0->getKind() != NodeKind::FnKeyword) {
-      DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::FnKeyword });
-      if (Pub) {
-        Pub->unref();
-      }
-      skipToLineFoldEnd();
-      return nullptr;
-    }
-    Fn = static_cast<FnKeyword*>(T0);
-
-    auto Name = expectToken<Identifier>();
-    if (!Name) {
-      if (Pub) {
-        Pub->unref();
-      }
-      Fn->unref();
       skipToLineFoldEnd();
       return nullptr;
     }
@@ -1138,10 +1052,12 @@ after_params:
 
 finish:
 
-    return new FunctionDeclaration(
+    return new LetDeclaration(
       Pub,
-      Fn,
-      Name,
+      Foreign,
+      Let,
+      Mut,
+      Pattern,
       Params,
       TA,
       Body
@@ -1152,9 +1068,7 @@ finish:
     auto T0 = peekFirstTokenAfterModifiers();
     switch (T0->getKind()) {
       case NodeKind::LetKeyword:
-        return parseVariableDeclaration();
-      case NodeKind::FnKeyword:
-        return parseFunctionDeclaration();
+        return parseLetDeclaration();
       case NodeKind::ReturnKeyword:
         return parseReturnStatement();
       case NodeKind::IfKeyword:
@@ -1558,12 +1472,12 @@ next_member:
   Node* Parser::parseClassElement() {
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
-      case NodeKind::FnKeyword:
-        return parseFunctionDeclaration();
+      case NodeKind::LetKeyword:
+        return parseLetDeclaration();
       case NodeKind::TypeKeyword:
         // TODO
       default:
-        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector<NodeKind> { NodeKind::FnKeyword, NodeKind::TypeKeyword });
+        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector<NodeKind> { NodeKind::LetKeyword, NodeKind::TypeKeyword });
         skipToLineFoldEnd();
         return nullptr;
     }
@@ -1573,9 +1487,7 @@ next_member:
     auto T0 = peekFirstTokenAfterModifiers();
     switch (T0->getKind()) {
       case NodeKind::LetKeyword:
-        return parseVariableDeclaration();
-      case NodeKind::FnKeyword:
-        return parseFunctionDeclaration();
+        return parseLetDeclaration();
       case NodeKind::IfKeyword:
         return parseIfStatement();
       case NodeKind::ClassKeyword:

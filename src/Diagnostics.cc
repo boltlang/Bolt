@@ -100,8 +100,8 @@ namespace bolt {
         return "'pub'";
       case NodeKind::LetKeyword:
         return "'let'";
-      case NodeKind::FnKeyword:
-        return "'fn'";
+      case NodeKind::ForeignKeyword:
+        return "'foreign'";
       case NodeKind::MutKeyword:
         return "'mut'";
       case NodeKind::MatchKeyword:
@@ -112,10 +112,8 @@ namespace bolt {
         return "'type'";
       case NodeKind::ReferenceTypeExpression:
         return "a type reference";
-      case NodeKind::FunctionDeclaration:
-        return "a function declaration";
-      case NodeKind::VariableDeclaration:
-        return "a variable declaration";
+      case NodeKind::LetDeclaration:
+        return "a let-declaration";
       case NodeKind::CallExpression:
         return "a call-expression";
       case NodeKind::InfixExpression:

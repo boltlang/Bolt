@@ -192,7 +192,7 @@ namespace bolt {
     /// Type inference
 
     void forwardDeclare(Node* Node);
-    void forwardDeclareFunctionDeclaration(FunctionDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
+    void forwardDeclareFunctionDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
 
     Type* inferExpression(Expression* Expression);
     Type* inferTypeExpression(TypeExpression* TE, bool IsPoly = true);
@@ -200,7 +200,7 @@ namespace bolt {
     Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
 
     void infer(Node* node);
-    void inferFunctionDeclaration(FunctionDeclaration* N);
+    void inferFunctionDeclaration(LetDeclaration* N);
     void inferConstraintExpression(ConstraintExpression* C);
 
     /// Factory methods 
