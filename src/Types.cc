@@ -71,7 +71,10 @@ namespace bolt {
 
   Type* Type::rewrite(std::function<Type*(Type*)> Fn, bool Recursive) {
     auto Ty2 = Fn(this);
-    if (!Recursive && this != Ty2) {
+    if (this != Ty2) {
+      if (Recursive) {
+        return Ty2->rewrite(Fn, Recursive);
+      }
       return Ty2;
     }
     switch (Kind) {
