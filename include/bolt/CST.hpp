@@ -1724,6 +1724,7 @@ namespace bolt {
   public:
 
     bool IsCycleActive = false;
+    bool Visited = false;
     InferContext* Ctx;
 
     class PubKeyword* PubKeyword;
