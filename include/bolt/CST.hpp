@@ -252,6 +252,7 @@ namespace bolt {
     Var,
     Class,
     Type,
+    Constructor,
   };
 
   class Scope {

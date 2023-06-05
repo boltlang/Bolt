@@ -140,6 +140,24 @@ namespace bolt {
       {
         auto Decl = static_cast<VariantDeclaration*>(X);
         addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Type);
+        for (auto Member: Decl->Members) {
+          switch (Member->getKind()) {
+            case NodeKind::TupleVariantDeclarationMember:
+            {
+              auto T = static_cast<TupleVariantDeclarationMember*>(Member);
+              addSymbol(T->Name->getCanonicalText(), Decl, SymbolKind::Constructor);
+              break;
+            }
+            case NodeKind::RecordVariantDeclarationMember:
+            {
+              auto R = static_cast<RecordVariantDeclarationMember*>(Member);
+              addSymbol(R->Name->getCanonicalText(), Decl, SymbolKind::Constructor);
+              break;
+            }
+            default:
+              ZEN_UNREACHABLE
+          }
+        }
         break;
       }
       default:
