@@ -18,8 +18,6 @@
 
 namespace bolt {
 
-  std::string describe(const Type* Ty);
-
   Constraint* Constraint::substitute(const TVSub &Sub) {
     switch (Kind) {
       case ConstraintKind::Equal:
@@ -102,7 +100,7 @@ namespace bolt {
   }
 
   void Checker::addBinding(ByteString Name, Scheme* Scm) {
-    getContext().Env.emplace(Name, Scm);
+    getContext().add(Name, Scm);
   }
 
   Type* Checker::getReturnType() {
@@ -307,7 +305,7 @@ namespace bolt {
         Type* Ty = createConType(Decl->Name->getCanonicalText());
 
         // Must be added early so we can create recursive types
-        Decl->Ctx->Parent->Env.emplace(Decl->Name->getCanonicalText(), new Forall(Ty));
+        Decl->Ctx->Parent->add(Decl->Name->getCanonicalText(), new Forall(Ty));
 
         for (auto Member: Decl->Members) {
           switch (Member->getKind()) {
@@ -322,7 +320,7 @@ namespace bolt {
               for (auto Element: TupleMember->Elements) {
                 ParamTypes.push_back(inferTypeExpression(Element));
               }
-              Decl->Ctx->Parent->Env.emplace(TupleMember->Name->getCanonicalText(), new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, TArrow::build(ParamTypes, RetTy)));
+              Decl->Ctx->Parent->add(TupleMember->Name->getCanonicalText(), new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, TArrow::build(ParamTypes, RetTy)));
               break;
             }
             case NodeKind::RecordVariantDeclarationMember:
@@ -356,7 +354,7 @@ namespace bolt {
         auto Ty = createConType(Name);
 
         // Must be added early so we can create recursive types
-        Decl->Ctx->Parent->Env.emplace(Name, new Forall(Ty));
+        Decl->Ctx->Parent->add(Name, new Forall(Ty));
 
         // Corresponds to the logic of one branch of a VariantDeclarationMember
         Type* FieldsTy = new TNil();
@@ -367,7 +365,7 @@ namespace bolt {
         for (auto TV: Vars) {
           RetTy = new TApp(RetTy, TV);
         }
-        Decl->Ctx->Parent->Env.emplace(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow(FieldsTy, RetTy)));
+        Decl->Ctx->Parent->add(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow(FieldsTy, RetTy)));
         popContext();
 
         break;
@@ -441,6 +439,8 @@ namespace bolt {
       return;
     }
 
+    // std::cerr << "declare " << Let->getNameAsString() << std::endl;
+
     setContext(Let->Ctx);
 
     auto addClassVars = [&](ClassDeclaration* Class, bool IsRigid) {
@@ -451,7 +451,7 @@ namespace bolt {
         auto Name = TE->Name->getCanonicalText();
         auto TV = IsRigid ? createRigidVar(Name) : createTypeVar();
         TV->Contexts.emplace(Id);
-        Ctx->Env.emplace(Name, new Forall(TV));
+        Ctx->add(Name, new Forall(TV));
         Out.push_back(TV);
       }
       return Out;
@@ -541,7 +541,7 @@ namespace bolt {
     }
 
     if (!Let->isInstance()) {
-      Let->Ctx->Parent->Env.emplace(Let->getNameAsString(), new Forall(Let->Ctx->TVs, Let->Ctx->Constraints, Ty));
+      Let->Ctx->Parent->add(Let->getNameAsString(), new Forall(Let->Ctx->TVs, Let->Ctx->Constraints, Ty));
     }
 
   }
@@ -551,6 +551,8 @@ namespace bolt {
     if (!Decl->isFunction()) {
       return;
     }
+
+    // std::cerr << "infer " << Decl->getNameAsString() << std::endl;
 
     setContext(Decl->Ctx);
 
@@ -720,6 +722,7 @@ namespace bolt {
         TVSub Sub;
         for (auto TV: *F->TVs) {
           auto Fresh = createTypeVar();
+          // std::cerr << describe(TV) << " => " << describe(Fresh) << std::endl;
           Fresh->Contexts = TV->Contexts;
           Sub[TV] = Fresh;
         }

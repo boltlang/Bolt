@@ -17,6 +17,8 @@
 
 namespace bolt {
 
+  std::string describe(const Type* Ty); // For debugging only
+
   class DiagnosticEngine;
 
   class Constraint;
@@ -144,6 +146,16 @@ namespace bolt {
     ConstraintSet* Constraints;
 
     TypeEnv Env;
+
+    void add(ByteString Name, Scheme* Scm) {
+      // auto F = static_cast<Forall*>(Scm);
+      // std::cerr << Name << " : forall ";
+      // for (auto TV: *F->TVs) {
+      //   std::cerr << describe(TV) << " ";
+      // }
+      // std::cerr << ". " << describe(F->Type) << "\n";
+      Env.emplace(Name, Scm);
+    }
 
     Type* ReturnType = nullptr;
 
