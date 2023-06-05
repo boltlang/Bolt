@@ -53,8 +53,6 @@ int main(int Argc, const char* Argv[]) {
 
   auto DirectDiagnostics = Match.has_flag("direct-diagnostics") && Match.get_flag<bool>("direct-diagnostics");
 
-  std::cerr << DirectDiagnostics << std::endl;
-
   auto [Name, Submatch] = Match.subcommand();
 
   ConsoleDiagnostics DE;
