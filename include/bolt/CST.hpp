@@ -2003,7 +2003,7 @@ namespace bolt {
 
   public:
 
-    TextFile& File;
+    TextFile File;
     InferContext* Ctx;
 
     std::vector<Node*> Elements;
