@@ -63,8 +63,8 @@ if (BOLT_ENABLE_TESTS)
   add_subdirectory(deps/googletest EXCLUDE_FROM_ALL)
   add_executable(
     alltests
-    src/TestText.cc
-    src/TestChecker.cc
+    test/TestText.cc
+    test/TestChecker.cc
   )
   target_link_libraries(
     alltests

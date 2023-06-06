@@ -54,6 +54,10 @@ namespace bolt {
       Diagnostics.clear();
     }
 
+    std::size_t countDiagnostics() const noexcept {
+      return Diagnostics.size();
+    }
+
     ~DiagnosticStore();
 
   };

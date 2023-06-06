@@ -99,6 +99,14 @@ namespace bolt {
     inline UnificationErrorDiagnostic(Type* OrigLeft, Type* OrigRight, TypePath LeftPath, TypePath RightPath, Node* Source):
       Diagnostic(DiagnosticKind::UnificationError), OrigLeft(OrigLeft), OrigRight(OrigRight), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
 
+    inline Type* getLeft() const {
+      return OrigLeft->resolve(LeftPath);
+    }
+
+    inline Type* getRight() const {
+      return OrigRight->resolve(RightPath);
+    }
+
     inline Node* getNode() const override {
       return Source;
     }

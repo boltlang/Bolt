@@ -1,7 +1,7 @@
 
 #include "gtest/gtest.h"
 
-#include "bolt/Text.hpp"
+#include "bolt/CST.hpp"
 
 using namespace bolt;
 
@@ -23,11 +23,11 @@ TEST(TextFileTest, ReportsCorrectLine) {
 
 TEST(TextFileTest, ReportsCorrectStartOffset) {
   TextFile T1 { "foo.txt", "bar\nbaz\nbax\n" };
-  ASSERT_EQ(T1.getStartOffset(1), 0);
-  ASSERT_EQ(T1.getStartOffset(2), 4);
-  ASSERT_EQ(T1.getStartOffset(3), 8);
-  ASSERT_EQ(T1.getStartOffset(4), 12);
-  ASSERT_EQ(T1.getStartOffset(5), 12);
+  ASSERT_EQ(T1.getStartOffsetOfLine(1), 0);
+  ASSERT_EQ(T1.getStartOffsetOfLine(2), 4);
+  ASSERT_EQ(T1.getStartOffsetOfLine(3), 8);
+  ASSERT_EQ(T1.getStartOffsetOfLine(4), 12);
+  ASSERT_EQ(T1.getStartOffsetOfLine(5), 12);
 }
 
 TEST(TextFileTest, ReportsCorrectColumn) {

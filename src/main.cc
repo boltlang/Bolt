@@ -103,7 +103,7 @@ int main(int Argc, const char* Argv[]) {
   std::sort(DS.Diagnostics.begin(), DS.Diagnostics.end(), lessThan);
 
   for (auto D: DS.Diagnostics) {
-    DE.printDiagnostic(*D);
+    DE.addDiagnostic(D);
   }
 
   if (DE.hasError()) {

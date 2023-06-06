@@ -288,9 +288,9 @@ namespace bolt {
   }
 
   DiagnosticStore::~DiagnosticStore() {
-    for (auto D: Diagnostics) {
-      delete D;
-    }
+    // for (auto D: Diagnostics) {
+    //   delete D;
+    // }
   }
 
   ConsoleDiagnostics::ConsoleDiagnostics(std::ostream& Out):
