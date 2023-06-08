@@ -54,6 +54,8 @@ namespace bolt {
       Diagnostics.clear();
     }
 
+    void sort();
+
     std::size_t countDiagnostics() const noexcept {
       return Diagnostics.size();
     }
@@ -217,6 +219,7 @@ namespace bolt {
 
     void write(const std::string_view& S);
     void write(std::size_t N);
+    void write(char C);
 
   public:
 

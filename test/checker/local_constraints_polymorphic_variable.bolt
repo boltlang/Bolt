@@ -1,0 +1,8 @@
+
+let fac n.
+  n + 1
+  return n
+
+@expect_diagnostic 2010
+(@:Int fac 1) + (@:Bool True)
+

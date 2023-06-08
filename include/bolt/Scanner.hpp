@@ -13,8 +13,11 @@
 namespace bolt {
 
   class Token;
+  class DiagnosticEngine;
 
   class Scanner : public BufferedStream<Token*> {
+
+    DiagnosticEngine& DE;
 
     TextFile& File;
 
@@ -41,13 +44,17 @@ namespace bolt {
       return Chars.peek(Offset);
     }
 
+    std::string scanIdentifier();
+
+    Token* readNullable();
+
   protected:
 
     Token* read() override;
 
   public:
 
-    Scanner(TextFile& File, Stream<Char>& Chars);
+    Scanner(DiagnosticEngine& DE, TextFile& File, Stream<Char>& Chars);
 
   };
 

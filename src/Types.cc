@@ -306,118 +306,99 @@ namespace bolt {
     ZEN_UNREACHABLE
   }
 
-  // bool Type::operator==(const Type& Other) const noexcept {
-  //   switch (Kind) {
-  //     case TypeKind::Var:
-  //       if (Other.Kind != TypeKind::Var) {
-  //         return false;
-  //       }
-  //       return static_cast<const TVar*>(this)->Id == static_cast<const TVar&>(Other).Id;
-  //     case TypeKind::Tuple:
-  //     {
-  //       if (Other.Kind != TypeKind::Tuple) {
-  //         return false;
-  //       }
-  //       auto A = static_cast<const TTuple&>(*this);
-  //       auto B = static_cast<const TTuple&>(Other);
-  //       if (A.ElementTypes.size() != B.ElementTypes.size()) {
-  //         return false;
-  //       }
-  //       for (auto [T1, T2]: zen::zip(A.ElementTypes, B.ElementTypes)) {
-  //         if (*T1 != *T2) {
-  //           return false;
-  //         }
-  //       }
-  //       return true;
-  //     }
-  //     case TypeKind::TupleIndex:
-  //     {
-  //       if (Other.Kind != TypeKind::TupleIndex) {
-  //         return false;
-  //       }
-  //       auto A = static_cast<const TTupleIndex&>(*this);
-  //       auto B = static_cast<const TTupleIndex&>(Other);
-  //       return A.I == B.I && *A.Ty == *B.Ty;
-  //     }
-  //     case TypeKind::Con:
-  //     {
-  //       if (Other.Kind != TypeKind::Con) {
-  //         return false;
-  //       }
-  //       auto A = static_cast<const TCon&>(*this);
-  //       auto B = static_cast<const TCon&>(Other);
-  //       if (A.Id != B.Id) {
-  //         return false;
-  //       }
-  //       if (A.Args.size() != B.Args.size()) {
-  //         return false;
-  //       }
-  //       for (auto [T1, T2]: zen::zip(A.Args, B.Args)) {
-  //         if (*T1 != *T2) {
-  //           return false;
-  //         }
-  //       }
-  //       return true;
-  //     }
-  //     case TypeKind::Arrow:
-  //     {
-  //       if (Other.Kind != TypeKind::Arrow) {
-  //         return false;
-  //       }
-  //       auto A = static_cast<const TArrow&>(*this);
-  //       auto B = static_cast<const TArrow&>(Other);
-  //       /* ArrowCursor C1 { &A }; */
-  //       /* ArrowCursor C2 { &B }; */
-  //       /* for (;;) { */
-  //       /*   auto T1 = C1.next(); */
-  //       /*   auto T2 = C2.next(); */
-  //       /*   if (T1 == nullptr && T2 == nullptr) { */
-  //       /*     break; */
-  //       /*   } */
-  //       /*   if (T1 == nullptr || T2 == nullptr || *T1 != *T2) { */
-  //       /*     return false; */
-  //       /*   } */
-  //       /* } */
-  //       if (A.ParamTypes.size() != B.ParamTypes.size()) {
-  //         return false;
-  //       }
-  //       for (auto [T1, T2]: zen::zip(A.ParamTypes, B.ParamTypes)) {
-  //         if (*T1 != *T2) {
-  //           return false;
-  //         }
-  //       }
-  //       return A.ReturnType != B.ReturnType;
-  //     }
-  //     case TypeKind::Absent:
-  //       if (Other.Kind != TypeKind::Absent) {
-  //         return false;
-  //       }
-  //       return true;
-  //     case TypeKind::Nil:
-  //       if (Other.Kind != TypeKind::Nil) {
-  //         return false;
-  //       }
-  //       return true;
-  //     case TypeKind::Present:
-  //     {
-  //       if (Other.Kind != TypeKind::Present) {
-  //         return false;
-  //       }
-  //       auto A = static_cast<const TPresent&>(*this);
-  //       auto B = static_cast<const TPresent&>(Other);
-  //       return *A.Ty == *B.Ty;
-  //     }
-  //     case TypeKind::Field:
-  //     {
-  //       if (Other.Kind != TypeKind::Field) {
-  //         return false;
-  //       }
-  //       auto A = static_cast<const TField&>(*this);
-  //       auto B = static_cast<const TField&>(Other);
-  //       return *A.Ty == *B.Ty && *A.RestTy == *B.RestTy;
-  //     }
-  //   }
-  // }
+  bool Type::operator==(const Type& Other) const noexcept {
+    switch (Kind) {
+      case TypeKind::Var:
+        if (Other.Kind != TypeKind::Var) {
+          return false;
+        }
+        return static_cast<const TVar*>(this)->Id == static_cast<const TVar&>(Other).Id;
+      case TypeKind::Tuple:
+      {
+        if (Other.Kind != TypeKind::Tuple) {
+          return false;
+        }
+        auto A = static_cast<const TTuple&>(*this);
+        auto B = static_cast<const TTuple&>(Other);
+        if (A.ElementTypes.size() != B.ElementTypes.size()) {
+          return false;
+        }
+        for (auto [T1, T2]: zen::zip(A.ElementTypes, B.ElementTypes)) {
+          if (*T1 != *T2) {
+            return false;
+          }
+        }
+        return true;
+      }
+      case TypeKind::TupleIndex:
+      {
+        if (Other.Kind != TypeKind::TupleIndex) {
+          return false;
+        }
+        auto A = static_cast<const TTupleIndex&>(*this);
+        auto B = static_cast<const TTupleIndex&>(Other);
+        return A.I == B.I && *A.Ty == *B.Ty;
+      }
+      case TypeKind::Con:
+      {
+        if (Other.Kind != TypeKind::Con) {
+          return false;
+        }
+        auto A = static_cast<const TCon&>(*this);
+        auto B = static_cast<const TCon&>(Other);
+        if (A.Id != B.Id) {
+          return false;
+        }
+        return true;
+      }
+      case TypeKind::App:
+      {
+        if (Other.Kind != TypeKind::App) {
+          return false;
+        }
+        auto A = static_cast<const TApp&>(*this);
+        auto B = static_cast<const TApp&>(Other);
+        return *A.Op == *B.Op && *A.Arg == *B.Arg;
+      }
+      case TypeKind::Arrow:
+      {
+        if (Other.Kind != TypeKind::Arrow) {
+          return false;
+        }
+        auto A = static_cast<const TArrow&>(*this);
+        auto B = static_cast<const TArrow&>(Other);
+        return *A.ParamType == *B.ParamType && *A.ReturnType == *B.ReturnType;
+      }
+      case TypeKind::Absent:
+        if (Other.Kind != TypeKind::Absent) {
+          return false;
+        }
+        return true;
+      case TypeKind::Nil:
+        if (Other.Kind != TypeKind::Nil) {
+          return false;
+        }
+        return true;
+      case TypeKind::Present:
+      {
+        if (Other.Kind != TypeKind::Present) {
+          return false;
+        }
+        auto A = static_cast<const TPresent&>(*this);
+        auto B = static_cast<const TPresent&>(Other);
+        return *A.Ty == *B.Ty;
+      }
+      case TypeKind::Field:
+      {
+        if (Other.Kind != TypeKind::Field) {
+          return false;
+        }
+        auto A = static_cast<const TField&>(*this);
+        auto B = static_cast<const TField&>(Other);
+        return A.Name == B.Name && *A.Ty == *B.Ty && *A.RestTy == *B.RestTy;
+      }
+    }
+  }
 
   TypeIterator Type::begin() {
     return TypeIterator { this, getStartIndex() };

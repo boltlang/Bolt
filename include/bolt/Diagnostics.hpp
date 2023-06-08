@@ -1,11 +1,8 @@
 
 #pragma once
 
-#include <cwchar>
 #include <vector>
-#include <stdexcept>
 #include <memory>
-#include <iostream>
 
 #include "bolt/ByteString.hpp"
 #include "bolt/String.hpp"
@@ -21,7 +18,6 @@ namespace bolt {
     UnificationError,
     TypeclassMissing,
     InstanceNotFound,
-    ClassNotFound,
     TupleIndexOutOfRange,
     InvalidTypeToTypeclass,
     FieldNotFound,
@@ -45,6 +41,23 @@ namespace bolt {
       return nullptr;
     }
 
+    virtual unsigned getCode() const noexcept = 0;
+
+  };
+
+  class UnexpectedStringDiagnostic : public Diagnostic {
+  public:
+
+    TextFile& File;
+    TextLoc Location;
+    String Actual;
+
+    inline UnexpectedStringDiagnostic(TextFile& File, TextLoc Location, String Actual):
+      Diagnostic(DiagnosticKind::UnexpectedString), File(File), Location(Location), Actual(Actual) {}
+
+    unsigned getCode() const noexcept override {
+      return 1001;
+    }
 
   };
 
@@ -58,17 +71,9 @@ namespace bolt {
     inline UnexpectedTokenDiagnostic(TextFile& File, Token* Actual, std::vector<NodeKind> Expected):
       Diagnostic(DiagnosticKind::UnexpectedToken), File(File), Actual(Actual), Expected(Expected) {}
 
-  };
-
-  class UnexpectedStringDiagnostic : public Diagnostic {
-  public:
-
-    TextFile& File;
-    TextLoc Location;
-    String Actual;
-
-    inline UnexpectedStringDiagnostic(TextFile& File, TextLoc Location, String Actual):
-      Diagnostic(DiagnosticKind::UnexpectedString), File(File), Location(Location), Actual(Actual) {}
+    unsigned getCode() const noexcept override {
+      return 1101;
+    }
 
   };
 
@@ -83,6 +88,10 @@ namespace bolt {
 
     inline Node* getNode() const override {
       return Initiator;
+    }
+
+    unsigned getCode() const noexcept override {
+      return 2005;
     }
 
   };
@@ -111,6 +120,10 @@ namespace bolt {
       return Source;
     }
 
+    unsigned getCode() const noexcept override {
+      return 2010;
+    }
+
   };
 
   class TypeclassMissingDiagnostic : public Diagnostic {
@@ -124,6 +137,10 @@ namespace bolt {
 
     inline Node* getNode() const override {
       return Decl;
+    }
+
+    unsigned getCode() const noexcept override {
+      return 2201;
     }
 
   };
@@ -142,15 +159,9 @@ namespace bolt {
       return Source;
     }
 
-  };
-
-  class ClassNotFoundDiagnostic : public Diagnostic {
-  public:
-
-    ByteString Name;
-
-    inline ClassNotFoundDiagnostic(ByteString Name):
-      Diagnostic(DiagnosticKind::ClassNotFound), Name(Name) {}
+    unsigned getCode() const noexcept override {
+      return 2251;
+    }
 
   };
 
@@ -162,6 +173,10 @@ namespace bolt {
 
     inline TupleIndexOutOfRangeDiagnostic(TTuple* Tuple, std::size_t I):
       Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I) {}
+
+    unsigned getCode() const noexcept override {
+      return 2015;
+    }
 
   };
 
@@ -179,6 +194,10 @@ namespace bolt {
       return Source;
     }
 
+    unsigned getCode() const noexcept override {
+      return 2060;
+    }
+
   };
 
   class FieldNotFoundDiagnostic : public Diagnostic {
@@ -191,6 +210,10 @@ namespace bolt {
 
     inline FieldNotFoundDiagnostic(ByteString Name, Type* Ty, TypePath Path, Node* Source):
       Diagnostic(DiagnosticKind::FieldNotFound), Name(Name), Ty(Ty), Path(Path), Source(Source) {}
+
+    unsigned getCode() const noexcept override {
+      return 2017;
+    }
 
   };
 

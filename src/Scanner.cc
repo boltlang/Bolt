@@ -9,6 +9,7 @@
 #include "bolt/Integer.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Diagnostics.hpp"
+#include "bolt/DiagnosticEngine.hpp"
 #include "bolt/Scanner.hpp"
 
 namespace bolt {
@@ -47,6 +48,12 @@ namespace bolt {
     }
   }
 
+  static bool isDirectiveIdentifierStart(Char Chr) {
+    return (Chr >= 65 && Chr <= 90) // Uppercase letter
+        || (Chr >= 96 && Chr <= 122) // Lowercase letter
+        || Chr == '_';
+  }
+
   static bool isIdentifierPart(Char Chr) {
     return (Chr >= 65 && Chr <= 90) // Uppercase letter
         || (Chr >= 96 && Chr <= 122) // Lowercase letter
@@ -77,10 +84,29 @@ namespace bolt {
     { "enum", NodeKind::EnumKeyword },
   };
 
-  Scanner::Scanner(TextFile& File, Stream<Char>& Chars):
-    File(File), Chars(Chars) {}
+  Scanner::Scanner(DiagnosticEngine& DE, TextFile& File, Stream<Char>& Chars):
+    DE(DE), File(File), Chars(Chars) {}
 
-  Token* Scanner::read() {
+  std::string Scanner::scanIdentifier() {
+    auto Loc = getCurrentLoc();
+    auto C0 = getChar();
+    if (!isDirectiveIdentifierStart(C0)) {
+      DE.add<UnexpectedStringDiagnostic>(File, Loc, std::string { C0 });
+      return nullptr;
+    }
+    ByteString Text { static_cast<char>(C0) };
+    for (;;) {
+      auto C1 = peekChar();
+      if (!isIdentifierPart(C1)) {
+        break;
+      }
+      Text.push_back(C1);
+      getChar();
+    }
+    return Text;
+}
+
+  Token* Scanner::readNullable() {
 
     TextLoc StartLoc;
     Char C0;
@@ -92,6 +118,23 @@ namespace bolt {
         continue;
       }
       if (C0 == '#') {
+        getChar();
+        auto C1 = peekChar(0);
+        auto C2 = peekChar(1);
+        if (C1 == '!' && C2 == '!') {
+          getChar();
+          getChar();
+          auto Name = scanIdentifier();
+          std::string Value;
+          for (;;) {
+            C0 = getChar();
+            Value.push_back(C0);
+            if (C0 == '\n' || C0 == EOF) {
+              break;
+            }
+          }
+          continue;
+        }
         for (;;) {
           C0 = getChar();
           if (C0 == '\n' || C0 == EOF) {
@@ -278,7 +321,8 @@ digit_finish:
               case '\'': Text.push_back('\''); break;
               case '"': Text.push_back('"'); break;
               default:
-                throw UnexpectedStringDiagnostic(File, Loc, String { static_cast<char>(C1) });
+                DE.add<UnexpectedStringDiagnostic>(File, Loc, String { static_cast<char>(C1) });
+                return nullptr;
             }
             Escaping = false;
           } else {
@@ -305,7 +349,8 @@ after_string_contents:
           getChar();
           auto C2 = peekChar();
           if (C2 == '.') {
-            throw UnexpectedStringDiagnostic(File, getCurrentLoc(), String { static_cast<char>(C2) });
+            DE.add<UnexpectedStringDiagnostic>(File, getCurrentLoc(), String { static_cast<char>(C2) });
+            return nullptr;
           }
           return new DotDot(StartLoc);
         }
@@ -347,7 +392,6 @@ after_string_contents:
         }
         return new CustomOperator(Text, StartLoc);
       }
-      
 
 #define BOLT_SIMPLE_TOKEN(ch, name) case ch: return new name(StartLoc);
 
@@ -360,12 +404,24 @@ after_string_contents:
     BOLT_SIMPLE_TOKEN('{', LBrace)
     BOLT_SIMPLE_TOKEN('}', RBrace)
     BOLT_SIMPLE_TOKEN('~', Tilde)
+    BOLT_SIMPLE_TOKEN('@', At)
 
     default:
-      throw UnexpectedStringDiagnostic(File, StartLoc, String { static_cast<char>(C0) });
+      DE.add<UnexpectedStringDiagnostic>(File, StartLoc, String { static_cast<char>(C0) });
+      return nullptr;
 
     }
 
+  }
+
+  Token* Scanner::read() {
+    for (;;) {
+      auto T0 = readNullable();
+      if (T0) {
+        // EndOFFile is guaranteed to be produced, so that ends the stream.
+        return T0;
+      }
+    }
   }
 
   Punctuator::Punctuator(Stream<Token*>& Tokens):

@@ -16,9 +16,9 @@ namespace bolt {
         // ZEN_ASSERT(Decl && Decl->getKind() == NodeKind::FunctionDeclaration);
         // return static_cast<FunctionDeclaration*>(Decl);
       }
-      case NodeKind::ConstantExpression:
+      case NodeKind::LiteralExpression:
       {
-        auto CE = static_cast<ConstantExpression*>(X);
+        auto CE = static_cast<LiteralExpression*>(X);
         switch (CE->Token->getKind()) {
           case NodeKind::IntegerLiteral:
             return static_cast<IntegerLiteral*>(CE->Token)->V;

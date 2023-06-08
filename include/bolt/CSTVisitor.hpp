@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include "CST.hpp"
 #include "zen/config.hpp"
 
 #include "bolt/CST.hpp"
@@ -24,6 +25,7 @@ namespace bolt {
         BOLT_GEN_CASE(Dot)
         BOLT_GEN_CASE(DotDot)
         BOLT_GEN_CASE(Tilde)
+        BOLT_GEN_CASE(At)
         BOLT_GEN_CASE(LParen)
         BOLT_GEN_CASE(RParen)
         BOLT_GEN_CASE(LBracket)
@@ -58,6 +60,8 @@ namespace bolt {
         BOLT_GEN_CASE(IdentifierAlt)
         BOLT_GEN_CASE(StringLiteral)
         BOLT_GEN_CASE(IntegerLiteral)
+        BOLT_GEN_CASE(ExpressionAnnotation)
+        BOLT_GEN_CASE(TypeAssertAnnotation)
         BOLT_GEN_CASE(TypeclassConstraintExpression)
         BOLT_GEN_CASE(EqualityConstraintExpression)
         BOLT_GEN_CASE(QualifiedTypeExpression)
@@ -79,7 +83,7 @@ namespace bolt {
         BOLT_GEN_CASE(MemberExpression)
         BOLT_GEN_CASE(TupleExpression)
         BOLT_GEN_CASE(NestedExpression)
-        BOLT_GEN_CASE(ConstantExpression)
+        BOLT_GEN_CASE(LiteralExpression)
         BOLT_GEN_CASE(CallExpression)
         BOLT_GEN_CASE(InfixExpression)
         BOLT_GEN_CASE(PrefixExpression)
@@ -112,371 +116,387 @@ namespace bolt {
     }
 
     void visitToken(Token* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitEquals(Equals* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitColon(Colon* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitComma(Comma* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitDot(Dot* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitDotDot(DotDot* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitTilde(Tilde* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
+    }
+
+    void visitAt(At* N) {
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitLParen(LParen* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitRParen(RParen* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitLBracket(LBracket* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitRBracket(RBracket* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitLBrace(LBrace* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitRBrace(RBrace* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitRArrow(RArrow* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitRArrowAlt(RArrowAlt* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitLetKeyword(LetKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitForeignKeyword(ForeignKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitMutKeyword(MutKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitPubKeyword(PubKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitTypeKeyword(TypeKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitReturnKeyword(ReturnKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitModKeyword(ModKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitStructKeyword(StructKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitEnumKeyword(EnumKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitClassKeyword(ClassKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitInstanceKeyword(InstanceKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitElifKeyword(ElifKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitIfKeyword(IfKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitElseKeyword(ElseKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitMatchKeyword(MatchKeyword* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitInvalid(Invalid* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitEndOfFile(EndOfFile* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitBlockStart(BlockStart* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitBlockEnd(BlockEnd* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitLineFoldEnd(LineFoldEnd* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitCustomOperator(CustomOperator* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitAssignment(Assignment* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitIdentifier(Identifier* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitIdentifierAlt(IdentifierAlt* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitStringLiteral(StringLiteral* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitIntegerLiteral(IntegerLiteral* N) {
-      visitToken(N);
+      static_cast<D*>(this)->visitToken(N);
+    }
+
+    void visitAnnotation(Annotation* N) {
+      static_cast<D*>(this)->visitNode(N);
+    }
+
+    void visitTypeAssertAnnotation(TypeAssertAnnotation* N) {
+      static_cast<D*>(this)->visitAnnotation(N);
+    }
+
+    void visitExpressionAnnotation(ExpressionAnnotation* N) {
+      static_cast<D*>(this)->visitAnnotation(N);
     }
 
     void visitConstraintExpression(ConstraintExpression* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitTypeclassConstraintExpression(TypeclassConstraintExpression* N) {
-      visitConstraintExpression(N);
+      static_cast<D*>(this)->visitConstraintExpression(N);
     }
 
     void visitEqualityConstraintExpression(EqualityConstraintExpression* N) {
-      visitConstraintExpression(N);
+      static_cast<D*>(this)->visitConstraintExpression(N);
     }
 
     void visitTypeExpression(TypeExpression* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitQualifiedTypeExpression(QualifiedTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitReferenceTypeExpression(ReferenceTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitArrowTypeExpression(ArrowTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitAppTypeExpression(AppTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitVarTypeExpression(VarTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitNestedTypeExpression(NestedTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitTupleTypeExpression(TupleTypeExpression* N) {
-      visitTypeExpression(N);
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitPattern(Pattern* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitBindPattern(BindPattern* N) {
-      visitPattern(N);
+      static_cast<D*>(this)->visitPattern(N);
     }
 
     void visitLiteralPattern(LiteralPattern* N) {
-      visitPattern(N);
+      static_cast<D*>(this)->visitPattern(N);
     }
 
     void visitNamedPattern(NamedPattern* N) {
-      visitPattern(N);
+      static_cast<D*>(this)->visitPattern(N);
     }
 
     void visitTuplePattern(TuplePattern* N) {
-      visitPattern(N);
+      static_cast<D*>(this)->visitPattern(N);
     }
 
     void visitNestedPattern(NestedPattern* N) {
-      visitPattern(N);
+      static_cast<D*>(this)->visitPattern(N);
     }
 
     void visitListPattern(ListPattern* N) {
-      visitPattern(N);
+      static_cast<D*>(this)->visitPattern(N);
     }
 
     void visitExpression(Expression* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitReferenceExpression(ReferenceExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitMatchCase(MatchCase* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitMatchExpression(MatchExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitMemberExpression(MemberExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitTupleExpression(TupleExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitNestedExpression(NestedExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
-    void visitConstantExpression(ConstantExpression* N) {
-      visitExpression(N);
+    void visitLiteralExpression(LiteralExpression* N) {
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitCallExpression(CallExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitInfixExpression(InfixExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitPrefixExpression(PrefixExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitRecordExpressionField(RecordExpressionField* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitRecordExpression(RecordExpression* N) {
-      visitExpression(N);
+      static_cast<D*>(this)->visitExpression(N);
     }
 
     void visitStatement(Statement* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitExpressionStatement(ExpressionStatement* N) {
-      visitStatement(N);
+      static_cast<D*>(this)->visitStatement(N);
     }
 
     void visitReturnStatement(ReturnStatement* N) {
-      visitStatement(N);
+      static_cast<D*>(this)->visitStatement(N);
     }
 
     void visitIfStatement(IfStatement* N) {
-      visitStatement(N);
+      static_cast<D*>(this)->visitStatement(N);
     }
 
     void visitIfStatementPart(IfStatementPart* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitTypeAssert(TypeAssert* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitParameter(Parameter* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitLetBody(LetBody* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitLetBlockBody(LetBlockBody* N) {
-      visitLetBody(N);
+      static_cast<D*>(this)->visitLetBody(N);
     }
 
     void visitLetExprBody(LetExprBody* N) {
-      visitLetBody(N);
+      static_cast<D*>(this)->visitLetBody(N);
     }
 
     void visitLetDeclaration(LetDeclaration* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitRecordDeclarationField(RecordDeclarationField* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitRecordDeclaration(RecordDeclaration* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitVariantDeclaration(VariantDeclaration* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitVariantDeclarationMember(VariantDeclarationMember* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitTupleVariantDeclarationMember(TupleVariantDeclarationMember* N) {
-      visitVariantDeclarationMember(N);
+      static_cast<D*>(this)->visitVariantDeclarationMember(N);
     }
 
     void visitRecordVariantDeclarationMember(RecordVariantDeclarationMember* N) {
-      visitVariantDeclarationMember(N);
+      static_cast<D*>(this)->visitVariantDeclarationMember(N);
     }
 
     void visitClassDeclaration(ClassDeclaration* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitInstanceDeclaration(InstanceDeclaration* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
     void visitSourceFile(SourceFile* N) {
-      visitNode(N);
+      static_cast<D*>(this)->visitNode(N);
     }
 
   public:
@@ -495,6 +515,7 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(Dot)
         BOLT_GEN_CHILD_CASE(DotDot)
         BOLT_GEN_CHILD_CASE(Tilde)
+        BOLT_GEN_CHILD_CASE(At)
         BOLT_GEN_CHILD_CASE(LParen)
         BOLT_GEN_CHILD_CASE(RParen)
         BOLT_GEN_CHILD_CASE(LBracket)
@@ -529,6 +550,8 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(IdentifierAlt)
         BOLT_GEN_CHILD_CASE(StringLiteral)
         BOLT_GEN_CHILD_CASE(IntegerLiteral)
+        BOLT_GEN_CHILD_CASE(ExpressionAnnotation)
+        BOLT_GEN_CHILD_CASE(TypeAssertAnnotation)
         BOLT_GEN_CHILD_CASE(TypeclassConstraintExpression)
         BOLT_GEN_CHILD_CASE(EqualityConstraintExpression)
         BOLT_GEN_CHILD_CASE(QualifiedTypeExpression)
@@ -550,7 +573,7 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(MemberExpression)
         BOLT_GEN_CHILD_CASE(TupleExpression)
         BOLT_GEN_CHILD_CASE(NestedExpression)
-        BOLT_GEN_CHILD_CASE(ConstantExpression)
+        BOLT_GEN_CHILD_CASE(LiteralExpression)
         BOLT_GEN_CHILD_CASE(CallExpression)
         BOLT_GEN_CHILD_CASE(InfixExpression)
         BOLT_GEN_CHILD_CASE(PrefixExpression)
@@ -594,6 +617,9 @@ namespace bolt {
     }
 
     void visitEachChild(Tilde* N) {
+    }
+
+    void visitEachChild(At* N) {
     }
 
     void visitEachChild(LParen* N) {
@@ -696,6 +722,17 @@ namespace bolt {
     }
 
     void visitEachChild(IntegerLiteral* N) {
+    }
+
+    void visitEachChild(ExpressionAnnotation* N) {
+      BOLT_VISIT(N->At);
+      BOLT_VISIT(N->Expression);
+    }
+
+    void visitEachChild(TypeAssertAnnotation* N) {
+      BOLT_VISIT(N->At);
+      BOLT_VISIT(N->Colon);
+      BOLT_VISIT(N->TE);
     }
 
     void visitEachChild(TypeclassConstraintExpression* N) {
@@ -809,6 +846,9 @@ namespace bolt {
     }
 
     void visitEachChild(ReferenceExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
        for (auto [Name, Dot]: N->ModulePath) {
          BOLT_VISIT(Name);
          BOLT_VISIT(Dot);
@@ -823,6 +863,9 @@ namespace bolt {
     }
 
     void visitEachChild(MatchExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->MatchKeyword);
       if (N->Value) {
         BOLT_VISIT(N->Value);
@@ -834,12 +877,18 @@ namespace bolt {
     }
 
     void visitEachChild(MemberExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->getExpression());
       BOLT_VISIT(N->Dot);
       BOLT_VISIT(N->Name);
     }
 
     void visitEachChild(TupleExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->LParen);
       for (auto [E, Comma]: N->Elements) {
         BOLT_VISIT(E);
@@ -851,16 +900,25 @@ namespace bolt {
     }
 
     void visitEachChild(NestedExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->LParen);
       BOLT_VISIT(N->Inner);
       BOLT_VISIT(N->RParen);
     }
 
-    void visitEachChild(ConstantExpression* N) {
+    void visitEachChild(LiteralExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->Token);
     }
 
     void visitEachChild(CallExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->Function);
       for (auto Arg: N->Args) {
         BOLT_VISIT(Arg);
@@ -868,12 +926,18 @@ namespace bolt {
     }
 
     void visitEachChild(InfixExpression* N) {
-      BOLT_VISIT(N->LHS);
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
+      BOLT_VISIT(N->Left);
       BOLT_VISIT(N->Operator);
-      BOLT_VISIT(N->RHS);
+      BOLT_VISIT(N->Right);
     }
 
     void visitEachChild(PrefixExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->Operator);
       BOLT_VISIT(N->Argument);
     }
@@ -885,6 +949,9 @@ namespace bolt {
     }
 
     void visitEachChild(RecordExpression* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->LBrace);
       for (auto [Field, Comma]: N->Fields) {
         BOLT_VISIT(Field);

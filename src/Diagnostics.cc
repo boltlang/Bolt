@@ -48,6 +48,25 @@ namespace bolt {
   Diagnostic::Diagnostic(DiagnosticKind Kind):
     std::runtime_error("a compiler error occurred without being caught"), Kind(Kind) {}
 
+  bool sourceLocLessThan(const Diagnostic* L, const Diagnostic* R) {
+    auto N1 = L->getNode();
+    auto N2 = R->getNode();
+    if (N1 == nullptr && N2 == nullptr) {
+      return false;
+    }
+    if (N1 == nullptr) {
+      return true;
+    }
+    if (N2 == nullptr) {
+      return false;
+    }
+    return N1->getStartLine() < N2->getStartLine() || N1->getStartColumn() < N2->getStartColumn();
+  };
+
+  void DiagnosticStore::sort() {
+    std::sort(Diagnostics.begin(), Diagnostics.end(), sourceLocLessThan);
+  }
+
   static std::string describe(NodeKind Type) {
     switch (Type) {
       case NodeKind::Identifier:
@@ -122,7 +141,7 @@ namespace bolt {
         return "a function or variable reference";
       case NodeKind::MatchExpression:
         return "a match-expression";
-      case NodeKind::ConstantExpression:
+      case NodeKind::LiteralExpression:
         return "a literal expression";
       case NodeKind::MemberExpression:
         return "an accessor of a member";
@@ -132,6 +151,8 @@ namespace bolt {
         return "a branch of an if-statement";
       case NodeKind::ListPattern:
         return "a list pattern";
+      case NodeKind::TypeAssertAnnotation:
+        return "an annotation for a type assertion";
       default:
         ZEN_UNREACHABLE
     }
@@ -476,6 +497,10 @@ namespace bolt {
 
   void ConsoleDiagnostics::write(const std::string_view& S) {
     Out << S;
+  }
+
+  void ConsoleDiagnostics::write(char C) {
+    Out << C;
   }
 
   void ConsoleDiagnostics::write(std::size_t I) {
@@ -846,16 +871,6 @@ namespace bolt {
         write(" was not found.\n\n");
         writeNode(E.Source);
         write("\n");
-        break;
-      }
-
-      case DiagnosticKind::ClassNotFound:
-      {
-        auto E = static_cast<const ClassNotFoundDiagnostic&>(D);
-        writePrefix(E);
-        write("the type class ");
-        writeTypeclassName(E.Name);
-        write(" was not found.\n\n");
         break;
       }
 

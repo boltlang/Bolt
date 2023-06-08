@@ -345,6 +345,22 @@ namespace bolt {
     return true;
   }
 
+  Token* ExpressionAnnotation::getFirstToken() const {
+    return At;
+  }
+
+  Token* ExpressionAnnotation::getLastToken() const {
+    return Expression->getLastToken();
+  }
+
+  Token* TypeAssertAnnotation::getFirstToken() const {
+    return At;
+  }
+
+  Token* TypeAssertAnnotation::getLastToken() const {
+    return TE->getLastToken();
+  }
+
   Token* TypeclassConstraintExpression::getFirstToken() const {
     return Name;
   }
@@ -553,11 +569,11 @@ namespace bolt {
     return RParen;
   }
 
-  Token* ConstantExpression::getFirstToken() const {
+  Token* LiteralExpression::getFirstToken() const {
     return Token;
   }
 
-  Token* ConstantExpression::getLastToken() const {
+  Token* LiteralExpression::getLastToken() const {
     return Token;
   }
 
@@ -573,11 +589,11 @@ namespace bolt {
   }
 
   Token* InfixExpression::getFirstToken() const {
-    return LHS->getFirstToken();
+    return Left->getFirstToken();
   }
 
   Token* InfixExpression::getLastToken() const {
-    return RHS->getLastToken();
+    return Right->getLastToken();
   }
 
   Token* PrefixExpression::getFirstToken() const {
@@ -936,6 +952,10 @@ namespace bolt {
 
   std::string Tilde::getText() const {
     return "~";
+  }
+
+  std::string At::getText() const {
+    return "@";
   }
 
   std::string ClassKeyword::getText() const {

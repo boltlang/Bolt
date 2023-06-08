@@ -904,6 +904,12 @@ namespace bolt {
 
     Type* Ty;
 
+    for (auto A: X->Annotations) {
+      if (A->getKind() == NodeKind::TypeAssertAnnotation) {
+        inferTypeExpression(static_cast<TypeAssertAnnotation*>(A)->TE);
+      }
+    }
+
     switch (X->getKind()) {
 
       case NodeKind::MatchExpression:
@@ -942,9 +948,9 @@ namespace bolt {
         break;
       }
 
-      case NodeKind::ConstantExpression:
+      case NodeKind::LiteralExpression:
       {
-        auto Const = static_cast<ConstantExpression*>(X);
+        auto Const = static_cast<LiteralExpression*>(X);
         Ty = inferLiteral(Const->Token);
         break;
       }
@@ -1009,8 +1015,8 @@ namespace bolt {
         auto OpTy = instantiate(Scm, Infix->Operator);
         Ty = createTypeVar();
         std::vector<Type*> ArgTys;
-        ArgTys.push_back(inferExpression(Infix->LHS));
-        ArgTys.push_back(inferExpression(Infix->RHS));
+        ArgTys.push_back(inferExpression(Infix->Left));
+        ArgTys.push_back(inferExpression(Infix->Right));
         makeEqual(TArrow::build(ArgTys, Ty), OpTy, X);
         break;
       }

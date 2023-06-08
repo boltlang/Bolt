@@ -609,6 +609,7 @@ after_tuple_element:
   }
 
   Expression* Parser::parsePrimitiveExpression() {
+    auto Annotations = parseAnnotations();
     auto T0 = Tokens.peek();
     switch (T0->getKind()) {
       case NodeKind::Identifier:
@@ -634,7 +635,7 @@ after_tuple_element:
           DE.add<UnexpectedTokenDiagnostic>(File, T3, std::vector { NodeKind::Identifier, NodeKind::IdentifierAlt });
           return nullptr;
         }
-        return new ReferenceExpression(ModulePath, static_cast<Symbol*>(T3));
+        return new ReferenceExpression(Annotations, ModulePath, static_cast<Symbol*>(T3));
       }
       case NodeKind::LParen:
       {
@@ -687,21 +688,29 @@ after_tuple_element:
         }
 after_tuple_elements:
         if (Elements.size() == 1 && !std::get<1>(Elements.front())) {
-          return new NestedExpression(LParen, std::get<0>(Elements.front()), RParen);
+          return new NestedExpression(Annotations, LParen, std::get<0>(Elements.front()), RParen);
         }
-        return new TupleExpression { LParen, Elements, RParen };
+        return new TupleExpression { Annotations, LParen, Elements, RParen };
       }
       case NodeKind::MatchKeyword:
         return parseMatchExpression();
       case NodeKind::IntegerLiteral:
       case NodeKind::StringLiteral:
         Tokens.get();
-        return new ConstantExpression(static_cast<Literal*>(T0));
+        return new LiteralExpression(Annotations, static_cast<Literal*>(T0));
       case NodeKind::LBrace:
         return parseRecordExpression();
       default:
         // Tokens.get();
-        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::MatchKeyword, NodeKind::Identifier, NodeKind::IdentifierAlt, NodeKind::LParen, NodeKind::LBrace, NodeKind::IntegerLiteral, NodeKind::StringLiteral });
+        DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector {
+          NodeKind::MatchKeyword,
+          NodeKind::Identifier,
+          NodeKind::IdentifierAlt,
+          NodeKind::LParen,
+          NodeKind::LBrace,
+          NodeKind::IntegerLiteral,
+          NodeKind::StringLiteral
+        });
         return nullptr;
     }
   }
@@ -722,7 +731,8 @@ after_tuple_elements:
         case NodeKind::Identifier:
           Tokens.get();
           Tokens.get();
-          E = new MemberExpression { E, static_cast<Dot*>(T1), T2 };
+          E = new MemberExpression { E->Annotations, E, static_cast<Dot*>(T1), T2 };
+          E->Annotations.clear();
           break;
         default:
           goto finish;
@@ -761,7 +771,9 @@ finish:
     if (Args.empty()) {
       return Operator;
     }
-    return new CallExpression(Operator, Args);
+    auto Annotations = Operator->Annotations;
+    Operator->Annotations.clear();
+    return new CallExpression(Annotations, Operator, Args);
   }
 
   Expression* Parser::parseUnaryExpression() {
@@ -1516,6 +1528,54 @@ next_member:
       }
     }
     return new SourceFile(File, Elements);
+  }
+
+  std::vector<Annotation*> Parser::parseAnnotations() {
+    std::vector<Annotation*> Annotations;
+    for (;;) {
+      auto T0 = Tokens.peek();
+      if (T0->getKind() != NodeKind::At) {
+        break;
+      }
+      auto At = static_cast<class At*>(T0);
+      Tokens.get();
+      auto T1 = Tokens.peek();
+      switch (T1->getKind()) {
+        case NodeKind::Colon:
+        {
+          auto Colon = static_cast<class Colon*>(T1);
+          Tokens.get();
+          auto TE = parsePrimitiveTypeExpression();
+          if (!TE) {
+            // TODO
+            continue;
+          }
+          Annotations.push_back(new TypeAssertAnnotation { At, Colon, TE });
+          continue;
+        }
+        default:
+        {
+          // auto Name = static_cast<Identifier*>(T1);
+          // Tokens.get();
+          auto E = parseExpression();
+          if (!E) {
+            At->unref();
+            skipToLineFoldEnd();
+            continue;
+          }
+          checkLineFoldEnd();
+          Annotations.push_back(new ExpressionAnnotation { At, E });
+          break;
+        }
+        // default:
+        //   DE.add<UnexpectedTokenDiagnostic>(File, T1, std::vector { NodeKind::Colon, NodeKind::Identifier });
+        //   At->unref();
+        //   skipToLineFoldEnd();
+        //   break;
+      }
+next_annotation:;
+    }
+    return Annotations;
   }
 
   void Parser::skipToLineFoldEnd() {

@@ -4,6 +4,7 @@
 #include <cctype>
 #include <istream>
 #include <iterator>
+#include <limits>
 #include <unordered_map>
 #include <variant>
 #include <vector>
@@ -95,6 +96,7 @@ namespace bolt {
     Dot,
     DotDot,
     Tilde,
+    At,
     LParen,
     RParen,
     LBracket,
@@ -129,6 +131,8 @@ namespace bolt {
     IdentifierAlt,
     StringLiteral,
     IntegerLiteral,
+    ExpressionAnnotation,
+    TypeAssertAnnotation,
     TypeclassConstraintExpression,
     EqualityConstraintExpression,
     QualifiedTypeExpression,
@@ -150,7 +154,7 @@ namespace bolt {
     MemberExpression,
     TupleExpression,
     NestedExpression,
-    ConstantExpression,
+    LiteralExpression,
     CallExpression,
     InfixExpression,
     PrefixExpression,
@@ -221,7 +225,7 @@ namespace bolt {
     template<>
     bool is<Expression>() const noexcept {
       return Kind == NodeKind::ReferenceExpression
-          || Kind == NodeKind::ConstantExpression
+          || Kind == NodeKind::LiteralExpression
           || Kind == NodeKind::PrefixExpression
           || Kind == NodeKind::InfixExpression
           || Kind == NodeKind::CallExpression
@@ -419,6 +423,20 @@ namespace bolt {
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::Tilde;
+    }
+
+  };
+
+  class At : public Token {
+  public:
+
+    inline At(TextLoc StartLoc):
+      Token(NodeKind::At, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::At;
     }
 
   };
@@ -949,10 +967,72 @@ namespace bolt {
       return V;
     }
 
+    inline int asInt() const {
+      ZEN_ASSERT(V >= std::numeric_limits<int>::min() && V <= std::numeric_limits<int>::max());
+      return V;
+    }
+
     LiteralValue getValue() override;
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::IntegerLiteral;
+    }
+
+  };
+
+  class Annotation : public Node {
+  public:
+
+    inline Annotation(NodeKind Kind):
+      Node(Kind) {}
+
+  };
+
+  class ExpressionAnnotation : public Annotation {
+  public:
+
+    At* At;
+    Expression* Expression;
+
+    inline ExpressionAnnotation(
+      class At* At,
+      class Expression* Expression
+    ): Annotation(NodeKind::ExpressionAnnotation),
+       At(At),
+       Expression(Expression) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+    inline class Expression* getExpression() const noexcept {
+      return Expression;
+    }
+
+  };
+
+  class TypeExpression;
+
+  class TypeAssertAnnotation : public Annotation {
+  public:
+
+    At* At;
+    Colon* Colon;
+    TypeExpression* TE;
+
+    inline TypeAssertAnnotation(
+      class At* At,
+      class Colon* Colon,
+      TypeExpression* TE
+    ): Annotation(NodeKind::TypeAssertAnnotation),
+       At(At),
+       Colon(Colon),
+       TE(TE) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+    inline TypeExpression* getTypeExpression() const noexcept {
+      return TE;
     }
 
   };
@@ -1307,10 +1387,15 @@ namespace bolt {
 
 
   class Expression : public TypedNode {
+  public:
+
+    std::vector<Annotation*> Annotations;
+
   protected:
 
-    inline Expression(NodeKind Kind):
-      TypedNode(Kind) {}
+    inline Expression(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
+      TypedNode(Kind), Annotations(Annotations) {}
+
 
   };
 
@@ -1320,12 +1405,24 @@ namespace bolt {
     std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
     Symbol* Name;
 
-    ReferenceExpression(
+    inline ReferenceExpression(
       std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
       Symbol* Name
     ): Expression(NodeKind::ReferenceExpression),
        ModulePath(ModulePath),
        Name(Name) {}
+
+    inline ReferenceExpression(
+      std::vector<Annotation*> Annotations,
+      std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
+      Symbol* Name
+    ): Expression(NodeKind::ReferenceExpression, Annotations),
+       ModulePath(ModulePath),
+       Name(Name) {}
+
+    inline ByteString getNameAsString() const noexcept {
+      return Name->getCanonicalText();
+    }
 
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
@@ -1376,6 +1473,18 @@ namespace bolt {
        BlockStart(BlockStart),
        Cases(Cases) {}
 
+    inline MatchExpression(
+      std::vector<Annotation*> Annotations,
+      class MatchKeyword* MatchKeyword,
+      Expression* Value,
+      class BlockStart* BlockStart,
+      std::vector<MatchCase*> Cases
+    ): Expression(NodeKind::MatchExpression, Annotations),
+       MatchKeyword(MatchKeyword),
+       Value(Value),
+       BlockStart(BlockStart),
+       Cases(Cases) {}
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
@@ -1393,6 +1502,16 @@ namespace bolt {
       class Dot* Dot,
       Token* Name
     ): Expression(NodeKind::MemberExpression),
+       E(E),
+       Dot(Dot),
+       Name(Name) {}
+
+    inline MemberExpression(
+      std::vector<Annotation*> Annotations,
+      class Expression* E,
+      class Dot* Dot,
+      Token* Name
+    ): Expression(NodeKind::MemberExpression, Annotations),
        E(E),
        Dot(Dot),
        Name(Name) {}
@@ -1422,6 +1541,16 @@ namespace bolt {
        Elements(Elements),
        RParen(RParen) {}
 
+    inline TupleExpression(
+      std::vector<Annotation*> Annotations,
+      class LParen* LParen,
+      std::vector<std::tuple<Expression*, Comma*>> Elements,
+      class RParen* RParen
+    ): Expression(NodeKind::TupleExpression, Annotations),
+       LParen(LParen),
+       Elements(Elements),
+       RParen(RParen) {}
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
@@ -1443,22 +1572,48 @@ namespace bolt {
        Inner(Inner),
        RParen(RParen) {}
 
+    inline NestedExpression(
+      std::vector<Annotation*> Annotations,
+      class LParen* LParen,
+      Expression* Inner,
+      class RParen* RParen
+    ): Expression(NodeKind::NestedExpression, Annotations),
+       LParen(LParen),
+       Inner(Inner),
+       RParen(RParen) {}
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
   };
 
-  class ConstantExpression : public Expression {
+  class LiteralExpression : public Expression {
   public:
 
-    class Literal* Token;
+    Literal* Token;
 
-    ConstantExpression(
-      class Literal* Token
-    ): Expression(NodeKind::ConstantExpression),
+    LiteralExpression(
+      Literal* Token
+    ): Expression(NodeKind::LiteralExpression),
        Token(Token) {}
 
-        class Token* getFirstToken() const override;
+    LiteralExpression(
+      std::vector<Annotation*> Annotations,
+      Literal* Token
+    ): Expression(NodeKind::LiteralExpression, Annotations),
+       Token(Token) {}
+
+    inline ByteString getAsText() {
+      ZEN_ASSERT(Token->getKind() == NodeKind::StringLiteral);
+      return static_cast<StringLiteral*>(Token)->Text;
+    }
+
+    inline int getAsInt() {
+      ZEN_ASSERT(Token->getKind() == NodeKind::IntegerLiteral);
+      return static_cast<IntegerLiteral*>(Token)->asInt();
+    }
+
+    class Token* getFirstToken() const override;
     class Token* getLastToken() const override;
 
   };
@@ -1469,10 +1624,18 @@ namespace bolt {
     Expression* Function;
     std::vector<Expression*> Args;
 
-    CallExpression(
+    inline CallExpression(
       Expression* Function,
       std::vector<Expression*> Args
     ): Expression(NodeKind::CallExpression),
+       Function(Function),
+       Args(Args) {}
+
+    inline CallExpression(
+      std::vector<Annotation*> Annotations,
+      Expression* Function,
+      std::vector<Expression*> Args
+    ): Expression(NodeKind::CallExpression, Annotations),
        Function(Function),
        Args(Args) {}
 
@@ -1484,15 +1647,28 @@ namespace bolt {
   class InfixExpression : public Expression {
   public:
 
-    Expression* LHS;
+    Expression* Left;
     Token* Operator;
-    Expression* RHS;
+    Expression* Right;
 
-    InfixExpression(Expression* LHS, Token* Operator, Expression* RHS):
-      Expression(NodeKind::InfixExpression),
-      LHS(LHS),
-      Operator(Operator),
-      RHS(RHS) {}
+    inline InfixExpression(
+      Expression* Left,
+      Token* Operator,
+      Expression* Right
+    ): Expression(NodeKind::InfixExpression),
+       Left(Left),
+       Operator(Operator),
+       Right(Right) {}
+
+    inline InfixExpression(
+      std::vector<Annotation*> Annotations,
+      Expression* Left,
+      Token* Operator,
+      Expression* Right
+    ): Expression(NodeKind::InfixExpression, Annotations),
+       Left(Left),
+       Operator(Operator),
+       Right(Right) {}
 
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
@@ -2082,7 +2258,7 @@ namespace bolt {
   template<> inline NodeKind getNodeType<BindPattern>() { return NodeKind::BindPattern; }
   template<> inline NodeKind getNodeType<ReferenceExpression>() { return NodeKind::ReferenceExpression; }
   template<> inline NodeKind getNodeType<NestedExpression>() { return NodeKind::NestedExpression; }
-  template<> inline NodeKind getNodeType<ConstantExpression>() { return NodeKind::ConstantExpression; }
+  template<> inline NodeKind getNodeType<LiteralExpression>() { return NodeKind::LiteralExpression; }
   template<> inline NodeKind getNodeType<CallExpression>() { return NodeKind::CallExpression; }
   template<> inline NodeKind getNodeType<InfixExpression>() { return NodeKind::InfixExpression; }
   template<> inline NodeKind getNodeType<PrefixExpression>() { return NodeKind::PrefixExpression; }

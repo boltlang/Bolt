@@ -94,6 +94,8 @@ namespace bolt {
     VarTypeExpression* parseVarTypeExpression();
     ReferenceTypeExpression* parseReferenceTypeExpression();
 
+    std::vector<Annotation*> parseAnnotations();
+
     void checkLineFoldEnd();
     void skipToLineFoldEnd();
 
