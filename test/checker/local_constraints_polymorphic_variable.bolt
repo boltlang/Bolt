@@ -4,5 +4,6 @@ let fac n.
   return n
 
 @expect_diagnostic 2010
-(@:Int fac 1) + (@:Bool True)
+@:Int fac "foo"
+@:Int fac 1
 

@@ -11,6 +11,7 @@
 
 #include "bolt/CST.hpp"
 #include "bolt/CSTVisitor.hpp"
+#include "bolt/ConsolePrinter.hpp"
 #include "bolt/DiagnosticEngine.hpp"
 #include "bolt/Diagnostics.hpp"
 #include "bolt/Scanner.hpp"
@@ -19,6 +20,12 @@
 #include "bolt/Evaluator.hpp"
 
 using namespace bolt;
+
+/**
+ * Status code that can be returned and should according to documentation
+ * terminate xargs's looping.
+ */
+const constexpr int XARGS_STOP_LOOP = 255;
 
 ByteString readFile(std::string Path) {
 
@@ -63,7 +70,8 @@ int main(int Argc, const char* Argv[]) {
   auto DirectDiagnostics = Match.has_flag("direct-diagnostics") && Match.get_flag<bool>("direct-diagnostics") && !IsVerify;
   auto AdditionalSyntax = Match.has_flag("additional-syntax") && Match.get_flag<bool>("additional-syntax");
 
-  ConsoleDiagnostics DE;
+  ConsolePrinter ThePrinter;
+  ConsoleDiagnostics DE(ThePrinter);
   LanguageConfig Config;
 
   std::vector<SourceFile*> SourceFiles;
@@ -96,7 +104,11 @@ int main(int Argc, const char* Argv[]) {
 
   if (IsVerify) {
 
-    struct Visitor : public CSTVisitor<Visitor> {
+    // TODO make this work with mulitple source files at once
+
+    bool HasError = 0;
+
+    struct AssertVisitor : public CSTVisitor<AssertVisitor> {
       Checker& C;
       DiagnosticEngine& DE;
       void visitExpression(Expression* N) {
@@ -114,12 +126,12 @@ int main(int Argc, const char* Argv[]) {
       }
     };
 
-    Visitor V { {}, TheChecker, DE };
+    AssertVisitor V { {}, TheChecker, DE };
     for (auto SF: SourceFiles) {
       V.visit(SF);
     }
 
-    struct EDVisitor : public CSTVisitor<EDVisitor> {
+    struct ExpectDiagnosticVisitor : public CSTVisitor<ExpectDiagnosticVisitor> {
       std::multimap<std::size_t, unsigned> Expected;
       void visitExpressionAnnotation(ExpressionAnnotation* N) {
         if (N->getExpression()->is<CallExpression>()) {
@@ -135,37 +147,41 @@ int main(int Argc, const char* Argv[]) {
       }
     };
 
-    EDVisitor V1;
+    ExpectDiagnosticVisitor V1;
     for (auto SF: SourceFiles) {
       V1.visit(SF);
     }
 
     for (auto D: DS.Diagnostics) {
       auto N = D->getNode();
-      if (!N) {
-        DE.addDiagnostic(D);
-      } else {
+      if (N) {
         auto Line = N->getStartLine();
         auto Match = V1.Expected.find(Line);
         if (Match != V1.Expected.end() && Match->second == D->getCode()) {
           std::cerr << "skipped 1 diagnostic" << std::endl;
-        } else {
-          DE.addDiagnostic(D);
+          continue;
         }
       }
+      // Whenever D did not succeed to match we have to print the diagnostic error
+      ThePrinter.writeDiagnostic(*D);
+      HasError = true;
+    }
+
+    if (HasError) {
+      return XARGS_STOP_LOOP;
     }
 
   } else {
 
     DS.sort();
     for (auto D: DS.Diagnostics) {
-      DE.addDiagnostic(D);
+      ThePrinter.writeDiagnostic(*D);
     }
 
-    if (DE.hasError()) {
-      return 1;
-    }
+  }
 
+  if (DE.hasError()) {
+    return 255;
   }
 
   if (Name == "eval") {

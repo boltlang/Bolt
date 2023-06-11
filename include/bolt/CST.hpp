@@ -1,9 +1,6 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
-#include <cctype>
-#include <istream>
-#include <iterator>
 #include <limits>
 #include <unordered_map>
 #include <variant>
@@ -988,6 +985,11 @@ namespace bolt {
 
   };
 
+  class AnnotationContainer {
+  public:
+    std::vector<Annotation*> Annotations;
+  };
+
   class ExpressionAnnotation : public Annotation {
   public:
 
@@ -1058,11 +1060,11 @@ namespace bolt {
 
   };
 
-  class TypeExpression : public TypedNode {
+  class TypeExpression : public TypedNode, AnnotationContainer {
   protected:
 
-    TypeExpression(NodeKind Kind):
-      TypedNode(Kind) {}
+    inline TypeExpression(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
+      TypedNode(Kind), AnnotationContainer(Annotations) {}
 
   };
 
@@ -1385,17 +1387,11 @@ namespace bolt {
 
   };
 
-
-  class Expression : public TypedNode {
-  public:
-
-    std::vector<Annotation*> Annotations;
-
+  class Expression : public TypedNode, public AnnotationContainer {
   protected:
 
     inline Expression(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
-      TypedNode(Kind), Annotations(Annotations) {}
-
+      TypedNode(Kind), AnnotationContainer(Annotations) {}
 
   };
 
@@ -1688,6 +1684,14 @@ namespace bolt {
        Operator(Operator),
        Argument(Argument) {}
 
+    PrefixExpression(
+      std::vector<Annotation*> Annotations,
+      Token* Operator,
+      Expression* Argument
+    ): Expression(NodeKind::PrefixExpression, Annotations),
+       Operator(Operator),
+       Argument(Argument) {}
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
@@ -1734,16 +1738,26 @@ namespace bolt {
        Fields(Fields),
        RBrace(RBrace) {}
 
+    inline RecordExpression(
+      std::vector<Annotation*> Annotations,
+      class LBrace* LBrace,
+      std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields,
+      class RBrace* RBrace
+    ): Expression(NodeKind::RecordExpression, Annotations),
+       LBrace(LBrace),
+       Fields(Fields),
+       RBrace(RBrace) {}
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
   };
 
-  class Statement : public Node {
+  class Statement : public Node, public AnnotationContainer {
   protected:
 
-    inline Statement(NodeKind Type):
-      Node(Type) {}
+    inline Statement(NodeKind Type, std::vector<Annotation*> Annotations = {}):
+      Node(Type), AnnotationContainer(Annotations) {}
 
   };
 
@@ -1755,12 +1769,18 @@ namespace bolt {
     ExpressionStatement(class Expression* Expression):
       Statement(NodeKind::ExpressionStatement), Expression(Expression) {}
 
+    ExpressionStatement(
+      std::vector<Annotation*> Annotations,
+      class Expression* Expression
+    ): Statement(NodeKind::ExpressionStatement, Annotations),
+       Expression(Expression) {}
+
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
 
   };
 
-  class IfStatementPart : public Node {
+  class IfStatementPart : public Node, public AnnotationContainer {
   public:
 
     Token* Keyword;
@@ -1774,6 +1794,19 @@ namespace bolt {
       class BlockStart* BlockStart,
       std::vector<Node*> Elements
     ): Node(NodeKind::IfStatementPart),
+       Keyword(Keyword),
+       Test(Test),
+       BlockStart(BlockStart),
+       Elements(Elements) {}
+
+    inline IfStatementPart(
+      std::vector<Annotation*> Annotations,
+      Token* Keyword,
+      Expression* Test,
+      class BlockStart* BlockStart,
+      std::vector<Node*> Elements
+    ): Node(NodeKind::IfStatementPart),
+       AnnotationContainer(Annotations),
        Keyword(Keyword),
        Test(Test),
        BlockStart(BlockStart),
@@ -1807,6 +1840,14 @@ namespace bolt {
       class ReturnKeyword* ReturnKeyword,
       class Expression* Expression
     ): Statement(NodeKind::ReturnStatement),
+       ReturnKeyword(ReturnKeyword),
+       Expression(Expression) {}
+
+    ReturnStatement(
+      std::vector<Annotation*> Annotations,
+      class ReturnKeyword* ReturnKeyword,
+      class Expression* Expression
+    ): Statement(NodeKind::ReturnStatement, Annotations),
        ReturnKeyword(ReturnKeyword),
        Expression(Expression) {}
 
@@ -1894,7 +1935,7 @@ namespace bolt {
 
   };
 
-  class LetDeclaration : public TypedNode {
+  class LetDeclaration : public TypedNode, public AnnotationContainer {
 
     Scope* TheScope = nullptr;
 
@@ -1923,6 +1964,27 @@ namespace bolt {
       class TypeAssert* TypeAssert,
       LetBody* Body
     ): TypedNode(NodeKind::LetDeclaration),
+       PubKeyword(PubKeyword),
+       ForeignKeyword(ForeignKeyword),
+       LetKeyword(LetKeyword),
+       MutKeyword(MutKeyword),
+       Pattern(Pattern),
+       Params(Params),
+       TypeAssert(TypeAssert),
+       Body(Body) {}
+
+    LetDeclaration(
+      std::vector<Annotation*> Annotations,
+      class PubKeyword* PubKeyword,
+      class ForeignKeyword* ForeignKeyword,
+      class LetKeyword* LetKeyword,
+      class MutKeyword* MutKeyword,
+      class Pattern* Pattern,
+      std::vector<Parameter*> Params,
+      class TypeAssert* TypeAssert,
+      LetBody* Body
+    ): TypedNode(NodeKind::LetDeclaration),
+       AnnotationContainer(Annotations),
        PubKeyword(PubKeyword),
        ForeignKeyword(ForeignKeyword),
        LetKeyword(LetKeyword),

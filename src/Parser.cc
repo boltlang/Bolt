@@ -86,6 +86,14 @@ namespace bolt {
         case NodeKind::PubKeyword:
         case NodeKind::MutKeyword:
           continue;
+        case NodeKind::At:
+          for (;;) {
+            auto T1 = Tokens.peek(I++);
+            if (T1->getKind() == NodeKind::LineFoldEnd) {
+              break;
+            }
+          }
+          continue;
         default:
           return T0;
       }
@@ -852,6 +860,7 @@ finish:
   }
 
   ReturnStatement* Parser::parseReturnStatement() {
+    auto Annotations = parseAnnotations();
     auto ReturnKeyword = expectToken<class ReturnKeyword>();
     if (!ReturnKeyword) {
       return nullptr;
@@ -870,7 +879,7 @@ finish:
       }
       checkLineFoldEnd();
     }
-    return new ReturnStatement(ReturnKeyword, Expression);
+    return new ReturnStatement(Annotations, ReturnKeyword, Expression);
   }
 
   IfStatement* Parser::parseIfStatement() {
@@ -903,36 +912,46 @@ finish:
     }
     Tokens.get()->unref(); // Always a LineFoldEnd
     Parts.push_back(new IfStatementPart(IfKeyword, Test, T1, Then));
-    auto T3 = Tokens.peek();
-    if (T3->getKind() == NodeKind::ElseKeyword) {
-      Tokens.get();
-      auto T4 = expectToken<BlockStart>();
-      if (!T4) {
-        for (auto Part: Parts) {
-          Part->unref();
+    for (;;) {
+      auto T3 = Tokens.peek();
+      if (T3->getKind() == NodeKind::ElseKeyword || T3->getKind() == NodeKind::ElifKeyword) {
+        Tokens.get();
+        Expression* Test = nullptr;
+        if (T3->getKind() == NodeKind::ElifKeyword) {
+          Test = parseExpression();
         }
-        return nullptr;
-      }
-      std::vector<Node*> Else;
-      for (;;) {
-        auto T5 = Tokens.peek();
-        if (T5->getKind() == NodeKind::BlockEnd) {
-          Tokens.get()->unref();
+        auto T4 = expectToken<BlockStart>();
+        if (!T4) {
+          for (auto Part: Parts) {
+            Part->unref();
+          }
+          return nullptr;
+        }
+        std::vector<Node*> Alt;
+        for (;;) {
+          auto T5 = Tokens.peek();
+          if (T5->getKind() == NodeKind::BlockEnd) {
+            Tokens.get()->unref();
+            break;
+          }
+          auto Element = parseLetBodyElement();
+          if (Element) {
+            Alt.push_back(Element);
+          }
+        }
+        Tokens.get()->unref(); // Always a LineFoldEnd
+        Parts.push_back(new IfStatementPart(T3, Test, T4, Alt));
+        if (T3->getKind() == NodeKind::ElseKeyword) {
           break;
         }
-        auto Element = parseLetBodyElement();
-        if (Element) {
-          Else.push_back(Element);
-        }
       }
-      Tokens.get()->unref(); // Always a LineFoldEnd
-      Parts.push_back(new IfStatementPart(T3, nullptr, T4, Else));
     }
     return new IfStatement(Parts);
   }
 
   LetDeclaration* Parser::parseLetDeclaration() {
 
+    auto Annotations = parseAnnotations();
     PubKeyword* Pub = nullptr;
     ForeignKeyword* Foreign = nullptr;
     LetKeyword* Let;
@@ -1065,6 +1084,7 @@ after_params:
 finish:
 
     return new LetDeclaration(
+      Annotations,
       Pub,
       Foreign,
       Let,
@@ -1565,7 +1585,7 @@ next_member:
           }
           checkLineFoldEnd();
           Annotations.push_back(new ExpressionAnnotation { At, E });
-          break;
+          continue;
         }
         // default:
         //   DE.add<UnexpectedTokenDiagnostic>(File, T1, std::vector { NodeKind::Colon, NodeKind::Identifier });

@@ -849,11 +849,11 @@ namespace bolt {
       for (auto A: N->Annotations) {
         BOLT_VISIT(A);
       }
-       for (auto [Name, Dot]: N->ModulePath) {
-         BOLT_VISIT(Name);
-         BOLT_VISIT(Dot);
-       }
-       BOLT_VISIT(N->Name);
+      for (auto [Name, Dot]: N->ModulePath) {
+        BOLT_VISIT(Name);
+        BOLT_VISIT(Dot);
+      }
+      BOLT_VISIT(N->Name);
     }
 
     void visitEachChild(MatchCase* N) {
@@ -963,10 +963,16 @@ namespace bolt {
     }
 
     void visitEachChild(ExpressionStatement* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->Expression);
     }
 
     void visitEachChild(ReturnStatement* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->ReturnKeyword);
       BOLT_VISIT(N->Expression);
     }
@@ -978,6 +984,9 @@ namespace bolt {
     }
 
     void visitEachChild(IfStatementPart* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       BOLT_VISIT(N->Keyword);
       if (N->Test != nullptr) {
         BOLT_VISIT(N->Test);
@@ -1013,6 +1022,9 @@ namespace bolt {
     }
 
     void visitEachChild(LetDeclaration* N) {
+      for (auto A: N->Annotations) {
+        BOLT_VISIT(A);
+      }
       if (N->PubKeyword) {
         BOLT_VISIT(N->PubKeyword);
       }

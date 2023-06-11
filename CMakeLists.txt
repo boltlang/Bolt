@@ -18,6 +18,7 @@ add_library(
   #src/Text.cc
   src/CST.cc
   src/Diagnostics.cc
+  src/ConsolePrinter.cc
   src/Scanner.cc
   src/Parser.cc
   src/Types.cc

@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/build/bolt",
-            "args": [ "--direct-diagnostics", "verify", "test/checker/local_constraints_polymorphic_variable.bolt" ],
+            "args": [ "--direct-diagnostics", "verify", "test/checker/wrong_return_type.bolt" ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "CMake: build"
         }
