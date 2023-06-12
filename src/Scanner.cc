@@ -426,17 +426,77 @@ after_string_contents:
 
   Punctuator::Punctuator(Stream<Token*>& Tokens):
     Tokens(Tokens) {
-      Frames.push(FrameType::Block);
+      Frames.push({ FrameType::Block });
       Locations.push(TextLoc { 0, 0 });
     }
+
+  static bool isCloseDelim(NodeKind Kind) {
+    switch (Kind) {
+      case NodeKind::RParen:
+      case NodeKind::RBrace:
+      case NodeKind::RBracket:
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // struct DelimCounter {
+  //   int Parens = 0;
+  //   int Braces = 0;
+  //   int Brackets = 0;
+  // };
+
+  bool Punctuator::isTerminal(NodeKind Kind) {
+    auto& Frame = Frames.top();
+    switch (Kind) {
+      case NodeKind::RParen:
+        return Frame.Parens == 0;
+       case NodeKind::RBrace:
+        return Frame.Braces == 0;
+      case NodeKind::RBracket:
+        return Frame.Brackets == 0;
+      default:
+        return false;
+    }
+  }
 
   Token* Punctuator::read() {
 
     auto T0 = Tokens.peek();
+    auto& RefLoc = Locations.top();
+    auto& Frame = Frames.top();
 
     switch (T0->getKind()) {
+      case NodeKind::LParen:
+        ++Frame.Parens;
+        break;
       case NodeKind::LBrace:
-        Frames.push(FrameType::Fallthrough);
+        ++Frame.Braces;
+        break;
+      case NodeKind::LBracket:
+        ++Frame.Brackets;
+        break;
+      case NodeKind::RParen:
+        if (Frame.Parens == 0) {
+          // TODO add diagnostic?
+          break;
+        }
+        --Frame.Parens;
+        break;
+      case NodeKind::RBrace:
+        if (Frame.Braces == 0) {
+          // TODO add diagnostic?
+          break;
+        }
+        --Frame.Braces;
+        break;
+      case NodeKind::RBracket:
+        if (Frame.Brackets == 0) {
+          // TODO add diagnostic?
+          break;
+        }
+        --Frame.Brackets;
         break;
       case NodeKind::EndOfFile:
       {
@@ -445,9 +505,7 @@ after_string_contents:
         }
         auto Frame = Frames.top();
         Frames.pop();
-        switch (Frame) {
-          case FrameType::Fallthrough:
-            break;
+        switch (Frame.Type) {
           case FrameType::Block:
             return new BlockEnd(T0->getStartLoc());
           case FrameType::LineFold:
@@ -458,20 +516,17 @@ after_string_contents:
         break;
     }
 
-    auto RefLoc = Locations.top();
-    switch (Frames.top()) {
-      case FrameType::Fallthrough:
-      {
-        if (T0->getKind() == NodeKind::RBrace) {
-          Frames.pop();
-        }
-        Tokens.get();
-        return T0;
-      }
+    switch (Frame.Type) {
       case FrameType::LineFold:
       {
-        if (T0->getStartLine() > RefLoc.Line
-          && T0->getStartColumn() <= RefLoc.Column) {
+        if (ShouldYieldNextTokenInLineFold) {
+          ShouldYieldNextTokenInLineFold = false;
+          return Tokens.get();
+        }
+        ShouldYieldNextTokenInLineFold = isTerminal(T0->getKind());
+        if (ShouldYieldNextTokenInLineFold
+            || (T0->getStartLine() > RefLoc.Line
+              && T0->getStartColumn() <= RefLoc.Column)) {
             Frames.pop();
             Locations.pop();
             return new LineFoldEnd(T0->getStartLoc());
@@ -480,7 +535,7 @@ after_string_contents:
           auto T1 = Tokens.peek(1);
           if (T1->getStartLine() > T0->getEndLine()) {
               Tokens.get();
-              Frames.push(FrameType::Block);
+              Frames.push({ FrameType::Block });
               return new BlockStart(T0->getStartLoc());
           }
         }
@@ -488,12 +543,12 @@ after_string_contents:
       }
       case FrameType::Block:
       {
-        if (T0->getStartColumn() <= RefLoc.Column) {
+        if (T0->getStartColumn() <= RefLoc.Column || isTerminal(T0->getKind())) {
           Frames.pop();
           return new BlockEnd(T0->getStartLoc());
         }
 
-        Frames.push(FrameType::LineFold);
+        Frames.push({ FrameType::LineFold });
         Locations.push(T0->getStartLoc());
 
         return Tokens.get();

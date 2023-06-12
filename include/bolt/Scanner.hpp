@@ -61,15 +61,24 @@ namespace bolt {
   enum class FrameType {
     Block,
     LineFold,
-    Fallthrough,
+  };
+
+  struct Frame {
+    FrameType Type;
+    int Parens = 0;
+    int Braces = 0;
+    int Brackets = 0;
   };
 
   class Punctuator : public BufferedStream<Token*> {
 
     Stream<Token*>& Tokens;
 
-    std::stack<FrameType> Frames;
+    std::stack<Frame> Frames;
     std::stack<TextLoc> Locations;
+
+    bool ShouldYieldNextTokenInLineFold = false;
+    bool isTerminal(NodeKind Kind);
 
   protected:
 
