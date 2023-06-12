@@ -1995,10 +1995,13 @@ namespace bolt {
        Body(Body) {}
 
     inline Scope* getScope() override {
-      if (TheScope == nullptr) {
-        TheScope = new Scope(this);
+      if (isFunction()) {
+        if (TheScope == nullptr) {
+          TheScope = new Scope(this);
+        }
+        return TheScope;
       }
-      return TheScope;
+      return Parent->getScope();
     }
 
     bool isInstance() const noexcept {
