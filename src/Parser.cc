@@ -78,7 +78,7 @@ namespace bolt {
       ExprOperators.add("$", OperatorFlags_InfixR, 0);
     }
 
-  Token* Parser::peekFirstTokenAfterModifiers() {
+  Token* Parser::peekFirstTokenAfterAnnotationsAndModifiers() {
     std::size_t I = 0;
     for (;;) {
       auto T0 = Tokens.peek(I++);
@@ -737,11 +737,14 @@ after_tuple_elements:
       switch (T2->getKind()) {
         case NodeKind::IntegerLiteral:
         case NodeKind::Identifier:
+        {
           Tokens.get();
           Tokens.get();
-          E = new MemberExpression { E->Annotations, E, static_cast<Dot*>(T1), T2 };
-          E->Annotations.clear();
+          auto Annotations = E->Annotations;
+          E->Annotations = {};
+          E = new MemberExpression { Annotations, E, static_cast<Dot*>(T1), T2 };
           break;
+        }
         default:
           goto finish;
       }
@@ -780,7 +783,7 @@ finish:
       return Operator;
     }
     auto Annotations = Operator->Annotations;
-    Operator->Annotations.clear();
+    Operator->Annotations = {};
     return new CallExpression(Annotations, Operator, Args);
   }
 
@@ -884,6 +887,7 @@ finish:
 
   IfStatement* Parser::parseIfStatement() {
     std::vector<IfStatementPart*> Parts;
+    auto Annotations = parseAnnotations();
     auto IfKeyword = expectToken<class IfKeyword>();
     auto Test = parseExpression();
     if (!Test) {
@@ -911,39 +915,41 @@ finish:
       }
     }
     Tokens.get()->unref(); // Always a LineFoldEnd
-    Parts.push_back(new IfStatementPart(IfKeyword, Test, T1, Then));
+    Parts.push_back(new IfStatementPart(Annotations, IfKeyword, Test, T1, Then));
     for (;;) {
-      auto T3 = Tokens.peek();
-      if (T3->getKind() == NodeKind::ElseKeyword || T3->getKind() == NodeKind::ElifKeyword) {
-        Tokens.get();
-        Expression* Test = nullptr;
-        if (T3->getKind() == NodeKind::ElifKeyword) {
-          Test = parseExpression();
+      auto T3 = peekFirstTokenAfterAnnotationsAndModifiers();
+      if (T3->getKind() != NodeKind::ElseKeyword && T3->getKind() != NodeKind::ElifKeyword) {
+        break;
+      }
+      auto Annotations = parseAnnotations();
+      Tokens.get();
+      Expression* Test = nullptr;
+      if (T3->getKind() == NodeKind::ElifKeyword) {
+        Test = parseExpression();
+      }
+      auto T4 = expectToken<BlockStart>();
+      if (!T4) {
+        for (auto Part: Parts) {
+          Part->unref();
         }
-        auto T4 = expectToken<BlockStart>();
-        if (!T4) {
-          for (auto Part: Parts) {
-            Part->unref();
-          }
-          return nullptr;
-        }
-        std::vector<Node*> Alt;
-        for (;;) {
-          auto T5 = Tokens.peek();
-          if (T5->getKind() == NodeKind::BlockEnd) {
-            Tokens.get()->unref();
-            break;
-          }
-          auto Element = parseLetBodyElement();
-          if (Element) {
-            Alt.push_back(Element);
-          }
-        }
-        Tokens.get()->unref(); // Always a LineFoldEnd
-        Parts.push_back(new IfStatementPart(T3, Test, T4, Alt));
-        if (T3->getKind() == NodeKind::ElseKeyword) {
+        return nullptr;
+      }
+      std::vector<Node*> Alt;
+      for (;;) {
+        auto T5 = Tokens.peek();
+        if (T5->getKind() == NodeKind::BlockEnd) {
+          Tokens.get()->unref();
           break;
         }
+        auto Element = parseLetBodyElement();
+        if (Element) {
+          Alt.push_back(Element);
+        }
+      }
+      Tokens.get()->unref(); // Always a LineFoldEnd
+      Parts.push_back(new IfStatementPart(Annotations, T3, Test, T4, Alt));
+      if (T3->getKind() == NodeKind::ElseKeyword) {
+        break;
       }
     }
     return new IfStatement(Parts);
@@ -1097,7 +1103,7 @@ finish:
   }
 
   Node* Parser::parseLetBodyElement() {
-    auto T0 = peekFirstTokenAfterModifiers();
+    auto T0 = peekFirstTokenAfterAnnotationsAndModifiers();
     switch (T0->getKind()) {
       case NodeKind::LetKeyword:
         return parseLetDeclaration();
@@ -1516,7 +1522,7 @@ next_member:
   }
 
   Node* Parser::parseSourceElement() {
-    auto T0 = peekFirstTokenAfterModifiers();
+    auto T0 = peekFirstTokenAfterAnnotationsAndModifiers();
     switch (T0->getKind()) {
       case NodeKind::LetKeyword:
         return parseLetDeclaration();

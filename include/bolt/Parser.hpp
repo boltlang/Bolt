@@ -67,7 +67,7 @@ namespace bolt {
 
     OperatorTable ExprOperators;
 
-    Token* peekFirstTokenAfterModifiers();
+    Token* peekFirstTokenAfterAnnotationsAndModifiers();
 
     Token* expectToken(NodeKind Ty);
 
