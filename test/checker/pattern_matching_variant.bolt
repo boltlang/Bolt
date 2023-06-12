@@ -1,0 +1,13 @@
+
+enum MyList a.
+  Nil
+  Pair a (MyList a)
+
+let (Pair True Nil) : MyList Bool
+let (Pair "foo" Nil) : MyList String
+
+@expect_diagnostic 2010
+let (Pair 1 Nil) : MyList Bool
+
+let Nil : MyList a
+

@@ -1,0 +1,10 @@
+
+# Simple test for instance arguments
+
+implicit let theanswer = 1
+
+let is_answer {{ a : Int }} x = a == x
+
+is_answer 1
+is_answer 2
+is_answer 42

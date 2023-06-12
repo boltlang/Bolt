@@ -1,0 +1,17 @@
+
+# Mutually recusive functions
+
+let is_odd x.
+  if x == 1.
+    return True
+  else.
+    return is_even (x-1)
+
+let is_even x.
+  if x == 0.
+    return True
+  else.
+    return is_odd (x-1)
+
+@:Bool is_even 1
+

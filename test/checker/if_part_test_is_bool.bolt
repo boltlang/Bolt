@@ -1,0 +1,8 @@
+
+@expect_diagnostic 2010
+if 1.
+  True
+
+@expect_diagnostic 2010
+if "a".
+  False

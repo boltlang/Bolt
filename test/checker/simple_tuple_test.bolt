@@ -1,0 +1,16 @@
+
+
+let pair x y = (x, y)
+
+let p1 = pair 1 1
+let p2 = (1, True)
+let p3 = (False, 1)
+
+@:Int p1.0
+@:Int p1.1
+
+@:Int p2.0
+@:Bool p2.1
+
+@:Bool p3.0
+@:Int p3.1
