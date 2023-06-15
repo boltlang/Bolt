@@ -118,7 +118,6 @@ namespace bolt {
         continue;
       }
       if (C0 == '#') {
-        getChar();
         auto C1 = peekChar(0);
         auto C2 = peekChar(1);
         if (C1 == '!' && C2 == '!') {
