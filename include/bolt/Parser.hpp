@@ -99,9 +99,6 @@ namespace bolt {
     void checkLineFoldEnd();
     void skipToLineFoldEnd();
 
-    void disablePunctuation();
-    void enablePunctuation();
-
   public:
 
     Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE);

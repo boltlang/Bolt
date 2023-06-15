@@ -492,8 +492,8 @@ after_tuple_element:
   }
 
   MatchExpression* Parser::parseMatchExpression() {
-    auto Match = expectToken<MatchKeyword>();
-    if (!Match) {
+    auto T0 = expectToken<MatchKeyword>();
+    if (!T0) {
       return nullptr;
     }
     auto T1 = Tokens.peek();
@@ -506,12 +506,12 @@ after_tuple_element:
     } else {
       Value = parseExpression();
       if (!Value) {
-        Match->unref();
+        T0->unref();
         return nullptr;
       }
       BlockStart = expectToken<class BlockStart>();
       if (!BlockStart) {
-        Match->unref();
+        T0->unref();
         Value->unref();
         return nullptr;
       }
@@ -544,7 +544,7 @@ after_tuple_element:
       checkLineFoldEnd();
       Cases.push_back(new MatchCase { Pattern, RArrowAlt, Expression });
     }
-    return new MatchExpression(Match, Value, BlockStart, Cases);
+    return new MatchExpression(static_cast<MatchKeyword*>(T0), Value, BlockStart, Cases);
   }
 
   RecordExpression* Parser::parseRecordExpression() {
@@ -688,13 +688,10 @@ after_tuple_element:
             case NodeKind::LineFoldEnd:
             case NodeKind::BlockStart:
             case NodeKind::EndOfFile:
+              // Can recover from this one
+              RParen = nullptr;
               DE.add<UnexpectedTokenDiagnostic>(File, T2, std::vector { NodeKind::RParen, NodeKind::Comma });
-              LParen->unref();
-              for (auto [E, Comma]: Elements) {
-                E->unref();
-                Comma->unref();
-              }
-              return nullptr;
+              goto after_tuple_elements;
           }
         }
 after_tuple_elements:
@@ -767,7 +764,6 @@ finish:
       if (T1->getKind() == NodeKind::LineFoldEnd
           || T1->getKind() == NodeKind::RParen
           || T1->getKind() == NodeKind::RBrace
-          || T1->getKind() == NodeKind::RBracket
           || T1->getKind() == NodeKind::BlockStart
           || T1->getKind() == NodeKind::Comma
           || ExprOperators.isInfix(T1)) {
