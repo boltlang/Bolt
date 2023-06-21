@@ -5,7 +5,14 @@ import { SourceFile, TextFile } from "./cst";
 import { ConsoleDiagnostics, Diagnostics } from "./diagnostics";
 import { Checker } from "./checker";
 import { Analyser } from "./analysis";
-import { Newable, Pass } from "./types";
+
+export interface Pass<In, Out> {
+  apply(input: In): Out;
+}
+
+export interface Newable<T> {
+  new (...args: any[]): T;
+}
 
 type AnyPass = Pass<any, any>;
 

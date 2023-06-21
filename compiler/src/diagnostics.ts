@@ -1,5 +1,6 @@
 
-import { TypeKind, type Type, Kind, KindType } from "./checker";
+import { Kind, KindType } from "./checker";
+import { type Type, TypeKind } from "./types"
 import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { assertNever, countDigits, deserializable, IndentWriter } from "./util";
 
@@ -42,6 +43,7 @@ const enum DiagnosticKind {
   TypeMismatch,
   TypeclassNotFound,
   TypeclassDecaredTwice,
+  TypeclassNotImplemented,
   BindingNotFound,
   ModuleNotFound,
   FieldNotFound,
@@ -114,10 +116,28 @@ export class TypeclassNotFoundDiagnostic extends DiagnosticBase {
   public level = Level.Error;
 
   public constructor(
-    public name: IdentifierAlt,
+    public name: string,
+    public node: Syntax | null = null,
     public origin: InstanceDeclaration | ClassConstraint | null = null,
   ) {
     super();
+  }
+
+}
+
+@deserializable()
+export class TypeclassNotImplementedDiagnostic extends DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.TypeclassNotImplemented;
+
+  public level = Level.Error;
+
+  public constructor(
+    public name: string,
+    public type: Type,
+    public node: Syntax | null = null,
+  ) {
+      super();
   }
 
 }
@@ -212,6 +232,7 @@ export type Diagnostic
   = UnexpectedCharDiagnostic
   | TypeclassNotFoundDiagnostic
   | TypeclassDeclaredTwiceDiagnostic
+  | TypeclassNotImplementedDiagnostic
   | BindingNotFoundDiagnostic
   | TypeMismatchDiagnostic
   | UnexpectedTokenDiagnostic
@@ -304,15 +325,17 @@ export class ConsoleDiagnostics implements Diagnostics {
         break;
 
       case DiagnosticKind.TypeclassNotFound:
-        this.writer.write(`the type class ${ANSI_FG_MAGENTA + diagnostic.name.text + ANSI_RESET} was not found.\n\n`);
-        this.writer.write(printNode(diagnostic.name) + '\n');
-        if (diagnostic.origin !== null) {
-          this.writer.indent();
-          this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
-          this.writer.write(`${ANSI_FG_MAGENTA + diagnostic.name.text + ANSI_RESET} is required by ${ANSI_FG_MAGENTA + diagnostic.origin.name.text + ANSI_RESET}\n\n`);
-          this.writer.write(printNode(diagnostic.origin.name) + '\n');
-          this.writer.dedent();
+        this.writer.write(`the type class ${ANSI_FG_MAGENTA + diagnostic.name + ANSI_RESET} was not found.\n\n`);
+        if (diagnostic.node !== null) {
+          this.writer.write(printNode(diagnostic.node) + '\n');
         }
+        // if (diagnostic.origin !== null) {
+        //   this.writer.indent();
+        //   this.writer.write(ANSI_FG_YELLOW + ANSI_BOLD + 'info: ' + ANSI_RESET);
+        //   this.writer.write(`${ANSI_FG_MAGENTA + diagnostic.name + ANSI_RESET} is required by ${ANSI_FG_MAGENTA + diagnostic.origin.name.text + ANSI_RESET}\n\n`);
+        //   this.writer.write(printNode(diagnostic.origin.name) + '\n');
+        //   this.writer.dedent();
+        // }
         break;
 
       case DiagnosticKind.BindingNotFound:

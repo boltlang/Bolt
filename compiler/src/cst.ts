@@ -4,7 +4,8 @@ import path from "path"
 
 import { assert, deserializable, implementationLimitation, IndentWriter, JSONObject, JSONValue, nonenumerable, unreachable } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
-import { InferContext, Kind, KindEnv, Scheme, Type, TypeEnv } from "./checker"
+import type { InferContext, Kind, KindEnv, Scheme, TypeEnv } from "./checker"
+import type { Type } from "./types";
 import { Emitter } from "./emitter";
 
 export type TextSpan = [number, number];
@@ -121,6 +122,7 @@ export const enum SyntaxKind {
   IfKeyword,
   ElifKeyword,
   ElseKeyword,
+  ForallKeyword,
   LineFoldEnd,
   BlockEnd,
   BlockStart,
@@ -133,6 +135,8 @@ export const enum SyntaxKind {
   AppTypeExpression,
   NestedTypeExpression,
   TupleTypeExpression,
+  ForallTypeExpression,
+  TypeExpressionWithConstraints,
 
   // Patterns
   NamedPattern,
@@ -1201,6 +1205,21 @@ export class VBar extends TokenBase {
 
 }
 
+@deserializable()
+export class ForallKeyword extends TokenBase {
+
+  public readonly kind = SyntaxKind.ForallKeyword;
+  
+  public get text(): string {
+    return 'forall';
+  }
+
+  public clone(): ForallKeyword {
+     return new ForallKeyword(this.startPos);
+  }
+
+}
+
 export type Token
   = RArrow
   | RArrowAlt
@@ -1243,9 +1262,77 @@ export type Token
   | ElifKeyword
   | EnumKeyword
   | ForeignKeyword
+  | ForallKeyword
 
 export type TokenKind
   = Token['kind']
+
+@deserializable()
+export class ForallTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.ForallTypeExpression;
+
+  public constructor(
+    public forallKeyword: ForallKeyword,
+    public varTypeExps: VarTypeExpression[],
+    public dot: Dot,
+    public typeExpr: TypeExpression,
+  ) {
+    super();
+  }
+
+  public clone(): ForallTypeExpression {
+    return new ForallTypeExpression(
+      this.forallKeyword.clone(),
+      this.varTypeExps.map(e => e.clone()),
+      this.dot.clone(),
+      this.typeExpr.clone(),
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.forallKeyword;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpr.getLastToken();
+  }
+
+}
+
+@deserializable()
+export class TypeExpressionWithConstraints extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.TypeExpressionWithConstraints;
+
+  public constructor(
+    public constraints: ClassConstraint[],
+    public rarrowAlt: RArrowAlt,
+    public typeExpr: TypeExpression,
+  ) {
+    super();
+  }
+
+  public clone(): TypeExpressionWithConstraints {
+    return new TypeExpressionWithConstraints(
+      this.constraints.map(c => c.clone()),
+      this.rarrowAlt.clone(),
+      this.typeExpr.clone(),
+    );
+  }
+
+  public getFirstToken(): Token {
+    if (this.constraints.length > 0) {
+      return this.constraints[0].getFirstToken();
+    }
+    return this.rarrowAlt;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpr.getLastToken();
+  }
+
+}
 
 @deserializable()
 export class ArrowTypeExpression extends SyntaxBase {
@@ -1437,6 +1524,8 @@ export type TypeExpression
   | AppTypeExpression
   | NestedTypeExpression
   | TupleTypeExpression
+  | ForallTypeExpression
+  | TypeExpressionWithConstraints
 
 @deserializable()
 export class NamedPattern extends SyntaxBase {

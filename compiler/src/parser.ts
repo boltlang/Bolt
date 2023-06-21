@@ -44,7 +44,6 @@ import {
   IfStatement,
   MemberExpression,
   IdentifierAlt,
-  WrappedOperator,
   ArrowTypeExpression,
   EnumDeclarationStructElement,
   EnumDeclaration,
@@ -67,6 +66,8 @@ import {
   InstanceDeclaration,
   ClassConstraintClause,
   AssignStatement,
+  ForallTypeExpression,
+  TypeExpressionWithConstraints,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -253,7 +254,57 @@ export class Parser {
     return new AppTypeExpression(operator, args);
   }
 
+  public parseTypeExpressionWithConstraints(): TypeExpression {
+    if (!this.lookaheadHasClassConstraints()) {
+      return this.parseArrowTypeExpression();
+    }
+    const constraints = [];
+    let rarrowAlt;
+    for (;;) {
+      const constraint = this.parseClassConstraint();
+      constraints.push(constraint);
+      const t1 = this.getToken();
+      if (t1.kind === SyntaxKind.RArrowAlt) {
+        rarrowAlt = t1;
+        break;
+      } else if (t1.kind !== SyntaxKind.Comma) {
+        this.raiseParseError(t1, [ SyntaxKind.RArrowAlt, SyntaxKind.Comma ]);
+      }
+    }
+    const type = this.parseArrowTypeExpression();
+    return new TypeExpressionWithConstraints(constraints, rarrowAlt, type);
+  }
+
   public parseTypeExpression(): TypeExpression {
+    const t0 = this.peekToken();
+    switch (t0.kind) {
+      case SyntaxKind.ForallKeyword:
+      {
+        this.getToken();
+        let dot;
+        const typeVarExps = [];
+        for (;;) {
+          const t1 = this.peekToken();
+          if (t1.kind === SyntaxKind.Dot) {
+            dot = t1;
+            this.getToken();
+            break;
+          }
+          typeVarExps.push(this.parseVarTypeExpression());
+        }
+        return new ForallTypeExpression(
+          t0,
+          typeVarExps,
+          dot,
+          this.parseTypeExpression(),
+        );
+      }
+      default:
+        return this.parseTypeExpressionWithConstraints();
+    }
+  }
+
+  public parseArrowTypeExpression(): TypeExpression {
     let returnType = this.parseAppTypeExpressionOrBelow();
     const paramTypes = [];
     for (;;) {
@@ -819,6 +870,20 @@ export class Parser {
         }
         // TODO convert parse errors to include LetKeyword and ReturnKeyword
         return this.parseExpressionStatement();
+    }
+  }
+
+  private lookaheadHasClassConstraints(): boolean {
+    for (let i = 1;; i++) {
+      const token = this.peekToken(i);
+      switch (token.kind) {
+        case SyntaxKind.RArrowAlt:
+          return true;
+        case SyntaxKind.BlockStart:
+        case SyntaxKind.LineFoldEnd:
+        case SyntaxKind.Equals:
+          return false;
+      }
     }
   }
 

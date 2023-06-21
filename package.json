@@ -1,0 +1,10 @@
+{
+  "name": "bolt-workspace",
+  "private": true,
+  "workspaces": [
+    "compiler"
+  ],
+  "dependencies": {
+    "typescript": "^5.0.4"
+  }
+}

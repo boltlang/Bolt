@@ -1,6 +1,6 @@
 import { Syntax } from "../cst";
 import { JSNode, JSProgram } from "../js";
-import { Pass } from "../types";
+import type { Pass } from "../program";
 
 export class BoltToJS implements Pass<Syntax, JSNode> {
 

@@ -45,6 +45,7 @@ import {
   ClassKeyword,
   InstanceKeyword,
   Backslash,
+  ForallKeyword,
 } from "./cst"
 import { Diagnostics } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -383,6 +384,7 @@ export class Scanner extends BufferedStream<Token> {
             case 'match': return new MatchKeyword(startPos);
             case 'foreign': return new ForeignKeyword(startPos);
             case 'mod': return new ModKeyword(startPos);
+            case 'forall': return new ForallKeyword(startPos);
             default:
               if (isUpper(text[0])) {
                 return new IdentifierAlt(startPos, text);

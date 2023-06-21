@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import "source-map-support/register"
+import "reflect-metadata"
 
 import fs from "fs"
 import util from "util"

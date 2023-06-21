@@ -1,7 +1,7 @@
 
 import { CBuiltinType, CBuiltinTypeKind, CCallExpr, CConstExpr, CDecl, CDir, CExpr, CExprStmt, CFuncDecl, CIncDir, CNode, CProgram, CRefExpr, CStmt } from "../c";
 import { Expression, Syntax, SyntaxKind } from "../cst";
-import { Pass } from "../types";
+import type { Pass } from "../program";
 import { assert } from "../util";
 
 interface Context {

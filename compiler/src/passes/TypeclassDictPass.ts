@@ -19,7 +19,7 @@ import {
   canHaveInstanceDeclaration,
   vistEachChild
 } from "../cst";
-import { Pass } from "../types";
+import { Pass } from "../program";
 import { assert } from "../util";
 
 function encode(typeExpr: TypeExpression): string {
@@ -58,7 +58,7 @@ export class TypeclassDictPassing implements Pass<SourceFile, SourceFile> {
         new LetKeyword(),
         null,
         null,
-        new NamedPattern(new Identifier(this.mangleInstance(node))),
+        new NamedPattern(new Identifier(null, this.mangleInstance(node))),
         [],
         null, // TODO
         new ExprBody(
@@ -69,7 +69,7 @@ export class TypeclassDictPassing implements Pass<SourceFile, SourceFile> {
               assert(element.kind === SyntaxKind.LetDeclaration);
               assert(element.pattern.kind === SyntaxKind.NamedPattern);
               return new StructExpressionField(
-                new Identifier(element.pattern.name.text),
+                new Identifier(null, element.pattern.name.text),
                 new Equals(),
                 new FunctionExpression(new Backslash(), element.params, element.body!)
               );

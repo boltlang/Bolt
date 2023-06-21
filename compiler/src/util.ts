@@ -1,5 +1,4 @@
 
-import "reflect-metadata"
 import path from "path"
 import stream from "stream"
 import { InspectOptions } from "util";
