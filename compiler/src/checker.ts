@@ -179,6 +179,7 @@ class KArrow extends KindBase {
 
 }
 
+// TODO actually use these
 const kindOfTypes = new KType();
 const kindOfRows = new KRow();
 
@@ -348,9 +349,18 @@ export interface InferContext {
   returnType: Type | null;
 }
 
+function isSignatureDeclarationLike(node: LetDeclaration): boolean {
+  return false; // May be foreignKeyword !== null later
+}
+
+function isVariableDeclarationLike(node: LetDeclaration): boolean {
+  return node.pattern.kind !== SyntaxKind.NamedPattern || !node.body;
+}
+
 function isFunctionDeclarationLike(node: LetDeclaration): boolean {
-  return (node.pattern.kind === SyntaxKind.NamedPattern || node.pattern.kind === SyntaxKind.NestedPattern && node.pattern.pattern.kind === SyntaxKind.NamedPattern)
-      && (node.params.length > 0 || (node.body !== null && node.body.kind === SyntaxKind.BlockBody));
+  return !isSignatureDeclarationLike(node) && !isVariableDeclarationLike(node);
+  // return (node.pattern.kind === SyntaxKind.NamedPattern || node.pattern.kind === SyntaxKind.NestedPattern && node.pattern.pattern.kind === SyntaxKind.NamedPattern)
+  //     && (node.params.length > 0 || (node.body !== null && node.body.kind === SyntaxKind.BlockBody));
 }
 
 export class Checker {
@@ -1047,50 +1057,85 @@ export class Checker {
       case SyntaxKind.LetDeclaration:
       {
         if (isFunctionDeclarationLike(node)) {
-          break;
-        }
-        const ctx = this.getContext();
-        const constraints = new ConstraintSet;
-        const innerCtx: InferContext = {
-          ...ctx,
-          constraints,
-        };
-        this.pushContext(innerCtx);
-        let type;
-        if (node.typeAssert !== null) {
-          type = this.inferTypeExpression(node.typeAssert.typeExpression);
-        }
-        if (node.body !== null) {
-          let bodyType;
-          switch (node.body.kind) {
-            case SyntaxKind.ExprBody:
-            {
-              bodyType = this.inferExpression(node.body.expression);
-              break;
+
+          node.activeCycle = true;
+          node.visited = true;
+
+          const context = node.context!;
+          const returnType = context.returnType!;
+          this.contexts.push(context);
+
+          if (node.body !== null) {
+            switch (node.body.kind) {
+              case SyntaxKind.ExprBody:
+              {
+                this.addConstraint(
+                  new CEqual(
+                    this.inferExpression(node.body.expression),
+                    returnType,
+                    node.body.expression
+                  )
+                );
+                break;
+              }
+              case SyntaxKind.BlockBody:
+              {
+                for (const element of node.body.elements) {
+                  this.infer(element);
+                }
+                break;
+              }
             }
-            case SyntaxKind.BlockBody:
-            {
-              // TODO
-              assert(false);
+          }
+
+          this.contexts.pop();
+          node.activeCycle = false;
+
+        } else {
+
+          const ctx = this.getContext();
+          const constraints = new ConstraintSet;
+          const innerCtx: InferContext = {
+            ...ctx,
+            constraints,
+          };
+          this.pushContext(innerCtx);
+          let type;
+          if (node.typeAssert !== null) {
+            type = this.inferTypeExpression(node.typeAssert.typeExpression);
+          }
+          if (node.body !== null) {
+            let bodyType;
+            switch (node.body.kind) {
+              case SyntaxKind.ExprBody:
+              {
+                bodyType = this.inferExpression(node.body.expression);
+                break;
+              }
+              case SyntaxKind.BlockBody:
+              {
+                // TODO
+                assert(false);
+              }
+            }
+            if (type === undefined) {
+              type = bodyType;
+            } else {
+              constraints.push(
+                new CEqual(
+                  type,
+                  bodyType,
+                  node.body
+                )
+              );
             }
           }
           if (type === undefined) {
-            type = bodyType;
-          } else {
-            constraints.push(
-              new CEqual(
-                type,
-                bodyType,
-                node.body
-              )
-            );
+            type = this.createTypeVar();
           }
+          this.popContext(innerCtx);
+          this.inferBindings(node.pattern, type, undefined, constraints, true);
         }
-        if (type === undefined) {
-          type = this.createTypeVar();
-        }
-        this.popContext(innerCtx);
-        this.inferBindings(node.pattern, type, undefined, constraints, true);
         break;
       }
 
@@ -1163,8 +1208,13 @@ export class Checker {
       {
         const scope = node.getScope();
         const target = scope.lookup(node.name.text);
-        if (target !== null && target.kind === SyntaxKind.LetDeclaration && target.activeCycle) {
-          return target.inferredType!;
+        if (target !== null && target.kind === SyntaxKind.LetDeclaration) {
+          if (target.activeCycle) {
+            return target.inferredType!;
+          }
+          if (!target.visited) {
+            this.infer(target);
+          }
         }
         const scheme = this.lookup(node, Symkind.Var);
         if (scheme === null) {
@@ -1701,11 +1751,11 @@ export class Checker {
 
   }
 
-  public check(node: SourceFile): void {
+  public check(sourceFile: SourceFile): void {
 
     const kenv = new KindEnv(this.globalKindEnv);
-    this.forwardDeclareKind(node, kenv);
-    this.inferKind(node, kenv);
+    this.forwardDeclareKind(sourceFile, kenv);
+    this.inferKind(sourceFile, kenv);
 
     const typeVars = new TVSet();
     const constraints = new ConstraintSet();
@@ -1714,12 +1764,12 @@ export class Checker {
 
     this.pushContext(context);
 
-    this.initialize(node, env);
+    this.initialize(sourceFile, env);
 
     this.pushContext({
       typeVars,
       constraints,
-      env: node.typeEnv!,
+      env: sourceFile.typeEnv!,
       returnType: null
     });
 
@@ -1727,17 +1777,10 @@ export class Checker {
 
     for (const nodes of sccs) {
 
-      if (nodes.some(n => n.kind === SyntaxKind.SourceFile)) {
-        assert(nodes.length === 1);
-        continue;
-      }
-
       const typeVars = new TVSet();
       const constraints = new ConstraintSet();
 
       for (const node of nodes) {
-
-        assert(node.kind === SyntaxKind.LetDeclaration);
 
         if (!isFunctionDeclarationLike(node)) {
           continue;
@@ -1806,84 +1849,7 @@ export class Checker {
 
     }
 
-    const visitElements = (elements: Syntax[]) => {
-      for (const element of elements) {
-        if (element.kind === SyntaxKind.LetDeclaration
-            && isFunctionDeclarationLike(element)) {
-          if (!this.analyser.isReferencedInParentScope(element)) {
-            const scheme = this.lookup(element.name, Symkind.Var);
-            assert(scheme !== null);
-            this.instantiate(scheme, null);
-          }
-        } else {
-          const shouldChangeTypeEnv = shouldChangeTypeEnvDuringVisit(element);
-          if (shouldChangeTypeEnv) {
-            this.pushContext({ ...this.getContext(), env: element.typeEnv! });
-          }
-          this.infer(element);
-          if(shouldChangeTypeEnv) {
-            this.contexts.pop();
-          }
-        }
-      }
-    }
-
-    for (const nodes of sccs) {
-
-      if (nodes[0].kind === SyntaxKind.SourceFile) {
-        assert(nodes.length === 1);
-        continue;
-      }
-
-      for (const node of nodes) {
-        assert(node.kind === SyntaxKind.LetDeclaration);
-        node.activeCycle = true;
-      }
-
-      for (const node of nodes) {
-
-        assert(node.kind === SyntaxKind.LetDeclaration);
-
-        if (!isFunctionDeclarationLike(node)) {
-          continue;
-        }
-
-        const context = node.context!;
-        const returnType = context.returnType!;
-        this.contexts.push(context);
-
-        if (node.body !== null) {
-          switch (node.body.kind) {
-            case SyntaxKind.ExprBody:
-            {
-              this.addConstraint(
-                new CEqual(
-                  this.inferExpression(node.body.expression),
-                  returnType,
-                  node.body.expression
-                )
-              );
-              break;
-            }
-            case SyntaxKind.BlockBody:
-            {
-              visitElements(node.body.elements);
-              break;
-            }
-          }
-        }
-
-        this.contexts.pop();
-      }
-
-      for (const node of nodes) {
-        assert(node.kind === SyntaxKind.LetDeclaration);
-        node.activeCycle = false;
-      }
-
-    }
-
-    visitElements(node.elements);
+    this.infer(sourceFile);
 
     this.contexts.pop();
     this.popContext(context);

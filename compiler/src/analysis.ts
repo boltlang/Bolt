@@ -3,24 +3,21 @@ import { assert } from "./util";
 import { Syntax, LetDeclaration, SourceFile, SyntaxKind } from "./cst";
 import type { Scope } from "./scope"
 
-type NodeWithBlock
-  = LetDeclaration
-  | SourceFile
-
 export class Analyser {
 
-  private referenceGraph = new DirectedHashGraph<NodeWithBlock>();
+  private referenceGraph = new DirectedHashGraph<LetDeclaration>();
 
   public addSourceFile(node: SourceFile): void {
 
-    const visit = (node: Syntax, source: NodeWithBlock) => {
+    const visit = (node: Syntax, source: Syntax | null) => {
 
       const addReference = (scope: Scope, name: string) => {
         const target = scope.lookup(name);
-        if (target === null || target.kind === SyntaxKind.Param) {
+        if (source === null || target === null || target.kind === SyntaxKind.Param) {
           return;
         }
-        assert(target.kind === SyntaxKind.LetDeclaration || target.kind === SyntaxKind.SourceFile);
+        assert(source.kind === SyntaxKind.LetDeclaration);
+        assert(target.kind === SyntaxKind.LetDeclaration);
         this.referenceGraph.addEdge(source, target);
       }
 
@@ -173,7 +170,7 @@ export class Analyser {
 
     }
 
-    visit(node, node);
+    visit(node, null);
 
   }
 
@@ -196,7 +193,7 @@ export class Analyser {
    * a let-declaration is not recusive, it will simply show up as a collection
    * with only one element.
    */
-  public getSortedDeclarations(): Iterable<NodeWithBlock[]> {
+  public getSortedDeclarations(): Iterable<LetDeclaration[]> {
     return strongconnect(this.referenceGraph);
   }
 

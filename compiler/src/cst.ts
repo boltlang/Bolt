@@ -2874,6 +2874,8 @@ export class LetDeclaration extends SyntaxBase {
 
   @nonenumerable
   public activeCycle?: boolean;
+  @nonenumerable
+  public visited?: boolean;
 
   @nonenumerable
   public context?: InferContext;
