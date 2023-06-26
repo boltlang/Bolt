@@ -501,8 +501,10 @@ export function describeType(type: Type): string {
       }
       return out;
     }
-    case TypeKind.Var:
+    case TypeKind.UniVar:
       return 'a' + type.id;
+    case TypeKind.RigidVar:
+      return type.displayName;
     case TypeKind.Arrow:
     {
       return describeType(type.paramType) + ' -> ' + describeType(type.returnType);
@@ -564,7 +566,7 @@ function describeKind(kind: Kind): string {
 }
 
 function getFirstNodeInTypeChain(type: Type): Syntax | null {
-  while (type !== type && (type.kind === TypeKind.Var || type.node === null)) {
+  while (type !== type && (type.kind === TypeKind.UniVar || type.node === null)) {
     type = type.next;
   }
   return type.node;

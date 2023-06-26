@@ -4,7 +4,8 @@ import { deserializable, ignore, InspectFn, toStringTag } from "./util";
 
 export enum TypeKind {
   Arrow,
-  Var,
+  UniVar,
+  RigidVar,
   Con,
   Tuple,
   App,
@@ -37,7 +38,7 @@ export abstract class TypeBase {
 
   public abstract substitute(sub: TVSub): Type;
 
-  public hasTypeVar(tv: TVar): boolean {
+  public hasTypeVar(tv: TUniVar): boolean {
     for (const other of this.getTypeVars()) {
       if (tv.id === other.id) {
         return true;
@@ -56,12 +57,49 @@ export function isType(value: any): value is Type {
       && value instanceof TypeBase;
 }
 
-@deserializable()
-export class TVar extends TypeBase {
+export class TRigidVar extends TypeBase {
 
-  public readonly kind = TypeKind.Var;
+  public readonly kind = TypeKind.RigidVar;
+
+  public constructor(
+    public id: number,
+    public displayName: string,
+    public node: Syntax | null = null
+  ) {
+    super();
+  }
+
+  public *getTypeVars(): Iterable<TVar> {
+    yield this;
+  }
+
+  public shallowClone(): TRigidVar {
+    return new TRigidVar(
+      this.id,
+      this.displayName,
+      this.node
+    );
+  }
+
+  public substitute(sub: TVSub): Type {
+    const other = sub.get(this);
+    return other === undefined
+      ? this : other.substitute(sub);
+  }
+
+  public [toStringTag]() {
+    return this.displayName;
+  }
+
+}
+
+@deserializable()
+export class TUniVar extends TypeBase {
+
+  public readonly kind = TypeKind.UniVar;
 
   @ignore
+
   public context = new Set<ClassDeclaration>();
 
   public constructor(
@@ -75,8 +113,8 @@ export class TVar extends TypeBase {
     yield this;
   }
 
-  public shallowClone(): TVar {
-    return new TVar(this.id, this.node);
+  public shallowClone(): TUniVar {
+    return new TUniVar(this.id, this.node);
   }
 
   public substitute(sub: TVSub): Type {
@@ -475,7 +513,8 @@ export class TNominal extends TypeBase {
 export type Type
   = TCon
   | TArrow
-  | TVar
+  | TRigidVar
+  | TUniVar
   | TTuple
   | TApp
   | TNominal
@@ -484,6 +523,9 @@ export type Type
   | TPresent
   | TAbsent
 
+export type TVar
+  = TUniVar
+  | TRigidVar
 
 export class TVSet {
 
@@ -508,7 +550,7 @@ export class TVSet {
   public intersectsType(type: Type): boolean {
     for (const tv of type.getTypeVars()) {
       if (this.has(tv)) {
-        return true; 
+        return true;
       }
     }
     return false;

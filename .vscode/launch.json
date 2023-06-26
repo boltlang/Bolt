@@ -11,8 +11,8 @@
             "skipFiles": [
                 "<node_internals>/**"
             ],
-            "program": "${workspaceFolder}/lib/bin/bolt.js",
-            "args": [ "test.bolt" ],
+            "program": "${workspaceFolder}/compiler/lib/bin/bolt.js",
+            "args": [ "compiler/test.bolt" ],
             "outputCapture": "std"
         }
     ]

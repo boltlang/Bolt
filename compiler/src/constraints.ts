@@ -1,7 +1,7 @@
 
 import { InspectOptions } from "util";
 import { Syntax } from "./cst"
-import { TVar, TVSub, Type } from "./types";
+import { TVSub, TVar, Type } from "./types";
 import { first, InspectFn, last, toStringTag } from "./util";
 
 export const enum ConstraintKind {

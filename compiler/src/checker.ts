@@ -1,6 +1,6 @@
 
-// TODO support rigid vs free variables
-//      https://www.reddit.com/r/haskell/comments/d4v83/comment/c0xmc3r/
+// FIXME Something wrong with eager solving unifying a3 ~ a and therefore removing polymorphism
+// TODO Add simplifyType() in instantiate() to fix this
 
 import {
   ClassDeclaration,
@@ -8,9 +8,7 @@ import {
   ExprOperator,
   Identifier,
   IdentifierAlt,
-  InstanceDeclaration,
   LetDeclaration,
-  ModuleDeclaration,
   Pattern,
   ReferenceExpression,
   ReferenceTypeExpression,
@@ -35,7 +33,7 @@ import {
 import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn, implementationLimitation } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
-import { TypeKind, TApp, TArrow, TCon, TField, TNil, TNominal, TPresent, TTuple, TVar, TVSet, TVSub, Type, TypeBase, TAbsent } from "./types";
+import { TypeKind, TApp, TArrow, TCon, TField, TNil, TNominal, TPresent, TTuple, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar } from "./types";
 import { CClass, CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
 
 // export class Qual {
@@ -182,7 +180,9 @@ class KArrow extends KindBase {
 
 // TODO actually use these
 const kindOfTypes = new KType();
-const kindOfRows = new KRow();
+//const kindOfTypes = new KCon('*');
+//const kindOfRows = new KCon('r');
+//const kindOfConstraints = new KCon();
 
 export type Kind
   = KType
@@ -230,7 +230,7 @@ class Forall extends SchemeBase {
     return new Forall(new TVSet, new CEmpty, type);
   }
 
-  public static fromArrays(typeVars: TVar[], constraints: Constraint[], type: Type): Forall {
+  public static fromArrays(typeVars: TUniVar[], constraints: Constraint[], type: Type): Forall {
     return new Forall(new TVSet(typeVars), new CMany(constraints), type);
   }
 
@@ -247,7 +247,7 @@ type NodeWithReference
   | ReferenceTypeExpression
 
 function validateScheme(scheme: Scheme): void {
-  const isMonoVar = scheme.type.kind === TypeKind.Var && scheme.typeVars.size === 0;
+  const isMonoVar = scheme.type.kind === TypeKind.UniVar && scheme.typeVars.size === 0;
   if (!isMonoVar) {
     const tvs = new TVSet(scheme.type.getTypeVars())
     for (const tv of tvs) {
@@ -404,12 +404,12 @@ export class Checker {
     private diagnostics: Diagnostics
   ) {
 
-    this.globalKindEnv.set('Int', new KType());
-    this.globalKindEnv.set('String', new KType());
-    this.globalKindEnv.set('Bool', new KType());
+    this.globalKindEnv.set('Int', kindOfTypes);
+    this.globalKindEnv.set('String', kindOfTypes);
+    this.globalKindEnv.set('Bool', kindOfTypes);
 
-    const a = new TVar(this.typeVarIds.next().value!);
-    const b = new TVar(this.typeVarIds.next().value!);
+    const a = new TUniVar(this.typeVarIds.next().value!);
+    const b = new TUniVar(this.typeVarIds.next().value!);
 
     this.globalTypeEnv.add('$', Forall.fromArrays([ a, b ], [], new TArrow(new TArrow(new TArrow(a, b), a), b)), Symkind.Var);
     this.globalTypeEnv.add('String', Forall.fromArrays([], [], this.stringType), Symkind.Type);
@@ -442,10 +442,16 @@ export class Checker {
     return new TCon(this.nextConTypeId++, types, name);
   }
 
-  private createTypeVar(node: Syntax | null = null): TVar {
-    const typeVar = new TVar(this.typeVarIds.next().value!, node);
+  private createTypeVar(node: Syntax | null = null): TUniVar {
+    const typeVar = new TUniVar(this.typeVarIds.next().value!, node);
     this.getContext().typeVars.add(typeVar);
     return typeVar;
+  }
+
+  private createRigidVar(displayName: string, node: Syntax | null = null): TRigidVar {
+    const tv = new TRigidVar(this.typeVarIds.next().value!, displayName, node);
+    this.getContext().typeVars.add(tv);
+    return tv;
   }
 
   public getContext(): InferContext {
@@ -475,7 +481,7 @@ export class Checker {
         let maxLevelRight = global;
         for (let i = this.contexts.length; i-- > 0;) {
           const ctx = this.contexts[i];
-          if (hasTypeVar(ctx.typeVars, constraint.left)) {
+          if (hasTypeVar(ctx.typeVars, constraint.right)) {
             maxLevelRight = i;
             break;
           }
@@ -590,7 +596,7 @@ export class Checker {
     }
   }
 
-  private lookup(node: NodeWithReference, expectedKind: Symkind): Scheme | null {
+  private lookup(node: NodeWithReference, expectedKind: Symkind, enableDiagnostics = true): Scheme | null {
     const [modulePath, name] = splitReferences(node);
     if (modulePath.length > 0) {
       let maxIndex = 0;
@@ -602,12 +608,14 @@ export class Checker {
           const nextDown = currDown.resolveModule(moduleName.text);
           if (nextDown === null) {
             if (currUp.kind === SyntaxKind.SourceFile) {
-              this.diagnostics.add(
-                new ModuleNotFoundDiagnostic(
-                  modulePath.slice(maxIndex).map(id => id.text),
-                  modulePath[maxIndex],
-                )
-              );
+              if (enableDiagnostics) {
+                this.diagnostics.add(
+                  new ModuleNotFoundDiagnostic(
+                    modulePath.slice(maxIndex).map(id => id.text),
+                    modulePath[maxIndex],
+                  )
+                );
+              }
               return null;
             }
             currUp = currUp.getEnclosingModule();
@@ -620,13 +628,15 @@ export class Checker {
         if (found !== null) {
           return found;
         }
-        this.diagnostics.add(
-          new BindingNotFoundDiagnostic(
-            modulePath.map(id => id.text),
-            name.text,
-            name,
-          )
-        );
+        if (enableDiagnostics) {
+          this.diagnostics.add(
+            new BindingNotFoundDiagnostic(
+              modulePath.map(id => id.text),
+              name.text,
+              name,
+            )
+          );
+        }
         return null;
       }
     } else {
@@ -638,13 +648,15 @@ export class Checker {
         }
         curr = curr.parent;
       } while(curr !== null);
-      this.diagnostics.add(
-        new BindingNotFoundDiagnostic(
-          [],
-          name.text,
-          name,
-        )
-      );
+      if (enableDiagnostics) {
+        this.diagnostics.add(
+          new BindingNotFoundDiagnostic(
+            [],
+            name.text,
+            name,
+          )
+        );
+      }
       return null;
     }
   }
@@ -737,7 +749,7 @@ export class Checker {
 
       case SyntaxKind.ForallTypeExpression:
       {
-        // TODO we currently automatically introduce type variables but maybe we should use the Forall?
+        // TODO we currently automatically introduce type variables but maybe we should use the ForallTypeExpression?
         kind = this.inferKindFromTypeExpression(node.typeExpr, env);
         break;
       }
@@ -858,7 +870,7 @@ export class Checker {
       case SyntaxKind.TypeDeclaration:
       {
         const innerEnv = new KindEnv(env);
-        let kind: Kind = new KType();
+        let kind: Kind = kindOfTypes;
         for (let i = node.varExps.length-1; i >= 0; i--) {
           const varExpr = node.varExps[i];
           const paramKind = this.createKindVar();
@@ -905,12 +917,12 @@ export class Checker {
         if (node.constraintClause !== null) {
           for (const constraint of node.constraintClause.constraints) {
             for (const typeExpr of constraint.types) {
-              this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), new KType(), typeExpr);
+              this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), kindOfTypes, typeExpr);
             }
           }
         }
         for (const typeExpr of node.types) {
-          this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), new KType(), typeExpr);
+          this.unifyKind(this.inferKindFromTypeExpression(typeExpr, env), kindOfTypes, typeExpr);
         }
         for (const element of node.elements) {
           this.inferKind(element, env);
@@ -930,7 +942,7 @@ export class Checker {
       {
         const declKind = env.lookup(node.name.text)!;
         const innerEnv = new KindEnv(env);
-        let kind: Kind = new KType();
+        let kind: Kind = kindOfTypes;
         for (let i = node.varExps.length-1; i >= 0; i--) {
           const varExpr = node.varExps[i];
           const paramKind = this.createKindVar();
@@ -940,7 +952,7 @@ export class Checker {
         this.unifyKind(declKind, kind, node);
         if (node.fields !== null) {
           for (const field of node.fields) {
-            this.unifyKind(this.inferKindFromTypeExpression(field.typeExpr, innerEnv), new KType(), field.typeExpr);
+            this.unifyKind(this.inferKindFromTypeExpression(field.typeExpr, innerEnv), kindOfTypes, field.typeExpr);
           }
         }
         break;
@@ -950,7 +962,7 @@ export class Checker {
       {
         const declKind = env.lookup(node.name.text)!;
         const innerEnv = new KindEnv(env);
-        let kind: Kind = new KType();
+        let kind: Kind = kindOfTypes;
         // FIXME should I go from right to left or left to right?
         for (let i = node.varExps.length-1; i >= 0; i--) {
           const varExpr = node.varExps[i];
@@ -965,14 +977,14 @@ export class Checker {
               case SyntaxKind.EnumDeclarationTupleElement:
               {
                 for (const element of member.elements) {
-                  this.unifyKind(this.inferKindFromTypeExpression(element, innerEnv), new KType(), element);
+                  this.unifyKind(this.inferKindFromTypeExpression(element, innerEnv), kindOfTypes, element);
                 }
                 break;
               }
               case SyntaxKind.EnumDeclarationStructElement:
               {
                 for (const field of member.fields) {
-                  this.unifyKind(this.inferKindFromTypeExpression(field.typeExpr, innerEnv), new KType(), field.typeExpr);
+                  this.unifyKind(this.inferKindFromTypeExpression(field.typeExpr, innerEnv), kindOfTypes, field.typeExpr);
                 }
                 break;
               }
@@ -987,7 +999,7 @@ export class Checker {
       case SyntaxKind.LetDeclaration:
       {
         if (node.typeAssert !== null) {
-          this.unifyKind(this.inferKindFromTypeExpression(node.typeAssert.typeExpression, env), new KType(), node.typeAssert.typeExpression);
+          this.unifyKind(this.inferKindFromTypeExpression(node.typeAssert.typeExpression, env), kindOfTypes, node.typeAssert.typeExpression);
         }
         if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
           const innerEnv = new KindEnv(env);
@@ -1123,7 +1135,7 @@ export class Checker {
 
           const context = node.context!;
           const returnType = context.returnType!;
-          this.contexts.push(context);
+          this.pushContext(context);
 
           if (node.body !== null) {
             switch (node.body.kind) {
@@ -1148,7 +1160,7 @@ export class Checker {
             }
           }
 
-          this.contexts.pop();
+          this.popContext(context);
           node.activeCycle = false;
 
         } else {
@@ -1278,7 +1290,7 @@ export class Checker {
         }
         const scheme = this.lookup(node, Symkind.Var);
         if (scheme === null) {
-          // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+           //this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
           return this.createTypeVar();
         }
         const type = this.instantiate(scheme, node);
@@ -1439,12 +1451,12 @@ export class Checker {
 
         case SyntaxKind.VarTypeExpression:
         {
-          const scheme = this.lookup(node.name, Symkind.Type);
+          const scheme = this.lookup(node.name, Symkind.Type, !introduceTypeVars);
           if (scheme === null) {
             if (!introduceTypeVars) {
               this.diagnostics.add(new BindingNotFoundDiagnostic([], node.name.text, node.name));
             }
-            type = this.createTypeVar();
+            type = this.createRigidVar(node.name.text, node);
             // TODO if !introduceTypeVars: re-emit a 'var not found' whenever the same var is encountered
             this.addBinding(node.name.text, Forall.mono(type), Symkind.Type);
           } else {
@@ -1852,7 +1864,7 @@ export class Checker {
         };
         node.context = innerCtx;
 
-        this.contexts.push(innerCtx);
+        this.pushContext(innerCtx);
 
         const returnType = this.createTypeVar();
         innerCtx.returnType = returnType;
@@ -1919,7 +1931,7 @@ export class Checker {
   private maxTypeErrorCount = 5;
 
   private find(type: Type): Type {
-    while (type.kind === TypeKind.Var && this.solution.has(type)) {
+    while (type.kind === TypeKind.UniVar && this.solution.has(type)) {
       type = this.solution.get(type)!;
     }
     return type;
@@ -1955,18 +1967,24 @@ export class Checker {
 
   private unify(left: Type, right: Type, enableDiagnostics: boolean): boolean {
 
+    console.log(`unify ${describeType(left)} @ ${left.node && left.node.constructor && left.node.constructor.name} ~ ${describeType(right)} @ ${right.node && right.node.constructor && right.node.constructor.name}`);
+
     left = this.find(left);
     right = this.find(right);
 
-    // console.log(`unify ${describeType(left)} @ ${left.node && left.node.constructor && left.node.constructor.name} ~ ${describeType(right)} @ ${right.node && right.node.constructor && right.node.constructor.name}`);
-
     const swap = () => { [right, left] = [left, right]; }
 
-    if (left.kind !== TypeKind.Var && right.kind === TypeKind.Var) {
+    if (left.kind === TypeKind.RigidVar && right.kind === TypeKind.RigidVar) {
+      if (left.id === right.id) {
+        return true;
+      }
+    }
+
+    if (left.kind !== TypeKind.UniVar && right.kind === TypeKind.UniVar) {
       swap();
     }
 
-    if (left.kind === TypeKind.Var) {
+    if (left.kind === TypeKind.UniVar) {
 
       // Perform an occurs check, verifying whether left occurs
       // somewhere inside the structure of right. If so, unification
@@ -2099,7 +2117,7 @@ export class Checker {
         return success;
       }
       let success = true;
-      const newRestType = new TVar(this.typeVarIds.next().value!);
+      const newRestType = new TUniVar(this.typeVarIds.next().value!);
       if (!this.unify(left.restType, new TField(right.name, right.type, newRestType), enableDiagnostics)) {
         success = false;
       }
