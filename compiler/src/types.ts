@@ -1,6 +1,6 @@
 import { InspectOptions } from "util";
 import { ClassDeclaration, EnumDeclaration, StructDeclaration, Syntax } from "./cst";
-import { deserializable, ignore, InspectFn, toStringTag } from "./util";
+import { InspectFn, toStringTag } from "./util";
 
 export enum TypeKind {
   Arrow,
@@ -18,10 +18,8 @@ export enum TypeKind {
 
 export abstract class TypeBase {
 
-  @ignore
   public abstract readonly kind: TypeKind;
 
-  @ignore
   public next: Type = this as any;
 
   public abstract node: Syntax | null;
@@ -93,12 +91,9 @@ export class TRigidVar extends TypeBase {
 
 }
 
-@deserializable()
 export class TUniVar extends TypeBase {
 
   public readonly kind = TypeKind.UniVar;
-
-  @ignore
 
   public context = new Set<ClassDeclaration>();
 
@@ -157,7 +152,6 @@ export class TNil extends TypeBase {
 
 }
 
-@deserializable()
 export class TAbsent extends TypeBase {
 
   public readonly kind = TypeKind.Absent;
@@ -186,7 +180,6 @@ export class TAbsent extends TypeBase {
 
 }
 
-@deserializable()
 export class TPresent extends TypeBase {
 
   public readonly kind = TypeKind.Present;
@@ -216,7 +209,6 @@ export class TPresent extends TypeBase {
 
 }
 
-@deserializable()
 export class TArrow extends TypeBase {
 
   public readonly kind = TypeKind.Arrow;
@@ -269,7 +261,6 @@ export class TArrow extends TypeBase {
 
 }
 
-@deserializable()
 export class TCon extends TypeBase {
 
   public readonly kind = TypeKind.Con;
@@ -317,7 +308,6 @@ export class TCon extends TypeBase {
 
 }
 
-@deserializable()
 export class TTuple extends TypeBase {
 
   public readonly kind = TypeKind.Tuple;
@@ -361,7 +351,6 @@ export class TTuple extends TypeBase {
 
 }
 
-@deserializable()
 export class TField extends TypeBase {
 
   public readonly kind = TypeKind.Field;
@@ -425,7 +414,6 @@ export class TField extends TypeBase {
 
 }
 
-@deserializable()
 export class TApp extends TypeBase {
 
   public readonly kind = TypeKind.App;
@@ -477,7 +465,6 @@ export class TApp extends TypeBase {
 
 }
 
-@deserializable()
 export class TNominal extends TypeBase {
 
   public readonly kind = TypeKind.Nominal;

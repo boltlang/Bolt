@@ -2,7 +2,7 @@
 import { Kind, KindType } from "./checker";
 import { type Type, TypeKind } from "./types"
 import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
-import { assertNever, countDigits, deserializable, IndentWriter } from "./util";
+import { assertNever, countDigits, IndentWriter } from "./util";
 
 const ANSI_RESET = "\u001b[0m"
 const ANSI_BOLD = "\u001b[1m"
@@ -57,7 +57,6 @@ abstract class DiagnosticBase {
 
 }
 
-@deserializable()
 export class UnexpectedCharDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.UnexpectedChar;
@@ -75,7 +74,6 @@ export class UnexpectedCharDiagnostic extends DiagnosticBase {
 }
 
 
-@deserializable()
 export class UnexpectedTokenDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.UnexpectedToken;
@@ -92,7 +90,6 @@ export class UnexpectedTokenDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class TypeclassDeclaredTwiceDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeclassDecaredTwice;
@@ -108,7 +105,6 @@ export class TypeclassDeclaredTwiceDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class TypeclassNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeclassNotFound;
@@ -125,7 +121,6 @@ export class TypeclassNotFoundDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class TypeclassNotImplementedDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeclassNotImplemented;
@@ -142,7 +137,6 @@ export class TypeclassNotImplementedDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class BindingNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.BindingNotFound;
@@ -159,7 +153,6 @@ export class BindingNotFoundDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class TypeMismatchDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeMismatch;
@@ -177,7 +170,6 @@ export class TypeMismatchDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class FieldNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.FieldNotFound;
@@ -195,7 +187,6 @@ export class FieldNotFoundDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class KindMismatchDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.KindMismatch;
@@ -212,7 +203,6 @@ export class KindMismatchDiagnostic extends DiagnosticBase {
 
 }
 
-@deserializable()
 export class ModuleNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.ModuleNotFound;

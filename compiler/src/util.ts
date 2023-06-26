@@ -242,41 +242,6 @@ export class MultiMap<K, V> {
 
 }
 
-export const classes = new Map<string, any>;
-
-export function deserializable() {
-  return (constructor: Function) => {
-    if (classes.has(constructor.name)) {
-      throw new Error(`A class with the name '${constructor.name}' has already been registered.`);
-    }
-    classes.set(constructor.name, constructor);
-  }
-}
-
-export function getIgnoredFields(target: any): Set<string> {
-  const fields = Reflect.getOwnMetadata('ignoredFields', target) ?? new Set;
-  for (;;) {
-    target = Object.getPrototypeOf(target);
-    if (target === null) {
-      break;
-    }
-    const otherFields = Reflect.getOwnMetadata('ignoredFields', target);
-    if (otherFields !== undefined) {
-      for (const field of otherFields) {
-        fields.add(field);
-      }
-    }
-  }
-  return fields;
-}
-
-export function ignore(target: any, propertyKey: string) {
-  if (!Reflect.hasOwnMetadata('ignoredFields', target.constructor)) {
-    Reflect.defineMetadata('ignoredFields', new Set([ propertyKey ]), target.constructor);
-  }
-  Reflect.getOwnMetadata('ignoredFields', target.constructor).add(propertyKey);
-}
-
 export const nonenumerable: {
     (target: any, name: string): void;
     (target: any, name: string, desc: PropertyDescriptor): PropertyDescriptor;
