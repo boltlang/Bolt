@@ -8,6 +8,7 @@ export enum TypeKind {
   RigidVar,
   Con,
   Tuple,
+  TupleIndex,
   App,
   Nominal,
   Field,
@@ -19,6 +20,8 @@ export enum TypeKind {
 export abstract class TypeBase {
 
   public abstract readonly kind: TypeKind;
+
+  public parent: Type = this as unknown as Type;
 
   public next: Type = this as any;
 
@@ -35,6 +38,19 @@ export abstract class TypeBase {
   public abstract shallowClone(): Type;
 
   public abstract substitute(sub: TVSub): Type;
+
+  public find(): Type {
+    let curr = this as unknown as Type;
+    while (curr.parent !== curr) {
+      curr.parent = curr.parent.parent;
+      curr = curr.parent;
+    }
+    return curr;
+  }
+
+  public set(newType: Type): void {
+    this.find().parent = newType;
+  }
 
   public hasTypeVar(tv: TUniVar): boolean {
     for (const other of this.getTypeVars()) {
@@ -308,6 +324,43 @@ export class TCon extends TypeBase {
 
 }
 
+export class TTupleIndex extends TypeBase {
+
+  public readonly kind = TypeKind.TupleIndex;
+
+  public constructor(
+    public tupleType: Type,
+    public index: number,
+    public node: Syntax | null = null,
+  ) {
+    super();
+  }
+
+  public getTypeVars(): Iterable<TVar> {
+    return this.tupleType.getTypeVars();
+  }
+
+  public substitute(sub: TVSub): Type {
+    const newTupleType = this.tupleType.substitute(sub);
+    if (newTupleType === this.tupleType) {
+      return this;
+    }
+    return new TTupleIndex(newTupleType, this.index);
+  }
+
+  public shallowClone(): TTupleIndex {
+    return new TTupleIndex(
+      this.tupleType,
+      this.index,
+    );
+  }
+
+  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn): string {
+    return inspect(this.tupleType, options) + '.' + this.index;
+  }
+
+}
+
 export class TTuple extends TypeBase {
 
   public readonly kind = TypeKind.Tuple;
@@ -509,6 +562,7 @@ export type Type
   | TNil
   | TPresent
   | TAbsent
+  | TTupleIndex
 
 export type TVar
   = TUniVar

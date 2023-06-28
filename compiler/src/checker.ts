@@ -1,7 +1,4 @@
 
-// FIXME Something wrong with eager solving unifying a3 ~ a and therefore removing polymorphism
-// TODO Add simplifyType() in instantiate() to fix this
-
 import {
   ClassDeclaration,
   Expression,
@@ -680,6 +677,78 @@ export class Checker {
     return sub;
   }
 
+  private simplifyType(type: Type): Type {
+    type = type.find();
+    switch (type.kind) {
+      case TypeKind.UniVar:
+      case TypeKind.RigidVar:
+      case TypeKind.Nil:
+      case TypeKind.Absent:
+      case TypeKind.Nominal:
+      case TypeKind.Con:
+        return type;
+      case TypeKind.TupleIndex:
+      {
+        const tupleType = this.simplifyType(type.tupleType);
+        if (tupleType.kind === TypeKind.Tuple) {
+          // TODO check bounds and add diagnostic
+          const newType = tupleType.elementTypes[type.index];
+          type.set(newType);
+          return newType;
+        }
+        return type;
+      }
+      case TypeKind.App:
+      {
+        const left = type.left.find();
+        const right = type.right.find();
+        if (left === type.left && right === type.right) {
+          return type;
+        }
+        return new TApp(left, right, type.node);
+      }
+      case TypeKind.Arrow:
+      {
+        const paramType = type.paramType.find();
+        const returnType = type.returnType.find();
+        if (paramType === type.paramType && returnType === type.returnType) {
+          return type;
+        }
+        return new TArrow(paramType, returnType, type.node);
+      }
+      case TypeKind.Field:
+      {
+        const newType = type.type.find();
+        const newRestType = type.restType.find();
+        if (newType === type.type && newRestType === type.restType) {
+          return type;
+        }
+        return new TField(type.name, newType, newRestType, type.node);
+      }
+      case TypeKind.Present:
+      {
+        const newType = type.type.find();
+        if (newType === type.type) {
+          return type;
+        }
+        return new TPresent(newType, type.node);
+      }
+      case TypeKind.Tuple:
+      {
+        let changed = false;
+        const newElementTypes = [];
+        for (const elementType of type.elementTypes) {
+          const newElementType = elementType.find();
+          newElementTypes.push(newElementType);
+          if (newElementType !== elementType) {
+            changed = true;
+          }
+        }
+        return changed ? new TTuple(newElementTypes, type.node) : type;
+      }
+    }
+  }
+
   private instantiate(scheme: Scheme, node: Syntax | null, sub = this.createSubstitution(scheme)): Type {
     const transform = (constraint: Constraint): Constraint => {
       switch (constraint.kind) {
@@ -691,8 +760,9 @@ export class Checker {
           return new CMany(newConstraints);
         case ConstraintKind.Empty:
           return constraint;
-        case ConstraintKind.Class:
         case ConstraintKind.Equal:
+          constraint.left = this.simplifyType(constraint.left)
+          constraint.right = this.simplifyType(constraint.right)
           const newConstraint = constraint.substitute(sub);
           newConstraint.node = node;
           newConstraint.prevInstantiation = constraint;
@@ -702,7 +772,7 @@ export class Checker {
       }
     }
     this.addConstraint(transform(scheme.constraint));
-    return scheme.type.substitute(sub);
+    return this.simplifyType(scheme.type).substitute(sub);
   }
 
   private addBinding(name: string, scheme: Scheme, kind: Symkind): void {
@@ -1967,10 +2037,10 @@ export class Checker {
 
   private unify(left: Type, right: Type, enableDiagnostics: boolean): boolean {
 
-    console.log(`unify ${describeType(left)} @ ${left.node && left.node.constructor && left.node.constructor.name} ~ ${describeType(right)} @ ${right.node && right.node.constructor && right.node.constructor.name}`);
+    // console.log(`unify ${describeType(left)} @ ${left.node && left.node.constructor && left.node.constructor.name} ~ ${describeType(right)} @ ${right.node && right.node.constructor && right.node.constructor.name}`);
 
-    left = this.find(left);
-    right = this.find(right);
+    left = this.simplifyType(left);
+    right = this.simplifyType(right);
 
     const swap = () => { [right, left] = [left, right]; }
 
@@ -2024,7 +2094,7 @@ export class Checker {
       //propagateClasses(left.context, right);
 
       // We are all clear; set the actual type of left to right.
-      this.solution.set(left, right);
+      left.set(right);
 
       // This is a very specific adjustment that is critical to the
       // well-functioning of the infer/unify algorithm. When addConstraint() is
@@ -2159,8 +2229,8 @@ export class Checker {
     if (enableDiagnostics) {
       this.diagnostics.add(
         new TypeMismatchDiagnostic(
-          left.substitute(this.solution),
-          right.substitute(this.solution),
+          this.simplifyType(left),
+          this.simplifyType(right),
           [...this.constraint!.getNodes()],
           this.path,
         )
