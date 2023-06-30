@@ -97,14 +97,13 @@ export class ScanError extends Error {
 
 export class Scanner extends BufferedStream<Token> {
 
-  private currLine = 1;
-  private currColumn = 1;
+  private textOffset = 0;
 
   public constructor(
     public text: string,
-    public textOffset: number = 0,
     public diagnostics: Diagnostics,
     private file: TextFile,
+    public currPos: TextPosition = new TextPosition(0, 1, 1),
   ) {
     super();
   }
@@ -115,14 +114,18 @@ export class Scanner extends BufferedStream<Token> {
   }
 
   private getChar(): string {
-    const ch = this.textOffset < this.text.length
-      ? this.text[this.textOffset++]
-      : EOF
-    if (ch === '\n') {
-      this.currLine++;
-      this.currColumn = 1;
+    let ch;
+    if (this.textOffset < this.text.length) {
+      ch = this.text[this.textOffset++];
+      this.currPos.offset++;
     } else {
-      this.currColumn++;
+      ch = EOF;
+    }
+    if (ch === '\n') {
+      this.currPos.line++;
+      this.currPos.column = 1;
+    } else {
+      this.currPos.column++;
     }
     return ch;
   }
@@ -141,11 +144,7 @@ export class Scanner extends BufferedStream<Token> {
   }
 
   private getCurrentPosition(): TextPosition {
-    return new TextPosition(
-      this.textOffset,
-      this.currLine,
-      this.currColumn
-    );
+    return this.currPos.clone();
   }
 
   public read(): Token {
@@ -162,13 +161,18 @@ export class Scanner extends BufferedStream<Token> {
           continue;
         }
         if (c0 === '#') {
+          const line = this.currPos.line;
           this.getChar();
+          let text = '';
           for (;;) {
             const c1 = this.getChar();
             if (c1 === '\n' || c1 === EOF) {
               break;
             }
+            text += c1;
           }
+          const scanner = new Scanner(text, this.diagnostics, this.file, this.getCurrentPosition());
+          this.file.comments.set(line, scanner.getAll());
           continue;
         }
 
@@ -404,6 +408,18 @@ export class Scanner extends BufferedStream<Token> {
 
     }
 
+  }
+
+  public getAll(): Token[] {
+    const tokens = [];
+    for (;;) {
+      const t0 = this.get();
+      if (t0.kind === SyntaxKind.EndOfFile) {
+        break;
+      }
+      tokens.push(t0);
+    }
+    return tokens;
   }
 
 }

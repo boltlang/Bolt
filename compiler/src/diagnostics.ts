@@ -36,7 +36,7 @@ const enum Level {
   Fatal,
 }
 
-const enum DiagnosticKind {
+export enum DiagnosticKind {
   UnexpectedChar,
   UnexpectedToken,
   KindMismatch,
@@ -55,6 +55,8 @@ abstract class DiagnosticBase {
   public abstract readonly kind: DiagnosticKind;
 
   public abstract level: Level;
+
+  public abstract position: TextPosition | undefined;
 
 }
 
@@ -89,12 +91,16 @@ export class UnexpectedTokenDiagnostic extends DiagnosticBase {
     super();
   }
 
+  public get position(): TextPosition {
+    return this.actual.getStartPosition();
+  }
+
 }
 
 export class TypeclassDeclaredTwiceDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.TypeclassDecaredTwice;
-  
+
   public level = Level.Error;
 
   public constructor(
@@ -102,7 +108,11 @@ export class TypeclassDeclaredTwiceDiagnostic extends DiagnosticBase {
     public origDecl: ClassDeclaration,
   ) {
     super();
-  } 
+  }
+
+  public get position(): TextPosition {
+    return this.name.getStartPosition();
+  }
 
 }
 
@@ -118,6 +128,10 @@ export class TypeclassNotFoundDiagnostic extends DiagnosticBase {
     public origin: InstanceDeclaration | ClassConstraint | null = null,
   ) {
     super();
+  }
+
+  public get position(): TextPosition | undefined {
+    return this.node?.getFirstToken().getStartPosition();
   }
 
 }
@@ -136,6 +150,10 @@ export class TypeclassNotImplementedDiagnostic extends DiagnosticBase {
       super();
   }
 
+  public get position(): TextPosition | undefined {
+    return this.node?.getFirstToken().getStartPosition();
+  }
+
 }
 
 export class BindingNotFoundDiagnostic extends DiagnosticBase {
@@ -150,6 +168,10 @@ export class BindingNotFoundDiagnostic extends DiagnosticBase {
     public node: Syntax,
   ) {
     super();
+  }
+
+  public get position(): TextPosition {
+    return this.node.getFirstToken().getStartPosition();
   }
 
 }
@@ -169,6 +191,10 @@ export class TypeMismatchDiagnostic extends DiagnosticBase {
     super();
   }
 
+  public get position(): TextPosition | undefined {
+    return this.trace[0]?.getFirstToken().getStartPosition();
+  }
+
 }
 
 export class TupleIndexOutOfRangeDiagnostic extends DiagnosticBase {
@@ -182,6 +208,10 @@ export class TupleIndexOutOfRangeDiagnostic extends DiagnosticBase {
     public tupleType: TTuple,
   ) {
     super();
+  }
+
+  public get position(): TextPosition | undefined {
+    return undefined;
   }
 
 }
@@ -201,6 +231,10 @@ export class FieldNotFoundDiagnostic extends DiagnosticBase {
     super();
   }
 
+  public get position(): TextPosition | undefined {
+    return this.cause?.getFirstToken().getStartPosition();
+  }
+
 }
 
 export class KindMismatchDiagnostic extends DiagnosticBase {
@@ -217,6 +251,10 @@ export class KindMismatchDiagnostic extends DiagnosticBase {
     super();
   }
 
+  public get position(): TextPosition | undefined {
+    return this.origin?.getFirstToken().getStartPosition();
+  }
+
 }
 
 export class ModuleNotFoundDiagnostic extends DiagnosticBase {
@@ -230,6 +268,10 @@ export class ModuleNotFoundDiagnostic extends DiagnosticBase {
     public node: Syntax,
   ) {
     super();
+  }
+
+  public get position(): TextPosition | undefined {
+    return this.node.getFirstToken().getStartPosition();
   }
 
 }
@@ -256,9 +298,13 @@ export interface Diagnostics {
 export class DiagnosticStore implements Diagnostics {
 
   private storage: Diagnostic[] = [];
-  
+
   public hasError = false;
   public hasFatal = false;
+
+  public get size(): number {
+    return this.storage.length;
+  }
 
   public add(diagnostic: Diagnostic): void {
     this.storage.push(diagnostic);
@@ -270,8 +316,8 @@ export class DiagnosticStore implements Diagnostics {
     }
   }
 
-  public getDiagnostics(): Iterable<Diagnostic> {
-    return this.storage;
+  public [Symbol.iterator](): IterableIterator<Diagnostic> {
+    return this.storage[Symbol.iterator]();
   }
 
 }

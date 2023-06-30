@@ -4,7 +4,7 @@ import { ParseError, Parser } from "./parser";
 import { Punctuator, ScanError, Scanner } from "./scanner";
 
 export function parseSourceFile(file: TextFile, diagnostics: Diagnostics): SourceFile | null {
-  const scanner = new Scanner(file.text, 0, diagnostics, file);
+  const scanner = new Scanner(file.text, diagnostics, file);
   const punctuated = new Punctuator(scanner);
   const parser = new Parser(file, punctuated);
   let sourceFile;

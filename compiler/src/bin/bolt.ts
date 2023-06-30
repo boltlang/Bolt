@@ -15,7 +15,7 @@ import BoltToJS from "../passes/BoltToJS"
 import { stripExtension } from "../util"
 import { sync as which } from "which"
 import { spawnSync } from "child_process"
-import { ConsoleDiagnostics, DiagnosticStore, TypeMismatchDiagnostic } from "../diagnostics"
+import { ConsoleDiagnostics, DiagnosticKind, DiagnosticStore, TypeMismatchDiagnostic } from "../diagnostics"
 import { Syntax, SyntaxKind, TextFile, isExpression, visitEachChild } from "../cst"
 import { Analyser, Checker, parseSourceFile } from ".."
 import { typesEqual } from "../types"
@@ -163,15 +163,24 @@ program.command('verify', { hidden: true })
     const realPath = path.resolve(fileName);
     const text = fs.readFileSync(realPath, 'utf-8');
     const file = new TextFile(fileName, text);
+
     const sourceFile = parseSourceFile(file, diagnostics);
     if (!sourceFile) {
       process.exit(1);
     }
+
     const analyser = new Analyser();
     analyser.addSourceFile(sourceFile);
     const checker = new Checker(analyser, diagnostics);
     checker.check(sourceFile);
+
     const realDiagnostics = new ConsoleDiagnostics();
+
+    let annotationTotalCount = 0;
+    let annotationErrorCount = 0;
+    let diagnosticTotalCount = diagnostics.size;
+    let diagnosticErrorCount = 0;
+
     const visit = (node: Syntax) => {
       if (isExpression(node)) {
         for (const annotation of node.annotations) {
@@ -180,13 +189,37 @@ program.command('verify', { hidden: true })
             const expected = checker.getTypeOfNode(annotation.typeExpr);
             if (!typesEqual(actual, expected)) {
               realDiagnostics.add(new TypeMismatchDiagnostic(actual, expected, [ node ], []));
+              annotationErrorCount++;
             }
+            annotationTotalCount++;
           }
         }
       }
       visitEachChild(node, visit);
     }
     visit(sourceFile);
+
+    const uncaughtDiagnostics = new Set(diagnostics);
+
+    for (const [line, comment] of file.comments) {
+      if (comment[0].kind === SyntaxKind.At && comment[1].kind === SyntaxKind.Identifier && comment[1].text === 'expect_diagnostic' && comment[2].kind === SyntaxKind.StringLiteral) {
+        for (const diagnostic of uncaughtDiagnostics) {
+          if (diagnostic.position && diagnostic.position.line === line+1 && DiagnosticKind[diagnostic.kind] === comment[2].contents) {
+            uncaughtDiagnostics.delete(diagnostic);
+          }
+        }
+      }
+    }
+
+    for (const diagnostic of uncaughtDiagnostics) {
+      realDiagnostics.add(diagnostic);
+    }
+
+    console.log(`${annotationTotalCount} type annotation(s) verified, ${annotationErrorCount} error(s).`);
+    console.log(`${diagnosticTotalCount} diagnostic(s) generated, ${uncaughtDiagnostics.size} unexpected.`);
+    if (realDiagnostics.hasError) {
+      process.exit(1);
+    }
   });
 
 program.parse();

@@ -66,6 +66,8 @@ export class TextRange {
 
 export class TextFile {
 
+  public comments = new Map<number, Token[]>();
+
   public constructor(
     public origPath: string,
     public text: string,
