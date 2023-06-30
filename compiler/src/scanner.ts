@@ -46,6 +46,7 @@ import {
   InstanceKeyword,
   Backslash,
   ForallKeyword,
+  At,
 } from "./cst"
 import { Diagnostics } from "./diagnostics"
 import { Stream, BufferedStream, assert } from "./util";
@@ -221,6 +222,7 @@ export class Scanner extends BufferedStream<Token> {
           return new EndOfFile(startPos);
         }
 
+        case '@': return new At(startPos);
         case '\\': return new Backslash(startPos);
         case '(': return new LParen(startPos);
         case ')': return new RParen(startPos);

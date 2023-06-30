@@ -1,6 +1,6 @@
 
 import { Kind, KindType } from "./checker";
-import { type Type, TypeKind } from "./types"
+import { type Type, TypeKind, TTuple } from "./types"
 import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { assertNever, countDigits, IndentWriter } from "./util";
 
@@ -41,6 +41,7 @@ const enum DiagnosticKind {
   UnexpectedToken,
   KindMismatch,
   TypeMismatch,
+  TupleIndexOutOfRange,
   TypeclassNotFound,
   TypeclassDecaredTwice,
   TypeclassNotImplemented,
@@ -170,6 +171,21 @@ export class TypeMismatchDiagnostic extends DiagnosticBase {
 
 }
 
+export class TupleIndexOutOfRangeDiagnostic extends DiagnosticBase {
+
+  public readonly kind = DiagnosticKind.TupleIndexOutOfRange;
+
+  public level = Level.Error;
+
+  public constructor(
+    public index: number,
+    public tupleType: TTuple,
+  ) {
+    super();
+  }
+
+}
+
 export class FieldNotFoundDiagnostic extends DiagnosticBase {
 
   public readonly kind = DiagnosticKind.FieldNotFound;
@@ -225,6 +241,7 @@ export type Diagnostic
   | TypeclassNotImplementedDiagnostic
   | BindingNotFoundDiagnostic
   | TypeMismatchDiagnostic
+  | TupleIndexOutOfRangeDiagnostic
   | UnexpectedTokenDiagnostic
   | FieldNotFoundDiagnostic
   | KindMismatchDiagnostic
@@ -510,6 +527,8 @@ export function describeType(type: Type): string {
       }
       return out + ')';
     }
+    case TypeKind.TupleIndex:
+      return describeType(type.tupleType) + '.' + type.index;
     case TypeKind.Nominal:
     {
       return type.decl.name.text;

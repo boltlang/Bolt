@@ -26,11 +26,12 @@ import {
   TypeclassDeclaredTwiceDiagnostic,
   FieldNotFoundDiagnostic,
   TypeMismatchDiagnostic,
+  TupleIndexOutOfRangeDiagnostic,
 } from "./diagnostics";
 import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn, implementationLimitation } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
-import { TypeKind, TApp, TArrow, TCon, TField, TNil, TNominal, TPresent, TTuple, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar } from "./types";
+import { TypeKind, TApp, TArrow, TCon, TField, TNil, TNominal, TPresent, TTuple, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, TTupleIndex } from "./types";
 import { CClass, CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
 
 // export class Qual {
@@ -691,7 +692,10 @@ export class Checker {
       {
         const tupleType = this.simplifyType(type.tupleType);
         if (tupleType.kind === TypeKind.Tuple) {
-          // TODO check bounds and add diagnostic
+          if (type.index >= tupleType.elementTypes.length) {
+            this.diagnostics.add(new TupleIndexOutOfRangeDiagnostic(type.index, tupleType));
+            return type;
+          }
           const newType = tupleType.elementTypes[type.index];
           type.set(newType);
           return newType;
@@ -1295,10 +1299,19 @@ export class Checker {
 
   public inferExpression(node: Expression): Type {
 
+    for (const annotation of node.annotations) {
+      if (annotation.kind === SyntaxKind.TypeAnnotation) {
+        this.inferTypeExpression(annotation.typeExpr, false, false);
+      }
+    }
+
+    let type: Type;
+
     switch (node.kind) {
 
       case SyntaxKind.NestedExpression:
-        return this.inferExpression(node.expression);
+        type = this.inferExpression(node.expression);
+        break;
 
       case SyntaxKind.MatchExpression:
       {
@@ -1308,7 +1321,7 @@ export class Checker {
         } else {
           exprType = this.createTypeVar();
         }
-        let resultType: Type = this.createTypeVar();
+        type = this.createTypeVar();
         for (const arm of node.arms) {
           const context = this.getContext();
           const newEnv = new TypeEnv(context.env);
@@ -1330,7 +1343,7 @@ export class Checker {
           );
           this.addConstraint(
             new CEqual(
-              resultType,
+              type,
               this.inferExpression(arm.expression),
               arm.expression
             )
@@ -1338,13 +1351,14 @@ export class Checker {
           this.popContext(newContext);
         }
         if (node.expression === null) {
-          resultType = new TArrow(exprType, resultType);
+          type = new TArrow(exprType, type);
         }
-        return resultType;
+        break;
       }
 
       case SyntaxKind.TupleExpression:
-        return new TTuple(node.elements.map(el => this.inferExpression(el)), node);
+        type = new TTuple(node.elements.map(el => this.inferExpression(el)), node);
+        break;
 
       case SyntaxKind.ReferenceExpression:
       {
@@ -1360,36 +1374,48 @@ export class Checker {
         }
         const scheme = this.lookup(node, Symkind.Var);
         if (scheme === null) {
-           //this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
-          return this.createTypeVar();
+          //this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
+          type = this.createTypeVar();
+          break;
         }
-        const type = this.instantiate(scheme, node);
+        type = this.instantiate(scheme, node);
         type.node = node;
-        return type;
+        break;
       }
 
       case SyntaxKind.MemberExpression:
       {
-        let type = this.inferExpression(node.expression);
+        type = this.inferExpression(node.expression);
         for (const [_dot, name] of node.path) {
-          const newFieldType = this.createTypeVar(name);
-          const newRestType = this.createTypeVar();
-          this.addConstraint(
-            new CEqual(
-              type,
-              new TField(name.text, new TPresent(newFieldType), newRestType, name),
-              node,
-            )
-          );
-          type = newFieldType;
+          switch (name.kind) {
+            case SyntaxKind.Identifier:
+            {
+              const newFieldType = this.createTypeVar(name);
+              const newRestType = this.createTypeVar();
+              this.addConstraint(
+                new CEqual(
+                  type,
+                  new TField(name.text, new TPresent(newFieldType), newRestType, name),
+                  node,
+                )
+              );
+              type = newFieldType;
+              break;
+            }
+            case SyntaxKind.Integer:
+              type = new TTupleIndex(type, Number(name.value));
+              break;
+            default:
+              assertNever(name);
+          }
         }
-        return type;
+        break;
       }
 
       case SyntaxKind.CallExpression:
       {
         const opType = this.inferExpression(node.func);
-        const retType = this.createTypeVar(node);
+        type = this.createTypeVar(node);
         const paramTypes = [];
         for (const arg of node.args) {
           paramTypes.push(this.inferExpression(arg));
@@ -1397,32 +1423,31 @@ export class Checker {
         this.addConstraint(
           new CEqual(
             opType,
-            TArrow.build(paramTypes, retType),
+            TArrow.build(paramTypes, type),
             node
           )
         );
-        return retType;
+        break;
       }
 
       case SyntaxKind.ConstantExpression:
       {
-        let ty;
         switch (node.token.kind) {
           case SyntaxKind.StringLiteral:
-            ty = this.getStringType();
+            type = this.getStringType();
             break;
           case SyntaxKind.Integer:
-            ty = this.getIntType();
+            type = this.getIntType();
             break;
         }
-        ty = ty.shallowClone();
-        ty.node = node;
-        return ty;
+        type = type.shallowClone();
+        type.node = node;
+        break;
       }
 
       case SyntaxKind.StructExpression:
       {
-        let type: Type = new TNil(node);
+        type = new TNil(node);
         for (const member of node.members) {
           switch (member.kind) {
             case SyntaxKind.StructExpressionField:
@@ -1447,7 +1472,9 @@ export class Checker {
               throw new Error(`Unexpected ${member}`);
           }
         }
-        return TField.sort(type);
+        // FIXME build a type rather than sorting it
+        type = TField.sort(type);
+        break;
       }
 
       case SyntaxKind.InfixExpression:
@@ -1458,17 +1485,17 @@ export class Checker {
           return this.createTypeVar();
         }
         const opType = this.instantiate(scheme, node.operator);
-        const retType = this.createTypeVar();
         const leftType = this.inferExpression(node.left);
         const rightType = this.inferExpression(node.right);
+        type = this.createTypeVar();
         this.addConstraint(
           new CEqual(
-            new TArrow(leftType, new TArrow(rightType, retType)),
+            new TArrow(leftType, new TArrow(rightType, type)),
             opType,
             node,
           ),
         );
-        return retType;
+        break;
       }
 
       default:
@@ -1476,13 +1503,17 @@ export class Checker {
 
     }
 
+    node.inferredType = type;
+
+    return type;
+
   }
 
-  public inferTypeExpression(node: TypeExpression, introduceTypeVars = false): Type {
+  public inferTypeExpression(node: TypeExpression, introduceTypeVars = false, checkKind = true): Type {
 
     let type;
 
-    if (!node.inferredKind) {
+    if (checkKind && !node.inferredKind) {
 
       type = this.createTypeVar();
 
@@ -1496,16 +1527,17 @@ export class Checker {
           if (scheme === null) {
             // this.diagnostics.add(new BindingNotFoudDiagnostic(node.name.text, node.name));
             type = this.createTypeVar();
-          } else {
-            type = this.instantiate(scheme, node.name);
-            // It is not guaranteed that `type` is copied during instantiation,
-            // so the following check ensures that we really are holding a copy
-            // that we can mutate.
-            if (type === scheme.type) {
-              type = type.shallowClone();
-            }
-            type.node = node;
+            break;
           }
+          type = this.instantiate(scheme, node.name);
+          // It is not guaranteed that `type` is copied during instantiation,
+          // so the following check ensures that we really are holding a copy
+          // that we can mutate.
+          if (type === scheme.type) {
+            type = type.shallowClone();
+          }
+          // Mutate the type
+          type.node = node;
           break;
         }
 
@@ -2279,6 +2311,11 @@ export class Checker {
 
   private lookupClass(name: string): ClassDeclaration | null {
     return this.classDecls.get(name) ?? null;
+  }
+
+  public getTypeOfNode(node: Syntax): Type  {
+    assert(node.inferredType !== undefined);
+    return this.simplifyType(node.inferredType);
   }
 
   // private *findInstanceContext(type: TCon, clazz: ClassDeclaration): Iterable<ClassDeclaration[]> {

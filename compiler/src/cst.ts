@@ -97,6 +97,7 @@ export const enum SyntaxKind {
   VBar,
   Dot,
   DotDot,
+  At,
   Comma,
   Colon,
   Equals,
@@ -124,6 +125,10 @@ export const enum SyntaxKind {
   BlockEnd,
   BlockStart,
   EndOfFile,
+
+  // Annotations
+  TypeAnnotation,
+  ExpressionAnnotation,
 
   // Type expressions
   ReferenceTypeExpression,
@@ -225,6 +230,7 @@ export type Syntax
   | StructDeclarationField
   | EnumDeclarationElement
   | TypeAssert
+  | Annotation
   | Declaration
   | Statement
   | Expression
@@ -824,6 +830,20 @@ export class Dot extends TokenBase {
 
 }
 
+export class At extends TokenBase {
+
+  public readonly kind = SyntaxKind.At;
+
+  public get text(): string {
+    return '@';
+  }
+
+  public clone(): At {
+    return new At(this.startPos);
+  }
+
+}
+
 export class Comma extends TokenBase {
 
   public readonly kind = SyntaxKind.Comma;
@@ -1190,6 +1210,7 @@ export type Token
   | CustomOperator
   | Integer
   | StringLiteral
+  | At
   | Comma
   | Dot
   | DotDot
@@ -1777,11 +1798,47 @@ export type Pattern
   | DisjunctivePattern
   | LiteralPattern
 
+export class TypeAnnotation extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.TypeAnnotation;
+
+  public constructor(
+    public at: At,
+    public colon: Colon,
+    public typeExpr: TypeExpression,
+  ) {
+    super();
+  }
+
+  public clone(): TypeAnnotation {
+    return new TypeAnnotation(
+      this.at.clone(),
+      this.colon.clone(),
+      this.typeExpr.clone()
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.at;
+  }
+
+  public getLastToken(): Token {
+    return this.typeExpr.getLastToken();
+  }
+
+}
+
+export type Annotation
+  = TypeAnnotation
+
+export type Annotations = Annotation[];
+
 export class TupleExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TupleExpression;
 
   public constructor(
+    public annotations: Annotations,
     public lparen: LParen,
     public elements: Expression[],
     public rparen: RParen,
@@ -1791,6 +1848,7 @@ export class TupleExpression extends SyntaxBase {
 
   public clone(): TupleExpression {
     return new TupleExpression(
+      this.annotations.map(a => a.clone()),
       this.lparen.clone(),
       this.elements.map(element => element.clone()),
       this.rparen.clone()
@@ -1812,6 +1870,7 @@ export class NestedExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.NestedExpression;
 
   public constructor(
+    public annotations: Annotations,
     public lparen: LParen,
     public expression: Expression,
     public rparen: RParen,
@@ -1821,6 +1880,7 @@ export class NestedExpression extends SyntaxBase {
 
   public clone(): NestedExpression {
     return new NestedExpression(
+      this.annotations.map(a => a.clone()),
       this.lparen.clone(),
       this.expression.clone(),
       this.rparen.clone(),
@@ -1842,13 +1902,17 @@ export class ConstantExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.ConstantExpression;
 
   public constructor(
+    public annotations: Annotations,
     public token: Integer | StringLiteral,
   ) {
     super();
   }
 
   public clone(): ConstantExpression {
-    return new ConstantExpression( this.token.clone() );
+    return new ConstantExpression(
+      this.annotations.map(a => a.clone()),
+      this.token.clone()
+    );
   }
 
   public getFirstToken(): Token {
@@ -1866,6 +1930,7 @@ export class CallExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.CallExpression;
 
   public constructor(
+    public annotations: Annotations,
     public func: Expression,
     public args: Expression[],
   ) {
@@ -1874,6 +1939,7 @@ export class CallExpression extends SyntaxBase {
 
   public clone(): CallExpression {
     return new CallExpression(
+      this.annotations.map(a => a.clone()),
       this.func.clone(),
       this.args.map(arg => arg.clone()),
     );
@@ -1955,6 +2021,7 @@ export class StructExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.StructExpression;
 
   public constructor(
+    public annotations: Annotations,
     public lbrace: LBrace,
     public members: StructExpressionElement[],
     public rbrace: RBrace,
@@ -1964,6 +2031,7 @@ export class StructExpression extends SyntaxBase {
 
   public clone(): StructExpression {
     return new StructExpression(
+      this.annotations.map(a => a.clone()),
       this.lbrace.clone(),
       this.members.map(member => member.clone()),
       this.rbrace.clone(),
@@ -1976,6 +2044,38 @@ export class StructExpression extends SyntaxBase {
 
   public getLastToken(): Token {
     return this.rbrace;
+  }
+
+}
+
+export class FunctionExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.FunctionExpression;
+
+  public constructor(
+    public annotations: Annotations,
+    public backslash: Backslash,
+    public params: Param[],
+    public body: Body,
+  ) {
+    super();
+  }
+
+  public clone(): FunctionExpression {
+    return new FunctionExpression(
+      this.annotations.map(a => a.clone()),
+      this.backslash.clone(),
+      this.params.map(param => param.clone()),
+      this.body.clone(),
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.backslash;
+  }
+
+  public getLastToken(): Token {
+    return this.body.getLastToken();
   }
 
 }
@@ -2010,42 +2110,13 @@ export class MatchArm extends SyntaxBase {
 
 }
 
-export class FunctionExpression extends SyntaxBase {
-
-  public readonly kind = SyntaxKind.FunctionExpression;
-
-  public constructor(
-    public backslash: Backslash,
-    public params: Param[],
-    public body: Body,
-  ) {
-    super();
-  }
-
-  public clone(): FunctionExpression {
-    return new FunctionExpression(
-      this.backslash.clone(),
-      this.params.map(param => param.clone()),
-      this.body.clone(),
-    );
-  }
-
-  public getFirstToken(): Token {
-    return this.backslash;
-  }
-
-  public getLastToken(): Token {
-    return this.body.getLastToken();
-  }
-
-
-}
 
 export class MatchExpression extends SyntaxBase {
 
   public readonly kind = SyntaxKind.MatchExpression;
 
   public constructor(
+    public annotations: Annotations,
     public matchKeyword: MatchKeyword,
     public expression: Expression | null,
     public arms: MatchArm[],
@@ -2055,6 +2126,7 @@ export class MatchExpression extends SyntaxBase {
 
   public clone(): MatchExpression {
     return new MatchExpression(
+      this.annotations.map(a => a.clone()),
       this.matchKeyword.clone(),
       this.expression !== null ? this.expression.clone() : null,
       this.arms.map(arm => arm.clone()),
@@ -2062,6 +2134,9 @@ export class MatchExpression extends SyntaxBase {
   }
 
   public getFirstToken(): Token {
+    if (this.annotations.length > 0) {
+      return this.annotations[0].getFirstToken();
+    }
     return this.matchKeyword;
   }
 
@@ -2082,6 +2157,7 @@ export class ReferenceExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.ReferenceExpression;
 
   public constructor(
+    public annotations: Annotations,
     public modulePath: Array<[IdentifierAlt, Dot]>,
     public name: Identifier | IdentifierAlt,
   ) {
@@ -2090,6 +2166,7 @@ export class ReferenceExpression extends SyntaxBase {
 
   public clone(): ReferenceExpression {
     return new ReferenceExpression(
+      this.annotations.map(a => a.clone()),
       this.modulePath.map(([name, dot]) => [name.clone(), dot.clone()]),
       this.name.clone(),
     );
@@ -2113,14 +2190,16 @@ export class MemberExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.MemberExpression;
 
   public constructor(
+    public annotations: Annotations,
     public expression: Expression,
-    public path: [Dot, Identifier][],
+    public path: [Dot, Identifier | Integer][],
   ) {
     super();
   }
 
   public clone(): MemberExpression {
     return new MemberExpression(
+      this.annotations.map(a => a.clone()),
       this.expression.clone(),
       this.path.map(([dot, name]) => [dot.clone(), name.clone()]),
     );
@@ -2141,6 +2220,7 @@ export class PrefixExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.PrefixExpression;
 
   public constructor(
+    public annotations: Annotations,
     public operator: ExprOperator,
     public expression: Expression,
   ) {
@@ -2149,6 +2229,7 @@ export class PrefixExpression extends SyntaxBase {
 
   public clone(): PrefixExpression {
     return new PrefixExpression(
+      this.annotations.map(a => a.clone()),
       this.operator.clone(),
       this.expression.clone(),
     );
@@ -2169,6 +2250,7 @@ export class PostfixExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.PostfixExpression;
 
   public constructor(
+    public annotations: Annotations,
     public expression: Expression,
     public operator: ExprOperator,
   ) {
@@ -2177,6 +2259,7 @@ export class PostfixExpression extends SyntaxBase {
 
   public clone(): PostfixExpression {
     return new PostfixExpression(
+      this.annotations.map(a => a.clone()),
       this.expression.clone(),
       this.operator.clone(),
     );
@@ -2197,6 +2280,7 @@ export class InfixExpression extends SyntaxBase {
   public readonly kind = SyntaxKind.InfixExpression;
 
   public constructor(
+    public annotations: Annotations,
     public left: Expression,
     public operator: ExprOperator,
     public right: Expression,
@@ -2206,6 +2290,7 @@ export class InfixExpression extends SyntaxBase {
 
   public clone(): InfixExpression {
     return new InfixExpression(
+      this.annotations.map(a => a.clone()),
       this.left.clone(),
       this.operator.clone(),
       this.right.clone(),
@@ -2220,6 +2305,26 @@ export class InfixExpression extends SyntaxBase {
     return this.right.getLastToken();
   }
 
+}
+
+export function isExpression(node: Syntax): node is Expression {
+  switch (node.kind) {
+    case SyntaxKind.MemberExpression:
+    case SyntaxKind.CallExpression:
+    case SyntaxKind.StructExpression:
+    case SyntaxKind.ReferenceExpression:
+    case SyntaxKind.ConstantExpression:
+    case SyntaxKind.TupleExpression:
+    case SyntaxKind.MatchExpression:
+    case SyntaxKind.NestedExpression:
+    case SyntaxKind.PrefixExpression:
+    case SyntaxKind.InfixExpression:
+    case SyntaxKind.PostfixExpression:
+    case SyntaxKind.FunctionExpression:
+      return true;
+    default:
+      return false;
+  }
 }
 
 export type Expression
@@ -3233,7 +3338,7 @@ export function isToken(value: any): value is Token {
       && value instanceof TokenBase;
 }
 
-export function vistEachChild<T extends Syntax>(node: T, proc: (node: Syntax) => Syntax | undefined): Syntax {
+export function visitEachChild<T extends Syntax>(node: T, proc: (node: Syntax) => Syntax | void): Syntax {
 
   const newArgs = [];
   let changed = false;

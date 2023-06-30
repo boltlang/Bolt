@@ -1,6 +1,6 @@
 import { InspectOptions } from "util";
 import { ClassDeclaration, EnumDeclaration, StructDeclaration, Syntax } from "./cst";
-import { InspectFn, toStringTag } from "./util";
+import { InspectFn, assert, assertNever, toStringTag } from "./util";
 
 export enum TypeKind {
   Arrow,
@@ -567,6 +567,58 @@ export type Type
 export type TVar
   = TUniVar
   | TRigidVar
+
+
+export function typesEqual(a: Type, b: Type): boolean {
+  if (a.kind !== b.kind) {
+    return false;
+  }
+  switch (a.kind) {
+    case TypeKind.Con:
+      assert(b.kind === TypeKind.Con);
+      return a.id === b.id;
+    case TypeKind.UniVar:
+      assert(b.kind === TypeKind.UniVar);
+      return a.id === b.id;
+    case TypeKind.RigidVar:
+      assert(b.kind === TypeKind.RigidVar);
+      return a.id === b.id;
+    case TypeKind.Nil:
+    case TypeKind.Absent:
+      return true;
+    case TypeKind.Nominal:
+      assert(b.kind === TypeKind.Nominal);
+      return a.decl === b.decl;
+    case TypeKind.App:
+      assert(b.kind === TypeKind.App);
+      return typesEqual(a.left, b.left) && typesEqual(a.right, b.right);
+    case TypeKind.Field:
+      assert(b.kind === TypeKind.Field);
+      return a.name === b.name && typesEqual(a.type, b.type) && typesEqual(a.restType, b.restType);
+    case TypeKind.Arrow:
+      assert(b.kind === TypeKind.Arrow);
+      return typesEqual(a.paramType, b.paramType) && typesEqual(a.returnType, b.returnType);
+    case TypeKind.Tuple:
+      assert(b.kind === TypeKind.Tuple);
+      if (a.elementTypes.length !== b.elementTypes.length) {
+        return false;
+      }
+      for (let i = 0; i < a.elementTypes.length; i++) {
+        if (!typesEqual(a.elementTypes[i], b.elementTypes[i])) {
+          return false;
+        }
+      }
+      return true;
+    case TypeKind.Present:
+      assert(b.kind === TypeKind.Present);
+      return typesEqual(a.type, b.type);
+    case TypeKind.TupleIndex:
+      assert(b.kind === TypeKind.TupleIndex);
+      return a.index === b.index && typesEqual(a.tupleType, b.tupleType);
+    default:
+      assertNever(a);
+  }
+}
 
 export class TVSet {
 

@@ -68,6 +68,11 @@ import {
   AssignStatement,
   ForallTypeExpression,
   TypeExpressionWithConstraints,
+  Annotation,
+  TypeAnnotation,
+  Annotations,
+  ExprOperator,
+  Integer,
 } from "./cst"
 import { Stream } from "./util";
 
@@ -322,16 +327,55 @@ export class Parser {
     return new ArrowTypeExpression(paramTypes, returnType);
   }
 
-  public parseConstantExpression(): ConstantExpression {
+  private parseAnnotations(inline = true): Annotation[] {
+    const annotations = [];
+    for (;;) {
+      const t0 = this.tokens.peek();
+      if (t0.kind !== SyntaxKind.At) {
+        break;
+      }
+      this.tokens.get();
+      const t1 = this.tokens.peek();
+      if (t1.kind === SyntaxKind.Colon) {
+        this.tokens.get();
+        let typeExpr;
+        if (inline) {
+          typeExpr = this.parsePrimitiveTypeExpression();
+        } else {
+          typeExpr = this.parseTypeExpression();
+          this.expectToken(SyntaxKind.LineFoldEnd);
+        }
+        annotations.push(new TypeAnnotation(t0, t1, typeExpr));
+        continue;
+      }
+      let expr;
+      if (inline) {
+        expr = this.parsePrimitiveExpression();
+      } else {
+        expr = this.parseExpression();
+        this.expectToken(SyntaxKind.LineFoldEnd);
+      }
+      annotations.push(new ExprAnnotation(t0, expr));
+    }
+    return annotations;
+  }
+
+  public parseConstantExpression(annotations?: Annotation[]): ConstantExpression {
+    if (annotations === undefined) {
+      annotations = this.parseAnnotations();
+    }
     const token = this.getToken()
     if (token.kind !== SyntaxKind.StringLiteral
       && token.kind !== SyntaxKind.Integer) {
       this.raiseParseError(token, [ SyntaxKind.StringLiteral, SyntaxKind.Integer ])
     }
-    return new ConstantExpression(token);
+    return new ConstantExpression(annotations, token);
   }
 
-  public parseReferenceExpression(): ReferenceExpression {
+  public parseReferenceExpression(annotations?: Annotation[]): ReferenceExpression {
+    if (annotations === undefined) {
+      annotations = this.parseAnnotations();
+    }
     const modulePath: Array<[IdentifierAlt, Dot]> = [];
     for (;;) {
       const t0 = this.peekToken(1);
@@ -347,10 +391,13 @@ export class Parser {
     if (name.kind !== SyntaxKind.Identifier && name.kind !== SyntaxKind.IdentifierAlt) {
       this.raiseParseError(name, [ SyntaxKind.Identifier, SyntaxKind.IdentifierAlt ]);
     }
-    return new ReferenceExpression(modulePath, name);
+    return new ReferenceExpression(annotations, modulePath, name);
   }
 
-  private parseExpressionWithParens(): Expression {
+  private parseExpressionWithParens(annotations?: Annotation[]): Expression {
+    if (annotations === undefined) {
+      annotations = this.parseAnnotations();
+    }
     const elements = [];
     const lparen = this.expectToken(SyntaxKind.LParen)
     let rparen;
@@ -374,46 +421,52 @@ export class Parser {
       }
     }
     if (elements.length === 1) {
-      return new NestedExpression(lparen, elements[0], rparen);
+      return new NestedExpression(annotations, lparen, elements[0], rparen);
     }
-    return new TupleExpression(lparen, elements, rparen);
+    return new TupleExpression(annotations, lparen, elements, rparen);
+  }
+
+  public parseMatchExpression(annotations?: Annotation[]): MatchExpression {
+    if (annotations === undefined) {
+      annotations = this.parseAnnotations();
+    }
+    const t0 = this.expectToken(SyntaxKind.MatchKeyword);
+    let expression = null
+    const t1 = this.peekToken();
+    if (t1.kind !== SyntaxKind.BlockStart) {
+      expression = this.parseExpression();
+    }
+    this.expectToken(SyntaxKind.BlockStart);
+    const arms = [];
+    for (;;) {
+      const t2 = this.peekToken();
+      if (t2.kind === SyntaxKind.BlockEnd) {
+        this.getToken();
+        break;
+      }
+      const pattern = this.parsePattern();
+      const rarrowAlt = this.expectToken(SyntaxKind.RArrowAlt);
+      const expression = this.parseExpression();
+      arms.push(new MatchArm(pattern, rarrowAlt, expression));
+      this.expectToken(SyntaxKind.LineFoldEnd);
+    }
+    return new MatchExpression(annotations, t0, expression, arms);
   }
 
   private parsePrimitiveExpression(): Expression {
+    const annotations = this.parseAnnotations();
     const t0 = this.peekToken();
     switch (t0.kind) {
       case SyntaxKind.LParen:
-        return this.parseExpressionWithParens();
+        return this.parseExpressionWithParens(annotations);
       case SyntaxKind.Identifier:
       case SyntaxKind.IdentifierAlt:
-        return this.parseReferenceExpression();
+        return this.parseReferenceExpression(annotations);
       case SyntaxKind.Integer:
       case SyntaxKind.StringLiteral:
-        return this.parseConstantExpression();
+        return this.parseConstantExpression(annotations);
       case SyntaxKind.MatchKeyword:
-      {
-        this.getToken();
-        let expression = null
-        const t1 = this.peekToken();
-        if (t1.kind !== SyntaxKind.BlockStart) {
-          expression = this.parseExpression();
-        }
-        this.expectToken(SyntaxKind.BlockStart);
-        const arms = [];
-        for (;;) {
-          const t2 = this.peekToken();
-          if (t2.kind === SyntaxKind.BlockEnd) {
-            this.getToken();
-            break;
-          }
-          const pattern = this.parsePattern();
-          const rarrowAlt = this.expectToken(SyntaxKind.RArrowAlt);
-          const expression = this.parseExpression();
-          arms.push(new MatchArm(pattern, rarrowAlt, expression));
-          this.expectToken(SyntaxKind.LineFoldEnd);
-        }
-        return new MatchExpression(t0, expression, arms);
-      }
+        return this.parseMatchExpression(annotations);
       case SyntaxKind.LBrace:
       {
         this.getToken();
@@ -452,7 +505,7 @@ export class Parser {
             break;
           }
         }
-        return new StructExpression(t0, fields, rbrace);
+        return new StructExpression(annotations, t0, fields, rbrace);
       }
       default:
         this.raiseParseError(t0, [
@@ -466,20 +519,25 @@ export class Parser {
 
   private tryParseMemberExpression(): Expression {
     const expression = this.parsePrimitiveExpression();
-    const path: Array<[Dot, Identifier]> = [];
+    const path: Array<[Dot, Identifier | Integer]> = [];
     for (;;) {
       const t1 = this.peekToken();
       if (t1.kind !== SyntaxKind.Dot) {
         break;
       }
       this.getToken();
-      const name = this.expectToken(SyntaxKind.Identifier);
-      path.push([t1, name]);
+      const t2 = this.getToken();
+      if (t2.kind !== SyntaxKind.Identifier && t2.kind !== SyntaxKind.Integer) {
+        this.raiseParseError(t2, [ SyntaxKind.Identifier, SyntaxKind.Integer ]);
+      }
+      path.push([t1, t2]);
     }
     if (path.length === 0) {
       return expression;
     }
-    return new MemberExpression(expression, path);
+    const annotations = expression.annotations;
+    expression.annotations = [];
+    return new MemberExpression(annotations, expression, path);
   }
 
   private tryParseCallExpression(): Expression {
@@ -501,13 +559,16 @@ export class Parser {
     if (args.length === 0) {
       return func
     }
-    return new CallExpression(func, args);
+    const annotations = func.annotations;
+    func.annotations = [];
+    return new CallExpression(annotations, func, args);
   }
 
   private parseUnaryExpression(): Expression {
     let result = this.tryParseCallExpression()
-    const prefixes = [];
+    const prefixes: Array<[Annotations, ExprOperator]> = [];
     for (;;) {
+      const annotations = this.parseAnnotations();
       const t0 = this.peekToken();
       if (!isExprOperator(t0)) {
         break;
@@ -515,12 +576,12 @@ export class Parser {
       if (!this.prefixExprOperators.has(t0.text)) {
         break;
       }
-      prefixes.push(t0);
+      prefixes.push([annotations, t0]);
       this.getToken()
     }
     for (let i = prefixes.length-1; i >= 0; i--) {
-      const operator = prefixes[i];
-      result = new PrefixExpression(operator, result);
+      const [annotations, operator] = prefixes[i];
+      result = new PrefixExpression(annotations, operator, result);
     }
     return result;
   }
@@ -550,7 +611,9 @@ export class Parser {
         }
         rhs = this.parseBinaryOperatorAfterExpr(rhs, info0.precedence);
       }
-      lhs = new InfixExpression(lhs, t0, rhs);
+      const annotations = lhs.annotations;
+      lhs.annotations = [];
+      lhs = new InfixExpression(annotations, lhs, t0, rhs);
     }
     return lhs;
   }

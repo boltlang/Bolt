@@ -64,6 +64,7 @@ export class TypeclassDictPassing implements Pass<SourceFile, SourceFile> {
         new ExprBody(
           new Equals(),
           new StructExpression(
+            [],
             new LBrace(),
             node.elements.map(element => {
               assert(element.kind === SyntaxKind.LetDeclaration);
@@ -71,7 +72,7 @@ export class TypeclassDictPassing implements Pass<SourceFile, SourceFile> {
               return new StructExpressionField(
                 new Identifier(null, element.pattern.name.text),
                 new Equals(),
-                new FunctionExpression(new Backslash(), element.params, element.body!)
+                new FunctionExpression([], new Backslash(), element.params, element.body!)
               );
             }),
             new RBrace(),

@@ -15,6 +15,10 @@ import BoltToJS from "../passes/BoltToJS"
 import { stripExtension } from "../util"
 import { sync as which } from "which"
 import { spawnSync } from "child_process"
+import { ConsoleDiagnostics, DiagnosticStore, TypeMismatchDiagnostic } from "../diagnostics"
+import { Syntax, SyntaxKind, TextFile, isExpression, visitEachChild } from "../cst"
+import { Analyser, Checker, parseSourceFile } from ".."
+import { typesEqual } from "../types"
 
 function debug(value: any) {
   console.error(util.inspect(value, { colors: true, depth: Infinity }));
@@ -73,15 +77,17 @@ program
   .version('0.0.1')
   .option('-C, --work-dir', 'Act as if run from this directory', '.');
 
-program.command('build', 'Build a set of Bolt sources')
+program.command('build', { isDefault: true })
+  .description('Build a set of Bolt sources')
   .argument('<file>', 'Path to the Bolt program to compile')
+  .option('-C, --work-dir', 'Act as if run from this directory', '.')
   .option('--no-typecheck', 'Skip type-checking')
   .option('--no-emit', 'Do not output compiled files')
   .option('-t, --target <target-id>', 'What to compile to', 'c')
-  .action((file, opts) => {
+  .action((fileName, opts) => {
 
     const cwd = opts.workDir;
-    const filename = path.resolve(cwd, file);
+    const filePath = path.resolve(cwd, fileName);
     const shouldTypecheck = opts.typecheck;
     const shouldEmit = opts.emit;
 
@@ -101,7 +107,7 @@ program.command('build', 'Build a set of Bolt sources')
         process.exit(1);
     }
 
-    const program = new Program([ filename ]);
+    const program = new Program([ filePath ]);
     if (program.diagnostics.hasError) {
       process.exit(1);
     }
@@ -146,6 +152,40 @@ program.command('build', 'Build a set of Bolt sources')
 
     }
 
+  });
+
+program.command('verify', { hidden: true })
+  .description('Run verification tests')
+  .argument('<file>', 'File with verification source')
+  .action((fileName, _opts) => {
+
+    const diagnostics = new DiagnosticStore();
+    const realPath = path.resolve(fileName);
+    const text = fs.readFileSync(realPath, 'utf-8');
+    const file = new TextFile(fileName, text);
+    const sourceFile = parseSourceFile(file, diagnostics);
+    if (!sourceFile) {
+      process.exit(1);
+    }
+    const analyser = new Analyser();
+    const checker = new Checker(analyser, diagnostics);
+    checker.check(sourceFile);
+    const realDiagnostics = new ConsoleDiagnostics();
+    const visit = (node: Syntax) => {
+      if (isExpression(node)) {
+        for (const annotation of node.annotations) {
+          if (annotation.kind === SyntaxKind.TypeAnnotation) {
+            const actual = checker.getTypeOfNode(node);
+            const expected = checker.getTypeOfNode(annotation.typeExpr);
+            if (!typesEqual(actual, expected)) {
+              realDiagnostics.add(new TypeMismatchDiagnostic(actual, expected, [ node ], []));
+            }
+          }
+        }
+      }
+      visitEachChild(node, visit);
+    }
+    visit(sourceFile);
   });
 
 program.parse();
