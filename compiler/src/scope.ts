@@ -158,7 +158,6 @@ export class Scope {
         break;
       }
       default:
-        console.log(node);
         throw new Error(`Unexpected ${node}`);
     }
   }
