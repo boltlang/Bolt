@@ -168,6 +168,7 @@ program.command('verify', { hidden: true })
       process.exit(1);
     }
     const analyser = new Analyser();
+    analyser.addSourceFile(sourceFile);
     const checker = new Checker(analyser, diagnostics);
     checker.check(sourceFile);
     const realDiagnostics = new ConsoleDiagnostics();
