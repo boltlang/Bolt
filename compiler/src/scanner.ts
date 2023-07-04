@@ -163,6 +163,13 @@ export class Scanner extends BufferedStream<Token> {
         if (c0 === '#') {
           const line = this.currPos.line;
           this.getChar();
+          for (;;) {
+            const c1 = this.peekChar();
+            if (!isWhiteSpace(c1) || c1 === '\n' || c1 === EOF) {
+              break;
+            }
+            this.getChar();
+          }
           let text = '';
           for (;;) {
             const c1 = this.getChar();
@@ -171,8 +178,10 @@ export class Scanner extends BufferedStream<Token> {
             }
             text += c1;
           }
-          const scanner = new Scanner(text, this.diagnostics, this.file, this.getCurrentPosition());
-          this.file.comments.set(line, scanner.getAll());
+          if (text[0] === '@') {
+            const scanner = new Scanner(text, this.diagnostics, this.file, this.getCurrentPosition());
+            this.file.comments.set(line, scanner.getAll());
+          }
           continue;
         }
 

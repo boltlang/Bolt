@@ -283,7 +283,6 @@ export class TCon extends TypeBase {
 
   public constructor(
     public id: number,
-    public argTypes: Type[],
     public displayName: string,
     public node: Syntax | null = null,
   ) {
@@ -291,35 +290,23 @@ export class TCon extends TypeBase {
   }
 
   public *getTypeVars(): Iterable<TVar> {
-    for (const argType of this.argTypes) {
-      yield* argType.getTypeVars();
-    }
+
   }
 
   public shallowClone(): TCon {
     return new TCon(
       this.id,
-      this.argTypes,
       this.displayName,
       this.node,
     );
   }
 
-  public substitute(sub: TVSub): Type {
-    let changed = false;
-    const newArgTypes = [];
-    for (const argType of this.argTypes) {
-      const newArgType = argType.substitute(sub);
-      if (newArgType !== argType) {
-        changed = true;
-      }
-      newArgTypes.push(newArgType);
-    }
-    return changed ? new TCon(this.id, newArgTypes, this.displayName, this.node) : this;
+  public substitute(_sub: TVSub): Type {
+    return this;
   }
 
-  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
-    return this.displayName + ' ' + this.argTypes.map(t => inspect(t, options)).join(' ');
+  public [toStringTag](_depth: number, _options: InspectOptions, _inspect: InspectFn) {
+    return this.displayName;
   }
 
 }
@@ -430,6 +417,14 @@ export class TField extends TypeBase {
     );
   }
 
+  public static build(fields: Map<string, Type>, restType: Type): Type {
+    let out = restType;
+    for (const [name, type] of fields) {
+      out = new TField(name, new TPresent(type, type.node), out, type.node);
+    }
+    return out
+  }
+
   public static sort(type: Type): Type {
     const fields = new Map<string, TField>();
     while (type.kind === TypeKind.Field) {
@@ -481,7 +476,7 @@ export class TApp extends TypeBase {
 
   public static build(resultType: Type, types: Type[], node: Syntax | null = null): Type {
     for (let i = 0; i < types.length; i++) {
-      resultType = new TApp(types[i], resultType, node);
+      resultType = new TApp(resultType, types[i], node);
     }
     return resultType;
   }
@@ -518,38 +513,6 @@ export class TApp extends TypeBase {
 
 }
 
-export class TNominal extends TypeBase {
-
-  public readonly kind = TypeKind.Nominal;
-
-  public constructor(
-    public decl: StructDeclaration | EnumDeclaration,
-    public node: Syntax | null = null,
-  ) {
-    super();
-  }
-
-  public *getTypeVars(): Iterable<TVar> {
-
-  }
-
-  public shallowClone(): Type {
-    return new TNominal(
-      this.decl,
-      this.node,
-    );
-  }
-
-  public substitute(_sub: TVSub): Type {
-    return this;
-  }
-
-  public [toStringTag]() {
-    return this.decl.name.text;
-  }
-
-}
-
 export type Type
   = TCon
   | TArrow
@@ -557,7 +520,6 @@ export type Type
   | TUniVar
   | TTuple
   | TApp
-  | TNominal
   | TField
   | TNil
   | TPresent
@@ -586,9 +548,6 @@ export function typesEqual(a: Type, b: Type): boolean {
     case TypeKind.Nil:
     case TypeKind.Absent:
       return true;
-    case TypeKind.Nominal:
-      assert(b.kind === TypeKind.Nominal);
-      return a.decl === b.decl;
     case TypeKind.App:
       assert(b.kind === TypeKind.App);
       return typesEqual(a.left, b.left) && typesEqual(a.right, b.right);

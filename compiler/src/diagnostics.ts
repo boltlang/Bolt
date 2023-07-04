@@ -548,11 +548,7 @@ export function describeType(type: Type): string {
   switch (type.kind) {
     case TypeKind.Con:
     {
-      let out = type.displayName;
-      for (const argType of type.argTypes) {
-        out += ' ' + describeType(argType);
-      }
-      return out;
+      return type.displayName;
     }
     case TypeKind.UniVar:
       return 'a' + type.id;
@@ -575,10 +571,6 @@ export function describeType(type: Type): string {
     }
     case TypeKind.TupleIndex:
       return describeType(type.tupleType) + '.' + type.index;
-    case TypeKind.Nominal:
-    {
-      return type.decl.name.text;
-    }
     case TypeKind.Field:
     {
       let out = '{ ' + type.name + ': ' + describeType(type.type);
@@ -594,7 +586,7 @@ export function describeType(type: Type): string {
     }
     case TypeKind.App:
     {
-      return describeType(type.right) + ' ' + describeType(type.left);
+      return describeType(type.left) + ' ' + describeType(type.right);
     }
     case TypeKind.Nil:
       return '{}';

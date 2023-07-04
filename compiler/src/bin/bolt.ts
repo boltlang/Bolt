@@ -201,6 +201,7 @@ program.command('verify', { hidden: true })
 
     const uncaughtDiagnostics = new Set(diagnostics);
 
+    // TODO check comments that did not match any diagnostic
     for (const [line, comment] of file.comments) {
       if (comment[0].kind === SyntaxKind.At && comment[1].kind === SyntaxKind.Identifier && comment[1].text === 'expect_diagnostic' && comment[2].kind === SyntaxKind.StringLiteral) {
         for (const diagnostic of uncaughtDiagnostics) {

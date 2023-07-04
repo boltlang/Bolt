@@ -31,7 +31,7 @@ import {
 import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn, implementationLimitation } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
-import { TypeKind, TApp, TArrow, TCon, TField, TNil, TNominal, TPresent, TTuple, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, TTupleIndex } from "./types";
+import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TTuple, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, TTupleIndex } from "./types";
 import { CClass, CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
 
 // export class Qual {
@@ -384,9 +384,9 @@ export class Checker {
   private nextKindVarId = 0;
   private nextConTypeId = 0;
 
-  private stringType = this.createTCon([], 'String');
-  private intType = this.createTCon([], 'Int');
-  private boolType = this.createTCon([], 'Bool');
+  private stringType = this.createTCon('String');
+  private intType = this.createTCon('Int');
+  private boolType = this.createTCon('Bool');
 
   private contexts: InferContext[] = [];
 
@@ -436,8 +436,8 @@ export class Checker {
     return this.boolType;
   }
 
-  private createTCon(types: Type[], name: string): TCon {
-    return new TCon(this.nextConTypeId++, types, name);
+  private createTCon(name: string, node: Syntax | null = null): TCon {
+    return new TCon(this.nextConTypeId++, name, node);
   }
 
   private createTypeVar(node: Syntax | null = null): TUniVar {
@@ -1447,12 +1447,13 @@ export class Checker {
 
       case SyntaxKind.StructExpression:
       {
-        type = new TNil(node);
+        const fields = new Map<string, Type>();
+        const restType = new TNil(node);
         for (const member of node.members) {
           switch (member.kind) {
             case SyntaxKind.StructExpressionField:
             {
-              type = new TField(member.name.text, new TPresent(this.inferExpression(member.expression)), type, node);
+              fields.set(member.name.text, this.inferExpression(member.expression));
               break;
             }
             case SyntaxKind.PunnedStructExpressionField:
@@ -1465,15 +1466,14 @@ export class Checker {
               } else {
                 fieldType = this.instantiate(scheme, member);
               }
-              type = new TField(member.name.text, new TPresent(fieldType), type, node);
+              fields.set(member.name.text, fieldType);
               break;
             }
             default:
               throw new Error(`Unexpected ${member}`);
           }
         }
-        // FIXME build a type rather than sorting it
-        type = TField.sort(type);
+        type = TField.build(fields, restType);
         break;
       }
 
@@ -1644,21 +1644,22 @@ export class Checker {
         this.inferBindings(pattern.pattern, type, typeVars, constraints);
         break;
 
-      // case SyntaxKind.NamedTuplePattern:
-      // {
-      //   const scheme = this.lookup(pattern.name, Symkind.Type);
-      //   if (scheme === null) {
-      //     return this.createTypeVar();
-      //   }
-      //   let tupleType = new TTuple(pattern.elements.map(p =>
-      //     this.inferBindings(p, this.createTypeVar(), typeVars, constraints));
-      //   // FIXME not tested
-      //   this.addConstraint(new CEqual(tupleType, type, pattern));
-      //   return TApp.build(
-      //     new TNominal(scheme.type.node as StructDeclaration | EnumDeclaration, pattern),
-      //     tupleType
-      //   );
-      // }
+      case SyntaxKind.NamedTuplePattern:
+      {
+        const scheme = this.lookup(pattern.name, Symkind.Var);
+        if (scheme === null) {
+          return;
+        }
+        const ctorType = this.instantiate(scheme, pattern);
+        let elementTypes = [];
+        for (const element of pattern.elements) {
+          const tv = this.createTypeVar();
+          this.inferBindings(element, tv, typeVars, constraints, generalize);
+          elementTypes.push(tv);
+        }
+        this.addConstraint(new CEqual(TArrow.build(elementTypes, type), ctorType, pattern));
+        break;
+      }
 
       case SyntaxKind.LiteralPattern:
       {
@@ -1693,13 +1694,14 @@ export class Checker {
       case SyntaxKind.StructPattern:
       {
         const variadicMember = getVariadicMember(pattern);
-        let structType: Type;
+        const fields = new Map<string, Type>();
+        let restType: Type;
         if (variadicMember === null) {
-          structType = new TNil(pattern);
+          restType = new TNil(pattern);
         } else {
-          structType = this.createTypeVar();
+          restType = this.createTypeVar();
           if (variadicMember.pattern !== null) {
-            this.inferBindings(variadicMember.pattern, structType, typeVars, constraints);
+            this.inferBindings(variadicMember.pattern, restType, typeVars, constraints);
           }
         }
         for (const member of pattern.members) {
@@ -1708,14 +1710,14 @@ export class Checker {
             {
               const fieldType = this.createTypeVar();
               this.inferBindings(member.pattern, fieldType, typeVars, constraints);
-              structType = new TField(member.name.text, new TPresent(fieldType), structType, pattern);
+              fields.set(member.name.text, fieldType);
               break;
             }
             case SyntaxKind.PunnedStructPatternField:
             {
               const fieldType = this.createTypeVar();
               this.addBinding(member.name.text, Forall.mono(fieldType), Symkind.Var);
-              structType = new TField(member.name.text, new TPresent(fieldType), structType, pattern);
+              fields.set(member.name.text, fieldType);
               break;
             }
             case SyntaxKind.VariadicStructPatternElement:
@@ -1727,7 +1729,7 @@ export class Checker {
         this.addConstraint(
           new CEqual(
             type,
-            TField.sort(structType),
+            TField.build(fields, restType),
             pattern,
           )
         );
@@ -1820,15 +1822,20 @@ export class Checker {
           constraints,
           returnType: null,
         }
+
         this.pushContext(context);
+
         const kindArgs = [];
         for (const name of node.varExps) {
           const kindArg = this.createTypeVar();
           env.add(name.text, Forall.mono(kindArg), Symkind.Type);
           kindArgs.push(kindArg);
         }
-        const type = TApp.build(new TNominal(node, node), kindArgs);
+
+        const type = this.createTCon(node.name.text, node);
+        const appliedType = TApp.build(type, kindArgs);
         parentEnv.add(node.name.text, new Forall(typeVars, new CMany(constraints), type), Symkind.Type);
+
         let elementTypes: Type[] = [];
         if (node.members !== null) {
           for (const member of node.members) {
@@ -1838,28 +1845,30 @@ export class Checker {
               {
                 const argTypes = member.elements.map(el => this.inferTypeExpression(el, false));
                 elementType = new TTuple(argTypes, member);
-                ctorType = TArrow.build(argTypes, type, member);
+                ctorType = TArrow.build(argTypes, appliedType, member);
                 break;
               }
               case SyntaxKind.EnumDeclarationStructElement:
               {
-                elementType = new TNil(member);
+                const restType = new TNil(member);
+                const fields = new Map<string, Type>();
                 for (const field of member.fields) {
-                  elementType = new TField(field.name.text, new TPresent(this.inferTypeExpression(field.typeExpr, false)), elementType, member);
+                  fields.set(field.name.text, this.inferTypeExpression(field.typeExpr, false));
                 }
-                elementType = TField.sort(elementType);
-                ctorType = new TArrow(elementType, type);
+                elementType = TField.build(fields, restType);
+                ctorType = new TArrow(elementType, appliedType, member);
                 break;
               }
               default:
                 throw new Error(`Unexpected ${member}`);
             }
-            // FIXME `typeVars` may contain too much irrelevant type variables
             parentEnv.add(member.name.text, new Forall(typeVars, new CMany(constraints), ctorType), Symkind.Var);
             elementTypes.push(elementType);
           }
         }
+
         this.popContext(context);
+
         break;
       }
 
@@ -1906,15 +1915,18 @@ export class Checker {
           env.add(varExpr.text, Forall.mono(kindArg), Symkind.Type);
           kindArgs.push(kindArg);
         }
-        let type: Type = new TNil(node);
+        const fields = new Map<string, Type>();
+        const restType = new TNil(node);
         if (node.fields !== null) {
           for (const field of node.fields) {
-            type = new TField(field.name.text, new TPresent(this.inferTypeExpression(field.typeExpr)), type, node);
+            fields.set(field.name.text, this.inferTypeExpression(field.typeExpr));
           }
         }
+        const type = this.createTCon(node.name.text, node.name);
+        const recordType = TField.build(fields, restType);
         this.popContext(context);
-        parentEnv.add(node.name.text, new Forall(typeVars, new CMany(constraints), TField.sort(type)), Symkind.Type);
-        //parentEnv.add(node.name.text, new Forall(typeVars, constraints, new TArrow(type, TApp.build(type, kindArgs))), Symkind.Var);
+        parentEnv.add(node.name.text, new Forall(typeVars, new CMany(constraints), type), Symkind.Type);
+        parentEnv.add(node.name.text, new Forall(typeVars, new CMany(constraints), new TArrow(recordType, type)), Symkind.Var);
         break;
       }
 
@@ -2186,18 +2198,8 @@ export class Checker {
 
     if (left.kind === TypeKind.Con && right.kind === TypeKind.Con) {
       if (left.id === right.id) {
-        assert(left.argTypes.length === right.argTypes.length);
-        const count = left.argTypes.length;
-        let success = true; 
-        for (let i = 0; i < count; i++) {
-          if (!this.unify(left.argTypes[i], right.argTypes[i], enableDiagnostics)) {
-            success = false;
-          }
-        }
-        if (success) {
-          TypeBase.join(left, right);
-        }
-        return success;
+        TypeBase.join(left, right);
+        return true;
       }
     }
 
@@ -2244,13 +2246,6 @@ export class Checker {
         success = false;
       }
       return success
-    }
-
-    if (left.kind === TypeKind.Nominal && right.kind === TypeKind.Nominal) {
-      if (left.decl === right.decl) {
-        return true;
-      }
-      // fall through to error reporting
     }
 
     if (left.kind === TypeKind.App && right.kind === TypeKind.App) {

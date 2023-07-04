@@ -470,11 +470,11 @@ abstract class TokenBase extends SyntaxBase {
   }
 
   public getFirstToken(): Token {
-    throw new Error(`Trying to get the first token of an object that is a token itself.`);
+    return this as Token;
   }
 
   public getLastToken(): Token {
-    throw new Error(`Trying to get the last token of an object that is a token itself.`);
+    return this as Token;
   }
 
   public getRange(): TextRange {
