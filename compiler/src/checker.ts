@@ -685,7 +685,6 @@ export class Checker {
       case TypeKind.RigidVar:
       case TypeKind.Nil:
       case TypeKind.Absent:
-      case TypeKind.Nominal:
       case TypeKind.Con:
         return type;
       case TypeKind.TupleIndex:
