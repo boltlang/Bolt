@@ -26,13 +26,12 @@ import {
   TypeclassDeclaredTwiceDiagnostic,
   FieldNotFoundDiagnostic,
   TypeMismatchDiagnostic,
-  TupleIndexOutOfRangeDiagnostic,
 } from "./diagnostics";
-import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn, implementationLimitation } from "./util";
+import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
-import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TTuple, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, TTupleIndex } from "./types";
-import { CClass, CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
+import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TUniVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, buildTupleTypeWithLoc, buildTupleType } from "./types";
+import { CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
 
 // export class Qual {
 
@@ -78,10 +77,9 @@ import { CClass, CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSe
 // type Pred = IsInPred;
 
 export const enum KindType {
-  Star,
+  Type,
   Arrow,
   Var,
-  Row,
 }
 
 class KVSub {
@@ -138,17 +136,7 @@ class KVar extends KindBase {
 
 class KType extends KindBase {
 
-  public readonly type = KindType.Star;
-
-  public substitute(_sub: KVSub): Kind {
-    return this;
-  }
-
-}
-
-class KRow extends KindBase {
-
-  public readonly type = KindType.Row;
+  public readonly type = KindType.Type;
 
   public substitute(_sub: KVSub): Kind {
     return this;
@@ -186,8 +174,6 @@ export type Kind
   = KType
   | KArrow
   | KVar
-  | KRow
-
 
 abstract class SchemeBase {
 }
@@ -387,6 +373,7 @@ export class Checker {
   private stringType = this.createTCon('String');
   private intType = this.createTCon('Int');
   private boolType = this.createTCon('Bool');
+  private unitType = buildTupleType([]);
 
   private contexts: InferContext[] = [];
 
@@ -687,20 +674,6 @@ export class Checker {
       case TypeKind.Absent:
       case TypeKind.Con:
         return type;
-      case TypeKind.TupleIndex:
-      {
-        const tupleType = this.simplifyType(type.tupleType);
-        if (tupleType.kind === TypeKind.Tuple) {
-          if (type.index >= tupleType.elementTypes.length) {
-            this.diagnostics.add(new TupleIndexOutOfRangeDiagnostic(type.index, tupleType));
-            return type;
-          }
-          const newType = tupleType.elementTypes[type.index];
-          type.set(newType);
-          return newType;
-        }
-        return type;
-      }
       case TypeKind.App:
       {
         const left = type.left.find();
@@ -735,19 +708,6 @@ export class Checker {
           return type;
         }
         return new TPresent(newType, type.node);
-      }
-      case TypeKind.Tuple:
-      {
-        let changed = false;
-        const newElementTypes = [];
-        for (const elementType of type.elementTypes) {
-          const newElementType = elementType.find();
-          newElementTypes.push(newElementType);
-          if (newElementType !== elementType) {
-            changed = true;
-          }
-        }
-        return changed ? new TTuple(newElementTypes, type.node) : type;
       }
     }
   }
@@ -1114,7 +1074,7 @@ export class Checker {
       return this.unifyKind(b, a, node);
     }
 
-    if (a.type === KindType.Star && b.type === KindType.Star) {
+    if (a.type === KindType.Type && b.type === KindType.Type) {
       return true;
     }
 
@@ -1185,7 +1145,7 @@ export class Checker {
       {
         let type;
         if (node.expression === null) {
-          type = new TTuple([]);
+          type = this.unitType;
         } else {
           type = this.inferExpression(node.expression);
         }
@@ -1356,7 +1316,7 @@ export class Checker {
       }
 
       case SyntaxKind.TupleExpression:
-        type = new TTuple(node.elements.map(el => this.inferExpression(el)), node);
+        type = buildTupleTypeWithLoc(node.elements.map(el => [el, this.inferExpression(el)]), node);
         break;
 
       case SyntaxKind.ReferenceExpression:
@@ -1386,27 +1346,27 @@ export class Checker {
       {
         type = this.inferExpression(node.expression);
         for (const [_dot, name] of node.path) {
+          let label;
           switch (name.kind) {
             case SyntaxKind.Identifier:
-            {
-              const newFieldType = this.createTypeVar(name);
-              const newRestType = this.createTypeVar();
-              this.addConstraint(
-                new CEqual(
-                  type,
-                  new TField(name.text, new TPresent(newFieldType), newRestType, name),
-                  node,
-                )
-              );
-              type = newFieldType;
+              label = name.text;
               break;
-            }
             case SyntaxKind.Integer:
-              type = new TTupleIndex(type, Number(name.value));
+              label = Number(name.value);
               break;
             default:
               assertNever(name);
           }
+          const newFieldType = this.createTypeVar(name);
+          const newRestType = this.createTypeVar();
+          this.addConstraint(
+            new CEqual(
+              type,
+              new TField(label, new TPresent(newFieldType), newRestType, name),
+              node,
+            )
+          );
+          type = newFieldType;
         }
         break;
       }
@@ -1542,7 +1502,7 @@ export class Checker {
 
         case SyntaxKind.TupleTypeExpression:
         {
-          type = new TTuple(node.elements.map(el => this.inferTypeExpression(el, introduceTypeVars)), node);
+          type = buildTupleTypeWithLoc(node.elements.map(el => [el, this.inferTypeExpression(el, introduceTypeVars)]), node);
           break;
         }
 
@@ -1579,10 +1539,11 @@ export class Checker {
 
         case SyntaxKind.TypeExpressionWithConstraints:
         {
-          for (const constraint of node.constraints) {
-            implementationLimitation(constraint.types.length === 1);
-            this.addConstraint(new CClass(constraint.name.text, this.inferTypeExpression(constraint.types[0]), constraint.name));
-          }
+          // TODO
+          // for (const constraint of node.constraints) {
+          //   implementationLimitation(constraint.types.length === 1);
+          //   this.addConstraint(new CClass(constraint.name.text, this.inferTypeExpression(constraint.types[0]), constraint.name));
+          // }
           return this.inferTypeExpression(node.typeExpr, introduceTypeVars);
         }
 
@@ -1842,9 +1803,9 @@ export class Checker {
             switch (member.kind) {
               case SyntaxKind.EnumDeclarationTupleElement:
               {
-                const argTypes = member.elements.map(el => this.inferTypeExpression(el, false));
-                elementType = new TTuple(argTypes, member);
-                ctorType = TArrow.build(argTypes, appliedType, member);
+                const args: Array<[Syntax, Type]> = member.elements.map(el => [el, this.inferTypeExpression(el, false)]);
+                elementType = buildTupleTypeWithLoc(args, member);
+                ctorType = TArrow.build(args.map(a => a[1]), appliedType, member);
                 break;
               }
               case SyntaxKind.EnumDeclarationStructElement:
@@ -2039,7 +2000,7 @@ export class Checker {
 
   }
 
-  private path: string[] = [];
+  private path: (string | number)[] = [];
   private constraint: Constraint | null = null;
   private maxTypeErrorCount = 5;
 
@@ -2177,22 +2138,6 @@ export class Checker {
         TypeBase.join(left, right);
       }
       return success;
-    }
-
-    if (left.kind === TypeKind.Tuple && right.kind === TypeKind.Tuple) {
-      if (left.elementTypes.length === right.elementTypes.length) {
-        let success = false;
-        const count = left.elementTypes.length;
-        for (let i = 0; i < count; i++) {
-          if (!this.unify(left.elementTypes[i], right.elementTypes[i], enableDiagnostics)) {
-            success = false;
-          }
-        }
-        if (success) {
-          TypeBase.join(left, right);
-        }
-        return success;
-      }
     }
 
     if (left.kind === TypeKind.Con && right.kind === TypeKind.Con) {

@@ -7,8 +7,6 @@ export enum TypeKind {
   UniVar,
   RigidVar,
   Con,
-  Tuple,
-  TupleIndex,
   App,
   Nominal,
   Field,
@@ -311,84 +309,20 @@ export class TCon extends TypeBase {
 
 }
 
-export class TTupleIndex extends TypeBase {
-
-  public readonly kind = TypeKind.TupleIndex;
-
-  public constructor(
-    public tupleType: Type,
-    public index: number,
-    public node: Syntax | null = null,
-  ) {
-    super();
-  }
-
-  public getTypeVars(): Iterable<TVar> {
-    return this.tupleType.getTypeVars();
-  }
-
-  public substitute(sub: TVSub): Type {
-    const newTupleType = this.tupleType.substitute(sub);
-    if (newTupleType === this.tupleType) {
-      return this;
-    }
-    return new TTupleIndex(newTupleType, this.index);
-  }
-
-  public shallowClone(): TTupleIndex {
-    return new TTupleIndex(
-      this.tupleType,
-      this.index,
-    );
-  }
-
-  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn): string {
-    return inspect(this.tupleType, options) + '.' + this.index;
-  }
-
+export function buildTupleType(types: Type[]): Type {
+  let out: Type = new TNil();
+  types.forEach((type, i) => {
+    out = new TField(i, new TPresent(type), out);
+  });
+  return out;
 }
 
-export class TTuple extends TypeBase {
-
-  public readonly kind = TypeKind.Tuple;
-
-  public constructor(
-    public elementTypes: Type[],
-    public node: Syntax | null = null,
-  ) {
-    super();
-  }
-
-  public *getTypeVars(): Iterable<TVar> {
-    for (const elementType of this.elementTypes) {
-      yield* elementType.getTypeVars();
-    }
-  }
-
-  public shallowClone(): TTuple {
-    return new TTuple(
-      this.elementTypes,
-      this.node,
-    );
-  }
-
-  public substitute(sub: TVSub): Type {
-    let changed = false;
-    const newElementTypes = [];
-    for (const elementType of this.elementTypes) {
-      const newElementType = elementType.substitute(sub);
-      if (newElementType !== elementType) {
-        changed = true;
-      }
-      newElementTypes.push(newElementType);
-    }
-    return changed ? new TTuple(newElementTypes, this.node) : this;
-  }
-
-  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
-    return this.elementTypes.map(t => inspect(t, options)).join(' × ');
-  }
-
+export function buildTupleTypeWithLoc(elements: Array<[Syntax, Type]>, node: Syntax) {
+  let out: Type = new TNil(node);
+  elements.forEach(([el, type], i) => {
+    out = new TField(i, new TPresent(type, el), out);
+  });
+  return out;
 }
 
 export class TField extends TypeBase {
@@ -396,7 +330,7 @@ export class TField extends TypeBase {
   public readonly kind = TypeKind.Field;
 
   public constructor(
-    public name: string,
+    public name: string | number,
     public type: Type,
     public restType: Type,
     public node: Syntax | null = null,
@@ -426,7 +360,7 @@ export class TField extends TypeBase {
   }
 
   public static sort(type: Type): Type {
-    const fields = new Map<string, TField>();
+    const fields = new Map<string | number, TField>();
     while (type.kind === TypeKind.Field) {
       fields.set(type.name, type);
       type = type.restType;
@@ -518,13 +452,11 @@ export type Type
   | TArrow
   | TRigidVar
   | TUniVar
-  | TTuple
   | TApp
   | TField
   | TNil
   | TPresent
   | TAbsent
-  | TTupleIndex
 
 export type TVar
   = TUniVar
@@ -557,23 +489,9 @@ export function typesEqual(a: Type, b: Type): boolean {
     case TypeKind.Arrow:
       assert(b.kind === TypeKind.Arrow);
       return typesEqual(a.paramType, b.paramType) && typesEqual(a.returnType, b.returnType);
-    case TypeKind.Tuple:
-      assert(b.kind === TypeKind.Tuple);
-      if (a.elementTypes.length !== b.elementTypes.length) {
-        return false;
-      }
-      for (let i = 0; i < a.elementTypes.length; i++) {
-        if (!typesEqual(a.elementTypes[i], b.elementTypes[i])) {
-          return false;
-        }
-      }
-      return true;
     case TypeKind.Present:
       assert(b.kind === TypeKind.Present);
       return typesEqual(a.type, b.type);
-    case TypeKind.TupleIndex:
-      assert(b.kind === TypeKind.TupleIndex);
-      return a.index === b.index && typesEqual(a.tupleType, b.tupleType);
     default:
       assertNever(a);
   }

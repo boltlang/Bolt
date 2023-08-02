@@ -1,6 +1,6 @@
 
 import { Kind, KindType } from "./checker";
-import { type Type, TypeKind, TTuple } from "./types"
+import { type Type, TypeKind } from "./types"
 import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
 import { assertNever, countDigits, IndentWriter } from "./util";
 
@@ -186,32 +186,13 @@ export class TypeMismatchDiagnostic extends DiagnosticBase {
     public left: Type,
     public right: Type,
     public trace: Syntax[],
-    public fieldPath: string[],
+    public fieldPath: (string | number)[],
   ) {
     super();
   }
 
   public get position(): TextPosition | undefined {
     return this.trace[0]?.getFirstToken().getStartPosition();
-  }
-
-}
-
-export class TupleIndexOutOfRangeDiagnostic extends DiagnosticBase {
-
-  public readonly kind = DiagnosticKind.TupleIndexOutOfRange;
-
-  public level = Level.Error;
-
-  public constructor(
-    public index: number,
-    public tupleType: TTuple,
-  ) {
-    super();
-  }
-
-  public get position(): TextPosition | undefined {
-    return undefined;
   }
 
 }
@@ -223,7 +204,7 @@ export class FieldNotFoundDiagnostic extends DiagnosticBase {
   public level = Level.Error;
 
   public constructor(
-    public fieldName: string,
+    public fieldName: string | number,
     public missing: Syntax | null,
     public present: Syntax | null,
     public cause: Syntax | null = null,
@@ -283,7 +264,6 @@ export type Diagnostic
   | TypeclassNotImplementedDiagnostic
   | BindingNotFoundDiagnostic
   | TypeMismatchDiagnostic
-  | TupleIndexOutOfRangeDiagnostic
   | UnexpectedTokenDiagnostic
   | FieldNotFoundDiagnostic
   | KindMismatchDiagnostic
@@ -494,9 +474,6 @@ const DESCRIPTIONS: Partial<Record<SyntaxKind, string>> = {
   [SyntaxKind.MatchKeyword]: "'match'",
   [SyntaxKind.TypeKeyword]: "'type'",
   [SyntaxKind.IdentifierAlt]: 'an identifier starting with an uppercase letter',
-  [SyntaxKind.ConstantExpression]: 'a constant expression',
-  [SyntaxKind.ReferenceExpression]: 'a reference expression',
-  [SyntaxKind.LineFoldEnd]: 'the end of the current line-fold',
   [SyntaxKind.TupleExpression]: 'a tuple expression such as (1, 2)',
   [SyntaxKind.ReferenceExpression]: 'a reference to some variable',
   [SyntaxKind.NestedExpression]: 'an expression nested with parentheses',
@@ -558,19 +535,6 @@ export function describeType(type: Type): string {
     {
       return describeType(type.paramType) + ' -> ' + describeType(type.returnType);
     }
-    case TypeKind.Tuple:
-    {
-      let out = '(';
-      let first = true;
-      for (const elementType of type.elementTypes) {
-        if (first) first = false;
-        else out += ', ';
-        out += describeType(elementType);
-      }
-      return out + ')';
-    }
-    case TypeKind.TupleIndex:
-      return describeType(type.tupleType) + '.' + type.index;
     case TypeKind.Field:
     {
       let out = '{ ' + type.name + ': ' + describeType(type.type);
@@ -605,7 +569,7 @@ function describeKind(kind: Kind): string {
       return `k${kind.id}`;
     case KindType.Arrow:
       return describeKind(kind.left) + ' -> ' + describeKind(kind.right);
-    case KindType.Star:
+    case KindType.Type:
       return '*';
     default:
       assertNever(kind);

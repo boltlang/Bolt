@@ -8,7 +8,6 @@ export const enum ConstraintKind {
   Equal,
   Many,
   Empty,
-  Class,
 }
 
 abstract class ConstraintBase {
@@ -113,32 +112,6 @@ export class CMany extends ConstraintBase {
 
 }
 
-export class CClass extends ConstraintBase {
-
-  public readonly kind = ConstraintKind.Class;
-
-  public constructor(
-    public className: string,
-    public type: Type,
-    public node: Syntax | null = null,
-  ) {
-    super();
-  }
-
-  public substitute(sub: TVSub): CClass {
-    return new CClass(this.className, this.type.substitute(sub));
-  }
-
-  public freeTypeVars(): Iterable<TVar> {
-    return this.type.getTypeVars();
-  }
-
-  public [toStringTag](_depth: number, options: InspectOptions, inspect: InspectFn) {
-    return this.className + ' ' + inspect(this.type, options);
-  }
-
-}
-
 export class CEmpty extends ConstraintBase {
 
   public readonly kind = ConstraintKind.Empty;
@@ -161,7 +134,6 @@ export type Constraint
   = CEqual
   | CMany
   | CEmpty
-  | CClass
 
 export  class ConstraintSet extends Array<Constraint> {
 
