@@ -1,0 +1,6 @@
+
+let foo n = @:Int foo_1 n
+let foo_1 n = @:Int foo_2 n
+let foo_2 n = foo n + foo_1 n
+
+@:Int foo 1
