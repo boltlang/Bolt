@@ -5,7 +5,11 @@ Bolt
 
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
-![sample code](https://github.com/boltlang/bolt/blob/main/assets/preview-fac.png?raw=true)
+```ocaml
+let fac = match.
+  0 | 1 => 1
+  k => k * fac (k-1)
+```
 
 Bolt is a new strictly-evaluated functional programming language in the making
 that aims to make writing complex applications dead-simple. It ships with some
