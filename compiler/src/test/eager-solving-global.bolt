@@ -1,0 +1,6 @@
+
+let foo n.
+  # @expect_diagnostic "TypeMismatch"
+  let f : String = 1
+  return n
+

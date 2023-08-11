@@ -1,0 +1,6 @@
+
+let id x = x
+
+@:Int id 1
+@:String id "foo"
+@:Bool id True

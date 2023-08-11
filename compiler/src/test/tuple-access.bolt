@@ -1,0 +1,5 @@
+
+let t1 = (1, True)
+
+@:Int t1.0
+@:Bool t1.1

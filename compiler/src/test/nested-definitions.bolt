@@ -1,0 +1,6 @@
+
+let foo x.
+  let bar y z = y + z - x
+  return bar 1 2
+
+@:Int foo 3
