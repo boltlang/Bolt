@@ -4,7 +4,7 @@ import path from "path"
 
 import { assert, implementationLimitation, IndentWriter, JSONObject, JSONValue, nonenumerable, unreachable } from "./util";
 import { isNodeWithScope, Scope } from "./scope"
-import type { InferContext, Kind, KindEnv, Scheme, TypeEnv } from "./checker"
+import type { Kind, Scheme } from "./checker"
 import type { Type } from "./types";
 import { Emitter } from "./emitter";
 
@@ -253,11 +253,6 @@ abstract class SyntaxBase {
   @nonenumerable
   public parent: Syntax | null = null;
 
-  @nonenumerable
-  public inferredKind?: Kind;
-  @nonenumerable
-  public inferredType?: Type;
-
   public abstract getFirstToken(): Token;
 
   public abstract getLastToken(): Token;
@@ -294,6 +289,10 @@ abstract class SyntaxBase {
       curr = curr!.parent;
     } while (curr !== null);
     throw new Error(`Could not find a scope for ${this}. Maybe the parent links are not set?`);
+  }
+
+  public getParentScope(): Scope | null {
+    return this.parent === null ? null : this.parent.getScope();
   }
 
   public getEnclosingModule(): ModuleDeclaration | SourceFile {
@@ -2595,9 +2594,6 @@ export class EnumDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.EnumDeclaration;
 
-  @nonenumerable
-  public typeEnv?: TypeEnv;
-
   public constructor(
     public pubKeyword: PubKeyword | null,
     public enumKeyword: EnumKeyword,
@@ -2667,9 +2663,6 @@ export class StructDeclarationField extends SyntaxBase {
 export class StructDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.StructDeclaration;
-
-  @nonenumerable
-  public typeEnv?: TypeEnv;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -2836,9 +2829,6 @@ export class TypeDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.TypeDeclaration;
 
-  @nonenumerable
-  public typeEnv?: TypeEnv;
-
   public constructor(
     public pubKeyword: PubKeyword | null,
     public typeKeyword: TypeKeyword,
@@ -2882,15 +2872,9 @@ export class LetDeclaration extends SyntaxBase {
   public scope?: Scope;
 
   @nonenumerable
-  public typeEnv?: TypeEnv;
-
-  @nonenumerable
   public activeCycle?: boolean;
   @nonenumerable
   public visited?: boolean;
-
-  @nonenumerable
-  public context?: InferContext;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -3082,9 +3066,6 @@ export class ClassDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ClassDeclaration;
 
-  @nonenumerable
-  public typeEnv?: TypeEnv;
-
   public constructor(
     public pubKeyword: PubKeyword | null,
     public classKeyword: ClassKeyword,
@@ -3186,9 +3167,6 @@ export class InstanceDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.InstanceDeclaration;
 
-  @nonenumerable
-  public typeEnv?: TypeEnv;
-
   public constructor(
     public pubKeyword: PubKeyword | null,
     public classKeyword: InstanceKeyword,
@@ -3232,11 +3210,6 @@ export class InstanceDeclaration extends SyntaxBase {
 export class ModuleDeclaration extends SyntaxBase {
 
   public readonly kind = SyntaxKind.ModuleDeclaration;
-
-  @nonenumerable
-  public typeEnv?: TypeEnv;
-  @nonenumerable
-  public kindEnv?: KindEnv;
 
   public constructor(
     public pubKeyword: PubKeyword | null,
@@ -3287,10 +3260,6 @@ export class SourceFile extends SyntaxBase {
 
   @nonenumerable
   public scope?: Scope;
-  @nonenumerable
-  public typeEnv?: TypeEnv;
-  @nonenumerable
-  public kindEnv?: KindEnv;
 
   public constructor(
     private file: TextFile,

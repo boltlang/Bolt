@@ -50,7 +50,7 @@ export abstract class TypeBase {
     this.find().parent = newType;
   }
 
-  public hasTypeVar(tv: TUniVar): boolean {
+  public hasTypeVar(tv: TRegularVar): boolean {
     for (const other of this.getTypeVars()) {
       if (tv.id === other.id) {
         return true;
@@ -105,7 +105,7 @@ export class TRigidVar extends TypeBase {
 
 }
 
-export class TUniVar extends TypeBase {
+export class TRegularVar extends TypeBase {
 
   public readonly kind = TypeKind.UniVar;
 
@@ -122,8 +122,8 @@ export class TUniVar extends TypeBase {
     yield this;
   }
 
-  public shallowClone(): TUniVar {
-    return new TUniVar(this.id, this.node);
+  public shallowClone(): TRegularVar {
+    return new TRegularVar(this.id, this.node);
   }
 
   public substitute(sub: TVSub): Type {
@@ -451,7 +451,7 @@ export type Type
   = TCon
   | TArrow
   | TRigidVar
-  | TUniVar
+  | TRegularVar
   | TApp
   | TField
   | TNil
@@ -459,9 +459,8 @@ export type Type
   | TAbsent
 
 export type TVar
-  = TUniVar
+  = TRegularVar
   | TRigidVar
-
 
 export function typesEqual(a: Type, b: Type): boolean {
   if (a.kind !== b.kind) {

@@ -23,6 +23,22 @@ nice goodies, including:
  - **Cross-platform standard library**, allowing you to write your code for the
    web and the desktop at the same time.
 
+## Examples
+
+_Note that these examples are stil in the design phase and not able to compile._
+
+```ocaml
+import "html" ( HtmlComponent )
+
+let app : HtmlComponent.
+
+  let { fullname, .. } = perform get_app_state
+
+  return match user.
+    None => h1 [ "Please log in." ]
+    Some({ fullname, .. }) =>
+```
+
 ## Core Principles
 
 Bolt has a few fundamental design principles that we hope in time will make it
