@@ -358,7 +358,8 @@ function isVariableDeclarationLike(node: LetDeclaration): boolean {
 }
 
 function isFunctionDeclarationLike(node: LetDeclaration): boolean {
-  return !isSignatureDeclarationLike(node) && !isVariableDeclarationLike(node);
+  return node.parent!.kind === SyntaxKind.ClassDeclaration
+      || (!isSignatureDeclarationLike(node) && !isVariableDeclarationLike(node));
   // return (node.pattern.kind === SyntaxKind.NamedPattern || node.pattern.kind === SyntaxKind.NestedPattern && node.pattern.pattern.kind === SyntaxKind.NamedPattern)
   //     && (node.params.length > 0 || (node.body !== null && node.body.kind === SyntaxKind.BlockBody));
 }
