@@ -32,8 +32,6 @@ import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
 import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TRegularVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, buildTupleTypeWithLoc, buildTupleType } from "./types";
 import { CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
-import { warn } from "console";
-import { wrap } from "module";
 
 // export class Qual {
 
