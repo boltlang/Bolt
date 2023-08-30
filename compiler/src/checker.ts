@@ -30,7 +30,7 @@ import {
 import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
-import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TRegularVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, buildTupleTypeWithLoc, buildTupleType } from "./types";
+import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TRegularVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, buildTupleTypeWithLoc, buildTupleType, isTVar } from "./types";
 import { CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
 
 // export class Qual {
@@ -231,7 +231,7 @@ type NodeWithReference
   | ReferenceTypeExpression
 
 function validateScheme(scheme: Scheme): void {
-  const isMonoVar = scheme.type.kind === TypeKind.UniVar && scheme.typeVars.size === 0;
+  const isMonoVar = scheme.type.kind === TypeKind.RegularVar && scheme.typeVars.size === 0;
   if (!isMonoVar) {
     const tvs = new TVSet(scheme.type.getTypeVars())
     for (const tv of tvs) {
@@ -723,7 +723,7 @@ export class Checker {
   private simplifyType(type: Type): Type {
     type = type.find();
     switch (type.kind) {
-      case TypeKind.UniVar:
+      case TypeKind.RegularVar:
       case TypeKind.RigidVar:
       case TypeKind.Nil:
       case TypeKind.Absent:
@@ -2099,7 +2099,7 @@ export class Checker {
   private maxTypeErrorCount = 5;
 
   private find(type: Type): Type {
-    while (type.kind === TypeKind.UniVar && this.typeSolution.has(type)) {
+    while (type.kind === TypeKind.RegularVar && this.typeSolution.has(type)) {
       type = this.typeSolution.get(type)!;
     }
     return type;
@@ -2149,11 +2149,11 @@ export class Checker {
       }
     }
 
-    if (left.kind !== TypeKind.UniVar && right.kind === TypeKind.UniVar) {
+    if (left.kind !== TypeKind.RegularVar && right.kind === TypeKind.RegularVar) {
       swap();
     }
 
-    if (left.kind === TypeKind.UniVar) {
+    if (left.kind === TypeKind.RegularVar) {
 
       // Perform an occurs check, verifying whether left occurs
       // somewhere inside the structure of right. If so, unification
@@ -2167,30 +2167,30 @@ export class Checker {
       // propagating the type classes that 'left' requires to 'right'.
       // If 'right' is another type variable, we're lucky. We just copy
       // the missing type classes from 'left' to 'right'. Otherwise,
-      //const propagateClasses = (classes: Iterable<ClassDeclaration>, type: Type) => {
-      //  if (type.kind === TypeKind.Var) {
-      //    for (const constraint of classes) {
-      //      type.context.add(constraint);
-      //    }
-      //  } else if (type.kind === TypeKind.Con) {
-      //    for (const constraint of classes) {
-      //      propagateClassTCon(constraint, type);
-      //    }
-      //  } else {
-      //    //assert(false);
-      //    //this.diagnostics.add(new );
-      //  }
-      //}
+      const propagateClasses = (classes: Iterable<ClassDeclaration>, type: Type) => {
+        if (isTVar(type)) {
+          for (const constraint of classes) {
+            type.context.add(constraint);
+          }
+        } else if (type.kind === TypeKind.Con) {
+          for (const constraint of classes) {
+            propagateClassTCon(constraint, type);
+          }
+        } else {
+          //assert(false);
+          //this.diagnostics.add(new );
+        }
+      }
 
-      //const propagateClassTCon = (clazz: ClassDeclaration, type: TCon) => {
-      //  const s = this.findInstanceContext(type, clazz);
-      //  let i = 0;
-      //  for (const classes of s) {
-      //    propagateClasses(classes, type.argTypes[i++]);
-      //  }
-      //}
+      const propagateClassTCon = (clazz: ClassDeclaration, type: TCon) => {
+        const s = this.findInstanceContext(type, clazz);
+        let i = 0;
+        for (const classes of s) {
+          propagateClasses(classes, type.types[i++]);
+        }
+      }
 
-      //propagateClasses(left.context, right);
+      propagateClasses(left.context, right);
 
       // We are all clear; set the actual type of left to right.
       left.set(right);

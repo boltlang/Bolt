@@ -527,7 +527,7 @@ export function describeType(type: Type): string {
     {
       return type.displayName;
     }
-    case TypeKind.UniVar:
+    case TypeKind.RegularVar:
       return 'a' + type.id;
     case TypeKind.RigidVar:
       return type.displayName;
@@ -577,7 +577,7 @@ function describeKind(kind: Kind): string {
 }
 
 function getFirstNodeInTypeChain(type: Type): Syntax | null {
-  while (type !== type && (type.kind === TypeKind.UniVar || type.node === null)) {
+  while (type !== type && (type.kind === TypeKind.RegularVar || type.node === null)) {
     type = type.next;
   }
   return type.node;

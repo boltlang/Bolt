@@ -1,10 +1,11 @@
 import { InspectOptions } from "util";
 import { ClassDeclaration, EnumDeclaration, StructDeclaration, Syntax } from "./cst";
 import { InspectFn, assert, assertNever, toStringTag } from "./util";
+import { warn } from "console";
 
 export enum TypeKind {
   Arrow,
-  UniVar,
+  RegularVar,
   RigidVar,
   Con,
   App,
@@ -69,7 +70,18 @@ export function isType(value: any): value is Type {
       && value instanceof TypeBase;
 }
 
-export class TRigidVar extends TypeBase {
+abstract class TVarBase extends TypeBase {
+
+  public context = new Set<ClassDeclaration>();
+
+}
+
+export function isTVar(type: Type): type is TVar {
+  return type.kind === TypeKind.RegularVar
+      || type.kind === TypeKind.RigidVar;
+}
+
+export class TRigidVar extends TVarBase {
 
   public readonly kind = TypeKind.RigidVar;
 
@@ -105,11 +117,9 @@ export class TRigidVar extends TypeBase {
 
 }
 
-export class TRegularVar extends TypeBase {
+export class TRegularVar extends TVarBase {
 
-  public readonly kind = TypeKind.UniVar;
-
-  public context = new Set<ClassDeclaration>();
+  public readonly kind = TypeKind.RegularVar;
 
   public constructor(
     public id: number,
@@ -470,8 +480,8 @@ export function typesEqual(a: Type, b: Type): boolean {
     case TypeKind.Con:
       assert(b.kind === TypeKind.Con);
       return a.id === b.id;
-    case TypeKind.UniVar:
-      assert(b.kind === TypeKind.UniVar);
+    case TypeKind.RegularVar:
+      assert(b.kind === TypeKind.RegularVar);
       return a.id === b.id;
     case TypeKind.RigidVar:
       assert(b.kind === TypeKind.RigidVar);
