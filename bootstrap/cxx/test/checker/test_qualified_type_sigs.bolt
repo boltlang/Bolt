@@ -1,0 +1,24 @@
+
+
+class Eq a.
+  let eq : a -> a -> Bool
+
+class Show a.
+  let show : a -> String
+
+instance Eq String.
+  let eq a b = True
+
+instance Show Bool.
+  let show s = "a boolean"
+
+instance Show Int.
+  let show s = "a string"
+
+let repr_eq_1 x y : (Show a, Show b) => a -> b -> Bool = eq (show x) (show y)
+
+@expect_diagnostic 2201
+let repr_eq_2 x y : (Show b) => a -> b -> Bool = eq (show x) (show y)
+
+@expect_diagnostic 2201
+let repr_eq_3 x y : a -> b -> Bool = eq (show x) (show y)

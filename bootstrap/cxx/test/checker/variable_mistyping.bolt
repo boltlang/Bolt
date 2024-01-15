@@ -1,0 +1,6 @@
+
+# Testing variable typing
+
+@expect_diagnostic 2010
+let a: Int = "foo"
+

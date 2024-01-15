@@ -1,0 +1,12 @@
+
+# Testing whether nested variable declarations work
+
+let id x.
+  let foo = x
+  return foo
+
+@:Int id 1
+@:Bool id True
+@:Int id 1
+@:String id "foo"
+

@@ -1,0 +1,10 @@
+
+enum List a.
+  Nil
+  Pair a (List a)
+
+let x : List Int
+@expect_diagnostic 2010
+let y : List Bool = x
+let z : List String
+

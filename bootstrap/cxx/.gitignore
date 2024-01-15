@@ -1,0 +1,12 @@
+
+# default build directory
+/build/
+
+# used by clangd and other programs
+.cache/
+
+# used for local development
+Makefile
+
+# quick test scripts in the main directory
+/*.bolt

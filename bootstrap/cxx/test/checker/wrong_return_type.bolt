@@ -1,0 +1,11 @@
+
+let wrong x.
+  if True.
+    return 1
+  elif False.
+    return 2
+  else.
+    @expect_diagnostic 2010
+    return "foo"
+
+wrong 1

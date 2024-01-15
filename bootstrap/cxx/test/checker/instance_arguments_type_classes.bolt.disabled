@@ -1,0 +1,36 @@
+
+# Advanced test for instance arguments as type classses
+# From the paper 'On the Bright Side of Type Classes'
+
+# Representation of the type class
+struct Eq a.
+  equal: a -> a -> Bool
+
+let primBoolEq a b = match (a, b).
+  (True, True) => True
+  (False, False) => True
+  _ => False
+
+# Class Eq default method
+let equal {{ eqT : Eq a }} : {{ Eq a }} -> a -> a -> Bool = eqT.equal
+
+# Instance Eq Bool
+let eqBool : Eq Bool = Eq {
+  equal = primBoolEq
+}
+
+# Instance Eq (List a)
+let primListEq a b = match (a, b).
+  ([], []) => True
+  (_, []) => False
+  ([], _) => False
+  (a :: b, c :: d) => equal a c && primListEq b c
+
+# Instance Eq a => Eq List a
+let listEq : Eq a -> Eq (List a) = Eq {
+  equal = primListEq
+}
+
+ equal True False
+ equal 1 2
+ equal 1 False
