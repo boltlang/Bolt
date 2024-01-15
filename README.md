@@ -27,16 +27,66 @@ nice goodies, including:
 
 _Note that these examples are stil in the design phase and not able to compile._
 
-```ocaml
-import "html" ( HtmlComponent )
+Here are some records we define in Bolt:
 
-let app : HtmlComponent.
+```
+struct Dog.
+  name: String
+  age: i32
 
-  let { fullname, .. } = perform get_app_state
+let spike = Dog {
+    name = "Spike",
+    age = 5
+  }
+
+# Shorthand
+let sadie = Dog "Sadie" 12
+
+print f"Hey look! {spike.name} and {sadie.name} are playing together!"
+```
+
+Records are _extensible_, meaning that you can do things like this:
+
+```
+let greet { name, .. } = print f"Hello, {name}!"
+
+greet sadie
+greet spike
+greet { name = "Sam", company = "Accelera" }
+```
+
+Bolt will also support traits/type classes, like in Rust and Haskell:
+
+```
+trait Shout.
+  let shout : String
+
+impl Shout for Dog.
+    let shout = "Bark, bark!"
+
+# Imagine somewhere in another library Cat is defined ...
+
+impl Shout for Cat.
+    let shout = "Miau! Miau!"
+```
+
+Here's an example of a [React](https://react.dev/)-like framework in Bolt:
+
+_Note that this example is very experimental._
+
+```
+import "html" ( Html )
+
+let app : Html.
+
+  let user = perform get_state
 
   return match user.
-    None => h1 [ "Please log in." ]
-    Some({ fullname, .. }) =>
+    None => do.
+        Future.when_done (fetch "/api/login") \data -> do.
+          perform set_state data
+        h1 [ "Please log in." ]
+    Some { name, .. } => h1 [ f"Welcome Back, {fullname}" ]
 ```
 
 ## Core Principles
