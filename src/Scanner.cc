@@ -3,8 +3,7 @@
 
 #include "zen/config.hpp"
 
-#include "llvm/Support/Casting.h"
-
+#include "bolt/Common.hpp"
 #include "bolt/Text.hpp"
 #include "bolt/Integer.hpp"
 #include "bolt/CST.hpp"
@@ -475,7 +474,7 @@ after_string_contents:
             Locations.pop();
             return new LineFoldEnd(T0->getStartLoc());
         }
-        if (llvm::isa<Dot>(T0)) {
+        if (isa<Dot>(T0)) {
           auto T1 = Tokens.peek(1);
           if (T1->getStartLine() > T0->getEndLine()) {
               Tokens.get();

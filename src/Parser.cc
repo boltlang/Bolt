@@ -1,11 +1,9 @@
 
 // TODO check for memory leaks everywhere a nullptr is returned
 
-#include <exception>
 #include <vector>
 
-#include "llvm/Support/Casting.h"
-
+#include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Scanner.hpp"
 #include "bolt/Parser.hpp"
@@ -268,7 +266,7 @@ finish:
   TypeExpression* Parser::parseQualifiedTypeExpression() {
     bool HasConstraints = false;
     auto T0 = Tokens.peek();
-    if (llvm::isa<LParen>(T0)) {
+    if (isa<LParen>(T0)) {
       std::size_t I = 1;
       for (;;) {
         auto T0 = Tokens.peek(I++);
@@ -363,7 +361,7 @@ after_constraints:
         RParen* RParen;
         for (;;) {
           auto T1 = Tokens.peek();
-          if (llvm::isa<class RParen>(T1)) {
+          if (isa<class RParen>(T1)) {
             Tokens.get();
             RParen = static_cast<class RParen*>(T1);
             break;
@@ -499,7 +497,7 @@ after_tuple_element:
     auto T1 = Tokens.peek();
     Expression* Value;
     BlockStart* BlockStart;
-    if (llvm::isa<class BlockStart>(T1)) {
+    if (isa<class BlockStart>(T1)) {
       Value = nullptr;
       BlockStart = static_cast<class BlockStart*>(T1);
       Tokens.get();
@@ -519,7 +517,7 @@ after_tuple_element:
     std::vector<MatchCase*> Cases;
     for (;;) {
       auto T2 = Tokens.peek();
-      if (llvm::isa<BlockEnd>(T2)) {
+      if (isa<BlockEnd>(T2)) {
         Tokens.get()->unref();
         break;
       }
@@ -627,7 +625,7 @@ after_tuple_element:
         for (;;) {
           auto T1 = Tokens.peek(0);
           auto T2 = Tokens.peek(1);
-          if (!llvm::isa<IdentifierAlt>(T1) || !llvm::isa<Dot>(T2)) {
+          if (!isa<IdentifierAlt>(T1) || !isa<Dot>(T2)) {
             break;
           }
           Tokens.get();
@@ -635,7 +633,7 @@ after_tuple_element:
           ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), static_cast<class Dot*>(T2)));
         }
         auto T3 = Tokens.get();
-        if (!llvm::isa<Symbol>(T3)) {
+        if (!isa<Symbol>(T3)) {
           for (auto [Name, Dot]: ModulePath) {
             Name->unref();
             Dot->unref();
@@ -652,7 +650,7 @@ after_tuple_element:
         auto LParen = static_cast<class LParen*>(T0);
         RParen* RParen;
         auto T1 = Tokens.peek();
-        if (llvm::isa<class RParen>(T1)) {
+        if (isa<class RParen>(T1)) {
           Tokens.get();
           RParen = static_cast<class RParen*>(T1);
           goto after_tuple_elements;
@@ -731,7 +729,7 @@ after_tuple_elements:
     for (;;) {
       auto T1 = Tokens.peek(0);
       auto T2 = Tokens.peek(1);
-      if (!llvm::isa<Dot>(T1)) {
+      if (!isa<Dot>(T1)) {
         break;
       }
       switch (T2->getKind()) {

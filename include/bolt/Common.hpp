@@ -32,4 +32,21 @@ namespace bolt {
 
   };
 
+  template<typename D, typename B>
+  D* cast(B* base) {
+    ZEN_ASSERT(D::classof(base));
+    return static_cast<D*>(base);
+  }
+
+  template<typename D, typename B>
+  const D* cast(const B* base) {
+    ZEN_ASSERT(D::classof(base));
+    return static_cast<const D*>(base);
+  }
+
+  template<typename D, typename T>
+  bool isa(const T* value) {
+    return D::classof(value);
+  }
+
 }

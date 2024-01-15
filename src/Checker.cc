@@ -4,8 +4,6 @@
 #include <stack>
 #include <map>
 
-#include "llvm/Support/Casting.h"
-
 #include "bolt/Type.hpp"
 #include "zen/config.hpp"
 #include "zen/range.hpp"
@@ -484,8 +482,8 @@ namespace bolt {
     if (Let->isInstance()) {
 
       auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
-      auto Class = llvm::cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
-      auto SigLet = llvm::cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, Let->getNameAsString() }, SymbolKind::Var));
+      auto Class = cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
+      auto SigLet = cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, Let->getNameAsString() }, SymbolKind::Var));
 
       auto Params = addClassVars(Class, false);
 
@@ -498,7 +496,7 @@ namespace bolt {
       // TVSub Sub;
       // for (auto TE: Class->TypeVars) {
       //   auto TV = createTypeVar();
-      //   Sub.emplace(llvm::cast<TVar>(TE->getType()), TV);
+      //   Sub.emplace(cast<TVar>(TE->getType()), TV);
       //   Params.push_back(TV);
       // }
 
@@ -1283,9 +1281,9 @@ namespace bolt {
   }
 
   bool assignableTo(Type* A, Type* B) {
-    if (llvm::isa<TCon>(A) && llvm::isa<TCon>(B)) {
-      auto Con1 = llvm::cast<TCon>(A);
-      auto Con2 = llvm::cast<TCon>(B);
+    if (isa<TCon>(A) && isa<TCon>(B)) {
+      auto Con1 = cast<TCon>(A);
+      auto Con2 = cast<TCon>(B);
       if (Con1->Id != Con2-> Id) {
         return false;
       }
@@ -1325,7 +1323,7 @@ namespace bolt {
           continue;
         }
         Ty = Arrow->resolve(Index);
-        if (llvm::isa<TArrow>(Ty)) {
+        if (isa<TArrow>(Ty)) {
           auto NewIndex = Arrow->getStartIndex();
           Stack.push({ static_cast<TArrow*>(Ty), true });
           Path.push_back(NewIndex);
@@ -1412,8 +1410,8 @@ namespace bolt {
     }
 
     void propagateClasses(std::unordered_set<TypeclassId>& Classes, Type* Ty) {
-      if (llvm::isa<TVar>(Ty)) {
-        auto TV = llvm::cast<TVar>(Ty);
+      if (isa<TVar>(Ty)) {
+        auto TV = cast<TVar>(Ty);
         for (auto Class: Classes) {
           TV->Contexts.emplace(Class);
         }
@@ -1425,7 +1423,7 @@ namespace bolt {
             }
           }
         }
-      } else if (llvm::isa<TCon>(Ty) || llvm::isa<TApp>(Ty)) {
+      } else if (isa<TCon>(Ty) || isa<TApp>(Ty)) {
         auto Sig = getTypeSig(Ty);
         for (auto Class: Classes) {
           propagateClassTycon(Class, Sig);
@@ -1482,14 +1480,14 @@ namespace bolt {
   };
 
   bool Unifier::unifyField(Type* A, Type* B, bool DidSwap) {
-    if (llvm::isa<TAbsent>(A) && llvm::isa<TAbsent>(B)) {
+    if (isa<TAbsent>(A) && isa<TAbsent>(B)) {
       return true;
     }
-    if (llvm::isa<TAbsent>(B)) {
+    if (isa<TAbsent>(B)) {
       std::swap(A, B);
       DidSwap = !DidSwap;
     }
-    if (llvm::isa<TAbsent>(A)) {
+    if (isa<TAbsent>(A)) {
       auto Present = static_cast<TPresent*>(B);
       C.DE.add<FieldNotFoundDiagnostic>(CurrentFieldName, C.simplifyType(getLeft()), LeftPath, getSource());
       return false;
@@ -1551,7 +1549,7 @@ namespace bolt {
       DidSwap = !DidSwap;
     };
 
-    if (llvm::isa<TVar>(A) && llvm::isa<TVar>(B)) {
+    if (isa<TVar>(A) && isa<TVar>(B)) {
       auto Var1 = static_cast<TVar*>(A);
       auto Var2 = static_cast<TVar*>(B);
       if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Rigid) {
@@ -1578,11 +1576,11 @@ namespace bolt {
       return true;
     }
 
-    if (llvm::isa<TVar>(B)) {
+    if (isa<TVar>(B)) {
       swap();
     }
 
-    if (llvm::isa<TVar>(A)) {
+    if (isa<TVar>(A)) {
 
       auto TV = static_cast<TVar*>(A);
 
@@ -1607,7 +1605,7 @@ namespace bolt {
       return true;
     }
 
-    if (llvm::isa<TArrow>(A) && llvm::isa<TArrow>(B)) {
+    if (isa<TArrow>(A) && isa<TArrow>(B)) {
       auto Arrow1 = static_cast<TArrow*>(A);
       auto Arrow2 = static_cast<TArrow*>(B);
       bool Success = true;
@@ -1628,7 +1626,7 @@ namespace bolt {
       return Success;
     }
 
-    if (llvm::isa<TApp>(A) && llvm::isa<TApp>(B)) {
+    if (isa<TApp>(A) && isa<TApp>(B)) {
       auto App1 = static_cast<TApp*>(A);
       auto App2 = static_cast<TApp*>(B);
       bool Success = true;
@@ -1649,7 +1647,7 @@ namespace bolt {
       return Success;
     }
 
-    if (llvm::isa<TTuple>(A) && llvm::isa<TTuple>(B)) {
+    if (isa<TTuple>(A) && isa<TTuple>(B)) {
       auto Tuple1 = static_cast<TTuple*>(A);
       auto Tuple2 = static_cast<TTuple*>(B);
       if (Tuple1->ElementTypes.size() != Tuple2->ElementTypes.size()) {
@@ -1670,20 +1668,20 @@ namespace bolt {
       return Success;
     }
 
-    if (llvm::isa<TTupleIndex>(A) || llvm::isa<TTupleIndex>(B)) {
+    if (isa<TTupleIndex>(A) || isa<TTupleIndex>(B)) {
       // Type(s) could not be simplified at the beginning of this function,
       // so we have to re-visit the constraint when there is more information.
       C.Queue.push_back(Constraint);
       return true;
     }
 
-    // if (llvm::isa<TTupleIndex>(A) && llvm::isa<TTupleIndex>(B)) {
+    // if (isa<TTupleIndex>(A) && isa<TTupleIndex>(B)) {
     //   auto Index1 = static_cast<TTupleIndex*>(A);  
     //   auto Index2 = static_cast<TTupleIndex*>(B);
     //   return unify(Index1->Ty, Index2->Ty, Source);
     // }
 
-    if (llvm::isa<TCon>(A) && llvm::isa<TCon>(B)) {
+    if (isa<TCon>(A) && isa<TCon>(B)) {
       auto Con1 = static_cast<TCon*>(A);
       auto Con2 = static_cast<TCon*>(B);
       if (Con1->Id != Con2->Id) {
@@ -1693,11 +1691,11 @@ namespace bolt {
       return true;
     }
 
-    if (llvm::isa<TNil>(A) && llvm::isa<TNil>(B)) {
+    if (isa<TNil>(A) && isa<TNil>(B)) {
       return true;
     }
 
-    if (llvm::isa<TField>(A) && llvm::isa<TField>(B)) {
+    if (isa<TField>(A) && isa<TField>(B)) {
       auto Field1 = static_cast<TField*>(A);
       auto Field2 = static_cast<TField*>(B);
       bool Success = true;
@@ -1733,11 +1731,11 @@ namespace bolt {
       return Success;
     }
 
-    if (llvm::isa<TNil>(A) && llvm::isa<TField>(B)) {
+    if (isa<TNil>(A) && isa<TField>(B)) {
       swap();
     }
 
-    if (llvm::isa<TField>(A) && llvm::isa<TNil>(B)) {
+    if (isa<TField>(A) && isa<TNil>(B)) {
       auto Field = static_cast<TField*>(A);
       bool Success = true;
       pushLeft(TypeIndex::forFieldType());

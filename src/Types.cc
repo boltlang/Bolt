@@ -1,9 +1,8 @@
 
-#include "llvm/Support/Casting.h"
-
 #include "zen/config.hpp"
 #include "zen/range.hpp"
 
+#include "bolt/Common.hpp"
 #include "bolt/Type.hpp"
 
 namespace bolt {
@@ -58,7 +57,7 @@ namespace bolt {
       case TypeIndexKind::AppArgType:
       case TypeIndexKind::TupleElement:
       {
-        auto Tuple = llvm::cast<TTuple>(Ty);
+        auto Tuple = cast<TTuple>(Ty);
         if (I+1 < Tuple->ElementTypes.size()) {
           ++I;
         } else {
@@ -271,7 +270,7 @@ namespace bolt {
 
   Type* Type::substitute(const TVSub &Sub) {
     return rewrite([&](auto Ty) {
-      if (llvm::isa<TVar>(Ty)) {
+      if (isa<TVar>(Ty)) {
         auto TV = static_cast<TVar*>(Ty);
         auto Match = Sub.find(TV);
         return Match != Sub.end() ? Match->second->substitute(Sub) : Ty;
@@ -283,23 +282,23 @@ namespace bolt {
   Type* Type::resolve(const TypeIndex& Index) const noexcept {
     switch (Index.Kind) {
       case TypeIndexKind::PresentType:
-        return llvm::cast<TPresent>(this)->Ty;
+        return cast<TPresent>(this)->Ty;
       case TypeIndexKind::AppOpType:
-        return llvm::cast<TApp>(this)->Op;
+        return cast<TApp>(this)->Op;
       case TypeIndexKind::AppArgType:
-        return llvm::cast<TApp>(this)->Arg;
+        return cast<TApp>(this)->Arg;
       case TypeIndexKind::TupleIndexType:
-        return llvm::cast<TTupleIndex>(this)->Ty;
+        return cast<TTupleIndex>(this)->Ty;
       case TypeIndexKind::TupleElement:
-        return llvm::cast<TTuple>(this)->ElementTypes[Index.I];
+        return cast<TTuple>(this)->ElementTypes[Index.I];
       case TypeIndexKind::ArrowParamType:
-        return llvm::cast<TArrow>(this)->ParamType;
+        return cast<TArrow>(this)->ParamType;
       case TypeIndexKind::ArrowReturnType:
-        return llvm::cast<TArrow>(this)->ReturnType;
+        return cast<TArrow>(this)->ReturnType;
       case TypeIndexKind::FieldType:
-        return llvm::cast<TField>(this)->Ty;
+        return cast<TField>(this)->Ty;
       case TypeIndexKind::FieldRestType:
-        return llvm::cast<TField>(this)->RestTy;
+        return cast<TField>(this)->RestTy;
       case TypeIndexKind::End:
         ZEN_UNREACHABLE
     }
