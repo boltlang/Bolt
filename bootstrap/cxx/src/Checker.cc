@@ -1,13 +1,11 @@
 
 #include <algorithm>
-#include <iterator>
 #include <stack>
 #include <map>
 
-#include "bolt/Type.hpp"
 #include "zen/config.hpp"
-#include "zen/range.hpp"
 
+#include "bolt/Type.hpp"
 #include "bolt/CSTVisitor.hpp"
 #include "bolt/DiagnosticEngine.hpp"
 #include "bolt/Diagnostics.hpp"
@@ -39,29 +37,30 @@ namespace bolt {
 
   Type* Checker::simplifyType(Type* Ty) {
 
-    return Ty->rewrite([&](auto Ty) {
+    Ty = Ty->find();
 
-      if (Ty->getKind() == TypeKind::Var) {
-        Ty = static_cast<TVar*>(Ty)->find();
-      }
-
-      if (Ty->getKind() == TypeKind::TupleIndex) {
-        auto Index = static_cast<TTupleIndex*>(Ty);
-        auto MaybeTuple = simplifyType(Index->Ty);
-        if (MaybeTuple->getKind() == TypeKind::Tuple) {
-          auto Tuple = static_cast<TTuple*>(MaybeTuple);
-          if (Index->I >= Tuple->ElementTypes.size()) {
-            DE.add<TupleIndexOutOfRangeDiagnostic>(Tuple, Index->I);
-          } else {
-            Ty = simplifyType(Tuple->ElementTypes[Index->I]);
-          }
+    if (Ty->isTupleIndex()) {
+      auto& Index = Ty->asTupleIndex();
+      auto MaybeTuple = simplifyType(Index.Ty);
+      if (MaybeTuple->isTuple()) {
+        auto& Tuple = MaybeTuple->asTuple();
+        if (Index.I >= Tuple.ElementTypes.size()) {
+          DE.add<TupleIndexOutOfRangeDiagnostic>(MaybeTuple, Index.I);
+        } else {
+          auto ElementTy = simplifyType(Tuple.ElementTypes[Index.I]);
+          Ty->set(ElementTy);
+          Ty = ElementTy;
         }
+      } else if (!MaybeTuple->isVar()) {
+        DE.add<NotATupleDiagnostic>(MaybeTuple);
       }
+    }
 
-      return Ty;
+    return Ty;
+  }
 
-    }, /*Recursive=*/true);
-
+  Type* Checker::solveType(Type* Ty) {
+    return Ty->rewrite([this](auto Ty) { return simplifyType(Ty); }, true);
   }
 
   Checker::Checker(const LanguageConfig& Config, DiagnosticEngine& DE):
@@ -70,6 +69,7 @@ namespace bolt {
       IntType = createConType("Int");
       StringType = createConType("String");
       ListType = createConType("List");
+      UnitType  = new Type(TTuple({}));
     }
 
   Scheme* Checker::lookup(ByteString Name) {
@@ -293,7 +293,7 @@ namespace bolt {
 
         setContext(Decl->Ctx);
 
-        std::vector<TVar*> Vars;
+        std::vector<Type*> Vars;
         for (auto TE: Decl->TVs) {
           auto TV = createRigidVar(TE->Name->getCanonicalText());
           Decl->Ctx->TVs->emplace(TV);
@@ -312,13 +312,20 @@ namespace bolt {
               auto TupleMember = static_cast<TupleVariantDeclarationMember*>(Member);
               auto RetTy = Ty;
               for (auto Var: Vars) {
-                RetTy = new TApp(RetTy, Var);
+                RetTy = new Type(TApp(RetTy, Var));
               }
               std::vector<Type*> ParamTypes;
               for (auto Element: TupleMember->Elements) {
                 ParamTypes.push_back(inferTypeExpression(Element));
               }
-              Decl->Ctx->Parent->add(TupleMember->Name->getCanonicalText(), new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, TArrow::build(ParamTypes, RetTy)));
+              Decl->Ctx->Parent->add(
+                TupleMember->Name->getCanonicalText(),
+                new Forall(
+                  Decl->Ctx->TVs,
+                  Decl->Ctx->Constraints,
+                  Type::buildArrow(ParamTypes, RetTy)
+                )
+              );
               break;
             }
             case NodeKind::RecordVariantDeclarationMember:
@@ -342,7 +349,7 @@ namespace bolt {
 
         setContext(Decl->Ctx);
 
-        std::vector<TVar*> Vars;
+        std::vector<Type*> Vars;
         for (auto TE: Decl->Vars) {
           auto TV = createRigidVar(TE->Name->getCanonicalText());
           Vars.push_back(TV);
@@ -355,15 +362,28 @@ namespace bolt {
         Decl->Ctx->Parent->add(Name, new Forall(Ty));
 
         // Corresponds to the logic of one branch of a VariantDeclarationMember
-        Type* FieldsTy = new TNil();
+        Type* FieldsTy = new Type(TNil());
         for (auto Field: Decl->Fields) {
-          FieldsTy = new TField(Field->Name->getCanonicalText(), new TPresent(inferTypeExpression(Field->TypeExpression)), FieldsTy);
+          FieldsTy = new Type(
+            TField(
+              Field->Name->getCanonicalText(),
+              new Type(TPresent(inferTypeExpression(Field->TypeExpression))),
+              FieldsTy
+            )
+          );
         }
         Type* RetTy = Ty;
         for (auto TV: Vars) {
-          RetTy = new TApp(RetTy, TV);
+          RetTy = new Type(TApp(RetTy, TV));
         }
-        Decl->Ctx->Parent->add(Name, new Forall(Decl->Ctx->TVs, Decl->Ctx->Constraints, new TArrow(FieldsTy, RetTy)));
+        Decl->Ctx->Parent->add(
+          Name,
+          new Forall(
+            Decl->Ctx->TVs,
+            Decl->Ctx->Constraints,
+            new Type(TArrow(FieldsTy, RetTy))
+          )
+        );
         popContext();
 
         break;
@@ -444,11 +464,11 @@ namespace bolt {
     auto addClassVars = [&](ClassDeclaration* Class, bool IsRigid) {
       auto Id = Class->Name->getCanonicalText();
       auto Ctx = &getContext();
-      std::vector<TVar*> Out;
+      std::vector<Type*> Out;
       for (auto TE: Class->TypeVars) {
         auto Name = TE->Name->getCanonicalText();
         auto TV = IsRigid ? createRigidVar(Name) : createTypeVar();
-        TV->Contexts.emplace(Id);
+        TV->asVar().Context.emplace(Id);
         Ctx->add(Name, new Forall(TV));
         Out.push_back(TV);
       }
@@ -586,7 +606,7 @@ namespace bolt {
       RetType = createTypeVar();
     }
 
-    makeEqual(Decl->getType(), TArrow::build(ParamTypes, RetType), Decl);
+    makeEqual(Decl->getType(), Type::buildArrow(ParamTypes, RetType), Decl);
 
     setContext(OldCtx);
   }
@@ -648,8 +668,8 @@ namespace bolt {
         if (RetStmt->Expression) {
           makeEqual(inferExpression(RetStmt->Expression), getReturnType(), RetStmt->Expression);
         } else {
-          ReturnType = new TTuple({});
-          makeEqual(new TTuple({}), getReturnType(), N);
+          ReturnType = UnitType;
+          makeEqual(UnitType, getReturnType(), N);
         }
         break;
       }
@@ -691,18 +711,18 @@ namespace bolt {
 
   }
 
-  TCon* Checker::createConType(ByteString Name) {
-    return new TCon(NextConTypeId++, Name);
+  Type* Checker::createConType(ByteString Name) {
+    return new Type(TCon(NextConTypeId++, Name));
   }
 
-  TVarRigid* Checker::createRigidVar(ByteString Name) {
-    auto TV = new TVarRigid(NextTypeVarId++, Name);
+  Type* Checker::createRigidVar(ByteString Name) {
+    auto TV = new Type(TVar(VarKind::Rigid, NextTypeVarId++, {}, Name, {{}}));
     getContext().TVs->emplace(TV);
     return TV;
   }
 
-  TVar* Checker::createTypeVar() {
-    auto TV = new TVar(NextTypeVarId++, VarKind::Unification);
+  Type* Checker::createTypeVar() {
+    auto TV = new Type(TVar(VarKind::Unification, NextTypeVarId++, {}));
     getContext().TVs->emplace(TV);
     return TV;
   }
@@ -727,7 +747,7 @@ namespace bolt {
         for (auto TV: *F->TVs) {
           auto Fresh = createTypeVar();
           // std::cerr << describe(TV) << " => " << describe(Fresh) << std::endl;
-          Fresh->Contexts = TV->Contexts;
+          Fresh->asVar().Context = TV->asVar().Context;
           Sub[TV] = Fresh;
         }
 
@@ -736,8 +756,8 @@ namespace bolt {
           // FIXME improve this
           if (Constraint->getKind() == ConstraintKind::Equal) {
             auto Eq = static_cast<CEqual*>(Constraint);
-            Eq->Left = simplifyType(Eq->Left);
-            Eq->Right = simplifyType(Eq->Right);
+            Eq->Left = solveType(Eq->Left);
+            Eq->Right = solveType(Eq->Right);
           }
 
           auto NewConstraint = Constraint->substitute(Sub);
@@ -752,11 +772,11 @@ namespace bolt {
           addConstraint(NewConstraint);
         }
 
-        // Note the call to simplify? This is because constraints may have already
+        // This call to solve happens because constraints may have already
         // been solved, with some unification variables being erased. To make
         // sure we instantiate unification variables that are still in use
         // we solve before substituting.
-        return simplifyType(F->Type)->substitute(Sub);
+        return solveType(F->Type)->substitute(Sub);
       }
 
     }
@@ -771,10 +791,8 @@ namespace bolt {
         std::vector<Type*> Types;
         for (auto TE: D->TEs) {
           auto Ty = inferTypeExpression(TE);
-          ZEN_ASSERT(Ty->getKind() == TypeKind::Var && static_cast<TVar*>(Ty)->isRigid());
-          auto TV = static_cast<TVarRigid*>(Ty);
-          TV->Provided.emplace(D->Name->getCanonicalText());
-          Types.push_back(TV);
+          Ty->asVar().Provided->emplace(D->Name->getCanonicalText());
+          Types.push_back(Ty);
         }
         break;
       }
@@ -813,7 +831,7 @@ namespace bolt {
         auto AppTE = static_cast<AppTypeExpression*>(N);
         Type* Ty = inferTypeExpression(AppTE->Op, IsPoly);
         for (auto Arg: AppTE->Args) {
-          Ty = new TApp(Ty, inferTypeExpression(Arg, IsPoly));
+          Ty = new Type(TApp(Ty, inferTypeExpression(Arg, IsPoly)));
         }
         N->setType(Ty);
         return Ty;
@@ -830,9 +848,9 @@ namespace bolt {
           Ty = IsPoly ? createRigidVar(VarTE->Name->getCanonicalText()) : createTypeVar();
           addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty));
         }
-        ZEN_ASSERT(Ty->getKind() == TypeKind::Var);
+        ZEN_ASSERT(Ty->isVar());
         N->setType(Ty);
-        return static_cast<TVar*>(Ty);
+        return Ty;
       }
 
       case NodeKind::TupleTypeExpression:
@@ -842,7 +860,7 @@ namespace bolt {
         for (auto [TE, Comma]: TupleTE->Elements) {
           ElementTypes.push_back(inferTypeExpression(TE, IsPoly));
         }
-        auto Ty = new TTuple(ElementTypes);
+        auto Ty = new Type(TTuple(ElementTypes));
         N->setType(Ty);
         return Ty;
       }
@@ -863,7 +881,7 @@ namespace bolt {
           ParamTypes.push_back(inferTypeExpression(ParamType, IsPoly));
         }
         auto ReturnType = inferTypeExpression(ArrowTE->ReturnType, IsPoly);
-        auto Ty = TArrow::build(ParamTypes, ReturnType);
+        auto Ty = Type::buildArrow(ParamTypes, ReturnType);
         N->setType(Ty);
         return Ty;
       }
@@ -886,14 +904,14 @@ namespace bolt {
   }
 
   Type* sortRow(Type* Ty) {
-    std::map<ByteString, TField*> Fields;
-    while (Ty->getKind() == TypeKind::Field) {
-      auto Field = static_cast<TField*>(Ty);
-      Fields.emplace(Field->Name, Field);
-      Ty = Field->RestTy;
+    std::map<ByteString, Type*> Fields;
+    while (Ty->isField()) {
+      auto& Field = Ty->asField();
+      Fields.emplace(Field.Name, Ty);
+      Ty = Field.RestTy;
     }
     for (auto [Name, Field]: Fields) {
-      Ty = new TField(Name, Field->Ty, Ty);
+      Ty = new Type(TField(Name, Field->asField().Ty, Ty));
     }
     return Ty;
   }
@@ -930,7 +948,7 @@ namespace bolt {
           setContext(OldCtx);
         }
         if (!Match->Value) {
-          Ty = new TArrow(ValTy, Ty);
+          Ty = new Type(TArrow(ValTy, Ty));
         }
         break;
       }
@@ -938,9 +956,13 @@ namespace bolt {
       case NodeKind::RecordExpression:
       {
         auto Record = static_cast<RecordExpression*>(X);
-        Ty = new TNil();
+        Ty = new Type(TNil());
         for (auto [Field, Comma]: Record->Fields) {
-          Ty = new TField(Field->Name->getCanonicalText(), new TPresent(inferExpression(Field->getExpression())), Ty);
+          Ty = new Type(TField(
+            Field->Name->getCanonicalText(),
+            new Type(TPresent(inferExpression(Field->getExpression()))),
+            Ty
+          ));
         }
         Ty = sortRow(Ty);
         break;
@@ -998,7 +1020,7 @@ namespace bolt {
         for (auto Arg: Call->Args) {
           ArgTypes.push_back(inferExpression(Arg));
         }
-        makeEqual(OpTy, TArrow::build(ArgTypes, Ty), X);
+        makeEqual(OpTy, Type::buildArrow(ArgTypes, Ty), X);
         break;
       }
 
@@ -1008,14 +1030,15 @@ namespace bolt {
         auto Scm = lookup(Infix->Operator->getText());
         if (Scm == nullptr) {
           DE.add<BindingNotFoundDiagnostic>(Infix->Operator->getText(), Infix->Operator);
-          return createTypeVar();
+          Ty = createTypeVar();
+          break;
         }
         auto OpTy = instantiate(Scm, Infix->Operator);
         Ty = createTypeVar();
         std::vector<Type*> ArgTys;
         ArgTys.push_back(inferExpression(Infix->Left));
         ArgTys.push_back(inferExpression(Infix->Right));
-        makeEqual(TArrow::build(ArgTys, Ty), OpTy, X);
+        makeEqual(Type::buildArrow(ArgTys, Ty), OpTy, X);
         break;
       }
 
@@ -1026,7 +1049,7 @@ namespace bolt {
         for (auto [E, Comma]: Tuple->Elements) {
           Types.push_back(inferExpression(E));
         }
-        Ty = new TTuple(Types);
+        Ty = new Type(TTuple(Types));
         break;
       }
 
@@ -1038,7 +1061,7 @@ namespace bolt {
           case NodeKind::IntegerLiteral:
           {
             auto I = static_cast<IntegerLiteral*>(Member->Name);
-            Ty = new TTupleIndex(ExprTy, I->getInteger());
+            Ty = new Type(TTupleIndex(ExprTy, I->getInteger()));
             break;
           }
           case NodeKind::Identifier:
@@ -1046,7 +1069,7 @@ namespace bolt {
             auto K = static_cast<Identifier*>(Member->Name);
             Ty = createTypeVar();
             auto RestTy = createTypeVar();
-            makeEqual(new TField(K->getCanonicalText(), Ty, RestTy), ExprTy, Member);
+            makeEqual(new Type(TField(K->getCanonicalText(), Ty, RestTy)), ExprTy, Member);
             break;
           }
           default:
@@ -1102,7 +1125,7 @@ namespace bolt {
         }
         auto Ty = instantiate(Scm, P);
         auto RetTy = createTypeVar();
-        makeEqual(Ty, TArrow::build(ParamTypes, RetTy), P);
+        makeEqual(Ty, Type::buildArrow(ParamTypes, RetTy), P);
         return RetTy;
       }
 
@@ -1113,7 +1136,7 @@ namespace bolt {
         for (auto [Element, Comma]: P->Elements) {
           ElementTypes.push_back(inferPattern(Element));
         }
-        return new TTuple(ElementTypes);
+        return new Type(TTuple(ElementTypes));
       }
 
       case NodeKind::ListPattern:
@@ -1123,7 +1146,7 @@ namespace bolt {
         for (auto [Element, Separator]: P->Elements) {
           makeEqual(ElementType, inferPattern(Element), P);
         }
-        return new TApp(ListType, ElementType);
+        return new Type(TApp(ListType, ElementType));
       }
 
       case NodeKind::NestedPattern:
@@ -1204,7 +1227,14 @@ namespace bolt {
   }
 
   Type* Checker::getType(TypedNode *Node) {
-    return Node->getType()->solve();
+    auto Ty = Node->getType();
+    if (Node->Flags & NodeFlags_TypeIsSolved) {
+      return Ty;
+    }
+    Ty = solveType(Ty);
+    Node->setType(Ty);
+    Node->Flags |= NodeFlags_TypeIsSolved;
+    return Ty;
   }
 
   void Checker::check(SourceFile *SF) {
@@ -1217,11 +1247,11 @@ namespace bolt {
     addBinding("True", new Forall(BoolType));
     addBinding("False", new Forall(BoolType));
     auto A = createTypeVar();
-    addBinding("==", new Forall(new TVSet { A }, new ConstraintSet, TArrow::build({ A, A }, BoolType)));
-    addBinding("+", new Forall(TArrow::build({ IntType, IntType }, IntType)));
-    addBinding("-", new Forall(TArrow::build({ IntType, IntType }, IntType)));
-    addBinding("*", new Forall(TArrow::build({ IntType, IntType }, IntType)));
-    addBinding("/", new Forall(TArrow::build({ IntType, IntType }, IntType)));
+    addBinding("==", new Forall(new TVSet { A }, new ConstraintSet, Type::buildArrow({ A, A }, BoolType)));
+    addBinding("+", new Forall(Type::buildArrow({ IntType, IntType }, IntType)));
+    addBinding("-", new Forall(Type::buildArrow({ IntType, IntType }, IntType)));
+    addBinding("*", new Forall(Type::buildArrow({ IntType, IntType }, IntType)));
+    addBinding("/", new Forall(Type::buildArrow({ IntType, IntType }, IntType)));
     populate(SF);
     forwardDeclare(SF);
     auto SCCs = RefGraph.strongconnect();
@@ -1243,6 +1273,27 @@ namespace bolt {
     ActiveContext = nullptr;
 
     solve(new CMany(*SF->Ctx->Constraints));
+
+    class Visitor : public CSTVisitor<Visitor> {
+
+      Checker& C;
+
+    public:
+
+      Visitor(Checker& C):
+        C(C) {}
+
+      void visitAnnotation(Annotation* A) {
+
+      }
+
+      void visitExpression(Expression* X) {
+        C.getType(X);
+      }
+
+    } V(*this);
+
+    V.visit(SF);
   }
 
   void Checker::solve(Constraint* Constraint) {
@@ -1281,10 +1332,10 @@ namespace bolt {
   }
 
   bool assignableTo(Type* A, Type* B) {
-    if (isa<TCon>(A) && isa<TCon>(B)) {
-      auto Con1 = cast<TCon>(A);
-      auto Con2 = cast<TCon>(B);
-      if (Con1->Id != Con2-> Id) {
+    if (A->isCon() && B->isCon()) {
+      auto& Con1 = A->asCon();
+      auto& Con2 = B->asCon();
+      if (Con1.Id != Con2.Id) {
         return false;
       }
       return true;
@@ -1295,13 +1346,15 @@ namespace bolt {
 
   class ArrowCursor {
 
-    std::stack<std::tuple<TArrow*, bool>> Stack;
+    /// Types on this stack are guaranteed to be arrow types.
+    std::stack<std::tuple<Type*, bool>> Stack;
+
     TypePath& Path;
     std::size_t I;
 
   public:
 
-    ArrowCursor(TArrow* Arr, TypePath& Path):
+    ArrowCursor(Type* Arr, TypePath& Path):
       Path(Path) {
         Stack.push({ Arr, true });
         Path.push_back(Arr->getStartIndex());
@@ -1323,9 +1376,9 @@ namespace bolt {
           continue;
         }
         Ty = Arrow->resolve(Index);
-        if (isa<TArrow>(Ty)) {
+        if (Ty->isArrow()) {
           auto NewIndex = Arrow->getStartIndex();
-          Stack.push({ static_cast<TArrow*>(Ty), true });
+          Stack.push({ Ty, true });
           Path.push_back(NewIndex);
         } else {
           return Ty;
@@ -1390,40 +1443,36 @@ namespace bolt {
     }
 
     TypeSig getTypeSig(Type* Ty) {
-      struct Visitor : TypeVisitor {
-        Type* Op = nullptr;
-        std::vector<Type*> Args;
-        void visitType(Type* Ty) override {
-          if (!Op) {
-            Op = Ty;
-          } else {
-            Args.push_back(Ty);
-          }
-        }
-        void visitAppType(TApp* Ty) override {
-          visitEachChild(Ty);
+      Type* Op = nullptr;
+      std::vector<Type*> Args;
+      std::function<void(Type*)> Visit = [&](Type* Ty) {
+        if (Ty->isApp()) {
+          Visit(Ty->asApp().Op);
+          Visit(Ty->asApp().Arg);
+        } else if (!Op) {
+          Op = Ty;
+        } else {
+          Args.push_back(Ty);
         }
       };
-      Visitor V;
-      V.visit(Ty);
-      return TypeSig { Ty, V.Op, V.Args };
+      Visit(Ty);
+      return TypeSig { Ty, Op, Args };
     }
 
     void propagateClasses(std::unordered_set<TypeclassId>& Classes, Type* Ty) {
-      if (isa<TVar>(Ty)) {
-        auto TV = cast<TVar>(Ty);
+      if (Ty->isVar()) {
+        auto TV = Ty->asVar();
         for (auto Class: Classes) {
-          TV->Contexts.emplace(Class);
+          TV.Context.emplace(Class);
         }
-        if (TV->isRigid()) {
-          auto RV = static_cast<TVarRigid*>(Ty);
-          for (auto Id: RV->Contexts) {
-            if (!RV->Provided.count(Id)) {
-              C.DE.add<TypeclassMissingDiagnostic>(TypeclassSignature { Id, { RV } }, getSource());
+        if (TV.isRigid()) {
+          for (auto Id: TV.Context) {
+            if (!TV.Provided->count(Id)) {
+              C.DE.add<TypeclassMissingDiagnostic>(TypeclassSignature { Id, { Ty } }, getSource());
             }
           }
         }
-      } else if (isa<TCon>(Ty) || isa<TApp>(Ty)) {
+      } else if (Ty->isCon() || Ty->isApp()) {
         auto Sig = getTypeSig(Ty);
         for (auto Class: Classes) {
           propagateClassTycon(Class, Sig);
@@ -1450,13 +1499,13 @@ namespace bolt {
      *
      * Other side effects may occur.
      */
-    void join(TVar* TV, Type* Ty) {
+    void join(Type* TV, Type* Ty) {
 
       // std::cerr << describe(TV) << " => " << describe(Ty) << std::endl;
 
       TV->set(Ty);
 
-      propagateClasses(TV->Contexts, Ty);
+      propagateClasses(TV->asVar().Context, Ty);
 
       // This is a very specific adjustment that is critical to the
       // well-functioning of the infer/unify algorithm. When addConstraint() is
@@ -1480,21 +1529,21 @@ namespace bolt {
   };
 
   bool Unifier::unifyField(Type* A, Type* B, bool DidSwap) {
-    if (isa<TAbsent>(A) && isa<TAbsent>(B)) {
+    if (A->isAbsent() && B->isAbsent()) {
       return true;
     }
-    if (isa<TAbsent>(B)) {
+    if (B->isAbsent()) {
       std::swap(A, B);
       DidSwap = !DidSwap;
     }
-    if (isa<TAbsent>(A)) {
-      auto Present = static_cast<TPresent*>(B);
-      C.DE.add<FieldNotFoundDiagnostic>(CurrentFieldName, C.simplifyType(getLeft()), LeftPath, getSource());
+    if (A->isAbsent()) {
+      auto& Present = B->asPresent();
+      C.DE.add<FieldNotFoundDiagnostic>(CurrentFieldName, C.solveType(getLeft()), LeftPath, getSource());
       return false;
     }
-    auto Present1 = static_cast<TPresent*>(A);
-    auto Present2 = static_cast<TPresent*>(B);
-    return unify(Present1->Ty, Present2->Ty, DidSwap);
+    auto& Present1 = A->asPresent();
+    auto& Present2 = B->asPresent();
+    return unify(Present1.Ty, Present2.Ty, DidSwap);
   };
 
   bool Unifier::unify(Type* A, Type* B, bool DidSwap) {
@@ -1504,8 +1553,8 @@ namespace bolt {
 
     auto unifyError = [&]() {
       C.DE.add<UnificationErrorDiagnostic>(
-        C.simplifyType(Constraint->Left),
-        C.simplifyType(Constraint->Right),
+        Constraint->Left,
+        Constraint->Right,
         LeftPath,
         RightPath,
         Constraint->Source
@@ -1549,50 +1598,50 @@ namespace bolt {
       DidSwap = !DidSwap;
     };
 
-    if (isa<TVar>(A) && isa<TVar>(B)) {
-      auto Var1 = static_cast<TVar*>(A);
-      auto Var2 = static_cast<TVar*>(B);
-      if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Rigid) {
-        if (Var1->Id != Var2->Id) {
+    if (A->isVar() && B->isVar()) {
+      auto& Var1 = A->asVar();
+      auto& Var2 = B->asVar();
+      if (Var1.isRigid() && Var2.isRigid()) {
+        if (Var1.Id != Var2.Id) {
           unifyError();
           return false;
         }
         return true;
       }
-      TVar* To;
-      TVar* From;
-      if (Var1->getVarKind() == VarKind::Rigid && Var2->getVarKind() == VarKind::Unification) {
-        To = Var1;
-        From = Var2;
+      Type* To;
+      Type* From;
+      if (Var1.isRigid() && Var2.isUni()) {
+        To = A;
+        From = B;
       } else {
         // Only cases left are Var1 = Unification, Var2 = Rigid and Var1 = Unification, Var2 = Unification
         // Either way, Var1, being Unification, is a good candidate for being unified away
-        To = Var2;
-        From = Var1;
+        To = B;
+        From = A;
       }
-      if (From->Id != To->Id) {
+      if (From->asVar().Id != To->asVar().Id) {
         join(From, To);
       }
       return true;
     }
 
-    if (isa<TVar>(B)) {
+    if (B->isVar()) {
       swap();
     }
 
-    if (isa<TVar>(A)) {
+    if (A->isVar()) {
 
-      auto TV = static_cast<TVar*>(A);
+      auto& TV = A->asVar();
 
       // Rigid type variables can never unify with antything else than what we
       // have already handled in the previous if-statement, so issue an error.
-      if (TV->getVarKind() == VarKind::Rigid) {
+      if (TV.isRigid()) {
         unifyError();
         return false;
       }
 
       // Occurs check
-      if (B->hasTypeVar(TV)) {
+      if (B->hasTypeVar(A)) {
         // NOTE Just like GHC, we just display an error message indicating that
         //      A cannot match B, e.g. a cannot match [a]. It looks much better
         //      than obsure references to an occurs check
@@ -1600,25 +1649,25 @@ namespace bolt {
         return false;
       }
 
-      join(TV, B);
+      join(A, B);
 
       return true;
     }
 
-    if (isa<TArrow>(A) && isa<TArrow>(B)) {
-      auto Arrow1 = static_cast<TArrow*>(A);
-      auto Arrow2 = static_cast<TArrow*>(B);
+    if (A->isArrow() && B->isArrow()) {
+      auto& Arrow1 = A->asArrow();
+      auto& Arrow2 = B->asArrow();
       bool Success = true;
       LeftPath.push_back(TypeIndex::forArrowParamType());
       RightPath.push_back(TypeIndex::forArrowParamType());
-      if (!unify(Arrow1->ParamType, Arrow2->ParamType, DidSwap)) {
+      if (!unify(Arrow1.ParamType, Arrow2.ParamType, DidSwap)) {
         Success = false;
       }
       LeftPath.pop_back();
       RightPath.pop_back();
       LeftPath.push_back(TypeIndex::forArrowReturnType());
       RightPath.push_back(TypeIndex::forArrowReturnType());
-      if  (!unify(Arrow1->ReturnType, Arrow2->ReturnType, DidSwap)) {
+      if (!unify(Arrow1.ReturnType, Arrow2.ReturnType, DidSwap)) {
         Success = false;
       }
       LeftPath.pop_back();
@@ -1626,20 +1675,20 @@ namespace bolt {
       return Success;
     }
 
-    if (isa<TApp>(A) && isa<TApp>(B)) {
-      auto App1 = static_cast<TApp*>(A);
-      auto App2 = static_cast<TApp*>(B);
+    if (A->isApp() && B->isApp()) {
+      auto& App1 = A->asApp();
+      auto& App2 = B->asApp();
       bool Success = true;
       LeftPath.push_back(TypeIndex::forAppOpType());
       RightPath.push_back(TypeIndex::forAppOpType());
-      if (!unify(App1->Op, App2->Op, DidSwap)) {
+      if (!unify(App1.Op, App2.Op, DidSwap)) {
         Success = false;
       }
       LeftPath.pop_back();
       RightPath.pop_back();
       LeftPath.push_back(TypeIndex::forAppArgType());
       RightPath.push_back(TypeIndex::forAppArgType());
-      if (!unify(App1->Arg, App2->Arg, DidSwap)) {
+      if (!unify(App1.Arg, App2.Arg, DidSwap)) {
         Success = false;
       }
       LeftPath.pop_back();
@@ -1647,19 +1696,19 @@ namespace bolt {
       return Success;
     }
 
-    if (isa<TTuple>(A) && isa<TTuple>(B)) {
-      auto Tuple1 = static_cast<TTuple*>(A);
-      auto Tuple2 = static_cast<TTuple*>(B);
-      if (Tuple1->ElementTypes.size() != Tuple2->ElementTypes.size()) {
+    if (A->isTuple() && B->isTuple()) {
+      auto& Tuple1 = A->asTuple();
+      auto& Tuple2 = B->asTuple();
+      if (Tuple1.ElementTypes.size() != Tuple2.ElementTypes.size()) {
         unifyError();
         return false;
       }
-      auto Count = Tuple1->ElementTypes.size();
+      auto Count = Tuple1.ElementTypes.size();
       bool Success = true;
       for (size_t I = 0; I < Count; I++) {
         LeftPath.push_back(TypeIndex::forTupleElement(I));
         RightPath.push_back(TypeIndex::forTupleElement(I));
-        if (!unify(Tuple1->ElementTypes[I], Tuple2->ElementTypes[I], DidSwap)) {
+        if (!unify(Tuple1.ElementTypes[I], Tuple2.ElementTypes[I], DidSwap)) {
           Success = false;
         }
         LeftPath.pop_back();
@@ -1668,84 +1717,85 @@ namespace bolt {
       return Success;
     }
 
-    if (isa<TTupleIndex>(A) || isa<TTupleIndex>(B)) {
+    if (A->isTupleIndex() || B->isTupleIndex()) {
       // Type(s) could not be simplified at the beginning of this function,
       // so we have to re-visit the constraint when there is more information.
       C.Queue.push_back(Constraint);
       return true;
     }
 
-    // if (isa<TTupleIndex>(A) && isa<TTupleIndex>(B)) {
+    // This does not work because it ignores the indices
+    // if (A->isTupleIndex() && B->isTupleIndex()) {
     //   auto Index1 = static_cast<TTupleIndex*>(A);  
     //   auto Index2 = static_cast<TTupleIndex*>(B);
     //   return unify(Index1->Ty, Index2->Ty, Source);
     // }
 
-    if (isa<TCon>(A) && isa<TCon>(B)) {
-      auto Con1 = static_cast<TCon*>(A);
-      auto Con2 = static_cast<TCon*>(B);
-      if (Con1->Id != Con2->Id) {
+    if (A->isCon() && B->isCon()) {
+      auto& Con1 = A->asCon();
+      auto& Con2 = B->asCon();
+      if (Con1.Id != Con2.Id) {
         unifyError();
         return false;
       }
       return true;
     }
 
-    if (isa<TNil>(A) && isa<TNil>(B)) {
+    if (A->isNil() && B->isNil()) {
       return true;
     }
 
-    if (isa<TField>(A) && isa<TField>(B)) {
-      auto Field1 = static_cast<TField*>(A);
-      auto Field2 = static_cast<TField*>(B);
+    if (A->isField() && B->isField()) {
+      auto& Field1 = A->asField();
+      auto& Field2 = B->asField();
       bool Success = true;
-      if (Field1->Name == Field2->Name) {
+      if (Field1.Name == Field2.Name) {
         LeftPath.push_back(TypeIndex::forFieldType());
         RightPath.push_back(TypeIndex::forFieldType());
-        CurrentFieldName = Field1->Name;
-        if (!unifyField(Field1->Ty, Field2->Ty, DidSwap)) {
+        CurrentFieldName = Field1.Name;
+        if (!unifyField(Field1.Ty, Field2.Ty, DidSwap)) {
           Success = false;
         }
         LeftPath.pop_back();
         RightPath.pop_back();
         LeftPath.push_back(TypeIndex::forFieldRest());
         RightPath.push_back(TypeIndex::forFieldRest());
-        if (!unify(Field1->RestTy, Field2->RestTy, DidSwap)) {
+        if (!unify(Field1.RestTy, Field2.RestTy, DidSwap)) {
           Success = false;
         }
         LeftPath.pop_back();
         RightPath.pop_back();
         return Success;
       }
-      auto NewRestTy = new TVar(C.NextTypeVarId++, VarKind::Unification);
+      auto NewRestTy = new Type(TVar(VarKind::Unification, C.NextTypeVarId++));
       pushLeft(TypeIndex::forFieldRest());
-      if (!unify(Field1->RestTy, new TField(Field2->Name, Field2->Ty, NewRestTy), DidSwap)) {
+      if (!unify(Field1.RestTy, new Type(TField(Field2.Name, Field2.Ty, NewRestTy)), DidSwap)) {
         Success = false;
       }
       popLeft();
       pushRight(TypeIndex::forFieldRest());
-      if (!unify(new TField(Field1->Name, Field1->Ty, NewRestTy), Field2->RestTy, DidSwap)) {
+      if (!unify(new Type(TField(Field1.Name, Field1.Ty, NewRestTy)), Field2.RestTy, DidSwap)) {
         Success = false;
       }
       popRight();
       return Success;
     }
 
-    if (isa<TNil>(A) && isa<TField>(B)) {
+    if (A->isNil() && B->isField()) {
       swap();
     }
 
-    if (isa<TField>(A) && isa<TNil>(B)) {
-      auto Field = static_cast<TField*>(A);
+    if (A->isField() && B->isNil()) {
+      auto& Field = A->asField();
       bool Success = true;
       pushLeft(TypeIndex::forFieldType());
-      CurrentFieldName = Field->Name;
-      if (!unifyField(Field->Ty, new TAbsent, DidSwap)) {
+      CurrentFieldName = Field.Name;
+      if (!unifyField(Field.Ty, new Type(TAbsent()), DidSwap)) {
         Success = false;
       }
       popLeft();
       pushLeft(TypeIndex::forFieldRest());
-      if (!unify(Field->RestTy, B, DidSwap)) {
+      if (!unify(Field.RestTy, B, DidSwap)) {
         Success = false;
       }
       popLeft();
@@ -1761,7 +1811,6 @@ namespace bolt {
     Unifier A { *this, C };
     A.unify();
   }
-
 
 }
 

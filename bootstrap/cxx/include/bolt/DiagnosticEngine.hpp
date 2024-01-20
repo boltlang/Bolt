@@ -22,12 +22,17 @@ namespace bolt {
 
   public:
 
+    bool FailOnError = false;
+
     inline bool hasError() const noexcept {
       return HasError;
     }
 
     template<typename D, typename ...Ts>
     void add(Ts&&... Args) {
+      // if (FailOnError) {
+      //   ZEN_PANIC("An error diagnostic caused the program to abort.");
+      // }
       HasError = true;
       addDiagnostic(new D { std::forward<Ts>(Args)... });
     }

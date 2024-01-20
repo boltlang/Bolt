@@ -193,41 +193,42 @@ namespace bolt {
   }
 
   std::string describe(const Type* Ty) {
+    Ty = Ty->find();
     switch (Ty->getKind()) {
       case TypeKind::Var:
       {
-        auto TV = static_cast<const TVar*>(Ty);
-        if (TV->getVarKind() == VarKind::Rigid) {
-          return static_cast<const TVarRigid*>(TV)->Name;
+        auto TV = Ty->asVar();
+        if (TV.isRigid()) {
+          return *TV.Name;
         }
-        return "a" + std::to_string(TV->Id);
+        return "a" + std::to_string(TV.Id);
       }
       case TypeKind::Arrow:
       {
-        auto Y = static_cast<const TArrow*>(Ty);
+        auto Y = Ty->asArrow();
         std::ostringstream Out;
-        Out << describe(Y->ParamType) << " -> " << describe(Y->ReturnType);
+        Out << describe(Y.ParamType) << " -> " << describe(Y.ReturnType);
         return Out.str();
       }
       case TypeKind::Con:
       {
-        auto Y = static_cast<const TCon*>(Ty);
-        return Y->DisplayName;
+        auto Y = Ty->asCon();
+        return Y.DisplayName;
       }
       case TypeKind::App:
       {
-        auto Y = static_cast<const TApp*>(Ty);
-        return describe(Y->Op) + " " + describe(Y->Arg);
+        auto Y = Ty->asApp();
+        return describe(Y.Op) + " " + describe(Y.Arg);
       }
       case TypeKind::Tuple:
       {
         std::ostringstream Out;
-        auto Y = static_cast<const TTuple*>(Ty);
+        auto Y = Ty->asTuple();
         Out << "(";
-        if (Y->ElementTypes.size()) {
-          auto Iter = Y->ElementTypes.begin();
+        if (Y.ElementTypes.size()) {
+          auto Iter = Y.ElementTypes.begin();
           Out << describe(*Iter++);
-          while (Iter != Y->ElementTypes.end()) {
+          while (Iter != Y.ElementTypes.end()) {
             Out << ", " << describe(*Iter++);
           }
         }
@@ -236,8 +237,8 @@ namespace bolt {
       }
       case TypeKind::TupleIndex:
       {
-        auto Y = static_cast<const TTupleIndex*>(Ty);
-        return describe(Y->Ty) + "." + std::to_string(Y->I);
+        auto Y = Ty->asTupleIndex();
+        return describe(Y.Ty) + "." + std::to_string(Y.I);
       }
       case TypeKind::Nil:
         return "{}";
@@ -245,19 +246,19 @@ namespace bolt {
         return "Abs";
       case TypeKind::Present:
       {
-        auto Y = static_cast<const TPresent*>(Ty);
-        return describe(Y->Ty);
+        auto Y = Ty->asPresent();
+        return describe(Y.Ty);
       }
       case TypeKind::Field:
       {
-        auto Y = static_cast<const TField*>(Ty);
+        auto Y = Ty->asField();
         std::ostringstream out;
-        out << "{ " << Y->Name << ": " << describe(Y->Ty);
-        Ty = Y->RestTy;
+        out << "{ " << Y.Name << ": " << describe(Y.Ty);
+        Ty = Y.RestTy;
         while (Ty->getKind() == TypeKind::Field) {
-          auto Y = static_cast<const TField*>(Ty);
-          out << "; " + Y->Name + ": " + describe(Y->Ty);
-          Ty = Y->RestTy;
+          auto Y = Ty->asField();
+          out << "; " + Y.Name + ": " + describe(Y.Ty);
+          Ty = Y.RestTy;
         }
         if (Ty->getKind() != TypeKind::Nil) {
           out << "; " + describe(Ty);
@@ -561,53 +562,52 @@ namespace bolt {
 
       void exitType(const Type* Ty) override {
         if (shouldUnderline()) {
-          W.setUnderline(false);
+          W.setUnderline(false); // FIXME Should set to old value
         }
       }
 
-      void visitAppType(const TApp *Ty) override {
-        auto Y = static_cast<const TApp*>(Ty);
+      void visitAppType(const TApp& Ty) override {
         Path.push_back(TypeIndex::forAppOpType());
-        visit(Y->Op);
+        visit(Ty.Op);
         Path.pop_back();
         W.write(" ");
         Path.push_back(TypeIndex::forAppArgType());
-        visit(Y->Arg);
+        visit(Ty.Arg);
         Path.pop_back();
       }
 
-      void visitVarType(const TVar* Ty) override {
-        if (Ty->getVarKind() == VarKind::Rigid) {
-          W.write(static_cast<const TVarRigid*>(Ty)->Name);
+      void visitVarType(const TVar& Ty) override {
+        if (Ty.isRigid()) {
+          W.write(*Ty.Name);
           return;
         }
         W.write("a");
-        W.write(Ty->Id);
+        W.write(Ty.Id);
       }
 
-      void visitConType(const TCon *Ty) override {
-        W.write(Ty->DisplayName);
+      void visitConType(const TCon& Ty) override {
+        W.write(Ty.DisplayName);
       }
 
-      void visitArrowType(const TArrow* Ty) override {
+      void visitArrowType(const TArrow& Ty) override {
         Path.push_back(TypeIndex::forArrowParamType());
-        visit(Ty->ParamType);
+        visit(Ty.ParamType);
         Path.pop_back();
         W.write(" -> ");
         Path.push_back(TypeIndex::forArrowReturnType());
-        visit(Ty->ReturnType);
+        visit(Ty.ReturnType);
         Path.pop_back();
       }
 
-      void visitTupleType(const TTuple *Ty) override {
+      void visitTupleType(const TTuple& Ty) override {
         W.write("(");
-        if (Ty->ElementTypes.size()) {
-          auto Iter = Ty->ElementTypes.begin();
+        if (Ty.ElementTypes.size()) {
+          auto Iter = Ty.ElementTypes.begin();
           Path.push_back(TypeIndex::forTupleElement(0));
           visit(*Iter++);
           Path.pop_back();
           std::size_t I = 1;
-          while (Iter != Ty->ElementTypes.end()) {
+          while (Iter != Ty.ElementTypes.end()) {
             W.write(", ");
             Path.push_back(TypeIndex::forTupleElement(I++));
             visit(*Iter++);
@@ -617,47 +617,47 @@ namespace bolt {
         W.write(")");
       }
 
-      void visitTupleIndexType(const TTupleIndex *Ty) override {
+      void visitTupleIndexType(const TTupleIndex& Ty) override {
         Path.push_back(TypeIndex::forTupleIndexType());
-        visit(Ty->Ty);
+        visit(Ty.Ty);
         Path.pop_back();
         W.write(".");
-        W.write(Ty->I);
+        W.write(Ty.I);
       }
 
-      void visitNilType(const TNil *Ty) override {
+      void visitNilType(const TNil& Ty) override {
         W.write("{}");
       }
 
-      void visitAbsentType(const TAbsent *Ty) override {
+      void visitAbsentType(const TAbsent& Ty) override {
         W.write("Abs");
       }
 
-      void visitPresentType(const TPresent *Ty) override {
+      void visitPresentType(const TPresent& Ty) override {
         Path.push_back(TypeIndex::forPresentType());
-        visit(Ty->Ty);
+        visit(Ty.Ty);
         Path.pop_back();
       }
 
-      void visitFieldType(const TField* Ty) override {
+      void visitFieldType(const TField& Ty) override {
         W.write("{ ");
-        W.write(Ty->Name);
+        W.write(Ty.Name);
         W.write(": ");
         Path.push_back(TypeIndex::forFieldType());
-        visit(Ty->Ty);
+        visit(Ty.Ty);
         Path.pop_back();
-        auto Ty2 = Ty->RestTy;
+        auto Ty2 = Ty.RestTy;
         Path.push_back(TypeIndex::forFieldRest());
         std::size_t I = 1;
-        while (Ty2->getKind() == TypeKind::Field) {
-          auto Y = static_cast<const TField*>(Ty2);
+        while (Ty2->isField()) {
+          auto Y = Ty2->asField();
           W.write("; ");
-          W.write(Y->Name);
+          W.write(Y.Name);
           W.write(": ");
           Path.push_back(TypeIndex::forFieldType());
-          visit(Y->Ty);
+          visit(Y.Ty);
           Path.pop_back();
-          Ty2 = Y->RestTy;
+          Ty2 = Y.RestTy;
           Path.push_back(TypeIndex::forFieldRest());
           ++I;
         }
@@ -730,7 +730,7 @@ namespace bolt {
 
       case DiagnosticKind::BindingNotFound:
       {
-        auto E = static_cast<const BindingNotFoundDiagnostic&>(D);
+        auto& E = static_cast<const BindingNotFoundDiagnostic&>(D);
         writePrefix(E);
         write("binding ");
         writeBinding(E.Name);
@@ -746,7 +746,7 @@ namespace bolt {
 
       case DiagnosticKind::UnexpectedToken:
       {
-        auto E = static_cast<const UnexpectedTokenDiagnostic&>(D);
+        auto& E = static_cast<const UnexpectedTokenDiagnostic&>(D);
         writePrefix(E);
         writeLoc(E.File, E.Actual->getStartLoc());
         write(" expected ");
@@ -780,7 +780,7 @@ namespace bolt {
 
       case DiagnosticKind::UnexpectedString:
       {
-        auto E = static_cast<const UnexpectedStringDiagnostic&>(D);
+        auto& E = static_cast<const UnexpectedStringDiagnostic&>(D);
         writePrefix(E);
         writeLoc(E.File, E.Location);
         write(" unexpected '");
@@ -806,7 +806,7 @@ namespace bolt {
 
       case DiagnosticKind::UnificationError:
       {
-        auto E = static_cast<const UnificationErrorDiagnostic&>(D);
+        auto& E = static_cast<const UnificationErrorDiagnostic&>(D);
         auto Left = E.OrigLeft->resolve(E.LeftPath);
         auto Right = E.OrigRight->resolve(E.RightPath);
         writePrefix(E);
@@ -857,7 +857,7 @@ namespace bolt {
 
       case DiagnosticKind::TypeclassMissing:
       {
-        auto E = static_cast<const TypeclassMissingDiagnostic&>(D);
+        auto& E = static_cast<const TypeclassMissingDiagnostic&>(D);
         writePrefix(E);
         write("the type class ");
         writeTypeclassSignature(E.Sig);
@@ -869,7 +869,7 @@ namespace bolt {
 
       case DiagnosticKind::InstanceNotFound:
       {
-        auto E = static_cast<const InstanceNotFoundDiagnostic&>(D);
+        auto& E = static_cast<const InstanceNotFoundDiagnostic&>(D);
         writePrefix(E);
         write("a type class instance ");
         writeTypeclassName(E.TypeclassName);
@@ -883,7 +883,7 @@ namespace bolt {
 
       case DiagnosticKind::TupleIndexOutOfRange:
       {
-        auto E = static_cast<const TupleIndexOutOfRangeDiagnostic&>(D);
+        auto& E = static_cast<const TupleIndexOutOfRangeDiagnostic&>(D);
         writePrefix(E);
         write("the index ");
         writeType(E.I);
@@ -894,7 +894,7 @@ namespace bolt {
 
       case DiagnosticKind::InvalidTypeToTypeclass:
       {
-        auto E = static_cast<const InvalidTypeToTypeclassDiagnostic&>(D);
+        auto& E = static_cast<const InvalidTypeToTypeclassDiagnostic&>(D);
         writePrefix(E);
         write("the type ");
         writeType(E.Actual);
@@ -911,13 +911,23 @@ namespace bolt {
 
       case DiagnosticKind::FieldNotFound:
       {
-        auto E = static_cast<const FieldNotFoundDiagnostic&>(D);
+        auto& E = static_cast<const FieldNotFoundDiagnostic&>(D);
         writePrefix(E);
         write("the field '");
         write(E.Name);
         write("' was required in one type but not found in another\n\n");
         writeNode(E.Source);
         write("\n");
+        break;
+      }
+
+      case DiagnosticKind::NotATuple:
+      {
+        auto& E = static_cast<const NotATupleDiagnostic&>(D);
+        writePrefix(E);
+        write("the type ");
+        writeType(E.Ty);
+        write(" is not a tuple.\n");
         break;
       }
 

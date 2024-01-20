@@ -178,6 +178,7 @@ namespace bolt {
     Type* ListType;
     Type* IntType;
     Type* StringType;
+    Type* UnitType;
 
     Graph<Node*> RefGraph;
 
@@ -217,9 +218,9 @@ namespace bolt {
 
     /// Factory methods 
 
-    TCon* createConType(ByteString Name);
-    TVar* createTypeVar();
-    TVarRigid* createRigidVar(ByteString Name);
+    Type* createConType(ByteString Name);
+    Type* createTypeVar();
+    Type* createRigidVar(ByteString Name);
     InferContext* createInferContext(
       InferContext* Parent = nullptr,
       TVSet* TVs = new TVSet,
@@ -279,6 +280,11 @@ namespace bolt {
      * \internal
      */
     Type* simplifyType(Type* Ty);
+
+    /**
+     * \internal
+     */
+    Type* solveType(Type* Ty);
 
     void check(SourceFile* SF);
 

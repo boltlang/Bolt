@@ -2,7 +2,6 @@
 #pragma once
 
 #include <vector>
-#include <memory>
 
 #include "bolt/ByteString.hpp"
 #include "bolt/String.hpp"
@@ -12,15 +11,16 @@
 namespace bolt {
 
   enum class DiagnosticKind : unsigned char {
-    UnexpectedToken,
-    UnexpectedString,
     BindingNotFound,
-    UnificationError,
-    TypeclassMissing,
-    InstanceNotFound,
-    TupleIndexOutOfRange,
-    InvalidTypeToTypeclass,
     FieldNotFound,
+    InstanceNotFound,
+    InvalidTypeToTypeclass,
+    NotATuple,
+    TupleIndexOutOfRange,
+    TypeclassMissing,
+    UnexpectedString,
+    UnexpectedToken,
+    UnificationError,
   };
 
   class Diagnostic : std::runtime_error {
@@ -168,10 +168,10 @@ namespace bolt {
   class TupleIndexOutOfRangeDiagnostic : public Diagnostic {
   public:
 
-    TTuple* Tuple;
+    Type* Tuple;
     std::size_t I;
 
-    inline TupleIndexOutOfRangeDiagnostic(TTuple* Tuple, std::size_t I):
+    inline TupleIndexOutOfRangeDiagnostic(Type* Tuple, std::size_t I):
       Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I) {}
 
     unsigned getCode() const noexcept override {
@@ -209,10 +209,24 @@ namespace bolt {
     Node* Source;
 
     inline FieldNotFoundDiagnostic(ByteString Name, Type* Ty, TypePath Path, Node* Source):
-      Diagnostic(DiagnosticKind::FieldNotFound), Name(Name), Ty(Ty), Path(Path), Source(Source) {}
+     Diagnostic(DiagnosticKind::FieldNotFound), Name(Name), Ty(Ty), Path(Path), Source(Source) {}
 
     unsigned getCode() const noexcept override {
       return 2017;
+    }
+
+  };
+
+  class NotATupleDiagnostic : public Diagnostic {
+  public:
+
+    Type* Ty;
+
+    inline NotATupleDiagnostic(Type* Ty):
+      Diagnostic(DiagnosticKind::NotATuple), Ty(Ty) {}
+
+    unsigned getCode() const noexcept override {
+      return 2016;
     }
 
   };

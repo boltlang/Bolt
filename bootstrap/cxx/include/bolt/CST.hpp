@@ -184,6 +184,12 @@ namespace bolt {
   template<typename T>
   NodeKind getNodeType();
 
+  enum NodeFlags {
+    NodeFlags_TypeIsSolved = 1,
+  };
+
+  using NodeFlagsMask = unsigned;
+
   class Node {
 
     unsigned RefCount = 1;
@@ -192,6 +198,7 @@ namespace bolt {
 
   public:
 
+    NodeFlagsMask Flags = 0;
     Node* Parent = nullptr;
 
     inline void ref() {
