@@ -1,5 +1,4 @@
 
-
 let pair x y = (x, y)
 
 let p1 = pair 1 1
@@ -14,3 +13,16 @@ let p3 = (False, 1)
 
 @:Bool p3.0
 @:Int p3.1
+
+@expect_diagnostic 2016
+"foo".1
+
+(1,2,3).2
+
+@expect_diagnostic 2015
+(1,2,3).3
+@expect_diagnostic 2015
+(1,2,3).4
+@expect_diagnostic 2015
+(1,2,3).5
+
