@@ -1294,8 +1294,18 @@ namespace bolt {
   void Checker::solve(Constraint* Constraint) {
 
     Queue.push_back(Constraint);
+    bool DidJoin = false;
+    std::deque<class Constraint*> NextQueue;
 
-    while (!Queue.empty()) {
+    while (true) {
+
+      if (Queue.empty()) {
+        if (NextQueue.empty() || !DidJoin) {
+          break;
+        }
+        DidJoin = false;
+        std::swap(Queue, NextQueue);
+      }
 
       auto Constraint = Queue.front();
       Queue.pop_front();
@@ -1318,7 +1328,7 @@ namespace bolt {
               unify(ElementTy, Field->FieldTy, Field->Source);
             }
           } else if (MaybeTuple->isVar()) {
-              // TODO Add logic for when tuple is a var
+              NextQueue.push_back(Constraint);
           } else {
             DE.add<NotATupleDiagnostic>(MaybeTuple, Field->Source);
           }
@@ -1337,7 +1347,9 @@ namespace bolt {
         case ConstraintKind::Equal:
         {
           auto Equal = static_cast<CEqual*>(Constraint);
-          unify(Equal->Left, Equal->Right, Equal->Source);
+          if (unify(Equal->Left, Equal->Right, Equal->Source)) {
+              DidJoin = true;
+          }
           break;
         }
 
@@ -1413,11 +1425,11 @@ namespace bolt {
     Type* Right;
     Node* Source;
 
-
     // Internal state used by the unifier
     ByteString CurrentFieldName;
     TypePath LeftPath;
     TypePath RightPath;
+    bool DidJoin = false;
 
     Type* getLeft() const {
       return Left;
@@ -1524,6 +1536,8 @@ namespace bolt {
       // std::cerr << describe(TV) << " => " << describe(Ty) << std::endl;
 
       TV->set(Ty);
+
+      DidJoin = true;
 
       propagateClasses(TV->asVar().Context, Ty);
 
@@ -1826,10 +1840,11 @@ namespace bolt {
     return false;
   }
 
-  void Checker::unify(Type* Left, Type* Right, Node* Source) {
+  bool Checker::unify(Type* Left, Type* Right, Node* Source) {
     // std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl;
     Unifier A { *this, Left, Right, Source };
     A.unify();
+    return A.DidJoin;
   }
 
 }

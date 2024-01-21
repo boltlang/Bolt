@@ -265,7 +265,12 @@ namespace bolt {
      */
     std::deque<class Constraint*> Queue;
 
-    void unify(Type* Left, Type* Right, Node* Source);
+    /**
+     * Unify two types, using `Source` as source location.
+     *
+     * \returns Whether a type variable was assigned a type or not.
+     */
+    bool unify(Type* Left, Type* Right, Node* Source);
 
     void solve(Constraint* Constraint);
 
