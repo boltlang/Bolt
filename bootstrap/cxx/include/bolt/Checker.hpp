@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "zen/config.hpp"
-
 #include "bolt/ByteString.hpp"
 #include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
@@ -11,7 +9,6 @@
 
 #include <cstdlib>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include <deque>
 
@@ -77,6 +74,7 @@ namespace bolt {
 
   enum class ConstraintKind {
     Equal,
+    Field,
     Many,
     Empty,
   };
@@ -109,6 +107,19 @@ namespace bolt {
 
     inline CEqual(Type* Left, Type* Right, Node* Source = nullptr):
       Constraint(ConstraintKind::Equal), Left(Left), Right(Right), Source(Source) {}
+
+  };
+
+  class CField : public Constraint {
+  public:
+
+    Type* TupleTy;
+    size_t I;
+    Type* FieldTy;
+    Node* Source;
+
+    inline CField(Type* TupleTy, size_t I, Type* FieldTy, Node* Source = nullptr):
+      Constraint(ConstraintKind::Field), TupleTy(TupleTy), I(I), FieldTy(FieldTy), Source(Source) {}
 
   };
 
@@ -254,7 +265,7 @@ namespace bolt {
      */
     std::deque<class Constraint*> Queue;
 
-    void solveEqual(CEqual* C);
+    void unify(Type* Left, Type* Right, Node* Source);
 
     void solve(Constraint* Constraint);
 
@@ -275,11 +286,6 @@ namespace bolt {
   public:
 
     Checker(const LanguageConfig& Config, DiagnosticEngine& DE);
-
-    /**
-     * \internal
-     */
-    Type* simplifyType(Type* Ty);
 
     /**
      * \internal

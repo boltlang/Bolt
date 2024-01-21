@@ -9,7 +9,6 @@
 #include <vector>
 
 #include "zen/config.hpp"
-#include "zen/range.hpp"
 
 #include "bolt/CST.hpp"
 #include "bolt/ByteString.hpp"
@@ -48,7 +47,6 @@ namespace bolt {
     TupleElement,
     FieldType,
     FieldRestType,
-    TupleIndexType,
     PresentType,
     End,
   };
@@ -105,10 +103,6 @@ namespace bolt {
       return { TypeIndexKind::AppArgType };
     }
 
-    static TypeIndex forTupleIndexType() {
-      return { TypeIndexKind::TupleIndexType };
-    }
-
     static TypeIndex forPresentType() {
       return { TypeIndexKind::PresentType };
     }
@@ -157,7 +151,6 @@ namespace bolt {
     App,
     Arrow,
     Tuple,
-    TupleIndex,
     Field,
     Nil,
     Absent,
@@ -225,15 +218,6 @@ namespace bolt {
 
   };
 
-  struct TTupleIndex {
-
-    Type* Ty;
-    std::size_t I;
-
-    bool operator==(const TTupleIndex& Other) const;
-
-  };
-
   struct TNil {
     bool operator==(const TNil& Other) const;
   };
@@ -266,7 +250,6 @@ namespace bolt {
       TVar Var;
       TArrow Arrow;
       TTuple Tuple;
-      TTupleIndex TupleIndex;
       TNil Nil;
       TField Field;
       TAbsent Absent;
@@ -288,9 +271,6 @@ namespace bolt {
     Type(TTuple&& Tuple):
       Kind(TypeKind::Tuple), Tuple(std::move(Tuple)) {};
 
-    Type(TTupleIndex&& TupleIndex):
-      Kind(TypeKind::TupleIndex), TupleIndex(std::move(TupleIndex)) {};
-
     Type(TNil&& Nil):
       Kind(TypeKind::Nil), Nil(std::move(Nil)) {};
 
@@ -302,46 +282,6 @@ namespace bolt {
 
     Type(TPresent&& Present):
       Kind(TypeKind::Present), Present(std::move(Present)) {};
-
-//     Type(TCon Con): Kind(TypeKind::Con) {
-//       new (&Con)TCon(Con);
-//     }
-
-//     Type(TApp App): Kind(TypeKind::App) {
-//       new (&App)TApp(App);
-//     }
-
-//     Type(TVar Var): Kind(TypeKind::Var) {
-//       new (&Var)TVar(Var);
-//     }
-
-//     Type(TArrow Arrow): Kind(TypeKind::Arrow) {
-//       new (&Arrow)TArrow(Arrow);
-//     }
-
-//     Type(TTuple Tuple): Kind(TypeKind::Tuple) {
-//       new (&Tuple)TTuple(Tuple);
-//     }
-
-//     Type(TTupleIndex TupleIndex): Kind(TypeKind::TupleIndex) {
-//       new (&TupleIndex)TTupleIndex(TupleIndex);
-//     }
-
-//     Type(TNil Nil): Kind(TypeKind::Nil) {
-//       new (&Nil)TNil(Nil);
-//     }
-
-//     Type(TField Field): Kind(TypeKind::Field) {
-//       new (&Field)TField(Field);
-//     }
-
-//     Type(TAbsent Absent): Kind(TypeKind::Absent) {
-//       new (&Absent)TAbsent(Absent);
-//     }
-
-//     Type(TPresent Present): Kind(TypeKind::Present) {
-//       new (&Present)TPresent(Present);
-//     }
 
     Type(const Type& Other): Kind(Other.Kind) {
       switch (Kind) {
@@ -359,9 +299,6 @@ namespace bolt {
           break;
         case TypeKind::Tuple:
           new (&Tuple)TTuple(Other.Tuple);
-          break;
-        case TypeKind::TupleIndex:
-          new (&TupleIndex)TTupleIndex(Other.TupleIndex);
           break;
         case TypeKind::Nil:
           new (&Nil)TNil(Other.Nil);
@@ -394,9 +331,6 @@ namespace bolt {
           break;
         case TypeKind::Tuple:
           new (&Tuple)TTuple(std::move(Other.Tuple));
-          break;
-        case TypeKind::TupleIndex:
-          new (&TupleIndex)TTupleIndex(std::move(Other.TupleIndex));
           break;
         case TypeKind::Nil:
           new (&Nil)TNil(std::move(Other.Nil));
@@ -490,20 +424,6 @@ namespace bolt {
     const TTuple& asTuple() const {
       ZEN_ASSERT(Kind == TypeKind::Tuple);
       return Tuple;
-    }
-
-    bool isTupleIndex() const {
-      return Kind == TypeKind::TupleIndex;
-    }
-
-    TTupleIndex& asTupleIndex() {
-      ZEN_ASSERT(Kind == TypeKind::TupleIndex);
-      return TupleIndex;
-    }
-
-    const TTupleIndex& asTupleIndex() const {
-      ZEN_ASSERT(Kind == TypeKind::TupleIndex);
-      return TupleIndex;
     }
 
     bool isField() const {
@@ -611,9 +531,6 @@ namespace bolt {
         case TypeKind::Tuple:
           Tuple.~TTuple();
           break;
-        case TypeKind::TupleIndex:
-          TupleIndex.~TTupleIndex();
-          break;
         case TypeKind::Nil:
           Nil.~TNil();
           break;
@@ -647,9 +564,6 @@ namespace bolt {
           break;
         case TypeKind::Tuple:
           Tuple = Other.Tuple;
-          break;
-        case TypeKind::TupleIndex:
-          TupleIndex = Other.TupleIndex;
           break;
         case TypeKind::Nil:
           Nil = Other.Nil;
@@ -735,10 +649,6 @@ namespace bolt {
       }
     }
 
-    virtual void visitTupleIndexType(C<TTupleIndex>& Ty) {
-      visit(Ty.Ty);
-    }
-
     virtual void visitAbsentType(C<TAbsent>& Ty) {
     }
 
@@ -794,12 +704,6 @@ namespace bolt {
           visit(Present->Ty);
           break;
         }
-        case TypeKind::TupleIndex:
-        {
-          auto& Index = Ty->asTupleIndex();
-          visit(Index->Ty);
-          break;
-        }
       }
     }
 
@@ -836,9 +740,6 @@ namespace bolt {
           break;
         case TypeKind::App:
           visitAppType(Ty->asApp());
-          break;
-        case TypeKind::TupleIndex:
-          visitTupleIndexType(Ty->asTupleIndex());
           break;
       }
       exitType(Ty);

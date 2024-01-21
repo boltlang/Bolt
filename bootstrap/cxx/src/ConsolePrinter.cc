@@ -235,11 +235,6 @@ namespace bolt {
         Out << ")";
         return Out.str();
       }
-      case TypeKind::TupleIndex:
-      {
-        auto Y = Ty->asTupleIndex();
-        return describe(Y.Ty) + "." + std::to_string(Y.I);
-      }
       case TypeKind::Nil:
         return "{}";
       case TypeKind::Absent:
@@ -617,14 +612,6 @@ namespace bolt {
         W.write(")");
       }
 
-      void visitTupleIndexType(const TTupleIndex& Ty) override {
-        Path.push_back(TypeIndex::forTupleIndexType());
-        visit(Ty.Ty);
-        Path.pop_back();
-        W.write(".");
-        W.write(Ty.I);
-      }
-
       void visitNilType(const TNil& Ty) override {
         W.write("{}");
       }
@@ -889,6 +876,9 @@ namespace bolt {
         writeType(E.I);
         write(" is out of range for tuple ");
         writeType(E.Tuple);
+        write("\n\n");
+        writeNode(E.Source);
+        write("\n");
         break;
       }
 
@@ -927,7 +917,9 @@ namespace bolt {
         writePrefix(E);
         write("the type ");
         writeType(E.Ty);
-        write(" is not a tuple.\n");
+        write(" is not a tuple.\n\n");
+        writeNode(E.Source);
+        write("\n");
         break;
       }
 

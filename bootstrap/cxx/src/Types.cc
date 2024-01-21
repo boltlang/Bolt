@@ -4,6 +4,8 @@
 #include <sys/wait.h>
 #include <vector>
 
+#include "zen/range.hpp"
+
 namespace bolt {
 
   bool TypeclassSignature::operator<(const TypeclassSignature& Other) const {
@@ -60,10 +62,6 @@ namespace bolt {
     return true;
   }
 
-  bool TTupleIndex::operator==(const TTupleIndex& Other) const {
-    return *Ty == *Other.Ty && I == Other.I;
-  }
-
   bool TNil::operator==(const TNil& Other) const {
     return true;
   }
@@ -101,8 +99,6 @@ namespace bolt {
         return Nil == Other.Nil;
       case TypeKind::Tuple:
         return Tuple == Other.Tuple;
-      case TypeKind::TupleIndex:
-        return TupleIndex == Other.TupleIndex;
       case TypeKind::App:
         return App == Other.App;
     }
@@ -145,11 +141,6 @@ namespace bolt {
         Proc(Present.Ty);
         break;
       }
-      case TypeKind::TupleIndex:
-      {
-        Proc(TupleIndex.Ty);
-        break;
-      }
     }
   }
 
@@ -189,12 +180,6 @@ namespace bolt {
           return Ty2;
         }
         return new Type(TApp(NewOp, NewArg));
-      }
-      case TypeKind::TupleIndex:
-      {
-        auto Tuple = Ty2->asTupleIndex();
-        auto NewTy = Tuple.Ty->rewrite(Fn, Recursive);
-        return NewTy != Tuple.Ty ? new Type(TTupleIndex(NewTy, Tuple.I)) : Ty2;
       }
       case TypeKind::Tuple:
       {
@@ -258,8 +243,6 @@ namespace bolt {
         return this->asApp().Op;
       case TypeIndexKind::AppArgType:
         return this->asApp().Arg;
-      case TypeIndexKind::TupleIndexType:
-        return this->asTupleIndex().Ty;
       case TypeIndexKind::TupleElement:
         return this->asTuple().ElementTypes[Index.I];
       case TypeIndexKind::ArrowParamType:
@@ -336,8 +319,6 @@ namespace bolt {
           }
         }
         return false;
-      case TypeKind::TupleIndex:
-        return TupleIndex.Ty->hasTypeVar(TV);
       case TypeKind::Field:
         return Field.Ty->hasTypeVar(TV) || Field.RestTy->hasTypeVar(TV);
       case TypeKind::Arrow:

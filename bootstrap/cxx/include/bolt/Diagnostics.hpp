@@ -170,9 +170,14 @@ namespace bolt {
 
     Type* Tuple;
     std::size_t I;
+    Node* Source;
 
-    inline TupleIndexOutOfRangeDiagnostic(Type* Tuple, std::size_t I):
-      Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I) {}
+    inline TupleIndexOutOfRangeDiagnostic(Type* Tuple, std::size_t I, Node* Source):
+      Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I), Source(Source) {}
+
+    inline Node * getNode() const override {
+      return Source;
+    }
 
     unsigned getCode() const noexcept override {
       return 2015;
@@ -221,9 +226,14 @@ namespace bolt {
   public:
 
     Type* Ty;
+    Node* Source; 
 
-    inline NotATupleDiagnostic(Type* Ty):
-      Diagnostic(DiagnosticKind::NotATuple), Ty(Ty) {}
+    inline NotATupleDiagnostic(Type* Ty, Node* Source):
+      Diagnostic(DiagnosticKind::NotATuple), Ty(Ty), Source(Source) {}
+
+    inline Node * getNode() const override { 
+      return Source;
+    }
 
     unsigned getCode() const noexcept override {
       return 2016;

@@ -30,37 +30,20 @@ namespace bolt {
         }
         return new CMany(*NewConstraints);
       }
+      case ConstraintKind::Field:
+      {
+        auto Field = static_cast<CField*>(this);
+        auto NewTupleTy = Field->TupleTy->substitute(Sub);
+        auto NewFieldTy = Field->FieldTy->substitute(Sub);
+        return new CField(NewTupleTy, Field->I, NewFieldTy);
+      }
       case ConstraintKind::Empty:
         return this;
     }
   }
 
-  Type* Checker::simplifyType(Type* Ty) {
-
-    Ty = Ty->find();
-
-    if (Ty->isTupleIndex()) {
-      auto& Index = Ty->asTupleIndex();
-      auto MaybeTuple = simplifyType(Index.Ty);
-      if (MaybeTuple->isTuple()) {
-        auto& Tuple = MaybeTuple->asTuple();
-        if (Index.I >= Tuple.ElementTypes.size()) {
-          DE.add<TupleIndexOutOfRangeDiagnostic>(MaybeTuple, Index.I);
-        } else {
-          auto ElementTy = simplifyType(Tuple.ElementTypes[Index.I]);
-          Ty->set(ElementTy);
-          Ty = ElementTy;
-        }
-      } else if (!MaybeTuple->isVar()) {
-        DE.add<NotATupleDiagnostic>(MaybeTuple);
-      }
-    }
-
-    return Ty;
-  }
-
   Type* Checker::solveType(Type* Ty) {
-    return Ty->rewrite([this](auto Ty) { return simplifyType(Ty); }, true);
+    return Ty->rewrite([this](auto Ty) { return Ty->find(); }, true);
   }
 
   Checker::Checker(const LanguageConfig& Config, DiagnosticEngine& DE):
@@ -135,7 +118,14 @@ namespace bolt {
   }
 
   void Checker::addConstraint(Constraint* C) {
+
     switch (C->getKind()) {
+
+      case ConstraintKind::Field:
+        // FIXME Check if this is all that needs to be done
+        getContext().Constraints->push_back(C);
+        break;
+
       case ConstraintKind::Equal:
       {
         auto Y = static_cast<CEqual*>(C);
@@ -195,13 +185,14 @@ namespace bolt {
         }
 
         if (UpperLevel == LowerLevel || MaxLevelLeft == Global || MaxLevelRight == Global) {
-          solveEqual(Y);
+          unify(Y->Left, Y->Right, Y->Source);
         } else {
           Contexts[UpperLevel]->Constraints->push_back(C);
         }
 
         break;
       }
+
       case ConstraintKind::Many:
       {
         auto Y = static_cast<CMany*>(C);
@@ -210,9 +201,12 @@ namespace bolt {
         }
         break;
       }
+
       case ConstraintKind::Empty:
         break;
+
     }
+
   }
 
   void Checker::forwardDeclare(Node* X) {
@@ -1061,7 +1055,8 @@ namespace bolt {
           case NodeKind::IntegerLiteral:
           {
             auto I = static_cast<IntegerLiteral*>(Member->Name);
-            Ty = new Type(TTupleIndex(ExprTy, I->getInteger()));
+            Ty = createTypeVar();
+            addConstraint(new CField(ExprTy, I->asInt(), Ty, Member));
             break;
           }
           case NodeKind::Identifier:
@@ -1310,6 +1305,26 @@ namespace bolt {
         case ConstraintKind::Empty:
           break;
 
+        case ConstraintKind::Field:
+        {
+          auto Field = static_cast<CField*>(Constraint);
+          auto MaybeTuple = Field->TupleTy->find();
+          if (MaybeTuple->isTuple()) {
+            auto& Tuple = MaybeTuple->asTuple();
+            if (Field->I >= Tuple.ElementTypes.size()) {
+              DE.add<TupleIndexOutOfRangeDiagnostic>(MaybeTuple, Field->I, Field->Source);
+            } else {
+              auto ElementTy = Tuple.ElementTypes[Field->I];
+              unify(ElementTy, Field->FieldTy, Field->Source);
+            }
+          } else if (MaybeTuple->isVar()) {
+              // TODO Add logic for when tuple is a var
+          } else {
+            DE.add<NotATupleDiagnostic>(MaybeTuple, Field->Source);
+          }
+          break;
+        }
+
         case ConstraintKind::Many:
         {
           auto Many = static_cast<CMany*>(Constraint);
@@ -1321,7 +1336,8 @@ namespace bolt {
 
         case ConstraintKind::Equal:
         {
-          solveEqual(static_cast<CEqual*>(Constraint));
+          auto Equal = static_cast<CEqual*>(Constraint);
+          unify(Equal->Left, Equal->Right, Equal->Source);
           break;
         }
 
@@ -1392,7 +1408,11 @@ namespace bolt {
   struct Unifier {
 
     Checker& C;
-    CEqual* Constraint;
+    // CEqual* Constraint;
+    Type* Left;
+    Type* Right;
+    Node* Source;
+
 
     // Internal state used by the unifier
     ByteString CurrentFieldName;
@@ -1400,15 +1420,15 @@ namespace bolt {
     TypePath RightPath;
 
     Type* getLeft() const {
-      return Constraint->Left;
+      return Left;
     }
 
     Type* getRight() const {
-      return Constraint->Right;
+      return Right;
     }
 
     Node* getSource() const {
-      return Constraint->Source;
+      return Source;
     }
 
     bool unifyField(Type* A, Type* B, bool DidSwap);
@@ -1416,7 +1436,7 @@ namespace bolt {
     bool unify(Type* A, Type* B, bool DidSwap);
 
     bool unify() {
-      return unify(Constraint->Left, Constraint->Right, false);
+      return unify(Left, Right, false);
     }
 
     std::vector<TypeclassContext> findInstanceContext(const TypeSig& Ty, TypeclassId& Class) {
@@ -1548,16 +1568,16 @@ namespace bolt {
 
   bool Unifier::unify(Type* A, Type* B, bool DidSwap) {
 
-    A = C.simplifyType(A);
-    B = C.simplifyType(B);
+    A = A->find();
+    B = B->find();
 
     auto unifyError = [&]() {
       C.DE.add<UnificationErrorDiagnostic>(
-        Constraint->Left,
-        Constraint->Right,
+        Left,
+        Right,
         LeftPath,
         RightPath,
-        Constraint->Source
+        Source
       );
     };
 
@@ -1717,12 +1737,12 @@ namespace bolt {
       return Success;
     }
 
-    if (A->isTupleIndex() || B->isTupleIndex()) {
-      // Type(s) could not be simplified at the beginning of this function,
-      // so we have to re-visit the constraint when there is more information.
-      C.Queue.push_back(Constraint);
-      return true;
-    }
+    // if (A->isTupleIndex() || B->isTupleIndex()) {
+    //   // Type(s) could not be simplified at the beginning of this function,
+    //   // so we have to re-visit the constraint when there is more information.
+    //   C.Queue.push_back(Constraint);
+    //   return true;
+    // }
 
     // This does not work because it ignores the indices
     // if (A->isTupleIndex() && B->isTupleIndex()) {
@@ -1806,9 +1826,9 @@ namespace bolt {
     return false;
   }
 
-  void Checker::solveEqual(CEqual* C) {
+  void Checker::unify(Type* Left, Type* Right, Node* Source) {
     // std::cerr << describe(C->Left) << " ~ " << describe(C->Right) << std::endl;
-    Unifier A { *this, C };
+    Unifier A { *this, Left, Right, Source };
     A.unify();
   }
 
