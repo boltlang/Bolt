@@ -158,7 +158,7 @@ int main(int Argc, const char* Argv[]) {
         auto Line = N->getStartLine();
         auto Match = V1.Expected.find(Line);
         if (Match != V1.Expected.end() && Match->second == D->getCode()) {
-          std::cerr << "skipped 1 diagnostic" << std::endl;
+          std::cerr << "caught 1 diagnostic" << std::endl;
           continue;
         }
       }
