@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug",
             "program": "${workspaceFolder}/build/bolt",
-            "args": [ "--direct-diagnostics", "verify", "test/checker/wrong_return_type.bolt" ],
+            "args": [ "--direct-diagnostics", "verify", "${workspaceFolder}/test.bolt" ],
             "cwd": "${workspaceFolder}",
             "preLaunchTask": "CMake: build"
         }
