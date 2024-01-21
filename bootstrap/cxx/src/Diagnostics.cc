@@ -39,7 +39,7 @@
 namespace bolt {
 
   Diagnostic::Diagnostic(DiagnosticKind Kind):
-    std::runtime_error("a compiler error occurred without being caught"), Kind(Kind) {}
+    Kind(Kind) {}
 
   bool sourceLocLessThan(const Diagnostic* L, const Diagnostic* R) {
     auto N1 = L->getNode();

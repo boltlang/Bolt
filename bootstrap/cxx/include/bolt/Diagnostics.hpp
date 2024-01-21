@@ -23,7 +23,7 @@ namespace bolt {
     UnificationError,
   };
 
-  class Diagnostic : std::runtime_error {
+  class Diagnostic {
 
     const DiagnosticKind Kind;
 
@@ -42,6 +42,8 @@ namespace bolt {
     }
 
     virtual unsigned getCode() const noexcept = 0;
+
+    virtual ~Diagnostic() {}
 
   };
 
