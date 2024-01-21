@@ -449,6 +449,7 @@ after_constraints:
           }
           if (T3->getKind() == NodeKind::VBar) {
             Tokens.get();
+            Fields.push_back(std::make_tuple(Field, nullptr));
             VBar = static_cast<class VBar*>(T3);
             Rest = parseTypeExpression();
             if (!Rest) {
