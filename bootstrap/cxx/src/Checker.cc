@@ -35,7 +35,7 @@ namespace bolt {
         auto Field = static_cast<CField*>(this);
         auto NewTupleTy = Field->TupleTy->substitute(Sub);
         auto NewFieldTy = Field->FieldTy->substitute(Sub);
-        return new CField(NewTupleTy, Field->I, NewFieldTy);
+        return new CField(NewTupleTy, Field->I, NewFieldTy, Field->Source);
       }
       case ConstraintKind::Empty:
         return this;
