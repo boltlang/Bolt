@@ -1,10 +1,10 @@
 
-enum List a.
+enum MyList a.
   Nil
-  Pair a (List a)
+  Pair a (MyList a)
 
-let x : List Int
+let x : MyList Int
 @expect_diagnostic 2010
-let y : List Bool = x
-let z : List String
+let y : MyList Bool = x
+let z : MyList String
 

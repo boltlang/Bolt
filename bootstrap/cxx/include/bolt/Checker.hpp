@@ -1,20 +1,27 @@
 
 #pragma once
 
+#include <cstdlib>
+#include <unordered_map>
+#include <vector>
+#include <deque>
+
+#include "zen/tuple_hash.hpp"
+
 #include "bolt/ByteString.hpp"
 #include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Type.hpp"
 #include "bolt/Support/Graph.hpp"
 
-#include <cstdlib>
-#include <unordered_map>
-#include <vector>
-#include <deque>
-
 namespace bolt {
 
   std::string describe(const Type* Ty); // For debugging only
+
+  enum class SymKind {
+    Type,
+    Var,
+  };
 
   class DiagnosticEngine;
 
@@ -70,7 +77,35 @@ namespace bolt {
 
   };
 
-  using TypeEnv = std::unordered_map<ByteString, Scheme*>;
+  class TypeEnv {
+
+    std::unordered_map<std::tuple<ByteString, SymKind>, Scheme*> Mapping;
+
+  public:
+
+    Scheme* lookup(ByteString Name, SymKind Kind) {
+      auto Key = std::make_tuple(Name, Kind);
+      auto Match = Mapping.find(Key);
+      if (Match == Mapping.end()) {
+        return nullptr;
+      }
+      return Match->second;
+    }
+
+    void add(ByteString Name, Scheme* Scm, SymKind Kind) {
+      auto Key = std::make_tuple(Name, Kind);
+      ZEN_ASSERT(!Mapping.count(Key))
+      // auto F = static_cast<Forall*>(Scm);
+      // std::cerr << Name << " : forall ";
+      // for (auto TV: *F->TVs) {
+      //   std::cerr << describe(TV) << " ";
+      // }
+      // std::cerr << ". " << describe(F->Type) << "\n";
+      Mapping.emplace(Key, Scm);
+    }
+
+  };
+
 
   enum class ConstraintKind {
     Equal,
@@ -158,16 +193,6 @@ namespace bolt {
 
     TypeEnv Env;
 
-    void add(ByteString Name, Scheme* Scm) {
-      // auto F = static_cast<Forall*>(Scm);
-      // std::cerr << Name << " : forall ";
-      // for (auto TV: *F->TVs) {
-      //   std::cerr << describe(TV) << " ";
-      // }
-      // std::cerr << ". " << describe(F->Type) << "\n";
-      Env.emplace(Name, Scm);
-    }
-
     Type* ReturnType = nullptr;
 
     InferContext* Parent = nullptr;
@@ -240,7 +265,7 @@ namespace bolt {
 
     /// Environment manipulation
 
-    Scheme* lookup(ByteString Name);
+    Scheme* lookup(ByteString Name, SymKind Kind);
 
     /**
      * Looks up a type/variable and  ensures that it is a monomorphic type.
@@ -254,9 +279,9 @@ namespace bolt {
      * \returns If the type/variable could not be found `nullptr` is returned.
      *          Otherwise, a [Type] is returned.
      */
-    Type* lookupMono(ByteString Name);
+    Type* lookupMono(ByteString Name, SymKind Kind);
 
-    void addBinding(ByteString Name, Scheme* Scm);
+    void addBinding(ByteString Name, Scheme* Scm, SymKind Kind);
 
     /// Constraint solving
 
