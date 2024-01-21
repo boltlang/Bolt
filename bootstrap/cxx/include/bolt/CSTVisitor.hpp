@@ -19,6 +19,7 @@ namespace bolt {
           return static_cast<D*>(this)->visit ## name(static_cast<name*>(N));
 
       switch (N->getKind()) {
+        BOLT_GEN_CASE(VBar)
         BOLT_GEN_CASE(Equals)
         BOLT_GEN_CASE(Colon)
         BOLT_GEN_CASE(Comma)
@@ -64,6 +65,8 @@ namespace bolt {
         BOLT_GEN_CASE(TypeAssertAnnotation)
         BOLT_GEN_CASE(TypeclassConstraintExpression)
         BOLT_GEN_CASE(EqualityConstraintExpression)
+        BOLT_GEN_CASE(RecordTypeExpressionField)
+        BOLT_GEN_CASE(RecordTypeExpression)
         BOLT_GEN_CASE(QualifiedTypeExpression)
         BOLT_GEN_CASE(ReferenceTypeExpression)
         BOLT_GEN_CASE(ArrowTypeExpression)
@@ -119,6 +122,10 @@ namespace bolt {
 
     void visitToken(Token* N) {
       static_cast<D*>(this)->visitNode(N);
+    }
+
+    void visitVBar(VBar* N) {
+      static_cast<D*>(this)->visitToken(N);
     }
 
     void visitEquals(Equals* N) {
@@ -311,6 +318,14 @@ namespace bolt {
 
     void visitTypeExpression(TypeExpression* N) {
       static_cast<D*>(this)->visitNode(N);
+    }
+
+    void visitRecordTypeExpressionField(RecordTypeExpressionField * N) {
+      static_cast<D*>(this)->visitNode(N);
+    }
+
+    void visitRecordTypeExpression(RecordTypeExpression* N) {
+      static_cast<D*>(this)->visitTypeExpression(N);
     }
 
     void visitQualifiedTypeExpression(QualifiedTypeExpression* N) {
@@ -519,6 +534,7 @@ namespace bolt {
         break;
 
       switch (N->getKind()) {
+        BOLT_GEN_CHILD_CASE(VBar)
         BOLT_GEN_CHILD_CASE(Equals)
         BOLT_GEN_CHILD_CASE(Colon)
         BOLT_GEN_CHILD_CASE(Comma)
@@ -564,6 +580,8 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(TypeAssertAnnotation)
         BOLT_GEN_CHILD_CASE(TypeclassConstraintExpression)
         BOLT_GEN_CHILD_CASE(EqualityConstraintExpression)
+        BOLT_GEN_CHILD_CASE(RecordTypeExpressionField)
+        BOLT_GEN_CHILD_CASE(RecordTypeExpression)
         BOLT_GEN_CHILD_CASE(QualifiedTypeExpression)
         BOLT_GEN_CHILD_CASE(ReferenceTypeExpression)
         BOLT_GEN_CHILD_CASE(ArrowTypeExpression)
@@ -612,6 +630,9 @@ namespace bolt {
     }
 
 #define BOLT_VISIT(node) static_cast<D*>(this)->visit(node)
+
+    void visitEachChild(VBar* N) {
+    }
 
     void visitEachChild(Equals* N) {
     }
@@ -758,6 +779,29 @@ namespace bolt {
       BOLT_VISIT(N->Left);
       BOLT_VISIT(N->Tilde);
       BOLT_VISIT(N->Right);
+    }
+
+    void visitEachChild(RecordTypeExpressionField* N) {
+      BOLT_VISIT(N->Name);
+      BOLT_VISIT(N->Colon);
+      BOLT_VISIT(N->TE);
+    }
+
+    void visitEachChild(RecordTypeExpression* N) {
+      BOLT_VISIT(N->LBrace);
+      for (auto [Field, Comma]: N->Fields) {
+        BOLT_VISIT(Field);
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+      }
+      if (N->VBar) {
+        BOLT_VISIT(N->VBar);
+      }
+      if (N->Rest) {
+        BOLT_VISIT(N->Rest);
+      }
+      BOLT_VISIT(N->RBrace);
     }
 
     void visitEachChild(QualifiedTypeExpression* N) {

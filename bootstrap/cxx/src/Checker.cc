@@ -677,9 +677,12 @@ namespace bolt {
 
       case NodeKind::LetDeclaration:
       {
-        // Function declarations are handled separately in inferLetDeclaration()
+        // Function declarations are handled separately in inferFunctionDeclaration()
         auto Decl = static_cast<LetDeclaration*>(N);
-        if (Decl->isFunction() && !Decl->Visited) {
+        if (Decl->Visited) {
+          break;
+        }
+        if (Decl->isFunction()) {
           Decl->IsCycleActive = true;
           Decl->Visited = true;
           inferFunctionDeclaration(Decl);
@@ -850,6 +853,17 @@ namespace bolt {
           addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty), SymKind::Type);
         }
         ZEN_ASSERT(Ty->isVar());
+        N->setType(Ty);
+        return Ty;
+      }
+
+      case NodeKind::RecordTypeExpression:
+      {
+        auto RecTE = static_cast<RecordTypeExpression*>(N);
+        auto Ty = RecTE->Rest ? inferTypeExpression(RecTE->Rest, IsPoly) : new Type(TNil());
+        for (auto [Field, Comma]: RecTE->Fields) {
+          Ty = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(inferTypeExpression(Field->TE, IsPoly))), Ty));
+        }
         N->setType(Ty);
         return Ty;
       }

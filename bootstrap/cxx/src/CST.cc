@@ -393,6 +393,22 @@ namespace bolt {
     return Left->getLastToken();
   }
 
+  Token* RecordTypeExpressionField::getFirstToken() const {
+    return Name;
+  }
+
+  Token* RecordTypeExpressionField::getLastToken() const {
+    return TE->getLastToken();
+  }
+
+  Token* RecordTypeExpression::getFirstToken() const {
+    return LBrace;
+  }
+
+  Token* RecordTypeExpression::getLastToken() const {
+    return RBrace;
+  }
+
   Token* QualifiedTypeExpression::getFirstToken() const {
     if (!Constraints.empty()) {
       return std::get<0>(Constraints.front())->getFirstToken();
@@ -838,6 +854,10 @@ namespace bolt {
       return Elements.back()->getLastToken();
     }
     return nullptr;
+  }
+
+  std::string VBar::getText() const {
+    return "|";
   }
 
   std::string Equals::getText() const {

@@ -87,6 +87,7 @@ namespace bolt {
   };
 
   enum class NodeKind {
+    VBar,
     Equals,
     Colon,
     Comma,
@@ -132,6 +133,8 @@ namespace bolt {
     TypeAssertAnnotation,
     TypeclassConstraintExpression,
     EqualityConstraintExpression,
+    RecordTypeExpressionField,
+    RecordTypeExpression,
     QualifiedTypeExpression,
     ReferenceTypeExpression,
     ArrowTypeExpression,
@@ -359,6 +362,20 @@ namespace bolt {
 
     static bool classof(const Node* N) {
       return N->getKind() == NodeKind::Equals;
+    }
+
+  };
+
+  class VBar : public Token {
+  public:
+
+    inline VBar(TextLoc StartLoc):
+      Token(NodeKind::VBar, StartLoc) {}
+
+    std::string getText() const override;
+
+    static bool classof(const Node* N) {
+      return N->getKind() == NodeKind::VBar;
     }
 
   };
@@ -1082,6 +1099,54 @@ namespace bolt {
 
     inline ConstraintExpression(NodeKind Kind):
       Node(Kind) {}
+
+  };
+
+  class RecordTypeExpressionField : public Node {
+  public:
+
+    Identifier* Name;
+    Colon* Colon;
+    TypeExpression* TE;
+
+    inline RecordTypeExpressionField(
+      Identifier* Name,
+      class Colon* Colon,
+      TypeExpression* TE
+    ): Node(NodeKind::RecordTypeExpressionField),
+       Name(Name),
+       Colon(Colon),
+       TE(TE) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class RecordTypeExpression : public TypeExpression {
+  public:
+
+    LBrace* LBrace;
+    std::vector<std::tuple<RecordTypeExpressionField*, Comma*>> Fields;
+    VBar* VBar;
+    TypeExpression* Rest;
+    RBrace* RBrace;
+
+    inline RecordTypeExpression(
+      class LBrace* LBrace,
+      std::vector<std::tuple<RecordTypeExpressionField*, Comma*>> Fields,
+      class VBar* VBar,
+      TypeExpression* Rest,
+      class RBrace* RBrace
+    ): TypeExpression(NodeKind::RecordTypeExpression),
+       LBrace(LBrace),
+       Fields(Fields),
+       VBar(VBar),
+       Rest(Rest),
+       RBrace(RBrace) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
 
   };
 
@@ -2079,7 +2144,7 @@ namespace bolt {
 
     bool isVariable() const noexcept {
       // Variables in classes and instances are never possible, so we reflect this by excluding them here.
-      return !isSignature() && !isClass() && !isInstance() && (Pattern->getKind() != NodeKind::BindPattern || !Body);
+      return !isSignature() && !isClass() && !isInstance() && Params.empty() && (Pattern->getKind() != NodeKind::BindPattern || !Body);
     }
 
     bool isFunction() const noexcept {

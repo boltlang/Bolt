@@ -379,7 +379,9 @@ after_string_contents:
           Text.push_back(static_cast<char>(C1));
           getChar();
         }
-        if (Text == "->") {
+        if (Text == "|") {
+          return new VBar(StartLoc);
+        } else if (Text == "->") {
           return new RArrow(StartLoc);
         } else if (Text == "=>") {
           return new RArrowAlt(StartLoc);

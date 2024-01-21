@@ -1,6 +1,7 @@
 
 // TODO check for memory leaks everywhere a nullptr is returned
 
+#include <tuple>
 #include <vector>
 
 #include "bolt/Common.hpp"
@@ -385,6 +386,9 @@ after_constraints:
       LParen->unref();
       for (auto [CE, Comma]: Constraints) {
         CE->unref();
+        if (Comma) {
+          Comma->unref();
+        }
       }
       RParen->unref();
       RArrowAlt->unref();
@@ -398,6 +402,93 @@ after_constraints:
     switch (T0->getKind()) {
       case NodeKind::Identifier:
           return parseVarTypeExpression();
+      case NodeKind::LBrace:
+      {
+        Tokens.get();
+        auto LBrace = static_cast<class LBrace*>(T0);
+        std::vector<std::tuple<RecordTypeExpressionField*, Comma*>> Fields;
+        VBar* VBar = nullptr;
+        TypeExpression* Rest = nullptr;
+        for (;;) {
+          auto T1 = Tokens.peek();
+          if (T1->getKind() == NodeKind::RBrace) {
+            break;
+          }
+          auto Name = expectToken<Identifier>();
+          if (Name == nullptr) {
+            for (auto [Field, Comma]: Fields) {
+              Field->unref();
+              Comma->unref();
+            }
+            return nullptr;
+          }
+          auto Colon = expectToken<class Colon>();
+          if (Colon == nullptr) {
+            for (auto [Field, Comma]: Fields) {
+              Field->unref();
+              Comma->unref();
+            }
+            Name->unref();
+            return nullptr;
+          }
+          auto TE = parseTypeExpression();
+          if (TE == nullptr) {
+            for (auto [Field, Comma]: Fields) {
+              Field->unref();
+              Comma->unref();
+            }
+            Name->unref();
+            Colon->unref();
+            return nullptr;
+          }
+          auto Field = new RecordTypeExpressionField(Name, Colon, TE);
+          auto T3 = Tokens.peek();
+          if (T3->getKind() == NodeKind::RBrace) {
+            Fields.push_back(std::make_tuple(Field, nullptr));
+            break;
+          }
+          if (T3->getKind() == NodeKind::VBar) {
+            Tokens.get();
+            VBar = static_cast<class VBar*>(T3);
+            Rest = parseTypeExpression();
+            if (!Rest) {
+              for (auto [Field, Comma]: Fields) {
+                Field->unref();
+                Comma->unref();
+              }
+              Field->unref();
+              return nullptr;
+            }
+            auto T4 = Tokens.peek();
+            if (T4->getKind() != NodeKind::RBrace) {
+              for (auto [Field, Comma]: Fields) {
+                Field->unref();
+                Comma->unref();
+              }
+              Field->unref();
+              Rest->unref();
+              DE.add<UnexpectedTokenDiagnostic>(File, T4, std::vector { NodeKind::RBrace });
+              return nullptr;
+            }
+            break;
+          }
+          if (T3->getKind() == NodeKind::Comma) {
+            Tokens.get();
+            auto Comma = static_cast<class Comma*>(T3);
+            Fields.push_back(std::make_tuple(Field, Comma));
+            continue;
+          }
+          DE.add<UnexpectedTokenDiagnostic>(File, T3, std::vector { NodeKind::RBrace, NodeKind::Comma, NodeKind::VBar });
+          for (auto [Field, Comma]: Fields) {
+            Field->unref();
+            Comma->unref();
+          }
+          Field->unref();
+          return nullptr;
+        }
+        auto RBrace = static_cast<class RBrace*>(Tokens.get());
+        return new RecordTypeExpression(LBrace, Fields, VBar, Rest, RBrace);
+      }
       case NodeKind::LParen:
       {
         Tokens.get();
@@ -488,7 +579,16 @@ after_tuple_element:
     for (;;) {
       auto T1 = Tokens.peek();
       auto Kind = T1->getKind();
-      if (Kind == NodeKind::RArrow || Kind == NodeKind::Equals || Kind == NodeKind::BlockStart || Kind == NodeKind::LineFoldEnd || Kind == NodeKind::EndOfFile || Kind == NodeKind::RParen) {
+      if (Kind == NodeKind::Comma
+       || Kind == NodeKind::RArrow
+        || Kind == NodeKind::Equals
+         || Kind == NodeKind::BlockStart
+          || Kind == NodeKind::LineFoldEnd
+           || Kind == NodeKind::EndOfFile
+            || Kind == NodeKind::RParen
+             || Kind == NodeKind::RBracket
+              || Kind == NodeKind::RBrace
+               || Kind == NodeKind::VBar) {
         break;
       }
       auto TE = parsePrimitiveTypeExpression();
