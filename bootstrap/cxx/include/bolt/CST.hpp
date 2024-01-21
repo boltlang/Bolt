@@ -141,7 +141,9 @@ namespace bolt {
     TupleTypeExpression,
     BindPattern,
     LiteralPattern,
-    NamedPattern,
+    RecordPatternField,
+    NamedRecordPattern,
+    NamedTuplePattern,
     TuplePattern,
     NestedPattern,
     ListPattern,
@@ -1313,16 +1315,68 @@ namespace bolt {
 
   };
 
-  class NamedPattern : public Pattern {
+  class RecordPatternField : public Node {
+  public:
+
+    Identifier* Name;
+    Equals* Equals;
+    Pattern* Pattern;
+
+    inline RecordPatternField(
+      Identifier* Name,
+      class Equals* Equals,
+      class Pattern* Pattern
+    ): Node(NodeKind::RecordPatternField),
+       Name(Name),
+       Equals(Equals),
+       Pattern(Pattern) {}
+
+    inline RecordPatternField(
+      Identifier* Name
+    ): RecordPatternField(Name, nullptr, nullptr) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class NamedRecordPattern : public Pattern {
+  public:
+
+    std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
+    IdentifierAlt* Name;
+    LBrace* LBrace;
+    std::vector<std::tuple<RecordPatternField*, Comma*>> Fields;
+    RBrace* RBrace;
+
+    inline NamedRecordPattern(
+      std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
+      IdentifierAlt* Name,
+      class LBrace* LBrace,
+      std::vector<std::tuple<RecordPatternField*, Comma*>> Fields,
+      class RBrace* RBrace
+    ): Pattern(NodeKind::NamedRecordPattern),
+       ModulePath(ModulePath),
+       Name(Name),
+       LBrace(LBrace),
+       Fields(Fields),
+       RBrace(RBrace) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class NamedTuplePattern : public Pattern {
   public:
 
     IdentifierAlt* Name;
     std::vector<Pattern*> Patterns;
 
-    inline NamedPattern(
+    inline NamedTuplePattern(
       IdentifierAlt* Name,
       std::vector<Pattern*> Patterns
-    ): Pattern(NodeKind::NamedPattern),
+    ): Pattern(NodeKind::NamedTuplePattern),
        Name(Name),
        Patterns(Patterns) {}
 

@@ -73,7 +73,9 @@ namespace bolt {
         BOLT_GEN_CASE(TupleTypeExpression)
         BOLT_GEN_CASE(BindPattern)
         BOLT_GEN_CASE(LiteralPattern)
-        BOLT_GEN_CASE(NamedPattern)
+        BOLT_GEN_CASE(RecordPatternField)
+        BOLT_GEN_CASE(NamedRecordPattern)
+        BOLT_GEN_CASE(NamedTuplePattern)
         BOLT_GEN_CASE(TuplePattern)
         BOLT_GEN_CASE(NestedPattern)
         BOLT_GEN_CASE(ListPattern)
@@ -351,7 +353,15 @@ namespace bolt {
       static_cast<D*>(this)->visitPattern(N);
     }
 
-    void visitNamedPattern(NamedPattern* N) {
+    void visitRecordPatternField(RecordPatternField* N) {
+      static_cast<D*>(this)->visitNode(N);
+    }
+
+    void visitNamedRecordPattern(NamedRecordPattern* N) {
+      static_cast<D*>(this)->visitPattern(N);
+    }
+
+    void visitNamedTuplePattern(NamedTuplePattern* N) {
       static_cast<D*>(this)->visitPattern(N);
     }
 
@@ -563,7 +573,9 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(TupleTypeExpression)
         BOLT_GEN_CHILD_CASE(BindPattern)
         BOLT_GEN_CHILD_CASE(LiteralPattern)
-        BOLT_GEN_CHILD_CASE(NamedPattern)
+        BOLT_GEN_CHILD_CASE(RecordPatternField)
+        BOLT_GEN_CHILD_CASE(NamedRecordPattern)
+        BOLT_GEN_CHILD_CASE(NamedTuplePattern)
         BOLT_GEN_CHILD_CASE(TuplePattern)
         BOLT_GEN_CHILD_CASE(NestedPattern)
         BOLT_GEN_CHILD_CASE(ListPattern)
@@ -810,7 +822,36 @@ namespace bolt {
       BOLT_VISIT(N->Literal);
     }
 
-    void visitEachChild(NamedPattern* N) {
+    void visitEachChild(RecordPatternField* N) {
+      BOLT_VISIT(N->Name);
+      if (N->Equals) {
+        BOLT_VISIT(N->Equals);
+      }
+      if (N->Pattern) {
+        BOLT_VISIT(N->Pattern);
+      }
+    }
+
+    void visitEachChild(NamedRecordPattern* N) {
+      for (auto [Name, Dot]: N->ModulePath) {
+        BOLT_VISIT(Name);
+        if (Dot) {
+          BOLT_VISIT(Dot);
+        }
+      }
+      BOLT_VISIT(N->Name);
+      BOLT_VISIT(N->LBrace);
+      for (auto [Field, Comma]: N->Fields) {
+        BOLT_VISIT(Field);
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+      }
+      BOLT_VISIT(N->LBrace);
+      BOLT_VISIT(N->RBrace);
+    }
+
+    void visitEachChild(NamedTuplePattern* N) {
       BOLT_VISIT(N->Name);
       for (auto P: N->Patterns) {
         BOLT_VISIT(P);

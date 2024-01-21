@@ -1113,13 +1113,13 @@ namespace bolt {
         return Ty;
       }
 
-      case NodeKind::NamedPattern:
+      case NodeKind::NamedTuplePattern:
       {
-        auto P = static_cast<NamedPattern*>(Pattern);
+        auto P = static_cast<NamedTuplePattern*>(Pattern);
         auto Scm = lookup(P->Name->getCanonicalText(), SymKind::Var);
-        std::vector<Type*> ParamTypes;
+        std::vector<Type*> ElementTypes;
         for (auto P2: P->Patterns) {
-          ParamTypes.push_back(inferPattern(P2, Constraints, TVs));
+          ElementTypes.push_back(inferPattern(P2, Constraints, TVs));
         }
         if (!Scm) {
           DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
@@ -1127,7 +1127,32 @@ namespace bolt {
         }
         auto Ty = instantiate(Scm, P);
         auto RetTy = createTypeVar();
-        makeEqual(Ty, Type::buildArrow(ParamTypes, RetTy), P);
+        makeEqual(Ty, Type::buildArrow(ElementTypes, RetTy), P);
+        return RetTy;
+      }
+
+      case NodeKind::NamedRecordPattern:
+      {
+        auto P = static_cast<NamedRecordPattern*>(Pattern);
+        auto Scm = lookup(P->Name->getCanonicalText(), SymKind::Var);
+        if (Scm == nullptr) {
+          DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
+          return createTypeVar();
+        }
+        auto RecordTy = new Type(TNil());
+        for (auto [Field, Comma]: P->Fields) {
+          Type* FieldTy;
+          if (Field->Pattern) {
+            FieldTy = inferPattern(Field->Pattern, Constraints, TVs);
+          } else {
+            FieldTy = createTypeVar();
+            addBinding(Field->Name->getCanonicalText(), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
+          }
+          RecordTy = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(FieldTy)), RecordTy));
+        }
+        auto Ty = instantiate(Scm, P);
+        auto RetTy = createTypeVar();
+        makeEqual(Ty, new Type(TArrow(RecordTy, RetTy)), P);
         return RetTy;
       }
 

@@ -89,7 +89,7 @@ namespace bolt {
         return "a tuple type expression";
       case NodeKind::BindPattern:
         return "a variable binder";
-      case NodeKind::NamedPattern:
+      case NodeKind::NamedTuplePattern:
         return "a pattern for a variant member";
       case NodeKind::TuplePattern:
         return "a pattern for a tuple";

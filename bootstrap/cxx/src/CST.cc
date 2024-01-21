@@ -3,6 +3,7 @@
 
 #include "bolt/CST.hpp"
 #include "bolt/CSTVisitor.hpp"
+#include <variant>
 
 namespace bolt {
 
@@ -173,9 +174,21 @@ namespace bolt {
         addSymbol(Y->Name->Text, Decl, SymbolKind::Var);
         break;
       }
-      case NodeKind::NamedPattern:
+      case NodeKind::NamedRecordPattern:
       {
-        auto Y = static_cast<NamedPattern*>(X);
+        auto Y = static_cast<NamedRecordPattern*>(X);
+        for (auto [Field, Comma]: Y->Fields) {
+          if (Field->Pattern) {
+            visitPattern(Field->Pattern, Decl);
+          } else {
+            addSymbol(Field->Name->Text, Decl, SymbolKind::Var);
+          }
+        }
+        break;
+      }
+      case NodeKind::NamedTuplePattern:
+      {
+        auto Y = static_cast<NamedTuplePattern*>(X);
         for (auto P: Y->Patterns) {
           visitPattern(P, Decl);
         }
@@ -464,11 +477,36 @@ namespace bolt {
     return Literal;
   }
 
-  Token* NamedPattern::getFirstToken() const {
+  Token* RecordPatternField::getFirstToken() const {
     return Name;
   }
 
-  Token* NamedPattern::getLastToken() const {
+  Token* RecordPatternField::getLastToken() const {
+    if (Pattern) {
+      return Pattern->getLastToken();
+    }
+    if (Equals) {
+      return Equals;
+    }
+    return Name;
+  }
+
+  Token* NamedRecordPattern::getFirstToken() const {
+    if (!ModulePath.empty()) {
+      return std::get<0>(ModulePath.back());
+    }
+    return Name;
+  }
+
+  Token* NamedRecordPattern::getLastToken() const {
+    return RBrace;
+  }
+
+  Token* NamedTuplePattern::getFirstToken() const {
+    return Name;
+  }
+
+  Token* NamedTuplePattern::getLastToken() const {
     if (Patterns.size()) {
       return Patterns.back()->getLastToken();
     }

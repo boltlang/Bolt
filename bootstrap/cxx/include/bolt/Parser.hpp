@@ -71,7 +71,8 @@ namespace bolt {
 
     Token* expectToken(NodeKind Ty);
 
-    std::vector<RecordDeclarationField*> parseRecordFields();
+    std::vector<RecordDeclarationField*> parseRecordDeclarationFields();
+    std::optional<std::vector<std::tuple<RecordPatternField*, Comma*>>> parseRecordPatternFields();
 
     template<typename T>
     T* expectToken() {
@@ -97,7 +98,8 @@ namespace bolt {
     std::vector<Annotation*> parseAnnotations();
 
     void checkLineFoldEnd();
-    void skipToLineFoldEnd();
+    void skipPastLineFoldEnd();
+    void skipToRBrace();
 
   public:
 
