@@ -1,5 +1,5 @@
 
-# default build directory
+# default build directory for VSCode
 /build/
 
 # used by clangd and other programs
@@ -7,6 +7,9 @@
 
 # used for local development
 Makefile
+
+# Used by IDEs to get correct error messages
+compile_commands.json
 
 # quick test scripts in the main directory
 /*.bolt
