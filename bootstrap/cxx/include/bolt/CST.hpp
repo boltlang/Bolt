@@ -145,6 +145,7 @@ namespace bolt {
     BindPattern,
     LiteralPattern,
     RecordPatternField,
+    RecordPattern,
     NamedRecordPattern,
     NamedTuplePattern,
     TuplePattern,
@@ -1383,22 +1384,61 @@ namespace bolt {
   class RecordPatternField : public Node {
   public:
 
+    DotDot* DotDot;
     Identifier* Name;
     Equals* Equals;
     Pattern* Pattern;
 
     inline RecordPatternField(
+      class DotDot* DotDot,
       Identifier* Name,
       class Equals* Equals,
       class Pattern* Pattern
     ): Node(NodeKind::RecordPatternField),
+       DotDot(DotDot),
        Name(Name),
        Equals(Equals),
        Pattern(Pattern) {}
 
     inline RecordPatternField(
+      Identifier* Name,
+      class Equals* Equals,
+      class Pattern* Pattern
+    ): RecordPatternField(nullptr, Name, Equals, Pattern) {}
+
+    inline RecordPatternField(
+      class DotDot* DotDot
+    ): RecordPatternField(DotDot, nullptr, nullptr, nullptr) {}
+
+    inline RecordPatternField(
+      class DotDot* DotDot,
+      class Pattern* Pattern
+    ): RecordPatternField(DotDot, nullptr, nullptr, Pattern) {}
+
+    inline RecordPatternField(
       Identifier* Name
-    ): RecordPatternField(Name, nullptr, nullptr) {}
+    ): RecordPatternField(nullptr, Name, nullptr, nullptr) {}
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+  class RecordPattern : public Pattern {
+  public:
+
+    LBrace* LBrace;
+    std::vector<std::tuple<RecordPatternField*, Comma*>> Fields;
+    RBrace* RBrace;
+
+    inline RecordPattern(
+      class LBrace* LBrace,
+      std::vector<std::tuple<RecordPatternField*, Comma*>> Fields,
+      class RBrace* RBrace
+    ): Pattern(NodeKind::RecordPattern),
+       LBrace(LBrace),
+       Fields(Fields),
+       RBrace(RBrace) {}
 
     Token* getFirstToken() const override;
     Token* getLastToken() const override;

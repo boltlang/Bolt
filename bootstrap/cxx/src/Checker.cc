@@ -266,14 +266,14 @@ namespace bolt {
 
       case NodeKind::LetDeclaration:
       {
-        // Function declarations are handled separately in forwardDeclareLetDeclaration()
+        // Function declarations are handled separately in forwardDeclareLetDeclaration() and inferExpression()
         auto Decl = static_cast<LetDeclaration*>(X);
         if (!Decl->isVariable()) {
           break;
         }
         Type* Ty;
         if (Decl->TypeAssert) {
-          Ty = inferTypeExpression(Decl->TypeAssert->TypeExpression, false);
+          Ty = inferTypeExpression(Decl->TypeAssert->TypeExpression);
         } else {
           Ty = createTypeVar();
         }
@@ -291,6 +291,7 @@ namespace bolt {
         for (auto TE: Decl->TVs) {
           auto TV = createRigidVar(TE->Name->getCanonicalText());
           Decl->Ctx->TVs->emplace(TV);
+          Decl->Ctx->Env.add(TE->Name->getCanonicalText(), new Forall(TV), SymKind::Type);
           Vars.push_back(TV);
         }
 
@@ -313,7 +314,7 @@ namespace bolt {
               std::vector<Type*> ParamTypes;
               for (auto Element: TupleMember->Elements) {
                 // inferTypeExpression will look up any TVars that were part of the signature of Decl
-                ParamTypes.push_back(inferTypeExpression(Element));
+                ParamTypes.push_back(inferTypeExpression(Element, false));
               }
               Decl->Ctx->Parent->Env.add(
                 TupleMember->Name->getCanonicalText(),
@@ -350,6 +351,8 @@ namespace bolt {
         std::vector<Type*> Vars;
         for (auto TE: Decl->Vars) {
           auto TV = createRigidVar(TE->Name->getCanonicalText());
+          Decl->Ctx->TVs->emplace(TV);
+          Decl->Ctx->Env.add(TE->Name->getCanonicalText(), new Forall(TV), SymKind::Type);
           Vars.push_back(TV);
         }
 
@@ -370,7 +373,7 @@ namespace bolt {
           FieldsTy = new Type(
             TField(
               Field->Name->getCanonicalText(),
-              new Type(TPresent(inferTypeExpression(Field->TypeExpression))),
+              new Type(TPresent(inferTypeExpression(Field->TypeExpression, false))),
               FieldsTy
             )
           );
@@ -811,7 +814,7 @@ namespace bolt {
     }
   }
 
-  Type* Checker::inferTypeExpression(TypeExpression* N, bool IsPoly) {
+  Type* Checker::inferTypeExpression(TypeExpression* N, bool AutoVars) {
 
     switch (N->getKind()) {
 
@@ -833,9 +836,9 @@ namespace bolt {
       case NodeKind::AppTypeExpression:
       {
         auto AppTE = static_cast<AppTypeExpression*>(N);
-        Type* Ty = inferTypeExpression(AppTE->Op, IsPoly);
+        Type* Ty = inferTypeExpression(AppTE->Op, AutoVars);
         for (auto Arg: AppTE->Args) {
-          Ty = new Type(TApp(Ty, inferTypeExpression(Arg, IsPoly)));
+          Ty = new Type(TApp(Ty, inferTypeExpression(Arg, AutoVars)));
         }
         N->setType(Ty);
         return Ty;
@@ -846,10 +849,10 @@ namespace bolt {
         auto VarTE = static_cast<VarTypeExpression*>(N);
         auto Ty = lookupMono(VarTE->Name->getCanonicalText(), SymKind::Type);
         if (Ty == nullptr) {
-          if (IsPoly && Config.typeVarsRequireForall()) {
+          if (!AutoVars || Config.typeVarsRequireForall()) {
             DE.add<BindingNotFoundDiagnostic>(VarTE->Name->getCanonicalText(), VarTE->Name);
           }
-          Ty = IsPoly ? createRigidVar(VarTE->Name->getCanonicalText()) : createTypeVar();
+          Ty = createRigidVar(VarTE->Name->getCanonicalText());
           addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty), SymKind::Type);
         }
         ZEN_ASSERT(Ty->isVar());
@@ -860,9 +863,9 @@ namespace bolt {
       case NodeKind::RecordTypeExpression:
       {
         auto RecTE = static_cast<RecordTypeExpression*>(N);
-        auto Ty = RecTE->Rest ? inferTypeExpression(RecTE->Rest, IsPoly) : new Type(TNil());
+        auto Ty = RecTE->Rest ? inferTypeExpression(RecTE->Rest, AutoVars) : new Type(TNil());
         for (auto [Field, Comma]: RecTE->Fields) {
-          Ty = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(inferTypeExpression(Field->TE, IsPoly))), Ty));
+          Ty = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(inferTypeExpression(Field->TE, AutoVars))), Ty));
         }
         N->setType(Ty);
         return Ty;
@@ -873,7 +876,7 @@ namespace bolt {
         auto TupleTE = static_cast<TupleTypeExpression*>(N);
         std::vector<Type*> ElementTypes;
         for (auto [TE, Comma]: TupleTE->Elements) {
-          ElementTypes.push_back(inferTypeExpression(TE, IsPoly));
+          ElementTypes.push_back(inferTypeExpression(TE, AutoVars));
         }
         auto Ty = new Type(TTuple(ElementTypes));
         N->setType(Ty);
@@ -883,7 +886,7 @@ namespace bolt {
       case NodeKind::NestedTypeExpression:
       {
         auto NestedTE = static_cast<NestedTypeExpression*>(N);
-        auto Ty = inferTypeExpression(NestedTE->TE, IsPoly);
+        auto Ty = inferTypeExpression(NestedTE->TE, AutoVars);
         N->setType(Ty);
         return Ty;
       }
@@ -893,9 +896,9 @@ namespace bolt {
         auto ArrowTE = static_cast<ArrowTypeExpression*>(N);
         std::vector<Type*> ParamTypes;
         for (auto ParamType: ArrowTE->ParamTypes) {
-          ParamTypes.push_back(inferTypeExpression(ParamType, IsPoly));
+          ParamTypes.push_back(inferTypeExpression(ParamType, AutoVars));
         }
-        auto ReturnType = inferTypeExpression(ArrowTE->ReturnType, IsPoly);
+        auto ReturnType = inferTypeExpression(ArrowTE->ReturnType, AutoVars);
         auto Ty = Type::buildArrow(ParamTypes, ReturnType);
         N->setType(Ty);
         return Ty;
@@ -907,7 +910,7 @@ namespace bolt {
         for (auto [C, Comma]: QTE->Constraints) {
           inferConstraintExpression(C);
         }
-        auto Ty = inferTypeExpression(QTE->TE, IsPoly);
+        auto Ty = inferTypeExpression(QTE->TE, AutoVars);
         N->setType(Ty);
         return Ty;
       }
@@ -1111,6 +1114,15 @@ namespace bolt {
     return Ty;
   }
 
+  RecordPatternField* getRestField(std::vector<std::tuple<RecordPatternField*, Comma*>> Fields) {
+    for (auto [Field, Comma]: Fields) {
+      if (Field->DotDot) {
+        return Field;
+      }
+    }
+    return nullptr;
+  }
+
   Type* Checker::inferPattern(
     Pattern* Pattern,
     ConstraintSet* Constraints,
@@ -1145,6 +1157,34 @@ namespace bolt {
         return RetTy;
       }
 
+      case NodeKind::RecordPattern:
+      {
+        auto P = static_cast<RecordPattern*>(Pattern);
+        auto RestField = getRestField(P->Fields);
+        Type* RecordTy;
+        if (RestField == nullptr) {
+          RecordTy = new Type(TNil());
+        } else if (RestField->Pattern) {
+          RecordTy = inferPattern(RestField->Pattern);
+        } else {
+          RecordTy = createTypeVar();
+        }
+        for (auto [Field, Comma]: P->Fields) {
+          if (Field->DotDot) {
+            continue;
+          }
+          Type* FieldTy;
+          if (Field->Pattern) {
+            FieldTy = inferPattern(Field->Pattern, Constraints, TVs);
+          } else {
+            FieldTy = createTypeVar();
+            addBinding(Field->Name->getCanonicalText(), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
+          }
+          RecordTy = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(FieldTy)), RecordTy));
+        }
+        return RecordTy;
+      }
+
       case NodeKind::NamedRecordPattern:
       {
         auto P = static_cast<NamedRecordPattern*>(Pattern);
@@ -1153,8 +1193,19 @@ namespace bolt {
           DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
           return createTypeVar();
         }
-        auto RecordTy = new Type(TNil());
+        auto RestField = getRestField(P->Fields);
+        Type* RecordTy;
+        if (RestField == nullptr) {
+          RecordTy = new Type(TNil());
+        } else if (RestField->Pattern) {
+          RecordTy = inferPattern(RestField->Pattern);
+        } else {
+          RecordTy = createTypeVar();
+        }
         for (auto [Field, Comma]: P->Fields) {
+          if (Field->DotDot) {
+            continue;
+          }
           Type* FieldTy;
           if (Field->Pattern) {
             FieldTy = inferPattern(Field->Pattern, Constraints, TVs);

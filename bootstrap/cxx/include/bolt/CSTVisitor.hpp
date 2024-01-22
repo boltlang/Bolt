@@ -77,6 +77,7 @@ namespace bolt {
         BOLT_GEN_CASE(BindPattern)
         BOLT_GEN_CASE(LiteralPattern)
         BOLT_GEN_CASE(RecordPatternField)
+        BOLT_GEN_CASE(RecordPattern)
         BOLT_GEN_CASE(NamedRecordPattern)
         BOLT_GEN_CASE(NamedTuplePattern)
         BOLT_GEN_CASE(TuplePattern)
@@ -372,6 +373,10 @@ namespace bolt {
       static_cast<D*>(this)->visitNode(N);
     }
 
+    void visitRecordPattern(RecordPattern* N) {
+      static_cast<D*>(this)->visitPattern(N);
+    }
+
     void visitNamedRecordPattern(NamedRecordPattern* N) {
       static_cast<D*>(this)->visitPattern(N);
     }
@@ -592,6 +597,7 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(BindPattern)
         BOLT_GEN_CHILD_CASE(LiteralPattern)
         BOLT_GEN_CHILD_CASE(RecordPatternField)
+        BOLT_GEN_CHILD_CASE(RecordPattern)
         BOLT_GEN_CHILD_CASE(NamedRecordPattern)
         BOLT_GEN_CHILD_CASE(NamedTuplePattern)
         BOLT_GEN_CHILD_CASE(TuplePattern)
@@ -867,13 +873,29 @@ namespace bolt {
     }
 
     void visitEachChild(RecordPatternField* N) {
-      BOLT_VISIT(N->Name);
+      if (N->DotDot) {
+        BOLT_VISIT(N->DotDot);
+      }
+      if (N->Name) {
+        BOLT_VISIT(N->Name);
+      }
       if (N->Equals) {
         BOLT_VISIT(N->Equals);
       }
       if (N->Pattern) {
         BOLT_VISIT(N->Pattern);
       }
+    }
+
+    void visitEachChild(RecordPattern* N) {
+      BOLT_VISIT(N->LBrace);
+      for (auto [Field, Comma]: N->Fields) {
+        BOLT_VISIT(Field);
+        if (Comma) {
+          BOLT_VISIT(Comma);
+        }
+      }
+      BOLT_VISIT(N->RBrace);
     }
 
     void visitEachChild(NamedRecordPattern* N) {

@@ -244,7 +244,7 @@ namespace bolt {
     void forwardDeclareFunctionDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
 
     Type* inferExpression(Expression* Expression);
-    Type* inferTypeExpression(TypeExpression* TE, bool IsPoly = true);
+    Type* inferTypeExpression(TypeExpression* TE, bool AutoVars = true);
     Type* inferLiteral(Literal* Lit);
     Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
 

@@ -158,6 +158,23 @@ finish:
       if (T0->getKind() == NodeKind::RBrace) {
         break;
       }
+      if (T0->getKind() == NodeKind::DotDot) {
+        Tokens.get();
+        auto DotDot = static_cast<class DotDot*>(T0);
+        auto T1 = Tokens.peek();
+        if (T1->getKind() == NodeKind::RBrace) {
+          Fields.push_back(std::make_tuple(new RecordPatternField(DotDot), nullptr));
+          break;
+        }
+        auto P = parseWidePattern();
+        auto T2 = Tokens.peek();
+        if (T2->getKind() != NodeKind::RBrace) {
+          DE.add<UnexpectedTokenDiagnostic>(File, T2, std::vector { NodeKind::RBrace, NodeKind::Comma });
+          return {};
+        }
+        Fields.push_back(std::make_tuple(new RecordPatternField(DotDot, P), nullptr));
+        break;
+      }
       auto Name = expectToken<Identifier>();
       Equals* Equals = nullptr;
       Pattern* Pattern = nullptr;
@@ -194,6 +211,19 @@ finish:
       case NodeKind::Identifier:
         Tokens.get();
         return new BindPattern(static_cast<Identifier*>(T0));
+      case NodeKind::LBrace:
+      {
+        Tokens.get();
+        auto LBrace = static_cast<class LBrace*>(T0);
+        auto Fields = parseRecordPatternFields();
+        if (!Fields) {
+          LBrace->unref();
+          skipToRBrace();
+          return nullptr;
+        }
+        auto RBrace = static_cast<class RBrace*>(Tokens.get());
+        return new RecordPattern(LBrace, *Fields, RBrace);
+      }
       case NodeKind::IdentifierAlt:
       {
         Tokens.get();
@@ -207,6 +237,7 @@ finish:
           Tokens.get();
           auto Fields = parseRecordPatternFields();
           if (!Fields) {
+            LBrace->unref();
             skipToRBrace();
             return nullptr;
           }

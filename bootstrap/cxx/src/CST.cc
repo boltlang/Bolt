@@ -174,13 +174,25 @@ namespace bolt {
         addSymbol(Y->Name->Text, Decl, SymbolKind::Var);
         break;
       }
+      case NodeKind::RecordPattern:
+      {
+        auto Y = static_cast<RecordPattern*>(X);
+        for (auto [Field, Comma]: Y->Fields) {
+          if (Field->Pattern) {
+            visitPattern(Field->Pattern, Decl);
+          } else if (Field->Name) {
+            addSymbol(Field->Name->Text, Decl, SymbolKind::Var);
+          }
+        }
+        break;
+      }
       case NodeKind::NamedRecordPattern:
       {
         auto Y = static_cast<NamedRecordPattern*>(X);
         for (auto [Field, Comma]: Y->Fields) {
           if (Field->Pattern) {
             visitPattern(Field->Pattern, Decl);
-          } else {
+          } else if (Field->Name) {
             addSymbol(Field->Name->Text, Decl, SymbolKind::Var);
           }
         }
@@ -505,6 +517,14 @@ namespace bolt {
       return Equals;
     }
     return Name;
+  }
+
+  Token* RecordPattern::getFirstToken() const {
+    return LBrace;
+  }
+
+  Token* RecordPattern::getLastToken() const {
+    return RBrace;
   }
 
   Token* NamedRecordPattern::getFirstToken() const {
