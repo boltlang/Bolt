@@ -5,6 +5,9 @@
 # used by clangd and other programs
 .cache/
 
+# created by pyenv
+.python-version
+
 # used for local development
 Makefile
 
