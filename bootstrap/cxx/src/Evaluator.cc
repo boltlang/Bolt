@@ -6,12 +6,12 @@
 
 namespace bolt {
 
-  Value Evaluator::evaluateExpression(Expression* X, Env& E) {
+  Value Evaluator::evaluateExpression(Expression* X, Env& Env) {
     switch (X->getKind()) {
       case NodeKind::ReferenceExpression:
       {
         auto RE = static_cast<ReferenceExpression*>(X);
-        return E.lookup(RE->Name->getCanonicalText());
+        return Env.lookup(getCanonicalText(RE->Name));
         // auto Decl = RE->getScope()->lookup(RE->getSymbolPath());
         // ZEN_ASSERT(Decl && Decl->getKind() == NodeKind::FunctionDeclaration);
         // return static_cast<FunctionDeclaration*>(Decl);
@@ -31,10 +31,10 @@ namespace bolt {
       case NodeKind::CallExpression:
       {
         auto CE = static_cast<CallExpression*>(X);
-        auto Op = evaluateExpression(CE->Function, E);
+        auto Op = evaluateExpression(CE->Function, Env);
         std::vector<Value> Args;
         for (auto Arg: CE->Args) {
-          Args.push_back(evaluateExpression(Arg, E));
+          Args.push_back(evaluateExpression(Arg, Env));
         }
         return apply(Op, Args);
       }
@@ -48,7 +48,7 @@ namespace bolt {
       case NodeKind::BindPattern:
       {
         auto BP = static_cast<BindPattern*>(P);
-        E.add(BP->Name->getCanonicalText(), V);
+        E.add(getCanonicalText(BP->Name), V);
         break;
       }
       default:

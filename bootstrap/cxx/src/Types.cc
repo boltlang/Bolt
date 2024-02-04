@@ -102,6 +102,7 @@ namespace bolt {
       case TypeKind::App:
         return App == Other.App;
     }
+    ZEN_UNREACHABLE
   }
 
   void Type::visitEachChild(std::function<void(Type*)> Proc) {
@@ -223,6 +224,7 @@ namespace bolt {
         return new Type(TPresent(NewTy));
       }
     }
+    ZEN_UNREACHABLE
   }
 
   Type* Type::substitute(const TVSub &Sub) {
@@ -326,6 +328,7 @@ namespace bolt {
       case TypeKind::Present:
         return Present.Ty->hasTypeVar(TV);
     }
+    ZEN_UNREACHABLE
   }
 
 }

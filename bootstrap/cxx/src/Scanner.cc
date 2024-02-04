@@ -500,7 +500,8 @@ after_string_contents:
       }
     }
 
-
+    ZEN_UNREACHABLE
   }
+
 
 }

@@ -125,10 +125,11 @@ namespace bolt {
     LineFoldEnd,
     CustomOperator,
     Assignment,
-    Identifier,
-    IdentifierAlt,
     StringLiteral,
     IntegerLiteral,
+    Identifier,
+    IdentifierAlt,
+    WrappedOperator,
     ExpressionAnnotation,
     TypeAssertAnnotation,
     TypeclassConstraintExpression,
@@ -196,6 +197,11 @@ namespace bolt {
 
   using NodeFlagsMask = unsigned;
 
+  class Node;
+
+  template<typename T>
+  bool _is_helper(const Node* N) noexcept;
+
   class Node {
 
     unsigned RefCount = 1;
@@ -229,17 +235,7 @@ namespace bolt {
 
     template<typename T>
     bool is() const noexcept {
-      return Kind == getNodeType<T>();
-    }
-
-    template<>
-    bool is<Expression>() const noexcept {
-      return Kind == NodeKind::ReferenceExpression
-          || Kind == NodeKind::LiteralExpression
-          || Kind == NodeKind::PrefixExpression
-          || Kind == NodeKind::InfixExpression
-          || Kind == NodeKind::CallExpression
-          || Kind == NodeKind::NestedExpression;
+      return _is_helper<T>(this);
     }
 
     template<typename T>
@@ -261,6 +257,21 @@ namespace bolt {
     virtual ~Node() {}
 
   };
+
+  template<typename T>
+  bool _is_helper(const Node* N) noexcept {
+    return N->getKind() == getNodeType<T>();
+  }
+
+  template<>
+  inline bool _is_helper<Expression>(const Node* N) noexcept {
+    return N->getKind() == NodeKind::ReferenceExpression
+        || N->getKind() == NodeKind::LiteralExpression
+        || N->getKind() == NodeKind::PrefixExpression
+        || N->getKind() == NodeKind::InfixExpression
+        || N->getKind() == NodeKind::CallExpression
+        || N->getKind() == NodeKind::NestedExpression;
+  }
 
   enum class SymbolKind {
     Var,
@@ -352,6 +363,31 @@ namespace bolt {
     }
 
   };
+
+  /// Any node that can be used as an operator
+  ///
+  /// This includes the following nodes:
+  /// - VBar
+  /// - CustomOperator
+  using Operator = Token;
+
+  /// Any node that can be used as a kind of identifier.
+  ///
+  /// This includes the following nodes:
+  ///  - Identifier
+  ///  - IdentifierAlt
+  ///  - WrappedOperator
+  using Symbol = Node;
+
+  inline bool isSymbol(const Node* N) {
+    return N->getKind() == NodeKind::Identifier
+        || N->getKind() == NodeKind::IdentifierAlt
+        || N->getKind() == NodeKind::WrappedOperator;
+  }
+
+  /// Get the text that is actually represented by a symbol, without all the
+  /// syntactic sugar.
+  ByteString getCanonicalText(const Symbol* N);
 
   class Equals : public Token {
   public:
@@ -889,30 +925,13 @@ namespace bolt {
 
   };
 
-  class Symbol : public Token {
-  public:
-
-    inline Symbol(NodeKind Kind, TextLoc StartLoc):
-      Token(Kind, StartLoc) {}
-
-    virtual ByteString getCanonicalText() = 0;
-
-    static bool classof(const Node* N) {
-      return N->getKind() == NodeKind::Identifier
-          || N->getKind() == NodeKind::IdentifierAlt;
-    }
-
-  };
-
-  class Identifier : public Symbol {
+  class Identifier : public Token {
   public:
 
     ByteString Text;
 
     Identifier(ByteString Text, TextLoc StartLoc = TextLoc::empty()):
-      Symbol(NodeKind::Identifier, StartLoc), Text(Text) {}
-
-    ByteString getCanonicalText() override;
+      Token(NodeKind::Identifier, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
@@ -924,15 +943,13 @@ namespace bolt {
 
   };
 
-  class IdentifierAlt : public Symbol {
+  class IdentifierAlt : public Token {
   public:
 
     ByteString Text;
 
     IdentifierAlt(ByteString Text, TextLoc StartLoc):
-      Symbol(NodeKind::IdentifierAlt, StartLoc), Text(Text) {}
-
-    ByteString getCanonicalText() override;
+      Token(NodeKind::IdentifierAlt, StartLoc), Text(Text) {}
 
     std::string getText() const override;
 
@@ -1020,8 +1037,8 @@ namespace bolt {
   class ExpressionAnnotation : public Annotation {
   public:
 
-    At* At;
-    Expression* Expression;
+    class At* At;
+    class Expression* Expression;
 
     inline ExpressionAnnotation(
       class At* At,
@@ -1044,8 +1061,8 @@ namespace bolt {
   class TypeAssertAnnotation : public Annotation {
   public:
 
-    At* At;
-    Colon* Colon;
+    class At* At;
+    class Colon* Colon;
     TypeExpression* TE;
 
     inline TypeAssertAnnotation(
@@ -1107,7 +1124,7 @@ namespace bolt {
   public:
 
     Identifier* Name;
-    Colon* Colon;
+    class Colon* Colon;
     TypeExpression* TE;
 
     inline RecordTypeExpressionField(
@@ -1127,11 +1144,11 @@ namespace bolt {
   class RecordTypeExpression : public TypeExpression {
   public:
 
-    LBrace* LBrace;
+    class LBrace* LBrace;
     std::vector<std::tuple<RecordTypeExpressionField*, Comma*>> Fields;
-    VBar* VBar;
+    class VBar* VBar;
     TypeExpression* Rest;
-    RBrace* RBrace;
+    class RBrace* RBrace;
 
     inline RecordTypeExpression(
       class LBrace* LBrace,
@@ -1183,9 +1200,9 @@ namespace bolt {
     TypeExpression* Right;
 
     inline EqualityConstraintExpression(
-    TypeExpression* Left,
-    class Tilde* Tilde,
-    TypeExpression* Right
+      TypeExpression* Left,
+      class Tilde* Tilde,
+      TypeExpression* Right
     ): ConstraintExpression(NodeKind::EqualityConstraintExpression),
        Left(Left),
        Tilde(Tilde),
@@ -1297,9 +1314,9 @@ namespace bolt {
   class NestedTypeExpression : public TypeExpression {
   public:
 
-    LParen* LParen;
+    class LParen* LParen;
     TypeExpression* TE;
-    RParen* RParen;
+    class RParen* RParen;
 
     inline NestedTypeExpression(
       class LParen* LParen,
@@ -1318,9 +1335,9 @@ namespace bolt {
   class TupleTypeExpression : public TypeExpression {
   public:
 
-    LParen* LParen;
+    class LParen* LParen;
     std::vector<std::tuple<TypeExpression*, Comma*>> Elements;
-    RParen* RParen;
+    class RParen* RParen;
 
     inline TupleTypeExpression(
       class LParen* LParen,
@@ -1336,6 +1353,32 @@ namespace bolt {
 
   };
 
+  class WrappedOperator : public Symbol {
+  public:
+
+    class LParen* LParen;
+    Token* Op;
+    class RParen* RParen;
+
+    WrappedOperator(
+      class LParen* LParen,
+      Token* Operator,
+      class RParen* RParen
+    ): Symbol(NodeKind::WrappedOperator),
+       LParen(LParen),
+       Op(Operator),
+       RParen(RParen) {}
+
+    inline Token* getOperator() const {
+      return Op;
+    }
+
+    Token* getFirstToken() const override;
+    Token* getLastToken() const override;
+
+  };
+
+
   class Pattern : public Node {
   protected:
 
@@ -1347,10 +1390,10 @@ namespace bolt {
   class BindPattern : public Pattern {
   public:
 
-    Identifier* Name;
+    Symbol* Name;
 
     BindPattern(
-      Identifier* Name
+      Symbol* Name
     ): Pattern(NodeKind::BindPattern),
        Name(Name) {}
 
@@ -1384,10 +1427,10 @@ namespace bolt {
   class RecordPatternField : public Node {
   public:
 
-    DotDot* DotDot;
+    class DotDot* DotDot;
     Identifier* Name;
-    Equals* Equals;
-    Pattern* Pattern;
+    class Equals* Equals;
+    class Pattern* Pattern;
 
     inline RecordPatternField(
       class DotDot* DotDot,
@@ -1427,9 +1470,9 @@ namespace bolt {
   class RecordPattern : public Pattern {
   public:
 
-    LBrace* LBrace;
+    class LBrace* LBrace;
     std::vector<std::tuple<RecordPatternField*, Comma*>> Fields;
-    RBrace* RBrace;
+    class RBrace* RBrace;
 
     inline RecordPattern(
       class LBrace* LBrace,
@@ -1450,9 +1493,9 @@ namespace bolt {
 
     std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
     IdentifierAlt* Name;
-    LBrace* LBrace;
+    class LBrace* LBrace;
     std::vector<std::tuple<RecordPatternField*, Comma*>> Fields;
-    RBrace* RBrace;
+    class RBrace* RBrace;
 
     inline NamedRecordPattern(
       std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
@@ -1493,10 +1536,10 @@ namespace bolt {
   class TuplePattern : public Pattern {
   public:
 
-    LParen* LParen;
+    class LParen* LParen;
     std::vector<std::tuple<Pattern*, Comma*>> Elements;
-    RParen* RParen;
-  
+    class RParen* RParen;
+
     inline TuplePattern(
       class LParen* LParen,
       std::vector<std::tuple<Pattern*, Comma*>> Elements,
@@ -1583,7 +1626,7 @@ namespace bolt {
        Name(Name) {}
 
     inline ByteString getNameAsString() const noexcept {
-      return Name->getCanonicalText();
+      return getCanonicalText(Name);
     }
 
     Token* getFirstToken() const override;
@@ -1656,11 +1699,11 @@ namespace bolt {
   public:
 
     Expression* E;
-    Dot* Dot;
+    class Dot* Dot;
     Token* Name;
 
     inline MemberExpression(
-      class Expression* E,
+      Expression* E,
       class Dot* Dot,
       Token* Name
     ): Expression(NodeKind::MemberExpression),
@@ -1867,7 +1910,7 @@ namespace bolt {
   public:
 
     Identifier* Name;
-    Equals* Equals;
+    class Equals* Equals;
     Expression* E;
 
     inline RecordExpressionField(
@@ -1891,9 +1934,9 @@ namespace bolt {
   class RecordExpression : public Expression {
   public:
 
-    LBrace* LBrace;
+    class LBrace* LBrace;
     std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields;
-    RBrace* RBrace;
+    class RBrace* RBrace;
 
     inline RecordExpression(
       class LBrace* LBrace,
@@ -2191,13 +2234,13 @@ namespace bolt {
       return !isSignature() && !isVariable();
     }
 
-    Identifier* getName() const noexcept {
+    Symbol* getName() const noexcept {
       ZEN_ASSERT(Pattern->getKind() == NodeKind::BindPattern);
       return static_cast<BindPattern*>(Pattern)->Name;
     }
 
     ByteString getNameAsString() const noexcept {
-      return getName()->getCanonicalText();
+      return getCanonicalText(getName());
     }
 
     Token* getFirstToken() const override;
@@ -2357,7 +2400,7 @@ namespace bolt {
   public:
 
     IdentifierAlt* Name;
-    BlockStart* BlockStart;
+    class BlockStart* BlockStart;
     std::vector<RecordDeclarationField*> Fields;
 
     inline RecordVariantDeclarationMember(

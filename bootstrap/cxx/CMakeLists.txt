@@ -13,6 +13,10 @@ set(ICU_INCLUDE_DIRS "${ICU_DIR}/include")
 set(ICU_LIBRARY_DIRS "${ICU_DIR}/lib")
 set(ICU_LIBRARIES icuuc)
 
+if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(BOLT_DEBUG ON)
+endif()
+
 add_library(
   BoltCore
   #src/Text.cc
@@ -33,10 +37,17 @@ target_link_directories(
 target_compile_options(
   BoltCore
   PUBLIC
-  -fstandalone-debug
   -Werror
   ${ICU_CFLAGS}
 )
+
+if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND BOLT_DEBUG)
+  target_compile_options(
+    BoltCore
+    PUBLIC
+    -fstandalone-debug
+  )
+endif()
 target_include_directories(
   BoltCore
   PUBLIC

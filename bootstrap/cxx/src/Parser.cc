@@ -32,6 +32,16 @@
 
 namespace bolt {
 
+  bool isOperator(Token* T) {
+    switch (T->getKind()) {
+      case NodeKind::VBar:
+      case NodeKind::CustomOperator:
+        return true;
+      default:
+        return false;
+    }
+  }
+
   std::optional<OperatorInfo> OperatorTable::getInfix(Token* T) {
     auto Match = Mapping.find(T->getText());
     if (Match == Mapping.end() || !Match->second.isInfix()) {
@@ -810,7 +820,7 @@ after_tuple_element:
           ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), static_cast<class Dot*>(T2)));
         }
         auto T3 = Tokens.get();
-        if (!isa<Symbol>(T3)) {
+        if (!T3->is<Identifier>() && !T3->is<IdentifierAlt>()) {
           for (auto [Name, Dot]: ModulePath) {
             Name->unref();
             Dot->unref();
@@ -938,13 +948,14 @@ finish:
       auto T1 = Tokens.peek();
       if (T1->getKind() == NodeKind::LineFoldEnd
           || T1->getKind() == NodeKind::RParen
+          || T1->getKind() == NodeKind::RBracket
           || T1->getKind() == NodeKind::RBrace
           || T1->getKind() == NodeKind::BlockStart
           || T1->getKind() == NodeKind::Comma
           || ExprOperators.isInfix(T1)) {
         break;
       }
-      auto Arg = parsePrimitiveExpression();
+      auto Arg = parseMemberExpression();
       if (!Arg) {
         Operator->unref();
         for (auto Arg: Args) {
@@ -1137,6 +1148,8 @@ finish:
     ForeignKeyword* Foreign = nullptr;
     LetKeyword* Let;
     MutKeyword* Mut = nullptr;
+    Pattern* Name;
+    std::vector<Parameter*> Params;
     TypeAssert* TA = nullptr;
     LetBody* Body = nullptr;
 
@@ -1167,27 +1180,49 @@ finish:
       Mut = static_cast<MutKeyword*>(T1);
     }
 
-    auto Pattern = parseNarrowPattern();
-    if (!Pattern) {
-      if (Pub) {
-        Pub->unref();
+    auto T2 = Tokens.peek(0);
+    auto T3 = Tokens.peek(1);
+    auto T4 = Tokens.peek(2);
+    if (T2->getKind() == NodeKind::LParen && isOperator(T3) && T4->getKind() == NodeKind::RParen) {
+      Tokens.get();
+      Tokens.get();
+      Tokens.get();
+      Name = new BindPattern(
+        new WrappedOperator(
+          static_cast<class LParen*>(T2),
+          T3,
+          static_cast<class RParen*>(T3)
+        )
+      );
+    } else if (isOperator(T3)) {
+      auto P1 = parseNarrowPattern();
+      Params.push_back(new Parameter(P1, nullptr));
+      Tokens.get();
+      auto P2 = parseNarrowPattern();
+      Params.push_back(new Parameter(P2, nullptr));
+      Name = new BindPattern(T3);
+      goto after_params;
+    } else {
+      Name = parseNarrowPattern();
+      if (!Name) {
+        if (Pub) {
+          Pub->unref();
+        }
+        if (Foreign) {
+          Foreign->unref();
+        }
+        Let->unref();
+        if (Mut) {
+          Mut->unref();
+        }
+        skipPastLineFoldEnd();
+        return nullptr;
       }
-      if (Foreign) {
-        Foreign->unref();
-      }
-      Let->unref();
-      if (Mut) {
-        Mut->unref();
-      }
-      skipPastLineFoldEnd();
-      return nullptr;
     }
 
-    std::vector<Parameter*> Params;
-    Token* T2;
     for (;;) {
-      T2 = Tokens.peek();
-      switch (T2->getKind()) {
+      auto T5 = Tokens.peek();
+      switch (T5->getKind()) {
         case NodeKind::LineFoldEnd:
         case NodeKind::BlockStart:
         case NodeKind::Equals:
@@ -1205,26 +1240,28 @@ finish:
 
 after_params:
 
-    if (T2->getKind() == NodeKind::Colon) {
+    auto T5 = Tokens.peek();
+
+    if (T5->getKind() == NodeKind::Colon) {
       Tokens.get();
       auto TE = parseTypeExpression();
       if (TE) {
-        TA = new TypeAssert(static_cast<Colon*>(T2), TE);
+        TA = new TypeAssert(static_cast<Colon*>(T5), TE);
       } else {
         skipPastLineFoldEnd();
         goto finish;
       }
-      T2 = Tokens.peek();
+      T5 = Tokens.peek();
     }
 
-    switch (T2->getKind()) {
+    switch (T5->getKind()) {
       case NodeKind::BlockStart:
       {
         Tokens.get();
         std::vector<Node*> Elements;
         for (;;) {
-          auto T3 = Tokens.peek();
-          if (T3->getKind() == NodeKind::BlockEnd) {
+          auto T6 = Tokens.peek();
+          if (T6->getKind() == NodeKind::BlockEnd) {
             break;
           }
           auto Element = parseLetBodyElement();
@@ -1233,7 +1270,7 @@ after_params:
           }
         }
         Tokens.get()->unref(); // Always a BlockEnd
-        Body = new LetBlockBody(static_cast<BlockStart*>(T2), Elements);
+        Body = new LetBlockBody(static_cast<BlockStart*>(T5), Elements);
         break;
       }
       case NodeKind::Equals:
@@ -1244,7 +1281,7 @@ after_params:
           skipPastLineFoldEnd();
           goto finish;
         }
-        Body = new LetExprBody(static_cast<Equals*>(T2), E);
+        Body = new LetExprBody(static_cast<Equals*>(T5), E);
         break;
       }
       case NodeKind::LineFoldEnd:
@@ -1257,7 +1294,7 @@ after_params:
           // First tokens of Pattern
           Expected.push_back(NodeKind::Identifier);
         }
-        DE.add<UnexpectedTokenDiagnostic>(File, T2, Expected);
+        DE.add<UnexpectedTokenDiagnostic>(File, T5, Expected);
     }
 
     checkLineFoldEnd();
@@ -1270,7 +1307,7 @@ finish:
       Foreign,
       Let,
       Mut,
-      Pattern,
+      Name,
       Params,
       TA,
       Body

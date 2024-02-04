@@ -3,7 +3,6 @@
 
 #include "bolt/CST.hpp"
 #include "bolt/CSTVisitor.hpp"
-#include <variant>
 
 namespace bolt {
 
@@ -117,7 +116,7 @@ namespace bolt {
       case NodeKind::ClassDeclaration:
       {
         auto Decl = static_cast<ClassDeclaration*>(X);
-        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Class);
+        addSymbol(getCanonicalText(Decl->Name), Decl, SymbolKind::Class);
         for (auto Element: Decl->Elements) {
           scanChild(Element);
         }
@@ -134,25 +133,25 @@ namespace bolt {
       case NodeKind::RecordDeclaration:
       {
         auto Decl = static_cast<RecordDeclaration*>(X);
-        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Type);
+        addSymbol(getCanonicalText(Decl->Name), Decl, SymbolKind::Type);
         break;
       }
       case NodeKind::VariantDeclaration:
       {
         auto Decl = static_cast<VariantDeclaration*>(X);
-        addSymbol(Decl->Name->getCanonicalText(), Decl, SymbolKind::Type);
+        addSymbol(getCanonicalText(Decl->Name), Decl, SymbolKind::Type);
         for (auto Member: Decl->Members) {
           switch (Member->getKind()) {
             case NodeKind::TupleVariantDeclarationMember:
             {
               auto T = static_cast<TupleVariantDeclarationMember*>(Member);
-              addSymbol(T->Name->getCanonicalText(), Decl, SymbolKind::Constructor);
+              addSymbol(getCanonicalText(T->Name), Decl, SymbolKind::Constructor);
               break;
             }
             case NodeKind::RecordVariantDeclarationMember:
             {
               auto R = static_cast<RecordVariantDeclarationMember*>(Member);
-              addSymbol(R->Name->getCanonicalText(), Decl, SymbolKind::Constructor);
+              addSymbol(getCanonicalText(R->Name), Decl, SymbolKind::Constructor);
               break;
             }
             default:
@@ -171,7 +170,7 @@ namespace bolt {
       case NodeKind::BindPattern:
       {
         auto Y = static_cast<BindPattern*>(X);
-        addSymbol(Y->Name->Text, Decl, SymbolKind::Var);
+        addSymbol(getCanonicalText(Y->Name), Decl, SymbolKind::Var);
         break;
       }
       case NodeKind::RecordPattern:
@@ -489,12 +488,38 @@ namespace bolt {
     return RParen;
   }
 
+  Token* WrappedOperator::getFirstToken() const {
+    return LParen;
+  }
+
+  Token* WrappedOperator::getLastToken() const {
+    return RParen;
+  }
+
   Token* BindPattern::getFirstToken() const {
-    return Name;
+    switch (Name->getKind()) {
+      case NodeKind::Identifier:
+        return static_cast<Identifier*>(Name);
+      case NodeKind::IdentifierAlt:
+        return static_cast<IdentifierAlt*>(Name);
+      case NodeKind::WrappedOperator:
+        return static_cast<WrappedOperator*>(Name)->LParen;
+      default:
+        ZEN_UNREACHABLE
+    }
   }
 
   Token* BindPattern::getLastToken() const {
-    return Name;
+    switch (Name->getKind()) {
+      case NodeKind::Identifier:
+        return static_cast<Identifier*>(Name);
+      case NodeKind::IdentifierAlt:
+        return static_cast<IdentifierAlt*>(Name);
+      case NodeKind::WrappedOperator:
+        return static_cast<WrappedOperator*>(Name)->RParen;
+      default:
+        ZEN_UNREACHABLE
+    }
   }
 
   Token* LiteralPattern::getFirstToken() const {
@@ -577,11 +602,29 @@ namespace bolt {
     if (!ModulePath.empty()) {
       return std::get<0>(ModulePath.front());
     }
-    return Name;
+    switch (Name->getKind()) {
+      case NodeKind::Identifier:
+        return static_cast<Identifier*>(Name);
+      case NodeKind::IdentifierAlt:
+        return static_cast<IdentifierAlt*>(Name);
+      case NodeKind::WrappedOperator:
+        return static_cast<WrappedOperator*>(Name)->LParen;
+      default:
+        ZEN_UNREACHABLE
+    }
   }
 
   Token* ReferenceExpression::getLastToken() const {
-    return Name;
+    switch (Name->getKind()) {
+      case NodeKind::Identifier:
+        return static_cast<Identifier*>(Name);
+      case NodeKind::IdentifierAlt:
+        return static_cast<IdentifierAlt*>(Name);
+      case NodeKind::WrappedOperator:
+        return static_cast<WrappedOperator*>(Name)->RParen;
+      default:
+        ZEN_UNREACHABLE
+    }
   }
 
   Token* MatchCase::getFirstToken() const {
@@ -1044,12 +1087,21 @@ namespace bolt {
     return "instance";
   }
 
-  ByteString Identifier::getCanonicalText() {
-    return Text;
-  }
-
-  ByteString IdentifierAlt::getCanonicalText() {
-    return Text;
+  ByteString getCanonicalText(const Symbol* N) {
+    switch (N->getKind()) {
+      case NodeKind::Identifier:
+        return static_cast<const Identifier*>(N)->Text;
+      case NodeKind::IdentifierAlt:
+        return static_cast<const IdentifierAlt*>(N)->Text;
+      case NodeKind::CustomOperator:
+        return static_cast<const CustomOperator*>(N)->Text;
+      case NodeKind::VBar:
+        return static_cast<const VBar*>(N)->getText();
+      case NodeKind::WrappedOperator:
+        return static_cast<const WrappedOperator*>(N)->getOperator()->getText();
+      default:
+        ZEN_UNREACHABLE
+    }
   }
 
   LiteralValue StringLiteral::getValue() {
@@ -1063,9 +1115,9 @@ namespace bolt {
   SymbolPath ReferenceExpression::getSymbolPath() const {
     std::vector<ByteString> ModuleNames;
     for (auto [Name, Dot]: ModulePath) {
-      ModuleNames.push_back(Name->getCanonicalText());
+      ModuleNames.push_back(getCanonicalText(Name));
     }
-    return SymbolPath { ModuleNames, Name->getCanonicalText() };
+    return SymbolPath { ModuleNames, getCanonicalText(Name) };
   }
 
 }

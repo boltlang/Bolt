@@ -59,6 +59,7 @@ namespace bolt {
         BOLT_GEN_CASE(Assignment)
         BOLT_GEN_CASE(Identifier)
         BOLT_GEN_CASE(IdentifierAlt)
+        BOLT_GEN_CASE(WrappedOperator)
         BOLT_GEN_CASE(StringLiteral)
         BOLT_GEN_CASE(IntegerLiteral)
         BOLT_GEN_CASE(ExpressionAnnotation)
@@ -357,6 +358,10 @@ namespace bolt {
       static_cast<D*>(this)->visitTypeExpression(N);
     }
 
+    void visitWrappedOperator(WrappedOperator* N) {
+      static_cast<D*>(this)->visitNode(N);
+    }
+
     void visitPattern(Pattern* N) {
       static_cast<D*>(this)->visitNode(N);
     }
@@ -579,6 +584,7 @@ namespace bolt {
         BOLT_GEN_CHILD_CASE(Assignment)
         BOLT_GEN_CHILD_CASE(Identifier)
         BOLT_GEN_CHILD_CASE(IdentifierAlt)
+        BOLT_GEN_CHILD_CASE(WrappedOperator)
         BOLT_GEN_CHILD_CASE(StringLiteral)
         BOLT_GEN_CHILD_CASE(IntegerLiteral)
         BOLT_GEN_CHILD_CASE(ExpressionAnnotation)
@@ -761,6 +767,12 @@ namespace bolt {
     }
 
     void visitEachChild(IntegerLiteral* N) {
+    }
+
+    void visitEachChild(WrappedOperator* N) {
+      BOLT_VISIT(N->LParen);
+      BOLT_VISIT(N->Op);
+      BOLT_VISIT(N->RParen);
     }
 
     void visitEachChild(ExpressionAnnotation* N) {

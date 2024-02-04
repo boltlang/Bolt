@@ -40,6 +40,7 @@ namespace bolt {
       case ConstraintKind::Empty:
         return this;
     }
+    ZEN_UNREACHABLE
   }
 
   Type* Checker::solveType(Type* Ty) {
@@ -250,9 +251,9 @@ namespace bolt {
           inferTypeExpression(TE);
         }
 
-        auto Match = InstanceMap.find(Decl->Name->getCanonicalText());
+        auto Match = InstanceMap.find(getCanonicalText(Decl->Name));
         if (Match == InstanceMap.end()) {
-          InstanceMap.emplace(Decl->Name->getCanonicalText(), std::vector { Decl });
+          InstanceMap.emplace(getCanonicalText(Decl->Name), std::vector { Decl });
         } else {
           Match->second.push_back(Decl);
         }
@@ -289,13 +290,13 @@ namespace bolt {
 
         std::vector<Type*> Vars;
         for (auto TE: Decl->TVs) {
-          auto TV = createRigidVar(TE->Name->getCanonicalText());
+          auto TV = createRigidVar(getCanonicalText(TE->Name));
           Decl->Ctx->TVs->emplace(TV);
-          Decl->Ctx->Env.add(TE->Name->getCanonicalText(), new Forall(TV), SymKind::Type);
+          Decl->Ctx->Env.add(getCanonicalText(TE->Name), new Forall(TV), SymKind::Type);
           Vars.push_back(TV);
         }
 
-        Type* Ty = createConType(Decl->Name->getCanonicalText());
+        Type* Ty = createConType(getCanonicalText(Decl->Name));
 
         // Build the type that is actually returned by constructor functions
         auto RetTy = Ty;
@@ -304,7 +305,7 @@ namespace bolt {
         }
 
         // Must be added early so we can create recursive types
-        Decl->Ctx->Parent->Env.add(Decl->Name->getCanonicalText(), new Forall(Ty), SymKind::Type);
+        Decl->Ctx->Parent->Env.add(getCanonicalText(Decl->Name), new Forall(Ty), SymKind::Type);
 
         for (auto Member: Decl->Members) {
           switch (Member->getKind()) {
@@ -317,7 +318,7 @@ namespace bolt {
                 ParamTypes.push_back(inferTypeExpression(Element, false));
               }
               Decl->Ctx->Parent->Env.add(
-                TupleMember->Name->getCanonicalText(),
+                getCanonicalText(TupleMember->Name),
                 new Forall(
                   Decl->Ctx->TVs,
                   Decl->Ctx->Constraints,
@@ -350,13 +351,13 @@ namespace bolt {
 
         std::vector<Type*> Vars;
         for (auto TE: Decl->Vars) {
-          auto TV = createRigidVar(TE->Name->getCanonicalText());
+          auto TV = createRigidVar(getCanonicalText(TE->Name));
           Decl->Ctx->TVs->emplace(TV);
-          Decl->Ctx->Env.add(TE->Name->getCanonicalText(), new Forall(TV), SymKind::Type);
+          Decl->Ctx->Env.add(getCanonicalText(TE->Name), new Forall(TV), SymKind::Type);
           Vars.push_back(TV);
         }
 
-        auto Name = Decl->Name->getCanonicalText();
+        auto Name = getCanonicalText(Decl->Name);
         auto Ty = createConType(Name);
 
         // Must be added early so we can create recursive types
@@ -372,7 +373,7 @@ namespace bolt {
         for (auto Field: Decl->Fields) {
           FieldsTy = new Type(
             TField(
-              Field->Name->getCanonicalText(),
+              getCanonicalText(Field->Name),
               new Type(TPresent(inferTypeExpression(Field->TypeExpression, false))),
               FieldsTy
             )
@@ -466,11 +467,11 @@ namespace bolt {
     setContext(Let->Ctx);
 
     auto addClassVars = [&](ClassDeclaration* Class, bool IsRigid) {
-      auto Id = Class->Name->getCanonicalText();
+      auto Id = getCanonicalText(Class->Name);
       auto Ctx = &getContext();
       std::vector<Type*> Out;
       for (auto TE: Class->TypeVars) {
-        auto Name = TE->Name->getCanonicalText();
+        auto Name = getCanonicalText(TE->Name);
         auto TV = IsRigid ? createRigidVar(Name) : createTypeVar();
         TV->asVar().Context.emplace(Id);
         Ctx->Env.add(Name, new Forall(TV), SymKind::Type);
@@ -506,7 +507,7 @@ namespace bolt {
     if (Let->isInstance()) {
 
       auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
-      auto Class = cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
+      auto Class = cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, getCanonicalText(Instance->Name) }, SymbolKind::Class));
       auto SigLet = cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, Let->getNameAsString() }, SymbolKind::Var));
 
       auto Params = addClassVars(Class, false);
@@ -788,6 +789,7 @@ namespace bolt {
 
     }
 
+    ZEN_UNREACHABLE
   }
 
   void Checker::inferConstraintExpression(ConstraintExpression* C) {
@@ -798,7 +800,7 @@ namespace bolt {
         std::vector<Type*> Types;
         for (auto TE: D->TEs) {
           auto Ty = inferTypeExpression(TE);
-          Ty->asVar().Provided->emplace(D->Name->getCanonicalText());
+          Ty->asVar().Provided->emplace(getCanonicalText(D->Name));
           Types.push_back(Ty);
         }
         break;
@@ -821,10 +823,10 @@ namespace bolt {
       case NodeKind::ReferenceTypeExpression:
       {
         auto RefTE = static_cast<ReferenceTypeExpression*>(N);
-        auto Scm = lookup(RefTE->Name->getCanonicalText(), SymKind::Type);
+        auto Scm = lookup(getCanonicalText(RefTE->Name), SymKind::Type);
         Type* Ty;
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(RefTE->Name->getCanonicalText(), RefTE->Name);
+          DE.add<BindingNotFoundDiagnostic>(getCanonicalText(RefTE->Name), RefTE->Name);
           Ty = createTypeVar();
         } else {
           Ty = instantiate(Scm, RefTE);
@@ -847,13 +849,13 @@ namespace bolt {
       case NodeKind::VarTypeExpression:
       {
         auto VarTE = static_cast<VarTypeExpression*>(N);
-        auto Ty = lookupMono(VarTE->Name->getCanonicalText(), SymKind::Type);
+        auto Ty = lookupMono(getCanonicalText(VarTE->Name), SymKind::Type);
         if (Ty == nullptr) {
           if (!AutoVars || Config.typeVarsRequireForall()) {
-            DE.add<BindingNotFoundDiagnostic>(VarTE->Name->getCanonicalText(), VarTE->Name);
+            DE.add<BindingNotFoundDiagnostic>(getCanonicalText(VarTE->Name), VarTE->Name);
           }
-          Ty = createRigidVar(VarTE->Name->getCanonicalText());
-          addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty), SymKind::Type);
+          Ty = createRigidVar(getCanonicalText(VarTE->Name));
+          addBinding(getCanonicalText(VarTE->Name), new Forall(Ty), SymKind::Type);
         }
         ZEN_ASSERT(Ty->isVar());
         N->setType(Ty);
@@ -865,7 +867,7 @@ namespace bolt {
         auto RecTE = static_cast<RecordTypeExpression*>(N);
         auto Ty = RecTE->Rest ? inferTypeExpression(RecTE->Rest, AutoVars) : new Type(TNil());
         for (auto [Field, Comma]: RecTE->Fields) {
-          Ty = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(inferTypeExpression(Field->TE, AutoVars))), Ty));
+          Ty = new Type(TField(getCanonicalText(Field->Name), new Type(TPresent(inferTypeExpression(Field->TE, AutoVars))), Ty));
         }
         N->setType(Ty);
         return Ty;
@@ -977,7 +979,7 @@ namespace bolt {
         Ty = new Type(TNil());
         for (auto [Field, Comma]: Record->Fields) {
           Ty = new Type(TField(
-            Field->Name->getCanonicalText(),
+            getCanonicalText(Field->Name),
             new Type(TPresent(inferExpression(Field->getExpression()))),
             Ty
           ));
@@ -998,9 +1000,9 @@ namespace bolt {
         auto Ref = static_cast<ReferenceExpression*>(X);
         ZEN_ASSERT(Ref->ModulePath.empty());
         if (Ref->Name->is<IdentifierAlt>()) {
-          auto Scm = lookup(Ref->Name->getCanonicalText(), SymKind::Var);
+          auto Scm = lookup(getCanonicalText(Ref->Name), SymKind::Var);
           if (!Scm) {
-            DE.add<BindingNotFoundDiagnostic>(Ref->Name->getCanonicalText(), Ref->Name);
+            DE.add<BindingNotFoundDiagnostic>(getCanonicalText(Ref->Name), Ref->Name);
             Ty = createTypeVar();
             break;
           }
@@ -1009,7 +1011,7 @@ namespace bolt {
         }
         auto Target = Ref->getScope()->lookup(Ref->getSymbolPath());
         if (!Target) {
-          DE.add<BindingNotFoundDiagnostic>(Ref->Name->getCanonicalText(), Ref->Name);
+          DE.add<BindingNotFoundDiagnostic>(getCanonicalText(Ref->Name), Ref->Name);
           Ty = createTypeVar();
           break;
         }
@@ -1023,7 +1025,7 @@ namespace bolt {
             infer(Let);
           }
         }
-        auto Scm = lookup(Ref->Name->getCanonicalText(), SymKind::Var);
+        auto Scm = lookup(getCanonicalText(Ref->Name), SymKind::Var);
         ZEN_ASSERT(Scm);
         Ty = instantiate(Scm, X);
         break;
@@ -1088,7 +1090,7 @@ namespace bolt {
             auto K = static_cast<Identifier*>(Member->Name);
             Ty = createTypeVar();
             auto RestTy = createTypeVar();
-            makeEqual(new Type(TField(K->getCanonicalText(), Ty, RestTy)), ExprTy, Member);
+            makeEqual(new Type(TField(getCanonicalText(K), Ty, RestTy)), ExprTy, Member);
             break;
           }
           default:
@@ -1135,20 +1137,20 @@ namespace bolt {
       {
         auto P = static_cast<BindPattern*>(Pattern);
         auto Ty = createTypeVar();
-        addBinding(P->Name->getCanonicalText(), new Forall(TVs, Constraints, Ty), SymKind::Var);
+        addBinding(getCanonicalText(P->Name), new Forall(TVs, Constraints, Ty), SymKind::Var);
         return Ty;
       }
 
       case NodeKind::NamedTuplePattern:
       {
         auto P = static_cast<NamedTuplePattern*>(Pattern);
-        auto Scm = lookup(P->Name->getCanonicalText(), SymKind::Var);
+        auto Scm = lookup(getCanonicalText(P->Name), SymKind::Var);
         std::vector<Type*> ElementTypes;
         for (auto P2: P->Patterns) {
           ElementTypes.push_back(inferPattern(P2, Constraints, TVs));
         }
         if (!Scm) {
-          DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
+          DE.add<BindingNotFoundDiagnostic>(getCanonicalText(P->Name), P->Name);
           return createTypeVar();
         }
         auto Ty = instantiate(Scm, P);
@@ -1178,9 +1180,9 @@ namespace bolt {
             FieldTy = inferPattern(Field->Pattern, Constraints, TVs);
           } else {
             FieldTy = createTypeVar();
-            addBinding(Field->Name->getCanonicalText(), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
+            addBinding(getCanonicalText(Field->Name), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
           }
-          RecordTy = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(FieldTy)), RecordTy));
+          RecordTy = new Type(TField(getCanonicalText(Field->Name), new Type(TPresent(FieldTy)), RecordTy));
         }
         return RecordTy;
       }
@@ -1188,9 +1190,9 @@ namespace bolt {
       case NodeKind::NamedRecordPattern:
       {
         auto P = static_cast<NamedRecordPattern*>(Pattern);
-        auto Scm = lookup(P->Name->getCanonicalText(), SymKind::Var);
+        auto Scm = lookup(getCanonicalText(P->Name), SymKind::Var);
         if (Scm == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
+          DE.add<BindingNotFoundDiagnostic>(getCanonicalText(P->Name), P->Name);
           return createTypeVar();
         }
         auto RestField = getRestField(P->Fields);
@@ -1211,9 +1213,9 @@ namespace bolt {
             FieldTy = inferPattern(Field->Pattern, Constraints, TVs);
           } else {
             FieldTy = createTypeVar();
-            addBinding(Field->Name->getCanonicalText(), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
+            addBinding(getCanonicalText(Field->Name), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
           }
-          RecordTy = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(FieldTy)), RecordTy));
+          RecordTy = new Type(TField(getCanonicalText(Field->Name), new Type(TPresent(FieldTy)), RecordTy));
         }
         auto Ty = instantiate(Scm, P);
         auto RetTy = createTypeVar();

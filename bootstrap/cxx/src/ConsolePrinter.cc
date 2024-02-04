@@ -175,6 +175,8 @@ namespace bolt {
         return "a branch of an if-statement";
       case NodeKind::VariantDeclaration:
         return "a variant";
+      case NodeKind::MatchCase:
+        return "a match-arm";
       default:
         ZEN_UNREACHABLE
     }
@@ -262,6 +264,7 @@ namespace bolt {
         return out.str();
       }
     }
+    ZEN_UNREACHABLE
   }
 
   void writeForegroundANSI(Color C, std::ostream& Out) {
@@ -924,6 +927,8 @@ namespace bolt {
       }
 
     }
+
+    ZEN_UNREACHABLE
 
   }
 
