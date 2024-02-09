@@ -112,9 +112,15 @@ stand out from other programming languages.
 
 ### When will the compiler be ready to use?
 
-We hope to have a working compiler by the start of 2023. Currently, we are
-working hard to get the type-checker fully operational. After that work will
-continue on the code generator and garbage collector.
+It is really difficult to say when the compiler will be ready. This project is
+made exclusively in people their spare time. Depending on the availability of the
+programmers making this project possible, this might take a lot of months or
+even years.
+
+Currently, we are working hard to get the type-checker fully operational. After
+that work will continue on the code generator and garbage collector. A small
+part of the code generator is already done: the first bindings to LLVM are
+operational and will be expanded in the future. Stay tuned!
 
 ### Why yet another programming language?
 
