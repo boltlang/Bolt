@@ -1183,7 +1183,19 @@ finish:
     auto T2 = Tokens.peek(0);
     auto T3 = Tokens.peek(1);
     auto T4 = Tokens.peek(2);
-    if (T2->getKind() == NodeKind::LParen && isOperator(T3) && T4->getKind() == NodeKind::RParen) {
+    if (isOperator(T2)) {
+      Tokens.get();
+      auto P1 = parseNarrowPattern();
+      Params.push_back(new Parameter(P1, nullptr));
+      Name = new BindPattern(T2);
+      goto after_params;
+    } else if (isOperator(T3) && (T4->getKind() == NodeKind::Colon || T4->getKind() == NodeKind::Equals || T4->getKind() == NodeKind::BlockStart || T4->getKind() == NodeKind::LineFoldEnd)) {
+      auto P1 = parseNarrowPattern();
+      Params.push_back(new Parameter(P1, nullptr));
+      Tokens.get();
+      Name = new BindPattern(T3);
+      goto after_params;
+    } else if (T2->getKind() == NodeKind::LParen && isOperator(T3) && T4->getKind() == NodeKind::RParen) {
       Tokens.get();
       Tokens.get();
       Tokens.get();
