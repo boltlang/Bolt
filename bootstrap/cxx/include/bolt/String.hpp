@@ -7,9 +7,9 @@
 
 namespace bolt {
 
-  using Char = char;
+using Char = char;
 
-  using String = std::basic_string<Char>;
+using String = std::basic_string<Char>;
 
 }
 

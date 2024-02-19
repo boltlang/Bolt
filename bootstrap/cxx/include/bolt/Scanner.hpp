@@ -12,73 +12,73 @@
 
 namespace bolt {
 
-  class Token;
-  class DiagnosticEngine;
+class Token;
+class DiagnosticEngine;
 
-  class Scanner : public BufferedStream<Token*> {
+class Scanner : public BufferedStream<Token*> {
 
-    DiagnosticEngine& DE;
+  DiagnosticEngine& DE;
 
-    TextFile& File;
+  TextFile& File;
 
-    Stream<Char>& Chars;
+  Stream<Char>& Chars;
 
-    TextLoc CurrLoc;
+  TextLoc CurrLoc;
 
-    inline TextLoc getCurrentLoc() const {
-      return CurrLoc;
+  inline TextLoc getCurrentLoc() const {
+    return CurrLoc;
+  }
+
+  inline Char getChar() {
+    auto Chr = Chars.get();
+    if (Chr == '\n') {
+      CurrLoc.Line += 1;
+      CurrLoc.Column = 1;
+    } else {
+      CurrLoc.Column += 1;
     }
+    return Chr;
+  }
 
-    inline Char getChar() {
-      auto Chr = Chars.get();
-      if (Chr == '\n') {
-        CurrLoc.Line += 1;
-        CurrLoc.Column = 1;
-      } else {
-        CurrLoc.Column += 1;
-      }
-      return Chr;
-    }
+  inline Char peekChar(std::size_t Offset = 0) {
+    return Chars.peek(Offset);
+  }
 
-    inline Char peekChar(std::size_t Offset = 0) {
-      return Chars.peek(Offset);
-    }
+  std::string scanIdentifier();
 
-    std::string scanIdentifier();
+  Token* readNullable();
 
-    Token* readNullable();
+protected:
 
-  protected:
+  Token* read() override;
 
-    Token* read() override;
+public:
 
-  public:
+  Scanner(DiagnosticEngine& DE, TextFile& File, Stream<Char>& Chars);
 
-    Scanner(DiagnosticEngine& DE, TextFile& File, Stream<Char>& Chars);
+};
 
-  };
+enum class FrameType {
+  Block,
+  LineFold,
+  Fallthrough,
+};
 
-  enum class FrameType {
-    Block,
-    LineFold,
-    Fallthrough,
-  };
+class Punctuator : public BufferedStream<Token*> {
 
-  class Punctuator : public BufferedStream<Token*> {
+  Stream<Token*>& Tokens;
 
-    Stream<Token*>& Tokens;
+  std::stack<FrameType> Frames;
+  std::stack<TextLoc> Locations;
 
-    std::stack<FrameType> Frames;
-    std::stack<TextLoc> Locations;
+protected:
 
-  protected:
+  virtual Token* read() override;
 
-    virtual Token* read() override;
+public:
 
-  public:
+  Punctuator(Stream<Token*>& Tokens);
 
-    Punctuator(Stream<Token*>& Tokens);
-
-  };
+};
 
 }

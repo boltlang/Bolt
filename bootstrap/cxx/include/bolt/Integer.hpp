@@ -3,7 +3,7 @@
 
 namespace bolt {
 
-  using Integer = long long;
+using Integer = long long;
 
 }
 

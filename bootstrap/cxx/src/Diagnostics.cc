@@ -38,44 +38,44 @@
 
 namespace bolt {
 
-  Diagnostic::Diagnostic(DiagnosticKind Kind):
-    Kind(Kind) {}
+Diagnostic::Diagnostic(DiagnosticKind Kind):
+  Kind(Kind) {}
 
-  bool sourceLocLessThan(const Diagnostic* L, const Diagnostic* R) {
-    auto N1 = L->getNode();
-    auto N2 = R->getNode();
-    if (N1 == nullptr && N2 == nullptr) {
-      return false;
-    }
-    if (N1 == nullptr) {
-      return true;
-    }
-    if (N2 == nullptr) {
-      return false;
-    }
-    return N1->getStartLine() < N2->getStartLine() || N1->getStartColumn() < N2->getStartColumn();
-  };
-
-  void DiagnosticStore::sort() {
-    std::sort(Diagnostics.begin(), Diagnostics.end(), sourceLocLessThan);
+bool sourceLocLessThan(const Diagnostic* L, const Diagnostic* R) {
+  auto N1 = L->getNode();
+  auto N2 = R->getNode();
+  if (N1 == nullptr && N2 == nullptr) {
+    return false;
   }
-
-  DiagnosticStore::~DiagnosticStore() {
-    for (auto D: Diagnostics) {
-      delete D;
-    }
+  if (N1 == nullptr) {
+    return true;
   }
+  if (N2 == nullptr) {
+    return false;
+  }
+  return N1->getStartLine() < N2->getStartLine() || N1->getStartColumn() < N2->getStartColumn();
+};
 
-  ConsoleDiagnostics::ConsoleDiagnostics(ConsolePrinter& P):
-    ThePrinter(P) {}
+void DiagnosticStore::sort() {
+  std::sort(Diagnostics.begin(), Diagnostics.end(), sourceLocLessThan);
+}
 
-  void ConsoleDiagnostics::addDiagnostic(Diagnostic* D) {
-
-    ThePrinter.writeDiagnostic(*D);
-
-    // Since this DiagnosticEngine is expected to own the diagnostic, we simply
-    // destroy the processed diagnostic so that there are no memory leaks.
+DiagnosticStore::~DiagnosticStore() {
+  for (auto D: Diagnostics) {
     delete D;
   }
+}
+
+ConsoleDiagnostics::ConsoleDiagnostics(ConsolePrinter& P):
+  ThePrinter(P) {}
+
+void ConsoleDiagnostics::addDiagnostic(Diagnostic* D) {
+
+  ThePrinter.writeDiagnostic(*D);
+
+  // Since this DiagnosticEngine is expected to own the diagnostic, we simply
+  // destroy the processed diagnostic so that there are no memory leaks.
+  delete D;
+}
 
 }

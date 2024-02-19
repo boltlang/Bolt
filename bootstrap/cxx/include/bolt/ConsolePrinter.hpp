@@ -9,181 +9,181 @@
 
 namespace bolt {
 
-  class Node;
-  class Type;
-  class TypeclassSignature;
-  class Diagnostic;
+class Node;
+class Type;
+class TypeclassSignature;
+class Diagnostic;
 
-  enum class Color {
-    None,
-    Black,
-    White,
-    Red,
-    Yellow,
-    Green,
-    Blue,
-    Cyan,
-    Magenta,
-  };
+enum class Color {
+  None,
+  Black,
+  White,
+  Red,
+  Yellow,
+  Green,
+  Blue,
+  Cyan,
+  Magenta,
+};
 
-  enum StyleFlags : unsigned {
-    StyleFlags_None = 0,
-    StyleFlags_Bold = 1 << 0,
-    StyleFlags_Underline = 1 << 1,
-    StyleFlags_Italic = 1 << 2,
-  };
+enum StyleFlags : unsigned {
+  StyleFlags_None = 0,
+  StyleFlags_Bold = 1 << 0,
+  StyleFlags_Underline = 1 << 1,
+  StyleFlags_Italic = 1 << 2,
+};
 
-  class Style {
+class Style {
 
-    unsigned Flags = StyleFlags_None;
+  unsigned Flags = StyleFlags_None;
 
-    Color FgColor = Color::None;
-    Color BgColor = Color::None;
+  Color FgColor = Color::None;
+  Color BgColor = Color::None;
 
-  public:
+public:
 
-    Color getForegroundColor() const noexcept {
-      return FgColor;
+  Color getForegroundColor() const noexcept {
+    return FgColor;
+  }
+
+  Color getBackgroundColor() const noexcept {
+    return BgColor;
+  }
+
+  void setForegroundColor(Color NewColor) noexcept {
+    FgColor = NewColor;
+  }
+
+  void setBackgroundColor(Color NewColor) noexcept {
+    BgColor = NewColor;
+  }
+
+  bool hasForegroundColor() const noexcept {
+    return FgColor != Color::None;
+  }
+
+  bool hasBackgroundColor() const noexcept {
+    return BgColor != Color::None;
+  }
+
+  void clearForegroundColor() noexcept {
+    FgColor = Color::None;
+  }
+
+  void clearBackgroundColor() noexcept {
+    BgColor = Color::None;
+  }
+
+  bool isUnderline() const noexcept {
+    return Flags & StyleFlags_Underline;
+  }
+
+  bool isItalic() const noexcept {
+    return Flags & StyleFlags_Italic;
+  }
+
+  bool isBold() const noexcept {
+    return Flags & StyleFlags_Bold;
+  }
+
+  void setUnderline(bool Enable) noexcept {
+    if (Enable) {
+      Flags |= StyleFlags_Underline;
+    } else {
+      Flags &= ~StyleFlags_Underline;
     }
+  }
 
-    Color getBackgroundColor() const noexcept {
-      return BgColor;
+  void setItalic(bool Enable) noexcept {
+    if (Enable) {
+      Flags |= StyleFlags_Italic;
+    } else {
+      Flags &= ~StyleFlags_Italic;
     }
+  }
 
-    void setForegroundColor(Color NewColor) noexcept {
-      FgColor = NewColor;
+  void setBold(bool Enable) noexcept {
+    if (Enable) {
+      Flags |= StyleFlags_Bold;
+    } else {
+      Flags &= ~StyleFlags_Bold;
     }
+  }
 
-    void setBackgroundColor(Color NewColor) noexcept {
-      BgColor = NewColor;
-    }
+  void reset() noexcept {
+    FgColor = Color::None;
+    BgColor = Color::None;
+    Flags = 0;
+  }
 
-    bool hasForegroundColor() const noexcept {
-      return FgColor != Color::None;
-    }
+};
 
-    bool hasBackgroundColor() const noexcept {
-      return BgColor != Color::None;
-    }
+/**
+ * Prints any diagnostic message that was added to it to the console.
+ */
+class ConsolePrinter {
 
-    void clearForegroundColor() noexcept {
-      FgColor = Color::None;
-    }
+  std::ostream& Out;
 
-    void clearBackgroundColor() noexcept {
-      BgColor = Color::None;
-    }
+  Style ActiveStyle;
 
-    bool isUnderline() const noexcept {
-      return Flags & StyleFlags_Underline;
-    }
+  void setForegroundColor(Color C);
+  void setBackgroundColor(Color C);
+  void applyStyles();
 
-    bool isItalic() const noexcept {
-      return Flags & StyleFlags_Italic;
-    }
+  void setBold(bool Enable);
+  void setItalic(bool Enable);
+  void setUnderline(bool Enable);
+  void resetStyles();
 
-    bool isBold() const noexcept {
-      return Flags & StyleFlags_Bold;
-    }
+  void writeGutter(
+    std::size_t GutterWidth,
+    std::string Text
+  );
 
-    void setUnderline(bool Enable) noexcept {
-      if (Enable) {
-        Flags |= StyleFlags_Underline;
-      } else {
-        Flags &= ~StyleFlags_Underline;
-      }
-    }
+  void writeHighlight(
+    std::size_t GutterWidth,
+    TextRange Range,
+    Color HighlightColor,
+    std::size_t Line,
+    std::size_t LineLength
+  );
 
-    void setItalic(bool Enable) noexcept {
-      if (Enable) {
-        Flags |= StyleFlags_Italic;
-      } else {
-        Flags &= ~StyleFlags_Italic;
-      }
-    }
+  void writeExcerpt(
+    const TextFile& File,
+    TextRange ToPrint,
+    TextRange ToHighlight,
+    Color HighlightColor
+  );
 
-    void setBold(bool Enable) noexcept {
-      if (Enable) {
-        Flags |= StyleFlags_Bold;
-      } else {
-        Flags &= ~StyleFlags_Bold;
-      }
-    }
+  void writeNode(const Node* N);
 
-    void reset() noexcept {
-      FgColor = Color::None;
-      BgColor = Color::None;
-      Flags = 0;
-    }
+  void writePrefix(const Diagnostic& D);
+  void writeBinding(const ByteString& Name);
+  void writeType(std::size_t I);
+  void writeType(const Type* Ty, const TypePath& Underline);
+  void writeType(const Type* Ty);
+  void writeLoc(const TextFile& File, const TextLoc& Loc);
+  void writeTypeclassName(const ByteString& Name);
+  void writeTypeclassSignature(const TypeclassSignature& Sig);
 
-  };
+  void write(const std::string_view& S);
+  void write(std::size_t N);
+  void write(char C);
 
-  /**
-   * Prints any diagnostic message that was added to it to the console.
-   */
-  class ConsolePrinter {
+public:
 
-    std::ostream& Out;
+  unsigned ExcerptLinesPre = 2;
+  unsigned ExcerptLinesPost = 2;
+  std::size_t MaxTypeSubsitutionCount = 0;
+  bool PrintFilePosition = true;
+  bool PrintExcerpts = true;
+  bool EnableColors = true;
 
-    Style ActiveStyle;
+  ConsolePrinter(std::ostream& Out = std::cerr);
 
-    void setForegroundColor(Color C);
-    void setBackgroundColor(Color C);
-    void applyStyles();
+  void writeDiagnostic(const Diagnostic& D);
 
-    void setBold(bool Enable);
-    void setItalic(bool Enable);
-    void setUnderline(bool Enable);
-    void resetStyles();
-
-    void writeGutter(
-      std::size_t GutterWidth,
-      std::string Text
-    );
-
-    void writeHighlight(
-      std::size_t GutterWidth,
-      TextRange Range,
-      Color HighlightColor,
-      std::size_t Line,
-      std::size_t LineLength
-    );
-
-    void writeExcerpt(
-      const TextFile& File,
-      TextRange ToPrint,
-      TextRange ToHighlight,
-      Color HighlightColor
-    );
-
-    void writeNode(const Node* N);
-
-    void writePrefix(const Diagnostic& D);
-    void writeBinding(const ByteString& Name);
-    void writeType(std::size_t I);
-    void writeType(const Type* Ty, const TypePath& Underline);
-    void writeType(const Type* Ty);
-    void writeLoc(const TextFile& File, const TextLoc& Loc);
-    void writeTypeclassName(const ByteString& Name);
-    void writeTypeclassSignature(const TypeclassSignature& Sig);
-
-    void write(const std::string_view& S);
-    void write(std::size_t N);
-    void write(char C);
-
-  public:
-
-    unsigned ExcerptLinesPre = 2;
-    unsigned ExcerptLinesPost = 2;
-    std::size_t MaxTypeSubsitutionCount = 0;
-    bool PrintFilePosition = true;
-    bool PrintExcerpts = true;
-    bool EnableColors = true;
-
-    ConsolePrinter(std::ostream& Out = std::cerr);
-
-    void writeDiagnostic(const Diagnostic& D);
-
-  };
+};
 
 }

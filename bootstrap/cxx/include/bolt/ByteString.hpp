@@ -6,9 +6,9 @@
 
 namespace bolt {
 
-  using ByteString = std::string;
+using ByteString = std::string;
 
-  using ByteStringView = std::string_view;
+using ByteStringView = std::string_view;
 
 }
 

@@ -9,144 +9,144 @@
 
 namespace bolt {
 
-  class DiagnosticEngine;
-  class Scanner;
+class DiagnosticEngine;
+class Scanner;
 
-  enum OperatorFlags {
-    OperatorFlags_Prefix = 1,
-    OperatorFlags_Suffix = 2,
-    OperatorFlags_InfixL = 4,
-    OperatorFlags_InfixR = 8,
-  };
+enum OperatorFlags {
+  OperatorFlags_Prefix = 1,
+  OperatorFlags_Suffix = 2,
+  OperatorFlags_InfixL = 4,
+  OperatorFlags_InfixR = 8,
+};
 
-  struct OperatorInfo {
+struct OperatorInfo {
 
-    int Precedence;
-    unsigned Flags;
+  int Precedence;
+  unsigned Flags;
 
-    inline bool isPrefix() const noexcept {
-      return Flags & OperatorFlags_Prefix;
-    }
+  inline bool isPrefix() const noexcept {
+    return Flags & OperatorFlags_Prefix;
+  }
 
-    inline bool isSuffix() const noexcept {
-      return Flags & OperatorFlags_Suffix;
-    }
+  inline bool isSuffix() const noexcept {
+    return Flags & OperatorFlags_Suffix;
+  }
 
-    inline bool isInfix() const noexcept {
-      return Flags & (OperatorFlags_InfixL | OperatorFlags_InfixR);
-    }
+  inline bool isInfix() const noexcept {
+    return Flags & (OperatorFlags_InfixL | OperatorFlags_InfixR);
+  }
 
-    inline bool isRightAssoc() const noexcept {
-      return Flags & OperatorFlags_InfixR;
-    }
+  inline bool isRightAssoc() const noexcept {
+    return Flags & OperatorFlags_InfixR;
+  }
 
-  };
+};
 
-  class OperatorTable {
+class OperatorTable {
 
-    std::unordered_map<std::string, OperatorInfo> Mapping;
+  std::unordered_map<std::string, OperatorInfo> Mapping;
 
-  public:
+public:
 
-    void add(std::string Name, unsigned Flags, int Precedence);
+  void add(std::string Name, unsigned Flags, int Precedence);
 
-    std::optional<OperatorInfo> getInfix(Token* T);
+  std::optional<OperatorInfo> getInfix(Token* T);
 
-    bool isInfix(Token* T);
-    bool isPrefix(Token* T);
-    bool isSuffix(Token* T);
+  bool isInfix(Token* T);
+  bool isPrefix(Token* T);
+  bool isSuffix(Token* T);
 
-  };
+};
 
-  class Parser {
+class Parser {
 
-    TextFile& File;
-    DiagnosticEngine& DE;
+  TextFile& File;
+  DiagnosticEngine& DE;
 
-    Stream<Token*>& Tokens;
+  Stream<Token*>& Tokens;
 
-    OperatorTable ExprOperators;
+  OperatorTable ExprOperators;
 
-    Token* peekFirstTokenAfterAnnotationsAndModifiers();
+  Token* peekFirstTokenAfterAnnotationsAndModifiers();
 
-    Token* expectToken(NodeKind Ty);
+  Token* expectToken(NodeKind Ty);
 
-    std::vector<RecordDeclarationField*> parseRecordDeclarationFields();
-    std::optional<std::vector<std::tuple<RecordPatternField*, Comma*>>> parseRecordPatternFields();
+  std::vector<RecordDeclarationField*> parseRecordDeclarationFields();
+  std::optional<std::vector<std::tuple<RecordPatternField*, Comma*>>> parseRecordPatternFields();
 
-    template<typename T>
-    T* expectToken() {
-      return static_cast<T*>(expectToken(getNodeType<T>()));
-    }
+  template<typename T>
+  T* expectToken() {
+    return static_cast<T*>(expectToken(getNodeType<T>()));
+  }
 
-    Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
+  Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
-    MatchExpression* parseMatchExpression();
-    Expression* parseMemberExpression();
-    RecordExpression* parseRecordExpression();
-    Expression* parsePrimitiveExpression();
+  MatchExpression* parseMatchExpression();
+  Expression* parseMemberExpression();
+  RecordExpression* parseRecordExpression();
+  Expression* parsePrimitiveExpression();
 
-    ConstraintExpression* parseConstraintExpression();
+  ConstraintExpression* parseConstraintExpression();
 
-    TypeExpression* parseAppTypeExpression();
-    TypeExpression* parsePrimitiveTypeExpression();
-    TypeExpression* parseQualifiedTypeExpression();
-    TypeExpression* parseArrowTypeExpression();
-    VarTypeExpression* parseVarTypeExpression();
-    ReferenceTypeExpression* parseReferenceTypeExpression();
+  TypeExpression* parseAppTypeExpression();
+  TypeExpression* parsePrimitiveTypeExpression();
+  TypeExpression* parseQualifiedTypeExpression();
+  TypeExpression* parseArrowTypeExpression();
+  VarTypeExpression* parseVarTypeExpression();
+  ReferenceTypeExpression* parseReferenceTypeExpression();
 
-    std::vector<Annotation*> parseAnnotations();
+  std::vector<Annotation*> parseAnnotations();
 
-    void checkLineFoldEnd();
-    void skipPastLineFoldEnd();
-    void skipToRBrace();
+  void checkLineFoldEnd();
+  void skipPastLineFoldEnd();
+  void skipToRBrace();
 
-  public:
+public:
 
-    Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE);
+  Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE);
 
-    TypeExpression* parseTypeExpression();
+  TypeExpression* parseTypeExpression();
 
-    ListPattern* parseListPattern();
-    Pattern* parsePrimitivePattern(bool IsNarrow);
-    Pattern* parseWidePattern();
-    Pattern* parseNarrowPattern();
+  ListPattern* parseListPattern();
+  Pattern* parsePrimitivePattern(bool IsNarrow);
+  Pattern* parseWidePattern();
+  Pattern* parseNarrowPattern();
 
-    Parameter* parseParam();
+  Parameter* parseParam();
 
-    ReferenceExpression* parseReferenceExpression();
+  ReferenceExpression* parseReferenceExpression();
 
-    Expression* parseUnaryExpression();
+  Expression* parseUnaryExpression();
 
-    Expression* parseExpression();
+  Expression* parseExpression();
 
-    Expression* parseCallExpression();
+  Expression* parseCallExpression();
 
-    IfStatement* parseIfStatement();
+  IfStatement* parseIfStatement();
 
-    ReturnStatement* parseReturnStatement();
+  ReturnStatement* parseReturnStatement();
 
-    ExpressionStatement* parseExpressionStatement();
+  ExpressionStatement* parseExpressionStatement();
 
-    Node* parseLetBodyElement();
+  Node* parseLetBodyElement();
 
-    LetDeclaration* parseLetDeclaration();
+  LetDeclaration* parseLetDeclaration();
 
-    Node* parseClassElement();
+  Node* parseClassElement();
 
-    ClassDeclaration* parseClassDeclaration();
+  ClassDeclaration* parseClassDeclaration();
 
-    InstanceDeclaration* parseInstanceDeclaration();
+  InstanceDeclaration* parseInstanceDeclaration();
 
-    RecordDeclaration* parseRecordDeclaration();
+  RecordDeclaration* parseRecordDeclaration();
 
-    VariantDeclaration* parseVariantDeclaration();
+  VariantDeclaration* parseVariantDeclaration();
 
-    Node* parseSourceElement();
+  Node* parseSourceElement();
 
-    SourceFile* parseSourceFile();
+  SourceFile* parseSourceFile();
 
-  };
+};
 
 }
 

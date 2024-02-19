@@ -10,237 +10,237 @@
 
 namespace bolt {
 
-  enum class DiagnosticKind : unsigned char {
-    BindingNotFound,
-    FieldNotFound,
-    InstanceNotFound,
-    InvalidTypeToTypeclass,
-    NotATuple,
-    TupleIndexOutOfRange,
-    TypeclassMissing,
-    UnexpectedString,
-    UnexpectedToken,
-    UnificationError,
-  };
+enum class DiagnosticKind : unsigned char {
+  BindingNotFound,
+  FieldNotFound,
+  InstanceNotFound,
+  InvalidTypeToTypeclass,
+  NotATuple,
+  TupleIndexOutOfRange,
+  TypeclassMissing,
+  UnexpectedString,
+  UnexpectedToken,
+  UnificationError,
+};
 
-  class Diagnostic {
+class Diagnostic {
 
-    const DiagnosticKind Kind;
+  const DiagnosticKind Kind;
 
-  protected:
+protected:
 
-    Diagnostic(DiagnosticKind Kind);
+  Diagnostic(DiagnosticKind Kind);
 
-  public:
+public:
 
-    inline DiagnosticKind getKind() const noexcept {
-      return Kind;
-    }
+  inline DiagnosticKind getKind() const noexcept {
+    return Kind;
+  }
 
-    virtual Node* getNode() const {
-      return nullptr;
-    }
+  virtual Node* getNode() const {
+    return nullptr;
+  }
 
-    virtual unsigned getCode() const noexcept = 0;
+  virtual unsigned getCode() const noexcept = 0;
 
-    virtual ~Diagnostic() {}
+  virtual ~Diagnostic() {}
 
-  };
+};
 
-  class UnexpectedStringDiagnostic : public Diagnostic {
-  public:
+class UnexpectedStringDiagnostic : public Diagnostic {
+public:
 
-    TextFile& File;
-    TextLoc Location;
-    String Actual;
+  TextFile& File;
+  TextLoc Location;
+  String Actual;
 
-    inline UnexpectedStringDiagnostic(TextFile& File, TextLoc Location, String Actual):
-      Diagnostic(DiagnosticKind::UnexpectedString), File(File), Location(Location), Actual(Actual) {}
+  inline UnexpectedStringDiagnostic(TextFile& File, TextLoc Location, String Actual):
+    Diagnostic(DiagnosticKind::UnexpectedString), File(File), Location(Location), Actual(Actual) {}
 
-    unsigned getCode() const noexcept override {
-      return 1001;
-    }
+  unsigned getCode() const noexcept override {
+    return 1001;
+  }
 
-  };
+};
 
-  class UnexpectedTokenDiagnostic : public Diagnostic {
-  public:
+class UnexpectedTokenDiagnostic : public Diagnostic {
+public:
 
-    TextFile& File;
-    Token* Actual;
-    std::vector<NodeKind> Expected;
+  TextFile& File;
+  Token* Actual;
+  std::vector<NodeKind> Expected;
 
-    inline UnexpectedTokenDiagnostic(TextFile& File, Token* Actual, std::vector<NodeKind> Expected):
-      Diagnostic(DiagnosticKind::UnexpectedToken), File(File), Actual(Actual), Expected(Expected) {}
+  inline UnexpectedTokenDiagnostic(TextFile& File, Token* Actual, std::vector<NodeKind> Expected):
+    Diagnostic(DiagnosticKind::UnexpectedToken), File(File), Actual(Actual), Expected(Expected) {}
 
-    unsigned getCode() const noexcept override {
-      return 1101;
-    }
+  unsigned getCode() const noexcept override {
+    return 1101;
+  }
 
-  };
+};
 
-  class BindingNotFoundDiagnostic : public Diagnostic {
-  public:
+class BindingNotFoundDiagnostic : public Diagnostic {
+public:
 
-    ByteString Name;
-    Node* Initiator;
+  ByteString Name;
+  Node* Initiator;
 
-    inline BindingNotFoundDiagnostic(ByteString Name, Node* Initiator):
-      Diagnostic(DiagnosticKind::BindingNotFound), Name(Name), Initiator(Initiator) {}
+  inline BindingNotFoundDiagnostic(ByteString Name, Node* Initiator):
+    Diagnostic(DiagnosticKind::BindingNotFound), Name(Name), Initiator(Initiator) {}
 
-    inline Node* getNode() const override {
-      return Initiator;
-    }
+  inline Node* getNode() const override {
+    return Initiator;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2005;
-    }
+  unsigned getCode() const noexcept override {
+    return 2005;
+  }
 
-  };
+};
 
-  class UnificationErrorDiagnostic : public Diagnostic {
-  public:
+class UnificationErrorDiagnostic : public Diagnostic {
+public:
 
-    Type* OrigLeft;
-    Type* OrigRight;
-    TypePath LeftPath;
-    TypePath RightPath;
-    Node* Source;
+  Type* OrigLeft;
+  Type* OrigRight;
+  TypePath LeftPath;
+  TypePath RightPath;
+  Node* Source;
 
-    inline UnificationErrorDiagnostic(Type* OrigLeft, Type* OrigRight, TypePath LeftPath, TypePath RightPath, Node* Source):
-      Diagnostic(DiagnosticKind::UnificationError), OrigLeft(OrigLeft), OrigRight(OrigRight), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
+  inline UnificationErrorDiagnostic(Type* OrigLeft, Type* OrigRight, TypePath LeftPath, TypePath RightPath, Node* Source):
+    Diagnostic(DiagnosticKind::UnificationError), OrigLeft(OrigLeft), OrigRight(OrigRight), LeftPath(LeftPath), RightPath(RightPath), Source(Source) {}
 
-    inline Type* getLeft() const {
-      return OrigLeft->resolve(LeftPath);
-    }
+  inline Type* getLeft() const {
+    return OrigLeft->resolve(LeftPath);
+  }
 
-    inline Type* getRight() const {
-      return OrigRight->resolve(RightPath);
-    }
+  inline Type* getRight() const {
+    return OrigRight->resolve(RightPath);
+  }
 
-    inline Node* getNode() const override {
-      return Source;
-    }
+  inline Node* getNode() const override {
+    return Source;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2010;
-    }
+  unsigned getCode() const noexcept override {
+    return 2010;
+  }
 
-  };
+};
 
-  class TypeclassMissingDiagnostic : public Diagnostic {
-  public:
+class TypeclassMissingDiagnostic : public Diagnostic {
+public:
 
-    TypeclassSignature Sig;
-    Node* Decl;
+  TypeclassSignature Sig;
+  Node* Decl;
 
-    inline TypeclassMissingDiagnostic(TypeclassSignature Sig, Node* Decl):
-      Diagnostic(DiagnosticKind::TypeclassMissing), Sig(Sig), Decl(Decl) {}
+  inline TypeclassMissingDiagnostic(TypeclassSignature Sig, Node* Decl):
+    Diagnostic(DiagnosticKind::TypeclassMissing), Sig(Sig), Decl(Decl) {}
 
-    inline Node* getNode() const override {
-      return Decl;
-    }
+  inline Node* getNode() const override {
+    return Decl;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2201;
-    }
+  unsigned getCode() const noexcept override {
+    return 2201;
+  }
 
-  };
+};
 
-  class InstanceNotFoundDiagnostic : public Diagnostic {
-  public:
+class InstanceNotFoundDiagnostic : public Diagnostic {
+public:
 
-    ByteString TypeclassName;
-    Type* Ty;
-    Node* Source;
+  ByteString TypeclassName;
+  Type* Ty;
+  Node* Source;
 
-    inline InstanceNotFoundDiagnostic(ByteString TypeclassName, Type* Ty, Node* Source):
-      Diagnostic(DiagnosticKind::InstanceNotFound), TypeclassName(TypeclassName), Ty(Ty), Source(Source) {}
+  inline InstanceNotFoundDiagnostic(ByteString TypeclassName, Type* Ty, Node* Source):
+    Diagnostic(DiagnosticKind::InstanceNotFound), TypeclassName(TypeclassName), Ty(Ty), Source(Source) {}
 
-    inline Node* getNode() const override {
-      return Source;
-    }
+  inline Node* getNode() const override {
+    return Source;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2251;
-    }
+  unsigned getCode() const noexcept override {
+    return 2251;
+  }
 
-  };
+};
 
-  class TupleIndexOutOfRangeDiagnostic : public Diagnostic {
-  public:
+class TupleIndexOutOfRangeDiagnostic : public Diagnostic {
+public:
 
-    Type* Tuple;
-    std::size_t I;
-    Node* Source;
+  Type* Tuple;
+  std::size_t I;
+  Node* Source;
 
-    inline TupleIndexOutOfRangeDiagnostic(Type* Tuple, std::size_t I, Node* Source):
-      Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I), Source(Source) {}
+  inline TupleIndexOutOfRangeDiagnostic(Type* Tuple, std::size_t I, Node* Source):
+    Diagnostic(DiagnosticKind::TupleIndexOutOfRange), Tuple(Tuple), I(I), Source(Source) {}
 
-    inline Node * getNode() const override {
-      return Source;
-    }
+  inline Node * getNode() const override {
+    return Source;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2015;
-    }
+  unsigned getCode() const noexcept override {
+    return 2015;
+  }
 
-  };
+};
 
-  class InvalidTypeToTypeclassDiagnostic : public Diagnostic {
-  public:
+class InvalidTypeToTypeclassDiagnostic : public Diagnostic {
+public:
 
-    Type* Actual;
-    std::vector<TypeclassId> Classes;
-    Node* Source;
+  Type* Actual;
+  std::vector<TypeclassId> Classes;
+  Node* Source;
 
-    inline InvalidTypeToTypeclassDiagnostic(Type* Actual, std::vector<TypeclassId> Classes, Node* Source):
-      Diagnostic(DiagnosticKind::InvalidTypeToTypeclass), Actual(Actual), Classes(Classes), Source(Source) {}
+  inline InvalidTypeToTypeclassDiagnostic(Type* Actual, std::vector<TypeclassId> Classes, Node* Source):
+    Diagnostic(DiagnosticKind::InvalidTypeToTypeclass), Actual(Actual), Classes(Classes), Source(Source) {}
 
-    inline Node* getNode() const override {
-      return Source;
-    }
+  inline Node* getNode() const override {
+    return Source;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2060;
-    }
+  unsigned getCode() const noexcept override {
+    return 2060;
+  }
 
-  };
+};
 
-  class FieldNotFoundDiagnostic : public Diagnostic {
-  public:
+class FieldNotFoundDiagnostic : public Diagnostic {
+public:
 
-    ByteString Name;
-    Type* Ty;
-    TypePath Path;
-    Node* Source;
+  ByteString Name;
+  Type* Ty;
+  TypePath Path;
+  Node* Source;
 
-    inline FieldNotFoundDiagnostic(ByteString Name, Type* Ty, TypePath Path, Node* Source):
-     Diagnostic(DiagnosticKind::FieldNotFound), Name(Name), Ty(Ty), Path(Path), Source(Source) {}
+  inline FieldNotFoundDiagnostic(ByteString Name, Type* Ty, TypePath Path, Node* Source):
+   Diagnostic(DiagnosticKind::FieldNotFound), Name(Name), Ty(Ty), Path(Path), Source(Source) {}
 
-    unsigned getCode() const noexcept override {
-      return 2017;
-    }
+  unsigned getCode() const noexcept override {
+    return 2017;
+  }
 
-  };
+};
 
-  class NotATupleDiagnostic : public Diagnostic {
-  public:
+class NotATupleDiagnostic : public Diagnostic {
+public:
 
-    Type* Ty;
-    Node* Source; 
+  Type* Ty;
+  Node* Source; 
 
-    inline NotATupleDiagnostic(Type* Ty, Node* Source):
-      Diagnostic(DiagnosticKind::NotATuple), Ty(Ty), Source(Source) {}
+  inline NotATupleDiagnostic(Type* Ty, Node* Source):
+    Diagnostic(DiagnosticKind::NotATuple), Ty(Ty), Source(Source) {}
 
-    inline Node * getNode() const override { 
-      return Source;
-    }
+  inline Node * getNode() const override { 
+    return Source;
+  }
 
-    unsigned getCode() const noexcept override {
-      return 2016;
-    }
+  unsigned getCode() const noexcept override {
+    return 2016;
+  }
 
-  };
+};
 
 }

@@ -16,328 +16,328 @@
 
 namespace bolt {
 
-  std::string describe(const Type* Ty); // For debugging only
+std::string describe(const Type* Ty); // For debugging only
 
-  enum class SymKind {
-    Type,
-    Var,
-  };
+enum class SymKind {
+  Type,
+  Var,
+};
 
-  class DiagnosticEngine;
+class DiagnosticEngine;
 
-  class Constraint;
+class Constraint;
 
-  using ConstraintSet = std::vector<Constraint*>;
+using ConstraintSet = std::vector<Constraint*>;
 
-  enum class SchemeKind : unsigned char {
-    Forall,
-  };
+enum class SchemeKind : unsigned char {
+  Forall,
+};
 
-  class Scheme {
+class Scheme {
 
-    const SchemeKind Kind;
+  const SchemeKind Kind;
 
-  protected:
+protected:
 
-    inline Scheme(SchemeKind Kind):
-      Kind(Kind) {}
+  inline Scheme(SchemeKind Kind):
+    Kind(Kind) {}
 
-  public:
+public:
 
-    inline SchemeKind getKind() const noexcept {
-      return Kind;
+  inline SchemeKind getKind() const noexcept {
+    return Kind;
+  }
+
+  virtual ~Scheme() {}
+
+};
+
+class Forall : public Scheme {
+public:
+
+  TVSet* TVs;
+  ConstraintSet* Constraints;
+  class Type* Type;
+
+  inline Forall(class Type* Type):
+    Scheme(SchemeKind::Forall), TVs(new TVSet), Constraints(new ConstraintSet), Type(Type) {}
+
+  inline Forall(
+    TVSet* TVs,
+    ConstraintSet* Constraints,
+    class Type* Type
+  ): Scheme(SchemeKind::Forall),
+     TVs(TVs),
+     Constraints(Constraints),
+     Type(Type) {}
+
+  static bool classof(const Scheme* Scm) {
+    return Scm->getKind() == SchemeKind::Forall;
+  }
+
+};
+
+class TypeEnv {
+
+  std::unordered_map<std::tuple<ByteString, SymKind>, Scheme*> Mapping;
+
+public:
+
+  Scheme* lookup(ByteString Name, SymKind Kind) {
+    auto Key = std::make_tuple(Name, Kind);
+    auto Match = Mapping.find(Key);
+    if (Match == Mapping.end()) {
+      return nullptr;
     }
+    return Match->second;
+  }
 
-    virtual ~Scheme() {}
+  void add(ByteString Name, Scheme* Scm, SymKind Kind) {
+    auto Key = std::make_tuple(Name, Kind);
+    ZEN_ASSERT(!Mapping.count(Key))
+    // auto F = static_cast<Forall*>(Scm);
+    // std::cerr << Name << " : forall ";
+    // for (auto TV: *F->TVs) {
+    //   std::cerr << describe(TV) << " ";
+    // }
+    // std::cerr << ". " << describe(F->Type) << "\n";
+    Mapping.emplace(Key, Scm);
+  }
 
-  };
+};
 
-  class Forall : public Scheme {
-  public:
 
-    TVSet* TVs;
-    ConstraintSet* Constraints;
-    class Type* Type;
+enum class ConstraintKind {
+  Equal,
+  Field,
+  Many,
+  Empty,
+};
 
-    inline Forall(class Type* Type):
-      Scheme(SchemeKind::Forall), TVs(new TVSet), Constraints(new ConstraintSet), Type(Type) {}
+class Constraint {
 
-    inline Forall(
-      TVSet* TVs,
-      ConstraintSet* Constraints,
-      class Type* Type
-    ): Scheme(SchemeKind::Forall),
-       TVs(TVs),
-       Constraints(Constraints),
-       Type(Type) {}
+  const ConstraintKind Kind;
 
-    static bool classof(const Scheme* Scm) {
-      return Scm->getKind() == SchemeKind::Forall;
-    }
+public:
 
-  };
+  inline Constraint(ConstraintKind Kind):
+    Kind(Kind) {}
 
-  class TypeEnv {
+  inline ConstraintKind getKind() const noexcept {
+    return Kind;
+  }
 
-    std::unordered_map<std::tuple<ByteString, SymKind>, Scheme*> Mapping;
+  Constraint* substitute(const TVSub& Sub);
 
-  public:
+  virtual ~Constraint() {}
 
-    Scheme* lookup(ByteString Name, SymKind Kind) {
-      auto Key = std::make_tuple(Name, Kind);
-      auto Match = Mapping.find(Key);
-      if (Match == Mapping.end()) {
-        return nullptr;
-      }
-      return Match->second;
-    }
+};
 
-    void add(ByteString Name, Scheme* Scm, SymKind Kind) {
-      auto Key = std::make_tuple(Name, Kind);
-      ZEN_ASSERT(!Mapping.count(Key))
-      // auto F = static_cast<Forall*>(Scm);
-      // std::cerr << Name << " : forall ";
-      // for (auto TV: *F->TVs) {
-      //   std::cerr << describe(TV) << " ";
-      // }
-      // std::cerr << ". " << describe(F->Type) << "\n";
-      Mapping.emplace(Key, Scm);
-    }
+class CEqual : public Constraint {
+public:
 
-  };
+  Type* Left;
+  Type* Right;
+  Node* Source;
 
+  inline CEqual(Type* Left, Type* Right, Node* Source = nullptr):
+    Constraint(ConstraintKind::Equal), Left(Left), Right(Right), Source(Source) {}
 
-  enum class ConstraintKind {
-    Equal,
-    Field,
-    Many,
-    Empty,
-  };
+};
 
-  class Constraint {
+class CField : public Constraint {
+public:
 
-    const ConstraintKind Kind;
+  Type* TupleTy;
+  size_t I;
+  Type* FieldTy;
+  Node* Source;
 
-  public:
+  inline CField(Type* TupleTy, size_t I, Type* FieldTy, Node* Source = nullptr):
+    Constraint(ConstraintKind::Field), TupleTy(TupleTy), I(I), FieldTy(FieldTy), Source(Source) {}
 
-    inline Constraint(ConstraintKind Kind):
-      Kind(Kind) {}
+};
 
-    inline ConstraintKind getKind() const noexcept {
-      return Kind;
-    }
+class CMany : public Constraint {
+public:
 
-    Constraint* substitute(const TVSub& Sub);
+  ConstraintSet& Elements;
 
-    virtual ~Constraint() {}
+  inline CMany(ConstraintSet& Elements):
+    Constraint(ConstraintKind::Many), Elements(Elements) {}
 
-  };
+};
 
-  class CEqual : public Constraint {
-  public:
+class CEmpty : public Constraint {
+public:
 
-    Type* Left;
-    Type* Right;
-    Node* Source;
+  inline CEmpty():
+    Constraint(ConstraintKind::Empty) {}
 
-    inline CEqual(Type* Left, Type* Right, Node* Source = nullptr):
-      Constraint(ConstraintKind::Equal), Left(Left), Right(Right), Source(Source) {}
+};
 
-  };
+using InferContextFlagsMask = unsigned;
 
-  class CField : public Constraint {
-  public:
+class InferContext {
+public:
 
-    Type* TupleTy;
-    size_t I;
-    Type* FieldTy;
-    Node* Source;
+  /**
+   * A heap-allocated list of type variables that eventually will become part of a Forall scheme.
+   */
+  TVSet* TVs;
 
-    inline CField(Type* TupleTy, size_t I, Type* FieldTy, Node* Source = nullptr):
-      Constraint(ConstraintKind::Field), TupleTy(TupleTy), I(I), FieldTy(FieldTy), Source(Source) {}
+  /**
+   * A heap-allocated list of constraints that eventually will become part of a Forall scheme.
+   */
+  ConstraintSet* Constraints;
 
-  };
+  TypeEnv Env;
 
-  class CMany : public Constraint {
-  public:
+  Type* ReturnType = nullptr;
 
-    ConstraintSet& Elements;
+  InferContext* Parent = nullptr;
 
-    inline CMany(ConstraintSet& Elements):
-      Constraint(ConstraintKind::Many), Elements(Elements) {}
+};
 
-  };
+class Checker {
 
-  class CEmpty : public Constraint {
-  public:
+  friend class Unifier;
+  friend class UnificationFrame;
 
-    inline CEmpty():
-      Constraint(ConstraintKind::Empty) {}
+  const LanguageConfig& Config;
+  DiagnosticEngine& DE;
 
-  };
+  size_t NextConTypeId = 0;
+  size_t NextTypeVarId = 0;
 
-  using InferContextFlagsMask = unsigned;
+  Type* BoolType;
+  Type* ListType;
+  Type* IntType;
+  Type* StringType;
+  Type* UnitType;
 
-  class InferContext {
-  public:
+  Graph<Node*> RefGraph;
 
-    /**
-     * A heap-allocated list of type variables that eventually will become part of a Forall scheme.
-     */
-    TVSet* TVs;
+  std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
 
-    /**
-     * A heap-allocated list of constraints that eventually will become part of a Forall scheme.
-     */
-    ConstraintSet* Constraints;
+  /// Inference context management
 
-    TypeEnv Env;
+  InferContext* ActiveContext;
 
-    Type* ReturnType = nullptr;
+  InferContext& getContext();
+  void setContext(InferContext* Ctx);
+  void popContext();
 
-    InferContext* Parent = nullptr;
+  void makeEqual(Type* A, Type* B, Node* Source);
 
-  };
+  void addConstraint(Constraint* Constraint);
 
-  class Checker {
+  /**
+   * Get the return type for the current context. If none could be found, the
+   * program will abort.
+   */
+  Type* getReturnType();
 
-    friend class Unifier;
-    friend class UnificationFrame;
+  /// Type inference
 
-    const LanguageConfig& Config;
-    DiagnosticEngine& DE;
+  void forwardDeclare(Node* Node);
+  void forwardDeclareFunctionDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
 
-    size_t NextConTypeId = 0;
-    size_t NextTypeVarId = 0;
+  Type* inferExpression(Expression* Expression);
+  Type* inferTypeExpression(TypeExpression* TE, bool AutoVars = true);
+  Type* inferLiteral(Literal* Lit);
+  Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
 
-    Type* BoolType;
-    Type* ListType;
-    Type* IntType;
-    Type* StringType;
-    Type* UnitType;
+  void infer(Node* node);
+  void inferFunctionDeclaration(LetDeclaration* N);
+  void inferConstraintExpression(ConstraintExpression* C);
 
-    Graph<Node*> RefGraph;
+  /// Factory methods 
 
-    std::unordered_map<ByteString, std::vector<InstanceDeclaration*>> InstanceMap;
+  Type* createConType(ByteString Name);
+  Type* createTypeVar();
+  Type* createRigidVar(ByteString Name);
+  InferContext* createInferContext(
+    InferContext* Parent = nullptr,
+    TVSet* TVs = new TVSet,
+    ConstraintSet* Constraints = new ConstraintSet
+  );
 
-    /// Inference context management
+  /// Environment manipulation
 
-    InferContext* ActiveContext;
+  Scheme* lookup(ByteString Name, SymKind Kind);
 
-    InferContext& getContext();
-    void setContext(InferContext* Ctx);
-    void popContext();
+  /**
+   * Looks up a type/variable and  ensures that it is a monomorphic type.
+   *
+   * This method is mainly syntactic sugar to make it clear in the code when a
+   * monomorphic type is expected.
+   *
+   * Note that if the type is not monomorphic the program will abort with a
+   * stack trace. It wil **not** print a user-friendly error message.
+   *
+   * \returns If the type/variable could not be found `nullptr` is returned.
+   *          Otherwise, a [Type] is returned.
+   */
+  Type* lookupMono(ByteString Name, SymKind Kind);
 
-    void makeEqual(Type* A, Type* B, Node* Source);
+  void addBinding(ByteString Name, Scheme* Scm, SymKind Kind);
 
-    void addConstraint(Constraint* Constraint);
+  /// Constraint solving
 
-    /**
-     * Get the return type for the current context. If none could be found, the
-     * program will abort.
-     */
-    Type* getReturnType();
+  /**
+   * The queue that is used during solving to store any unsolved constraints.
+   */
+  std::deque<class Constraint*> Queue;
 
-    /// Type inference
+  /**
+   * Unify two types, using `Source` as source location.
+   *
+   * \returns Whether a type variable was assigned a type or not.
+   */
+  bool unify(Type* Left, Type* Right, Node* Source);
 
-    void forwardDeclare(Node* Node);
-    void forwardDeclareFunctionDeclaration(LetDeclaration* N, TVSet* TVs, ConstraintSet* Constraints);
+  void solve(Constraint* Constraint);
 
-    Type* inferExpression(Expression* Expression);
-    Type* inferTypeExpression(TypeExpression* TE, bool AutoVars = true);
-    Type* inferLiteral(Literal* Lit);
-    Type* inferPattern(Pattern* Pattern, ConstraintSet* Constraints = new ConstraintSet, TVSet* TVs = new TVSet);
+  /// Helpers
 
-    void infer(Node* node);
-    void inferFunctionDeclaration(LetDeclaration* N);
-    void inferConstraintExpression(ConstraintExpression* C);
+  void populate(SourceFile* SF);
 
-    /// Factory methods 
+  /**
+   * Verifies that type class signatures on type asserts in let-declarations
+   * correctly declare the right type classes.
+   */
+  void checkTypeclassSigs(Node* N);
 
-    Type* createConType(ByteString Name);
-    Type* createTypeVar();
-    Type* createRigidVar(ByteString Name);
-    InferContext* createInferContext(
-      InferContext* Parent = nullptr,
-      TVSet* TVs = new TVSet,
-      ConstraintSet* Constraints = new ConstraintSet
-    );
+  Type* instantiate(Scheme* S, Node* Source);
 
-    /// Environment manipulation
+  void initialize(Node* N);
 
-    Scheme* lookup(ByteString Name, SymKind Kind);
+public:
 
-    /**
-     * Looks up a type/variable and  ensures that it is a monomorphic type.
-     *
-     * This method is mainly syntactic sugar to make it clear in the code when a
-     * monomorphic type is expected.
-     *
-     * Note that if the type is not monomorphic the program will abort with a
-     * stack trace. It wil **not** print a user-friendly error message.
-     *
-     * \returns If the type/variable could not be found `nullptr` is returned.
-     *          Otherwise, a [Type] is returned.
-     */
-    Type* lookupMono(ByteString Name, SymKind Kind);
+  Checker(const LanguageConfig& Config, DiagnosticEngine& DE);
 
-    void addBinding(ByteString Name, Scheme* Scm, SymKind Kind);
+  /**
+   * \internal
+   */
+  Type* solveType(Type* Ty);
 
-    /// Constraint solving
+  void check(SourceFile* SF);
 
-    /**
-     * The queue that is used during solving to store any unsolved constraints.
-     */
-    std::deque<class Constraint*> Queue;
+  inline Type* getBoolType() const {
+    return BoolType;
+  }
 
-    /**
-     * Unify two types, using `Source` as source location.
-     *
-     * \returns Whether a type variable was assigned a type or not.
-     */
-    bool unify(Type* Left, Type* Right, Node* Source);
+  inline Type* getStringType() const {
+    return StringType;
+  }
 
-    void solve(Constraint* Constraint);
+  inline Type* getIntType() const {
+    return IntType;
+  }
 
-    /// Helpers
+  Type* getType(TypedNode* Node);
 
-    void populate(SourceFile* SF);
-
-    /**
-     * Verifies that type class signatures on type asserts in let-declarations
-     * correctly declare the right type classes.
-     */
-    void checkTypeclassSigs(Node* N);
-
-    Type* instantiate(Scheme* S, Node* Source);
-
-    void initialize(Node* N);
-
-  public:
-
-    Checker(const LanguageConfig& Config, DiagnosticEngine& DE);
-
-    /**
-     * \internal
-     */
-    Type* solveType(Type* Ty);
-
-    void check(SourceFile* SF);
-
-    inline Type* getBoolType() const {
-      return BoolType;
-    }
-
-    inline Type* getStringType() const {
-      return StringType;
-    }
-
-    inline Type* getIntType() const {
-      return IntType;
-    }
-
-    Type* getType(TypedNode* Node);
-
-  };
+};
 
 }
