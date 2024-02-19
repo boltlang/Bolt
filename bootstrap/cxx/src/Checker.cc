@@ -508,6 +508,7 @@ namespace bolt {
 
       auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
       auto Class = cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, getCanonicalText(Instance->Name) }, SymbolKind::Class));
+      // TODO check if `Class` is nullptr
       auto SigLet = cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, Let->getNameAsString() }, SymbolKind::Var));
 
       auto Params = addClassVars(Class, false);
@@ -1297,7 +1298,7 @@ namespace bolt {
         auto Y = static_cast<ReferenceExpression*>(N);
         auto Def = Y->getScope()->lookup(Y->getSymbolPath());
         // Name lookup failures will be reported directly in inferExpression().
-        if (Def == nullptr || Def->getKind() == NodeKind::SourceFile) {
+        if (Def == nullptr || Def->getKind() != NodeKind::LetDeclaration) {
           return;
         }
         // This case ensures that a deeply nested structure that references a
@@ -1307,7 +1308,6 @@ namespace bolt {
           RefGraph.addEdge(Stack.top(), Def->Parent);
           return;
         }
-        ZEN_ASSERT(Def->getKind() == NodeKind::LetDeclaration);
         if (!Stack.empty()) {
           RefGraph.addEdge(Def, Stack.top());
         }

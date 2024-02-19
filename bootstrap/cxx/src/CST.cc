@@ -78,6 +78,12 @@ namespace bolt {
         }
         break;
       }
+      case NodeKind::MatchCase:
+      {
+        auto Case = static_cast<MatchCase*>(X);
+        visitPattern(Case->Pattern, Case);
+        break;
+      }
       case NodeKind::LetDeclaration:
       {
         auto Decl = static_cast<LetDeclaration*>(X);

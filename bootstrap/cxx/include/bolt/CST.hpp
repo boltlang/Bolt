@@ -1637,6 +1637,9 @@ namespace bolt {
   };
 
   class MatchCase : public Node { 
+
+    Scope* TheScope = nullptr;
+
   public:
 
     InferContext* Ctx;
@@ -1656,6 +1659,14 @@ namespace bolt {
 
     Token* getFirstToken() const override;
     Token* getLastToken() const override;
+
+    inline Scope* getScope() override {
+      if (TheScope == nullptr) {
+        TheScope = new Scope(this);
+      }
+      return TheScope;
+    }
+
 
   };
 
