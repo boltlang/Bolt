@@ -731,7 +731,7 @@ namespace bolt {
           writeExcerpt(E.Initiator->getSourceFile()->getTextFile(), Range, Range, Color::Red);
           Out << "\n";
         }
-        break;
+        return;
       }
 
       case DiagnosticKind::UnexpectedToken:
@@ -765,7 +765,7 @@ namespace bolt {
         write("\n\n");
         writeExcerpt(E.File, E.Actual->getRange(), E.Actual->getRange(), Color::Red);
         write("\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::UnexpectedString:
@@ -791,7 +791,7 @@ namespace bolt {
         TextRange Range { E.Location, E.Location + E.Actual };
         writeExcerpt(E.File, Range, Range, Color::Red);
         write("\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::UnificationError:
@@ -842,7 +842,7 @@ namespace bolt {
         //   writeType(E.OrigRight);
         //   write("\n\n");
         // }
-        break;
+        return;
       }
 
       case DiagnosticKind::TypeclassMissing:
@@ -854,7 +854,7 @@ namespace bolt {
         write(" is missing from the declaration's type signature\n\n");
         writeNode(E.Decl);
         write("\n\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::InstanceNotFound:
@@ -868,7 +868,7 @@ namespace bolt {
         write(" was not found.\n\n");
         writeNode(E.Source);
         write("\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::TupleIndexOutOfRange:
@@ -882,7 +882,7 @@ namespace bolt {
         write("\n\n");
         writeNode(E.Source);
         write("\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::InvalidTypeToTypeclass:
@@ -899,7 +899,7 @@ namespace bolt {
           writeTypeclassName(Class);
         }
         write(" but this is invalid\n\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::FieldNotFound:
@@ -911,7 +911,7 @@ namespace bolt {
         write("' was required in one type but not found in another\n\n");
         writeNode(E.Source);
         write("\n");
-        break;
+        return;
       }
 
       case DiagnosticKind::NotATuple:
@@ -923,7 +923,7 @@ namespace bolt {
         write(" is not a tuple.\n\n");
         writeNode(E.Source);
         write("\n");
-        break;
+        return;
       }
 
     }
