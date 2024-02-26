@@ -1,7 +1,9 @@
 Bolt
 ====
 
-⚠️ This compiler is experimental and might have breaking changes with each update.
+> ![WARNING]
+>
+> This compiler is experimental and might have breaking changes with each update.
 
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
