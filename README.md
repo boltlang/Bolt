@@ -1,7 +1,7 @@
 Bolt
 ====
 
-> ![WARNING]
+> [!WARNING]
 >
 > This compiler is experimental and might have breaking changes with each update.
 
