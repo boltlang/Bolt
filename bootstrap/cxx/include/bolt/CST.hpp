@@ -1,11 +1,13 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
+#include <cstdlib>
 #include <limits>
 #include <unordered_map>
 #include <variant>
 #include <vector>
 
+#include "bolt/Common.hpp"
 #include "zen/config.hpp"
 
 #include "bolt/Integer.hpp"
@@ -172,7 +174,11 @@ enum class NodeKind {
   Parameter,
   LetBlockBody,
   LetExprBody,
-  LetDeclaration,
+  PrefixFunctionDeclaration,
+  InfixFunctionDeclaration,
+  SuffixFunctionDeclaration,
+  NamedFunctionDeclaration,
+  VariableDeclaration,
   RecordDeclarationField,
   RecordDeclaration,
   VariantDeclaration,
@@ -363,31 +369,6 @@ public:
   }
 
 };
-
-/// Any node that can be used as an operator
-///
-/// This includes the following nodes:
-/// - VBar
-/// - CustomOperator
-using Operator = Token;
-
-/// Any node that can be used as a kind of identifier.
-///
-/// This includes the following nodes:
-///  - Identifier
-///  - IdentifierAlt
-///  - WrappedOperator
-using Symbol = Node;
-
-inline bool isSymbol(const Node* N) {
-  return N->getKind() == NodeKind::Identifier
-      || N->getKind() == NodeKind::IdentifierAlt
-      || N->getKind() == NodeKind::WrappedOperator;
-}
-
-/// Get the text that is actually represented by a symbol, without all the
-/// syntactic sugar.
-ByteString getCanonicalText(const Symbol* N);
 
 class Equals : public Token {
 public:
@@ -903,6 +884,8 @@ public:
 
   std::string getText() const override;
 
+  std::string getCanonicalText() const;
+
   static bool classof(const Node* N) {
     return N->getKind() == NodeKind::CustomOperator;
   }
@@ -935,6 +918,8 @@ public:
 
   std::string getText() const override;
 
+  ByteString getCanonicalText() const;
+
   bool isTypeVar() const;
 
   static bool classof(const Node* N) {
@@ -952,6 +937,8 @@ public:
     Token(NodeKind::IdentifierAlt, StartLoc), Text(Text) {}
 
   std::string getText() const override;
+
+  ByteString getCanonicalText() const;
 
   static bool classof(const Node* N) {
     return N->getKind() == NodeKind::IdentifierAlt;
@@ -1020,6 +1007,182 @@ public:
   }
 
 };
+
+/// Base node for things that can be used as an operator
+///
+/// This includes the following nodes:
+/// - VBar
+/// - CustomOperator
+class Operator {
+
+  Node* N;
+
+  Operator(Node* N):
+    N(N) {}
+
+public:
+
+  Operator() {}
+
+  Operator(VBar* N):
+    N(N) {}
+
+  Operator(CustomOperator* N):
+    N(N) {}
+
+  static Operator from_raw_node(Node* N) {
+    ZEN_ASSERT(isa<Operator>(N));
+    return N;
+  }
+
+  inline NodeKind getKind() const {
+    return N->getKind();
+  }
+
+  inline bool isVBar() const {
+    return N->getKind() == NodeKind::VBar;
+  }
+
+  inline bool isCustomOperator() const {
+    return N->getKind() == NodeKind::CustomOperator;
+  }
+
+  VBar* asVBar() const {
+    return static_cast<VBar*>(N);
+  }
+
+  CustomOperator* asCustomOperator() const {
+    return static_cast<CustomOperator*>(N);
+  }
+
+  operator Node*() const {
+    return N;
+  }
+
+  /// Get the name that is actually represented by an operator, without all the
+  /// syntactic sugar.
+  virtual ByteString getCanonicalText() const;
+
+  Token* getFirstToken() const;
+  Token* getLastToken() const;
+
+  inline static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::VBar
+        || N->getKind() == NodeKind::CustomOperator;
+  }
+
+};
+class WrappedOperator : public Node {
+public:
+
+  class LParen* LParen;
+  Operator Op;
+  class RParen* RParen;
+
+  WrappedOperator(
+    class LParen* LParen,
+    Operator Operator,
+    class RParen* RParen
+  ): Node(NodeKind::WrappedOperator),
+     LParen(LParen),
+     Op(Operator),
+     RParen(RParen) {}
+
+  inline Operator getOperator() const {
+    return Op;
+  }
+
+  ByteString getCanonicalText() const {
+    return Op.getCanonicalText();
+  }
+
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::WrappedOperator;
+  }
+
+};
+
+/// Base node for things that can be used as a symbol
+///
+/// This includes the following nodes:
+/// - WrappedOperator
+/// - Identifier
+/// - IdentifierAlt
+class Symbol {
+
+  Node* N;
+
+  Symbol(Node* N):
+    N(N) {}
+
+public:
+
+  Symbol() {}
+
+  Symbol(WrappedOperator* N):
+    N(N) {}
+
+  Symbol(Identifier* N):
+    N(N) {}
+
+  Symbol(IdentifierAlt* N):
+    N(N) {}
+
+  static Symbol from_raw_node(Node* N) {
+    ZEN_ASSERT(isa<Symbol>(N));
+    return N;
+  }
+
+  NodeKind getKind() const {
+    return N->getKind();
+  }
+
+  bool isWrappedOperator() const {
+    return N->getKind() == NodeKind::WrappedOperator;
+  }
+
+  bool isIdentifier() const {
+    return N->getKind() == NodeKind::Identifier;
+  }
+
+  bool isIdentifierAlt() const {
+    return N->getKind() == NodeKind::IdentifierAlt;
+  }
+
+  IdentifierAlt* asIdentifierAlt() const {
+    return cast<IdentifierAlt>(N);
+  }
+
+  Identifier* asIdentifier() const {
+    return cast<Identifier>(N);
+  }
+
+  WrappedOperator* asWrappedOperator() const {
+    return cast<WrappedOperator>(N);
+  }
+
+  operator Node*() const {
+    return N;
+  }
+
+  /// Get the name that is actually represented by a symbol, without all the
+  /// syntactic sugar.
+  ByteString getCanonicalText() const;
+
+  Token* getFirstToken() const;
+  Token* getLastToken() const;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::Identifier
+        || N->getKind() == NodeKind::IdentifierAlt
+        || N->getKind() == NodeKind::WrappedOperator;
+  }
+
+};
+
 
 class Annotation : public Node {
 public:
@@ -1353,31 +1516,6 @@ public:
 
 };
 
-class WrappedOperator : public Symbol {
-public:
-
-  class LParen* LParen;
-  Token* Op;
-  class RParen* RParen;
-
-  WrappedOperator(
-    class LParen* LParen,
-    Token* Operator,
-    class RParen* RParen
-  ): Symbol(NodeKind::WrappedOperator),
-     LParen(LParen),
-     Op(Operator),
-     RParen(RParen) {}
-
-  inline Token* getOperator() const {
-    return Op;
-  }
-
-  Token* getFirstToken() const override;
-  Token* getLastToken() const override;
-
-};
-
 
 class Pattern : public Node {
 protected:
@@ -1390,10 +1528,10 @@ protected:
 class BindPattern : public Pattern {
 public:
 
-  Symbol* Name;
+  Identifier* Name;
 
   BindPattern(
-    Symbol* Name
+    Identifier* Name
   ): Pattern(NodeKind::BindPattern),
      Name(Name) {}
 
@@ -1608,11 +1746,11 @@ class ReferenceExpression : public Expression {
 public:
 
   std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
-  Symbol* Name;
+  Symbol Name;
 
   inline ReferenceExpression(
     std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
-    Symbol* Name
+    Symbol Name
   ): Expression(NodeKind::ReferenceExpression),
      ModulePath(ModulePath),
      Name(Name) {}
@@ -1620,13 +1758,13 @@ public:
   inline ReferenceExpression(
     std::vector<Annotation*> Annotations,
     std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
-    Symbol* Name
+    Symbol Name
   ): Expression(NodeKind::ReferenceExpression, Annotations),
      ModulePath(ModulePath),
      Name(Name) {}
 
   inline ByteString getNameAsString() const noexcept {
-    return getCanonicalText(Name);
+    return Name.getCanonicalText();
   }
 
   Token* getFirstToken() const override;
@@ -1864,12 +2002,12 @@ class InfixExpression : public Expression {
 public:
 
   Expression* Left;
-  Token* Operator;
+  Operator Operator;
   Expression* Right;
 
   inline InfixExpression(
     Expression* Left,
-    Token* Operator,
+    class Operator Operator,
     Expression* Right
   ): Expression(NodeKind::InfixExpression),
      Left(Left),
@@ -1879,7 +2017,7 @@ public:
   inline InfixExpression(
     std::vector<Annotation*> Annotations,
     Expression* Left,
-    Token* Operator,
+    class Operator Operator,
     Expression* Right
   ): Expression(NodeKind::InfixExpression, Annotations),
      Left(Left),
@@ -2110,6 +2248,10 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::Parameter;
+  }
+
 };
 
 class LetBody : public Node {
@@ -2155,7 +2297,7 @@ public:
 
 };
 
-class LetDeclaration : public TypedNode, public AnnotationContainer {
+class FunctionDeclaration : public TypedNode, public AnnotationContainer {
 
   Scope* TheScope = nullptr;
 
@@ -2165,63 +2307,34 @@ public:
   bool Visited = false;
   InferContext* Ctx;
 
-  class PubKeyword* PubKeyword;
-  class ForeignKeyword* ForeignKeyword;
-  class LetKeyword* LetKeyword;
-  class MutKeyword* MutKeyword;
-  class Pattern* Pattern;
-  std::vector<Parameter*> Params;
-  class TypeAssert* TypeAssert;
-  LetBody* Body;
+  FunctionDeclaration(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
+    TypedNode(Kind), AnnotationContainer(Annotations) {}
 
-  LetDeclaration(
-    class PubKeyword* PubKeyword,
-    class ForeignKeyword* ForeignKeyword,
-    class LetKeyword* LetKeyword,
-    class MutKeyword* MutKeyword,
-    class Pattern* Pattern,
-    std::vector<Parameter*> Params,
-    class TypeAssert* TypeAssert,
-    LetBody* Body
-  ): TypedNode(NodeKind::LetDeclaration),
-     PubKeyword(PubKeyword),
-     ForeignKeyword(ForeignKeyword),
-     LetKeyword(LetKeyword),
-     MutKeyword(MutKeyword),
-     Pattern(Pattern),
-     Params(Params),
-     TypeAssert(TypeAssert),
-     Body(Body) {}
+  virtual bool isPublic() const = 0;
 
-  LetDeclaration(
-    std::vector<Annotation*> Annotations,
-    class PubKeyword* PubKeyword,
-    class ForeignKeyword* ForeignKeyword,
-    class LetKeyword* LetKeyword,
-    class MutKeyword* MutKeyword,
-    class Pattern* Pattern,
-    std::vector<Parameter*> Params,
-    class TypeAssert* TypeAssert,
-    LetBody* Body
-  ): TypedNode(NodeKind::LetDeclaration),
-     AnnotationContainer(Annotations),
-     PubKeyword(PubKeyword),
-     ForeignKeyword(ForeignKeyword),
-     LetKeyword(LetKeyword),
-     MutKeyword(MutKeyword),
-     Pattern(Pattern),
-     Params(Params),
-     TypeAssert(TypeAssert),
-     Body(Body) {}
+  virtual bool isForeign() const = 0;
+
+  virtual ByteString  getNameAsString() const = 0;
+
+  virtual std::vector<Parameter*> getParams() const = 0;
+
+  virtual TypeAssert* getTypeAssert() const = 0;
+
+  bool hasTypeAssert() const {
+    return getTypeAssert();
+  }
+
+  virtual LetBody* getBody() const = 0;
+
+  bool hasBody() const {
+    return getBody();
+  }
 
   inline Scope* getScope() override {
-    if (isFunction()) {
-      if (TheScope == nullptr) {
-        TheScope = new Scope(this);
-      }
-      return TheScope;
+    if (TheScope == nullptr) {
+      TheScope = new Scope(this);
     }
-    return Parent->getScope();
+    return TheScope;
   }
 
   bool isInstance() const noexcept {
@@ -2232,33 +2345,310 @@ public:
     return Parent->getKind() == NodeKind::ClassDeclaration;
   }
 
-  bool isSignature() const noexcept {
-    return ForeignKeyword;
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::PrefixFunctionDeclaration
+        || N->getKind() == NodeKind::InfixFunctionDeclaration
+        || N->getKind() == NodeKind::SuffixFunctionDeclaration
+        || N->getKind() == NodeKind::NamedFunctionDeclaration;
   }
 
-  bool isVariable() const noexcept {
-    // Variables in classes and instances are never possible, so we reflect this by excluding them here.
-    return !isSignature() && !isClass() && !isInstance() && Params.empty() && (Pattern->getKind() != NodeKind::BindPattern || !Body);
+};
+
+class PrefixFunctionDeclaration : public FunctionDeclaration {
+public:
+
+  class PubKeyword* PubKeyword;
+  class ForeignKeyword* ForeignKeyword;
+  class LetKeyword* LetKeyword;
+  class Operator Name;
+  Parameter* Param;
+  class TypeAssert* TypeAssert;
+  LetBody* Body;
+
+  PrefixFunctionDeclaration(
+    class std::vector<Annotation*> Annotations,
+    class PubKeyword* PubKeyword,
+    class ForeignKeyword* ForeignKeyword,
+    class LetKeyword* LetKeyword,
+    Operator Name,
+    Parameter* Param,
+    class TypeAssert* TypeAssert,
+    LetBody* Body
+  ): FunctionDeclaration(NodeKind::PrefixFunctionDeclaration, Annotations),
+     PubKeyword(PubKeyword),
+     ForeignKeyword(ForeignKeyword),
+     LetKeyword(LetKeyword),
+     Name(Name),
+     Param(Param),
+     TypeAssert(TypeAssert),
+     Body(Body) {}
+
+  bool isPublic() const override {
+    return PubKeyword != nullptr;
   }
 
-  bool isFunction() const noexcept {
-    return !isSignature() && !isVariable();
+  bool isForeign() const override {
+    return ForeignKeyword != nullptr;
   }
 
-  Symbol* getName() const noexcept {
-    ZEN_ASSERT(Pattern->getKind() == NodeKind::BindPattern);
-    return static_cast<BindPattern*>(Pattern)->Name;
+  ByteString getNameAsString() const override {
+    return Name.getCanonicalText();
   }
 
-  ByteString getNameAsString() const noexcept {
-    return getCanonicalText(getName());
+  std::vector<Parameter*> getParams() const override {
+    return { Param };
+  }
+
+  class TypeAssert* getTypeAssert() const override {
+    return TypeAssert;
+  }
+
+  LetBody* getBody() const override {
+    return Body;
   }
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
   static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LetDeclaration;
+    return N->getKind() == NodeKind::PrefixFunctionDeclaration;
+  }
+
+};
+
+class SuffixFunctionDeclaration : public FunctionDeclaration {
+public:
+
+  class PubKeyword* PubKeyword;
+  class ForeignKeyword* ForeignKeyword;
+  class LetKeyword* LetKeyword;
+  Parameter* Param;
+  class Operator Name;
+  class TypeAssert* TypeAssert;
+  LetBody* Body;
+
+  SuffixFunctionDeclaration(
+    class std::vector<Annotation*> Annotations,
+    class PubKeyword* PubKeyword,
+    class ForeignKeyword* ForeignKeyword,
+    class LetKeyword* LetKeyword,
+    Parameter* Param,
+    Operator Name,
+    class TypeAssert* TypeAssert,
+    LetBody* Body
+  ): FunctionDeclaration(NodeKind::SuffixFunctionDeclaration, Annotations),
+     PubKeyword(PubKeyword),
+     ForeignKeyword(ForeignKeyword),
+     LetKeyword(LetKeyword),
+     Name(Name),
+     Param(Param),
+     TypeAssert(TypeAssert),
+     Body(Body) {}
+
+  bool isPublic() const override {
+    return PubKeyword != nullptr;
+  }
+
+  bool isForeign() const override {
+    return ForeignKeyword != nullptr;
+  }
+
+  ByteString getNameAsString() const override {
+    return Name.getCanonicalText();
+  }
+
+  std::vector<Parameter*> getParams() const override {
+    return { Param };
+  }
+
+  class TypeAssert* getTypeAssert() const override {
+    return TypeAssert;
+  }
+
+  LetBody* getBody() const override {
+    return Body;
+  }
+
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::SuffixFunctionDeclaration;
+  }
+
+};
+
+class InfixFunctionDeclaration : public FunctionDeclaration {
+public:
+
+  class PubKeyword* PubKeyword;
+  class ForeignKeyword* ForeignKeyword;
+  class LetKeyword* LetKeyword;
+  Parameter* Left;
+  class Operator Name;
+  Parameter* Right;
+  class TypeAssert* TypeAssert;
+  LetBody* Body;
+
+  InfixFunctionDeclaration(
+    class std::vector<Annotation*> Annotations,
+    class PubKeyword* PubKeyword,
+    class ForeignKeyword* ForeignKeyword,
+    class LetKeyword* LetKeyword,
+    Parameter* Left,
+    class Operator Name,
+    Parameter* Right,
+    class TypeAssert* TypeAssert,
+    LetBody* Body
+  ): FunctionDeclaration(NodeKind::InfixFunctionDeclaration, Annotations),
+     PubKeyword(PubKeyword),
+     ForeignKeyword(ForeignKeyword),
+     LetKeyword(LetKeyword),
+     Left(Left),
+     Name(Name),
+     Right(Right),
+     TypeAssert(TypeAssert),
+     Body(Body) {}
+
+  bool isPublic() const override {
+    return PubKeyword != nullptr;
+  }
+
+  bool isForeign() const override {
+    return ForeignKeyword != nullptr;
+  }
+
+  ByteString getNameAsString() const override {
+    return Name.getCanonicalText();
+  }
+
+  std::vector<Parameter*> getParams() const override {
+    return { Left, Right };
+  }
+
+  class TypeAssert* getTypeAssert() const override {
+    return TypeAssert;
+  }
+
+  LetBody* getBody() const override {
+    return Body;
+  }
+
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::InfixFunctionDeclaration;
+  }
+
+};
+
+class NamedFunctionDeclaration : public FunctionDeclaration {
+public:
+
+  class PubKeyword* PubKeyword;
+  class ForeignKeyword* ForeignKeyword;
+  class LetKeyword* LetKeyword;
+  class Symbol Name;
+  std::vector<Parameter*> Params;
+  class TypeAssert* TypeAssert;
+  LetBody* Body;
+
+  NamedFunctionDeclaration(
+    class std::vector<Annotation*> Annotations,
+    class PubKeyword* PubKeyword,
+    class ForeignKeyword* ForeignKeyword,
+    class LetKeyword* LetKeyword,
+    class Symbol Name,
+    std::vector<Parameter*> Params,
+    class TypeAssert* TypeAssert,
+    LetBody* Body
+  ): FunctionDeclaration(NodeKind::NamedFunctionDeclaration, Annotations),
+     PubKeyword(PubKeyword),
+     ForeignKeyword(ForeignKeyword),
+     LetKeyword(LetKeyword),
+     Name(Name),
+     Params(Params),
+     TypeAssert(TypeAssert),
+     Body(Body) {}
+
+  bool isPublic() const override {
+    return PubKeyword != nullptr;
+  }
+
+  bool isForeign() const override {
+    return ForeignKeyword != nullptr;
+  }
+
+  ByteString getNameAsString() const override {
+    return Name.getCanonicalText();
+  }
+
+  std::vector<Parameter*> getParams() const override {
+    return Params;
+  }
+
+  class TypeAssert* getTypeAssert() const override {
+    return TypeAssert;
+  }
+
+  LetBody* getBody() const override {
+    return Body;
+  }
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::NamedFunctionDeclaration;
+  }
+
+};
+
+class VariableDeclaration : public TypedNode, public AnnotationContainer {
+public:
+
+  class PubKeyword* PubKeyword;
+  class ForeignKeyword* ForeignKeyword;
+  class LetKeyword* LetKeyword;
+  class MutKeyword* MutKeyword;
+  class Pattern* Pattern;
+  std::vector<Parameter*> Params;
+  class TypeAssert* TypeAssert;
+  LetBody* Body;
+
+  VariableDeclaration(
+    class std::vector<Annotation*> Annotations,
+    class PubKeyword* PubKeyword,
+    class ForeignKeyword* ForeignKeyword,
+    class LetKeyword* LetKeyword,
+    class MutKeyword* MutKeyword,
+    class Pattern* Pattern,
+    class TypeAssert* TypeAssert,
+    LetBody* Body
+  ): TypedNode(NodeKind::VariableDeclaration),
+     AnnotationContainer(Annotations),
+     PubKeyword(PubKeyword),
+     ForeignKeyword(ForeignKeyword),
+     LetKeyword(LetKeyword),
+     MutKeyword(MutKeyword),
+     Pattern(Pattern),
+     TypeAssert(TypeAssert),
+     Body(Body) {}
+
+  Symbol getName() const noexcept {
+    ZEN_ASSERT(Pattern->getKind() == NodeKind::BindPattern);
+    return static_cast<BindPattern*>(Pattern)->Name;
+  }
+
+  ByteString getNameAsString() const noexcept {
+    return getName().getCanonicalText();
+  }
+
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::VariableDeclaration;
   }
 
 };
@@ -2555,7 +2945,11 @@ template<> inline NodeKind getNodeType<TypeAssert>() { return NodeKind::TypeAsse
 template<> inline NodeKind getNodeType<Parameter>() { return NodeKind::Parameter; }
 template<> inline NodeKind getNodeType<LetBlockBody>() { return NodeKind::LetBlockBody; }
 template<> inline NodeKind getNodeType<LetExprBody>() { return NodeKind::LetExprBody; }
-template<> inline NodeKind getNodeType<LetDeclaration>() { return NodeKind::LetDeclaration; }
+template<> inline NodeKind getNodeType<PrefixFunctionDeclaration>() { return NodeKind::PrefixFunctionDeclaration; }
+template<> inline NodeKind getNodeType<InfixFunctionDeclaration>() { return NodeKind::InfixFunctionDeclaration; }
+template<> inline NodeKind getNodeType<SuffixFunctionDeclaration>() { return NodeKind::SuffixFunctionDeclaration; }
+template<> inline NodeKind getNodeType<NamedFunctionDeclaration()>() { return NodeKind::NamedFunctionDeclaration; }
+template<> inline NodeKind getNodeType<VariableDeclaration>() { return NodeKind::VariableDeclaration; }
 template<> inline NodeKind getNodeType<RecordDeclarationField>() { return NodeKind::RecordDeclarationField; }
 template<> inline NodeKind getNodeType<RecordDeclaration>() { return NodeKind::RecordDeclaration; }
 template<> inline NodeKind getNodeType<ClassDeclaration>() { return NodeKind::ClassDeclaration; }

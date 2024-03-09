@@ -251,9 +251,9 @@ void Checker::forwardDeclare(Node* X) {
         inferTypeExpression(TE);
       }
 
-      auto Match = InstanceMap.find(getCanonicalText(Decl->Name));
+      auto Match = InstanceMap.find(Decl->Name->getCanonicalText());
       if (Match == InstanceMap.end()) {
-        InstanceMap.emplace(getCanonicalText(Decl->Name), std::vector { Decl });
+        InstanceMap.emplace(Decl->Name->getCanonicalText(), std::vector { Decl });
       } else {
         Match->second.push_back(Decl);
       }
@@ -265,13 +265,15 @@ void Checker::forwardDeclare(Node* X) {
       break;
     }
 
-    case NodeKind::LetDeclaration:
+    case NodeKind::PrefixFunctionDeclaration:
+    case NodeKind::InfixFunctionDeclaration:
+    case NodeKind::SuffixFunctionDeclaration:
+    case NodeKind::NamedFunctionDeclaration:
+      break;
+
+    case NodeKind::VariableDeclaration:
     {
-      // Function declarations are handled separately in forwardDeclareLetDeclaration() and inferExpression()
-      auto Decl = static_cast<LetDeclaration*>(X);
-      if (!Decl->isVariable()) {
-        break;
-      }
+      auto Decl = static_cast<VariableDeclaration*>(X);
       Type* Ty;
       if (Decl->TypeAssert) {
         Ty = inferTypeExpression(Decl->TypeAssert->TypeExpression);
@@ -290,13 +292,13 @@ void Checker::forwardDeclare(Node* X) {
 
       std::vector<Type*> Vars;
       for (auto TE: Decl->TVs) {
-        auto TV = createRigidVar(getCanonicalText(TE->Name));
+        auto TV = createRigidVar(TE->Name->getCanonicalText());
         Decl->Ctx->TVs->emplace(TV);
-        Decl->Ctx->Env.add(getCanonicalText(TE->Name), new Forall(TV), SymKind::Type);
+        Decl->Ctx->Env.add(TE->Name->getCanonicalText(), new Forall(TV), SymKind::Type);
         Vars.push_back(TV);
       }
 
-      Type* Ty = createConType(getCanonicalText(Decl->Name));
+      Type* Ty = createConType(Decl->Name->getCanonicalText());
 
       // Build the type that is actually returned by constructor functions
       auto RetTy = Ty;
@@ -305,7 +307,7 @@ void Checker::forwardDeclare(Node* X) {
       }
 
       // Must be added early so we can create recursive types
-      Decl->Ctx->Parent->Env.add(getCanonicalText(Decl->Name), new Forall(Ty), SymKind::Type);
+      Decl->Ctx->Parent->Env.add(Decl->Name->getCanonicalText(), new Forall(Ty), SymKind::Type);
 
       for (auto Member: Decl->Members) {
         switch (Member->getKind()) {
@@ -318,7 +320,7 @@ void Checker::forwardDeclare(Node* X) {
               ParamTypes.push_back(inferTypeExpression(Element, false));
             }
             Decl->Ctx->Parent->Env.add(
-              getCanonicalText(TupleMember->Name),
+              TupleMember->Name->getCanonicalText(),
               new Forall(
                 Decl->Ctx->TVs,
                 Decl->Ctx->Constraints,
@@ -351,13 +353,13 @@ void Checker::forwardDeclare(Node* X) {
 
       std::vector<Type*> Vars;
       for (auto TE: Decl->Vars) {
-        auto TV = createRigidVar(getCanonicalText(TE->Name));
+        auto TV = createRigidVar(TE->Name->getCanonicalText());
         Decl->Ctx->TVs->emplace(TV);
-        Decl->Ctx->Env.add(getCanonicalText(TE->Name), new Forall(TV), SymKind::Type);
+        Decl->Ctx->Env.add(TE->Name->getCanonicalText(), new Forall(TV), SymKind::Type);
         Vars.push_back(TV);
       }
 
-      auto Name = getCanonicalText(Decl->Name);
+      auto Name = Decl->Name->getCanonicalText();
       auto Ty = createConType(Name);
 
       // Must be added early so we can create recursive types
@@ -373,7 +375,7 @@ void Checker::forwardDeclare(Node* X) {
       for (auto Field: Decl->Fields) {
         FieldsTy = new Type(
           TField(
-            getCanonicalText(Field->Name),
+            Field->Name->getCanonicalText(),
             new Type(TPresent(inferTypeExpression(Field->TypeExpression, false))),
             FieldsTy
           )
@@ -435,13 +437,11 @@ void Checker::initialize(Node* N) {
       Contexts.pop();
     }
 
-    void visitLetDeclaration(LetDeclaration* Let) {
-      if (Let->isFunction()) {
-        Let->Ctx = createDerivedContext();
-        Contexts.push(Let->Ctx);
-        visitEachChild(Let);
-        Contexts.pop();
-      }
+    void visitFunctionDeclaration(FunctionDeclaration* Func) {
+      Func->Ctx = createDerivedContext();
+      Contexts.push(Func->Ctx);
+      visitEachChild(Func);
+      Contexts.pop();
     }
 
     // void visitVariableDeclaration(VariableDeclaration* Var) {
@@ -456,22 +456,18 @@ void Checker::initialize(Node* N) {
 
 }
 
-void Checker::forwardDeclareFunctionDeclaration(LetDeclaration* Let, TVSet* TVs, ConstraintSet* Constraints) {
-
-  if (!Let->isFunction()) {
-    return;
-  }
+void Checker::forwardDeclareFunctionDeclaration(FunctionDeclaration* Let, TVSet* TVs, ConstraintSet* Constraints) {
 
   // std::cerr << "declare " << Let->getNameAsString() << std::endl;
 
   setContext(Let->Ctx);
 
   auto addClassVars = [&](ClassDeclaration* Class, bool IsRigid) {
-    auto Id = getCanonicalText(Class->Name);
+    auto Id = Class->Name->getCanonicalText();
     auto Ctx = &getContext();
     std::vector<Type*> Out;
     for (auto TE: Class->TypeVars) {
-      auto Name = getCanonicalText(TE->Name);
+      auto Name = TE->Name->getCanonicalText();
       auto TV = IsRigid ? createRigidVar(Name) : createTypeVar();
       TV->asVar().Context.emplace(Id);
       Ctx->Env.add(Name, new Forall(TV), SymKind::Type);
@@ -493,8 +489,8 @@ void Checker::forwardDeclareFunctionDeclaration(LetDeclaration* Let, TVSet* TVs,
   // Otherwise, the type is not further specified and we create a new
   // unification variable.
   Type* Ty;
-  if (Let->TypeAssert) {
-    Ty = inferTypeExpression(Let->TypeAssert->TypeExpression);
+  if (Let->hasTypeAssert()) {
+    Ty = inferTypeExpression(Let->getTypeAssert()->TypeExpression);
   } else {
     Ty = createTypeVar();
   }
@@ -507,9 +503,33 @@ void Checker::forwardDeclareFunctionDeclaration(LetDeclaration* Let, TVSet* TVs,
   if (Let->isInstance()) {
 
     auto Instance = static_cast<InstanceDeclaration*>(Let->Parent);
-    auto Class = cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, getCanonicalText(Instance->Name) }, SymbolKind::Class));
-    // TODO check if `Class` is nullptr
-    auto SigLet = cast<LetDeclaration>(Class->getScope()->lookupDirect({ {}, Let->getNameAsString() }, SymbolKind::Var));
+    auto Class = cast<ClassDeclaration>(Instance->getScope()->lookup({ {}, Instance->Name->getCanonicalText() }, SymbolKind::Class));
+
+    if (Class == nullptr) {
+      // TODO print diagnostic
+      // DE.add<TypeclassNotFoundDiagnostic>(Instance->Name->getCanonicalText());
+      goto after_isinstance;
+    }
+
+    auto Decl = Class->getScope()->lookupDirect({ {}, Let->getNameAsString() }, SymbolKind::Var);
+
+    if (Decl == nullptr) {
+
+      // TODO print diagnostic
+      // DE.add<MethodNotFoundInTypeclass>(Let->getNameAsStrings), Let->getName());
+      goto after_isinstance;
+
+    }
+
+    if (!isa<VariableDeclaration>(Decl)) {
+
+      // TODO print diagnostic
+      // DE.add<MustBeVariableDeclaration>(Decl);
+      goto after_isinstance;
+
+    }
+
+    auto FuncDecl = cast<FunctionDeclaration>(Decl);
 
     auto Params = addClassVars(Class, false);
 
@@ -536,23 +556,25 @@ void Checker::forwardDeclareFunctionDeclaration(LetDeclaration* Let, TVSet* TVs,
 
     // It would be very strange if there was no type assert in the type
     // class let-declaration but we rather not let the compiler crash if that happens.
-    if (SigLet->TypeAssert) {
+    if (FuncDecl->hasTypeAssert()) {
       // Note that we can't do SigLet->TypeAssert->TypeExpression->getType()
       // because we need to re-generate the type within the local context of
       // this let-declaration.
       // TODO make CEqual accept multiple nodes
-      makeEqual(Ty, inferTypeExpression(SigLet->TypeAssert->TypeExpression), Let);
+      makeEqual(Ty, inferTypeExpression(FuncDecl->getTypeAssert()->TypeExpression), Let);
     }
 
   }
 
-  if (Let->Body) {
-    switch (Let->Body->getKind()) {
+after_isinstance:
+
+  if (Let->hasBody()) {
+    switch (Let->getBody()->getKind()) {
       case NodeKind::LetExprBody:
         break;
       case NodeKind::LetBlockBody:
       {
-        auto Block = static_cast<LetBlockBody*>(Let->Body);
+        auto Block = static_cast<LetBlockBody*>(Let->getBody());
         Let->Ctx->ReturnType = createTypeVar();
         for (auto Element: Block->Elements) {
           forwardDeclare(Element);
@@ -570,11 +592,7 @@ void Checker::forwardDeclareFunctionDeclaration(LetDeclaration* Let, TVSet* TVs,
 
 }
 
-void Checker::inferFunctionDeclaration(LetDeclaration* Decl) {
-
-  if (!Decl->isFunction()) {
-    return;
-  }
+void Checker::inferFunctionDeclaration(FunctionDeclaration* Decl) {
 
   // std::cerr << "infer " << Decl->getNameAsString() << std::endl;
 
@@ -584,21 +602,21 @@ void Checker::inferFunctionDeclaration(LetDeclaration* Decl) {
   std::vector<Type*> ParamTypes;
   Type* RetType;
 
-  for (auto Param: Decl->Params) {
+  for (auto Param: Decl->getParams()) {
     ParamTypes.push_back(inferPattern(Param->Pattern));
   }
 
-  if (Decl->Body) {
-    switch (Decl->Body->getKind()) {
+  if (Decl->hasBody()) {
+    switch (Decl->getBody()->getKind()) {
       case NodeKind::LetExprBody:
       {
-        auto Expr = static_cast<LetExprBody*>(Decl->Body);
+        auto Expr = static_cast<LetExprBody*>(Decl->getBody());
         RetType = inferExpression(Expr->Expression);
         break;
       }
       case NodeKind::LetBlockBody:
       {
-        auto Block = static_cast<LetBlockBody*>(Decl->Body);
+        auto Block = static_cast<LetBlockBody*>(Decl->getBody());
         RetType = Decl->Ctx->ReturnType;
         for (auto Element: Block->Elements) {
           infer(Element);
@@ -680,29 +698,34 @@ void Checker::infer(Node* N) {
       break;
     }
 
-    case NodeKind::LetDeclaration:
+    case NodeKind::PrefixFunctionDeclaration:
+    case NodeKind::InfixFunctionDeclaration:
+    case NodeKind::SuffixFunctionDeclaration:
+    case NodeKind::NamedFunctionDeclaration:
     {
-      // Function declarations are handled separately in inferFunctionDeclaration()
-      auto Decl = static_cast<LetDeclaration*>(N);
+      auto Decl = static_cast<FunctionDeclaration*>(N);
       if (Decl->Visited) {
         break;
       }
-      if (Decl->isFunction()) {
-        Decl->IsCycleActive = true;
-        Decl->Visited = true;
-        inferFunctionDeclaration(Decl);
-        Decl->IsCycleActive = false;
-      } else if (Decl->isVariable()) {
-        auto Ty = Decl->getType();
-        if (Decl->Body) {
-          ZEN_ASSERT(Decl->Body->getKind() == NodeKind::LetExprBody);
-          auto E = static_cast<LetExprBody*>(Decl->Body);
-          auto Ty2 = inferExpression(E->Expression);
-          makeEqual(Ty, Ty2, Decl);
-        }
-        auto Ty3 = inferPattern(Decl->Pattern);
-        makeEqual(Ty, Ty3, Decl);
+      Decl->IsCycleActive = true;
+      Decl->Visited = true;
+      inferFunctionDeclaration(Decl);
+      Decl->IsCycleActive = false;
+      break;
+    }
+
+    case NodeKind::VariableDeclaration:
+    {
+      auto Decl = static_cast<VariableDeclaration*>(N);
+      auto Ty = Decl->getType();
+      if (Decl->Body) {
+        ZEN_ASSERT(Decl->Body->getKind() == NodeKind::LetExprBody);
+        auto E = static_cast<LetExprBody*>(Decl->Body);
+        auto Ty2 = inferExpression(E->Expression);
+        makeEqual(Ty, Ty2, Decl);
       }
+      auto Ty3 = inferPattern(Decl->Pattern);
+      makeEqual(Ty, Ty3, Decl);
       break;
     }
 
@@ -801,7 +824,7 @@ void Checker::inferConstraintExpression(ConstraintExpression* C) {
       std::vector<Type*> Types;
       for (auto TE: D->TEs) {
         auto Ty = inferTypeExpression(TE);
-        Ty->asVar().Provided->emplace(getCanonicalText(D->Name));
+        Ty->asVar().Provided->emplace(D->Name->getCanonicalText());
         Types.push_back(Ty);
       }
       break;
@@ -824,10 +847,10 @@ Type* Checker::inferTypeExpression(TypeExpression* N, bool AutoVars) {
     case NodeKind::ReferenceTypeExpression:
     {
       auto RefTE = static_cast<ReferenceTypeExpression*>(N);
-      auto Scm = lookup(getCanonicalText(RefTE->Name), SymKind::Type);
+      auto Scm = lookup(RefTE->Name->getCanonicalText(), SymKind::Type);
       Type* Ty;
       if (Scm == nullptr) {
-        DE.add<BindingNotFoundDiagnostic>(getCanonicalText(RefTE->Name), RefTE->Name);
+        DE.add<BindingNotFoundDiagnostic>(RefTE->Name->getCanonicalText(), RefTE->Name);
         Ty = createTypeVar();
       } else {
         Ty = instantiate(Scm, RefTE);
@@ -850,13 +873,13 @@ Type* Checker::inferTypeExpression(TypeExpression* N, bool AutoVars) {
     case NodeKind::VarTypeExpression:
     {
       auto VarTE = static_cast<VarTypeExpression*>(N);
-      auto Ty = lookupMono(getCanonicalText(VarTE->Name), SymKind::Type);
+      auto Ty = lookupMono(VarTE->Name->getCanonicalText(), SymKind::Type);
       if (Ty == nullptr) {
         if (!AutoVars || Config.typeVarsRequireForall()) {
-          DE.add<BindingNotFoundDiagnostic>(getCanonicalText(VarTE->Name), VarTE->Name);
+          DE.add<BindingNotFoundDiagnostic>(VarTE->Name->getCanonicalText(), VarTE->Name);
         }
-        Ty = createRigidVar(getCanonicalText(VarTE->Name));
-        addBinding(getCanonicalText(VarTE->Name), new Forall(Ty), SymKind::Type);
+        Ty = createRigidVar(VarTE->Name->getCanonicalText());
+        addBinding(VarTE->Name->getCanonicalText(), new Forall(Ty), SymKind::Type);
       }
       ZEN_ASSERT(Ty->isVar());
       N->setType(Ty);
@@ -868,7 +891,7 @@ Type* Checker::inferTypeExpression(TypeExpression* N, bool AutoVars) {
       auto RecTE = static_cast<RecordTypeExpression*>(N);
       auto Ty = RecTE->Rest ? inferTypeExpression(RecTE->Rest, AutoVars) : new Type(TNil());
       for (auto [Field, Comma]: RecTE->Fields) {
-        Ty = new Type(TField(getCanonicalText(Field->Name), new Type(TPresent(inferTypeExpression(Field->TE, AutoVars))), Ty));
+        Ty = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(inferTypeExpression(Field->TE, AutoVars))), Ty));
       }
       N->setType(Ty);
       return Ty;
@@ -980,7 +1003,7 @@ Type* Checker::inferExpression(Expression* X) {
       Ty = new Type(TNil());
       for (auto [Field, Comma]: Record->Fields) {
         Ty = new Type(TField(
-          getCanonicalText(Field->Name),
+          Field->Name->getCanonicalText(),
           new Type(TPresent(inferExpression(Field->getExpression()))),
           Ty
         ));
@@ -999,11 +1022,12 @@ Type* Checker::inferExpression(Expression* X) {
     case NodeKind::ReferenceExpression:
     {
       auto Ref = static_cast<ReferenceExpression*>(X);
+      auto Name = Ref->Name.getCanonicalText();
       ZEN_ASSERT(Ref->ModulePath.empty());
-      if (Ref->Name->is<IdentifierAlt>()) {
-        auto Scm = lookup(getCanonicalText(Ref->Name), SymKind::Var);
+      if (Ref->Name.isIdentifierAlt()) {
+        auto Scm = lookup(Name, SymKind::Var);
         if (!Scm) {
-          DE.add<BindingNotFoundDiagnostic>(getCanonicalText(Ref->Name), Ref->Name);
+          DE.add<BindingNotFoundDiagnostic>(Name, Ref->Name);
           Ty = createTypeVar();
           break;
         }
@@ -1012,12 +1036,12 @@ Type* Checker::inferExpression(Expression* X) {
       }
       auto Target = Ref->getScope()->lookup(Ref->getSymbolPath());
       if (!Target) {
-        DE.add<BindingNotFoundDiagnostic>(getCanonicalText(Ref->Name), Ref->Name);
+        DE.add<BindingNotFoundDiagnostic>(Name, Ref->Name);
         Ty = createTypeVar();
         break;
       }
-      if (Target->getKind() == NodeKind::LetDeclaration) {
-        auto Let = static_cast<LetDeclaration*>(Target);
+      if (isa<FunctionDeclaration>(Target)) {
+        auto Let = static_cast<FunctionDeclaration*>(Target);
         if (Let->IsCycleActive) {
           Ty = Let->getType();
           break;
@@ -1026,7 +1050,7 @@ Type* Checker::inferExpression(Expression* X) {
           infer(Let);
         }
       }
-      auto Scm = lookup(getCanonicalText(Ref->Name), SymKind::Var);
+      auto Scm = lookup(Name, SymKind::Var);
       ZEN_ASSERT(Scm);
       Ty = instantiate(Scm, X);
       break;
@@ -1048,9 +1072,9 @@ Type* Checker::inferExpression(Expression* X) {
     case NodeKind::InfixExpression:
     {
       auto Infix = static_cast<InfixExpression*>(X);
-      auto Scm = lookup(Infix->Operator->getText(), SymKind::Var);
+      auto Scm = lookup(Infix->Operator.getCanonicalText(), SymKind::Var);
       if (Scm == nullptr) {
-        DE.add<BindingNotFoundDiagnostic>(Infix->Operator->getText(), Infix->Operator);
+        DE.add<BindingNotFoundDiagnostic>(Infix->Operator.getCanonicalText(), Infix->Operator);
         Ty = createTypeVar();
         break;
       }
@@ -1091,7 +1115,7 @@ Type* Checker::inferExpression(Expression* X) {
           auto K = static_cast<Identifier*>(Member->Name);
           Ty = createTypeVar();
           auto RestTy = createTypeVar();
-          makeEqual(new Type(TField(getCanonicalText(K), Ty, RestTy)), ExprTy, Member);
+          makeEqual(new Type(TField(K->getCanonicalText(), Ty, RestTy)), ExprTy, Member);
           break;
         }
         default:
@@ -1138,20 +1162,20 @@ Type* Checker::inferPattern(
     {
       auto P = static_cast<BindPattern*>(Pattern);
       auto Ty = createTypeVar();
-      addBinding(getCanonicalText(P->Name), new Forall(TVs, Constraints, Ty), SymKind::Var);
+      addBinding(P->Name->getCanonicalText(), new Forall(TVs, Constraints, Ty), SymKind::Var);
       return Ty;
     }
 
     case NodeKind::NamedTuplePattern:
     {
       auto P = static_cast<NamedTuplePattern*>(Pattern);
-      auto Scm = lookup(getCanonicalText(P->Name), SymKind::Var);
+      auto Scm = lookup(P->Name->getCanonicalText(), SymKind::Var);
       std::vector<Type*> ElementTypes;
       for (auto P2: P->Patterns) {
         ElementTypes.push_back(inferPattern(P2, Constraints, TVs));
       }
       if (!Scm) {
-        DE.add<BindingNotFoundDiagnostic>(getCanonicalText(P->Name), P->Name);
+        DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
         return createTypeVar();
       }
       auto Ty = instantiate(Scm, P);
@@ -1181,9 +1205,9 @@ Type* Checker::inferPattern(
           FieldTy = inferPattern(Field->Pattern, Constraints, TVs);
         } else {
           FieldTy = createTypeVar();
-          addBinding(getCanonicalText(Field->Name), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
+          addBinding(Field->Name->getCanonicalText(), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
         }
-        RecordTy = new Type(TField(getCanonicalText(Field->Name), new Type(TPresent(FieldTy)), RecordTy));
+        RecordTy = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(FieldTy)), RecordTy));
       }
       return RecordTy;
     }
@@ -1191,9 +1215,9 @@ Type* Checker::inferPattern(
     case NodeKind::NamedRecordPattern:
     {
       auto P = static_cast<NamedRecordPattern*>(Pattern);
-      auto Scm = lookup(getCanonicalText(P->Name), SymKind::Var);
+      auto Scm = lookup(P->Name->getCanonicalText(), SymKind::Var);
       if (Scm == nullptr) {
-        DE.add<BindingNotFoundDiagnostic>(getCanonicalText(P->Name), P->Name);
+        DE.add<BindingNotFoundDiagnostic>(P->Name->getCanonicalText(), P->Name);
         return createTypeVar();
       }
       auto RestField = getRestField(P->Fields);
@@ -1214,9 +1238,9 @@ Type* Checker::inferPattern(
           FieldTy = inferPattern(Field->Pattern, Constraints, TVs);
         } else {
           FieldTy = createTypeVar();
-          addBinding(getCanonicalText(Field->Name), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
+          addBinding(Field->Name->getCanonicalText(), new Forall(TVs, Constraints, FieldTy), SymKind::Var);
         }
-        RecordTy = new Type(TField(getCanonicalText(Field->Name), new Type(TPresent(FieldTy)), RecordTy));
+        RecordTy = new Type(TField(Field->Name->getCanonicalText(), new Type(TPresent(FieldTy)), RecordTy));
       }
       auto Ty = instantiate(Scm, P);
       auto RetTy = createTypeVar();
@@ -1287,7 +1311,14 @@ void Checker::populate(SourceFile* SF) {
 
     std::stack<Node*> Stack;
 
-    void visitLetDeclaration(LetDeclaration* N) {
+    void visitFunctionDeclaration(FunctionDeclaration* N) {
+      RefGraph.addVertex(N);
+      Stack.push(N);
+      visitEachChild(N);
+      Stack.pop();
+    }
+
+    void visitVariableDeclaration(VariableDeclaration* N) {
       RefGraph.addVertex(N);
       Stack.push(N);
       visitEachChild(N);
@@ -1295,22 +1326,26 @@ void Checker::populate(SourceFile* SF) {
     }
 
     void visitReferenceExpression(ReferenceExpression* N) {
-      auto Y = static_cast<ReferenceExpression*>(N);
-      auto Def = Y->getScope()->lookup(Y->getSymbolPath());
-      // Name lookup failures will be reported directly in inferExpression().
-      if (Def == nullptr || Def->getKind() != NodeKind::LetDeclaration) {
+      auto Ref = static_cast<ReferenceExpression*>(N);
+      auto Def = Ref->getScope()->lookup(Ref->getSymbolPath());
+      if (Def == nullptr) {
+        // Name lookup failures will be reported directly in inferExpression().
         return;
       }
+      ZEN_ASSERT(isa<FunctionDeclaration>(Def) || isa<VariableDeclaration>(Def) || isa<Parameter>(Def));
       // This case ensures that a deeply nested structure that references a
       // parameter of a parent node but is not referenced itself is correctly handled.
       // Note that the edge goes from the parent let to the parameter. This is normal.
-      if (Def->getKind() == NodeKind::Parameter) {
-        RefGraph.addEdge(Stack.top(), Def->Parent);
+      // if (Def->getKind() == NodeKind::Parameter) {
+      //   RefGraph.addEdge(Stack.top(), Def->Parent);
+      //   return;
+      // }
+      if (Stack.empty()) {
+        // An empty stack means we are traversing the toplevel of the source
+        // file, in which case we don't have anyting to connect with.
         return;
       }
-      if (!Stack.empty()) {
-        RefGraph.addEdge(Def, Stack.top());
-      }
+      RefGraph.addEdge(Def, Stack.top());
     }
 
   };
@@ -1353,10 +1388,10 @@ void Checker::check(SourceFile *SF) {
     auto TVs = new TVSet;
     auto Constraints = new ConstraintSet;
     for (auto N: Nodes) {
-      if (N->getKind() != NodeKind::LetDeclaration) {
+      if (!isa<FunctionDeclaration>(N)) {
         continue;
       }
-      auto Decl = static_cast<LetDeclaration*>(N);
+      auto Decl = static_cast<FunctionDeclaration*>(N);
       forwardDeclareFunctionDeclaration(Decl, TVs, Constraints);
     }
   }

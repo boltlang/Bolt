@@ -59,216 +59,6 @@ ByteString TextFile::getText() const {
   return Text;
 }
 
-Scope::Scope(Node* Source):
-  Source(Source) {
-    scan(Source);
-  }
-
-void Scope::addSymbol(ByteString Name, Node* Decl, SymbolKind Kind) {
-  Mapping.emplace(Name, std::make_tuple(Decl, Kind));
-}
-
-void Scope::scan(Node* X) {
-  switch (X->getKind()) {
-    case NodeKind::SourceFile:
-    {
-      auto File = static_cast<SourceFile*>(X);
-      for (auto Element: File->Elements) {
-        scanChild(Element);
-      }
-      break;
-    }
-    case NodeKind::MatchCase:
-    {
-      auto Case = static_cast<MatchCase*>(X);
-      visitPattern(Case->Pattern, Case);
-      break;
-    }
-    case NodeKind::LetDeclaration:
-    {
-      auto Decl = static_cast<LetDeclaration*>(X);
-      ZEN_ASSERT(Decl->isFunction());
-      for (auto Param: Decl->Params) {
-        visitPattern(Param->Pattern, Param);
-      }
-      if (Decl->Body) {
-        scanChild(Decl->Body);
-      }
-      break;
-    }
-    default:
-      ZEN_UNREACHABLE
-  }
-}
-
-void Scope::scanChild(Node* X) {
-  switch (X->getKind()) {
-    case NodeKind::LetExprBody:
-    case NodeKind::ExpressionStatement:
-    case NodeKind::IfStatement:
-    case NodeKind::ReturnStatement:
-      break;
-    case NodeKind::LetBlockBody:
-    {
-      auto Block = static_cast<LetBlockBody*>(X);
-      for (auto Element: Block->Elements) {
-        scanChild(Element);
-      }
-      break;
-    }
-    case NodeKind::InstanceDeclaration:
-      // We ignore let-declarations inside instance-declarations for now
-      break;
-    case NodeKind::ClassDeclaration:
-    {
-      auto Decl = static_cast<ClassDeclaration*>(X);
-      addSymbol(getCanonicalText(Decl->Name), Decl, SymbolKind::Class);
-      for (auto Element: Decl->Elements) {
-        scanChild(Element);
-      }
-      break;
-    }
-    case NodeKind::LetDeclaration:
-    {
-      auto Decl = static_cast<LetDeclaration*>(X);
-      // No matter if it  is a function or a variable, by visiting the pattern
-      // we add all relevant bindings to the current scope.
-      visitPattern(Decl->Pattern, Decl);
-      break;
-    }
-    case NodeKind::RecordDeclaration:
-    {
-      auto Decl = static_cast<RecordDeclaration*>(X);
-      addSymbol(getCanonicalText(Decl->Name), Decl, SymbolKind::Type);
-      break;
-    }
-    case NodeKind::VariantDeclaration:
-    {
-      auto Decl = static_cast<VariantDeclaration*>(X);
-      addSymbol(getCanonicalText(Decl->Name), Decl, SymbolKind::Type);
-      for (auto Member: Decl->Members) {
-        switch (Member->getKind()) {
-          case NodeKind::TupleVariantDeclarationMember:
-          {
-            auto T = static_cast<TupleVariantDeclarationMember*>(Member);
-            addSymbol(getCanonicalText(T->Name), Decl, SymbolKind::Constructor);
-            break;
-          }
-          case NodeKind::RecordVariantDeclarationMember:
-          {
-            auto R = static_cast<RecordVariantDeclarationMember*>(Member);
-            addSymbol(getCanonicalText(R->Name), Decl, SymbolKind::Constructor);
-            break;
-          }
-          default:
-            ZEN_UNREACHABLE
-        }
-      }
-      break;
-    }
-    default:
-      ZEN_UNREACHABLE
-  }
-}
-
-void Scope::visitPattern(Pattern* X, Node* Decl) {
-  switch (X->getKind()) {
-    case NodeKind::BindPattern:
-    {
-      auto Y = static_cast<BindPattern*>(X);
-      addSymbol(getCanonicalText(Y->Name), Decl, SymbolKind::Var);
-      break;
-    }
-    case NodeKind::RecordPattern:
-    {
-      auto Y = static_cast<RecordPattern*>(X);
-      for (auto [Field, Comma]: Y->Fields) {
-        if (Field->Pattern) {
-          visitPattern(Field->Pattern, Decl);
-        } else if (Field->Name) {
-          addSymbol(Field->Name->Text, Decl, SymbolKind::Var);
-        }
-      }
-      break;
-    }
-    case NodeKind::NamedRecordPattern:
-    {
-      auto Y = static_cast<NamedRecordPattern*>(X);
-      for (auto [Field, Comma]: Y->Fields) {
-        if (Field->Pattern) {
-          visitPattern(Field->Pattern, Decl);
-        } else if (Field->Name) {
-          addSymbol(Field->Name->Text, Decl, SymbolKind::Var);
-        }
-      }
-      break;
-    }
-    case NodeKind::NamedTuplePattern:
-    {
-      auto Y = static_cast<NamedTuplePattern*>(X);
-      for (auto P: Y->Patterns) {
-        visitPattern(P, Decl);
-      }
-      break;
-    }
-    case NodeKind::NestedPattern:
-    {
-      auto Y = static_cast<NestedPattern*>(X);
-      visitPattern(Y->P, Decl);
-      break;
-    }
-    case NodeKind::TuplePattern:
-    {
-      auto Y = static_cast<TuplePattern*>(X);
-      for (auto [Element, Comma]: Y->Elements) {
-        visitPattern(Element, Decl);
-      }
-      break;
-    }
-    case NodeKind::ListPattern:
-    {
-      auto Y = static_cast<ListPattern*>(X);
-      for (auto [Element, Separator]: Y->Elements) {
-        visitPattern(Element, Decl);
-      }
-      break;
-    }
-    case NodeKind::LiteralPattern:
-      break;
-    default:
-      ZEN_UNREACHABLE
-  }
-}
-
-Node* Scope::lookupDirect(SymbolPath Path, SymbolKind Kind) {
-  ZEN_ASSERT(Path.Modules.empty());
-  auto Match = Mapping.find(Path.Name);
-  if (Match != Mapping.end() && std::get<1>(Match->second) == Kind) {
-    return std::get<0>(Match->second);
-  }
-  return nullptr;
-}
-
-Node* Scope::lookup(SymbolPath Path, SymbolKind Kind) {
-  ZEN_ASSERT(Path.Modules.empty());
-  auto Curr = this;
-  do {
-    auto Found = Curr->lookupDirect(Path, Kind);
-    if (Found) {
-      return Found;
-    }
-    Curr = Curr->getParentScope();
-  } while (Curr != nullptr);
-  return nullptr;
-}
-
-Scope* Scope::getParentScope() {
-  if (Source->Parent == nullptr) {
-    return nullptr;
-  }
-  return Source->Parent->getScope();
-}
-
 const SourceFile* Node::getSourceFile() const {
   const  Node* CurrNode = this;
   for (;;) {
@@ -503,29 +293,11 @@ Token* WrappedOperator::getLastToken() const {
 }
 
 Token* BindPattern::getFirstToken() const {
-  switch (Name->getKind()) {
-    case NodeKind::Identifier:
-      return static_cast<Identifier*>(Name);
-    case NodeKind::IdentifierAlt:
-      return static_cast<IdentifierAlt*>(Name);
-    case NodeKind::WrappedOperator:
-      return static_cast<WrappedOperator*>(Name)->LParen;
-    default:
-      ZEN_UNREACHABLE
-  }
+  return Name;
 }
 
 Token* BindPattern::getLastToken() const {
-  switch (Name->getKind()) {
-    case NodeKind::Identifier:
-      return static_cast<Identifier*>(Name);
-    case NodeKind::IdentifierAlt:
-      return static_cast<IdentifierAlt*>(Name);
-    case NodeKind::WrappedOperator:
-      return static_cast<WrappedOperator*>(Name)->RParen;
-    default:
-      ZEN_UNREACHABLE
-  }
+  return Name;
 }
 
 Token* LiteralPattern::getFirstToken() const {
@@ -608,26 +380,26 @@ Token* ReferenceExpression::getFirstToken() const {
   if (!ModulePath.empty()) {
     return std::get<0>(ModulePath.front());
   }
-  switch (Name->getKind()) {
+  switch (Name.getKind()) {
     case NodeKind::Identifier:
-      return static_cast<Identifier*>(Name);
+      return Name.asIdentifier();
     case NodeKind::IdentifierAlt:
-      return static_cast<IdentifierAlt*>(Name);
+      return Name.asIdentifierAlt();
     case NodeKind::WrappedOperator:
-      return static_cast<WrappedOperator*>(Name)->LParen;
+      return Name.asWrappedOperator()->getFirstToken();
     default:
       ZEN_UNREACHABLE
   }
 }
 
 Token* ReferenceExpression::getLastToken() const {
-  switch (Name->getKind()) {
+  switch (Name.getKind()) {
     case NodeKind::Identifier:
-      return static_cast<Identifier*>(Name);
+      return Name.asIdentifier();
     case NodeKind::IdentifierAlt:
-      return static_cast<IdentifierAlt*>(Name);
+      return Name.asIdentifierAlt();
     case NodeKind::WrappedOperator:
-      return static_cast<WrappedOperator*>(Name)->RParen;
+      return Name.asWrappedOperator()->getLastToken();
     default:
       ZEN_UNREACHABLE
   }
@@ -805,7 +577,7 @@ Token* LetExprBody::getLastToken() const {
   return Expression->getLastToken();
 }
 
-Token* LetDeclaration::getFirstToken() const {
+Token* PrefixFunctionDeclaration::getFirstToken() const {
   if (PubKeyword) {
     return PubKeyword;
   }
@@ -815,17 +587,97 @@ Token* LetDeclaration::getFirstToken() const {
   return LetKeyword;
 }
 
-Token* LetDeclaration::getLastToken() const {
+Token* PrefixFunctionDeclaration::getLastToken() const {
   if (Body) {
     return Body->getLastToken();
   }
   if (TypeAssert) {
     return TypeAssert->getLastToken();
   }
-  if (Params.size()) {
+  return Param->getLastToken();
+}
+
+Token* InfixFunctionDeclaration::getFirstToken() const {
+  if (PubKeyword) {
+    return PubKeyword;
+  }
+  if (ForeignKeyword) {
+    return ForeignKeyword;
+  }
+  return LetKeyword;
+}
+
+Token* InfixFunctionDeclaration::getLastToken() const {
+  if (Body) {
+    return Body->getLastToken();
+  }
+  if (TypeAssert) {
+    return TypeAssert->getLastToken();
+  }
+  return Right->getLastToken();
+}
+
+Token* SuffixFunctionDeclaration::getFirstToken() const {
+  if (PubKeyword) {
+    return PubKeyword;
+  }
+  if (ForeignKeyword) {
+    return ForeignKeyword;
+  }
+  return LetKeyword;
+}
+
+Token* SuffixFunctionDeclaration::getLastToken() const {
+  if (Body) {
+    return Body->getLastToken();
+  }
+  if (TypeAssert) {
+    return TypeAssert->getLastToken();
+  }
+  return Name.getLastToken();
+}
+
+Token* NamedFunctionDeclaration::getFirstToken() const {
+  if (PubKeyword) {
+    return PubKeyword;
+  }
+  if (ForeignKeyword) {
+    return ForeignKeyword;
+  }
+  return LetKeyword;
+}
+
+Token* NamedFunctionDeclaration::getLastToken() const {
+  if (Body) {
+    return Body->getLastToken();
+  }
+  if (TypeAssert) {
+    return TypeAssert->getLastToken();
+  }
+  if (!Params.empty()) {
     return Params.back()->getLastToken();
   }
+  return Name.getLastToken();
+}
+
+Token* VariableDeclaration::getFirstToken() const {
+  if (PubKeyword) {
+    return PubKeyword;
+  }
+  if (ForeignKeyword) {
+    return ForeignKeyword;
+  }
+  return LetKeyword;
+}
+
+Token* VariableDeclaration::getLastToken() const {
   return Pattern->getLastToken();
+  if (TypeAssert) {
+    return TypeAssert->getLastToken();
+  }
+  if (Body) {
+    return Body->getLastToken();
+  }
 }
 
 Token* RecordDeclarationField::getFirstToken() const {
@@ -1093,21 +945,79 @@ std::string InstanceKeyword::getText() const {
   return "instance";
 }
 
-ByteString getCanonicalText(const Symbol* N) {
+ByteString Identifier::getCanonicalText() const {
+  return Text;
+}
+
+ByteString IdentifierAlt::getCanonicalText() const {
+  return Text;
+}
+
+ByteString CustomOperator::getCanonicalText() const {
+  return Text;
+}
+
+ByteString Symbol::getCanonicalText() const {
   switch (N->getKind()) {
     case NodeKind::Identifier:
-      return static_cast<const Identifier*>(N)->Text;
+      return static_cast<const Identifier*>(N)->getCanonicalText();
     case NodeKind::IdentifierAlt:
-      return static_cast<const IdentifierAlt*>(N)->Text;
+      return static_cast<const IdentifierAlt*>(N)->getCanonicalText();
     case NodeKind::CustomOperator:
-      return static_cast<const CustomOperator*>(N)->Text;
+      return static_cast<const CustomOperator*>(N)->getCanonicalText();
     case NodeKind::VBar:
       return static_cast<const VBar*>(N)->getText();
     case NodeKind::WrappedOperator:
-      return static_cast<const WrappedOperator*>(N)->getOperator()->getText();
+      return static_cast<const WrappedOperator*>(N)->getCanonicalText();
     default:
       ZEN_UNREACHABLE
   }
+}
+
+Token* Symbol::getFirstToken() const {
+  switch (N->getKind()) {
+    case NodeKind::Identifier:
+      return static_cast<Identifier*>(N);
+    case NodeKind::IdentifierAlt:
+      return static_cast<IdentifierAlt*>(N);
+    case NodeKind::WrappedOperator:
+      return static_cast<WrappedOperator*>(N)->getFirstToken();
+    default:
+      ZEN_UNREACHABLE
+  }
+}
+
+Token* Symbol::getLastToken() const {
+  switch (N->getKind()) {
+    case NodeKind::Identifier:
+      return static_cast<Identifier*>(N);
+    case NodeKind::IdentifierAlt:
+      return static_cast<IdentifierAlt*>(N);
+    case NodeKind::WrappedOperator:
+      return static_cast<WrappedOperator*>(N)->getLastToken();
+    default:
+      ZEN_UNREACHABLE
+  }
+}
+
+
+ByteString Operator::getCanonicalText() const {
+  switch (N->getKind()) {
+    case NodeKind::CustomOperator:
+      return static_cast<const CustomOperator*>(N)->getCanonicalText();
+    case NodeKind::VBar:
+      return static_cast<const VBar*>(N)->getText();
+    default:
+      ZEN_UNREACHABLE
+  }
+}
+
+Token* Operator::getFirstToken() const {
+  return static_cast<Token*>(N);
+}
+
+Token* Operator::getLastToken() const {
+  return static_cast<Token*>(N);
 }
 
 LiteralValue StringLiteral::getValue() {
@@ -1121,9 +1031,9 @@ LiteralValue IntegerLiteral::getValue() {
 SymbolPath ReferenceExpression::getSymbolPath() const {
   std::vector<ByteString> ModuleNames;
   for (auto [Name, Dot]: ModulePath) {
-    ModuleNames.push_back(getCanonicalText(Name));
+    ModuleNames.push_back(Name->getCanonicalText());
   }
-  return SymbolPath { ModuleNames, getCanonicalText(Name) };
+  return SymbolPath { ModuleNames, Name.getCanonicalText() };
 }
 
 }

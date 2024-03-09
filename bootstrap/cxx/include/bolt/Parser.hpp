@@ -130,7 +130,7 @@ public:
 
   Node* parseLetBodyElement();
 
-  LetDeclaration* parseLetDeclaration();
+  Node* parseLetDeclaration();
 
   Node* parseClassElement();
 

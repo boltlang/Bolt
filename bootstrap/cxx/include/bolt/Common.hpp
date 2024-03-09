@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "zen/config.hpp"
+
 namespace bolt {
 
 class LanguageConfig {

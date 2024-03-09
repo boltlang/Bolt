@@ -29,7 +29,7 @@ class Value {
   union {
     ByteString S;
     Integer I;
-    LetDeclaration* D;
+    FunctionDeclaration* D;
     NativeFunction F;
     Tuple T;
   };
@@ -45,7 +45,7 @@ public:
   Value(Integer I):
     Kind(ValueKind::Integer), I(I) {}
 
-  Value(LetDeclaration* D):
+  Value(FunctionDeclaration* D):
     Kind(ValueKind::SourceFunction), D(D) {}
 
   Value(NativeFunction F):
@@ -67,7 +67,7 @@ public:
           new (&I) Tuple(V.T);
           break;
         case ValueKind::SourceFunction:
-          new (&D) LetDeclaration*(V.D);
+          new (&D) FunctionDeclaration*(V.D);
           break;
         case ValueKind::NativeFunction:
           new (&F) NativeFunction(V.F);
@@ -90,7 +90,7 @@ public:
         new (&I) Tuple(Other.T);
         break;
       case ValueKind::SourceFunction:
-        new (&D) LetDeclaration*(Other.D);
+        new (&D) FunctionDeclaration*(Other.D);
         break;
       case ValueKind::NativeFunction:
         new (&F) NativeFunction(Other.F);
@@ -112,7 +112,7 @@ public:
     return S;
   }
 
-  inline LetDeclaration* getDeclaration() {
+  inline FunctionDeclaration* getDeclaration() {
     ZEN_ASSERT(Kind == ValueKind::SourceFunction);
     return D;
   }

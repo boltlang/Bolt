@@ -155,7 +155,12 @@ static std::string describe(NodeKind Type) {
       return "'class'";
     case NodeKind::InstanceKeyword:
       return "'instance'";
-    case NodeKind::LetDeclaration:
+    case NodeKind::PrefixFunctionDeclaration:
+    case NodeKind::InfixFunctionDeclaration:
+    case NodeKind::SuffixFunctionDeclaration:
+    case NodeKind::NamedFunctionDeclaration:
+      return "a let-declaration";
+    case NodeKind::VariableDeclaration:
       return "a let-declaration";
     case NodeKind::CallExpression:
       return "a call-expression";

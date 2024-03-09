@@ -11,7 +11,7 @@ Value Evaluator::evaluateExpression(Expression* X, Env& Env) {
     case NodeKind::ReferenceExpression:
     {
       auto RE = static_cast<ReferenceExpression*>(X);
-      return Env.lookup(getCanonicalText(RE->Name));
+      return Env.lookup(RE->Name.getCanonicalText());
       // auto Decl = RE->getScope()->lookup(RE->getSymbolPath());
       // ZEN_ASSERT(Decl && Decl->getKind() == NodeKind::FunctionDeclaration);
       // return static_cast<FunctionDeclaration*>(Decl);
@@ -48,7 +48,7 @@ void Evaluator::assignPattern(Pattern* P, Value& V, Env& E) {
     case NodeKind::BindPattern:
     {
       auto BP = static_cast<BindPattern*>(P);
-      E.add(getCanonicalText(BP->Name), V);
+      E.add(BP->Name->getCanonicalText(), V);
       break;
     }
     default:
@@ -62,12 +62,12 @@ Value Evaluator::apply(Value Op, std::vector<Value> Args) {
     {
       auto Fn = Op.getDeclaration();
       Env NewEnv;
-      for (auto [Param, Arg]: zen::zip(Fn->Params, Args)) {
+      for (auto [Param, Arg]: zen::zip(Fn->getParams(), Args)) {
         assignPattern(Param->Pattern, Arg, NewEnv);
       }
-      switch (Fn->Body->getKind()) {
+      switch (Fn->getBody()->getKind()) {
         case NodeKind::LetExprBody:
-          return evaluateExpression(static_cast<LetExprBody*>(Fn->Body)->Expression, NewEnv);
+          return evaluateExpression(static_cast<LetExprBody*>(Fn->getBody())->Expression, NewEnv);
         default:
           ZEN_UNREACHABLE
       }
@@ -98,23 +98,28 @@ void Evaluator::evaluate(Node* N, Env& E) {
       evaluateExpression(ES->Expression, E);
       break;
     }
-    case NodeKind::LetDeclaration:
+    case NodeKind::PrefixFunctionDeclaration:
+    case NodeKind::InfixFunctionDeclaration:
+    case NodeKind::SuffixFunctionDeclaration:
+    case NodeKind::NamedFunctionDeclaration:
     {
-      auto Decl = static_cast<LetDeclaration*>(N);
-      if (Decl->isFunction()) {
-        E.add(Decl->getNameAsString(), Decl);
-      } else {
-        Value V;
-        if (Decl->Body) {
-          switch (Decl->Body->getKind()) {
-            case NodeKind::LetExprBody:
-            {
-              auto Body = static_cast<LetExprBody*>(Decl->Body);
-              V = evaluateExpression(Body->Expression, E);
-            }
-            default:
-              ZEN_UNREACHABLE
+      auto Decl = static_cast<FunctionDeclaration*>(N);
+      E.add(Decl->getNameAsString(), Decl);
+      break;
+    }
+    case NodeKind::VariableDeclaration:
+    {
+      auto Decl = static_cast<VariableDeclaration*>(N);
+      Value V;
+      if (Decl->Body) {
+        switch (Decl->Body->getKind()) {
+          case NodeKind::LetExprBody:
+          {
+            auto Body = static_cast<LetExprBody*>(Decl->Body);
+            V = evaluateExpression(Body->Expression, E);
           }
+          default:
+            ZEN_UNREACHABLE
         }
       }
       break;

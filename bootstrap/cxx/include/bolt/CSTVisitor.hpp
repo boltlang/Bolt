@@ -15,8 +15,8 @@ public:
   void visit(Node* N) {
 
 #define BOLT_GEN_CASE(name) \
-      case NodeKind::name: \
-        return static_cast<D*>(this)->visit ## name(static_cast<name*>(N));
+    case NodeKind::name: \
+      return static_cast<D*>(this)->visit ## name(static_cast<name*>(N));
 
     switch (N->getKind()) {
       BOLT_GEN_CASE(VBar)
@@ -104,7 +104,11 @@ public:
       BOLT_GEN_CASE(Parameter)
       BOLT_GEN_CASE(LetBlockBody)
       BOLT_GEN_CASE(LetExprBody)
-      BOLT_GEN_CASE(LetDeclaration)
+      BOLT_GEN_CASE(PrefixFunctionDeclaration)
+      BOLT_GEN_CASE(InfixFunctionDeclaration)
+      BOLT_GEN_CASE(SuffixFunctionDeclaration)
+      BOLT_GEN_CASE(NamedFunctionDeclaration)
+      BOLT_GEN_CASE(VariableDeclaration)
       BOLT_GEN_CASE(RecordDeclaration)
       BOLT_GEN_CASE(RecordDeclarationField)
       BOLT_GEN_CASE(VariantDeclaration)
@@ -113,6 +117,35 @@ public:
       BOLT_GEN_CASE(ClassDeclaration)
       BOLT_GEN_CASE(InstanceDeclaration)
       BOLT_GEN_CASE(SourceFile)
+    }
+  }
+
+  void dispatchSymbol(const Symbol& S) {
+    switch (S.getKind()) {
+      case NodeKind::Identifier:
+        visit(S.asIdentifier());
+        break;
+      case NodeKind::IdentifierAlt:
+        visit(S.asIdentifierAlt());
+        break;
+      case NodeKind::WrappedOperator:
+        visit(S.asWrappedOperator());
+        break;
+      default:
+        ZEN_UNREACHABLE
+    }
+  }
+
+  void dispatchOperator(const Operator& O) {
+    switch (O.getKind()) {
+      case NodeKind::VBar:
+        visit(O.asVBar());
+        break;
+      case NodeKind::CustomOperator:
+        visit(O.asCustomOperator());
+        break;
+      default:
+        ZEN_UNREACHABLE
     }
   }
 
@@ -494,7 +527,27 @@ protected:
     static_cast<D*>(this)->visitLetBody(N);
   }
 
-  void visitLetDeclaration(LetDeclaration* N) {
+  void visitFunctionDeclaration(FunctionDeclaration* N) {
+    static_cast<D*>(this)->visitNode(N);
+  }
+
+  void visitPrefixFunctionDeclaration(PrefixFunctionDeclaration* N) {
+    static_cast<D*>(this)->visitFunctionDeclaration(N);
+  }
+
+  void visitInfixFunctionDeclaration(InfixFunctionDeclaration* N) {
+    static_cast<D*>(this)->visitFunctionDeclaration(N);
+  }
+
+  void visitSuffixFunctionDeclaration(SuffixFunctionDeclaration* N) {
+    static_cast<D*>(this)->visitFunctionDeclaration(N);
+  }
+
+  void visitNamedFunctionDeclaration(NamedFunctionDeclaration* N) {
+    static_cast<D*>(this)->visitFunctionDeclaration(N);
+  }
+
+  void visitVariableDeclaration(VariableDeclaration* N) {
     static_cast<D*>(this)->visitNode(N);
   }
 
@@ -629,7 +682,11 @@ public:
       BOLT_GEN_CHILD_CASE(Parameter)
       BOLT_GEN_CHILD_CASE(LetBlockBody)
       BOLT_GEN_CHILD_CASE(LetExprBody)
-      BOLT_GEN_CHILD_CASE(LetDeclaration)
+      BOLT_GEN_CHILD_CASE(PrefixFunctionDeclaration)
+      BOLT_GEN_CHILD_CASE(InfixFunctionDeclaration)
+      BOLT_GEN_CHILD_CASE(SuffixFunctionDeclaration)
+      BOLT_GEN_CHILD_CASE(NamedFunctionDeclaration)
+      BOLT_GEN_CHILD_CASE(VariableDeclaration)
       BOLT_GEN_CHILD_CASE(RecordDeclaration)
       BOLT_GEN_CHILD_CASE(RecordDeclarationField)
       BOLT_GEN_CHILD_CASE(VariantDeclaration)
@@ -642,6 +699,8 @@ public:
   }
 
 #define BOLT_VISIT(node) static_cast<D*>(this)->visit(node)
+#define BOLT_VISIT_SYMBOL(node) static_cast<D*>(this)->dispatchSymbol(node)
+#define BOLT_VISIT_OPERATOR(node) static_cast<D*>(this)->dispatchOperator(node)
 
   void visitEachChild(VBar* N) {
   }
@@ -771,7 +830,7 @@ public:
 
   void visitEachChild(WrappedOperator* N) {
     BOLT_VISIT(N->LParen);
-    BOLT_VISIT(N->Op);
+    BOLT_VISIT_OPERATOR(N->Op);
     BOLT_VISIT(N->RParen);
   }
 
@@ -972,7 +1031,7 @@ public:
       BOLT_VISIT(Name);
       BOLT_VISIT(Dot);
     }
-    BOLT_VISIT(N->Name);
+    BOLT_VISIT_SYMBOL(N->Name);
   }
 
   void visitEachChild(MatchCase* N) {
@@ -1049,7 +1108,7 @@ public:
       BOLT_VISIT(A);
     }
     BOLT_VISIT(N->Left);
-    BOLT_VISIT(N->Operator);
+    BOLT_VISIT_OPERATOR(N->Operator);
     BOLT_VISIT(N->Right);
   }
 
@@ -1140,7 +1199,7 @@ public:
     BOLT_VISIT(N->Expression);
   }
 
-  void visitEachChild(LetDeclaration* N) {
+  void visitEachChild(PrefixFunctionDeclaration* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1151,6 +1210,96 @@ public:
       BOLT_VISIT(N->ForeignKeyword);
     }
     BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT(N->Param);
+    BOLT_VISIT_OPERATOR(N->Name);
+    if (N->TypeAssert) {
+      BOLT_VISIT(N->TypeAssert);
+    }
+    if (N->Body) {
+      BOLT_VISIT(N->Body);
+    }
+  }
+
+  void visitEachChild(InfixFunctionDeclaration* N) {
+    for (auto A: N->Annotations) {
+      BOLT_VISIT(A);
+    }
+    if (N->PubKeyword) {
+      BOLT_VISIT(N->PubKeyword);
+    }
+    if (N->ForeignKeyword) {
+      BOLT_VISIT(N->ForeignKeyword);
+    }
+    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT(N->Left);
+    BOLT_VISIT_OPERATOR(N->Name);
+    BOLT_VISIT(N->Right);
+    if (N->TypeAssert) {
+      BOLT_VISIT(N->TypeAssert);
+    }
+    if (N->Body) {
+      BOLT_VISIT(N->Body);
+    }
+  }
+
+  void visitEachChild(SuffixFunctionDeclaration* N) {
+    for (auto A: N->Annotations) {
+      BOLT_VISIT(A);
+    }
+    if (N->PubKeyword) {
+      BOLT_VISIT(N->PubKeyword);
+    }
+    if (N->ForeignKeyword) {
+      BOLT_VISIT(N->ForeignKeyword);
+    }
+    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT_OPERATOR(N->Name);
+    BOLT_VISIT(N->Param);
+    if (N->TypeAssert) {
+      BOLT_VISIT(N->TypeAssert);
+    }
+    if (N->Body) {
+      BOLT_VISIT(N->Body);
+    }
+  }
+
+  void visitEachChild(NamedFunctionDeclaration* N) {
+    for (auto A: N->Annotations) {
+      BOLT_VISIT(A);
+    }
+    if (N->PubKeyword) {
+      BOLT_VISIT(N->PubKeyword);
+    }
+    if (N->ForeignKeyword) {
+      BOLT_VISIT(N->ForeignKeyword);
+    }
+    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT_SYMBOL(N->Name);
+    for (auto Param: N->Params) {
+      BOLT_VISIT(Param);
+    }
+    if (N->TypeAssert) {
+      BOLT_VISIT(N->TypeAssert);
+    }
+    if (N->Body) {
+      BOLT_VISIT(N->Body);
+    }
+  }
+
+  void visitEachChild(VariableDeclaration* N) {
+    for (auto A: N->Annotations) {
+      BOLT_VISIT(A);
+    }
+    if (N->PubKeyword) {
+      BOLT_VISIT(N->PubKeyword);
+    }
+    if (N->ForeignKeyword) {
+      BOLT_VISIT(N->ForeignKeyword);
+    }
+    BOLT_VISIT(N->LetKeyword);
+    if (N->MutKeyword) {
+      BOLT_VISIT(N->MutKeyword);
+    }
     BOLT_VISIT(N->Pattern);
     for (auto Param: N->Params) {
       BOLT_VISIT(Param);

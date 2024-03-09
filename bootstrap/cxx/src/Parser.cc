@@ -32,16 +32,6 @@
 
 namespace bolt {
 
-bool isOperator(Token* T) {
-  switch (T->getKind()) {
-    case NodeKind::VBar:
-    case NodeKind::CustomOperator:
-      return true;
-    default:
-      return false;
-  }
-}
-
 std::optional<OperatorInfo> OperatorTable::getInfix(Token* T) {
   auto Match = Mapping.find(T->getText());
   if (Match == Mapping.end() || !Match->second.isInfix()) {
@@ -828,7 +818,7 @@ Expression* Parser::parsePrimitiveExpression() {
         DE.add<UnexpectedTokenDiagnostic>(File, T3, std::vector { NodeKind::Identifier, NodeKind::IdentifierAlt });
         return nullptr;
       }
-      return new ReferenceExpression(Annotations, ModulePath, static_cast<Symbol*>(T3));
+      return new ReferenceExpression(Annotations, ModulePath, Symbol::from_raw_node(T3));
     }
     case NodeKind::LParen:
     {
@@ -1025,7 +1015,7 @@ Expression* Parser::parseInfixOperatorAfterExpression(Expression* Left, int MinP
       }
       Right = NewRight;
     }
-    Left = new InfixExpression(Left, T0, Right);
+    Left = new InfixExpression(Left, Operator::from_raw_node(T0), Right);
   }
   return Left;
 }
@@ -1141,17 +1131,31 @@ IfStatement* Parser::parseIfStatement() {
   return new IfStatement(Parts);
 }
 
-LetDeclaration* Parser::parseLetDeclaration() {
+enum class LetMode {
+  Prefix,
+  Infix,
+  Suffix,
+  Wrapped,
+  VarOrNamed,
+};
+
+Node* Parser::parseLetDeclaration() {
 
   auto Annotations = parseAnnotations();
   PubKeyword* Pub = nullptr;
   ForeignKeyword* Foreign = nullptr;
   LetKeyword* Let;
   MutKeyword* Mut = nullptr;
+  Operator Op;
+  Symbol Sym;
   Pattern* Name;
+  Parameter* Param;
+  Parameter* Left;
+  Parameter* Right;
   std::vector<Parameter*> Params;
   TypeAssert* TA = nullptr;
   LetBody* Body = nullptr;
+  LetMode Mode;
 
   auto T0 = Tokens.get();
   if (T0->getKind() == NodeKind::PubKeyword) {
@@ -1183,38 +1187,46 @@ LetDeclaration* Parser::parseLetDeclaration() {
   auto T2 = Tokens.peek(0);
   auto T3 = Tokens.peek(1);
   auto T4 = Tokens.peek(2);
-  if (isOperator(T2)) {
+  if (isa<Operator>(T2)) {
+    // Prefix function declaration
     Tokens.get();
     auto P1 = parseNarrowPattern();
-    Params.push_back(new Parameter(P1, nullptr));
-    Name = new BindPattern(T2);
+    Param = new Parameter(P1, nullptr);
+    Op = Operator::from_raw_node(T2);
+    Mode = LetMode::Prefix;
     goto after_params;
-  } else if (isOperator(T3) && (T4->getKind() == NodeKind::Colon || T4->getKind() == NodeKind::Equals || T4->getKind() == NodeKind::BlockStart || T4->getKind() == NodeKind::LineFoldEnd)) {
+  } else if (isa<Operator>(T3) && (T4->getKind() == NodeKind::Colon || T4->getKind() == NodeKind::Equals || T4->getKind() == NodeKind::BlockStart || T4->getKind() == NodeKind::LineFoldEnd)) {
+    // Sufffix function declaration
     auto P1 = parseNarrowPattern();
-    Params.push_back(new Parameter(P1, nullptr));
+    Param = new Parameter(P1, nullptr);
     Tokens.get();
-    Name = new BindPattern(T3);
+    Op = Operator::from_raw_node(T3);
+    Mode = LetMode::Suffix;
     goto after_params;
-  } else if (T2->getKind() == NodeKind::LParen && isOperator(T3) && T4->getKind() == NodeKind::RParen) {
+  } else if (T2->getKind() == NodeKind::LParen && isa<Operator>(T3) && T4->getKind() == NodeKind::RParen) {
+    // Wrapped operator function declaration
     Tokens.get();
     Tokens.get();
     Tokens.get();
-    Name = new BindPattern(
-      new WrappedOperator(
-        static_cast<class LParen*>(T2),
-        T3,
-        static_cast<class RParen*>(T3)
-      )
+    Sym = new WrappedOperator(
+      static_cast<class LParen*>(T2),
+      Operator::from_raw_node(T3),
+      static_cast<class RParen*>(T3)
     );
-  } else if (isOperator(T3)) {
+    Mode = LetMode::Wrapped;
+  } else if (isa<Operator>(T3)) {
+    // Infix function declaration
     auto P1 = parseNarrowPattern();
-    Params.push_back(new Parameter(P1, nullptr));
+    Left = new Parameter(P1, nullptr);
     Tokens.get();
     auto P2 = parseNarrowPattern();
-    Params.push_back(new Parameter(P2, nullptr));
-    Name = new BindPattern(T3);
+    Right = new Parameter(P2, nullptr);
+    Op = Operator::from_raw_node(T3);
+    Mode = LetMode::Infix;
     goto after_params;
   } else {
+    // Variable declaration or named function declaration
+    Mode = LetMode::VarOrNamed;
     Name = parseNarrowPattern();
     if (!Name) {
       if (Pub) {
@@ -1313,17 +1325,77 @@ after_params:
 
 finish:
 
-  return new LetDeclaration(
-    Annotations,
-    Pub,
-    Foreign,
-    Let,
-    Mut,
-    Name,
-    Params,
-    TA,
-    Body
-  );
+  switch (Mode) {
+    case LetMode::Prefix:
+      return new PrefixFunctionDeclaration(
+        Annotations,
+        Pub,
+        Foreign,
+        Let,
+        Op,
+        Param,
+        TA,
+        Body
+      );
+    case LetMode::Suffix:
+      return new SuffixFunctionDeclaration(
+        Annotations,
+        Pub,
+        Foreign,
+        Let,
+        Param,
+        Op,
+        TA,
+        Body
+      );
+    case LetMode::Infix:
+      return new InfixFunctionDeclaration(
+        Annotations,
+        Pub,
+        Foreign,
+        Let,
+        Left,
+        Op,
+        Right,
+        TA,
+        Body
+      );
+    case LetMode::Wrapped:
+      return new NamedFunctionDeclaration(
+        Annotations,
+        Pub,
+        Foreign,
+        Let,
+        Sym,
+        Params,
+        TA,
+        Body
+      );
+    case LetMode::VarOrNamed:
+      if (Name->getKind() != NodeKind::BindPattern || Mut) {
+        // TODO assert Params is empty
+        return new VariableDeclaration(
+          Annotations,
+          Pub,
+          Foreign,
+          Let,
+          Mut,
+          Name,
+          TA,
+          Body
+        );
+      }
+      return new NamedFunctionDeclaration(
+        Annotations,
+        Pub,
+        Foreign,
+        Let,
+        Name->as<BindPattern>()->Name,
+        Params,
+        TA,
+        Body
+      );
+  }
 }
 
 Node* Parser::parseLetBodyElement() {

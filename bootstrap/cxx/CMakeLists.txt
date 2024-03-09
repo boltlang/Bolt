@@ -1,7 +1,7 @@
 
 cmake_minimum_required(VERSION 3.10)
 
-project(Bolt CXX)
+project(Bolt C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 
@@ -17,6 +17,8 @@ if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Deb
   set(BOLT_DEBUG ON)
 endif()
 
+find_package(LLVM 18.1.0 REQUIRED)
+
 add_library(
   BoltCore
   #src/Text.cc
@@ -28,6 +30,7 @@ add_library(
   src/Types.cc
   src/Checker.cc
   src/Evaluator.cc
+  src/Scope.cc
 )
 target_link_directories(
   BoltCore
@@ -61,6 +64,22 @@ target_link_libraries(
   icuuc
 )
 
+add_library(
+  BoltLLVM
+  src/LLVMCodeGen.cc
+)
+llvm_map_components_to_libnames(llvm_libs support core irreader)
+target_include_directories(BoltLLVM PRIVATE ${LLVM_INCLUDE_DIRS})
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+target_compile_definitions(BoltLLVM PRIVATE ${LLVM_DEFINITIONS_LIST})
+
+target_link_libraries(
+  BoltLLVM
+  PUBLIC
+  BoltCore
+  ${llvm_libs}
+)
+
 add_executable(
   bolt
   src/main.cc
@@ -69,6 +88,7 @@ target_link_libraries(
   bolt
   PUBLIC
   BoltCore
+  BoltLLVM
 )
 
 if (BOLT_ENABLE_TESTS)
