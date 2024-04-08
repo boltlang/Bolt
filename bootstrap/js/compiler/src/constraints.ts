@@ -6,6 +6,7 @@ import { first, InspectFn, last, toStringTag } from "./util";
 
 export const enum ConstraintKind {
   Equal,
+  // Class,
   Many,
   Empty,
 }
@@ -99,18 +100,47 @@ export class CMany extends ConstraintBase {
     }
   }
 
-  public [toStringTag](currentDepth: number, { depth = 2, ...options }: InspectOptions, inspect: InspectFn): string {
+  public [toStringTag](_depth: number, opts: InspectOptions, inspect: InspectFn): string {
     if (this.elements.length === 0) {
       return '[]';
     }
     let out = '[\n';
-    const newOptions = { ...options, depth: depth === null ? null : depth - 1 };
-    out += this.elements.map(constraint => '  ' + inspect(constraint, newOptions)).join('\n');
+    out += this.elements.map(constraint => '  ' + inspect(constraint, opts)).join('\n');
     out += '\n]';
     return out;
   }
 
 }
+
+// export class CClass extends ConstraintBase {
+
+//   public readonly kind = ConstraintKind.Class;
+
+//   public constructor(
+//     public className: string,
+//     public type: Type,
+//     public node: Syntax,
+//   ) {
+//     super();
+//   }
+
+//   public substitute(sub: TVSub): Constraint {
+//     return new CClass(
+//       this.className,
+//       this.type.substitute(sub),
+//       this.node,
+//     );
+//   }
+
+//   public *freeTypeVars(): Iterable<TVar> {
+//     yield* this.type.getTypeVars();
+//   }
+
+//   public [toStringTag](_depth: number, opts: InspectOptions, inspect: InspectFn): string {
+//     return this.className + ' => ' + inspect(this.type, opts);
+//   }
+
+// }
 
 export class CEmpty extends ConstraintBase {
 
@@ -132,9 +162,10 @@ export class CEmpty extends ConstraintBase {
 
 export type Constraint
   = CEqual
+  // | CClass
   | CMany
   | CEmpty
 
-export  class ConstraintSet extends Array<Constraint> {
+export class ConstraintSet extends Array<Constraint> {
 
 }

@@ -17,7 +17,7 @@ import {
   FunctionExpression,
   Backslash,
   canHaveInstanceDeclaration,
-  vistEachChild
+  visitEachChild
 } from "../cst";
 import { Pass } from "../program";
 import { assert } from "../util";
@@ -50,7 +50,7 @@ export class TypeclassDictPassing implements Pass<SourceFile, SourceFile> {
 
   private visit(node: Syntax): Syntax {
     if (canHaveInstanceDeclaration(node)) {
-      return vistEachChild(node, this.visit.bind(this));
+      return visitEachChild(node, this.visit.bind(this));
     }
     if (node.kind === SyntaxKind.InstanceDeclaration) {
       const decl = new LetDeclaration(

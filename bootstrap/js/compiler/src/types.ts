@@ -14,6 +14,7 @@ export enum TypeKind {
   Nil,
   Absent,
   Present,
+  Tag,
 }
 
 export abstract class TypeBase {
@@ -457,6 +458,40 @@ export class TApp extends TypeBase {
 
 }
 
+export const labelTag = '____tag';
+
+// export class TTag extends TypeBase {
+
+//   public readonly kind = TypeKind.Tag;
+
+//   public constructor(
+//     public name: string,
+//     public node: Syntax | null = null,
+//   ) {
+//     super();
+//   }
+
+//   public shallowClone(): Type {
+//     return new TTag(
+//       this.name,
+//       this.node,
+//     );
+//   }
+
+//   public *getTypeVars(): Iterable<TVar> {
+//     // noop
+//   }
+
+//   public substitute(sub: TVSub): Type {
+//     return this;
+//   }
+
+//   public [toStringTag]() {
+//     return this.name;
+//   }
+
+// }
+
 export type Type
   = TCon
   | TArrow
@@ -467,10 +502,42 @@ export type Type
   | TNil
   | TPresent
   | TAbsent
+  // | TTag
 
 export type TVar
   = TRegularVar
   | TRigidVar
+
+
+export function getSignature(type: Type): Type[] {
+  const out = [];
+  let stack = [ type ];
+  for (;;) {
+    const child = stack.pop()!;
+    if (child.kind === TypeKind.App) {
+      stack.push(child.left);
+      stack.push(child.right);
+    } else {
+      out.push(child);
+    }
+    if (stack.length === 0) {
+      break;
+    }
+  }
+  return out;
+}
+
+export function isSignature(type: Type): boolean {
+  return type.kind === TypeKind.Con
+      || type.kind === TypeKind.App;
+}
+
+export function assignableTo(left: Type, right: Type): boolean {
+  if (left.kind === TypeKind.Con && right.kind == TypeKind.Con) {
+    return left.id === right.id;
+  }
+  return false;
+}
 
 export function typesEqual(a: Type, b: Type): boolean {
   if (a.kind !== b.kind) {

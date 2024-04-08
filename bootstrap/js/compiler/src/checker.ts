@@ -5,6 +5,7 @@ import {
   ExprOperator,
   Identifier,
   IdentifierAlt,
+  InstanceDeclaration,
   LetDeclaration,
   Pattern,
   ReferenceExpression,
@@ -23,58 +24,31 @@ import {
   KindMismatchDiagnostic,
   ModuleNotFoundDiagnostic,
   TypeclassNotFoundDiagnostic,
-  TypeclassDeclaredTwiceDiagnostic,
   FieldNotFoundDiagnostic,
   TypeMismatchDiagnostic,
 } from "./diagnostics";
-import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn } from "./util";
+import { assert, assertNever, isEmpty, MultiMap, toStringTag, InspectFn, implementationLimitation } from "./util";
 import { Analyser } from "./analysis";
 import { InspectOptions } from "util";
-import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TRegularVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, buildTupleTypeWithLoc, buildTupleType, isTVar } from "./types";
+import { TypeKind, TApp, TArrow, TCon, TField, TNil, TPresent, TRegularVar, TVSet, TVSub, Type, TypeBase, TAbsent, TRigidVar, TVar, buildTupleTypeWithLoc, buildTupleType, labelTag } from "./types";
 import { CEmpty, CEqual, CMany, Constraint, ConstraintKind, ConstraintSet } from "./constraints";
 
-// export class Qual {
+// class IsIn {
 
 //   public constructor(
-//     public preds: Pred[],
-//     public type: Type,
-//   ) {
-
-//   }
-
-//   public substitute(sub: TVSub): Qual {
-//     return new Qual(
-//       this.preds.map(pred => pred.substitute(sub)),
-//       this.type.substitute(sub),
-//     );
-//   }
-
-//   public *getTypeVars() {
-//     for (const pred of this.preds) {
-//       yield* pred.type.getTypeVars();
-//     }
-//     yield* this.type.getTypeVars();
-//   }
-
-// }
-
-// class IsInPred {
-
-//   public constructor(
-//     public id: string,
+//     public className: string,
 //     public type: Type,
 //   ) {
 
 //   }
 
 //   public substitute(sub: TVSub): Pred {
-//     return new IsInPred(this.id, this.type.substitute(sub));
-
+//     return new IsIn(this.className, this.type.substitute(sub));
 //   }
 
 // }
 
-// type Pred = IsInPred;
+// type Pred = IsIn;
 
 export const enum KindType {
   Type,
@@ -371,6 +345,11 @@ function hasTypeVar(typeVars: TVSet, type: Type): boolean {
   return false;
 }
 
+interface ClassMeta {
+  decl: ClassDeclaration | null;
+  instances: Set<InstanceDeclaration>;
+}
+
 export class Checker {
 
   private nextTypeVarId = 0;
@@ -382,7 +361,7 @@ export class Checker {
   private boolType = this.createTCon('Bool');
   private unitType = buildTupleType([]);
 
-  private classDecls = new Map<string, ClassDeclaration>();
+  private classDecls = new Map<string, ClassMeta>();
   private globalKindEnv = new KindEnv();
   private globalTypeEnv = new TypeEnv();
 
@@ -779,8 +758,8 @@ export class Checker {
         case ConstraintKind.Empty:
           return constraint;
         case ConstraintKind.Equal:
-          constraint.left = this.simplifyType(constraint.left)
-          constraint.right = this.simplifyType(constraint.right)
+          // constraint.left = this.simplifyType(constraint.left)
+          // constraint.right = this.simplifyType(constraint.right)
           const newConstraint = constraint.substitute(sub);
           newConstraint.node = node;
           newConstraint.prevInstantiation = constraint;
@@ -877,13 +856,15 @@ export class Checker {
       }
 
       case SyntaxKind.NestedTypeExpression:
+      case SyntaxKind.InstanceTypeExpression:
       {
         kind = this.inferKindFromTypeExpression(node.typeExpr, env);
         break;
       }
 
       default:
-        throw new Error(`Unexpected ${node}`);
+        assertNever(node);
+
     }
 
     // We store the kind on the node so there is a one-to-one correspondence
@@ -1580,6 +1561,7 @@ export class Checker {
           break;
         }
 
+        case SyntaxKind.InstanceTypeExpression:
         case SyntaxKind.NestedTypeExpression:
           type = this.inferTypeExpression(node.typeExpr, introduceTypeVars);
           break;
@@ -1613,11 +1595,16 @@ export class Checker {
 
         case SyntaxKind.TypeExpressionWithConstraints:
         {
-          // TODO
-          // for (const constraint of node.constraints) {
-          //   implementationLimitation(constraint.types.length === 1);
-          //   this.addConstraint(new CClass(constraint.name.text, this.inferTypeExpression(constraint.types[0]), constraint.name));
-          // }
+          for (const constraint of node.constraints) {
+            implementationLimitation(constraint.types.length === 1);
+            this.addConstraint(
+              new CClass(
+                constraint.name.text,
+                this.inferTypeExpression(constraint.types[0]),
+                constraint.name
+              )
+            );
+          }
           return this.inferTypeExpression(node.typeExpr, introduceTypeVars);
         }
 
@@ -1646,7 +1633,7 @@ export class Checker {
         }
 
         default:
-          throw new Error(`Unrecognised ${node}`);
+          assertNever(node);
 
       }
 
@@ -1778,6 +1765,18 @@ export class Checker {
 
   }
 
+  private getClassMeta(name: string): ClassMeta {
+    let meta = this.classDecls.get(name);
+    if (meta === undefined) {
+      meta = {
+        decl: null,
+        instances: new Set(),
+      };
+      this.classDecls.set(name, meta);
+    }
+    return meta;
+  }
+
   private initialize(node: Syntax): void {
 
     switch (node.kind) {
@@ -1816,6 +1815,11 @@ export class Checker {
 
       case SyntaxKind.ClassDeclaration:
       {
+        const meta = this.getClassMeta(node.name.text);
+        if (meta.decl !== undefined) {
+          // TODO class declaration already exists diagnostic
+        }
+        meta.decl = node;
         const info = this.getInfo(node);
         const env = info.typeEnv = new TypeEnv();
         for (const tv of node.types) {
@@ -1830,14 +1834,19 @@ export class Checker {
 
       case SyntaxKind.InstanceDeclaration:
       {
-        if (!this.classDecls.has(node.name.text)) {
+        const meta = this.getClassMeta(node.name.text);
+        meta.instances.add(node);
+
+        if (meta.decl === null) {
           this.diagnostics.add(new TypeclassNotFoundDiagnostic(node.name.text, node.name));
         }
+
         const info = this.getInfo(node);
         info.typeEnv = new TypeEnv();
         for (const element of node.elements) {
           this.initialize(element);
         }
+
         break;
       }
 
@@ -1974,8 +1983,16 @@ export class Checker {
           typeArgs.push(typeArg);
         }
 
+        // const tagType = TApp.build(
+        //   this.createTCon(node.name.text, node.name),
+        //   typeArgs,
+        //   node.name
+        // );
+        const tagType = this.createTCon(node.name.text, node.name);
         const fields = new Map<string, Type>();
         const restType = new TNil(node);
+
+        fields.set(labelTag, tagType);
 
         if (node.fields !== null) {
           for (const field of node.fields) {
@@ -1983,14 +2000,13 @@ export class Checker {
           }
         }
 
-        const type = this.createTCon(node.name.text, node.name);
         const recordType = TField.build(fields, restType);
 
         this.polyContextStack.pop();
         this.typeEnvStack.pop();
 
-        parentEnv.add(node.name.text, new Forall(poly.typeVars, new CMany(poly.constraints), type), Symkind.Type);
-        parentEnv.add(node.name.text, new Forall(poly.typeVars, new CMany(poly.constraints), new TArrow(recordType, type)), Symkind.Var);
+        parentEnv.add(node.name.text, new Forall(poly.typeVars, new CMany(poly.constraints), recordType), Symkind.Type);
+        // parentEnv.add(node.name.text, new Forall(poly.typeVars, new CMany(poly.constraints), new TArrow(recordType, type)), Symkind.Var);
 
         break;
       }
@@ -2041,7 +2057,16 @@ export class Checker {
 
         const paramTypes = node.params.map(param => {
           const paramType = this.createTRegularVar();
-          this.inferBindings(param.pattern, paramType)
+          switch (param.kind) {
+            case SyntaxKind.PlainParam:
+              this.inferBindings(param.pattern, paramType)
+              break;
+            case SyntaxKind.InstanceParam:
+              this.addBinding(param.name.text, Forall.mono(paramType), Symkind.Var);
+              break;
+            default:
+              assertNever(param);
+          }
           return paramType;
         });
 
@@ -2094,16 +2119,34 @@ export class Checker {
 
   }
 
+  // private findInstanceContext(sig: Type[], clazz: ClassDeclaration): Iterable<ClassDeclaration[]> {
+
+  //   const contexts = [];
+  //   const meta = this.getClassMeta(clazz.name.text);
+
+  //   // TODO should be a seperate verification pass somewhere
+  //   // if (meta.decl === null) {
+  //   //   this.diagnostics.add(new TypeclassNotFoundDiagnostic(clazz.name.text));
+  //   // }
+
+  //   for (const instance of meta.instances) {
+  //     let i = 0;
+  //     for (const type of instance.types) {
+  //       // TODO might need unification
+  //       const left = sig[i++];
+  //       const right = this.getTypeOfNode(type);
+  //       if (assignableTo(left, right)) {
+  //         contexts.push(context);
+  //       }
+  //     }
+  //   }
+
+  //   return contexts;
+  // }
+
   private path: (string | number)[] = [];
   private constraint: Constraint | null = null;
   private maxTypeErrorCount = 5;
-
-  private find(type: Type): Type {
-    while (type.kind === TypeKind.RegularVar && this.typeSolution.has(type)) {
-      type = this.typeSolution.get(type)!;
-    }
-    return type;
-  }
 
   private unifyField(left: Type, right: Type, enableDiagnostics: boolean): boolean {
 
@@ -2131,7 +2174,6 @@ export class Checker {
     assert(left.kind === TypeKind.Present && right.kind === TypeKind.Present);
     return this.unify(left.type, right.type, enableDiagnostics);
   }
-
 
   private unify(left: Type, right: Type, enableDiagnostics: boolean): boolean {
 
@@ -2167,30 +2209,33 @@ export class Checker {
       // propagating the type classes that 'left' requires to 'right'.
       // If 'right' is another type variable, we're lucky. We just copy
       // the missing type classes from 'left' to 'right'. Otherwise,
-      const propagateClasses = (classes: Iterable<ClassDeclaration>, type: Type) => {
-        if (isTVar(type)) {
-          for (const constraint of classes) {
-            type.context.add(constraint);
-          }
-        } else if (type.kind === TypeKind.Con) {
-          for (const constraint of classes) {
-            propagateClassTCon(constraint, type);
-          }
-        } else {
-          //assert(false);
-          //this.diagnostics.add(new );
-        }
-      }
+      //const propagateClasses = (classes: Iterable<ClassDeclaration>, type: Type) => {
+      //  if (isTVar(type)) {
+      //    for (const constraint of classes) {
+      //      type.context.add(constraint);
+      //    }
+      //  } else if (isSignature(type)) {
+      //    const sig = getSignature(type);
+      //    for (const constraint of classes) {
+      //      propagateClassTCon(constraint, sig);
+      //    }
+      //  } else {
+      //    assert(false);
+      //    //this.diagnostics.add(new );
+      //  }
+      //}
 
-      const propagateClassTCon = (clazz: ClassDeclaration, type: TCon) => {
-        const s = this.findInstanceContext(type, clazz);
-        let i = 0;
-        for (const classes of s) {
-          propagateClasses(classes, type.types[i++]);
-        }
-      }
+      //const propagateClassTCon = (clazz: ClassDeclaration, sig: Type[]) => {
+      //  const s = this.findInstanceContext(sig, clazz);
+      //  let i = 1;
+      //  for (const classes of s) {
+      //    propagateClasses(classes, sig[i++]);
+      //  }
+      //}
 
-      propagateClasses(left.context, right);
+      //if (left.context.size > 0) {
+      //  propagateClasses(left.context, right);
+      //}
 
       // We are all clear; set the actual type of left to right.
       left.set(right);
@@ -2305,6 +2350,35 @@ export class Checker {
     return false;
   }
 
+  // private inHnf(p: Pred): boolean {
+  //   let curr = p.type;
+  //   for (;;) {
+  //     if (isTVar(curr)) {
+  //       return true;
+  //     }
+  //     if (curr.kind === TypeKind.Con) {
+  //       return false;
+  //     }
+  //     if (curr.kind === TypeKind.App) {
+  //       curr = curr.left;
+  //       continue;
+  //     }
+  //     unreachable();
+  //   }
+  // }
+
+  // private toHnf(p: Pred): Pred[] {
+  //   if (this.inHnf(p)) {
+  //     return [ p ];
+  //   }
+  //   const result = this.byInst(p);
+  //   if (result === undefined) {
+  //     // TODO add diagnostic
+  //     throw new Error(`context reduction`);
+  //   }
+  //   result.map(this.toHnf.bind(this)).flatten();
+  // }
+
   public solve(constraint: Constraint): void {
 
     let queue = [ constraint ];
@@ -2316,6 +2390,9 @@ export class Checker {
       const constraint = queue.shift()!;
 
       switch (constraint.kind) {
+
+        case ConstraintKind.Empty:
+          break;
 
         case ConstraintKind.Many:
         {
@@ -2337,13 +2414,20 @@ export class Checker {
           break;
         }
 
+        case ConstraintKind.Class:
+          // TODO
+          break;
+
+        default:
+          assertNever(constraint);;
+
       }
 
     }
 
   }
 
-  private lookupClass(name: string): ClassDeclaration | null {
+  private lookupClass(name: string): ClassMeta | null {
     return this.classDecls.get(name) ?? null;
   }
 

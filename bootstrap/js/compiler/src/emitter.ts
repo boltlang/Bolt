@@ -12,7 +12,7 @@ export class Emitter {
   public emit(node: Syntax): void {
 
     switch (node.kind) {
-    
+
       case SyntaxKind.ModuleDeclaration:
         this.writer.write(`mod ${node.name.text}`);
         if (node.elements === null) {
@@ -91,7 +91,7 @@ export class Emitter {
         this.writer.write(node.name.text);
         break;
 
-      case SyntaxKind.Param:
+      case SyntaxKind.PlainParam:
         this.emit(node.pattern);
         break;
 

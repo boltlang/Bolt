@@ -1,5 +1,6 @@
+import { warn } from "console";
 import { LetDeclaration, Pattern, SourceFile, Syntax, SyntaxKind } from "./cst";
-import { MultiMap } from "./util";
+import { MultiMap, assertNever } from "./util";
 
 export type NodeWithScope
   = SourceFile
@@ -96,13 +97,23 @@ export class Scope {
       case SyntaxKind.StructDeclaration:
       {
         this.add(node.name.text, node, Symkind.Type);
-        this.add(node.name.text, node, Symkind.Var);
+        // TODO remove this?
+        // this.add(node.name.text, node, Symkind.Var);
         break;
       }
       case SyntaxKind.LetDeclaration:
       {
         for (const param of node.params) {
-          this.scanPattern(param.pattern, param);
+          switch (param.kind) {
+            case SyntaxKind.PlainParam:
+              this.scanPattern(param.pattern, param);
+              break;
+            case SyntaxKind.InstanceParam:
+              this.add(node.name.text, param, Symkind.Var);
+              break;
+            default:
+              assertNever(param);
+          }
         }
         if (node === this.node) {
           if (node.body !== null && node.body.kind === SyntaxKind.BlockBody) {
@@ -116,7 +127,7 @@ export class Scope {
         break;
       }
       default:
-        throw new Error(`Unexpected ${node.constructor.name}`);
+        assertNever(node);
     }
   }
 

@@ -1,4 +1,5 @@
 
+import { warn } from "console";
 import {
   ReferenceTypeExpression,
   SourceFile,
@@ -73,8 +74,12 @@ import {
   Annotations,
   ExprOperator,
   Integer,
+  InstanceParam,
+  PlainParam,
+  InstanceTypeExpression,
 } from "./cst"
 import { Stream } from "./util";
+import { wrap } from "module";
 
 export class ParseError extends Error {
 
@@ -196,7 +201,24 @@ export class Parser {
   }
 
   public parsePrimitiveTypeExpression(): TypeExpression {
-    const t0 = this.peekToken();
+    const t0 = this.peekToken(1);
+    const t1 = this.peekToken(2);
+    if (t0.kind === SyntaxKind.LBrace && t1.kind === SyntaxKind.LBrace) {
+      this.getToken();
+      this.getToken();
+      let name = null;
+      let colon = null;
+      const t2 = this.peekToken(2);
+      if (t2.kind === SyntaxKind.Colon) {
+        name = this.expectToken(SyntaxKind.Identifier);
+        this.getToken();
+        colon = t2;
+      }
+      const typeExpr = this.parseTypeExpression();
+      const t3 = this.expectToken(SyntaxKind.RBrace);
+      const t4 = this.expectToken(SyntaxKind.RBrace);
+      return new InstanceTypeExpression(t0, t1, name, colon, typeExpr, t3, t4);
+    }
     switch (t0.kind) {
       case SyntaxKind.Identifier:
         return this.parseVarTypeExpression();
@@ -893,8 +915,18 @@ export class Parser {
   }
 
   public parseParam(): Param {
+    const t0 = this.peekToken(1);
+    const t1 = this.peekToken(2);
+    if (t0.kind === SyntaxKind.LBrace && t1.kind === SyntaxKind.LBrace) {
+      this.getToken();
+      this.getToken();
+      const name = this.expectToken(SyntaxKind.Identifier);
+      const t3 = this.expectToken(SyntaxKind.RBrace);
+      const t4 = this.expectToken(SyntaxKind.RBrace);
+      return new InstanceParam(t0, t1, name, t3, t4);
+    }
     const pattern = this.parsePattern();
-    return new Param(pattern);
+    return new PlainParam(pattern);
   }
 
   private lookaheadIsAssignment(): boolean {

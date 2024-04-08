@@ -7,6 +7,7 @@ import { isNodeWithScope, Scope } from "./scope"
 import type { Kind, Scheme } from "./checker"
 import type { Type } from "./types";
 import { Emitter } from "./emitter";
+import { warn } from "console";
 
 export type TextSpan = [number, number];
 
@@ -81,7 +82,7 @@ export class TextFile {
 
 }
 
-export const enum SyntaxKind {
+export enum SyntaxKind {
 
   // Tokens
   Identifier,
@@ -140,6 +141,7 @@ export const enum SyntaxKind {
   NestedTypeExpression,
   TupleTypeExpression,
   ForallTypeExpression,
+  InstanceTypeExpression,
   TypeExpressionWithConstraints,
 
   // Patterns
@@ -204,12 +206,15 @@ export const enum SyntaxKind {
   EnumDeclarationStructElement,
   EnumDeclarationTupleElement,
 
+  // Parameters
+  PlainParam,
+  InstanceParam,
+
   // Other nodes
   WrappedOperator,
   MatchArm,
   Initializer,
   TypeAssert,
-  Param,
   SourceFile,
   ClassConstraint,
   ClassConstraintClause,
@@ -1486,6 +1491,44 @@ export class NestedTypeExpression extends SyntaxBase {
 
 }
 
+export class InstanceTypeExpression extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.InstanceTypeExpression;
+
+  public constructor(
+    public lbrace1: LBrace,
+    public lbrace2: LBrace,
+    public name: Identifier | null = null,
+    public colon: Colon | null = null,
+    public typeExpr: TypeExpression,
+    public rbrace1: RBrace,
+    public rbrace2: RBrace,
+  ) {
+    super();
+  }
+
+  public clone(): InstanceTypeExpression {
+    return new InstanceTypeExpression(
+      this.lbrace1,
+      this.lbrace2,
+      this.name,
+      this.colon,
+      this.typeExpr,
+      this.rbrace1,
+      this.rbrace2,
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.lbrace1;
+  }
+
+  public getLastToken(): Token {
+    return this.rbrace2;
+  }
+
+}
+
 export type TypeExpression
   = ReferenceTypeExpression
   | ArrowTypeExpression
@@ -1495,6 +1538,7 @@ export type TypeExpression
   | TupleTypeExpression
   | ForallTypeExpression
   | TypeExpressionWithConstraints
+  | InstanceTypeExpression
 
 export class NamedPattern extends SyntaxBase {
 
@@ -2494,9 +2538,43 @@ export type Statement
   | IfStatement
   | AssignStatement
 
-export class Param extends SyntaxBase {
+export class InstanceParam extends SyntaxBase {
 
-  public readonly kind = SyntaxKind.Param;
+  public readonly kind = SyntaxKind.InstanceParam;
+
+  public constructor(
+    public lbrace1: LBrace,
+    public lbrace2: LBrace,
+    public name: Identifier,
+    public rbrace1: RBrace,
+    public rbrace2: RBrace,
+  ) {
+    super();
+  }
+
+  public clone(): InstanceParam {
+    return new InstanceParam(
+      this.lbrace1,
+      this.lbrace2,
+      this.name,
+      this.rbrace1,
+      this.rbrace2,
+    );
+  }
+
+  public getFirstToken(): Token {
+    return this.lbrace1;
+  }
+
+  public getLastToken(): Token {
+    return this.rbrace2;
+  }
+
+}
+
+export class PlainParam extends SyntaxBase {
+
+  public readonly kind = SyntaxKind.PlainParam;
 
   public constructor(
     public pattern: Pattern,
@@ -2504,8 +2582,8 @@ export class Param extends SyntaxBase {
     super();
   }
 
-  public clone(): Param {
-    return new Param(
+  public clone(): PlainParam {
+    return new PlainParam(
       this.pattern.clone(),
     );
   }
@@ -2518,6 +2596,15 @@ export class Param extends SyntaxBase {
     return this.pattern.getLastToken();
   }
 
+}
+
+export type Param
+  = InstanceParam
+  | PlainParam 
+
+export function isParam(node: Syntax): node is Param {
+  return node.kind === SyntaxKind.PlainParam
+      || node.kind === SyntaxKind.InstanceParam;
 }
 
 export class EnumDeclarationStructElement extends SyntaxBase {

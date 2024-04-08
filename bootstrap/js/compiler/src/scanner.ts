@@ -1,4 +1,5 @@
 
+import { warn } from "console";
 import {
   SyntaxKind,
   Token,

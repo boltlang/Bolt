@@ -13,7 +13,7 @@ export class Analyser {
 
       const addReference = (scope: Scope, name: string) => {
         const target = scope.lookup(name);
-        if (source === null || target === null || target.kind === SyntaxKind.Param) {
+        if (source === null || target === null || isParam(target.kind)) {
           return;
         }
         assert(source.kind === SyntaxKind.LetDeclaration);

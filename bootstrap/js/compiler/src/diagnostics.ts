@@ -1,8 +1,10 @@
 
 import { Kind, KindType } from "./checker";
-import { type Type, TypeKind } from "./types"
+import { type Type, TypeKind, labelTag } from "./types"
 import { ClassConstraint, ClassDeclaration, IdentifierAlt, InstanceDeclaration, Syntax, SyntaxKind, TextFile, TextPosition, TextRange, Token } from "./cst";
-import { assertNever, countDigits, IndentWriter } from "./util";
+import { assert, assertNever, countDigits, IndentWriter } from "./util";
+import { unwatchFile } from "fs";
+import { warn } from "console";
 
 const ANSI_RESET = "\u001b[0m"
 const ANSI_BOLD = "\u001b[1m"
@@ -537,6 +539,13 @@ export function describeType(type: Type): string {
     }
     case TypeKind.Field:
     {
+      // let curr: Type = type;
+      // while (curr.kind === TypeKind.Field) {
+      //   if (curr.name === labelTag) {
+      //     return describeType(curr.type);
+      //   }
+      //   curr = curr.restType;
+      // }
       let out = '{ ' + type.name + ': ' + describeType(type.type);
       type = type.restType;
       while (type.kind === TypeKind.Field) {
