@@ -18,6 +18,7 @@
 #include "bolt/Parser.hpp"
 #include "bolt/Checker.hpp"
 #include "bolt/Evaluator.hpp"
+#include "bolt/Program.hpp"
 
 using namespace bolt;
 
@@ -72,9 +73,10 @@ int main(int Argc, const char* Argv[]) {
 
   ConsolePrinter ThePrinter;
   ConsoleDiagnostics DE(ThePrinter);
+  DiagnosticStore DS;
   LanguageConfig Config;
 
-  std::vector<SourceFile*> SourceFiles;
+  Program Prog { DirectDiagnostics ? static_cast<DiagnosticEngine&>(DE) : DS, Config };
 
   for (auto Filename: Submatch->get_pos_args()) {
 
@@ -92,15 +94,10 @@ int main(int Argc, const char* Argv[]) {
 
     SF->setParents();
 
-    SourceFiles.push_back(SF);
+    Prog.addSourceFile(Filename, SF);
   }
 
-  DiagnosticStore DS;
-  Checker TheChecker { Config, DirectDiagnostics ? static_cast<DiagnosticEngine&>(DE) : static_cast<DiagnosticEngine&>(DS) };
-
-  for (auto SF: SourceFiles) {
-    TheChecker.check(SF);
-  }
+  Prog.check();
 
   if (IsVerify) {
 
@@ -109,8 +106,10 @@ int main(int Argc, const char* Argv[]) {
     bool HasError = 0;
 
     struct AssertVisitor : public CSTVisitor<AssertVisitor> {
+
       Checker& C;
       DiagnosticEngine& DE;
+
       void visitExpression(Expression* N) {
         for (auto A: N->Annotations) {
           if (A->getKind() == NodeKind::TypeAssertAnnotation) {
@@ -124,15 +123,18 @@ int main(int Argc, const char* Argv[]) {
         }
         visitEachChild(N);
       }
+
     };
 
-    AssertVisitor V { {}, TheChecker, DE };
-    for (auto SF: SourceFiles) {
+    for (auto SF: Prog.getSourceFiles()) {
+      AssertVisitor V { {}, Prog.getTypeChecker(SF), DE };
       V.visit(SF);
     }
 
     struct ExpectDiagnosticVisitor : public CSTVisitor<ExpectDiagnosticVisitor> {
+
       std::multimap<std::size_t, unsigned> Expected;
+
       void visitExpressionAnnotation(ExpressionAnnotation* N) {
         if (N->getExpression()->is<CallExpression>()) {
           auto CE = static_cast<CallExpression*>(N->getExpression());
@@ -145,10 +147,11 @@ int main(int Argc, const char* Argv[]) {
           }
         }
       }
+
     };
 
     ExpectDiagnosticVisitor V1;
-    for (auto SF: SourceFiles) {
+    for (auto SF: Prog.getSourceFiles()) {
       V1.visit(SF);
     }
 
@@ -192,7 +195,7 @@ int main(int Argc, const char* Argv[]) {
       std::cerr << Args[0].asString() << "\n";
       return Value::unit();
     }));
-    for (auto SF: SourceFiles) {
+    for (auto SF: Prog.getSourceFiles()) {
       // TODO add a SourceFile-local env that inherits from GlobalEnv
       E.evaluate(SF, GlobalEnv);
     }
