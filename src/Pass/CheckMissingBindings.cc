@@ -1,0 +1,7 @@
+
+namespace bolt {
+
+class CheckMissingBindings {
+};
+
+}

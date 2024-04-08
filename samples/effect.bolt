@@ -1,0 +1,34 @@
+
+let foreign write : String -> ()
+let foreign writeln : String -> ()
+let foreign print : a -> ()
+
+let (<=) : Int -> Int -> Bool
+
+effect Yield a.
+  yield : a -> Bool
+
+let count_to_three x.
+  yield "one"
+  yield "two"
+  yield "three"
+
+let coun_to_three_indirect.
+  count_to_three 1
+  count_to_three 1
+
+handle.
+  effect yield str.
+    writeln str
+    resume True
+  count_to_three
+
+handle.
+  effect yield str.
+    resume True
+  count_to_three
+
+# TODO make this compile
+#
+write "Hello, world!\n"
+wite "This is Bolt speaking.\n"

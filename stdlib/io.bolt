@@ -1,0 +1,5 @@
+
+let print : String -> ()
+
+let eprint : String -> ()
+

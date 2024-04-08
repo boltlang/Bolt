@@ -5,15 +5,13 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "type": "node",
+            "type": "lldb",
             "request": "launch",
-            "name": "Launch Program",
-            "skipFiles": [
-                "<node_internals>/**"
-            ],
-            "program": "${workspaceFolder}/compiler/lib/bin/bolt.js",
-            "args": [ "compiler/test.bolt" ],
-            "outputCapture": "std"
+            "name": "Debug",
+            "program": "${workspaceFolder}/build/bolt",
+            "args": [ "--direct-diagnostics", "verify", "${workspaceFolder}/test.bolt" ],
+            "cwd": "${workspaceFolder}",
+            "preLaunchTask": "CMake: build"
         }
     ]
 }

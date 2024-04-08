@@ -1,8 +1,0 @@
-
-let fac n = fac_2 n
-
-let fac_2 n = fac_3 n + fac n
-
-let fac_3 n = fac_2 (n-1)
-
-@:Int fac 1

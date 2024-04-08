@@ -1,0 +1,102 @@
+
+let alpha
+  = range 'a'..'z'
+  <|> range 'A'..'Z'
+
+let digit
+  = range '0'..'9'
+
+let alnum
+  = alpha
+  <|> digit
+
+let identifier_start
+  = alpha
+  <|> one_of [ '_' ]
+
+let identifier_part
+  = alnum
+  <|> one_of [ '_' ]
+
+let identifier.
+  identifier_start
+  many identifier_part
+
+let wrapped_operator.
+  char '('
+  operator
+  char ')'
+
+let symbol
+  = identifier
+  <|> wrapped_operator
+
+let reference_type_expression.
+  module_path <- many $ identifier << char '.'
+  name <- symbol
+
+let type_expression
+  = reference_type_expression
+  <|> arrow_type_expression
+  <|> app_type_expression
+
+let expression_body.
+  char '='
+  expression
+
+let blank
+  = one_of [ '\t', '\r', ' ' ]
+
+let eol.
+  blank
+  char '\n'
+
+let block_start.
+  char '.'
+  lookahead eol
+
+let block x.
+  block_start
+  elements <- many $ x
+
+let function_body_element
+  = statement
+  <|> variable_declaration
+  <|> function_declaration
+
+let param.
+  pattern
+
+let named_function_declaration.
+  maybe $ keyword "pub"
+  keyword "let"
+  name <- identifier
+  char '('
+  sep_by (char ',') param
+  char ')'
+  body <- block function_body_element
+
+let function_declaration
+  = named_function_declaration
+
+let variable_declaration.
+  maybe $ keyword "pub"
+  keyword "let"
+  maybe $ keyword "mut"
+  name <- identifier
+  maybe type_assertion
+  body <- expression_body
+
+let type_alias_declaration.
+  maybe $ keyword "type"
+  keyword "type"
+  name <- identifier
+  many type_param
+  char '='
+  type_expression
+
+let declaration
+  = variable_declaration
+  <|> function_declaration
+  <|> type_alias_declaration
+

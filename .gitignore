@@ -1,11 +1,19 @@
 
-# populated by npm
-node_modules/
+# default build directory for VSCode
+/build/
 
-# compiled TypeScript code from src/
-/lib/
+# used by clangd and other programs
+.cache/
 
-# local development helpers
+# created by pyenv
+.python-version
+
+# used for local development
 Makefile
+
+# Used by IDEs to get correct error messages
+compile_commands.json
+
+# quick test scripts in the main directory
 /*.bolt
 /*.c

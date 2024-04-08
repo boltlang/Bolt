@@ -1,0 +1,22 @@
+
+# TODO
+#trait Add k.
+#  let a + b : k -> k -> k
+
+let a && b : Bool -> Bool -> Bool = match (a, b).
+  (True,  True)  => True
+  (True,  False) => False
+  (False, True)  => False
+  (False, False) => False
+
+let a || b : Bool -> Bool -> Bool = match (a, b).
+  (True,  True)  => True
+  (True,  False) => True
+  (False, True)  => True
+  (False, False) => False
+
+let not : Bool -> Bool = match.
+  True  => False
+  False => True
+
+let ! a = not a

@@ -1,0 +1,44 @@
+
+# Some notes:
+#
+# - '[ .. ]' is an alternative notation for a function call combined with
+#   a dictionary. It augments the f()-syntax in imperative languages.
+# - A call to a function that accepts something of type 'Interpolation' is
+#   parsed differently than other calls (if feasible).
+# - A period ('.') is used to start a new block. It replaces the 'do'-keyword
+#   in Haskell.
+#
+# Issues:
+# 
+# - The period is frequently used to perform function composition. In our
+#   language, it is possible to do so, but then it must happen on the same
+#   line.
+# - What is the meaning of adding a period to a reference to
+#   a function? Does it simply call the function with a list? Can we generalise
+#   this to monoids? Can monads (which are derived from monoids) work with the
+#   same mechanism?
+# - How should longer pieces of text be declared? How does interpolation work?
+
+import "web/html" (Html, render)
+
+struct Task.
+  description : String
+  created_at : Date
+  updated_at : Date
+  done : Bool
+
+let item : Task -> Html
+let item task.
+  render.
+    div.
+      checkbox[checked: task.done, title: "Check this box if you're done with this to-do item."]
+      p task.description
+      date $ Date.format task.created_at
+
+let app.
+  let tasks = fetch_tasks
+  render.
+    div[style: { display: "flex", flex_direction: "column" }].
+      map item tasks
+      button "Add item!"
+
