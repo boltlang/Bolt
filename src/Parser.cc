@@ -4,6 +4,8 @@
 #include <tuple>
 #include <vector>
 
+#include "zen/config.hpp"
+
 #include "bolt/Common.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/Scanner.hpp"

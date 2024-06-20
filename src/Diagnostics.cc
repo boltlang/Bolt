@@ -2,9 +2,8 @@
 // FIXME writeExcerpt does not work well with the last line in a file
 
 #include <sstream>
+#include <algorithm>
 #include <cmath>
-
-#include "zen/config.hpp"
 
 #include "bolt/CST.hpp"
 #include "bolt/Type.hpp"

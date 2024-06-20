@@ -2,11 +2,10 @@
 #include <cmath>
 #include <memory>
 
-#include "llvm/IR/Value.h"
-
-#include "LLVMCodeGen.hpp"
 #include "bolt/CST.hpp"
 #include "bolt/CSTVisitor.hpp"
+
+#include "LLVMCodeGen.hpp"
 
 namespace bolt {
 

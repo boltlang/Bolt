@@ -1,8 +1,6 @@
 
 #include <unordered_map>
 
-#include "zen/config.hpp"
-
 #include "bolt/Common.hpp"
 #include "bolt/Text.hpp"
 #include "bolt/Integer.hpp"

@@ -5,6 +5,8 @@
 #include <filesystem>
 #include <unordered_map>
 
+#include "zen/range.hpp"
+
 #include "bolt/Common.hpp"
 #include "bolt/Checker.hpp"
 #include "bolt/DiagnosticEngine.hpp"
@@ -47,12 +49,12 @@ public:
     if (Match != TCs.end()) {
       return Match->second;
     }
-    return TCs.emplace(SF, Checker { Config, DE }).first->second;
+    return TCs.emplace(SF, Checker { DE }).first->second;
   }
 
   void check() {
     for (auto SF: getSourceFiles()) {
-      getTypeChecker(SF).check(SF);
+      getTypeChecker(SF).run(SF);
     }
   }
 

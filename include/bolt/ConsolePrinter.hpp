@@ -5,13 +5,10 @@
 
 #include "bolt/ByteString.hpp"
 #include "bolt/CST.hpp"
-#include "bolt/Type.hpp"
 
 namespace bolt {
 
 class Node;
-class Type;
-class TypeclassSignature;
 class Diagnostic;
 
 enum class Color {
@@ -160,12 +157,8 @@ class ConsolePrinter {
 
   void writePrefix(const Diagnostic& D);
   void writeBinding(const ByteString& Name);
-  void writeType(std::size_t I);
-  void writeType(const Type* Ty, const TypePath& Underline);
-  void writeType(const Type* Ty);
   void writeLoc(const TextFile& File, const TextLoc& Loc);
-  void writeTypeclassName(const ByteString& Name);
-  void writeTypeclassSignature(const TypeclassSignature& Sig);
+  void writeType(Type* Ty);
 
   void write(const std::string_view& S);
   void write(std::size_t N);

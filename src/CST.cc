@@ -1,6 +1,4 @@
 
-#include "zen/config.hpp"
-
 #include "bolt/CST.hpp"
 #include "bolt/CSTVisitor.hpp"
 
@@ -512,8 +510,8 @@ Token* ReturnStatement::getFirstToken() const {
 }
 
 Token* ReturnStatement::getLastToken() const {
-  if (Expression) {
-    return Expression->getLastToken();
+  if (E) {
+    return E->getLastToken();
   }
   return ReturnKeyword;
 }
@@ -1034,6 +1032,13 @@ SymbolPath ReferenceExpression::getSymbolPath() const {
     ModuleNames.push_back(Name->getCanonicalText());
   }
   return SymbolPath { ModuleNames, Name.getCanonicalText() };
+}
+
+bool TypedNode::classof(Node* N) {
+  return Expression::classof(N)
+      || TypeExpression::classof(N)
+      || FunctionDeclaration::classof(N)
+      || VariableDeclaration::classof(N);
 }
 
 }

@@ -1,11 +1,12 @@
 
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.20)
 
 project(Bolt C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
+add_subdirectory(deps/llvm-project/llvm EXCLUDE_FROM_ALL)
 
 set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
 set(ICU_CFLAGS "-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1")
@@ -17,7 +18,7 @@ if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Deb
   set(BOLT_DEBUG ON)
 endif()
 
-find_package(LLVM 18.1.0 REQUIRED)
+#find_package(LLVM 19.0 REQUIRED)
 
 add_library(
   BoltCore
@@ -27,10 +28,11 @@ add_library(
   src/ConsolePrinter.cc
   src/Scanner.cc
   src/Parser.cc
-  src/Types.cc
+  src/Type.cc
   src/Checker.cc
   src/Evaluator.cc
   src/Scope.cc
+  src/Program.cc
 )
 target_link_directories(
   BoltCore
@@ -41,6 +43,7 @@ target_compile_options(
   BoltCore
   PUBLIC
   -Werror
+  -fno-exceptions
   ${ICU_CFLAGS}
 )
 
@@ -68,16 +71,18 @@ add_library(
   BoltLLVM
   src/LLVMCodeGen.cc
 )
-llvm_map_components_to_libnames(llvm_libs support core irreader)
-target_include_directories(BoltLLVM PRIVATE ${LLVM_INCLUDE_DIRS})
-separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
-target_compile_definitions(BoltLLVM PRIVATE ${LLVM_DEFINITIONS_LIST})
-
 target_link_libraries(
   BoltLLVM
   PUBLIC
   BoltCore
-  ${llvm_libs}
+  LLVMCore
+  LLVMTarget
+)
+target_include_directories(
+  BoltLLVM
+  PUBLIC
+  deps/llvm-project/llvm/include # FIXME this is a hack
+  ${CMAKE_BINARY_DIR}/deps/llvm-project/llvm/include # FIXME this is a hack
 )
 
 add_executable(

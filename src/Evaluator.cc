@@ -1,6 +1,4 @@
 
-#include "zen/range.hpp"
-
 #include "bolt/CST.hpp"
 #include "bolt/Evaluator.hpp"
 
@@ -62,8 +60,24 @@ Value Evaluator::apply(Value Op, std::vector<Value> Args) {
     {
       auto Fn = Op.getDeclaration();
       Env NewEnv;
-      for (auto [Param, Arg]: zen::zip(Fn->getParams(), Args)) {
-        assignPattern(Param->Pattern, Arg, NewEnv);
+      auto Params= Fn->getParams();
+      auto ParamIter = Params.begin();
+      auto ParamsEnd = Params.end();
+      auto ArgIter = Args.begin();
+      auto ArgsEnd= Args.end();
+      for (;;) {
+        if (ParamIter == ParamsEnd && ArgIter == ArgsEnd) {
+          break;
+        }
+        if (ParamIter == ParamsEnd) {
+          // TODO Make this a soft failure
+          ZEN_PANIC("Too much arguments supplied to function call.");
+        }
+        if (ArgIter == ArgsEnd) {
+          // TODO Make this a soft failure
+          ZEN_PANIC("Too much few arguments supplied to function call.");
+        }
+        assignPattern((*ParamIter)->Pattern, *ArgIter, NewEnv);
       }
       switch (Fn->getBody()->getKind()) {
         case NodeKind::LetExprBody:

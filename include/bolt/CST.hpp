@@ -1,23 +1,22 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
+#include <cmath>
 #include <cstdlib>
-#include <limits>
 #include <unordered_map>
 #include <variant>
 #include <vector>
+#include <optional>
 
-#include "bolt/Common.hpp"
 #include "zen/config.hpp"
 
+#include "bolt/Common.hpp"
 #include "bolt/Integer.hpp"
 #include "bolt/String.hpp"
 #include "bolt/ByteString.hpp"
+#include "bolt/Type.hpp"
 
 namespace bolt {
-
-class Type;
-class InferContext;
 
 class Token;
 class SourceFile;
@@ -1265,6 +1264,8 @@ public:
     return Ty;
   }
 
+  static bool classof(Node* N);
+
 };
 
 class TypeExpression : public TypedNode, AnnotationContainer {
@@ -1272,6 +1273,19 @@ protected:
 
   inline TypeExpression(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
     TypedNode(Kind), AnnotationContainer(Annotations) {}
+
+public:
+
+  static bool classof(Node* N) {
+    return N->getKind() == NodeKind::ReferenceTypeExpression
+        || N->getKind() == NodeKind::AppTypeExpression
+        || N->getKind() == NodeKind::NestedTypeExpression
+        || N->getKind() == NodeKind::ArrowTypeExpression
+        || N->getKind() == NodeKind::VarTypeExpression
+        || N->getKind() == NodeKind::TupleTypeExpression
+        || N->getKind() == NodeKind::RecordTypeExpression
+        || N->getKind() == NodeKind::QualifiedTypeExpression;
+  }
 
 };
 
@@ -1740,6 +1754,21 @@ protected:
   inline Expression(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
     TypedNode(Kind), AnnotationContainer(Annotations) {}
 
+public:
+
+  static bool classof(Node* N) {
+    return N->getKind() == NodeKind::ReferenceExpression
+        || N->getKind() == NodeKind::NestedExpression
+        || N->getKind() == NodeKind::CallExpression
+        || N->getKind() == NodeKind::TupleExpression
+        || N->getKind() == NodeKind::InfixExpression
+        || N->getKind() == NodeKind::RecordExpression
+        || N->getKind() == NodeKind::MatchExpression
+        || N->getKind() == NodeKind::MemberExpression
+        || N->getKind() == NodeKind::LiteralExpression
+        || N->getKind() == NodeKind::PrefixExpression;
+  }
+
 };
 
 class ReferenceExpression : public Expression {
@@ -1779,8 +1808,6 @@ class MatchCase : public Node {
   Scope* TheScope = nullptr;
 
 public:
-
-  InferContext* Ctx;
 
   class Pattern* Pattern;
   class RArrowAlt* RArrowAlt;
@@ -2117,6 +2144,14 @@ protected:
   inline Statement(NodeKind Type, std::vector<Annotation*> Annotations = {}):
     Node(Type), AnnotationContainer(Annotations) {}
 
+public:
+
+  static bool classof(Node* N) {
+    return N->getKind() == NodeKind::ExpressionStatement
+        || N->getKind() == NodeKind::ReturnStatement
+        || N->getKind() == NodeKind::IfStatement;
+  }
+
 };
 
 class ExpressionStatement : public Statement {
@@ -2192,14 +2227,14 @@ class ReturnStatement : public Statement {
 public:
 
   class ReturnKeyword* ReturnKeyword;
-  class Expression* Expression;
+  Expression* E;
 
   ReturnStatement(
     class ReturnKeyword* ReturnKeyword,
     class Expression* Expression
   ): Statement(NodeKind::ReturnStatement),
      ReturnKeyword(ReturnKeyword),
-     Expression(Expression) {}
+     E(Expression) {}
 
   ReturnStatement(
     std::vector<Annotation*> Annotations,
@@ -2207,10 +2242,18 @@ public:
     class Expression* Expression
   ): Statement(NodeKind::ReturnStatement, Annotations),
      ReturnKeyword(ReturnKeyword),
-     Expression(Expression) {}
+     E(Expression) {}
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  bool hasExpression() const {
+    return E;
+  }
+
+  Expression* getExpression() {
+    return E;
+  }
 
 };
 
@@ -2297,7 +2340,44 @@ public:
 
 };
 
-class FunctionDeclaration : public TypedNode, public AnnotationContainer {
+class Declaration : public TypedNode, public AnnotationContainer {
+
+  std::optional<TypeScheme> Scm;
+
+protected:
+
+
+  inline Declaration(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
+    TypedNode(Kind), AnnotationContainer(Annotations) {}
+
+public:
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::VariantDeclaration
+        || N->getKind() == NodeKind::RecordDeclaration
+        || N->getKind() == NodeKind::VariantDeclaration
+        || N->getKind() == NodeKind::PrefixFunctionDeclaration
+        || N->getKind() == NodeKind::InfixFunctionDeclaration
+        || N->getKind() == NodeKind::SuffixFunctionDeclaration
+        || N->getKind() == NodeKind::NamedFunctionDeclaration;
+  }
+
+  const TypeScheme& getScheme() const {
+    ZEN_ASSERT(Scm.has_value());
+    return *Scm;
+  }
+
+  bool hasScheme() const {
+    return Scm.has_value();
+  }
+
+  void setScheme(TypeScheme NewScm) {
+    Scm = NewScm;
+  }
+
+};
+
+class FunctionDeclaration : public Declaration {
 
   Scope* TheScope = nullptr;
 
@@ -2305,10 +2385,9 @@ public:
 
   bool IsCycleActive = false;
   bool Visited = false;
-  InferContext* Ctx;
 
   FunctionDeclaration(NodeKind Kind, std::vector<Annotation*> Annotations = {}):
-    TypedNode(Kind), AnnotationContainer(Annotations) {}
+    Declaration(Kind, Annotations) {}
 
   virtual bool isPublic() const = 0;
 
@@ -2604,7 +2683,7 @@ public:
 
 };
 
-class VariableDeclaration : public TypedNode, public AnnotationContainer {
+class VariableDeclaration : public Declaration {
 public:
 
   class PubKeyword* PubKeyword;
@@ -2625,8 +2704,7 @@ public:
     class Pattern* Pattern,
     class TypeAssert* TypeAssert,
     LetBody* Body
-  ): TypedNode(NodeKind::VariableDeclaration),
-     AnnotationContainer(Annotations),
+  ): Declaration(NodeKind::VariableDeclaration, Annotations),
      PubKeyword(PubKeyword),
      ForeignKeyword(ForeignKeyword),
      LetKeyword(LetKeyword),
@@ -2649,6 +2727,15 @@ public:
 
   static bool classof(const Node* N) {
     return N->getKind() == NodeKind::VariableDeclaration;
+  }
+
+  bool hasExpression() const {
+    return Body;
+  }
+
+  Expression* getExpression() {
+    ZEN_ASSERT(Body->getKind() == NodeKind::LetExprBody);
+    return static_cast<LetExprBody*>(Body)->Expression;
   }
 
 };
@@ -2739,10 +2826,8 @@ public:
 
 };
 
-class RecordDeclaration : public Node {
+class RecordDeclaration : public Declaration {
 public:
-
-  InferContext* Ctx;
 
   class PubKeyword* PubKeyword;
   class StructKeyword* StructKeyword;
@@ -2758,7 +2843,7 @@ public:
     std::vector<VarTypeExpression*> Vars,
     class BlockStart* BlockStart,
     std::vector<RecordDeclarationField*> Fields
-  ): Node(NodeKind::RecordDeclaration),
+  ): Declaration(NodeKind::RecordDeclaration),
      PubKeyword(PubKeyword),
      StructKeyword(StructKeyword),
      Name(Name),
@@ -2818,10 +2903,8 @@ public:
 
 };
 
-class VariantDeclaration : public Node {
+class VariantDeclaration : public Declaration {
 public:
-
-  InferContext* Ctx;
 
   class PubKeyword* PubKeyword;
   class EnumKeyword* EnumKeyword;
@@ -2837,7 +2920,7 @@ public:
     std::vector<VarTypeExpression*> TVs,
     class BlockStart* BlockStart,
     std::vector<VariantDeclarationMember*> Members
-  ): Node(NodeKind::VariantDeclaration),
+  ): Declaration(NodeKind::VariantDeclaration),
      PubKeyword(PubKeyword),
      EnumKeyword(EnumKeyword),
      Name(Name),
@@ -2857,7 +2940,6 @@ class SourceFile : public Node {
 public:
 
   TextFile File;
-  InferContext* Ctx;
 
   std::vector<Node*> Elements;
 

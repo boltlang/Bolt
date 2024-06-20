@@ -1,7 +1,8 @@
 
 #pragma once
 
-#include "llvm/IR/Value.h"
+#include <memory>
+
 #include "llvm/IR/IRBuilder.h"
 
 namespace bolt {

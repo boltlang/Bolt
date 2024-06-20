@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <map>
 
-#include "zen/config.hpp"
 #include "zen/po.hpp"
 
 #include "bolt/CST.hpp"
@@ -113,11 +112,11 @@ int main(int Argc, const char* Argv[]) {
       void visitExpression(Expression* N) {
         for (auto A: N->Annotations) {
           if (A->getKind() == NodeKind::TypeAssertAnnotation) {
-            auto Left = C.getType(N);
+            auto Left = C.getTypeOfNode(N);
             auto Right = static_cast<TypeAssertAnnotation*>(A)->getTypeExpression()->getType();
-            std::cerr << "verify " << describe(Left) << " == " << describe(Right) << std::endl;
+            std::cerr << "verify " << Left->toString() << " == " << Right->toString() << std::endl;
             if (*Left != *Right) {
-              DE.add<UnificationErrorDiagnostic>(Left, Right, TypePath(), TypePath(), A);
+              DE.add<TypeMismatchError>(Left, Right, A);
             }
           }
         }

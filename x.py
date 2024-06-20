@@ -167,7 +167,8 @@ def build_bolt(c_path: str | None = None, cxx_path: str | None = None) -> None:
             'CMAKE_BUILD_TYPE': 'Debug',
             'BOLT_ENABLE_TESTS': True,
             'ZEN_ENABLE_TESTS': False,
-            'LLVM_CONFIG': str(llvm_config_path)
+            #'LLVM_CONFIG': str(llvm_config_path),
+            'LLVM_TARGETS_TO_BUILD': 'X86',
         }
         if c_path is not None:
             defines['CMAKE_C_COMPILER'] = c_path
@@ -196,13 +197,13 @@ c_path = None
 cxx_path = None
 
 if os.name == 'posix':
-    clang_c_path = shutil.which('clangj')
+    clang_c_path = shutil.which('clang')
     clang_cxx_path = shutil.which('clang++')
     if clang_c_path is not None and clang_cxx_path is not None and (force == NONE or force == CLANG):
         c_path = clang_c_path
         cxx_path = clang_cxx_path
     else:
-        for version in [ '18' ]:
+        for version in [ '18', '19' ]:
             clang_c_path = shutil.which(f'clang-{version}')
             clang_cxx_path = shutil.which(f'clang++-{version}')
             if clang_c_path is not None and clang_cxx_path is not None and (force == NONE or force == CLANG):

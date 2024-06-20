@@ -1,10 +1,8 @@
 
 // FIXME writeExcerpt does not work well with the last line in a file
 
-#include <sstream>
+#include <functional>
 #include <cmath>
-
-#include "zen/config.hpp"
 
 #include "bolt/CST.hpp"
 #include "bolt/Type.hpp"
@@ -182,6 +180,8 @@ static std::string describe(NodeKind Type) {
       return "a variant";
     case NodeKind::MatchCase:
       return "a match-arm";
+    case NodeKind::LetExprBody:
+      return "the body of a let-declaration";
     default:
       ZEN_UNREACHABLE
   }
@@ -197,79 +197,6 @@ static std::string describe(Token* T) {
     default:
       return "'" + T->getText() + "'";
   }
-}
-
-std::string describe(const Type* Ty) {
-  Ty = Ty->find();
-  switch (Ty->getKind()) {
-    case TypeKind::Var:
-    {
-      auto TV = Ty->asVar();
-      if (TV.isRigid()) {
-        return *TV.Name;
-      }
-      return "a" + std::to_string(TV.Id);
-    }
-    case TypeKind::Arrow:
-    {
-      auto Y = Ty->asArrow();
-      std::ostringstream Out;
-      Out << describe(Y.ParamType) << " -> " << describe(Y.ReturnType);
-      return Out.str();
-    }
-    case TypeKind::Con:
-    {
-      auto Y = Ty->asCon();
-      return Y.DisplayName;
-    }
-    case TypeKind::App:
-    {
-      auto Y = Ty->asApp();
-      return describe(Y.Op) + " " + describe(Y.Arg);
-    }
-    case TypeKind::Tuple:
-    {
-      std::ostringstream Out;
-      auto Y = Ty->asTuple();
-      Out << "(";
-      if (Y.ElementTypes.size()) {
-        auto Iter = Y.ElementTypes.begin();
-        Out << describe(*Iter++);
-        while (Iter != Y.ElementTypes.end()) {
-          Out << ", " << describe(*Iter++);
-        }
-      }
-      Out << ")";
-      return Out.str();
-    }
-    case TypeKind::Nil:
-      return "{}";
-    case TypeKind::Absent:
-      return "Abs";
-    case TypeKind::Present:
-    {
-      auto Y = Ty->asPresent();
-      return describe(Y.Ty);
-    }
-    case TypeKind::Field:
-    {
-      auto Y = Ty->asField();
-      std::ostringstream out;
-      out << "{ " << Y.Name << ": " << describe(Y.Ty);
-      Ty = Y.RestTy;
-      while (Ty->getKind() == TypeKind::Field) {
-        auto Y = Ty->asField();
-        out << "; " + Y.Name + ": " + describe(Y.Ty);
-        Ty = Y.RestTy;
-      }
-      if (Ty->getKind() != TypeKind::Nil) {
-        out << "; " + describe(Ty);
-      }
-      out << " }";
-      return out.str();
-    }
-  }
-  ZEN_UNREACHABLE
 }
 
 void writeForegroundANSI(Color C, std::ostream& Out) {
@@ -533,153 +460,6 @@ void ConsolePrinter::writeBinding(const ByteString& Name) {
   write("'");
 }
 
-void ConsolePrinter::writeType(const Type* Ty) {
-  TypePath Path;
-  writeType(Ty, Path);
-}
-
-void ConsolePrinter::writeType(const Type* Ty, const TypePath& Underline) {
-
-  setForegroundColor(Color::Green);
-
-  class TypePrinter : public ConstTypeVisitor {
-
-    TypePath Path;
-    ConsolePrinter& W;
-    const TypePath& Underline;
-
-  public:
-
-    TypePrinter(ConsolePrinter& W, const TypePath& Underline):
-      W(W), Underline(Underline) {}
-
-    bool shouldUnderline() const {
-      return !Underline.empty() && Path == Underline;
-    }
-
-    void enterType(const Type* Ty) override {
-      if (shouldUnderline()) {
-        W.setUnderline(true);
-      }
-    }
-
-    void exitType(const Type* Ty) override {
-      if (shouldUnderline()) {
-        W.setUnderline(false); // FIXME Should set to old value
-      }
-    }
-
-    void visitAppType(const TApp& Ty) override {
-      Path.push_back(TypeIndex::forAppOpType());
-      visit(Ty.Op);
-      Path.pop_back();
-      W.write(" ");
-      Path.push_back(TypeIndex::forAppArgType());
-      visit(Ty.Arg);
-      Path.pop_back();
-    }
-
-    void visitVarType(const TVar& Ty) override {
-      if (Ty.isRigid()) {
-        W.write(*Ty.Name);
-        return;
-      }
-      W.write("a");
-      W.write(Ty.Id);
-    }
-
-    void visitConType(const TCon& Ty) override {
-      W.write(Ty.DisplayName);
-    }
-
-    void visitArrowType(const TArrow& Ty) override {
-      Path.push_back(TypeIndex::forArrowParamType());
-      visit(Ty.ParamType);
-      Path.pop_back();
-      W.write(" -> ");
-      Path.push_back(TypeIndex::forArrowReturnType());
-      visit(Ty.ReturnType);
-      Path.pop_back();
-    }
-
-    void visitTupleType(const TTuple& Ty) override {
-      W.write("(");
-      if (Ty.ElementTypes.size()) {
-        auto Iter = Ty.ElementTypes.begin();
-        Path.push_back(TypeIndex::forTupleElement(0));
-        visit(*Iter++);
-        Path.pop_back();
-        std::size_t I = 1;
-        while (Iter != Ty.ElementTypes.end()) {
-          W.write(", ");
-          Path.push_back(TypeIndex::forTupleElement(I++));
-          visit(*Iter++);
-          Path.pop_back();
-        }
-      }
-      W.write(")");
-    }
-
-    void visitNilType(const TNil& Ty) override {
-      W.write("{}");
-    }
-
-    void visitAbsentType(const TAbsent& Ty) override {
-      W.write("Abs");
-    }
-
-    void visitPresentType(const TPresent& Ty) override {
-      Path.push_back(TypeIndex::forPresentType());
-      visit(Ty.Ty);
-      Path.pop_back();
-    }
-
-    void visitFieldType(const TField& Ty) override {
-      W.write("{ ");
-      W.write(Ty.Name);
-      W.write(": ");
-      Path.push_back(TypeIndex::forFieldType());
-      visit(Ty.Ty);
-      Path.pop_back();
-      auto Ty2 = Ty.RestTy;
-      Path.push_back(TypeIndex::forFieldRest());
-      std::size_t I = 1;
-      while (Ty2->isField()) {
-        auto Y = Ty2->asField();
-        W.write("; ");
-        W.write(Y.Name);
-        W.write(": ");
-        Path.push_back(TypeIndex::forFieldType());
-        visit(Y.Ty);
-        Path.pop_back();
-        Ty2 = Y.RestTy;
-        Path.push_back(TypeIndex::forFieldRest());
-        ++I;
-      }
-      if (Ty2->getKind() != TypeKind::Nil) {
-        W.write("; ");
-        visit(Ty2);
-      }
-      W.write(" }");
-      for (auto K = 0; K < I; K++) {
-        Path.pop_back();
-      }
-    }
-
-  };
-
-  TypePrinter P { *this, Underline };
-  P.visit(Ty);
-
-  resetStyles();
-}
-
-void ConsolePrinter::writeType(std::size_t I) {
-  setForegroundColor(Color::Green);
-  write(I);
-  resetStyles();
-}
-
 void ConsolePrinter::writeNode(const Node* N) {
   auto Range = N->getRange();
   writeExcerpt(N->getSourceFile()->getTextFile(), Range, Range, Color::Red);
@@ -703,19 +483,42 @@ void ConsolePrinter::writePrefix(const Diagnostic& D) {
   resetStyles();
 }
 
-void ConsolePrinter::writeTypeclassName(const ByteString& Name) {
-  setForegroundColor(Color::Magenta);
-  write(Name);
-  resetStyles();
-}
-
-void ConsolePrinter::writeTypeclassSignature(const TypeclassSignature& Sig) {
-  setForegroundColor(Color::Magenta);
-  write(Sig.Id);
-  for (auto TV: Sig.Params) {
-    write(" ");
-    write(describe(TV));
-  }
+void ConsolePrinter::writeType(Type* Ty) {
+  std::function<void(Type*)> visit = [&](auto Ty) {
+    switch (Ty->getKind()) {
+      case TypeKind::Var:
+      {
+        auto T = static_cast<TVar*>(Ty);
+        // FIXME
+        write("α");
+        break;
+      }
+      case TypeKind::Con:
+      {
+        auto T = static_cast<TCon*>(Ty);
+        write(T->getName());
+        break;
+      }
+      case TypeKind::Fun:
+      {
+        auto T = static_cast<TFun*>(Ty);
+        visit(T->getLeft());
+        write(" -> ");
+        visit(T->getRight());
+        break;
+      }
+      case TypeKind::App:
+      {
+        auto T = static_cast<TApp*>(Ty);
+        visit(T->getLeft());
+        write(" ");
+        visit(T->getRight());
+        break;
+      }
+    }
+  };
+  setForegroundColor(Color::Green);
+  visit(Ty);
   resetStyles();
 }
 
@@ -799,11 +602,14 @@ void ConsolePrinter::writeDiagnostic(const Diagnostic& D) {
       return;
     }
 
-    case DiagnosticKind::UnificationError:
+    case DiagnosticKind::TypeMismatchError:
     {
-      auto& E = static_cast<const UnificationErrorDiagnostic&>(D);
-      auto Left = E.OrigLeft->resolve(E.LeftPath);
-      auto Right = E.OrigRight->resolve(E.RightPath);
+      auto& E = static_cast<const TypeMismatchError&>(D);
+      // auto Left = E.OrigLeft->resolve(E.LeftPath);
+      // auto Right = E.OrigRight->resolve(E.RightPath);
+      auto Left = E.Left;
+      auto Right = E.Right;
+      auto S = E.getNode();
       writePrefix(E);
       write("the types ");
       writeType(Left);
@@ -815,7 +621,7 @@ void ConsolePrinter::writeDiagnostic(const Diagnostic& D) {
       write("  info: ");
       resetStyles();
       write("due to an equality constraint on ");
-      write(describe(E.Source->getKind()));
+      write(describe(S->getKind()));
       write(":\n\n");
       // write(" - left type ");
       // writeType(E.OrigLeft, E.LeftPath);
@@ -823,7 +629,7 @@ void ConsolePrinter::writeDiagnostic(const Diagnostic& D) {
       // write(" - right type ");
       // writeType(E.OrigRight, E.RightPath);
       // write("\n\n");
-      writeNode(E.Source);
+      writeNode(S);
       write("\n");
       // if (E.Left != E.OrigLeft) {
       //   setForegroundColor(Color::Yellow);
@@ -847,87 +653,6 @@ void ConsolePrinter::writeDiagnostic(const Diagnostic& D) {
       //   writeType(E.OrigRight);
       //   write("\n\n");
       // }
-      return;
-    }
-
-    case DiagnosticKind::TypeclassMissing:
-    {
-      auto& E = static_cast<const TypeclassMissingDiagnostic&>(D);
-      writePrefix(E);
-      write("the type class ");
-      writeTypeclassSignature(E.Sig);
-      write(" is missing from the declaration's type signature\n\n");
-      writeNode(E.Decl);
-      write("\n\n");
-      return;
-    }
-
-    case DiagnosticKind::InstanceNotFound:
-    {
-      auto& E = static_cast<const InstanceNotFoundDiagnostic&>(D);
-      writePrefix(E);
-      write("a type class instance ");
-      writeTypeclassName(E.TypeclassName);
-      write(" ");
-      writeType(E.Ty);
-      write(" was not found.\n\n");
-      writeNode(E.Source);
-      write("\n");
-      return;
-    }
-
-    case DiagnosticKind::TupleIndexOutOfRange:
-    {
-      auto& E = static_cast<const TupleIndexOutOfRangeDiagnostic&>(D);
-      writePrefix(E);
-      write("the index ");
-      writeType(E.I);
-      write(" is out of range for tuple ");
-      writeType(E.Tuple);
-      write("\n\n");
-      writeNode(E.Source);
-      write("\n");
-      return;
-    }
-
-    case DiagnosticKind::InvalidTypeToTypeclass:
-    {
-      auto& E = static_cast<const InvalidTypeToTypeclassDiagnostic&>(D);
-      writePrefix(E);
-      write("the type ");
-      writeType(E.Actual);
-      write(" was applied to type class names ");
-      bool First = true;
-      for (auto Class: E.Classes) {
-        if (First) First = false;
-        else write(", ");
-        writeTypeclassName(Class);
-      }
-      write(" but this is invalid\n\n");
-      return;
-    }
-
-    case DiagnosticKind::FieldNotFound:
-    {
-      auto& E = static_cast<const FieldNotFoundDiagnostic&>(D);
-      writePrefix(E);
-      write("the field '");
-      write(E.Name);
-      write("' was required in one type but not found in another\n\n");
-      writeNode(E.Source);
-      write("\n");
-      return;
-    }
-
-    case DiagnosticKind::NotATuple:
-    {
-      auto& E = static_cast<const NotATupleDiagnostic&>(D);
-      writePrefix(E);
-      write("the type ");
-      writeType(E.Ty);
-      write(" is not a tuple.\n\n");
-      writeNode(E.Source);
-      write("\n");
       return;
     }
 

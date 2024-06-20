@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include <cstdlib>
+
 #include "zen/config.hpp"
 
 namespace bolt {

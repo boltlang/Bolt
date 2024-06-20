@@ -1,9 +1,6 @@
 
 #pragma once
 
-#include "CST.hpp"
-#include "zen/config.hpp"
-
 #include "bolt/CST.hpp"
 
 namespace bolt {
@@ -17,6 +14,10 @@ public:
 #define BOLT_GEN_CASE(name) \
     case NodeKind::name: \
       return static_cast<D*>(this)->visit ## name(static_cast<name*>(N));
+
+#define BOLT_VISIT(node) static_cast<D*>(this)->visit(node)
+#define BOLT_VISIT_SYMBOL(node) static_cast<D*>(this)->dispatchSymbol(node)
+#define BOLT_VISIT_OPERATOR(node) static_cast<D*>(this)->dispatchOperator(node)
 
     switch (N->getKind()) {
       BOLT_GEN_CASE(VBar)
@@ -123,13 +124,13 @@ public:
   void dispatchSymbol(const Symbol& S) {
     switch (S.getKind()) {
       case NodeKind::Identifier:
-        visit(S.asIdentifier());
+        BOLT_VISIT(S.asIdentifier());
         break;
       case NodeKind::IdentifierAlt:
-        visit(S.asIdentifierAlt());
+        BOLT_VISIT(S.asIdentifierAlt());
         break;
       case NodeKind::WrappedOperator:
-        visit(S.asWrappedOperator());
+        BOLT_VISIT(S.asWrappedOperator());
         break;
       default:
         ZEN_UNREACHABLE
@@ -139,10 +140,10 @@ public:
   void dispatchOperator(const Operator& O) {
     switch (O.getKind()) {
       case NodeKind::VBar:
-        visit(O.asVBar());
+        BOLT_VISIT(O.asVBar());
         break;
       case NodeKind::CustomOperator:
-        visit(O.asCustomOperator());
+        BOLT_VISIT(O.asCustomOperator());
         break;
       default:
         ZEN_UNREACHABLE
@@ -698,10 +699,6 @@ public:
     }
   }
 
-#define BOLT_VISIT(node) static_cast<D*>(this)->visit(node)
-#define BOLT_VISIT_SYMBOL(node) static_cast<D*>(this)->dispatchSymbol(node)
-#define BOLT_VISIT_OPERATOR(node) static_cast<D*>(this)->dispatchOperator(node)
-
   void visitEachChild(VBar* N) {
   }
 
@@ -1152,7 +1149,7 @@ public:
       BOLT_VISIT(A);
     }
     BOLT_VISIT(N->ReturnKeyword);
-    BOLT_VISIT(N->Expression);
+    BOLT_VISIT(N->E);
   }
 
   void visitEachChild(IfStatement* N) {
