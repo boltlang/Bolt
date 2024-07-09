@@ -6,7 +6,7 @@ project(Bolt C CXX)
 set(CMAKE_CXX_STANDARD 20)
 
 add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
-add_subdirectory(deps/llvm-project/llvm EXCLUDE_FROM_ALL)
+# add_subdirectory(deps/llvm-project/llvm EXCLUDE_FROM_ALL)
 
 set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
 set(ICU_CFLAGS "-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1")
@@ -67,23 +67,23 @@ target_link_libraries(
   icuuc
 )
 
-add_library(
-  BoltLLVM
-  src/LLVMCodeGen.cc
-)
-target_link_libraries(
-  BoltLLVM
-  PUBLIC
-  BoltCore
-  LLVMCore
-  LLVMTarget
-)
-target_include_directories(
-  BoltLLVM
-  PUBLIC
-  deps/llvm-project/llvm/include # FIXME this is a hack
-  ${CMAKE_BINARY_DIR}/deps/llvm-project/llvm/include # FIXME this is a hack
-)
+# add_library(
+#   BoltLLVM
+#   src/LLVMCodeGen.cc
+# )
+# target_link_libraries(
+#   BoltLLVM
+#   PUBLIC
+#   BoltCore
+#   LLVMCore
+#   LLVMTarget
+# )
+# target_include_directories(
+#   BoltLLVM
+#   PUBLIC
+#   deps/llvm-project/llvm/include # FIXME this is a hack
+#   ${CMAKE_BINARY_DIR}/deps/llvm-project/llvm/include # FIXME this is a hack
+# )
 
 add_executable(
   bolt
@@ -93,7 +93,7 @@ target_link_libraries(
   bolt
   PUBLIC
   BoltCore
-  BoltLLVM
+  # BoltLLVM
 )
 
 if (BOLT_ENABLE_TESTS)
