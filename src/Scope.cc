@@ -49,11 +49,11 @@ void Scope::scan(Node* X) {
 }
 
 void Scope::scanChild(Node* X) {
+  if (isa<Expression>(X)) {
+    return;
+  }
   switch (X->getKind()) {
     case NodeKind::LetExprBody:
-    case NodeKind::ExpressionStatement:
-    case NodeKind::IfStatement:
-    case NodeKind::ReturnStatement:
       break;
     case NodeKind::LetBlockBody:
     {

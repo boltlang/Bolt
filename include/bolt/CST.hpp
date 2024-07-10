@@ -24,7 +24,6 @@ class SourceFile;
 class Scope;
 class Pattern;
 class Expression;
-class Statement;
 
 class TextLoc {
 public:
@@ -168,10 +167,9 @@ enum class NodeKind {
   PrefixExpression,
   RecordExpressionField,
   RecordExpression,
-  ExpressionStatement,
-  ReturnStatement,
-  IfStatement,
-  IfStatementPart,
+  ReturnExpression,
+  IfExpression,
+  IfExpressionPart,
   TypeAssert,
   Parameter,
   LetBlockBody,
@@ -214,7 +212,7 @@ class Node {
 
   unsigned RefCount = 1;
 
-  const NodeKind Kind;
+  const NodeKind K;
 
 public:
 
@@ -238,24 +236,13 @@ public:
   virtual std::size_t getEndColumn() const;
 
   inline NodeKind getKind() const noexcept {
-    return Kind;
-  }
-
-  template<typename T>
-  bool is() const noexcept {
-    return _is_helper<T>(this);
-  }
-
-  template<typename T>
-  T* as() {
-    ZEN_ASSERT(is<T>());
-    return static_cast<T*>(this);
+    return K;
   }
 
   virtual TextRange getRange() const;
 
   inline Node(NodeKind Type):
-      Kind(Type) {}
+      K(Type) {}
 
   const SourceFile* getSourceFile() const;
   SourceFile* getSourceFile();
@@ -265,21 +252,6 @@ public:
   virtual ~Node() {}
 
 };
-
-template<typename T>
-bool _is_helper(const Node* N) noexcept {
-  return N->getKind() == getNodeType<T>();
-}
-
-template<>
-inline bool _is_helper<Expression>(const Node* N) noexcept {
-  return N->getKind() == NodeKind::ReferenceExpression
-      || N->getKind() == NodeKind::LiteralExpression
-      || N->getKind() == NodeKind::PrefixExpression
-      || N->getKind() == NodeKind::InfixExpression
-      || N->getKind() == NodeKind::CallExpression
-      || N->getKind() == NodeKind::NestedExpression;
-}
 
 enum class SymbolKind {
   Var,
@@ -380,9 +352,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Equals;
-  }
+  static constexpr NodeKind Kind = NodeKind::Equals;
 
 };
 
@@ -394,9 +364,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::VBar;
-  }
+  static constexpr const NodeKind Kind = NodeKind::VBar;
 
 };
 
@@ -408,9 +376,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Colon;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Colon;
 
 };
 
@@ -422,9 +388,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Comma;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Comma;
 
 };
 
@@ -436,9 +400,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Dot;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Dot;
 
 };
 
@@ -450,9 +412,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::DotDot;
-  }
+  static constexpr const NodeKind Kind = NodeKind::DotDot;
 
 };
 
@@ -464,9 +424,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Tilde;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Tilde;
 
 };
 
@@ -478,9 +436,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::At;
-  }
+  static constexpr const NodeKind Kind = NodeKind::At;
 
 };
 
@@ -492,9 +448,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::DoKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::DoKeyword;
 
 };
 
@@ -506,9 +460,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LParen;
-  }
+  static constexpr const NodeKind Kind = NodeKind::LParen;
 
 };
 
@@ -520,9 +472,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::RParen;
-  }
+  static constexpr const NodeKind Kind = NodeKind::RParen;
 
 };
 
@@ -534,9 +484,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LBracket;
-  }
+  static constexpr const NodeKind Kind = NodeKind::LBracket;
 
 };
 
@@ -548,9 +496,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::RBracket;
-  }
+  static constexpr const NodeKind Kind = NodeKind::RBracket;
 
 };
 
@@ -562,9 +508,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LBrace;
-  }
+  static constexpr const NodeKind Kind = NodeKind::LBrace;
 
 };
 
@@ -576,9 +520,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::RBrace;
-  }
+  static constexpr const NodeKind Kind = NodeKind::RBrace;
 
 };
 
@@ -590,9 +532,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::RArrow;
-  }
+  static constexpr const NodeKind Kind = NodeKind::RArrow;
 
 };
 
@@ -604,9 +544,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::RArrowAlt;
-  }
+  static constexpr const NodeKind Kind = NodeKind::RArrowAlt;
 
 };
 
@@ -618,9 +556,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LetKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::LetKeyword;
 
 };
 
@@ -632,9 +568,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::MutKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::MutKeyword;
 
 };
 
@@ -646,9 +580,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::PubKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::PubKeyword;
 
 };
 
@@ -660,9 +592,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ForeignKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ForeignKeyword;
 
 };
 
@@ -674,9 +604,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::TypeKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::TypeKeyword;
 
 };
 
@@ -688,9 +616,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ReturnKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ReturnKeyword;
 
 };
 
@@ -702,9 +628,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ModKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ModKeyword;
 
 };
 
@@ -716,9 +640,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::StructKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::StructKeyword;
 
 };
 
@@ -730,9 +652,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::EnumKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::EnumKeyword;
 
 };
 
@@ -744,9 +664,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ClassKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ClassKeyword;
 
 };
 
@@ -758,9 +676,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::InstanceKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::InstanceKeyword;
 
 };
 
@@ -772,9 +688,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ElifKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ElifKeyword;
 
 };
 
@@ -786,9 +700,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::IfKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::IfKeyword;
 
 };
 
@@ -800,9 +712,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ElseKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ElseKeyword;
 
 };
 
@@ -814,9 +724,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::MatchKeyword;
-  }
+  static constexpr const NodeKind Kind = NodeKind::MatchKeyword;
 
 };
 
@@ -828,9 +736,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Invalid;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Invalid;
 
 };
 
@@ -842,9 +748,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::EndOfFile;
-  }
+  static constexpr const NodeKind Kind = NodeKind::EndOfFile;
 
 };
 
@@ -856,9 +760,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::BlockStart;
-  }
+  static constexpr const NodeKind Kind = NodeKind::BlockStart;
 
 };
 
@@ -870,9 +772,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::BlockEnd;
-  }
+  static constexpr const NodeKind Kind = NodeKind::BlockEnd;
 
 };
 
@@ -884,9 +784,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LineFoldEnd;
-  }
+  static constexpr const NodeKind Kind = NodeKind::LineFoldEnd;
 
 };
 
@@ -902,9 +800,7 @@ public:
 
   std::string getCanonicalText() const;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::CustomOperator;
-  }
+  static constexpr const NodeKind Kind = NodeKind::CustomOperator;
 
 };
 
@@ -918,9 +814,7 @@ public:
 
   std::string getText() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Assignment;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Assignment;
 
 };
 
@@ -938,9 +832,7 @@ public:
 
   bool isTypeVar() const;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Identifier;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Identifier;
 
 };
 
@@ -956,9 +848,7 @@ public:
 
   ByteString getCanonicalText() const;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::IdentifierAlt;
-  }
+  static constexpr const NodeKind Kind = NodeKind::IdentifierAlt;
 
 };
 
@@ -991,9 +881,7 @@ public:
 
   LiteralValue getValue() override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::StringLiteral;
-  }
+  static constexpr const NodeKind Kind = NodeKind::StringLiteral;
 
 };
 
@@ -1018,9 +906,7 @@ public:
 
   LiteralValue getValue() override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::IntegerLiteral;
-  }
+  static constexpr const NodeKind Kind = NodeKind::IntegerLiteral;
 
 };
 
@@ -1082,7 +968,7 @@ public:
   Token* getFirstToken() const;
   Token* getLastToken() const;
 
-  inline static bool classof(const Node* N) {
+  static bool classof(const Node* N) {
     return N->getKind() == NodeKind::VBar
         || N->getKind() == NodeKind::CustomOperator;
   }
@@ -1115,9 +1001,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::WrappedOperator;
-  }
+  static constexpr const NodeKind Kind = NodeKind::WrappedOperator;
 
 };
 
@@ -1241,6 +1125,8 @@ public:
     return Expression;
   }
 
+  static constexpr const NodeKind Kind = NodeKind::ExpressionAnnotation;
+
 };
 
 class TypeExpression;
@@ -1268,6 +1154,8 @@ public:
     return TE;
   }
 
+  static constexpr const NodeKind Kind = NodeKind::TypeAssertAnnotation;
+
 };
 
 class TypedNode : public Node {
@@ -1289,7 +1177,7 @@ public:
     return Ty;
   }
 
-  static bool classof(Node* N);
+  static bool classof(const Node* N);
 
 };
 
@@ -1301,7 +1189,7 @@ protected:
 
 public:
 
-  static bool classof(Node* N) {
+  static bool classof(const Node* N) {
     return N->getKind() == NodeKind::ReferenceTypeExpression
         || N->getKind() == NodeKind::AppTypeExpression
         || N->getKind() == NodeKind::NestedTypeExpression
@@ -1341,6 +1229,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::RecordTypeExpressionField;
+
 };
 
 class RecordTypeExpression : public TypeExpression {
@@ -1368,6 +1258,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::RecordTypeExpression;
+
 };
 
 class VarTypeExpression;
@@ -1388,9 +1280,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::TypeclassConstraintExpression;
-  }
+  static constexpr const NodeKind Kind = NodeKind::TypeclassConstraintExpression;
 
 };
 
@@ -1413,9 +1303,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::EqualityConstraintExpression;
-  }
+  static constexpr const NodeKind Kind = NodeKind::EqualityConstraintExpression;
 
 };
 
@@ -1438,9 +1326,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::QualifiedTypeExpression;
-  }
+  static constexpr const NodeKind Kind = NodeKind::QualifiedTypeExpression;
 
 };
 
@@ -1462,6 +1348,8 @@ public:
 
   SymbolPath getSymbolPath() const;
 
+  static constexpr const NodeKind Kind = NodeKind::ReferenceTypeExpression;
+
 };
 
 class ArrowTypeExpression : public TypeExpression {
@@ -1479,6 +1367,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::ArrowTypeExpression;
 
 };
 
@@ -1498,6 +1388,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::AppTypeExpression;
+
 };
 
 class VarTypeExpression : public TypeExpression {
@@ -1510,6 +1402,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::VarTypeExpression;
 
 };
 
@@ -1532,6 +1426,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::NestedTypeExpression;
+
 };
 
 class TupleTypeExpression : public TypeExpression {
@@ -1553,6 +1449,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::TupleTypeExpression;
+
 };
 
 
@@ -1561,6 +1459,17 @@ protected:
 
   inline Pattern(NodeKind Type):
     Node(Type) {}
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::BindPattern
+        || N->getKind() == NodeKind::ListPattern
+        || N->getKind() == NodeKind::LiteralPattern
+        || N->getKind() == NodeKind::NamedRecordPattern
+        || N->getKind() == NodeKind::NamedTuplePattern
+        || N->getKind() == NodeKind::NestedPattern
+        || N->getKind() == NodeKind::RecordPattern
+        || N->getKind() == NodeKind::TuplePattern;
+  }
 
 };
 
@@ -1577,9 +1486,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::BindPattern;
-  }
+  static constexpr const NodeKind Kind = NodeKind::BindPattern;
 
 };
 
@@ -1595,9 +1502,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::LiteralPattern;
-  }
+  static constexpr const NodeKind Kind = NodeKind::LiteralPattern;
 
 };
 
@@ -1642,6 +1547,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::RecordPatternField;
+
 };
 
 class RecordPattern : public Pattern {
@@ -1662,6 +1569,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::RecordPattern;
 
 };
 
@@ -1690,6 +1599,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::NamedRecordPattern;
+
 };
 
 class NamedTuplePattern : public Pattern {
@@ -1707,6 +1618,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::NamedTuplePattern;
 
 };
 
@@ -1729,6 +1642,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::TuplePattern;
+
 };
 
 class NestedPattern : public Pattern {
@@ -1749,6 +1664,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::NestedPattern;
 
 };
 
@@ -1771,6 +1688,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::ListPattern;
+
 };
 
 class Expression : public TypedNode, public AnnotationContainer {
@@ -1781,7 +1700,7 @@ protected:
 
 public:
 
-  static bool classof(Node* N) {
+  static bool classof(const Node* N) {
     return N->getKind() == NodeKind::ReferenceExpression
         || N->getKind() == NodeKind::NestedExpression
         || N->getKind() == NodeKind::CallExpression
@@ -1792,6 +1711,9 @@ public:
         || N->getKind() == NodeKind::BlockExpression
         || N->getKind() == NodeKind::MemberExpression
         || N->getKind() == NodeKind::LiteralExpression
+        || N->getKind() == NodeKind::BlockExpression
+        || N->getKind() == NodeKind::IfExpression
+        || N->getKind() == NodeKind::ReturnExpression
         || N->getKind() == NodeKind::PrefixExpression;
   }
 
@@ -1804,19 +1726,17 @@ public:
   Symbol Name;
 
   inline ReferenceExpression(
-    std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
-    Symbol Name
-  ): Expression(NodeKind::ReferenceExpression),
-     ModulePath(ModulePath),
-     Name(Name) {}
-
-  inline ReferenceExpression(
     std::vector<Annotation*> Annotations,
     std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
     Symbol Name
   ): Expression(NodeKind::ReferenceExpression, Annotations),
      ModulePath(ModulePath),
      Name(Name) {}
+
+  inline ReferenceExpression(
+    std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath,
+    Symbol Name
+  ): ReferenceExpression({}, ModulePath, Name) {}
 
   inline ByteString getNameAsString() const noexcept {
     return Name.getCanonicalText();
@@ -1826,6 +1746,8 @@ public:
   Token* getLastToken() const override;
 
   SymbolPath getSymbolPath() const;
+
+  static constexpr const NodeKind Kind = NodeKind::ReferenceExpression;
 
 };
 
@@ -1858,6 +1780,7 @@ public:
     return TheScope;
   }
 
+  static constexpr const NodeKind Kind = NodeKind::MatchCase; 
 
 };
 
@@ -1868,18 +1791,7 @@ public:
   Expression* Value;
   class BlockStart* BlockStart;
   std::vector<MatchCase*> Cases;
-
-  inline MatchExpression(
-    class MatchKeyword* MatchKeyword,
-    Expression* Value,
-    class BlockStart* BlockStart,
-    std::vector<MatchCase*> Cases
-  ): Expression(NodeKind::MatchExpression),
-     MatchKeyword(MatchKeyword),
-     Value(Value),
-     BlockStart(BlockStart),
-     Cases(Cases) {}
-
+     
   inline MatchExpression(
     std::vector<Annotation*> Annotations,
     class MatchKeyword* MatchKeyword,
@@ -1892,8 +1804,17 @@ public:
      BlockStart(BlockStart),
      Cases(Cases) {}
 
+  inline MatchExpression(
+    class MatchKeyword* MatchKeyword,
+    Expression* Value,
+    class BlockStart* BlockStart,
+    std::vector<MatchCase*> Cases
+  ): MatchExpression({}, MatchKeyword, Value, BlockStart, Cases) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::MatchExpression;
 
 };
 
@@ -1905,15 +1826,6 @@ public:
   std::vector<Node*> Elements;
 
   inline BlockExpression(
-    class DoKeyword* DoKeyword,
-    class BlockStart* BlockStart,
-    std::vector<Node*> Elements
-  ): Expression(NodeKind::BlockExpression),
-     DoKeyword(DoKeyword),
-     BlockStart(BlockStart),
-     Elements(Elements) {}
-
-  inline BlockExpression(
     std::vector<Annotation*> Annotations,
     class DoKeyword* DoKeyword,
     class BlockStart* BlockStart,
@@ -1923,8 +1835,16 @@ public:
      BlockStart(BlockStart),
      Elements(Elements) {}
 
+  inline BlockExpression(
+    class DoKeyword* DoKeyword,
+    class BlockStart* BlockStart,
+    std::vector<Node*> Elements
+  ): BlockExpression({}, DoKeyword, BlockStart, Elements) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::BlockExpression;
 
 };
 
@@ -1936,15 +1856,6 @@ public:
   Token* Name;
 
   inline MemberExpression(
-    Expression* E,
-    class Dot* Dot,
-    Token* Name
-  ): Expression(NodeKind::MemberExpression),
-     E(E),
-     Dot(Dot),
-     Name(Name) {}
-
-  inline MemberExpression(
     std::vector<Annotation*> Annotations,
     class Expression* E,
     class Dot* Dot,
@@ -1954,12 +1865,20 @@ public:
      Dot(Dot),
      Name(Name) {}
 
+  inline MemberExpression(
+    Expression* E,
+    class Dot* Dot,
+    Token* Name
+  ): MemberExpression({}, E, Dot, Name) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
   inline Expression* getExpression() const {
     return E;
   }
+
+  static constexpr const NodeKind Kind = NodeKind::MemberExpression;
 
 };
 
@@ -1971,15 +1890,6 @@ public:
   class RParen* RParen;
 
   inline TupleExpression(
-    class LParen* LParen,
-    std::vector<std::tuple<Expression*, Comma*>> Elements,
-    class RParen* RParen
-  ): Expression(NodeKind::TupleExpression),
-     LParen(LParen),
-     Elements(Elements),
-     RParen(RParen) {}
-
-  inline TupleExpression(
     std::vector<Annotation*> Annotations,
     class LParen* LParen,
     std::vector<std::tuple<Expression*, Comma*>> Elements,
@@ -1989,8 +1899,16 @@ public:
      Elements(Elements),
      RParen(RParen) {}
 
+  inline TupleExpression(
+    class LParen* LParen,
+    std::vector<std::tuple<Expression*, Comma*>> Elements,
+    class RParen* RParen
+  ): TupleExpression({}, LParen, Elements, RParen) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::TupleExpression;
 
 };
 
@@ -2002,15 +1920,6 @@ public:
   class RParen* RParen;
 
   inline NestedExpression(
-    class LParen* LParen,
-    Expression* Inner,
-    class RParen* RParen
-  ): Expression(NodeKind::NestedExpression),
-     LParen(LParen),
-     Inner(Inner),
-     RParen(RParen) {}
-
-  inline NestedExpression(
     std::vector<Annotation*> Annotations,
     class LParen* LParen,
     Expression* Inner,
@@ -2020,8 +1929,17 @@ public:
      Inner(Inner),
      RParen(RParen) {}
 
+
+  inline NestedExpression(
+    class LParen* LParen,
+    Expression* Inner,
+    class RParen* RParen
+  ): NestedExpression({}, LParen, Inner, RParen) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::NestedExpression;
 
 };
 
@@ -2030,16 +1948,14 @@ public:
 
   Literal* Token;
 
-  LiteralExpression(
-    Literal* Token
-  ): Expression(NodeKind::LiteralExpression),
-     Token(Token) {}
-
-  LiteralExpression(
+  inline LiteralExpression(
     std::vector<Annotation*> Annotations,
     Literal* Token
   ): Expression(NodeKind::LiteralExpression, Annotations),
      Token(Token) {}
+
+  inline LiteralExpression(Literal* Token):
+    LiteralExpression({}, Token) {}
 
   inline ByteString getAsText() {
     ZEN_ASSERT(Token->getKind() == NodeKind::StringLiteral);
@@ -2054,6 +1970,8 @@ public:
   class Token* getFirstToken() const override;
   class Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::LiteralExpression;
+
 };
 
 class CallExpression : public Expression {
@@ -2063,13 +1981,6 @@ public:
   std::vector<Expression*> Args;
 
   inline CallExpression(
-    Expression* Function,
-    std::vector<Expression*> Args
-  ): Expression(NodeKind::CallExpression),
-     Function(Function),
-     Args(Args) {}
-
-  inline CallExpression(
     std::vector<Annotation*> Annotations,
     Expression* Function,
     std::vector<Expression*> Args
@@ -2077,8 +1988,15 @@ public:
      Function(Function),
      Args(Args) {}
 
+  inline CallExpression(
+    Expression* Function,
+    std::vector<Expression*> Args
+  ): CallExpression({}, Function, Args) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::CallExpression;
 
 };
 
@@ -2090,15 +2008,6 @@ public:
   Expression* Right;
 
   inline InfixExpression(
-    Expression* Left,
-    class Operator Operator,
-    Expression* Right
-  ): Expression(NodeKind::InfixExpression),
-     Left(Left),
-     Operator(Operator),
-     Right(Right) {}
-
-  inline InfixExpression(
     std::vector<Annotation*> Annotations,
     Expression* Left,
     class Operator Operator,
@@ -2108,8 +2017,16 @@ public:
      Operator(Operator),
      Right(Right) {}
 
+  inline InfixExpression(
+    Expression* Left,
+    class Operator Operator,
+    Expression* Right
+  ): InfixExpression({}, Left, Operator, Right) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::InfixExpression;
 
 };
 
@@ -2119,14 +2036,7 @@ public:
   Token* Operator;
   Expression* Argument;
 
-  PrefixExpression(
-    Token* Operator,
-    Expression* Argument
-  ): Expression(NodeKind::PrefixExpression),
-     Operator(Operator),
-     Argument(Argument) {}
-
-  PrefixExpression(
+  inline PrefixExpression(
     std::vector<Annotation*> Annotations,
     Token* Operator,
     Expression* Argument
@@ -2134,8 +2044,15 @@ public:
      Operator(Operator),
      Argument(Argument) {}
 
+  inline PrefixExpression(
+    Token* Operator,
+    Expression* Argument
+  ): PrefixExpression({}, Operator, Argument) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::PrefixExpression;
 
 };
 
@@ -2158,9 +2075,16 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  bool hasExpression() const {
+    return E; 
+  }
+
   inline Expression* getExpression() const {
+    ZEN_ASSERT(E != nullptr);
     return E;
   }
+
+  static constexpr const NodeKind Kind = NodeKind::RecordExpressionField;
 
 };
 
@@ -2172,15 +2096,6 @@ public:
   class RBrace* RBrace;
 
   inline RecordExpression(
-    class LBrace* LBrace,
-    std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields,
-    class RBrace* RBrace
-  ): Expression(NodeKind::RecordExpression),
-     LBrace(LBrace),
-     Fields(Fields),
-     RBrace(RBrace) {}
-
-  inline RecordExpression(
     std::vector<Annotation*> Annotations,
     class LBrace* LBrace,
     std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields,
@@ -2190,47 +2105,20 @@ public:
      Fields(Fields),
      RBrace(RBrace) {}
 
-  Token* getFirstToken() const override;
-  Token* getLastToken() const override;
-
-};
-
-class Statement : public Node, public AnnotationContainer {
-protected:
-
-  inline Statement(NodeKind Type, std::vector<Annotation*> Annotations = {}):
-    Node(Type), AnnotationContainer(Annotations) {}
-
-public:
-
-  static bool classof(Node* N) {
-    return N->getKind() == NodeKind::ExpressionStatement
-        || N->getKind() == NodeKind::ReturnStatement
-        || N->getKind() == NodeKind::IfStatement;
-  }
-
-};
-
-class ExpressionStatement : public Statement {
-public:
-
-  class Expression* Expression;
-
-  ExpressionStatement(class Expression* Expression):
-    Statement(NodeKind::ExpressionStatement), Expression(Expression) {}
-
-  ExpressionStatement(
-    std::vector<Annotation*> Annotations,
-    class Expression* Expression
-  ): Statement(NodeKind::ExpressionStatement, Annotations),
-     Expression(Expression) {}
+  inline RecordExpression(
+    class LBrace* LBrace,
+    std::vector<std::tuple<RecordExpressionField*, Comma*>> Fields,
+    class RBrace* RBrace
+  ): RecordExpression({}, LBrace, Fields, RBrace) {}
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::RecordExpression;
+
 };
 
-class IfStatementPart : public Node, public AnnotationContainer {
+class IfExpressionPart : public Node, public AnnotationContainer {
 public:
 
   Token* Keyword;
@@ -2238,68 +2126,73 @@ public:
   class BlockStart* BlockStart;
   std::vector<Node*> Elements;
 
-  inline IfStatementPart(
-    Token* Keyword,
-    Expression* Test,
-    class BlockStart* BlockStart,
-    std::vector<Node*> Elements
-  ): Node(NodeKind::IfStatementPart),
-     Keyword(Keyword),
-     Test(Test),
-     BlockStart(BlockStart),
-     Elements(Elements) {}
-
-  inline IfStatementPart(
+  inline IfExpressionPart(
     std::vector<Annotation*> Annotations,
     Token* Keyword,
     Expression* Test,
     class BlockStart* BlockStart,
     std::vector<Node*> Elements
-  ): Node(NodeKind::IfStatementPart),
+  ): Node(NodeKind::IfExpressionPart),
      AnnotationContainer(Annotations),
      Keyword(Keyword),
      Test(Test),
      BlockStart(BlockStart),
      Elements(Elements) {}
 
+  inline IfExpressionPart(
+    Token* Keyword,
+    Expression* Test,
+    class BlockStart* BlockStart,
+    std::vector<Node*> Elements
+  ): IfExpressionPart({}, Keyword, Test, BlockStart, Elements) {}
+
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::IfExpressionPart;
+
 };
 
-class IfStatement : public Statement {
+class IfExpression : public Expression {
 public:
 
-  std::vector<IfStatementPart*> Parts;
+  std::vector<IfExpressionPart*> Parts;
 
-  inline IfStatement(std::vector<IfStatementPart*> Parts):
-    Statement(NodeKind::IfStatement), Parts(Parts) {}
+  inline IfExpression(
+    std::vector<Annotation*> Annotations,
+    std::vector<IfExpressionPart*> Parts
+  ): Expression(NodeKind::IfExpression, Annotations),
+     Parts(Parts) {}
+
+
+  inline IfExpression(std::vector<IfExpressionPart*> Parts):
+    IfExpression({}, Parts) {}
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::IfExpression;
+
 };
 
-class ReturnStatement : public Statement {
+class ReturnExpression : public Expression {
 public:
 
   class ReturnKeyword* ReturnKeyword;
   Expression* E;
 
-  ReturnStatement(
-    class ReturnKeyword* ReturnKeyword,
-    class Expression* Expression
-  ): Statement(NodeKind::ReturnStatement),
-     ReturnKeyword(ReturnKeyword),
-     E(Expression) {}
-
-  ReturnStatement(
+  inline ReturnExpression(
     std::vector<Annotation*> Annotations,
     class ReturnKeyword* ReturnKeyword,
-    class Expression* Expression
-  ): Statement(NodeKind::ReturnStatement, Annotations),
+    Expression* E
+  ): Expression(NodeKind::ReturnExpression, Annotations),
      ReturnKeyword(ReturnKeyword),
-     E(Expression) {}
+     E(E) {}
+
+  inline ReturnExpression(
+    class ReturnKeyword* ReturnKeyword,
+    class Expression* Expression
+  ): ReturnExpression({}, ReturnKeyword, Expression) {}
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
@@ -2311,6 +2204,8 @@ public:
   Expression* getExpression() {
     return E;
   }
+
+  static constexpr const NodeKind Kind = NodeKind::ReturnExpression;
 
 };
 
@@ -2330,6 +2225,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::TypeAssert;
+
 };
 
 class Parameter : public Node {
@@ -2348,9 +2245,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::Parameter;
-  }
+  static constexpr const NodeKind Kind = NodeKind::Parameter;
 
 };
 
@@ -2377,6 +2272,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::LetBlockBody;
+
 };
 
 class LetExprBody : public LetBody {
@@ -2394,6 +2291,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::LetExprBody;
 
 };
 
@@ -2546,9 +2445,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::PrefixFunctionDeclaration;
-  }
+  static constexpr const NodeKind Kind = NodeKind::PrefixFunctionDeclaration;
 
 };
 
@@ -2608,9 +2505,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::SuffixFunctionDeclaration;
-  }
+  static constexpr const NodeKind Kind = NodeKind::SuffixFunctionDeclaration;
 
 };
 
@@ -2673,9 +2568,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::InfixFunctionDeclaration;
-  }
+  static constexpr const NodeKind Kind = NodeKind::InfixFunctionDeclaration;
 
 };
 
@@ -2734,9 +2627,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::NamedFunctionDeclaration;
-  }
+  static constexpr const NodeKind Kind = NodeKind::NamedFunctionDeclaration;
 
 };
 
@@ -2782,10 +2673,6 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::VariableDeclaration;
-  }
-
   bool hasExpression() const {
     return Body;
   }
@@ -2794,6 +2681,8 @@ public:
     ZEN_ASSERT(Body->getKind() == NodeKind::LetExprBody);
     return static_cast<LetExprBody*>(Body)->Expression;
   }
+
+  static constexpr const NodeKind Kind = NodeKind::VariableDeclaration;
 
 };
 
@@ -2822,9 +2711,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::InstanceDeclaration;
-  }
+  static constexpr const NodeKind Kind = NodeKind::InstanceDeclaration;
 
 };
 
@@ -2856,9 +2743,7 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::ClassDeclaration;
-  }
+  static constexpr const NodeKind Kind = NodeKind::ClassDeclaration;
 
 };
 
@@ -2880,6 +2765,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::RecordDeclarationField;
 
 };
 
@@ -2911,6 +2798,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::RecordDeclaration;
+
 };
 
 class VariantDeclarationMember : public Node {
@@ -2937,6 +2826,8 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  static constexpr const NodeKind Kind = NodeKind::TupleVariantDeclarationMember;
+
 };
 
 class RecordVariantDeclarationMember : public VariantDeclarationMember {
@@ -2957,6 +2848,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::RecordVariantDeclarationMember;
 
 };
 
@@ -2987,6 +2880,8 @@ public:
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::VariantDeclaration;
 
 };
 
@@ -3021,79 +2916,78 @@ public:
     return TheScope;
   }
 
-  static bool classof(const Node* N) {
-    return N->getKind() == NodeKind::SourceFile;
-  }
+  static constexpr const NodeKind Kind = NodeKind::SourceFile;
 
 };
 
-template<> inline NodeKind getNodeType<Equals>() { return NodeKind::Equals; }
-template<> inline NodeKind getNodeType<Colon>() { return NodeKind::Colon; }
-template<> inline NodeKind getNodeType<Dot>() { return NodeKind::Dot; }
-template<> inline NodeKind getNodeType<DotDot>() { return NodeKind::DotDot; }
-template<> inline NodeKind getNodeType<Tilde>() { return NodeKind::Tilde; }
-template<> inline NodeKind getNodeType<LParen>() { return NodeKind::LParen; }
-template<> inline NodeKind getNodeType<RParen>() { return NodeKind::RParen; }
-template<> inline NodeKind getNodeType<LBracket>() { return NodeKind::LBracket; }
-template<> inline NodeKind getNodeType<RBracket>() { return NodeKind::RBracket; }
-template<> inline NodeKind getNodeType<LBrace>() { return NodeKind::LBrace; }
-template<> inline NodeKind getNodeType<RBrace>() { return NodeKind::RBrace; }
-template<> inline NodeKind getNodeType<RArrow>() { return NodeKind::RArrow; }
-template<> inline NodeKind getNodeType<RArrowAlt>() { return NodeKind::RArrowAlt; }
-template<> inline NodeKind getNodeType<LetKeyword>() { return NodeKind::LetKeyword; }
-template<> inline NodeKind getNodeType<ForeignKeyword>() { return NodeKind::ForeignKeyword; }
-template<> inline NodeKind getNodeType<MutKeyword>() { return NodeKind::MutKeyword; }
-template<> inline NodeKind getNodeType<PubKeyword>() { return NodeKind::PubKeyword; }
-template<> inline NodeKind getNodeType<TypeKeyword>() { return NodeKind::TypeKeyword; }
-template<> inline NodeKind getNodeType<ReturnKeyword>() { return NodeKind::ReturnKeyword; }
-template<> inline NodeKind getNodeType<ModKeyword>() { return NodeKind::ModKeyword; }
-template<> inline NodeKind getNodeType<StructKeyword>() { return NodeKind::StructKeyword; }
-template<> inline NodeKind getNodeType<EnumKeyword>() { return NodeKind::EnumKeyword; }
-template<> inline NodeKind getNodeType<ClassKeyword>() { return NodeKind::ClassKeyword; }
-template<> inline NodeKind getNodeType<InstanceKeyword>() { return NodeKind::InstanceKeyword; }
-template<> inline NodeKind getNodeType<ElifKeyword>() { return NodeKind::ElifKeyword; }
-template<> inline NodeKind getNodeType<IfKeyword>() { return NodeKind::IfKeyword; }
-template<> inline NodeKind getNodeType<MatchKeyword>() { return NodeKind::MatchKeyword; }
-template<> inline NodeKind getNodeType<ElseKeyword>() { return NodeKind::ElseKeyword; }
-template<> inline NodeKind getNodeType<Invalid>() { return NodeKind::Invalid; }
-template<> inline NodeKind getNodeType<EndOfFile>() { return NodeKind::EndOfFile; }
-template<> inline NodeKind getNodeType<BlockStart>() { return NodeKind::BlockStart; }
-template<> inline NodeKind getNodeType<BlockEnd>() { return NodeKind::BlockEnd; }
-template<> inline NodeKind getNodeType<LineFoldEnd>() { return NodeKind::LineFoldEnd; }
-template<> inline NodeKind getNodeType<CustomOperator>() { return NodeKind::CustomOperator; }
-template<> inline NodeKind getNodeType<Assignment>() { return NodeKind::Assignment; }
-template<> inline NodeKind getNodeType<Identifier>() { return NodeKind::Identifier; }
-template<> inline NodeKind getNodeType<IdentifierAlt>() { return NodeKind::IdentifierAlt; }
-template<> inline NodeKind getNodeType<StringLiteral>() { return NodeKind::StringLiteral; }
-template<> inline NodeKind getNodeType<IntegerLiteral>() { return NodeKind::IntegerLiteral; }
-template<> inline NodeKind getNodeType<QualifiedTypeExpression>() { return NodeKind::QualifiedTypeExpression; }
-template<> inline NodeKind getNodeType<ReferenceTypeExpression>() { return NodeKind::ReferenceTypeExpression; }
-template<> inline NodeKind getNodeType<ArrowTypeExpression>() { return NodeKind::ArrowTypeExpression; }
-template<> inline NodeKind getNodeType<BindPattern>() { return NodeKind::BindPattern; }
-template<> inline NodeKind getNodeType<ReferenceExpression>() { return NodeKind::ReferenceExpression; }
-template<> inline NodeKind getNodeType<NestedExpression>() { return NodeKind::NestedExpression; }
-template<> inline NodeKind getNodeType<LiteralExpression>() { return NodeKind::LiteralExpression; }
-template<> inline NodeKind getNodeType<CallExpression>() { return NodeKind::CallExpression; }
-template<> inline NodeKind getNodeType<InfixExpression>() { return NodeKind::InfixExpression; }
-template<> inline NodeKind getNodeType<PrefixExpression>() { return NodeKind::PrefixExpression; }
-template<> inline NodeKind getNodeType<ExpressionStatement>() { return NodeKind::ExpressionStatement; }
-template<> inline NodeKind getNodeType<ReturnStatement>() { return NodeKind::ReturnStatement; }
-template<> inline NodeKind getNodeType<IfStatement>() { return NodeKind::IfStatement; }
-template<> inline NodeKind getNodeType<IfStatementPart>() { return NodeKind::IfStatementPart; }
-template<> inline NodeKind getNodeType<TypeAssert>() { return NodeKind::TypeAssert; }
-template<> inline NodeKind getNodeType<Parameter>() { return NodeKind::Parameter; }
-template<> inline NodeKind getNodeType<LetBlockBody>() { return NodeKind::LetBlockBody; }
-template<> inline NodeKind getNodeType<LetExprBody>() { return NodeKind::LetExprBody; }
-template<> inline NodeKind getNodeType<PrefixFunctionDeclaration>() { return NodeKind::PrefixFunctionDeclaration; }
-template<> inline NodeKind getNodeType<InfixFunctionDeclaration>() { return NodeKind::InfixFunctionDeclaration; }
-template<> inline NodeKind getNodeType<SuffixFunctionDeclaration>() { return NodeKind::SuffixFunctionDeclaration; }
-template<> inline NodeKind getNodeType<NamedFunctionDeclaration()>() { return NodeKind::NamedFunctionDeclaration; }
-template<> inline NodeKind getNodeType<VariableDeclaration>() { return NodeKind::VariableDeclaration; }
-template<> inline NodeKind getNodeType<RecordDeclarationField>() { return NodeKind::RecordDeclarationField; }
-template<> inline NodeKind getNodeType<RecordDeclaration>() { return NodeKind::RecordDeclaration; }
-template<> inline NodeKind getNodeType<ClassDeclaration>() { return NodeKind::ClassDeclaration; }
-template<> inline NodeKind getNodeType<InstanceDeclaration>() { return NodeKind::InstanceDeclaration; }
-template<> inline NodeKind getNodeType<SourceFile>() { return NodeKind::SourceFile; }
+// template<> inline NodeKind getNodeType<Equals>() { return NodeKind::Equals; }
+// template<> inline NodeKind getNodeType<Colon>() { return NodeKind::Colon; }
+// template<> inline NodeKind getNodeType<Dot>() { return NodeKind::Dot; }
+// template<> inline NodeKind getNodeType<DotDot>() { return NodeKind::DotDot; }
+// template<> inline NodeKind getNodeType<Tilde>() { return NodeKind::Tilde; }
+// template<> inline NodeKind getNodeType<LParen>() { return NodeKind::LParen; }
+// template<> inline NodeKind getNodeType<RParen>() { return NodeKind::RParen; }
+// template<> inline NodeKind getNodeType<LBracket>() { return NodeKind::LBracket; }
+// template<> inline NodeKind getNodeType<RBracket>() { return NodeKind::RBracket; }
+// template<> inline NodeKind getNodeType<LBrace>() { return NodeKind::LBrace; }
+// template<> inline NodeKind getNodeType<RBrace>() { return NodeKind::RBrace; }
+// template<> inline NodeKind getNodeType<RArrow>() { return NodeKind::RArrow; }
+// template<> inline NodeKind getNodeType<RArrowAlt>() { return NodeKind::RArrowAlt; }
+// template<> inline NodeKind getNodeType<LetKeyword>() { return NodeKind::LetKeyword; }
+// template<> inline NodeKind getNodeType<ForeignKeyword>() { return NodeKind::ForeignKeyword; }
+// template<> inline NodeKind getNodeType<MutKeyword>() { return NodeKind::MutKeyword; }
+// template<> inline NodeKind getNodeType<PubKeyword>() { return NodeKind::PubKeyword; }
+// template<> inline NodeKind getNodeType<TypeKeyword>() { return NodeKind::TypeKeyword; }
+// template<> inline NodeKind getNodeType<ReturnKeyword>() { return NodeKind::ReturnKeyword; }
+// template<> inline NodeKind getNodeType<ModKeyword>() { return NodeKind::ModKeyword; }
+// template<> inline NodeKind getNodeType<StructKeyword>() { return NodeKind::StructKeyword; }
+// template<> inline NodeKind getNodeType<EnumKeyword>() { return NodeKind::EnumKeyword; }
+// template<> inline NodeKind getNodeType<ClassKeyword>() { return NodeKind::ClassKeyword; }
+// template<> inline NodeKind getNodeType<InstanceKeyword>() { return NodeKind::InstanceKeyword; }
+// template<> inline NodeKind getNodeType<ElifKeyword>() { return NodeKind::ElifKeyword; }
+// template<> inline NodeKind getNodeType<IfKeyword>() { return NodeKind::IfKeyword; }
+// template<> inline NodeKind getNodeType<MatchKeyword>() { return NodeKind::MatchKeyword; }
+// template<> inline NodeKind getNodeType<ElseKeyword>() { return NodeKind::ElseKeyword; }
+// template<> inline NodeKind getNodeType<Invalid>() { return NodeKind::Invalid; }
+// template<> inline NodeKind getNodeType<EndOfFile>() { return NodeKind::EndOfFile; }
+// template<> inline NodeKind getNodeType<BlockStart>() { return NodeKind::BlockStart; }
+// template<> inline NodeKind getNodeType<BlockEnd>() { return NodeKind::BlockEnd; }
+// template<> inline NodeKind getNodeType<LineFoldEnd>() { return NodeKind::LineFoldEnd; }
+// template<> inline NodeKind getNodeType<CustomOperator>() { return NodeKind::CustomOperator; }
+// template<> inline NodeKind getNodeType<Assignment>() { return NodeKind::Assignment; }
+// template<> inline NodeKind getNodeType<Identifier>() { return NodeKind::Identifier; }
+// template<> inline NodeKind getNodeType<IdentifierAlt>() { return NodeKind::IdentifierAlt; }
+// template<> inline NodeKind getNodeType<StringLiteral>() { return NodeKind::StringLiteral; }
+// template<> inline NodeKind getNodeType<IntegerLiteral>() { return NodeKind::IntegerLiteral; }
+// template<> inline NodeKind getNodeType<QualifiedTypeExpression>() { return NodeKind::QualifiedTypeExpression; }
+// template<> inline NodeKind getNodeType<ReferenceTypeExpression>() { return NodeKind::ReferenceTypeExpression; }
+// template<> inline NodeKind getNodeType<ArrowTypeExpression>() { return NodeKind::ArrowTypeExpression; }
+// template<> inline NodeKind getNodeType<BindPattern>() { return NodeKind::BindPattern; }
+// template<> inline NodeKind getNodeType<ReferenceExpression>() { return NodeKind::ReferenceExpression; }
+// template<> inline NodeKind getNodeType<NestedExpression>() { return NodeKind::NestedExpression; }
+// template<> inline NodeKind getNodeType<MatchExpression>() { return NodeKind::MatchExpression; }
+// template<> inline NodeKind getNodeType<BlockExpression>() { return NodeKind::BlockExpression; }
+// template<> inline NodeKind getNodeType<LiteralExpression>() { return NodeKind::LiteralExpression; }
+// template<> inline NodeKind getNodeType<CallExpression>() { return NodeKind::CallExpression; }
+// template<> inline NodeKind getNodeType<InfixExpression>() { return NodeKind::InfixExpression; }
+// template<> inline NodeKind getNodeType<PrefixExpression>() { return NodeKind::PrefixExpression; }
+// template<> inline NodeKind getNodeType<ReturnExpression>() { return NodeKind::ReturnExpression; }
+// template<> inline NodeKind getNodeType<IfExpression>() { return NodeKind::IfExpression; }
+// template<> inline NodeKind getNodeType<IfExpressionPart>() { return NodeKind::IfExpressionPart; }
+// template<> inline NodeKind getNodeType<TypeAssert>() { return NodeKind::TypeAssert; }
+// template<> inline NodeKind getNodeType<Parameter>() { return NodeKind::Parameter; }
+// template<> inline NodeKind getNodeType<LetBlockBody>() { return NodeKind::LetBlockBody; }
+// template<> inline NodeKind getNodeType<LetExprBody>() { return NodeKind::LetExprBody; }
+// template<> inline NodeKind getNodeType<PrefixFunctionDeclaration>() { return NodeKind::PrefixFunctionDeclaration; }
+// template<> inline NodeKind getNodeType<InfixFunctionDeclaration>() { return NodeKind::InfixFunctionDeclaration; }
+// template<> inline NodeKind getNodeType<SuffixFunctionDeclaration>() { return NodeKind::SuffixFunctionDeclaration; }
+// template<> inline NodeKind getNodeType<NamedFunctionDeclaration()>() { return NodeKind::NamedFunctionDeclaration; }
+// template<> inline NodeKind getNodeType<VariableDeclaration>() { return NodeKind::VariableDeclaration; }
+// template<> inline NodeKind getNodeType<RecordDeclarationField>() { return NodeKind::RecordDeclarationField; }
+// template<> inline NodeKind getNodeType<RecordDeclaration>() { return NodeKind::RecordDeclaration; }
+// template<> inline NodeKind getNodeType<ClassDeclaration>() { return NodeKind::ClassDeclaration; }
+// template<> inline NodeKind getNodeType<InstanceDeclaration>() { return NodeKind::InstanceDeclaration; }
+// template<> inline NodeKind getNodeType<SourceFile>() { return NodeKind::SourceFile; }
 
 }
 

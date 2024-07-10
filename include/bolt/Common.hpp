@@ -1,6 +1,7 @@
 
 #pragma once
 
+#include <concepts>
 #include <cstdlib>
 
 #include "zen/config.hpp"
@@ -36,22 +37,33 @@ public:
 
 };
 
-template<typename D, typename B>
-D* cast(B* base) {
-  ZEN_ASSERT(D::classof(base));
-  return static_cast<D*>(base);
-}
-
-template<typename D, typename B>
-const D* cast(const B* base) {
-  ZEN_ASSERT(D::classof(base));
-  return static_cast<const D*>(base);
-}
+template<typename T>
+concept HoldsKind = requires (T a) {
+  { a.getKind() } -> std::convertible_to<decltype(T::Kind)>;
+};
 
 template<typename D, typename T>
 bool isa(const T* value) {
   ZEN_ASSERT(value != nullptr);
   return D::classof(value);
+}
+
+template<HoldsKind D, typename T>
+bool isa(const T* value) {
+  ZEN_ASSERT(value != nullptr);
+  return D::Kind == value->getKind();
+}
+
+template<typename D, typename B>
+D* cast(B* base) {
+  ZEN_ASSERT(isa<D>(base));
+  return static_cast<D*>(base);
+}
+
+template<typename D, typename B>
+const D* cast(const B* base) {
+  ZEN_ASSERT(isa<D>(base));
+  return static_cast<const D*>(base);
 }
 
 }

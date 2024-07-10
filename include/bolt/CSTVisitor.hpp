@@ -99,10 +99,9 @@ public:
       BOLT_GEN_CASE(PrefixExpression)
       BOLT_GEN_CASE(RecordExpressionField)
       BOLT_GEN_CASE(RecordExpression)
-      BOLT_GEN_CASE(ExpressionStatement)
-      BOLT_GEN_CASE(ReturnStatement)
-      BOLT_GEN_CASE(IfStatement)
-      BOLT_GEN_CASE(IfStatementPart)
+      BOLT_GEN_CASE(ReturnExpression)
+      BOLT_GEN_CASE(IfExpression)
+      BOLT_GEN_CASE(IfExpressionPart)
       BOLT_GEN_CASE(TypeAssert)
       BOLT_GEN_CASE(Parameter)
       BOLT_GEN_CASE(LetBlockBody)
@@ -498,23 +497,15 @@ protected:
     static_cast<D*>(this)->visitExpression(N);
   }
 
-  void visitStatement(Statement* N) {
-    static_cast<D*>(this)->visitNode(N);
+  void visitReturnExpression(ReturnExpression* N) {
+    static_cast<D*>(this)->visitExpression(N);
   }
 
-  void visitExpressionStatement(ExpressionStatement* N) {
-    static_cast<D*>(this)->visitStatement(N);
+  void visitIfExpression(IfExpression* N) {
+    static_cast<D*>(this)->visitExpression(N);
   }
 
-  void visitReturnStatement(ReturnStatement* N) {
-    static_cast<D*>(this)->visitStatement(N);
-  }
-
-  void visitIfStatement(IfStatement* N) {
-    static_cast<D*>(this)->visitStatement(N);
-  }
-
-  void visitIfStatementPart(IfStatementPart* N) {
+  void visitIfExpressionPart(IfExpressionPart* N) {
     static_cast<D*>(this)->visitNode(N);
   }
 
@@ -687,10 +678,9 @@ public:
       BOLT_GEN_CHILD_CASE(PrefixExpression)
       BOLT_GEN_CHILD_CASE(RecordExpressionField)
       BOLT_GEN_CHILD_CASE(RecordExpression)
-      BOLT_GEN_CHILD_CASE(ExpressionStatement)
-      BOLT_GEN_CHILD_CASE(ReturnStatement)
-      BOLT_GEN_CHILD_CASE(IfStatement)
-      BOLT_GEN_CHILD_CASE(IfStatementPart)
+      BOLT_GEN_CHILD_CASE(ReturnExpression)
+      BOLT_GEN_CHILD_CASE(IfExpression)
+      BOLT_GEN_CHILD_CASE(IfExpressionPart)
       BOLT_GEN_CHILD_CASE(TypeAssert)
       BOLT_GEN_CHILD_CASE(Parameter)
       BOLT_GEN_CHILD_CASE(LetBlockBody)
@@ -1163,14 +1153,7 @@ public:
     BOLT_VISIT(N->RBrace);
   }
 
-  void visitEachChild(ExpressionStatement* N) {
-    for (auto A: N->Annotations) {
-      BOLT_VISIT(A);
-    }
-    BOLT_VISIT(N->Expression);
-  }
-
-  void visitEachChild(ReturnStatement* N) {
+  void visitEachChild(ReturnExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1178,13 +1161,13 @@ public:
     BOLT_VISIT(N->E);
   }
 
-  void visitEachChild(IfStatement* N) {
+  void visitEachChild(IfExpression* N) {
     for (auto Part: N->Parts) {
       BOLT_VISIT(Part);
     }
   }
 
-  void visitEachChild(IfStatementPart* N) {
+  void visitEachChild(IfExpressionPart* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }

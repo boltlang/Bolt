@@ -60,11 +60,11 @@ Value Evaluator::apply(Value Op, std::vector<Value> Args) {
     {
       auto Fn = Op.getDeclaration();
       Env NewEnv;
-      auto Params= Fn->getParams();
+      auto Params = Fn->getParams();
       auto ParamIter = Params.begin();
       auto ParamsEnd = Params.end();
       auto ArgIter = Args.begin();
-      auto ArgsEnd= Args.end();
+      auto ArgsEnd = Args.end();
       for (;;) {
         if (ParamIter == ParamsEnd && ArgIter == ArgsEnd) {
           break;
@@ -97,6 +97,10 @@ Value Evaluator::apply(Value Op, std::vector<Value> Args) {
 }
 
 void Evaluator::evaluate(Node* N, Env& E) {
+  if (isa<Expression>(N)) {
+    evaluateExpression(cast<Expression>(N), E);
+    return;
+  }
   switch (N->getKind()) {
     case NodeKind::SourceFile:
     {
@@ -104,12 +108,6 @@ void Evaluator::evaluate(Node* N, Env& E) {
       for (auto Element: SF->Elements) {
         evaluate(Element, E);
       }
-      break;
-    }
-    case NodeKind::ExpressionStatement:
-    {
-      auto ES = static_cast<ExpressionStatement*>(N);
-      evaluateExpression(ES->Expression, E);
       break;
     }
     case NodeKind::PrefixFunctionDeclaration:

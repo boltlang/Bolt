@@ -75,9 +75,7 @@ class Parser {
   std::optional<std::vector<std::tuple<RecordPatternField*, Comma*>>> parseRecordPatternFields();
 
   template<typename T>
-  T* expectToken() {
-    return static_cast<T*>(expectToken(getNodeType<T>()));
-  }
+  T* expectToken();
 
   Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
 
@@ -115,18 +113,15 @@ public:
   Parameter* parseParam();
 
   ReferenceExpression* parseReferenceExpression();
-
   Expression* parseUnaryExpression();
-
   Expression* parseExpression();
-
+  BlockExpression* parseBlockExpression(std::vector<Annotation*> Annotations = {});
   Expression* parseCallExpression();
+  IfExpression* parseIfExpression();
 
-  IfStatement* parseIfStatement();
+  ReturnExpression* parseReturnExpression();
 
-  ReturnStatement* parseReturnStatement();
-
-  ExpressionStatement* parseExpressionStatement();
+  Expression* parseExpressionStatement();
 
   Node* parseLetBodyElement();
 

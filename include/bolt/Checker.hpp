@@ -89,15 +89,11 @@ class Checker {
   Type* IntType;
   Type* BoolType;
   Type* StringType;
+  Type* UnitType;
 
 public:
 
-  Checker(DiagnosticEngine& DE):
-    DE(DE) {
-    IntType = new TCon("Int");
-    BoolType = new TCon("Bool");
-    StringType = new TCon("String");
-  }
+  Checker(DiagnosticEngine& DE);
 
   Type* getIntType() const {
     return IntType;
@@ -109,6 +105,10 @@ public:
 
   Type* getStringType() const {
     return StringType;
+  }
+
+  Type* getUnitType() const {
+    return UnitType;
   }
 
   TVar* createTVar() {

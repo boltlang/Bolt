@@ -78,7 +78,13 @@ Type* substituteType(Type* Ty, const TVSub& Sub) {
   }
 }
 
-
+Checker::Checker(DiagnosticEngine& DE):
+  DE(DE) {
+    IntType = new TCon("Int");
+    BoolType = new TCon("Bool");
+    StringType = new TCon("String");
+    UnitType = new TCon("()");
+  }
 
 Type* Checker::instantiate(TypeScheme* Scm) {
   TVSub Sub;
@@ -102,6 +108,23 @@ std::tuple<ConstraintSet, Type*> Checker::inferExpr(TypeEnv& Env, Expression* Ex
   }
 
   switch (Expr->getKind()) {
+
+    case NodeKind::BlockExpression:
+      {
+        auto E = static_cast<BlockExpression*>(Expr);
+        auto N = E->Elements.size();
+        for (std::size_t I = 0; I+1 < N; ++I) {
+          auto Element = E->Elements[I];
+          
+          auto CC = inferElement(Env, Element, RetTy);
+          mergeTo(Out, CC);
+        }
+        auto Last = E->Elements[N-1];
+        auto [CC, ResTy] = inferExpr(Env, cast<Expression>(Last), RetTy);
+        mergeTo(Out, CC);
+        Ty = ResTy;
+        break;
+      }
 
     case NodeKind::ReferenceExpression:
       {
@@ -166,6 +189,21 @@ std::tuple<ConstraintSet, Type*> Checker::inferExpr(TypeEnv& Env, Expression* Ex
         auto FunTy = new TFun(LeftTy, new TFun(RightTy, RetTy));
         Out.push_back(new CTypesEqual(FunTy, instantiate(Match), E));
         Ty = RetTy;
+        break;
+      }
+
+    case NodeKind::ReturnExpression:
+      {
+        auto E = static_cast<ReturnExpression*>(Expr);
+        if (E->hasExpression()) {
+          auto [ValOut, ValTy] = inferExpr(Env, E->getExpression(), RetTy);
+          mergeTo(Out, ValOut);
+          // Since evaluation stops at the return expression, it can be matched with any type.
+          Out.push_back(new CTypesEqual { ValTy, RetTy, E });
+        } else {
+          Out.push_back(new CTypesEqual { getUnitType(), RetTy, E });
+        }
+        Ty = createTVar();
         break;
       }
 
@@ -255,7 +293,7 @@ ConstraintSet Checker::inferFunctionDeclaration(TypeEnv& Env, FunctionDeclaratio
   if (Body != nullptr) {
     // TODO elminate BlockBody and replace with BlockExpr
     ZEN_ASSERT(Body->getKind() == NodeKind::LetExprBody);
-    auto [BodyOut, BodyTy] = inferExpr(NewEnv, static_cast<LetExprBody*>(Body)->Expression, RetTy);
+    auto [BodyOut, BodyTy] = inferExpr(NewEnv, cast<LetExprBody>(Body)->Expression, RetTy);
     mergeTo(Out, BodyOut);
     Out.push_back(new CTypesEqual(RetTy, BodyTy, Body));
   }
@@ -351,7 +389,7 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
     V.visit(N);
   };
 
-  std::vector<Statement*> Stmts;
+  std::vector<Node*> Stmts;
 
   for (auto Element: Elements) {
     if (isa<FunctionDeclaration>(Element)) {
@@ -367,7 +405,7 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
         populate(M, M->getExpression());
       }
     } else {
-      Stmts.push_back(cast<Statement>(Element));
+      Stmts.push_back(Element);
     }
   }
 
@@ -407,6 +445,11 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
 
 ConstraintSet Checker::inferElement(TypeEnv& Env, Node* N, Type* RetTy) {
 
+  if (isa<Expression>(N)) {
+    auto [Out, Ty] = inferExpr(Env, cast<Expression>(N), RetTy);
+    return Out;
+  }
+
   switch (N->getKind()) {
 
     case NodeKind::PrefixFunctionDeclaration:
@@ -415,16 +458,9 @@ ConstraintSet Checker::inferElement(TypeEnv& Env, Node* N, Type* RetTy) {
     case NodeKind::NamedFunctionDeclaration:
       return inferFunctionDeclaration(Env, static_cast<FunctionDeclaration*>(N));
 
-    case NodeKind::ExpressionStatement:
+    case NodeKind::ReturnExpression:
       {
-        auto M = static_cast<ExpressionStatement*>(N);
-        auto [Out, _] = inferExpr(Env, M->Expression, RetTy);
-        return Out;
-      }
-
-    case NodeKind::ReturnStatement:
-      {
-        auto M = static_cast<ReturnStatement*>(N);
+        auto M = static_cast<ReturnExpression*>(N);
         if (!M->hasExpression()) {
           return {};
         }

@@ -172,9 +172,9 @@ static std::string describe(NodeKind Type) {
       return "a literal expression";
     case NodeKind::MemberExpression:
       return "an accessor of a member";
-    case NodeKind::IfStatement:
+    case NodeKind::IfExpression:
       return "an if-statement";
-    case NodeKind::IfStatementPart:
+    case NodeKind::IfExpressionPart:
       return "a branch of an if-statement";
     case NodeKind::VariantDeclaration:
       return "a variant";

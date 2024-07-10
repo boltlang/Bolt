@@ -85,6 +85,18 @@ Parser::Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE):
     ExprOperators.add("$", OperatorFlags_InfixR, 0);
   }
 
+
+template<typename T>
+T* Parser::expectToken() {
+  auto Tok = Tokens.peek();
+  if (Tok->getKind() != T::Kind) {
+    DE.add<UnexpectedTokenDiagnostic>(File, Tok, std::vector<NodeKind> { T::Kind });
+    return nullptr;
+  }
+  Tokens.get();
+  return static_cast<T*>(Tok);
+}
+
 Token* Parser::peekFirstTokenAfterAnnotationsAndModifiers() {
   std::size_t I = 0;
   for (;;) {
@@ -105,16 +117,6 @@ Token* Parser::peekFirstTokenAfterAnnotationsAndModifiers() {
         return T0;
     }
   }
-}
-
-Token* Parser::expectToken(NodeKind Kind) {
-  auto T = Tokens.peek();
-  if (T->getKind() != Kind) {
-    DE.add<UnexpectedTokenDiagnostic>(File, T, std::vector<NodeKind> { Kind });
-    return nullptr;
-  }
-  Tokens.get();
-  return T;
 }
 
 ListPattern* Parser::parseListPattern() {
@@ -818,7 +820,7 @@ Expression* Parser::parsePrimitiveExpression() {
         ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), static_cast<class Dot*>(T2)));
       }
       auto T3 = Tokens.get();
-      if (!T3->is<Identifier>() && !T3->is<IdentifierAlt>()) {
+      if (!isa<Identifier>(T3) && !isa<IdentifierAlt>(T3)) {
         for (auto [Name, Dot]: ModulePath) {
           Name->unref();
           Dot->unref();
@@ -886,37 +888,11 @@ after_tuple_elements:
     case NodeKind::MatchKeyword:
       return parseMatchExpression();
     case NodeKind::DoKeyword:
-    {
-      Tokens.get();
-      auto T1 = expectToken(NodeKind::BlockStart);
-      if (!T1) {
-        BOLT_EACH_UNREF(Annotations);
-        T0->unref();
-        return nullptr;
-      }
-      std::vector<Node*> Elements;
-      for (;;) {
-          auto T2 = Tokens.peek();
-          if (T2->getKind() == NodeKind::BlockEnd) {
-            Tokens.get()->unref();
-            break;
-          }
-          auto Element = parseLetBodyElement();
-          if (Element == nullptr) {
-            BOLT_EACH_UNREF(Annotations);
-            T0->unref();
-            T1->unref();
-            BOLT_EACH_UNREF(Elements);
-            return nullptr;
-          }
-          Elements.push_back(Element);
-      }
-      return new BlockExpression {
-        static_cast<class DoKeyword*>(T0),
-        static_cast<BlockStart*>(T1),
-        Elements
-      };
-    }
+      return parseBlockExpression();
+    case NodeKind::IfKeyword:
+      return parseIfExpression();
+    case NodeKind::ReturnKeyword:
+      return parseReturnExpression();
     case NodeKind::IntegerLiteral:
     case NodeKind::StringLiteral:
       Tokens.get();
@@ -936,6 +912,42 @@ after_tuple_elements:
       });
       return nullptr;
   }
+}
+
+BlockExpression* Parser::parseBlockExpression(std::vector<Annotation*> Annotations) {
+  auto DoKeyword = expectToken<class DoKeyword>();
+  if (!DoKeyword) {
+    BOLT_EACH_UNREF(Annotations);
+    return nullptr;
+  }
+  auto BlockStart = expectToken<class BlockStart>();
+  if (!BlockStart) {
+    BOLT_EACH_UNREF(Annotations);
+    DoKeyword->unref();
+    return nullptr;
+  }
+  std::vector<Node*> Elements;
+  for (;;) {
+      auto T2 = Tokens.peek();
+      if (T2->getKind() == NodeKind::BlockEnd) {
+        Tokens.get()->unref();
+        break;
+      }
+      auto Element = parseLetBodyElement();
+      if (Element == nullptr) {
+        BOLT_EACH_UNREF(Annotations);
+        DoKeyword->unref();
+        BlockStart->unref();
+        BOLT_EACH_UNREF(Elements);
+        return nullptr;
+      }
+      Elements.push_back(Element);
+  }
+  return new BlockExpression {
+    DoKeyword,
+    BlockStart,
+    Elements
+  };
 }
 
 Expression* Parser::parseMemberExpression() {
@@ -1068,17 +1080,17 @@ Expression* Parser::parseExpression() {
   return parseInfixOperatorAfterExpression(Left, 0);
 }
 
-ExpressionStatement* Parser::parseExpressionStatement() {
+Expression* Parser::parseExpressionStatement() {
   auto E = parseExpression();
   if (!E) {
     skipPastLineFoldEnd();
     return nullptr;
   }
   checkLineFoldEnd();
-  return new ExpressionStatement(E);
+  return E;
 }
 
-ReturnStatement* Parser::parseReturnStatement() {
+ReturnExpression* Parser::parseReturnExpression() {
   auto Annotations = parseAnnotations();
   auto ReturnKeyword = expectToken<class ReturnKeyword>();
   if (!ReturnKeyword) {
@@ -1094,16 +1106,14 @@ ReturnStatement* Parser::parseReturnStatement() {
     Expression = parseExpression();
     if (!Expression) {
       ReturnKeyword->unref();
-      skipPastLineFoldEnd();
       return nullptr;
     }
-    checkLineFoldEnd();
   }
-  return new ReturnStatement(Annotations, ReturnKeyword, Expression);
+  return new ReturnExpression(Annotations, ReturnKeyword, Expression);
 }
 
-IfStatement* Parser::parseIfStatement() {
-  std::vector<IfStatementPart*> Parts;
+IfExpression* Parser::parseIfExpression() {
+  std::vector<IfExpressionPart*> Parts;
   auto Annotations = parseAnnotations();
   auto IfKeyword = expectToken<class IfKeyword>();
   if (!IfKeyword) {
@@ -1136,7 +1146,7 @@ IfStatement* Parser::parseIfStatement() {
     }
   }
   Tokens.get()->unref(); // Always a LineFoldEnd
-  Parts.push_back(new IfStatementPart(Annotations, IfKeyword, Test, T1, Then));
+  Parts.push_back(new IfExpressionPart(Annotations, IfKeyword, Test, T1, Then));
   for (;;) {
     auto T3 = peekFirstTokenAfterAnnotationsAndModifiers();
     if (T3->getKind() != NodeKind::ElseKeyword && T3->getKind() != NodeKind::ElifKeyword) {
@@ -1168,12 +1178,12 @@ IfStatement* Parser::parseIfStatement() {
       }
     }
     Tokens.get()->unref(); // Always a LineFoldEnd
-    Parts.push_back(new IfStatementPart(Annotations, T3, Test, T4, Alt));
+    Parts.push_back(new IfExpressionPart(Annotations, T3, Test, T4, Alt));
     if (T3->getKind() == NodeKind::ElseKeyword) {
       break;
     }
   }
-  return new IfStatement(Parts);
+  return new IfExpression(Parts);
 }
 
 enum class LetMode {
@@ -1435,7 +1445,7 @@ finish:
         Pub,
         Foreign,
         Let,
-        Name->as<BindPattern>()->Name,
+        cast<BindPattern>(Name)->Name,
         Params,
         TA,
         Body
@@ -1448,10 +1458,6 @@ Node* Parser::parseLetBodyElement() {
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
       return parseLetDeclaration();
-    case NodeKind::ReturnKeyword:
-      return parseReturnStatement();
-    case NodeKind::IfKeyword:
-      return parseIfStatement();
     default:
       return parseExpressionStatement();
   }
@@ -1550,7 +1556,7 @@ InstanceDeclaration* Parser::parseInstanceDeclaration() {
   std::vector<TypeExpression*> TypeExps;
   for (;;) {
     auto T1 = Tokens.peek();
-    if (T1->is<BlockStart>()) {
+    if (isa<BlockStart>(T1)) { 
       break;
     }
     auto TE = parseTypeExpression();
@@ -1578,7 +1584,7 @@ InstanceDeclaration* Parser::parseInstanceDeclaration() {
   std::vector<Node*> Elements;
   for (;;) {
     auto T2 = Tokens.peek();
-    if (T2->is<BlockEnd>()) {
+    if (isa<BlockEnd>(T2)) {
       Tokens.get()->unref();
       break;
     }
@@ -1656,7 +1662,7 @@ ClassDeclaration* Parser::parseClassDeclaration() {
   std::vector<Node*> Elements;
   for (;;) {
     auto T2 = Tokens.peek();
-    if (T2->is<BlockEnd>()) {
+    if (isa<BlockEnd>(T2)) {
       Tokens.get()->unref();
       break;
     }
@@ -1867,8 +1873,6 @@ Node* Parser::parseSourceElement() {
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
       return parseLetDeclaration();
-    case NodeKind::IfKeyword:
-      return parseIfStatement();
     case NodeKind::ClassKeyword:
       return parseClassDeclaration();
     case NodeKind::InstanceKeyword:
@@ -1886,7 +1890,7 @@ SourceFile* Parser::parseSourceFile() {
   std::vector<Node*> Elements;
   for (;;) {
     auto T0 = Tokens.peek();
-    if (T0->is<EndOfFile>()) {
+    if (isa<EndOfFile>(T0)) {
       break;
     }
     auto Element = parseSourceElement();

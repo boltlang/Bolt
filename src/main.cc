@@ -135,12 +135,12 @@ int main(int Argc, const char* Argv[]) {
       std::multimap<std::size_t, unsigned> Expected;
 
       void visitExpressionAnnotation(ExpressionAnnotation* N) {
-        if (N->getExpression()->is<CallExpression>()) {
+        if (isa<CallExpression>(N->getExpression())) {
           auto CE = static_cast<CallExpression*>(N->getExpression());
-          if (CE->Function->is<ReferenceExpression>()) {
+          if (isa<ReferenceExpression>(CE->Function)) {
             auto RE = static_cast<ReferenceExpression*>(CE->Function);
             if (RE->getNameAsString() == "expect_diagnostic") {
-              ZEN_ASSERT(CE->Args.size() == 1 && CE->Args[0]->is<LiteralExpression>());
+              ZEN_ASSERT(CE->Args.size() == 1 && isa<LiteralExpression>(CE->Args[0]));
               Expected.emplace(N->Parent->getStartLine(), static_cast<LiteralExpression*>(CE->Args[0])->getAsInt());
             }
           }

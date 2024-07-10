@@ -7,7 +7,7 @@ namespace bolt {
 TextFile::TextFile(ByteString Path, ByteString Text):
   Path(Path), Text(Text) {
     LineOffsets.push_back(0);
-    for (size_t I = 0; I < Text.size(); I++) {
+    for (std::size_t I = 0; I < Text.size(); I++) {
       auto Chr = Text[I];
       if (Chr == '\n') {
         LineOffsets.push_back(I+1);
@@ -16,16 +16,16 @@ TextFile::TextFile(ByteString Path, ByteString Text):
     LineOffsets.push_back(Text.size());
   }
 
-size_t TextFile::getLineCount() const {
+std::size_t TextFile::getLineCount() const {
   return LineOffsets.size()-1;
 }
 
-size_t TextFile::getStartOffsetOfLine(size_t Line) const {
+std::size_t TextFile::getStartOffsetOfLine(std::size_t Line) const {
   ZEN_ASSERT(Line-1 < LineOffsets.size());
   return LineOffsets[Line-1];
 }
 
-size_t TextFile::getEndOffsetOfLine(size_t Line) const {
+std::size_t TextFile::getEndOffsetOfLine(std::size_t Line) const {
   ZEN_ASSERT(Line <= LineOffsets.size());
   if (Line == LineOffsets.size()) {
     return Text.size();
@@ -33,9 +33,9 @@ size_t TextFile::getEndOffsetOfLine(size_t Line) const {
   return LineOffsets[Line];
 }
 
-size_t TextFile::getLine(size_t Offset) const {
+std::size_t TextFile::getLine(std::size_t Offset) const {
   ZEN_ASSERT(Offset < Text.size());
-  for (size_t I = 0; I < LineOffsets.size(); ++I) {
+  for (std::size_t I = 0; I < LineOffsets.size(); ++I) {
     if (LineOffsets[I] > Offset) {
       return I;
     }
@@ -43,7 +43,7 @@ size_t TextFile::getLine(size_t Offset) const {
   ZEN_UNREACHABLE
 }
 
-size_t TextFile::getColumn(size_t Offset) const {
+std::size_t TextFile::getColumn(std::size_t Offset) const {
   auto Line = getLine(Offset);
   auto StartOffset = getStartOffsetOfLine(Line);
   return Offset - StartOffset + 1 ;
@@ -60,7 +60,7 @@ ByteString TextFile::getText() const {
 const SourceFile* Node::getSourceFile() const {
   const  Node* CurrNode = this;
   for (;;) {
-    if (CurrNode->Kind == NodeKind::SourceFile) {
+    if (CurrNode->K == NodeKind::SourceFile) {
       return static_cast<const SourceFile*>(CurrNode);
     }
     CurrNode = CurrNode->Parent;
@@ -70,7 +70,7 @@ const SourceFile* Node::getSourceFile() const {
 SourceFile* Node::getSourceFile() {
   Node* CurrNode = this;
   for (;;) {
-    if (CurrNode->Kind == NodeKind::SourceFile) {
+    if (CurrNode->K == NodeKind::SourceFile) {
       return static_cast<SourceFile*>(CurrNode);
     }
     CurrNode = CurrNode->Parent;
@@ -508,42 +508,34 @@ Token* PrefixExpression::getLastToken() const {
   return Argument->getLastToken();
 }
 
-Token* ExpressionStatement::getFirstToken() const {
-  return Expression->getFirstToken();
-}
-
-Token* ExpressionStatement::getLastToken() const {
-  return Expression->getLastToken();
-}
-
-Token* ReturnStatement::getFirstToken() const {
+Token* ReturnExpression::getFirstToken() const {
   return ReturnKeyword;
 }
 
-Token* ReturnStatement::getLastToken() const {
+Token* ReturnExpression::getLastToken() const {
   if (E) {
     return E->getLastToken();
   }
   return ReturnKeyword;
 }
 
-Token* IfStatementPart::getFirstToken() const {
+Token* IfExpressionPart::getFirstToken() const {
   return Keyword;
 }
 
-Token* IfStatementPart::getLastToken() const {
+Token* IfExpressionPart::getLastToken() const {
   if (Elements.size()) {
     return Elements.back()->getLastToken();
   }
   return BlockStart;
 }
 
-Token* IfStatement::getFirstToken() const {
+Token* IfExpression::getFirstToken() const {
   ZEN_ASSERT(Parts.size());
   return Parts.front()->getFirstToken();
 }
 
-Token* IfStatement::getLastToken() const {
+Token* IfExpression::getLastToken() const {
   ZEN_ASSERT(Parts.size());
   return Parts.back()->getLastToken();
 }
@@ -1049,7 +1041,7 @@ SymbolPath ReferenceExpression::getSymbolPath() const {
   return SymbolPath { ModuleNames, Name.getCanonicalText() };
 }
 
-bool TypedNode::classof(Node* N) {
+bool TypedNode::classof(const Node* N) {
   return Expression::classof(N)
       || TypeExpression::classof(N)
       || FunctionDeclaration::classof(N)
