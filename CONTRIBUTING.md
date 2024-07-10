@@ -20,7 +20,7 @@ You need the most recent version of the Zen libries to be able to compile. If
 you still get build errors, the Zen libraries in the repositories might be out
 of date. Do not hesitate to file an issue!
 
-2. Configure the build using CMake
+### 2. Configure the build using CMake
 
 This is how a potential invocation to CMake could look like:
 
@@ -37,7 +37,7 @@ cmake \
     -DLLVM_OPTIMIZED_TABLEGEN=ON
 ```
 
-3. Build the compiler
+### 3. Build the compiler
 
 Issue the following command while being in the root folder of the project:
 
@@ -45,7 +45,7 @@ Issue the following command while being in the root folder of the project:
 ninja -C build bolt
 ```
 
-4. Run the compiler
+### 4. Run the compiler
 
 The compiler is not available in `build/bolt`. You can run it like so:
 
