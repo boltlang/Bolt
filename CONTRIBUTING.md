@@ -5,15 +5,7 @@ great! We're so glad to have you!
 
 ## Preliminary Knowledge
 
-### Type Checking
-
-Here are some resouces to get started with type checking, ordered from high-level overview to deep dive:
-
-- [Hindley-Milner Type System](https://en.wikipedia.org/wiki/Hindley%E2%80%93Milner_type_system)
-- [Write You A Haskell](https://smunix.github.io/dev.stephendiehl.com/fun/index.html), most notably [this implemenation](https://github.com/sdiehl/write-you-a-haskell/tree/master/chapter7/poly_constraints)
-- [Type Inference blog posts by Thunderseethe](https://thunderseethe.dev/posts/type-inference/)
-- [Typing Haskell in Haskell](https://gist.github.com/chrisdone/0075a16b32bfd4f62b7b)
-- [The Essence of ML Type Inference](http://gallium.inria.fr/~fpottier/publis/emlti-final.pdf)
+It is recommended you know a thing or two about compilers.
 
 ## Building
 
@@ -27,6 +19,8 @@ git clone https://github.com/samvv/zen bolt/deps/zen
 You need the most recent version of the Zen libries to be able to compile. If
 you still get build errors, the Zen libraries in the repositories might be out
 of date. Do not hesitate to file an issue!
+
+2. Configure the build using CMake
 
 This is how a potential invocation to CMake could look like:
 
@@ -42,3 +36,21 @@ cmake \
     -DLLVM_TARGETS_TO_BUILD=host \
     -DLLVM_OPTIMIZED_TABLEGEN=ON
 ```
+
+3. Build the compiler
+
+Issue the following command while being in the root folder of the project:
+
+```sh
+ninja -C build bolt
+```
+
+4. Run the compiler
+
+The compiler is not available in `build/bolt`. You can run it like so:
+
+```sh
+./build/bolt test.bolt
+```
+
+That's it! You've succesfully compiled some sources with Bolt!
