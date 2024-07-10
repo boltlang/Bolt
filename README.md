@@ -84,8 +84,8 @@ let app : Html.
   let user = perform get_state
 
   return match user.
-    None => do.
-        Future.when_done (fetch "/api/login") \data -> do.
+    None => do
+        Future.when_done (fetch "/api/login") \data -> do
           perform set_state data
         h1 [ "Please log in." ]
     Some { name, .. } => h1 [ f"Welcome Back, {fullname}" ]
