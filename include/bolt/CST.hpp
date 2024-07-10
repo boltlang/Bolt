@@ -118,6 +118,7 @@ enum class NodeKind {
   ElifKeyword,
   ElseKeyword,
   EnumKeyword,
+  FnKeyword,
   ForeignKeyword,
   IfKeyword,
   InstanceKeyword,
@@ -683,6 +684,18 @@ public:
   std::string getText() const override;
 
   static constexpr const NodeKind Kind = NodeKind::EnumKeyword;
+
+};
+
+class FnKeyword : public Token {
+public:
+
+  inline FnKeyword(TextLoc StartLoc):
+    Token(NodeKind::FnKeyword, StartLoc) {}
+
+  std::string getText() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::FnKeyword;
 
 };
 
@@ -2424,7 +2437,7 @@ public:
 
   class PubKeyword* PubKeyword;
   class ForeignKeyword* ForeignKeyword;
-  class LetKeyword* LetKeyword;
+  class FnKeyword* FnKeyword;
   class Operator Name;
   Parameter* Param;
   class TypeAssert* TypeAssert;
@@ -2434,7 +2447,7 @@ public:
     class std::vector<Annotation*> Annotations,
     class PubKeyword* PubKeyword,
     class ForeignKeyword* ForeignKeyword,
-    class LetKeyword* LetKeyword,
+    class FnKeyword* FnKeyword,
     Operator Name,
     Parameter* Param,
     class TypeAssert* TypeAssert,
@@ -2442,7 +2455,7 @@ public:
   ): FunctionDeclaration(NodeKind::PrefixFunctionDeclaration, Annotations),
      PubKeyword(PubKeyword),
      ForeignKeyword(ForeignKeyword),
-     LetKeyword(LetKeyword),
+     FnKeyword(FnKeyword),
      Name(Name),
      Param(Param),
      TypeAssert(TypeAssert),
@@ -2484,7 +2497,7 @@ public:
 
   class PubKeyword* PubKeyword;
   class ForeignKeyword* ForeignKeyword;
-  class LetKeyword* LetKeyword;
+  class FnKeyword* FnKeyword;
   Parameter* Param;
   class Operator Name;
   class TypeAssert* TypeAssert;
@@ -2494,7 +2507,7 @@ public:
     class std::vector<Annotation*> Annotations,
     class PubKeyword* PubKeyword,
     class ForeignKeyword* ForeignKeyword,
-    class LetKeyword* LetKeyword,
+    class FnKeyword* FnKeyword,
     Parameter* Param,
     Operator Name,
     class TypeAssert* TypeAssert,
@@ -2502,7 +2515,7 @@ public:
   ): FunctionDeclaration(NodeKind::SuffixFunctionDeclaration, Annotations),
      PubKeyword(PubKeyword),
      ForeignKeyword(ForeignKeyword),
-     LetKeyword(LetKeyword),
+     FnKeyword(FnKeyword),
      Name(Name),
      Param(Param),
      TypeAssert(TypeAssert),
@@ -2544,7 +2557,7 @@ public:
 
   class PubKeyword* PubKeyword;
   class ForeignKeyword* ForeignKeyword;
-  class LetKeyword* LetKeyword;
+  class FnKeyword* FnKeyword;
   Parameter* Left;
   class Operator Name;
   Parameter* Right;
@@ -2555,7 +2568,7 @@ public:
     class std::vector<Annotation*> Annotations,
     class PubKeyword* PubKeyword,
     class ForeignKeyword* ForeignKeyword,
-    class LetKeyword* LetKeyword,
+    class FnKeyword* FnKeyword,
     Parameter* Left,
     class Operator Name,
     Parameter* Right,
@@ -2564,7 +2577,7 @@ public:
   ): FunctionDeclaration(NodeKind::InfixFunctionDeclaration, Annotations),
      PubKeyword(PubKeyword),
      ForeignKeyword(ForeignKeyword),
-     LetKeyword(LetKeyword),
+     FnKeyword(FnKeyword),
      Left(Left),
      Name(Name),
      Right(Right),
@@ -2607,7 +2620,7 @@ public:
 
   class PubKeyword* PubKeyword;
   class ForeignKeyword* ForeignKeyword;
-  class LetKeyword* LetKeyword;
+  class FnKeyword* FnKeyword;
   class Symbol Name;
   std::vector<Parameter*> Params;
   class TypeAssert* TypeAssert;
@@ -2617,7 +2630,7 @@ public:
     class std::vector<Annotation*> Annotations,
     class PubKeyword* PubKeyword,
     class ForeignKeyword* ForeignKeyword,
-    class LetKeyword* LetKeyword,
+    class FnKeyword* FnKeyword,
     class Symbol Name,
     std::vector<Parameter*> Params,
     class TypeAssert* TypeAssert,
@@ -2625,7 +2638,7 @@ public:
   ): FunctionDeclaration(NodeKind::NamedFunctionDeclaration, Annotations),
      PubKeyword(PubKeyword),
      ForeignKeyword(ForeignKeyword),
-     LetKeyword(LetKeyword),
+     FnKeyword(FnKeyword),
      Name(Name),
      Params(Params),
      TypeAssert(TypeAssert),
@@ -2665,18 +2678,15 @@ class VariableDeclaration : public Declaration {
 public:
 
   class PubKeyword* PubKeyword;
-  class ForeignKeyword* ForeignKeyword;
   class LetKeyword* LetKeyword;
   class MutKeyword* MutKeyword;
   class Pattern* Pattern;
-  std::vector<Parameter*> Params;
   class TypeAssert* TypeAssert;
   LetBody* Body;
 
   VariableDeclaration(
     class std::vector<Annotation*> Annotations,
     class PubKeyword* PubKeyword,
-    class ForeignKeyword* ForeignKeyword,
     class LetKeyword* LetKeyword,
     class MutKeyword* MutKeyword,
     class Pattern* Pattern,
@@ -2684,7 +2694,6 @@ public:
     LetBody* Body
   ): Declaration(NodeKind::VariableDeclaration, Annotations),
      PubKeyword(PubKeyword),
-     ForeignKeyword(ForeignKeyword),
      LetKeyword(LetKeyword),
      MutKeyword(MutKeyword),
      Pattern(Pattern),

@@ -585,7 +585,7 @@ Token* PrefixFunctionDeclaration::getFirstToken() const {
   if (ForeignKeyword) {
     return ForeignKeyword;
   }
-  return LetKeyword;
+  return FnKeyword;
 }
 
 Token* PrefixFunctionDeclaration::getLastToken() const {
@@ -605,7 +605,7 @@ Token* InfixFunctionDeclaration::getFirstToken() const {
   if (ForeignKeyword) {
     return ForeignKeyword;
   }
-  return LetKeyword;
+  return FnKeyword;
 }
 
 Token* InfixFunctionDeclaration::getLastToken() const {
@@ -625,7 +625,7 @@ Token* SuffixFunctionDeclaration::getFirstToken() const {
   if (ForeignKeyword) {
     return ForeignKeyword;
   }
-  return LetKeyword;
+  return FnKeyword;
 }
 
 Token* SuffixFunctionDeclaration::getLastToken() const {
@@ -645,7 +645,7 @@ Token* NamedFunctionDeclaration::getFirstToken() const {
   if (ForeignKeyword) {
     return ForeignKeyword;
   }
-  return LetKeyword;
+  return FnKeyword;
 }
 
 Token* NamedFunctionDeclaration::getLastToken() const {
@@ -664,9 +664,6 @@ Token* NamedFunctionDeclaration::getLastToken() const {
 Token* VariableDeclaration::getFirstToken() const {
   if (PubKeyword) {
     return PubKeyword;
-  }
-  if (ForeignKeyword) {
-    return ForeignKeyword;
   }
   return LetKeyword;
 }
@@ -880,6 +877,10 @@ std::string StructKeyword::getText() const {
 
 std::string EnumKeyword::getText() const {
   return "enum";
+}
+
+std::string FnKeyword::getText() const {
+  return "fn";
 }
 
 std::string Invalid::getText() const {

@@ -125,7 +125,8 @@ public:
 
   Node* parseLetBodyElement();
 
-  Node* parseLetDeclaration();
+  FunctionDeclaration* parseFunctionDeclaration();
+  VariableDeclaration* parseVariableDeclaration();
 
   Node* parseClassElement();
 

@@ -123,7 +123,7 @@ public:
 
   ConstraintSet inferFunctionDeclaration(TypeEnv& Env, FunctionDeclaration* D);
 
-  ConstraintSet inferVariableDeclaration(TypeEnv& Env, VariableDeclaration* Decl);
+  ConstraintSet inferVariableDeclaration(TypeEnv& Env, VariableDeclaration* Decl, Type* RetTy);
 
   ConstraintSet inferMany(TypeEnv& Env, std::vector<Node*>& N, Type* RetTy);
 

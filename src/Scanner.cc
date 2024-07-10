@@ -69,6 +69,7 @@ std::unordered_map<ByteString, NodeKind> Keywords = {
   { "elif", NodeKind::ElifKeyword },
   { "else", NodeKind::ElseKeyword },
   { "enum", NodeKind::EnumKeyword },
+  { "fn", NodeKind::FnKeyword },
   { "foreign", NodeKind::ForeignKeyword },
   { "if", NodeKind::IfKeyword },
   { "instance", NodeKind::InstanceKeyword },
@@ -293,6 +294,8 @@ digit_finish:
             return new EnumKeyword(StartLoc);
           case NodeKind::DoKeyword:
               return new DoKeyword(StartLoc);
+          case NodeKind::FnKeyword:
+              return new FnKeyword(StartLoc);
           default:
             ZEN_UNREACHABLE
         }

@@ -1186,21 +1186,20 @@ IfExpression* Parser::parseIfExpression() {
   return new IfExpression(Parts);
 }
 
-enum class LetMode {
+enum class FnMode {
   Prefix,
   Infix,
   Suffix,
   Wrapped,
-  VarOrNamed,
+  Named,
 };
 
-Node* Parser::parseLetDeclaration() {
+FunctionDeclaration* Parser::parseFunctionDeclaration() {
 
   auto Annotations = parseAnnotations();
   PubKeyword* Pub = nullptr;
   ForeignKeyword* Foreign = nullptr;
-  LetKeyword* Let;
-  MutKeyword* Mut = nullptr;
+  FnKeyword* Fn;
   Operator Op;
   Symbol Sym;
   Pattern* Name;
@@ -1210,7 +1209,7 @@ Node* Parser::parseLetDeclaration() {
   std::vector<Parameter*> Params;
   TypeAssert* TA = nullptr;
   LetBody* Body = nullptr;
-  LetMode Mode;
+  FnMode Mode;
 
   auto T0 = Tokens.get();
   if (T0->getKind() == NodeKind::PubKeyword) {
@@ -1221,8 +1220,8 @@ Node* Parser::parseLetDeclaration() {
     Foreign = static_cast<ForeignKeyword*>(T0);
     T0 = Tokens.get();
   }
-  if (T0->getKind() != NodeKind::LetKeyword) {
-    DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::LetKeyword });
+  if (T0->getKind() != NodeKind::FnKeyword) {
+    DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::FnKeyword });
     if (Pub) {
       Pub->unref();
     }
@@ -1232,12 +1231,7 @@ Node* Parser::parseLetDeclaration() {
     skipPastLineFoldEnd();
     return nullptr;
   }
-  Let = static_cast<LetKeyword*>(T0);
-  auto T1 = Tokens.peek();
-  if (T1->getKind() == NodeKind::MutKeyword) {
-    Tokens.get();
-    Mut = static_cast<MutKeyword*>(T1);
-  }
+  Fn = static_cast<FnKeyword*>(T0);
 
   auto T2 = Tokens.peek(0);
   auto T3 = Tokens.peek(1);
@@ -1248,7 +1242,7 @@ Node* Parser::parseLetDeclaration() {
     auto P1 = parseNarrowPattern();
     Param = new Parameter(P1, nullptr);
     Op = Operator::from_raw_node(T2);
-    Mode = LetMode::Prefix;
+    Mode = FnMode::Prefix;
     goto after_params;
   } else if (isa<Operator>(T3) && (T4->getKind() == NodeKind::Colon || T4->getKind() == NodeKind::Equals || T4->getKind() == NodeKind::BlockStart || T4->getKind() == NodeKind::LineFoldEnd)) {
     // Sufffix function declaration
@@ -1256,7 +1250,7 @@ Node* Parser::parseLetDeclaration() {
     Param = new Parameter(P1, nullptr);
     Tokens.get();
     Op = Operator::from_raw_node(T3);
-    Mode = LetMode::Suffix;
+    Mode = FnMode::Suffix;
     goto after_params;
   } else if (T2->getKind() == NodeKind::LParen && isa<Operator>(T3) && T4->getKind() == NodeKind::RParen) {
     // Wrapped operator function declaration
@@ -1268,7 +1262,7 @@ Node* Parser::parseLetDeclaration() {
       Operator::from_raw_node(T3),
       static_cast<class RParen*>(T3)
     );
-    Mode = LetMode::Wrapped;
+    Mode = FnMode::Wrapped;
   } else if (isa<Operator>(T3)) {
     // Infix function declaration
     auto P1 = parseNarrowPattern();
@@ -1277,11 +1271,11 @@ Node* Parser::parseLetDeclaration() {
     auto P2 = parseNarrowPattern();
     Right = new Parameter(P2, nullptr);
     Op = Operator::from_raw_node(T3);
-    Mode = LetMode::Infix;
+    Mode = FnMode::Infix;
     goto after_params;
   } else {
     // Variable declaration or named function declaration
-    Mode = LetMode::VarOrNamed;
+    Mode = FnMode::Named;
     Name = parseNarrowPattern();
     if (!Name) {
       if (Pub) {
@@ -1290,10 +1284,7 @@ Node* Parser::parseLetDeclaration() {
       if (Foreign) {
         Foreign->unref();
       }
-      Let->unref();
-      if (Mut) {
-        Mut->unref();
-      }
+      Fn->unref();
       skipPastLineFoldEnd();
       return nullptr;
     }
@@ -1381,70 +1372,57 @@ after_params:
 finish:
 
   switch (Mode) {
-    case LetMode::Prefix:
+    case FnMode::Prefix:
       return new PrefixFunctionDeclaration(
         Annotations,
         Pub,
         Foreign,
-        Let,
+        Fn,
         Op,
         Param,
         TA,
         Body
       );
-    case LetMode::Suffix:
+    case FnMode::Suffix:
       return new SuffixFunctionDeclaration(
         Annotations,
         Pub,
         Foreign,
-        Let,
+        Fn,
         Param,
         Op,
         TA,
         Body
       );
-    case LetMode::Infix:
+    case FnMode::Infix:
       return new InfixFunctionDeclaration(
         Annotations,
         Pub,
         Foreign,
-        Let,
+        Fn,
         Left,
         Op,
         Right,
         TA,
         Body
       );
-    case LetMode::Wrapped:
+    case FnMode::Wrapped:
       return new NamedFunctionDeclaration(
         Annotations,
         Pub,
         Foreign,
-        Let,
+        Fn,
         Sym,
         Params,
         TA,
         Body
       );
-    case LetMode::VarOrNamed:
-      if (Name->getKind() != NodeKind::BindPattern || Mut) {
-        // TODO assert Params is empty
-        return new VariableDeclaration(
-          Annotations,
-          Pub,
-          Foreign,
-          Let,
-          Mut,
-          Name,
-          TA,
-          Body
-        );
-      }
+    case FnMode::Named:
       return new NamedFunctionDeclaration(
         Annotations,
         Pub,
         Foreign,
-        Let,
+        Fn,
         cast<BindPattern>(Name)->Name,
         Params,
         TA,
@@ -1453,11 +1431,134 @@ finish:
   }
 }
 
+
+VariableDeclaration* Parser::parseVariableDeclaration() {
+
+  auto Annotations = parseAnnotations();
+  PubKeyword* Pub = nullptr;
+  LetKeyword* Let;
+  MutKeyword* Mut = nullptr;
+  Operator Op;
+  Symbol Sym;
+  Pattern* Name;
+  TypeAssert* TA = nullptr;
+  LetBody* Body = nullptr;
+
+  auto T0 = Tokens.get();
+  if (T0->getKind() == NodeKind::PubKeyword) {
+    Pub = static_cast<PubKeyword*>(T0);
+    T0 = Tokens.get();
+  }
+  if (T0->getKind() != NodeKind::LetKeyword) {
+    DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::LetKeyword });
+    if (Pub) {
+      Pub->unref();
+    }
+    skipPastLineFoldEnd();
+    return nullptr;
+  }
+  Let = static_cast<LetKeyword*>(T0);
+  auto T1 = Tokens.peek();
+  if (T1->getKind() == NodeKind::MutKeyword) {
+    Tokens.get();
+    Mut = static_cast<MutKeyword*>(T1);
+  }
+
+  auto T2 = Tokens.peek(0);
+  auto T3 = Tokens.peek(1);
+  auto T4 = Tokens.peek(2);
+  Name = parseNarrowPattern();
+  if (!Name) {
+    if (Pub) {
+      Pub->unref();
+    }
+    Let->unref();
+    if (Mut) {
+      Mut->unref();
+    }
+    skipPastLineFoldEnd();
+    return nullptr;
+  }
+
+  auto T5 = Tokens.peek();
+
+  if (T5->getKind() == NodeKind::Colon) {
+    Tokens.get();
+    auto TE = parseTypeExpression();
+    if (TE) {
+      TA = new TypeAssert(static_cast<Colon*>(T5), TE);
+    } else {
+      skipPastLineFoldEnd();
+      goto finish;
+    }
+    T5 = Tokens.peek();
+  }
+
+  switch (T5->getKind()) {
+    case NodeKind::BlockStart:
+    {
+      Tokens.get();
+      std::vector<Node*> Elements;
+      for (;;) {
+        auto T6 = Tokens.peek();
+        if (T6->getKind() == NodeKind::BlockEnd) {
+          break;
+        }
+        auto Element = parseLetBodyElement();
+        if (Element) {
+          Elements.push_back(Element);
+        }
+      }
+      Tokens.get()->unref(); // Always a BlockEnd
+      Body = new LetBlockBody(static_cast<BlockStart*>(T5), Elements);
+      break;
+    }
+    case NodeKind::Equals:
+    {
+      Tokens.get();
+      auto E = parseExpression();
+      if (!E) {
+        skipPastLineFoldEnd();
+        goto finish;
+      }
+      Body = new LetExprBody(static_cast<Equals*>(T5), E);
+      break;
+    }
+    case NodeKind::LineFoldEnd:
+      break;
+    default:
+      std::vector<NodeKind> Expected { NodeKind::BlockStart, NodeKind::LineFoldEnd, NodeKind::Equals };
+      if (TA == nullptr) {
+        // First tokens of TypeAssert
+        Expected.push_back(NodeKind::Colon);
+        // First tokens of Pattern
+        Expected.push_back(NodeKind::Identifier);
+      }
+      DE.add<UnexpectedTokenDiagnostic>(File, T5, Expected);
+  }
+
+  checkLineFoldEnd();
+
+finish:
+
+  return new VariableDeclaration(
+    Annotations,
+    Pub,
+    Let,
+    Mut,
+    Name,
+    TA,
+    Body
+  );
+}
+
 Node* Parser::parseLetBodyElement() {
   auto T0 = peekFirstTokenAfterAnnotationsAndModifiers();
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
-      return parseLetDeclaration();
+      return parseVariableDeclaration();
+    case NodeKind::FnKeyword:
+        return parseFunctionDeclaration();
     default:
       return parseExpressionStatement();
   }
@@ -1858,7 +1959,7 @@ Node* Parser::parseClassElement() {
   auto T0 = Tokens.peek();
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
-      return parseLetDeclaration();
+      return parseVariableDeclaration();
     case NodeKind::TypeKeyword:
       // TODO
     default:
@@ -1872,7 +1973,9 @@ Node* Parser::parseSourceElement() {
   auto T0 = peekFirstTokenAfterAnnotationsAndModifiers();
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
-      return parseLetDeclaration();
+      return parseVariableDeclaration();
+    case NodeKind::FnKeyword:
+        return parseFunctionDeclaration();
     case NodeKind::ClassKeyword:
       return parseClassDeclaration();
     case NodeKind::InstanceKeyword:

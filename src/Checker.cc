@@ -305,9 +305,33 @@ ConstraintSet Checker::inferFunctionDeclaration(TypeEnv& Env, FunctionDeclaratio
   return Out;
 }
 
-ConstraintSet Checker::inferVariableDeclaration(TypeEnv& Env, VariableDeclaration* Decl) {
+ConstraintSet Checker::inferVariableDeclaration(TypeEnv& Env, VariableDeclaration* Decl, Type* RetTy) {
+
   ConstraintSet Out;
-  // TODO
+
+  Type* Ty = nullptr;
+
+  if (Decl->TypeAssert != nullptr) {
+    auto [AssertOut, AssertTy] = inferTypeExpr(Env, Decl->TypeAssert->TypeExpression);
+    mergeTo(Out, AssertOut);
+    Ty = AssertTy;
+  }
+
+  if (Decl->Body != nullptr) {
+    // TODO elminate BlockBody and replace with BlockExpr
+    ZEN_ASSERT(Decl->Body->getKind() == NodeKind::LetExprBody);
+    auto [BodyOut, BodyTy] = inferExpr(Env, cast<LetExprBody>(Decl->Body)->Expression, RetTy);
+    mergeTo(Out, BodyOut);
+    if (Ty == nullptr) {
+      Ty = BodyTy;
+    } else {
+      Out.push_back(new CTypesEqual(Ty, BodyTy, Decl->Body));
+    }
+  }
+
+  // Currently we don't perform generalisation on variable declarations
+  Env.add(Decl->getNameAsString(), Ty, SymbolKind::Var);
+
   return Out;
 }
 
@@ -415,7 +439,7 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
       if (isa<FunctionDeclaration>(N)) {
         mergeTo(Out, inferFunctionDeclaration(Env, static_cast<FunctionDeclaration*>(N)));
       } else if (isa<VariableDeclaration>(N)) {
-        mergeTo(Out, inferVariableDeclaration(Env, static_cast<VariableDeclaration*>(N)));
+        mergeTo(Out, inferVariableDeclaration(Env, static_cast<VariableDeclaration*>(N), RetTy));
       } else {
         ZEN_UNREACHABLE
       }

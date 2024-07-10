@@ -46,6 +46,7 @@ public:
       BOLT_GEN_CASE(ModKeyword)
       BOLT_GEN_CASE(StructKeyword)
       BOLT_GEN_CASE(EnumKeyword)
+      BOLT_GEN_CASE(FnKeyword)
       BOLT_GEN_CASE(ClassKeyword)
       BOLT_GEN_CASE(InstanceKeyword)
       BOLT_GEN_CASE(ElifKeyword)
@@ -262,6 +263,10 @@ protected:
   }
 
   void visitEnumKeyword(EnumKeyword* N) {
+    static_cast<D*>(this)->visitToken(N);
+  }
+
+  void visitFnKeyword(FnKeyword* N) {
     static_cast<D*>(this)->visitToken(N);
   }
 
@@ -595,7 +600,7 @@ public:
 
 #define BOLT_GEN_CHILD_CASE(name) \
     case NodeKind::name: \
-      visitEachChild(static_cast<name*>(N)); \
+      visitEachChildImpl(static_cast<name*>(N)); \
       break;
 
     switch (N->getKind()) {
@@ -625,6 +630,7 @@ public:
       BOLT_GEN_CHILD_CASE(ModKeyword)
       BOLT_GEN_CHILD_CASE(StructKeyword)
       BOLT_GEN_CHILD_CASE(EnumKeyword)
+      BOLT_GEN_CHILD_CASE(FnKeyword)
       BOLT_GEN_CHILD_CASE(ClassKeyword)
       BOLT_GEN_CHILD_CASE(InstanceKeyword)
       BOLT_GEN_CHILD_CASE(ElifKeyword)
@@ -701,172 +707,175 @@ public:
     }
   }
 
-  void visitEachChild(VBar* N) {
+  void visitEachChildImpl(VBar* N) {
   }
 
-  void visitEachChild(Equals* N) {
+  void visitEachChildImpl(Equals* N) {
   }
 
-  void visitEachChild(Colon* N) {
+  void visitEachChildImpl(Colon* N) {
   }
 
-  void visitEachChild(Comma* N) {
+  void visitEachChildImpl(Comma* N) {
   }
 
-  void visitEachChild(Dot* N) {
+  void visitEachChildImpl(Dot* N) {
   }
 
-  void visitEachChild(DotDot* N) {
+  void visitEachChildImpl(DotDot* N) {
   }
 
-  void visitEachChild(Tilde* N) {
+  void visitEachChildImpl(Tilde* N) {
   }
 
-  void visitEachChild(At* N) {
+  void visitEachChildImpl(At* N) {
   }
 
-  void visitEachChild(DoKeyword* N) {
+  void visitEachChildImpl(DoKeyword* N) {
   }
 
-  void visitEachChild(LParen* N) {
+  void visitEachChildImpl(LParen* N) {
   }
 
-  void visitEachChild(RParen* N) {
+  void visitEachChildImpl(RParen* N) {
   }
 
-  void visitEachChild(LBracket* N) {
+  void visitEachChildImpl(LBracket* N) {
   }
 
-  void visitEachChild(RBracket* N) {
+  void visitEachChildImpl(RBracket* N) {
   }
 
-  void visitEachChild(LBrace* N) {
+  void visitEachChildImpl(LBrace* N) {
   }
 
-  void visitEachChild(RBrace* N) {
+  void visitEachChildImpl(RBrace* N) {
   }
 
-  void visitEachChild(RArrow* N) {
+  void visitEachChildImpl(RArrow* N) {
   }
 
-  void visitEachChild(RArrowAlt* N) {
+  void visitEachChildImpl(RArrowAlt* N) {
   }
 
-  void visitEachChild(LetKeyword* N) {
+  void visitEachChildImpl(LetKeyword* N) {
   }
 
-  void visitEachChild(ForeignKeyword* N) {
+  void visitEachChildImpl(ForeignKeyword* N) {
   }
 
-  void visitEachChild(MutKeyword* N) {
+  void visitEachChildImpl(MutKeyword* N) {
   }
 
-  void visitEachChild(PubKeyword* N) {
+  void visitEachChildImpl(PubKeyword* N) {
   }
 
-  void visitEachChild(TypeKeyword* N) {
+  void visitEachChildImpl(TypeKeyword* N) {
   }
 
-  void visitEachChild(ReturnKeyword* N) {
+  void visitEachChildImpl(ReturnKeyword* N) {
   }
 
-  void visitEachChild(ModKeyword* N) {
+  void visitEachChildImpl(ModKeyword* N) {
   }
 
-  void visitEachChild(StructKeyword* N) {
+  void visitEachChildImpl(StructKeyword* N) {
   }
 
-  void visitEachChild(EnumKeyword* N) {
+  void visitEachChildImpl(EnumKeyword* N) {
   }
 
-  void visitEachChild(ClassKeyword* N) {
+  void visitEachChildImpl(FnKeyword* N) {
   }
 
-  void visitEachChild(InstanceKeyword* N) {
+  void visitEachChildImpl(ClassKeyword* N) {
   }
 
-  void visitEachChild(ElifKeyword* N) {
+  void visitEachChildImpl(InstanceKeyword* N) {
   }
 
-  void visitEachChild(IfKeyword* N) {
+  void visitEachChildImpl(ElifKeyword* N) {
   }
 
-  void visitEachChild(ElseKeyword* N) {
+  void visitEachChildImpl(IfKeyword* N) {
   }
 
-  void visitEachChild(MatchKeyword* N) {
+  void visitEachChildImpl(ElseKeyword* N) {
   }
 
-  void visitEachChild(Invalid* N) {
+  void visitEachChildImpl(MatchKeyword* N) {
   }
 
-  void visitEachChild(EndOfFile* N) {
+  void visitEachChildImpl(Invalid* N) {
   }
 
-  void visitEachChild(BlockStart* N) {
+  void visitEachChildImpl(EndOfFile* N) {
   }
 
-  void visitEachChild(BlockEnd* N) {
+  void visitEachChildImpl(BlockStart* N) {
   }
 
-  void visitEachChild(LineFoldEnd* N) {
+  void visitEachChildImpl(BlockEnd* N) {
   }
 
-  void visitEachChild(CustomOperator* N) {
+  void visitEachChildImpl(LineFoldEnd* N) {
   }
 
-  void visitEachChild(Assignment* N) {
+  void visitEachChildImpl(CustomOperator* N) {
   }
 
-  void visitEachChild(Identifier* N) {
+  void visitEachChildImpl(Assignment* N) {
   }
 
-  void visitEachChild(IdentifierAlt* N) {
+  void visitEachChildImpl(Identifier* N) {
   }
 
-  void visitEachChild(StringLiteral* N) {
+  void visitEachChildImpl(IdentifierAlt* N) {
   }
 
-  void visitEachChild(IntegerLiteral* N) {
+  void visitEachChildImpl(StringLiteral* N) {
   }
 
-  void visitEachChild(WrappedOperator* N) {
+  void visitEachChildImpl(IntegerLiteral* N) {
+  }
+
+  void visitEachChildImpl(WrappedOperator* N) {
     BOLT_VISIT(N->LParen);
     BOLT_VISIT_OPERATOR(N->Op);
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(ExpressionAnnotation* N) {
+  void visitEachChildImpl(ExpressionAnnotation* N) {
     BOLT_VISIT(N->At);
     BOLT_VISIT(N->Expression);
   }
 
-  void visitEachChild(TypeAssertAnnotation* N) {
+  void visitEachChildImpl(TypeAssertAnnotation* N) {
     BOLT_VISIT(N->At);
     BOLT_VISIT(N->Colon);
     BOLT_VISIT(N->TE);
   }
 
-  void visitEachChild(TypeclassConstraintExpression* N) {
+  void visitEachChildImpl(TypeclassConstraintExpression* N) {
     BOLT_VISIT(N->Name);
     for (auto TE: N->TEs) {
       BOLT_VISIT(TE);
     }
   }
 
-  void visitEachChild(EqualityConstraintExpression* N) {
+  void visitEachChildImpl(EqualityConstraintExpression* N) {
     BOLT_VISIT(N->Left);
     BOLT_VISIT(N->Tilde);
     BOLT_VISIT(N->Right);
   }
 
-  void visitEachChild(RecordTypeExpressionField* N) {
+  void visitEachChildImpl(RecordTypeExpressionField* N) {
     BOLT_VISIT(N->Name);
     BOLT_VISIT(N->Colon);
     BOLT_VISIT(N->TE);
   }
 
-  void visitEachChild(RecordTypeExpression* N) {
+  void visitEachChildImpl(RecordTypeExpression* N) {
     BOLT_VISIT(N->LBrace);
     for (auto [Field, Comma]: N->Fields) {
       BOLT_VISIT(Field);
@@ -883,7 +892,7 @@ public:
     BOLT_VISIT(N->RBrace);
   }
 
-  void visitEachChild(QualifiedTypeExpression* N) {
+  void visitEachChildImpl(QualifiedTypeExpression* N) {
     for (auto [CE, Comma]: N->Constraints) {
       BOLT_VISIT(CE);
       if (Comma) {
@@ -894,7 +903,7 @@ public:
     BOLT_VISIT(N->TE);
   }
 
-  void visitEachChild(ReferenceTypeExpression* N) {
+  void visitEachChildImpl(ReferenceTypeExpression* N) {
     for (auto [Name, Dot]: N->ModulePath) {
       BOLT_VISIT(Name);
       BOLT_VISIT(Dot);
@@ -902,31 +911,31 @@ public:
     BOLT_VISIT(N->Name);
   }
 
-  void visitEachChild(ArrowTypeExpression* N) {
+  void visitEachChildImpl(ArrowTypeExpression* N) {
     for (auto PT: N->ParamTypes) {
       BOLT_VISIT(PT);
     }
     BOLT_VISIT(N->ReturnType);
   }
 
-  void visitEachChild(AppTypeExpression* N) {
+  void visitEachChildImpl(AppTypeExpression* N) {
     BOLT_VISIT(N->Op);
     for (auto Arg: N->Args) {
       BOLT_VISIT(Arg);
     }
   }
 
-  void visitEachChild(VarTypeExpression* N) {
+  void visitEachChildImpl(VarTypeExpression* N) {
     BOLT_VISIT(N->Name);
   }
 
-  void visitEachChild(NestedTypeExpression* N) {
+  void visitEachChildImpl(NestedTypeExpression* N) {
     BOLT_VISIT(N->LParen);
     BOLT_VISIT(N->TE);
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(TupleTypeExpression* N) {
+  void visitEachChildImpl(TupleTypeExpression* N) {
     BOLT_VISIT(N->LParen);
     for (auto [TE, Comma]: N->Elements) {
       if (Comma) {
@@ -937,15 +946,15 @@ public:
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(BindPattern* N) {
+  void visitEachChildImpl(BindPattern* N) {
     BOLT_VISIT(N->Name);
   }
 
-  void visitEachChild(LiteralPattern* N) {
+  void visitEachChildImpl(LiteralPattern* N) {
     BOLT_VISIT(N->Literal);
   }
 
-  void visitEachChild(RecordPatternField* N) {
+  void visitEachChildImpl(RecordPatternField* N) {
     if (N->DotDot) {
       BOLT_VISIT(N->DotDot);
     }
@@ -960,7 +969,7 @@ public:
     }
   }
 
-  void visitEachChild(RecordPattern* N) {
+  void visitEachChildImpl(RecordPattern* N) {
     BOLT_VISIT(N->LBrace);
     for (auto [Field, Comma]: N->Fields) {
       BOLT_VISIT(Field);
@@ -971,7 +980,7 @@ public:
     BOLT_VISIT(N->RBrace);
   }
 
-  void visitEachChild(NamedRecordPattern* N) {
+  void visitEachChildImpl(NamedRecordPattern* N) {
     for (auto [Name, Dot]: N->ModulePath) {
       BOLT_VISIT(Name);
       if (Dot) {
@@ -990,14 +999,14 @@ public:
     BOLT_VISIT(N->RBrace);
   }
 
-  void visitEachChild(NamedTuplePattern* N) {
+  void visitEachChildImpl(NamedTuplePattern* N) {
     BOLT_VISIT(N->Name);
     for (auto P: N->Patterns) {
       BOLT_VISIT(P);
     }
   }
 
-  void visitEachChild(TuplePattern* N) {
+  void visitEachChildImpl(TuplePattern* N) {
     BOLT_VISIT(N->LParen);
     for (auto [P, Comma]: N->Elements) {
       BOLT_VISIT(P);
@@ -1008,13 +1017,13 @@ public:
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(NestedPattern* N) {
+  void visitEachChildImpl(NestedPattern* N) {
     BOLT_VISIT(N->LParen);
     BOLT_VISIT(N->P);
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(ListPattern* N) {
+  void visitEachChildImpl(ListPattern* N) {
     BOLT_VISIT(N->LBracket);
     for (auto [Element, Separator]: N->Elements) {
       BOLT_VISIT(Element);
@@ -1025,7 +1034,7 @@ public:
     BOLT_VISIT(N->RBracket);
   }
 
-  void visitEachChild(ReferenceExpression* N) {
+  void visitEachChildImpl(ReferenceExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1036,13 +1045,13 @@ public:
     BOLT_VISIT_SYMBOL(N->Name);
   }
 
-  void visitEachChild(MatchCase* N) {
+  void visitEachChildImpl(MatchCase* N) {
     BOLT_VISIT(N->Pattern);
     BOLT_VISIT(N->RArrowAlt);
     BOLT_VISIT(N->Expression);
   }
 
-  void visitEachChild(MatchExpression* N) {
+  void visitEachChildImpl(MatchExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1056,7 +1065,7 @@ public:
     }
   }
 
-  void visitEachChild(BlockExpression* N) {
+  void visitEachChildImpl(BlockExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1067,7 +1076,7 @@ public:
     }
   }
 
-  void visitEachChild(MemberExpression* N) {
+  void visitEachChildImpl(MemberExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1076,7 +1085,7 @@ public:
     BOLT_VISIT(N->Name);
   }
 
-  void visitEachChild(TupleExpression* N) {
+  void visitEachChildImpl(TupleExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1090,7 +1099,7 @@ public:
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(NestedExpression* N) {
+  void visitEachChildImpl(NestedExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1099,14 +1108,14 @@ public:
     BOLT_VISIT(N->RParen);
   }
 
-  void visitEachChild(LiteralExpression* N) {
+  void visitEachChildImpl(LiteralExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
     BOLT_VISIT(N->Token);
   }
 
-  void visitEachChild(CallExpression* N) {
+  void visitEachChildImpl(CallExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1116,7 +1125,7 @@ public:
     }
   }
 
-  void visitEachChild(InfixExpression* N) {
+  void visitEachChildImpl(InfixExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1125,7 +1134,7 @@ public:
     BOLT_VISIT(N->Right);
   }
 
-  void visitEachChild(PrefixExpression* N) {
+  void visitEachChildImpl(PrefixExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1133,13 +1142,13 @@ public:
     BOLT_VISIT(N->Argument);
   }
 
-  void visitEachChild(RecordExpressionField* N) {
+  void visitEachChildImpl(RecordExpressionField* N) {
     BOLT_VISIT(N->Name);
     BOLT_VISIT(N->Equals);
     BOLT_VISIT(N->E);
   }
 
-  void visitEachChild(RecordExpression* N) {
+  void visitEachChildImpl(RecordExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1153,7 +1162,7 @@ public:
     BOLT_VISIT(N->RBrace);
   }
 
-  void visitEachChild(ReturnExpression* N) {
+  void visitEachChildImpl(ReturnExpression* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1161,13 +1170,13 @@ public:
     BOLT_VISIT(N->E);
   }
 
-  void visitEachChild(IfExpression* N) {
+  void visitEachChildImpl(IfExpression* N) {
     for (auto Part: N->Parts) {
       BOLT_VISIT(Part);
     }
   }
 
-  void visitEachChild(IfExpressionPart* N) {
+  void visitEachChildImpl(IfExpressionPart* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1181,31 +1190,31 @@ public:
     }
   }
 
-  void visitEachChild(TypeAssert* N) {
+  void visitEachChildImpl(TypeAssert* N) {
     BOLT_VISIT(N->Colon);
     BOLT_VISIT(N->TypeExpression);
   }
 
-  void visitEachChild(Parameter* N) {
+  void visitEachChildImpl(Parameter* N) {
     BOLT_VISIT(N->Pattern);
     if (N->TypeAssert != nullptr) {
       BOLT_VISIT(N->TypeAssert);
     }
   }
 
-  void visitEachChild(LetBlockBody* N) {
+  void visitEachChildImpl(LetBlockBody* N) {
     BOLT_VISIT(N->BlockStart);
     for (auto Element: N->Elements) {
       BOLT_VISIT(Element);
     }
   }
 
-  void visitEachChild(LetExprBody* N) {
+  void visitEachChildImpl(LetExprBody* N) {
     BOLT_VISIT(N->Equals);
     BOLT_VISIT(N->Expression);
   }
 
-  void visitEachChild(PrefixFunctionDeclaration* N) {
+  void visitEachChildImpl(PrefixFunctionDeclaration* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1215,7 +1224,7 @@ public:
     if (N->ForeignKeyword) {
       BOLT_VISIT(N->ForeignKeyword);
     }
-    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT(N->FnKeyword);
     BOLT_VISIT(N->Param);
     BOLT_VISIT_OPERATOR(N->Name);
     if (N->TypeAssert) {
@@ -1226,7 +1235,7 @@ public:
     }
   }
 
-  void visitEachChild(InfixFunctionDeclaration* N) {
+  void visitEachChildImpl(InfixFunctionDeclaration* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1236,7 +1245,7 @@ public:
     if (N->ForeignKeyword) {
       BOLT_VISIT(N->ForeignKeyword);
     }
-    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT(N->FnKeyword);
     BOLT_VISIT(N->Left);
     BOLT_VISIT_OPERATOR(N->Name);
     BOLT_VISIT(N->Right);
@@ -1248,7 +1257,7 @@ public:
     }
   }
 
-  void visitEachChild(SuffixFunctionDeclaration* N) {
+  void visitEachChildImpl(SuffixFunctionDeclaration* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1258,7 +1267,7 @@ public:
     if (N->ForeignKeyword) {
       BOLT_VISIT(N->ForeignKeyword);
     }
-    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT(N->FnKeyword);
     BOLT_VISIT_OPERATOR(N->Name);
     BOLT_VISIT(N->Param);
     if (N->TypeAssert) {
@@ -1269,7 +1278,7 @@ public:
     }
   }
 
-  void visitEachChild(NamedFunctionDeclaration* N) {
+  void visitEachChildImpl(NamedFunctionDeclaration* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
@@ -1279,7 +1288,7 @@ public:
     if (N->ForeignKeyword) {
       BOLT_VISIT(N->ForeignKeyword);
     }
-    BOLT_VISIT(N->LetKeyword);
+    BOLT_VISIT(N->FnKeyword);
     BOLT_VISIT_SYMBOL(N->Name);
     for (auto Param: N->Params) {
       BOLT_VISIT(Param);
@@ -1292,24 +1301,18 @@ public:
     }
   }
 
-  void visitEachChild(VariableDeclaration* N) {
+  void visitEachChildImpl(VariableDeclaration* N) {
     for (auto A: N->Annotations) {
       BOLT_VISIT(A);
     }
     if (N->PubKeyword) {
       BOLT_VISIT(N->PubKeyword);
     }
-    if (N->ForeignKeyword) {
-      BOLT_VISIT(N->ForeignKeyword);
-    }
     BOLT_VISIT(N->LetKeyword);
     if (N->MutKeyword) {
       BOLT_VISIT(N->MutKeyword);
     }
     BOLT_VISIT(N->Pattern);
-    for (auto Param: N->Params) {
-      BOLT_VISIT(Param);
-    }
     if (N->TypeAssert) {
       BOLT_VISIT(N->TypeAssert);
     }
@@ -1318,13 +1321,13 @@ public:
     }
   }
 
-  void visitEachChild(RecordDeclarationField* N) {
+  void visitEachChildImpl(RecordDeclarationField* N) {
     BOLT_VISIT(N->Name);
     BOLT_VISIT(N->Colon);
     BOLT_VISIT(N->TypeExpression);
   }
 
-  void visitEachChild(RecordDeclaration* N) {
+  void visitEachChildImpl(RecordDeclaration* N) {
     if (N->PubKeyword) {
       BOLT_VISIT(N->PubKeyword);
     }
@@ -1336,7 +1339,7 @@ public:
     }
   }
 
-  void visitEachChild(VariantDeclaration* N) {
+  void visitEachChildImpl(VariantDeclaration* N) {
     if (N->PubKeyword) {
       BOLT_VISIT(N->PubKeyword);
     }
@@ -1351,14 +1354,14 @@ public:
     }
   }
 
-  void visitEachChild(TupleVariantDeclarationMember* N) {
+  void visitEachChildImpl(TupleVariantDeclarationMember* N) {
     BOLT_VISIT(N->Name);
     for (auto Element: N->Elements) {
       BOLT_VISIT(Element);
     }
   }
 
-  void visitEachChild(RecordVariantDeclarationMember* N) {
+  void visitEachChildImpl(RecordVariantDeclarationMember* N) {
     BOLT_VISIT(N->Name);
     BOLT_VISIT(N->BlockStart);
     for (auto Field: N->Fields) {
@@ -1366,7 +1369,7 @@ public:
     }
   }
 
-  void visitEachChild(ClassDeclaration* N) {
+  void visitEachChildImpl(ClassDeclaration* N) {
     if (N->PubKeyword) {
       BOLT_VISIT(N->PubKeyword);
     }
@@ -1381,7 +1384,7 @@ public:
     }
   }
 
-  void visitEachChild(InstanceDeclaration* N) {
+  void visitEachChildImpl(InstanceDeclaration* N) {
     BOLT_VISIT(N->InstanceKeyword);
     BOLT_VISIT(N->Name);
     for (auto TE: N->TypeExps) {
@@ -1393,7 +1396,7 @@ public:
     }
   }
 
-  void visitEachChild(SourceFile* N) {
+  void visitEachChildImpl(SourceFile* N) {
     for (auto Element: N->Elements) {
       BOLT_VISIT(Element);
     }
