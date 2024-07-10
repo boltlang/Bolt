@@ -492,6 +492,14 @@ Token* CallExpression::getLastToken() const {
   return Function->getLastToken();
 }
 
+Token* FunctionExpression::getFirstToken() const {
+  return Backslash;
+}
+
+Token* FunctionExpression::getLastToken() const {
+  return E->getLastToken();
+}
+
 Token* InfixExpression::getFirstToken() const {
   return Left->getFirstToken();
 }
@@ -773,6 +781,10 @@ Token* SourceFile::getLastToken() const {
     return Elements.back()->getLastToken();
   }
   return nullptr;
+}
+
+std::string Backslash::getText() const {
+  return "\\";
 }
 
 std::string VBar::getText() const {

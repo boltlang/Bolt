@@ -72,7 +72,7 @@ class Parser {
   Token* expectToken(NodeKind Ty);
 
   std::vector<RecordDeclarationField*> parseRecordDeclarationFields();
-  std::optional<std::vector<std::tuple<RecordPatternField*, Comma*>>> parseRecordPatternFields();
+  std::vector<std::tuple<RecordPatternField*, Comma*>> parseRecordPatternFields();
 
   template<typename T>
   T* expectToken();
@@ -112,6 +112,7 @@ public:
 
   Parameter* parseParam();
 
+  FunctionExpression* parseFunctionExpression();
   ReferenceExpression* parseReferenceExpression();
   Expression* parseUnaryExpression();
   Expression* parseExpression();

@@ -344,6 +344,9 @@ after_string_contents:
       return new StringLiteral(Text, StartLoc);
     }
 
+    case '\\':
+      return new Backslash { getCurrentLoc() };
+
     case '.':
     {
       auto C1 = peekChar();

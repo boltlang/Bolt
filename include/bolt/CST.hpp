@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "zen/config.hpp"
+#include "zen/range.hpp"
 
 #include "bolt/Common.hpp"
 #include "bolt/Integer.hpp"
@@ -92,6 +93,7 @@ enum class NodeKind {
   // Plain tokens
   Assignment,
   At,
+  Backslash,
   Colon,
   Comma,
   CustomOperator,
@@ -150,14 +152,14 @@ enum class NodeKind {
   TypeclassConstraintExpression,
   EqualityConstraintExpression,
 
-  RecordTypeExpression,
+  RecordTypeExpressionField,
 
   // Type expressions
   AppTypeExpression,
   ArrowTypeExpression,
   NestedTypeExpression,
   QualifiedTypeExpression,
-  RecordTypeExpressionField,
+  RecordTypeExpression,
   ReferenceTypeExpression,
   TupleTypeExpression,
   VarTypeExpression,
@@ -181,6 +183,7 @@ enum class NodeKind {
   // Expressions
   BlockExpression,
   CallExpression,
+  FunctionExpression,
   IfExpression,
   InfixExpression,
   LiteralExpression,
@@ -468,6 +471,18 @@ public:
   std::string getText() const override;
 
   static constexpr const NodeKind Kind = NodeKind::At;
+
+};
+
+class Backslash : public Token {
+public:
+
+  inline Backslash(TextLoc StartLoc):
+    Token(NodeKind::Backslash, StartLoc) {}
+
+  std::string getText() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::Backslash;
 
 };
 
@@ -1747,6 +1762,7 @@ public:
     return N->getKind() == NodeKind::ReferenceExpression
         || N->getKind() == NodeKind::NestedExpression
         || N->getKind() == NodeKind::CallExpression
+        || N->getKind() == NodeKind::FunctionExpression
         || N->getKind() == NodeKind::TupleExpression
         || N->getKind() == NodeKind::InfixExpression
         || N->getKind() == NodeKind::RecordExpression
@@ -2040,6 +2056,53 @@ public:
   Token* getLastToken() const override;
 
   static constexpr const NodeKind Kind = NodeKind::CallExpression;
+
+};
+
+class FunctionExpression : public Expression {
+
+public:
+
+  Backslash* Backslash;
+  std::vector<Pattern*> Params;
+  RArrow* RArrow;
+  Expression* E;
+
+  inline FunctionExpression(
+    std::vector<Annotation*> Annotations,
+    class Backslash* Backslash,
+    std::vector<Pattern*> Params,
+    class RArrow* RArrow,
+    class Expression* E
+  ): Expression(NodeKind::FunctionExpression, Annotations),
+     Backslash(Backslash),
+     Params(Params),
+     RArrow(RArrow),
+     E(E) {}
+
+  inline FunctionExpression(
+    class Backslash* Backslash,
+    std::vector<Pattern*> Params,
+    class RArrow* RArrow,
+    class Expression* Expression
+  ): FunctionExpression({}, Backslash, Params, RArrow, Expression) {}
+
+  std::size_t countParams() {
+    return Params.size();
+  }
+
+  auto getParameters() {
+    return zen::make_iterator_range(Params);
+  }
+
+  Expression* getExpression() const {
+    return E;
+  }
+
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+  static constexpr const NodeKind Kind = NodeKind::FunctionExpression;
 
 };
 
