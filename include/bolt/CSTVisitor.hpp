@@ -28,6 +28,7 @@ public:
       BOLT_GEN_CASE(DotDot)
       BOLT_GEN_CASE(Tilde)
       BOLT_GEN_CASE(At)
+      BOLT_GEN_CASE(DoKeyword)
       BOLT_GEN_CASE(LParen)
       BOLT_GEN_CASE(RParen)
       BOLT_GEN_CASE(LBracket)
@@ -88,6 +89,7 @@ public:
       BOLT_GEN_CASE(ReferenceExpression)
       BOLT_GEN_CASE(MatchCase)
       BOLT_GEN_CASE(MatchExpression)
+      BOLT_GEN_CASE(BlockExpression)
       BOLT_GEN_CASE(MemberExpression)
       BOLT_GEN_CASE(TupleExpression)
       BOLT_GEN_CASE(NestedExpression)
@@ -189,6 +191,10 @@ protected:
   }
 
   void visitAt(At* N) {
+    static_cast<D*>(this)->visitToken(N);
+  }
+
+  void visitDoKeyword(DoKeyword* N) {
     static_cast<D*>(this)->visitToken(N);
   }
 
@@ -452,6 +458,10 @@ protected:
     static_cast<D*>(this)->visitExpression(N);
   }
 
+  void visitBlockExpression(BlockExpression* N) {
+    static_cast<D*>(this)->visitExpression(N);
+  }
+
   void visitMemberExpression(MemberExpression* N) {
     static_cast<D*>(this)->visitExpression(N);
   }
@@ -606,6 +616,7 @@ public:
       BOLT_GEN_CHILD_CASE(DotDot)
       BOLT_GEN_CHILD_CASE(Tilde)
       BOLT_GEN_CHILD_CASE(At)
+      BOLT_GEN_CHILD_CASE(DoKeyword)
       BOLT_GEN_CHILD_CASE(LParen)
       BOLT_GEN_CHILD_CASE(RParen)
       BOLT_GEN_CHILD_CASE(LBracket)
@@ -666,6 +677,7 @@ public:
       BOLT_GEN_CHILD_CASE(ReferenceExpression)
       BOLT_GEN_CHILD_CASE(MatchCase)
       BOLT_GEN_CHILD_CASE(MatchExpression)
+      BOLT_GEN_CHILD_CASE(BlockExpression)
       BOLT_GEN_CHILD_CASE(MemberExpression)
       BOLT_GEN_CHILD_CASE(TupleExpression)
       BOLT_GEN_CHILD_CASE(NestedExpression)
@@ -721,6 +733,9 @@ public:
   }
 
   void visitEachChild(At* N) {
+  }
+
+  void visitEachChild(DoKeyword* N) {
   }
 
   void visitEachChild(LParen* N) {
@@ -1048,6 +1063,17 @@ public:
     BOLT_VISIT(N->BlockStart);
     for (auto Case: N->Cases) {
       BOLT_VISIT(Case);
+    }
+  }
+
+  void visitEachChild(BlockExpression* N) {
+    for (auto A: N->Annotations) {
+      BOLT_VISIT(A);
+    }
+    BOLT_VISIT(N->DoKeyword);
+    BOLT_VISIT(N->BlockStart);
+    for (auto Element: N->Elements) {
+      BOLT_VISIT(Element);
     }
   }
 

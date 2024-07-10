@@ -422,6 +422,17 @@ Token* MatchExpression::getLastToken() const {
   return BlockStart;
 }
 
+Token* BlockExpression::getFirstToken() const {
+  return DoKeyword;
+}
+
+Token* BlockExpression::getLastToken() const {
+  if (!Elements.empty()) {
+    return Elements.back()->getLastToken();
+  }
+  return BlockStart;
+}
+
 Token* RecordExpressionField::getFirstToken() const {
   return Name;
 }
@@ -932,6 +943,10 @@ std::string Tilde::getText() const {
 }
 
 std::string At::getText() const {
+  return "@";
+}
+
+std::string DoKeyword::getText() const {
   return "@";
 }
 

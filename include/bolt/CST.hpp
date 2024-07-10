@@ -1,6 +1,7 @@
 #ifndef BOLT_CST_HPP
 #define BOLT_CST_HPP
 
+#include <stdint.h>
 #include <cmath>
 #include <cstdlib>
 #include <unordered_map>
@@ -28,8 +29,8 @@ class Statement;
 class TextLoc {
 public:
 
-  size_t Line = 1;
-  size_t Column = 1;
+  std::size_t Line = 1;
+  std::size_t Column = 1;
 
   inline bool isEmpty() const noexcept {
     return Line == 0 && Column == 0;
@@ -68,18 +69,18 @@ class TextFile {
   ByteString Path;
   ByteString Text;
 
-  std::vector<size_t> LineOffsets;
+  std::vector<std::size_t> LineOffsets;
 
 public:
 
   TextFile(ByteString Path, ByteString Text);
 
-  size_t getLine(size_t Offset) const;
-  size_t getColumn(size_t Offset) const;
-  size_t getStartOffsetOfLine(size_t Line) const;
-  size_t getEndOffsetOfLine(size_t Line) const;
+  std::size_t getLine(std::size_t Offset) const;
+  std::size_t getColumn(std::size_t Offset) const;
+  std::size_t getStartOffsetOfLine(std::size_t Line) const;
+  std::size_t getEndOffsetOfLine(std::size_t Line) const;
 
-  size_t getLineCount() const;
+  std::size_t getLineCount() const;
 
   ByteString getPath() const;
 
@@ -96,6 +97,7 @@ enum class NodeKind {
   DotDot,
   Tilde,
   At,
+  DoKeyword,
   LParen,
   RParen,
   LBracket,
@@ -156,6 +158,7 @@ enum class NodeKind {
   ReferenceExpression,
   MatchCase,
   MatchExpression,
+  BlockExpression,
   MemberExpression,
   TupleExpression,
   NestedExpression,
@@ -347,19 +350,19 @@ public:
 
   TextLoc getEndLoc() const;
 
-  inline size_t getStartLine() const override {
+  inline std::size_t getStartLine() const override {
     return StartLoc.Line;
   }
 
-  inline size_t getStartColumn() const override {
+  inline std::size_t getStartColumn() const override {
     return StartLoc.Column;
   }
 
-  inline size_t getEndLine() const override {
+  inline std::size_t getEndLine() const override {
     return getEndLoc().Line;
   }
 
-  inline size_t getEndColumn() const override {
+  inline std::size_t getEndColumn() const override {
     return getEndLoc().Column;
   }
 
@@ -477,6 +480,20 @@ public:
 
   static bool classof(const Node* N) {
     return N->getKind() == NodeKind::At;
+  }
+
+};
+
+class DoKeyword : public Token {
+public:
+
+  inline DoKeyword(TextLoc StartLoc):
+    Token(NodeKind::DoKeyword, StartLoc) {}
+
+  std::string getText() const override;
+
+  static bool classof(const Node* N) {
+    return N->getKind() == NodeKind::DoKeyword;
   }
 
 };
@@ -1193,7 +1210,15 @@ public:
 
 class AnnotationContainer {
 public:
+
   std::vector<Annotation*> Annotations;
+
+  inline AnnotationContainer():
+    Annotations({}) {}
+
+  inline AnnotationContainer(std::vector<Annotation*> Annotations):
+    Annotations(Annotations) {}
+
 };
 
 class ExpressionAnnotation : public Annotation {
@@ -1764,6 +1789,7 @@ public:
         || N->getKind() == NodeKind::InfixExpression
         || N->getKind() == NodeKind::RecordExpression
         || N->getKind() == NodeKind::MatchExpression
+        || N->getKind() == NodeKind::BlockExpression
         || N->getKind() == NodeKind::MemberExpression
         || N->getKind() == NodeKind::LiteralExpression
         || N->getKind() == NodeKind::PrefixExpression;
@@ -1865,6 +1891,37 @@ public:
      Value(Value),
      BlockStart(BlockStart),
      Cases(Cases) {}
+
+  Token* getFirstToken() const override;
+  Token* getLastToken() const override;
+
+};
+
+class BlockExpression : public Expression {
+public:
+
+  class DoKeyword* DoKeyword;
+  class BlockStart* BlockStart;
+  std::vector<Node*> Elements;
+
+  inline BlockExpression(
+    class DoKeyword* DoKeyword,
+    class BlockStart* BlockStart,
+    std::vector<Node*> Elements
+  ): Expression(NodeKind::BlockExpression),
+     DoKeyword(DoKeyword),
+     BlockStart(BlockStart),
+     Elements(Elements) {}
+
+  inline BlockExpression(
+    std::vector<Annotation*> Annotations,
+    class DoKeyword* DoKeyword,
+    class BlockStart* BlockStart,
+    std::vector<Node*> Elements
+  ): Expression(NodeKind::BlockExpression, Annotations),
+     DoKeyword(DoKeyword),
+     BlockStart(BlockStart),
+     Elements(Elements) {}
 
   Token* getFirstToken() const override;
   Token* getLastToken() const override;

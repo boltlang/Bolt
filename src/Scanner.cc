@@ -64,21 +64,22 @@ static int toDigit(Char Chr) {
 }
 
 std::unordered_map<ByteString, NodeKind> Keywords = {
-  { "pub", NodeKind::PubKeyword },
-  { "let", NodeKind::LetKeyword },
-  { "foreign", NodeKind::ForeignKeyword },
-  { "mut", NodeKind::MutKeyword },
-  { "return", NodeKind::ReturnKeyword },
-  { "type", NodeKind::TypeKeyword },
-  { "mod", NodeKind::ModKeyword },
-  { "if", NodeKind::IfKeyword },
-  { "else", NodeKind::ElseKeyword },
-  { "elif", NodeKind::ElifKeyword },
-  { "match", NodeKind::MatchKeyword },
   { "class", NodeKind::ClassKeyword },
-  { "instance", NodeKind::InstanceKeyword },
-  { "struct", NodeKind::StructKeyword },
+  { "do", NodeKind::DoKeyword },
+  { "elif", NodeKind::ElifKeyword },
+  { "else", NodeKind::ElseKeyword },
   { "enum", NodeKind::EnumKeyword },
+  { "foreign", NodeKind::ForeignKeyword },
+  { "if", NodeKind::IfKeyword },
+  { "instance", NodeKind::InstanceKeyword },
+  { "let", NodeKind::LetKeyword },
+  { "match", NodeKind::MatchKeyword },
+  { "mod", NodeKind::ModKeyword },
+  { "mut", NodeKind::MutKeyword },
+  { "pub", NodeKind::PubKeyword },
+  { "return", NodeKind::ReturnKeyword },
+  { "struct", NodeKind::StructKeyword },
+  { "type", NodeKind::TypeKeyword },
 };
 
 Scanner::Scanner(DiagnosticEngine& DE, TextFile& File, Stream<Char>& Chars):
@@ -290,6 +291,8 @@ digit_finish:
             return new StructKeyword(StartLoc);
           case NodeKind::EnumKeyword:
             return new EnumKeyword(StartLoc);
+          case NodeKind::DoKeyword:
+              return new DoKeyword(StartLoc);
           default:
             ZEN_UNREACHABLE
         }
@@ -432,6 +435,12 @@ Token* Punctuator::read() {
 
   auto T0 = Tokens.peek();
 
+  if (ShouldStartBlock) {
+    ShouldStartBlock = false;
+    Frames.push(FrameType::Block);
+    return new BlockStart { T0->getStartLoc() };
+  }
+
   switch (T0->getKind()) {
     case NodeKind::LBrace:
       Frames.push(FrameType::Fallthrough);
@@ -481,6 +490,9 @@ Token* Punctuator::read() {
             Frames.push(FrameType::Block);
             return new BlockStart(T0->getStartLoc());
         }
+      }
+      if (isa<DoKeyword>(T0)) {
+        ShouldStartBlock = true;
       }
       return Tokens.get();
     }

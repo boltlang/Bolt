@@ -50,6 +50,7 @@ const D* cast(const B* base) {
 
 template<typename D, typename T>
 bool isa(const T* value) {
+  ZEN_ASSERT(value != nullptr);
   return D::classof(value);
 }
 

@@ -68,6 +68,8 @@ class Punctuator : public BufferedStream<Token*> {
 
   Stream<Token*>& Tokens;
 
+  bool ShouldStartBlock = false;
+
   std::stack<FrameType> Frames;
   std::stack<TextLoc> Locations;
 

@@ -1,6 +1,7 @@
 
 // TODO check for memory leaks everywhere a nullptr is returned
 
+#include <sys/wait.h>
 #include <tuple>
 #include <vector>
 
@@ -60,6 +61,11 @@ bool OperatorTable::isSuffix(Token* T) {
 void OperatorTable::add(std::string Name, unsigned Flags, int Precedence) { 
   Mapping.emplace(Name, OperatorInfo { Precedence, Flags });
 }
+
+#define BOLT_EACH_UNREF(nodes) \
+  for (auto N: nodes) { \
+    N->unref(); \
+  }
 
 Parser::Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE):
   File(File), Tokens(S), DE(DE) {
@@ -879,6 +885,38 @@ after_tuple_elements:
     }
     case NodeKind::MatchKeyword:
       return parseMatchExpression();
+    case NodeKind::DoKeyword:
+    {
+      Tokens.get();
+      auto T1 = expectToken(NodeKind::BlockStart);
+      if (!T1) {
+        BOLT_EACH_UNREF(Annotations);
+        T0->unref();
+        return nullptr;
+      }
+      std::vector<Node*> Elements;
+      for (;;) {
+          auto T2 = Tokens.peek();
+          if (T2->getKind() == NodeKind::BlockEnd) {
+            Tokens.get()->unref();
+            break;
+          }
+          auto Element = parseLetBodyElement();
+          if (Element == nullptr) {
+            BOLT_EACH_UNREF(Annotations);
+            T0->unref();
+            T1->unref();
+            BOLT_EACH_UNREF(Elements);
+            return nullptr;
+          }
+          Elements.push_back(Element);
+      }
+      return new BlockExpression {
+        static_cast<class DoKeyword*>(T0),
+        static_cast<BlockStart*>(T1),
+        Elements
+      };
+    }
     case NodeKind::IntegerLiteral:
     case NodeKind::StringLiteral:
       Tokens.get();
@@ -1044,6 +1082,7 @@ ReturnStatement* Parser::parseReturnStatement() {
   auto Annotations = parseAnnotations();
   auto ReturnKeyword = expectToken<class ReturnKeyword>();
   if (!ReturnKeyword) {
+    BOLT_EACH_UNREF(Annotations);
     return nullptr;
   }
   Expression* Expression;
@@ -1067,6 +1106,10 @@ IfStatement* Parser::parseIfStatement() {
   std::vector<IfStatementPart*> Parts;
   auto Annotations = parseAnnotations();
   auto IfKeyword = expectToken<class IfKeyword>();
+  if (!IfKeyword) {
+    BOLT_EACH_UNREF(Annotations);
+    return nullptr;
+  }
   auto Test = parseExpression();
   if (!Test) {
     IfKeyword->unref();
