@@ -340,10 +340,10 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
       Node* From;
       void visitReferenceExpression(ReferenceExpression* E) {
         auto To = E->getScope()->lookup(E->getSymbolPath());
-        if (isa<Parameter>(To)) {
-          To = To->Parent;
-        }
         if (To != nullptr) {
+          if (isa<Parameter>(To)) {
+            To = To->Parent;
+          }
           G.add_edge(From, To);
         }
       }
