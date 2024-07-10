@@ -76,7 +76,9 @@
         "__nullptr": "cpp",
         "__config": "cpp",
         "__debug": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "format": "cpp",
+        "future": "cpp"
     },
     "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools"
 }
