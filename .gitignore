@@ -1,4 +1,7 @@
 
+# subprojects that the user should install themselves
+/deps/zen
+
 # default build directory for VSCode
 /build/
 
