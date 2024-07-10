@@ -7,8 +7,8 @@ Bolt
 
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
-```ocaml
-let fac = match.
+```rust
+fn fac = match.
   0 | 1 => 1
   k => k * fac (k-1)
 ```
@@ -50,7 +50,7 @@ print f"Hey look! {spike.name} and {sadie.name} are playing together!"
 Records are _extensible_, meaning that you can do things like this:
 
 ```
-let greet { name, .. } = print f"Hello, {name}!"
+fn greet { name, .. } = print f"Hello, {name}!"
 
 greet sadie
 greet spike
@@ -79,15 +79,15 @@ _Note that this example is very experimental._
 ```
 import "html" ( Html )
 
-let app : Html.
+fn app : Html.
 
   let user = perform get_state
 
   return match user.
     None => do
-        Future.when_done (fetch "/api/login") \data -> do
-          perform set_state data
-        h1 [ "Please log in." ]
+      Future.when_done (fetch "/api/login") \data -> do
+        perform set_state data
+      h1 [ "Please log in." ]
     Some { name, .. } => h1 [ f"Welcome Back, {fullname}" ]
 ```
 
