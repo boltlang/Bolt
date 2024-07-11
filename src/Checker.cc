@@ -131,7 +131,7 @@ std::tuple<ConstraintSet, Type*> Checker::inferExpr(TypeEnv& Env, Expression* Ex
           mergeTo(Out, ExprOut);
           Out.push_back(new CTypesEqual { ExprTy, Ty, Case->Expression });
         }
-        if (E->Value) {
+        if (!E->Value) {
           auto ParamTy = createTVar();
           Ty = new TFun(ParamTy, Ty);
         }
