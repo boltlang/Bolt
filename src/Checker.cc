@@ -336,6 +336,19 @@ std::tuple<ConstraintSet, Type*> Checker::inferTypeExpr(TypeEnv& Env, TypeExpres
         break;
       }
 
+    case NodeKind::ArrowTypeExpression:
+      {
+        auto Arrow = static_cast<ArrowTypeExpression*>(TE);
+        auto [ReturnOut, ReturnTy] = inferTypeExpr(Env, Arrow->ReturnType);
+        Ty = ReturnTy;
+        for (auto PT: Arrow->ParamTypes) {
+          auto [ParamOut, ParamTy] = inferTypeExpr(Env, PT);
+          mergeTo(Out, ParamOut);
+          Ty = new TFun(ParamTy, Ty);
+        }
+        break;
+      }
+
     default:
       ZEN_UNREACHABLE
 
