@@ -1873,6 +1873,14 @@ public:
   Token* getFirstToken() const override;
   Token* getLastToken() const override;
 
+  inline bool hasValue() const {
+    return Value;
+  }
+
+  Expression* getValue() const {
+    return Value;
+  }
+
   static constexpr const NodeKind Kind = NodeKind::MatchExpression;
 
 };
