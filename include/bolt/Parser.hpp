@@ -58,90 +58,134 @@ public:
 
 };
 
+class TokenStream {
+
+  std::vector<Token*>& Buffer;
+  std::size_t Offset;
+
+public:
+
+  TokenStream(
+    std::vector<Token*>& Buffer,
+    std::size_t Offset = 0
+  ): Buffer(Buffer), Offset(Offset) {}
+
+  std::size_t getAbsoluteOffset() const {
+    return Offset;
+  }
+
+  Token* peek(std::size_t I = 0) {
+    auto RealOffset = Offset + I;
+    if (RealOffset >= Buffer.size()) {
+      return Buffer.back();
+    }
+    return Buffer[RealOffset];
+  }
+
+  TokenStream fork() {
+    return TokenStream { Buffer, Offset };
+  }
+
+  void skip(std::size_t Count) {
+    Offset = std::min(Buffer.size()-1, Offset + Count);
+  }
+
+  Token* get() {
+    auto Tok = Buffer[Offset];
+    if (Offset+1 < Buffer.size()) {
+      ++Offset;
+    }
+    return Tok;
+  }
+
+};
+
 class Parser {
 
   TextFile& File;
   DiagnosticEngine& DE;
 
-  Stream<Token*>& Tokens;
-
   OperatorTable ExprOperators;
 
-  Token* peekFirstTokenAfterAnnotationsAndModifiers();
+  std::optional<std::pair<std::size_t, std::vector<Annotation*>>> CachedAnnotations;
 
-  Token* expectToken(NodeKind Ty);
+  void cacheAnnotations(TokenStream& Tokens);
 
-  std::vector<RecordDeclarationField*> parseRecordDeclarationFields();
-  std::vector<std::tuple<RecordPatternField*, Comma*>> parseRecordPatternFields();
+  Token* peekTokenAfterAnnotations(TokenStream& Tokens);
+  Token* peekTokenAfterAnnotationsAndModifiers(TokenStream& Tokens);
+
+  std::vector<RecordDeclarationField*> parseRecordDeclarationFields(TokenStream& Tokens);
+  std::vector<std::tuple<RecordPatternField*, Comma*>> parseRecordPatternFields(TokenStream& Tokens);
 
   template<typename T>
-  T* expectToken();
+  T* expectToken(TokenStream& Tokens);
 
-  Expression* parseInfixOperatorAfterExpression(Expression* LHS, int MinPrecedence);
+  Expression* parseInfixOperatorAfterExpression(TokenStream& Tokens, Expression* LHS, int MinPrecedence);
 
-  MatchExpression* parseMatchExpression();
-  Expression* parseMemberExpression();
-  RecordExpression* parseRecordExpression();
-  Expression* parsePrimitiveExpression();
+  MatchExpression* parseMatchExpression(TokenStream& Tokens);
+  Expression* parseMemberExpression(TokenStream& Tokens);
+  RecordExpression* parseRecordExpression(TokenStream& Tokens);
+  Expression* parsePrimitiveExpression(TokenStream& Tokens);
 
-  ConstraintExpression* parseConstraintExpression();
+  ConstraintExpression* parseConstraintExpression(TokenStream& Tokens);
 
-  TypeExpression* parseAppTypeExpression();
-  TypeExpression* parsePrimitiveTypeExpression();
-  TypeExpression* parseQualifiedTypeExpression();
-  TypeExpression* parseArrowTypeExpression();
-  VarTypeExpression* parseVarTypeExpression();
-  ReferenceTypeExpression* parseReferenceTypeExpression();
+  TypeExpression* parseAppTypeExpression(TokenStream& Tokens);
+  TypeExpression* parsePrimitiveTypeExpression(TokenStream& Tokens);
+  TypeExpression* parseQualifiedTypeExpression(TokenStream& Tokens);
+  TypeExpression* parseArrowTypeExpression(TokenStream& Tokens);
+  VarTypeExpression* parseVarTypeExpression(TokenStream& Tokens);
+  ReferenceTypeExpression* parseReferenceTypeExpression(TokenStream& Tokens);
 
-  std::vector<Annotation*> parseAnnotations();
+  std::vector<Annotation*> parseAnnotations(TokenStream& Tokens);
 
-  void checkLineFoldEnd();
-  void skipPastLineFoldEnd();
-  void skipToRBrace();
+  void checkLineFoldEnd(TokenStream& Tokens);
+  void skipPastLineFoldEnd(TokenStream& Tokens);
+  void skipToRBrace(TokenStream& Tokens);
 
 public:
 
-  Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE);
+  Parser(TextFile& File, DiagnosticEngine& DE);
 
-  TypeExpression* parseTypeExpression();
+  TypeExpression* parseTypeExpression(TokenStream& Tokens);
 
-  ListPattern* parseListPattern();
-  Pattern* parsePrimitivePattern(bool IsNarrow);
-  Pattern* parseWidePattern();
-  Pattern* parseNarrowPattern();
+  ListPattern* parseListPattern(TokenStream& Tokens);
+  Pattern* parsePrimitivePattern(TokenStream& Tokkens, bool IsNarrow);
+  Pattern* parseWidePattern(TokenStream& Tokens);
+  Pattern* parseNarrowPattern(TokenStream& Tokens);
 
-  Parameter* parseParam();
+  Parameter* parseParam(TokenStream& Tokens);
 
-  FunctionExpression* parseFunctionExpression();
-  ReferenceExpression* parseReferenceExpression();
-  Expression* parseUnaryExpression();
-  Expression* parseExpression();
-  BlockExpression* parseBlockExpression(std::vector<Annotation*> Annotations = {});
-  Expression* parseCallExpression();
-  IfExpression* parseIfExpression();
+  LiteralExpression* parseLiteralExpression(TokenStream& Tokens);
+  FunctionExpression* parseFunctionExpression(TokenStream& Tokens);
+  ReferenceExpression* parseReferenceExpression(TokenStream& Tokens);
+  Expression* parseUnaryExpression(TokenStream& Tokens);
+  Expression* parseExpression(TokenStream& Tokens);
+  BlockExpression* parseBlockExpression(TokenStream& Tokens);
+  Expression* parseCallExpression(TokenStream& Tokens);
+  IfExpression* parseIfExpression(TokenStream& Tokens);
 
-  ReturnExpression* parseReturnExpression();
+  ReturnExpression* parseReturnExpression(TokenStream& Tokens);
 
-  Expression* parseExpressionStatement();
+  Expression* parseExpressionStatement(TokenStream& Tokens);
 
-  Node* parseLetBodyElement();
+  Node* parseLetBodyElement(TokenStream& Tokens);
 
-  FunctionDeclaration* parseFunctionDeclaration();
-  VariableDeclaration* parseVariableDeclaration();
+  FunctionDeclaration* parseFunctionDeclaration(TokenStream& Tokens);
+  VariableDeclaration* parseVariableDeclaration(TokenStream& Tokens);
 
-  Node* parseClassElement();
+  Node* parseClassElement(TokenStream& Tokens);
 
-  ClassDeclaration* parseClassDeclaration();
+  ClassDeclaration* parseClassDeclaration(TokenStream& Tokens);
 
-  InstanceDeclaration* parseInstanceDeclaration();
+  InstanceDeclaration* parseInstanceDeclaration(TokenStream& Tokens);
 
-  RecordDeclaration* parseRecordDeclaration();
+  RecordDeclaration* parseRecordDeclaration(TokenStream& Tokens);
 
-  VariantDeclaration* parseVariantDeclaration();
+  VariantDeclaration* parseVariantDeclaration(TokenStream& Tokens);
 
-  Node* parseSourceElement();
+  Node* parseSourceElement(TokenStream& Tokens);
 
-  SourceFile* parseSourceFile();
+  SourceFile* parseSourceFile(TokenStream& Tokens);
 
 };
 

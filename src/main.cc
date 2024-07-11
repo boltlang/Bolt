@@ -44,6 +44,18 @@ ByteString readFile(std::string Path) {
 
 namespace po = zen::po;
 
+auto getAllTokens(Stream<Token*>& S) {
+  std::vector<Token*> Tokens;
+  for (;;) {
+    auto Tok = S.get();
+    Tokens.push_back(Tok);
+    if (Tok->getKind() == NodeKind::EndOfFile)  {
+      break;
+    }
+  }
+  return Tokens;
+}
+
 int main(int Argc, const char* Argv[]) {
 
   auto Match = po::program("bolt", "The offical compiler for the Bolt programming language")
@@ -84,9 +96,11 @@ int main(int Argc, const char* Argv[]) {
     VectorStream<ByteString, Char> Chars(Text, EOF);
     Scanner S(DE, File, Chars);
     Punctuator PT(S);
-    Parser P(File, PT, DE);
+    auto Buffer = getAllTokens(PT);
+    Parser P(File, DE);
+    TokenStream Tokens { Buffer };
 
-    auto SF = P.parseSourceFile();
+    auto SF = P.parseSourceFile(Tokens);
     if (SF == nullptr) {
       continue;
     }
@@ -112,11 +126,12 @@ int main(int Argc, const char* Argv[]) {
       void visitExpression(Expression* N) {
         for (auto A: N->Annotations) {
           if (A->getKind() == NodeKind::TypeAssertAnnotation) {
+            auto TA = static_cast<TypeAssertAnnotation*>(A);
             auto Left = C.getTypeOfNode(N);
-            auto Right = static_cast<TypeAssertAnnotation*>(A)->getTypeExpression()->getType();
+            auto Right = TA->getTypeExpression()->getType();
             std::cerr << "verify " << Left->toString() << " == " << Right->toString() << std::endl;
             if (*Left != *Right) {
-              DE.add<TypeMismatchError>(Left, Right, A);
+              DE.add<TypeMismatchError>(Left, Right, TA->getTypeExpression());
             }
           }
         }

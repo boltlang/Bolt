@@ -69,8 +69,8 @@ void OperatorTable::add(std::string Name, unsigned Flags, int Precedence) {
   Mapping.emplace(Name, OperatorInfo { Precedence, Flags });
 }
 
-Parser::Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE):
-  File(File), Tokens(S), DE(DE) {
+Parser::Parser(TextFile& File, DiagnosticEngine& DE):
+  File(File), DE(DE) {
     ExprOperators.add("**", OperatorFlags_InfixR, 10);
     ExprOperators.add("*", OperatorFlags_InfixL, 5);
     ExprOperators.add("/", OperatorFlags_InfixL, 5);
@@ -89,7 +89,7 @@ Parser::Parser(TextFile& File, Stream<Token*>& S, DiagnosticEngine& DE):
 
 
 template<typename T>
-T* Parser::expectToken() {
+T* Parser::expectToken(TokenStream& Tokens) {
   auto Tok = Tokens.get();
   if (Tok->getKind() != T::Kind) {
     DE.add<UnexpectedTokenDiagnostic>(File, Tok, std::vector<NodeKind> { T::Kind });
@@ -105,21 +105,28 @@ void unrefAll(std::vector<T>& Container) {
   }
 }
 
-Token* Parser::peekFirstTokenAfterAnnotationsAndModifiers() {
+void Parser::cacheAnnotations(TokenStream& Tokens) {
+  auto Start = Tokens.getAbsoluteOffset();
+  auto Annotations = parseAnnotations(Tokens);
+  auto End = Tokens.getAbsoluteOffset();
+  CachedAnnotations = { End - Start, Annotations };
+}
+
+Token* Parser::peekTokenAfterAnnotations(TokenStream& Tokens) {
+  auto Lookahead = Tokens.fork();
+  cacheAnnotations(Lookahead);
+  return Lookahead.peek();
+}
+
+Token* Parser::peekTokenAfterAnnotationsAndModifiers(TokenStream& Tokens) {
+  auto Lookahead = Tokens.fork();
+  cacheAnnotations(Lookahead);
   std::size_t I = 0;
   for (;;) {
-    auto T0 = Tokens.peek(I++);
+    auto T0 = Lookahead.peek(I++);
     switch (T0->getKind()) {
       case NodeKind::PubKeyword:
       case NodeKind::MutKeyword:
-        continue;
-      case NodeKind::At:
-        for (;;) {
-          auto T1 = Tokens.peek(I++);
-          if (T1->getKind() == NodeKind::LineFoldEnd) {
-            break;
-          }
-        }
         continue;
       default:
         return T0;
@@ -127,9 +134,9 @@ Token* Parser::peekFirstTokenAfterAnnotationsAndModifiers() {
   }
 }
 
-ListPattern* Parser::parseListPattern() {
+ListPattern* Parser::parseListPattern(TokenStream& Tokens) {
 
-  auto LBracket = expectToken<class LBracket>();
+  auto LBracket = expectToken<class LBracket>(Tokens);
   if (!LBracket) {
     return nullptr;
   }
@@ -147,7 +154,7 @@ ListPattern* Parser::parseListPattern() {
 
   for (;;) {
 
-    auto P = parseWidePattern();
+    auto P = parseWidePattern(Tokens);
     if (!P) {
       LBracket->unref();
       for (auto [Pattern, Comma]: Elements) {
@@ -188,7 +195,7 @@ finish:
   return new ListPattern { LBracket, Elements, RBracket };
 }
 
-std::vector<std::tuple<RecordPatternField*, Comma*>> Parser::parseRecordPatternFields() {
+std::vector<std::tuple<RecordPatternField*, Comma*>> Parser::parseRecordPatternFields(TokenStream& Tokens) {
 
   std::vector<std::tuple<RecordPatternField*, Comma*>> Fields;
 
@@ -221,7 +228,7 @@ std::vector<std::tuple<RecordPatternField*, Comma*>> Parser::parseRecordPatternF
 
       // We only get here if there's still something interesting on the stream.
       // Go parse it now.
-      auto P = parseWidePattern();
+      auto P = parseWidePattern(Tokens);
 
       if (P) {
 
@@ -253,7 +260,7 @@ std::vector<std::tuple<RecordPatternField*, Comma*>> Parser::parseRecordPatternF
     // If we get here we are NOT at a '..' pattern and also not at the end of
     // the contents of the braces.
     
-    auto Name = expectToken<Identifier>();
+    auto Name = expectToken<Identifier>(Tokens);
 
     if (!Name) {
       // Something else than an identifier on the stream. Since we can't guess
@@ -273,7 +280,7 @@ std::vector<std::tuple<RecordPatternField*, Comma*>> Parser::parseRecordPatternF
       Tokens.get();
 
       Equals = static_cast<class Equals*>(T1);
-      Pattern = parseWidePattern();
+      Pattern = parseWidePattern(Tokens);
 
       // We failed to parse a pattern, so we'll act as if this was due to a small typo by the user.
       // parseWidePattern() should have already advanced the stream so we don't have to.
@@ -313,7 +320,7 @@ std::vector<std::tuple<RecordPatternField*, Comma*>> Parser::parseRecordPatternF
   return Fields;
 }
 
-Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
+Pattern* Parser::parsePrimitivePattern(TokenStream& Tokens, bool IsNarrow) {
 
   auto T0 = Tokens.peek();
 
@@ -335,7 +342,7 @@ Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
     {
       Tokens.get();
       auto LBrace = static_cast<class LBrace*>(T0);
-      auto Fields = parseRecordPatternFields();
+      auto Fields = parseRecordPatternFields(Tokens);
       auto RBrace = static_cast<class RBrace*>(Tokens.get());
       return new RecordPattern(LBrace, Fields, RBrace);
     }
@@ -362,7 +369,7 @@ Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
       if (T1->getKind() == NodeKind::LBrace) {
         Tokens.get();
         auto LBrace = static_cast<class LBrace*>(T1);
-        auto Fields = parseRecordPatternFields();
+        auto Fields = parseRecordPatternFields(Tokens);
         auto RBrace = static_cast<class RBrace*>(Tokens.get());
         return new NamedRecordPattern({}, Name, LBrace, Fields, RBrace);
       }
@@ -389,7 +396,7 @@ Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
         }
 
         // Parse one element of the named tuple pattern, e.g. the 'a' in 'Foo a b'
-        auto P = parseNarrowPattern();
+        auto P = parseNarrowPattern(Tokens);
 
         // A simple check ensures that no nullptrs are pushed in the tuple element list.
         // parseNarrowPattern() returns a nullptr if it failed to parse a
@@ -404,7 +411,7 @@ Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
 
     // Parse a list pattern such as [ first, second, third ]
     case NodeKind::LBracket:
-      return parseListPattern();
+      return parseListPattern(Tokens);
 
     // Parse something between parentheses; either a nested pattern or a tuple pattern.
     case NodeKind::LParen:
@@ -421,7 +428,7 @@ Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
       RParen* RParen;
       for (;;) {
 
-        auto P = parseWidePattern();
+        auto P = parseWidePattern(Tokens);
 
         if (!P) {
           // If the tuple element failed to parse, simply ignore it and try again.
@@ -471,19 +478,20 @@ Pattern* Parser::parsePrimitivePattern(bool IsNarrow) {
   }
 }
 
-Pattern* Parser::parseWidePattern() {
-  return parsePrimitivePattern(false);
+Pattern* Parser::parseWidePattern(TokenStream& Tokens) {
+  return parsePrimitivePattern(Tokens, false);
 }
 
-Pattern* Parser::parseNarrowPattern() {
-  return parsePrimitivePattern(true);
+Pattern* Parser::parseNarrowPattern(TokenStream& Tokens) {
+  return parsePrimitivePattern(Tokens, true);
 }
 
-TypeExpression* Parser::parseTypeExpression() {
-  return parseQualifiedTypeExpression();
+TypeExpression* Parser::parseTypeExpression(TokenStream& Tokens) {
+  return parseQualifiedTypeExpression(Tokens);
 }
 
-TypeExpression* Parser::parseQualifiedTypeExpression() {
+TypeExpression* Parser::parseQualifiedTypeExpression(TokenStream& Tokens) {
+
   bool HasConstraints = false;
 
   // First we check if there is a '=>', indicating that there are (class)
@@ -507,11 +515,12 @@ TypeExpression* Parser::parseQualifiedTypeExpression() {
       }
     }
   }
+
 after_lookahead:
 
   // Skip the logic below if we can see that there is are no constraint expressions.
   if (!HasConstraints) {
-    return parseArrowTypeExpression();
+    return parseArrowTypeExpression(Tokens);
   }
 
   Tokens.get();
@@ -533,7 +542,7 @@ after_lookahead:
 
   for (;;) {
 
-    auto C = parseConstraintExpression();
+    auto C = parseConstraintExpression(Tokens);
 
     if (!C) {
       // If we couldn't parse the constraint expression then we assume that
@@ -564,7 +573,7 @@ after_lookahead:
 
 after_constraints:
 
-  RArrowAlt = expectToken<class RArrowAlt>();
+  RArrowAlt = expectToken<class RArrowAlt>(Tokens);
   if (!RArrowAlt) {
     LParen->unref();
     for (auto [CE, Comma]: Constraints) {
@@ -577,7 +586,7 @@ after_constraints:
     return nullptr;
   }
 
-  auto TE = parseArrowTypeExpression();
+  auto TE = parseArrowTypeExpression(Tokens);
   if (!TE) {
     LParen->unref();
     for (auto [CE, Comma]: Constraints) {
@@ -594,14 +603,14 @@ after_constraints:
   return new QualifiedTypeExpression { Constraints, RArrowAlt, TE };
 }
 
-TypeExpression* Parser::parsePrimitiveTypeExpression() {
+TypeExpression* Parser::parsePrimitiveTypeExpression(TokenStream& Tokens) {
 
   auto T0 = Tokens.peek();
 
   switch (T0->getKind()) {
 
     case NodeKind::Identifier:
-        return parseVarTypeExpression();
+        return parseVarTypeExpression(Tokens);
 
     case NodeKind::LBrace:
     {
@@ -621,7 +630,7 @@ TypeExpression* Parser::parsePrimitiveTypeExpression() {
           break;
         }
 
-        auto Name = expectToken<Identifier>();
+        auto Name = expectToken<Identifier>(Tokens);
         if (Name == nullptr) {
           for (auto [Field, Comma]: Fields) {
             Field->unref();
@@ -632,7 +641,7 @@ TypeExpression* Parser::parsePrimitiveTypeExpression() {
           return nullptr;
         }
 
-        auto Colon = expectToken<class Colon>();
+        auto Colon = expectToken<class Colon>(Tokens);
         if (Colon == nullptr) {
           for (auto [Field, Comma]: Fields) {
             Field->unref();
@@ -644,7 +653,7 @@ TypeExpression* Parser::parsePrimitiveTypeExpression() {
           return nullptr;
         }
 
-        auto TE = parseTypeExpression();
+        auto TE = parseTypeExpression(Tokens);
         if (TE == nullptr) {
           for (auto [Field, Comma]: Fields) {
             Field->unref();
@@ -669,7 +678,7 @@ TypeExpression* Parser::parsePrimitiveTypeExpression() {
           Tokens.get();
           Fields.push_back(std::make_tuple(Field, nullptr));
           VBar = static_cast<class VBar*>(T3);
-          Rest = parseTypeExpression();
+          Rest = parseTypeExpression(Tokens);
           if (!Rest) {
             for (auto [Field, Comma]: Fields) {
               Field->unref();
@@ -736,7 +745,7 @@ TypeExpression* Parser::parsePrimitiveTypeExpression() {
           break;
         }
 
-        auto TE = parseTypeExpression();
+        auto TE = parseTypeExpression(Tokens);
         if (!TE) {
           LParen->unref();
           for (auto [TE, Comma]: Elements) {
@@ -779,7 +788,7 @@ after_tuple_element:
     }
 
     case NodeKind::IdentifierAlt:
-      return parseReferenceTypeExpression();
+      return parseReferenceTypeExpression(Tokens);
 
     default:
       Tokens.get();
@@ -789,11 +798,11 @@ after_tuple_element:
 
 }
 
-ReferenceTypeExpression* Parser::parseReferenceTypeExpression() {
+ReferenceTypeExpression* Parser::parseReferenceTypeExpression(TokenStream& Tokens) {
 
   std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
 
-  auto Name = expectToken<IdentifierAlt>();
+  auto Name = expectToken<IdentifierAlt>(Tokens);
   if (!Name) {
     return nullptr;
   }
@@ -810,7 +819,7 @@ ReferenceTypeExpression* Parser::parseReferenceTypeExpression() {
 
     ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(Name), static_cast<Dot*>(T1)));
 
-    Name = expectToken<IdentifierAlt>();
+    Name = expectToken<IdentifierAlt>(Tokens);
     if (!Name) {
       for (auto [Name, Dot]: ModulePath) {
         Name->unref();
@@ -824,9 +833,9 @@ ReferenceTypeExpression* Parser::parseReferenceTypeExpression() {
   return new ReferenceTypeExpression(ModulePath, static_cast<IdentifierAlt*>(Name));
 }
 
-TypeExpression* Parser::parseAppTypeExpression() {
+TypeExpression* Parser::parseAppTypeExpression(TokenStream& Tokens) {
 
-  auto OpTy = parsePrimitiveTypeExpression();
+  auto OpTy = parsePrimitiveTypeExpression(Tokens);
 
   if (!OpTy) {
     return nullptr;
@@ -849,7 +858,7 @@ TypeExpression* Parser::parseAppTypeExpression() {
              || Kind == NodeKind::VBar) {
       break;
     }
-    auto TE = parsePrimitiveTypeExpression();
+    auto TE = parsePrimitiveTypeExpression(Tokens);
     if (!TE) {
       OpTy->unref();
       for (auto Arg: ArgTys) {
@@ -867,9 +876,9 @@ TypeExpression* Parser::parseAppTypeExpression() {
   return new AppTypeExpression { OpTy, ArgTys };
 }
 
-TypeExpression* Parser::parseArrowTypeExpression() {
+TypeExpression* Parser::parseArrowTypeExpression(TokenStream& Tokens) {
 
-  auto RetType = parseAppTypeExpression();
+  auto RetType = parseAppTypeExpression(Tokens);
 
   if (RetType == nullptr) {
     return nullptr;
@@ -884,7 +893,7 @@ TypeExpression* Parser::parseArrowTypeExpression() {
     }
     Tokens.get();
     ParamTypes.push_back(RetType);
-    RetType = parseAppTypeExpression();
+    RetType = parseAppTypeExpression(Tokens);
     if (!RetType) {
       for (auto ParamType: ParamTypes) {
         ParamType->unref();
@@ -900,30 +909,30 @@ TypeExpression* Parser::parseArrowTypeExpression() {
   return RetType;
 }
 
-MatchExpression* Parser::parseMatchExpression() {
+MatchExpression* Parser::parseMatchExpression(TokenStream& Tokens) {
 
-  auto T0 = expectToken<MatchKeyword>();
+  auto Annotations = parseAnnotations(Tokens);
 
+  auto T0 = expectToken<MatchKeyword>(Tokens);
   if (!T0) {
     return nullptr;
   }
 
-  auto T1 = Tokens.peek();
-
   Expression* Value;
   BlockStart* BlockStart;
 
+  auto T1 = Tokens.peek();
   if (isa<class BlockStart>(T1)) {
     Value = nullptr;
     BlockStart = static_cast<class BlockStart*>(T1);
     Tokens.get();
   } else {
-    Value = parseExpression();
+    Value = parseExpression(Tokens);
     if (!Value) {
       T0->unref();
       return nullptr;
     }
-    BlockStart = expectToken<class BlockStart>();
+    BlockStart = expectToken<class BlockStart>(Tokens);
     if (!BlockStart) {
       T0->unref();
       Value->unref();
@@ -939,34 +948,42 @@ MatchExpression* Parser::parseMatchExpression() {
       Tokens.get()->unref();
       break;
     }
-    auto Pattern = parseWidePattern();
+    auto Pattern = parseWidePattern(Tokens);
     if (!Pattern) {
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
-    auto RArrowAlt = expectToken<class RArrowAlt>();
+    auto RArrowAlt = expectToken<class RArrowAlt>(Tokens);
     if (!RArrowAlt) {
       Pattern->unref();
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
-    auto Expression = parseExpression();
+    auto Expression = parseExpression(Tokens);
     if (!Expression) {
       Pattern->unref();
       RArrowAlt->unref();
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
-    checkLineFoldEnd();
+    checkLineFoldEnd(Tokens);
     Cases.push_back(new MatchCase { Pattern, RArrowAlt, Expression });
   }
 
-  return new MatchExpression(static_cast<MatchKeyword*>(T0), Value, BlockStart, Cases);
+  return new MatchExpression {
+    Annotations,
+    static_cast<MatchKeyword*>(T0),
+    Value,
+    BlockStart,
+    Cases
+  };
 }
 
-RecordExpression* Parser::parseRecordExpression() {
+RecordExpression* Parser::parseRecordExpression(TokenStream& Tokens) {
 
-  auto LBrace = expectToken<class LBrace>();
+  auto Annotations = parseAnnotations(Tokens);
+
+  auto LBrace = expectToken<class LBrace>(Tokens);
   if (!LBrace) {
     return nullptr;
   }
@@ -986,7 +1003,7 @@ RecordExpression* Parser::parseRecordExpression() {
 
     for (;;) {
 
-      auto Name = expectToken<Identifier>();
+      auto Name = expectToken<Identifier>(Tokens);
       if (!Name) {
         LBrace->unref();
         for (auto [Field, Comma]: Fields) {
@@ -996,7 +1013,7 @@ RecordExpression* Parser::parseRecordExpression() {
         return nullptr;
       }
 
-      auto Equals = expectToken<class Equals>();
+      auto Equals = expectToken<class Equals>(Tokens);
       if (!Equals) {
         LBrace->unref();
         for (auto [Field, Comma]: Fields) {
@@ -1007,7 +1024,7 @@ RecordExpression* Parser::parseRecordExpression() {
         return nullptr;
       }
 
-      auto E = parseExpression();
+      auto E = parseExpression(Tokens);
       if (!E) {
         LBrace->unref();
         for (auto [Field, Comma]: Fields) {
@@ -1047,12 +1064,14 @@ RecordExpression* Parser::parseRecordExpression() {
 
   }
 
-  return new RecordExpression { LBrace, Fields, RBrace };
+  return new RecordExpression { Annotations, LBrace, Fields, RBrace };
 }
 
-FunctionExpression* Parser::parseFunctionExpression() {
+FunctionExpression* Parser::parseFunctionExpression(TokenStream& Tokens) {
 
-  auto Backslash = expectToken<class Backslash>();
+  auto Annotations = parseAnnotations(Tokens);
+
+  auto Backslash = expectToken<class Backslash>(Tokens);
   if (!Backslash) {
     return nullptr;
   }
@@ -1080,7 +1099,7 @@ FunctionExpression* Parser::parseFunctionExpression() {
       break;
     }
 
-    auto P = parseNarrowPattern();
+    auto P = parseNarrowPattern(Tokens);
     if (!P) {
       Backslash->unref();
       unrefAll(Params);
@@ -1090,7 +1109,7 @@ FunctionExpression* Parser::parseFunctionExpression() {
     Params.push_back(P);
   }
 
-  auto E = parseExpression();
+  auto E = parseExpression(Tokens);
   if (!E) {
     Backslash->unref();
     unrefAll(Params);
@@ -1099,6 +1118,7 @@ FunctionExpression* Parser::parseFunctionExpression() {
   }
 
   return new FunctionExpression {
+    Annotations,
     Backslash,
     Params,
     RArrow,
@@ -1106,50 +1126,64 @@ FunctionExpression* Parser::parseFunctionExpression() {
   };
 }
 
-Expression* Parser::parsePrimitiveExpression() {
+ReferenceExpression* Parser::parseReferenceExpression(TokenStream& Tokens) {
 
-  auto Annotations = parseAnnotations();
+  auto Annotations = parseAnnotations(Tokens);
 
-  auto T0 = Tokens.peek();
+  std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
+
+  for (;;) {
+
+    auto T1 = Tokens.peek(0);
+    auto T2 = Tokens.peek(1);
+
+    if (!isa<IdentifierAlt>(T1) || !isa<Dot>(T2)) {
+      break;
+    }
+
+    Tokens.get();
+    Tokens.get();
+
+    ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), static_cast<class Dot*>(T2)));
+  }
+
+  auto T3 = Tokens.get();
+
+  if (!isa<Identifier>(T3) && !isa<IdentifierAlt>(T3)) {
+    for (auto [Name, Dot]: ModulePath) {
+      Name->unref();
+      Dot->unref();
+    }
+    DE.add<UnexpectedTokenDiagnostic>(File, T3, std::vector { NodeKind::Identifier, NodeKind::IdentifierAlt });
+    return nullptr;
+  }
+
+  return new ReferenceExpression(Annotations, ModulePath, Symbol::from_raw_node(T3));
+}
+
+LiteralExpression* Parser::parseLiteralExpression(TokenStream& Tokens) {
+  auto Annotations = parseAnnotations(Tokens);
+  auto T0 = Tokens.get();
+  if (!isa<Literal>(T0)) {
+    DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::IntegerLiteral, NodeKind::StringLiteral });
+    return nullptr;
+  }
+  return new LiteralExpression(Annotations, static_cast<Literal*>(T0));
+}
+
+Expression* Parser::parsePrimitiveExpression(TokenStream& Tokens) {
+
+  auto T0 = peekTokenAfterAnnotations(Tokens);
 
   switch (T0->getKind()) {
 
     case NodeKind::Identifier:
     case NodeKind::IdentifierAlt:
-    {
-      std::vector<std::tuple<IdentifierAlt*, Dot*>> ModulePath;
-
-      for (;;) {
-
-        auto T1 = Tokens.peek(0);
-        auto T2 = Tokens.peek(1);
-
-        if (!isa<IdentifierAlt>(T1) || !isa<Dot>(T2)) {
-          break;
-        }
-
-        Tokens.get();
-        Tokens.get();
-
-        ModulePath.push_back(std::make_tuple(static_cast<IdentifierAlt*>(T1), static_cast<class Dot*>(T2)));
-      }
-
-      auto T3 = Tokens.get();
-
-      if (!isa<Identifier>(T3) && !isa<IdentifierAlt>(T3)) {
-        for (auto [Name, Dot]: ModulePath) {
-          Name->unref();
-          Dot->unref();
-        }
-        DE.add<UnexpectedTokenDiagnostic>(File, T3, std::vector { NodeKind::Identifier, NodeKind::IdentifierAlt });
-        return nullptr;
-      }
-
-      return new ReferenceExpression(Annotations, ModulePath, Symbol::from_raw_node(T3));
-    }
+      return parseReferenceExpression(Tokens);
 
     case NodeKind::LParen:
     {
+      auto Annotations = parseAnnotations(Tokens);
 
       Tokens.get();
       auto LParen = static_cast<class LParen*>(T0);
@@ -1170,7 +1204,7 @@ Expression* Parser::parsePrimitiveExpression() {
 
         auto T1 = Tokens.peek();
 
-        auto E = parseExpression();
+        auto E = parseExpression(Tokens);
         if (!E) {
           LParen->unref();
           for (auto [E, Comma]: Elements) {
@@ -1225,27 +1259,26 @@ after_tuple_elements:
     }
 
     case NodeKind::Backslash:
-      return parseFunctionExpression();
+      return parseFunctionExpression(Tokens);
 
     case NodeKind::MatchKeyword:
-      return parseMatchExpression();
+      return parseMatchExpression(Tokens);
   
     case NodeKind::DoKeyword:
-      return parseBlockExpression();
+      return parseBlockExpression(Tokens);
 
     case NodeKind::IfKeyword:
-      return parseIfExpression();
+      return parseIfExpression(Tokens);
 
     case NodeKind::ReturnKeyword:
-      return parseReturnExpression();
+      return parseReturnExpression(Tokens);
 
     case NodeKind::IntegerLiteral:
     case NodeKind::StringLiteral:
-      Tokens.get();
-      return new LiteralExpression(Annotations, static_cast<Literal*>(T0));
+      return parseLiteralExpression(Tokens);
 
     case NodeKind::LBrace:
-      return parseRecordExpression();
+      return parseRecordExpression(Tokens);
 
     default:
       Tokens.get();
@@ -1265,15 +1298,17 @@ after_tuple_elements:
 
 }
 
-BlockExpression* Parser::parseBlockExpression(std::vector<Annotation*> Annotations) {
+BlockExpression* Parser::parseBlockExpression(TokenStream& Tokens) {
 
-  auto DoKeyword = expectToken<class DoKeyword>();
+  auto Annotations = parseAnnotations(Tokens);
+
+  auto DoKeyword = expectToken<class DoKeyword>(Tokens);
   if (!DoKeyword) {
     unrefAll(Annotations);
     return nullptr;
   }
 
-  auto BlockStart = expectToken<class BlockStart>();
+  auto BlockStart = expectToken<class BlockStart>(Tokens);
   if (!BlockStart) {
     unrefAll(Annotations);
     DoKeyword->unref();
@@ -1291,7 +1326,7 @@ BlockExpression* Parser::parseBlockExpression(std::vector<Annotation*> Annotatio
         break;
       }
 
-      auto Element = parseLetBodyElement();
+      auto Element = parseLetBodyElement(Tokens);
       if (Element == nullptr) {
         unrefAll(Annotations);
         DoKeyword->unref();
@@ -1310,8 +1345,8 @@ BlockExpression* Parser::parseBlockExpression(std::vector<Annotation*> Annotatio
   };
 }
 
-Expression* Parser::parseMemberExpression() {
-  auto E = parsePrimitiveExpression();
+Expression* Parser::parseMemberExpression(TokenStream& Tokens) {
+  auto E = parsePrimitiveExpression(Tokens);
   if (!E) {
     return nullptr;
   }
@@ -1340,8 +1375,8 @@ finish:
   return E;
 }
 
-Expression* Parser::parseCallExpression() {
-  auto Operator = parseMemberExpression();
+Expression* Parser::parseCallExpression(TokenStream& Tokens) {
+  auto Operator = parseMemberExpression(Tokens);
   if (!Operator) {
     return nullptr;
   }
@@ -1357,7 +1392,7 @@ Expression* Parser::parseCallExpression() {
         || ExprOperators.isInfix(T1)) {
       break;
     }
-    auto Arg = parseMemberExpression();
+    auto Arg = parseMemberExpression(Tokens);
     if (!Arg) {
       Operator->unref();
       for (auto Arg: Args) {
@@ -1375,7 +1410,7 @@ Expression* Parser::parseCallExpression() {
   return new CallExpression(Annotations, Operator, Args);
 }
 
-Expression* Parser::parseUnaryExpression() {
+Expression* Parser::parseUnaryExpression(TokenStream& Tokens) {
 
   std::vector<Token*> Prefix;
 
@@ -1392,7 +1427,7 @@ Expression* Parser::parseUnaryExpression() {
     Prefix.push_back(T0);
   }
 
-  auto E = parseCallExpression();
+  auto E = parseCallExpression(Tokens);
   if (!E) {
     for (auto Tok: Prefix) {
       Tok->unref();
@@ -1407,7 +1442,7 @@ Expression* Parser::parseUnaryExpression() {
   return E;
 }
 
-Expression* Parser::parseInfixOperatorAfterExpression(Expression* Left, int MinPrecedence) {
+Expression* Parser::parseInfixOperatorAfterExpression(TokenStream& Tokens, Expression* Left, int MinPrecedence) {
 
   for (;;) {
 
@@ -1420,7 +1455,7 @@ Expression* Parser::parseInfixOperatorAfterExpression(Expression* Left, int MinP
 
     Tokens.get();
 
-    auto Right = parseUnaryExpression();
+    auto Right = parseUnaryExpression(Tokens);
     if (!Right) {
       Left->unref();
       T0->unref();
@@ -1436,7 +1471,7 @@ Expression* Parser::parseInfixOperatorAfterExpression(Expression* Left, int MinP
         break;
       }
 
-      auto NewRight = parseInfixOperatorAfterExpression(Right, Info1->Precedence);
+      auto NewRight = parseInfixOperatorAfterExpression(Tokens, Right, Info1->Precedence);
       if (!NewRight) {
         Left->unref();
         T0->unref();
@@ -1453,29 +1488,29 @@ Expression* Parser::parseInfixOperatorAfterExpression(Expression* Left, int MinP
   return Left;
 }
 
-Expression* Parser::parseExpression() {
-  auto Left = parseUnaryExpression();
+Expression* Parser::parseExpression(TokenStream& Tokens) {
+  auto Left = parseUnaryExpression(Tokens);
   if (!Left) {
     return nullptr;
   }
-  return parseInfixOperatorAfterExpression(Left, 0);
+  return parseInfixOperatorAfterExpression(Tokens, Left, 0);
 }
 
-Expression* Parser::parseExpressionStatement() {
-  auto E = parseExpression();
+Expression* Parser::parseExpressionStatement(TokenStream& Tokens) {
+  auto E = parseExpression(Tokens);
   if (!E) {
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
-  checkLineFoldEnd();
+  checkLineFoldEnd(Tokens);
   return E;
 }
 
-ReturnExpression* Parser::parseReturnExpression() {
+ReturnExpression* Parser::parseReturnExpression(TokenStream& Tokens) {
 
-  auto Annotations = parseAnnotations();
+  auto Annotations = parseAnnotations(Tokens);
 
-  auto ReturnKeyword = expectToken<class ReturnKeyword>();
+  auto ReturnKeyword = expectToken<class ReturnKeyword>(Tokens);
   if (!ReturnKeyword) {
     unrefAll(Annotations);
     return nullptr;
@@ -1488,7 +1523,7 @@ ReturnExpression* Parser::parseReturnExpression() {
     Tokens.get()->unref();
     Expression = nullptr;
   } else {
-    Expression = parseExpression();
+    Expression = parseExpression(Tokens);
     if (!Expression) {
       unrefAll(Annotations);
       ReturnKeyword->unref();
@@ -1499,30 +1534,30 @@ ReturnExpression* Parser::parseReturnExpression() {
   return new ReturnExpression(Annotations, ReturnKeyword, Expression);
 }
 
-IfExpression* Parser::parseIfExpression() {
+IfExpression* Parser::parseIfExpression(TokenStream& Tokens) {
 
-  auto Annotations = parseAnnotations();
+  auto Annotations = parseAnnotations(Tokens);
 
   std::vector<IfExpressionPart*> Parts;
 
-  auto IfKeyword = expectToken<class IfKeyword>();
+  auto IfKeyword = expectToken<class IfKeyword>(Tokens);
   if (!IfKeyword) {
     unrefAll(Annotations);
     return nullptr;
   }
 
-  auto Test = parseExpression();
+  auto Test = parseExpression(Tokens);
   if (!Test) {
     IfKeyword->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
-  auto T1 = expectToken<BlockStart>();
+  auto T1 = expectToken<BlockStart>(Tokens);
   if (!T1) {
     IfKeyword->unref();
     Test->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -1537,7 +1572,7 @@ IfExpression* Parser::parseIfExpression() {
       break;
     }
 
-    auto Element = parseLetBodyElement();
+    auto Element = parseLetBodyElement(Tokens);
     if (Element) {
       Then.push_back(Element);
     }
@@ -1550,23 +1585,23 @@ IfExpression* Parser::parseIfExpression() {
 
   for (;;) {
 
-    auto T3 = peekFirstTokenAfterAnnotationsAndModifiers();
+    auto T3 = peekTokenAfterAnnotationsAndModifiers(Tokens);
 
     if (T3->getKind() != NodeKind::ElseKeyword && T3->getKind() != NodeKind::ElifKeyword) {
       break;
     }
 
-    auto Annotations = parseAnnotations();
+    auto Annotations = parseAnnotations(Tokens);
 
     Tokens.get();
 
     Expression* Test = nullptr;
 
     if (T3->getKind() == NodeKind::ElifKeyword) {
-      Test = parseExpression();
+      Test = parseExpression(Tokens);
     }
 
-    auto T4 = expectToken<BlockStart>();
+    auto T4 = expectToken<BlockStart>(Tokens);
     if (!T4) {
       for (auto Part: Parts) {
         Part->unref();
@@ -1585,7 +1620,7 @@ IfExpression* Parser::parseIfExpression() {
         break;
       }
 
-      auto Element = parseLetBodyElement();
+      auto Element = parseLetBodyElement(Tokens);
       if (Element) {
         Alt.push_back(Element);
       }
@@ -1613,9 +1648,10 @@ enum class FnMode {
   Named,
 };
 
-FunctionDeclaration* Parser::parseFunctionDeclaration() {
+FunctionDeclaration* Parser::parseFunctionDeclaration(TokenStream& Tokens) {
 
-  auto Annotations = parseAnnotations();
+  auto Annotations = parseAnnotations(Tokens);
+
   PubKeyword* Pub = nullptr;
   ForeignKeyword* Foreign = nullptr;
   FnKeyword* Fn;
@@ -1647,7 +1683,7 @@ FunctionDeclaration* Parser::parseFunctionDeclaration() {
     if (Foreign) {
       Foreign->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
   Fn = static_cast<FnKeyword*>(T0);
@@ -1658,14 +1694,14 @@ FunctionDeclaration* Parser::parseFunctionDeclaration() {
   if (isa<Operator>(T2)) {
     // Prefix function declaration
     Tokens.get();
-    auto P1 = parseNarrowPattern();
+    auto P1 = parseNarrowPattern(Tokens);
     Param = new Parameter(P1, nullptr);
     Op = Operator::from_raw_node(T2);
     Mode = FnMode::Prefix;
     goto after_params;
   } else if (isa<Operator>(T3) && (T4->getKind() == NodeKind::Colon || T4->getKind() == NodeKind::Equals || T4->getKind() == NodeKind::BlockStart || T4->getKind() == NodeKind::LineFoldEnd)) {
     // Sufffix function declaration
-    auto P1 = parseNarrowPattern();
+    auto P1 = parseNarrowPattern(Tokens);
     Param = new Parameter(P1, nullptr);
     Tokens.get();
     Op = Operator::from_raw_node(T3);
@@ -1684,10 +1720,10 @@ FunctionDeclaration* Parser::parseFunctionDeclaration() {
     Mode = FnMode::Wrapped;
   } else if (isa<Operator>(T3)) {
     // Infix function declaration
-    auto P1 = parseNarrowPattern();
+    auto P1 = parseNarrowPattern(Tokens);
     Left = new Parameter(P1, nullptr);
     Tokens.get();
-    auto P2 = parseNarrowPattern();
+    auto P2 = parseNarrowPattern(Tokens);
     Right = new Parameter(P2, nullptr);
     Op = Operator::from_raw_node(T3);
     Mode = FnMode::Infix;
@@ -1695,7 +1731,7 @@ FunctionDeclaration* Parser::parseFunctionDeclaration() {
   } else {
     // Variable declaration or named function declaration
     Mode = FnMode::Named;
-    Name = parseNarrowPattern();
+    Name = parseNarrowPattern(Tokens);
     if (!Name) {
       if (Pub) {
         Pub->unref();
@@ -1704,7 +1740,7 @@ FunctionDeclaration* Parser::parseFunctionDeclaration() {
         Foreign->unref();
       }
       Fn->unref();
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       return nullptr;
     }
   }
@@ -1718,7 +1754,7 @@ FunctionDeclaration* Parser::parseFunctionDeclaration() {
       case NodeKind::Colon:
         goto after_params;
       default:
-        auto P = parseNarrowPattern();
+        auto P = parseNarrowPattern(Tokens);
         if (!P) {
           Tokens.get();
           P = new BindPattern(new Identifier("_"));
@@ -1733,11 +1769,11 @@ after_params:
 
   if (T5->getKind() == NodeKind::Colon) {
     Tokens.get();
-    auto TE = parseTypeExpression();
+    auto TE = parseTypeExpression(Tokens);
     if (TE) {
       TA = new TypeAssert(static_cast<Colon*>(T5), TE);
     } else {
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       goto finish;
     }
     T5 = Tokens.peek();
@@ -1753,7 +1789,7 @@ after_params:
         if (T6->getKind() == NodeKind::BlockEnd) {
           break;
         }
-        auto Element = parseLetBodyElement();
+        auto Element = parseLetBodyElement(Tokens);
         if (Element) {
           Elements.push_back(Element);
         }
@@ -1765,9 +1801,9 @@ after_params:
     case NodeKind::Equals:
     {
       Tokens.get();
-      auto E = parseExpression();
+      auto E = parseExpression(Tokens);
       if (!E) {
-        skipPastLineFoldEnd();
+        skipPastLineFoldEnd(Tokens);
         goto finish;
       }
       Body = new LetExprBody(static_cast<Equals*>(T5), E);
@@ -1786,7 +1822,7 @@ after_params:
       DE.add<UnexpectedTokenDiagnostic>(File, T5, Expected);
   }
 
-  checkLineFoldEnd();
+  checkLineFoldEnd(Tokens);
 
 finish:
 
@@ -1851,9 +1887,9 @@ finish:
 }
 
 
-VariableDeclaration* Parser::parseVariableDeclaration() {
+VariableDeclaration* Parser::parseVariableDeclaration(TokenStream& Tokens) {
 
-  auto Annotations = parseAnnotations();
+  auto Annotations = parseAnnotations(Tokens);
   PubKeyword* Pub = nullptr;
   LetKeyword* Let;
   MutKeyword* Mut = nullptr;
@@ -1873,7 +1909,7 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
     if (Pub) {
       Pub->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
   Let = static_cast<LetKeyword*>(T0);
@@ -1886,7 +1922,7 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
   auto T2 = Tokens.peek(0);
   auto T3 = Tokens.peek(1);
   auto T4 = Tokens.peek(2);
-  Name = parseNarrowPattern();
+  Name = parseNarrowPattern(Tokens);
   if (!Name) {
     if (Pub) {
       Pub->unref();
@@ -1895,7 +1931,7 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
     if (Mut) {
       Mut->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -1903,11 +1939,11 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
 
   if (T5->getKind() == NodeKind::Colon) {
     Tokens.get();
-    auto TE = parseTypeExpression();
+    auto TE = parseTypeExpression(Tokens);
     if (TE) {
       TA = new TypeAssert(static_cast<Colon*>(T5), TE);
     } else {
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       goto finish;
     }
     T5 = Tokens.peek();
@@ -1928,7 +1964,7 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
           break;
         }
 
-        auto Element = parseLetBodyElement();
+        auto Element = parseLetBodyElement(Tokens);
         if (Element) {
           Elements.push_back(Element);
         }
@@ -1946,9 +1982,9 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
     {
       Tokens.get();
 
-      auto E = parseExpression();
+      auto E = parseExpression(Tokens);
       if (!E) {
-        skipPastLineFoldEnd();
+        skipPastLineFoldEnd(Tokens);
         goto finish;
       }
 
@@ -1971,7 +2007,7 @@ VariableDeclaration* Parser::parseVariableDeclaration() {
       DE.add<UnexpectedTokenDiagnostic>(File, T5, Expected);
   }
 
-  checkLineFoldEnd();
+  checkLineFoldEnd(Tokens);
 
 finish:
 
@@ -1986,19 +2022,19 @@ finish:
   );
 }
 
-Node* Parser::parseLetBodyElement() {
-  auto T0 = peekFirstTokenAfterAnnotationsAndModifiers();
+Node* Parser::parseLetBodyElement(TokenStream& Tokens) {
+  auto T0 = peekTokenAfterAnnotationsAndModifiers(Tokens);
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
-      return parseVariableDeclaration();
+      return parseVariableDeclaration(Tokens);
     case NodeKind::FnKeyword:
-        return parseFunctionDeclaration();
+        return parseFunctionDeclaration(Tokens);
     default:
-      return parseExpressionStatement();
+      return parseExpressionStatement(Tokens);
   }
 }
 
-ConstraintExpression* Parser::parseConstraintExpression() {
+ConstraintExpression* Parser::parseConstraintExpression(TokenStream& Tokens) {
 
   bool HasTilde = false;
 
@@ -2025,18 +2061,18 @@ after_lookahead:
 
   if (HasTilde) {
 
-    auto Left = parseArrowTypeExpression();
+    auto Left = parseArrowTypeExpression(Tokens);
     if (!Left) {
       return nullptr;
     }
 
-    auto Tilde = expectToken<class Tilde>();
+    auto Tilde = expectToken<class Tilde>(Tokens);
     if (!Tilde) {
       Left->unref();
       return nullptr;
     }
 
-    auto Right = parseArrowTypeExpression();
+    auto Right = parseArrowTypeExpression(Tokens);
     if (!Right) {
       Left->unref();
       Tilde->unref();
@@ -2046,7 +2082,7 @@ after_lookahead:
     return new EqualityConstraintExpression { Left, Tilde, Right };
   }
 
-  auto Name = expectToken<IdentifierAlt>();
+  auto Name = expectToken<IdentifierAlt>(Tokens);
   if (!Name) {
     return nullptr;
   }
@@ -2082,9 +2118,9 @@ after_vars:
   return new TypeclassConstraintExpression { Name, TEs };
 }
 
-VarTypeExpression* Parser::parseVarTypeExpression() {
+VarTypeExpression* Parser::parseVarTypeExpression(TokenStream& Tokens) {
 
-  auto Name = expectToken<Identifier>();
+  auto Name = expectToken<Identifier>(Tokens);
   if (!Name) {
     return nullptr;
   }
@@ -2101,18 +2137,18 @@ VarTypeExpression* Parser::parseVarTypeExpression() {
   return new VarTypeExpression { Name };
 }
 
-InstanceDeclaration* Parser::parseInstanceDeclaration() {
+InstanceDeclaration* Parser::parseInstanceDeclaration(TokenStream& Tokens) {
 
-  auto InstanceKeyword = expectToken<class InstanceKeyword>();
+  auto InstanceKeyword = expectToken<class InstanceKeyword>(Tokens);
   if (!InstanceKeyword) {
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
-  auto Name = expectToken<IdentifierAlt>();
+  auto Name = expectToken<IdentifierAlt>(Tokens);
   if (!Name) {
     InstanceKeyword->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2125,28 +2161,28 @@ InstanceDeclaration* Parser::parseInstanceDeclaration() {
       break;
     }
 
-    auto TE = parseTypeExpression();
+    auto TE = parseTypeExpression(Tokens);
     if (!TE) {
       InstanceKeyword->unref();
       Name->unref();
       for (auto TE: TypeExps) {
         TE->unref();
       }
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       return nullptr;
     }
 
     TypeExps.push_back(TE);
   }
 
-  auto BlockStart = expectToken<class BlockStart>();
+  auto BlockStart = expectToken<class BlockStart>(Tokens);
   if (!BlockStart) { 
     InstanceKeyword->unref();
     Name->unref();
     for (auto TE: TypeExps) {
       TE->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2161,14 +2197,14 @@ InstanceDeclaration* Parser::parseInstanceDeclaration() {
       break;
     }
 
-    auto Element = parseClassElement();
+    auto Element = parseClassElement(Tokens);
     if (Element) {
       Elements.push_back(Element);
     }
 
   }
 
-  checkLineFoldEnd();
+  checkLineFoldEnd(Tokens);
 
   return new InstanceDeclaration(
     InstanceKeyword,
@@ -2179,7 +2215,7 @@ InstanceDeclaration* Parser::parseInstanceDeclaration() {
   );
 }
 
-ClassDeclaration* Parser::parseClassDeclaration() {
+ClassDeclaration* Parser::parseClassDeclaration(TokenStream& Tokens) {
 
   PubKeyword* PubKeyword = nullptr;
 
@@ -2189,22 +2225,22 @@ ClassDeclaration* Parser::parseClassDeclaration() {
     PubKeyword = static_cast<class PubKeyword*>(T0);
   }
 
-  auto ClassKeyword = expectToken<class ClassKeyword>();
+  auto ClassKeyword = expectToken<class ClassKeyword>(Tokens);
   if (!ClassKeyword) {
     if (PubKeyword) {
       PubKeyword->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
-  auto Name = expectToken<IdentifierAlt>();
+  auto Name = expectToken<IdentifierAlt>(Tokens);
   if (!Name) {
     if (PubKeyword) {
       PubKeyword->unref();
     }
     ClassKeyword->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2217,7 +2253,7 @@ ClassDeclaration* Parser::parseClassDeclaration() {
       break;
     }
 
-    auto TE = parseVarTypeExpression();
+    auto TE = parseVarTypeExpression(Tokens);
     if (!TE) {
       if (PubKeyword) {
         PubKeyword->unref();
@@ -2226,14 +2262,14 @@ ClassDeclaration* Parser::parseClassDeclaration() {
       for (auto TV: TypeVars) {
         TV->unref();
       }
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       return nullptr;
     }
 
     TypeVars.push_back(TE);
   }
 
-  auto BlockStart = expectToken<class BlockStart>();
+  auto BlockStart = expectToken<class BlockStart>(Tokens);
   if (!BlockStart) {
     if (PubKeyword) {
       PubKeyword->unref();
@@ -2242,7 +2278,7 @@ ClassDeclaration* Parser::parseClassDeclaration() {
     for (auto TV: TypeVars) {
       TV->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2257,11 +2293,11 @@ ClassDeclaration* Parser::parseClassDeclaration() {
       break;
     }
 
-    auto Element = parseClassElement();
+    auto Element = parseClassElement(Tokens);
     if (Element) {
       Elements.push_back(Element);
     } else {
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
     }
 
   }
@@ -2278,7 +2314,7 @@ ClassDeclaration* Parser::parseClassDeclaration() {
   );
 }
 
-std::vector<RecordDeclarationField*> Parser::parseRecordDeclarationFields() {
+std::vector<RecordDeclarationField*> Parser::parseRecordDeclarationFields(TokenStream& Tokens) {
 
   std::vector<RecordDeclarationField*> Fields;
 
@@ -2290,28 +2326,28 @@ std::vector<RecordDeclarationField*> Parser::parseRecordDeclarationFields() {
       break;
     }
 
-    auto Name = expectToken<Identifier>();
+    auto Name = expectToken<Identifier>(Tokens);
     if (!Name) {
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
 
-    auto Colon = expectToken<class Colon>();
+    auto Colon = expectToken<class Colon>(Tokens);
     if (!Colon) {
       Name->unref();
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
 
-    auto TE = parseTypeExpression();
+    auto TE = parseTypeExpression(Tokens);
     if (!TE) {
       Name->unref();
       Colon->unref();
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
 
-    checkLineFoldEnd();
+    checkLineFoldEnd(Tokens);
 
     Fields.push_back(new RecordDeclarationField { Name, Colon, TE });
   }
@@ -2319,7 +2355,7 @@ std::vector<RecordDeclarationField*> Parser::parseRecordDeclarationFields() {
   return Fields;
 }
 
-RecordDeclaration* Parser::parseRecordDeclaration() {
+RecordDeclaration* Parser::parseRecordDeclaration(TokenStream& Tokens) {
 
   PubKeyword* Pub = nullptr;
 
@@ -2329,22 +2365,22 @@ RecordDeclaration* Parser::parseRecordDeclaration() {
     Pub = static_cast<PubKeyword*>(T0);
   }
 
-  auto Struct = expectToken<StructKeyword>();
+  auto Struct = expectToken<StructKeyword>(Tokens);
   if (!Struct) {
     if (Pub) {
       Pub->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
-  auto Name = expectToken<IdentifierAlt>();
+  auto Name = expectToken<IdentifierAlt>(Tokens);
   if (!Name) {
     if (Pub) {
       Pub->unref();
     }
     Struct->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2354,7 +2390,7 @@ RecordDeclaration* Parser::parseRecordDeclaration() {
     if (T1->getKind() == NodeKind::BlockStart) {
       break;
     }
-    auto Var = parseVarTypeExpression();
+    auto Var = parseVarTypeExpression(Tokens);
     if (Var) {
       Vars.push_back(Var);
     } else {
@@ -2362,7 +2398,7 @@ RecordDeclaration* Parser::parseRecordDeclaration() {
     }
   }
 
-  auto BS = expectToken<BlockStart>();
+  auto BS = expectToken<BlockStart>(Tokens);
   if (!BS) {
     if (Pub) {
       Pub->unref();
@@ -2372,18 +2408,18 @@ RecordDeclaration* Parser::parseRecordDeclaration() {
     for (auto V: Vars) {
       V->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
-  auto Fields = parseRecordDeclarationFields();
+  auto Fields = parseRecordDeclarationFields(Tokens);
 
   Tokens.get()->unref(); // Always a LineFoldEnd
 
   return new RecordDeclaration { Pub, Struct, Name, Vars, BS, Fields };
 }
 
-VariantDeclaration* Parser::parseVariantDeclaration() {
+VariantDeclaration* Parser::parseVariantDeclaration(TokenStream& Tokens) {
 
   PubKeyword* Pub = nullptr;
 
@@ -2393,22 +2429,22 @@ VariantDeclaration* Parser::parseVariantDeclaration() {
     Pub = static_cast<PubKeyword*>(T0);
   }
 
-  auto Enum = expectToken<EnumKeyword>();
+  auto Enum = expectToken<EnumKeyword>(Tokens);
   if (!Enum) {
     if (Pub) {
       Pub->unref();
     }
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
-  auto Name = expectToken<IdentifierAlt>();
+  auto Name = expectToken<IdentifierAlt>(Tokens);
   if (!Name) {
     if (Pub) {
       Pub->unref();
     }
     Enum->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2421,21 +2457,21 @@ VariantDeclaration* Parser::parseVariantDeclaration() {
       break;
     }
 
-    auto Var = parseVarTypeExpression();
+    auto Var = parseVarTypeExpression(Tokens);
     if (Var) {
       TVs.push_back(Var);
     }
 
   }
 
-  auto BS = expectToken<BlockStart>();
+  auto BS = expectToken<BlockStart>(Tokens);
   if (!BS) {
     if (Pub) {
       Pub->unref();
     }
     Enum->unref();
     Name->unref();
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
     return nullptr;
   }
 
@@ -2450,9 +2486,9 @@ next_member:
       break;
     }
 
-    auto Name = expectToken<IdentifierAlt>();
+    auto Name = expectToken<IdentifierAlt>(Tokens);
     if (!Name) {
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       continue;
     }
 
@@ -2460,7 +2496,7 @@ next_member:
     if (T1->getKind() == NodeKind::BlockStart) {
       Tokens.get();
       auto BS = static_cast<BlockStart*>(T1);
-      auto Fields = parseRecordDeclarationFields();
+      auto Fields = parseRecordDeclarationFields(Tokens);
       // TODO continue; on error in Fields
       Members.push_back(new RecordVariantDeclarationMember { Name, BS, Fields });
     } else {
@@ -2475,7 +2511,7 @@ next_member:
           break;
         }
 
-        auto TE = parsePrimitiveTypeExpression();
+        auto TE = parsePrimitiveTypeExpression(Tokens);
         if (!TE) {
           Name->unref();
           for (auto El: Elements) {
@@ -2492,59 +2528,59 @@ next_member:
 
   }
 
-  checkLineFoldEnd();
+  checkLineFoldEnd(Tokens);
 
   return new VariantDeclaration { Pub, Enum, Name, TVs, BS, Members };
 }
 
-Node* Parser::parseClassElement() {
+Node* Parser::parseClassElement(TokenStream& Tokens) {
 
   auto T0 = Tokens.peek();
 
   switch (T0->getKind()) {
 
     case NodeKind::LetKeyword:
-      return parseVariableDeclaration();
+      return parseVariableDeclaration(Tokens);
 
     case NodeKind::TypeKeyword:
       // TODO
 
     default:
       DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector<NodeKind> { NodeKind::LetKeyword, NodeKind::TypeKeyword });
-      skipPastLineFoldEnd();
+      skipPastLineFoldEnd(Tokens);
       return nullptr;
   }
 }
 
-Node* Parser::parseSourceElement() {
+Node* Parser::parseSourceElement(TokenStream& Tokens) {
 
-  auto T0 = peekFirstTokenAfterAnnotationsAndModifiers();
+  auto T0 = peekTokenAfterAnnotationsAndModifiers(Tokens);
 
   switch (T0->getKind()) {
     case NodeKind::LetKeyword:
-      return parseVariableDeclaration();
+      return parseVariableDeclaration(Tokens);
 
     case NodeKind::FnKeyword:
-        return parseFunctionDeclaration();
+        return parseFunctionDeclaration(Tokens);
 
     case NodeKind::ClassKeyword:
-      return parseClassDeclaration();
+      return parseClassDeclaration(Tokens);
 
     case NodeKind::InstanceKeyword:
-      return parseInstanceDeclaration();
+      return parseInstanceDeclaration(Tokens);
 
     case NodeKind::StructKeyword:
-      return parseRecordDeclaration();
+      return parseRecordDeclaration(Tokens);
 
     case NodeKind::EnumKeyword:
-      return parseVariantDeclaration();
+      return parseVariantDeclaration(Tokens);
 
     default:
-      return parseExpressionStatement();
+      return parseExpressionStatement(Tokens);
   }
 }
 
-SourceFile* Parser::parseSourceFile() {
+SourceFile* Parser::parseSourceFile(TokenStream& Tokens) {
 
   std::vector<Node*> Elements;
 
@@ -2555,7 +2591,7 @@ SourceFile* Parser::parseSourceFile() {
       break;
     }
 
-    auto Element = parseSourceElement();
+    auto Element = parseSourceElement(Tokens);
     if (Element) {
       Elements.push_back(Element);
     }
@@ -2565,7 +2601,17 @@ SourceFile* Parser::parseSourceFile() {
   return new SourceFile(File, Elements);
 }
 
-std::vector<Annotation*> Parser::parseAnnotations() {
+std::vector<Annotation*> Parser::parseAnnotations(TokenStream& Tokens) {
+
+  // Small trick to avoid parsing annotations multiple times if a lookahead
+  // function was used. The tested variable will be populated in functions such
+  // as peekTokenAfterAnnotations()
+  if (CachedAnnotations) {
+    auto [Count, Keep] = *CachedAnnotations;
+    Tokens.skip(Count);
+    CachedAnnotations = {};
+    return Keep;
+  }
 
   std::vector<Annotation*> Annotations;
 
@@ -2585,7 +2631,7 @@ std::vector<Annotation*> Parser::parseAnnotations() {
       {
         auto Colon = static_cast<class Colon*>(T1);
         Tokens.get();
-        auto TE = parsePrimitiveTypeExpression();
+        auto TE = parsePrimitiveTypeExpression(Tokens);
         if (!TE) {
           // TODO
           continue;
@@ -2597,13 +2643,13 @@ std::vector<Annotation*> Parser::parseAnnotations() {
       {
         // auto Name = static_cast<Identifier*>(T1);
         // Tokens.get();
-        auto E = parseExpression();
+        auto E = parseExpression(Tokens);
         if (!E) {
           At->unref();
-          skipPastLineFoldEnd();
+          skipPastLineFoldEnd(Tokens);
           continue;
         }
-        checkLineFoldEnd();
+        checkLineFoldEnd(Tokens);
         Annotations.push_back(new ExpressionAnnotation { At, E });
         continue;
       }
@@ -2620,7 +2666,7 @@ next_annotation:;
   return Annotations;
 }
 
-void Parser::skipToRBrace() {
+void Parser::skipToRBrace(TokenStream& Tokens) {
 
   unsigned ParenLevel = 0;
   unsigned BracketLevel = 0;
@@ -2689,13 +2735,14 @@ void Parser::skipToRBrace() {
       default:
         Tokens.get()->unref();
         break;
+        
     }
 
   }
 
 }
 
-void Parser::skipPastLineFoldEnd() {
+void Parser::skipPastLineFoldEnd(TokenStream& Tokens) {
 
   unsigned ParenLevel = 0;
   unsigned BracketLevel = 0;
@@ -2767,7 +2814,7 @@ void Parser::skipPastLineFoldEnd() {
 
 }
 
-void Parser::checkLineFoldEnd() {
+void Parser::checkLineFoldEnd(TokenStream& Tokens) {
 
   auto T0 = Tokens.peek();
 
@@ -2775,7 +2822,7 @@ void Parser::checkLineFoldEnd() {
     Tokens.get()->unref();
   } else {
     DE.add<UnexpectedTokenDiagnostic>(File, T0, std::vector { NodeKind::LineFoldEnd });
-    skipPastLineFoldEnd();
+    skipPastLineFoldEnd(Tokens);
   }
 
 }
