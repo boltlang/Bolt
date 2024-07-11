@@ -117,7 +117,7 @@ public:
 
   Type* instantiate(TypeScheme* Scm);
 
-  void visitPattern(Pattern* P, Type* Ty, TypeEnv& Out);
+  ConstraintSet visitPattern(Pattern* P, Type* Ty, TypeEnv& Out);
 
   ConstraintSet inferSourceFile(TypeEnv& Env, SourceFile* SF);
 
