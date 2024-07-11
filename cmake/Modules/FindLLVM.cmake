@@ -1,6 +1,10 @@
 # Code taken from LDC – the LLVM-based D Compiler
 # https://github.com/ldc-developers/ldc
 #
+# - Find LLVM headers and libraries.
+# This module locates LLVM and adapts the llvm-config output for use with
+# CMake.
+#
 # A given list of COMPONENTS is passed to llvm-config.
 #
 # The following variables are defined:
@@ -31,13 +35,10 @@
 # We also want an user-specified LLVM_ROOT_DIR to take precedence over the
 # system default locations such as /usr/local/bin. Executing find_program()
 # multiples times is the approach recommended in the docs.
-set(llvm_config_names llvm-config-17.0 llvm-config170 llvm-config-17
+set(llvm_config_names llvm-config-18.1 llvm-config181 llvm-config-18
+                      llvm-config-17.0 llvm-config170 llvm-config-17
                       llvm-config-16.0 llvm-config160 llvm-config-16
                       llvm-config-15.0 llvm-config150 llvm-config-15
-                      llvm-config-14.0 llvm-config140 llvm-config-14
-                      llvm-config-13.0 llvm-config130 llvm-config-13
-                      llvm-config-12.0 llvm-config120 llvm-config-12
-                      llvm-config-11.0 llvm-config110 llvm-config-11
                       llvm-config)
 find_program(LLVM_CONFIG
     NAMES ${llvm_config_names}
@@ -48,15 +49,11 @@ if(APPLE)
     # extra fallbacks for MacPorts & Homebrew
     find_program(LLVM_CONFIG
         NAMES ${llvm_config_names}
-        PATHS /opt/local/libexec/llvm-17/bin
+        PATHS /opt/local/libexec/llvm-18/bin /opt/local/libexec/llvm-17/bin
               /opt/local/libexec/llvm-16/bin /opt/local/libexec/llvm-15/bin
-              /opt/local/libexec/llvm-14/bin /opt/local/libexec/llvm-13/bin
-              /opt/local/libexec/llvm-12/bin /opt/local/libexec/llvm-11/bin
               /opt/local/libexec/llvm/bin
-              /usr/local/opt/llvm@17/bin
+              /usr/local/opt/llvm@18/bin /usr/local/opt/llvm@17/bin
               /usr/local/opt/llvm@16/bin /usr/local/opt/llvm@15/bin
-              /usr/local/opt/llvm@14/bin /usr/local/opt/llvm@13/bin
-              /usr/local/opt/llvm@12/bin /usr/local/opt/llvm@11/bin
               /usr/local/opt/llvm/bin
         NO_DEFAULT_PATH)
 endif()
