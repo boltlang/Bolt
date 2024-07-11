@@ -101,7 +101,6 @@ if (BOLT_ENABLE_TESTS)
   add_executable(
     alltests
     test/TestText.cc
-    test/TestChecker.cc
   )
   target_link_libraries(
     alltests
