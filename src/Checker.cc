@@ -475,8 +475,14 @@ auto getUnbound(const TypeEnv& Env, Type* Ty) {
       Env(Env) {}
     std::vector<TVar*> Out;
     void visitVar(TVar* TV) {
-      if (!Env.hasVar(TV)) {
-        Out.push_back(TV);
+      auto Solved = TV->find();
+      if (isa<TVar>(Solved)) {
+        auto Var = static_cast<TVar*>(Solved);
+        if (!Env.hasVar(Var)) {
+          Out.push_back(Var);
+        }
+      } else {
+        visit(Solved);
       }
     }
   } V { Env };
