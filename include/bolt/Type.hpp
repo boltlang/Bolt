@@ -146,6 +146,8 @@ public:
     }
   }
 
+  static constexpr const TypeKind Kind = TypeKind::Var;
+
 };
 
 class TCon : public Type {
@@ -160,6 +162,8 @@ public:
   ByteStringView getName() const {
     return Name;
   }
+
+  static constexpr const TypeKind Kind = TypeKind::Con;
 
 };
 
@@ -181,6 +185,8 @@ public:
     return Right;
   }
 
+  static constexpr const TypeKind Kind = TypeKind::Fun;
+
 };
 
 class TApp : public Type {
@@ -200,6 +206,8 @@ public:
   Type* getRight() const {
     return Right;
   }
+
+  static constexpr const TypeKind Kind = TypeKind::App;
 
 };
 
