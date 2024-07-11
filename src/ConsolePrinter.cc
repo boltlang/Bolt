@@ -97,6 +97,8 @@ static std::string describe(NodeKind Type) {
       return "'('";
     case NodeKind::RParen:
       return "')'";
+    case NodeKind::FnKeyword:
+      return "'fn'";
     case NodeKind::LBrace:
       return "'['";
     case NodeKind::RBrace:
@@ -125,6 +127,8 @@ static std::string describe(NodeKind Type) {
       return "'->'";
     case NodeKind::RArrowAlt:
       return "'=>'";
+    case NodeKind::DoKeyword:
+      return "do";
     case NodeKind::PubKeyword:
       return "'pub'";
     case NodeKind::LetKeyword:
@@ -153,6 +157,8 @@ static std::string describe(NodeKind Type) {
       return "'class'";
     case NodeKind::InstanceKeyword:
       return "'instance'";
+    case NodeKind::Backslash:
+      return "'\\'";
     case NodeKind::PrefixFunctionDeclaration:
     case NodeKind::InfixFunctionDeclaration:
     case NodeKind::SuffixFunctionDeclaration:
