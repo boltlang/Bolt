@@ -324,11 +324,11 @@ std::tuple<ConstraintSet, Type*> Checker::inferTypeExpr(TypeEnv& Env, TypeExpres
 
     case NodeKind::ReferenceTypeExpression:
       {
-        auto E = static_cast<ReferenceTypeExpression*>(TE);
-        auto Name = E->Name->getCanonicalText();
+        auto Ref = static_cast<ReferenceTypeExpression*>(TE);
+        auto Name = Ref->Name->getCanonicalText();
         auto Match = Env.lookup(Name, SymbolKind::Type);
         if (Match == nullptr) {
-          DE.add<BindingNotFoundDiagnostic>(Name, E->Name);
+          DE.add<BindingNotFoundDiagnostic>(Name, Ref->Name);
           Ty = createTVar();
         } else {
           Ty = instantiate(Match);
@@ -532,11 +532,11 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
     solve(Out);
     for (auto N: Nodes) {
       if (isa<FunctionDeclaration>(N)) {
-        auto M = static_cast<FunctionDeclaration*>(N);
-        auto Unbound = getUnbound(Env, cast<Declaration>(N)->getType());
+        auto Func = static_cast<FunctionDeclaration*>(N);
+        auto Unbound = getUnbound(Env, Func->getType());
         Env.add(
-          M->getNameAsString(),
-          new TypeScheme { { Unbound.begin(), Unbound.end() }, M->getType() },
+          Func->getNameAsString(),
+          new TypeScheme { { Unbound.begin(), Unbound.end() }, Func->getType()->find() },
           SymbolKind::Var
         );
       }
