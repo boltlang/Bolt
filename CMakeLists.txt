@@ -3,11 +3,29 @@ cmake_minimum_required(VERSION 3.20)
 
 project(Bolt C CXX)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
+
+option(BOLT_ENABLE_LLVM "Enable using LLVM as a back-end" ON)
+option(BOLT_ENABLE_CLANG "Enable integration with the Clang compiler" ON)
+
+if (NOT BOLT_ENABLE_LLVM AND BOLT_ENABLE_CLANG)
+  message(FATAL_ERROR "BOLT_ENABLE_LLVM must be set when enabling BOLT_ENABLE_CLANG")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 
-add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
-# add_subdirectory(deps/llvm-project/llvm EXCLUDE_FROM_ALL)
+if (BOLT_ENABLE_LLVM)
+  add_subdirectory(deps/llvm/llvm EXCLUDE_FROM_ALL)
+  # find_package(LLVM 18 REQUIRED all-targets)
+  # if (BOLT_ENABLE_CLANG)
+  #   find_package(Clang 18 REQUIRED)
+  # endif()
+endif()
 
+add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
+add_subdirectory(deps/fmt EXCLUDE_FROM_ALL)
+
+# FIXME temporary solution
 set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
 set(ICU_CFLAGS "-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1")
 set(ICU_INCLUDE_DIRS "${ICU_DIR}/include")
@@ -17,8 +35,6 @@ set(ICU_LIBRARIES icuuc)
 if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(BOLT_DEBUG ON)
 endif()
-
-#find_package(LLVM 19.0 REQUIRED)
 
 add_library(
   BoltCore
@@ -38,15 +54,30 @@ target_link_directories(
   BoltCore
   PUBLIC
   ${ICU_LIBRARY_DIRS}
+  ${CLANG_LIBDIRS}
 )
 target_compile_options(
   BoltCore
   PUBLIC
   -Werror
   -fno-exceptions
+  #-fno-rtti
   ${ICU_CFLAGS}
 )
-
+target_include_directories(
+  BoltCore
+  PUBLIC
+  include
+  ${ICU_LIBRARY_DIRS}
+  ${CLANG_INCLUDE_DIRS}
+)
+target_link_libraries(
+  BoltCore
+  PUBLIC
+  zen
+  icuuc
+  ${CLANG_LIBRARIES}
+)
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND BOLT_DEBUG)
   target_compile_options(
     BoltCore
@@ -54,36 +85,17 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND BOLT_DEBUG)
     -fstandalone-debug
   )
 endif()
-target_include_directories(
-  BoltCore
-  PUBLIC
-  include
-  ${ICU_LIBRARY_DIRS}
+
+add_library(
+  BoltLLVM
+  src/LLVMCodeGen.cc
 )
 target_link_libraries(
-  BoltCore
+  BoltLLVM
   PUBLIC
-  zen
-  icuuc
+  BoltCore
+  LLVM
 )
-
-# add_library(
-#   BoltLLVM
-#   src/LLVMCodeGen.cc
-# )
-# target_link_libraries(
-#   BoltLLVM
-#   PUBLIC
-#   BoltCore
-#   LLVMCore
-#   LLVMTarget
-# )
-# target_include_directories(
-#   BoltLLVM
-#   PUBLIC
-#   deps/llvm-project/llvm/include # FIXME this is a hack
-#   ${CMAKE_BINARY_DIR}/deps/llvm-project/llvm/include # FIXME this is a hack
-# )
 
 add_executable(
   bolt
@@ -93,7 +105,8 @@ target_link_libraries(
   bolt
   PUBLIC
   BoltCore
-  # BoltLLVM
+  BoltLLVM
+  fmt::fmt
 )
 
 if (BOLT_ENABLE_TESTS)

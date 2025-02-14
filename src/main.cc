@@ -1,12 +1,18 @@
 
-#include <stdio.h>
-
+#include <cwchar>
 #include <iostream>
 #include <fstream>
 #include <algorithm>
 #include <map>
 
+#include "llvm/IR/Module.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Path.h"
+
 #include "zen/po.hpp"
+#include "zen/fs/io.hpp"
 
 #include "bolt/CST.hpp"
 #include "bolt/CSTVisitor.hpp"
@@ -19,6 +25,8 @@
 #include "bolt/Evaluator.hpp"
 #include "bolt/Program.hpp"
 
+#include "LLVMCodeGen.hpp"
+
 using namespace bolt;
 
 /**
@@ -26,21 +34,6 @@ using namespace bolt;
  * terminate xargs's looping.
  */
 const constexpr int XARGS_STOP_LOOP = 255;
-
-ByteString readFile(std::string Path) {
-
-  std::ifstream File(Path);
-  ByteString Out;
-
-  File.seekg(0, std::ios::end);
-  Out.reserve(File.tellg());
-  File.seekg(0, std::ios::beg);
-
-  Out.assign((std::istreambuf_iterator<char>(File)),
-              std::istreambuf_iterator<char>());
-
-  return Out;
-}
 
 namespace po = zen::po;
 
@@ -68,9 +61,11 @@ int main(int Argc, const char* Argv[]) {
       po::command("verify", "Verify integrity of the compiler on selected file(s)")
         .pos_arg("file", po::some))
     .subcommand(
+      po::command("build", "Build sources into a library or executable")
+        .pos_arg("file", po::some))
+    .subcommand(
       po::command("eval", "Run sources")
-        .pos_arg("file", po::some)
-        .fallback())
+        .pos_arg("file", po::some))
     .parse_args(Argc, Argv)
     .unwrap();
 
@@ -91,16 +86,21 @@ int main(int Argc, const char* Argv[]) {
 
   for (auto Filename: Submatch->get_pos_args()) {
 
-    auto Text = readFile(Filename);
+    auto ReadResult = zen::fs::read_file(Filename);
+    if (!ReadResult) {
+      DE.add<OpenFileFailedDiagnostic>(Filename, ReadResult.left());
+      continue;
+    }
+    ByteString Text { ReadResult->c_str(), ReadResult->size() };
     TextFile File { Filename, Text };
-    VectorStream<ByteString, Char> Chars(Text, EOF);
-    Scanner S(DE, File, Chars);
-    Punctuator PT(S);
-    auto Buffer = getAllTokens(PT);
-    Parser P(File, DE);
+    VectorStream<ByteString, Char> Chars { Text, EOF };
+    Scanner TheScanner(DE, File, Chars);
+    Punctuator ThePunctuator(TheScanner);
+    auto Buffer = getAllTokens(ThePunctuator);
+    Parser TheParser(File, DE);
     TokenStream Tokens { Buffer };
 
-    auto SF = P.parseSourceFile(Tokens);
+    auto SF = TheParser.parseSourceFile(Tokens);
     if (SF == nullptr) {
       continue;
     }
@@ -201,7 +201,36 @@ int main(int Argc, const char* Argv[]) {
     return 255;
   }
 
-  if (Name == "eval") {
+  if (Name == "build") {
+
+    // auto HostABI = "x86_64";
+    // auto TripleStr = "x86_64-pc-linux-gnu";
+
+    // std::string Error;
+    // auto Target = llvm::TargetRegistry::lookupTarget(TripleStr, Error);
+    // if (!Target) {
+    //   error("failed to create codegen target: {}\n", Error);
+    //   return 255;
+    // }
+
+    llvm::LLVMContext TheContext;
+    for (auto SF: Prog.getSourceFiles()) {
+
+      LLVMCodeGen CG { TheContext, Prog.getTypeChecker(SF) };
+      auto Module = CG.generate(SF);
+
+      auto SourcePath = SF->getFilePath();
+
+      auto IRPath = SourcePath.parent_path() / (SourcePath.stem().string() + ".ll");
+
+      std::cerr << IRPath << "\n";
+
+      // std::error_code EC;
+      // llvm::raw_fd_ostream OS { IRPath, EC };
+      // Module->print(OS, nullptr);
+    }
+
+  } else if (Name == "eval") {
     Evaluator E;
     Env GlobalEnv;
     GlobalEnv.add("print", Value::binding([](auto Args) {
@@ -213,6 +242,7 @@ int main(int Argc, const char* Argv[]) {
       // TODO add a SourceFile-local env that inherits from GlobalEnv
       E.evaluate(SF, GlobalEnv);
     }
+
   }
 
   return 0;
