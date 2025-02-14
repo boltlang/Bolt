@@ -8,6 +8,7 @@
 #include <variant>
 #include <vector>
 #include <optional>
+#include <filesystem>
 
 #include "zen/config.hpp"
 #include "zen/range.hpp"
@@ -3014,6 +3015,10 @@ public:
 
   inline const TextFile& getTextFile() const {
     return File;
+  }
+
+  inline std::filesystem::path getFilePath() {
+    return File.getPath();
   }
 
   Token* getFirstToken() const override;
