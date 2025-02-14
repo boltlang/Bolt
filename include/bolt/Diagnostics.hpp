@@ -1,8 +1,8 @@
 
 #pragma once
 
-#include <cwchar>
 #include <vector>
+#include <filesystem>
 
 #include "bolt/ByteString.hpp"
 #include "bolt/String.hpp"
@@ -22,6 +22,7 @@ enum class DiagnosticKind : unsigned char {
   UnexpectedString,
   UnexpectedToken,
   TypeMismatchError,
+  OpenFileFailedDiagnostic,
 };
 
 class Diagnostic {
@@ -115,6 +116,27 @@ public:
 
   unsigned getCode() const override {
     return 3001;
+  }
+
+};
+
+class OpenFileFailedDiagnostic : public Diagnostic {
+public:
+
+  std::filesystem::path Filename;
+  std::error_code Code;
+
+  inline OpenFileFailedDiagnostic(
+    std::filesystem::path Filename,
+    std::error_code Code
+  ): Diagnostic(DiagnosticKind::OpenFileFailedDiagnostic), Filename(Filename), Code(Code) {}
+
+  inline Node* getNode() const override {
+    return nullptr;
+  }
+
+  unsigned getCode() const override {
+    return 101;
   }
 
 };

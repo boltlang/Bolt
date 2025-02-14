@@ -1,6 +1,7 @@
 
 // FIXME writeExcerpt does not work well with the last line in a file
 
+#include <cstring>
 #include <functional>
 #include <cmath>
 
@@ -606,6 +607,16 @@ void ConsolePrinter::writeDiagnostic(const Diagnostic& D) {
       writeExcerpt(E.File, Range, Range, Color::Red);
       write("\n");
       return;
+    }
+
+    case DiagnosticKind::OpenFileFailedDiagnostic:
+    {
+        auto E = static_cast<const OpenFileFailedDiagnostic&>(D);
+        write("failed to open file ");
+        write(E.Filename.c_str());
+        write(": ");
+        write(strerror(E.Code.value()));
+        return;
     }
 
     case DiagnosticKind::TypeMismatchError:
