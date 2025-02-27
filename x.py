@@ -208,7 +208,7 @@ def build_bolt(llvm_root: Path) -> None:
             'BOLT_ENABLE_TESTS': True,
             'ZEN_ENABLE_TESTS': False,
             'LLVM_ROOT': str(llvm_install_dir),
-            'ICU_ROOt': str(icu_install_dir),
+            'ICU_ROOT': str(icu_install_dir),
             #'LLVM_CONFIG': str(llvm_config_path),
             #'LLVM_TARGETS_TO_BUILD': 'X86',
         }
