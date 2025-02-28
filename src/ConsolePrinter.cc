@@ -616,6 +616,7 @@ void ConsolePrinter::writeDiagnostic(const Diagnostic& D) {
         write(E.Filename.c_str());
         write(": ");
         write(strerror(E.Code.value()));
+        write("\n");
         return;
     }
 
