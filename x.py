@@ -15,6 +15,13 @@ ICU_VERSION = '76.1'
 
 here = Path(__file__).parent.resolve()
 
+NONE = 0
+CLANG = 1
+GCC = 2
+MSVC = 3
+
+force = None
+
 parser = argparse.ArgumentParser()
 
 parser.add_argument('--no-ninja', action='store_true', help='Do not use Ninja if present')
@@ -26,6 +33,11 @@ parser.add_argument('-j', '--jobs', help='The maximum amount of jobs that build 
 parser.add_argument('--no-system-llvm', action='store_true', help='Use a local version of the LLVM compiler framework')
 
 args = parser.parse_args()
+
+if args.clang:
+    force = CLANG
+elif args.gcc:
+    force = GCC
 
 cache_dir = here / '.cache' / 'bolt-build'
 download_dir = cache_dir / 'downloads'
@@ -198,17 +210,18 @@ def ninja(targets: list[str], cwd: Path | None = None) -> None:
         argv.extend([ '-C', str(cwd) ])
     spawn(argv)
 
-def build_bolt(llvm_root: Path) -> None:
+def build_bolt(llvm_root: Path, icu_root: Path) -> None:
 
     if newer(bolt_source_dir / 'CMakeLists.txt', bolt_build_dir):
 
+        print(icu_root)
         defines: dict[str, CMakeValue] = {
             'CMAKE_EXPORT_COMPILE_COMMANDS': True,
             'CMAKE_BUILD_TYPE': 'Debug',
             'BOLT_ENABLE_TESTS': True,
             'ZEN_ENABLE_TESTS': False,
-            'LLVM_ROOT': str(llvm_install_dir),
-            'ICU_ROOT': str(icu_install_dir),
+            'LLVM_ROOT': str(llvm_root),
+            'ICU_ROOT': str(icu_root),
             #'LLVM_CONFIG': str(llvm_config_path),
             #'LLVM_TARGETS_TO_BUILD': 'X86',
         }
@@ -241,29 +254,28 @@ def build_icu(version: str) -> None:
     env = dict(os.environ)
     env['CC'] = str(c_path)
     env['CXX'] = str(cxx_path)
-    env['CPPFLAGS'] = '-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1'
+    env['CXXFLAGS'] = '-std=c++17'
+    #env['CPPFLAGS'] = '-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1'
+    env['CPPFLAGS'] = '-DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1'
     configured_path = icu_source_dir / '.configured'
     if not configured_path.exists():
-        shell(f'{icu_source_dir}/source/runConfigureICU Linux', cwd=icu_build_dir, env=env)
+        spawn([ f'{icu_source_dir}/source/runConfigureICU', 'Linux', '--enable-static', '--prefix', str(icu_install_dir) ], cwd=icu_build_dir, env=env)
         touch(configured_path)
-    built_path = icu_source_dir / '.built'
-    if not built_path.exists():
-        shell(f'make -j{os.cpu_count()}', cwd=icu_build_dir, env=env)
-        touch(built_path)
+    installed_path = icu_source_dir / '.installed'
+    if not installed_path.exists():
+        shell(f'make install -j{os.cpu_count()}', cwd=icu_build_dir, env=env)
+        touch(installed_path)
 
 enable_ninja = not args.no_ninja
-
-NONE = 0
-CLANG = 1
-GCC = 2
-MSVC = 3
-
-force = NONE
 
 ninja_path = enable_ninja and shutil.which('ninja')
 
 def detect_compilers() -> tuple[Path, Path] | None:
     if os.name == 'posix':
+        cxx_path = os.environ.get('CXX')
+        c_path = os.environ.get('CC')
+        if c_path is not None and cxx_path is not None:
+            return Path(c_path).absolute(), Path(cxx_path).absolute()
         for suffix in [ '', '-19', '-18' ]:
             clang_c_path = shutil.which(f'clang{suffix}')
             clang_cxx_path = shutil.which(f'clang++{suffix}')
@@ -313,9 +325,7 @@ if llvm_config_path is None or args.no_system_llvm:
 
 llvm_root = Path(stdout([ str(llvm_config_path), '--cmakedir' ]))
 
-print(llvm_root)
-
 build_icu(version=ICU_VERSION)
 
-build_bolt(llvm_root=llvm_root)
+build_bolt(llvm_root=llvm_root, icu_root=icu_install_dir)
 

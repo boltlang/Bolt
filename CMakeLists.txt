@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 
 project(Bolt C CXX)
 
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
+#set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules")
 
 option(BOLT_ENABLE_LLVM "Enable using LLVM as a back-end" ON)
 option(BOLT_ENABLE_CLANG "Enable integration with the Clang compiler" ON)
@@ -14,8 +14,12 @@ endif()
 
 set(CMAKE_CXX_STANDARD 20)
 
+find_package(ICU REQUIRED uc)
+
 if (BOLT_ENABLE_LLVM)
-  add_subdirectory(deps/llvm/llvm EXCLUDE_FROM_ALL)
+  find_package(LLVM REQUIRED CONFIG)
+  message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+  message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
   # find_package(LLVM 18 REQUIRED all-targets)
   # if (BOLT_ENABLE_CLANG)
   #   find_package(Clang 18 REQUIRED)
@@ -26,11 +30,11 @@ add_subdirectory(deps/zen EXCLUDE_FROM_ALL)
 add_subdirectory(deps/fmt EXCLUDE_FROM_ALL)
 
 # FIXME temporary solution
-set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
-set(ICU_CFLAGS "-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1")
-set(ICU_INCLUDE_DIRS "${ICU_DIR}/include")
-set(ICU_LIBRARY_DIRS "${ICU_DIR}/lib")
-set(ICU_LIBRARIES icuuc)
+#set(ICU_DIR "${CMAKE_CURRENT_SOURCE_DIR}/build/icu/install")
+#set(ICU_CFLAGS "-DUNISTR_FROM_CHAR_EXPLICIT=explicit -DUNISTR_FROM_STRING_EXPLICIT=explicit -DU_NO_DEFAULT_INCLUDE_UTF_HEADERS=1 -DU_HIDE_OBSOLETE_UTF_OLD_H=1")
+#set(ICU_INCLUDE_DIRS "${ICU_DIR}/include")
+#set(ICU_LIBRARY_DIRS "${ICU_DIR}/lib")
+#set(ICU_LIBRARIES icuuc)
 
 if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo" OR CMAKE_BUILD_TYPE STREQUAL "Debug")
   set(BOLT_DEBUG ON)
@@ -78,6 +82,7 @@ target_link_libraries(
   icuuc
   ${CLANG_LIBRARIES}
 )
+
 if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND BOLT_DEBUG)
   target_compile_options(
     BoltCore
@@ -86,15 +91,34 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang" AND BOLT_DEBUG)
   )
 endif()
 
+separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
+llvm_map_components_to_libnames(llvm_libs support core native)
+message("Libs: ${llvm_libs}")
+
 add_library(
   BoltLLVM
   src/LLVMCodeGen.cc
+)
+target_include_directories(
+  BoltLLVM
+  PUBLIC
+  ${LLVM_INCLUDE_DIRS}
 )
 target_link_libraries(
   BoltLLVM
   PUBLIC
   BoltCore
-  LLVM
+  ${llvm_libs}
+)
+target_compile_definitions(
+  BoltLLVM
+  PUBLIC
+  ${LLVM_DEFINITIONS_LIST}
+)
+target_link_directories(
+  BoltLLVM
+  PUBLIC
+  ${LLVM_LIBRARY_DIRS}
 )
 
 add_executable(
