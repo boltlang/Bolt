@@ -58,46 +58,6 @@ void TypeEnv::dump() const {
   }
 }
 
-using TVSub = std::unordered_map<TVar*, Type*>;
-
-Type* substituteType(Type* Ty, const TVSub& Sub) {
-  switch (Ty->getKind()) {
-    case TypeKind::App:
-      {
-        auto A = static_cast<TApp*>(Ty);
-        auto NewLeft = substituteType(A->getLeft(), Sub);
-        auto NewRight = substituteType(A->getRight(), Sub);
-        if (A->getLeft() == NewLeft && A->getRight() == NewRight) {
-          return Ty;
-        }
-        return new TApp(NewLeft, NewRight);
-      }
-    case TypeKind::Con:
-      return Ty;
-    case TypeKind::Var:
-      {
-        auto NewTy = Ty->find();
-        if (NewTy->getKind() != TypeKind::Var) {
-          return substituteType(NewTy, Sub);
-        }
-        auto Match = Sub.find(static_cast<TVar*>(NewTy));
-        return Match == Sub.end() 
-            ? NewTy
-            : Match->second;
-      }
-    case TypeKind::Fun:
-      {
-        auto F = static_cast<TFun*>(Ty);
-        auto NewLeft = substituteType(F->getLeft(), Sub);
-        auto NewRight = substituteType(F->getRight(), Sub);
-        if (F->getLeft() == NewLeft && F->getRight() == NewRight) {
-          return Ty;
-        }
-        return new TFun(NewLeft, NewRight);
-      }
-  }
-}
-
 Checker::Checker(DiagnosticEngine& DE):
   DE(DE) {
     IntType = new TCon("Int");
@@ -106,14 +66,20 @@ Checker::Checker(DiagnosticEngine& DE):
     UnitType = new TCon("()");
   }
 
-Type* Checker::instantiate(TypeScheme* Scm) {
+std::tuple<ConstraintSet, Type*> Checker::instantiate(TypeScheme* Scm) {
   TVSub Sub;
   for (auto TV: Scm->Unbound) {
     auto Fresh = createTVar();
     Sub[TV] = Fresh;
   }
-  // TODO instantiate constraints
-  return substituteType(Scm->getType(), Sub);
+  std::vector<Constraint*> Constraints;
+  for (const auto C: Scm->Constraints) {
+    Constraints.push_back(substitute(C, Sub));
+  }
+  return {
+    Constraints,
+    substitute(Scm->getType(), Sub),
+  };
 }
 
 std::tuple<ConstraintSet, Type*> Checker::inferExpr(TypeEnv& Env, Expression* Expr, Type* RetTy) {
@@ -209,7 +175,9 @@ std::tuple<ConstraintSet, Type*> Checker::inferExpr(TypeEnv& Env, Expression* Ex
           DE.add<BindingNotFoundDiagnostic>(Name, E->Name);
           Ty = createTVar();
         } else {
-          Ty = instantiate(Match);
+          auto [Out2, Ty2] = instantiate(Match);
+          mergeTo(Out, Out2);
+          Ty = Ty2;
         }
         break;
       }
@@ -261,7 +229,9 @@ std::tuple<ConstraintSet, Type*> Checker::inferExpr(TypeEnv& Env, Expression* Ex
         }
         auto RetTy = createTVar();
         auto FunTy = new TFun(LeftTy, new TFun(RightTy, RetTy));
-        Out.push_back(new CTypesEqual(FunTy, instantiate(Match), E));
+        auto [MatchOut, MatchTy] = instantiate(Match);
+        mergeTo(Out, MatchOut);
+        Out.push_back(new CTypesEqual(FunTy, MatchTy, E));
         Ty = RetTy;
         break;
       }
@@ -350,7 +320,9 @@ std::tuple<ConstraintSet, Type*> Checker::inferTypeExpr(TypeEnv& Env, TypeExpres
           DE.add<BindingNotFoundDiagnostic>(Name, Ref->Name);
           Ty = createTVar();
         } else {
-          Ty = instantiate(Match);
+          auto [Out2, Ty2] = instantiate(Match);
+          mergeTo(Out, Out2);
+          Ty = Ty2;
         }
         break;
       }

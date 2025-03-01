@@ -57,4 +57,6 @@ public:
 
 };
 
+Constraint* substitute(const Constraint* C, const TVSub& Sub);
+
 }

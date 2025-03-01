@@ -1,5 +1,6 @@
 
 #include "zen/config.hpp"
+#include <istream>
 #include <sstream>
 
 #include "bolt/Type.hpp"
@@ -111,6 +112,44 @@ std::string TypeScheme::toString() const {
   }
   Out << Ty->toString();
   return Out.str();
+}
+
+Type* substitute(Type* Ty, const TVSub& Sub) {
+  switch (Ty->getKind()) {
+    case TypeKind::App:
+      {
+        auto A = static_cast<TApp*>(Ty);
+        auto NewLeft = substitute(A->getLeft(), Sub);
+        auto NewRight = substitute(A->getRight(), Sub);
+        if (A->getLeft() == NewLeft && A->getRight() == NewRight) {
+          return Ty;
+        }
+        return new TApp(NewLeft, NewRight);
+      }
+    case TypeKind::Con:
+      return Ty;
+    case TypeKind::Var:
+      {
+        auto NewTy = Ty->find();
+        if (NewTy->getKind() != TypeKind::Var) {
+          return substitute(NewTy, Sub);
+        }
+        auto Match = Sub.find(static_cast<TVar*>(NewTy));
+        return Match == Sub.end() 
+            ? NewTy
+            : Match->second;
+      }
+    case TypeKind::Fun:
+      {
+        auto F = static_cast<TFun*>(Ty);
+        auto NewLeft = substitute(F->getLeft(), Sub);
+        auto NewRight = substitute(F->getRight(), Sub);
+        if (F->getLeft() == NewLeft && F->getRight() == NewRight) {
+          return Ty;
+        }
+        return new TFun(NewLeft, NewRight);
+      }
+  }
 }
 
 }

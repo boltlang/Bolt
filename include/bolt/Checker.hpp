@@ -74,7 +74,7 @@ public:
      return new TVar("a" + std::to_string(NextVarId++));
   }
 
-  Type* instantiate(TypeScheme* Scm);
+  std::tuple<ConstraintSet, Type*> instantiate(TypeScheme* Scm);
 
   ConstraintSet visitPattern(Pattern* P, Type* Ty, TypeEnv& Out);
 

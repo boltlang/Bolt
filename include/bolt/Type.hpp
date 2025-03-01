@@ -5,6 +5,7 @@
 #include <cwchar>
 #include <vector>
 #include <unordered_set>
+#include <unordered_map>
 
 #include "zen/config.hpp"
 
@@ -214,6 +215,10 @@ public:
   static constexpr const TypeKind Kind = TypeKind::App;
 
 };
+
+using TVSub = std::unordered_map<TVar*, Type*>;
+
+Type* substitute(Type* Ty, const TVSub& Sub);
 
 struct TypeScheme {
 
