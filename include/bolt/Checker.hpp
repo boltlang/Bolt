@@ -31,6 +31,8 @@ public:
 
   bool hasVar(TVar* TV) const;
 
+  void dump() const;
+
   TypeScheme* lookup(ByteString Name, SymbolKind Kind);
 
 };
@@ -45,6 +47,8 @@ class Checker {
   Type* BoolType;
   Type* StringType;
   Type* UnitType;
+
+  unsigned NextVarId = 0;
 
 public:
 
@@ -67,7 +71,7 @@ public:
   }
 
   TVar* createTVar() {
-     return new TVar();
+     return new TVar("a" + std::to_string(NextVarId++));
   }
 
   Type* instantiate(TypeScheme* Scm);

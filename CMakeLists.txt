@@ -49,6 +49,7 @@ add_library(
   src/Scanner.cc
   src/Parser.cc
   src/Type.cc
+  src/Constraint.cc
   src/Checker.cc
   src/Evaluator.cc
   src/Scope.cc

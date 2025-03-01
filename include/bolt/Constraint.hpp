@@ -5,6 +5,8 @@
 
 namespace bolt {
 
+class Node;
+
 enum class ConstraintKind {
   TypesEqual,
 };
@@ -23,6 +25,8 @@ public:
   inline ConstraintKind getKind() const {
     return Kind;
   }
+
+  std::string toString() const;
 
 };
 
@@ -48,6 +52,8 @@ public:
   Node* getOrigin() const {
     return Origin;
   }
+
+  std::string toString() const;
 
 };
 

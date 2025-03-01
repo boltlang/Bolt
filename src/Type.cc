@@ -1,5 +1,6 @@
 
 #include "zen/config.hpp"
+#include <sstream>
 
 #include "bolt/Type.hpp"
 
@@ -74,7 +75,7 @@ std::string Type::toString() const {
         return F->getLeft()->toString() + " -> " + F->getRight()->toString();
       }
     case TypeKind::Var:
-      return "α";
+      return static_cast<const TVar*>(this)->Name;
   }
 }
 
@@ -97,6 +98,19 @@ void TypeVisitor::visit(Type* Ty) {
       visitVar(static_cast<TVar*>(Ty));
       break;
   }
+}
+
+std::string TypeScheme::toString() const {
+  std::ostringstream Out;
+  if (!Unbound.empty()) {
+    Out << "forall";
+    for (auto TV: Unbound) {
+      Out << " " << TV->toString();
+    }
+    Out << ". ";
+  }
+  Out << Ty->toString();
+  return Out.str();
 }
 
 }

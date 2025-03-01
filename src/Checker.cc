@@ -1,15 +1,14 @@
+#include <unordered_set>
+#include <cwchar>
+#include <functional>
 
-#include "bolt/CSTVisitor.hpp"
 #include "zen/graph.hpp"
 
 #include "bolt/ByteString.hpp"
 #include "bolt/CST.hpp"
+#include "bolt/CSTVisitor.hpp"
 #include "bolt/Type.hpp"
 #include "bolt/Diagnostics.hpp"
-#include <algorithm>
-#include <cwchar>
-#include <functional>
-#include <variant>
 #include "bolt/Checker.hpp"
 
 namespace bolt {
@@ -33,11 +32,30 @@ TypeScheme* TypeEnv::lookup(ByteString Name, SymbolKind Kind) {
 }
 
 void TypeEnv::add(ByteString Name, TypeScheme* Scm, SymbolKind Kind) {
-  Mapping.emplace(std::make_tuple(Name, Kind), Scm);
+  Mapping[std::make_tuple(Name, Kind)] = Scm;
 }
 
 void TypeEnv::add(ByteString Name, Type* Ty, SymbolKind Kind) {
-  add(Name, new TypeScheme { {}, Ty }, Kind);
+  add(Name, new TypeScheme { {}, {}, Ty }, Kind);
+}
+
+void TypeEnv::dump() const {
+  for (auto [Tuple, Scm]: Mapping) {
+    auto Name = std::get<0>(Tuple);
+    auto Kind = std::get<1>(Tuple);
+    switch (Kind) {
+      case SymbolKind::Var:
+        std::cerr << "let " << Name << " : " << Scm->toString() << "\n";
+        break;
+      case SymbolKind::Type:
+        std::cerr << "type " << Name << " = " << Scm->toString() << "\n";
+        break;
+      case SymbolKind::Class:
+        ZEN_UNREACHABLE // TODO
+      case SymbolKind::Constructor:
+        ZEN_UNREACHABLE // TODO
+    }
+  }
 }
 
 using TVSub = std::unordered_map<TVar*, Type*>;
@@ -94,6 +112,7 @@ Type* Checker::instantiate(TypeScheme* Scm) {
     auto Fresh = createTVar();
     Sub[TV] = Fresh;
   }
+  // TODO instantiate constraints
   return substituteType(Scm->getType(), Sub);
 }
 
@@ -467,26 +486,45 @@ bool TypeEnv::hasVar(TVar* TV) const {
   return false;
 }
 
-auto getUnbound(const TypeEnv& Env, Type* Ty) {
+static void addUnbound(Type* Ty, const TypeEnv& Env, std::unordered_set<TVar*>& Vars) {
   struct Visitor : public TypeVisitor {
     const TypeEnv& Env;
-    Visitor(const TypeEnv& Env):
-      Env(Env) {}
-    std::vector<TVar*> Out;
+    std::unordered_set<TVar*>& Vars;
+    Visitor(const TypeEnv& Env, std::unordered_set<TVar*>& Vars):
+      Env(Env), Vars(Vars) {}
     void visitVar(TVar* TV) {
       auto Solved = TV->find();
       if (isa<TVar>(Solved)) {
         auto Var = static_cast<TVar*>(Solved);
         if (!Env.hasVar(Var)) {
-          Out.push_back(Var);
+          Vars.emplace(Var);
         }
       } else {
         visit(Solved);
       }
     }
-  } V { Env };
+  } V { Env, Vars };
   V.visit(Ty);
-  return V.Out;
+}
+
+static void addUnbound(const Constraint& C, const TypeEnv& Env, std::unordered_set<TVar*>& Vars) {
+  switch (C.getKind()) {
+    case ConstraintKind::TypesEqual:
+    {
+      auto TE = static_cast<const CTypesEqual&>(C);
+      addUnbound(TE.getLeft(), Env, Vars);
+      addUnbound(TE.getRight(), Env, Vars);
+      break;
+    }
+  }
+}
+
+static TypeScheme* generalize(const TypeEnv& Env, const ConstraintSet& Constraints, Type* Ty) {
+  std::unordered_set<TVar*> Vars;
+  for (const auto C: Constraints) {
+    addUnbound(*C, Env, Vars);
+  }
+  return new TypeScheme { Vars, Constraints, Ty };
 }
 
 ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Type* RetTy) {
@@ -564,10 +602,9 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
     for (auto N: Mutual) {
       if (isa<FunctionDeclaration>(N)) {
         auto Func = static_cast<FunctionDeclaration*>(N);
-        auto Unbound = getUnbound(Env, Func->getType());
         Env.add(
           Func->getNameAsString(),
-          new TypeScheme { { Unbound.begin(), Unbound.end() }, Func->getType()->find() },
+          generalize(Env, Out, Func->getType()->find()),
           SymbolKind::Var
         );
       }
@@ -737,7 +774,7 @@ void Checker::run(SourceFile* SF) {
   Env.add("not", new TFun(Bool, Bool), SymbolKind::Var);
   Env.add("+", new TFun(Int, new TFun(Int, Int)), SymbolKind::Var);
   Env.add("-", new TFun(Int, new TFun(Int, Int)), SymbolKind::Var);
-  Env.add("$", new TypeScheme({ A, B }, new TFun(new TFun(A, B), new TFun(A, B))), SymbolKind::Var);
+  Env.add("$", new TypeScheme({ A, B }, {}, new TFun(new TFun(A, B), new TFun(A, B))), SymbolKind::Var);
   auto Out = inferSourceFile(Env, SF);
   solve(Out);
 }

@@ -12,6 +12,8 @@
 
 namespace bolt {
 
+class Constraint;
+
 enum class TypeIndexKind {
   AppOp,
   AppArg,
@@ -123,8 +125,10 @@ class TVar : public Type {
 
 public:
 
-  TVar():
-    Type(TypeKind::Var) {}
+  std::string Name;
+
+  TVar(std::string Name):
+    Type(TypeKind::Var), Name(Name) {}
 
   void set(Type* Ty) {
     auto Root = find();
@@ -136,11 +140,11 @@ public:
   Type* find() const override {
     TVar* Curr = const_cast<TVar*>(this);
     for (;;) {
-      auto Keep = Curr->Parent;
-      if (Keep == Curr || !Keep->isVar()) {
-        return Keep;
+      auto Parent = Curr->Parent;
+      if (Parent == Curr || !Parent->isVar()) {
+        return Parent;
       }
-      auto Keep2 = static_cast<TVar*>(Keep);
+      auto Keep2 = static_cast<TVar*>(Parent);
       Curr->Parent = Keep2->Parent;
       Curr = Keep2;
     }
@@ -214,11 +218,14 @@ public:
 struct TypeScheme {
 
   std::unordered_set<TVar*> Unbound;
+  std::vector<Constraint*> Constraints;
   Type* Ty;
 
   Type* getType() const {
     return Ty;
   }
+
+  std::string toString() const;
 
 };
 
