@@ -16,6 +16,7 @@ __pycache__/
 
 # used for local development
 Makefile
+.rgignore
 
 # Used by IDEs to get correct error messages
 compile_commands.json
