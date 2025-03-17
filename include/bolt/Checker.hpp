@@ -31,6 +31,8 @@ public:
 
   bool hasVar(TVar* TV) const;
 
+  void remove(ByteString Name, SymbolKind Kind);
+
   void dump() const;
 
   TypeScheme* lookup(ByteString Name, SymbolKind Kind);

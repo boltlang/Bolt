@@ -1,3 +1,4 @@
+#include <tuple>
 #include <unordered_set>
 #include <cwchar>
 #include <functional>
@@ -31,12 +32,22 @@ TypeScheme* TypeEnv::lookup(ByteString Name, SymbolKind Kind) {
   return nullptr;
 }
 
+void TypeEnv::remove(ByteString Name, SymbolKind Kind) {
+  Mapping.erase(std::make_tuple(Name, Kind));
+}
+
 void TypeEnv::add(ByteString Name, TypeScheme* Scm, SymbolKind Kind) {
   Mapping[std::make_tuple(Name, Kind)] = Scm;
 }
 
 void TypeEnv::add(ByteString Name, Type* Ty, SymbolKind Kind) {
   add(Name, new TypeScheme { {}, {}, Ty }, Kind);
+}
+
+void dump(const ConstraintSet& Cs) {
+  for (const auto C: Cs) {
+    std::cerr << C->toString() << "\n";
+  }
 }
 
 void TypeEnv::dump() const {
@@ -569,7 +580,15 @@ ConstraintSet Checker::inferMany(TypeEnv& Env, std::vector<Node*>& Elements, Typ
       }
     }
 
-    solve(Out);
+    // We need to remove the generated type var back from the environment so
+    // that functions are properly generalised.
+    for (auto N: Mutual) {
+      if (isa<FunctionDeclaration>(N)) {
+        Env.remove(static_cast<FunctionDeclaration*>(N)->getNameAsString(), SymbolKind::Var);
+      }
+    }
+
+    // solve(Out);
 
     for (auto N: Mutual) {
       if (isa<FunctionDeclaration>(N)) {
