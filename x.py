@@ -116,7 +116,7 @@ def cmake(
     if generator is None and ninja_path is not None:
         generator = CMakeGenerator.ninja
     if defines is None:
-        defines = dict()
+        defines = {}
     argv = [
         'cmake',
         '-S',
