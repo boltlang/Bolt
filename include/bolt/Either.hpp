@@ -54,7 +54,7 @@ public:
     _is_left(false), _right(std::move(right.value)) {}
 
   Either(const Either& other):
-    _is_left(_is_left) {
+    _is_left(other._is_left) {
       if (other._is_left) {
         new (&_left)L(other._left);
       } else {
