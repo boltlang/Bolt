@@ -480,8 +480,8 @@ class Writer:
 class DiGraph:
 
     def __init__(self):
-        self._out_edges = dict()
-        self._in_edges = dict()
+        self._out_edges = {}
+        self._in_edges = {}
 
     def add_edge(self, a, b):
         if  a not in self._out_edges:
@@ -567,11 +567,11 @@ def main():
     parser = Parser(scanner)
     elements = parser.parse_grammar()
 
-    types = dict()
-    nodes = list()
-    leaf_nodes = list()
+    types = {}
+    nodes = []
+    leaf_nodes = []
     graph = DiGraph()
-    parent_to_children = dict()
+    parent_to_children = {}
 
     for element in elements:
         if isinstance(element, External) \
@@ -601,7 +601,7 @@ def main():
         return False
 
     def get_all_variant_elements(type_expr):
-        types = list()
+        types = []
         def loop(ty):
             if isinstance(ty, RefTypeExpr) and ty.name == 'Variant':
                 for arg in ty.args:
