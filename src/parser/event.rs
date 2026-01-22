@@ -84,15 +84,11 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
                 self.builder.start_node(kind.into());
             }
             Event::Token { kind: expected } => {
-                // let mut actual;
-                // loop {
-                //     actual = self.lexed.token_kind(self.pos);
-                //     if !actual.is_trivia() {
-                //         break;
-                //     }
-                //     self.push_token();
-                // }
-                // debug_assert!(actual == expected, "{actual:?} == {expected:?}");
+                #[cfg(debug_assertions)]
+                {
+                    let actual = self.lexed.token_kind(self.pos);
+                    assert!(actual == expected, "{actual:?} == {expected:?}");
+                }
                 self.push_token();
             }
             Event::Error { msg } => {
