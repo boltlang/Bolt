@@ -31,17 +31,17 @@ fn main() {
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
     parse_source_file(&mut p);
-    let interspersed = intersperse_trivia(
+    let (interspersed, errors)= intersperse_trivia(
         p.finish().into_iter(),
         &lexed
     );
-    let (node, errors) = parser::event::process(
+    let (node, _) = parser::event::process(
         interspersed.into_iter(),
         &lexed,
         &text
     );
     for error in errors {
-        eprintln!("Error: {}", error);
+        eprintln!("Error: {:?}", error);
     }
     let syn = SyntaxNode::new_root(node);
     print(0, syn.into());

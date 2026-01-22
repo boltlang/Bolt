@@ -3,6 +3,7 @@
 pub type Error = String;
 
 /// Public-facing parse error.
+#[derive(Debug)]
 pub struct SyntaxError {
     message: String,
     offset: usize,

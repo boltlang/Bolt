@@ -102,53 +102,27 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
 
 }
 
+fn with_text<'text, 'event, I: Iterator<Item = &'event Event>>(iter: I, lexed: &LexResult, text: &'text str) -> impl Iterator<Item = &'text str> {
+    let mut text_pos = 0;
+    let mut pos = 0;
+    iter
+        .filter(|ev| matches!(ev, Event::Token { .. }))
+        .map(move |_ev| {
+            let start = text_pos;
+            let len = lexed.token_len(pos) as usize;
+            let end = start + len;
+            let text = &text[start..end];
+            text_pos += len;
+            pos += 1;
+            text
+        })
+}
+
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 enum IntersperseState {
     PendingEnter,
     Normal,
     PendingExit,
-}
-
-struct WithText<'a, 'b, I> {
-    text: &'a str,
-    pos: u32,
-    lexed: &'b LexResult,
-    text_pos: usize,
-    events: I,
-}
-
-impl <'a, 'b, I> WithText<'a, 'b, I> {
-
-    pub fn new(events: I, lexed: &'b LexResult, text: &'a str) -> Self {
-        Self {
-            text,
-            lexed,
-            pos: 0,
-            text_pos: 0,
-            events,
-        }
-    }
-
-}
-
-impl <'a, 'b, I: Iterator<Item = Event>> Iterator for WithText<'a, 'b, I> {
-
-    type Item = (Event, Option<&'a str>);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.events.next()? {
-            e@Event::Token { .. } => {
-                let start = self.text_pos;
-                let len = self.lexed.token_len(self.pos) as usize;
-                let end = start + len;
-                let text = &self.text[start..end];
-                self.text_pos += len;
-                self.pos += 1;
-                Some((e, Some(text)))
-            }
-            e => Some((e, None)),
-        }
-    }
 }
 
 pub(crate) struct IntersperseTrivia<'a> {
@@ -160,7 +134,7 @@ pub(crate) struct IntersperseTrivia<'a> {
     errors: Vec<SyntaxError>,
 }
 
-pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed: &'a LexResult) -> Vec<Event> {
+pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed: &'a LexResult) -> (Vec<Event>, Vec<SyntaxError>) {
     let mut builder = IntersperseTrivia::new(lexed);
     for event in events {
         builder.feed_event(event);
@@ -172,7 +146,7 @@ pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed
         }
         IntersperseState::PendingEnter | IntersperseState::Normal => unreachable!(),
     }
-    builder.output
+    (builder.output, builder.errors)
 }
 
 impl <'a> IntersperseTrivia<'a> {

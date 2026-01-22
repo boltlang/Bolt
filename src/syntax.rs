@@ -7,6 +7,8 @@ pub enum SyntaxKind {
     ERROR,
     TOMBSTONE,
     END_OF_FILE,
+    BLOCK_START,
+    BLOCK_END,
 
     // Skippable tokens
     WHITESPACE,
@@ -32,6 +34,7 @@ pub enum SyntaxKind {
     HEX_INT,
 
     // Keywords
+    DO_KEYWORD,
     FN_KEYWORD,
     LET_KEYWORD,
     MATCH_KEYWORD,
@@ -80,6 +83,8 @@ impl SyntaxKind {
             WHITESPACE => "some whitespace",
             LINE_COMMENT => "a line comment",
             BLOCK_COMMENT => "a block comment",
+            BLOCK_START => "the start of an indented block",
+            BLOCK_END => "the end of an indented block",
             L_PAREN => "'('",
             R_PAREN => "')'",
             L_BRACKET => "'['",
@@ -91,6 +96,7 @@ impl SyntaxKind {
             COMMA => "','",
             IDENTIFIER => "an identifier",
             BIN_INT | OCT_INT | DEC_INT | HEX_INT => "an integer literal",
+            DO_KEYWORD => "'do'",
             FN_KEYWORD => "'fn'",
             LET_KEYWORD => "'let'",
             MATCH_KEYWORD => "'match'",

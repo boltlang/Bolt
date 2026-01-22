@@ -125,11 +125,24 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
     m.complete(p, VAR_DECL)
 }
 
+fn check_line_fold_end(p: &mut Parser) {
+    // TODO maybe skip the entire line fold
+    if p.current_line_fold() == p.next_line_fold() {
+        p.error("expected end of line fold");
+    }
+}
+
+pub fn parse_expression_statement(p: &mut Parser) -> Option<CompletedMarker> {
+    let m = parse_expression(p);
+    check_line_fold_end(p);
+    m
+}
+
 pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
     let kind = peek_after_modifiers(p);
     match kind {
         LET_KEYWORD => Some(parse_variable_declaration(p)),
-        _ => parse_expression(p),
+        _ => parse_expression_statement(p),
     }
 }
 

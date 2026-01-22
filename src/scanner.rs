@@ -9,10 +9,37 @@ use unicode_ident::{is_xid_continue, is_xid_start};
 
 const EOF: char = '\u{FFFF}';
 
+#[derive(Debug, Clone)]
+pub struct Pos {
+    offset: usize,
+    line: usize,
+    column: usize,
+}
+
+impl PartialEq for Pos {
+    fn eq(&self, other: &Self) -> bool {
+        self.offset.eq(&other.offset)
+    }
+}
+
+impl Eq for Pos {}
+
+impl Pos {
+    pub fn new(offset: usize, line: usize, column: usize) -> Self {
+        Self { offset, line, column }
+    }
+}
+
+impl Default for Pos {
+    fn default() -> Self {
+        Self::new(0, 1, 1)
+    }
+}
+
 pub struct Scanner<I> {
     iter: I,
     buffer: VecDeque<char>,
-    offset: u32,
+    pos: Pos,
     errors: Vec<Error>,
 }
 
@@ -49,6 +76,7 @@ fn is_hex_num(ch: char) -> bool {
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, SyntaxKind> = {
         let mut m = HashMap::new();
+        m.insert("do", DO_KEYWORD);
         m.insert("fn", FN_KEYWORD);
         m.insert("let", LET_KEYWORD);
         m.insert("match", MATCH_KEYWORD);
@@ -65,7 +93,7 @@ impl <'a> Scanner<Chars<'a>> {
     pub fn new(iter: Chars<'a>) -> Self {
         Self {
             iter,
-            offset: 0,
+            pos: Pos::default(),
             buffer: VecDeque::new(),
             errors: Vec::new(),
         }
@@ -85,7 +113,13 @@ impl <I: Iterator<Item = char>> Scanner<I> {
             None => self.read(),
         };
         if ch != EOF {
-            self.offset += 1;
+            self.pos.offset += 1;
+            if ch == '\n' {
+                self.pos.line += 1;
+                self.pos.column = 1;
+            } else {
+                self.pos.column += 1;
+            }
         }
         ch
     }
@@ -102,8 +136,8 @@ impl <I: Iterator<Item = char>> Scanner<I> {
         self.errors.push(msg.into());
     }
 
-    pub fn pos(&self) -> u32 {
-        self.offset
+    pub fn pos(&self) -> Pos {
+        self.pos.clone()
     }
 
     pub fn scan(&mut self) -> SyntaxKind {
@@ -188,6 +222,7 @@ impl <I: Iterator<Item = char>> Scanner<I> {
 #[derive(Debug)]
 pub struct LexResult {
     kinds: Vec<SyntaxKind>,
+    lines: Vec<u32>,
     lens: Vec<u32>,
 }
 
@@ -210,16 +245,75 @@ impl LexResult {
             .iter()
             .filter(|k| !k.is_trivia())
             .copied()
-            .collect())
+            .collect(),
+            self.lines.clone())
     }
 
 }
 
+#[derive(Debug, Clone)]
+struct LineColumn {
+    line: usize,
+    column: usize,
+}
+
+impl LineColumn {
+
+    pub fn new(line: usize, column: usize) -> Self {
+        Self {
+            line,
+            column,
+        }
+    }
+
+}
+
+impl Default for LineColumn {
+    fn default() -> Self {
+        LineColumn { line: 1, column: 1 }
+    }
+}
+
+impl From<&Pos> for LineColumn {
+    fn from(value: &Pos) -> Self {
+        LineColumn::new(value.line, value.column)
+    }
+}
+
+enum Frame {
+    /// Holds the textual location of the first token that introduces this line fold.
+    LineFold(LineColumn),
+    /// Holds the textual location of the keyword that introduced this block.
+    Block(LineColumn),
+}
+
 pub fn tokenize(text: impl Into<String>) -> LexResult {
+
+    struct LineFoldState {
+        /// The index of the token that started this linefold.
+        pos: u32,
+        /// Line and column number of the token pointed to by [pos].
+        lc: LineColumn,
+    }
+
+    // Input
     let text = text.into();
-    let mut scanner = Scanner::new(text.chars());
+
+    // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
+    let mut lines = Vec::new();
+
+    // State
+    let mut pos = 0;
+    let mut scanner = Scanner::new(text.chars());
+    // A stack of indent locations for blocks (introduced with the 'do'-keyword)
+    let mut blocks = vec![ LineColumn::default() ];
+    // Indicates when [blocks] is ready to receive its indent location
+    let mut at_block_start = false;
+    // Indicates the token index and indent location of the current line fold in the nearest block
+    let mut line_fold = LineFoldState { pos: 0, lc: LineColumn::default() };
+
     loop {
         let start = scanner.pos();
         let kind = scanner.scan();
@@ -227,11 +321,75 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
         if kind == END_OF_FILE {
             break;
         }
+        if !kind.is_trivia() {
+
+            if kind == DO_KEYWORD {
+
+                // Transfer the token from the input to the output vectors
+                kinds.push(kind);
+                lines.push(line_fold.pos);
+                lens.push((end.offset - start.offset) as u32);
+                pos += 1;
+
+                // Insert the virtual `BLOCK_START` token
+                kinds.push(BLOCK_START);
+                lines.push(line_fold.pos);
+                lens.push(0);
+                at_block_start = true;
+
+                continue;
+            }
+
+            if at_block_start {
+                blocks.push((&start).into());
+                at_block_start = false;
+            }
+
+            // First deterimine whether we still are in the same block
+            let block = blocks.last().unwrap();
+            if start.column < block.column {
+                loop {
+                    let block = blocks.last().unwrap();
+                    if block.column <= start.column {
+                        if block.column != start.column {
+                            // TODO
+                            eprintln!("wrong indentation for block expression");
+                        }
+                        break;
+                    }
+                    blocks.pop();
+                    kinds.push(BLOCK_END);
+                    lines.push(line_fold.pos);
+                    lens.push(0);
+                }
+            } else if start.column == block.column {
+                line_fold.pos = pos;
+                line_fold.lc = (&start).into();
+            }
+
+            // Now update the line fold state if necessary
+            let is_in_fold = start.line == line_fold.lc.line || start.column > line_fold.lc.column;
+            if !is_in_fold {
+                line_fold.pos = pos;
+                line_fold.lc = (&start).into();
+            }
+
+        }
+
+        // Transfer the token from the input to the output vectors
         kinds.push(kind);
-        lens.push(end - start);
+        lines.push(line_fold.pos);
+        lens.push((end.offset - start.offset) as u32);
+        pos += 1;
     }
+
+    for (i, (a, b)) in (&kinds).iter().zip(&lines).enumerate() {
+        eprintln!("{i}. {a:?} = {b}");
+    }
+
     LexResult {
         kinds,
+        lines,
         lens,
     }
 }
