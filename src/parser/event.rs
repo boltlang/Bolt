@@ -107,7 +107,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-enum State {
+enum IntersperseState {
     PendingEnter,
     Normal,
     PendingExit,
@@ -159,7 +159,7 @@ pub(crate) struct IntersperseTrivia<'a> {
     lexed: &'a LexResult,
     pos: u32,
     text_pos: usize,
-    state: State,
+    state: IntersperseState,
     output: Vec<Event>,
     errors: Vec<SyntaxError>,
 }
@@ -169,12 +169,12 @@ pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed
     for event in events {
         builder.feed_event(event);
     }
-    match std::mem::replace(&mut builder.state, State::Normal) {
-        State::PendingExit => {
+    match std::mem::replace(&mut builder.state, IntersperseState::Normal) {
+        IntersperseState::PendingExit => {
             builder.eat_trivias();
             builder.output.push(Event::Finish);
         }
-        State::PendingEnter | State::Normal => unreachable!(),
+        IntersperseState::PendingEnter | IntersperseState::Normal => unreachable!(),
     }
     builder.output
 }
@@ -186,7 +186,7 @@ impl <'a> IntersperseTrivia<'a> {
             lexed,
             pos: 0,
             text_pos: 0,
-            state: State::PendingEnter,
+            state: IntersperseState::PendingEnter,
             output: Vec::new(),
             errors: Vec::new(),
         }
@@ -212,34 +212,34 @@ impl <'a> IntersperseTrivia<'a> {
         // FIXME must be placed somewhere else
         match event {
             Event::Token { kind } => {
-                match std::mem::replace(&mut self.state, State::Normal) {
-                    State::PendingEnter => unreachable!(),
-                    State::PendingExit => self.output.push(Event::Finish),
-                    State::Normal => (),
+                match std::mem::replace(&mut self.state, IntersperseState::Normal) {
+                    IntersperseState::PendingEnter => unreachable!(),
+                    IntersperseState::PendingExit => self.output.push(Event::Finish),
+                    IntersperseState::Normal => (),
                 }
                 self.eat_trivias();
                 self.do_token(kind);
             }
             Event::Start { kind } => {
-                match std::mem::replace(&mut self.state, State::Normal) {
-                    State::PendingEnter => {
+                match std::mem::replace(&mut self.state, IntersperseState::Normal) {
+                    IntersperseState::PendingEnter => {
                         self.output.push(Event::Start { kind });
                         // No need to attach trivias to previous node: there is no
                         // previous node.
                         return;
                     }
-                    State::PendingExit => self.output.push(Event::Finish),
-                    State::Normal => (),
+                    IntersperseState::PendingExit => self.output.push(Event::Finish),
+                    IntersperseState::Normal => (),
                 }
                 self.eat_trivias();
                 self.output.push(Event::Start { kind });
                 // TODO add trivias attached to node here
             }
             Event::Finish => {
-                match std::mem::replace(&mut self.state, State::PendingExit) {
-                    State::PendingEnter => unreachable!(),
-                    State::PendingExit => self.output.push(Event::Finish),
-                    State::Normal => (),
+                match std::mem::replace(&mut self.state, IntersperseState::PendingExit) {
+                    IntersperseState::PendingEnter => unreachable!(),
+                    IntersperseState::PendingExit => self.output.push(Event::Finish),
+                    IntersperseState::Normal => (),
                 }
             }
             Event::Error { msg } => {
