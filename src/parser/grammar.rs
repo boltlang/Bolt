@@ -1,0 +1,127 @@
+
+use crate::{parser::{parser::{CompletedMarker, Parser}, token_set::TokenSet}, syntax::SyntaxKind::{self, *}};
+
+const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENTIFIER]);
+
+fn peek_after_modifiers(p: &mut Parser) -> SyntaxKind {
+    let mut i = 0;
+    loop {
+        let k0 = p.nth(i);
+        match k0 {
+            PUB_KEYWORD => { i += 1; },
+            _ => return k0,
+        }
+    }
+}
+
+pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    if p.at_ts(PATH_NAME_REF_KINDS) {
+        let m = p.start();
+        p.bump_any();
+        Some(m.complete(p, REF_EXPR))
+    } else {
+        p.error_and_bump("expected identifier");
+        None
+    }
+}
+
+pub fn parse_parenthesized_expression(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.expect(L_PAREN);
+    let mut saw_comma = false;
+    if p.eat(COMMA) {
+        p.error("expected expression");
+        saw_comma = true;
+    }
+    while !p.at(END_OF_FILE) && !p.at(R_PAREN) {
+        if parse_expression(p).is_none() {
+            break;
+        }
+        if !p.at(R_PAREN) {
+            saw_comma = true;
+            p.expect(COMMA);
+        }
+    }
+    m.complete(p, if saw_comma { TUPLE_EXPR } else { NEST_EXPR })
+}
+
+pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    match p.current() {
+        IDENTIFIER => parse_reference_expression(p),
+        L_PAREN => Some(parse_parenthesized_expression(p)),
+        _ => {
+            p.error_and_bump("expected expression");
+            return None;
+        }
+    }
+}
+
+pub fn parse_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    parse_prim_expression(p)
+}
+
+pub fn parse_named_pattern(p: &mut Parser) -> Option<CompletedMarker> {
+    if p.at_ts(PATH_NAME_REF_KINDS) {
+        let m = p.start();
+        p.bump_any();
+        Some(m.complete(p, NAMED_PATT))
+    } else {
+        p.error_and_bump("expected identifier");
+        None
+    }
+}
+
+pub fn parse_parenthesized_pattern(p: &mut Parser) -> CompletedMarker {
+    todo!()
+}
+
+pub fn parse_pattern(p: &mut Parser) -> Option<CompletedMarker> {
+    match p.current() {
+        IDENTIFIER => parse_named_pattern(p),
+        L_PAREN => Some(parse_parenthesized_pattern(p)),
+        _ => {
+            p.error_and_bump("expected pattern");
+            return None;
+        }
+    }
+}
+
+pub fn parse_type_expression(p: &mut Parser) -> CompletedMarker {
+    todo!()
+}
+
+pub fn parse_type_ascription(p: &mut Parser) {
+    p.bump(COLON);
+    parse_type_expression(p);
+}
+
+pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.eat(PUB_KEYWORD);
+    p.expect(LET_KEYWORD);
+    parse_pattern(p);
+    if p.current() == COLON {
+        parse_type_ascription(p);
+    }
+    if p.current() == EQUALS {
+        p.expect(EQUALS);
+        parse_expression(p);
+    }
+    m.complete(p, VAR_DECL)
+}
+
+pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
+    let kind = peek_after_modifiers(p);
+    match kind {
+        LET_KEYWORD => Some(parse_variable_declaration(p)),
+        _ => parse_expression(p),
+    }
+}
+
+pub fn parse_source_file(p: &mut Parser) {
+    let m = p.start();
+    while !p.at(END_OF_FILE) {
+        parse_source_element(p);
+    }
+    m.complete(p, SOURCE_FILE);
+}
