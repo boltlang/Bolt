@@ -28,7 +28,6 @@ fn main() {
     let fname = args.nth(1).expect("must provide a filename");
     let text = std::fs::read_to_string(&fname).expect(&format!("could not read {}", &fname));
     let lexed = scanner::tokenize(&text);
-    eprintln!("{:?}", lexed);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
     parse_source_file(&mut p);

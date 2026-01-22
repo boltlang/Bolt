@@ -212,7 +212,6 @@ impl <'a> IntersperseTrivia<'a> {
         // FIXME must be placed somewhere else
         match event {
             Event::Token { kind } => {
-                eprintln!("TOKEN");
                 match std::mem::replace(&mut self.state, State::Normal) {
                     State::PendingEnter => unreachable!(),
                     State::PendingExit => self.output.push(Event::Finish),
@@ -222,7 +221,6 @@ impl <'a> IntersperseTrivia<'a> {
                 self.do_token(kind);
             }
             Event::Start { kind } => {
-                eprintln!("START");
                 match std::mem::replace(&mut self.state, State::Normal) {
                     State::PendingEnter => {
                         self.output.push(Event::Start { kind });
@@ -245,7 +243,6 @@ impl <'a> IntersperseTrivia<'a> {
                 }
             }
             Event::Error { msg } => {
-                eprintln!("ERROR");
                 let start  = self.text_pos;
                 self.errors.push(SyntaxError::new(msg, start));
             }
