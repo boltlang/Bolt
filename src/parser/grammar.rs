@@ -25,6 +25,20 @@ pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
+pub fn parse_literal_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    match p.current() {
+        BIN_INT | OCT_INT | DEC_INT | HEX_INT => {
+            let m = p.start();
+            p.bump_any();
+            Some(m.complete(p, LIT_EXPR))
+        }
+        _ => {
+            p.error_and_bump("expected literal");
+            None
+        }
+    }
+}
+
 pub fn parse_parenthesized_expression(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.expect(L_PAREN);
@@ -47,6 +61,7 @@ pub fn parse_parenthesized_expression(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
+        BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
         IDENTIFIER => parse_reference_expression(p),
         L_PAREN => Some(parse_parenthesized_expression(p)),
         _ => {
