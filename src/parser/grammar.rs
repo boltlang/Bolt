@@ -122,13 +122,21 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
         p.expect(EQUALS);
         parse_expression(p);
     }
+    check_line_fold_end(p);
     m.complete(p, VAR_DECL)
 }
 
 fn check_line_fold_end(p: &mut Parser) {
-    // TODO maybe skip the entire line fold
     if p.current_line_fold() == p.next_line_fold() {
         p.error("expected end of line fold");
+        let m = p.start();
+        loop {
+            p.bump_any();
+            if p.at(END_OF_FILE) || p.current_line_fold() != p.next_line_fold() {
+                break;
+            }
+        }
+        m.complete(p, ERROR);
     }
 }
 
