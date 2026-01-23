@@ -6,7 +6,6 @@ use crate::parser::{event::intersperse_trivia, grammar::parse_source_file, parse
 
 mod util;
 mod syntax;
-mod scanner;
 mod parser;
 
 fn print(indent: usize, element: SyntaxElement) {
@@ -27,7 +26,7 @@ fn main() {
     let mut args = std::env::args();
     let fname = args.nth(1).expect("must provide a filename");
     let text = std::fs::read_to_string(&fname).expect(&format!("could not read {}", &fname));
-    let lexed = scanner::tokenize(&text);
+    let lexed = parser::lexer::tokenize(&text);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
     parse_source_file(&mut p);

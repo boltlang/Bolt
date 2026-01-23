@@ -1,9 +1,14 @@
-use std::collections::VecDeque;
 
 use rowan::{GreenNode, GreenNodeBuilder};
 
 use super::error::Error;
-use crate::{parser::error::SyntaxError, scanner::LexResult, syntax::SyntaxKind};
+use crate::{
+    parser::{
+        error::SyntaxError,
+        lexer::LexResult
+    },
+    syntax::SyntaxKind
+};
 
 #[derive(Debug)]
 pub(crate) enum Event {

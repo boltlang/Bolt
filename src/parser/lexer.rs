@@ -36,7 +36,7 @@ impl Default for Pos {
     }
 }
 
-pub struct Scanner<I> {
+pub struct Lexer<I> {
     iter: I,
     buffer: VecDeque<char>,
     pos: Pos,
@@ -88,7 +88,7 @@ lazy_static! {
     };
 }
 
-impl <'a> Scanner<Chars<'a>> {
+impl <'a> Lexer<Chars<'a>> {
 
     pub fn new(iter: Chars<'a>) -> Self {
         Self {
@@ -101,7 +101,7 @@ impl <'a> Scanner<Chars<'a>> {
 
 }
 
-impl <I: Iterator<Item = char>> Scanner<I> {
+impl <I: Iterator<Item = char>> Lexer<I> {
 
     fn read(&mut self) -> char {
         self.iter.next().unwrap_or(EOF)
@@ -306,7 +306,7 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
 
     // State
     let mut pos = 0;
-    let mut scanner = Scanner::new(text.chars());
+    let mut lexer = Lexer::new(text.chars());
     // A stack of indent locations for blocks (introduced with the 'do'-keyword)
     let mut blocks = vec![ LineColumn::default() ];
     // Indicates when [blocks] is ready to receive its indent location
@@ -315,9 +315,9 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
     let mut line_fold = LineFoldState { pos: 0, lc: LineColumn::default() };
 
     loop {
-        let start = scanner.pos();
-        let kind = scanner.scan();
-        let end = scanner.pos();
+        let start = lexer.pos();
+        let kind = lexer.scan();
+        let end = lexer.pos();
         if kind == END_OF_FILE {
             break;
         }
