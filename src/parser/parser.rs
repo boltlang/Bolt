@@ -57,7 +57,6 @@ pub struct Parser<'t> {
     inp: &'t Input,
     pos: usize,
     pub events: Vec<Event>,
-    errors: Vec<Error>,
 }
 
 impl <'t> Parser<'t> {
@@ -67,7 +66,6 @@ impl <'t> Parser<'t> {
             inp,
             pos: 0,
             events: Vec::with_capacity(2 * inp.kinds.len()),
-            errors: Vec::new(),
         }
     }
 
