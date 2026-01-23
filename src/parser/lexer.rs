@@ -241,12 +241,15 @@ impl LexResult {
     }
 
     pub fn to_input(&self) -> Input {
-        Input::new(self.kinds
-            .iter()
-            .filter(|k| !k.is_trivia())
-            .copied()
-            .collect(),
-            self.lines.clone())
+        let mut kinds = Vec::new();
+        let mut lines = Vec::new();
+        for (kind, line) in self.kinds.iter().zip(&self.lines) {
+            if !kind.is_trivia() {
+                kinds.push(*kind);
+                lines.push(*line);
+            }
+        }
+        Input::new(kinds, lines)
     }
 
 }
