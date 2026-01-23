@@ -3,10 +3,10 @@
 pub type Error = String;
 
 /// Public-facing parse error.
-#[derive(Debug)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SyntaxError {
-    message: String,
-    offset: usize,
+    pub message: String,
+    pub offset: usize,
 }
 
 impl SyntaxError {

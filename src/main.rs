@@ -1,10 +1,12 @@
 
 use rowan::NodeOrToken;
+use salsa::{Database, DatabaseImpl};
 
+use crate::db::{parse, Diagnostic, SourceProgram};
 use crate::syntax::{SyntaxElement, SyntaxKind, SyntaxNode};
-use crate::parser::{event::intersperse_trivia, grammar::parse_source_file, parser::Parser};
 
 mod util;
+mod db;
 mod syntax;
 mod parser;
 
@@ -26,22 +28,13 @@ fn main() {
     let mut args = std::env::args();
     let fname = args.nth(1).expect("must provide a filename");
     let text = std::fs::read_to_string(&fname).expect(&format!("could not read {}", &fname));
-    let lexed = parser::lexer::tokenize(&text);
-    let inp = lexed.to_input();
-    let mut p = Parser::new(&inp);
-    parse_source_file(&mut p);
-    let (interspersed, errors)= intersperse_trivia(
-        p.finish().into_iter(),
-        &lexed
-    );
-    let (node, _) = parser::event::process(
-        interspersed.into_iter(),
-        &lexed,
-        &text
-    );
-    for error in errors {
-        eprintln!("Error: {:?}", error);
-    }
-    let syn = SyntaxNode::new_root(node);
-    print(0, syn.into());
+    DatabaseImpl::default().attach(|db| {
+        let source_program = SourceProgram::new(db, text);
+        let prog = parse(db, source_program);
+        let errors = parse::accumulated::<Diagnostic>(db, source_program);
+        for error in errors {
+            eprintln!("{error:#?}");
+        }
+        print(0, SyntaxNode::new_root(prog.node(db).clone()).into());
+    });
 }

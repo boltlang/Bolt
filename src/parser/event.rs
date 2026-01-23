@@ -36,7 +36,7 @@ pub(crate) enum Event {
     }
 }
 
-pub fn process<I: Iterator<Item = Event>>(
+pub fn process_events<I: Iterator<Item = Event>>(
     events: I,
     lexed: &LexResult,
     text: &str
