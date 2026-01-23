@@ -10,7 +10,7 @@ use crate::parser::{self, Parser, SyntaxError};
 #[salsa::db]
 #[derive(Clone)]
 #[cfg_attr(not(test), derive(Default))]
-pub struct DatabaseImpl {
+pub struct BoltDatabaseImpl {
     storage: salsa::Storage<Self>,
 
     // The logs are only used for testing and demonstrating reuse:
@@ -19,7 +19,7 @@ pub struct DatabaseImpl {
 }
 
 #[cfg(test)]
-impl Default for DatabaseImpl {
+impl Default for BoltDatabaseImpl {
     fn default() -> Self {
         let logs = <Arc<Mutex<Option<Vec<String>>>>>::default();
         Self {
@@ -42,7 +42,7 @@ impl Default for DatabaseImpl {
 }
 
 #[salsa::db]
-impl salsa::Database for DatabaseImpl {}
+impl salsa::Database for BoltDatabaseImpl {}
 
 #[salsa::input(debug)]
 pub struct SourceProgram {
