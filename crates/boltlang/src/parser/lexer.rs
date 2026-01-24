@@ -255,9 +255,9 @@ impl LexResult {
 }
 
 #[derive(Debug, Clone)]
-struct LineColumn {
-    line: usize,
-    column: usize,
+pub struct LineColumn {
+    pub line: usize,
+    pub column: usize,
 }
 
 impl LineColumn {

@@ -1,0 +1,11 @@
+[package]
+name = "boltlang-cli"
+version = "0.1.0"
+edition = "2024"
+
+[[bin]]
+name = "bolt"
+path = "src/main.rs"
+
+[dependencies]
+boltlang = { path = "../boltlang" }

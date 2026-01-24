@@ -1,0 +1,14 @@
+[package]
+name = "boltlang"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+fluent-uri = "0.4.1"
+lazy_static = "1.5.0"
+rowan = "0.16.1"
+salsa = "0.25.2"
+thiserror = "2.0.18"
+tokio = { version = "1.49.0", features = ["full"] }
+tower-lsp-server = "0.23.0"
+unicode-ident = "1.0.22"

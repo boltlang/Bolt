@@ -1,14 +1,14 @@
 
-use rowan::NodeOrToken;
-use salsa::Database;
+use boltlang::rowan::NodeOrToken;
+use boltlang::salsa::Database;
 
 use boltlang::{
+    BoltDatabaseImpl,
+    SourceProgram,
     SyntaxElement,
+    SyntaxError,
     SyntaxKind,
     SyntaxNode,
-    BoltDatabaseImpl,
-    Diagnostic,
-    SourceProgram,
     parse
 };
 
@@ -33,7 +33,7 @@ fn main() {
     BoltDatabaseImpl::default().attach(|db| {
         let source_program = SourceProgram::new(db, text);
         let prog = parse(db, source_program);
-        let errors = parse::accumulated::<Diagnostic>(db, source_program);
+        let errors = parse::accumulated::<SyntaxError>(db, source_program);
         for error in errors {
             eprintln!("{error:#?}");
         }
