@@ -166,13 +166,6 @@ impl Backend {
 
 }
 
-pub enum ClientMessage {
-    
-}
-
-pub struct Server {
-}
-
 #[tokio::main]
 async fn main() {
     let db = Mutex::new(RootDatabase::new(None));
