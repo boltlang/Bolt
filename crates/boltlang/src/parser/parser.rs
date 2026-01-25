@@ -1,5 +1,5 @@
 
-use crate::{parser::{error::Error, event::Event, token_set::TokenSet}, syntax::SyntaxKind, util::DropBomb};
+use crate::{parser::{event::Event, token_set::TokenSet}, syntax::SyntaxKind, util::DropBomb};
 
 use SyntaxKind::*;
 

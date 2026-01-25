@@ -1,6 +1,10 @@
 
 mod util;
+mod error;
+mod diagnostic;
 mod db;
+mod text;
+mod import;
 mod syntax;
 mod parser;
 
@@ -12,6 +16,8 @@ pub use rowan;
 
 pub use {
     syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement},
-    db::{BoltDatabaseImpl, parse, SourceProgram, line_column_of_offset, start_offset_of_line, end_offset_of_line, index_lines},
-    parser::SyntaxError
+    db::{RootDatabase, File},
+    parser::parse_file,
+    text::{line_column_of_offset, start_offset_of_line, end_offset_of_line, index_lines},
+    diagnostic::Diagnostic,
 };

@@ -1,11 +1,35 @@
-pub mod error;
 pub mod token_set;
 pub mod lexer;
 pub mod event;
 pub mod parser;
 pub mod grammar;
 
-pub use error::SyntaxError;
 pub(crate) use event::{process_events, intersperse_trivia};
 pub(crate) use parser::Parser;
 pub(crate) use grammar::*;
+
+use salsa::Accumulator;
+use crate::db::{File, ParsedFile};
+
+#[salsa::tracked]
+pub fn parse_file(db: &dyn salsa::Database, source: File) -> ParsedFile<'_> {
+    let text = source.contents(db);
+    let lexed = lexer::tokenize(text);
+    let inp = lexed.to_input();
+    let mut p = Parser::new(&inp);
+    parse_source_file(&mut p);
+    let interspersed = intersperse_trivia(
+        p.finish().into_iter(),
+        &lexed
+    );
+    let (node, errors) = process_events(
+        interspersed.into_iter(),
+        &lexed,
+        &text
+    );
+    for error in errors {
+        error.accumulate(db);
+    }
+    ParsedFile::new(db, node)
+}
+

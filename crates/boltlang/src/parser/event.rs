@@ -1,14 +1,16 @@
 
 use rowan::{GreenNode, GreenNodeBuilder};
 
-use super::error::Error;
 use crate::{
+    diagnostic::Diagnostic,
     parser::{
-        error::SyntaxError,
         lexer::LexResult
     },
     syntax::SyntaxKind
 };
+
+/// Intermediate error structure used during parsing.
+pub type ParseError = String;
 
 #[derive(Debug)]
 pub(crate) enum Event {
@@ -40,7 +42,7 @@ pub fn process_events<I: Iterator<Item = Event>>(
     events: I,
     lexed: &LexResult,
     text: &str
-) -> (GreenNode, Vec<Error>) {
+) -> (GreenNode, Vec<Diagnostic>) {
     let mut processor = EventProcessor::new(lexed, text);
     for event in events {
         processor.feed_event(event);
@@ -52,7 +54,7 @@ pub fn process_events<I: Iterator<Item = Event>>(
 struct EventProcessor<'lex, 'text, 'cache> {
     lexed: &'lex LexResult,
     text: &'text str,
-    errors: Vec<Error>,
+    errors: Vec<Diagnostic>,
     builder: GreenNodeBuilder<'cache>,
     /// Which token is being inspected
     pos: u32,
@@ -97,7 +99,8 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
                 self.push_token();
             }
             Event::Error { msg } => {
-                self.errors.push(msg);
+                let start  = self.text_pos;
+                self.errors.push(Diagnostic::syntax_error(msg, start));
             }
             Event::Finish => {
                 self.builder.finish_node();
@@ -136,10 +139,9 @@ pub(crate) struct IntersperseTrivia<'a> {
     text_pos: usize,
     state: IntersperseState,
     output: Vec<Event>,
-    errors: Vec<SyntaxError>,
 }
 
-pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed: &'a LexResult) -> (Vec<Event>, Vec<SyntaxError>) {
+pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed: &'a LexResult) -> Vec<Event> {
     let mut builder = IntersperseTrivia::new(lexed);
     for event in events {
         builder.feed_event(event);
@@ -151,7 +153,7 @@ pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed
         }
         IntersperseState::PendingEnter | IntersperseState::Normal => unreachable!(),
     }
-    (builder.output, builder.errors)
+    builder.output
 }
 
 impl <'a> IntersperseTrivia<'a> {
@@ -163,7 +165,6 @@ impl <'a> IntersperseTrivia<'a> {
             text_pos: 0,
             state: IntersperseState::PendingEnter,
             output: Vec::new(),
-            errors: Vec::new(),
         }
     }
 
@@ -217,9 +218,8 @@ impl <'a> IntersperseTrivia<'a> {
                     IntersperseState::Normal => (),
                 }
             }
-            Event::Error { msg } => {
-                let start  = self.text_pos;
-                self.errors.push(SyntaxError::new(msg, start));
+            e@Event::Error { .. } => {
+                self.output.push(e)
             }
         }
     }

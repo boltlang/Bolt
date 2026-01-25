@@ -1,15 +1,17 @@
 
+use std::path::PathBuf;
+
 use boltlang::rowan::NodeOrToken;
 use boltlang::salsa::Database;
 
 use boltlang::{
-    BoltDatabaseImpl,
-    SourceProgram,
+    RootDatabase,
+    File,
     SyntaxElement,
-    SyntaxError,
+    Diagnostic,
     SyntaxKind,
     SyntaxNode,
-    parse
+    parse_file
 };
 
 fn print(indent: usize, element: SyntaxElement) {
@@ -30,13 +32,13 @@ fn main() {
     let mut args = std::env::args();
     let fname = args.nth(1).expect("must provide a filename");
     let text = std::fs::read_to_string(&fname).expect(&format!("could not read {}", &fname));
-    BoltDatabaseImpl::default().attach(|db| {
-        let source_program = SourceProgram::new(db, text);
-        let prog = parse(db, source_program);
-        let errors = parse::accumulated::<SyntaxError>(db, source_program);
+    RootDatabase::new(None).attach(|db| {
+        let file = File::new(db, PathBuf::from(fname), text);
+        let parsed = parse_file(db, file);
+        let errors = parse_file::accumulated::<Diagnostic>(db, file);
         for error in errors {
             eprintln!("{error:#?}");
         }
-        print(0, SyntaxNode::new_root(prog.node(db).clone()).into());
+        print(0, SyntaxNode::new_root(parsed.node(db).clone()).into());
     });
 }
