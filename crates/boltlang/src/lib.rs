@@ -14,7 +14,12 @@ pub use salsa;
 /// Re-export of the Rowan library that boltlang uses
 pub use rowan;
 
+pub type OwnedUri = String;
+
+pub type BorrowedUri = str;
+
 pub use {
+    error::{Error, Result},
     syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement},
     db::{RootDatabase, File},
     parser::parse_file,

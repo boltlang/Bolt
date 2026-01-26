@@ -17,7 +17,7 @@ pub struct Diagnostic {
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.inner.fmt(f)
+        std::fmt::Display::fmt(&self.inner, f)
     }
 }
 
@@ -40,6 +40,14 @@ impl Diagnostic {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum InnerDiagnostic {
     Syntax(SyntaxDiagnostic),
+}
+
+impl Display for InnerDiagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Syntax(diag) => std::fmt::Display::fmt(diag, f),
+        }
+    }
 }
 
 impl InnerDiagnostic {

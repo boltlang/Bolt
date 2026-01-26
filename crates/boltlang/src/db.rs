@@ -1,8 +1,8 @@
-
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
+use fluent_uri::Uri;
 use notify_debouncer_mini::new_debouncer;
 use crossbeam_channel::Sender;
 use dashmap::{DashMap, Entry};
@@ -10,14 +10,15 @@ use notify_debouncer_mini::DebounceEventResult;
 use notify_debouncer_mini::notify::RecursiveMode;
 use notify_debouncer_mini::{Debouncer, notify::RecommendedWatcher};
 use rowan::GreenNode;
-use salsa::{Setter};
+use salsa::Setter;
 
 use crate::error::Result;
-use crate::import::transitive_import_paths;
+use crate::import::transitive_imports;
+use crate::{BorrowedUri, OwnedUri};
 
 #[salsa::input]
 pub struct File {
-    pub path: PathBuf,
+    pub uri: OwnedUri,
     #[returns(ref)]
     pub contents: String,
 }
@@ -26,8 +27,7 @@ pub struct File {
 #[derive(Clone)]
 pub struct RootDatabase {
     storage: salsa::Storage<Self>,
-    files: DashMap<PathBuf, File>,
-    watcher: Option<Arc<Mutex<Debouncer<RecommendedWatcher>>>>,
+    files: DashMap<OwnedUri, File>,
     // The logs are only used for testing and demonstrating reuse:
     #[cfg(test)]
     logs: Arc<Mutex<Option<Vec<String>>>>,
@@ -64,7 +64,6 @@ impl RootDatabase {
                 }))
             ),
             files: DashMap::new(),
-            watcher: tx.map(|tx| Arc::new(Mutex::new(new_debouncer(Duration::from_secs(1), tx).unwrap()))),
             #[cfg(test)]
             logs,
         }
@@ -81,47 +80,58 @@ impl RootDatabase {
         }
     }
 
-    pub fn load_transitive(&mut self, path: &Path) -> Result<()> {
-
-        for path in transitive_import_paths(self, path)? {
-
-            let path = canonical_path(self, &path)?;
-            let contents = std::fs::read_to_string(&path)?;
-
-            // We can't use DashMap::entry due to borrow issues
-            if self.files.contains_key(&path) {
-                let file = self.files.get(&path).unwrap().clone();
-                file.set_contents(self).to(contents);
-            } else {
-                let file = File::new(self, path.clone(), contents);
-                self.files.insert(path.clone(), file);
-            }
-
+    pub fn load_transitive(&self, uri: &BorrowedUri) -> Result<()> {
+        // FIXME This should go to the language server or CLI
+        for uri in transitive_imports(self, uri)? {
+            let _ = self.load(uri.as_str());
         }
-
         Ok(())
     }
 
-    pub fn input(&self, path: PathBuf) -> std::io::Result<File> {
-
-        // Ensure that the path is unique
-        let path = path.canonicalize()?;
-
-        Ok(match self.files.entry(path.clone()) {
-            Entry::Occupied(entry) => *entry.get(),
-            Entry::Vacant(entry) => {
-                if let Some(watcher) = &self.watcher {
-                    watcher
-                        .lock()
-                        .unwrap()
-                        .watcher()
-                        .watch(&path, RecursiveMode::NonRecursive)
-                        .unwrap();
-                }
-                let contents = std::fs::read_to_string(&path)?;
-                *entry.insert(File::new(self, path, contents))
+    pub fn load(&self, uri: &BorrowedUri) -> Result<Option<File>> {
+        Ok(match self.files.entry(uri.to_owned()) {
+            Entry::Occupied(entry) => {
+                Some(*entry.get())
+            }
+            Entry::Vacant(_entry) => {
+                None
             }
         })
+    }
+
+//     pub fn load(&mut self, uri: BorrowedUri) -> Result<()> {
+//         let contents = self.fs.read_to_string(uri);
+//         let uri = canonical_uri(self, &uri)?;
+
+//         // We can't use DashMap::entry due to borrow issues
+//         if self.files.contains_key(&uri) {
+//             let file = self.files.get(&uri).unwrap().clone();
+//             file.set_contents(self).to(contents);
+//         } else {
+//             let file = File::new(self, uri.to_owned(), contents);
+//             self.files.insert(uri.clone(), file);
+//         }
+//         Ok(())
+//     }
+
+    pub fn input(&mut self, uri: OwnedUri, contents: String) -> Result<File> {
+
+        // Ensure that the URI is unique
+        let uri = canonical_uri(self, uri.as_str())?;
+
+        let file = match self.files.entry(uri.clone()) {
+            Entry::Occupied(entry) => {
+                *entry.get()
+            }
+            Entry::Vacant(entry) => {
+                *entry.insert(File::new(self, uri, contents.clone()))
+            }
+        };
+
+        // Set the contents of the file, overriding any previous contents
+        file.set_contents(self).to(contents);
+
+        Ok(file)
     }
 
 }
@@ -149,8 +159,8 @@ pub struct Name<'db> {
 /// Returns the complete path from the workspace root to the file pointed to by the given path.
 ///
 /// This way, a database that stores this path on disk can be moved without any issues.
-pub fn canonical_path(db: &dyn salsa::Database, path: &Path) -> std::io::Result<PathBuf> {
+pub fn canonical_uri(db: &dyn salsa::Database, uri: &BorrowedUri) -> Result<OwnedUri> {
     // TODO make this relative to the root workspace
-    path.canonicalize()
+    Ok(Uri::parse(uri)?.normalize().to_string())
 }
 
