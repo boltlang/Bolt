@@ -3,10 +3,8 @@ use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::{
     diagnostic::Diagnostic,
-    parser::{
-        lexer::LexResult
-    },
-    syntax::SyntaxKind
+    parser::lexer::LexResult,
+    syntax::SyntaxKind, File
 };
 
 /// Intermediate error structure used during parsing.
@@ -40,10 +38,11 @@ pub(crate) enum Event {
 
 pub fn process_events<I: Iterator<Item = Event>>(
     events: I,
+    file: File,
     lexed: &LexResult,
     text: &str
 ) -> (GreenNode, Vec<Diagnostic>) {
-    let mut processor = EventProcessor::new(lexed, text);
+    let mut processor = EventProcessor::new(file, lexed, text);
     for event in events {
         processor.feed_event(event);
     }
@@ -54,6 +53,8 @@ pub fn process_events<I: Iterator<Item = Event>>(
 struct EventProcessor<'lex, 'text, 'cache> {
     lexed: &'lex LexResult,
     text: &'text str,
+    /// Kept to store on any diagnostics
+    file: File,
     errors: Vec<Diagnostic>,
     builder: GreenNodeBuilder<'cache>,
     /// Which token is being inspected
@@ -64,10 +65,11 @@ struct EventProcessor<'lex, 'text, 'cache> {
 
 impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
 
-    fn new(lexed: &'lex LexResult, text: &'text str) -> Self {
+    fn new(file: File, lexed: &'lex LexResult, text: &'text str) -> Self {
         Self {
             lexed,
             text,
+            file,
             errors: Vec::new(),
             builder: GreenNodeBuilder::new(),
             pos: 0,
@@ -100,7 +102,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
             }
             Event::Error { msg } => {
                 let start  = self.text_pos;
-                self.errors.push(Diagnostic::syntax_error(msg, start));
+                self.errors.push(Diagnostic::syntax_error(msg, self.file, start));
             }
             Event::Finish => {
                 self.builder.finish_node();

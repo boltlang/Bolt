@@ -8,4 +8,6 @@ name = "bolt"
 path = "src/main.rs"
 
 [dependencies]
+ariadne = "0.6.0"
 boltlang = { path = "../boltlang" }
+fluent-uri = "0.4.1"

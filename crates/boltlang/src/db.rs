@@ -17,6 +17,7 @@ use crate::import::transitive_imports;
 use crate::{BorrowedUri, OwnedUri};
 
 #[salsa::input]
+#[derive(Debug)]
 pub struct File {
     pub uri: OwnedUri,
     #[returns(ref)]

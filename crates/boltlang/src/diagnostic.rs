@@ -2,7 +2,9 @@
 /// Internal representation of an error generated during parsing.
 // pub type Diagnostic = String;
 
-use std::fmt::{Debug, Display};
+use std::fmt::{format, Debug, Display};
+
+use crate::File;
 
 pub type Span = std::ops::Range<usize>;
 
@@ -12,37 +14,75 @@ pub const CODE_SYNTAX_ERROR: u16 = 1;
 #[salsa::accumulator]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct Diagnostic {
-    inner: InnerDiagnostic,
+    pub data: DiagnosticData,
 }
 
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.inner, f)
+        std::fmt::Display::fmt(&self.data, f)
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub enum Severity {
+    Info,
+    Warn,
+    Error,
+    Fatal,
+}
+
+#[derive(Clone, Debug)]
+pub struct Source {
+    file: File,
+    span: Span,
+}
+
+impl Source {
+
+    pub fn new(file: File, span: Span) -> Self {
+        Self { file, span }
+    }
+
+    pub fn file(&self) -> File {
+        self.file
+    }
+
+    pub fn span(&self) -> &Span {
+        &self.span
+    }
+
 }
 
 impl Diagnostic {
 
-    pub fn syntax_error(message: String, offset: usize) -> Self {
-        Self { inner: InnerDiagnostic::Syntax(SyntaxDiagnostic { message, offset }) }
+    pub fn syntax_error(message: String, file: File, offset: usize) -> Self {
+        Self { data: DiagnosticData::Syntax(SyntaxDiagnostic { message, offset, file }) }
     }
 
     pub fn code(&self) -> u16 {
-        self.inner.code()
+        self.data.code()
     }
 
-    pub fn offset(&self) -> Option<usize> {
-        self.inner.offset()
+    pub fn message(&self) -> String {
+        self.data.message()
+    }
+
+    pub fn severity(&self) -> Severity {
+        self.data.severity()
+    }
+
+    pub fn source(&self) -> Option<Source> {
+        self.data.source()
     }
 
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum InnerDiagnostic {
+pub enum DiagnosticData {
     Syntax(SyntaxDiagnostic),
 }
 
-impl Display for InnerDiagnostic {
+impl Display for DiagnosticData {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Syntax(diag) => std::fmt::Display::fmt(diag, f),
@@ -50,23 +90,37 @@ impl Display for InnerDiagnostic {
     }
 }
 
-impl InnerDiagnostic {
-    fn code(&self) -> u16 {
+impl DiagnosticData {
+
+    pub fn message(&self) -> String {
+        format!("{}", self)
+    }
+
+    pub fn code(&self) -> u16 {
         match self {
             Self::Syntax(diag) => diag.code(),
         }
     }
-    fn offset(&self) -> Option<usize> {
+
+    pub fn severity(&self) -> Severity {
         match self {
-            Self::Syntax(diag) => Some(diag.offset),
+            Self::Syntax(_) => Severity::Error,
         }
     }
+
+    pub fn source(&self) -> Option<Source> {
+        match self {
+            Self::Syntax(diag) => Some(Source::new(diag.file, diag.offset..diag.offset)),
+        }
+    }
+
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SyntaxDiagnostic {
     message: String,
     offset: usize,
+    file: File,
 }
 
 impl Display for SyntaxDiagnostic {

@@ -12,8 +12,8 @@ use salsa::Accumulator;
 use crate::db::{File, ParsedFile};
 
 #[salsa::tracked]
-pub fn parse_file(db: &dyn salsa::Database, source: File) -> ParsedFile<'_> {
-    let text = source.contents(db);
+pub fn parse_file(db: &dyn salsa::Database, file: File) -> ParsedFile<'_> {
+    let text = file.contents(db);
     let lexed = lexer::tokenize(text);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
@@ -24,6 +24,7 @@ pub fn parse_file(db: &dyn salsa::Database, source: File) -> ParsedFile<'_> {
     );
     let (node, errors) = process_events(
         interspersed.into_iter(),
+        file,
         &lexed,
         &text
     );
