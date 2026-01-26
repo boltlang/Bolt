@@ -386,9 +386,9 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
         pos += 1;
     }
 
-    for (i, (a, b)) in (&kinds).iter().zip(&lines).enumerate() {
-        eprintln!("{i}. {a:?} = {b}");
-    }
+    // for (i, (a, b)) in (&kinds).iter().zip(&lines).enumerate() {
+    //     eprintln!("{i}. {a:?} = {b}");
+    // }
 
     LexResult {
         kinds,
