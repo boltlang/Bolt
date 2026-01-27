@@ -93,7 +93,7 @@ pub fn parse_call_expression(p: &mut Parser) -> Option<CompletedMarker> {
     let m = p.start();
     let m_2 = parse_prim_expression(p);
     let mut has_args = false;
-    while p.prev_line_fold() == p.current_line_fold() {
+    while in_line_fold(p) {
         parse_prim_expression(p);
         has_args = true;
     }
