@@ -221,6 +221,7 @@ impl <'a> IntersperseTrivia<'a> {
                 }
             }
             e@Event::Error { .. } => {
+                self.eat_trivias();
                 self.output.push(e)
             }
         }
