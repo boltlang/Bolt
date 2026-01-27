@@ -89,8 +89,24 @@ pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
+pub fn parse_call_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    let m = p.start();
+    let m_2 = parse_prim_expression(p);
+    let mut has_args = false;
+    while p.prev_line_fold() == p.current_line_fold() {
+        parse_prim_expression(p);
+        has_args = true;
+    }
+    if has_args {
+        Some(m.complete(p, CALL_EXPR))
+    } else {
+        m.abandon(p);
+        m_2
+    }
+}
+
 pub fn parse_expression(p: &mut Parser) -> Option<CompletedMarker> {
-    parse_prim_expression(p)
+    parse_call_expression(p)
 }
 
 pub fn parse_named_pattern(p: &mut Parser) -> Option<CompletedMarker> {
