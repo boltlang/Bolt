@@ -62,6 +62,9 @@ pub enum SyntaxKind {
     FUNC_DECL,
     VAR_DECL,
 
+    // Helper syntax
+    BLOCK,
+
     // Top-level
     SOURCE_FILE,
 }
@@ -104,6 +107,7 @@ impl SyntaxKind {
             PUB_KEYWORD => "'pub'",
             RETURN_KEYWORD => "'return'",
             TYPE_KEYWORD => "'type'",
+            BLOCK => "a block of statement",
             NAMED_PATT => "a named pattern",
             BLOCK_EXPR => "a block expression",
             CALL_EXPR => "a call expression",

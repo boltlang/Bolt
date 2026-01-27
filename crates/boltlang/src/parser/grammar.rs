@@ -25,6 +25,23 @@ pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
+pub fn parse_block(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.expect(BLOCK_START);
+    while !p.at(END_OF_FILE) && !p.at(BLOCK_END) {
+        parse_body_element(p);
+    }
+    p.bump_any();
+    m.complete(p, BLOCK)
+}
+
+pub fn parse_block_expression(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.expect(DO_KEYWORD);
+    parse_block(p);
+    m.complete(p, BLOCK_EXPR)
+}
+
 pub fn parse_literal_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         BIN_INT | OCT_INT | DEC_INT | HEX_INT => {
@@ -63,6 +80,7 @@ pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
         IDENTIFIER => parse_reference_expression(p),
+        DO_KEYWORD => Some(parse_block_expression(p)),
         L_PAREN => Some(parse_parenthesized_expression(p)),
         _ => {
             p.error_and_bump("expected expression");
@@ -148,6 +166,14 @@ pub fn parse_expression_statement(p: &mut Parser) -> Option<CompletedMarker> {
     let m = parse_expression(p);
     check_line_fold_end(p);
     m
+}
+
+pub fn parse_body_element(p: &mut Parser) -> Option<CompletedMarker> {
+    let kind = peek_after_modifiers(p);
+    match kind {
+        LET_KEYWORD => Some(parse_variable_declaration(p)),
+        _ => parse_expression_statement(p),
+    }
 }
 
 pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
