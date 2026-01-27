@@ -135,8 +135,25 @@ pub fn parse_pattern(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
-pub fn parse_type_expression(p: &mut Parser) -> CompletedMarker {
-    todo!()
+pub fn parse_named_type_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    if p.at_ts(PATH_NAME_REF_KINDS) {
+        let m = p.start();
+        p.bump_any();
+        Some(m.complete(p, NAMED_TYPE_EXPR))
+    } else {
+        p.error_and_bump("expected an identifier");
+        None
+    }
+}
+
+pub fn parse_type_expression(p: &mut Parser) -> Option<CompletedMarker> {
+    match p.current() {
+        IDENTIFIER => parse_named_type_expression(p),
+        _ => {
+            p.error_and_bump("expected type expression");
+            None
+        }
+    }
 }
 
 pub fn parse_type_ascription(p: &mut Parser) {

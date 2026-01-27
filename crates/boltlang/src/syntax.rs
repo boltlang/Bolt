@@ -48,6 +48,9 @@ pub enum SyntaxKind {
     // Patterns
     NAMED_PATT,
 
+    // Type expressions
+    NAMED_TYPE_EXPR,
+
     // Expressions
     BLOCK_EXPR,
     CALL_EXPR,
@@ -111,6 +114,7 @@ impl SyntaxKind {
             PUB_KEYWORD => "'pub'",
             RETURN_KEYWORD => "'return'",
             TYPE_KEYWORD => "'type'",
+            NAMED_TYPE_EXPR => "a reference to another type",
             BLOCK => "a block of statement",
             NAMED_PATT => "a named pattern",
             BLOCK_EXPR => "a block expression",
