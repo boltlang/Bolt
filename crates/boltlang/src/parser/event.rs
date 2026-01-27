@@ -20,7 +20,7 @@ pub(crate) enum Event {
     ///
     /// All tokens between a `Start` and a `Finish` would
     /// become the children of the respective node.
-    Start { kind: SyntaxKind },
+    Start { kind: SyntaxKind, abandoned: bool },
 
     /// Complete previous `Start` event
     Finish,
@@ -89,7 +89,8 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
 
     fn feed_event(&mut self, event: Event) {
         match event {
-            Event::Start { kind  } => {
+            Event::Start { abandoned: true, .. } => {},
+            Event::Start { kind, ..  } => {
                 self.builder.start_node(kind.into());
             }
             Event::Token { kind: expected } => {
@@ -198,10 +199,11 @@ impl <'a> IntersperseTrivia<'a> {
                 self.eat_trivias();
                 self.do_token(kind);
             }
-            Event::Start { kind } => {
+            Event::Start { abandoned: true, .. } => {},
+            Event::Start { kind, .. } => {
                 match std::mem::replace(&mut self.state, IntersperseState::Normal) {
                     IntersperseState::PendingEnter => {
-                        self.output.push(Event::Start { kind });
+                        self.output.push(Event::Start { kind, abandoned: false });
                         // No need to attach trivias to previous node: there is no
                         // previous node.
                         return;
@@ -210,7 +212,7 @@ impl <'a> IntersperseTrivia<'a> {
                     IntersperseState::Normal => (),
                 }
                 self.eat_trivias();
-                self.output.push(Event::Start { kind });
+                self.output.push(Event::Start { kind, abandoned: false });
                 // TODO add trivias attached to node here
                 // https://github.com/rust-lang/rust-analyzer/blob/137eee2f3d9acbabe677b07e221686d38f233ce9/crates/parser/src/shortcuts.rs#L156
             }

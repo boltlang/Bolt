@@ -17,6 +17,17 @@ impl Marker {
         }
     }
 
+    pub(crate) fn abandon(mut self, p: &mut Parser) {
+        self.bomb.defuse();
+        let idx = self.pos as usize;
+        match &mut p.events[idx] {
+            Event::Start { abandoned, .. } => {
+                *abandoned = true;
+            }
+            _ => unreachable!(),
+        }
+    }
+
     pub(crate) fn complete(mut self, p: &mut Parser, kind: SyntaxKind) -> CompletedMarker {
         self.bomb.defuse();
         let idx = self.pos as usize;
@@ -130,7 +141,7 @@ impl <'t> Parser<'t> {
     /// belong to the same node.
     pub(crate) fn start(&mut self) -> Marker {
         let pos = self.events.len() as u32;
-        self.push_event(Event::Start { kind: TOMBSTONE });
+        self.push_event(Event::Start { kind: TOMBSTONE, abandoned: false });
         Marker::new(pos)
     }
 
