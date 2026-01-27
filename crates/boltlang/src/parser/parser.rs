@@ -17,6 +17,7 @@ impl Marker {
         }
     }
 
+    /// Abandon this node and apppend all children of this node directly to the parent node.
     pub(crate) fn abandon(mut self, p: &mut Parser) {
         self.bomb.defuse();
         let idx = self.pos as usize;
@@ -28,6 +29,7 @@ impl Marker {
         }
     }
 
+    /// Will create a node with children between [Parer::start] and the current position.
     pub(crate) fn complete(mut self, p: &mut Parser, kind: SyntaxKind) -> CompletedMarker {
         self.bomb.defuse();
         let idx = self.pos as usize;
@@ -112,6 +114,9 @@ impl <'t> Parser<'t> {
         self.inp.kind(self.pos + n) == kind
     }
 
+    /// Tries to consume a specific token.
+    ///
+    /// If the token isn't present, this function returns `false`.
     pub (crate) fn eat(&mut self, kind: SyntaxKind) -> bool {
         if !self.at(kind) {
             return false;
