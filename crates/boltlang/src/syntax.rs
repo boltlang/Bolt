@@ -28,6 +28,8 @@ pub enum SyntaxKind {
 
     // Tokens which can have a value
     IDENTIFIER,
+    OPERATOR,
+    ASSIGNMENT,
     BIN_INT,
     OCT_INT,
     DEC_INT,
@@ -98,6 +100,8 @@ impl SyntaxKind {
             EQUALS => "'='",
             COMMA => "','",
             IDENTIFIER => "an identifier",
+            OPERATOR => "an operator",
+            ASSIGNMENT => "an assignment operator",
             BIN_INT | OCT_INT | DEC_INT | HEX_INT => "an integer literal",
             DO_KEYWORD => "'do'",
             FN_KEYWORD => "'fn'",

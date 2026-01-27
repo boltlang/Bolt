@@ -73,6 +73,10 @@ fn is_hex_num(ch: char) -> bool {
     matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '9' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F')
 }
 
+fn is_operator(ch: char) -> bool {
+    matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '?' | '!')
+}
+
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, SyntaxKind> = {
         let mut m = HashMap::new();
@@ -212,6 +216,20 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                     self.get();
                 }
                 DEC_INT
+            }
+            c0 if is_operator(c0) => {
+                let mut text = String::new();
+                text.push(c0);
+                while is_operator(self.peek(0)) {
+                    text.push(self.get());
+                }
+                if text.ends_with("==") {
+                    OPERATOR
+                } else if text.ends_with('=') {
+                    ASSIGNMENT
+                } else {
+                    OPERATOR
+                }
             }
             _ => ERROR,
         }
