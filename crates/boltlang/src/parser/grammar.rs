@@ -144,6 +144,34 @@ pub fn parse_type_ascription(p: &mut Parser) {
     parse_type_expression(p);
 }
 
+pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.eat(PUB_KEYWORD);
+    p.expect(FN_KEYWORD);
+    match p.current() {
+        IDENTIFIER => p.bump_any(),
+        L_PAREN => {
+            p.bump_any();
+            p.expect(OPERATOR);
+            p.expect(R_PAREN);
+        },
+        _ => {
+            p.error("expected an identifier or an operator wrapped between '(' and ')'");
+            // TODO maybe bump
+        }
+    }
+    while in_line_fold(p) && !p.at(COLON) && !p.at(EQUALS) {
+        parse_pattern(p);
+    }
+    if p.at(COLON) {
+        parse_type_ascription(p);
+    }
+    if p.eat(EQUALS) {
+        parse_expression(p);
+    }
+    m.complete(p, FUNC_DECL)
+}
+
 pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.eat(PUB_KEYWORD);
@@ -189,6 +217,7 @@ pub fn parse_body_element(p: &mut Parser) -> Option<CompletedMarker> {
     let kind = peek_after_modifiers(p);
     match kind {
         LET_KEYWORD => Some(parse_variable_declaration(p)),
+        FN_KEYWORD => Some(parse_named_function_declaration(p)),
         _ => parse_expression_statement(p),
     }
 }
@@ -197,6 +226,7 @@ pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
     let kind = peek_after_modifiers(p);
     match kind {
         LET_KEYWORD => Some(parse_variable_declaration(p)),
+        FN_KEYWORD => Some(parse_named_function_declaration(p)),
         _ => parse_expression_statement(p),
     }
 }
