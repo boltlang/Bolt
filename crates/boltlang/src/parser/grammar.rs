@@ -148,6 +148,7 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.eat(PUB_KEYWORD);
     p.expect(LET_KEYWORD);
+    p.eat(MUT_KEYWORD);
     parse_pattern(p);
     if p.current() == COLON {
         parse_type_ascription(p);
