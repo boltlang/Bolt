@@ -169,6 +169,7 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
     if p.eat(EQUALS) {
         parse_expression(p);
     }
+    check_line_fold_end(p);
     m.complete(p, FUNC_DECL)
 }
 
