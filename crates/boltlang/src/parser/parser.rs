@@ -77,8 +77,11 @@ impl <'t> Parser<'t> {
         self.inp.lines.iter().nth(self.pos).copied().unwrap_or(u32::MAX)
     }
 
-    pub(crate) fn next_line_fold(&self) -> u32 {
-        self.inp.lines.iter().nth(self.pos + 1).copied().unwrap_or(u32::MAX)
+    pub(crate) fn prev_line_fold(&self) -> u32 {
+        match self.pos.checked_sub(1) {
+            None => self.inp.lines.first().copied().unwrap_or(u32::MAX),
+            Some(pos) => self.inp.lines.iter().nth(pos).copied().unwrap_or(u32::MAX),
+        }
     }
 
     pub(crate) fn nth(&self, n: usize) -> SyntaxKind {

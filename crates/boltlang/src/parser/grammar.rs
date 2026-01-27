@@ -126,14 +126,17 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
     m.complete(p, VAR_DECL)
 }
 
+fn in_line_fold(p: &mut Parser) -> bool {
+    !(p.at(END_OF_FILE) || p.at(BLOCK_END)) && p.prev_line_fold() == p.current_line_fold()
+}
+
 fn check_line_fold_end(p: &mut Parser) {
-    if !p.at(END_OF_FILE) && p.current_line_fold() == p.next_line_fold() {
+    if in_line_fold(p) {
         p.error("expected end of line fold");
         let m = p.start();
         loop {
             p.bump_any();
-            if p.at(END_OF_FILE) || p.current_line_fold() != p.next_line_fold() {
-                p.bump_any();
+            if !in_line_fold(p) {
                 break;
             }
         }
