@@ -212,6 +212,7 @@ impl <'a> IntersperseTrivia<'a> {
                 self.eat_trivias();
                 self.output.push(Event::Start { kind });
                 // TODO add trivias attached to node here
+                // https://github.com/rust-lang/rust-analyzer/blob/137eee2f3d9acbabe677b07e221686d38f233ce9/crates/parser/src/shortcuts.rs#L156
             }
             Event::Finish => {
                 match std::mem::replace(&mut self.state, IntersperseState::PendingExit) {
