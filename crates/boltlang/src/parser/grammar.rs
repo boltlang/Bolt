@@ -130,7 +130,7 @@ pub fn parse_pattern(p: &mut Parser) -> Option<CompletedMarker> {
         L_PAREN => Some(parse_parenthesized_pattern(p)),
         _ => {
             p.error_and_bump("expected pattern");
-            return None;
+            None
         }
     }
 }
