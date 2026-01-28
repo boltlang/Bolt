@@ -12,6 +12,4 @@ notify-debouncer-mini = { version = "0.7.0", features = ["crossbeam-channel"] }
 rowan = "0.16.1"
 salsa = "0.25.2"
 thiserror = "2.0.18"
-tokio = { version = "1.49.0", features = ["full"] }
-tower-lsp-server = "0.23.0"
 unicode-ident = "1.0.22"

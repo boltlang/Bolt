@@ -98,7 +98,7 @@ dependencies = [
  "futures",
  "itertools",
  "tokio",
- "tower-lsp-server 0.23.0",
+ "tower-lsp-server",
 ]
 
 [[package]]
@@ -113,8 +113,6 @@ dependencies = [
  "rowan",
  "salsa",
  "thiserror 2.0.18",
- "tokio",
- "tower-lsp-server 0.23.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "unicode-ident",
 ]
 
@@ -1218,26 +1216,6 @@ dependencies = [
  "tower",
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "tower-lsp-server"
-version = "0.23.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f0e711655c89181a6bc6a2cc348131fcd9680085f5b06b6af13427a393a6e72"
-dependencies = [
- "bytes",
- "dashmap",
- "futures",
- "httparse",
- "ls-types",
- "memchr",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tower",
- "tracing",
 ]
 
 [[package]]
