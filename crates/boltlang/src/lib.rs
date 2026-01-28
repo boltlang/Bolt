@@ -22,7 +22,8 @@ pub use {
     error::{Error, Result},
     syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement},
     db::{RootDatabase, File},
+    parser::lexer::LineColumn,
     parser::parse_file,
-    text::{line_column_of_offset, start_offset_of_line, end_offset_of_line, index_lines},
+    text::{LineIndex, index_lines},
     diagnostic::{Diagnostic, Severity},
 };
