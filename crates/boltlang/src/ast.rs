@@ -1,6 +1,8 @@
 
 use std::marker::PhantomData;
 
+use rowan::SyntaxElement;
+
 use crate::syntax::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
 
 pub trait Node : Sized {
@@ -129,6 +131,18 @@ impl Node for Expr {
 
 pub struct LitExpr(SyntaxNode);
 
+impl LitExpr {
+    pub fn value(&self) -> Option<SyntaxToken> {
+        self.0.children_with_tokens().find_map(|x| match x {
+            SyntaxElement::Token(token) if matches!(
+                token.kind(), 
+                BIN_INT | OCT_INT | DEC_INT | HEX_INT | STRING
+            ) => Some(token),
+            _ => None,
+        })
+    }
+}
+
 impl Node for LitExpr {
     fn kind() -> SyntaxKind {
         LIT_EXPR
@@ -152,6 +166,12 @@ impl Node for NamedExpr {
     }
     fn syntax(&self) -> &SyntaxNode {
         &self.0
+    }
+}
+
+impl NamedExpr {
+    pub fn name(&self) -> Option<SyntaxToken> {
+        self.token(IDENTIFIER)
     }
 }
 
@@ -224,4 +244,28 @@ impl FuncDecl {
         self.node()
     }
 
+}
+
+pub enum SourceElement {
+    VarDecl(VarDecl),
+}
+
+pub struct SourceFile(SyntaxNode);
+
+impl Node for SourceFile {
+    fn kind() -> SyntaxKind {
+        SOURCE_FILE
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        SourceFile(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
+impl SourceFile {
+    pub fn elements(&self) -> ChildrenIter<SourceElement> {
+        ChildrenIter::new(&self.0)
+    }
 }

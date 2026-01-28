@@ -8,6 +8,7 @@ mod import;
 mod syntax;
 mod parser;
 mod ast;
+mod tc;
 
 /// Re-export of the Salsa library that boltlang uses
 pub use salsa;

@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 crossbeam-channel = "0.5.15"
 dashmap = "6.1.0"
+ena = "0.14.3"
 fluent-uri = "0.4.1"
 lazy_static = "1.5.0"
 notify-debouncer-mini = { version = "0.7.0", features = ["crossbeam-channel"] }

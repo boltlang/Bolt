@@ -30,6 +30,7 @@ pub enum SyntaxKind {
     // Tokens which can have a value
     IDENTIFIER,
     OPERATOR,
+    STRING,
     ASSIGNMENT,
     BIN_INT,
     OCT_INT,
@@ -111,6 +112,7 @@ impl SyntaxKind {
             COMMA => "','",
             R_ARROW => "'->'",
             IDENTIFIER => "an identifier",
+            STRING => "a string",
             OPERATOR => "an operator",
             ASSIGNMENT => "an assignment operator",
             BIN_INT | OCT_INT | DEC_INT | HEX_INT => "an integer literal",

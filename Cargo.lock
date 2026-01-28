@@ -107,6 +107,7 @@ version = "0.1.0"
 dependencies = [
  "crossbeam-channel",
  "dashmap",
+ "ena",
  "fluent-uri 0.4.1",
  "lazy_static",
  "notify-debouncer-mini",
@@ -252,6 +253,15 @@ name = "either"
 version = "1.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "48c757948c5ede0e46177b7add2e67155f70e33c07fea8284df6576da70b3719"
+
+[[package]]
+name = "ena"
+version = "0.14.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3d248bdd43ce613d87415282f69b9bb99d947d290b10962dd6c56233312c2ad5"
+dependencies = [
+ "log",
+]
 
 [[package]]
 name = "equivalent"
