@@ -223,7 +223,9 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                 while is_operator(self.peek(0)) {
                     text.push(self.get());
                 }
-                if text.ends_with("==") {
+                if text == "->" {
+                    R_ARROW
+                } else if text.ends_with("==") {
                     OPERATOR
                 } else if text.ends_with('=') {
                     ASSIGNMENT

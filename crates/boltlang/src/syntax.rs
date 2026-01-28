@@ -22,6 +22,7 @@ pub enum SyntaxKind {
     R_BRACKET,
     L_BRACE,
     R_BRACE,
+    R_ARROW,
     COLON,
     EQUALS,
     COMMA,
@@ -49,6 +50,7 @@ pub enum SyntaxKind {
     NAMED_PATT,
 
     // Type expressions
+    ARROW_TYPE_EXPR,
     NAMED_TYPE_EXPR,
 
     // Expressions
@@ -102,6 +104,7 @@ impl SyntaxKind {
             COLON => "':'",
             EQUALS => "'='",
             COMMA => "','",
+            R_ARROW => "'->'",
             IDENTIFIER => "an identifier",
             OPERATOR => "an operator",
             ASSIGNMENT => "an assignment operator",
@@ -114,6 +117,7 @@ impl SyntaxKind {
             PUB_KEYWORD => "'pub'",
             RETURN_KEYWORD => "'return'",
             TYPE_KEYWORD => "'type'",
+            ARROW_TYPE_EXPR => "a function type signature",
             NAMED_TYPE_EXPR => "a reference to another type",
             BLOCK => "a block of statement",
             NAMED_PATT => "a named pattern",
