@@ -22,14 +22,14 @@ pub fn parse_file(db: &dyn salsa::Database, file: File) -> ParsedFile<'_> {
         p.finish().into_iter(),
         &lexed
     );
-    let (node, errors) = process_events(
+    let (node, diagnostics) = process_events(
         interspersed.into_iter(),
         file,
         &lexed,
         &text
     );
-    for error in errors {
-        error.accumulate(db);
+    for diagnostic in diagnostics {
+        diagnostic.accumulate(db);
     }
     ParsedFile::new(db, node)
 }
