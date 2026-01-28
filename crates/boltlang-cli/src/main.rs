@@ -1,6 +1,4 @@
 
-use std::path::PathBuf;
-
 use ariadne::Report;
 use boltlang::rowan::NodeOrToken;
 use boltlang::salsa::Database;
