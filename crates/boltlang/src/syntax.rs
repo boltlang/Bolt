@@ -48,6 +48,9 @@ pub enum SyntaxKind {
 
     // Patterns
     NAMED_PATT,
+    LIT_PATT,
+    TUPLE_PATT,
+    NEST_PATT,
 
     // Type expressions
     ARROW_TYPE_EXPR,
@@ -71,6 +74,8 @@ pub enum SyntaxKind {
 
     // Helper syntax
     BLOCK,
+    TYPE_SIGNATURE,
+    INITIALIZER,
 
     // Top-level
     SOURCE_FILE,
@@ -120,7 +125,12 @@ impl SyntaxKind {
             ARROW_TYPE_EXPR => "a function type signature",
             NAMED_TYPE_EXPR => "a reference to another type",
             BLOCK => "a block of statement",
+            TYPE_SIGNATURE => "a type ascription",
+            INITIALIZER => "an initializer",
             NAMED_PATT => "a named pattern",
+            LIT_PATT => "a literal pattern",
+            TUPLE_PATT => "a tuple pattern",
+            NEST_PATT => "a pattern between '(' and ')'",
             BLOCK_EXPR => "a block expression",
             CALL_EXPR => "a call expression",
             INFIX_EXPR => "an infix-expression",
@@ -163,6 +173,9 @@ pub type SyntaxNode = rowan::SyntaxNode<Lang>;
 
 #[allow(unused)]
 pub type SyntaxToken = rowan::SyntaxToken<Lang>;
+
+#[allow(unused)]
+pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<Lang>;
 
 #[allow(unused)]
 pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;

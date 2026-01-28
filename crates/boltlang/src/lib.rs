@@ -7,6 +7,7 @@ mod text;
 mod import;
 mod syntax;
 mod parser;
+mod ast;
 
 /// Re-export of the Salsa library that boltlang uses
 pub use salsa;
@@ -26,4 +27,5 @@ pub use {
     parser::parse_file,
     text::{LineIndex, index_lines},
     diagnostic::{Diagnostic, Severity},
+    ast::*,
 };
