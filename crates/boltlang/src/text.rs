@@ -77,10 +77,10 @@ pub fn index_lines(db: &dyn salsa::Database, source: File) -> DbLineIndex<'_> {
             }
         };
 
+        char_offset += 1;
         if code == UNICODE_NEWLINE {
             out.push(char_offset);
         }
-        char_offset += 1;
 
     }
 
