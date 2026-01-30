@@ -2,11 +2,11 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use fluent_uri::Uri;
-use notify_debouncer_mini::new_debouncer;
 use crossbeam_channel::Sender;
 use dashmap::{DashMap, Entry};
+use fluent_uri::Uri;
 use notify_debouncer_mini::DebounceEventResult;
+use notify_debouncer_mini::new_debouncer;
 use notify_debouncer_mini::notify::RecursiveMode;
 use notify_debouncer_mini::{Debouncer, notify::RecommendedWatcher};
 use rowan::GreenNode;
