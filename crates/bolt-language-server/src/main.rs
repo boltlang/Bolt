@@ -2,7 +2,7 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use boltlang::{RootDatabase, Diagnostic, index_lines, LineColumn, parse_file};
+use boltlang::{RootDatabase, DbDiagnostic, index_lines, LineColumn, parse_file};
 use boltlang::salsa::{Database, Setter};
 use tower_lsp_server::{LspService, jsonrpc, ls_types};
 use tower_lsp_server::ls_types::{DiagnosticSeverity, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult, FullDocumentDiagnosticReport, InitializeResult, InitializedParams, MessageType, RelatedFullDocumentDiagnosticReport, ServerCapabilities, ServerInfo, Uri, WorkspaceDiagnosticReport, WorkspaceDiagnosticReportResult, WorkspaceDocumentDiagnosticReport, WorkspaceFullDocumentDiagnosticReport};
@@ -216,8 +216,8 @@ impl Backend {
             let root_node = parse_file(db, file);
             let index = index_lines(db, file).lines(db);
 
-            eprintln!("{}", parse_file::accumulated::<Diagnostic>(db, file).len());
-            Ok(parse_file::accumulated::<Diagnostic>(db, file)
+            eprintln!("{}", parse_file::accumulated::<DbDiagnostic>(db, file).len());
+            Ok(parse_file::accumulated::<DbDiagnostic>(db, file)
                 .into_iter()
                 .filter_map(|e| {
                     let source = e.source()?;

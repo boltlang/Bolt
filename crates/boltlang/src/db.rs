@@ -141,7 +141,7 @@ impl RootDatabase {
 impl salsa::Database for RootDatabase {}
 
 #[salsa::tracked(debug)]
-pub struct ParsedFile<'db> {
+pub struct DbNode<'db> {
     #[tracked]
     #[returns(ref)]
     pub node: GreenNode,

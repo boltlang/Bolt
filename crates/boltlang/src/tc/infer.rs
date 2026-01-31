@@ -1,9 +1,8 @@
 use std::{collections::{HashMap, HashSet}, vec};
 
-use ena::unify::{EqUnifyValue, InPlaceUnificationTable, UnifyKey};
 use lazy_static::lazy_static;
 
-use crate::{Diagnostic, SyntaxKind::*, SyntaxNode, SyntaxToken, ast::*};
+use crate::{File, SyntaxKind::*, SyntaxNode, SyntaxToken, ast::*, diagnostic::{BindingNotFoundDiagnostic, Diagnostics, Source}, tc::{TVSub, TVar, Type, solve::Solver}};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SymbolKind {
@@ -11,87 +10,10 @@ pub enum SymbolKind {
     Type,
 }
 
-/// A unique name for the type constructor.
-type ConId = String;
+pub type TVSet = HashSet<TVar>;
 
-#[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
-struct TVar(u32);
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum Type {
-
-    /// A temporary hole used during type inference.
-    UniVar(TVar),
-
-    /// The type of type constructors.
-    Con(ConId, Vec<Type>),
-
-    /// The type of a function accepting one argument.
-    ///
-    /// Could be a [Con], but we define it here for performance and ease of use.
-    Fun(Box<Type>, Box<Type>),
-}
-
-impl Type {
-
-    fn uni_vars_helper(&self, out: &mut Vec<TVar>) {
-        match self {
-            Self::UniVar(tv) => {
-                out.push(*tv);
-            },
-            Self::Con(_, args) => {
-                for arg in args {
-                    arg.uni_vars_helper(out);
-                }
-            },
-            Self::Fun(left, right) => {
-                left.uni_vars_helper(out);
-                right.uni_vars_helper(out);
-            },
-        }
-    }
-
-    pub fn uni_vars(&self) -> Vec<TVar> {
-        let mut out = Vec::new();
-        self.uni_vars_helper(&mut out);
-        out
-    }
-
-    pub fn has_uni_var(&self, tv: &TVar) -> bool {
-        match self {
-            Self::UniVar(tv_2) => tv == tv_2,
-            Self::Con(_, args) => args.iter().any(|t| t.has_uni_var(tv)),
-            Self::Fun(left, right) => left.has_uni_var(tv) || right.has_uni_var(tv),
-        }
-    }
-
-    pub fn substitute(self, sub: &TVSub) -> Type {
-        match self {
-            Type::UniVar(tv) => sub.get(&tv).cloned().unwrap_or(self),
-            Type::Con(id, args) => Type::Con(
-                id,
-                args.into_iter()
-                    .map(|t| t.substitute(sub))
-                    .collect()
-            ),
-            Type::Fun(left, right) => Type::Fun(
-                Box::new(left.substitute(sub)),
-                Box::new(right.substitute(sub))
-            ),
-        }
-    }
-
-}
-
-impl From<TVar> for Type {
-    fn from(tv: TVar) -> Self {
-        Type::UniVar(tv)
-    }
-}
-
-type TVSet = HashSet<TVar>;
-
-struct Scheme {
+#[derive(Clone, Eq, PartialEq)]
+pub struct Scheme {
     unbound: TVSet,
     ty: Type,
 }
@@ -102,6 +24,10 @@ impl Scheme {
         Self { unbound, ty }
     }
 
+    pub fn mono(ty: Type) -> Self {
+        Self { ty, unbound: TVSet::new() }
+    }
+
     pub fn has_uni_var(&self, tv: &TVar) -> bool {
         !self.unbound.contains(tv) && self.ty.has_uni_var(tv)
     }
@@ -110,38 +36,37 @@ impl Scheme {
 
 pub enum Constraint {
     TypesEqual {
+        provenance: Provenance,
         left: Type,
         right: Type,
     },
 }
 
-struct TypeEnv {
+struct TypeEnvData {
     mapping: HashMap<(SymbolKind, String), Scheme>,
 }
 
-impl TypeEnv {
+impl TypeEnvData {
+
+    fn new() -> Self {
+        Self { mapping: HashMap::new() }
+    }
 
     fn get(&self, name: &str, kind: SymbolKind) -> Option<&Scheme> {
         self.mapping.get(&(kind, name.to_owned()))
     }
 
-    fn add(&mut self, name: String, kind: SymbolKind, scheme: Scheme) {
-        debug_assert!(self.mapping.contains_key(&(kind, name.clone())));
+    fn add<S: Into<String>>(&mut self, name: S, kind: SymbolKind, scheme: Scheme) {
+        let name = name.into();
+        debug_assert!(!self.mapping.contains_key(&(kind, name.clone())));
         self.mapping.insert((kind, name), scheme);
-    }
-
-    fn has_uni_var(&self, tv: &TVar) -> bool {
-        for scm in self.mapping.values() {
-            if scm.has_uni_var(tv) {
-                return true;
-            }
-        }
-        false
     }
 
 }
 
-type Constraints = Vec<Constraint>;
+type TypeEnvId = usize;
+
+pub type Constraints = Vec<Constraint>;
 
 lazy_static! {
 
@@ -151,69 +76,103 @@ lazy_static! {
 
 }
 
-type TVSub = HashMap<TVar, Type>;
+pub struct InferContext<'d> {
+    diagnostics: &'d mut dyn Diagnostics,
+    solver: Solver,
+    envs: Vec<TypeEnvData>,
+}
 
-impl EqUnifyValue for Type {}
+pub enum Provenance {
+    AppExpectedFun(CallExpr),
+    UnexpectedFun(Expr),
+    ExpectedUnify(Expr),
+}
 
-impl UnifyKey for TVar {
+impl Provenance {
 
-    type Value = Option<Type>;
-
-    fn index(&self) -> u32 {
-        self.0
-    }
-
-    fn from_index(u: u32) -> Self {
-        TVar(u)
-    }
-
-    fn tag() -> &'static str {
-        "TypeVar"
+    pub fn node(&self) -> &SyntaxNode {
+        match self {
+            Provenance::AppExpectedFun(node) => node.syntax(),
+            Provenance::UnexpectedFun(node) => node.syntax(),
+            Provenance::ExpectedUnify(node) => node.syntax(),
+        }
     }
 
 }
 
-struct InferContext {
-    table: InPlaceUnificationTable<TVar>,
-}
+impl <'d> InferContext<'d> {
 
-impl InferContext {
-
-    fn new() -> Self {
-        Self { table: InPlaceUnificationTable::new() }
+    pub fn new(diagnostics: &'d mut dyn Diagnostics) -> Self {
+        let mut global_env = TypeEnvData::new();
+        global_env.add("True", SymbolKind::Var, Scheme::mono(BOOL_TYPE.clone()));
+        global_env.add("False", SymbolKind::Var, Scheme::mono(BOOL_TYPE.clone()));
+        global_env.add("Bool", SymbolKind::Type, Scheme::mono(BOOL_TYPE.clone()));
+        global_env.add("Int", SymbolKind::Type, Scheme::mono(INT_TYPE.clone()));
+        global_env.add("String", SymbolKind::Type, Scheme::mono(STRING_TYPE.clone()));
+        Self {
+            diagnostics,
+            envs: vec![ global_env ],
+            solver: Solver::new(),
+        }
     }
 
-    fn fresh(&mut self) -> TVar {
-        self.table.new_key(None)
+    fn fresh_type_var(&mut self) -> TVar {
+        self.solver.unifier.fresh_type_var()
     }
 
     fn instantiate(&mut self, scm: &Scheme) -> Type {
         let mut sub = TVSub::new();
         for tv in &scm.unbound {
-            sub.insert(*tv, self.fresh().into());
+            sub.insert(*tv, self.fresh_type_var().into());
         }
         scm.ty.clone().substitute(&sub)
     }
 
-    fn generalize(&self, ty: Type, env: &TypeEnv) -> Scheme {
+    fn global_env(&self) -> TypeEnvId {
+        0
+    }
+
+    fn generalize(&self, ty: Type, env: &TypeEnvId) -> Scheme {
         let mut unbound = TVSet::new();
         for tv in ty.uni_vars() {
-            if !env.has_uni_var(&tv) {
+            if !self.env_has_uni_var(env, &tv) {
                 unbound.insert(tv);
             }
         }
         Scheme::new(unbound, ty)
     }
 
-    fn lookup(&mut self, name: &str, kind: SymbolKind, env: &TypeEnv) -> (Type, Constraints) {
-        match env.get(name, kind) {
-            None => {
-                // TODO
-                // Diagnostic::binding_not_found(name.to_owned(), );
-                (self.fresh().into(), vec![])
-            },
-            Some(scm) => (self.instantiate(scm), vec![]),
+    fn env_has_uni_var(&self, env: &TypeEnvId, tv: &TVar) -> bool {
+        for i in (0..*env).rev() {
+            let data = &self.envs[i];
+            for scm in data.mapping.values() {
+                if scm.has_uni_var(tv) {
+                    return true;
+                }
+            }
         }
+        false
+    }
+
+    fn env_add<S: Into<String>>(&mut self, env: TypeEnvId, name: S, kind: SymbolKind, scm: Scheme) {
+        self.envs[env].add(name, kind, scm);
+    }
+
+    fn lookup(&mut self, name: &str, source: Source, kind: SymbolKind, env: TypeEnvId) -> (Type, Constraints) {
+        for i in (0..env).rev() {
+            let scm = self.envs[i].get(name, kind).cloned();
+            if let Some(scm) = scm {
+                 return (self.instantiate(&scm), vec![]);
+            }
+        }
+        self.diagnostics.add(BindingNotFoundDiagnostic::new(name.to_owned(), kind, source).into());
+        (self.fresh_type_var().into(), vec![])
+    }
+
+    fn fork_env(&mut self, _env: TypeEnvId) -> TypeEnvId {
+        let i = self.envs.len();
+        self.envs.push(TypeEnvData::new());
+        i
     }
 
     fn infer_literal(&mut self, token: SyntaxToken) -> (Type, Constraints) {
@@ -224,44 +183,200 @@ impl InferContext {
         }
     }
 
-    fn infer_expr(&mut self, expr: &Expr, env: &mut TypeEnv) -> (Type, Constraints) {
-        match expr {
-            Expr::Named(named) => match named.name() {
-                Some(name) => self.lookup(name.text(),  SymbolKind::Var, env),
-                None => (self.fresh().into(), vec![]),
-            },
-            Expr::Lit(lit) => match lit.value() {
-                Some(lit) => self.infer_literal(lit),
-                None => (self.fresh().into(), vec![]),
-            },
+    fn infer_pattern(&mut self, pattern: &Pattern, to_insert: TypeEnvId, env: TypeEnvId, file: File) -> (Type, Constraints) {
+        match pattern {
+            Pattern::Named(named) => {
+                let ty: Type = self.fresh_type_var().into();
+                if let Some(name) = named.name() {
+                    self.env_add(to_insert, name.text().to_string(), SymbolKind::Var, Scheme::mono(ty.clone()));
+                }
+                (ty, vec![])
+            }
         }
     }
 
-    fn check_expr(&mut self, expr: &Expr, ty: &Type, env: &mut TypeEnv) -> Constraints {
+    pub fn infer_expr(&mut self, expr: &Expr, env: TypeEnvId, file: File) -> (Type, Constraints) {
+        match expr {
+            Expr::Named(named) => match named.name() {
+                Some(name) => self.lookup(
+                    name.text(),
+                    Source::new(file, name.text_range().into()),
+                    SymbolKind::Var,
+                    env
+                ),
+                None => (self.fresh_type_var().into(), vec![]),
+            }
+            Expr::Lit(lit) => match lit.value() {
+                Some(lit) => self.infer_literal(lit),
+                None => (self.fresh_type_var().into(), vec![]),
+            }
+            Expr::Fun(fun) => {
+                let mut out = Constraints::new();
+                let new_env = self.fork_env(env);
+                let (mut ty, ty_out) = match fun.body() {
+                    Some(expr) => self.infer_expr(&expr, env, file),
+                    None => (self.fresh_type_var().into(), vec![]),
+                };
+                out.extend(ty_out);
+                for pattern in fun.params().collect::<Vec<_>>().into_iter().rev() {
+                    let (param_ty, param_out) = self.infer_pattern(&pattern, new_env, env, file);
+                    out.extend(param_out);
+                    ty = Type::fun(param_ty, ty);
+                }
+                (ty, out)
+            }
+            Expr::Call(call) => {
+                // FIXME check this is correct
+                eprintln!("HEREREREREE");
+                let (mut fun_ty, fun_out) = match call.operator() {
+                    Some(e) => self.infer_expr(&e, env, file),
+                    None => (self.fresh_type_var().into(), vec![]),
+                };
+                let mut out = fun_out;
+                for arg in call.args() {
+                    let (arg_ty, ret_ty_2) = match &fun_ty {
+                        Type::Fun(left, right) => (left.as_ref().clone(), right.as_ref().clone()),
+                        ty => {
+                            let arg_ty: Type = self.fresh_type_var().into();
+                            let ret_ty: Type = self.fresh_type_var().into();
+                            out.push(Constraint::TypesEqual {
+                                provenance: Provenance::AppExpectedFun(call.clone()),
+                                left: Type::fun(arg_ty.clone(), ret_ty.clone()),
+                                right: ty.clone(),
+                            });
+                            (arg_ty, ret_ty)
+                        }
+                    };
+                    out.extend(self.check_expr(&arg, &arg_ty, env, file));
+                    fun_ty = ret_ty_2;
+                }
+                (fun_ty, out)
+            }
+        }
+    }
+
+    fn check_pattern(&mut self, pattern: &Pattern, ty: Type, to_insert: TypeEnvId, env: TypeEnvId) -> Constraints {
+        match pattern {
+            Pattern::Named(named) => {
+                if let Some(name) = named.name() {
+                    self.env_add(to_insert, name.text(), SymbolKind::Var, Scheme::mono(ty));
+                }
+                vec![]
+            }
+        }
+    }
+
+    fn check_expr(&mut self, expr: &Expr, ty: &Type, env: TypeEnvId, file: File) -> Constraints {
+        match (expr, ty) {
+            (Expr::Fun(fun), ty) => {
+                let mut out = Constraints::new();
+                let new_env = self.fork_env(env);
+                let mut ty = ty.clone();
+                for pattern in fun.params() {
+                    let (arg_ty, ret_ty) = match ty {
+                        Type::Fun(arg_ty, ret_ty) => (arg_ty.as_ref().clone(), ret_ty.as_ref().clone()),
+                        ty => {
+                            let arg_ty: Type = self.fresh_type_var().into();
+                            let ret_ty: Type = self.fresh_type_var().into();
+                            out.push(Constraint::TypesEqual {
+                                provenance: Provenance::UnexpectedFun(expr.clone()),
+                                left: ty.clone(),
+                                right: Type::fun(arg_ty.clone(), ret_ty.clone()),
+                            });
+                            (arg_ty, ret_ty)
+                        }
+                    };
+                    let param_out = self.check_pattern(&pattern, arg_ty, new_env, env);
+                    out.extend(param_out);
+                    ty = ret_ty;
+                }
+                let body_out = self.check_expr(expr, &ty, new_env, file);
+                out.extend(body_out);
+                out
+            }
+            _ => {
+                let (actual_ty, mut out) = self.infer_expr(expr, env, file);
+                out.push(Constraint::TypesEqual {
+                    provenance: Provenance::ExpectedUnify(expr.clone()),
+                    left: actual_ty,
+                    right: ty.clone(),
+                });
+                out
+            }
+        }
+    }
+
+    fn infer_type_expr(&mut self, te: &TypeExpr, env: TypeEnvId, file: File) -> (Type, Constraints) {
+        match te {
+            TypeExpr::Named(named) => match named.name() {
+                None => (self.fresh_type_var().into(), vec![]),
+                Some(name) => self.lookup(
+                    name.text(),
+                    Source::new(file, name.text_range().into()),
+                    SymbolKind::Type,
+                    env
+                ),
+            }
+        }
+    }
+
+    fn infer_var_decl(&mut self, decl: &VarDecl, env: TypeEnvId, file: File) -> Constraints {
+        let mut out = Constraints::new();
+        let mut ty = None;
+        if let Some(te) = decl.type_expr() {
+            let (te_ty, te_ty_out) = self.infer_type_expr(&te, env, file);
+            out.extend(te_ty_out);
+            ty = Some(te_ty);
+        }
+        if let Some(pattern) = decl.pattern() {
+            match &ty {
+                Some(ty) => {
+                    out.extend(self.check_pattern(&pattern, ty.clone(), env, env));
+                }
+                None => {
+                    let (patt_ty, patt_out) = self.infer_pattern(&pattern, env, env, file);
+                    out.extend(patt_out);
+                    ty = Some(patt_ty);
+                }
+            }
+        }
+        if let Some(expr) = decl.expr() {
+            match ty {
+                Some(ty) => {
+                    out.extend(self.check_expr(&expr, &ty, env, file));
+                }
+                None => {
+                    let (_expr_ty, expr_out) = self.infer_expr(&expr, env, file);
+                    out.extend(expr_out);
+                }
+            }
+        }
+        out
+    }
+
+    fn infer_func_decl(&mut self, node: &FuncDecl, env: TypeEnvId, file: File) -> Constraints {
         todo!()
     }
 
-    fn infer_source_file(&mut self, sf: &SourceFile) -> Constraints {
-        todo!()
+    fn infer_element(&mut self, element: &SourceElement, env: TypeEnvId, file: File) -> Constraints {
+        match element {
+            SourceElement::VarDecl(decl) => self.infer_var_decl(decl, env, file),
+            SourceElement::FuncDecl(decl) => self.infer_func_decl(decl, env, file),
+            SourceElement::Expr(expr) => self.infer_expr(expr, env, file).1,
+        }
     }
 
-    fn solve(&mut self, constraints: &[Constraint]) -> Self {
-        todo!()
+    pub fn infer_source_file(&mut self, node: &SourceFile, file: File) -> Constraints {
+        let env = self.fork_env(self.global_env());
+        node.elements().flat_map(|x| self.infer_element(&x, env, file)).collect()
+    }
+
+    pub fn solve(&mut self, constraints: &[Constraint]) {
+        for constraint in constraints {
+            self.solver.add(constraint, self.diagnostics);
+        }
+        self.solver.solve();
     }
 
 }
 
-struct CheckResult {
-    mapping: HashMap<SyntaxNode, Scheme>,
-}
-
-pub fn check_source_file(node: &SourceFile) -> CheckResult {
-    let mapping = HashMap::new();
-    let mut infer = InferContext::new();
-    let mut constraints = Constraints::new();
-    constraints.extend(infer.infer_source_file(node));
-    infer.solve(&constraints);
-    CheckResult {
-        mapping,
-    }
-}

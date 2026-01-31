@@ -1,7 +1,7 @@
 
 use std::marker::PhantomData;
 
-use rowan::SyntaxElement;
+use rowan::{Children, SyntaxElement};
 
 use crate::syntax::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
 
@@ -27,14 +27,14 @@ pub trait Node : Sized {
         Self::kind() == kind
     }
 
-    fn token(&self, kind: SyntaxKind) -> Option<SyntaxToken> {
+    fn find_token(&self, kind: SyntaxKind) -> Option<SyntaxToken> {
         self.syntax()
             .children_with_tokens()
             .filter_map(|x| x.into_token())
             .find(|x| x.kind() == kind)
     }
 
-    fn node<N: Node>(&self) -> Option<N> {
+    fn find_node<N: Node>(&self) -> Option<N> {
         self.syntax()
             .children()
             .find_map(N::cast)
@@ -62,6 +62,49 @@ impl<N: Node> Iterator for ChildrenIter<N> {
     }
 }
 
+pub enum TypeExpr {
+    Named(NamedTypeExpr),
+}
+
+impl Node for TypeExpr {
+    fn can_cast(kind: SyntaxKind) -> bool {
+        matches!(kind, NAMED_TYPE_EXPR)
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        match syntax.kind() {
+            NAMED_TYPE_EXPR => TypeExpr::Named(NamedTypeExpr(syntax)),
+            _ => unreachable!(),
+        }
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            TypeExpr::Named(node) => node.syntax(),
+        }
+    }
+}
+
+pub struct NamedTypeExpr(SyntaxNode);
+
+impl NamedTypeExpr {
+
+    pub fn name(&self) -> Option<SyntaxToken> {
+        self.find_token(IDENTIFIER)
+    }
+
+}
+
+impl Node for NamedTypeExpr {
+    fn kind() -> SyntaxKind {
+        NAMED_TYPE_EXPR
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        NamedTypeExpr(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
 pub enum Pattern {
     Named(NamedPattern),
 }
@@ -74,7 +117,7 @@ impl Node for Pattern {
 
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
-            NAMED_PATT => Self::Named(NamedPattern::wrap(syntax)),
+            NAMED_PATT => Self::Named(NamedPattern(syntax)),
             _ => unreachable!(),
         }
     }
@@ -87,7 +130,15 @@ impl Node for Pattern {
 
 }
 
+#[derive(Clone)]
 pub struct NamedPattern(SyntaxNode);
+
+impl NamedPattern {
+    pub fn name(&self) -> Option<SyntaxToken> {
+        self.find_token(IDENTIFIER)
+    }
+}
+
 
 impl Node for NamedPattern {
     fn kind() -> SyntaxKind {
@@ -101,17 +152,22 @@ impl Node for NamedPattern {
     }
 }
 
+#[derive(Clone)]
 pub enum Expr {
     Named(NamedExpr),
     Lit(LitExpr),
+    Call(CallExpr),
+    Fun(FunExpr),
 }
 
 impl Node for Expr {
 
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
-            REF_EXPR => Expr::Named(NamedExpr::wrap(syntax)),
-            LIT_EXPR => Expr::Lit(LitExpr::wrap(syntax)),
+            REF_EXPR => Expr::Named(NamedExpr(syntax)),
+            LIT_EXPR => Expr::Lit(LitExpr(syntax)),
+            CALL_EXPR => Expr::Call(CallExpr(syntax)),
+            FUN_EXPR => Expr::Fun(FunExpr(syntax)),
             _ => unreachable!(),
         }
     }
@@ -119,16 +175,43 @@ impl Node for Expr {
     fn syntax(&self) -> &SyntaxNode {
         match self {
             Expr::Lit(node) => node.syntax(),
+            Expr::Call(node) => node.syntax(),
             Expr::Named(node) => node.syntax(),
+            Expr::Fun(node) => node.syntax(),
         }
     }
 
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, REF_EXPR | LIT_EXPR)
+        matches!(kind, REF_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR)
     }
 
 }
 
+#[derive(Clone)]
+pub struct FunExpr(SyntaxNode);
+
+impl FunExpr {
+    pub fn params(&self) -> ChildrenIter<Pattern> {
+        ChildrenIter::new(&self.0)
+    }
+    pub fn body(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+impl Node for FunExpr {
+    fn kind() -> SyntaxKind {
+        FUN_EXPR
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        FunExpr(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
+#[derive(Clone)]
 pub struct LitExpr(SyntaxNode);
 
 impl LitExpr {
@@ -155,6 +238,22 @@ impl Node for LitExpr {
     }
 }
 
+#[derive(Clone)]
+pub struct CallExpr(SyntaxNode);
+
+impl Node for CallExpr {
+    fn kind() -> SyntaxKind {
+        CALL_EXPR
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        CallExpr(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
+#[derive(Clone)]
 pub struct NamedExpr(SyntaxNode);
 
 impl Node for NamedExpr {
@@ -169,12 +268,22 @@ impl Node for NamedExpr {
     }
 }
 
-impl NamedExpr {
-    pub fn name(&self) -> Option<SyntaxToken> {
-        self.token(IDENTIFIER)
+impl CallExpr {
+    pub fn operator(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn args(&self) -> impl Iterator<Item = Expr> {
+        self.0.children().filter_map(Expr::cast).skip(1)
     }
 }
 
+impl NamedExpr {
+    pub fn name(&self) -> Option<SyntaxToken> {
+        self.find_token(IDENTIFIER)
+    }
+}
+
+#[derive(Clone)]
 pub struct VarDecl(SyntaxNode);
 
 impl Node for VarDecl {
@@ -192,7 +301,15 @@ impl Node for VarDecl {
 impl VarDecl {
 
     pub fn pattern(&self) -> Option<Pattern> {
-        self.node()
+        self.find_node()
+    }
+
+    pub fn type_expr(&self) -> Option<TypeExpr> {
+        self.find_node()
+    }
+
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
     }
 
 }
@@ -212,6 +329,7 @@ impl Node for TypeSignature {
     }
 }
 
+#[derive(Clone)]
 pub struct FuncDecl(SyntaxNode);
 
 impl Node for FuncDecl {
@@ -229,7 +347,7 @@ impl Node for FuncDecl {
 impl FuncDecl {
 
     pub fn name(&self) -> Option<SyntaxToken> {
-        self.token(IDENTIFIER)
+        self.find_token(IDENTIFIER)
     }
 
     pub fn params(&self) -> ChildrenIter<Pattern> {
@@ -237,17 +355,40 @@ impl FuncDecl {
     }
 
     pub fn return_type(&self ) -> Option<TypeSignature> {
-        self.node()
+        self.find_node()
     }
 
     pub fn body(&self) -> Option<Expr> {
-        self.node()
+        self.find_node()
     }
 
 }
 
+#[derive(Clone)]
 pub enum SourceElement {
     VarDecl(VarDecl),
+    FuncDecl(FuncDecl),
+    Expr(Expr),
+}
+
+impl Node for SourceElement {
+    fn can_cast(kind: SyntaxKind) -> bool {
+        matches!(kind, VAR_DECL | FUNC_DECL)
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        match syntax.kind() {
+            VAR_DECL => Self::VarDecl(VarDecl(syntax)),
+            FUNC_DECL => Self::FuncDecl(FuncDecl(syntax)),
+            _ => unreachable!(),
+        }
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        match self {
+            SourceElement::VarDecl(node) => node.syntax(),
+            SourceElement::FuncDecl(node) => node.syntax(),
+            SourceElement::Expr(node) => node.syntax(),
+        }
+    }
 }
 
 pub struct SourceFile(SyntaxNode);

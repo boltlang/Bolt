@@ -8,6 +8,9 @@ name = "bolt"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1.0.100"
 ariadne = "0.6.0"
 boltlang = { path = "../boltlang" }
+clap = { version = "4.5.56", features = ["cargo", "derive"] }
 fluent-uri = "0.4.1"
+serde_json = "1.0.149"

@@ -9,10 +9,10 @@ pub(crate) use parser::Parser;
 pub(crate) use grammar::*;
 
 use salsa::Accumulator;
-use crate::db::{File, ParsedFile};
+use crate::db::{File, DbNode};
 
 #[salsa::tracked]
-pub fn parse_file(db: &dyn salsa::Database, file: File) -> ParsedFile<'_> {
+pub fn parse_file(db: &dyn salsa::Database, file: File) -> DbNode<'_> {
     let text = file.contents(db);
     let lexed = lexer::tokenize(text);
     let inp = lexed.to_input();
@@ -31,6 +31,6 @@ pub fn parse_file(db: &dyn salsa::Database, file: File) -> ParsedFile<'_> {
     for diagnostic in diagnostics {
         diagnostic.accumulate(db);
     }
-    ParsedFile::new(db, node)
+    DbNode::new(db, node)
 }
 

@@ -2,9 +2,7 @@
 use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::{
-    diagnostic::Diagnostic,
-    parser::lexer::LexResult,
-    syntax::SyntaxKind, File
+    File, diagnostic::{DbDiagnostic, SyntaxDiagnostic}, parser::lexer::LexResult, syntax::SyntaxKind
 };
 
 /// Intermediate error structure used during parsing.
@@ -41,7 +39,7 @@ pub fn process_events<I: Iterator<Item = Event>>(
     file: File,
     lexed: &LexResult,
     text: &str
-) -> (GreenNode, Vec<Diagnostic>) {
+) -> (GreenNode, Vec<DbDiagnostic>) {
     let mut processor = EventProcessor::new(file, lexed, text);
     for event in events {
         processor.feed_event(event);
@@ -55,7 +53,7 @@ struct EventProcessor<'lex, 'text, 'cache> {
     text: &'text str,
     /// Kept to store on any diagnostics
     file: File,
-    errors: Vec<Diagnostic>,
+    errors: Vec<DbDiagnostic>,
     builder: GreenNodeBuilder<'cache>,
     /// Which token is being inspected
     pos: u32,
@@ -103,7 +101,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
             }
             Event::Error { msg } => {
                 let start  = self.text_pos;
-                self.errors.push(Diagnostic::syntax_error(msg, self.file, start));
+                self.errors.push(DbDiagnostic::new(SyntaxDiagnostic::new(msg, start, self.file).into()));
             }
             Event::Finish => {
                 self.builder.finish_node();

@@ -60,6 +60,7 @@ pub enum SyntaxKind {
     // Expressions
     BLOCK_EXPR,
     CALL_EXPR,
+    FUN_EXPR,
     INFIX_EXPR,
     LIT_EXPR,
     MATCH_EXPR,
@@ -135,6 +136,7 @@ impl SyntaxKind {
             NEST_PATT => "a pattern between '(' and ')'",
             BLOCK_EXPR => "a block expression",
             CALL_EXPR => "a call expression",
+            FUN_EXPR => "a function expression",
             INFIX_EXPR => "an infix-expression",
             LIT_EXPR => "a literal expression",
             MATCH_EXPR => "a match expression",
