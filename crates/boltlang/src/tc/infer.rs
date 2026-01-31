@@ -469,7 +469,7 @@ impl <'d> InferContext<'d> {
 
     pub fn solve(&mut self, constraints: &[Constraint]) {
         for constraint in constraints {
-            self.solver.add(constraint);
+            self.solver.add(constraint, self.diagnostics);
         }
         self.solver.solve();
     }

@@ -8,11 +8,10 @@ use crate::{
         UnmatchedTypeSignatureDiagnostic
     },
     tc::{infer::{Constraint, Provenance}, unify::{Unifier, UnifyError}},
-    Diagnostic
+    Diagnostic, Diagnostics
 };
 
 pub struct Solver {
-    diagnostics: Vec<Diagnostic>,
     pub unifier: Unifier,
 }
 
@@ -20,20 +19,15 @@ impl Solver {
 
     pub fn new() -> Self {
         Self {
-            diagnostics: Vec::new(),
             unifier: Unifier::new(),
         }
     }
 
-    pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
-        std::mem::take(&mut self.diagnostics)
-    }
-
-    pub fn add(&mut self, constraint: &Constraint) {
+    pub fn add(&mut self, constraint: &Constraint, diagnostics: &mut dyn Diagnostics) {
         match constraint {
             Constraint::TypesEqual { provenance, left, right } => {
                 for diag in self.unifier.unify_type_type(&left, &right) {
-                    self.diagnostics.push(match diag {
+                    diagnostics.add(match diag {
                         UnifyError::OccursCheck(ty, var) => 
                             InfiniteTypeDiagnostic {
                                 source: provenance.source().clone(),
