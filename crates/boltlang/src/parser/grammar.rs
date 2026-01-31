@@ -180,6 +180,23 @@ pub fn parse_type_ascription(p: &mut Parser) {
     parse_type_expression(p);
 }
 
+pub fn parse_param(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    if p.eat(L_PAREN) {
+        parse_pattern(p);
+        if p.eat(COLON) { // FIXME pattern will provide this already
+            parse_type_expression(p);
+        }
+        if p.eat(EQUALS) {
+            parse_type_expression(p);
+        }
+        p.expect(R_PAREN);
+    } else {
+        parse_pattern(p);
+    }
+    m.complete(p, PARAM)
+}
+
 pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.eat(PUB_KEYWORD);
@@ -197,7 +214,7 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
         }
     }
     while in_line_fold(p) && !p.at(COLON) && !p.at(EQUALS) {
-        parse_pattern(p);
+        parse_param(p);
     }
     if p.at(COLON) {
         parse_type_ascription(p);

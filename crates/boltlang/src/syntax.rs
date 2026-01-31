@@ -78,6 +78,7 @@ pub enum SyntaxKind {
     BLOCK,
     TYPE_SIGNATURE,
     INITIALIZER,
+    PARAM,
 
     // Top-level
     SOURCE_FILE,
@@ -127,6 +128,7 @@ impl SyntaxKind {
             TYPE_KEYWORD => "'type'",
             ARROW_TYPE_EXPR => "a function type signature",
             NAMED_TYPE_EXPR => "a reference to another type",
+            PARAM => "a function parameter",
             BLOCK => "a block of statement",
             TYPE_SIGNATURE => "a type ascription",
             INITIALIZER => "an initializer",
@@ -177,6 +179,9 @@ pub type SyntaxNode = rowan::SyntaxNode<Lang>;
 
 #[allow(unused)]
 pub type SyntaxToken = rowan::SyntaxToken<Lang>;
+
+#[allow(unused)]
+pub type NodeOrToken = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
 
 #[allow(unused)]
 pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<Lang>;

@@ -1,9 +1,9 @@
 
-use std::marker::PhantomData;
+use std::{marker::PhantomData, process::Child, ptr::read_volatile};
 
-use rowan::{Children, SyntaxElement};
+use rowan::SyntaxElement;
 
-use crate::syntax::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
+use crate::{syntax::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken}, util::IterExt};
 
 pub trait Node : Sized {
 
@@ -40,6 +40,16 @@ pub trait Node : Sized {
             .find_map(N::cast)
     }
 
+    fn rfind_node<N: Node>(&self) -> Option<N> {
+        // FIXME this could be optimised in Rowan
+        self.syntax()
+            .children()
+            .collect::<Vec<_>>()
+            .into_iter()
+            .rev()
+            .find_map(N::cast)
+    }
+
 }
 
 /// An iterator over `SyntaxNode` children of a particular AST type.
@@ -64,22 +74,51 @@ impl<N: Node> Iterator for ChildrenIter<N> {
 
 pub enum TypeExpr {
     Named(NamedTypeExpr),
+    Arrow(ArrowTypeExpr),
 }
 
 impl Node for TypeExpr {
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, NAMED_TYPE_EXPR)
+        matches!(kind, NAMED_TYPE_EXPR | ARROW_TYPE_EXPR)
     }
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
             NAMED_TYPE_EXPR => TypeExpr::Named(NamedTypeExpr(syntax)),
+            ARROW_TYPE_EXPR => TypeExpr::Arrow(ArrowTypeExpr(syntax)),
             _ => unreachable!(),
         }
     }
     fn syntax(&self) -> &SyntaxNode {
         match self {
             TypeExpr::Named(node) => node.syntax(),
+            TypeExpr::Arrow(node) => node.syntax(),
         }
+    }
+}
+
+pub struct ArrowTypeExpr(SyntaxNode);
+
+impl ArrowTypeExpr {
+
+    pub fn params(&self) -> impl Iterator<Item = TypeExpr> {
+        ChildrenIter::new(&self.0).skip_last(1)
+    }
+
+    pub fn return_ty(&self) -> Option<TypeExpr> {
+        self.rfind_node()
+    }
+
+}
+
+impl Node for ArrowTypeExpr {
+    fn kind() -> SyntaxKind {
+        ARROW_TYPE_EXPR
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        ArrowTypeExpr(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
     }
 }
 
@@ -130,7 +169,6 @@ impl Node for Pattern {
 
 }
 
-#[derive(Clone)]
 pub struct NamedPattern(SyntaxNode);
 
 impl NamedPattern {
@@ -152,12 +190,12 @@ impl Node for NamedPattern {
     }
 }
 
-#[derive(Clone)]
 pub enum Expr {
     Named(NamedExpr),
     Lit(LitExpr),
     Call(CallExpr),
     Fun(FunExpr),
+    Block(BlockExpr),
 }
 
 impl Node for Expr {
@@ -168,6 +206,7 @@ impl Node for Expr {
             LIT_EXPR => Expr::Lit(LitExpr(syntax)),
             CALL_EXPR => Expr::Call(CallExpr(syntax)),
             FUN_EXPR => Expr::Fun(FunExpr(syntax)),
+            BLOCK_EXPR => Expr::Block(BlockExpr(syntax)),
             _ => unreachable!(),
         }
     }
@@ -178,6 +217,7 @@ impl Node for Expr {
             Expr::Call(node) => node.syntax(),
             Expr::Named(node) => node.syntax(),
             Expr::Fun(node) => node.syntax(),
+            Expr::Block(node) => node.syntax(),
         }
     }
 
@@ -187,7 +227,28 @@ impl Node for Expr {
 
 }
 
-#[derive(Clone)]
+pub struct BlockExpr(SyntaxNode);
+
+impl Node for BlockExpr {
+    fn kind() -> SyntaxKind {
+        BLOCK_EXPR
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        BlockExpr(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
+impl BlockExpr {
+
+    pub fn elements(&self) -> ChildrenIter<SourceElement> {
+        ChildrenIter::new(&self.0)
+    }
+
+}
+
 pub struct FunExpr(SyntaxNode);
 
 impl FunExpr {
@@ -211,14 +272,13 @@ impl Node for FunExpr {
     }
 }
 
-#[derive(Clone)]
 pub struct LitExpr(SyntaxNode);
 
 impl LitExpr {
     pub fn value(&self) -> Option<SyntaxToken> {
         self.0.children_with_tokens().find_map(|x| match x {
             SyntaxElement::Token(token) if matches!(
-                token.kind(), 
+                token.kind(),
                 BIN_INT | OCT_INT | DEC_INT | HEX_INT | STRING
             ) => Some(token),
             _ => None,
@@ -238,7 +298,6 @@ impl Node for LitExpr {
     }
 }
 
-#[derive(Clone)]
 pub struct CallExpr(SyntaxNode);
 
 impl Node for CallExpr {
@@ -253,7 +312,6 @@ impl Node for CallExpr {
     }
 }
 
-#[derive(Clone)]
 pub struct NamedExpr(SyntaxNode);
 
 impl Node for NamedExpr {
@@ -283,7 +341,6 @@ impl NamedExpr {
     }
 }
 
-#[derive(Clone)]
 pub struct VarDecl(SyntaxNode);
 
 impl Node for VarDecl {
@@ -329,7 +386,36 @@ impl Node for TypeSignature {
     }
 }
 
-#[derive(Clone)]
+pub struct Param(SyntaxNode);
+
+impl Node for Param {
+    fn kind() -> SyntaxKind {
+        PARAM
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        Param(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
+impl Param {
+
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+
+    pub fn type_expr(&self) -> Option<TypeExpr> {
+        self.find_node()
+    }
+
+    pub fn default(&self) -> Option<Expr> {
+        self.find_node()
+    }
+
+}
+
 pub struct FuncDecl(SyntaxNode);
 
 impl Node for FuncDecl {
@@ -350,11 +436,11 @@ impl FuncDecl {
         self.find_token(IDENTIFIER)
     }
 
-    pub fn params(&self) -> ChildrenIter<Pattern> {
+    pub fn params(&self) -> ChildrenIter<Param> {
         ChildrenIter::new(&self.0)
     }
 
-    pub fn return_type(&self ) -> Option<TypeSignature> {
+    pub fn type_signature(&self ) -> Option<TypeExpr> {
         self.find_node()
     }
 
@@ -364,7 +450,9 @@ impl FuncDecl {
 
 }
 
-#[derive(Clone)]
+/// All-rounder for elements in blocks, function bodies, modules and source files.
+///
+/// In some contexts, certain element types should not be processed.
 pub enum SourceElement {
     VarDecl(VarDecl),
     FuncDecl(FuncDecl),
@@ -373,13 +461,13 @@ pub enum SourceElement {
 
 impl Node for SourceElement {
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, VAR_DECL | FUNC_DECL)
+        matches!(kind, VAR_DECL | FUNC_DECL) || Expr::can_cast(kind)
     }
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
             VAR_DECL => Self::VarDecl(VarDecl(syntax)),
             FUNC_DECL => Self::FuncDecl(FuncDecl(syntax)),
-            _ => unreachable!(),
+            _ => Self::Expr(Expr::wrap(syntax)),
         }
     }
     fn syntax(&self) -> &SyntaxNode {

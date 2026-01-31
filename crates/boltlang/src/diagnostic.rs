@@ -1,7 +1,7 @@
 
 use std::fmt::{Debug, Display};
 
-use crate::{File, Type, tc::{ConId, SymbolKind, TVar}};
+use crate::{tc::{ConId, SymbolKind, TVar}, File, Type};
 
 pub type Span = std::ops::Range<usize>;
 
@@ -12,6 +12,7 @@ pub const CODE_APP_EXPECTED_FUN: u16 = 4;
 pub const CODE_EXPECTED_UNIFY: u16 = 5;
 pub const CODE_INFINITE_TYPE: u16 = 6;
 pub const CODE_CON_ARGS_LENGTH_MISMATCH: u16 = 7;
+pub const CODE_UNMATCHED_TYPE_SIGNATURE: u16 = 8;
 
 #[salsa::accumulator]
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -92,6 +93,7 @@ pub enum Diagnostic {
     UnexpectedFun(UnexpectedFunDiagnostic),
     InfiniteType(InfiniteTypeDiagnostic),
     ConArgsLengthMismatch(ConArgsLengthMismatchDiagnostic),
+    UnmatchedTypeSignature(UnmatchedTypeSignatureDiagnostic),
 }
 
 impl Diagnostic {
@@ -105,6 +107,7 @@ impl Diagnostic {
             Self::UnexpectedFun(diag) => diag.code(),
             Self::InfiniteType(diag) => diag.code(),
             Self::ConArgsLengthMismatch(diag) => diag.code(),
+            Self::UnmatchedTypeSignature(diag) => diag.code(),
         }
     }
 
@@ -117,6 +120,7 @@ impl Diagnostic {
             Self::UnexpectedFun(diag) => diag.severity(),
             Self::InfiniteType(diag) => diag.severity(),
             Self::ConArgsLengthMismatch(diag) => diag.severity(),
+            Self::UnmatchedTypeSignature(diag) => diag.severity(),
         }
     }
 
@@ -129,6 +133,7 @@ impl Diagnostic {
             Self::UnexpectedFun(diag) => diag.source(),
             Self::InfiniteType(diag) => diag.source(),
             Self::ConArgsLengthMismatch(diag) => diag.source(),
+            Self::UnmatchedTypeSignature(diag) => diag.source(),
         }
     }
 
@@ -144,6 +149,7 @@ impl Display for Diagnostic {
             Self::UnexpectedFun(diag) => std::fmt::Display::fmt(diag, f),
             Self::InfiniteType(diag) => std::fmt::Display::fmt(diag, f),
             Self::ConArgsLengthMismatch(diag) => std::fmt::Display::fmt(diag, f),
+            Self::UnmatchedTypeSignature(diag) => std::fmt::Display::fmt(diag, f),
         }
     }
 }
@@ -194,18 +200,18 @@ impl From<SyntaxDiagnostic> for Diagnostic {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BindingNotFoundDiagnostic {
+    pub source: Source,
     pub name: String,
     pub kind: SymbolKind,
-    pub source: Source,
 }
 
 impl BindingNotFoundDiagnostic {
 
     pub fn new(name: String, kind: SymbolKind, source: Source) -> Self {
         BindingNotFoundDiagnostic {
+            source,
             name,
             kind,
-            source
         }
     }
 
@@ -237,6 +243,7 @@ impl From<BindingNotFoundDiagnostic> for Diagnostic {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ExpectedUnifyDiagnostic {
+    pub source: Source,
     pub checked: Type,
     pub inferred: Type,
 }
@@ -252,7 +259,7 @@ impl ExpectedUnifyDiagnostic {
     }
 
     fn source(&self) -> Option<Source> {
-        None // FIXME
+        Some(self.source.clone())
     }
 
 }
@@ -271,6 +278,7 @@ impl From<ExpectedUnifyDiagnostic> for Diagnostic {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct AppExpectedFunDiagnostic {
+    pub source: Source,
     pub inferred_ty: Type,
     pub expected_fun_ty: Type,
 }
@@ -286,7 +294,7 @@ impl AppExpectedFunDiagnostic {
     }
 
     fn source(&self) -> Option<Source> {
-        None // FIXME
+        Some(self.source.clone())
     }
 }
 
@@ -304,6 +312,7 @@ impl From<AppExpectedFunDiagnostic> for Diagnostic {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct UnexpectedFunDiagnostic {
+    pub source: Source,
     pub expected_ty: Type,
     pub fun_ty: Type,
 }
@@ -331,13 +340,14 @@ impl UnexpectedFunDiagnostic {
     }
 
     fn source(&self) -> Option<Source> {
-        None // FIXME
+        Some(self.source.clone())
     }
 
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct InfiniteTypeDiagnostic {
+    pub source: Source,
     pub ty: Type,
     pub var: TVar,
 }
@@ -353,7 +363,7 @@ impl InfiniteTypeDiagnostic {
     }
 
     fn source(&self) -> Option<Source> {
-        None // FIXME
+        Some(self.source.clone())
     }
 
 }
@@ -372,15 +382,17 @@ impl Display for InfiniteTypeDiagnostic {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConArgsLengthMismatchDiagnostic {
-    id: ConId,
-    a_args: Vec<Type>,
-    b_args: Vec<Type>,
+    pub source: Source,
+    pub id: ConId,
+    pub a_args: Vec<Type>,
+    pub b_args: Vec<Type>,
 }
 
 impl ConArgsLengthMismatchDiagnostic {
 
-    pub fn new(id: ConId, a_args: Vec<Type>, b_args: Vec<Type>) -> Self {
+    pub fn new(source: Source, id: ConId, a_args: Vec<Type>, b_args: Vec<Type>) -> Self {
         Self {
+            source,
             id,
             a_args,
             b_args,
@@ -396,7 +408,7 @@ impl ConArgsLengthMismatchDiagnostic {
     }
 
     fn source(&self) -> Option<Source> {
-        None // FIXME
+        Some(self.source.clone())
     }
 
 }
@@ -421,6 +433,41 @@ impl Display for ConArgsLengthMismatchDiagnostic {
 impl From<ConArgsLengthMismatchDiagnostic> for Diagnostic {
     fn from(value: ConArgsLengthMismatchDiagnostic) -> Self {
         Diagnostic::ConArgsLengthMismatch(value)
+    }
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct UnmatchedTypeSignatureDiagnostic {
+    pub source: Source,
+    pub sig_ty: Type,
+    pub actual_ty: Type,
+}
+
+impl UnmatchedTypeSignatureDiagnostic {
+
+    fn code(&self) -> u16 {
+        CODE_UNMATCHED_TYPE_SIGNATURE
+    }
+
+    fn severity(&self) -> Severity {
+        Severity::Error
+    }
+
+    fn source(&self) -> Option<Source> {
+        Some(self.source.clone())
+    }
+
+}
+
+impl Display for UnmatchedTypeSignatureDiagnostic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "type signature expected {} but {} was inferred", self.sig_ty, self.actual_ty)
+    }
+}
+
+impl From<UnmatchedTypeSignatureDiagnostic> for Diagnostic {
+    fn from(value: UnmatchedTypeSignatureDiagnostic) -> Self {
+        Diagnostic::UnmatchedTypeSignature(value)
     }
 }
 

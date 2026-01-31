@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::HashMap, env::remove_var, fmt::Display};
 
 use ena::unify::{EqUnifyValue, UnifyKey};
 
@@ -51,6 +51,14 @@ impl Type {
 
     pub fn fun(left: Type, right: Type) -> Type {
         Type::Fun(Box::new(left), Box::new(right))
+    }
+
+    pub fn signature(params: impl IntoIterator<Item = Type, IntoIter: DoubleEndedIterator>, ret_ty: Type) -> Type {
+        let mut out = ret_ty;
+        for param in params.into_iter().rev() {
+            out = Type::fun(param, out);
+        }
+        out
     }
 
     fn uni_vars_helper(&self, out: &mut Vec<TVar>) {

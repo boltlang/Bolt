@@ -46,6 +46,9 @@ pub fn check_file(db: &dyn salsa::Database, file: File) -> CheckResult {
     let mut constraints = Constraints::new();
     constraints.extend(infer.infer_source_file(&source_file, file));
     infer.solve(&constraints);
+    for diagnostic in infer.solver.take_diagnostics() {
+        DbDiagnostic::new(diagnostic).accumulate(db);
+    }
     for diagnostic in diagnostics.take_diagnostics() {
         DbDiagnostic::new(diagnostic).accumulate(db);
     }
