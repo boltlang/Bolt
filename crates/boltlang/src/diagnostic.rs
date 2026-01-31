@@ -1,7 +1,7 @@
 
 use std::fmt::{Debug, Display};
 
-use crate::{tc::{ConId, SymbolKind, TVar}, File, Type};
+use crate::{tc::{ConId, SymbolKind, TVar, Provenance}, File, Type};
 
 pub type Span = std::ops::Range<usize>;
 
@@ -88,12 +88,9 @@ impl DbDiagnostic {
 pub enum Diagnostic {
     BindingNotFound(BindingNotFoundDiagnostic),
     SyntaxDiagnostic(SyntaxDiagnostic),
-    ExpectedUnify(ExpectedUnifyDiagnostic),
-    AppExpectedFun(AppExpectedFunDiagnostic),
-    UnexpectedFun(UnexpectedFunDiagnostic),
+    TypeMismatch(TypeMismatchDiagnostic),
     InfiniteType(InfiniteTypeDiagnostic),
     ConArgsLengthMismatch(ConArgsLengthMismatchDiagnostic),
-    UnmatchedTypeSignature(UnmatchedTypeSignatureDiagnostic),
 }
 
 impl Diagnostic {
@@ -102,12 +99,9 @@ impl Diagnostic {
         match self {
             Self::SyntaxDiagnostic(diag) => diag.code(),
             Self::BindingNotFound(diag) => diag.code(),
-            Self::ExpectedUnify(diag) => diag.code(),
-            Self::AppExpectedFun(diag) => diag.code(),
-            Self::UnexpectedFun(diag) => diag.code(),
+            Self::TypeMismatch(diag) => diag.code(),
             Self::InfiniteType(diag) => diag.code(),
             Self::ConArgsLengthMismatch(diag) => diag.code(),
-            Self::UnmatchedTypeSignature(diag) => diag.code(),
         }
     }
 
@@ -115,12 +109,9 @@ impl Diagnostic {
         match self {
             Self::SyntaxDiagnostic(diag) => diag.severity(),
             Self::BindingNotFound(diag) => diag.severity(),
-            Self::ExpectedUnify(diag) => diag.severity(),
-            Self::AppExpectedFun(diag) => diag.severity(),
-            Self::UnexpectedFun(diag) => diag.severity(),
+            Self::TypeMismatch(diag) => diag.severity(),
             Self::InfiniteType(diag) => diag.severity(),
             Self::ConArgsLengthMismatch(diag) => diag.severity(),
-            Self::UnmatchedTypeSignature(diag) => diag.severity(),
         }
     }
 
@@ -128,12 +119,9 @@ impl Diagnostic {
         match self {
             Self::SyntaxDiagnostic(diag) => diag.source(),
             Self::BindingNotFound(diag) => diag.source(),
-            Self::ExpectedUnify(diag) => diag.source(),
-            Self::AppExpectedFun(diag) => diag.source(),
-            Self::UnexpectedFun(diag) => diag.source(),
+            Self::TypeMismatch(diag) => diag.source(),
             Self::InfiniteType(diag) => diag.source(),
             Self::ConArgsLengthMismatch(diag) => diag.source(),
-            Self::UnmatchedTypeSignature(diag) => diag.source(),
         }
     }
 
@@ -144,12 +132,9 @@ impl Display for Diagnostic {
         match self {
             Self::SyntaxDiagnostic(diag) => std::fmt::Display::fmt(diag, f),
             Self::BindingNotFound(diag) => std::fmt::Display::fmt(diag, f),
-            Self::ExpectedUnify(diag) => std::fmt::Display::fmt(diag, f),
-            Self::AppExpectedFun(diag) => std::fmt::Display::fmt(diag, f),
-            Self::UnexpectedFun(diag) => std::fmt::Display::fmt(diag, f),
+            Self::TypeMismatch(diag) => std::fmt::Display::fmt(diag, f),
             Self::InfiniteType(diag) => std::fmt::Display::fmt(diag, f),
             Self::ConArgsLengthMismatch(diag) => std::fmt::Display::fmt(diag, f),
-            Self::UnmatchedTypeSignature(diag) => std::fmt::Display::fmt(diag, f),
         }
     }
 }
@@ -242,13 +227,13 @@ impl From<BindingNotFoundDiagnostic> for Diagnostic {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub struct ExpectedUnifyDiagnostic {
-    pub source: Source,
+pub struct TypeMismatchDiagnostic {
     pub checked: Type,
     pub inferred: Type,
+    pub provenance: Provenance,
 }
 
-impl ExpectedUnifyDiagnostic {
+impl TypeMismatchDiagnostic {
 
     fn code(&self) -> u16 {
         CODE_EXPECTED_UNIFY
@@ -259,90 +244,26 @@ impl ExpectedUnifyDiagnostic {
     }
 
     fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
+        Some(self.provenance.source().clone())
     }
 
 }
 
-impl Display for ExpectedUnifyDiagnostic {
+impl Display for TypeMismatchDiagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "expected {} but got {}", self.inferred, self.checked)
+        match self.provenance {
+            Provenance::ExpectedUnify(..) => write!(f, "expected {} but got {}", self.checked, self.inferred),
+            Provenance::AppExpectedFun(..) => write!(f, "expected {} to be a function type applicable to {}", self.checked, self.inferred),
+            Provenance::TypeSignature(..) => write!(f, "type signature expected {} but {} was inferred", self.checked, self.inferred),
+            Provenance::UnexpectedFun(..) => write!(f, "expected data type {} but got a function {}", self.checked, self.inferred),
+        }
     }
 }
 
-impl From<ExpectedUnifyDiagnostic> for Diagnostic {
-    fn from(value: ExpectedUnifyDiagnostic) -> Self {
-        Diagnostic::ExpectedUnify(value)
+impl From<TypeMismatchDiagnostic> for Diagnostic {
+    fn from(value: TypeMismatchDiagnostic) -> Self {
+        Diagnostic::TypeMismatch(value)
     }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct AppExpectedFunDiagnostic {
-    pub source: Source,
-    pub inferred_ty: Type,
-    pub expected_fun_ty: Type,
-}
-
-impl AppExpectedFunDiagnostic {
-
-    fn code(&self) -> u16 {
-        CODE_APP_EXPECTED_FUN
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
-
-    fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
-    }
-}
-
-impl Display for AppExpectedFunDiagnostic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "expected {} to be a function type applicable to {}", self.expected_fun_ty, self.inferred_ty)
-    }
-}
-
-impl From<AppExpectedFunDiagnostic> for Diagnostic {
-    fn from(value: AppExpectedFunDiagnostic) -> Self {
-        Diagnostic::AppExpectedFun(value)
-    }
-}
-
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct UnexpectedFunDiagnostic {
-    pub source: Source,
-    pub expected_ty: Type,
-    pub fun_ty: Type,
-}
-
-impl Display for UnexpectedFunDiagnostic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "expected data type {} but got a function {}", self.expected_ty, self.fun_ty)
-    }
-}
-
-impl From<UnexpectedFunDiagnostic> for Diagnostic {
-    fn from(value: UnexpectedFunDiagnostic) -> Self {
-        Diagnostic::UnexpectedFun(value)
-    }
-}
-
-impl UnexpectedFunDiagnostic {
-
-    fn code(&self) -> u16 {
-        CODE_UNEXPECTED_FUN
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
-
-    fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
-    }
-
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
@@ -436,68 +357,41 @@ impl From<ConArgsLengthMismatchDiagnostic> for Diagnostic {
     }
 }
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct UnmatchedTypeSignatureDiagnostic {
-    pub source: Source,
-    pub sig_ty: Type,
-    pub actual_ty: Type,
-}
+// pub trait Diagnostics {
+//     fn add(&mut self, diag: Diagnostic);
+// }
 
-impl UnmatchedTypeSignatureDiagnostic {
+// pub struct DiagnosticStore {
+//     storage: Vec<Diagnostic>,
+// }
 
-    fn code(&self) -> u16 {
-        CODE_UNMATCHED_TYPE_SIGNATURE
-    }
+// impl DiagnosticStore {
 
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
+//     pub fn new() -> Self {
+//         Self { storage: Vec::new() }
+//     }
 
-    fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
-    }
+//     pub fn diagnostics(&self) -> &[Diagnostic] {
+//         &self.storage
+//     }
 
-}
+//     pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
+//         std::mem::take(&mut self.storage)
+//     }
 
-impl Display for UnmatchedTypeSignatureDiagnostic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "type signature expected {} but {} was inferred", self.sig_ty, self.actual_ty)
-    }
-}
+// }
 
-impl From<UnmatchedTypeSignatureDiagnostic> for Diagnostic {
-    fn from(value: UnmatchedTypeSignatureDiagnostic) -> Self {
-        Diagnostic::UnmatchedTypeSignature(value)
-    }
-}
+// impl IntoIterator for DiagnosticStore {
+//     type Item = Diagnostic;
+//     type IntoIter = std::vec::IntoIter<Diagnostic>;
+//     fn into_iter(self) -> Self::IntoIter {
+//         self.storage.into_iter()
+//     }
+// }
 
-pub trait Diagnostics {
-    fn add(&mut self, diag: Diagnostic);
-}
-
-pub struct DiagnosticStore {
-    storage: Vec<Diagnostic>,
-}
-
-impl DiagnosticStore {
-
-    pub fn new() -> Self {
-        Self { storage: Vec::new() }
-    }
-
-    pub fn diagnostics(&self) -> &[Diagnostic] {
-        &self.storage
-    }
-
-    pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
-        std::mem::take(&mut self.storage)
-    }
-
-}
-
-impl Diagnostics for DiagnosticStore {
-    fn add(&mut self, diag: Diagnostic) {
-        self.storage.push(diag);
-    }
-}
+// impl Diagnostics for DiagnosticStore {
+//     fn add(&mut self, diag: Diagnostic) {
+//         self.storage.push(diag);
+//     }
+// }
 

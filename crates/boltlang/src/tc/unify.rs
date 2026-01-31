@@ -1,6 +1,6 @@
 use ena::unify::InPlaceUnificationTable;
 
-use crate::{Type, tc::ConId};
+use crate::{diagnostic::TypeMismatchDiagnostic, tc::ConId, Diagnostic, Type};
 
 use super::TVar;
 
@@ -61,6 +61,32 @@ impl Unifier {
                 }
             }
             _ => out.push(UnifyError::TypeMismatch(a.clone(), b.clone())),
+        }
+    }
+
+    pub fn normalize_type(&mut self, ty: Type) -> Type {
+        match ty {
+            Type::UniVar(var) => 
+                self.table.probe_value(var).unwrap_or(ty),
+            Type::Fun(left, right) =>
+                Type::fun(self.normalize_type(*left), self.normalize_type(*right)),
+            Type::Con(id, args) =>
+                Type::Con(id, args.into_iter().map(|t| self.normalize_type(t)).collect()),
+        }
+    }
+
+    pub fn normalize_diagnostic(&mut self, diagnostic: Diagnostic) -> Diagnostic {
+        match diagnostic {
+            Diagnostic::TypeMismatch(TypeMismatchDiagnostic {
+                checked,
+                inferred,
+                provenance,
+            }) => Diagnostic::TypeMismatch(TypeMismatchDiagnostic {
+                checked: self.normalize_type(checked),
+                inferred: self.normalize_type(inferred),
+                provenance,
+            }),
+            diag => diag,
         }
     }
 

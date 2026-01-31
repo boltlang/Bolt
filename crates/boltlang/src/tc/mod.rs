@@ -8,7 +8,7 @@ use std::collections::HashMap;
 
 use rowan::GreenNode;
 
-pub use infer::{SymbolKind, Scheme, InferContext, Constraints};
+pub use infer::{SymbolKind, Scheme, InferContext, Constraints, Provenance};
 pub use types::{Type, TVar, ConId, TVSub};
 
 #[derive(Clone, Eq, PartialEq)]

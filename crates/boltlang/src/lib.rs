@@ -32,7 +32,7 @@ pub use {
     parser::lexer::LineColumn,
     parser::parse_file,
     text::{LineIndex, index_lines},
-    diagnostic::{DbDiagnostic, Diagnostic, Severity, DiagnosticStore, Diagnostics},
+    diagnostic::{DbDiagnostic, Diagnostic, Severity},
     ast::*,
 };
 
@@ -40,14 +40,12 @@ pub use {
 pub fn check_file(db: &dyn salsa::Database, file: File) -> CheckResult {
     let node = parse_file(db, file);
     let source_file = SourceFile::wrap(SyntaxNode::new_root(node.node(db).clone()));
-    let mut diagnostics = DiagnosticStore::new();
     let mapping = HashMap::new();
-    let mut infer = InferContext::new(&mut diagnostics);
-    let mut constraints = Constraints::new();
-    constraints.extend(infer.infer_source_file(&source_file, file));
-    infer.solve(&constraints);
-    for diagnostic in diagnostics.take_diagnostics() {
-        DbDiagnostic::new(diagnostic).accumulate(db);
+    let mut infer = InferContext::new();
+    let (constraints, mut diagnostics) = infer.infer_source_file(&source_file, file);
+    diagnostics.extend(infer.solve(&constraints));
+    for diagnostic in diagnostics {
+        DbDiagnostic::new(infer.solver.unifier.normalize_diagnostic(diagnostic)).accumulate(db);
     }
     CheckResult {
         mapping,

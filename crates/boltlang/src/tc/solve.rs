@@ -1,14 +1,10 @@
 use crate::{
     diagnostic::{
-        AppExpectedFunDiagnostic,
         ConArgsLengthMismatchDiagnostic,
-        ExpectedUnifyDiagnostic,
-        InfiniteTypeDiagnostic,
-        UnexpectedFunDiagnostic,
-        UnmatchedTypeSignatureDiagnostic
+        InfiniteTypeDiagnostic, TypeMismatchDiagnostic,
     },
-    tc::{infer::{Constraint, Provenance}, unify::{Unifier, UnifyError}},
-    Diagnostic, Diagnostics
+    tc::{infer::{Constraint}, unify::{Unifier, UnifyError}},
+    Diagnostic
 };
 
 pub struct Solver {
@@ -23,11 +19,12 @@ impl Solver {
         }
     }
 
-    pub fn add(&mut self, constraint: &Constraint, diagnostics: &mut dyn Diagnostics) {
+    pub fn add(&mut self, constraint: &Constraint) -> Vec<Diagnostic> {
+        let mut out = Vec::new();
         match constraint {
             Constraint::TypesEqual { provenance, left, right } => {
                 for diag in self.unifier.unify_type_type(&left, &right) {
-                    diagnostics.add(match diag {
+                    out.push(match diag {
                         UnifyError::OccursCheck(ty, var) => 
                             InfiniteTypeDiagnostic {
                                 source: provenance.source().clone(),
@@ -41,36 +38,17 @@ impl Solver {
                                 a_args,
                                 b_args
                             }.into(),
-                        UnifyError::TypeMismatch(a, b) => match provenance {
-                            Provenance::TypeSignature(source) =>
-                                UnmatchedTypeSignatureDiagnostic {
-                                    source: source.clone(),
-                                    sig_ty: a,
-                                    actual_ty: b,
-                                }.into(),
-                            Provenance::UnexpectedFun(source) =>
-                                UnexpectedFunDiagnostic {
-                                    source: source.clone(),
-                                    expected_ty: a,
-                                    fun_ty: b,
-                                }.into(),
-                            Provenance::AppExpectedFun(source) =>
-                                AppExpectedFunDiagnostic {
-                                    source: source.clone(),
-                                    inferred_ty: a,
-                                    expected_fun_ty: b,
-                                }.into(),
-                            Provenance::ExpectedUnify(source) =>
-                                ExpectedUnifyDiagnostic {
-                                    source: source.clone(),
-                                    inferred: a,
-                                    checked: b,
-                                }.into(),
-                        }
+                        UnifyError::TypeMismatch(a, b) => TypeMismatchDiagnostic {
+                                // TODO mark a and b inside left and right
+                                inferred: left.clone(),
+                                checked: right.clone(),
+                                provenance: provenance.clone(),
+                            }.into(),
                     });
                 }
             }
         }
+        out
     }
 
     pub fn solve(&mut self) {
