@@ -234,7 +234,7 @@ impl Backend {
             Ok(parse_file::accumulated::<DbDiagnostic>(db, file)
                 .into_iter()
                 .filter_map(|e| {
-                    let source = e.source()?;
+                    let source = e.source();
                     let start = index.line_column_of_offset(source.span().start);
                     let end = index.line_column_of_offset(source.span().end);
                     Some(ls_types::Diagnostic {
