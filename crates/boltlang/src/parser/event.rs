@@ -2,10 +2,10 @@
 use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::{
-    File, diagnostic::{DbDiagnostic, SyntaxDiagnostic}, parser::lexer::LexResult, syntax::SyntaxKind
+    Diagnostic, diagnostic::{DbDiagnostic, Source, SyntaxDiagnostic}, parser::lexer::LexResult, syntax::SyntaxKind
 };
 
-/// Intermediate error structure used during parsing.
+/// Intermediate error structure generated during parsing.
 pub type ParseError = String;
 
 #[derive(Debug)]
@@ -30,17 +30,16 @@ pub(crate) enum Event {
 
     /// Produce an error at the given syntax level.
     Error {
-        msg: String,
+        msg: ParseError,
     }
 }
 
 pub fn process_events<I: Iterator<Item = Event>>(
     events: I,
-    file: File,
     lexed: &LexResult,
     text: &str
-) -> (GreenNode, Vec<DbDiagnostic>) {
-    let mut processor = EventProcessor::new(file, lexed, text);
+) -> (GreenNode, Vec<Diagnostic>) {
+    let mut processor = EventProcessor::new(lexed, text);
     for event in events {
         processor.feed_event(event);
     }
@@ -52,8 +51,7 @@ struct EventProcessor<'lex, 'text, 'cache> {
     lexed: &'lex LexResult,
     text: &'text str,
     /// Kept to store on any diagnostics
-    file: File,
-    errors: Vec<DbDiagnostic>,
+    errors: Vec<Diagnostic>,
     builder: GreenNodeBuilder<'cache>,
     /// Which token is being inspected
     pos: u32,
@@ -63,11 +61,10 @@ struct EventProcessor<'lex, 'text, 'cache> {
 
 impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
 
-    fn new(file: File, lexed: &'lex LexResult, text: &'text str) -> Self {
+    fn new(lexed: &'lex LexResult, text: &'text str) -> Self {
         Self {
             lexed,
             text,
-            file,
             errors: Vec::new(),
             builder: GreenNodeBuilder::new(),
             pos: 0,
@@ -101,7 +98,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
             }
             Event::Error { msg } => {
                 let start  = self.text_pos;
-                self.errors.push(DbDiagnostic::new(SyntaxDiagnostic::new(msg, start, self.file).into()));
+                self.errors.push(SyntaxDiagnostic::new(msg, start..start).into());
             }
             Event::Finish => {
                 self.builder.finish_node();

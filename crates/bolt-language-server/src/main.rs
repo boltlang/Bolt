@@ -2,19 +2,22 @@ use std::borrow::Cow;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use boltlang::{RootDatabase, DbDiagnostic, index_lines, LineColumn, parse_file};
-use boltlang::salsa::{Database, Setter};
+use boltlang::{Db, DbDiagnostic, LineColumn, WritableSystem, check_file, index_lines, parse_file};
+use boltlang::salsa::Database;
 use tower_lsp_server::{LspService, jsonrpc, ls_types};
-use tower_lsp_server::ls_types::{DiagnosticSeverity, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult, FullDocumentDiagnosticReport, InitializeResult, InitializedParams, MessageType, RelatedFullDocumentDiagnosticReport, ServerCapabilities, ServerInfo, Uri, WorkspaceDiagnosticReport, WorkspaceDiagnosticReportResult, WorkspaceDocumentDiagnosticReport, WorkspaceFullDocumentDiagnosticReport};
+use tower_lsp_server::ls_types::{DiagnosticSeverity, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult, FullDocumentDiagnosticReport, InitializeResult, InitializedParams, MessageType, RelatedFullDocumentDiagnosticReport, ServerCapabilities, ServerInfo, Uri};
 use tower_lsp_server::{Client, LanguageServer, ls_types::InitializeParams};
-use tower_lsp_server::jsonrpc::Result;
+
+use crate::db::LspDatabase;
+
+mod db;
 
 const LANGUAGE_SERVER_NAME: &str = "bolt-language-server";
 const LANGUAGE_SERVER_VERSION: &str = "0.0.1";
 
 pub struct Backend {
     client: Client,
-    db: Mutex<RootDatabase>,
+    db: Mutex<LspDatabase>,
     root_dir: Option<PathBuf>,
 }
 
@@ -36,7 +39,7 @@ macro_rules! logged {
 
 impl LanguageServer for Backend {
 
-    async fn initialize(&self, _: InitializeParams) -> Result<InitializeResult> {
+    async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
                 version: Some(LANGUAGE_SERVER_VERSION.to_string()),
@@ -70,31 +73,45 @@ impl LanguageServer for Backend {
     async fn initialized(&self, _: InitializedParams) {
         self.client.log_message(MessageType::INFO, "Bolt language server initialized").await;
     }
-
-    async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) -> () {
-        logged!(self, self.db.lock().unwrap().input(params.text_document.uri.to_string(), params.text_document.text));
+    
+    async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
+        logged!(self, self.db.lock().unwrap().system.write_file_bytes_virtual(
+            params.text_document.uri.as_str(),
+            params.text_document.text.as_bytes()
+        ));
     }
 
     async fn did_change(&self, params: ls_types::DidChangeTextDocumentParams) {
-        let mut db = self.db.lock().unwrap();
-        let result = db.attach(|db| {
-            let file = db.load(params.text_document.uri.as_str()).ok()??;
-            let index = index_lines(db, file).lines(db);
-            let mut contents = file.contents(db).clone();
-            for change in params.content_changes {
-                match change.range {
-                    Some(range) => {
-                        let start = index.offset_from_line_column(&LineColumn::new(range.start.line.try_into().unwrap(), range.start.character.try_into().unwrap()));
-                        let end = index.offset_from_line_column(&LineColumn::new(range.end.line.try_into().unwrap(), range.end.character.try_into().unwrap()));
-                        contents.replace_range(start..end, &change.text);
-                    },
-                    None => contents = change.text,
+        let result: boltlang::Result<()> = {
+            let db = self.db.lock().unwrap();
+            let path = params.text_document.uri.as_str();
+            let file = db.files().resolve_virtual(&*db, path);
+            db.attach(|db| {
+                let real_path = file.path(db).clone();
+                let mut contents = file.read_to_string(db)?;
+                let index = index_lines(db, file).lines(db);
+                for change in params.content_changes {
+                    match change.range {
+                        Some(range) => {
+                            let start = index.offset_from_line_column(&LineColumn::new(
+                                    range.start.line.try_into().unwrap(),
+                                    range.start.character.try_into().unwrap()
+                                ));
+                            let end = index.offset_from_line_column(
+                                    &LineColumn::new(range.end.line.try_into().unwrap(),
+                                    range.end.character.try_into().unwrap()
+                                ));
+                            contents.replace_range(start..end, &change.text);
+                        },
+                        None => contents = change.text,
+                    }
                 }
-            }
-            Some((file, contents))
-        });
-        if let Some((file, contents)) = result {
-            file.set_contents(&mut *db).to(contents);
+                db.system.write_file_bytes_virtual(path, contents.as_bytes())?;
+                Ok(())
+            })
+        };
+        if let Err(error) = result {
+            self.client.log_message(MessageType::ERROR, error).await;
         }
         // self.client.publish_diagnostics(
         //     params.text_document.uri.clone(),
@@ -122,12 +139,12 @@ impl LanguageServer for Backend {
         }
 
         if let Some(text) = params.text {
-            logged!(self.db.lock().unwrap().input(params.text_document.uri.to_string(), text));
+            logged!(self.db.lock().unwrap().system.write_file_bytes_virtual(params.text_document.uri.as_str(), text.as_bytes()));
         }
 
     }
 
-    async fn diagnostic(&self, params: DocumentDiagnosticParams) -> Result<DocumentDiagnosticReportResult> {
+    async fn diagnostic(&self, params: DocumentDiagnosticParams) -> jsonrpc::Result<DocumentDiagnosticReportResult> {
         let items = self.diagnostics_for_file(&params.text_document.uri).await?;
         Ok(DocumentDiagnosticReportResult::Report(DocumentDiagnosticReport::Full(
             RelatedFullDocumentDiagnosticReport {
@@ -186,7 +203,7 @@ impl LanguageServer for Backend {
     //     }))
     // }
 
-    async  fn shutdown(&self) -> Result<()> {
+    async  fn shutdown(&self) -> jsonrpc::Result<()> {
         Ok(())
     }
 
@@ -210,13 +227,10 @@ impl Backend {
 
         self.db.lock().unwrap().attach(|db| {
 
-            let file = db.load(uri.as_str())
-                .map_err(from_boltlang_error)?
-                .ok_or_else(|| server_error(E_COMPILER_ERROR, format!("file {} was not found", uri.as_str())))?;
-            let root_node = parse_file(db, file);
+            let file = db.files().resolve_virtual(db, uri.as_str());
+            let _result = check_file(db, file);
             let index = index_lines(db, file).lines(db);
 
-            eprintln!("{}", parse_file::accumulated::<DbDiagnostic>(db, file).len());
             Ok(parse_file::accumulated::<DbDiagnostic>(db, file)
                 .into_iter()
                 .filter_map(|e| {
@@ -254,7 +268,7 @@ impl Backend {
 
 #[tokio::main]
 async fn main() {
-    let db = Mutex::new(RootDatabase::new(None));
+    let db = Mutex::new(LspDatabase::default());
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
     let (service, socket) = LspService::new(|client| Backend {

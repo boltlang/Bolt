@@ -1,22 +1,27 @@
 
-use std::path::PathBuf;
+mod db;
 
 use ariadne::Report;
-use boltlang::rowan::NodeOrToken;
-use boltlang::salsa::{self, Database};
+
+use boltlang::{SystemPathBuf, rowan::NodeOrToken};
+use boltlang::salsa::Database;
+
+use db::CliDatabase;
 
 use boltlang::{
+    Db,
     DbDiagnostic,
     File,
-    RootDatabase,
+    Path,
+    PathBuf,
     SyntaxElement,
     SyntaxKind,
     SyntaxNode,
     check_file,
     parse_file
 };
+
 use clap::Parser;
-use fluent_uri::Uri;
 
 trait Exec {
     fn exec(&self) -> anyhow::Result<()>;
@@ -65,9 +70,10 @@ enum OutputFormat {
 
 impl Exec for DumpAstCommand {
     fn exec(&self) -> anyhow::Result<()> {
-        let text = std::fs::read_to_string(&self.file).expect(&format!("could not read {}", self.file.display()));
-        let root_node = RootDatabase::new(None).attach(|db| {
-            let file = File::new(db, format!("file://{}", std::fs::canonicalize(&self.file).unwrap().to_string_lossy()), text);
+        let cwd = PathBuf::from(std::env::current_dir()?);
+        let path = Path::new(self.file.as_path());
+        let root_node = CliDatabase::new(&cwd).attach(|db| {
+            let file = File::new(db, path.to_system_path_buf().into());
             let parsed = parse_file(db, file);
             let diagnostics = parse_file::accumulated::<DbDiagnostic>(db, file);
             for diagnostic in diagnostics {
@@ -90,10 +96,10 @@ struct CheckCommand {
 
 impl Exec for CheckCommand {
     fn exec(&self) -> anyhow::Result<()> {
-        for file in &self.files {
-            let text = std::fs::read_to_string(&file).expect(&format!("could not read {}", file.display()));
-            RootDatabase::new(None).attach(|db| {
-                let file = File::new(db, format!("file://{}", std::fs::canonicalize(file).unwrap().to_string_lossy()), text);
+        let cwd = SystemPathBuf::from(std::env::current_dir()?);
+        for raw_path in &self.files {
+            CliDatabase::new(&cwd).attach(|db| {
+                let file = File::new(db, raw_path.clone().into());
                 let _ = check_file(db, file);
                 let diagnostics = check_file::accumulated::<DbDiagnostic>(db, file);
                 for diagnostic in diagnostics {
@@ -128,25 +134,21 @@ fn severity_to_report_kind(sev: boltlang::Severity) -> ariadne::ReportKind<'stat
     }
 }
 
-fn report_diagnostic(db: &dyn salsa::Database, diagnostic: &DbDiagnostic) {
-    match diagnostic.source() {
-        None => eprintln!("Error: {}", diagnostic),
-        Some(source) => {
-            let parsed = Uri::parse(source.file().uri(db)).unwrap();
-            let fname = parsed.path();
-            let contents = source.file().contents(db);
-            Report::build(severity_to_report_kind(diagnostic.severity()), (fname.as_str(), source.span().clone()))
-                .with_code(diagnostic.code())
+fn report_diagnostic(db: &dyn Db, diagnostic: &DbDiagnostic) {
+    let source = diagnostic.source();
+    let file = source.file();
+    let fname = file.path(db).as_system_path_buf().unwrap().as_str().unwrap(); // TODO handle None
+    let contents = file.read_to_string(db).unwrap(); // TODO handle Err
+    Report::build(severity_to_report_kind(diagnostic.severity()), (fname, source.span().clone()))
+        .with_code(diagnostic.code())
+        .with_message(diagnostic.message())
+        .with_label(
+            ariadne::Label::new((fname, source.span().clone()))
                 .with_message(diagnostic.message())
-                .with_label(
-                    ariadne::Label::new((fname.as_str(), source.span().clone()))
-                        .with_message(diagnostic.message())
-                )
-                .finish()
-                .print((fname.as_str(), ariadne::Source::from(contents)))
-                .unwrap();
-        }
-    }
+        )
+        .finish()
+        .print((fname, ariadne::Source::from(contents)))
+        .unwrap();
 }
 
 fn main() -> anyhow::Result<()> {

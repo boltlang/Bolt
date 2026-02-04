@@ -27,18 +27,18 @@ impl Solver {
                     out.push(match diag {
                         UnifyError::OccursCheck(ty, var) => 
                             InfiniteTypeDiagnostic {
-                                source: provenance.source().clone(),
+                                span: provenance.span().clone(),
                                 ty,
                                 var
                             }.into(),
                         UnifyError::ConArgsLengthMismatch(id, a_args, b_args) =>
                             ConArgsLengthMismatchDiagnostic {
-                                source: provenance.source().clone(),
+                                span: provenance.span().clone(),
                                 id,
                                 a_args,
                                 b_args
                             }.into(),
-                        UnifyError::TypeMismatch(a, b) => TypeMismatchDiagnostic {
+                        UnifyError::TypeMismatch(_a, _b) => TypeMismatchDiagnostic {
                                 // TODO mark a and b inside left and right
                                 inferred: left.clone(),
                                 checked: right.clone(),

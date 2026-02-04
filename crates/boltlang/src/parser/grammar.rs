@@ -120,7 +120,7 @@ pub fn parse_named_pattern(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
-pub fn parse_parenthesized_pattern(p: &mut Parser) -> CompletedMarker {
+pub fn parse_parenthesized_pattern(_p: &mut Parser) -> CompletedMarker {
     todo!()
 }
 

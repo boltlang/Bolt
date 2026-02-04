@@ -9,12 +9,12 @@ pub(crate) use parser::Parser;
 pub(crate) use grammar::*;
 
 use salsa::Accumulator;
-use crate::db::{File, DbNode};
+use crate::{Db, DbDiagnostic, DbNode, File, text::source_text};
 
 #[salsa::tracked]
-pub fn parse_file(db: &dyn salsa::Database, file: File) -> DbNode<'_> {
-    let text = file.contents(db);
-    let lexed = lexer::tokenize(text);
+pub fn parse_file(db: &dyn Db, file: File) -> DbNode<'_> {
+    let text = source_text(db, file);
+    let lexed = lexer::tokenize(&text);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
     parse_source_file(&mut p);
@@ -24,12 +24,11 @@ pub fn parse_file(db: &dyn salsa::Database, file: File) -> DbNode<'_> {
     );
     let (node, diagnostics) = process_events(
         interspersed.into_iter(),
-        file,
         &lexed,
         &text
     );
     for diagnostic in diagnostics {
-        diagnostic.accumulate(db);
+        DbDiagnostic::new(diagnostic.with_file(file)).accumulate(db);
     }
     DbNode::new(db, node)
 }

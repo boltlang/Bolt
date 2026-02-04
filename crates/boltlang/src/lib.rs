@@ -1,8 +1,14 @@
 
 mod util;
 mod error;
+
+mod vfs;
+
+mod system;
+mod files;
 mod diagnostic;
 mod db;
+
 mod text;
 mod import;
 mod syntax;
@@ -10,9 +16,10 @@ mod parser;
 mod ast;
 mod tc;
 
-use std::collections::HashMap;
+use std::{collections::HashMap, hash::BuildHasherDefault};
+use rustc_hash::FxHasher;
 use salsa::Accumulator;
-use crate::tc::{Constraints, InferContext};
+use crate::tc::InferContext;
 
 /// Re-export of the Salsa library that boltlang uses
 pub use salsa;
@@ -24,30 +31,44 @@ pub type OwnedUri = String;
 
 pub type BorrowedUri = str;
 
+pub type FxDashMap<K, V> = dashmap::DashMap<K, V, BuildHasherDefault<FxHasher>>;
+pub type FxDashSet<K> = dashmap::DashSet<K, BuildHasherDefault<FxHasher>>;
+
 pub use {
-    tc::{Type, CheckResult},
+    ast::*,
+    db::Db,
+    diagnostic::{DbDiagnostic, Diagnostic, Severity},
     error::{Error, Result},
-    syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement},
-    db::{RootDatabase, File},
+    files::{File, FilePath, Files},
     parser::lexer::LineColumn,
     parser::parse_file,
+    syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement, DbNode},
+    system::{System, SystemPath, SystemPathBuf, WritableSystem, OsSystem, InMemorySystem},
+    tc::{Type, CheckResult, Constraints},
     text::{LineIndex, index_lines},
-    diagnostic::{DbDiagnostic, Diagnostic, Severity},
-    ast::*,
+    vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
 };
 
+#[cfg(test)]
+pub use crate::system::TestSystem;
+
 #[salsa::tracked]
-pub fn check_file(db: &dyn salsa::Database, file: File) -> CheckResult {
+pub fn check_file(db: &dyn Db, file: File) -> CheckResult {
     let node = parse_file(db, file);
     let source_file = SourceFile::wrap(SyntaxNode::new_root(node.node(db).clone()));
     let mapping = HashMap::new();
     let mut infer = InferContext::new();
-    let (constraints, mut diagnostics) = infer.infer_source_file(&source_file, file);
-    diagnostics.extend(infer.solve(&constraints));
-    for diagnostic in diagnostics {
-        DbDiagnostic::new(infer.solver.unifier.normalize_diagnostic(diagnostic)).accumulate(db);
-    }
+    let (constraints, diagnostics) = infer.infer_source_file(&source_file);
+    [ diagnostics, infer.solve(&constraints) ]
+        .into_iter()
+        .flatten()
+        .map(|d| infer.solver.unifier.normalize_diagnostic(d))
+        .map(|d| d.with_file(file))
+        .for_each(|d| {
+            DbDiagnostic::new(d).accumulate(db);
+        });
     CheckResult {
         mapping,
     }
 }
+

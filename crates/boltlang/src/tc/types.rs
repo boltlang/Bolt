@@ -1,4 +1,4 @@
-use std::{collections::HashMap, env::remove_var, fmt::Display};
+use std::{collections::HashMap, fmt::Display};
 
 use ena::unify::{EqUnifyValue, UnifyKey};
 

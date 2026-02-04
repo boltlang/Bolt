@@ -375,7 +375,7 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
                     let block = blocks.last().unwrap();
                     if block.column <= start.column {
                         if block.column != start.column {
-                            // TODO
+                            // TODO genenerate diagnostic
                             eprintln!("wrong indentation for block expression");
                         }
                         break;
@@ -406,6 +406,7 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
         pos += 1;
     }
 
+    // For debugging only
     // for (i, (a, b)) in (&kinds).iter().zip(&lines).enumerate() {
     //     eprintln!("{i}. {a:?} = {b}");
     // }

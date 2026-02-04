@@ -1,4 +1,4 @@
-use crate::{File, parser::lexer::LineColumn};
+use crate::{Db, File, FilePath, parser::lexer::LineColumn};
 
 const UNICODE_NEWLINE: u32 = 0x000A;
 const UNICODE_INVALID: u32 = 0xFFFD;
@@ -108,9 +108,42 @@ impl LineIndex {
 }
 
 #[salsa::tracked]
-pub fn index_lines(db: &dyn salsa::Database, source: File) -> DbLineIndex<'_> {
-    let text = source.contents(db);
-    DbLineIndex::new(db, LineIndex::from_str(text))
+pub fn index_lines(db: &dyn Db, file: File) -> DbLineIndex<'_> {
+    let text = source_text(db, file);
+    DbLineIndex::new(db, LineIndex::from_str(text.as_str()))
+}
+
+#[salsa::tracked]
+pub fn source_text(db: &dyn Db, file: File) -> String {
+    let path = file.path(db);
+    let mut read_error = None;
+    match path {
+        FilePath::System(system) => {
+            // Add a dependency on the revision to ensure the operation gets re-executed when the file changes.
+            let _ = file.revision(db);
+
+            db
+                .system()
+                .read_to_string(system)
+                .unwrap_or_else(|err| {
+                    read_error = Some(err);
+                    String::new()
+                })
+        }
+            
+        FilePath::SystemVirtual(system_virtual) => {
+            // Add a dependency on the revision to ensure the operation gets re-executed when the file changes.
+            let _ = file.revision(db);
+
+            db
+                .system()
+                .read_virtual_path_to_string(system_virtual)
+                .unwrap_or_else(|err| {
+                    read_error = Some(err);
+                    String::new()
+                })
+        }
+    }
 }
 
 #[cfg(test)]

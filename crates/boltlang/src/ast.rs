@@ -1,5 +1,5 @@
 
-use std::{marker::PhantomData, process::Child, ptr::read_volatile};
+use std::{marker::PhantomData};
 
 use rowan::SyntaxElement;
 

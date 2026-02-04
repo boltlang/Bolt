@@ -84,6 +84,7 @@ pub enum SyntaxKind {
     SOURCE_FILE,
 }
 use SyntaxKind::*;
+use rowan::GreenNode;
 
 pub const LAST_TOKEN_KIND_DISCRIMINANT: usize = TYPE_KEYWORD as usize;
 
@@ -188,3 +189,11 @@ pub type SyntaxNodeChildren = rowan::SyntaxNodeChildren<Lang>;
 
 #[allow(unused)]
 pub type SyntaxElement = rowan::NodeOrToken<SyntaxNode, SyntaxToken>;
+
+#[salsa::tracked]
+pub struct DbNode<'db> {
+    #[tracked]
+    #[returns(ref)]
+    pub node: GreenNode,
+}
+

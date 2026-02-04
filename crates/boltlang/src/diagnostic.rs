@@ -1,35 +1,32 @@
 
 use std::fmt::{Debug, Display};
 
-use crate::{tc::{ConId, SymbolKind, TVar, Provenance}, File, Type};
+use crate::{tc::{ConId, Provenance, SymbolKind, TVar}, File, Type};
 
 pub type Span = std::ops::Range<usize>;
 
 pub const CODE_SYNTAX_ERROR: u16 = 1;
 pub const CODE_BINDING_NOT_FOUND: u16 = 2;
-pub const CODE_UNEXPECTED_FUN: u16 = 3;
-pub const CODE_APP_EXPECTED_FUN: u16 = 4;
 pub const CODE_EXPECTED_UNIFY: u16 = 5;
 pub const CODE_INFINITE_TYPE: u16 = 6;
 pub const CODE_CON_ARGS_LENGTH_MISMATCH: u16 = 7;
-pub const CODE_UNMATCHED_TYPE_SIGNATURE: u16 = 8;
 
 #[salsa::accumulator]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DbDiagnostic {
-    pub data: Diagnostic,
+    pub data: DiagnosticWithFile,
 }
 
 impl DbDiagnostic {
 
-    pub fn new(data: Diagnostic) -> DbDiagnostic {
+    pub fn new(data: DiagnosticWithFile) -> DbDiagnostic {
         DbDiagnostic { data }
     }
 }
 
 impl Display for DbDiagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        std::fmt::Display::fmt(&self.data, f)
+        std::fmt::Display::fmt(&self.data.0, f)
     }
 }
 
@@ -47,6 +44,18 @@ pub struct Source {
     span: Span,
 }
 
+impl Ord for Source {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.file.cmp(&other.file).then(self.span.start.cmp(&other.span.start).then(self.span.end.cmp(&other.span.end)))
+    }
+}
+
+impl PartialOrd for Source {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
 impl Source {
 
     pub fn new(file: File, span: Span) -> Self {
@@ -54,8 +63,7 @@ impl Source {
     }
 
     pub fn file(&self) -> File {
-        self.file
-
+        self.file.clone()
     }
 
     pub fn span(&self) -> &Span {
@@ -67,19 +75,20 @@ impl Source {
 impl DbDiagnostic {
 
     pub fn code(&self) -> u16 {
-        self.data.code()
+        self.data.0.code()
     }
 
     pub fn message(&self) -> String {
-        format!("{}", self.data)
+        format!("{}", self.data.0)
     }
 
     pub fn severity(&self) -> Severity {
-        self.data.severity()
+        self.data.0.severity()
     }
 
-    pub fn source(&self) -> Option<Source> {
-        self.data.source()
+    pub fn source(&self) -> Source {
+        Source::new(self.data.1, self.data.0.span().clone())
+        
     }
 
 }
@@ -93,9 +102,11 @@ pub enum Diagnostic {
     ConArgsLengthMismatch(ConArgsLengthMismatchDiagnostic),
 }
 
+pub type DiagnosticWithFile = (Diagnostic, File);
+
 impl Diagnostic {
 
-    fn code(&self) -> u16 {
+    pub fn code(&self) -> u16 {
         match self {
             Self::SyntaxDiagnostic(diag) => diag.code(),
             Self::BindingNotFound(diag) => diag.code(),
@@ -105,7 +116,7 @@ impl Diagnostic {
         }
     }
 
-    fn severity(&self) -> Severity {
+    pub fn severity(&self) -> Severity {
         match self {
             Self::SyntaxDiagnostic(diag) => diag.severity(),
             Self::BindingNotFound(diag) => diag.severity(),
@@ -115,14 +126,18 @@ impl Diagnostic {
         }
     }
 
-    fn source(&self) -> Option<Source> {
+    pub fn span(&self) -> &Span {
         match self {
-            Self::SyntaxDiagnostic(diag) => diag.source(),
-            Self::BindingNotFound(diag) => diag.source(),
-            Self::TypeMismatch(diag) => diag.source(),
-            Self::InfiniteType(diag) => diag.source(),
-            Self::ConArgsLengthMismatch(diag) => diag.source(),
+            Self::SyntaxDiagnostic(diag) => diag.span(),
+            Self::BindingNotFound(diag) => diag.span(),
+            Self::TypeMismatch(diag) => diag.span(),
+            Self::InfiniteType(diag) => diag.span(),
+            Self::ConArgsLengthMismatch(diag) => diag.span(),
         }
+    }
+
+    pub fn with_file(self, file: File) -> DiagnosticWithFile {
+        (self, file)
     }
 
 }
@@ -143,17 +158,15 @@ impl Display for Diagnostic {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct SyntaxDiagnostic {
     pub message: String,
-    pub offset: usize,
-    pub file: File,
+    pub span: Span,
 }
 
 impl SyntaxDiagnostic {
 
-    pub fn new(message: String, offset: usize, file: File) -> Self {
+    pub fn new(message: String, span: Span) -> Self {
         Self {
             message,
-            offset,
-            file,
+            span,
         }
     }
 
@@ -165,8 +178,8 @@ impl SyntaxDiagnostic {
         Severity::Error
     }
 
-    fn source(&self) -> Option<Source> {
-        Some(Source::new(self.file, self.offset..self.offset))
+    fn span(&self) -> &Span  {
+        &self.span
     }
 
 }
@@ -185,16 +198,16 @@ impl From<SyntaxDiagnostic> for Diagnostic {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct BindingNotFoundDiagnostic {
-    pub source: Source,
+    pub span: Span,
     pub name: String,
     pub kind: SymbolKind,
 }
 
 impl BindingNotFoundDiagnostic {
 
-    pub fn new(name: String, kind: SymbolKind, source: Source) -> Self {
+    pub fn new(name: String, kind: SymbolKind, span: Span) -> Self {
         BindingNotFoundDiagnostic {
-            source,
+            span,
             name,
             kind,
         }
@@ -208,8 +221,8 @@ impl BindingNotFoundDiagnostic {
         Severity::Error
     }
 
-    fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
+    fn span(&self) -> &Span {
+        &self.span
     }
 
 }
@@ -243,8 +256,8 @@ impl TypeMismatchDiagnostic {
         Severity::Error
     }
 
-    fn source(&self) -> Option<Source> {
-        Some(self.provenance.source().clone())
+    fn span(&self) -> &Span {
+        self.provenance.span()
     }
 
 }
@@ -268,7 +281,7 @@ impl From<TypeMismatchDiagnostic> for Diagnostic {
 
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct InfiniteTypeDiagnostic {
-    pub source: Source,
+    pub span: Span,
     pub ty: Type,
     pub var: TVar,
 }
@@ -283,8 +296,8 @@ impl InfiniteTypeDiagnostic {
         Severity::Error
     }
 
-    fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
+    fn span(&self) -> &Span {
+        &self.span
     }
 
 }
@@ -303,7 +316,7 @@ impl Display for InfiniteTypeDiagnostic {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConArgsLengthMismatchDiagnostic {
-    pub source: Source,
+    pub span: Span,
     pub id: ConId,
     pub a_args: Vec<Type>,
     pub b_args: Vec<Type>,
@@ -311,9 +324,9 @@ pub struct ConArgsLengthMismatchDiagnostic {
 
 impl ConArgsLengthMismatchDiagnostic {
 
-    pub fn new(source: Source, id: ConId, a_args: Vec<Type>, b_args: Vec<Type>) -> Self {
+    pub fn new(span: Span, id: ConId, a_args: Vec<Type>, b_args: Vec<Type>) -> Self {
         Self {
-            source,
+            span,
             id,
             a_args,
             b_args,
@@ -328,8 +341,8 @@ impl ConArgsLengthMismatchDiagnostic {
         Severity::Error
     }
 
-    fn source(&self) -> Option<Source> {
-        Some(self.source.clone())
+    fn span(&self) -> &Span {
+        &self.span
     }
 
 }
