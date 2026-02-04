@@ -1,7 +1,6 @@
 [workspace]
 resolver = "3"
 members = [
-  "crates/tower-lsp-server",
   "crates/boltlang",
   "crates/boltlang-cli",
   "crates/bolt-language-server",
