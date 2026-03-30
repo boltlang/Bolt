@@ -2,12 +2,10 @@ use std::{collections::{HashMap, HashSet}, vec};
 
 use lazy_static::lazy_static;
 
-// FIXME forked environments must be popped
-
 use crate::{
     Diagnostic, SyntaxKind::*, SyntaxToken, ast::*, diagnostic::{
         BindingNotFoundDiagnostic,
-        Source, Span
+        Span
     }, tc::{TVSub, TVar, Type, solve::Solver}, util::IterExt
 };
 
