@@ -186,7 +186,7 @@ mod test {
     fn test_get_file() {
         let db = TestDatabase::new();
         let file = db.files().resolve(&db, SystemPath::new("foo/bar.txt"));
-        assert_eq!(file.path(&db), &FilePath::System(SystemPathBuf::from("foo/bar.txt")));
+        assert_eq!(file.path(&db), &FilePath::System(SystemPathBuf::from("/foo/bar.txt")));
     }
 
 }
