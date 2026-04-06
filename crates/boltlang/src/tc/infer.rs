@@ -238,8 +238,11 @@ impl InferContext {
 
     pub fn infer_expr(&mut self, expr: &Expr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
         match expr {
-            Expr::Block(block) => {
-                let elements: Vec<_> = block.elements().collect();
+            Expr::Block(expr) => {
+                let elements = match expr.block() {
+                    Some(block) => block.elements().collect(),
+                    None => vec![],
+                };
                 if elements.is_empty() {
                     return (UNIT_TYPE.clone(), vec![], vec![]);
                 }

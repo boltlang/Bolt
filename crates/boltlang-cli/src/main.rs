@@ -9,16 +9,7 @@ use boltlang::salsa::Database;
 use db::CliDatabase;
 
 use boltlang::{
-    Db,
-    DbDiagnostic,
-    File,
-    Path,
-    PathBuf,
-    SyntaxElement,
-    SyntaxKind,
-    SyntaxNode,
-    check_file,
-    parse_file
+    Db, DbDiagnostic, Emit, File, Formatter, Node, Path, PathBuf, SourceFile, SyntaxElement, SyntaxKind, SyntaxNode, check_file, parse_file
 };
 
 use clap::Parser;
@@ -66,6 +57,7 @@ enum OutputFormat {
     #[default]
     Pretty,
     Json,
+    Native,
 }
 
 impl Exec for DumpAstCommand {
@@ -82,6 +74,11 @@ impl Exec for DumpAstCommand {
             SyntaxNode::new_root(parsed.node(db).clone())
         });
         match self.format {
+            OutputFormat::Native => {
+                let mut stdout = std::io::stdout();
+                let mut f= Formatter::new(&mut stdout);
+                SourceFile::wrap(root_node).emit(&mut f)?;
+            }
             OutputFormat::Pretty => print(0, root_node.into()),
             OutputFormat::Json => serde_json::to_writer_pretty(std::io::stdout(), &root_node)?,
         }

@@ -228,7 +228,7 @@ impl Node for Expr {
     }
 
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, REF_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR)
+        matches!(kind, REF_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR | BLOCK_EXPR)
     }
 
 }
@@ -248,6 +248,26 @@ impl Node for BlockExpr {
 }
 
 impl BlockExpr {
+    pub fn block(&self) -> Option<Block> {
+        self.find_node()
+    }
+}
+
+pub struct Block(SyntaxNode);
+
+impl Node for Block {
+    fn kind() -> SyntaxKind {
+        SyntaxKind::BLOCK
+    }
+    fn wrap(syntax: SyntaxNode) -> Self {
+        Block(syntax)
+    }
+    fn syntax(&self) -> &SyntaxNode {
+        &self.0
+    }
+}
+
+impl Block {
 
     pub fn elements(&self) -> ChildrenIter<SourceElement> {
         ChildrenIter::new(&self.0)

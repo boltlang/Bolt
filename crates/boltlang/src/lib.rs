@@ -16,6 +16,8 @@ mod parser;
 mod ast;
 mod tc;
 
+mod emit;
+
 use std::{collections::HashMap, hash::BuildHasherDefault};
 use rustc_hash::FxHasher;
 use salsa::Accumulator;
@@ -47,6 +49,7 @@ pub use {
     tc::{Type, CheckResult, Constraints},
     text::{LineIndex, index_lines},
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
+    emit::{Formatter, Emit},
 };
 
 #[cfg(test)]
