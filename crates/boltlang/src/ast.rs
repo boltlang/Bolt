@@ -172,9 +172,15 @@ impl Node for Pattern {
 pub struct NamedPattern(SyntaxNode);
 
 impl NamedPattern {
+
+    pub fn mut_keyword(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
+
     pub fn name(&self) -> Option<SyntaxToken> {
         self.find_token(IDENTIFIER)
     }
+
 }
 
 
@@ -357,6 +363,10 @@ impl Node for VarDecl {
 
 impl VarDecl {
 
+    pub fn pub_keyword(&self) -> Option<SyntaxToken> {
+        self.find_token(PUB_KEYWORD)
+    }
+
     pub fn pattern(&self) -> Option<Pattern> {
         self.find_node()
     }
@@ -431,6 +441,10 @@ impl Node for FuncDecl {
 }
 
 impl FuncDecl {
+
+    pub fn pub_keyword(&self) -> Option<SyntaxToken> {
+        self.find_token(PUB_KEYWORD)
+    }
 
     pub fn name(&self) -> Option<SyntaxToken> {
         self.find_token(IDENTIFIER)
