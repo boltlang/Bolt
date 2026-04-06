@@ -68,7 +68,11 @@ impl MemoryFs {
 
     pub fn canonicalize(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
         let path = path.as_ref();
-        self.metadata(path)?;
+
+        // Emulate returning ENOENT
+        let lock = self.inner.by_path.read().map_err(other_error)?;
+        let _ = lock.get(path).ok_or_else(file_not_found)?;
+
         Ok(self.normalize_path(path))
     }
 
