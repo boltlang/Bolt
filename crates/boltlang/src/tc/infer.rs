@@ -6,7 +6,7 @@ use crate::{
     Diagnostic, SyntaxKind::*, SyntaxToken, ast::*, diagnostic::{
         BindingNotFoundDiagnostic,
         Span
-    }, tc::{TVSub, TVar, Type, solve::Solver}, util::IterExt
+    }, tc::{TVSub, TVar, Type, solve::Solver}, util::{DropBomb, IterExt}
 };
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -70,6 +70,26 @@ impl TypeEnvData {
 }
 
 type TypeEnvId = usize;
+
+struct ForkedEnv {
+    id: TypeEnvId,
+    bomb: DropBomb,
+}
+
+impl ForkedEnv {
+
+    fn new(id: TypeEnvId) -> Self {
+        Self {
+            id,
+            bomb: DropBomb::new("typing environment must explicitly be dropped"),
+        }
+    }
+
+    fn id(&self) -> TypeEnvId {
+        self.id
+    }
+
+}
 
 pub type Constraints = Vec<Constraint>;
 
@@ -183,14 +203,15 @@ impl InferContext {
         )
     }
 
-    fn fork_env(&mut self, _env: TypeEnvId) -> TypeEnvId {
+    fn fork_env(&mut self, _env: TypeEnvId) -> ForkedEnv {
         let i = self.envs.len();
         self.envs.push(TypeEnvData::new());
-        i
+        ForkedEnv::new(i)
     }
 
-    fn drop_env(&mut self, env: TypeEnvId) {
-        debug_assert!(self.envs.len()-1 == env);
+    fn drop_env(&mut self, mut env: ForkedEnv) {
+        env.bomb.defuse();
+        debug_assert!(self.envs.len()-1 == env.id);
         self.envs.pop();
     }
 
@@ -264,7 +285,7 @@ impl InferContext {
                 cs.extend(ty_cs);
                 ds.extend(ty_ds);
                 for pattern in fun.params().collect::<Vec<_>>().into_iter().rev() {
-                    let (param_ty, param_cs, param_ds) = self.infer_pattern(&pattern, new_env, env);
+                    let (param_ty, param_cs, param_ds) = self.infer_pattern(&pattern, new_env.id(), env);
                     cs.extend(param_cs);
                     ds.extend(param_ds);
                     ty = Type::fun(param_ty, ty);
@@ -341,12 +362,12 @@ impl InferContext {
                             (arg_ty, ret_ty)
                         }
                     };
-                    let (param_cs, param_ds) = self.check_pattern(&pattern, arg_ty, new_env, env);
+                    let (param_cs, param_ds) = self.check_pattern(&pattern, arg_ty, new_env.id(), env);
                     cs.extend(param_cs);
                     ds.extend(param_ds);
                     ty = ret_ty;
                 }
-                let (body_cs, body_ds) = self.check_expr(expr, &ty, new_env);
+                let (body_cs, body_ds) = self.check_expr(expr, &ty, new_env.id());
                 cs.extend(body_cs);
                 ds.extend(body_ds);
                 self.drop_env(new_env);
@@ -487,7 +508,7 @@ impl InferContext {
                         &param.pattern(),
                         &param.type_expr(),
                         &param.default(),
-                        new_env,
+                        new_env.id(),
                         false,
                         env
                     );
@@ -531,7 +552,7 @@ impl InferContext {
         let mut cs = Constraints::new();
         let mut ds = Vec::new();
         for element in node.elements() {
-            let (el_cs, el_ds) = self.infer_element(&element, true, env);
+            let (el_cs, el_ds) = self.infer_element(&element, true, env.id());
             cs.extend(el_cs);
             ds.extend(el_ds);
         }
