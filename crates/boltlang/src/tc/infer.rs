@@ -237,7 +237,7 @@ impl InferContext {
                 match (typed.pattern(), typed.type_expression()) {
                     (Some(p), Some(te)) => {
                         let (ty, mut cs, mut ds) = self.infer_type_expr(&te, env);
-                        let (cs_2, ds_2) = self.check_pattern(&p, ty.clone(), to_insert, env);
+                        let (cs_2, ds_2) = self.check_pattern(&p, &ty, to_insert, env);
                         cs.extend(cs_2);
                         ds.extend(ds_2);
                         (ty, cs, ds)
@@ -339,21 +339,21 @@ impl InferContext {
         }
     }
 
-    fn check_type_expression(&mut self, te: &TypeExpr, ty: Type, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
+    fn check_type_expression(&mut self, te: &TypeExpr, ty: &Type, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
         let (te_ty, mut cs, ds) = self.infer_type_expr(&te, env);
         cs.push(Constraint::TypesEqual {
             provenance: Provenance::TypeSignature(te.syntax().text_range().into()),
             left: te_ty,
-            right: ty,
+            right: ty.clone(),
         });
         (cs, ds)
     }
 
-    fn check_pattern(&mut self, pattern: &Pattern, ty: Type, to_insert: TypeEnvId, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
+    fn check_pattern(&mut self, pattern: &Pattern, ty: &Type, to_insert: TypeEnvId, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
         match pattern {
             Pattern::Named(named) => {
                 if let Some(name) = named.name() {
-                    self.env_add(to_insert, name.text(), SymbolKind::Var, Scheme::mono(ty));
+                    self.env_add(to_insert, name.text(), SymbolKind::Var, Scheme::mono(ty.clone()));
                 }
                 (vec![], vec![])
             },
@@ -361,12 +361,12 @@ impl InferContext {
                 let mut cs = Vec::new();
                 let mut ds = Vec::new();
                 if let Some(p) = typed.pattern() {
-                    let (cs_2, ds_2) = self.check_pattern(&p, ty.clone(), to_insert, env);
+                    let (cs_2, ds_2) = self.check_pattern(&p, ty, to_insert, env);
                     cs.extend(cs_2);
                     ds.extend(ds_2);
                 }
                 if let Some(te) = typed.type_expression() {
-                    let (cs_2, ds_2) = self.check_type_expression(&te, ty.clone(), env);
+                    let (cs_2, ds_2) = self.check_type_expression(&te, ty, env);
                     cs.extend(cs_2);
                     ds.extend(ds_2);
                 }
@@ -404,7 +404,7 @@ impl InferContext {
                             (arg_ty, ret_ty)
                         }
                     };
-                    let (param_cs, param_ds) = self.check_pattern(&pattern, arg_ty, new_env.id(), env);
+                    let (param_cs, param_ds) = self.check_pattern(&pattern, &arg_ty, new_env.id(), env);
                     cs.extend(param_cs);
                     ds.extend(param_ds);
                     ty = ret_ty;
@@ -489,7 +489,7 @@ impl InferContext {
         if let Some(pattern) = pattern {
             match &ty {
                 Some(ty) => {
-                    let (patt_cs, patt_ds) = self.check_pattern(&pattern, ty.clone(), to_insert, env);
+                    let (patt_cs, patt_ds) = self.check_pattern(&pattern, ty, to_insert, env);
                     cs.extend(patt_cs);
                     ds.extend(patt_ds);
                 }
