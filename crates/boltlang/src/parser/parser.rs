@@ -51,13 +51,12 @@ pub(crate) struct CompletedMarker {
 
 pub struct Input {
     kinds: Vec<SyntaxKind>,
-    lines: Vec<u32>,
 }
 
 impl Input {
 
-    pub fn new(kinds: Vec<SyntaxKind>, lines: Vec<u32>) -> Self {
-        Self { kinds, lines }
+    pub fn new(kinds: Vec<SyntaxKind>) -> Self {
+        Self { kinds }
     }
 
     pub fn kind(&self, idx: usize) -> SyntaxKind {
@@ -84,17 +83,6 @@ impl <'t> Parser<'t> {
 
     pub(crate) fn current(&self) -> SyntaxKind {
         self.nth(0)
-    }
-
-    pub(crate) fn current_line_fold(&self) -> u32 {
-        self.inp.lines.iter().nth(self.pos).copied().unwrap_or(u32::MAX)
-    }
-
-    pub(crate) fn prev_line_fold(&self) -> u32 {
-        match self.pos.checked_sub(1) {
-            None => self.inp.lines.first().copied().unwrap_or(u32::MAX),
-            Some(pos) => self.inp.lines.iter().nth(pos).copied().unwrap_or(u32::MAX),
-        }
     }
 
     pub(crate) fn nth(&self, n: usize) -> SyntaxKind {

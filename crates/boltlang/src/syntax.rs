@@ -7,8 +7,6 @@ pub enum SyntaxKind {
     ERROR,
     TOMBSTONE,
     END_OF_FILE,
-    BLOCK_START,
-    BLOCK_END,
 
     // Skippable tokens
     WHITESPACE,
@@ -26,6 +24,7 @@ pub enum SyntaxKind {
     COLON,
     EQUALS,
     COMMA,
+    SEMI,
 
     // Tokens which can have a value
     IDENTIFIER,
@@ -103,8 +102,6 @@ impl SyntaxKind {
             WHITESPACE => "some whitespace",
             LINE_COMMENT => "a line comment",
             BLOCK_COMMENT => "a block comment",
-            BLOCK_START => "the start of an indented block",
-            BLOCK_END => "the end of an indented block",
             L_PAREN => "'('",
             R_PAREN => "')'",
             L_BRACKET => "'['",
@@ -115,6 +112,7 @@ impl SyntaxKind {
             EQUALS => "'='",
             COMMA => "','",
             R_ARROW => "'->'",
+            SEMI => "';'",
             IDENTIFIER => "an identifier",
             STRING => "a string",
             OPERATOR => "an operator",
@@ -137,6 +135,7 @@ impl SyntaxKind {
             NAMED_PATT => "a named pattern",
             LIT_PATT => "a literal pattern",
             TUPLE_PATT => "a tuple pattern",
+            TYPED_PATT => "a pattern with a type ascription",
             NEST_PATT => "a pattern between '(' and ')'",
             BLOCK_EXPR => "a block expression",
             CALL_EXPR => "a call expression",

@@ -162,6 +162,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             ']' => R_BRACKET,
             ',' => COMMA,
             ':' => COLON,
+            ';' => SEMI,
             '=' => EQUALS,
             '#' => {
                 loop {
@@ -242,7 +243,6 @@ impl <I: Iterator<Item = char>> Lexer<I> {
 #[derive(Debug)]
 pub struct LexResult {
     kinds: Vec<SyntaxKind>,
-    lines: Vec<u32>,
     lens: Vec<u32>,
 }
 
@@ -261,15 +261,13 @@ impl LexResult {
     }
 
     pub fn to_input(&self) -> Input {
-        let mut kinds = Vec::new();
-        let mut lines = Vec::new();
-        for (kind, line) in self.kinds.iter().zip(&self.lines) {
-            if !kind.is_trivia() {
-                kinds.push(*kind);
-                lines.push(*line);
-            }
-        }
-        Input::new(kinds, lines)
+        Input::new(
+            self.kinds
+                .iter()
+                .copied()
+                .filter(|k| !k.is_trivia())
+                .collect()
+        )
     }
 
 }
@@ -312,30 +310,15 @@ enum Frame {
 
 pub fn tokenize(text: impl Into<String>) -> LexResult {
 
-    struct LineFoldState {
-        /// The index of the token that started this linefold.
-        pos: u32,
-        /// Line and column number of the token pointed to by [pos].
-        lc: LineColumn,
-    }
-
     // Input
     let text = text.into();
 
     // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
-    let mut lines = Vec::new();
 
     // State
-    let mut pos = 0;
     let mut lexer = Lexer::new(text.chars());
-    // A stack of indent locations for blocks (introduced with the 'do'-keyword)
-    let mut blocks = vec![ LineColumn::default() ];
-    // Indicates when [blocks] is ready to receive its indent location
-    let mut at_block_start = false;
-    // Indicates the token index and indent location of the current line fold in the nearest block
-    let mut line_fold = LineFoldState { pos: 0, lc: LineColumn::default() };
 
     loop {
         let start = lexer.pos();
@@ -344,66 +327,10 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
         if kind == END_OF_FILE {
             break;
         }
-        if !kind.is_trivia() {
-
-            if kind == DO_KEYWORD {
-
-                // Transfer the token from the input to the output vectors
-                kinds.push(kind);
-                lines.push(line_fold.pos);
-                lens.push((end.offset - start.offset) as u32);
-                pos += 1;
-
-                // Insert the virtual `BLOCK_START` token
-                kinds.push(BLOCK_START);
-                lines.push(line_fold.pos);
-                lens.push(0);
-                at_block_start = true;
-
-                continue;
-            }
-
-            if at_block_start {
-                blocks.push((&start).into());
-                at_block_start = false;
-            }
-
-            // First deterimine whether we still are in the same block
-            let block = blocks.last().unwrap();
-            if start.column < block.column {
-                loop {
-                    let block = blocks.last().unwrap();
-                    if block.column <= start.column {
-                        if block.column != start.column {
-                            // TODO genenerate diagnostic
-                            eprintln!("wrong indentation for block expression");
-                        }
-                        break;
-                    }
-                    blocks.pop();
-                    kinds.push(BLOCK_END);
-                    lines.push(line_fold.pos);
-                    lens.push(0);
-                }
-            } else if start.column == block.column {
-                line_fold.pos = pos;
-                line_fold.lc = (&start).into();
-            }
-
-            // Now update the line fold state if necessary
-            let is_in_fold = start.line == line_fold.lc.line || start.column > line_fold.lc.column;
-            if !is_in_fold {
-                line_fold.pos = pos;
-                line_fold.lc = (&start).into();
-            }
-
-        }
 
         // Transfer the token from the input to the output vectors
         kinds.push(kind);
-        lines.push(line_fold.pos);
         lens.push((end.offset - start.offset) as u32);
-        pos += 1;
     }
 
     // For debugging only
@@ -413,7 +340,6 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
 
     LexResult {
         kinds,
-        lines,
         lens,
     }
 }

@@ -27,17 +27,15 @@ pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
 
 pub fn parse_block(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    p.expect(BLOCK_START);
-    while !p.at(END_OF_FILE) && !p.at(BLOCK_END) {
+    p.expect(L_BRACE);
+    while !p.at(END_OF_FILE) && !p.eat(R_BRACE) {
         parse_body_element(p);
     }
-    p.bump_any();
     m.complete(p, BLOCK)
 }
 
 pub fn parse_block_expression(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    p.expect(DO_KEYWORD);
     parse_block(p);
     m.complete(p, BLOCK_EXPR)
 }
@@ -80,7 +78,7 @@ pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
         IDENTIFIER => parse_reference_expression(p),
-        DO_KEYWORD => Some(parse_block_expression(p)),
+        L_BRACE => Some(parse_block_expression(p)),
         L_PAREN => Some(parse_parenthesized_expression(p)),
         _ => {
             p.error_and_bump("expected expression");
@@ -92,17 +90,23 @@ pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
 pub fn parse_call_expression(p: &mut Parser) -> Option<CompletedMarker> {
     let m = p.start();
     let m_2 = parse_prim_expression(p);
-    let mut has_args = false;
-    while in_line_fold(p) {
-        parse_prim_expression(p);
-        has_args = true;
-    }
-    if has_args {
-        Some(m.complete(p, CALL_EXPR))
-    } else {
+    if !p.eat(L_PAREN) {
         m.abandon(p);
-        m_2
+        return m_2
     }
+    if !p.eat(R_PAREN) {
+        while !p.at(END_OF_FILE) && !p.at(SEMI) && !p.at(R_BRACE) && !p.at(R_BRACKET) {
+            parse_expression(p);
+            if p.at(R_PAREN) {
+                break;
+            } else if p.eat(COMMA) {
+                continue;
+            }
+            p.error("expected ')' or ','");
+        }
+    }
+    p.expect(R_PAREN);
+    Some(m.complete(p, CALL_EXPR))
 }
 
 pub fn parse_expression(p: &mut Parser) -> Option<CompletedMarker> {
@@ -125,13 +129,23 @@ pub fn parse_parenthesized_pattern(_p: &mut Parser) -> CompletedMarker {
 }
 
 pub fn parse_pattern(p: &mut Parser) -> Option<CompletedMarker> {
-    match p.current() {
+    let m = p.start();
+    let m_2 = match p.current() {
         IDENTIFIER => parse_named_pattern(p),
         L_PAREN => Some(parse_parenthesized_pattern(p)),
         _ => {
             p.error_and_bump("expected pattern");
             None
         }
+    };
+
+    // Attempt to parse typed pattern
+    if p.eat(COLON) {
+        parse_type_expression(p);
+        Some(m.complete(p, TYPED_PATT))
+    } else {
+        m.abandon(p);
+        m_2
     }
 }
 
@@ -182,17 +196,9 @@ pub fn parse_type_ascription(p: &mut Parser) {
 
 pub fn parse_param(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    if p.eat(L_PAREN) {
-        parse_pattern(p);
-        if p.eat(COLON) { // FIXME pattern will provide this already
-            parse_type_expression(p);
-        }
-        if p.eat(EQUALS) {
-            parse_type_expression(p);
-        }
-        p.expect(R_PAREN);
-    } else {
-        parse_pattern(p);
+    parse_pattern(p);
+    if p.eat(EQUALS) {
+        parse_type_expression(p);
     }
     m.complete(p, PARAM)
 }
@@ -213,16 +219,21 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
             // TODO maybe bump
         }
     }
-    while in_line_fold(p) && !p.at(COLON) && !p.at(EQUALS) {
+    p.expect(L_PAREN);
+    while !p.at(SEMI) && !p.at(END_OF_FILE) && !p.eat(R_PAREN) {
         parse_param(p);
     }
-    if p.at(COLON) {
-        parse_type_ascription(p);
+    if p.eat(R_ARROW) {
+        parse_type_expression(p);
     }
     if p.eat(EQUALS) {
         parse_expression(p);
+        check_semi(p);
+    } else if p.at(L_BRACE) {
+        parse_block(p);
+    } else {
+        check_semi(p);
     }
-    check_line_fold_end(p);
     m.complete(p, FUNC_DECL)
 }
 
@@ -239,31 +250,19 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
         p.expect(EQUALS);
         parse_expression(p);
     }
-    check_line_fold_end(p);
+    check_semi(p);
     m.complete(p, VAR_DECL)
 }
 
-fn in_line_fold(p: &mut Parser) -> bool {
-    !(p.at(END_OF_FILE) || p.at(BLOCK_END)) && p.prev_line_fold() == p.current_line_fold()
-}
-
-fn check_line_fold_end(p: &mut Parser) {
-    if in_line_fold(p) {
-        p.error("expected end of line fold");
-        let m = p.start();
-        loop {
-            p.bump_any();
-            if !in_line_fold(p) {
-                break;
-            }
-        }
-        m.complete(p, ERROR);
+fn check_semi(p: &mut Parser) {
+    if !p.at(R_BRACE) {
+        p.expect(SEMI);
     }
 }
 
 pub fn parse_expression_statement(p: &mut Parser) -> Option<CompletedMarker> {
     let m = parse_expression(p);
-    check_line_fold_end(p);
+    check_semi(p);
     m
 }
 
