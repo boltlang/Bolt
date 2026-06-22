@@ -2,10 +2,43 @@ use crate::{
     diagnostic::{
         ConArgsLengthMismatchDiagnostic,
         InfiniteTypeDiagnostic, TypeMismatchDiagnostic,
+        Span,
     },
-    tc::{infer::{Constraint}, unify::{Unifier, UnifyError}},
+    tc::{
+        types::Type,
+        unify::{Unifier, UnifyError}
+    },
     Diagnostic
 };
+
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub enum Provenance {
+    TypeSignature(Span),
+    AppExpectedFun(Span),
+    UnexpectedFun(Span),
+    ExpectedUnify(Span),
+}
+
+impl Provenance {
+
+    pub fn span(&self) -> &Span {
+        match self {
+            Provenance::TypeSignature(span) => span,
+            Provenance::AppExpectedFun(span) => span,
+            Provenance::UnexpectedFun(span) => span,
+            Provenance::ExpectedUnify(span) => span,
+        }
+    }
+
+}
+
+pub enum Constraint {
+    TypesEqual {
+        provenance: Provenance,
+        left: Type,
+        right: Type,
+    },
+}
 
 pub struct Solver {
     pub unifier: Unifier,
