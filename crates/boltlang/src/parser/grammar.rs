@@ -74,12 +74,20 @@ pub fn parse_parenthesized_expression(p: &mut Parser) -> CompletedMarker {
     m.complete(p, if saw_comma { TUPLE_EXPR } else { NEST_EXPR })
 }
 
+pub fn parse_return_expression(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.expect(RETURN_KEYWORD);
+    parse_expression(p);
+    m.complete(p, RET_EXPR)
+}
+
 pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
         IDENTIFIER => parse_reference_expression(p),
         L_BRACE => Some(parse_block_expression(p)),
         L_PAREN => Some(parse_parenthesized_expression(p)),
+        RETURN_KEYWORD => Some(parse_return_expression(p)),
         _ => {
             p.error_and_bump("expected expression");
             return None;

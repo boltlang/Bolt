@@ -68,6 +68,7 @@ pub enum SyntaxKind {
     POSTFIX_EXPR,
     PREFIX_EXPR,
     REF_EXPR,
+    RET_EXPR,
     TUPLE_EXPR,
 
     // Declarations
@@ -144,6 +145,7 @@ impl SyntaxKind {
             LIT_EXPR => "a literal expression",
             MATCH_EXPR => "a match expression",
             NEST_EXPR => "a nested expression",
+            RET_EXPR => "a 'return' expression",
             POSTFIX_EXPR => "a postfix-expression",
             PREFIX_EXPR => "a prefix-expression",
             REF_EXPR => "a reference expression",
