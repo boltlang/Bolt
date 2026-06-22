@@ -52,6 +52,7 @@ pub enum SyntaxKind {
     LIT_PATT,
     TUPLE_PATT,
     NEST_PATT,
+    TYPED_PATT,
 
     // Type expressions
     ARROW_TYPE_EXPR,

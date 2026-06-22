@@ -224,7 +224,7 @@ impl InferContext {
         ty
     }
 
-    fn infer_pattern(&mut self, pattern: &Pattern, to_insert: TypeEnvId, _env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+    fn infer_pattern(&mut self, pattern: &Pattern, to_insert: TypeEnvId, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
         match pattern {
             Pattern::Named(named) => {
                 let ty: Type = self.fresh_type_var().into();
@@ -232,6 +232,20 @@ impl InferContext {
                     self.env_add(to_insert, name.text().to_string(), SymbolKind::Var, Scheme::mono(ty.clone()));
                 }
                 (ty, vec![], vec![])
+            }
+            Pattern::Typed(typed) => {
+                match (typed.pattern(), typed.type_expression()) {
+                    (Some(p), Some(te)) => {
+                        let (ty, mut cs, mut ds) = self.infer_type_expr(&te, env);
+                        let (cs_2, ds_2) = self.check_pattern(&p, ty.clone(), to_insert, env);
+                        cs.extend(cs_2);
+                        ds.extend(ds_2);
+                        (ty, cs, ds)
+                    },
+                    (Some(p), None) => self.infer_pattern(&p, to_insert, env),
+                    (None, Some(te)) => self.infer_type_expr(&te, env),
+                    (None, None) => (self.fresh_type_var().into(), vec![], vec![]),
+                }
             }
         }
     }
@@ -325,13 +339,38 @@ impl InferContext {
         }
     }
 
-    fn check_pattern(&mut self, pattern: &Pattern, ty: Type, to_insert: TypeEnvId, _env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
+    fn check_type_expression(&mut self, te: &TypeExpr, ty: Type, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
+        let (te_ty, mut cs, ds) = self.infer_type_expr(&te, env);
+        cs.push(Constraint::TypesEqual {
+            provenance: Provenance::TypeSignature(te.syntax().text_range().into()),
+            left: te_ty,
+            right: ty,
+        });
+        (cs, ds)
+    }
+
+    fn check_pattern(&mut self, pattern: &Pattern, ty: Type, to_insert: TypeEnvId, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
         match pattern {
             Pattern::Named(named) => {
                 if let Some(name) = named.name() {
                     self.env_add(to_insert, name.text(), SymbolKind::Var, Scheme::mono(ty));
                 }
                 (vec![], vec![])
+            },
+            Pattern::Typed(typed) => {
+                let mut cs = Vec::new();
+                let mut ds = Vec::new();
+                if let Some(p) = typed.pattern() {
+                    let (cs_2, ds_2) = self.check_pattern(&p, ty.clone(), to_insert, env);
+                    cs.extend(cs_2);
+                    ds.extend(ds_2);
+                }
+                if let Some(te) = typed.type_expression() {
+                    let (cs_2, ds_2) = self.check_type_expression(&te, ty.clone(), env);
+                    cs.extend(cs_2);
+                    ds.extend(ds_2);
+                }
+                (cs, ds)
             }
         }
     }
