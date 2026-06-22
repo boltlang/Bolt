@@ -1,4 +1,6 @@
-use crate::{ArrowTypeExpr, BlockExpr, CallExpr, Expr, FunExpr, FuncDecl, LitExpr, NamedExpr, NamedPattern, NamedTypeExpr, Param, Pattern, SourceElement, SourceFile, TypeExpr, VarDecl};
+use std::fs::write;
+
+use crate::{ArrowTypeExpr, BlockExpr, CallExpr, Expr, FunExpr, FuncDecl, LitExpr, NamedExpr, NamedPattern, NamedTypeExpr, Param, Pattern, SourceElement, SourceFile, TypeExpr, TypedPattern, VarDecl};
 
 pub struct Formatter<'a> {
     after_newline: bool,
@@ -56,7 +58,21 @@ impl <'a> Formatter<'a> {
 }
 
 pub trait Emit {
+
     fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()>;
+
+}
+
+fn emit_interspersed<I: IntoIterator<Item: Emit>>(f: &mut Formatter<'_>, list: I, sep: &str) -> std::io::Result<()> {
+    let mut iter = list.into_iter();
+    if let Some(first) = iter.next() {
+        first.emit(f)?;
+        for item in iter {
+            f.write(sep)?;
+            item.emit(f)?;
+        }
+    }
+    Ok(())
 }
 
 impl Emit for NamedTypeExpr {
@@ -103,26 +119,40 @@ impl Emit for NamedPattern {
     }
 }
 
+impl Emit for TypedPattern {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        if let Some(p) = self.pattern() {
+            p.emit(f)?;
+        }
+        if let Some(te) = self.type_expression() {
+            f.write(": ")?;
+            te.emit(f)?;
+        }
+        Ok(())
+    }
+}
+
 impl Emit for Pattern {
     fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
         match self {
             Pattern::Named(p) => p.emit(f),
+            Pattern::Typed(p) => p.emit(f),
         }
     }
+
 }
 
 impl Emit for BlockExpr {
     fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
-        f.write("do")?;
         match self.block() {
             Some(block) => {
-                f.write("\n")?;
+                f.write("{\n")?;
                 f.indent();
                 for element in block.elements() {
                     element.emit(f)?;
-                    f.write(" ")?;
                 }
                 f.dedent();
+                f.write("}")?;
                 Ok(())
             }
             None => f.write("..."),
@@ -134,12 +164,10 @@ impl Emit for CallExpr {
     fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
         if let Some(operator) = self.operator() {
             operator.emit(f)?;
-            f.write(" ")?;
         }
-        for arg in self.args() {
-            arg.emit(f)?;
-            f.write(" ")?;
-        }
+        f.write("(")?;
+        emit_interspersed(f, self.args(), ", ")?;
+        f.write(")")?;
         Ok(())
     }
 }
@@ -223,14 +251,17 @@ impl Emit for FuncDecl {
         }
         f.write("fn ")?;
         if let Some(name) = self.name() {
-            f.write(&format!("{} ", name.text()))?;
+            f.write(&format!("{}", name.text()))?;
         }
-        for param in self.params() {
-            param.emit(f)?;
-            f.write(" ")?;
+        f.write("(")?;
+        emit_interspersed(f, self.params(), ", ")?;
+        f.write(")")?;
+        if let Some(te) = self.type_signature() {
+            f.write(" -> ")?;
+            te.emit(f)?;
         }
         if let Some(body) = self.body() {
-            f.write("= ")?;
+            f.write(" = ")?;
             body.emit(f)?;
         }
         f.write("\n")?;
@@ -255,7 +286,7 @@ impl Emit for VarDecl {
             f.write(" = ")?;
             expr.emit(f)?;
         }
-        f.write("\n")?;
+        f.write(";\n")?;
         Ok(())
     }
 }
@@ -263,7 +294,7 @@ impl Emit for VarDecl {
 impl Emit for SourceElement {
     fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
         match self {
-            SourceElement::Expr(expr) => { expr.emit(f)?; f.write("\n") },
+            SourceElement::Expr(expr) => { expr.emit(f)?; f.write(";\n") },
             SourceElement::VarDecl(decl) => decl.emit(f),
             SourceElement::FuncDecl(decl) => decl.emit(f),
         }
