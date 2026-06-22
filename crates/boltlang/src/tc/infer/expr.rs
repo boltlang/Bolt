@@ -1,9 +1,5 @@
 use crate::{
-    Diagnostic,
-    Expr,
-    Node,
-    SourceElement,
-    util::IterExt
+    BlockExpr, CallExpr, Diagnostic, Expr, FunExpr, LitExpr, NamedExpr, Node, SourceElement, util::IterExt
 };
 
 use super::{
@@ -72,92 +68,106 @@ impl InferContext {
         (cs, ds)
     }
 
+    pub fn infer_named_expr(&mut self, expr: &NamedExpr, env: TypeEnvId) -> (Type, Constraints,  Vec<Diagnostic>) {
+        match expr.name() {
+            Some(name) => self.lookup(
+                name.text(),
+                name.text_range().into(),
+                SymbolKind::Var,
+                env
+            ),
+            None => (self.fresh_type_var().into(), vec![], vec![]),
+        }
+    }
+
+    pub fn infer_lit_expr(&mut self, expr: &LitExpr, _env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+        match expr.value() {
+            Some(lit) => (self.infer_literal(lit), vec![], vec![]),
+            None => (self.fresh_type_var().into(), vec![], vec![]),
+        }
+    }
+
+    pub fn infer_block_expr(&mut self, expr: &BlockExpr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+        let elements = match expr.block() {
+            Some(block) => block.elements().collect(),
+            None => vec![],
+        };
+        if elements.is_empty() {
+            return (UNIT_TYPE.clone(), vec![], vec![]);
+        }
+        let mut cs = Constraints::new();
+        let mut ds = Vec::new();
+        for element in elements.iter().skip_last(1) {
+            let (el_cs, el_ds) = self.infer_element(element, false, env);
+            cs.extend(el_cs);
+            ds.extend(el_ds);
+        }
+        let last = elements.last().unwrap();
+        let ty = if let SourceElement::Expr(expr) = last {
+            let (ty, ty_out, ty_ds) = self.infer_expr(&expr, env);
+            cs.extend(ty_out);
+            ds.extend(ty_ds);
+            ty
+        } else {
+            UNIT_TYPE.clone()
+        };
+        (ty, cs, ds)
+    }
+
+    pub fn infer_fun_expr(&mut self, expr: &FunExpr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+        let mut cs = Constraints::new();
+        let mut ds = Vec::new();
+        let new_env = self.fork_env(env);
+        let (mut ty, ty_cs, ty_ds) = match expr.body() {
+            Some(expr) => self.infer_expr(&expr, env),
+            None => (self.fresh_type_var().into(), vec![], vec![]),
+        };
+        cs.extend(ty_cs);
+        ds.extend(ty_ds);
+        for pattern in expr.params().collect::<Vec<_>>().into_iter().rev() {
+            let (param_ty, param_cs, param_ds) = self.infer_pattern(&pattern, new_env.id(), env);
+            cs.extend(param_cs);
+            ds.extend(param_ds);
+            ty = Type::fun(param_ty, ty);
+        }
+        self.drop_env(new_env);
+        (ty, cs, ds)
+    }
+
+    pub fn infer_call_expr(&mut self, expr: &CallExpr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+        let (mut fun_ty, mut cs, mut ds) = match expr.operator() {
+            Some(e) => self.infer_expr(&e, env),
+            None => (self.fresh_type_var().into(), vec![], vec![]),
+        };
+        for arg in expr.args() {
+            let (arg_ty, ret_ty_2) = match &fun_ty {
+                Type::Fun(left, right) => (left.as_ref().clone(), right.as_ref().clone()),
+                ty => {
+                    let arg_ty: Type = self.fresh_type_var().into();
+                    let ret_ty: Type = self.fresh_type_var().into();
+                    cs.push(Constraint::TypesEqual {
+                        provenance: Provenance::AppExpectedFun(expr.syntax().text_range().into()),
+                        left: Type::fun(arg_ty.clone(), ret_ty.clone()),
+                        right: ty.clone(),
+                    });
+                    (arg_ty, ret_ty)
+                }
+            };
+            let (check_cs, check_ds) = self.check_expr(&arg, &arg_ty, env);
+            cs.extend(check_cs);
+            ds.extend(check_ds);
+            fun_ty = ret_ty_2;
+        }
+        (fun_ty, cs, ds)
+    }
+
     pub fn infer_expr(&mut self, expr: &Expr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
         match expr {
-            Expr::Block(expr) => {
-                let elements = match expr.block() {
-                    Some(block) => block.elements().collect(),
-                    None => vec![],
-                };
-                if elements.is_empty() {
-                    return (UNIT_TYPE.clone(), vec![], vec![]);
-                }
-                let mut cs = Constraints::new();
-                let mut ds = Vec::new();
-                for element in elements.iter().skip_last(1) {
-                    let (el_cs, el_ds) = self.infer_element(element, false, env);
-                    cs.extend(el_cs);
-                    ds.extend(el_ds);
-                }
-                let last = elements.last().unwrap();
-                let ty = if let SourceElement::Expr(expr) = last {
-                    let (ty, ty_out, ty_ds) = self.infer_expr(&expr, env);
-                    cs.extend(ty_out);
-                    ds.extend(ty_ds);
-                    ty
-                } else {
-                    UNIT_TYPE.clone()
-                };
-                (ty, cs, ds)
-            }
-            Expr::Named(named) => match named.name() {
-                Some(name) => self.lookup(
-                    name.text(),
-                    name.text_range().into(),
-                    SymbolKind::Var,
-                    env
-                ),
-                None => (self.fresh_type_var().into(), vec![], vec![]),
-            }
-            Expr::Lit(lit) => match lit.value() {
-                Some(lit) => (self.infer_literal(lit), vec![], vec![]),
-                None => (self.fresh_type_var().into(), vec![], vec![]),
-            }
-            Expr::Fun(fun) => {
-                let mut cs = Constraints::new();
-                let mut ds = Vec::new();
-                let new_env = self.fork_env(env);
-                let (mut ty, ty_cs, ty_ds) = match fun.body() {
-                    Some(expr) => self.infer_expr(&expr, env),
-                    None => (self.fresh_type_var().into(), vec![], vec![]),
-                };
-                cs.extend(ty_cs);
-                ds.extend(ty_ds);
-                for pattern in fun.params().collect::<Vec<_>>().into_iter().rev() {
-                    let (param_ty, param_cs, param_ds) = self.infer_pattern(&pattern, new_env.id(), env);
-                    cs.extend(param_cs);
-                    ds.extend(param_ds);
-                    ty = Type::fun(param_ty, ty);
-                }
-                self.drop_env(new_env);
-                (ty, cs, ds)
-            }
-            Expr::Call(call) => {
-                let (mut fun_ty, mut cs, mut ds) = match call.operator() {
-                    Some(e) => self.infer_expr(&e, env),
-                    None => (self.fresh_type_var().into(), vec![], vec![]),
-                };
-                for arg in call.args() {
-                    let (arg_ty, ret_ty_2) = match &fun_ty {
-                        Type::Fun(left, right) => (left.as_ref().clone(), right.as_ref().clone()),
-                        ty => {
-                            let arg_ty: Type = self.fresh_type_var().into();
-                            let ret_ty: Type = self.fresh_type_var().into();
-                            cs.push(Constraint::TypesEqual {
-                                provenance: Provenance::AppExpectedFun(call.syntax().text_range().into()),
-                                left: Type::fun(arg_ty.clone(), ret_ty.clone()),
-                                right: ty.clone(),
-                            });
-                            (arg_ty, ret_ty)
-                        }
-                    };
-                    let (check_cs, check_ds) = self.check_expr(&arg, &arg_ty, env);
-                    cs.extend(check_cs);
-                    ds.extend(check_ds);
-                    fun_ty = ret_ty_2;
-                }
-                (fun_ty, cs, ds)
-            }
+            Expr::Block(expr) => self.infer_block_expr(expr, env),
+            Expr::Named(named) => self.infer_named_expr(named, env),
+            Expr::Lit(lit) => self.infer_lit_expr(lit, env),
+            Expr::Fun(fun) => self.infer_fun_expr(fun, env),
+            Expr::Call(call) => self.infer_call_expr(call, env),
         }
     }
 
