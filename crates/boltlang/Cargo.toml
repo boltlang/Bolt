@@ -13,7 +13,7 @@ lazy_static = "1.5.0"
 notify-debouncer-mini = { version = "0.7.0", features = ["crossbeam-channel"] }
 rowan = { version = "0.16.1", features = ["serde1"] }
 rustc-hash = "2.1.1"
-salsa = "0.26.0"
+salsa = "0.27.0"
 thiserror = "2.0.18"
 tracing = "0.1.44"
 unicode-ident = "1.0.22"

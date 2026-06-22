@@ -6,6 +6,6 @@ edition = "2024"
 [dependencies]
 tokio = { version = "1.49.0", features = ["full"] }
 boltlang = { path = "../boltlang" }
-itertools = "0.14.0"
+itertools = "0.15.0"
 futures = "0.3.31"
 tower-lsp-server = "0.23.0"
