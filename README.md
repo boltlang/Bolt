@@ -9,8 +9,8 @@ Bolt
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
 ```rust
-fn fac() {
-    match {
+fn fac(n: Int) -> Int {
+    match n {
       0 | 1 => 1
       k => k * fac(k-1)
     }
