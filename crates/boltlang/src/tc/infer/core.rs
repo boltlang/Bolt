@@ -154,13 +154,13 @@ impl InferContext {
 
     pub fn lookup(&mut self, name: &str, span: Span, kind: SymbolKind, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
         // Search in this environment and all parent environments
-        for i in (0..env).rev() {
+        for i in (0..=env).rev() {
             let scm = self.envs[i].get(name, kind).cloned();
             if let Some(scm) = scm {
                  return (self.instantiate(&scm), vec![], vec![]);
             }
         }
-        // Binding waSources not found
+        // Binding not found
         (
             self.fresh_type_var().into(),
             vec![],
