@@ -164,6 +164,15 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             ':' => COLON,
             ';' => SEMI,
             '=' => EQUALS,
+            '"' => {
+                loop {
+                    let c1 = self.get();
+                    if c1 == '"' {
+                        break;
+                    }
+                }
+                STRING
+            }
             '#' => {
                 loop {
                     let c1 = self.get();

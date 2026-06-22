@@ -42,7 +42,7 @@ pub fn parse_block_expression(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_literal_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        BIN_INT | OCT_INT | DEC_INT | HEX_INT => {
+        STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT => {
             let m = p.start();
             p.bump_any();
             Some(m.complete(p, LIT_EXPR))
@@ -83,7 +83,7 @@ pub fn parse_return_expression(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
+        STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
         IDENTIFIER => parse_reference_expression(p),
         L_BRACE => Some(parse_block_expression(p)),
         L_PAREN => Some(parse_parenthesized_expression(p)),
