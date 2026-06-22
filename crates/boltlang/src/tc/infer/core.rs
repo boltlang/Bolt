@@ -183,6 +183,7 @@ impl InferContext {
         )
     }
 
+    #[allow(unused)]
     pub fn dump_envs(&self) {
         for (i, env) in self.envs.iter().enumerate() {
             for ((kind, name), value) in &env.mapping {
