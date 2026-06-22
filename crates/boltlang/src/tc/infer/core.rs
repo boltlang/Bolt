@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::{collections::{HashMap, HashSet}, fmt::Display};
 
 use lazy_static::lazy_static;
 
@@ -14,6 +14,19 @@ pub enum SymbolKind {
 pub struct Scheme {
     pub unbound: TVSet,
     pub ty: Type,
+}
+
+impl Display for Scheme {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if !self.unbound.is_empty() {
+            write!(f, "forall")?;
+            for tv in &self.unbound {
+                write!(f, " {tv}")?;
+            }
+            write!(f, ". ")?;
+        }
+        write!(f, "{}", self.ty)
+    }
 }
 
 impl Scheme {
@@ -168,6 +181,17 @@ impl InferContext {
                 BindingNotFoundDiagnostic::new(name.to_owned(), kind, span).into()
             ]
         )
+    }
+
+    pub fn dump_envs(&self) {
+        for (i, env) in self.envs.iter().enumerate() {
+            for ((kind, name), value) in &env.mapping {
+                for _ in 0..i {
+                    print!("  ")
+                }
+                println!("{kind:?} {name} = {value}")
+            }
+        }
     }
 
     pub fn fork_env(&mut self, _env: TypeEnvId) -> ForkedEnv {
