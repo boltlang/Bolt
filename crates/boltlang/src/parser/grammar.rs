@@ -254,8 +254,7 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
     if p.current() == COLON {
         parse_type_ascription(p);
     }
-    if p.current() == EQUALS {
-        p.expect(EQUALS);
+    if p.eat(EQUALS) {
         parse_expression(p);
     }
     check_semi(p);
