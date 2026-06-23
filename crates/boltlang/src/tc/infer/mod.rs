@@ -11,6 +11,7 @@ pub use super::{
 };
 
 pub use core::{
+    GenOut,
     Scheme,
     SymbolKind,
     InferContext,

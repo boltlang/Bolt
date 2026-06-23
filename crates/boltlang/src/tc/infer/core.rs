@@ -108,6 +108,38 @@ lazy_static! {
     pub static ref UNIT_TYPE: Type = Type::Con("Unit".to_string(), vec![]);
 }
 
+pub struct GenOut {
+    pub constraints: Constraints,
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+impl GenOut {
+
+    pub fn new() -> Self {
+        Self {
+            constraints: Vec::new(),
+            diagnostics: Vec::new(),
+        }
+    }
+
+    pub fn diagnostic(diagnostic: Diagnostic) -> Self {
+        Self {
+            constraints: vec![],
+            diagnostics: vec![ diagnostic ],
+        }
+    }
+
+    pub fn add_constraint(&mut self, constraint: Constraint) {
+        self.constraints.push(constraint);
+    }
+
+    pub fn extend(&mut self, other: GenOut) {
+        self.constraints.extend(other.constraints);
+        self.diagnostics.extend(other.diagnostics);
+    }
+
+}
+
 impl InferContext {
 
     pub fn new() -> Self {
@@ -165,21 +197,20 @@ impl InferContext {
         self.envs[env].add(name, kind, scm);
     }
 
-    pub fn lookup(&mut self, name: &str, span: Span, kind: SymbolKind, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+    pub fn lookup(&mut self, name: &str, span: Span, kind: SymbolKind, env: TypeEnvId) -> (GenOut, Type) {
         // Search in this environment and all parent environments
         for i in (0..=env).rev() {
             let scm = self.envs[i].get(name, kind).cloned();
             if let Some(scm) = scm {
-                 return (self.instantiate(&scm), vec![], vec![]);
+                 return (GenOut::new(), self.instantiate(&scm));
             }
         }
         // Binding not found
         (
-            self.fresh_type_var().into(),
-            vec![],
-            vec![
+            GenOut::diagnostic(
                 BindingNotFoundDiagnostic::new(name.to_owned(), kind, span).into()
-            ]
+            ),
+            self.fresh_type_var().into()
         )
     }
 

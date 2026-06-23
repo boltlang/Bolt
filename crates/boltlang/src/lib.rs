@@ -61,8 +61,8 @@ pub fn check_file(db: &dyn Db, file: File) -> CheckResult {
     let source_file = SourceFile::wrap(SyntaxNode::new_root(node.node(db).clone()));
     let mapping = HashMap::new();
     let mut infer = InferContext::new();
-    let (constraints, diagnostics) = infer.infer_source_file(&source_file);
-    [ diagnostics, infer.solve(&constraints) ]
+    let res = infer.infer_source_file(&source_file);
+    [ res.diagnostics, infer.solve(&res.constraints) ]
         .into_iter()
         .flatten()
         .map(|d| infer.solver.unifier.normalize_diagnostic(d))

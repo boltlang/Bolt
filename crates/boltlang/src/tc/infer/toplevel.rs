@@ -1,38 +1,31 @@
 use crate::{
-    Diagnostic,
     SourceElement,
-    SourceFile
+    SourceFile, tc::infer::GenOut
 };
 use super::{
-    Constraints,
     InferContext,
     TypeEnvId,
 };
 
 impl InferContext {
 
-    pub fn infer_element(&mut self, element: &SourceElement, is_toplevel: bool, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
+    pub fn infer_element(&mut self, element: &SourceElement, is_toplevel: bool, env: TypeEnvId) -> GenOut {
         match element {
             SourceElement::VarDecl(decl) => self.infer_var_decl(decl, is_toplevel, env),
             SourceElement::FuncDecl(decl) => self.infer_func_decl(decl, env),
-            SourceElement::Expr(expr) => {
-                let (_ty, cs, ds) = self.infer_expr(expr, env);
-                (cs, ds)
-            }
+            SourceElement::Expr(expr) => self.infer_expr(expr, env).0,
         }
     }
 
-    pub fn infer_source_file(&mut self, node: &SourceFile) -> (Constraints, Vec<Diagnostic>) {
+    pub fn infer_source_file(&mut self, node: &SourceFile) -> GenOut {
         let env = self.fork_env(self.global_env());
-        let mut cs = Constraints::new();
-        let mut ds = Vec::new();
+        let mut out = GenOut::new();
         for element in node.elements() {
-            let (el_cs, el_ds) = self.infer_element(&element, true, env.id());
-            cs.extend(el_cs);
-            ds.extend(el_ds);
+            let el_out = self.infer_element(&element, true, env.id());
+            out.extend(el_out);
         }
         self.drop_env(env);
-        (cs, ds)
+        out
     }
 
 }

@@ -1,10 +1,10 @@
 use crate::{
-    BlockExpr, CallExpr, Diagnostic, Expr, FunExpr, LitExpr, NamedExpr, Node, SourceElement, util::IterExt
+    BlockExpr, CallExpr, Expr, FunExpr, LitExpr, NamedExpr, Node, SourceElement, util::IterExt
 };
 
 use super::{
     Constraint,
-    Constraints,
+    GenOut,
     InferContext,
     Provenance,
     SymbolKind,
@@ -15,19 +15,18 @@ use super::{
 
 impl InferContext {
 
-    pub fn check_expr(&mut self, expr: &Expr, ty: &Type, env: TypeEnvId) -> (Constraints, Vec<Diagnostic>) {
+    pub fn check_expr(&mut self, expr: &Expr, ty: &Type, env: TypeEnvId) -> GenOut {
         // Attempt to handle some special cases
         match (expr, ty) {
             // Case where a literal expression is matched with a literal type
             (Expr::Lit(lit), ty) => if let Some(value) = lit.value() {
                 if self.infer_literal(value) == *ty {
-                    return (vec![], vec![]);
+                    return GenOut::new();
                 }
             }
             // Case where a lambda expression is being compared with the type
             (Expr::Fun(fun), ty) => {
-                let mut ds = Vec::new();
-                let mut cs = Constraints::new();
+                let mut out = GenOut::new();
                 let new_env = self.fork_env(env);
                 let mut ty = ty.clone();
                 for pattern in fun.params() {
@@ -36,7 +35,7 @@ impl InferContext {
                         ty => {
                             let arg_ty: Type = self.fresh_type_var().into();
                             let ret_ty: Type = self.fresh_type_var().into();
-                            cs.push(Constraint::TypesEqual {
+                            out.add_constraint(Constraint::TypesEqual {
                                 provenance: Provenance::UnexpectedFun(fun.syntax().text_range().into()),
                                 left: ty.clone(),
                                 right: Type::fun(arg_ty.clone(), ret_ty.clone()),
@@ -44,31 +43,29 @@ impl InferContext {
                             (arg_ty, ret_ty)
                         }
                     };
-                    let (param_cs, param_ds) = self.check_pattern(&pattern, &arg_ty, new_env.id(), env);
-                    cs.extend(param_cs);
-                    ds.extend(param_ds);
+                    let param_out = self.check_pattern(&pattern, &arg_ty, new_env.id(), env);
+                    out.extend(param_out);
                     ty = ret_ty;
                 }
-                let (body_cs, body_ds) = self.check_expr(expr, &ty, new_env.id());
-                cs.extend(body_cs);
-                ds.extend(body_ds);
+                let body_out = self.check_expr(expr, &ty, new_env.id());
+                out.extend(body_out);
                 self.drop_env(new_env);
-                return (cs, ds)
+                return out;
             },
             // No special case, so the logic below will run
             _ => {},
         }
         // Fallback logic that just performs further downward inference
-        let (actual_ty, mut cs, ds) = self.infer_expr(expr, env);
-        cs.push(Constraint::TypesEqual {
+        let (mut out, actual_ty) = self.infer_expr(expr, env);
+        out.add_constraint(Constraint::TypesEqual {
             provenance: Provenance::ExpectedUnify(expr.syntax().text_range().into()),
             left: actual_ty,
             right: ty.clone(),
         });
-        (cs, ds)
+        out
     }
 
-    pub fn infer_named_expr(&mut self, expr: &NamedExpr, env: TypeEnvId) -> (Type, Constraints,  Vec<Diagnostic>) {
+    pub fn infer_named_expr(&mut self, expr: &NamedExpr, env: TypeEnvId) -> (GenOut, Type) {
         match expr.name() {
             Some(name) => self.lookup(
                 name.text(),
@@ -76,68 +73,62 @@ impl InferContext {
                 SymbolKind::Var,
                 env
             ),
-            None => (self.fresh_type_var().into(), vec![], vec![]),
+            None => (GenOut::new(), self.fresh_type_var().into()),
         }
     }
 
-    pub fn infer_lit_expr(&mut self, expr: &LitExpr, _env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+    pub fn infer_lit_expr(&mut self, expr: &LitExpr, _env: TypeEnvId) -> (GenOut, Type) {
         match expr.value() {
-            Some(lit) => (self.infer_literal(lit), vec![], vec![]),
-            None => (self.fresh_type_var().into(), vec![], vec![]),
+            Some(lit) => (GenOut::new(), self.infer_literal(lit)),
+            None => (GenOut::new(), self.fresh_type_var().into()),
         }
     }
 
-    pub fn infer_block_expr(&mut self, expr: &BlockExpr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+    pub fn infer_block_expr(&mut self, expr: &BlockExpr, env: TypeEnvId) -> (GenOut, Type) {
         let elements = match expr.block() {
             Some(block) => block.elements().collect(),
             None => vec![],
         };
         if elements.is_empty() {
-            return (UNIT_TYPE.clone(), vec![], vec![]);
+            return (GenOut::new(), UNIT_TYPE.clone());
         }
-        let mut cs = Constraints::new();
-        let mut ds = Vec::new();
+        let mut out = GenOut::new();
         for element in elements.iter().skip_last(1) {
-            let (el_cs, el_ds) = self.infer_element(element, false, env);
-            cs.extend(el_cs);
-            ds.extend(el_ds);
+            let el_out = self.infer_element(element, false, env);
+            out.extend(el_out);
         }
         let last = elements.last().unwrap();
         let ty = if let SourceElement::Expr(expr) = last {
-            let (ty, ty_out, ty_ds) = self.infer_expr(&expr, env);
-            cs.extend(ty_out);
-            ds.extend(ty_ds);
+            let (ty_out, ty) = self.infer_expr(&expr, env);
+            out.extend(ty_out);
             ty
         } else {
             UNIT_TYPE.clone()
         };
-        (ty, cs, ds)
+        (out, ty)
     }
 
-    pub fn infer_fun_expr(&mut self, expr: &FunExpr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
-        let mut cs = Constraints::new();
-        let mut ds = Vec::new();
+    pub fn infer_fun_expr(&mut self, expr: &FunExpr, env: TypeEnvId) -> (GenOut, Type) {
+        let mut out = GenOut::new();
         let new_env = self.fork_env(env);
-        let (mut ty, ty_cs, ty_ds) = match expr.body() {
+        let (ty_out, mut ty) = match expr.body() {
             Some(expr) => self.infer_expr(&expr, env),
-            None => (self.fresh_type_var().into(), vec![], vec![]),
+            None => (GenOut::new(), self.fresh_type_var().into()),
         };
-        cs.extend(ty_cs);
-        ds.extend(ty_ds);
+        out.extend(ty_out);
         for pattern in expr.params().collect::<Vec<_>>().into_iter().rev() {
-            let (param_ty, param_cs, param_ds) = self.infer_pattern(&pattern, new_env.id(), env);
-            cs.extend(param_cs);
-            ds.extend(param_ds);
+            let (param_out, param_ty) = self.infer_pattern(&pattern, new_env.id(), env);
+            out.extend(param_out);
             ty = Type::fun(param_ty, ty);
         }
         self.drop_env(new_env);
-        (ty, cs, ds)
+        (out, ty)
     }
 
-    pub fn infer_call_expr(&mut self, expr: &CallExpr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
-        let (mut fun_ty, mut cs, mut ds) = match expr.operator() {
+    pub fn infer_call_expr(&mut self, expr: &CallExpr, env: TypeEnvId) -> (GenOut, Type) {
+        let (mut out, mut fun_ty) = match expr.operator() {
             Some(e) => self.infer_expr(&e, env),
-            None => (self.fresh_type_var().into(), vec![], vec![]),
+            None => (GenOut::new(), self.fresh_type_var().into()),
         };
         for arg in expr.args() {
             let (arg_ty, ret_ty_2) = match &fun_ty {
@@ -145,7 +136,7 @@ impl InferContext {
                 ty => {
                     let arg_ty: Type = self.fresh_type_var().into();
                     let ret_ty: Type = self.fresh_type_var().into();
-                    cs.push(Constraint::TypesEqual {
+                    out.add_constraint(Constraint::TypesEqual {
                         provenance: Provenance::AppExpectedFun(expr.syntax().text_range().into()),
                         left: Type::fun(arg_ty.clone(), ret_ty.clone()),
                         right: ty.clone(),
@@ -153,15 +144,14 @@ impl InferContext {
                     (arg_ty, ret_ty)
                 }
             };
-            let (check_cs, check_ds) = self.check_expr(&arg, &arg_ty, env);
-            cs.extend(check_cs);
-            ds.extend(check_ds);
+            let check_out = self.check_expr(&arg, &arg_ty, env);
+            out.extend(check_out);
             fun_ty = ret_ty_2;
         }
-        (fun_ty, cs, ds)
+        (out, fun_ty)
     }
 
-    pub fn infer_expr(&mut self, expr: &Expr, env: TypeEnvId) -> (Type, Constraints, Vec<Diagnostic>) {
+    pub fn infer_expr(&mut self, expr: &Expr, env: TypeEnvId) -> (GenOut, Type) {
         match expr {
             Expr::Block(expr) => self.infer_block_expr(expr, env),
             Expr::Named(named) => self.infer_named_expr(named, env),
