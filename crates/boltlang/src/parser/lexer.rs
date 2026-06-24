@@ -235,6 +235,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                 }
                 if text == "->" {
                     R_ARROW
+                // FIXME what if something like =+=?
                 } else if text.ends_with("==") {
                     OPERATOR
                 } else if text.ends_with('=') {
