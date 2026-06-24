@@ -262,8 +262,12 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
 }
 
 fn check_semi(p: &mut Parser) {
-    if !p.at(R_BRACE) {
-        p.expect(SEMI);
+    if !p.at(R_BRACE) && !p.eat(SEMI) {
+        p.error("expected ';' or '}'");
+        // TODO handle newlines
+        while !p.at(R_BRACE) && !p.eat(SEMI) {
+            p.bump_any();
+        }
     }
 }
 
