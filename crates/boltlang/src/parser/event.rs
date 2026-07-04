@@ -2,7 +2,7 @@
 use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::{
-    Diagnostic, diagnostic::{DbDiagnostic, Source, SyntaxDiagnostic}, parser::lexer::LexResult, syntax::SyntaxKind
+    Diagnostic, diagnostic::SyntaxDiagnostic, parser::lexer::LexResult, syntax::SyntaxKind
 };
 
 /// Intermediate error structure generated during parsing.
