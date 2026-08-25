@@ -127,7 +127,7 @@ pub struct NamedTypeExpr(SyntaxNode);
 impl NamedTypeExpr {
 
     pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENTIFIER)
+        self.find_token(IDENT)
     }
 
 }
@@ -207,7 +207,7 @@ impl NamedPattern {
     }
 
     pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENTIFIER)
+        self.find_token(IDENT)
     }
 
 }
@@ -237,7 +237,7 @@ impl Node for Expr {
 
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
-            REF_EXPR => Expr::Named(NamedExpr(syntax)),
+            PATH_EXPR => Expr::Named(NamedExpr(syntax)),
             LIT_EXPR => Expr::Lit(LitExpr(syntax)),
             CALL_EXPR => Expr::Call(CallExpr(syntax)),
             FUN_EXPR => Expr::Fun(FunExpr(syntax)),
@@ -257,7 +257,7 @@ impl Node for Expr {
     }
 
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, REF_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR | BLOCK_EXPR)
+        matches!(kind, PATH_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR | BLOCK_EXPR)
     }
 
 }
@@ -371,7 +371,7 @@ pub struct NamedExpr(SyntaxNode);
 
 impl Node for NamedExpr {
     fn kind() -> SyntaxKind {
-        REF_EXPR
+        PATH_EXPR
     }
     fn wrap(syntax: SyntaxNode) -> Self {
         NamedExpr(syntax)
@@ -392,7 +392,7 @@ impl CallExpr {
 
 impl NamedExpr {
     pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENTIFIER)
+        self.find_token(IDENT)
     }
 }
 
@@ -400,7 +400,7 @@ pub struct VarDecl(SyntaxNode);
 
 impl Node for VarDecl {
     fn kind() -> SyntaxKind {
-        VAR_DECL
+        LET_STMT
     }
     fn wrap(syntax: SyntaxNode) -> Self {
         VarDecl(syntax)
@@ -496,7 +496,7 @@ impl FuncDecl {
     }
 
     pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENTIFIER)
+        self.find_token(IDENT)
     }
 
     pub fn params(&self) -> ChildrenIter<Param> {
@@ -524,11 +524,11 @@ pub enum SourceElement {
 
 impl Node for SourceElement {
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, VAR_DECL | FUNC_DECL) || Expr::can_cast(kind)
+        matches!(kind, LET_STMT | FUNC_DECL) || Expr::can_cast(kind)
     }
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
-            VAR_DECL => Self::VarDecl(VarDecl(syntax)),
+            LET_STMT => Self::VarDecl(VarDecl(syntax)),
             FUNC_DECL => Self::FuncDecl(FuncDecl(syntax)),
             _ => Self::Expr(Expr::wrap(syntax)),
         }

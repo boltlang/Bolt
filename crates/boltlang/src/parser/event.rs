@@ -1,14 +1,25 @@
 
+use std::num::NonZeroU32;
+
 use rowan::{GreenNode, GreenNodeBuilder};
 
 use crate::{
-    Diagnostic, diagnostic::SyntaxDiagnostic, parser::lexer::LexResult, syntax::SyntaxKind
+    Diagnostic, SyntaxKind::TOMBSTONE, diagnostic::SyntaxDiagnostic, parser::lexer::LexResult, syntax::SyntaxKind
 };
 
 /// Intermediate error structure generated during parsing.
 pub type ParseError = String;
 
-#[derive(Debug)]
+/// `Parser` produces a flat list of `Event`s.
+/// They are converted to a tree-structure in
+/// a separate pass, via `TreeBuilder`.
+///
+/// Kept to 8 bytes: error messages live in a side table on the `Parser`
+/// (the `errors` vec) and `Event::Error` only stores an index into it.
+/// `forward_parent` uses `NonZeroU32` so `Option` is niche-optimised away
+/// (the offset is always ≥ 1 because the forward parent sits later in the
+/// event stream).
+#[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Event {
 
     /// This event signifies the start of the node.
@@ -18,7 +29,10 @@ pub(crate) enum Event {
     ///
     /// All tokens between a `Start` and a `Finish` would
     /// become the children of the respective node.
-    Start { kind: SyntaxKind, abandoned: bool },
+    Start {
+        kind: SyntaxKind,
+        forward_parent: Option<NonZeroU32>,
+    },
 
     /// Complete previous `Start` event
     Finish,
@@ -30,8 +44,17 @@ pub(crate) enum Event {
 
     /// Produce an error at the given syntax level.
     Error {
+        // TODO actually store the errors in a separate vec
         msg: ParseError,
     }
+}
+
+impl Event {
+
+    pub(crate) fn tombstone() -> Self {
+        Event::Start { kind: TOMBSTONE, forward_parent: None }
+    }
+
 }
 
 pub fn process_events<I: Iterator<Item = Event>>(
@@ -84,7 +107,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
 
     fn feed_event(&mut self, event: Event) {
         match event {
-            Event::Start { abandoned: true, .. } => {},
+            Event::Start { kind: TOMBSTONE, .. } => {},
             Event::Start { kind, ..  } => {
                 self.builder.start_node(kind.into());
             }
@@ -194,11 +217,11 @@ impl <'a> IntersperseTrivia<'a> {
                 self.eat_trivias();
                 self.do_token(kind);
             }
-            Event::Start { abandoned: true, .. } => {},
+            Event::Start { kind: TOMBSTONE, .. } => {},
             Event::Start { kind, .. } => {
                 match std::mem::replace(&mut self.state, IntersperseState::Normal) {
                     IntersperseState::PendingEnter => {
-                        self.output.push(Event::Start { kind, abandoned: false });
+                        self.output.push(Event::Start { kind, forward_parent: None });
                         // No need to attach trivias to previous node: there is no
                         // previous node.
                         return;
@@ -207,7 +230,7 @@ impl <'a> IntersperseTrivia<'a> {
                     IntersperseState::Normal => (),
                 }
                 self.eat_trivias();
-                self.output.push(Event::Start { kind, abandoned: false });
+                self.output.push(Event::Start { kind, forward_parent: None });
                 // TODO add trivias attached to node here
                 // https://github.com/rust-lang/rust-analyzer/blob/137eee2f3d9acbabe677b07e221686d38f233ce9/crates/parser/src/shortcuts.rs#L156
             }

@@ -1,7 +1,7 @@
 
 use crate::{parser::{parser::{CompletedMarker, Parser}, token_set::TokenSet}, syntax::SyntaxKind::{self, *}};
 
-const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENTIFIER]);
+const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENT]);
 
 fn peek_after_modifiers(p: &mut Parser) -> SyntaxKind {
     let mut i = 0;
@@ -18,7 +18,7 @@ pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
     if p.at_ts(PATH_NAME_REF_KINDS) {
         let m = p.start();
         p.bump_any();
-        Some(m.complete(p, REF_EXPR))
+        Some(m.complete(p, PATH_EXPR))
     } else {
         p.error_and_bump("expected identifier");
         None
@@ -28,7 +28,7 @@ pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
 pub fn parse_block(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.expect(L_BRACE);
-    while !p.at(END_OF_FILE) && !p.eat(R_BRACE) {
+    while !p.at(EOF) && !p.eat(R_BRACE) {
         parse_body_element(p);
     }
     m.complete(p, BLOCK)
@@ -62,7 +62,7 @@ pub fn parse_parenthesized_expression(p: &mut Parser) -> CompletedMarker {
         p.error("expected expression");
         saw_comma = true;
     }
-    while !p.at(END_OF_FILE) && !p.at(R_PAREN) {
+    while !p.at(EOF) && !p.at(R_PAREN) {
         if parse_expression(p).is_none() {
             break;
         }
@@ -84,7 +84,7 @@ pub fn parse_return_expression(p: &mut Parser) -> CompletedMarker {
 pub fn parse_prim_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expression(p),
-        IDENTIFIER => parse_reference_expression(p),
+        IDENT => parse_reference_expression(p),
         L_BRACE => Some(parse_block_expression(p)),
         L_PAREN => Some(parse_parenthesized_expression(p)),
         RETURN_KEYWORD => Some(parse_return_expression(p)),
@@ -103,7 +103,7 @@ pub fn parse_call_expression(p: &mut Parser) -> Option<CompletedMarker> {
         return m_2
     }
     if !p.eat(R_PAREN) {
-        while !p.at(END_OF_FILE) && !p.at(SEMI) && !p.at(R_BRACE) && !p.at(R_BRACKET) {
+        while !p.at(EOF) && !p.at(SEMI) && !p.at(R_BRACE) && !p.at(R_BRACKET) {
             parse_expression(p);
             if p.at(R_PAREN) {
                 break;
@@ -139,7 +139,7 @@ pub fn parse_parenthesized_pattern(_p: &mut Parser) -> CompletedMarker {
 pub fn parse_pattern(p: &mut Parser) -> Option<CompletedMarker> {
     let m = p.start();
     let m_2 = match p.current() {
-        IDENTIFIER => parse_named_pattern(p),
+        IDENT => parse_named_pattern(p),
         L_PAREN => Some(parse_parenthesized_pattern(p)),
         _ => {
             p.error_and_bump("expected pattern");
@@ -170,7 +170,7 @@ pub fn parse_named_type_expression(p: &mut Parser) -> Option<CompletedMarker> {
 
 pub fn parse_prim_type_expression(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        IDENTIFIER => parse_named_type_expression(p),
+        IDENT => parse_named_type_expression(p),
         _ => {
             p.error_and_bump("expected type expression");
             None
@@ -228,7 +228,7 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
         }
     }
     p.expect(L_PAREN);
-    while !p.at(SEMI) && !p.at(END_OF_FILE) && !p.eat(R_PAREN) {
+    while !p.at(SEMI) && !p.at(EOF) && !p.eat(R_PAREN) {
         parse_param(p);
     }
     if p.eat(R_ARROW) {
@@ -258,7 +258,7 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
         parse_expression(p);
     }
     check_semi(p);
-    m.complete(p, VAR_DECL)
+    m.complete(p, LET_STMT)
 }
 
 fn check_semi(p: &mut Parser) {
@@ -297,7 +297,7 @@ pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
 
 pub fn parse_source_file(p: &mut Parser) {
     let m = p.start();
-    while !p.at(END_OF_FILE) {
+    while !p.at(EOF) {
         parse_source_element(p);
     }
     m.complete(p, SOURCE_FILE);

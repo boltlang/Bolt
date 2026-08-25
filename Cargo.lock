@@ -112,6 +112,7 @@ dependencies = [
  "ena",
  "filetime",
  "fluent-uri 0.4.1",
+ "itertools",
  "lazy_static",
  "notify-debouncer-mini",
  "rowan",

@@ -4,10 +4,11 @@ use std::{collections::{HashMap, VecDeque}, str::Chars};
 use crate::{parser::parser::Input, syntax::SyntaxKind};
 
 use SyntaxKind::*;
+use itertools::izip;
 use lazy_static::lazy_static;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
-const EOF: char = '\u{FFFF}';
+const CHAR_EOF: char = '\u{FFFF}';
 
 #[derive(Debug, Clone)]
 pub struct Pos {
@@ -108,7 +109,7 @@ impl <'a> Lexer<Chars<'a>> {
 impl <I: Iterator<Item = char>> Lexer<I> {
 
     fn read(&mut self) -> char {
-        self.iter.next().unwrap_or(EOF)
+        self.iter.next().unwrap_or(CHAR_EOF)
     }
 
     fn get(&mut self) -> char {
@@ -116,7 +117,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             Some(ch) => ch,
             None => self.read(),
         };
-        if ch != EOF {
+        if ch != CHAR_EOF {
             self.pos.offset += 1;
             if ch == '\n' {
                 self.pos.line += 1;
@@ -147,7 +148,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
     pub fn scan(&mut self) -> SyntaxKind {
         let c0 = self.get();
         match c0 {
-            EOF => END_OF_FILE,
+            CHAR_EOF => EOF,
             ch if is_whitespace(ch) => {
                 while is_whitespace(self.peek(0)) {
                     self.get();
@@ -176,7 +177,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             '#' => {
                 loop {
                     let c1 = self.get();
-                    if c1 == '\n' || c1 == EOF {
+                    if c1 == '\n' || c1 == CHAR_EOF {
                         break;
                     }
                 }
@@ -188,7 +189,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                 while is_ident_part(self.peek(0)) {
                     name.push(self.get());
                 }
-                KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENTIFIER)
+                KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENT)
             }
             '0' => match self.get() {
                 'b' => {
@@ -254,6 +255,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
 pub struct LexResult {
     kinds: Vec<SyntaxKind>,
     lens: Vec<u32>,
+    values: Vec<Option<String>>,
 }
 
 impl LexResult {
@@ -271,13 +273,18 @@ impl LexResult {
     }
 
     pub fn to_input(&self) -> Input {
-        Input::new(
-            self.kinds
-                .iter()
-                .copied()
-                .filter(|k| !k.is_trivia())
-                .collect()
-        )
+        let mut kinds = Vec::new();
+        let mut lens = Vec::new();
+        let mut values = Vec::new();
+        for (kind, len, value) in izip!(self.kinds.iter().copied(), self.lens.iter(), self.values.iter().cloned()) {
+            if kind.is_trivia() {
+                continue;
+            }
+            kinds.push(kind);
+            lens.push(len);
+            values.push(value);
+        }
+        Input::new(kinds, values)
     }
 
 }
@@ -311,11 +318,8 @@ impl From<&Pos> for LineColumn {
     }
 }
 
-enum Frame {
-    /// Holds the textual location of the first token that introduces this line fold.
-    LineFold(LineColumn),
-    /// Holds the textual location of the keyword that introduced this block.
-    Block(LineColumn),
+fn needs_value(kind: SyntaxKind) -> bool {
+    matches!(kind, OPERATOR)
 }
 
 pub fn tokenize(text: impl Into<String>) -> LexResult {
@@ -326,6 +330,7 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
     // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
+    let mut values = Vec::new();
 
     // State
     let mut lexer = Lexer::new(text.chars());
@@ -334,13 +339,14 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
         let start = lexer.pos();
         let kind = lexer.scan();
         let end = lexer.pos();
-        if kind == END_OF_FILE {
+        if kind == EOF {
             break;
         }
 
         // Transfer the token from the input to the output vectors
         kinds.push(kind);
         lens.push((end.offset - start.offset) as u32);
+        values.push(needs_value(kind).then(|| text[start.offset..end.offset].to_string()));
     }
 
     // For debugging only
@@ -350,6 +356,7 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
 
     LexResult {
         kinds,
+        values,
         lens,
     }
 }
