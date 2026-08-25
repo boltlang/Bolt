@@ -1,6 +1,6 @@
 use crate::syntax::{LAST_TOKEN_KIND_DISCRIMINANT, SyntaxKind};
 
-
+#[derive(Clone, Copy)]
 pub struct TokenSet([u64; 3]);
 
 impl TokenSet {
@@ -34,7 +34,7 @@ impl TokenSet {
         self.0[idx] & mask != 0
     }
 
-    pub fn union(self, other: TokenSet) -> TokenSet {
+    pub const fn union(self, other: TokenSet) -> TokenSet {
         TokenSet([ self.0[0] | other.0[0], self.0[1] | other.0[1], self.0[2] | other.0[2] ])
     }
 

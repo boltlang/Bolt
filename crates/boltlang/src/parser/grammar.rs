@@ -5,7 +5,7 @@ mod item;
 
 use crate::{
     parser::{
-        grammar::{expr::parse_expression, pat::parse_pattern, ty::parse_type_expression},
+        grammar::{expr::parse_expr, pat::parse_pattern, ty::parse_type_expression},
         parser::{CompletedMarker, Parser},
         token_set::TokenSet
     },
@@ -13,6 +13,47 @@ use crate::{
 };
 
 const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENT]);
+
+/// The `parser` passed this is required to at least consume one token if it returns `true`.
+/// If the `parser` returns false, parsing will stop.
+fn delimited(
+    p: &mut Parser<'_>,
+    bra: SyntaxKind,
+    ket: SyntaxKind,
+    delim: SyntaxKind,
+    unexpected_delim_message: impl Fn() -> String,
+    first_set: TokenSet,
+    mut parser: impl FnMut(&mut Parser<'_>) -> bool,
+) {
+    p.bump(bra);
+    while !p.at(ket) && !p.at(EOF) {
+        if p.at(delim) {
+            // Recover if an argument is missing and only got a delimiter,
+            // e.g. `(a, , b)`.
+
+            // Wrap the erroneous delimiter in an error node so that fixup logic gets rid of it.
+            // FIXME: Ideally this should be handled in fixup in a structured way, but our list
+            // nodes currently have no concept of a missing node between two delimiters.
+            // So doing it this way is easier.
+            let m = p.start();
+            p.error(unexpected_delim_message());
+            p.bump(delim);
+            m.complete(p, ERROR);
+            continue;
+        }
+        if !parser(p) {
+            break;
+        }
+        if !p.eat(delim) {
+            if p.at_ts(first_set) {
+                p.error(format!("expected {delim:?}"));
+            } else {
+                break;
+            }
+        }
+    }
+    p.expect(ket);
+}
 
 fn peek_after_modifiers(p: &mut Parser) -> SyntaxKind {
     let mut i = 0;
@@ -63,7 +104,7 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
         parse_type_expression(p);
     }
     if p.eat(EQUALS) {
-        parse_expression(p);
+        parse_expr(p);
         check_semi(p);
     } else if p.at(L_BRACE) {
         parse_block(p);
@@ -83,7 +124,7 @@ pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
         parse_type_ascription(p);
     }
     if p.eat(EQUALS) {
-        parse_expression(p);
+        parse_expr(p);
     }
     check_semi(p);
     m.complete(p, LET_STMT)
@@ -100,7 +141,7 @@ fn check_semi(p: &mut Parser) {
 }
 
 pub fn parse_expression_statement(p: &mut Parser) -> Option<CompletedMarker> {
-    let m = parse_expression(p);
+    let m = parse_expr(p);
     check_semi(p);
     m
 }

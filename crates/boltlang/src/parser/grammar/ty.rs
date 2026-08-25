@@ -1,3 +1,4 @@
+
 use crate::{
     parser::parser::{Parser, CompletedMarker},
     syntax::SyntaxKind::*,
@@ -44,3 +45,11 @@ pub fn parse_type_expression(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
+/// Parse a type **without** type bounds.
+///
+/// This is e.g. used in [[parse_cast_expr]], where a cast to a type with type bounds would be
+/// illegal.
+pub fn type_no_bounds(p: &mut Parser) -> Option<CompletedMarker> {
+    // TODO change me as soon as type bounds are added
+    parse_type_expression(p)
+}
