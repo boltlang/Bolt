@@ -133,28 +133,6 @@ pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
-pub fn parse_call_expression(p: &mut Parser) -> Option<CompletedMarker> {
-    let m = p.start();
-    let m_2 = parse_atom_expr(p);
-    if !p.eat(L_PAREN) {
-        m.abandon(p);
-        return m_2
-    }
-    if !p.eat(R_PAREN) {
-        while !p.at(EOF) && !p.at(SEMI) && !p.at(R_BRACE) && !p.at(R_BRACKET) {
-            parse_expr(p);
-            if p.at(R_PAREN) {
-                break;
-            } else if p.eat(COMMA) {
-                continue;
-            }
-            p.error("expected ')' or ','");
-        }
-    }
-    p.expect(R_PAREN);
-    Some(m.complete(p, CALL_EXPR))
-}
-
 fn parse_lhs(p: &mut Parser) -> Option<CompletedMarker> {
     let m;
     let kind = match p.current() {
