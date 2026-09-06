@@ -51,7 +51,7 @@ fn main() {
         Command::Codegen(codegen_cmd) => {
             match codegen_cmd.name.as_str() {
                 "parser-tests" => {
-                    codegen::parser_inline_tests::generate(codegen_cmd.check);
+                    codegen::parser_tests::generate(codegen_cmd.check);
                 }
                 name => panic!("undefined code generator {name}"),
             }

@@ -1,4 +1,4 @@
-pub(crate) mod parser_inline_tests;
+pub(crate) mod parser_tests;
 
 use std::path::Path;
 
@@ -45,76 +45,6 @@ fn ensure_file_contents(cg: CodegenType, file: &Path, contents: &str, check: boo
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct CommentBlock {
-    pub(crate) id: String,
-    pub(crate) line: usize,
-    pub(crate) contents: Vec<String>,
-    is_doc: bool,
-}
-
-fn normalize_newlines(s: &str) -> String {
-    s.replace("\r\n", "\n")
-}
-
-impl CommentBlock {
-    fn extract(tag: &str, text: &str) -> Vec<CommentBlock> {
-        assert!(tag.starts_with(char::is_uppercase));
-
-        let tag = format!("{tag}:");
-        let mut blocks = CommentBlock::extract_untagged(text);
-        blocks.retain_mut(|block| {
-            let first = block.contents.remove(0);
-            let Some(id) = first.strip_prefix(&tag) else {
-                return false;
-            };
-
-            if block.is_doc {
-                panic!("Use plain (non-doc) comments with tags like {tag}:\n    {first}");
-            }
-
-            id.trim().clone_into(&mut block.id);
-            true
-        });
-        blocks
-    }
-
-    fn extract_untagged(text: &str) -> Vec<CommentBlock> {
-        let mut res = Vec::new();
-
-        let lines = text.lines().map(str::trim_start);
-
-        let dummy_block =
-            CommentBlock { id: String::new(), line: 0, contents: Vec::new(), is_doc: false };
-        let mut block = dummy_block.clone();
-        for (line_num, line) in lines.enumerate() {
-            match line.strip_prefix("//") {
-                Some(mut contents) if !contents.starts_with('/') => {
-                    if let Some('/' | '!') = contents.chars().next() {
-                        contents = &contents[1..];
-                        block.is_doc = true;
-                    }
-                    if let Some(' ') = contents.chars().next() {
-                        contents = &contents[1..];
-                    }
-                    block.contents.push(contents.to_owned());
-                }
-                _ => {
-                    if !block.contents.is_empty() {
-                        let block = std::mem::replace(&mut block, dummy_block.clone());
-                        res.push(block);
-                    }
-                    block.line = line_num + 2;
-                }
-            }
-        }
-        if !block.contents.is_empty() {
-            res.push(block);
-        }
-        res
-    }
-}
-
 fn reformat(text: String) -> String {
     let sh = Shell::new().unwrap();
     let rustfmt_toml = project_root().join("rustfmt.toml");
@@ -149,4 +79,9 @@ fn reformat(text: String) -> String {
         stdout.push('\n');
     }
     stdout
+}
+
+
+fn normalize_newlines(s: &str) -> String {
+    s.replace("\r\n", "\n")
 }
