@@ -63,7 +63,7 @@ pub fn parse_file(db: &dyn Db, file: File) -> DbNode<'_> {
     let text = source_text(db, file);
     let (node, diagnostics) = boltlang_parser::parse_file(&text);
     for d in diagnostics {
-        DbDiagnostic::new(Diagnostic::SyntaxDiagnostic(d.into()).with_file(file)).accumulate(db);
+        DbDiagnostic::new(Diagnostic::Parse(d.into()).with_file(file)).accumulate(db);
     }
     DbNode::new(db, node)
 }

@@ -96,7 +96,7 @@ impl DbDiagnostic {
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub enum Diagnostic {
     BindingNotFound(BindingNotFoundDiagnostic),
-    SyntaxDiagnostic(SyntaxDiagnostic),
+    Parse(boltlang_parser::Diagnostic),
     TypeMismatch(TypeMismatchDiagnostic),
     InfiniteType(InfiniteTypeDiagnostic),
     ConArgsLengthMismatch(ConArgsLengthMismatchDiagnostic),
@@ -108,27 +108,27 @@ impl Diagnostic {
 
     pub fn code(&self) -> u16 {
         match self {
-            Self::SyntaxDiagnostic(diag) => diag.code(),
-            Self::BindingNotFound(diag) => diag.code(),
-            Self::TypeMismatch(diag) => diag.code(),
-            Self::InfiniteType(diag) => diag.code(),
-            Self::ConArgsLengthMismatch(diag) => diag.code(),
+            Self::Parse(_) => 1001,
+            Self::BindingNotFound(_) => 2001,
+            Self::TypeMismatch(_) => 2010,
+            Self::InfiniteType(_) => 2011,
+            Self::ConArgsLengthMismatch(_) => 2012,
         }
     }
 
     pub fn severity(&self) -> Severity {
         match self {
-            Self::SyntaxDiagnostic(diag) => diag.severity(),
-            Self::BindingNotFound(diag) => diag.severity(),
-            Self::TypeMismatch(diag) => diag.severity(),
-            Self::InfiniteType(diag) => diag.severity(),
-            Self::ConArgsLengthMismatch(diag) => diag.severity(),
+            Self::Parse(_) => Severity::Error,
+            Self::BindingNotFound(_) => Severity::Error,
+            Self::TypeMismatch(_) => Severity::Error,
+            Self::InfiniteType(_) => Severity::Error,
+            Self::ConArgsLengthMismatch(_) => Severity::Error,
         }
     }
 
     pub fn span(&self) -> &Span {
         match self {
-            Self::SyntaxDiagnostic(diag) => diag.span(),
+            Self::Parse(diag) => diag.span(),
             Self::BindingNotFound(diag) => diag.span(),
             Self::TypeMismatch(diag) => diag.span(),
             Self::InfiniteType(diag) => diag.span(),
@@ -145,7 +145,7 @@ impl Diagnostic {
 impl Display for Diagnostic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::SyntaxDiagnostic(diag) => std::fmt::Display::fmt(diag, f),
+            Self::Parse(diag) => std::fmt::Display::fmt(diag, f),
             Self::BindingNotFound(diag) => std::fmt::Display::fmt(diag, f),
             Self::TypeMismatch(diag) => std::fmt::Display::fmt(diag, f),
             Self::InfiniteType(diag) => std::fmt::Display::fmt(diag, f),
@@ -154,54 +154,9 @@ impl Display for Diagnostic {
     }
 }
 
-/// Public-facing parse error.
-#[derive(Debug, Clone, Eq, PartialEq)]
-pub struct SyntaxDiagnostic {
-    pub message: String,
-    pub span: Span,
-}
-
-impl From<boltlang_parser::Diagnostic> for SyntaxDiagnostic {
+impl From<boltlang_parser::Diagnostic> for Diagnostic {
     fn from(value: boltlang_parser::Diagnostic) -> Self {
-        SyntaxDiagnostic {
-            message: value.message,
-            span: value.span,
-        }
-    }
-}
-
-impl SyntaxDiagnostic {
-
-    pub fn new(message: String, span: Span) -> Self {
-        Self {
-            message,
-            span,
-        }
-    }
-
-    fn code(&self) -> u16 {
-        CODE_SYNTAX_ERROR
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
-
-    fn span(&self) -> &Span  {
-        &self.span
-    }
-
-}
-
-impl Display for SyntaxDiagnostic {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl From<SyntaxDiagnostic> for Diagnostic {
-    fn from(value: SyntaxDiagnostic) -> Self {
-        Diagnostic::SyntaxDiagnostic(value)
+        Diagnostic::Parse(value)
     }
 }
 
