@@ -17,8 +17,8 @@ fn fac(n: Int) -> Int {
 }
 ```
 
-Bolt is a new strictly-evaluated functional programming language in the making
-that aims to make writing complex applications dead-simple. It ships with some
+Bolt is a new strictly-evaluated programming language in the making that aims
+to make writing complex applications dead-simple. It ships with some
 nice goodies, including:
 
  - **Static type checking** will catch hundreds of bugs before a single line of
@@ -33,47 +33,93 @@ nice goodies, including:
 
 _Note that these examples are stil in the design phase and not able to compile._
 
+All objects are garbage-collected and passed by reference, meaning you can do
+things like the following without a problem:
+
+```rust
+struct Node {
+    value: Int,
+    children: Vec<Node>,
+    parent: Option<Node>,
+}
+
+impl Node {
+
+    pub fn new(value: Int) -> Node {
+        Node {
+            value,
+            children: Vec::new(),
+            parent: None,
+        }
+    }
+
+}
+
+let mut root = Node::new(1);
+
+let mut left = Node::new(2);
+root.children.push(left);
+left.parent = root;
+
+let mut right = Node::new(3);
+root.children.push(right);
+right.parent = root;
+
+root.children.get(0).unwrap().value = 42;
+assert!(left.value == 42);
+```
+
 Here are some records we define in Bolt:
 
-```
-struct Dog.
-  name: String
-  age: i32
+```rust
+struct Dog {
+    name: String,
+    age: i32,
+}
 
 let spike = Dog {
     name = "Spike",
     age = 5
-  }
+}
 
 # Shorthand
-let sadie = Dog "Sadie" 12
+let sadie = Dog("Sadie", 12)
 
-print f"Hey look! {spike.name} and {sadie.name} are playing together!"
+print(f"Hey look! {spike.name} and {sadie.name} are playing together!");
 ```
 
 Records are _extensible_, meaning that you can do things like this:
 
-```
-fn greet { name, .. } = print f"Hello, {name}!"
+```rust
+fn greet({ name, .. }) {
+    print(f"Hello, {name}!");
+}
 
-greet sadie
-greet spike
-greet { name = "Sam", company = "Accelera" }
+greet(sadie);
+greet(spike);
+greet({ name = "Sam", company = "Accelera" });
 ```
 
 Bolt will also support traits/type classes, like in Rust and Haskell:
 
-```
-trait Shout a.
-  let shout : a -> String
+```rust
+trait Shout a {
+  fn shout(self: a) -> String;
+}
 
-impl Shout Dog.
-    let shout _ = "Bark, bark!"
+impl Shout Dog {
+    fn shout(self) {
+        print("Bark, bark!");
+    }
+}
 
-# Imagine somewhere in another library Cat is defined ...
+// Imagine somewhere in another library Cat is defined ...
 
-impl Shout Cat.
-    let shout _ = "Miau! Miau!"
+impl Shout Cat {
+    fn shout(self) {
+        print("Miau! Miau!");
+    }
+}
 ```
 
 Here's an example of a [React](https://react.dev/)-like framework in Bolt:
@@ -83,16 +129,28 @@ _Note that this example is very experimental._
 ```
 import "html" ( Html )
 
-fn app : Html.
+fn app() -> Html {
 
-  let user = perform get_state
+    rx user = None;
 
-  return match user.
-    None => do
-      Future.when_done (fetch "/api/login") \data -> do
-        perform set_state data
-      h1 [ "Please log in." ]
-    Some { name, .. } => h1 [ f"Welcome Back, {fullname}" ]
+    match user {
+        None => {
+            let { data, isLoading, isError, isOk } = fetch("/api/login");
+            if isLoading {
+                return <h1>Processing ...</h1>;
+            }
+            if isError {
+                return <h1>Something went wrong.</h1>;
+            }
+            if isOk {
+                user = Some({ username: data.username });
+                return <h1>Logging in ...</h1>;
+            }
+            <h1>Please log in.</h1>
+        }
+        Some({ name, .. }) => <h1>Welcome Back, {username}</h1>
+    }
+}
 ```
 
 ## Core Principles
