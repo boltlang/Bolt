@@ -1,0 +1,7 @@
+---
+source: crates/boltlang-parser/tests/parser.rs
+expression: "& stringify(node, diags)"
+---
+- LIT_EXPR
+- - BIN_INT
+  - '0b1100110'
