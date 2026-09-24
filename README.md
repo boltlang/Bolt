@@ -55,6 +55,8 @@ impl Node {
 
 }
 
+// Build the tree
+
 let mut root = Node::new(1);
 
 let mut left = Node::new(2);
@@ -65,7 +67,10 @@ let mut right = Node::new(3);
 root.children.push(right);
 right.parent = root;
 
+// Now set the leftmost node's value to 42
 root.children.get(0).unwrap().value = 42;
+
+// Because everthing is managed by references, the variable `left` will be upated!
 assert!(left.value == 42);
 ```
 
@@ -82,7 +87,7 @@ let spike = Dog {
     age = 5
 }
 
-# Shorthand
+// Shorthand
 let sadie = Dog("Sadie", 12)
 
 print(f"Hey look! {spike.name} and {sadie.name} are playing together!");
