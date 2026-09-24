@@ -19,10 +19,12 @@ pub use {
     parser::Parser,
 };
 
-use crate::lexer::tokenize;
+use crate::{diagnostic::Diagnostics, lexer::tokenize};
 
+// TODO maybe replace me with parse()
 pub fn parse_file(text: &str) -> (GreenNode, Vec<Diagnostic>) {
-    let lexed = lexer::tokenize(text);
+    let mut diags = Diagnostics::new();
+    let lexed = tokenize(text, &mut diags);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
     grammar::parse_source_file(&mut p);
@@ -30,15 +32,18 @@ pub fn parse_file(text: &str) -> (GreenNode, Vec<Diagnostic>) {
         p.finish().into_iter(),
         &lexed
     );
-    process_events(
+    let node = process_events(
         interspersed.into_iter(),
         &lexed,
-        &text
-    )
+        &text,
+        &mut diags
+    );
+    (node, diags.take_diagnostics())
 }
 
 pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec<Diagnostic>) {
-    let lexed = tokenize(text);
+    let mut diags = Diagnostics::new();
+    let lexed = tokenize(text, &mut diags);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
     rule(&mut p);
@@ -49,9 +54,11 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
         p.finish().into_iter(),
         &lexed
     );
-    process_events(
+    let node = process_events(
         interspersed.into_iter(),
         &lexed,
-        &text
-    )
+        &text,
+        &mut diags
+    );
+    (node, diags.take_diagnostics())
 }

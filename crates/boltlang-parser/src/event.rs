@@ -2,7 +2,7 @@
 use std::num::NonZeroU32;
 
 use boltlang_syntax::SyntaxKind::{self, TOMBSTONE};
-use crate::{rowan::{GreenNode, GreenNodeBuilder}, Diagnostic, lexer::LexResult};
+use crate::{diagnostic::{Diagnostics, ExpectedTokenDiagnostic}, lexer::LexResult, rowan::{GreenNode, GreenNodeBuilder}};
 
 /// Intermediate error structure generated during parsing.
 pub type ParseError = String;
@@ -57,21 +57,21 @@ impl Event {
 pub fn process_events<I: Iterator<Item = Event>>(
     events: I,
     lexed: &LexResult,
-    text: &str
-) -> (GreenNode, Vec<Diagnostic>) {
-    let mut processor = EventProcessor::new(lexed, text);
+    text: &str,
+    diags: &mut Diagnostics,
+) -> GreenNode {
+    let mut processor = EventProcessor::new(lexed, text, diags);
     for event in events {
         processor.feed_event(event);
     }
     debug_assert!(processor.pos == lexed.len());
-    (processor.builder.finish(), processor.errors)
+    processor.builder.finish()
 }
 
-struct EventProcessor<'lex, 'text, 'cache> {
+struct EventProcessor<'lex, 'text, 'cache, 'diag> {
     lexed: &'lex LexResult,
     text: &'text str,
-    /// Kept to store on any diagnostics
-    errors: Vec<Diagnostic>,
+    diags: &'diag mut Diagnostics,
     builder: GreenNodeBuilder<'cache>,
     /// Which token is being inspected
     pos: u32,
@@ -79,13 +79,13 @@ struct EventProcessor<'lex, 'text, 'cache> {
     text_pos: usize,
 }
 
-impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
+impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
 
-    fn new(lexed: &'lex LexResult, text: &'text str) -> Self {
+    fn new(lexed: &'lex LexResult, text: &'text str, diags: &'diag mut Diagnostics) -> Self {
         Self {
             lexed,
             text,
-            errors: Vec::new(),
+            diags,
             builder: GreenNodeBuilder::new(),
             pos: 0,
             text_pos: 0,
@@ -118,7 +118,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
             }
             Event::Error { msg } => {
                 let start  = self.text_pos;
-                self.errors.push(Diagnostic::new(msg, start..start).into());
+                self.diags.push(ExpectedTokenDiagnostic::new(msg, start..start).into());
             }
             Event::Finish => {
                 self.builder.finish_node();

@@ -48,62 +48,64 @@ mod test {
         String::from_utf8_lossy_owned(cursor.into_inner())
     }
 
-    macro_rules! assert_parse_fail {
-        ($lit:literal, $expr:expr) => {
-
-        };
-    }
-
     #[test]
     fn test_a_string_is_some_text_wrapped_in_two_double_quotes() {
         assert_snapshot!(&output("\"foobar\"", parse_expr));
     }
+
     #[test]
-    fn test_a_string_is_some_text_wrapped_in_two_double_quotes_1() {
-        assert_parse_fail!("\"foobar", parse_expr);
+    fn test_a_string_is_some_text_wrapped_in_two_double_quotes_missing_right_quote() {
+        assert_snapshot!(&output("\"foobar", parse_expr));
     }
-    #[test]
-    fn test_a_string_is_some_text_wrapped_in_two_double_quotes_2() {
-        assert_parse_fail!("foobar\"", parse_expr);
-    }
+
     #[test]
     fn test_the_empty_string_is_a_valid_string() {
         assert_snapshot!(&output("\"\"", parse_expr));
     }
+
     #[test]
     fn test_a_string_may_contain_spaces() {
         assert_snapshot!(&output("\"Hello, world!\"", parse_expr));
     }
+
     #[test]
     fn test_a_string_may_contain_spaces_1() {
         assert_snapshot!(&output("0b1100110", parse_expr));
     }
+
     #[test]
     fn test_a_string_may_contain_spaces_2() {
         assert_snapshot!(&output("0o73651", parse_expr));
     }
+
     #[test]
     fn test_digits_are_valid_numbers() {
         assert_snapshot!(&output("1", parse_expr));
     }
+
     #[test]
     fn test_digits_are_valid_numbers_1() {
         assert_snapshot!(&output("2", parse_expr));
     }
+
     #[test]
     fn test_digits_are_valid_numbers_2() {
         assert_snapshot!(&output("3", parse_expr));
     }
+
     #[test]
     fn test_digits_are_valid_numbers_3() {
         assert_snapshot!(&output("42", parse_expr));
     }
+
     #[test]
     fn test_digits_are_valid_numbers_4() {
         assert_snapshot!(&output("123456", parse_expr));
     }
+
     #[test]
     fn test_digits_are_valid_numbers_5() {
         assert_snapshot!(&output("0xffab23", parse_expr));
     }
+
 }

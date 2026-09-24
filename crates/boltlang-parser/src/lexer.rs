@@ -1,8 +1,9 @@
 
 use std::{collections::{HashMap, VecDeque}, str::Chars};
 
+use boltlang_common::Span;
 use boltlang_syntax::SyntaxKind::{self, *};
-use crate::{parser::Input};
+use crate::{diagnostic::{Diagnostics, UnexpectedCharDiagnostic}, parser::Input};
 
 use itertools::izip;
 use lazy_static::lazy_static;
@@ -37,14 +38,12 @@ impl Default for Pos {
     }
 }
 
-pub struct Lexer<I> {
+pub struct Lexer<'d, I> {
     iter: I,
     buffer: VecDeque<char>,
     pos: Pos,
-    errors: Vec<Error>,
+    diags: &'d mut Diagnostics,
 }
-
-type Error = String;
 
 const fn is_whitespace(ch: char) -> bool {
     matches!(ch, ' ' | '\n' | '\t' | '\r')
@@ -93,20 +92,20 @@ lazy_static! {
     };
 }
 
-impl <'a> Lexer<Chars<'a>> {
+impl <'d, 'a> Lexer<'d, Chars<'a>> {
 
-    pub fn new(iter: Chars<'a>) -> Self {
+    pub fn new(iter: Chars<'a>, diags: &'d mut Diagnostics) -> Self {
         Self {
             iter,
             pos: Pos::default(),
             buffer: VecDeque::new(),
-            errors: Vec::new(),
+            diags,
         }
     }
 
 }
 
-impl <I: Iterator<Item = char>> Lexer<I> {
+impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
 
     fn read(&mut self) -> char {
         self.iter.next().unwrap_or(CHAR_EOF)
@@ -137,8 +136,8 @@ impl <I: Iterator<Item = char>> Lexer<I> {
         self.buffer[n]
     }
 
-    fn error(&mut self, msg: impl Into<String>) {
-        self.errors.push(msg.into());
+    fn error(&mut self, msg: impl Into<String>, span: Span) {
+        self.diags.push(UnexpectedCharDiagnostic { message: msg.into(), span }.into());
     }
 
     pub fn pos(&self) -> Pos {
@@ -168,6 +167,11 @@ impl <I: Iterator<Item = char>> Lexer<I> {
             '"' => {
                 loop {
                     let c1 = self.get();
+                    if c1 == CHAR_EOF {
+                        self.error("expected '\"' to delimit the string literal but found end-of-file", self.pos.offset-1..self.pos.offset);
+                        // TODO backtrack to the firsst brace or paren after the string and take that string?
+                        break;
+                    }
                     if c1 == '"' {
                         break;
                     }
@@ -217,7 +221,7 @@ impl <I: Iterator<Item = char>> Lexer<I> {
                     DEC_INT
                 }
                 c1 if is_ident_part(c1) => {
-                    self.error("identifiers may not begin with decimal digits");
+                    self.error("identifiers may not begin with decimal digits", self.pos.offset-1..self.pos.offset);
                     ERROR
                 }
                 _ => DEC_INT
@@ -322,7 +326,7 @@ fn needs_value(kind: SyntaxKind) -> bool {
     matches!(kind, OPERATOR)
 }
 
-pub fn tokenize(text: impl Into<String>) -> LexResult {
+pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
 
     // Input
     let text = text.into();
@@ -333,7 +337,7 @@ pub fn tokenize(text: impl Into<String>) -> LexResult {
     let mut values = Vec::new();
 
     // State
-    let mut lexer = Lexer::new(text.chars());
+    let mut lexer = Lexer::new(text.chars(), diags);
 
     loop {
         let start = lexer.pos();

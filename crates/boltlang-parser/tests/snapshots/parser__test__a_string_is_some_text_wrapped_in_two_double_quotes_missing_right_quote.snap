@@ -1,0 +1,13 @@
+---
+source: crates/boltlang-parser/tests/parser.rs
+expression: "&output(\"\\\"foobar\", parse_expr)"
+---
+- LIT_EXPR
+- - STRING
+  - '"foobar'
+---
+!UnexpectedChar
+message: expected '"' to delimit the string literal but found end-of-file
+span:
+  start: 6
+  end: 7
