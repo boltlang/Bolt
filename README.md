@@ -131,7 +131,7 @@ Here's an example of a [React](https://react.dev/)-like framework in Bolt:
 
 _Note that this example is very experimental._
 
-```
+```rust
 import "html" ( Html )
 
 fn app() -> Html {
