@@ -5,12 +5,6 @@ use crate::{tc::{ConId, Provenance, SymbolKind, TVar}, File, Type};
 
 pub type Span = std::ops::Range<usize>;
 
-pub const CODE_SYNTAX_ERROR: u16 = 1;
-pub const CODE_BINDING_NOT_FOUND: u16 = 2;
-pub const CODE_EXPECTED_UNIFY: u16 = 5;
-pub const CODE_INFINITE_TYPE: u16 = 6;
-pub const CODE_CON_ARGS_LENGTH_MISMATCH: u16 = 7;
-
 #[salsa::accumulator]
 #[derive(Debug, Clone, Eq, PartialEq)]
 pub struct DbDiagnostic {
