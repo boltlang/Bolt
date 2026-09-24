@@ -34,7 +34,7 @@ pub fn transitive_imports(db: &dyn Db, file: File) -> Vec<File> {
         }
         visited.insert(file.clone());
         for file_2 in import_paths(db, file) {
-            visit(db, file_2, visited);
+            visit(db, *file_2, visited);
         }
     }
 

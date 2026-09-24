@@ -176,7 +176,7 @@ impl File {
             // }
             FilePath::SystemVirtual(_) => {
                 tracing::debug!("Updating the revision of `{:?}`", self.path(db));
-                let current_revision = self.revision(db);
+                let current_revision = *self.revision(db);
                 self.set_revision(db)
                     .to(FileRevision::new(current_revision.as_u128() + 1));
             }
@@ -204,17 +204,17 @@ impl File {
             _ => (FileStatus::NotFound, FileRevision::zero(), None),
         };
 
-        if file.status(db) != status {
+        if *file.status(db) != status {
             tracing::debug!("Updating the status of `{:?}`", file.path(db));
             file.set_status(db).to(status);
         }
 
-        if file.revision(db) != revision {
+        if *file.revision(db) != revision {
             tracing::debug!("Updating the revision of `{:?}`", file.path(db));
             file.set_revision(db).to(revision);
         }
 
-        if file.permissions(db) != permission {
+        if *file.permissions(db) != permission {
             tracing::debug!("Updating the permissions of `{:?}`", file.path(db));
             file.set_permissions(db).to(permission);
         }

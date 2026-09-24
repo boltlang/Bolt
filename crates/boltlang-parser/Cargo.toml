@@ -9,7 +9,7 @@ boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
 drop_bomb = "0.1.5"
 itertools = "0.15.0"
 lazy_static = "1.5.0"
-salsa = "0.28.4"
+salsa = "0.28.5"
 serde = { version = "1.0.229", features = ["derive"] }
 unicode-ident = "1.0.26"
 
