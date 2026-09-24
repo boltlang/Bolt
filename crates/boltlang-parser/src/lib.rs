@@ -11,11 +11,13 @@ pub use boltlang_syntax::rowan;
 use rowan::GreenNode;
 
 pub(crate) use event::{process_events, intersperse_trivia};
-pub(crate) use parser::Parser;
 
 pub use diagnostic::Diagnostic;
 
-pub use lexer::LineColumn;
+pub use {
+    lexer::LineColumn,
+    parser::Parser,
+};
 
 use crate::lexer::tokenize;
 
