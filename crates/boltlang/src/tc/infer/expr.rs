@@ -1,5 +1,7 @@
+use itertools::Itertools;
+
 use crate::{
-    BlockExpr, CallExpr, Expr, FunExpr, LitExpr, NamedExpr, Node, SourceElement, util::IterExt
+    BlockExpr, CallExpr, Expr, FunExpr, LitExpr, NamedExpr, Node, SourceElement
 };
 
 use super::{
@@ -93,7 +95,7 @@ impl InferContext {
             return (GenOut::new(), UNIT_TYPE.clone());
         }
         let mut out = GenOut::new();
-        for element in elements.iter().skip_last(1) {
+        for element in elements.iter().dropping_back(1) {
             let el_out = self.infer_element(element, false, env);
             out.extend(el_out);
         }

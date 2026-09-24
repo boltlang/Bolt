@@ -1,5 +1,4 @@
 
-mod util;
 mod error;
 
 mod vfs;
@@ -11,9 +10,6 @@ mod db;
 
 mod text;
 mod import;
-mod syntax;
-mod parser;
-mod ast;
 mod tc;
 
 mod emit;
@@ -21,13 +17,15 @@ mod emit;
 use std::{collections::HashMap, hash::BuildHasherDefault};
 use rustc_hash::FxHasher;
 use salsa::Accumulator;
-use crate::tc::InferContext;
+use rowan::GreenNode;
+
+use crate::{tc::InferContext, text::source_text};
 
 /// Re-export of the Salsa library that boltlang uses
 pub use salsa;
 
 /// Re-export of the Rowan library that boltlang uses
-pub use rowan;
+pub use boltlang_syntax::rowan;
 
 pub type OwnedUri = String;
 
@@ -37,14 +35,12 @@ pub type FxDashMap<K, V> = dashmap::DashMap<K, V, BuildHasherDefault<FxHasher>>;
 pub type FxDashSet<K> = dashmap::DashSet<K, BuildHasherDefault<FxHasher>>;
 
 pub use {
-    ast::*,
     db::Db,
     diagnostic::{DbDiagnostic, Diagnostic, Severity},
     error::{Error, Result},
     files::{File, FilePath, Files},
-    parser::lexer::LineColumn,
-    parser::parse_file,
-    syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement, DbNode},
+    boltlang_parser::{LineColumn},
+    boltlang_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement, ast::*},
     system::{System, SystemPath, SystemPathBuf, WritableSystem, OsSystem, InMemorySystem},
     tc::{Type, CheckResult, Constraints},
     text::{LineIndex, index_lines},
@@ -56,9 +52,27 @@ pub use {
 pub use crate::system::TestSystem;
 
 #[salsa::tracked]
+pub struct DbNode<'db> {
+    #[tracked]
+    #[returns(ref)]
+    pub node: GreenNode,
+}
+
+#[salsa::tracked]
+pub fn parse_file(db: &dyn Db, file: File) -> DbNode<'_> {
+    let text = source_text(db, file);
+    let (node, diagnostics) = boltlang_parser::parse_file(&text);
+    for d in diagnostics {
+        DbDiagnostic::new(Diagnostic::SyntaxDiagnostic(d.into()).with_file(file)).accumulate(db);
+    }
+    DbNode::new(db, node)
+}
+
+#[salsa::tracked]
 pub fn check_file(db: &dyn Db, file: File) -> CheckResult {
-    let node = parse_file(db, file);
-    let source_file = SourceFile::wrap(SyntaxNode::new_root(node.node(db).clone()));
+    let raw_node = parse_file(db, file);
+    let node = SyntaxNode::new_root(raw_node.node(db).clone());
+    let source_file = SourceFile::wrap(node);
     let mapping = HashMap::new();
     let mut infer = InferContext::new();
     let res = infer.infer_source_file(&source_file);

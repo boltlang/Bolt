@@ -1,8 +1,8 @@
 
+use boltlang_syntax::SyntaxKind::*;
 use crate::{
-    parser::parser::{Parser, CompletedMarker},
-    syntax::SyntaxKind::*,
-    parser::grammar::PATH_NAME_REF_KINDS
+    parser::{Parser, CompletedMarker},
+    grammar::PATH_NAME_REF_KINDS
 };
 
 pub fn parse_named_type_expression(p: &mut Parser) -> Option<CompletedMarker> {

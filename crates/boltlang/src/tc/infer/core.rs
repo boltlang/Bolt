@@ -1,8 +1,9 @@
 use std::{collections::{HashMap, HashSet}, fmt::Display};
 
+use drop_bomb::DropBomb;
 use lazy_static::lazy_static;
 
-use crate::{Diagnostic, SyntaxKind::*, SyntaxToken, Type, diagnostic::{BindingNotFoundDiagnostic, Span}, tc::{TVSub, solve::{Constraint, Solver}, types::TVar}, util::DropBomb};
+use crate::{Diagnostic, SyntaxKind::*, SyntaxToken, Type, diagnostic::{BindingNotFoundDiagnostic, Span}, tc::{TVSub, solve::{Constraint, Solver}, types::TVar}};
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum SymbolKind {

@@ -1,10 +1,9 @@
+use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
-    SyntaxKind, parser::{
-        Parser,
-        grammar::{PATH_NAME_REF_KINDS, delimited},
-        parse_block,
-        parser::{CompletedMarker, Marker}, token_set::TokenSet
-    }, syntax::SyntaxKind::*
+    Parser,
+    grammar::{PATH_NAME_REF_KINDS, delimited, parse_block},
+    parser::{CompletedMarker, Marker},
+    token_set::TokenSet
 };
 
 pub(super) const PATH_FIRST: TokenSet = TokenSet::new(&[
@@ -58,7 +57,7 @@ const LHS_FIRST: TokenSet =
 
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
-pub(in crate::parser::grammar) const EXPR_RECOVERY_SET: TokenSet =
+pub(in crate::grammar) const EXPR_RECOVERY_SET: TokenSet =
     TokenSet::new(&[R_BRACE, R_PAREN, R_BRACKET, COMMA]);
 
 pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {

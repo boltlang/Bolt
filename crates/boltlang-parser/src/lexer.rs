@@ -1,9 +1,9 @@
 
 use std::{collections::{HashMap, VecDeque}, str::Chars};
 
-use crate::{parser::parser::Input, syntax::SyntaxKind};
+use boltlang_syntax::SyntaxKind::{self, *};
+use crate::{parser::Input};
 
-use SyntaxKind::*;
 use itertools::izip;
 use lazy_static::lazy_static;
 use unicode_ident::{is_xid_continue, is_xid_start};

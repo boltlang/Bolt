@@ -1,4 +1,6 @@
 
+pub mod ast;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[allow(non_camel_case_types)]
 #[repr(u16)]
@@ -149,6 +151,8 @@ pub enum SyntaxKind {
 }
 use SyntaxKind::*;
 use rowan::GreenNode;
+
+pub use rowan;
 
 pub const LAST_TOKEN_KIND_DISCRIMINANT: usize = YIELD_KEYWORD as usize;
 

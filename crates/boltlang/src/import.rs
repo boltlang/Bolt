@@ -1,9 +1,7 @@
 
 use std::collections::HashSet;
 
-use rowan::SyntaxNode;
-
-use crate::{Db, File, Node, SourceFile, parse_file};
+use crate::{rowan::SyntaxNode, Db, File, Node, SourceFile, parse_file};
 
 /// Returns all import paths in a given file.
 #[salsa::tracked]

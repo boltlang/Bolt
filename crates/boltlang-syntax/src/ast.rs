@@ -3,7 +3,8 @@ use std::{marker::PhantomData};
 
 use rowan::SyntaxElement;
 
-use crate::{syntax::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken}, util::IterExt};
+use boltlang_common::IterExt;
+use crate::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
 
 pub trait Node : Sized {
 

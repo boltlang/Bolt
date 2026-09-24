@@ -1,7 +1,9 @@
 
 use std::{collections::HashMap, num::NonZeroU32};
 
-use crate::{parser::{event::Event, token_set::TokenSet}, syntax::SyntaxKind, util::DropBomb};
+use boltlang_syntax::SyntaxKind;
+use boltlang_common::DropBomb;
+use crate::{event::Event, token_set::TokenSet};
 
 use SyntaxKind::*;
 
@@ -55,7 +57,7 @@ impl Marker {
 
 }
 
-pub(crate) struct CompletedMarker {
+pub struct CompletedMarker {
     start_pos: u32,
     end_pos: u32,
     kind: SyntaxKind,

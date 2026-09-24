@@ -1,0 +1,18 @@
+[package]
+name = "boltlang-parser"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+boltlang-common = { version = "0.1.0", path = "../boltlang-common" }
+boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+drop_bomb = "0.1.5"
+itertools = "0.15.0"
+lazy_static = "1.5.0"
+salsa = "0.28.4"
+serde = { version = "1.0.229", features = ["derive"] }
+unicode-ident = "1.0.26"
+
+[dev-dependencies]
+insta = { version = "1.48.0", features = ["yaml"] }
+yaml_serde = "0.10.7"

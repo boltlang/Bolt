@@ -1,8 +1,10 @@
 [workspace]
 resolver = "3"
 members = [
-  "xtask",
+  "crates/boltlang-common",
+  "crates/boltlang-syntax",
+  "crates/boltlang-parser",
   "crates/boltlang",
   "crates/boltlang-cli",
-  "crates/bolt-language-server", "xtask",
+  "crates/bolt-language-server",
 ]

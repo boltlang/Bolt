@@ -1,4 +1,6 @@
-use crate::{Db, File, FilePath, parser::lexer::LineColumn};
+use boltlang_parser::LineColumn;
+
+use crate::{Db, File, FilePath};
 
 const UNICODE_NEWLINE: u32 = 0x000A;
 const UNICODE_INVALID: u32 = 0xFFFD;
@@ -148,7 +150,8 @@ pub fn source_text(db: &dyn Db, file: File) -> String {
 
 #[cfg(test)]
 mod test {
-    use crate::{parser::lexer::LineColumn, text::LineIndex};
+    use boltlang_parser::LineColumn;
+    use super::LineIndex;
 
     #[test]
     fn test_get_offset_from_line_column() {

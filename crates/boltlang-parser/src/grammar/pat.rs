@@ -1,4 +1,5 @@
-use crate::{SyntaxKind::*, parser::{Parser, grammar::{PATH_NAME_REF_KINDS, ty::parse_type_expression}, parser::CompletedMarker}};
+use boltlang_syntax::SyntaxKind::*;
+use crate::{Parser, grammar::{PATH_NAME_REF_KINDS, ty::parse_type_expression}, parser::CompletedMarker};
 
 pub fn parse_named_pattern(p: &mut Parser) -> Option<CompletedMarker> {
     if p.at_ts(PATH_NAME_REF_KINDS) {

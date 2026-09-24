@@ -1,11 +1,8 @@
 
 use std::num::NonZeroU32;
 
-use rowan::{GreenNode, GreenNodeBuilder};
-
-use crate::{
-    Diagnostic, SyntaxKind::TOMBSTONE, diagnostic::SyntaxDiagnostic, parser::lexer::LexResult, syntax::SyntaxKind
-};
+use boltlang_syntax::SyntaxKind::{self, TOMBSTONE};
+use crate::{rowan::{GreenNode, GreenNodeBuilder}, Diagnostic, lexer::LexResult};
 
 /// Intermediate error structure generated during parsing.
 pub type ParseError = String;
@@ -121,7 +118,7 @@ impl <'lex, 'text, 'cache> EventProcessor<'lex, 'text, 'cache> {
             }
             Event::Error { msg } => {
                 let start  = self.text_pos;
-                self.errors.push(SyntaxDiagnostic::new(msg, start..start).into());
+                self.errors.push(Diagnostic::new(msg, start..start).into());
             }
             Event::Finish => {
                 self.builder.finish_node();

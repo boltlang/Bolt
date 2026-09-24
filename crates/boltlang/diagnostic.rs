@@ -1,7 +1,7 @@
 
 use std::fmt::{Debug, Display};
 
-use crate::{tc::{ConId, Provenance, SymbolKind, TVar}, File, Type};
+use crate::File;
 
 pub type Span = std::ops::Range<usize>;
 
@@ -159,15 +159,6 @@ impl Display for Diagnostic {
 pub struct SyntaxDiagnostic {
     pub message: String,
     pub span: Span,
-}
-
-impl From<boltlang_parser::Diagnostic> for SyntaxDiagnostic {
-    fn from(value: boltlang_parser::Diagnostic) -> Self {
-        SyntaxDiagnostic {
-            message: value.message,
-            span: value.span,
-        }
-    }
 }
 
 impl SyntaxDiagnostic {

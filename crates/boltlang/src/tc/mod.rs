@@ -6,7 +6,7 @@ mod unify;
 
 use std::collections::HashMap;
 
-use rowan::GreenNode;
+use crate::rowan::GreenNode;
 
 pub use infer::{SymbolKind, Scheme, InferContext, Constraints, Provenance};
 pub use types::{Type, TVar, ConId, TVSub};

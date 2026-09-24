@@ -1,0 +1,9 @@
+[package]
+name = "boltlang-syntax"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+boltlang-common = { version = "0.1.0", path = "../boltlang-common" }
+rowan = { version = "0.17.0", features = ["serde1"] }
+salsa = "0.28.4"

@@ -1,4 +1,4 @@
-use crate::syntax::{LAST_TOKEN_KIND_DISCRIMINANT, SyntaxKind};
+use boltlang_syntax::{LAST_TOKEN_KIND_DISCRIMINANT, SyntaxKind};
 
 #[derive(Clone, Copy)]
 pub struct TokenSet([u64; 3]);

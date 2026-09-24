@@ -3,13 +3,15 @@ mod pat;
 mod ty;
 mod item;
 
+pub use expr::*;
+pub use pat::*;
+pub use ty::*;
+pub use item::*;
+
+use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
-    parser::{
-        grammar::{expr::parse_expr, pat::parse_pattern, ty::parse_type_expression},
         parser::{CompletedMarker, Parser},
         token_set::TokenSet
-    },
-    syntax::SyntaxKind::{self, *}
 };
 
 const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENT]);
