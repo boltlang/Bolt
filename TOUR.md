@@ -2,12 +2,9 @@
 
 ## Printing
 
-Bolt provides a convenient `print` function to output stuff to the console or
-terminal. It accepts any object and will print its representation.
+To print a string, simply call the `print` function like in Python.
 
-In it simplest form you can print strings:
-
-```rust
+```
 print("Hello, world!");
 ```
 
@@ -31,6 +28,26 @@ Output:
 True
 ```
 
+Any object that implements the `Display` trait is printable.
+
+## Debug Printing
+
+Bolt provides a convenient `debug` function to output the state of objects to
+the console or terminal. It accepts any object and will print its
+representation.
+
+```rust
+debug("Hello, world!");
+debug(33);
+debug(True);
+```
+
+```
+"Hello, world!"
+33
+True
+```
+
 In Rust you would need to `#[derive(Debug)]` to print a struct or an enum. In
 Bolt this is not necessary.
 
@@ -42,7 +59,7 @@ struct User {
 
 let sam = User { "samvv@example.com", "samvv" };
 
-print(sam);
+debug(sam);
 ```
 
 Outputs:
