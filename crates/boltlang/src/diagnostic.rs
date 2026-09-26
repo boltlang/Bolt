@@ -171,14 +171,6 @@ impl BindingNotFoundDiagnostic {
         }
     }
 
-    fn code(&self) -> u16 {
-        CODE_BINDING_NOT_FOUND
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
-
     fn span(&self) -> &Span {
         &self.span
     }
@@ -205,14 +197,6 @@ pub struct TypeMismatchDiagnostic {
 }
 
 impl TypeMismatchDiagnostic {
-
-    fn code(&self) -> u16 {
-        CODE_EXPECTED_UNIFY
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
 
     fn span(&self) -> &Span {
         self.provenance.span()
@@ -245,14 +229,6 @@ pub struct InfiniteTypeDiagnostic {
 }
 
 impl InfiniteTypeDiagnostic {
-
-    fn code(&self) -> u16 {
-        CODE_INFINITE_TYPE
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
-    }
 
     fn span(&self) -> &Span {
         &self.span
@@ -289,14 +265,6 @@ impl ConArgsLengthMismatchDiagnostic {
             a_args,
             b_args,
         }
-    }
-
-    fn code(&self) -> u16 {
-        CODE_CON_ARGS_LENGTH_MISMATCH
-    }
-
-    fn severity(&self) -> Severity {
-        Severity::Error
     }
 
     fn span(&self) -> &Span {
