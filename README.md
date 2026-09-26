@@ -1,6 +1,8 @@
 Bolt
 ====
 
+[![Rust](https://github.com/boltlang/Bolt/actions/workflows/rust.yml/badge.svg)](https://github.com/boltlang/Bolt/actions/workflows/rust.yml)
+
 > [!WARNING]
 >
 > This compiler is experimental and might have breaking changes with each
