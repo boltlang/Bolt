@@ -73,6 +73,9 @@ User {
 
 ## Format Strings
 
+Just like in Python, format strings allow you to mix fragments of text with
+values that need to be stringified.
+
 ```rust
 let name = "Sam";
 let age = 32;
@@ -91,6 +94,7 @@ Hello, Sam! You have 28 years to go before becoming 50!
 Records are _extensible_, meaning that you can do things like this:
 
 ```rust
+// greet accepts any record that has a 'name' field
 fn greet(data: { name: String, .. }) {
     print(f"Hello, {data.name}!");
 }
