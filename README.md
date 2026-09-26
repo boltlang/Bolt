@@ -62,11 +62,11 @@ let mut root = Node::new(1);
 
 let mut left = Node::new(2);
 root.children.push(left);
-left.parent = root;
+left.parent = Some(root);
 
 let mut right = Node::new(3);
 root.children.push(right);
-right.parent = root;
+right.parent = Some(root);
 
 // Now set the leftmost node's value to 42
 root.children.get(0).unwrap().value = 42;
