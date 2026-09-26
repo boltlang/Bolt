@@ -32,132 +32,9 @@ nice goodies, including:
 
 ## Examples
 
-_Note that these examples are stil in the design phase and not able to compile._
+Read the [tour of the language][tour] to learn more!
 
-All objects are garbage-collected and passed by reference, meaning you can do
-things like the following without a problem:
-
-```rust
-struct Node {
-    value: Int,
-    children: Vec<Node>,
-    parent: Option<Node>,
-}
-
-impl Node {
-
-    pub fn new(value: Int) -> Node {
-        Node {
-            value,
-            children: Vec::new(),
-            parent: None,
-        }
-    }
-
-}
-
-// Build the tree
-
-let mut root = Node::new(1);
-
-let mut left = Node::new(2);
-root.children.push(left);
-left.parent = Some(root);
-
-let mut right = Node::new(3);
-root.children.push(right);
-right.parent = Some(root);
-
-// Now set the leftmost node's value to 42
-root.children.get(0).unwrap().value = 42;
-
-// Because everthing is managed by references, the variable `left` will be upated!
-assert!(left.value == 42);
-```
-
-Here are some records we define in Bolt:
-
-```rust
-struct Dog {
-    name: String,
-    age: i32,
-}
-
-let spike = Dog {
-    name = "Spike",
-    age = 5
-}
-
-// Shorthand
-let sadie = Dog("Sadie", 12)
-
-print(f"Hey look! {spike.name} and {sadie.name} are playing together!");
-```
-
-Records are _extensible_, meaning that you can do things like this:
-
-```rust
-fn greet({ name, .. }) {
-    print(f"Hello, {name}!");
-}
-
-greet(sadie);
-greet(spike);
-greet({ name = "Sam", company = "Accelera" });
-```
-
-Bolt will also support traits/type classes, like in Rust and Haskell:
-
-```rust
-trait Shout a {
-  fn shout(self: a) -> String;
-}
-
-impl Shout Dog {
-    fn shout(self) {
-        print("Bark, bark!");
-    }
-}
-
-// Imagine somewhere in another library Cat is defined ...
-
-impl Shout Cat {
-    fn shout(self) {
-        print("Miau! Miau!");
-    }
-}
-```
-
-Here's an example of a [React](https://react.dev/)-like framework in Bolt:
-
-_Note that this example is very experimental._
-
-```rust
-import "html" ( Html )
-
-fn app() -> Html {
-
-    rx user = None;
-
-    match user {
-        None => {
-            let { data, isLoading, isError, isOk } = fetch("/api/login");
-            if isLoading {
-                return <h1>Processing ...</h1>;
-            }
-            if isError {
-                return <h1>Something went wrong.</h1>;
-            }
-            if isOk {
-                user = Some({ username: data.username });
-                return <h1>Logging in ...</h1>;
-            }
-            <h1>Please log in.</h1>
-        }
-        Some({ name, .. }) => <h1>Welcome Back, {username}</h1>
-    }
-}
-```
+[tour]: https://github.com/boltlang/Bolt/blob/main/TOUR.md
 
 ## Core Principles
 
@@ -223,9 +100,9 @@ that it is worth it.
 
 The old repository has been archived and has been replaced with this one. I
 doubt there will be much interest in this older software artifact. If you want
-to check it out nonetheless, you can still do it [by following this link][1].
+to check it out nonetheless, you can still do it [by following this link][oldbolt].
 
-[1]: https://github.com/boltlang/BoltJS
+[oldbolt]: https://github.com/boltlang/BoltJS
 
 ### What's the difference between the old Bolt programming language and this language?
 
