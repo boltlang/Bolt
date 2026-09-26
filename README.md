@@ -1,5 +1,4 @@
-Bolt
-====
+# The Bolt Programming Language
 
 [![Rust](https://github.com/boltlang/Bolt/actions/workflows/rust.yml/badge.svg)](https://github.com/boltlang/Bolt/actions/workflows/rust.yml)
 
