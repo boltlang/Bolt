@@ -12,26 +12,41 @@ mod test {
 
     struct N(SyntaxElement);
 
-    impl serde::Serialize for N {
-        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where
-            S: serde::Serializer
-        {
-            match &self.0 {
-                NodeOrToken::Node(node) => {
-                    let mut s = serializer.serialize_seq(Some(node.children_with_tokens().count()))?;
-                    s.serialize_element(&format!("{:?}", self.0.kind()))?;
-                    for child in node.children_with_tokens() {
-                        s.serialize_element(&N(child))?;
-                    }
-                    s.end()
+//     impl serde::Serialize for N {
+//         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//         where
+//             S: serde::Serializer
+//         {
+//             match &self.0 {
+//                 NodeOrToken::Node(node) => {
+//                     let mut s = serializer.serialize_seq(Some(node.children_with_tokens().count()))?;
+//                     s.serialize_element(&format!("{:?}", self.0.kind()))?;
+//                     for child in node.children_with_tokens() {
+//                         s.serialize_element(&N(child))?;
+//                     }
+//                     s.end()
+//                 }
+//                 NodeOrToken::Token(token) => {
+//                     let mut tup = serializer.serialize_tuple(2)?;
+//                     tup.serialize_element(&format!("{:?}", self.0.kind()))?;
+//                     tup.serialize_element(token.text())?;
+//                     tup.end()
+//                 }
+//             }
+//         }
+//     }
+
+    fn write_element<W: Write>(writer: &mut W, element: &SyntaxElement, indent: usize) -> std::io::Result<()> {
+        match element {
+            NodeOrToken::Node(node) => {
+                writeln!(writer, "{:indent$}- {name:?}", "", indent = indent, name = element.kind())?;
+                for child in node.children_with_tokens() {
+                    write_element(writer, &child, indent+2)?;
                 }
-                NodeOrToken::Token(token) => {
-                    let mut tup = serializer.serialize_tuple(2)?;
-                    tup.serialize_element(&format!("{:?}", self.0.kind()))?;
-                    tup.serialize_element(token.text())?;
-                    tup.end()
-                }
+                Ok(())
+            }
+            NodeOrToken::Token(token)  => {
+                writeln!(writer, "{:indent$}- {name:?} {text:?}", "", indent = indent, name = element.kind(), text = token.text())
             }
         }
     }
@@ -39,13 +54,14 @@ mod test {
     fn output<R, F: Fn(&mut Parser) -> R>(lit: &str, proc: F) -> String {
         let (node, diags) = parse(lit, proc);
         let node = SyntaxNode::new_root(node).into();
-        let mut cursor = Cursor::new(Vec::new());
-        yaml_serde::to_writer(&mut cursor, &N(node)).unwrap();
+        let mut out = Cursor::new(Vec::new());
+        write_element(&mut out, &node, 0).unwrap();
+        // yaml_serde::to_writer(&mut cursor, &N(node)).unwrap();
         for d in diags {
-            write!(cursor, "---\n").unwrap();
-            write!(cursor, "{}", yaml_serde::to_string(&d).unwrap()).unwrap();
+            write!(out, "---\n").unwrap();
+            write!(out, "{}", yaml_serde::to_string(&d).unwrap()).unwrap();
         }
-        String::from_utf8_lossy_owned(cursor.into_inner())
+        String::from_utf8_lossy_owned(out.into_inner())
     }
 
     #[test]

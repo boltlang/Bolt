@@ -1,7 +1,6 @@
 ---
 source: crates/boltlang-parser/tests/parser.rs
-expression: "& stringify(node, diags)"
+expression: "&output(\"1\", parse_expr)"
 ---
 - LIT_EXPR
-- - DEC_INT
-  - '1'
+  - DEC_INT "1"

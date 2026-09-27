@@ -1,7 +1,6 @@
 ---
 source: crates/boltlang-parser/tests/parser.rs
-expression: "& stringify(node, diags)"
+expression: "&output(\"0xffab23\", parse_expr)"
 ---
 - LIT_EXPR
-- - HEX_INT
-  - '0xffab23'
+  - HEX_INT "0xffab23"

@@ -1,7 +1,6 @@
 ---
 source: crates/boltlang-parser/tests/parser.rs
-expression: "& stringify(node, diags)"
+expression: "&output(\"\\\"Hello, world!\\\"\", parse_expr)"
 ---
 - LIT_EXPR
-- - STRING
-  - '"Hello, world!"'
+  - STRING "\"Hello, world!\""
