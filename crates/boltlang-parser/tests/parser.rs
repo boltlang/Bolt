@@ -4,37 +4,10 @@
 mod test {
 
     use std::{io::{Cursor, Write}};
-    use serde::ser::{SerializeSeq, SerializeTuple};
     use insta::assert_snapshot;
 
     use boltlang_syntax::{NodeOrToken, SyntaxElement, SyntaxNode};
     use boltlang_parser::{Parser, grammar::*, parse};
-
-    struct N(SyntaxElement);
-
-//     impl serde::Serialize for N {
-//         fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//         where
-//             S: serde::Serializer
-//         {
-//             match &self.0 {
-//                 NodeOrToken::Node(node) => {
-//                     let mut s = serializer.serialize_seq(Some(node.children_with_tokens().count()))?;
-//                     s.serialize_element(&format!("{:?}", self.0.kind()))?;
-//                     for child in node.children_with_tokens() {
-//                         s.serialize_element(&N(child))?;
-//                     }
-//                     s.end()
-//                 }
-//                 NodeOrToken::Token(token) => {
-//                     let mut tup = serializer.serialize_tuple(2)?;
-//                     tup.serialize_element(&format!("{:?}", self.0.kind()))?;
-//                     tup.serialize_element(token.text())?;
-//                     tup.end()
-//                 }
-//             }
-//         }
-//     }
 
     fn write_element<W: Write>(writer: &mut W, element: &SyntaxElement, indent: usize) -> std::io::Result<()> {
         match element {
@@ -56,7 +29,6 @@ mod test {
         let node = SyntaxNode::new_root(node).into();
         let mut out = Cursor::new(Vec::new());
         write_element(&mut out, &node, 0).unwrap();
-        // yaml_serde::to_writer(&mut cursor, &N(node)).unwrap();
         for d in diags {
             write!(out, "---\n").unwrap();
             write!(out, "{}", yaml_serde::to_string(&d).unwrap()).unwrap();
