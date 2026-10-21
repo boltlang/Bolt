@@ -5,6 +5,7 @@ members = [
   "crates/boltlang-syntax",
   "crates/boltlang-parser",
   "crates/boltlang-hir",
+  "crates/boltlang-hir-ty",
   "crates/boltlang",
   "crates/boltlang-cli",
   "crates/bolt-language-server",

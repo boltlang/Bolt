@@ -149,6 +149,10 @@ name = "boltlang-hir"
 version = "0.1.0"
 
 [[package]]
+name = "boltlang-hir-ty"
+version = "0.1.0"
+
+[[package]]
 name = "boltlang-parser"
 version = "0.1.0"
 dependencies = [
