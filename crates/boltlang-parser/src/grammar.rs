@@ -136,7 +136,7 @@ fn check_semi(p: &mut Parser) {
     if !p.at(R_BRACE) && !p.eat(SEMI) {
         p.error("expected ';' or '}'");
         // TODO handle newlines
-        while !p.at(R_BRACE) && !p.eat(SEMI) {
+        while !p.at(R_BRACE) && !p.at(EOF) && !p.eat(SEMI) {
             p.bump_any();
         }
     }

@@ -1,0 +1,28 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/unterminated_string.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "s"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - STRING "\"hello;\n"
+---
+!UnexpectedChar
+message: expected '"' to delimit the string literal but found end-of-file
+span:
+  start: 15
+  end: 16
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 16
+  end: 16
