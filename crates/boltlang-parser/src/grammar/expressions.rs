@@ -9,7 +9,7 @@ pub(crate) use atom::*;
 use boltlang_syntax::{SyntaxKind::{self, *}, T};
 
 use crate::{
-    grammar::{opt_item, parse_pattern, type_, type_no_bounds},
+    grammar::{attr, at_inner_attr, opt_item, outer_attrs, parse_pattern, type_, type_no_bounds},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -40,7 +40,7 @@ pub(crate) struct Restrictions {
 
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
-const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![..], T![..=]]));
+const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![..], T![..=], T![#]]));
 
 /// Whether an expression can start here. Besides [`EXPR_FIRST`], `||` can
 /// start a closure without parameters; the lexer joins it into an operator.
@@ -82,11 +82,23 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
     if p.eat(T![;]) {
         return;
     }
-    if p.at(T![let]) {
-        let_stmt(p, semicolon);
+    // Like in the grammar, `#![...]` can stand wherever a statement can.
+    if at_inner_attr(p) {
+        attr(p, true);
         return;
     }
     let m = p.start();
+    let has_attrs = outer_attrs(p);
+    if p.at(T![let]) {
+        let_stmt(p, m, semicolon);
+        return;
+    }
+    // Like in the grammar, an attribute can stand on its own, e.g. at the
+    // end of a file.
+    if has_attrs && (p.at(T!['}']) || p.at(EOF)) {
+        m.abandon(p);
+        return;
+    }
     let m = match opt_item(p, m) {
         Ok(()) => return,
         Err(m) => m,
@@ -119,8 +131,7 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
 
 /// `let pattern: Type = value else { ... };`, with the type, value and
 /// `else` block optional.
-pub(crate) fn let_stmt(p: &mut Parser, semicolon: Semicolon) {
-    let m = p.start();
+pub(crate) fn let_stmt(p: &mut Parser, m: Marker, semicolon: Semicolon) {
     p.bump(T![let]);
     p.eat(T![mut]);
     parse_pattern(p);
@@ -195,7 +206,11 @@ fn current_op(p: &Parser) -> (u8, SyntaxKind, Associativity) {
 
 /// Parse an expression whose operators bind at least as tightly as `bp`.
 fn expr_bp(p: &mut Parser, m: Option<Marker>, r: Restrictions, bp: u8) -> Option<(CompletedMarker, BlockLike)> {
-    let m = m.unwrap_or_else(|| p.start());
+    let m = m.unwrap_or_else(|| {
+        let m = p.start();
+        outer_attrs(p);
+        m
+    });
     if !at_expr_start(p) {
         p.err_recover("expected an expression", EXPR_RECOVERY_SET);
         m.abandon(p);

@@ -5,7 +5,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use super::{BlockLike, at_expr_start, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
 use crate::{
-    grammar::{dotted_path, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern, pattern_single, type_},
+    grammar::{attr, at_inner_attr, at_outer_attr, dotted_path, outer_attrs, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern, pattern_single, type_},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -181,8 +181,9 @@ fn record_expr_field_list(p: &mut Parser) {
                 }
                 continue;
             }
-            IDENT | INT_NUMBER => {
+            IDENT | INT_NUMBER | T![#] => {
                 let field = p.start();
+                outer_attrs(p);
                 let name = p.start();
                 p.bump_any();
                 name.complete(p, NAME_REF);
@@ -429,6 +430,15 @@ fn match_arm_list(p: &mut Parser) {
 /// and after a value that ends in a block.
 fn match_arm(p: &mut Parser) {
     let m = p.start();
+    // The grammar allows both outer and inner attributes here.
+    while at_outer_attr(p) || at_inner_attr(p) {
+        attr(p, at_inner_attr(p));
+    }
+    if p.at(T!['}']) {
+        // Only attributes, like `#![cfg(...)]` at the start of the arms.
+        m.abandon(p);
+        return;
+    }
     parse_pattern(p);
     if p.at(T![if]) {
         let guard = p.start();

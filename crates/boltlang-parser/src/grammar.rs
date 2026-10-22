@@ -1,6 +1,7 @@
 //! The grammar of Bolt, laid out like rust-analyzer's parser: one module
 //! per area of the grammar, with shared helpers here.
 
+mod attributes;
 mod expressions;
 mod generic_args;
 mod generic_params;
@@ -10,6 +11,7 @@ mod paths;
 mod patterns;
 mod types;
 
+pub(crate) use attributes::*;
 pub use expressions::*;
 pub(crate) use generic_args::*;
 pub(crate) use generic_params::*;

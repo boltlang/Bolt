@@ -1,0 +1,482 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/attributes.bolt
+---
+- SOURCE_FILE
+  - ATTR
+    - HASHTAG "#"
+    - EXCL "!"
+    - L_BRACKET "["
+    - META
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "feature"
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "thing"
+        - R_PAREN ")"
+    - R_BRACKET "]"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "test"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "test_foo"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "derive"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - IDENT "Debug"
+          - COMMA ","
+          - WHITESPACE " "
+          - IDENT "Eq"
+          - COMMA ","
+          - R_PAREN ")"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Foo"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - RECORD_FIELD
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "serde"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - IDENT "skip"
+              - R_PAREN ")"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - WHITESPACE " "
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "T"
+    - TUPLE_FIELD_LIST
+      - L_PAREN "("
+      - TUPLE_FIELD
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - ENUM
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "cfg"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - IDENT "target_os"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - STRING "\"macos\""
+          - R_PAREN ")"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - ENUM_KEYWORD "enum"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "E"
+    - WHITESPACE " "
+    - VARIANT_LIST
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - VARIANT
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "default"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - VARIANT
+        - NAME
+          - IDENT "B"
+      - WHITESPACE " "
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "f"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "unused"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - NAMED_PATT
+          - NAME
+            - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - ATTR
+          - HASHTAG "#"
+          - EXCL "!"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "allow"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - IDENT "dead_code"
+              - R_PAREN ")"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - LET_STMT
+          - ATTR
+            - HASHTAG "#"
+            - L_BRACKET "["
+            - META
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "inline"
+            - R_BRACKET "]"
+          - WHITESPACE " "
+          - LET_KEYWORD "let"
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "y"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - SEMI ";"
+        - WHITESPACE "\n    "
+        - EXPR_STMT
+          - CALL_EXPR
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "g"
+            - ARG_LIST
+              - L_PAREN "("
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "x"
+              - COMMA ","
+              - WHITESPACE " "
+              - PATH_EXPR
+                - ATTR
+                  - HASHTAG "#"
+                  - L_BRACKET "["
+                  - META
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "cfg"
+                    - TOKEN_TREE
+                      - L_PAREN "("
+                      - IDENT "foo"
+                      - R_PAREN ")"
+                  - R_BRACKET "]"
+                - WHITESPACE " "
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "y"
+              - R_PAREN ")"
+          - SEMI ";"
+        - WHITESPACE "\n    "
+        - LET_STMT
+          - LET_KEYWORD "let"
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "z"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - ARRAY_EXPR
+            - L_BRACKET "["
+            - LIT_EXPR
+              - ATTR
+                - HASHTAG "#"
+                - L_BRACKET "["
+                - META
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "hello"
+                - R_BRACKET "]"
+              - WHITESPACE " "
+              - INT_NUMBER "2"
+            - COMMA ","
+            - WHITESPACE " "
+            - LIT_EXPR
+              - INT_NUMBER "7"
+            - R_BRACKET "]"
+          - SEMI ";"
+        - WHITESPACE "\n    "
+        - EXPR_STMT
+          - MATCH_EXPR
+            - MATCH_KEYWORD "match"
+            - WHITESPACE " "
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "x"
+            - WHITESPACE " "
+            - MATCH_ARM_LIST
+              - L_BRACE "{"
+              - WHITESPACE " "
+              - MATCH_ARM
+                - ATTR
+                  - HASHTAG "#"
+                  - EXCL "!"
+                  - L_BRACKET "["
+                  - META
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "cfg"
+                    - TOKEN_TREE
+                      - L_PAREN "("
+                      - IDENT "a"
+                      - R_PAREN ")"
+                  - R_BRACKET "]"
+                - WHITESPACE " "
+                - ATTR
+                  - HASHTAG "#"
+                  - L_BRACKET "["
+                  - META
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "b"
+                  - R_BRACKET "]"
+                - WHITESPACE " "
+                - WILDCARD_PATT
+                  - UNDERSCORE "_"
+                - WHITESPACE " "
+                - FAT_ARROW "=>"
+                - WHITESPACE " "
+                - BLOCK_EXPR
+                  - BLOCK
+                    - L_BRACE "{"
+                    - R_BRACE "}"
+              - WHITESPACE " "
+              - R_BRACE "}"
+        - WHITESPACE "\n    "
+        - RECORD_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "S"
+          - WHITESPACE " "
+          - RECORD_EXPR_FIELD_LIST
+            - L_BRACE "{"
+            - WHITESPACE " "
+            - RECORD_EXPR_FIELD
+              - ATTR
+                - HASHTAG "#"
+                - L_BRACKET "["
+                - META
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "c"
+                - R_BRACKET "]"
+              - WHITESPACE " "
+              - NAME_REF
+                - IDENT "a"
+              - COLON ":"
+              - WHITESPACE " "
+              - LIT_EXPR
+                - INT_NUMBER "1"
+            - WHITESPACE " "
+            - R_BRACE "}"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "X"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - ATTR
+        - HASHTAG "#"
+        - EXCL "!"
+        - L_BRACKET "["
+        - META
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "doc"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - LIT_EXPR
+            - STRING "\"x\""
+        - R_BRACKET "]"
+      - WHITESPACE " "
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - ATTR
+    - HASHTAG "#"
+    - L_BRACKET "["
+    - META
+      - PATH
+        - PATH
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "path"
+          - DOT "."
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "to"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "attr"
+      - WHITESPACE " "
+      - EQUALS "="
+      - WHITESPACE " "
+      - FIELD_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "value"
+        - DOT "."
+        - NAME_REF
+          - IDENT "field"
+    - R_BRACKET "]"
+  - WHITESPACE "\n"
+  - ATTR
+    - HASHTAG "#"
+    - L_BRACKET "["
+    - META
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "attr"
+      - TOKEN_TREE
+        - L_PAREN "("
+        - FAT_ARROW "=>"
+        - WHITESPACE " "
+        - IDENT "arbitrary"
+        - WHITESPACE " "
+        - IDENT "tokens"
+        - WHITESPACE " "
+        - OPERATOR "<="
+        - COMMA ","
+        - WHITESPACE " "
+        - METAVARIABLE "$x"
+        - WHITESPACE " "
+        - CHAR "';'"
+        - R_PAREN ")"
+    - R_BRACKET "]"
+  - WHITESPACE "\n"

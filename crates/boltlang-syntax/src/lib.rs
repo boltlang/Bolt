@@ -186,6 +186,10 @@ pub enum SyntaxKind {
     TRAIT_BOUNDS,
 
     // Macros
+    /// `#[meta]` or `#![meta]`
+    ATTR,
+    /// `path`, `path = value` or `path(tokens)` in an attribute
+    META,
     MACRO_EXPR,
     MACRO_CALL,
     TOKEN_TREE,
@@ -399,6 +403,8 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            ATTR => "an attribute",
+            META => "the contents of an attribute",
             QUOTE => "'\''",
             IMPORT => "an import",
             IMPORT_LIST => "a list of imported names",

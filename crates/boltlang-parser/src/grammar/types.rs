@@ -3,7 +3,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{delimited, generic_param_list, is_path_start, parse_expr, pattern_single, type_path},
+    grammar::{delimited, outer_attrs, generic_param_list, is_path_start, parse_expr, pattern_single, type_path},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -168,6 +168,7 @@ fn fn_type_param_list(p: &mut Parser) {
 
 fn fn_type_param(p: &mut Parser) {
     let m = p.start();
+    outer_attrs(p);
     if p.eat(T![...]) {
         m.complete(p, VARIADIC_PARAM);
         return;

@@ -1897,3 +1897,61 @@ impl SourceFile {
         ChildrenIter::new(&self.0)
     }
 }
+
+/// `#[meta]` or `#![meta]`
+pub struct Attr(SyntaxNode);
+
+simple_node!(Attr, ATTR);
+
+impl Attr {
+    /// Whether this is an inner attribute like `#![allow(unused)]`.
+    pub fn is_inner(&self) -> bool {
+        self.find_token(EXCL).is_some()
+    }
+    pub fn meta(&self) -> Option<Meta> {
+        self.find_node()
+    }
+}
+
+/// `path`, `path = value` or `path(tokens)` in an attribute
+pub struct Meta(SyntaxNode);
+
+simple_node!(Meta, META);
+
+impl Meta {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+    /// The value of `path = value`.
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    /// The arguments of `path(tokens)`.
+    pub fn token_tree(&self) -> Option<TokenTree> {
+        self.find_node()
+    }
+}
+
+/// Any tokens between balanced `()`, `[]` or `{}`
+pub struct TokenTree(SyntaxNode);
+
+simple_node!(TokenTree, TOKEN_TREE);
+
+/// A node that can have attributes like `#[derive(Debug)]`.
+pub trait HasAttrs: Node {
+    fn attrs(&self) -> ChildrenIter<Attr> {
+        ChildrenIter::new(self.syntax())
+    }
+}
+
+macro_rules! has_attrs {
+    ($($name:ident),* $(,)?) => {
+        $(impl HasAttrs for $name {})*
+    };
+}
+
+has_attrs!(
+    SourceFile, FuncDecl, VarDecl, ExprStmt, Struct, Enum, Variant, RecordField, TupleField, Const,
+    TypeAlias, Trait, Impl, ItemList, ExternBlock, Import, Param, MatchArm, MatchArmList,
+    RecordExprField, Block,
+);

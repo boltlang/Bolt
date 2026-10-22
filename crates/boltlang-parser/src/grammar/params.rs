@@ -2,7 +2,7 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
-    grammar::{delimited, parse_expr, pattern_single, type_},
+    grammar::{delimited, outer_attrs, parse_expr, pattern_single, type_},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -39,6 +39,7 @@ pub(crate) fn param_list(p: &mut Parser) {
 /// an optional type and default value, like `x`, `x: T` or `x: T = 1`.
 fn param(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
+    outer_attrs(p);
     if p.at(T![...]) {
         p.bump(T![...]);
         return m.complete(p, VARIADIC_PARAM);

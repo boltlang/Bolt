@@ -43,7 +43,7 @@ input_file: crates/boltlang-parser/tests/data/err/hash_is_not_a_comment.bolt
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected an expression, an item or a let statement
+message: expected an expression
 span:
   start: 0
   end: 0

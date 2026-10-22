@@ -4,12 +4,12 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{LITERAL_FIRST, delimited, name, parse_block_expr, parse_literal_expr, trait_bounds, type_},
+    grammar::{LITERAL_FIRST, outer_attrs, delimited, name, parse_block_expr, parse_literal_expr, trait_bounds, type_},
     parser::Parser,
     token_set::TokenSet,
 };
 
-const GENERIC_PARAM_FIRST: TokenSet = TokenSet::new(&[IDENT, METAVARIABLE, T![const]]);
+const GENERIC_PARAM_FIRST: TokenSet = TokenSet::new(&[IDENT, METAVARIABLE, T![const], T![#]]);
 
 /// `[T, U: Bound = Default, const N: usize = 3]`
 pub(crate) fn generic_param_list(p: &mut Parser) {
@@ -27,6 +27,9 @@ pub(crate) fn generic_param_list(p: &mut Parser) {
 }
 
 fn generic_param(p: &mut Parser) -> bool {
+    // Attributes go before the parameter, outside its node, like siblings in
+    // the grammar's `type_parameters`.
+    outer_attrs(p);
     match p.current() {
         METAVARIABLE => {
             let m = p.start();

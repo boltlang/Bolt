@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        abi, delimited, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        abi, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -246,9 +246,9 @@ fn variant_list(p: &mut Parser) {
         T!['}'],
         T![,],
         || "expected a variant".into(),
-        TokenSet::new(&[IDENT, T![pub]]),
+        TokenSet::new(&[IDENT, T![pub], T![#]]),
         |p| {
-            if !p.at(IDENT) && !p.at(T![pub]) {
+            if !p.at(IDENT) && !p.at(T![pub]) && !p.at(T![#]) {
                 return false;
             }
             variant(p);
@@ -261,6 +261,7 @@ fn variant_list(p: &mut Parser) {
 /// `None`, `Some(T)`, `Point { x: i32 }` or `A = 1`
 fn variant(p: &mut Parser) {
     let m = p.start();
+    outer_attrs(p);
     opt_visibility(p);
     name(p);
     match p.current() {
@@ -283,12 +284,13 @@ pub(crate) fn record_field_list(p: &mut Parser) {
         T!['}'],
         T![,],
         || "expected a field".into(),
-        TokenSet::new(&[IDENT, T![pub]]),
+        TokenSet::new(&[IDENT, T![pub], T![#]]),
         |p| {
-            if !p.at(IDENT) && !p.at(T![pub]) {
+            if !p.at(IDENT) && !p.at(T![pub]) && !p.at(T![#]) {
                 return false;
             }
             let field = p.start();
+            outer_attrs(p);
             opt_visibility(p);
             name(p);
             p.expect(T![:]);
@@ -309,12 +311,13 @@ pub(crate) fn tuple_field_list(p: &mut Parser) {
         T![')'],
         T![,],
         || "expected a type".into(),
-        TYPE_FIRST.union(TokenSet::new(&[T![pub]])),
+        TYPE_FIRST.union(TokenSet::new(&[T![pub], T![#]])),
         |p| {
-            if !p.at_ts(TYPE_FIRST) && !p.at(T![pub]) {
+            if !p.at_ts(TYPE_FIRST) && !p.at(T![pub]) && !p.at(T![#]) {
                 return false;
             }
             let field = p.start();
+            outer_attrs(p);
             opt_visibility(p);
             type_(p);
             field.complete(p, TUPLE_FIELD);
@@ -410,11 +413,20 @@ pub(crate) fn item_list(p: &mut Parser) {
         if p.eat(T![;]) {
             continue;
         }
-        if p.at(T![let]) {
-            let_stmt(p, Semicolon::Required);
+        if at_inner_attr(p) {
+            attr(p, true);
             continue;
         }
         let item = p.start();
+        let has_attrs = outer_attrs(p);
+        if p.at(T![let]) {
+            let_stmt(p, item, Semicolon::Required);
+            continue;
+        }
+        if has_attrs && p.at(T!['}']) {
+            item.abandon(p);
+            continue;
+        }
         if let Err(item) = opt_item(p, item) {
             item.abandon(p);
             if p.at(T!['{']) {
