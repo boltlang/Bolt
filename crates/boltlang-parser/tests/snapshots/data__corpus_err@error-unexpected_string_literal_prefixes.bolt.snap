@@ -17,24 +17,23 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string
     - COLON ":"
   - WHITESPACE " "
   - EXPR_STMT
-    - ARRAY_EXPR
-      - L_BRACKET "["
-      - PATH_EXPR
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "str"
-      - R_BRACKET "]"
+    - BIN_EXPR
+      - ARRAY_EXPR
+        - L_BRACKET "["
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "str"
+        - R_BRACKET "]"
       - WHITESPACE " "
-  - ERROR
-    - EQUALS "="
-  - WHITESPACE " "
-  - EXPR_STMT
-    - ARRAY_EXPR
-      - L_BRACKET "["
-      - WHITESPACE "\n    "
-      - ERROR
-        - AT "@"
+      - EQUALS "="
+      - WHITESPACE " "
+      - ARRAY_EXPR
+        - L_BRACKET "["
+        - WHITESPACE "\n    "
+        - ERROR
+          - AT "@"
   - EXPR_STMT
     - LIT_EXPR
       - STRING "\"asdf\""
@@ -85,18 +84,6 @@ message: expected an expression, an item or a let statement
 span:
   start: 7
   end: 7
----
-!ExpectedToken
-message: expected ';'
-span:
-  start: 15
-  end: 15
----
-!ExpectedToken
-message: expected an expression, an item or a let statement
-span:
-  start: 15
-  end: 15
 ---
 !ExpectedToken
 message: expected an expression

@@ -53,7 +53,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-for_expressi
       - WHITESPACE " "
       - IN_KEYWORD "in"
       - WHITESPACE " "
-      - BIN_EXPR
+      - RANGE_EXPR
         - LIT_EXPR
           - INT_NUMBER "0"
         - DOTDOT ".."
@@ -97,7 +97,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-for_expressi
       - WHITESPACE " "
       - IN_KEYWORD "in"
       - WHITESPACE " "
-      - BIN_EXPR
+      - RANGE_EXPR
         - LIT_EXPR
           - INT_NUMBER "0"
         - DOTDOT ".."
@@ -121,7 +121,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-for_expressi
             - WHITESPACE " "
             - IN_KEYWORD "in"
             - WHITESPACE " "
-            - BIN_EXPR
+            - RANGE_EXPR
               - LIT_EXPR
                 - INT_NUMBER "0"
               - DOTDOT ".."

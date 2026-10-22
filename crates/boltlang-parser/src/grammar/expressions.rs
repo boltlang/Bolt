@@ -40,7 +40,7 @@ pub(crate) struct Restrictions {
 
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
-const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!]]));
+const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![..], T![..=]]));
 
 /// Whether an expression can start here. Besides [`EXPR_FIRST`], `||` can
 /// start a closure without parameters; the lexer joins it into an operator.
@@ -159,17 +159,26 @@ enum Associativity {
 
 /// Binding powers of the binary operators, following the grammar's `PREC`.
 /// See <https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html>.
+///
+/// The grammar only knows a fixed set of operators. Other operators, like
+/// `<$>`, are left-associative and bind tighter than all built-in binary
+/// operators except `as`, like undeclared operators in Haskell.
 #[rustfmt::skip]
 fn current_op(p: &Parser) -> (u8, SyntaxKind, Associativity) {
     use Associativity::*;
     const NOT_AN_OP: (u8, SyntaxKind, Associativity) = (0, T![@], Left);
-    if p.at(T![as]) {
-        return (12, T![as], Left);
+    match p.current() {
+        T![as] => return (13, T![as], Left),
+        T![=] | ASSIGNMENT => return (1, p.current(), Right),
+        // These have a fixed role elsewhere in the grammar.
+        T![->] | T![=>] | T![!] | T![...] | T![.] => return NOT_AN_OP,
+        _ => {}
     }
     let Some(op) = p.op_text() else {
         return NOT_AN_OP;
     };
     let (bp, assoc) = match op {
+        ".." | "..="                   => (2,  Left),
         "||"                           => (3,  Left),
         "&&"                           => (4,  Left),
         "==" | "!=" | "<" | "<=" | ">" | ">=" => (5,  Left),
@@ -179,8 +188,7 @@ fn current_op(p: &Parser) -> (u8, SyntaxKind, Associativity) {
         "<<" | ">>"                    => (9,  Left),
         "+" | "-"                      => (10, Left),
         "*" | "/" | "%"                => (11, Left),
-        ".." | "..="                   => (2,  Left),
-        _ => return NOT_AN_OP,
+        _                              => (12, Left),
     };
     (bp, p.current(), assoc)
 }
@@ -216,8 +224,19 @@ fn expr_bp(p: &mut Parser, m: Option<Marker>, r: Restrictions, bp: u8) -> Option
             lhs = cast_expr(p, lhs);
             continue;
         }
+        let is_range = p.at(T![..]) || p.at(T![..=]);
         let m = lhs.precede(p);
         p.bump(op);
+        if is_range {
+            // `a..` has no end.
+            if !at_range_end(p, r) {
+                lhs = m.complete(p, RANGE_EXPR);
+                break;
+            }
+            expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, op_bp + 1);
+            lhs = m.complete(p, RANGE_EXPR);
+            continue;
+        }
         let op_bp = match associativity {
             Associativity::Left => op_bp + 1,
             Associativity::Right => op_bp,
@@ -228,9 +247,24 @@ fn expr_bp(p: &mut Parser, m: Option<Marker>, r: Restrictions, bp: u8) -> Option
     Some((lhs, BlockLike::NotBlock))
 }
 
+/// Whether an expression follows that can end a range. In a condition, `{`
+/// starts the body: `for i in 0.. {`.
+fn at_range_end(p: &Parser, r: Restrictions) -> bool {
+    at_expr_start(p) && !(r.forbid_structs && p.at(T!['{']))
+}
+
 /// A prefix operator applied to an expression, or an atom followed by
 /// postfix operators like calls.
 fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> {
+    // `..b`, `..=b` or `..`
+    if p.at(T![..]) || p.at(T![..=]) {
+        let m = p.start();
+        p.bump_any();
+        if at_range_end(p, r) {
+            expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 3);
+        }
+        return Some((m.complete(p, RANGE_EXPR), BlockLike::NotBlock));
+    }
     if matches!(p.current(), T![-] | T![!]) {
         let m = p.start();
         p.bump_any();

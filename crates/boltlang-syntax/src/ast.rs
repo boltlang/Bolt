@@ -611,6 +611,7 @@ ast_enum!(
         Record(RecordExpr) = RECORD_EXPR,
         Array(ArrayExpr) = ARRAY_EXPR,
         Closure(ClosureExpr) = CLOSURE_EXPR,
+        Range(RangeExpr) = RANGE_EXPR,
     }
 );
 
@@ -762,6 +763,29 @@ impl WhileExpr {
 /// The first child of `node` that is a block expression.
 fn find_block(node: &SyntaxNode) -> Option<BlockExpr> {
     node.children().find_map(BlockExpr::cast)
+}
+
+/// `a..b`, `a..=b`, `a..`, `..b` or `..`
+pub struct RangeExpr(SyntaxNode);
+
+simple_node!(RangeExpr, RANGE_EXPR);
+
+impl RangeExpr {
+    /// The operator: `..` or `..=`.
+    pub fn op_token(&self) -> Option<SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|x| x.into_token())
+            .find(|token| matches!(token.kind(), DOTDOT | DOTDOTEQUALS))
+    }
+    pub fn start(&self) -> Option<Expr> {
+        let op = self.op_token()?;
+        self.0.children().filter(|n| n.text_range().end() <= op.text_range().start()).find_map(Expr::cast)
+    }
+    pub fn end(&self) -> Option<Expr> {
+        let op = self.op_token()?;
+        self.0.children().filter(|n| n.text_range().start() >= op.text_range().end()).find_map(Expr::cast)
+    }
 }
 
 /// `|a, b| a + b`
