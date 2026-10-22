@@ -1,0 +1,15 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/index.bolt
+---
+- SOURCE_FILE
+  - INDEX_EXPR
+    - PATH_EXPR
+      - IDENT "xs"
+    - L_BRACKET "["
+    - LIT_EXPR
+      - DEC_INT "0"
+    - R_BRACKET "]"
+  - SEMI ";"
+  - WHITESPACE "\n"

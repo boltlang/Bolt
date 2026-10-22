@@ -1,0 +1,22 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/binary_precedence.bolt
+---
+- SOURCE_FILE
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "+"
+    - WHITESPACE " "
+    - BIN_EXPR
+      - PATH_EXPR
+        - IDENT "b"
+      - WHITESPACE " "
+      - OPERATOR "*"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - IDENT "c"
+  - SEMI ";"
+  - WHITESPACE "\n"

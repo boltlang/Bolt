@@ -159,9 +159,49 @@ pub(crate) struct IntersperseTrivia<'a> {
     output: Vec<Event>,
 }
 
-pub(crate) fn intersperse_trivia<'a, I: Iterator<Item = Event>>(events: I, lexed: &'a LexResult) -> Vec<Event> {
+/// Resolve `forward_parent` links, so that every `Start` event is in the
+/// position where its node actually starts.
+///
+/// [`CompletedMarker::precede`](crate::parser::CompletedMarker::precede) and
+/// [`CompletedMarker::extend_to`](crate::parser::CompletedMarker::extend_to)
+/// can't insert a `Start` event before an earlier one, so they append it and
+/// link to it from the earlier `Start` instead. Here, each chain of links is
+/// followed, the linked events are replaced with tombstones, and the chain's
+/// nodes are started outermost-first in place of the first event.
+fn resolve_forward_parents(mut events: Vec<Event>) -> Vec<Event> {
+    let mut output = Vec::with_capacity(events.len());
+    let mut chain = Vec::new();
+    for i in 0..events.len() {
+        match std::mem::replace(&mut events[i], Event::tombstone()) {
+            Event::Start { kind, forward_parent } => {
+                chain.push(kind);
+                let mut idx = i;
+                let mut next = forward_parent;
+                while let Some(offset) = next {
+                    idx += offset.get() as usize;
+                    next = match std::mem::replace(&mut events[idx], Event::tombstone()) {
+                        Event::Start { kind, forward_parent } => {
+                            chain.push(kind);
+                            forward_parent
+                        }
+                        _ => unreachable!("forward_parent must point to a Start event"),
+                    };
+                }
+                for kind in chain.drain(..).rev() {
+                    if kind != TOMBSTONE {
+                        output.push(Event::Start { kind, forward_parent: None });
+                    }
+                }
+            }
+            event => output.push(event),
+        }
+    }
+    output
+}
+
+pub(crate) fn intersperse_trivia(events: Vec<Event>, lexed: &LexResult) -> Vec<Event> {
     let mut builder = IntersperseTrivia::new(lexed);
-    for event in events {
+    for event in resolve_forward_parents(events) {
         builder.feed_event(event);
     }
     match std::mem::replace(&mut builder.state, IntersperseState::Normal) {

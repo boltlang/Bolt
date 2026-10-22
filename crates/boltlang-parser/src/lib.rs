@@ -29,7 +29,7 @@ pub fn parse_file(text: &str) -> (GreenNode, Vec<Diagnostic>) {
     let mut p = Parser::new(&inp);
     grammar::parse_source_file(&mut p);
     let interspersed = intersperse_trivia(
-        p.finish().into_iter(),
+        p.finish(),
         &lexed
     );
     let node = process_events(
@@ -51,7 +51,7 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
         p.error("parser not at end of file");
     }
     let interspersed = intersperse_trivia(
-        p.finish().into_iter(),
+        p.finish(),
         &lexed
     );
     let node = process_events(
