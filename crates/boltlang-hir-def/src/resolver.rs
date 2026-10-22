@@ -30,8 +30,8 @@ use crate::{
     },
 };
 
-/// An item that can have generic parameters.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+/// An item that can have generic parameters. It can be the key of a query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue, salsa::Supertype)]
 pub enum GenericDefId<'db> {
     Function(FunctionId<'db>),
     Struct(StructId<'db>),
