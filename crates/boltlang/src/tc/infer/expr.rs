@@ -1,7 +1,7 @@
 use itertools::Itertools;
 
 use crate::{
-    BlockExpr, CallExpr, Expr, FunExpr, LitExpr, NamedExpr, Node, SourceElement
+    BlockExpr, CallExpr, CastExpr, Expr, FunExpr, LitExpr, NamedExpr, NestExpr, Node, SourceElement
 };
 
 use super::{
@@ -160,7 +160,48 @@ impl InferContext {
             Expr::Lit(lit) => self.infer_lit_expr(lit, env),
             Expr::Fun(fun) => self.infer_fun_expr(fun, env),
             Expr::Call(call) => self.infer_call_expr(call, env),
+            Expr::Nest(nest) => self.infer_nest_expr(nest, env),
+            Expr::Cast(cast) => self.infer_cast_expr(cast, env),
+            // TODO: these need typing rules for operators, tuples, indexing,
+            // `?` and `return`. For now, only their subexpressions are
+            // checked, and the expression itself gets an unknown type.
+            Expr::Bin(bin) => self.infer_subexprs([bin.lhs(), bin.rhs()], env),
+            Expr::Prefix(prefix) => self.infer_subexprs([prefix.expr()], env),
+            Expr::Tuple(tuple) => self.infer_subexprs(tuple.elements().map(Some), env),
+            Expr::Index(index) => self.infer_subexprs([index.base(), index.index()], env),
+            Expr::Try(try_expr) => self.infer_subexprs([try_expr.expr()], env),
+            Expr::Ret(ret) => self.infer_subexprs([ret.expr()], env),
         }
+    }
+
+    pub fn infer_nest_expr(&mut self, expr: &NestExpr, env: TypeEnvId) -> (GenOut, Type) {
+        match expr.expr() {
+            Some(inner) => self.infer_expr(&inner, env),
+            None => (GenOut::new(), self.fresh_type_var().into()),
+        }
+    }
+
+    pub fn infer_cast_expr(&mut self, expr: &CastExpr, env: TypeEnvId) -> (GenOut, Type) {
+        let (mut out, _) = self.infer_subexprs([expr.expr()], env);
+        let ty = match expr.type_expr() {
+            Some(te) => {
+                let (te_out, ty) = self.infer_type_expr(&te, env);
+                out.extend(te_out);
+                ty
+            }
+            None => self.fresh_type_var().into(),
+        };
+        (out, ty)
+    }
+
+    /// Infer each of `exprs` and give the enclosing expression a fresh type.
+    fn infer_subexprs(&mut self, exprs: impl IntoIterator<Item = Option<Expr>>, env: TypeEnvId) -> (GenOut, Type) {
+        let mut out = GenOut::new();
+        for expr in exprs.into_iter().flatten() {
+            let (expr_out, _) = self.infer_expr(&expr, env);
+            out.extend(expr_out);
+        }
+        (out, self.fresh_type_var().into())
     }
 
 }

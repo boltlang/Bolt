@@ -1,6 +1,6 @@
 use std::fs::write;
 
-use crate::{ArrowTypeExpr, BlockExpr, CallExpr, Expr, FunExpr, FuncDecl, LitExpr, NamedExpr, NamedPattern, NamedTypeExpr, Param, Pattern, SourceElement, SourceFile, TypeExpr, TypedPattern, VarDecl};
+use crate::{ArrowTypeExpr, BinExpr, BlockExpr, CallExpr, CastExpr, Expr, IndexExpr, NestExpr, PrefixExpr, RetExpr, TryExpr, TupleExpr, FunExpr, FuncDecl, LitExpr, NamedExpr, NamedPattern, NamedTypeExpr, Param, Pattern, SourceElement, SourceFile, TypeExpr, TypedPattern, VarDecl};
 
 pub struct Formatter<'a> {
     after_newline: bool,
@@ -214,7 +214,95 @@ impl Emit for Expr {
             Expr::Fun(expr) => expr.emit(f),
             Expr::Call(expr) => expr.emit(f),
             Expr::Block(expr) => expr.emit(f),
+            Expr::Bin(expr) => expr.emit(f),
+            Expr::Prefix(expr) => expr.emit(f),
+            Expr::Nest(expr) => expr.emit(f),
+            Expr::Tuple(expr) => expr.emit(f),
+            Expr::Index(expr) => expr.emit(f),
+            Expr::Cast(expr) => expr.emit(f),
+            Expr::Try(expr) => expr.emit(f),
+            Expr::Ret(expr) => expr.emit(f),
         }
+    }
+}
+
+fn emit_opt<N: Emit>(f: &mut Formatter<'_>, node: Option<N>) -> std::io::Result<()> {
+    match node {
+        Some(node) => node.emit(f),
+        None => f.write("..."),
+    }
+}
+
+impl Emit for BinExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        emit_opt(f, self.lhs())?;
+        f.write(" ")?;
+        f.write(self.operator().as_ref().map_or("...", |op| op.text()))?;
+        f.write(" ")?;
+        emit_opt(f, self.rhs())
+    }
+}
+
+impl Emit for PrefixExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        f.write(self.operator().as_ref().map_or("...", |op| op.text()))?;
+        emit_opt(f, self.expr())
+    }
+}
+
+impl Emit for NestExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        f.write("(")?;
+        emit_opt(f, self.expr())?;
+        f.write(")")
+    }
+}
+
+impl Emit for TupleExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        f.write("(")?;
+        let elements: Vec<_> = self.elements().collect();
+        let len = elements.len();
+        emit_interspersed(f, elements.into_iter(), ", ")?;
+        if len == 1 {
+            f.write(",")?;
+        }
+        f.write(")")
+    }
+}
+
+impl Emit for IndexExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        emit_opt(f, self.base())?;
+        f.write("[")?;
+        emit_opt(f, self.index())?;
+        f.write("]")
+    }
+}
+
+impl Emit for CastExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        emit_opt(f, self.expr())?;
+        f.write(" as ")?;
+        emit_opt(f, self.type_expr())
+    }
+}
+
+impl Emit for TryExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        emit_opt(f, self.expr())?;
+        f.write("?")
+    }
+}
+
+impl Emit for RetExpr {
+    fn emit(&self, f: &mut Formatter<'_>) -> std::io::Result<()> {
+        f.write("return")?;
+        if let Some(expr) = self.expr() {
+            f.write(" ")?;
+            expr.emit(f)?;
+        }
+        Ok(())
     }
 }
 

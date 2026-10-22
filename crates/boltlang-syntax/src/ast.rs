@@ -232,6 +232,14 @@ pub enum Expr {
     Call(CallExpr),
     Fun(FunExpr),
     Block(BlockExpr),
+    Bin(BinExpr),
+    Prefix(PrefixExpr),
+    Nest(NestExpr),
+    Tuple(TupleExpr),
+    Index(IndexExpr),
+    Cast(CastExpr),
+    Try(TryExpr),
+    Ret(RetExpr),
 }
 
 impl Node for Expr {
@@ -243,6 +251,14 @@ impl Node for Expr {
             CALL_EXPR => Expr::Call(CallExpr(syntax)),
             FUN_EXPR => Expr::Fun(FunExpr(syntax)),
             BLOCK_EXPR => Expr::Block(BlockExpr(syntax)),
+            BIN_EXPR => Expr::Bin(BinExpr(syntax)),
+            PREFIX_EXPR => Expr::Prefix(PrefixExpr(syntax)),
+            NEST_EXPR => Expr::Nest(NestExpr(syntax)),
+            TUPLE_EXPR => Expr::Tuple(TupleExpr(syntax)),
+            INDEX_EXPR => Expr::Index(IndexExpr(syntax)),
+            CAST_EXPR => Expr::Cast(CastExpr(syntax)),
+            TRY_EXPR => Expr::Try(TryExpr(syntax)),
+            RET_EXPR => Expr::Ret(RetExpr(syntax)),
             _ => unreachable!(),
         }
     }
@@ -254,13 +270,145 @@ impl Node for Expr {
             Expr::Named(node) => node.syntax(),
             Expr::Fun(node) => node.syntax(),
             Expr::Block(node) => node.syntax(),
+            Expr::Bin(node) => node.syntax(),
+            Expr::Prefix(node) => node.syntax(),
+            Expr::Nest(node) => node.syntax(),
+            Expr::Tuple(node) => node.syntax(),
+            Expr::Index(node) => node.syntax(),
+            Expr::Cast(node) => node.syntax(),
+            Expr::Try(node) => node.syntax(),
+            Expr::Ret(node) => node.syntax(),
         }
     }
 
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, PATH_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR | BLOCK_EXPR)
+        matches!(
+            kind,
+            PATH_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR | BLOCK_EXPR | BIN_EXPR | PREFIX_EXPR
+                | NEST_EXPR | TUPLE_EXPR | INDEX_EXPR | CAST_EXPR | TRY_EXPR | RET_EXPR
+        )
     }
 
+}
+
+/// Implements [`Node`] for a newtype around a single [`SyntaxKind`].
+macro_rules! simple_node {
+    ($name:ident, $kind:ident) => {
+        impl Node for $name {
+            fn kind() -> SyntaxKind {
+                $kind
+            }
+            fn wrap(syntax: SyntaxNode) -> Self {
+                $name(syntax)
+            }
+            fn syntax(&self) -> &SyntaxNode {
+                &self.0
+            }
+        }
+    };
+}
+
+/// `a + b`
+pub struct BinExpr(SyntaxNode);
+
+simple_node!(BinExpr, BIN_EXPR);
+
+impl BinExpr {
+    pub fn lhs(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn operator(&self) -> Option<SyntaxToken> {
+        self.find_token(OPERATOR)
+    }
+    pub fn rhs(&self) -> Option<Expr> {
+        self.0.children().filter_map(Expr::cast).nth(1)
+    }
+}
+
+/// `-a`, `+a`, `!a`
+pub struct PrefixExpr(SyntaxNode);
+
+simple_node!(PrefixExpr, PREFIX_EXPR);
+
+impl PrefixExpr {
+    pub fn operator(&self) -> Option<SyntaxToken> {
+        self.find_token(OPERATOR)
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `(a)`
+pub struct NestExpr(SyntaxNode);
+
+simple_node!(NestExpr, NEST_EXPR);
+
+impl NestExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `(a, b)`
+pub struct TupleExpr(SyntaxNode);
+
+simple_node!(TupleExpr, TUPLE_EXPR);
+
+impl TupleExpr {
+    pub fn elements(&self) -> ChildrenIter<Expr> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `a[i]`
+pub struct IndexExpr(SyntaxNode);
+
+simple_node!(IndexExpr, INDEX_EXPR);
+
+impl IndexExpr {
+    pub fn base(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn index(&self) -> Option<Expr> {
+        self.0.children().filter_map(Expr::cast).nth(1)
+    }
+}
+
+/// `a as T`
+pub struct CastExpr(SyntaxNode);
+
+simple_node!(CastExpr, CAST_EXPR);
+
+impl CastExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn type_expr(&self) -> Option<TypeExpr> {
+        self.find_node()
+    }
+}
+
+/// `a?`
+pub struct TryExpr(SyntaxNode);
+
+simple_node!(TryExpr, TRY_EXPR);
+
+impl TryExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `return a`
+pub struct RetExpr(SyntaxNode);
+
+simple_node!(RetExpr, RET_EXPR);
+
+impl RetExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
 }
 
 pub struct BlockExpr(SyntaxNode);
