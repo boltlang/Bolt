@@ -1,6 +1,6 @@
 use boltlang_syntax::SyntaxKind::*;
 use crate::{
-    grammar::{check_semi, parse_block_expr, parse_expr, param_list, type_},
+    grammar::{opt_ret_type, check_semi, parse_block_expr, parse_expr, param_list, type_},
     parser::{CompletedMarker, Parser, is_operator_kind},
 };
 
@@ -46,9 +46,7 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
         }
     }
     param_list(p);
-    if p.eat(R_ARROW) {
-        type_(p);
-    }
+    opt_ret_type(p);
     if p.eat(EQUALS) {
         parse_expr(p);
         check_semi(p);

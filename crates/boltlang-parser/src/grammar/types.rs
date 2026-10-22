@@ -3,7 +3,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{is_path_start, parse_expr, type_path},
+    grammar::{delimited, is_path_start, parse_expr, parse_pattern, type_path},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -15,6 +15,10 @@ pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     T!['('],
     T!['['],
     T![!],
+    T![fn],
+    T![async],
+    T![const],
+    T![extern],
 ]);
 
 pub(crate) const TYPE_RECOVERY_SET: TokenSet =
@@ -49,7 +53,8 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
         T!['('] => tuple_type(p),
         T!['['] => array_type(p),
         T![!] => never_type(p),
-        _ if is_path_start(p) => path_type(p),
+        T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
+        _ if is_path_start(p) => path_or_fn_trait_type(p),
         _ => {
             p.err_recover("expected a type", TYPE_RECOVERY_SET);
             return None;
@@ -58,11 +63,124 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
     Some(m)
 }
 
-/// `Vec[T]`, `Shape.Circle`, `M[N].O`
-fn path_type(p: &mut Parser) -> CompletedMarker {
-    let m = p.start();
-    type_path(p);
+/// `Vec[T]`, `Shape.Circle`, `M[N].O`, or a function type written with a
+/// trait, like `FnOnce(i32) -> i32`.
+fn path_or_fn_trait_type(p: &mut Parser) -> CompletedMarker {
+    let path = type_path(p).expect("called at the start of a path");
+    path_type_after_path(p, path)
+}
+
+/// Turn a parsed path into a PATH_TYPE, or into an FN_TYPE if `(` follows,
+/// as in `FnOnce(i32) -> i32`.
+pub(crate) fn path_type_after_path(p: &mut Parser, path: CompletedMarker) -> CompletedMarker {
+    let m = path.precede(p);
+    if p.at(T!['(']) {
+        fn_type_param_list(p);
+        opt_ret_type(p);
+        return m.complete(p, FN_TYPE);
+    }
     m.complete(p, PATH_TYPE)
+}
+
+/// `fn(A) -> B`, with optional modifiers: `async`, `const`, `extern "C"`.
+fn fn_type(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    function_modifiers(p);
+    p.expect(T![fn]);
+    fn_type_param_list(p);
+    opt_ret_type(p);
+    m.complete(p, FN_TYPE)
+}
+
+/// `async`, `const` and `extern "C"`, in any order, as in the grammar's
+/// `function_modifiers`.
+pub(crate) fn function_modifiers(p: &mut Parser) {
+    loop {
+        match p.current() {
+            T![async] | T![const] => p.bump_any(),
+            T![extern] => abi(p),
+            _ => break,
+        }
+    }
+}
+
+/// `extern` or `extern "C"`
+pub(crate) fn abi(p: &mut Parser) {
+    let m = p.start();
+    p.bump(T![extern]);
+    p.eat(STRING);
+    m.complete(p, ABI);
+}
+
+/// `-> T`, if there is one.
+pub(crate) fn opt_ret_type(p: &mut Parser) {
+    if p.at(T![->]) {
+        let m = p.start();
+        p.bump(T![->]);
+        type_no_bounds(p);
+        m.complete(p, RET_TYPE);
+    }
+}
+
+const FN_TYPE_PARAM_FIRST: TokenSet = TYPE_FIRST.union(TokenSet::new(&[T![_], T![mut], T![...], T![#]]));
+
+/// The parameters of a function type. Unlike in a function declaration, a
+/// bare name is a type here: `fn(i32)` takes an `i32`. A parameter can still
+/// be named, as in `fn(x: i32)`.
+fn fn_type_param_list(p: &mut Parser) {
+    let m = p.start();
+    delimited(
+        p,
+        T!['('],
+        T![')'],
+        T![,],
+        || "expected a parameter".into(),
+        FN_TYPE_PARAM_FIRST,
+        |p| {
+            if !p.at_ts(FN_TYPE_PARAM_FIRST) {
+                return false;
+            }
+            fn_type_param(p);
+            true
+        },
+    );
+    m.complete(p, PARAM_LIST);
+}
+
+fn fn_type_param(p: &mut Parser) {
+    let m = p.start();
+    if p.eat(T![...]) {
+        m.complete(p, VARIADIC_PARAM);
+        return;
+    }
+    let after_mut = if p.at(T![mut]) { 1 } else { 0 };
+    if p.nth_at(after_mut, T![self]) && !p.nth_at(after_mut + 1, T![:]) {
+        p.eat(T![mut]);
+        p.bump(T![self]);
+        m.complete(p, SELF_PARAM);
+        return;
+    }
+    // `x: T` or `mut x: T`
+    let named = matches!(p.nth(after_mut), IDENT | T![_] | T![self]) && p.nth_at(after_mut + 1, T![:]);
+    if named {
+        p.eat(T![mut]);
+        if p.at(T![self]) {
+            let name = p.start();
+            p.bump(T![self]);
+            name.complete(p, NAME);
+        } else {
+            parse_pattern(p);
+        }
+        p.bump(T![:]);
+        if p.eat(T![...]) {
+            m.complete(p, VARIADIC_PARAM);
+            return;
+        }
+        type_(p);
+    } else if !p.eat(T![_]) {
+        type_(p);
+    }
+    m.complete(p, PARAM);
 }
 
 /// `()`, `(A,)` or `(A, B)`. Like the grammar, `(A)` is a tuple type too.

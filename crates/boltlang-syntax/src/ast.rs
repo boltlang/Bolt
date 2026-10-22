@@ -126,6 +126,7 @@ ast_enum!(
         Array(ArrayType) = ARRAY_TYPE,
         Never(NeverType) = NEVER_TYPE,
         Bounded(BoundedType) = BOUNDED_TYPE,
+        Fn(FnType) = FN_TYPE,
     }
 );
 
@@ -184,6 +185,49 @@ impl BoundedType {
     }
     pub fn rhs(&self) -> Option<Type> {
         self.0.children().filter_map(Type::cast).nth(1)
+    }
+}
+
+/// `fn(A) -> B`, `extern "C" fn()`, or `FnOnce(A) -> B` with a trait.
+pub struct FnType(SyntaxNode);
+
+simple_node!(FnType, FN_TYPE);
+
+impl FnType {
+    /// The trait, in `FnOnce(A) -> B`.
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+    pub fn abi(&self) -> Option<Abi> {
+        self.find_node()
+    }
+    pub fn param_list(&self) -> Option<ParamList> {
+        self.find_node()
+    }
+    pub fn ret_type(&self) -> Option<RetType> {
+        self.find_node()
+    }
+}
+
+/// `-> T`
+pub struct RetType(SyntaxNode);
+
+simple_node!(RetType, RET_TYPE);
+
+impl RetType {
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// `extern` or `extern "C"`
+pub struct Abi(SyntaxNode);
+
+simple_node!(Abi, ABI);
+
+impl Abi {
+    pub fn string(&self) -> Option<SyntaxToken> {
+        self.find_token(STRING)
     }
 }
 
@@ -610,6 +654,9 @@ impl FunExpr {
     pub fn params(&self) -> Vec<Param> {
         self.param_list().map(|list| list.params().collect()).unwrap_or_default()
     }
+    pub fn ret_type(&self) -> Option<RetType> {
+        self.find_node()
+    }
     pub fn body(&self) -> Option<Expr> {
         self.find_node()
     }
@@ -839,7 +886,7 @@ impl FuncDecl {
         self.param_list().map(|list| list.params().collect()).unwrap_or_default()
     }
 
-    pub fn type_signature(&self ) -> Option<Type> {
+    pub fn ret_type(&self) -> Option<RetType> {
         self.find_node()
     }
 

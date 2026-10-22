@@ -1,7 +1,7 @@
 use boltlang_syntax::{SyntaxKind::{self, *}, T};
 use crate::{
     Parser,
-    grammar::{PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, param_list, parse_pattern, type_, type_no_bounds},
+    grammar::{opt_ret_type, PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, param_list, parse_pattern, type_, type_no_bounds},
     parser::{CompletedMarker, Marker},
     token_set::TokenSet
 };
@@ -113,9 +113,7 @@ pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(FN_KEYWORD);
     param_list(p);
-    if p.eat(R_ARROW) {
-        type_(p);
-    }
+    opt_ret_type(p);
     if p.eat(EQUALS) {
         parse_expr(p);
     } else if p.at(L_BRACE) {

@@ -128,6 +128,12 @@ pub enum SyntaxKind {
     NEVER_TYPE,
     /// `A + B`
     BOUNDED_TYPE,
+    /// `fn(A) -> B`, `extern "C" fn()` or `FnOnce(A) -> B`
+    FN_TYPE,
+    /// `-> T`
+    RET_TYPE,
+    /// `extern` or `extern "C"`
+    ABI,
 
     // Generic arguments
     /// `[A, B]` after a type
@@ -289,6 +295,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            FN_TYPE => "a function type",
+            RET_TYPE => "a return type",
+            ABI => "an ABI (like extern \"C\")",
             PARAM_LIST => "a parameter list",
             SELF_PARAM => "a self parameter",
             VARIADIC_PARAM => "a variadic parameter",

@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
     grammar::{
         LITERAL_FIRST, TYPE_FIRST, delimited, name_ref, parse_block_expr, parse_literal_expr,
-        PathMode, path_for_qualifier, trait_bounds, type_, type_no_bounds,
+        PathMode, path_for_qualifier, path_type_after_path, trait_bounds, type_, type_no_bounds,
     },
     parser::Parser,
     token_set::TokenSet,
@@ -67,7 +67,7 @@ fn generic_arg(p: &mut Parser) -> bool {
                 while p.at(T![.]) {
                     path = path_for_qualifier(p, path, PathMode::Type);
                 }
-                let mut ty = path.precede(p).complete(p, PATH_TYPE);
+                let mut ty = path_type_after_path(p, path);
                 while p.at(T![+]) {
                     let bounded = ty.precede(p);
                     p.bump(T![+]);
