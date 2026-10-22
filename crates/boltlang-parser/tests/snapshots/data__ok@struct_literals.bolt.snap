@@ -1,0 +1,256 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/struct_literals.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "a"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - RECORD_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Point"
+      - WHITESPACE " "
+      - RECORD_EXPR_FIELD_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - IDENT "x"
+        - COMMA ","
+        - WHITESPACE " "
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - IDENT "y"
+          - COLON ":"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "b"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - RECORD_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Point"
+      - WHITESPACE " "
+      - RECORD_EXPR_FIELD_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - IDENT "x"
+          - COLON ":"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+        - COMMA ","
+        - WHITESPACE " "
+        - DOTDOT ".."
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "base"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "c"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - RECORD_EXPR
+      - PATH
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Shape"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Circle"
+      - WHITESPACE " "
+      - RECORD_EXPR_FIELD_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - IDENT "radius"
+          - COLON ":"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - FLOAT_NUMBER "1.0"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "d"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - RECORD_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Pair"
+      - WHITESPACE " "
+      - RECORD_EXPR_FIELD_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - INT_NUMBER "0"
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
+        - COMMA ","
+        - WHITESPACE " "
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - INT_NUMBER "1"
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "b"
+        - COMMA ","
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "e"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - RECORD_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Empty"
+      - WHITESPACE " "
+      - RECORD_EXPR_FIELD_LIST
+        - L_BRACE "{"
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - BIN_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - WHITESPACE " "
+        - OPERATOR "=="
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Point"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "x"
+          - WHITESPACE " "
+          - R_BRACE "}"
+  - WHITESPACE " "
+  - EXPR_STMT
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "f"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - DOT "."
+      - NAME_REF
+        - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - FOR_EXPR
+      - FOR_KEYWORD "for"
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "p"
+      - WHITESPACE " "
+      - IN_KEYWORD "in"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "points"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - R_BRACE "}"
+  - WHITESPACE "\n"

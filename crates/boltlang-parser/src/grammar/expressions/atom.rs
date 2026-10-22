@@ -5,7 +5,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
 use crate::{
-    grammar::{expr_path, is_path_start, opt_ret_type, param_list, parse_pattern},
+    grammar::{dotted_path, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -64,6 +64,9 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
         return Some((m, BlockLike::NotBlock));
     }
     if is_path_start(p) {
+        if !r.forbid_structs && at_struct_literal(p) {
+            return Some((record_expr(p), BlockLike::NotBlock));
+        }
         return Some((path_expr(p), BlockLike::NotBlock));
     }
     // `'label: loop { }` and other labelled loops and blocks
@@ -133,6 +136,68 @@ fn path_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     expr_path(p);
     m.complete(p, PATH_EXPR)
+}
+
+/// Whether a struct literal starts here: a name or dotted path like
+/// `Shape.Circle`, followed by `{`. Elsewhere in an expression, `a.b` is a
+/// field access.
+fn at_struct_literal(p: &Parser) -> bool {
+    if !p.at(IDENT) {
+        return false;
+    }
+    let mut n = 0;
+    while p.nth_at(n + 1, T![.]) && p.nth_at(n + 2, IDENT) {
+        n += 2;
+    }
+    p.nth_at(n + 1, T!['{'])
+}
+
+/// `Point { x, y: 1, ..base }`
+fn record_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    dotted_path(p);
+    record_expr_field_list(p);
+    m.complete(p, RECORD_EXPR)
+}
+
+fn record_expr_field_list(p: &mut Parser) {
+    let m = p.start();
+    p.bump(T!['{']);
+    while !p.at(EOF) && !p.at(T!['}']) {
+        match p.current() {
+            // `..base` must come last.
+            T![..] => {
+                p.bump(T![..]);
+                expr(p);
+                if p.at(T![,]) {
+                    p.error("expected '}' after the base of a struct literal");
+                    p.bump(T![,]);
+                }
+                continue;
+            }
+            IDENT | INT_NUMBER => {
+                let field = p.start();
+                let name = p.start();
+                p.bump_any();
+                name.complete(p, NAME_REF);
+                if p.eat(T![:]) {
+                    expr(p);
+                }
+                field.complete(p, RECORD_EXPR_FIELD);
+            }
+            _ => {
+                p.err_recover("expected a field", TokenSet::new(&[T!['}'], T![,]]));
+                if !p.at(T![,]) {
+                    break;
+                }
+            }
+        }
+        if !p.at(T!['}']) {
+            p.expect(T![,]);
+        }
+    }
+    p.expect(T!['}']);
+    m.complete(p, RECORD_EXPR_FIELD_LIST);
 }
 
 /// `(a)`, `(a,)`, `(a, b)` or `()`

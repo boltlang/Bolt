@@ -608,6 +608,7 @@ ast_enum!(
         Continue(ContinueExpr) = CONTINUE_EXPR,
         Yield(YieldExpr) = YIELD_EXPR,
         Match(MatchExpr) = MATCH_EXPR,
+        Record(RecordExpr) = RECORD_EXPR,
     }
 );
 
@@ -759,6 +760,50 @@ impl WhileExpr {
 /// The first child of `node` that is a block expression.
 fn find_block(node: &SyntaxNode) -> Option<BlockExpr> {
     node.children().find_map(BlockExpr::cast)
+}
+
+/// A struct literal: `Point { x, y: 1, ..base }`
+pub struct RecordExpr(SyntaxNode);
+
+simple_node!(RecordExpr, RECORD_EXPR);
+
+impl RecordExpr {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+    pub fn field_list(&self) -> Option<RecordExprFieldList> {
+        self.find_node()
+    }
+}
+
+/// The `{ x, y: 1, ..base }` of a struct literal
+pub struct RecordExprFieldList(SyntaxNode);
+
+simple_node!(RecordExprFieldList, RECORD_EXPR_FIELD_LIST);
+
+impl RecordExprFieldList {
+    pub fn fields(&self) -> ChildrenIter<RecordExprField> {
+        ChildrenIter::new(&self.0)
+    }
+    /// The `base` of `..base`.
+    pub fn spread(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `x`, `x: value` or `0: value` in a struct literal
+pub struct RecordExprField(SyntaxNode);
+
+simple_node!(RecordExprField, RECORD_EXPR_FIELD);
+
+impl RecordExprField {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    /// The value, or `None` for the shorthand `x`.
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
 }
 
 /// `match value { pattern => value, ... }`
