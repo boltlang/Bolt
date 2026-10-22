@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        delimited, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        abi, delimited, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -59,6 +59,10 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
         }
         T![impl] => {
             impl_item(p, m);
+            return Ok(());
+        }
+        T![extern] => {
+            extern_block(p, m);
             return Ok(());
         }
         _ => {}
@@ -422,4 +426,16 @@ pub(crate) fn item_list(p: &mut Parser) {
     }
     p.expect(T!['}']);
     m.complete(p, ITEM_LIST);
+}
+
+/// `extern "C" { items }` or `extern "C";`, following the grammar's
+/// `foreign_mod_item`.
+fn extern_block(p: &mut Parser, m: Marker) {
+    abi(p);
+    if p.at(T!['{']) {
+        item_list(p);
+    } else {
+        p.expect(T![;]);
+    }
+    m.complete(p, EXTERN_BLOCK);
 }

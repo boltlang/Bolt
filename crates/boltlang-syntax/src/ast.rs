@@ -1535,8 +1535,23 @@ ast_enum!(
         TypeAlias(TypeAlias) = TYPE_ALIAS,
         Trait(Trait) = TRAIT,
         Impl(Impl) = IMPL,
+        ExternBlock(ExternBlock) = EXTERN_BLOCK,
     }
 );
+
+/// `extern "C" { items }` or `extern "C";`
+pub struct ExternBlock(SyntaxNode);
+
+simple_node!(ExternBlock, EXTERN_BLOCK);
+
+impl ExternBlock {
+    pub fn abi(&self) -> Option<Abi> {
+        self.find_node()
+    }
+    pub fn item_list(&self) -> Option<ItemList> {
+        self.find_node()
+    }
+}
 
 /// `trait Name: Bounds { items }`
 pub struct Trait(SyntaxNode);
