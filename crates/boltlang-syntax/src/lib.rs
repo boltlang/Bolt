@@ -55,6 +55,7 @@ pub enum SyntaxKind {
     OPERATOR,
     BYTE_STRING,
     BYTE,
+    C_STRING,
     CHAR,
     STRING,
     ASSIGNMENT,
@@ -181,6 +182,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            C_STRING => "a C string (like c\"foo\")",
             DOLLAR => "'$'",
             DOTDOTDOT => "'...'",
             FAT_ARROW => "'=>'",

@@ -1,0 +1,90 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/literals.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "a"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - CHAR "'x'"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "b"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - BYTE "b'y'"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "c"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - STRING "\"tab\\there \\\"quoted\\\"\""
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "d"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - BYTE_STRING "b\"bytes\""
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "e"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - C_STRING "c\"c\""
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "f"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - STRING "r#\"raw \"string\"\"#"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "r#match"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - FLOAT_NUMBER "1.5"
+    - SEMI ";"
+  - WHITESPACE "\n"

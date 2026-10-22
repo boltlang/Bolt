@@ -1,31 +1,34 @@
 ---
 source: crates/boltlang-parser/tests/data.rs
-assertion_line: 100
 expression: "dump(&node, &diags)"
-input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-floating_point_literals.bolt
+input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-character_literals.bolt
 ---
 - SOURCE_FILE
   - LIT_EXPR
-    - FLOAT_NUMBER "123.123"
+    - CHAR "'a'"
   - SEMI ";"
   - WHITESPACE "\n"
   - LIT_EXPR
-    - FLOAT_NUMBER "2."
+    - CHAR "'\\''"
   - SEMI ";"
   - WHITESPACE "\n"
   - LIT_EXPR
-    - FLOAT_NUMBER "123.0f64"
+    - CHAR "'\\0'"
   - SEMI ";"
   - WHITESPACE "\n"
   - LIT_EXPR
-    - FLOAT_NUMBER "0.1f64"
+    - BYTE "b'x'"
   - SEMI ";"
   - WHITESPACE "\n"
   - LIT_EXPR
-    - FLOAT_NUMBER "0.1f32"
+    - CHAR "'\\t'"
   - SEMI ";"
   - WHITESPACE "\n"
   - LIT_EXPR
-    - FLOAT_NUMBER "12E+99_f64"
+    - CHAR "'\\xff'"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - CHAR "'\\\\'"
   - SEMI ";"
   - WHITESPACE "\n"

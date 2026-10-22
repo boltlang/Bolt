@@ -24,6 +24,7 @@ pub(crate) const LITERAL_FIRST: TokenSet = TokenSet::new(&[
     CHAR,
     STRING,
     BYTE_STRING,
+    C_STRING,
 ]);
 
 pub(super) const ATOM_EXPR_FIRST: TokenSet =
@@ -74,7 +75,7 @@ pub fn parse_block_expr(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        STRING | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => {
+        STRING | BYTE_STRING | C_STRING | CHAR | BYTE | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => {
             let m = p.start();
             p.bump_any();
             Some(m.complete(p, LIT_EXPR))
@@ -141,7 +142,7 @@ pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        STRING | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => parse_literal_expr(p),
+        STRING | BYTE_STRING | C_STRING | CHAR | BYTE | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => parse_literal_expr(p),
         IDENT => parse_reference_expression(p),
         L_BRACE => Some(parse_block_expr(p)),
         L_PAREN => Some(parse_nest_expr(p)),

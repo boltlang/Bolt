@@ -79,12 +79,9 @@ ok/expressions-tuple_expressions.bolt
 ok/expressions-type_cast_expressions.bolt
 ok/expressions-while_expressions.bolt
 ok/expressions-while_let_expressions.bolt
-ok/literals-character_literals.bolt
 ok/literals-floating_point_literals.bolt
 ok/literals-integer_literals.bolt
-ok/literals-raw_byte_string_literals.bolt
 ok/literals-raw_c_string_literals.bolt
-ok/literals-raw_string_literals.bolt
 ok/literals-string_literals.bolt
 ok/macros-macro_definition.bolt
 ok/macros-macro_invocation_arbitrary_tokens.bolt

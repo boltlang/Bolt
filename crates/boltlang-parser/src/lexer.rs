@@ -207,6 +207,117 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
         self.pos.clone()
     }
 
+    /// Lex an escape sequence after its `\\`, reporting an invalid one.
+    /// Like the grammar, any character can be escaped, but `\\x` must be
+    /// followed by two hex digits and `\\u` by `{` hex digits `}` or four
+    /// hex digits.
+    fn scan_escape(&mut self) {
+        let start = self.pos.offset - 1;
+        match self.get() {
+            'x' => {
+                if is_hex_num(self.peek(0)) && is_hex_num(self.peek(1)) {
+                    self.get();
+                    self.get();
+                } else {
+                    self.error("expected two hex digits after `\\x`", start..self.pos.offset);
+                }
+            }
+            'u' if self.peek(0) == '{' => {
+                self.get();
+                self.eat_while(is_hex_num);
+                if self.peek(0) == '}' {
+                    self.get();
+                } else {
+                    self.error("expected `}` to end the unicode escape", start..self.pos.offset);
+                }
+            }
+            'u' => {
+                for _ in 0..4 {
+                    if !is_hex_num(self.peek(0)) {
+                        self.error("expected `{` or four hex digits after `\\u`", start..self.pos.offset);
+                        return;
+                    }
+                    self.get();
+                }
+            }
+            CHAR_EOF => {}
+            _ => {}
+        }
+    }
+
+    /// Lex the rest of a string after its opening `"`.
+    fn scan_string_body(&mut self) {
+        loop {
+            match self.get() {
+                CHAR_EOF => {
+                    self.error("expected '\"' to delimit the string literal but found end-of-file", self.pos.offset-1..self.pos.offset);
+                    break;
+                }
+                '"' => break,
+                '\\' => self.scan_escape(),
+                _ => {}
+            }
+        }
+    }
+
+    /// Lex the rest of a character literal after its opening `'`.
+    fn scan_char_body(&mut self, kind: SyntaxKind) -> SyntaxKind {
+        let start = self.pos.offset - 1;
+        match self.get() {
+            '\\' => self.scan_escape(),
+            '\'' | '\n' | CHAR_EOF => {
+                self.error("expected a character", start..self.pos.offset);
+                return kind;
+            }
+            _ => {}
+        }
+        if self.peek(0) == '\'' {
+            self.get();
+        } else {
+            self.error("expected `'` to end the character literal", start..self.pos.offset);
+        }
+        kind
+    }
+
+    /// Whether a raw string starts at `peek(n)`: `"` or `#`s followed by `"`.
+    fn at_raw_string(&mut self, n: usize) -> bool {
+        let mut i = n;
+        while self.peek(i) == '#' {
+            i += 1;
+        }
+        self.peek(i) == '"'
+    }
+
+    /// Lex a raw string like `r#"..."#` after its `r`.
+    fn scan_raw_string(&mut self) {
+        let start = self.pos.offset - 1;
+        let mut hashes = 0;
+        while self.peek(0) == '#' {
+            self.get();
+            hashes += 1;
+        }
+        self.get(); // the opening `"`
+        loop {
+            match self.get() {
+                CHAR_EOF => {
+                    self.error("expected the raw string to be closed", start..self.pos.offset);
+                    return;
+                }
+                '"' => {
+                    let mut closing = 0;
+                    while closing < hashes && self.peek(0) == '#' {
+                        self.get();
+                        closing += 1;
+                    }
+                    if closing == hashes {
+                        return;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     /// Consume characters while `pred` holds for them.
     fn eat_while(&mut self, pred: impl Fn(char) -> bool) {
         while pred(self.peek(0)) {
@@ -317,19 +428,10 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             }
             ';' => SEMI,
             '"' => {
-                loop {
-                    let c1 = self.get();
-                    if c1 == CHAR_EOF {
-                        self.error("expected '\"' to delimit the string literal but found end-of-file", self.pos.offset-1..self.pos.offset);
-                        // TODO backtrack to the firsst brace or paren after the string and take that string?
-                        break;
-                    }
-                    if c1 == '"' {
-                        break;
-                    }
-                }
+                self.scan_string_body();
                 STRING
             }
+            '\'' => self.scan_char_body(CHAR),
             '#' => HASHTAG,
             '/' if self.peek(0) == '*' => {
                 // Block comments nest, like in Rust: `/* a /* b */ c */`.
@@ -364,6 +466,36 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                     self.get();
                 }
                 LINE_COMMENT
+            }
+            // Prefixed literals: b"..", b'.', c"..", r".." and r#".."#, br"..",
+            // cr"..", and raw identifiers like r#match.
+            'b' if self.peek(0) == '"' => {
+                self.get();
+                self.scan_string_body();
+                BYTE_STRING
+            }
+            'b' if self.peek(0) == '\'' => {
+                self.get();
+                self.scan_char_body(BYTE)
+            }
+            'c' if self.peek(0) == '"' => {
+                self.get();
+                self.scan_string_body();
+                C_STRING
+            }
+            'r' if self.at_raw_string(0) => {
+                self.scan_raw_string();
+                STRING
+            }
+            'b' | 'c' if self.peek(0) == 'r' && self.at_raw_string(1) => {
+                self.get();
+                self.scan_raw_string();
+                if c0 == 'b' { BYTE_STRING } else { C_STRING }
+            }
+            'r' if self.peek(0) == '#' && is_ident_start(self.peek(1)) => {
+                self.get();
+                self.eat_while(is_ident_part);
+                IDENT
             }
             c0 if is_ident_start(c0) => {
                 let mut name = String::new();
@@ -574,6 +706,44 @@ mod tests {
     fn invalid_number_suffix() {
         assert_eq!(lex_errors("1abc").len(), 1);
         assert_eq!(lex_errors("1.5u8").len(), 1);
+    }
+
+    #[test]
+    fn strings() {
+        for (text, kind) in [
+            (r#""""#, STRING),
+            (r#""a \" b""#, STRING),
+            (r#""\n\t\\\0\x7f\u{1F600}\u00e9""#, STRING),
+            (r#"b"bytes""#, BYTE_STRING),
+            (r#"c"c string""#, C_STRING),
+            (r#"r"raw \ string""#, STRING),
+            (r###"r##"a "# b"##"###, STRING),
+            (r#"br"raw bytes""#, BYTE_STRING),
+            (r##"cr#"raw c"#"##, C_STRING),
+        ] {
+            assert_eq!(lex(text), [(kind, text)], "{text}");
+        }
+    }
+
+    #[test]
+    fn chars() {
+        for (text, kind) in [("'a'", CHAR), ("'\\''", CHAR), ("'\\u{e9}'", CHAR), ("'é'", CHAR), ("b'a'", BYTE)] {
+            assert_eq!(lex(text), [(kind, text)], "{text}");
+        }
+    }
+
+    #[test]
+    fn raw_identifiers() {
+        assert_eq!(lex("r#match r#abc"), [(IDENT, "r#match"), (IDENT, "r#abc")]);
+        assert_eq!(lex("r b c"), [(IDENT, "r"), (IDENT, "b"), (IDENT, "c")]);
+    }
+
+    #[test]
+    fn invalid_literals() {
+        assert_eq!(lex_errors(r#""\x7""#).len(), 1);
+        assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
+        assert_eq!(lex_errors("'ab'").len(), 1);
+        assert_eq!(lex_errors(r##"r#"no end""##).len(), 1);
     }
 
     #[test]
