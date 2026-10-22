@@ -10,6 +10,7 @@
 //!   forms defined in [`hir`].
 //! - [`body`] lowers the bodies of functions, consts, enum discriminants and
 //!   the top-level statements of files.
+//! - [`signatures`] lowers everything about items except their bodies.
 
 pub mod arena;
 pub mod body;
@@ -19,6 +20,7 @@ pub mod ids;
 pub mod item_tree;
 mod name;
 pub mod nameres;
+pub mod signatures;
 
 pub use name::Name;
 
