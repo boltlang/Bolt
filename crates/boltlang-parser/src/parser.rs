@@ -1,7 +1,7 @@
 
-use std::{collections::HashMap, num::NonZeroU32};
+use std::{cell::Cell, num::NonZeroU32};
 
-use boltlang_syntax::SyntaxKind;
+use boltlang_syntax::{SyntaxKind, T};
 use boltlang_common::DropBomb;
 use crate::{event::Event, token_set::TokenSet};
 
@@ -121,6 +121,10 @@ impl CompletedMarker {
         self
     }
 
+    pub(crate) fn kind(&self) -> SyntaxKind {
+        self.kind
+    }
+
     pub(crate) fn last_token(&self, p: &Parser<'_>) -> Option<SyntaxKind> {
         let end_pos = self.end_pos as usize;
         debug_assert_eq!(p.events[end_pos - 1], Event::Finish);
@@ -150,32 +154,6 @@ impl Input {
 
 }
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub(crate) enum Associativity {
-    Left,
-    Right,
-}
-
-#[derive(Clone)]
-struct OpDesc {
-    pub assoc: Associativity,
-    pub prec: u8,
-}
-
-const EMPTY_OP_DESC: OpDesc = OpDesc { prec: 0, assoc: Associativity::Left };
-
-impl OpDesc {
-
-    pub(crate) fn is_rassoc(&self) -> bool {
-        self.assoc == Associativity::Right
-    }
-
-    pub(crate) fn is_lassoc(&self) -> bool {
-        self.assoc == Associativity::Left
-    }
-
-}
-
 pub struct Parser<'t> {
     inp: Input,
     pos: usize,
@@ -183,9 +161,15 @@ pub struct Parser<'t> {
     /// Tokens that were split in two by [`Parser::split_bump`], as
     /// `(token index, length of the first part)`.
     splits: Vec<(usize, u32)>,
-    expr_op_table: HashMap<String, OpDesc>,
+    /// How often the parser looked at a token since it last consumed one.
+    /// See [`PARSER_STEP_LIMIT`].
+    steps: Cell<u32>,
     _input: std::marker::PhantomData<&'t Input>,
 }
+
+/// If the parser looks at this many tokens without consuming any, it's
+/// stuck in a loop, and [`Parser::nth`] panics instead of hanging.
+const PARSER_STEP_LIMIT: u32 = if cfg!(debug_assertions) { 150_000 } else { 15_000_000 };
 
 impl <'t> Parser<'t> {
 
@@ -195,7 +179,7 @@ impl <'t> Parser<'t> {
             pos: 0,
             events: Vec::with_capacity(2 * inp.kinds.len()),
             splits: Vec::new(),
-            expr_op_table: HashMap::new(),
+            steps: Cell::new(0),
             _input: std::marker::PhantomData,
         }
     }
@@ -205,7 +189,59 @@ impl <'t> Parser<'t> {
     }
 
     pub(crate) fn nth(&self, n: usize) -> SyntaxKind {
+        let steps = self.steps.get();
+        assert!(steps < PARSER_STEP_LIMIT, "the parser seems stuck");
+        self.steps.set(steps + 1);
         self.inp.kind(self.pos + n)
+    }
+
+    /// The text of the token `n` tokens ahead, or `""` past the end.
+    pub(crate) fn nth_text(&self, n: usize) -> &str {
+        self.inp.values.get(self.pos + n).and_then(Option::as_deref).unwrap_or("")
+    }
+
+    /// Whether the current token is the contextual keyword `kw`, like
+    /// `T![default]`. The lexer produces an `IDENT` for these.
+    pub(crate) fn at_contextual_kw(&self, kw: SyntaxKind) -> bool {
+        self.nth_at_contextual_kw(0, kw)
+    }
+
+    pub(crate) fn nth_at_contextual_kw(&self, n: usize, kw: SyntaxKind) -> bool {
+        let text = match kw {
+            DEFAULT_KEYWORD => "default",
+            GEN_KEYWORD => "gen",
+            MACRO_RULES_KEYWORD => "macro_rules",
+            _ => panic!("{kw:?} is not a contextual keyword"),
+        };
+        self.nth(n) == IDENT && self.nth_text(n) == text
+    }
+
+    /// Consume the contextual keyword `kw` as a keyword, if it's next.
+    pub(crate) fn eat_contextual_kw(&mut self, kw: SyntaxKind) -> bool {
+        if !self.at_contextual_kw(kw) {
+            return false;
+        }
+        self.bump_remap(kw);
+        true
+    }
+
+    /// Whether the current token is the operator `op`, e.g. `"&&"`. Use this
+    /// for operators that have no kind of their own (see [`is_operator_kind`]).
+    pub(crate) fn at_op(&self, op: &str) -> bool {
+        self.nth_at_op(0, op)
+    }
+
+    pub(crate) fn nth_at_op(&self, n: usize, op: &str) -> bool {
+        is_operator_kind(self.nth(n)) && self.nth_text(n) == op
+    }
+
+    /// Consume the operator `op`, if it's next.
+    pub(crate) fn eat_op(&mut self, op: &str) -> bool {
+        if !self.at_op(op) {
+            return false;
+        }
+        self.bump_any();
+        true
     }
 
     /// Check whether the current token falls into the given [TokenSet].
@@ -218,7 +254,7 @@ impl <'t> Parser<'t> {
     }
 
     pub(crate) fn nth_at(&self, n: usize, kind: SyntaxKind) -> bool {
-        self.inp.kind(self.pos + n) == kind
+        self.nth(n) == kind
     }
 
     /// Tries to consume a specific token.
@@ -287,13 +323,6 @@ impl <'t> Parser<'t> {
         false
     }
 
-    /// Create an error node and consume the next token.
-    pub(crate) fn err_and_bump(&mut self, message: &str) {
-        let m = self.start();
-        self.error(message);
-        self.bump_any();
-        m.complete(self, ERROR);
-    }
 
     pub(crate) fn value(&self) -> Option<&String> {
         self.inp.values[self.pos].as_ref()
@@ -310,25 +339,15 @@ impl <'t> Parser<'t> {
         }
     }
 
-    pub fn is_operator(&self, text: &str) -> bool {
-        self.op_text().is_some_and(|t| t == text)
-    }
 
-    pub fn is_expr_prefix_operator(&self) -> bool {
-        self.op_text().is_some_and(|t| matches!(t, "-" | "+" | "!"))
-    }
 
-    pub(crate) fn expr_operator(&self) -> (u8, &str, Associativity) {
-        let text = self.op_text().expect("current token is not an operator");
-        let desc = self.expr_op_table.get(text).unwrap_or(&EMPTY_OP_DESC);
-        (desc.prec, text, desc.assoc)
-    }
 
     /// Create an error node and consume the next token unless it is in the recovery set.
     ///
     /// Returns true if recovery kicked in.
     pub(crate) fn err_recover(&mut self, message: &str, recovery: TokenSet) -> bool {
-        if self.at_ts(recovery) {
+        // Never skip braces: they're what the rest of the parser recovers on.
+        if matches!(self.current(), T!['{'] | T!['}']) || self.at_ts(recovery) {
             self.error(message);
             return true;
         }
@@ -369,6 +388,7 @@ impl <'t> Parser<'t> {
     /// Perform the actual recording of a token.
     fn do_bump(&mut self, kind: SyntaxKind) {
         self.pos += 1;
+        self.steps.set(0);
         self.push_event(Event::Token { kind });
     }
 

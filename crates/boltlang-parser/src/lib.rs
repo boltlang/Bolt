@@ -67,6 +67,31 @@ mod tests {
     }
 
     #[test]
+    fn contextual_keywords_and_operators() {
+        let tokens = tokens("default <$> x", |p| {
+            let m = p.start();
+            assert!(p.at_contextual_kw(DEFAULT_KEYWORD));
+            assert!(p.eat_contextual_kw(DEFAULT_KEYWORD));
+            assert!(p.at_op("<$>"));
+            assert!(!p.at_op("<"));
+            assert!(p.eat_op("<$>"));
+            assert!(!p.at_contextual_kw(DEFAULT_KEYWORD));
+            p.bump_any();
+            m.complete(p, SOURCE_FILE);
+        });
+        let kinds: Vec<_> = tokens.iter().map(|(kind, _)| *kind).filter(|kind| *kind != WHITESPACE).collect();
+        assert_eq!(kinds, [DEFAULT_KEYWORD, OPERATOR, IDENT]);
+    }
+
+    #[test]
+    #[should_panic(expected = "the parser seems stuck")]
+    fn a_stuck_parser_panics() {
+        parse("x", |p| loop {
+            p.at(IDENT);
+        });
+    }
+
+    #[test]
     fn split_bump_splits_a_token_in_two() {
         let tokens = tokens(" >> ", |p| {
             let m = p.start();
