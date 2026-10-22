@@ -177,12 +177,11 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 STRING
             }
-            '#' => {
-                loop {
-                    let c1 = self.get();
-                    if c1 == '\n' || c1 == CHAR_EOF {
-                        break;
-                    }
+            '#' => HASHTAG,
+            '/' if self.peek(0) == '/' => {
+                // The newline isn't part of the comment.
+                while !matches!(self.peek(0), '\n' | CHAR_EOF) {
+                    self.get();
                 }
                 LINE_COMMENT
             }
@@ -238,13 +237,16 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             c0 if is_operator(c0) => {
                 let mut text = String::new();
                 text.push(c0);
-                while is_operator(self.peek(0)) {
+                // Stop before `//`, so `a +// note` is `+` followed by a comment.
+                while is_operator(self.peek(0)) && !(self.peek(0) == '/' && self.peek(1) == '/') {
                     text.push(self.get());
                 }
                 if text == "->" {
                     R_ARROW
                 } else if text == "=" {
                     EQUALS
+                } else if matches!(text.as_str(), "!=" | "<=" | ">=") {
+                    OPERATOR
                 } else if text.chars().filter(|c| *c == '=').count() > 1 {
                     // Things like +==% and -== should be parsed as a regular operator
                     OPERATOR

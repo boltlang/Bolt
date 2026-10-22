@@ -1,0 +1,6 @@
+// A comment
+let x = 1; // trailing comment
+//
+let y = a +// right after an operator
+  b;
+// at end of file without newline

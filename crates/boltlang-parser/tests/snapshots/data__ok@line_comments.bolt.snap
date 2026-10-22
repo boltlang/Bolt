@@ -1,0 +1,44 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/line_comments.bolt
+---
+- SOURCE_FILE
+  - LINE_COMMENT "// A comment"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "1"
+    - SEMI ";"
+  - WHITESPACE " "
+  - LINE_COMMENT "// trailing comment"
+  - WHITESPACE "\n"
+  - LINE_COMMENT "//"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BIN_EXPR
+      - PATH_EXPR
+        - IDENT "a"
+      - WHITESPACE " "
+      - OPERATOR "+"
+      - LINE_COMMENT "// right after an operator"
+      - WHITESPACE "\n  "
+      - PATH_EXPR
+        - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LINE_COMMENT "// at end of file without newline"

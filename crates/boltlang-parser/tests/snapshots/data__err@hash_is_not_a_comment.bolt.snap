@@ -1,0 +1,36 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/hash_is_not_a_comment.bolt
+---
+- SOURCE_FILE
+  - ERROR
+    - HASHTAG "#"
+    - WHITESPACE " "
+  - IDENT "not"
+  - WHITESPACE " "
+  - IDENT "a"
+  - WHITESPACE " "
+  - IDENT "comment"
+  - WHITESPACE "\n"
+  - LET_KEYWORD "let"
+  - WHITESPACE " "
+  - IDENT "x"
+  - WHITESPACE " "
+  - EQUALS "="
+  - WHITESPACE " "
+  - DEC_INT "1"
+  - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected expression
+span:
+  start: 0
+  end: 0
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 2
+  end: 2

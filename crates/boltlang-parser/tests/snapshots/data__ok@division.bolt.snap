@@ -1,0 +1,24 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/division.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BIN_EXPR
+      - PATH_EXPR
+        - IDENT "a"
+      - WHITESPACE " "
+      - OPERATOR "/"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
