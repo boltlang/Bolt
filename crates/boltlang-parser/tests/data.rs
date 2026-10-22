@@ -11,9 +11,19 @@
 //! Add a test by adding a file, then run `cargo insta test --review`.
 //! Run a single file with `cargo test --test data let_mut`.
 
+// Lets us capture what a test prints and only show it when the test fails,
+// like the default test harness does. This is an internal std feature, so it
+// may break on a future nightly; if it does, drop `run_captured` and set
+// `INSTA_OUTPUT=minimal` instead.
+#![feature(internal_output_capture)]
+
 mod common;
 
-use std::path::{Path, PathBuf};
+use std::{
+    panic::{AssertUnwindSafe, catch_unwind},
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
 
 use common::{dump, has_error_node, parse_file_with_timeout};
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -75,6 +85,28 @@ fn check(path: &Path, expect: Expect, snapshot: Option<&str>) -> Result<(), Fail
     Ok(())
 }
 
+/// Run `f` with its output (including insta's diffs, panic messages and
+/// anything printed by threads it spawns) captured. The output is dropped if
+/// the test passes and appended to the failure message if it fails.
+fn run_captured(f: impl FnOnce() -> Result<(), Failed>) -> Result<(), Failed> {
+    let buf = Arc::new(Mutex::new(Vec::new()));
+    let prev = std::io::set_output_capture(Some(buf.clone()));
+    let result = catch_unwind(AssertUnwindSafe(f));
+    std::io::set_output_capture(prev);
+
+    let message = match result {
+        Ok(Ok(())) => return Ok(()),
+        Ok(Err(failed)) => failed.message().unwrap_or_default().to_string(),
+        Err(_) => "test panicked".to_string(),
+    };
+    let output = String::from_utf8_lossy(&buf.lock().unwrap()).into_owned();
+    if output.trim().is_empty() {
+        Err(message.into())
+    } else {
+        Err(format!("{message}\n\n{output}").into())
+    }
+}
+
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
@@ -88,7 +120,7 @@ fn main() {
             );
             let (expect, snapshot) = (group.expect, group.snapshot);
             trials.push(
-                Trial::test(name, move || check(&path, expect, snapshot))
+                Trial::test(name, move || run_captured(|| check(&path, expect, snapshot)))
                     .with_ignored_flag(group.ignored),
             );
         }
