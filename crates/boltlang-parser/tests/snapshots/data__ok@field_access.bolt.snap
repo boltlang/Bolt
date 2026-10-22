@@ -1,0 +1,271 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/field_access.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "a"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - DOT "."
+      - NAME_REF
+        - IDENT "y"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "b"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - FIELD_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - DOT "."
+        - NAME_REF
+          - IDENT "y"
+      - DOT "."
+      - NAME_REF
+        - IDENT "z"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "c"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "t"
+      - DOT "."
+      - NAME_REF
+        - INT_NUMBER "0"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "d"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - FIELD_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "t"
+        - DOT "."
+        - NAME_REF
+          - INT_NUMBER "0"
+      - DOT "."
+      - NAME_REF
+        - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "e"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - FIELD_EXPR
+        - FIELD_EXPR
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "t"
+          - DOT "."
+          - NAME_REF
+            - INT_NUMBER "0"
+        - DOT "."
+        - NAME_REF
+          - INT_NUMBER "1"
+      - DOT "."
+      - NAME_REF
+        - INT_NUMBER "2"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "f"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CALL_EXPR
+      - FIELD_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - DOT "."
+        - NAME_REF
+          - IDENT "f"
+      - ARG_LIST
+        - L_PAREN "("
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "g"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CALL_EXPR
+      - FIELD_EXPR
+        - CALL_EXPR
+          - FIELD_EXPR
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "x"
+            - DOT "."
+            - NAME_REF
+              - IDENT "f"
+          - ARG_LIST
+            - L_PAREN "("
+            - R_PAREN ")"
+        - DOT "."
+        - NAME_REF
+          - IDENT "g"
+      - ARG_LIST
+        - L_PAREN "("
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "h"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CALL_EXPR
+      - FIELD_EXPR
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - DOT "."
+        - NAME_REF
+          - IDENT "max"
+      - ARG_LIST
+        - L_PAREN "("
+        - LIT_EXPR
+          - INT_NUMBER "2"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "i"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - AWAIT_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "fut"
+      - DOT "."
+      - AWAIT_KEYWORD "await"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "j"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FIELD_EXPR
+      - TRY_EXPR
+        - AWAIT_EXPR
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "fut"
+          - DOT "."
+          - AWAIT_KEYWORD "await"
+        - QUEST "?"
+      - DOT "."
+      - NAME_REF
+        - IDENT "x"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "k"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - AWAIT_EXPR
+      - FIELD_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "t"
+        - DOT "."
+        - NAME_REF
+          - INT_NUMBER "0"
+      - WHITESPACE " "
+      - DOT "."
+      - AWAIT_KEYWORD "await"
+    - SEMI ";"
+  - WHITESPACE "\n"

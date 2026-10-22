@@ -250,6 +250,7 @@ fn postfix_expr(
             T!['('] if allow_calls => call_expr(p, lhs),
             T!['['] if allow_calls => index_expr(p, lhs),
             T![?] => try_expr(p, lhs),
+            T![.] => dot_expr(p, lhs),
             _ => break,
         };
         allow_calls = true;
@@ -286,6 +287,53 @@ fn index_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
     expr(p);
     p.expect(T![']']);
     m.complete(p, INDEX_EXPR)
+}
+
+/// `x.await`, `x.field` or `x.0`. A method call like `x.f()` is a call of
+/// the field access `x.f`, as in the grammar.
+fn dot_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
+    let m = lhs.precede(p);
+    p.bump(T![.]);
+    match p.current() {
+        T![await] => {
+            p.bump(T![await]);
+            return m.complete(p, AWAIT_EXPR);
+        }
+        IDENT | INT_NUMBER => {
+            let name = p.start();
+            p.bump_any();
+            name.complete(p, NAME_REF);
+        }
+        // `t.0.1` is lexed with the float `0.1`. Split it into `0`, `.` and
+        // `1`, like rust-analyzer does.
+        FLOAT_NUMBER if is_tuple_index_float(p.nth_text(0)) => {
+            let text = p.nth_text(0).to_string();
+            let dot = text.find('.').unwrap();
+            let name = p.start();
+            p.split_bump_as(INT_NUMBER, dot, T![.]);
+            name.complete(p, NAME_REF);
+            let lhs = m.complete(p, FIELD_EXPR);
+            if dot + 1 == text.len() {
+                // `t.0.` followed by something else: leave the `.` to the
+                // caller.
+                return lhs;
+            }
+            let m = lhs.precede(p);
+            p.split_bump_as(T![.], 1, INT_NUMBER);
+            let name = p.start();
+            p.bump(INT_NUMBER);
+            name.complete(p, NAME_REF);
+            return m.complete(p, FIELD_EXPR);
+        }
+        _ => p.error("expected a field name or a number"),
+    }
+    m.complete(p, FIELD_EXPR)
+}
+
+/// Whether a float is two tuple indices, like `0.1`, rather than something
+/// like `1e5` or `1.5f32`.
+fn is_tuple_index_float(text: &str) -> bool {
+    text.chars().all(|ch| ch.is_ascii_digit() || ch == '.') && text.matches('.').count() == 1
 }
 
 /// `x?`

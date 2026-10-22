@@ -17,6 +17,16 @@ pub(crate) fn is_operator_kind(kind: SyntaxKind) -> bool {
     )
 }
 
+/// A token that the parser split in two. See [`Parser::split_bump`].
+pub(crate) struct Split {
+    /// The index of the token, counting only non-trivia tokens.
+    pub(crate) index: usize,
+    /// The length of the first part in bytes.
+    pub(crate) len: u32,
+    /// The kind of the second part.
+    pub(crate) rest_kind: SyntaxKind,
+}
+
 pub(crate) struct Marker {
     pos: u32,
     bomb: DropBomb,
@@ -158,9 +168,8 @@ pub struct Parser<'t> {
     inp: Input,
     pos: usize,
     pub events: Vec<Event>,
-    /// Tokens that were split in two by [`Parser::split_bump`], as
-    /// `(token index, length of the first part)`.
-    splits: Vec<(usize, u32)>,
+    /// Tokens that were split in two by [`Parser::split_bump`].
+    splits: Vec<Split>,
     /// How often the parser looked at a token since it last consumed one.
     /// See [`PARSER_STEP_LIMIT`].
     steps: Cell<u32>,
@@ -375,15 +384,23 @@ impl <'t> Parser<'t> {
     ///
     /// The lexer joins runs of operator characters into one token, so the
     /// parser uses this where the grammar needs part of one, e.g. the first
-    /// `>` of the `>>` in `Vec<Vec<T>>`.
+    /// `|` of the `||` in the closure `|| x`.
     pub(crate) fn split_bump(&mut self, kind: SyntaxKind, len: usize) {
+        let text = self.inp.values[self.pos].clone().expect("token has no text");
+        let rest_kind = crate::lexer::operator_kind(&text[len..]);
+        self.split_bump_as(kind, len, rest_kind);
+    }
+
+    /// Like [`Parser::split_bump`], but the rest becomes a token of kind
+    /// `rest_kind`. Used to split the float `0.1` in `t.0.1`.
+    pub(crate) fn split_bump_as(&mut self, kind: SyntaxKind, len: usize, rest_kind: SyntaxKind) {
         let text = self.inp.values[self.pos].clone().expect("token has no text");
         assert!(0 < len && len < text.len(), "can't split {text:?} at {len}");
         let (first, rest) = text.split_at(len);
-        self.inp.kinds.insert(self.pos + 1, crate::lexer::operator_kind(rest));
+        self.inp.kinds.insert(self.pos + 1, rest_kind);
         self.inp.values.insert(self.pos + 1, Some(rest.to_string()));
         self.inp.values[self.pos] = Some(first.to_string());
-        self.splits.push((self.pos, len as u32));
+        self.splits.push(Split { index: self.pos, len: len as u32, rest_kind });
         self.do_bump(kind);
     }
 
@@ -401,7 +418,7 @@ impl <'t> Parser<'t> {
 
     /// Finishes the builder and returns the events that were generated during
     /// the build, and the tokens that were split (see [`Parser::split_bump`]).
-    pub(crate) fn finish(self) -> (Vec<Event>, Vec<(usize, u32)>) {
+    pub(crate) fn finish(self) -> (Vec<Event>, Vec<Split>) {
         (self.events, self.splits)
     }
 

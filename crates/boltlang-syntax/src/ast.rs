@@ -581,70 +581,26 @@ impl ConstBlockPattern {
     }
 }
 
-pub enum Expr {
-    Path(PathExpr),
-    Lit(LitExpr),
-    Call(CallExpr),
-    Fun(FunExpr),
-    Block(BlockExpr),
-    Bin(BinExpr),
-    Prefix(PrefixExpr),
-    Nest(NestExpr),
-    Tuple(TupleExpr),
-    Index(IndexExpr),
-    Cast(CastExpr),
-    Try(TryExpr),
-    Ret(RetExpr),
-}
-
-impl Node for Expr {
-
-    fn wrap(syntax: SyntaxNode) -> Self {
-        match syntax.kind() {
-            PATH_EXPR => Expr::Path(PathExpr(syntax)),
-            LIT_EXPR => Expr::Lit(LitExpr(syntax)),
-            CALL_EXPR => Expr::Call(CallExpr(syntax)),
-            FUN_EXPR => Expr::Fun(FunExpr(syntax)),
-            BLOCK_EXPR => Expr::Block(BlockExpr(syntax)),
-            BIN_EXPR => Expr::Bin(BinExpr(syntax)),
-            PREFIX_EXPR => Expr::Prefix(PrefixExpr(syntax)),
-            NEST_EXPR => Expr::Nest(NestExpr(syntax)),
-            TUPLE_EXPR => Expr::Tuple(TupleExpr(syntax)),
-            INDEX_EXPR => Expr::Index(IndexExpr(syntax)),
-            CAST_EXPR => Expr::Cast(CastExpr(syntax)),
-            TRY_EXPR => Expr::Try(TryExpr(syntax)),
-            RET_EXPR => Expr::Ret(RetExpr(syntax)),
-            _ => unreachable!(),
-        }
+ast_enum!(
+    /// An expression, as in the grammar's `_expression`.
+    Expr {
+        Path(PathExpr) = PATH_EXPR,
+        Lit(LitExpr) = LIT_EXPR,
+        Call(CallExpr) = CALL_EXPR,
+        Fun(FunExpr) = FUN_EXPR,
+        Block(BlockExpr) = BLOCK_EXPR,
+        Bin(BinExpr) = BIN_EXPR,
+        Prefix(PrefixExpr) = PREFIX_EXPR,
+        Nest(NestExpr) = NEST_EXPR,
+        Tuple(TupleExpr) = TUPLE_EXPR,
+        Index(IndexExpr) = INDEX_EXPR,
+        Cast(CastExpr) = CAST_EXPR,
+        Try(TryExpr) = TRY_EXPR,
+        Ret(RetExpr) = RET_EXPR,
+        Field(FieldExpr) = FIELD_EXPR,
+        Await(AwaitExpr) = AWAIT_EXPR,
     }
-
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            Expr::Lit(node) => node.syntax(),
-            Expr::Call(node) => node.syntax(),
-            Expr::Path(node) => node.syntax(),
-            Expr::Fun(node) => node.syntax(),
-            Expr::Block(node) => node.syntax(),
-            Expr::Bin(node) => node.syntax(),
-            Expr::Prefix(node) => node.syntax(),
-            Expr::Nest(node) => node.syntax(),
-            Expr::Tuple(node) => node.syntax(),
-            Expr::Index(node) => node.syntax(),
-            Expr::Cast(node) => node.syntax(),
-            Expr::Try(node) => node.syntax(),
-            Expr::Ret(node) => node.syntax(),
-        }
-    }
-
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(
-            kind,
-            PATH_EXPR | LIT_EXPR | CALL_EXPR | FUN_EXPR | BLOCK_EXPR | BIN_EXPR | PREFIX_EXPR
-                | NEST_EXPR | TUPLE_EXPR | INDEX_EXPR | CAST_EXPR | TRY_EXPR | RET_EXPR
-        )
-    }
-
-}
+);
 
 
 /// A reference to a variable or function, like `x` or `self`.
@@ -718,6 +674,32 @@ impl Name {
     }
     pub fn text(&self) -> String {
         self.ident().map(|t| t.text().to_string()).unwrap_or_default()
+    }
+}
+
+/// `x.field` or `x.0`
+pub struct FieldExpr(SyntaxNode);
+
+simple_node!(FieldExpr, FIELD_EXPR);
+
+impl FieldExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    /// The field name or tuple index.
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+}
+
+/// `x.await`
+pub struct AwaitExpr(SyntaxNode);
+
+simple_node!(AwaitExpr, AWAIT_EXPR);
+
+impl AwaitExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
     }
 }
 

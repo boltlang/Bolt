@@ -109,8 +109,11 @@ const NUMERIC_SUFFIXES: &[&str] = &[
     "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "isize", "usize", "f32", "f64",
 ];
 
+/// Characters that are joined into operators like `<$>`. `?` is not one of
+/// them: it's always a token of its own, so that `x?.y` and `x??` lex as
+/// postfix tries.
 fn is_operator(ch: char) -> bool {
-    matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '?' | '!' | '.')
+    matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '!' | '.')
 }
 
 lazy_static! {
@@ -523,6 +526,7 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENT)
             }
             c0 if is_dec_num(c0) => self.scan_number(c0),
+            '?' => QUEST,
             c0 if is_operator(c0) => {
                 let mut text = String::new();
                 text.push(c0);
@@ -561,7 +565,7 @@ impl LexResult {
 
     /// Split the `index`th non-trivia token in two, the first part being
     /// `len` bytes long. See [`Parser::split_bump`](crate::Parser::split_bump).
-    pub(crate) fn split(&mut self, index: usize, len: u32) {
+    pub(crate) fn split(&mut self, index: usize, len: u32, rest_kind: SyntaxKind) {
         let raw = self
             .kinds
             .iter()
@@ -572,7 +576,7 @@ impl LexResult {
             .expect("split index out of range");
         let text = self.values[raw].take().unwrap();
         let (first, rest) = text.split_at(len as usize);
-        self.kinds.insert(raw + 1, operator_kind(rest));
+        self.kinds.insert(raw + 1, rest_kind);
         self.lens[raw] = len;
         self.lens.insert(raw + 1, rest.len() as u32);
         self.values[raw] = Some(first.to_string());
@@ -800,5 +804,6 @@ mod tests {
         assert_eq!(lex("||"), [(OPERATOR, "||")]);
         assert_eq!(lex("<="), [(OPERATOR, "<=")]);
         assert_eq!(lex("+="), [(ASSIGNMENT, "+=")]);
+        assert_eq!(lex("x?.y??"), [(IDENT, "x"), (QUEST, "?"), (DOT, "."), (IDENT, "y"), (QUEST, "?"), (QUEST, "?")]);
     }
 }

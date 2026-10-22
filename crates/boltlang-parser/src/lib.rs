@@ -36,8 +36,8 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
         p.error("parser not at end of file");
     }
     let (events, splits) = p.finish();
-    for (index, len) in splits {
-        lexed.split(index, len);
+    for split in splits {
+        lexed.split(split.index, split.len, split.rest_kind);
     }
     let interspersed = intersperse_trivia(events, &lexed);
     let node = process_events(
