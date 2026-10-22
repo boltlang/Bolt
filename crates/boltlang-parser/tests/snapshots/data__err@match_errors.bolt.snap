@@ -1,0 +1,85 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/match_errors.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - MATCH_ARM
+          - NAMED_PATT
+            - NAME
+              - IDENT "a"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "b"
+            - WHITESPACE " "
+        - MATCH_ARM
+          - NAMED_PATT
+            - NAME
+              - IDENT "c"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "d"
+        - WHITESPACE " "
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - MATCH_ARM
+          - NAMED_PATT
+            - NAME
+              - IDENT "a"
+            - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "b"
+        - WHITESPACE " "
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ','
+span:
+  start: 17
+  end: 17
+---
+!ExpectedToken
+message: expected '=>'
+span:
+  start: 38
+  end: 38

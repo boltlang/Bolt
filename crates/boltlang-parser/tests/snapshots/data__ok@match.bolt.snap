@@ -1,0 +1,263 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/match.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - MATCH_ARM
+          - LIT_PATT
+            - INT_NUMBER "0"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
+          - COMMA ","
+        - WHITESPACE "\n    "
+        - MATCH_ARM
+          - OR_PATT
+            - LIT_PATT
+              - INT_NUMBER "1"
+            - WHITESPACE " "
+            - VBAR "|"
+            - WHITESPACE " "
+            - LIT_PATT
+              - INT_NUMBER "2"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - BLOCK_EXPR
+            - BLOCK
+              - L_BRACE "{"
+              - WHITESPACE " "
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "b"
+              - WHITESPACE " "
+              - R_BRACE "}"
+        - WHITESPACE "\n    "
+        - MATCH_ARM
+          - TUPLE_STRUCT_PATT
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Some"
+            - L_PAREN "("
+            - NAMED_PATT
+              - NAME
+                - IDENT "y"
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - MATCH_GUARD
+            - IF_KEYWORD "if"
+            - WHITESPACE " "
+            - BIN_EXPR
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "y"
+              - WHITESPACE " "
+              - GT ">"
+              - WHITESPACE " "
+              - LIT_EXPR
+                - INT_NUMBER "0"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "c"
+          - COMMA ","
+        - WHITESPACE "\n    "
+        - MATCH_ARM
+          - TUPLE_STRUCT_PATT
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Some"
+            - L_PAREN "("
+            - NAMED_PATT
+              - NAME
+                - IDENT "y"
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - MATCH_GUARD
+            - IF_KEYWORD "if"
+            - WHITESPACE " "
+            - BIN_EXPR
+              - LET_EXPR
+                - LET_KEYWORD "let"
+                - WHITESPACE " "
+                - TUPLE_STRUCT_PATT
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "Ok"
+                  - L_PAREN "("
+                  - NAMED_PATT
+                    - NAME
+                      - IDENT "z"
+                  - R_PAREN ")"
+                - WHITESPACE " "
+                - EQUALS "="
+                - WHITESPACE " "
+                - CALL_EXPR
+                  - PATH_EXPR
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "f"
+                  - ARG_LIST
+                    - L_PAREN "("
+                    - PATH_EXPR
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "y"
+                    - R_PAREN ")"
+              - WHITESPACE " "
+              - OPERATOR "&&"
+              - WHITESPACE " "
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "z"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "d"
+          - COMMA ","
+        - WHITESPACE "\n    "
+        - MATCH_ARM
+          - WILDCARD_PATT
+            - UNDERSCORE "_"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - BLOCK_EXPR
+            - BLOCK
+              - L_BRACE "{"
+              - R_BRACE "}"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "v"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - MATCH_ARM
+          - NAMED_PATT
+            - NAME
+              - IDENT "a"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - COMMA ","
+        - WHITESPACE " "
+        - MATCH_ARM
+          - NAMED_PATT
+            - NAME
+              - IDENT "b"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "2"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - MATCH_ARM
+          - OR_PATT
+            - VBAR "|"
+            - WHITESPACE " "
+            - NAMED_PATT
+              - NAME
+                - IDENT "A"
+            - WHITESPACE " "
+            - VBAR "|"
+            - WHITESPACE " "
+            - NAMED_PATT
+              - NAME
+                - IDENT "B"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - COMMA ","
+        - WHITESPACE " "
+        - R_BRACE "}"
+  - WHITESPACE "\n"

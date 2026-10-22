@@ -3,7 +3,7 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 
-use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct};
+use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
 use crate::{
     grammar::{expr_path, is_path_start, opt_ret_type, param_list, parse_pattern},
     parser::{CompletedMarker, Marker, Parser},
@@ -35,6 +35,7 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T![while],
     T![loop],
     T![for],
+    T![match],
     T![break],
     T![continue],
     T![yield],
@@ -102,6 +103,7 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
             let m = p.start();
             return Some((for_expr(p, m), BlockLike::Block));
         }
+        T![match] => return Some((match_expr(p), BlockLike::Block)),
         T![break] => break_expr(p, r),
         T![continue] => continue_expr(p),
         T![yield] => {
@@ -290,4 +292,57 @@ fn opt_value(p: &mut Parser, r: Restrictions) {
     if p.at_ts(EXPR_FIRST) && !(r.forbid_structs && p.at(T!['{'])) {
         expr(p);
     }
+}
+
+/// `match value { pattern => value, ... }`
+fn match_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![match]);
+    expr_no_struct(p);
+    if p.at(T!['{']) {
+        match_arm_list(p);
+    } else {
+        p.error("expected '{'");
+    }
+    m.complete(p, MATCH_EXPR)
+}
+
+fn match_arm_list(p: &mut Parser) {
+    let m = p.start();
+    p.bump(T!['{']);
+    while !p.at(EOF) && !p.at(T!['}']) {
+        if p.at(T!['{']) {
+            // Recover from a stray block without eating the rest of the arms.
+            let e = p.start();
+            p.error("expected a match arm");
+            parse_block_expr(p);
+            e.complete(p, ERROR);
+            continue;
+        }
+        match_arm(p);
+    }
+    p.expect(T!['}']);
+    m.complete(p, MATCH_ARM_LIST);
+}
+
+/// `pattern if guard => value,`. The comma is optional after the last arm
+/// and after a value that ends in a block.
+fn match_arm(p: &mut Parser) {
+    let m = p.start();
+    parse_pattern(p);
+    if p.at(T![if]) {
+        let guard = p.start();
+        p.bump(T![if]);
+        expr(p);
+        guard.complete(p, MATCH_GUARD);
+    }
+    p.expect(T![=>]);
+    let blocklike = match expr_stmt(p, None) {
+        Some((_, blocklike)) => blocklike,
+        None => BlockLike::NotBlock,
+    };
+    if !p.eat(T![,]) && !blocklike.is_block() && !p.at(T!['}']) {
+        p.error("expected ','");
+    }
+    m.complete(p, MATCH_ARM);
 }

@@ -208,6 +208,12 @@ pub enum SyntaxKind {
     YIELD_EXPR,
     /// `'outer`, before a loop or block or after `break` and `continue`
     LABEL,
+    /// The `{ ... }` of a `match`
+    MATCH_ARM_LIST,
+    /// `pattern if guard => value`
+    MATCH_ARM,
+    /// `if condition` in a match arm
+    MATCH_GUARD,
     BIN_EXPR,
     BLOCK_EXPR,
     CALL_EXPR,
@@ -352,6 +358,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            MATCH_ARM_LIST => "the arms of a match",
+            MATCH_ARM => "a match arm",
+            MATCH_GUARD => "a match guard",
             LOOP_EXPR => "a loop",
             FOR_EXPR => "a for loop",
             BREAK_EXPR => "a break expression",

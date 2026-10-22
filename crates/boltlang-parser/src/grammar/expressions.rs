@@ -23,7 +23,7 @@ pub(crate) enum BlockLike {
 }
 
 impl BlockLike {
-    fn is_block(self) -> bool {
+    pub(crate) fn is_block(self) -> bool {
         self == BlockLike::Block
     }
 }

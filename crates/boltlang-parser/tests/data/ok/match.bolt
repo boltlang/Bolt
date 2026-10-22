@@ -1,0 +1,10 @@
+match x {
+    0 => a,
+    1 | 2 => { b }
+    Some(y) if y > 0 => c,
+    Some(y) if let Ok(z) = f(y) && z => d,
+    _ => {}
+}
+let v = match x { a => 1, b => 2 };
+match x {}
+match x { | A | B => 1, }

@@ -607,6 +607,7 @@ ast_enum!(
         Break(BreakExpr) = BREAK_EXPR,
         Continue(ContinueExpr) = CONTINUE_EXPR,
         Yield(YieldExpr) = YIELD_EXPR,
+        Match(MatchExpr) = MATCH_EXPR,
     }
 );
 
@@ -758,6 +759,62 @@ impl WhileExpr {
 /// The first child of `node` that is a block expression.
 fn find_block(node: &SyntaxNode) -> Option<BlockExpr> {
     node.children().find_map(BlockExpr::cast)
+}
+
+/// `match value { pattern => value, ... }`
+pub struct MatchExpr(SyntaxNode);
+
+simple_node!(MatchExpr, MATCH_EXPR);
+
+impl MatchExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn match_arm_list(&self) -> Option<MatchArmList> {
+        self.find_node()
+    }
+    pub fn arms(&self) -> Vec<MatchArm> {
+        self.match_arm_list().map(|list| list.arms().collect()).unwrap_or_default()
+    }
+}
+
+/// The `{ ... }` of a `match`
+pub struct MatchArmList(SyntaxNode);
+
+simple_node!(MatchArmList, MATCH_ARM_LIST);
+
+impl MatchArmList {
+    pub fn arms(&self) -> ChildrenIter<MatchArm> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `pattern if guard => value`
+pub struct MatchArm(SyntaxNode);
+
+simple_node!(MatchArm, MATCH_ARM);
+
+impl MatchArm {
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+    pub fn guard(&self) -> Option<MatchGuard> {
+        self.find_node()
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `if condition` in a match arm
+pub struct MatchGuard(SyntaxNode);
+
+simple_node!(MatchGuard, MATCH_GUARD);
+
+impl MatchGuard {
+    pub fn condition(&self) -> Option<Expr> {
+        self.find_node()
+    }
 }
 
 /// `'outer`
