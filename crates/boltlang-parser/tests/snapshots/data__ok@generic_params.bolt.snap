@@ -343,23 +343,23 @@ input_file: crates/boltlang-parser/tests/data/ok/generic_params.bolt
         - IDENT "i"
     - COLON ":"
     - WHITESPACE " "
-    - IMPL_TRAIT_TYPE
-      - IMPL_KEYWORD "impl"
-      - WHITESPACE " "
-      - BOUNDED_TYPE
+    - BOUNDED_TYPE
+      - IMPL_TRAIT_TYPE
+        - IMPL_KEYWORD "impl"
+        - WHITESPACE " "
         - PATH_TYPE
           - PATH
             - PATH_SEGMENT
               - NAME_REF
                 - IDENT "A"
-        - WHITESPACE " "
-        - PLUS "+"
-        - WHITESPACE " "
-        - PATH_TYPE
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "B"
+      - WHITESPACE " "
+      - PLUS "+"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "B"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

@@ -90,8 +90,8 @@ pub(crate) fn path_type_after_path(p: &mut Parser, path: CompletedMarker) -> Com
 }
 
 /// `impl Trait`, or `impl for[T] Trait` to introduce generic parameters.
-/// Like the grammar's `abstract_type`, the trait can have bounds:
-/// `impl A + B` is one impl type of `A + B`.
+/// Like in the grammar's `abstract_type`, `impl` binds tighter than `+`:
+/// `impl A + B` is the impl type `impl A` with the bound `B`.
 fn impl_trait_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(T![impl]);
@@ -102,7 +102,7 @@ fn impl_trait_type(p: &mut Parser) -> CompletedMarker {
             p.error("expected generic parameters like `[T]`");
         }
     }
-    type_(p);
+    type_no_bounds(p);
     m.complete(p, IMPL_TRAIT_TYPE)
 }
 

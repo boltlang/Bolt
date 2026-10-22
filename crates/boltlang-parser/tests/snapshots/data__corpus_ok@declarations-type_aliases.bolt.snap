@@ -57,12 +57,12 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-type_aliase
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
-    - IMPL_TRAIT_TYPE
-      - IMPL_KEYWORD "impl"
-      - WHITESPACE " "
+    - BOUNDED_TYPE
       - BOUNDED_TYPE
         - BOUNDED_TYPE
-          - BOUNDED_TYPE
+          - IMPL_TRAIT_TYPE
+            - IMPL_KEYWORD "impl"
+            - WHITESPACE " "
             - TUPLE_TYPE
               - L_PAREN "("
               - FN_TYPE
@@ -83,14 +83,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-type_aliase
                         - NAME_REF
                           - IDENT "Capture"
               - R_PAREN ")"
-            - WHITESPACE " "
-            - PLUS "+"
-            - WHITESPACE " "
-            - PATH_TYPE
-              - PATH
-                - PATH_SEGMENT
-                  - NAME_REF
-                    - IDENT "Send"
           - WHITESPACE " "
           - PLUS "+"
           - WHITESPACE " "
@@ -98,7 +90,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-type_aliase
             - PATH
               - PATH_SEGMENT
                 - NAME_REF
-                  - IDENT "Sync"
+                  - IDENT "Send"
         - WHITESPACE " "
         - PLUS "+"
         - WHITESPACE " "
@@ -106,6 +98,14 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-type_aliase
           - PATH
             - PATH_SEGMENT
               - NAME_REF
-                - IDENT "UnwindSafe"
+                - IDENT "Sync"
+      - WHITESPACE " "
+      - PLUS "+"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "UnwindSafe"
     - SEMI ";"
   - WHITESPACE "\n"
