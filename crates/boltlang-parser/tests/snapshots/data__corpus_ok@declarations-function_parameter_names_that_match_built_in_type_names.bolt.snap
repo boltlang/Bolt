@@ -10,16 +10,15 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
     - IDENT "foo"
     - L_PAREN "("
     - PARAM
-      - TYPED_PATT
-        - NAMED_PATT
-          - IDENT "str"
-        - COLON ":"
-        - WHITESPACE " "
-        - PATH_TYPE
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "c_char"
+      - NAMED_PATT
+        - IDENT "str"
+      - COLON ":"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "c_char"
     - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR
@@ -33,16 +32,15 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
     - IDENT "bar"
     - L_PAREN "("
     - PARAM
-      - TYPED_PATT
-        - NAMED_PATT
-          - IDENT "bool"
-        - COLON ":"
-        - WHITESPACE " "
-        - PATH_TYPE
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "bool"
+      - NAMED_PATT
+        - IDENT "bool"
+      - COLON ":"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "bool"
     - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR

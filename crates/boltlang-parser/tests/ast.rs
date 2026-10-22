@@ -103,8 +103,8 @@ fn path_type_with_generic_args() {
     assert!(diags.is_empty(), "{diags:?}");
     let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
     let Some(SourceElement::VarDecl(decl)) = file.elements().next() else { panic!() };
-    let Some(Pattern::Typed(typed)) = decl.pattern() else { panic!() };
-    let Some(Type::Path(ty)) = typed.type_expression() else { panic!() };
+    assert!(matches!(decl.pattern(), Some(Pattern::Named(_))));
+    let Some(Type::Path(ty)) = decl.type_expr() else { panic!() };
     let segment = ty.path().unwrap().segment().unwrap();
     assert_eq!(segment.name_ref().unwrap().text(), "HashMap");
     let args: Vec<_> = segment.generic_arg_list().unwrap().args().collect();

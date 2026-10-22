@@ -116,7 +116,6 @@ pub enum SyntaxKind {
     LIT_PATT,
     TUPLE_PATT,
     NEST_PATT,
-    TYPED_PATT,
 
     // Type expressions
     /// A type named by a path, like `Vec[T]` or `Shape.Circle`
@@ -414,7 +413,6 @@ impl SyntaxKind {
             TRY_EXPR => "a try-expression",
             TUPLE_EXPR => "a tuple expression",
             TUPLE_PATT => "a tuple pattern",
-            TYPED_PATT => "a pattern with a type ascription",
             TYPE_ALIAS => "a type alias",
             TYPE_SIGNATURE => "a type ascription",
             UNDERSCORE => "'_'",

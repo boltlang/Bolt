@@ -258,19 +258,17 @@ impl TraitBounds {
 
 pub enum Pattern {
     Named(NamedPattern),
-    Typed(TypedPattern),
 }
 
 impl Node for Pattern {
 
     fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind,  NAMED_PATT | TYPED_PATT)
+        matches!(kind, NAMED_PATT)
     }
 
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
             NAMED_PATT => Self::Named(NamedPattern(syntax)),
-            TYPED_PATT => Self::Typed(TypedPattern(syntax)),
             _ => unreachable!(),
         }
     }
@@ -278,36 +276,9 @@ impl Node for Pattern {
     fn syntax(&self) -> &SyntaxNode {
         match self {
             Self::Named(node) => node.syntax(),
-            Self::Typed(node) => node.syntax(),
         }
     }
 
-}
-
-pub struct TypedPattern(SyntaxNode);
-
-impl TypedPattern {
-
-    pub fn pattern(&self) -> Option<Pattern> {
-        self.find_node()
-    }
-
-    pub fn type_expression(&self) -> Option<Type> {
-        self.find_node()
-    }
-
-}
-
-impl Node for TypedPattern {
-    fn kind() -> SyntaxKind {
-        TYPED_PATT
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        TypedPattern(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
 }
 
 pub struct NamedPattern(SyntaxNode);
@@ -633,7 +604,7 @@ impl Block {
 pub struct FunExpr(SyntaxNode);
 
 impl FunExpr {
-    pub fn params(&self) -> ChildrenIter<Pattern> {
+    pub fn params(&self) -> ChildrenIter<Param> {
         ChildrenIter::new(&self.0)
     }
     pub fn body(&self) -> Option<Expr> {

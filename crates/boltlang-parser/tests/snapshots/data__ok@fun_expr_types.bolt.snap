@@ -16,7 +16,7 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_types.bolt
       - FN_KEYWORD "fn"
       - WHITESPACE " "
       - L_PAREN "("
-      - TYPED_PATT
+      - PARAM
         - NAMED_PATT
           - IDENT "x"
         - COLON ":"

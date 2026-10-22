@@ -44,16 +44,15 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "
-    - TYPED_PATT
-      - NAMED_PATT
-        - IDENT "size"
-      - COLON ":"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "f64"
+    - NAMED_PATT
+      - IDENT "size"
+    - COLON ":"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "f64"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

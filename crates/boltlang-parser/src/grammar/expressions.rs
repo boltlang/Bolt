@@ -1,7 +1,7 @@
-use boltlang_syntax::SyntaxKind::{self, *};
+use boltlang_syntax::{SyntaxKind::{self, *}, T};
 use crate::{
     Parser,
-    grammar::{PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, parse_pattern, type_, type_no_bounds},
+    grammar::{PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, parse_param, parse_pattern, type_, type_no_bounds},
     parser::{CompletedMarker, Marker},
     token_set::TokenSet
 };
@@ -109,14 +109,12 @@ pub fn parse_return_expr(p: &mut Parser) -> CompletedMarker {
 /// Parse an anonymous function: `fn (x y) = expr` or `fn (x y) { ... }`,
 /// optionally with a return type: `fn (x) -> Int = x`.
 ///
-/// Unlike in a named function, the parameters are bare patterns, which is
-/// what [`FunExpr::params`](boltlang_syntax::ast::FunExpr::params) expects.
 pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump(FN_KEYWORD);
     p.expect(L_PAREN);
     while !p.at(SEMI) && !p.at(EOF) && !p.eat(R_PAREN) {
-        parse_pattern(p);
+        parse_param(p);
     }
     if p.eat(R_ARROW) {
         type_(p);
@@ -380,19 +378,14 @@ pub(crate) fn parse_statement(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
-pub fn parse_type_ascription(p: &mut Parser) {
-    p.bump(COLON);
-    type_(p);
-}
-
 pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.eat(PUB_KEYWORD);
     p.expect(LET_KEYWORD);
     p.eat(MUT_KEYWORD);
     parse_pattern(p);
-    if p.current() == COLON {
-        parse_type_ascription(p);
+    if p.eat(T![:]) {
+        type_(p);
     }
     if p.eat(EQUALS) {
         parse_expr(p);

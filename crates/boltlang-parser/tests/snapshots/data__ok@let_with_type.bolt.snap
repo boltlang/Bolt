@@ -7,16 +7,15 @@ input_file: crates/boltlang-parser/tests/data/ok/let_with_type.bolt
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "
-    - TYPED_PATT
-      - NAMED_PATT
-        - IDENT "x"
-      - COLON ":"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "Int"
+    - NAMED_PATT
+      - IDENT "x"
+    - COLON ":"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Int"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

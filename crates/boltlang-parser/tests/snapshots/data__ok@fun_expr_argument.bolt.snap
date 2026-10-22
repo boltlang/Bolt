@@ -16,8 +16,9 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_argument.bolt
         - FN_KEYWORD "fn"
         - WHITESPACE " "
         - L_PAREN "("
-        - NAMED_PATT
-          - IDENT "x"
+        - PARAM
+          - NAMED_PATT
+            - IDENT "x"
         - R_PAREN ")"
         - WHITESPACE " "
         - EQUALS "="
