@@ -8,8 +8,11 @@
 //!   including imports.
 //! - [`expr_store`] holds lowered expressions, patterns and types, in the
 //!   forms defined in [`hir`].
+//! - [`body`] lowers the bodies of functions, consts, enum discriminants and
+//!   the top-level statements of files.
 
 pub mod arena;
+pub mod body;
 pub mod expr_store;
 pub mod hir;
 pub mod ids;
