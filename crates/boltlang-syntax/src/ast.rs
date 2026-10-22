@@ -1533,8 +1533,78 @@ ast_enum!(
         Enum(Enum) = ENUM,
         Const(Const) = CONST,
         TypeAlias(TypeAlias) = TYPE_ALIAS,
+        Trait(Trait) = TRAIT,
+        Impl(Impl) = IMPL,
     }
 );
+
+/// `trait Name: Bounds { items }`
+pub struct Trait(SyntaxNode);
+
+simple_node!(Trait, TRAIT);
+
+impl Trait {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    pub fn bounds(&self) -> Option<TraitBounds> {
+        self.find_node()
+    }
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        self.find_node()
+    }
+    pub fn item_list(&self) -> Option<ItemList> {
+        self.find_node()
+    }
+}
+
+/// `impl Type { items }` or `impl Trait for Type { items }`
+pub struct Impl(SyntaxNode);
+
+simple_node!(Impl, IMPL);
+
+impl Impl {
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    /// The `!` of a negative impl like `impl !Send for T {}`.
+    pub fn excl_token(&self) -> Option<SyntaxToken> {
+        self.find_token(EXCL)
+    }
+    /// The trait, in `impl Trait for Type`.
+    pub fn trait_(&self) -> Option<Type> {
+        self.find_token(FOR_KEYWORD)?;
+        self.find_node()
+    }
+    /// The type the impl is for.
+    pub fn self_ty(&self) -> Option<Type> {
+        let n = if self.find_token(FOR_KEYWORD).is_some() { 1 } else { 0 };
+        self.0.children().filter_map(Type::cast).nth(n)
+    }
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        self.find_node()
+    }
+    pub fn item_list(&self) -> Option<ItemList> {
+        self.find_node()
+    }
+}
+
+/// The `{ items }` of a trait, impl or extern block
+pub struct ItemList(SyntaxNode);
+
+simple_node!(ItemList, ITEM_LIST);
+
+impl ItemList {
+    pub fn items(&self) -> ChildrenIter<SourceElement> {
+        ChildrenIter::new(&self.0)
+    }
+}
 
 /// `const NAME: Type = value;`
 pub struct Const(SyntaxNode);

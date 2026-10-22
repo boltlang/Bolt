@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        delimited, expr, function_modifiers, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        delimited, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -51,6 +51,14 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
         }
         T![type] => {
             type_alias(p, m);
+            return Ok(());
+        }
+        T![trait] => {
+            trait_item(p, m);
+            return Ok(());
+        }
+        T![impl] => {
+            impl_item(p, m);
             return Ok(());
         }
         _ => {}
@@ -340,4 +348,78 @@ fn type_alias(p: &mut Parser, m: Marker) {
     }
     p.expect(T![;]);
     m.complete(p, TYPE_ALIAS);
+}
+
+/// `trait Name[T]: Bounds where ... { items }`
+fn trait_item(p: &mut Parser, m: Marker) {
+    p.bump(T![trait]);
+    name(p);
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+    if p.at(T![:]) {
+        trait_bounds(p);
+    }
+    opt_where_clause(p);
+    if p.at(T!['{']) {
+        item_list(p);
+    } else {
+        p.error("expected '{'");
+    }
+    m.complete(p, TRAIT);
+}
+
+/// `impl[T] Type { }`, `impl Trait for Type { }`, `impl !Send for T {}` or
+/// `impl T for U;`
+fn impl_item(p: &mut Parser, m: Marker) {
+    p.bump(T![impl]);
+    // Like in the grammar, `[` right after `impl` starts generic parameters.
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+    let negative = p.eat(T![!]);
+    type_no_bounds(p);
+    if p.eat(T![for]) {
+        type_no_bounds(p);
+    } else if negative {
+        p.error("expected 'for' after a negative trait");
+    }
+    opt_where_clause(p);
+    if p.at(T!['{']) {
+        item_list(p);
+    } else {
+        p.expect(T![;]);
+    }
+    m.complete(p, IMPL);
+}
+
+/// `{ items }`, as in the grammar's `declaration_list`: items, let
+/// statements and empty statements.
+pub(crate) fn item_list(p: &mut Parser) {
+    let m = p.start();
+    p.bump(T!['{']);
+    while !p.at(EOF) && !p.at(T!['}']) {
+        if p.eat(T![;]) {
+            continue;
+        }
+        if p.at(T![let]) {
+            let_stmt(p, Semicolon::Required);
+            continue;
+        }
+        let item = p.start();
+        if let Err(item) = opt_item(p, item) {
+            item.abandon(p);
+            if p.at(T!['{']) {
+                // Skip a stray block as a whole.
+                let e = p.start();
+                p.error("expected an item");
+                parse_block_expr(p);
+                e.complete(p, ERROR);
+            } else {
+                p.error_and_bump("expected an item");
+            }
+        }
+    }
+    p.expect(T!['}']);
+    m.complete(p, ITEM_LIST);
 }

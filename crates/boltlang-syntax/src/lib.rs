@@ -270,6 +270,12 @@ pub enum SyntaxKind {
     OPERATOR_NAME,
     /// `const NAME: Type = value;`
     CONST,
+    /// `trait Name: Bounds { items }`
+    TRAIT,
+    /// `impl Type { items }` or `impl Trait for Type { items }`
+    IMPL,
+    /// The `{ items }` of a trait, impl or extern block
+    ITEM_LIST,
     /// `struct Point { x: i32 }`, `struct Pair(A, B);` or `struct Unit;`
     STRUCT,
     /// `enum Option[T] { None, Some(T) }`
@@ -384,6 +390,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            TRAIT => "a trait",
+            IMPL => "an impl",
+            ITEM_LIST => "a list of items",
             CONST => "a constant",
             STRUCT => "a struct",
             ENUM => "an enum",

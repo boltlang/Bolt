@@ -1,0 +1,12 @@
+trait Show { fn show(self) -> String; }
+pub trait Iterator[T]: Clone + Debug where T: Ord {
+    type Item;
+    const MAX: usize = 10;
+    fn next(mut self) -> Option[Self.Item];
+    fn count(self) -> usize { 0 }
+}
+impl Point { fn new() -> Self = Point { x: 0, y: 0 }; }
+impl[T] Show for Vec[T] where T: Show { fn show(self) -> String { "" } }
+impl !Send for Rc {}
+impl Marker for i32;
+impl[T] [T; 3] {}
