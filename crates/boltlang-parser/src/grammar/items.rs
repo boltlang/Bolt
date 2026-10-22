@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        abi, delimited, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        abi, delimited, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -63,6 +63,10 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
         }
         T![extern] => {
             extern_block(p, m);
+            return Ok(());
+        }
+        T![import] => {
+            import_item(p, m);
             return Ok(());
         }
         _ => {}
@@ -438,4 +442,54 @@ fn extern_block(p: &mut Parser, m: Marker) {
         p.expect(T![;]);
     }
     m.complete(p, EXTERN_BLOCK);
+}
+
+/// `import "./path";`, `import "./path" (a, b as c);`,
+/// `import "./path" as name;` or `import "./path" *;`, following the
+/// grammar's `import_declaration`.
+fn import_item(p: &mut Parser, m: Marker) {
+    p.bump(T![import]);
+    if !p.eat(STRING) {
+        p.error("expected a string with the path to import");
+    }
+    match p.current() {
+        T!['('] => import_list(p),
+        T![as] => {
+            p.bump(T![as]);
+            name(p);
+        }
+        T![*] => p.bump(T![*]),
+        _ => {}
+    }
+    p.expect(T![;]);
+    m.complete(p, IMPORT);
+}
+
+/// `(a, b as c)`
+fn import_list(p: &mut Parser) {
+    let m = p.start();
+    delimited(
+        p,
+        T!['('],
+        T![')'],
+        T![,],
+        || "expected a name".into(),
+        TokenSet::new(&[IDENT]),
+        |p| {
+            if !p.at(IDENT) {
+                return false;
+            }
+            if p.nth_at(1, T![as]) {
+                let alias = p.start();
+                name_ref(p);
+                p.bump(T![as]);
+                name(p);
+                alias.complete(p, IMPORT_ALIAS);
+            } else {
+                name_ref(p);
+            }
+            true
+        },
+    );
+    m.complete(p, IMPORT_LIST);
 }

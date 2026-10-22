@@ -1,0 +1,50 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/import_errors.bolt
+---
+- SOURCE_FILE
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+  - EXPR_STMT
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "a"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - STRING "\"./b\""
+    - WHITESPACE " "
+    - IMPORT_LIST
+      - L_PAREN "("
+      - NAME_REF
+        - IDENT "x"
+        - WHITESPACE " "
+      - NAME_REF
+        - IDENT "y"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected a string with the path to import
+span:
+  start: 7
+  end: 7
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 7
+  end: 7
+---
+!ExpectedToken
+message: expected ','
+span:
+  start: 26
+  end: 26

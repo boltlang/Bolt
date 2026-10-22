@@ -1536,8 +1536,65 @@ ast_enum!(
         Trait(Trait) = TRAIT,
         Impl(Impl) = IMPL,
         ExternBlock(ExternBlock) = EXTERN_BLOCK,
+        Import(Import) = IMPORT,
     }
 );
+
+/// `import "./path" (a, b as c);`, `import "./path" as name;` or
+/// `import "./path" *;`
+pub struct Import(SyntaxNode);
+
+simple_node!(Import, IMPORT);
+
+impl Import {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    /// The string with the path to import.
+    pub fn source(&self) -> Option<SyntaxToken> {
+        self.find_token(STRING)
+    }
+    pub fn import_list(&self) -> Option<ImportList> {
+        self.find_node()
+    }
+    /// The `name` of `import "./path" as name;`.
+    pub fn alias(&self) -> Option<Name> {
+        self.find_node()
+    }
+    /// The `*` of `import "./path" *;`.
+    pub fn star_token(&self) -> Option<SyntaxToken> {
+        self.find_token(STAR)
+    }
+}
+
+/// `(a, b as c)` in an import
+pub struct ImportList(SyntaxNode);
+
+simple_node!(ImportList, IMPORT_LIST);
+
+impl ImportList {
+    /// The names imported without an alias.
+    pub fn names(&self) -> ChildrenIter<NameRef> {
+        ChildrenIter::new(&self.0)
+    }
+    pub fn aliases(&self) -> ChildrenIter<ImportAlias> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `b as c` in an import list
+pub struct ImportAlias(SyntaxNode);
+
+simple_node!(ImportAlias, IMPORT_ALIAS);
+
+impl ImportAlias {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    pub fn alias(&self) -> Option<Name> {
+        self.find_node()
+    }
+}
 
 /// `extern "C" { items }` or `extern "C";`
 pub struct ExternBlock(SyntaxNode);

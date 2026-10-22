@@ -270,6 +270,12 @@ pub enum SyntaxKind {
     OPERATOR_NAME,
     /// `const NAME: Type = value;`
     CONST,
+    /// `import "./path" (a, b as c);`
+    IMPORT,
+    /// `(a, b as c)` in an import
+    IMPORT_LIST,
+    /// `b as c` in an import list
+    IMPORT_ALIAS,
     /// `trait Name: Bounds { items }`
     TRAIT,
     /// `impl Type { items }` or `impl Trait for Type { items }`
@@ -390,6 +396,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            IMPORT => "an import",
+            IMPORT_LIST => "a list of imported names",
+            IMPORT_ALIAS => "an imported name with an alias",
             TRAIT => "a trait",
             IMPL => "an impl",
             ITEM_LIST => "a list of items",

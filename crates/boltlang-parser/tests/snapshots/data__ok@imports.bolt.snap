@@ -1,0 +1,57 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/imports.bolt
+---
+- SOURCE_FILE
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - STRING "\"./a\""
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - IMPORT
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - STRING "\"./b\""
+    - WHITESPACE " "
+    - IMPORT_LIST
+      - L_PAREN "("
+      - NAME_REF
+        - IDENT "x"
+      - COMMA ","
+      - WHITESPACE " "
+      - IMPORT_ALIAS
+        - NAME_REF
+          - IDENT "y"
+        - WHITESPACE " "
+        - AS_KEYWORD "as"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "z"
+      - COMMA ","
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - STRING "\"./c\""
+    - WHITESPACE " "
+    - AS_KEYWORD "as"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "c"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - STRING "\"./d\""
+    - WHITESPACE " "
+    - STAR "*"
+    - SEMI ";"
+  - WHITESPACE "\n"
