@@ -1,0 +1,63 @@
+//! A database for tests, with files in memory.
+
+use std::sync::{Arc, Mutex};
+
+use boltlang_base_db::{Db, File, Files, InMemorySystem, System, SystemPath, WritableSystem};
+
+#[salsa::db]
+#[derive(Clone)]
+pub(crate) struct TestDb {
+    storage: salsa::Storage<Self>,
+    files: Files,
+    system: InMemorySystem,
+    /// The queries that ran, while logging is on.
+    executed: Arc<Mutex<Option<Vec<String>>>>,
+}
+
+impl TestDb {
+    pub(crate) fn new() -> Self {
+        let executed: Arc<Mutex<Option<Vec<String>>>> = Default::default();
+        let log = executed.clone();
+        let storage = salsa::Storage::new(Some(Box::new(move |event: salsa::Event| {
+            if let salsa::EventKind::WillExecute { database_key } = event.kind {
+                if let Some(log) = &mut *log.lock().unwrap() {
+                    log.push(format!("{database_key:?}"));
+                }
+            }
+        })));
+        Self { storage, files: Files::default(), system: InMemorySystem::new(), executed }
+    }
+
+    /// Create a file with the given contents.
+    pub(crate) fn file(&self, path: &str, text: &str) -> File {
+        let path = SystemPath::new(path);
+        self.system.write_file_bytes(path, text.as_bytes()).unwrap();
+        self.files.resolve(self, path)
+    }
+
+    /// Change the contents of a file.
+    pub(crate) fn edit(&mut self, file: File, text: &str) {
+        let path = file.path(self).as_system_path_buf().unwrap().clone();
+        self.system.write_file_bytes(&path, text.as_bytes()).unwrap();
+        file.sync(self);
+    }
+
+    /// Run `f` and return the queries that ran during it.
+    pub(crate) fn log_executed(&mut self, f: impl FnOnce(&mut Self)) -> Vec<String> {
+        *self.executed.lock().unwrap() = Some(Vec::new());
+        f(self);
+        self.executed.lock().unwrap().take().unwrap()
+    }
+}
+
+impl salsa::Database for TestDb {}
+
+#[salsa::db]
+impl Db for TestDb {
+    fn files(&self) -> &Files {
+        &self.files
+    }
+    fn system(&self) -> &dyn System {
+        &self.system
+    }
+}

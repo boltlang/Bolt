@@ -167,6 +167,11 @@ version = "0.1.0"
 [[package]]
 name = "boltlang-hir-def"
 version = "0.1.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-syntax",
+ "salsa",
+]
 
 [[package]]
 name = "boltlang-hir-ty"

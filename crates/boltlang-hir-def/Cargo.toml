@@ -4,3 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
+boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+salsa = "0.28.5"

@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Definitions in Bolt programs, modelled after rust-analyzer's `hir-def`
+//! but much simpler, since every file is a module and imports are explicit.
+//!
+//! - [`item_tree`] summarises the items of a file without their bodies, so
+//!   that editing a body doesn't invalidate anything that depends on it.
+
+pub mod item_tree;
+mod name;
+
+pub use name::Name;
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+mod test_db;
