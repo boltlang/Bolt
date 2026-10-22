@@ -15,8 +15,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
           - IDENT "str"
         - COLON ":"
         - WHITESPACE " "
-        - NAMED_TYPE_EXPR
-          - IDENT "c_char"
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "c_char"
     - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR
@@ -35,8 +38,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
           - IDENT "bool"
         - COLON ":"
         - WHITESPACE " "
-        - NAMED_TYPE_EXPR
-          - IDENT "bool"
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "bool"
     - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR

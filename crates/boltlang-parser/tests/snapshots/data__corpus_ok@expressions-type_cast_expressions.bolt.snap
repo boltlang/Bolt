@@ -10,8 +10,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
     - WHITESPACE " "
     - AS_KEYWORD "as"
     - WHITESPACE " "
-    - NAMED_TYPE_EXPR
-      - IDENT "u8"
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "u8"
   - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -31,8 +34,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
       - WHITESPACE " "
       - AS_KEYWORD "as"
       - WHITESPACE " "
-      - NAMED_TYPE_EXPR
-        - IDENT "char"
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "char"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -43,8 +49,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
         - IDENT "size"
       - COLON ":"
       - WHITESPACE " "
-      - NAMED_TYPE_EXPR
-        - IDENT "f64"
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "f64"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -75,8 +84,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
           - WHITESPACE " "
           - AS_KEYWORD "as"
           - WHITESPACE " "
-          - NAMED_TYPE_EXPR
-            - IDENT "f64"
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "f64"
       - WHITESPACE " "
       - PLUS "+"
       - WHITESPACE " "

@@ -73,75 +73,186 @@ impl<N: Node> Iterator for ChildrenIter<N> {
     }
 }
 
-pub enum TypeExpr {
-    Named(NamedTypeExpr),
-    Arrow(ArrowTypeExpr),
-}
-
-impl Node for TypeExpr {
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, NAMED_TYPE_EXPR | ARROW_TYPE_EXPR)
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        match syntax.kind() {
-            NAMED_TYPE_EXPR => TypeExpr::Named(NamedTypeExpr(syntax)),
-            ARROW_TYPE_EXPR => TypeExpr::Arrow(ArrowTypeExpr(syntax)),
-            _ => unreachable!(),
+/// Implements [`Node`] for a newtype around a single [`SyntaxKind`].
+macro_rules! simple_node {
+    ($name:ident, $kind:ident) => {
+        impl Node for $name {
+            fn kind() -> SyntaxKind {
+                $kind
+            }
+            fn wrap(syntax: SyntaxNode) -> Self {
+                $name(syntax)
+            }
+            fn syntax(&self) -> &SyntaxNode {
+                &self.0
+            }
         }
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            TypeExpr::Named(node) => node.syntax(),
-            TypeExpr::Arrow(node) => node.syntax(),
+    };
+}
+
+/// Defines an enum over several node types, like [`Expr`], with one variant
+/// per node kind.
+macro_rules! ast_enum {
+    ($(#[$meta:meta])* $name:ident { $($variant:ident($node:ident) = $kind:ident),* $(,)? }) => {
+        $(#[$meta])*
+        pub enum $name {
+            $($variant($node)),*
         }
+
+        impl Node for $name {
+            fn can_cast(kind: SyntaxKind) -> bool {
+                matches!(kind, $($kind)|*)
+            }
+            fn wrap(syntax: SyntaxNode) -> Self {
+                match syntax.kind() {
+                    $($kind => $name::$variant($node(syntax)),)*
+                    _ => unreachable!(),
+                }
+            }
+            fn syntax(&self) -> &SyntaxNode {
+                match self {
+                    $($name::$variant(node) => node.syntax()),*
+                }
+            }
+        }
+    };
+}
+
+ast_enum!(
+    /// A type, as in the grammar's `_type`.
+    Type {
+        Path(PathType) = PATH_TYPE,
+        Tuple(TupleType) = TUPLE_TYPE,
+        Array(ArrayType) = ARRAY_TYPE,
+        Never(NeverType) = NEVER_TYPE,
+        Bounded(BoundedType) = BOUNDED_TYPE,
+    }
+);
+
+/// `Vec[T]`, `Shape.Circle`
+pub struct PathType(SyntaxNode);
+
+simple_node!(PathType, PATH_TYPE);
+
+impl PathType {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
     }
 }
 
-pub struct ArrowTypeExpr(SyntaxNode);
+/// `(A, B)`, or `()` for the unit type.
+pub struct TupleType(SyntaxNode);
 
-impl ArrowTypeExpr {
+simple_node!(TupleType, TUPLE_TYPE);
 
-    pub fn params(&self) -> impl Iterator<Item = TypeExpr> {
-        ChildrenIter::new(&self.0).skip_last(1)
+impl TupleType {
+    pub fn fields(&self) -> ChildrenIter<Type> {
+        ChildrenIter::new(&self.0)
     }
-
-    pub fn return_ty(&self) -> Option<TypeExpr> {
-        self.rfind_node()
-    }
-
-}
-
-impl Node for ArrowTypeExpr {
-    fn kind() -> SyntaxKind {
-        ARROW_TYPE_EXPR
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        ArrowTypeExpr(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
+    pub fn is_unit(&self) -> bool {
+        self.fields().next().is_none()
     }
 }
 
-pub struct NamedTypeExpr(SyntaxNode);
+/// `[T]` or `[T; N]`
+pub struct ArrayType(SyntaxNode);
 
-impl NamedTypeExpr {
+simple_node!(ArrayType, ARRAY_TYPE);
 
-    pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENT)
+impl ArrayType {
+    pub fn element(&self) -> Option<Type> {
+        self.find_node()
     }
-
+    pub fn length(&self) -> Option<Expr> {
+        self.find_node()
+    }
 }
 
-impl Node for NamedTypeExpr {
-    fn kind() -> SyntaxKind {
-        NAMED_TYPE_EXPR
+/// `!`
+pub struct NeverType(SyntaxNode);
+
+simple_node!(NeverType, NEVER_TYPE);
+
+/// `A + B`
+pub struct BoundedType(SyntaxNode);
+
+simple_node!(BoundedType, BOUNDED_TYPE);
+
+impl BoundedType {
+    pub fn lhs(&self) -> Option<Type> {
+        self.find_node()
     }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        NamedTypeExpr(syntax)
+    pub fn rhs(&self) -> Option<Type> {
+        self.0.children().filter_map(Type::cast).nth(1)
     }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
+}
+
+/// `[A, B]` after a type
+pub struct GenericArgList(SyntaxNode);
+
+simple_node!(GenericArgList, GENERIC_ARG_LIST);
+
+impl GenericArgList {
+    pub fn args(&self) -> ChildrenIter<GenericArg> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+ast_enum!(GenericArg {
+    Type(TypeArg) = TYPE_ARG,
+    AssocType(AssocTypeArg) = ASSOC_TYPE_ARG,
+    Const(ConstArg) = CONST_ARG,
+});
+
+pub struct TypeArg(SyntaxNode);
+
+simple_node!(TypeArg, TYPE_ARG);
+
+impl TypeArg {
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+    pub fn bounds(&self) -> Option<TraitBounds> {
+        self.find_node()
+    }
+}
+
+/// `Item = T`
+pub struct AssocTypeArg(SyntaxNode);
+
+simple_node!(AssocTypeArg, ASSOC_TYPE_ARG);
+
+impl AssocTypeArg {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    pub fn generic_arg_list(&self) -> Option<GenericArgList> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// A literal or block as a generic argument.
+pub struct ConstArg(SyntaxNode);
+
+simple_node!(ConstArg, CONST_ARG);
+
+impl ConstArg {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `: A + B`
+pub struct TraitBounds(SyntaxNode);
+
+simple_node!(TraitBounds, TRAIT_BOUNDS);
+
+impl TraitBounds {
+    pub fn bounds(&self) -> ChildrenIter<Type> {
+        ChildrenIter::new(&self.0)
     }
 }
 
@@ -181,7 +292,7 @@ impl TypedPattern {
         self.find_node()
     }
 
-    pub fn type_expression(&self) -> Option<TypeExpr> {
+    pub fn type_expression(&self) -> Option<Type> {
         self.find_node()
     }
 
@@ -291,22 +402,6 @@ impl Node for Expr {
 
 }
 
-/// Implements [`Node`] for a newtype around a single [`SyntaxKind`].
-macro_rules! simple_node {
-    ($name:ident, $kind:ident) => {
-        impl Node for $name {
-            fn kind() -> SyntaxKind {
-                $kind
-            }
-            fn wrap(syntax: SyntaxNode) -> Self {
-                $name(syntax)
-            }
-            fn syntax(&self) -> &SyntaxNode {
-                &self.0
-            }
-        }
-    };
-}
 
 /// A reference to a variable or function, like `x` or `self`.
 pub struct PathExpr(SyntaxNode);
@@ -347,6 +442,9 @@ simple_node!(PathSegment, PATH_SEGMENT);
 
 impl PathSegment {
     pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    pub fn generic_arg_list(&self) -> Option<GenericArgList> {
         self.find_node()
     }
 }
@@ -463,7 +561,7 @@ impl CastExpr {
     pub fn expr(&self) -> Option<Expr> {
         self.find_node()
     }
-    pub fn type_expr(&self) -> Option<TypeExpr> {
+    pub fn type_expr(&self) -> Option<Type> {
         self.find_node()
     }
 }
@@ -635,7 +733,7 @@ impl VarDecl {
         self.find_node()
     }
 
-    pub fn type_expr(&self) -> Option<TypeExpr> {
+    pub fn type_expr(&self) -> Option<Type> {
         self.find_node()
     }
 
@@ -680,7 +778,7 @@ impl Param {
         self.find_node()
     }
 
-    pub fn type_expr(&self) -> Option<TypeExpr> {
+    pub fn type_expr(&self) -> Option<Type> {
         self.find_node()
     }
 
@@ -718,7 +816,7 @@ impl FuncDecl {
         ChildrenIter::new(&self.0)
     }
 
-    pub fn type_signature(&self ) -> Option<TypeExpr> {
+    pub fn type_signature(&self ) -> Option<Type> {
         self.find_node()
     }
 

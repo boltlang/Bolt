@@ -2,6 +2,7 @@
 //! per area of the grammar, with shared helpers here.
 
 mod expressions;
+mod generic_args;
 mod items;
 mod params;
 mod paths;
@@ -9,6 +10,7 @@ mod patterns;
 mod types;
 
 pub use expressions::*;
+pub(crate) use generic_args::*;
 pub use items::*;
 pub use params::*;
 pub(crate) use paths::*;

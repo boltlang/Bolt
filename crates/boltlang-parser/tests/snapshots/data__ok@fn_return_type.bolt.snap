@@ -16,8 +16,11 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_return_type.bolt
     - WHITESPACE " "
     - R_ARROW "->"
     - WHITESPACE " "
-    - NAMED_TYPE_EXPR
-      - IDENT "Int"
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Int"
     - WHITESPACE " "
     - BLOCK_EXPR
       - BLOCK

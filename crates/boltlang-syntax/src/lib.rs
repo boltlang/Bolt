@@ -119,8 +119,28 @@ pub enum SyntaxKind {
     TYPED_PATT,
 
     // Type expressions
-    ARROW_TYPE_EXPR,
-    NAMED_TYPE_EXPR,
+    /// A type named by a path, like `Vec[T]` or `Shape.Circle`
+    PATH_TYPE,
+    /// `(A, B)`, or `()` for the unit type
+    TUPLE_TYPE,
+    /// `[T]` or `[T; N]`
+    ARRAY_TYPE,
+    /// `!`
+    NEVER_TYPE,
+    /// `A + B`
+    BOUNDED_TYPE,
+
+    // Generic arguments
+    /// `[A, B]` after a type
+    GENERIC_ARG_LIST,
+    /// A type as a generic argument
+    TYPE_ARG,
+    /// A binding like `Item = T` as a generic argument
+    ASSOC_TYPE_ARG,
+    /// A literal or block as a generic argument, like `3` or `{ N + 1 }`
+    CONST_ARG,
+    /// `: A + B`
+    TRAIT_BOUNDS,
 
     // Macros
     MACRO_EXPR,
@@ -264,6 +284,16 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            PATH_TYPE => "a type",
+            TUPLE_TYPE => "a tuple type",
+            ARRAY_TYPE => "an array type",
+            NEVER_TYPE => "the never type",
+            BOUNDED_TYPE => "a type with bounds",
+            GENERIC_ARG_LIST => "a list of generic arguments",
+            TYPE_ARG => "a type argument",
+            ASSOC_TYPE_ARG => "an associated type binding",
+            CONST_ARG => "a constant generic argument",
+            TRAIT_BOUNDS => "a list of trait bounds",
             NAME => "a name",
             NAME_REF => "a reference to a name",
             PATH => "a path",
@@ -311,7 +341,6 @@ impl SyntaxKind {
             YIELD_KEYWORD => "'yield'",
             AT => "'@'",
             ARG_LIST => "the argument list",
-            ARROW_TYPE_EXPR => "a function type signature",
             ASSIGNMENT => "an assignment operator",
             AWAIT_EXPR => "an await expression",
             BIN_EXPR => "an infix-expression",
@@ -360,7 +389,6 @@ impl SyntaxKind {
             MINUS => "'-'",
             MODULE => "a module",
             NAMED_PATT => "a named pattern",
-            NAMED_TYPE_EXPR => "a reference to another type",
             NEST_EXPR => "a nested expression",
             NEST_PATT => "a pattern between '(' and ')'",
             OPERATOR => "an operator",

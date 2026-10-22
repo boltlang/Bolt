@@ -1,0 +1,12 @@
+let a: Vec[Vec[i32]] = x;
+let b: (i32, String) = x;
+let c: () = x;
+let d: [i32; 3] = x;
+let e: [u8] = x;
+let f: ! = x;
+let g: Box[Something + Send] = x;
+let h: H[K = L] = x;
+let i: B.C = x;
+let j: M[N].O = x;
+let k: Arr[3, { n }, -1, "s"] = x;
+let l: I[T: Ord + Hash] = x;

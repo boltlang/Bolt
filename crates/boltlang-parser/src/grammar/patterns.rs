@@ -1,5 +1,5 @@
 use boltlang_syntax::SyntaxKind::*;
-use crate::{Parser, grammar::{PATH_NAME_REF_KINDS, parse_type_expression}, parser::CompletedMarker};
+use crate::{Parser, grammar::{PATH_NAME_REF_KINDS, type_}, parser::CompletedMarker};
 
 pub fn parse_named_pattern(p: &mut Parser) -> Option<CompletedMarker> {
     if p.at_ts(PATH_NAME_REF_KINDS) {
@@ -29,7 +29,7 @@ pub fn parse_pattern(p: &mut Parser) -> Option<CompletedMarker> {
 
     // Attempt to parse typed pattern
     if p.eat(COLON) {
-        parse_type_expression(p);
+        type_(p);
         Some(m.complete(p, TYPED_PATT))
     } else {
         m.abandon(p);

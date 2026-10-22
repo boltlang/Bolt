@@ -21,14 +21,20 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_types.bolt
           - IDENT "x"
         - COLON ":"
         - WHITESPACE " "
-        - NAMED_TYPE_EXPR
-          - IDENT "Int"
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Int"
       - R_PAREN ")"
       - WHITESPACE " "
       - R_ARROW "->"
       - WHITESPACE " "
-      - NAMED_TYPE_EXPR
-        - IDENT "Int"
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Int"
       - WHITESPACE " "
       - EQUALS "="
       - WHITESPACE " "

@@ -1,0 +1,5 @@
+let a = x as Vec[i32];
+let b = (x as T)[0];
+let c = xs[0];
+let d = grid[i][j];
+let e = x as A.B;

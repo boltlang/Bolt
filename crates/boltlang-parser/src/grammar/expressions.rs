@@ -1,7 +1,7 @@
 use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
     Parser,
-    grammar::{PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, parse_pattern, parse_type_expression},
+    grammar::{PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, parse_pattern, type_, type_no_bounds},
     parser::{CompletedMarker, Marker},
     token_set::TokenSet
 };
@@ -119,7 +119,7 @@ pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
         parse_pattern(p);
     }
     if p.eat(R_ARROW) {
-        parse_type_expression(p);
+        type_(p);
     }
     if p.eat(EQUALS) {
         parse_expr(p);
@@ -182,7 +182,7 @@ fn parse_cast_expr(p: &mut Parser<'_>, lhs: CompletedMarker) -> CompletedMarker 
     p.bump(AS_KEYWORD);
     // Use type_no_bounds(), because cast expressions are not
     // allowed to have bounds.
-    super::types::type_no_bounds(p);
+    type_no_bounds(p);
     m.complete(p, CAST_EXPR)
 }
 
@@ -382,7 +382,7 @@ pub(crate) fn parse_statement(p: &mut Parser) -> Option<CompletedMarker> {
 
 pub fn parse_type_ascription(p: &mut Parser) {
     p.bump(COLON);
-    parse_type_expression(p);
+    type_(p);
 }
 
 pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {

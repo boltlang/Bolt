@@ -4,7 +4,7 @@
 use boltlang_parser::parse_file;
 use boltlang_syntax::{
     SyntaxNode,
-    ast::{Expr, Node, SourceElement, SourceFile},
+    ast::{Expr, GenericArg, Node, Pattern, SourceElement, SourceFile, Type},
 };
 
 /// Parse `let x = <expr>;` and return the initializer.
@@ -95,4 +95,20 @@ fn path_expr() {
     assert!(path.qualifier().is_none());
     let segments: Vec<_> = path.segments().iter().map(|s| s.name_ref().unwrap().text()).collect();
     assert_eq!(segments, ["foo"]);
+}
+
+#[test]
+fn path_type_with_generic_args() {
+    let (green, diags) = parse_file("let m: HashMap[K, Vec[V]] = x;");
+    assert!(diags.is_empty(), "{diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    let Some(SourceElement::VarDecl(decl)) = file.elements().next() else { panic!() };
+    let Some(Pattern::Typed(typed)) = decl.pattern() else { panic!() };
+    let Some(Type::Path(ty)) = typed.type_expression() else { panic!() };
+    let segment = ty.path().unwrap().segment().unwrap();
+    assert_eq!(segment.name_ref().unwrap().text(), "HashMap");
+    let args: Vec<_> = segment.generic_arg_list().unwrap().args().collect();
+    assert_eq!(args.len(), 2);
+    let GenericArg::Type(arg) = &args[1] else { panic!() };
+    assert!(matches!(arg.ty(), Some(Type::Path(_))));
 }
