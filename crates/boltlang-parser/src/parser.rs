@@ -122,6 +122,7 @@ impl CompletedMarker {
 
 }
 
+#[derive(Clone)]
 pub struct Input {
     kinds: Vec<SyntaxKind>,
     values: Vec<Option<String>>,
@@ -166,20 +167,26 @@ impl OpDesc {
 }
 
 pub struct Parser<'t> {
-    inp: &'t Input,
+    inp: Input,
     pos: usize,
     pub events: Vec<Event>,
+    /// Tokens that were split in two by [`Parser::split_bump`], as
+    /// `(token index, length of the first part)`.
+    splits: Vec<(usize, u32)>,
     expr_op_table: HashMap<String, OpDesc>,
+    _input: std::marker::PhantomData<&'t Input>,
 }
 
 impl <'t> Parser<'t> {
 
     pub fn new(inp: &'t Input) -> Self {
         Self {
-            inp,
+            inp: inp.clone(),
             pos: 0,
             events: Vec::with_capacity(2 * inp.kinds.len()),
+            splits: Vec::new(),
             expr_op_table: HashMap::new(),
+            _input: std::marker::PhantomData,
         }
     }
 
@@ -329,6 +336,24 @@ impl <'t> Parser<'t> {
         m.complete(self, ERROR);
     }
 
+    /// Split the current token in two and consume the first `len` bytes as a
+    /// token of kind `kind`. The rest stays as the current token, with the
+    /// kind the lexer would give it on its own.
+    ///
+    /// The lexer joins runs of operator characters into one token, so the
+    /// parser uses this where the grammar needs part of one, e.g. the first
+    /// `>` of the `>>` in `Vec<Vec<T>>`.
+    pub(crate) fn split_bump(&mut self, kind: SyntaxKind, len: usize) {
+        let text = self.inp.values[self.pos].clone().expect("token has no text");
+        assert!(0 < len && len < text.len(), "can't split {text:?} at {len}");
+        let (first, rest) = text.split_at(len);
+        self.inp.kinds.insert(self.pos + 1, crate::lexer::operator_kind(rest));
+        self.inp.values.insert(self.pos + 1, Some(rest.to_string()));
+        self.inp.values[self.pos] = Some(first.to_string());
+        self.splits.push((self.pos, len as u32));
+        self.do_bump(kind);
+    }
+
     /// Perform the actual recording of a token.
     fn do_bump(&mut self, kind: SyntaxKind) {
         self.pos += 1;
@@ -340,9 +365,10 @@ impl <'t> Parser<'t> {
         self.events.push(event);
     }
 
-    /// Finishes the builder and returns the events that were generated during the build.
-    pub fn finish(self) -> Vec<Event> {
-        self.events
+    /// Finishes the builder and returns the events that were generated during
+    /// the build, and the tokens that were split (see [`Parser::split_bump`]).
+    pub(crate) fn finish(self) -> (Vec<Event>, Vec<(usize, u32)>) {
+        (self.events, self.splits)
     }
 
 }

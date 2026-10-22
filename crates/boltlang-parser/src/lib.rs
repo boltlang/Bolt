@@ -21,17 +21,25 @@ pub use {
 
 use crate::{diagnostic::Diagnostics, lexer::tokenize};
 
-// TODO maybe replace me with parse()
 pub fn parse_file(text: &str) -> (GreenNode, Vec<Diagnostic>) {
+    parse(text, grammar::parse_source_file)
+}
+
+/// Parse `text` with a single grammar rule, e.g. `grammar::parse_expr`.
+pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec<Diagnostic>) {
     let mut diags = Diagnostics::new();
-    let lexed = tokenize(text, &mut diags);
+    let mut lexed = tokenize(text, &mut diags);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
-    grammar::parse_source_file(&mut p);
-    let interspersed = intersperse_trivia(
-        p.finish(),
-        &lexed
-    );
+    rule(&mut p);
+    if !p.at(EOF) {
+        p.error("parser not at end of file");
+    }
+    let (events, splits) = p.finish();
+    for (index, len) in splits {
+        lexed.split(index, len);
+    }
+    let interspersed = intersperse_trivia(events, &lexed);
     let node = process_events(
         interspersed.into_iter(),
         &lexed,
@@ -41,24 +49,37 @@ pub fn parse_file(text: &str) -> (GreenNode, Vec<Diagnostic>) {
     (node, diags.take_diagnostics())
 }
 
-pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec<Diagnostic>) {
-    let mut diags = Diagnostics::new();
-    let lexed = tokenize(text, &mut diags);
-    let inp = lexed.to_input();
-    let mut p = Parser::new(&inp);
-    rule(&mut p);
-    if !p.at(EOF) {
-        p.error("parser not at end of file");
+#[cfg(test)]
+mod tests {
+    use boltlang_syntax::{SyntaxKind::*, SyntaxNode};
+
+    use super::parse;
+
+    /// The (kind, text) of every token in the tree.
+    fn tokens(text: &str, rule: impl Fn(&mut crate::Parser)) -> Vec<(boltlang_syntax::SyntaxKind, String)> {
+        let (green, diags) = parse(text, rule);
+        assert!(diags.is_empty(), "{diags:?}");
+        SyntaxNode::new_root(green)
+            .descendants_with_tokens()
+            .filter_map(|e| e.into_token())
+            .map(|t| (t.kind(), t.text().to_string()))
+            .collect()
     }
-    let interspersed = intersperse_trivia(
-        p.finish(),
-        &lexed
-    );
-    let node = process_events(
-        interspersed.into_iter(),
-        &lexed,
-        &text,
-        &mut diags
-    );
-    (node, diags.take_diagnostics())
+
+    #[test]
+    fn split_bump_splits_a_token_in_two() {
+        let tokens = tokens(" >> ", |p| {
+            let m = p.start();
+            p.split_bump(GT, 1);
+            assert_eq!(p.value().map(String::as_str), Some(">"));
+            p.bump_any();
+            m.complete(p, SOURCE_FILE);
+        });
+        assert_eq!(tokens, [
+            (WHITESPACE, " ".to_string()),
+            (GT, ">".to_string()),
+            (OPERATOR, ">".to_string()),
+            (WHITESPACE, " ".to_string()),
+        ]);
+    }
 }

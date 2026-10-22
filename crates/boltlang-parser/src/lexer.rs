@@ -74,6 +74,22 @@ fn is_hex_num(ch: char) -> bool {
     matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F')
 }
 
+/// The kind of token for a run of operator characters, e.g. `->` or `+=`.
+pub(crate) fn operator_kind(text: &str) -> SyntaxKind {
+    match text {
+        "->" => R_ARROW,
+        "|" => VBAR,
+        "." => DOT,
+        "=" => EQUALS,
+        "!=" | "<=" | ">=" => OPERATOR,
+        // Things like +==% and -== should be parsed as a regular operator
+        t if t.chars().filter(|c| *c == '=').count() > 1 => OPERATOR,
+        // Previous check made sure there is no other '=' in text
+        t if t.ends_with('=') => ASSIGNMENT,
+        _ => OPERATOR,
+    }
+}
+
 fn is_operator(ch: char) -> bool {
     matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '?' | '!' | '.')
 }
@@ -269,18 +285,7 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 while is_operator(self.peek(0)) && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*')) {
                     text.push(self.get());
                 }
-                match text.as_str() {
-                    "->" => R_ARROW,
-                    "|" => VBAR,
-                    "." => DOT,
-                    "=" => EQUALS,
-                    "!=" | "<=" | ">=" => OPERATOR,
-                    // Things like +==% and -== should be parsed as a regular operator
-                    t if t.chars().filter(|c| *c == '=').count() > 1 => OPERATOR,
-                    // Previous check made sure there is no other '=' in text
-                    t if t.ends_with('=') => ASSIGNMENT,
-                    _ => OPERATOR,
-                }
+                operator_kind(&text)
             }
             _ => ERROR,
         }
@@ -307,6 +312,26 @@ impl LexResult {
 
     pub fn len(&self) -> u32 {
         self.kinds.len() as u32
+    }
+
+    /// Split the `index`th non-trivia token in two, the first part being
+    /// `len` bytes long. See [`Parser::split_bump`](crate::Parser::split_bump).
+    pub(crate) fn split(&mut self, index: usize, len: u32) {
+        let raw = self
+            .kinds
+            .iter()
+            .enumerate()
+            .filter(|(_, kind)| !kind.is_trivia())
+            .nth(index)
+            .map(|(raw, _)| raw)
+            .expect("split index out of range");
+        let text = self.values[raw].take().unwrap();
+        let (first, rest) = text.split_at(len as usize);
+        self.kinds.insert(raw + 1, operator_kind(rest));
+        self.lens[raw] = len;
+        self.lens.insert(raw + 1, rest.len() as u32);
+        self.values[raw] = Some(first.to_string());
+        self.values.insert(raw + 1, Some(rest.to_string()));
     }
 
     pub fn to_input(&self) -> Input {
@@ -355,10 +380,6 @@ impl From<&Pos> for LineColumn {
     }
 }
 
-fn needs_value(kind: SyntaxKind) -> bool {
-    matches!(kind, OPERATOR)
-}
-
 pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
 
     // Input
@@ -383,7 +404,7 @@ pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
         // Transfer the token from the input to the output vectors
         kinds.push(kind);
         lens.push((end.offset - start.offset) as u32);
-        values.push(needs_value(kind).then(|| text[start.offset..end.offset].to_string()));
+        values.push(Some(text[start.offset..end.offset].to_string()));
     }
 
     // For debugging only
