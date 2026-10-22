@@ -12,3 +12,8 @@ ok/declarations-generic_associated_types.bolt
 ok/declarations-trait_declarations.bolt
 ok/declarations-operator_function_definitions.bolt
 ok/declarations-where_clauses.bolt
+ok/declarations-associated_type_definitions.bolt
+ok/declarations-disable_automatically_derived_trait_impls.bolt
+ok/declarations-trait_bounds_in_type_arguments_in_trait.bolt
+ok/declarations-trait_impl_signature.bolt
+ok/declarations-trait_impls.bolt

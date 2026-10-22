@@ -1,0 +1,72 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/old_impl_syntax.bolt
+---
+- SOURCE_FILE
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Show"
+    - WHITESPACE " "
+    - ERROR
+      - FOR_KEYWORD "for"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Dog"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - NEVER_TYPE
+      - EXCL "!"
+  - EXPR_STMT
+    - INDEX_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Send"
+      - L_BRACKET "["
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Rc"
+      - R_BRACKET "]"
+      - WHITESPACE " "
+  - EXPR_STMT
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected '{' or ';'; write `impl Class for Type` as `impl Class[Type]`
+span:
+  start: 10
+  end: 10
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 27
+  end: 27
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 36
+  end: 36

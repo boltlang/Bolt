@@ -1718,7 +1718,7 @@ impl Class {
     }
 }
 
-/// `impl Type { items }` or `impl Trait for Type { items }`
+/// `impl Dog { items }` or `impl Show[Dog] { items }`
 pub struct Impl(SyntaxNode);
 
 simple_node!(Impl, IMPL);
@@ -1727,19 +1727,9 @@ impl Impl {
     pub fn generic_param_list(&self) -> Option<GenericParamList> {
         self.find_node()
     }
-    /// The `!` of a negative impl like `impl !Send for T {}`.
-    pub fn excl_token(&self) -> Option<SyntaxToken> {
-        self.find_token(EXCL)
-    }
-    /// The trait, in `impl Trait for Type`.
-    pub fn trait_(&self) -> Option<Type> {
-        self.find_token(FOR_KEYWORD)?;
+    /// The type, like `Dog`, or the class instance, like `Show[Dog]`.
+    pub fn ty(&self) -> Option<Type> {
         self.find_node()
-    }
-    /// The type the impl is for.
-    pub fn self_ty(&self) -> Option<Type> {
-        let n = if self.find_token(FOR_KEYWORD).is_some() { 1 } else { 0 };
-        self.0.children().filter_map(Type::cast).nth(n)
     }
     pub fn where_clause(&self) -> Option<WhereClause> {
         self.find_node()

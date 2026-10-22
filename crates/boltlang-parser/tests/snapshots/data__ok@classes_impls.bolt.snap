@@ -1,7 +1,7 @@
 ---
 source: crates/boltlang-parser/tests/data.rs
 expression: "dump(&node, &diags)"
-input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
+input_file: crates/boltlang-parser/tests/data/ok/classes_impls.bolt
 ---
 - SOURCE_FILE
   - CLASS
@@ -299,14 +299,6 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Show"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "Vec"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -314,7 +306,16 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "T"
+                      - IDENT "Vec"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "T"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE " "
     - WHERE_CLAUSE
@@ -345,8 +346,26 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
           - IDENT "show"
         - PARAM_LIST
           - L_PAREN "("
-          - SELF_PARAM
-            - SELF_KEYWORD "self"
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "x"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Vec"
+                  - GENERIC_ARG_LIST
+                    - L_BRACKET "["
+                    - TYPE_ARG
+                      - PATH_TYPE
+                        - PATH
+                          - PATH_SEGMENT
+                            - NAME_REF
+                              - IDENT "T"
+                    - R_BRACKET "]"
           - R_PAREN ")"
         - WHITESPACE " "
         - RET_TYPE
@@ -372,41 +391,20 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
   - IMPL
     - IMPL_KEYWORD "impl"
     - WHITESPACE " "
-    - EXCL "!"
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "Send"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "Rc"
-    - WHITESPACE " "
-    - ITEM_LIST
-      - L_BRACE "{"
-      - R_BRACE "}"
-  - WHITESPACE "\n"
-  - IMPL
-    - IMPL_KEYWORD "impl"
-    - WHITESPACE " "
     - PATH_TYPE
       - PATH
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Marker"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "i32"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "i32"
+            - R_BRACKET "]"
     - SEMI ";"
   - WHITESPACE "\n"
   - IMPL

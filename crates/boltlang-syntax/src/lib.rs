@@ -297,7 +297,7 @@ pub enum SyntaxKind {
     IMPORT_ALIAS,
     /// `class Show[T] { items }`
     CLASS,
-    /// `impl Type { items }` or `impl Trait for Type { items }`
+    /// `impl Dog { items }` or `impl Show[Dog] { items }`
     IMPL,
     /// The `{ items }` of a class, impl or extern block
     ITEM_LIST,

@@ -6,7 +6,6 @@ pub class Iterator[I] where I: Clone + Debug, Ord[I] {
     fn count(it: I) -> usize { 0 }
 }
 impl Point { fn new() -> Self = Point { x: 0, y: 0 }; }
-impl[T] Show for Vec[T] where T: Show { fn show(self) -> String { "" } }
-impl !Send for Rc {}
-impl Marker for i32;
+impl[T] Show[Vec[T]] where T: Show { fn show(x: Vec[T]) -> String { "" } }
+impl Marker[i32];
 impl[T] [T; 3] {}

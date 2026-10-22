@@ -370,20 +370,24 @@ fn class_item(p: &mut Parser, m: Marker) {
     m.complete(p, CLASS);
 }
 
-/// `impl[T] Type { }`, `impl Trait for Type { }`, `impl !Send for T {}` or
-/// `impl T for U;`
+/// `impl Dog { }` or `impl[T] Show[Vec[T]] where T: Show { }`, or without a
+/// body: `impl Marker[i32];`. Following the grammar's `impl_item`, both add
+/// functions to a type and declare class instances; the compiler tells them
+/// apart by name.
 fn impl_item(p: &mut Parser, m: Marker) {
     p.bump(T![impl]);
     // Like in the grammar, `[` right after `impl` starts generic parameters.
     if p.at(T!['[']) {
         generic_param_list(p);
     }
-    let negative = p.eat(T![!]);
     type_no_bounds(p);
-    if p.eat(T![for]) {
+    // Recover from the old `impl Class for Type` syntax.
+    if p.at(T![for]) {
+        let e = p.start();
+        p.error("expected '{' or ';'; write `impl Class for Type` as `impl Class[Type]`");
+        p.bump(T![for]);
         type_no_bounds(p);
-    } else if negative {
-        p.error("expected 'for' after a negative trait");
+        e.complete(p, ERROR);
     }
     opt_where_clause(p);
     if p.at(T!['{']) {

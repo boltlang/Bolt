@@ -1,0 +1,2 @@
+impl Show for Dog {}
+impl !Send[Rc] {}
