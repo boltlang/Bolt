@@ -109,11 +109,15 @@ impl MemoryFs {
 
     pub fn write_file_bytes(&self, path: &Path, content: impl AsRef<[u8]>) -> std::io::Result<()> {
         let content = content.as_ref();
-        let path = self.canonicalize(path)?;
+        // Not `canonicalize`, which fails if the file doesn't exist yet.
+        let path = self.normalize_path(path);
         let mut lock = self.inner.by_path.write().map_err(other_error)?;
         match lock.entry(path) {
             HashMapEntry::Occupied(mut entry) => match entry.get_mut() {
-                Entry::File(file) => { file.content = content.into(); },
+                Entry::File(file) => {
+                    file.content = content.into();
+                    file.last_modified = FileTime::now();
+                },
                 Entry::Directory(_) => return Err(is_a_dir()),
             }
             HashMapEntry::Vacant(entry) => {
@@ -128,11 +132,15 @@ impl MemoryFs {
 
     pub fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, content: impl AsRef<[u8]>) -> std::io::Result<()> {
         let content = content.as_ref();
-        let path = self.canonicalize(path)?;
+        // Not `canonicalize`, which fails if the file doesn't exist yet.
+        let path = self.normalize_path(path);
         let mut lock = self.inner.virtual_by_path.write().map_err(other_error)?;
         match lock.entry(path) {
             HashMapEntry::Occupied(mut entry) => match entry.get_mut() {
-                Entry::File(file) => { file.content = content.into(); },
+                Entry::File(file) => {
+                    file.content = content.into();
+                    file.last_modified = FileTime::now();
+                },
                 Entry::Directory(_) => return Err(is_a_dir()),
             }
             HashMapEntry::Vacant(entry) => {
@@ -159,4 +167,22 @@ struct File {
 
 struct Directory {
     last_modified: FileTime,
+}
+#[cfg(test)]
+mod tests {
+    use super::MemoryFs;
+    use crate::SystemPath;
+
+    #[test]
+    fn writes_new_files_and_overwrites_them() {
+        let fs = MemoryFs::new();
+        let path = SystemPath::new("/a.bolt");
+        fs.write_file_bytes(path, b"one").unwrap();
+        assert_eq!(fs.read_to_string(path).unwrap(), "one");
+        let before = fs.metadata(path).unwrap().revision();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        fs.write_file_bytes(path, b"two").unwrap();
+        assert_eq!(fs.read_to_string(path).unwrap(), "two");
+        assert_ne!(fs.metadata(path).unwrap().revision(), before);
+    }
 }
