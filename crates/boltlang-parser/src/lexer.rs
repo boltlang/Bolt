@@ -66,11 +66,11 @@ fn is_oct_num(ch: char) -> bool {
 }
 
 fn is_dec_num(ch: char) -> bool {
-    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '9')
+    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9')
 }
 
 fn is_hex_num(ch: char) -> bool {
-    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '9' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F')
+    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F')
 }
 
 fn is_operator(ch: char) -> bool {
