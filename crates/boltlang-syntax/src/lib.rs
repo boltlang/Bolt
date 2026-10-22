@@ -190,6 +190,8 @@ pub enum SyntaxKind {
 
     // Expressions
     AWAIT_EXPR,
+    /// `[a, b]` or `[x; n]`
+    ARRAY_EXPR,
     /// `if cond { } else { }`
     IF_EXPR,
     /// `let pattern = value` in the condition of an `if` or `while`
@@ -358,6 +360,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            ARRAY_EXPR => "an array expression",
             MATCH_ARM_LIST => "the arms of a match",
             MATCH_ARM => "a match arm",
             MATCH_GUARD => "a match guard",

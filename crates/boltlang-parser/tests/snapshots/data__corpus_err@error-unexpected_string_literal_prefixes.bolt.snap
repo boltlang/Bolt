@@ -16,25 +16,25 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string
   - ERROR
     - COLON ":"
   - WHITESPACE " "
-  - ERROR
-    - L_BRACKET "["
   - EXPR_STMT
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "str"
-  - ERROR
-    - R_BRACKET "]"
-  - WHITESPACE " "
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "str"
+      - R_BRACKET "]"
+      - WHITESPACE " "
   - ERROR
     - EQUALS "="
   - WHITESPACE " "
-  - ERROR
-    - L_BRACKET "["
-  - WHITESPACE "\n    "
-  - ERROR
-    - AT "@"
+  - EXPR_STMT
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - WHITESPACE "\n    "
+      - ERROR
+        - AT "@"
   - EXPR_STMT
     - LIT_EXPR
       - STRING "\"asdf\""
@@ -87,22 +87,10 @@ span:
   end: 7
 ---
 !ExpectedToken
-message: expected an expression, an item or a let statement
-span:
-  start: 9
-  end: 9
----
-!ExpectedToken
 message: expected ';'
 span:
-  start: 13
-  end: 13
----
-!ExpectedToken
-message: expected an expression, an item or a let statement
-span:
-  start: 13
-  end: 13
+  start: 15
+  end: 15
 ---
 !ExpectedToken
 message: expected an expression, an item or a let statement
@@ -111,16 +99,22 @@ span:
   end: 15
 ---
 !ExpectedToken
-message: expected an expression, an item or a let statement
-span:
-  start: 17
-  end: 17
----
-!ExpectedToken
-message: expected an expression, an item or a let statement
+message: expected an expression
 span:
   start: 23
   end: 23
+---
+!ExpectedToken
+message: expected ']'
+span:
+  start: 24
+  end: 24
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 24
+  end: 24
 ---
 !ExpectedToken
 message: expected ';'

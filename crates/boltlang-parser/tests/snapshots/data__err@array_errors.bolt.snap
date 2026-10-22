@@ -1,0 +1,75 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/array_errors.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "a"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - LIT_EXPR
+        - INT_NUMBER "1"
+        - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "2"
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "b"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - LIT_EXPR
+        - INT_NUMBER "1"
+      - COMMA ","
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "2"
+    - SEMI ";"
+  - WHITESPACE " "
+  - EXPR_STMT
+    - LIT_EXPR
+      - INT_NUMBER "3"
+  - ERROR
+    - R_BRACKET "]"
+  - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ','
+span:
+  start: 11
+  end: 11
+---
+!ExpectedToken
+message: expected ']'
+span:
+  start: 28
+  end: 28
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 31
+  end: 31
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 31
+  end: 31

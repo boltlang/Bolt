@@ -28,6 +28,7 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     METAVARIABLE,
     T!['('],
     T!['{'],
+    T!['['],
     T![return],
     T![fn],
     T![if],
@@ -91,6 +92,7 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     }
     let done = match p.current() {
         T!['('] => paren_or_tuple_expr(p),
+        T!['['] => array_expr(p),
         T!['{'] => return Some((parse_block_expr(p), BlockLike::Block)),
         T![async] | T![const] if p.nth_at(1, T!['{']) => {
             let m = p.start();
@@ -225,6 +227,35 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     }
     p.expect(T![')']);
     m.complete(p, if saw_expr && !saw_comma { NEST_EXPR } else { TUPLE_EXPR })
+}
+
+/// `[a, b, c]`, `[]` or `[x; n]`
+fn array_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T!['[']);
+    let mut first = true;
+    while !p.at(EOF) && !p.at(T![']']) {
+        if !p.at_ts(EXPR_FIRST) {
+            p.err_recover("expected an expression", TokenSet::new(&[T![']'], T![,]]));
+            break;
+        }
+        expr(p);
+        if first && p.eat(T![;]) {
+            expr(p);
+            break;
+        }
+        first = false;
+        if p.eat(T![,]) {
+            continue;
+        }
+        if p.at_ts(EXPR_FIRST) {
+            p.error("expected ','");
+        } else {
+            break;
+        }
+    }
+    p.expect(T![']']);
+    m.complete(p, ARRAY_EXPR)
 }
 
 /// `{ statements; tail }`

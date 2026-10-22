@@ -609,6 +609,7 @@ ast_enum!(
         Yield(YieldExpr) = YIELD_EXPR,
         Match(MatchExpr) = MATCH_EXPR,
         Record(RecordExpr) = RECORD_EXPR,
+        Array(ArrayExpr) = ARRAY_EXPR,
     }
 );
 
@@ -760,6 +761,26 @@ impl WhileExpr {
 /// The first child of `node` that is a block expression.
 fn find_block(node: &SyntaxNode) -> Option<BlockExpr> {
     node.children().find_map(BlockExpr::cast)
+}
+
+/// `[a, b, c]` or `[x; n]`
+pub struct ArrayExpr(SyntaxNode);
+
+simple_node!(ArrayExpr, ARRAY_EXPR);
+
+impl ArrayExpr {
+    /// The elements of `[a, b, c]`, or the repeated value of `[x; n]`.
+    pub fn elements(&self) -> ChildrenIter<Expr> {
+        ChildrenIter::new(&self.0)
+    }
+    /// Whether this is `[x; n]`.
+    pub fn is_repeat(&self) -> bool {
+        self.find_token(SEMI).is_some()
+    }
+    /// The `n` of `[x; n]`.
+    pub fn repeat_count(&self) -> Option<Expr> {
+        if self.is_repeat() { self.0.children().filter_map(Expr::cast).nth(1) } else { None }
+    }
 }
 
 /// A struct literal: `Point { x, y: 1, ..base }`
