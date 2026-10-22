@@ -7,8 +7,10 @@
 //! - [`ty`] defines the types.
 //! - [`unify`] makes types equal by binding inference variables.
 //! - [`lower`] turns type references and signatures into types.
+//! - [`solve`] solves equality and class constraints.
 
 pub mod lower;
+pub mod solve;
 pub mod ty;
 pub mod unify;
 
