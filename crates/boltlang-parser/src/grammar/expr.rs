@@ -108,6 +108,7 @@ pub fn parse_nest_expr(p: &mut Parser) -> CompletedMarker {
             p.expect(COMMA);
         }
     }
+    p.expect(R_PAREN);
     m.complete(p, if saw_comma { TUPLE_EXPR } else { NEST_EXPR })
 }
 

@@ -1,0 +1,17 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/tuple.bolt
+---
+- SOURCE_FILE
+  - TUPLE_EXPR
+    - L_PAREN "("
+    - PATH_EXPR
+      - IDENT "a"
+    - COMMA ","
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+    - R_PAREN ")"
+  - SEMI ";"
+  - WHITESPACE "\n"
