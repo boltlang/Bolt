@@ -4,13 +4,14 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/ok/parenthesized.bolt
 ---
 - SOURCE_FILE
-  - NEST_EXPR
-    - L_PAREN "("
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "a"
-    - R_PAREN ")"
-  - SEMI ";"
+  - EXPR_STMT
+    - NEST_EXPR
+      - L_PAREN "("
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - R_PAREN ")"
+    - SEMI ";"
   - WHITESPACE "\n"

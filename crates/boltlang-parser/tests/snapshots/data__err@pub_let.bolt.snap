@@ -1,12 +1,13 @@
 ---
 source: crates/boltlang-parser/tests/data.rs
 expression: "dump(&node, &diags)"
-input_file: crates/boltlang-parser/tests/data/ok/pub_let.bolt
+input_file: crates/boltlang-parser/tests/data/err/pub_let.bolt
 ---
 - SOURCE_FILE
-  - LET_STMT
+  - ERROR
     - PUB_KEYWORD "pub"
-    - WHITESPACE " "
+  - WHITESPACE " "
+  - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
@@ -19,3 +20,9 @@ input_file: crates/boltlang-parser/tests/data/ok/pub_let.bolt
       - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 0
+  end: 0

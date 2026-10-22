@@ -4,28 +4,29 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/ok/call_chain.bolt
 ---
 - SOURCE_FILE
-  - CALL_EXPR
+  - EXPR_STMT
     - CALL_EXPR
-      - PATH_EXPR
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "f"
+      - CALL_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "f"
+        - ARG_LIST
+          - L_PAREN "("
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
+          - R_PAREN ")"
       - ARG_LIST
         - L_PAREN "("
         - PATH_EXPR
           - PATH
             - PATH_SEGMENT
               - NAME_REF
-                - IDENT "a"
+                - IDENT "b"
         - R_PAREN ")"
-    - ARG_LIST
-      - L_PAREN "("
-      - PATH_EXPR
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "b"
-      - R_PAREN ")"
-  - SEMI ";"
+    - SEMI ";"
   - WHITESPACE "\n"

@@ -144,3 +144,20 @@ fn struct_pattern() {
     assert!(matches!(fields[1].pattern(), Some(Pattern::Tuple(_))));
     assert!(pattern.rest().is_some());
 }
+
+#[test]
+fn block_statements_and_tail() {
+    let (green, diags) = parse_file("fn f() { let Some(x) = o else { return; }; g(x); x + 1 }");
+    assert!(diags.is_empty(), "{diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    let Some(SourceElement::FuncDecl(decl)) = file.elements().next() else { panic!() };
+    let Some(Expr::Block(body)) = decl.body() else { panic!() };
+    let block = body.block().unwrap();
+    let elements: Vec<_> = block.elements().collect();
+    assert_eq!(elements.len(), 2);
+    let SourceElement::VarDecl(let_stmt) = &elements[0] else { panic!() };
+    assert!(let_stmt.else_block().is_some());
+    let SourceElement::ExprStmt(stmt) = &elements[1] else { panic!() };
+    assert!(matches!(stmt.expr(), Some(Expr::Call(_))));
+    assert!(matches!(block.tail_expr(), Some(Expr::Bin(_))));
+}

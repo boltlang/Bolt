@@ -30,26 +30,27 @@ input_file: crates/boltlang-parser/tests/data/ok/multiple_statements.bolt
       - INT_NUMBER "2"
     - SEMI ";"
   - WHITESPACE "\n"
-  - CALL_EXPR
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "f"
-    - ARG_LIST
-      - L_PAREN "("
+  - EXPR_STMT
+    - CALL_EXPR
       - PATH_EXPR
         - PATH
           - PATH_SEGMENT
             - NAME_REF
-              - IDENT "x"
-      - COMMA ","
-      - WHITESPACE " "
-      - PATH_EXPR
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "y"
-      - R_PAREN ")"
-  - SEMI ";"
+              - IDENT "f"
+      - ARG_LIST
+        - L_PAREN "("
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - COMMA ","
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "y"
+        - R_PAREN ")"
+    - SEMI ";"
   - WHITESPACE "\n"

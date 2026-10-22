@@ -4,36 +4,82 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/err/error-json_macro_contents.bolt
 ---
 - SOURCE_FILE
-  - NEST_EXPR
-    - L_PAREN "("
-    - BLOCK_EXPR
-      - BLOCK
-        - L_BRACE "{"
-        - WHITESPACE " "
-        - LIT_EXPR
-          - STRING "\"session_id\""
-        - COLON ":"
-        - WHITESPACE " "
-        - IDENT "session_id"
-        - COMMA ","
-        - WHITESPACE " "
-        - STRING "\"output\""
-        - COLON ":"
-        - WHITESPACE " "
-        - IDENT "output"
-        - WHITESPACE " "
-        - R_BRACE "}"
-    - R_PAREN ")"
-    - WHITESPACE "\n"
+  - EXPR_STMT
+    - NEST_EXPR
+      - L_PAREN "("
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - EXPR_STMT
+            - LIT_EXPR
+              - STRING "\"session_id\""
+          - ERROR
+            - COLON ":"
+          - WHITESPACE " "
+          - EXPR_STMT
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "session_id"
+          - ERROR
+            - COMMA ","
+          - WHITESPACE " "
+          - EXPR_STMT
+            - LIT_EXPR
+              - STRING "\"output\""
+          - ERROR
+            - COLON ":"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "output"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - R_PAREN ")"
+      - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected ';' or '}'
+message: expected ';'
 span:
   start: 15
   end: 15
 ---
 !ExpectedToken
-message: expected ';' or '}'
+message: expected an expression, an item or a let statement
+span:
+  start: 15
+  end: 15
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 27
+  end: 27
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 27
+  end: 27
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 37
+  end: 37
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 37
+  end: 37
+---
+!ExpectedToken
+message: expected ';'
 span:
   start: 49
   end: 49

@@ -16,72 +16,64 @@ input_file: crates/boltlang-parser/tests/data/err/if_without_keyword.bolt
     - ERROR
       - IF_KEYWORD "if"
       - WHITESPACE " "
-    - IDENT "a"
-    - WHITESPACE " "
-    - L_BRACE "{"
-    - WHITESPACE " "
-    - IDENT "b"
-  - WHITESPACE " "
-  - ERROR
-    - R_BRACE "}"
+  - EXPR_STMT
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "a"
+      - WHITESPACE " "
+  - EXPR_STMT
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "b"
+        - WHITESPACE " "
+        - R_BRACE "}"
   - WHITESPACE " "
   - ERROR
     - ELSE_KEYWORD "else"
-    - WHITESPACE " "
-  - L_BRACE "{"
   - WHITESPACE " "
-  - IDENT "c"
-  - WHITESPACE " "
-  - ERROR
-    - R_BRACE "}"
-  - ERROR
+  - EXPR_STMT
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "c"
+        - WHITESPACE " "
+        - R_BRACE "}"
     - SEMI ";"
-    - WHITESPACE "\n"
+  - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected expression
+message: expected an expression
 span:
   start: 8
   end: 8
 ---
 !ExpectedToken
-message: expected ';' or '}'
+message: expected ';'
 span:
   start: 11
   end: 11
 ---
 !ExpectedToken
-message: unexpected '}'
+message: expected ';'
 span:
-  start: 17
-  end: 17
+  start: 13
+  end: 13
 ---
 !ExpectedToken
-message: expected expression
+message: expected an expression, an item or a let statement
 span:
   start: 19
   end: 19
----
-!ExpectedToken
-message: expected ';' or '}'
-span:
-  start: 24
-  end: 24
----
-!ExpectedToken
-message: unexpected '}'
-span:
-  start: 28
-  end: 28
----
-!ExpectedToken
-message: expected expression
-span:
-  start: 29
-  end: 29
----
-!ExpectedToken
-message: expected ';' or '}'
-span:
-  start: 31
-  end: 31

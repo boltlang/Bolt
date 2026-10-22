@@ -6,45 +6,184 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string
 - SOURCE_FILE
   - ERROR
     - CONST_KEYWORD "const"
-    - WHITESPACE " "
-  - IDENT "A"
-  - COLON ":"
   - WHITESPACE " "
-  - L_BRACKET "["
-  - IDENT "str"
-  - R_BRACKET "]"
+  - EXPR_STMT
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "A"
+  - ERROR
+    - COLON ":"
   - WHITESPACE " "
-  - EQUALS "="
+  - ERROR
+    - L_BRACKET "["
+  - EXPR_STMT
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "str"
+  - ERROR
+    - R_BRACKET "]"
   - WHITESPACE " "
-  - L_BRACKET "["
+  - ERROR
+    - EQUALS "="
+  - WHITESPACE " "
+  - ERROR
+    - L_BRACKET "["
   - WHITESPACE "\n    "
-  - AT "@"
-  - STRING "\"asdf\""
-  - COMMA ","
+  - ERROR
+    - AT "@"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "\"asdf\""
+  - ERROR
+    - COMMA ","
   - WHITESPACE "\n    "
-  - LT "<"
-  - STRING "\"asdf\""
-  - COMMA ","
+  - ERROR
+    - LT "<"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "\"asdf\""
+  - ERROR
+    - COMMA ","
   - WHITESPACE "\n    "
-  - GT ">"
-  - STRING "\"asdf\""
-  - COMMA ","
+  - ERROR
+    - GT ">"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "\"asdf\""
+  - ERROR
+    - COMMA ","
   - WHITESPACE "\n    "
-  - COLON ":"
-  - STRING "\"asdf\""
-  - WHITESPACE "\n"
-  - R_BRACKET "]"
+  - ERROR
+    - COLON ":"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "\"asdf\""
+      - WHITESPACE "\n"
+  - ERROR
+    - R_BRACKET "]"
   - SEMI ";"
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected expression
+message: expected an expression, an item or a let statement
 span:
   start: 0
   end: 0
 ---
 !ExpectedToken
-message: expected ';' or '}'
+message: expected ';'
 span:
-  start: 6
-  end: 6
+  start: 7
+  end: 7
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 7
+  end: 7
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 9
+  end: 9
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 13
+  end: 13
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 13
+  end: 13
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 15
+  end: 15
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 17
+  end: 17
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 23
+  end: 23
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 30
+  end: 30
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 30
+  end: 30
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 36
+  end: 36
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 43
+  end: 43
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 43
+  end: 43
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 49
+  end: 49
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 56
+  end: 56
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 56
+  end: 56
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 62
+  end: 62
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 70
+  end: 70
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 70
+  end: 70

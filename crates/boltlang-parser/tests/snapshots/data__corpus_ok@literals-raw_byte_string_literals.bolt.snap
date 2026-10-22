@@ -4,11 +4,13 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-raw_byte_string_literals.bolt
 ---
 - SOURCE_FILE
-  - LIT_EXPR
-    - BYTE_STRING "br#\"abc\"#"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - BYTE_STRING "br#\"abc\"#"
+    - SEMI ";"
   - WHITESPACE "\n"
-  - LIT_EXPR
-    - BYTE_STRING "br##\"abc\"##"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - BYTE_STRING "br##\"abc\"##"
+    - SEMI ";"
   - WHITESPACE "\n"

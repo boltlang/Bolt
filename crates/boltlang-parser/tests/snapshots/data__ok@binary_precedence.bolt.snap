@@ -4,28 +4,29 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/ok/binary_precedence.bolt
 ---
 - SOURCE_FILE
-  - BIN_EXPR
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "a"
-    - WHITESPACE " "
-    - PLUS "+"
-    - WHITESPACE " "
+  - EXPR_STMT
     - BIN_EXPR
       - PATH_EXPR
         - PATH
           - PATH_SEGMENT
             - NAME_REF
-              - IDENT "b"
+              - IDENT "a"
       - WHITESPACE " "
-      - STAR "*"
+      - PLUS "+"
       - WHITESPACE " "
-      - PATH_EXPR
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "c"
-  - SEMI ";"
+      - BIN_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "b"
+        - WHITESPACE " "
+        - STAR "*"
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "c"
+    - SEMI ";"
   - WHITESPACE "\n"

@@ -16,18 +16,22 @@ input_file: crates/boltlang-parser/tests/data/err/missing_semi.bolt
     - LIT_EXPR
       - INT_NUMBER "1"
       - WHITESPACE "\n"
+  - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "
-    - IDENT "y"
+    - NAMED_PATT
+      - NAME
+        - IDENT "y"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
-    - INT_NUMBER "2"
+    - LIT_EXPR
+      - INT_NUMBER "2"
     - SEMI ";"
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected ';' or '}'
+message: expected ';'
 span:
   start: 10
   end: 10

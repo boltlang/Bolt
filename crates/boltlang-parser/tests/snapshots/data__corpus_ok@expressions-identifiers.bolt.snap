@@ -16,12 +16,13 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-identifiers.
       - BLOCK
         - L_BRACE "{"
         - WHITESPACE "\n  "
-        - PATH_EXPR
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "abc"
-        - SEMI ";"
+        - EXPR_STMT
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "abc"
+          - SEMI ";"
         - WHITESPACE "\n"
         - R_BRACE "}"
   - WHITESPACE "\n"

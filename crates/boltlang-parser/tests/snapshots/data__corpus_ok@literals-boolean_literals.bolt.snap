@@ -4,11 +4,13 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-boolean_literals.bolt
 ---
 - SOURCE_FILE
-  - LIT_EXPR
-    - TRUE_KEYWORD "true"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - TRUE_KEYWORD "true"
+    - SEMI ";"
   - WHITESPACE "\n"
-  - LIT_EXPR
-    - FALSE_KEYWORD "false"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - FALSE_KEYWORD "false"
+    - SEMI ";"
   - WHITESPACE "\n"

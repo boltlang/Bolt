@@ -23,7 +23,7 @@ span:
   end: 16
 ---
 !ExpectedToken
-message: expected ';' or '}'
+message: expected ';'
 span:
   start: 16
   end: 16

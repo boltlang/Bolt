@@ -4,35 +4,36 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/err/call_missing_argument.bolt
 ---
 - SOURCE_FILE
-  - CALL_EXPR
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "f"
-    - ARG_LIST
-      - L_PAREN "("
+  - EXPR_STMT
+    - CALL_EXPR
       - PATH_EXPR
         - PATH
           - PATH_SEGMENT
             - NAME_REF
-              - IDENT "a"
-      - COMMA ","
-      - WHITESPACE " "
-      - ERROR
+              - IDENT "f"
+      - ARG_LIST
+        - L_PAREN "("
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "a"
         - COMMA ","
-      - WHITESPACE " "
-      - PATH_EXPR
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "b"
-      - R_PAREN ")"
-  - SEMI ";"
+        - WHITESPACE " "
+        - ERROR
+          - COMMA ","
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "b"
+        - R_PAREN ")"
+    - SEMI ";"
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected expression
+message: expected an expression
 span:
   start: 5
   end: 5

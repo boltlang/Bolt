@@ -4,19 +4,20 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/ok/subtraction.bolt
 ---
 - SOURCE_FILE
-  - BIN_EXPR
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "a"
-    - WHITESPACE " "
-    - MINUS "-"
-    - WHITESPACE " "
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "b"
-  - SEMI ";"
+  - EXPR_STMT
+    - BIN_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - WHITESPACE " "
+      - MINUS "-"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
+    - SEMI ";"
   - WHITESPACE "\n"

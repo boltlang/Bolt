@@ -1,290 +1,200 @@
+//! Statements and expressions, as in the grammar's `_statement` and
+//! `_expression`. Ported from rust-analyzer: a Pratt parser for operators
+//! ([`expr_bp`]) on top of atoms ([`atom`]).
+
+mod atom;
+
+pub(crate) use atom::*;
+
 use boltlang_syntax::{SyntaxKind::{self, *}, T};
+
 use crate::{
-    Parser,
-    grammar::{opt_ret_type, PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, param_list, parse_pattern, type_, type_no_bounds},
-    parser::{CompletedMarker, Marker},
-    token_set::TokenSet
+    grammar::{count_modifiers, is_named_fn, parse_named_function_declaration, parse_pattern, type_, type_no_bounds},
+    parser::{CompletedMarker, Marker, Parser},
+    token_set::TokenSet,
 };
 
-pub(super) const PATH_FIRST: TokenSet = TokenSet::new(&[IDENT, SELF_KEYWORD, METAVARIABLE]);
+/// Whether an expression ends in a block, like `if` and `match`. As a
+/// statement, such an expression doesn't need a `;`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum BlockLike {
+    Block,
+    NotBlock,
+}
 
-pub(crate) const LITERAL_FIRST: TokenSet = TokenSet::new(&[
-    TRUE_KEYWORD,
-    FALSE_KEYWORD,
-    INT_NUMBER,
-    FLOAT_NUMBER,
-    BYTE,
-    CHAR,
-    STRING,
-    BYTE_STRING,
-    C_STRING,
-]);
+impl BlockLike {
+    fn is_block(self) -> bool {
+        self == BlockLike::Block
+    }
+}
 
-pub(super) const ATOM_EXPR_FIRST: TokenSet =
-    LITERAL_FIRST.union(PATH_FIRST).union(TokenSet::new(&[
-        L_PAREN,
-        L_BRACE,
-        L_BRACKET,
-        VBAR,
-        BREAK_KEYWORD,
-        CONST_KEYWORD,
-        CONTINUE_KEYWORD,
-        FOR_KEYWORD,
-        IF_KEYWORD,
-        LET_KEYWORD,
-        FN_KEYWORD,
-        LOOP_KEYWORD,
-        MATCH_KEYWORD,
-        RETURN_KEYWORD,
-        WHILE_KEYWORD,
-        YIELD_KEYWORD
-    ]));
-
-const LHS_FIRST: TokenSet =
-    ATOM_EXPR_FIRST.union(TokenSet::new(&[EXCL, DOT, MINUS, UNDERSCORE, HASHTAG]));
+/// Constraints on the expression being parsed.
+#[derive(Clone, Copy)]
+pub(crate) struct Restrictions {
+    /// `{` can't start a struct literal, as in `if x {`.
+    forbid_structs: bool,
+    /// An expression ending in a block ends the statement, so `{ 1 } - 1`
+    /// is a block followed by `-1`.
+    prefer_stmt: bool,
+}
 
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
-pub(in crate::grammar) const EXPR_RECOVERY_SET: TokenSet =
-    TokenSet::new(&[R_BRACE, R_PAREN, R_BRACKET, COMMA]);
+const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!]]));
 
-pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
-    let m = p.start();
-    if expr_path(p).is_none() {
-        m.abandon(p);
-        p.error_and_bump("expected identifier");
-        return None;
+/// An expression.
+pub fn parse_expr(p: &mut Parser) -> Option<CompletedMarker> {
+    expr(p)
+}
+
+pub(crate) fn expr(p: &mut Parser) -> Option<CompletedMarker> {
+    let r = Restrictions { forbid_structs: false, prefer_stmt: false };
+    expr_bp(p, None, r, 1).map(|(m, _)| m)
+}
+
+/// An expression where `{` can't start a struct literal, like the condition
+/// of an `if`.
+pub(crate) fn expr_no_struct(p: &mut Parser) -> Option<CompletedMarker> {
+    let r = Restrictions { forbid_structs: true, prefer_stmt: false };
+    expr_bp(p, None, r, 1).map(|(m, _)| m)
+}
+
+fn expr_stmt(p: &mut Parser, m: Option<Marker>) -> Option<(CompletedMarker, BlockLike)> {
+    let r = Restrictions { forbid_structs: false, prefer_stmt: true };
+    expr_bp(p, m, r, 1)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Semicolon {
+    Required,
+    Optional,
+}
+
+/// A statement: `;`, a `let`, an item like a function, or an expression.
+pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
+    // An empty statement.
+    if p.eat(T![;]) {
+        return;
     }
-    Some(m.complete(p, PATH_EXPR))
-}
-
-pub fn parse_block_expr(p: &mut Parser) -> CompletedMarker {
+    if p.at(T![let]) {
+        let_stmt(p, semicolon);
+        return;
+    }
+    let n = count_modifiers(p);
+    if p.nth_at(n, T![fn]) && is_named_fn(p, n) {
+        parse_named_function_declaration(p);
+        return;
+    }
+    if !p.at_ts(EXPR_FIRST) {
+        p.error_and_bump("expected an expression, an item or a let statement");
+        return;
+    }
     let m = p.start();
-    parse_block(p);
-    m.complete(p, BLOCK_EXPR)
-}
-
-pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
-    match p.current() {
-        STRING | BYTE_STRING | C_STRING | CHAR | BYTE | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => {
-            let m = p.start();
-            p.bump_any();
-            Some(m.complete(p, LIT_EXPR))
+    if let Some((cm, blocklike)) = expr_stmt(p, Some(m)) {
+        // An expression at the end of a block is its value, not a statement.
+        if p.at(T!['}']) {
+            return;
         }
-        _ => {
-            p.error_and_bump("expected literal");
-            None
+        let m = cm.precede(p);
+        match semicolon {
+            Semicolon::Required if blocklike.is_block() => {
+                p.eat(T![;]);
+            }
+            Semicolon::Required => {
+                p.expect(T![;]);
+            }
+            Semicolon::Optional => {
+                p.eat(T![;]);
+            }
         }
+        m.complete(p, EXPR_STMT);
     }
 }
 
-pub fn parse_nest_expr(p: &mut Parser) -> CompletedMarker {
+/// `let pattern: Type = value else { ... };`, with the type, value and
+/// `else` block optional.
+pub(crate) fn let_stmt(p: &mut Parser, semicolon: Semicolon) {
     let m = p.start();
-    p.expect(L_PAREN);
-    let mut saw_comma = false;
-    if p.eat(COMMA) {
-        p.error("expected expression");
-        saw_comma = true;
+    p.bump(T![let]);
+    p.eat(T![mut]);
+    parse_pattern(p);
+    if p.eat(T![:]) {
+        type_(p);
     }
-    while !p.at(EOF) && !p.at(R_PAREN) {
-        if parse_expr(p).is_none() {
-            break;
-        }
-        if !p.at(R_PAREN) {
-            saw_comma = true;
-            p.expect(COMMA);
-        }
+    if p.eat(T![=]) {
+        expr(p);
     }
-    p.expect(R_PAREN);
-    m.complete(p, if saw_comma { TUPLE_EXPR } else { NEST_EXPR })
-}
-
-pub fn parse_return_expr(p: &mut Parser) -> CompletedMarker {
-    let m = p.start();
-    p.expect(RETURN_KEYWORD);
-    parse_expr(p);
-    m.complete(p, RET_EXPR)
-}
-
-/// Parse an anonymous function: `fn (x y) = expr` or `fn (x y) { ... }`,
-/// optionally with a return type: `fn (x) -> Int = x`.
-///
-pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
-    let m = p.start();
-    p.bump(FN_KEYWORD);
-    param_list(p);
-    opt_ret_type(p);
-    if p.eat(EQUALS) {
-        parse_expr(p);
-    } else if p.at(L_BRACE) {
+    if p.eat(T![else]) {
         parse_block_expr(p);
-    } else {
-        p.error("expected '=' or '{' to start the function body");
     }
-    m.complete(p, FUN_EXPR)
+    match semicolon {
+        Semicolon::Required => {
+            p.expect(T![;]);
+        }
+        Semicolon::Optional => {
+            p.eat(T![;]);
+        }
+    }
+    m.complete(p, LET_STMT);
 }
 
-pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
-    match p.current() {
-        STRING | BYTE_STRING | C_STRING | CHAR | BYTE | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => parse_literal_expr(p),
-        _ if is_path_start(p) => parse_reference_expression(p),
-        L_BRACE => Some(parse_block_expr(p)),
-        L_PAREN => Some(parse_nest_expr(p)),
-        RETURN_KEYWORD => Some(parse_return_expr(p)),
-        FN_KEYWORD => Some(parse_fun_expr(p)),
-        _ => {
-            p.error_and_bump("expected expression");
-            return None;
-        }
+/// The statements and tail expression of a block, up to its `}`.
+pub(crate) fn expr_block_contents(p: &mut Parser) {
+    while !p.at(EOF) && !p.at(T!['}']) {
+        stmt(p, Semicolon::Required);
     }
 }
 
-/// Whether the current token is an operator that can start a prefix expression.
-fn at_prefix_op(p: &Parser) -> bool {
-    matches!(p.op_text(), Some("-" | "+" | "!"))
-}
-
-fn parse_lhs(p: &mut Parser) -> Option<CompletedMarker> {
-    let m;
-    let kind = match p.current() {
-        _ if at_prefix_op(p) => {
-            m = p.start();
-            p.bump_any();
-            PREFIX_EXPR
-        },
-        _ => {
-            let lhs = parse_atom_expr(p)?;
-            let cm = parse_postfix_expr(p, lhs, true);
-            return Some(cm);
-        }
-    };
-    // parse the interior of the unary expression
-    parse_expr_bp(p, None, 255);
-    let cm =  m.complete(p, kind);
-    Some(cm)
-}
-
+#[derive(Clone, Copy)]
 enum Associativity {
     Left,
     Right,
 }
 
-fn parse_cast_expr(p: &mut Parser<'_>, lhs: CompletedMarker) -> CompletedMarker {
-    assert!(p.at(AS_KEYWORD));
-    let m = lhs.precede(p);
-    p.bump(AS_KEYWORD);
-    // Use type_no_bounds(), because cast expressions are not
-    // allowed to have bounds.
-    type_no_bounds(p);
-    m.complete(p, CAST_EXPR)
-}
-
-fn parse_index_expr(p: &mut Parser<'_>, lhs: CompletedMarker) -> CompletedMarker {
-    assert!(p.at(L_BRACKET));
-    let m = lhs.precede(p);
-    p.bump(L_BRACKET);
-    parse_expr(p);
-    p.expect(R_BRACKET);
-    m.complete(p, INDEX_EXPR)
-}
-
-fn parse_try_expr(p: &mut Parser<'_>, lhs: CompletedMarker) -> CompletedMarker {
-    assert!(p.at(QUEST));
-    let m = lhs.precede(p);
-    p.bump(QUEST);
-    m.complete(p, TRY_EXPR)
-}
-
-fn parse_arg_list(p: &mut Parser<'_>) {
-    assert!(p.at(L_PAREN));
-    let m = p.start();
-    delimited(
-        p,
-        L_PAREN,
-        R_PAREN,
-        COMMA,
-        || "expected expression".into(),
-        EXPR_FIRST,
-        |p| parse_expr(p).is_some(),
-    );
-    m.complete(p, ARG_LIST);
-}
-
-fn parse_call_expr(p: &mut Parser<'_>, lhs: CompletedMarker) -> CompletedMarker {
-    assert!(p.at(L_PAREN));
-    let m = lhs.precede(p);
-    parse_arg_list(p);
-    m.complete(p, CALL_EXPR)
-}
-
-fn parse_postfix_expr(
-    p: &mut Parser,
-    mut lhs: CompletedMarker,
-    mut allow_calls: bool,
-) -> CompletedMarker {
-    loop {
-        lhs = match p.current() {
-            L_PAREN if allow_calls => parse_call_expr(p, lhs),
-            L_BRACKET if allow_calls => parse_index_expr(p, lhs),
-            DOT => match parse_postfix_dot_expr(p, lhs) {
-                Ok(it) => it,
-                Err(it) => {
-                    lhs = it;
-                    break;
-                }
-            },
-            QUEST => parse_try_expr(p, lhs),
-            _ => break,
-        };
-        allow_calls = true;
+/// Binding powers of the binary operators, following the grammar's `PREC`.
+/// See <https://matklad.github.io/2020/04/13/simple-but-powerful-pratt-parsing.html>.
+#[rustfmt::skip]
+fn current_op(p: &Parser) -> (u8, SyntaxKind, Associativity) {
+    use Associativity::*;
+    const NOT_AN_OP: (u8, SyntaxKind, Associativity) = (0, T![@], Left);
+    if p.at(T![as]) {
+        return (12, T![as], Left);
     }
-    lhs
+    let Some(op) = p.op_text() else {
+        return NOT_AN_OP;
+    };
+    let (bp, assoc) = match op {
+        "||"                           => (3,  Left),
+        "&&"                           => (4,  Left),
+        "==" | "!=" | "<" | "<=" | ">" | ">=" => (5,  Left),
+        "|"                            => (6,  Left),
+        "^"                            => (7,  Left),
+        "&"                            => (8,  Left),
+        "<<" | ">>"                    => (9,  Left),
+        "+" | "-"                      => (10, Left),
+        "*" | "/" | "%"                => (11, Left),
+        ".." | "..="                   => (2,  Left),
+        _ => return NOT_AN_OP,
+    };
+    (bp, p.current(), assoc)
 }
 
-fn parse_field_expr(p: &mut Parser, lhs: CompletedMarker) -> Result<CompletedMarker, CompletedMarker> {
-    todo!()
-}
-
-fn parse_method_call_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
-    todo!()
-}
-
-fn parse_postfix_dot_expr(p: &mut Parser, lhs: CompletedMarker) -> Result<CompletedMarker, CompletedMarker> {
-
-    assert!(p.at(DOT));
-
-    if PATH_NAME_REF_KINDS.contains(p.nth(1))
-        && (p.nth(2) == L_PAREN || p.nth_at(2, COLONCOLON))
-        || p.nth(1) == L_PAREN
-    {
-        return Ok(parse_method_call_expr(p, lhs));
-    }
-
-    if p.at(DOTDOTEQUALS) || p.at(DOTDOT) {
-        return Err(lhs);
-    }
-
-    parse_field_expr(p, lhs)
-}
-
-pub fn parse_expr_bp(p: &mut Parser, m: Option<Marker>, min_bp: u8) -> Option<CompletedMarker> {
-
-    let m = m.unwrap_or_else(|| {
-        let m = p.start();
-        // attributes::outer_attrs(p);
-        m
-    });
-
-    if !p.at_ts(EXPR_FIRST) && !at_prefix_op(p) {
-        p.err_recover("expected expression", EXPR_RECOVERY_SET);
+/// Parse an expression whose operators bind at least as tightly as `bp`.
+fn expr_bp(p: &mut Parser, m: Option<Marker>, r: Restrictions, bp: u8) -> Option<(CompletedMarker, BlockLike)> {
+    let m = m.unwrap_or_else(|| p.start());
+    if !p.at_ts(EXPR_FIRST) {
+        p.err_recover("expected an expression", EXPR_RECOVERY_SET);
         m.abandon(p);
         return None;
     }
-    let mut lhs = match parse_lhs(p) {
-        Some(lhs) => {
+    let mut lhs = match lhs(p, r) {
+        Some((lhs, blocklike)) => {
             let lhs = lhs.extend_to(p, m);
+            if r.prefer_stmt && blocklike.is_block() {
+                return Some((lhs, BlockLike::Block));
+            }
             lhs
-        },
+        }
         None => {
             m.abandon(p);
             return None;
@@ -293,11 +203,11 @@ pub fn parse_expr_bp(p: &mut Parser, m: Option<Marker>, min_bp: u8) -> Option<Co
 
     loop {
         let (op_bp, op, associativity) = current_op(p);
-        if op_bp < min_bp {
+        if op_bp < bp {
             break;
         }
-        if p.at(AS_KEYWORD) {
-            lhs = parse_cast_expr(p, lhs);
+        if p.at(T![as]) {
+            lhs = cast_expr(p, lhs);
             continue;
         }
         let m = lhs.precede(p);
@@ -306,118 +216,89 @@ pub fn parse_expr_bp(p: &mut Parser, m: Option<Marker>, min_bp: u8) -> Option<Co
             Associativity::Left => op_bp + 1,
             Associativity::Right => op_bp,
         };
-        parse_expr_bp(p, None, op_bp);
+        expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, op_bp);
         lhs = m.complete(p, BIN_EXPR);
     }
-
-    Some(lhs)
+    Some((lhs, BlockLike::NotBlock))
 }
 
-pub fn parse_expr(p: &mut Parser) -> Option<CompletedMarker> {
-    parse_expr_bp(p, None, 1)
-}
-
-fn current_op(p: &Parser<'_>) -> (u8, SyntaxKind, Associativity) {
-    use Associativity::*;
-    const NOT_AN_OP: (u8, SyntaxKind, Associativity) = (0, AT, Left);
-    match p.current() {
-        _ if p.op_text().is_some() => {
-            let name = p.op_text().unwrap();
-            let (bp, assoc) = match name {
-                "||"  => (3, Left),
-                "|="  => (1, Right),
-                "|"   => (6, Left),
-                ">>=" => (1, Right),
-                ">>"  => (9, Left),
-                ">="  => (5, Left),
-                ">"   => (5, Left),
-                "=="  => (5, Left),
-                "="   => (1, Right),
-                "<="  => (5, Left),
-                "<<=" => (1, Right),
-                "<<"  => (9, Left),
-                "<"   => (5, Left),
-                "+="  => (1, Right),
-                "+"   => (10, Left),
-                "^="  => (1, Right),
-                "^"   => (7, Left),
-                "%="  => (1, Right),
-                "%"   => (11, Left),
-                "&&"  => (4, Left),
-                "&"   => (8, Left),
-                "/="  => (1, Right),
-                "/"   => (11, Left),
-                "*="  => (1, Right),
-                "*"   => (11, Left),
-                "..=" => (2, Left),
-                ".."  => (2, Left),
-                "!="  => (5, Left),
-                "-="  => (1, Right),
-                "-"   => (10, Left),
-                _ => return NOT_AN_OP,
-            };
-            (bp, p.current(), assoc)
-        }
-        AS_KEYWORD => (12, AS_KEYWORD,  Left),
-        _ => NOT_AN_OP
+/// A prefix operator applied to an expression, or an atom followed by
+/// postfix operators like calls.
+fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> {
+    if matches!(p.current(), T![-] | T![!]) {
+        let m = p.start();
+        p.bump_any();
+        // Prefix operators bind tighter than casts and binary operators, but
+        // not as tight as postfix operators: `-f(x)` is `-(f(x))`.
+        expr_bp(p, None, r, 255);
+        return Some((m.complete(p, PREFIX_EXPR), BlockLike::NotBlock));
     }
+    let (lhs, blocklike) = atom_expr(p, r)?;
+    let (lhs, blocklike) = postfix_expr(p, lhs, blocklike, !(r.prefer_stmt && blocklike.is_block()));
+    Some((lhs, blocklike))
 }
 
-/// Parse a statement that starts with `let`, a named `fn`, or an expression.
-pub(crate) fn parse_statement(p: &mut Parser) -> Option<CompletedMarker> {
-    let n = count_modifiers(p);
-    match p.nth(n) {
-        LET_KEYWORD => Some(parse_variable_declaration(p)),
-        FN_KEYWORD if is_named_fn(p, n) => Some(parse_named_function_declaration(p)),
-        _ => parse_expression_statement(p),
+fn postfix_expr(
+    p: &mut Parser,
+    mut lhs: CompletedMarker,
+    mut blocklike: BlockLike,
+    // As a statement, `{ } (x)` is a block followed by a tuple, not a call.
+    mut allow_calls: bool,
+) -> (CompletedMarker, BlockLike) {
+    loop {
+        lhs = match p.current() {
+            T!['('] if allow_calls => call_expr(p, lhs),
+            T!['['] if allow_calls => index_expr(p, lhs),
+            T![?] => try_expr(p, lhs),
+            _ => break,
+        };
+        allow_calls = true;
+        blocklike = BlockLike::NotBlock;
     }
+    (lhs, blocklike)
 }
 
-pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
+/// `f(a, b)`
+fn call_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
+    let m = lhs.precede(p);
+    arg_list(p);
+    m.complete(p, CALL_EXPR)
+}
+
+fn arg_list(p: &mut Parser) {
     let m = p.start();
-    p.eat(PUB_KEYWORD);
-    p.expect(LET_KEYWORD);
-    p.eat(MUT_KEYWORD);
-    parse_pattern(p);
-    if p.eat(T![:]) {
-        type_(p);
-    }
-    if p.eat(EQUALS) {
-        parse_expr(p);
-    }
-    check_semi(p);
-    m.complete(p, LET_STMT)
+    crate::grammar::delimited(
+        p,
+        T!['('],
+        T![')'],
+        T![,],
+        || "expected an expression".into(),
+        EXPR_FIRST,
+        |p| expr(p).is_some(),
+    );
+    m.complete(p, ARG_LIST);
 }
 
-pub(crate) fn check_semi(p: &mut Parser) {
-    if !p.at(R_BRACE) && !p.eat(SEMI) {
-        p.error("expected ';' or '}'");
-        // TODO handle newlines
-        while !p.at(R_BRACE) && !p.at(EOF) && !p.eat(SEMI) {
-            p.bump_any();
-        }
-    }
+/// `xs[i]`
+fn index_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
+    let m = lhs.precede(p);
+    p.bump(T!['[']);
+    expr(p);
+    p.expect(T![']']);
+    m.complete(p, INDEX_EXPR)
 }
 
-pub fn parse_expression_statement(p: &mut Parser) -> Option<CompletedMarker> {
-    let m = parse_expr(p);
-    check_semi(p);
-    m
+/// `x?`
+fn try_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
+    let m = lhs.precede(p);
+    p.bump(T![?]);
+    m.complete(p, TRY_EXPR)
 }
 
-pub fn parse_block(p: &mut Parser) -> CompletedMarker {
-    let m = p.start();
-    p.expect(L_BRACE);
-    while !p.at(EOF) && !p.eat(R_BRACE) {
-        parse_body_element(p);
-    }
-    m.complete(p, BLOCK)
-}
-
-pub fn parse_body_element(p: &mut Parser) -> Option<CompletedMarker> {
-    parse_statement(p)
-}
-
-pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
-    parse_statement(p)
+/// `x as T`. The type has no bounds: `x as A + b` adds `b` to the cast.
+fn cast_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
+    let m = lhs.precede(p);
+    p.bump(T![as]);
+    type_no_bounds(p);
+    m.complete(p, CAST_EXPR)
 }

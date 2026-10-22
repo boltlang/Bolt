@@ -214,6 +214,10 @@ pub enum SyntaxKind {
     RECORD_EXPR_FIELD,
     ARG_LIST,
 
+    /// An expression followed by `;`, or one ending in a block, used as a
+    /// statement.
+    EXPR_STMT,
+
     // Declarations
     FUNC_DECL,
     EXTERN_BLOCK,
@@ -331,6 +335,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            EXPR_STMT => "an expression statement",
             WILDCARD_PATT => "a wildcard pattern",
             PATH_PATT => "a path pattern",
             TUPLE_STRUCT_PATT => "a tuple struct pattern",

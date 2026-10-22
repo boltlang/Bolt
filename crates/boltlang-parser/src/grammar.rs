@@ -25,7 +25,6 @@ use crate::{
         token_set::TokenSet
 };
 
-const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENT]);
 
 /// The name of something being declared, like the `f` in `fn f()`.
 pub(crate) fn name(p: &mut Parser) {
@@ -100,7 +99,7 @@ pub fn parse_source_file(p: &mut Parser) {
             p.error_and_bump("unexpected '}'");
             continue;
         }
-        parse_source_element(p);
+        stmt(p, Semicolon::Required);
     }
     m.complete(p, SOURCE_FILE);
 }

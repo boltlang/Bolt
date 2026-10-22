@@ -4,23 +4,28 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-raw_string_literals.bolt
 ---
 - SOURCE_FILE
-  - LIT_EXPR
-    - STRING "r#\"abc\"#"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "r#\"abc\"#"
+    - SEMI ";"
   - WHITESPACE " "
-  - LIT_EXPR
-    - STRING "r##\"ok\"##"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "r##\"ok\"##"
+    - SEMI ";"
   - WHITESPACE "\n"
-  - LIT_EXPR
-    - STRING "r##\"foo #\"# bar\"##"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "r##\"foo #\"# bar\"##"
+    - SEMI ";"
   - WHITESPACE "\n"
-  - LIT_EXPR
-    - STRING "r###\"foo ##\"## bar\"###"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "r###\"foo ##\"## bar\"###"
+    - SEMI ";"
   - WHITESPACE "\n"
-  - LIT_EXPR
-    - STRING "r######\"foo ##### bar\"######"
-  - SEMI ";"
+  - EXPR_STMT
+    - LIT_EXPR
+      - STRING "r######\"foo ##### bar\"######"
+    - SEMI ";"
   - WHITESPACE "\n"

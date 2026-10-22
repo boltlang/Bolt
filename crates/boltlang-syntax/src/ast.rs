@@ -868,8 +868,14 @@ impl Node for Block {
 
 impl Block {
 
+    /// The statements, leaving out the tail expression.
     pub fn elements(&self) -> ChildrenIter<SourceElement> {
         ChildrenIter::new(&self.0)
+    }
+
+    /// The expression at the end without a `;`, which is the block's value.
+    pub fn tail_expr(&self) -> Option<Expr> {
+        self.find_node()
     }
 
 }
@@ -975,8 +981,8 @@ impl Node for VarDecl {
 
 impl VarDecl {
 
-    pub fn pub_keyword(&self) -> Option<SyntaxToken> {
-        self.find_token(PUB_KEYWORD)
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
     }
 
     pub fn pattern(&self) -> Option<Pattern> {
@@ -989,6 +995,15 @@ impl VarDecl {
 
     pub fn expr(&self) -> Option<Expr> {
         self.find_node()
+    }
+
+    /// The `else` block of `let Some(x) = y else { ... };`
+    pub fn else_block(&self) -> Option<BlockExpr> {
+        let else_token = self.find_token(ELSE_KEYWORD)?;
+        self.0
+            .children()
+            .filter(|n| n.text_range().start() >= else_token.text_range().end())
+            .find_map(BlockExpr::cast)
     }
 
 }
@@ -1129,32 +1144,24 @@ impl FuncDecl {
 
 }
 
-/// All-rounder for elements in blocks, function bodies, modules and source files.
-///
-/// In some contexts, certain element types should not be processed.
-pub enum SourceElement {
-    VarDecl(VarDecl),
-    FuncDecl(FuncDecl),
-    Expr(Expr),
-}
+ast_enum!(
+    /// A statement in a block or source file. The tail expression of a block
+    /// is not a statement; see [`Block::tail_expr`].
+    SourceElement {
+        VarDecl(VarDecl) = LET_STMT,
+        FuncDecl(FuncDecl) = FUNC_DECL,
+        ExprStmt(ExprStmt) = EXPR_STMT,
+    }
+);
 
-impl Node for SourceElement {
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, LET_STMT | FUNC_DECL) || Expr::can_cast(kind)
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        match syntax.kind() {
-            LET_STMT => Self::VarDecl(VarDecl(syntax)),
-            FUNC_DECL => Self::FuncDecl(FuncDecl(syntax)),
-            _ => Self::Expr(Expr::wrap(syntax)),
-        }
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            SourceElement::VarDecl(node) => node.syntax(),
-            SourceElement::FuncDecl(node) => node.syntax(),
-            SourceElement::Expr(node) => node.syntax(),
-        }
+/// An expression used as a statement, like `f(x);` or `if x { }`.
+pub struct ExprStmt(SyntaxNode);
+
+simple_node!(ExprStmt, EXPR_STMT);
+
+impl ExprStmt {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
     }
 }
 

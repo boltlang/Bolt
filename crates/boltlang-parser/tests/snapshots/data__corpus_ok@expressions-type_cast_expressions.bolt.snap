@@ -4,18 +4,19 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_expressions.bolt
 ---
 - SOURCE_FILE
-  - CAST_EXPR
-    - LIT_EXPR
-      - INT_NUMBER "1000"
-    - WHITESPACE " "
-    - AS_KEYWORD "as"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "u8"
-  - SEMI ";"
+  - EXPR_STMT
+    - CAST_EXPR
+      - LIT_EXPR
+        - INT_NUMBER "1000"
+      - WHITESPACE " "
+      - AS_KEYWORD "as"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "u8"
+    - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
     - LET_KEYWORD "let"
