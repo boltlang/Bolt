@@ -4,8 +4,8 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string_literal_prefixes.bolt
 ---
 - SOURCE_FILE
-  - PATH_EXPR
-    - IDENT "const"
+  - ERROR
+    - CONST_KEYWORD "const"
     - WHITESPACE " "
   - IDENT "A"
   - COLON ":"
@@ -36,6 +36,12 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string
   - R_BRACKET "]"
   - SEMI ";"
   - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected expression
+span:
+  start: 0
+  end: 0
 ---
 !ExpectedToken
 message: expected ';' or '}'

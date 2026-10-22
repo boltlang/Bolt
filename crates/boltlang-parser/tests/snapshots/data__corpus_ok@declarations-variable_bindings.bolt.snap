@@ -79,8 +79,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
-    - PATH_EXPR
-      - IDENT "false"
+    - LIT_EXPR
+      - FALSE_KEYWORD "false"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -96,8 +96,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
-    - PATH_EXPR
-      - IDENT "false"
+    - LIT_EXPR
+      - FALSE_KEYWORD "false"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT

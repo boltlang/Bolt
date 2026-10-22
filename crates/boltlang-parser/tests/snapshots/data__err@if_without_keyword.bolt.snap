@@ -12,8 +12,8 @@ input_file: crates/boltlang-parser/tests/data/err/if_without_keyword.bolt
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
-    - PATH_EXPR
-      - IDENT "if"
+    - ERROR
+      - IF_KEYWORD "if"
       - WHITESPACE " "
     - IDENT "a"
     - WHITESPACE " "
@@ -24,8 +24,8 @@ input_file: crates/boltlang-parser/tests/data/err/if_without_keyword.bolt
   - ERROR
     - R_BRACE "}"
   - WHITESPACE " "
-  - PATH_EXPR
-    - IDENT "else"
+  - ERROR
+    - ELSE_KEYWORD "else"
     - WHITESPACE " "
   - L_BRACE "{"
   - WHITESPACE " "
@@ -38,6 +38,12 @@ input_file: crates/boltlang-parser/tests/data/err/if_without_keyword.bolt
     - WHITESPACE "\n"
 ---
 !ExpectedToken
+message: expected expression
+span:
+  start: 8
+  end: 8
+---
+!ExpectedToken
 message: expected ';' or '}'
 span:
   start: 11
@@ -48,6 +54,12 @@ message: unexpected '}'
 span:
   start: 17
   end: 17
+---
+!ExpectedToken
+message: expected expression
+span:
+  start: 19
+  end: 19
 ---
 !ExpectedToken
 message: expected ';' or '}'

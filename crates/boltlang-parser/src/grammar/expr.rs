@@ -10,8 +10,7 @@ pub(super) const PATH_FIRST: TokenSet = TokenSet::new(&[
     IDENT,
     SELF_KEYWORD,
     SUPER_KEYWORD,
-    CRATE_KEYWORD,
-    SELF_TYPE_KEYWORD,
+    PACKAGE_KEYWORD,
     COLON,
     LT
 ]);
@@ -40,7 +39,6 @@ pub(super) const ATOM_EXPR_FIRST: TokenSet =
         BREAK_KEYWORD,
         CONST_KEYWORD,
         CONTINUE_KEYWORD,
-        DO_KEYWORD,
         FOR_KEYWORD,
         IF_KEYWORD,
         LET_KEYWORD,
@@ -80,7 +78,7 @@ pub fn parse_block_expr(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT => {
+        STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT | TRUE_KEYWORD | FALSE_KEYWORD => {
             let m = p.start();
             p.bump_any();
             Some(m.complete(p, LIT_EXPR))
@@ -147,7 +145,7 @@ pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
 
 pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
-        STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expr(p),
+        STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT | TRUE_KEYWORD | FALSE_KEYWORD => parse_literal_expr(p),
         IDENT => parse_reference_expression(p),
         L_BRACE => Some(parse_block_expr(p)),
         L_PAREN => Some(parse_nest_expr(p)),
