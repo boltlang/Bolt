@@ -12,15 +12,18 @@
 //!   the top-level statements of files.
 //! - [`signatures`] lowers everything about items except their bodies.
 //! - [`scope`] finds which local variables are visible where in a body.
+//! - [`resolver`] resolves paths, combining the above.
 
 pub mod arena;
 pub mod body;
+pub mod builtin_type;
 pub mod expr_store;
 pub mod hir;
 pub mod ids;
 pub mod item_tree;
 mod name;
 pub mod nameres;
+pub mod resolver;
 pub mod scope;
 pub mod signatures;
 
