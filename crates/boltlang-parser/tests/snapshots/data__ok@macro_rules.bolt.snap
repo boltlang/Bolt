@@ -1,0 +1,84 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/macro_rules.bolt
+---
+- SOURCE_FILE
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "m"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE " "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - TOKEN_REPETITION
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - TOKEN_BINDING
+              - METAVARIABLE "$x"
+              - COLON ":"
+              - IDENT "expr"
+            - R_PAREN ")"
+          - COMMA ","
+          - PLUS "+"
+        - WHITESPACE " "
+        - TOKEN_REPETITION
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - COMMA ","
+            - R_PAREN ")"
+          - QUEST "?"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - TOKEN_TREE
+          - L_BRACKET "["
+          - TOKEN_REPETITION
+            - DOLLAR "$"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - METAVARIABLE "$x"
+              - R_PAREN ")"
+            - COMMA ","
+            - PLUS "+"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+    - WHITESPACE " "
+    - R_BRACE "}"
+  - WHITESPACE "\n"
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "n"
+    - WHITESPACE " "
+    - L_PAREN "("
+    - WHITESPACE " "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_PAREN "("
+        - R_PAREN ")"
+    - WHITESPACE " "
+    - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"

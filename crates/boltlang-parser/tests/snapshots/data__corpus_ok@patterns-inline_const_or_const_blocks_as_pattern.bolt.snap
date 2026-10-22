@@ -1,0 +1,191 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/patterns-inline_const_or_const_blocks_as_pattern.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "foo"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - CONST
+          - CONST_KEYWORD "const"
+          - WHITESPACE " "
+          - NAME
+            - IDENT "CUBE"
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "i32"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - CALL_EXPR
+            - FIELD_EXPR
+              - LIT_EXPR
+                - INT_NUMBER "3"
+              - DOT "."
+              - NAME_REF
+                - IDENT "pow"
+            - ARG_LIST
+              - L_PAREN "("
+              - LIT_EXPR
+                - INT_NUMBER "3"
+              - R_PAREN ")"
+          - SEMI ";"
+        - WHITESPACE "\n    "
+        - MATCH_EXPR
+          - MATCH_KEYWORD "match"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "x"
+          - WHITESPACE " "
+          - MATCH_ARM_LIST
+            - L_BRACE "{"
+            - WHITESPACE "\n        "
+            - MATCH_ARM
+              - NAMED_PATT
+                - NAME
+                  - IDENT "CUBE"
+              - WHITESPACE " "
+              - FAT_ARROW "=>"
+              - WHITESPACE " "
+              - MACRO_EXPR
+                - MACRO_CALL
+                  - NAME_REF
+                    - IDENT "println"
+                  - EXCL "!"
+                  - TOKEN_TREE
+                    - L_PAREN "("
+                    - STRING "\"three cubed\""
+                    - R_PAREN ")"
+              - COMMA ","
+            - WHITESPACE "\n        "
+            - MATCH_ARM
+              - WILDCARD_PATT
+                - UNDERSCORE "_"
+              - WHITESPACE " "
+              - FAT_ARROW "=>"
+              - WHITESPACE " "
+              - BLOCK_EXPR
+                - BLOCK
+                  - L_BRACE "{"
+                  - R_BRACE "}"
+            - WHITESPACE "\n    "
+            - R_BRACE "}"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "foo"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - MATCH_EXPR
+          - MATCH_KEYWORD "match"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "x"
+          - WHITESPACE " "
+          - MATCH_ARM_LIST
+            - L_BRACE "{"
+            - WHITESPACE "\n        "
+            - MATCH_ARM
+              - CONST_BLOCK_PATT
+                - CONST_KEYWORD "const"
+                - WHITESPACE " "
+                - BLOCK_EXPR
+                  - BLOCK
+                    - L_BRACE "{"
+                    - WHITESPACE " "
+                    - CALL_EXPR
+                      - FIELD_EXPR
+                        - LIT_EXPR
+                          - INT_NUMBER "3"
+                        - DOT "."
+                        - NAME_REF
+                          - IDENT "pow"
+                      - ARG_LIST
+                        - L_PAREN "("
+                        - LIT_EXPR
+                          - INT_NUMBER "3"
+                        - R_PAREN ")"
+                    - WHITESPACE " "
+                    - R_BRACE "}"
+              - WHITESPACE " "
+              - FAT_ARROW "=>"
+              - WHITESPACE " "
+              - MACRO_EXPR
+                - MACRO_CALL
+                  - NAME_REF
+                    - IDENT "println"
+                  - EXCL "!"
+                  - TOKEN_TREE
+                    - L_PAREN "("
+                    - STRING "\"three cubed\""
+                    - R_PAREN ")"
+              - COMMA ","
+            - WHITESPACE "\n        "
+            - MATCH_ARM
+              - WILDCARD_PATT
+                - UNDERSCORE "_"
+              - WHITESPACE " "
+              - FAT_ARROW "=>"
+              - WHITESPACE " "
+              - BLOCK_EXPR
+                - BLOCK
+                  - L_BRACE "{"
+                  - R_BRACE "}"
+            - WHITESPACE "\n    "
+            - R_BRACE "}"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

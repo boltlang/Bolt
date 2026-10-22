@@ -1,16 +1,3 @@
 # Corpus cases the parser can't handle yet. The test runner reports them as
 # ignored; run `cargo test --test data -- --ignored corpus` to check them.
 # Remove a line once that case parses.
-ok/declarations-function_declarations.bolt
-ok/declarations-functions_with_destructured_parameters.bolt
-ok/declarations-key_value_attribute_expressions.bolt
-ok/declarations-macro_invocations_inside_trait_declarations.bolt
-ok/expressions-if_let_expressions.bolt
-ok/expressions-match_expressions.bolt
-ok/macros-macro_definition.bolt
-ok/macros-macro_invocation_arbitrary_tokens.bolt
-ok/macros-macro_invocation_no_arguments.bolt
-ok/macros-macro_invocation_with_comments.bolt
-ok/patterns-inline_const_or_const_blocks_as_pattern.bolt
-ok/patterns-or_patterns.bolt
-ok/patterns-struct_patterns.bolt

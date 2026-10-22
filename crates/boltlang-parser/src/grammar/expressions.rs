@@ -113,9 +113,12 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
         if p.at(T!['}']) {
             return;
         }
+        let cm_kind = cm.kind();
         let m = cm.precede(p);
         match semicolon {
-            Semicolon::Required if blocklike.is_block() => {
+            // Like in the grammar, a macro invocation is a statement on its
+            // own, so it doesn't need a `;` either.
+            Semicolon::Required if blocklike.is_block() || cm_kind == MACRO_EXPR => {
                 p.eat(T![;]);
             }
             Semicolon::Required => {

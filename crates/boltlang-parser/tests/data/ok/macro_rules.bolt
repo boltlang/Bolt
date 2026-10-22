@@ -1,0 +1,2 @@
+macro_rules! m { ($($x:expr),+ $(,)?) => { [$($x),+] }; }
+macro_rules! n ( () => () );

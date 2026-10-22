@@ -1,0 +1,39 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/macros-macro_invocation_no_arguments.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "a"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "b"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_BRACKET "["
+          - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "c"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_BRACE "{"
+          - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"

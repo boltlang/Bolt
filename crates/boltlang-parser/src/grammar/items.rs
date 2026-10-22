@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        abi, at_macro_call, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -31,6 +31,10 @@ pub(crate) const ITEM_RECOVERY_SET: TokenSet = TokenSet::new(&[
 /// Parse an item if one starts here, completing `m` with it. `m` was
 /// started before the item, so that attributes can be part of it.
 pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
+    if at_macro_rules(p) {
+        macro_rules(p, m);
+        return Ok(());
+    }
     let has_visibility = opt_visibility(p);
     if at_fn(p) {
         fn_item(p, m);

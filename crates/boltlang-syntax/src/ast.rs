@@ -1588,8 +1588,37 @@ ast_enum!(
         ExternBlock(ExternBlock) = EXTERN_BLOCK,
         Import(Import) = IMPORT,
         MacroCall(MacroCall) = MACRO_CALL,
+        MacroRules(MacroRules) = MACRO_RULES,
     }
 );
+
+/// `macro_rules! name { rules }`
+pub struct MacroRules(SyntaxNode);
+
+simple_node!(MacroRules, MACRO_RULES);
+
+impl MacroRules {
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn rules(&self) -> ChildrenIter<MacroRule> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `(pattern) => { body }` in a macro definition
+pub struct MacroRule(SyntaxNode);
+
+simple_node!(MacroRule, MACRO_RULE);
+
+impl MacroRule {
+    pub fn pattern(&self) -> Option<TokenTree> {
+        self.find_node()
+    }
+    pub fn body(&self) -> Option<TokenTree> {
+        self.0.children().filter_map(TokenTree::cast).nth(1)
+    }
+}
 
 /// `import "./path" (a, b as c);`, `import "./path" as name;` or
 /// `import "./path" *;`

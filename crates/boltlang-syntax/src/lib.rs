@@ -198,6 +198,14 @@ pub enum SyntaxKind {
     MACRO_PATT,
     /// A macro invocation used as a type
     MACRO_TYPE,
+    /// `macro_rules! name { rules }`
+    MACRO_RULES,
+    /// `(pattern) => { body }` in a macro definition
+    MACRO_RULE,
+    /// `$( tokens ) sep op` in a macro definition, like `$($x),*`
+    TOKEN_REPETITION,
+    /// `$name:fragment` in the pattern of a macro rule, like `$e:expr`
+    TOKEN_BINDING,
     TOKEN_TREE,
 
     // Expressions
@@ -409,6 +417,10 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            MACRO_RULES => "a macro definition",
+            MACRO_RULE => "a macro rule",
+            TOKEN_REPETITION => "a repetition in a macro",
+            TOKEN_BINDING => "a metavariable binding",
             MACRO_PATT => "a macro invocation as a pattern",
             MACRO_TYPE => "a macro invocation as a type",
             ATTR => "an attribute",

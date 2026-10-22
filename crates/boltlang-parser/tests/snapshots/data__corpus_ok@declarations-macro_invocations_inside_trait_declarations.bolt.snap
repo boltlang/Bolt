@@ -1,0 +1,64 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-macro_invocations_inside_trait_declarations.bolt
+---
+- SOURCE_FILE
+  - TRAIT
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - TRAIT_KEYWORD "trait"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "A"
+    - TRAIT_BOUNDS
+      - COLON ":"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "B"
+      - WHITESPACE " "
+      - PLUS "+"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "C"
+      - WHITESPACE " "
+      - PLUS "+"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "D"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "private_decl"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_BRACE "{"
+          - R_BRACE "}"
+      - WHITESPACE "\n    "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "f"
+        - PARAM_LIST
+          - L_PAREN "("
+          - SELF_PARAM
+            - SELF_KEYWORD "self"
+          - R_PAREN ")"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

@@ -1,0 +1,277 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/macros-macro_definition.bolt
+---
+- SOURCE_FILE
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "say_hello"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_PAREN "("
+        - WHITESPACE "\n        "
+        - IDENT "println"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - STRING "\"Hello!\""
+          - R_PAREN ")"
+        - SEMI ";"
+        - WHITESPACE "\n    "
+        - R_PAREN ")"
+    - WHITESPACE "\n"
+    - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "four"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_BRACE "{"
+        - INT_NUMBER "1"
+        - WHITESPACE " "
+        - PLUS "+"
+        - WHITESPACE " "
+        - INT_NUMBER "3"
+        - R_BRACE "}"
+    - SEMI ";"
+    - WHITESPACE "\n"
+    - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "foo"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "x"
+        - WHITESPACE " "
+        - FAT_ARROW "=>"
+        - WHITESPACE " "
+        - TOKEN_BINDING
+          - METAVARIABLE "$e"
+          - COLON ":"
+          - IDENT "expr"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "println"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - STRING "\"mode X: {}\""
+          - COMMA ","
+          - WHITESPACE " "
+          - METAVARIABLE "$e"
+          - R_PAREN ")"
+        - R_PAREN ")"
+    - SEMI ";"
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "y"
+        - WHITESPACE " "
+        - FAT_ARROW "=>"
+        - WHITESPACE " "
+        - TOKEN_BINDING
+          - METAVARIABLE "$e"
+          - COLON ":"
+          - IDENT "expr"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "println"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - STRING "\"mode Y: {}\""
+          - COMMA ","
+          - WHITESPACE " "
+          - METAVARIABLE "$e"
+          - R_PAREN ")"
+        - R_PAREN ")"
+    - WHITESPACE "\n"
+    - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "o_O"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - WHITESPACE "\n      "
+        - TOKEN_REPETITION
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - TOKEN_BINDING
+              - METAVARIABLE "$x"
+              - COLON ":"
+              - IDENT "expr"
+            - SEMI ";"
+            - WHITESPACE " "
+            - TOKEN_TREE
+              - L_BRACKET "["
+              - WHITESPACE " "
+              - TOKEN_REPETITION
+                - DOLLAR "$"
+                - TOKEN_TREE
+                  - L_PAREN "("
+                  - WHITESPACE " "
+                  - TOKEN_BINDING
+                    - METAVARIABLE "$y"
+                    - COLON ":"
+                    - IDENT "expr"
+                  - WHITESPACE " "
+                  - R_PAREN ")"
+                - COMMA ","
+                - STAR "*"
+              - WHITESPACE " "
+              - R_BRACKET "]"
+            - R_PAREN ")"
+          - SEMI ";"
+          - STAR "*"
+        - WHITESPACE "\n    "
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_BRACE "{"
+        - WHITESPACE "\n      "
+        - TOKEN_REPETITION
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - TOKEN_REPETITION
+              - DOLLAR "$"
+              - TOKEN_TREE
+                - L_PAREN "("
+                - METAVARIABLE "$x"
+                - WHITESPACE " "
+                - PLUS "+"
+                - WHITESPACE " "
+                - METAVARIABLE "$e"
+                - R_PAREN ")"
+              - COMMA ","
+              - STAR "*"
+            - R_PAREN ")"
+          - COMMA ","
+          - STAR "*"
+        - WHITESPACE "\n    "
+        - R_BRACE "}"
+    - WHITESPACE "\n"
+    - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "zero_or_one"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - TOKEN_REPETITION
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - TOKEN_BINDING
+              - METAVARIABLE "$e"
+              - COLON ":"
+              - IDENT "expr"
+            - R_PAREN ")"
+          - COMMA ","
+          - QUEST "?"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_BRACE "{"
+        - WHITESPACE "\n        "
+        - TOKEN_REPETITION
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - METAVARIABLE "$e"
+            - R_PAREN ")"
+          - COMMA ","
+          - QUEST "?"
+        - WHITESPACE "\n    "
+        - R_BRACE "}"
+    - SEMI ";"
+    - WHITESPACE "\n"
+    - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - MACRO_RULES
+    - MACRO_RULES_KEYWORD "macro_rules"
+    - EXCL "!"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "empty"
+    - WHITESPACE " "
+    - L_BRACKET "["
+    - WHITESPACE "\n    "
+    - MACRO_RULE
+      - TOKEN_TREE
+        - L_PAREN "("
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - FAT_ARROW "=>"
+      - WHITESPACE " "
+      - TOKEN_TREE
+        - L_BRACE "{"
+        - R_BRACE "}"
+    - SEMI ";"
+    - WHITESPACE "\n"
+    - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
