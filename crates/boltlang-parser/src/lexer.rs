@@ -75,7 +75,7 @@ fn is_hex_num(ch: char) -> bool {
 }
 
 fn is_operator(ch: char) -> bool {
-    matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '?' | '!')
+    matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '?' | '!' | '.')
 }
 
 lazy_static! {
@@ -269,20 +269,17 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 while is_operator(self.peek(0)) && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*')) {
                     text.push(self.get());
                 }
-                if text == "->" {
-                    R_ARROW
-                } else if text == "=" {
-                    EQUALS
-                } else if matches!(text.as_str(), "!=" | "<=" | ">=") {
-                    OPERATOR
-                } else if text.chars().filter(|c| *c == '=').count() > 1 {
+                match text.as_str() {
+                    "->" => R_ARROW,
+                    "|" => VBAR,
+                    "." => DOT,
+                    "=" => EQUALS,
+                    "!=" | "<=" | ">=" => OPERATOR,
                     // Things like +==% and -== should be parsed as a regular operator
-                    OPERATOR
-                } else if text.ends_with('=') {
+                    t if t.chars().filter(|c| *c == '=').count() > 1 => OPERATOR,
                     // Previous check made sure there is no other '=' in text
-                    ASSIGNMENT
-                } else {
-                    OPERATOR
+                    t if t.ends_with('=') => ASSIGNMENT,
+                    _ => OPERATOR,
                 }
             }
             _ => ERROR,
