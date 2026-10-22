@@ -1,5 +1,6 @@
 # The Bolt Programming Language
 
+[![Vibe-Scale 2.0(V2|U1|T0): Significant AI, spot-checked](https://img.shields.io/badge/Vibe--Scale%202.0(V2%7CU1%7CT0)-Significant%20AI%2C%20spot--checked-2ca02c)](https://github.com/vibesdk/vibe-scale/blob/main/scale/vibe-2.md#v2-u1-t0-score-20--significant-ai-spot-checked)
 [![Rust](https://github.com/boltlang/Bolt/actions/workflows/rust.yml/badge.svg)](https://github.com/boltlang/Bolt/actions/workflows/rust.yml)
 
 > [!WARNING]
