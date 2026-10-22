@@ -1,0 +1,29 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/fun_expr_missing_body.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "f"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FUN_EXPR
+      - FN_KEYWORD "fn"
+      - WHITESPACE " "
+      - L_PAREN "("
+      - NAMED_PATT
+        - IDENT "x"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected '=' or '{' to start the function body
+span:
+  start: 14
+  end: 14

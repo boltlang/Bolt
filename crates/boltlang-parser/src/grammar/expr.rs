@@ -1,7 +1,7 @@
 use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
     Parser,
-    grammar::{PATH_NAME_REF_KINDS, delimited, parse_block},
+    grammar::{PATH_NAME_REF_KINDS, delimited, parse_block, parse_pattern, parse_type_expression},
     parser::{CompletedMarker, Marker},
     token_set::TokenSet
 };
@@ -44,6 +44,7 @@ pub(super) const ATOM_EXPR_FIRST: TokenSet =
         FOR_KEYWORD,
         IF_KEYWORD,
         LET_KEYWORD,
+        FN_KEYWORD,
         LOOP_KEYWORD,
         MATCH_KEYWORD,
         RETURN_KEYWORD,
@@ -119,6 +120,31 @@ pub fn parse_return_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, RET_EXPR)
 }
 
+/// Parse an anonymous function: `fn (x y) = expr` or `fn (x y) { ... }`,
+/// optionally with a return type: `fn (x) -> Int = x`.
+///
+/// Unlike in a named function, the parameters are bare patterns, which is
+/// what [`FunExpr::params`](boltlang_syntax::ast::FunExpr::params) expects.
+pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(FN_KEYWORD);
+    p.expect(L_PAREN);
+    while !p.at(SEMI) && !p.at(EOF) && !p.eat(R_PAREN) {
+        parse_pattern(p);
+    }
+    if p.eat(R_ARROW) {
+        parse_type_expression(p);
+    }
+    if p.eat(EQUALS) {
+        parse_expr(p);
+    } else if p.at(L_BRACE) {
+        parse_block_expr(p);
+    } else {
+        p.error("expected '=' or '{' to start the function body");
+    }
+    m.complete(p, FUN_EXPR)
+}
+
 pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         STRING | BIN_INT | OCT_INT | DEC_INT | HEX_INT => parse_literal_expr(p),
@@ -126,6 +152,7 @@ pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
         L_BRACE => Some(parse_block_expr(p)),
         L_PAREN => Some(parse_nest_expr(p)),
         RETURN_KEYWORD => Some(parse_return_expr(p)),
+        FN_KEYWORD => Some(parse_fun_expr(p)),
         _ => {
             p.error_and_bump("expected expression");
             return None;

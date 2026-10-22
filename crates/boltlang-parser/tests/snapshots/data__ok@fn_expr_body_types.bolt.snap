@@ -1,0 +1,38 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/fn_expr_body_types.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "inc"
+    - L_PAREN "("
+    - PARAM
+      - TYPED_PATT
+        - NAMED_PATT
+          - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - NAMED_TYPE_EXPR
+          - IDENT "Int"
+    - R_PAREN ")"
+    - WHITESPACE " "
+    - R_ARROW "->"
+    - WHITESPACE " "
+    - NAMED_TYPE_EXPR
+      - IDENT "Int"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BIN_EXPR
+      - PATH_EXPR
+        - IDENT "x"
+      - WHITESPACE " "
+      - OPERATOR "+"
+      - WHITESPACE " "
+      - LIT_EXPR
+        - DEC_INT "1"
+    - SEMI ";"
+  - WHITESPACE "\n"

@@ -1,0 +1,36 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/fun_expr_argument.bolt
+---
+- SOURCE_FILE
+  - CALL_EXPR
+    - PATH_EXPR
+      - IDENT "map"
+    - ARG_LIST
+      - L_PAREN "("
+      - FUN_EXPR
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - L_PAREN "("
+        - NAMED_PATT
+          - IDENT "x"
+        - R_PAREN ")"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - BIN_EXPR
+          - PATH_EXPR
+            - IDENT "x"
+          - WHITESPACE " "
+          - OPERATOR "*"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - DEC_INT "2"
+      - COMMA ","
+      - WHITESPACE " "
+      - PATH_EXPR
+        - IDENT "xs"
+      - R_PAREN ")"
+  - SEMI ";"
+  - WHITESPACE "\n"

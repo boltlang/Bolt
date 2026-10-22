@@ -1,0 +1,38 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/fn_operator.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - L_PAREN "("
+    - OPERATOR "+"
+    - R_PAREN ")"
+    - L_PAREN "("
+    - PARAM
+      - NAMED_PATT
+        - IDENT "a"
+    - WHITESPACE " "
+    - PARAM
+      - NAMED_PATT
+        - IDENT "b"
+    - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CALL_EXPR
+      - PATH_EXPR
+        - IDENT "add"
+      - ARG_LIST
+        - L_PAREN "("
+        - PATH_EXPR
+          - IDENT "a"
+        - COMMA ","
+        - WHITESPACE " "
+        - PATH_EXPR
+          - IDENT "b"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"

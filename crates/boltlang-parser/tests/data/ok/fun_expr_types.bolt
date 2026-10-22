@@ -1,0 +1,1 @@
+let inc = fn (x: Int) -> Int = x + 1;

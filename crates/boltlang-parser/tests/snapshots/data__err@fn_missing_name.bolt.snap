@@ -7,9 +7,6 @@ input_file: crates/boltlang-parser/tests/data/err/fn_missing_name.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - L_PAREN "("
-    - R_PAREN ")"
-    - WHITESPACE " "
     - PARAM
       - ERROR
         - L_BRACE "{"
@@ -19,31 +16,31 @@ input_file: crates/boltlang-parser/tests/data/err/fn_missing_name.bolt
       - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected an operator
+message: expected an identifier or an operator wrapped between '(' and ')'
+span:
+  start: 3
+  end: 3
+---
+!ExpectedToken
+message: expected '('
+span:
+  start: 3
+  end: 3
+---
+!ExpectedToken
+message: expected pattern
+span:
+  start: 3
+  end: 3
+---
+!ExpectedToken
+message: expected pattern
 span:
   start: 4
   end: 4
 ---
 !ExpectedToken
-message: expected '('
-span:
-  start: 6
-  end: 6
----
-!ExpectedToken
-message: expected pattern
-span:
-  start: 6
-  end: 6
----
-!ExpectedToken
-message: expected pattern
-span:
-  start: 7
-  end: 7
----
-!ExpectedToken
 message: expected ';' or '}'
 span:
-  start: 9
-  end: 9
+  start: 6
+  end: 6

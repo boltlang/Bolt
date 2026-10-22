@@ -57,14 +57,34 @@ fn delimited(
     p.expect(ket);
 }
 
-fn peek_after_modifiers(p: &mut Parser) -> SyntaxKind {
+/// The number of modifier tokens (like `pub`) at the current position.
+fn count_modifiers(p: &Parser) -> usize {
     let mut i = 0;
-    loop {
-        let k0 = p.nth(i);
-        match k0 {
-            PUB_KEYWORD => { i += 1; },
-            _ => return k0,
-        }
+    while p.nth(i) == PUB_KEYWORD {
+        i += 1;
+    }
+    i
+}
+
+/// Whether the `fn` keyword at token `n` starts a named function or operator
+/// declaration, rather than an anonymous function like `fn (x) = x`.
+fn is_named_fn(p: &Parser, n: usize) -> bool {
+    match p.nth(n + 1) {
+        // `fn (+)(a b) = ...` declares an operator
+        L_PAREN => p.nth(n + 2) == OPERATOR && p.nth(n + 3) == R_PAREN,
+        // Anything else is a name, or a missing one that
+        // parse_named_function_declaration reports.
+        _ => true,
+    }
+}
+
+/// Parse a statement that starts with `let`, a named `fn`, or an expression.
+fn parse_statement(p: &mut Parser) -> Option<CompletedMarker> {
+    let n = count_modifiers(p);
+    match p.nth(n) {
+        LET_KEYWORD => Some(parse_variable_declaration(p)),
+        FN_KEYWORD if is_named_fn(p, n) => Some(parse_named_function_declaration(p)),
+        _ => parse_expression_statement(p),
     }
 }
 
@@ -158,21 +178,11 @@ pub fn parse_block(p: &mut Parser) -> CompletedMarker {
 }
 
 pub fn parse_body_element(p: &mut Parser) -> Option<CompletedMarker> {
-    let kind = peek_after_modifiers(p);
-    match kind {
-        LET_KEYWORD => Some(parse_variable_declaration(p)),
-        FN_KEYWORD => Some(parse_named_function_declaration(p)),
-        _ => parse_expression_statement(p),
-    }
+    parse_statement(p)
 }
 
 pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
-    let kind = peek_after_modifiers(p);
-    match kind {
-        LET_KEYWORD => Some(parse_variable_declaration(p)),
-        FN_KEYWORD => Some(parse_named_function_declaration(p)),
-        _ => parse_expression_statement(p),
-    }
+    parse_statement(p)
 }
 
 pub fn parse_source_file(p: &mut Parser) {
