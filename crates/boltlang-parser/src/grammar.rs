@@ -129,7 +129,7 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
         parse_expr(p);
         check_semi(p);
     } else if p.at(L_BRACE) {
-        parse_block(p);
+        parse_block_expr(p);
     } else {
         check_semi(p);
     }

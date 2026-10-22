@@ -70,3 +70,12 @@ fn fun_expr_body_can_be_any_expression() {
     let Expr::Fun(fun) = let_expr("let f = fn (x) = x + 1;") else { panic!() };
     assert!(matches!(fun.body(), Some(Expr::Bin(_))));
 }
+
+#[test]
+fn func_decl_block_body() {
+    let (green, diags) = parse_file("fn f(x) { x + 1 }");
+    assert!(diags.is_empty(), "{diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    let Some(SourceElement::FuncDecl(decl)) = file.elements().next() else { panic!() };
+    assert!(matches!(decl.body(), Some(Expr::Block(_))));
+}

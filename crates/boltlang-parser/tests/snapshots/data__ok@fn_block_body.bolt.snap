@@ -14,15 +14,16 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_block_body.bolt
         - IDENT "x"
     - R_PAREN ")"
     - WHITESPACE " "
-    - BLOCK
-      - L_BRACE "{"
-      - WHITESPACE " "
-      - RET_EXPR
-        - RETURN_KEYWORD "return"
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
         - WHITESPACE " "
-        - PATH_EXPR
-          - IDENT "x"
-      - SEMI ";"
-      - WHITESPACE " "
-      - R_BRACE "}"
+        - RET_EXPR
+          - RETURN_KEYWORD "return"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - IDENT "x"
+        - SEMI ";"
+        - WHITESPACE " "
+        - R_BRACE "}"
   - WHITESPACE "\n"
