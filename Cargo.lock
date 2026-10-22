@@ -169,6 +169,7 @@ name = "boltlang-hir-def"
 version = "0.1.0"
 dependencies = [
  "boltlang-base-db",
+ "boltlang-parser",
  "boltlang-syntax",
  "salsa",
 ]

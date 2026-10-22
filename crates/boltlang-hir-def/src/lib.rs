@@ -6,7 +6,12 @@
 //! - [`ids`] has interned IDs for items, pointing into item trees.
 //! - [`nameres`] resolves the names at the top level of each file,
 //!   including imports.
+//! - [`expr_store`] holds lowered expressions, patterns and types, in the
+//!   forms defined in [`hir`].
 
+pub mod arena;
+pub mod expr_store;
+pub mod hir;
 pub mod ids;
 pub mod item_tree;
 mod name;

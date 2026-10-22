@@ -9,8 +9,6 @@
 //! an [`AstId`]: its position among the items of the same kind in the file.
 //! Unlike a text range, that position doesn't change when a body is edited.
 
-use std::marker::PhantomData;
-
 use boltlang_base_db::{Db, File, parse_file};
 use boltlang_syntax::{
     SyntaxKind::{self, *},
@@ -18,6 +16,7 @@ use boltlang_syntax::{
     ast::{self, Node},
 };
 
+pub use crate::arena::Idx;
 use crate::Name;
 
 /// The items of `file`.
@@ -31,53 +30,6 @@ pub fn item_tree(db: &dyn Db, file: File) -> ItemTree {
     }
     tree
 }
-
-/// An index into one of the item lists of an [`ItemTree`].
-pub struct Idx<T> {
-    raw: u32,
-    _ty: PhantomData<fn() -> T>,
-}
-
-impl<T> Idx<T> {
-    fn new(raw: usize) -> Self {
-        Idx { raw: raw as u32, _ty: PhantomData }
-    }
-
-    pub fn index(self) -> usize {
-        self.raw as usize
-    }
-}
-
-impl<T> Clone for Idx<T> {
-    fn clone(&self) -> Self {
-        *self
-    }
-}
-
-impl<T> Copy for Idx<T> {}
-
-impl<T> PartialEq for Idx<T> {
-    fn eq(&self, other: &Self) -> bool {
-        self.raw == other.raw
-    }
-}
-
-impl<T> Eq for Idx<T> {}
-
-impl<T> std::hash::Hash for Idx<T> {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.raw.hash(state);
-    }
-}
-
-impl<T> std::fmt::Debug for Idx<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Idx::<{}>({})", std::any::type_name::<T>().rsplit("::").next().unwrap(), self.raw)
-    }
-}
-
-// SAFETY: `Idx` holds no references; the type parameter is only a marker.
-unsafe impl<T> salsa::SalsaValue for Idx<T> {}
 
 /// Where to find the syntax of an item: the `index`th node of kind `kind`
 /// among the items of the file, in the order they appear. Bodies are
