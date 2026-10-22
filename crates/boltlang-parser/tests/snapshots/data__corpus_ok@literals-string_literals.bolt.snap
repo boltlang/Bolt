@@ -1,0 +1,42 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-string_literals.bolt
+---
+- SOURCE_FILE
+  - LIT_EXPR
+    - STRING "\"\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - STRING "\"abc\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - C_STRING "c\"foo\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - BYTE_STRING "b\"foo\\nbar\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - STRING "\"foo\\\n    bar\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - STRING "\"\\\"foo\\\"\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - STRING "\"/* foo bar */ foo bar\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - STRING "\"foo\\x42\\x43bar\""
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - STRING "\"foo \\x42  \\x43 bar\""
+  - SEMI ";"
+  - WHITESPACE "\n"

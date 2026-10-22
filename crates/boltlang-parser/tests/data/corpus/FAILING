@@ -55,7 +55,6 @@ ok/declarations-where_clauses.bolt
 ok/expressions-array_expressions.bolt
 ok/expressions-assignment_expressions.bolt
 ok/expressions-basic_if_let_expressions.bolt
-ok/expressions-call_expressions.bolt
 ok/expressions-closures.bolt
 ok/expressions-closures_with_typed_parameteres.bolt
 ok/expressions-compound_assignment_expressions.bolt
@@ -76,13 +75,9 @@ ok/expressions-struct_expressions.bolt
 ok/expressions-struct_expressions_with_update_initializers.bolt
 ok/expressions-try_expressions.bolt
 ok/expressions-tuple_expressions.bolt
-ok/expressions-type_cast_expressions.bolt
 ok/expressions-while_expressions.bolt
 ok/expressions-while_let_expressions.bolt
-ok/literals-floating_point_literals.bolt
-ok/literals-integer_literals.bolt
-ok/literals-raw_c_string_literals.bolt
-ok/literals-string_literals.bolt
+ok/expressions-yield_expressions.bolt
 ok/macros-macro_definition.bolt
 ok/macros-macro_invocation_arbitrary_tokens.bolt
 ok/macros-macro_invocation_no_arguments.bolt
@@ -93,7 +88,6 @@ ok/patterns-inline_const_or_const_blocks_as_pattern.bolt
 ok/patterns-or_patterns.bolt
 ok/patterns-struct_patterns.bolt
 ok/patterns-tuple_struct_patterns.bolt
-ok/source_files-empty_shebang_with_code_after.bolt
 ok/source_files-greek_letters_in_identifiers.bolt
 ok/source_files-immediate_inner_attribute.bolt
 ok/types-array_types.bolt

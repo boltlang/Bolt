@@ -1,0 +1,50 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/literals-integer_literals.bolt
+---
+- SOURCE_FILE
+  - LIT_EXPR
+    - INT_NUMBER "0"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "0___0"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "123"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "0usize"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "123i32"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "123u32"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "123_u32"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "0xff_u8"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "0o70_i16"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "0b1111_1111_1001_0000_i32"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - LIT_EXPR
+    - INT_NUMBER "1u128"
+  - SEMI ";"
+  - WHITESPACE "\n"

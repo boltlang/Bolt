@@ -1,0 +1,20 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-empty_shebang_with_code_after.bolt
+---
+- SOURCE_FILE
+  - SHEBANG "#!"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "main"
+    - L_PAREN "("
+    - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
