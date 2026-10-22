@@ -115,8 +115,8 @@ fn is_operator(ch: char) -> bool {
 
 lazy_static! {
     static ref KEYWORDS: HashMap<&'static str, SyntaxKind> = {
-        // `default`, `gen` and `macro_rules` are contextual keywords, so they
-        // are left out here; the parser remaps them where needed.
+        // `macro_rules` is a contextual keyword, so it's left out here; the
+        // parser remaps it where needed.
         let mut m = HashMap::new();
         m.insert("as", AS_KEYWORD);
         m.insert("async", ASYNC_KEYWORD);
@@ -137,13 +137,11 @@ lazy_static! {
         m.insert("let", LET_KEYWORD);
         m.insert("loop", LOOP_KEYWORD);
         m.insert("match", MATCH_KEYWORD);
-        m.insert("mod", MOD_KEYWORD);
         m.insert("mut", MUT_KEYWORD);
         m.insert("package", PACKAGE_KEYWORD);
         m.insert("pub", PUB_KEYWORD);
         m.insert("return", RETURN_KEYWORD);
         m.insert("self", SELF_KEYWORD);
-        m.insert("static", STATIC_KEYWORD);
         m.insert("struct", STRUCT_KEYWORD);
         m.insert("super", SUPER_KEYWORD);
         m.insert("trait", TRAIT_KEYWORD);

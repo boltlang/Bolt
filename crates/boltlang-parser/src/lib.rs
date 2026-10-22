@@ -68,19 +68,19 @@ mod tests {
 
     #[test]
     fn contextual_keywords_and_operators() {
-        let tokens = tokens("default <$> x", |p| {
+        let tokens = tokens("macro_rules <$> x", |p| {
             let m = p.start();
-            assert!(p.at_contextual_kw(DEFAULT_KEYWORD));
-            assert!(p.eat_contextual_kw(DEFAULT_KEYWORD));
+            assert!(p.at_contextual_kw(MACRO_RULES_KEYWORD));
+            assert!(p.eat_contextual_kw(MACRO_RULES_KEYWORD));
             assert!(p.at_op("<$>"));
             assert!(!p.at_op("<"));
             assert!(p.eat_op("<$>"));
-            assert!(!p.at_contextual_kw(DEFAULT_KEYWORD));
+            assert!(!p.at_contextual_kw(MACRO_RULES_KEYWORD));
             p.bump_any();
             m.complete(p, SOURCE_FILE);
         });
         let kinds: Vec<_> = tokens.iter().map(|(kind, _)| *kind).filter(|kind| *kind != WHITESPACE).collect();
-        assert_eq!(kinds, [DEFAULT_KEYWORD, OPERATOR, IDENT]);
+        assert_eq!(kinds, [MACRO_RULES_KEYWORD, OPERATOR, IDENT]);
     }
 
     #[test]

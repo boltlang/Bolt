@@ -43,7 +43,6 @@ pub(super) const ATOM_EXPR_FIRST: TokenSet =
         LOOP_KEYWORD,
         MATCH_KEYWORD,
         RETURN_KEYWORD,
-        STATIC_KEYWORD,
         WHILE_KEYWORD,
         YIELD_KEYWORD
     ]));

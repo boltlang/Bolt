@@ -66,22 +66,20 @@ pub enum SyntaxKind {
     INT_NUMBER,
 
 
-    // Keywords. `default`, `gen` and `macro_rules` are contextual: the lexer
-    // produces an IDENT and the parser remaps it where it acts as a keyword.
+    // Keywords. `macro_rules` is contextual: the lexer produces an IDENT and
+    // the parser remaps it where it acts as a keyword.
     AS_KEYWORD,
     ASYNC_KEYWORD,
     AWAIT_KEYWORD,
     BREAK_KEYWORD,
     CONST_KEYWORD,
     CONTINUE_KEYWORD,
-    DEFAULT_KEYWORD,
     ELSE_KEYWORD,
     ENUM_KEYWORD,
     EXTERN_KEYWORD,
     FALSE_KEYWORD,
     FN_KEYWORD,
     FOR_KEYWORD,
-    GEN_KEYWORD,
     IF_KEYWORD,
     IMPL_KEYWORD,
     IMPORT_KEYWORD,
@@ -90,13 +88,11 @@ pub enum SyntaxKind {
     LOOP_KEYWORD,
     MACRO_RULES_KEYWORD,
     MATCH_KEYWORD,
-    MOD_KEYWORD,
     MUT_KEYWORD,
     PACKAGE_KEYWORD,
     PUB_KEYWORD,
     RETURN_KEYWORD,
     SELF_KEYWORD,
-    STATIC_KEYWORD,
     STRUCT_KEYWORD,
     SUPER_KEYWORD,
     TRAIT_KEYWORD,
@@ -213,14 +209,12 @@ macro_rules! T {
     [break] => { $crate::SyntaxKind::BREAK_KEYWORD };
     [const] => { $crate::SyntaxKind::CONST_KEYWORD };
     [continue] => { $crate::SyntaxKind::CONTINUE_KEYWORD };
-    [default] => { $crate::SyntaxKind::DEFAULT_KEYWORD };
     [else] => { $crate::SyntaxKind::ELSE_KEYWORD };
     [enum] => { $crate::SyntaxKind::ENUM_KEYWORD };
     [extern] => { $crate::SyntaxKind::EXTERN_KEYWORD };
     [false] => { $crate::SyntaxKind::FALSE_KEYWORD };
     [fn] => { $crate::SyntaxKind::FN_KEYWORD };
     [for] => { $crate::SyntaxKind::FOR_KEYWORD };
-    [gen] => { $crate::SyntaxKind::GEN_KEYWORD };
     [if] => { $crate::SyntaxKind::IF_KEYWORD };
     [impl] => { $crate::SyntaxKind::IMPL_KEYWORD };
     [import] => { $crate::SyntaxKind::IMPORT_KEYWORD };
@@ -229,13 +223,11 @@ macro_rules! T {
     [loop] => { $crate::SyntaxKind::LOOP_KEYWORD };
     [macro_rules] => { $crate::SyntaxKind::MACRO_RULES_KEYWORD };
     [match] => { $crate::SyntaxKind::MATCH_KEYWORD };
-    [mod] => { $crate::SyntaxKind::MOD_KEYWORD };
     [mut] => { $crate::SyntaxKind::MUT_KEYWORD };
     [package] => { $crate::SyntaxKind::PACKAGE_KEYWORD };
     [pub] => { $crate::SyntaxKind::PUB_KEYWORD };
     [return] => { $crate::SyntaxKind::RETURN_KEYWORD };
     [self] => { $crate::SyntaxKind::SELF_KEYWORD };
-    [static] => { $crate::SyntaxKind::STATIC_KEYWORD };
     [struct] => { $crate::SyntaxKind::STRUCT_KEYWORD };
     [super] => { $crate::SyntaxKind::SUPER_KEYWORD };
     [trait] => { $crate::SyntaxKind::TRAIT_KEYWORD };
@@ -277,14 +269,12 @@ impl SyntaxKind {
             BREAK_KEYWORD => "'break'",
             CONST_KEYWORD => "'const'",
             CONTINUE_KEYWORD => "'continue'",
-            DEFAULT_KEYWORD => "'default'",
             ELSE_KEYWORD => "'else'",
             ENUM_KEYWORD => "'enum'",
             EXTERN_KEYWORD => "'extern'",
             FALSE_KEYWORD => "'false'",
             FN_KEYWORD => "'fn'",
             FOR_KEYWORD => "'for'",
-            GEN_KEYWORD => "'gen'",
             IF_KEYWORD => "'if'",
             IMPL_KEYWORD => "'impl'",
             IMPORT_KEYWORD => "'import'",
@@ -293,13 +283,11 @@ impl SyntaxKind {
             LOOP_KEYWORD => "'loop'",
             MACRO_RULES_KEYWORD => "'macro_rules'",
             MATCH_KEYWORD => "'match'",
-            MOD_KEYWORD => "'mod'",
             MUT_KEYWORD => "'mut'",
             PACKAGE_KEYWORD => "'package'",
             PUB_KEYWORD => "'pub'",
             RETURN_KEYWORD => "'return'",
             SELF_KEYWORD => "'self'",
-            STATIC_KEYWORD => "'static'",
             STRUCT_KEYWORD => "'struct'",
             SUPER_KEYWORD => "'super'",
             TRAIT_KEYWORD => "'trait'",

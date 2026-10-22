@@ -201,15 +201,13 @@ impl <'t> Parser<'t> {
     }
 
     /// Whether the current token is the contextual keyword `kw`, like
-    /// `T![default]`. The lexer produces an `IDENT` for these.
+    /// `T![macro_rules]`. The lexer produces an `IDENT` for these.
     pub(crate) fn at_contextual_kw(&self, kw: SyntaxKind) -> bool {
         self.nth_at_contextual_kw(0, kw)
     }
 
     pub(crate) fn nth_at_contextual_kw(&self, n: usize, kw: SyntaxKind) -> bool {
         let text = match kw {
-            DEFAULT_KEYWORD => "default",
-            GEN_KEYWORD => "gen",
             MACRO_RULES_KEYWORD => "macro_rules",
             _ => panic!("{kw:?} is not a contextual keyword"),
         };
