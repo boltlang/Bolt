@@ -140,6 +140,14 @@ impl<K, V> ArenaMap<K, V> {
     pub fn get(&self, idx: Idx<K>) -> Option<&V> {
         self.data.get(idx.index()).and_then(Option::as_ref)
     }
+
+    pub fn iter(&self) -> impl Iterator<Item = (Idx<K>, &V)> {
+        self.data.iter().enumerate().filter_map(|(i, v)| Some((Idx::new(i), v.as_ref()?)))
+    }
+
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut V> {
+        self.data.iter_mut().flatten()
+    }
 }
 
 impl<K, V: fmt::Debug> fmt::Debug for ArenaMap<K, V> {

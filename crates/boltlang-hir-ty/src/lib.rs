@@ -8,10 +8,19 @@
 //! - [`unify`] makes types equal by binding inference variables.
 //! - [`lower`] turns type references and signatures into types.
 //! - [`solve`] solves equality and class constraints.
+//! - [`scheme`] has the types of functions, which can be generic.
+//! - [`infer`] infers the types in a body, and [`check`] has the queries
+//!   that run it.
 
+pub mod check;
+pub mod infer;
 pub mod lower;
+pub mod scheme;
 pub mod solve;
 pub mod ty;
 pub mod unify;
 
+pub use check::{function_scheme, infer_body};
+pub use infer::{InferenceDiagnostic, InferenceResult};
+pub use scheme::Scheme;
 pub use ty::{AdtId, GenericParamId, Ty, TyVar, VarKind};

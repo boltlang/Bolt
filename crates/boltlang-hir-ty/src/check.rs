@@ -1,0 +1,342 @@
+//! The queries that infer bodies.
+//!
+//! A function whose type comes from its declaration (see
+//! [`is_declared`]) is checked on its own, so editing its body doesn't
+//! affect its callers. The other functions of a file are inferred together
+//! by [`file_inference`]: grouped by which call which, each group inferred
+//! after the groups it calls, and then generalized.
+
+use boltlang_base_db::{Db, File};
+use boltlang_hir_def::{
+    body::{DefWithBody, DefWithBodyId, body},
+    hir::{BinaryOp, Expr, Path},
+    ids::{FunctionId, ItemContainerId},
+    item_tree::{AssocItem, ModItem, item_tree},
+    resolver::{Resolver, ValueNs, ValueResolution},
+};
+
+use crate::{
+    infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
+    lower::{ClassConstraint, ImplTarget, const_ty, fn_sig, impl_header},
+    scheme::{Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, is_declared},
+    solve::{Origin, Solver, TypeError, vars_in},
+    ty::{GenericParamId, Ty, TyVar, VarKind},
+};
+
+pub fn def_file<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> File {
+    match def.def(db) {
+        DefWithBody::Function(id) => id.file(db),
+        DefWithBody::Const(id) => id.file(db),
+        DefWithBody::Variant(id) => id.parent.file(db),
+        DefWithBody::File(file) => file,
+    }
+}
+
+/// The type of a function, for its callers. `Err` if it can't be inferred
+/// because files that import each other have functions without complete
+/// signatures that call each other.
+pub fn function_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db Scheme<'db>, ()> {
+    if is_declared(db, f) {
+        return Ok(declared_scheme(db, f));
+    }
+    let inference = file_inference(db, f.file(db));
+    inference.schemes.iter().find(|(g, _)| *g == f).map(|(_, s)| s).ok_or(())
+}
+
+/// The types in the body of `def`.
+#[salsa::tracked(returns(ref))]
+pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceResult<'db> {
+    let file = def_file(db, def);
+    match def.def(db) {
+        DefWithBody::Function(f) if !is_declared(db, f) => {
+            let inference = file_inference(db, file);
+            match inference.results.iter().find(|(g, _)| *g == f) {
+                Some((_, result)) => result.clone(),
+                None => InferenceResult { diagnostics: vec![InferenceDiagnostic::CyclicInference], ..Default::default() },
+            }
+        }
+        DefWithBody::Function(f) => {
+            let env = FnEnv::default();
+            let mut solver = Solver::new(db, file);
+            for assumption in assumptions(db, f) {
+                solver.assume(assumption);
+            }
+            let Ty::Fn(params, ret) = &declared_scheme(db, f).ty else { unreachable!() };
+            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
+            // A method of a class impl must have the class's types.
+            if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
+                let origin = Origin { body: def, node: crate::solve::ExprOrPat::Expr(ctx.body.body_expr) };
+                for (own, class) in params.iter().zip(class_params.iter()) {
+                    ctx.solver.equal(class, own, origin);
+                }
+                ctx.solver.equal(&class_ret, ret, origin);
+            }
+            ctx.infer_fn_body(params, ret);
+            finish(ctx)
+        }
+        DefWithBody::Const(c) => {
+            let env = FnEnv::default();
+            let mut solver = Solver::new(db, file);
+            let ty = const_ty(db, c).ty.clone();
+            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
+            ctx.infer_expr_body(Some(&ty));
+            finish(ctx)
+        }
+        DefWithBody::Variant(_) => {
+            let env = FnEnv::default();
+            let mut solver = Solver::new(db, file);
+            let int = solver.new_var(VarKind::Int);
+            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
+            ctx.infer_expr_body(Some(&int));
+            finish(ctx)
+        }
+        DefWithBody::File(_) => {
+            let env = FnEnv::default();
+            let mut solver = Solver::new(db, file);
+            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
+            ctx.infer_expr_body(None);
+            finish(ctx)
+        }
+    }
+}
+
+/// Solve what's left, and collect the diagnostics.
+fn finish<'db>(ctx: InferenceContext<'_, 'db>) -> InferenceResult<'db> {
+    ctx.solver.finish();
+    let errors = std::mem::take(&mut ctx.solver.errors);
+    let mut result = ctx.finish();
+    result.diagnostics.extend(errors.into_iter().map(InferenceDiagnostic::Type));
+    result
+}
+
+/// The functions of a file without complete signatures, inferred together.
+#[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct FileInference<'db> {
+    pub schemes: Vec<(FunctionId<'db>, Scheme<'db>)>,
+    pub results: Vec<(FunctionId<'db>, InferenceResult<'db>)>,
+}
+
+#[salsa::tracked(returns(ref), cycle_result = file_inference_cycle)]
+pub fn file_inference<'db>(db: &'db dyn Db, file: File) -> FileInference<'db> {
+    let functions = inferred_functions(db, file);
+    let calls: Vec<Vec<usize>> = functions
+        .iter()
+        .map(|&f| called_functions(db, f).iter().filter_map(|g| functions.iter().position(|h| h == g)).collect())
+        .collect();
+    let mut env = FnEnv::default();
+    let mut out = FileInference::default();
+    for group in strongly_connected(&calls) {
+        let group: Vec<FunctionId<'db>> = group.into_iter().map(|i| functions[i]).collect();
+        infer_group(db, file, &group, &mut env, &mut out);
+    }
+    out
+}
+
+fn file_inference_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _file: File) -> FileInference<'db> {
+    FileInference::default()
+}
+
+/// Infer a group of functions that call each other, and generalize them.
+fn infer_group<'db>(
+    db: &'db dyn Db,
+    file: File,
+    group: &[FunctionId<'db>],
+    env: &mut FnEnv<'db>,
+    out: &mut FileInference<'db>,
+) {
+    let mut solver = Solver::new(db, file);
+    let mut signatures = Vec::new();
+    for &f in group {
+        for assumption in assumptions(db, f) {
+            solver.assume(assumption);
+        }
+        let sig = fn_sig(db, f);
+        let params: Box<[Ty<'db>]> =
+            sig.params.iter().map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General))).collect();
+        let ret = sig.ret.clone().unwrap_or_else(|| solver.new_var(VarKind::General));
+        env.mono.insert(f, Ty::Fn(params.clone(), Box::new(ret.clone())));
+        signatures.push((params, ret));
+    }
+    let mut results = Vec::new();
+    for (&f, (params, ret)) in group.iter().zip(&signatures) {
+        let def = DefWithBodyId::new(db, DefWithBody::Function(f));
+        let mut ctx = InferenceContext::new(db, def, &mut solver, env);
+        ctx.infer_fn_body(params, ret);
+        results.push((def, ctx.take_result()));
+    }
+
+    // Integer variables don't become type parameters; they default first.
+    solver.solve_classes();
+    solver.unifier.default_numeric_vars();
+    solver.solve_classes();
+    let pending = solver.take_pending();
+    let mut errors = std::mem::take(&mut solver.errors);
+
+    for (&f, (def, mut result)) in group.iter().zip(results) {
+        let ty = solver.unifier.resolve(&env.mono.remove(&f).unwrap());
+        let mut vars = Vec::new();
+        vars_in(&ty, &mut vars);
+        let generalize = |t: &Ty<'db>, vars: &[TyVar]| {
+            t.fold(&mut |t| match t {
+                Ty::Var(v) => vars.iter().position(|w| w == v).map(|i| Ty::Bound(i as u32)),
+                _ => None,
+            })
+        };
+        // The constraints on this function's type become part of it.
+        let mut predicates: Vec<ClassConstraint<'db>> = assumptions(db, f);
+        for (constraint, origin) in &pending {
+            if origin.body != def {
+                continue;
+            }
+            let mut constraint_vars = Vec::new();
+            constraint.args.iter().for_each(|t| vars_in(t, &mut constraint_vars));
+            if constraint_vars.iter().all(|v| vars.contains(v)) && !constraint_vars.is_empty() {
+                let pred = constraint.map(|t| generalize(t, &vars));
+                if !predicates.contains(&pred) {
+                    predicates.push(pred);
+                }
+            } else {
+                errors.push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
+            }
+        }
+        let mut params: Vec<GenericParamId<'db>> = Vec::new();
+        for def in generic_chain(db, f) {
+            let count = def.generic_params(db).type_params.len();
+            params.extend((0..count).map(|index| GenericParamId { def, index: index as u32 }));
+        }
+        let scheme =
+            Scheme { params: params.into(), bound: vars.len() as u32, predicates: predicates.into(), ty: generalize(&ty, &vars) };
+
+        result.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
+        let own_errors = errors.iter().filter(|e| error_origin(e).body == def).cloned();
+        result.diagnostics.extend(own_errors.map(|e| {
+            let mut d = InferenceDiagnostic::Type(e);
+            d.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
+            d
+        }));
+        env.done.insert(f, scheme.clone());
+        out.schemes.push((f, scheme));
+        out.results.push((f, result));
+    }
+}
+
+fn error_origin<'a, 'db>(error: &'a TypeError<'db>) -> &'a Origin<'db> {
+    match error {
+        TypeError::Mismatch { origin, .. }
+        | TypeError::InfiniteType { origin, .. }
+        | TypeError::NoInstance { origin, .. }
+        | TypeError::Ambiguous { origin, .. } => origin,
+    }
+}
+
+/// The functions of a file whose types are inferred from their bodies: those
+/// with incomplete signatures, at the top level or in inherent impls.
+#[salsa::tracked(returns(ref))]
+pub fn inferred_functions<'db>(db: &'db dyn Db, file: File) -> Vec<FunctionId<'db>> {
+    let tree = item_tree(db, file);
+    let mut out = Vec::new();
+    for item in &tree.top_level {
+        match *item {
+            ModItem::Function(idx) => out.push(FunctionId::new(db, ItemContainerId::File(file), idx)),
+            ModItem::Impl(idx) => {
+                let imp = boltlang_hir_def::ids::ImplId::new(db, file, idx);
+                if matches!(impl_header(db, imp).target, ImplTarget::Inherent(_)) {
+                    for item in &imp.item(db).items {
+                        if let AssocItem::Function(idx) = *item {
+                            out.push(FunctionId::new(db, ItemContainerId::Impl(imp), idx));
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    out.retain(|&f| !is_declared(db, f));
+    out
+}
+
+/// The functions a function's body refers to by name.
+fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<'db>> {
+    let def = DefWithBodyId::new(db, DefWithBody::Function(f));
+    let body = body(db, def);
+    let mut out = Vec::new();
+    for (id, expr) in body.exprs.iter() {
+        let path = match expr {
+            Expr::Path(path) => path.clone(),
+            // `x.f()` may call `f`.
+            Expr::Field { name, .. } => Path::from_name(name.clone()),
+            Expr::Binary { op: BinaryOp::Custom(name), .. } => Path::from_name(name.clone()),
+            _ => continue,
+        };
+        let resolver = Resolver::for_expr(db, def, id);
+        if let Some(ValueResolution::Value(ValueNs::Function(g))) = resolver.resolve_path_in_value_ns(db, &path)
+            && !out.contains(&g)
+        {
+            out.push(g);
+        }
+    }
+    out
+}
+
+/// Tarjan's algorithm: the strongly connected components of a graph, each
+/// after the components it has edges to.
+fn strongly_connected(edges: &[Vec<usize>]) -> Vec<Vec<usize>> {
+    struct State<'a> {
+        edges: &'a [Vec<usize>],
+        index: Vec<Option<usize>>,
+        low: Vec<usize>,
+        on_stack: Vec<bool>,
+        stack: Vec<usize>,
+        next: usize,
+        out: Vec<Vec<usize>>,
+    }
+    fn visit(s: &mut State<'_>, v: usize) {
+        s.index[v] = Some(s.next);
+        s.low[v] = s.next;
+        s.next += 1;
+        s.stack.push(v);
+        s.on_stack[v] = true;
+        for &w in &s.edges[v] {
+            match s.index[w] {
+                None => {
+                    visit(s, w);
+                    s.low[v] = s.low[v].min(s.low[w]);
+                }
+                Some(i) if s.on_stack[w] => s.low[v] = s.low[v].min(i),
+                Some(_) => {}
+            }
+        }
+        if Some(s.low[v]) == s.index[v] {
+            let mut component = Vec::new();
+            loop {
+                let w = s.stack.pop().unwrap();
+                s.on_stack[w] = false;
+                component.push(w);
+                if w == v {
+                    break;
+                }
+            }
+            component.reverse();
+            s.out.push(component);
+        }
+    }
+    let n = edges.len();
+    let mut s = State {
+        edges,
+        index: vec![None; n],
+        low: vec![0; n],
+        on_stack: vec![false; n],
+        stack: Vec::new(),
+        next: 0,
+        out: Vec::new(),
+    };
+    for v in 0..n {
+        if s.index[v].is_none() {
+            visit(&mut s, v);
+        }
+    }
+    s.out
+}
+
+#[cfg(test)]
+mod tests;
