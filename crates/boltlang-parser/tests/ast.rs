@@ -112,3 +112,19 @@ fn path_type_with_generic_args() {
     let GenericArg::Type(arg) = &args[1] else { panic!() };
     assert!(matches!(arg.ty(), Some(Type::Path(_))));
 }
+
+#[test]
+fn func_decl_params() {
+    let (green, diags) = parse_file("fn f(self, a, b: i32 = 1, rest: ...) = a;");
+    assert!(diags.is_empty(), "{diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    let Some(SourceElement::FuncDecl(decl)) = file.elements().next() else { panic!() };
+    let list = decl.param_list().unwrap();
+    assert!(list.self_param().is_some());
+    assert!(list.variadic_param().is_some());
+    let params = decl.params();
+    assert_eq!(params.len(), 2);
+    assert!(params[0].type_expr().is_none() && params[0].default().is_none());
+    assert!(matches!(params[1].type_expr(), Some(Type::Path(_))));
+    assert!(matches!(params[1].default(), Some(Expr::Lit(_))));
+}

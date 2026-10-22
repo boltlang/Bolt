@@ -187,7 +187,13 @@ pub enum SyntaxKind {
     BLOCK,
     TYPE_SIGNATURE,
     INITIALIZER,
+    /// `(a, b: T)`
+    PARAM_LIST,
     PARAM,
+    /// `self` or `mut self`
+    SELF_PARAM,
+    /// `...` or `args: ...`
+    VARIADIC_PARAM,
     VISIBILITY,
 
     // Top-level
@@ -283,6 +289,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            PARAM_LIST => "a parameter list",
+            SELF_PARAM => "a self parameter",
+            VARIADIC_PARAM => "a variadic parameter",
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",
             ARRAY_TYPE => "an array type",

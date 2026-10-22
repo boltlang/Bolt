@@ -15,18 +15,19 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_types.bolt
     - FUN_EXPR
       - FN_KEYWORD "fn"
       - WHITESPACE " "
-      - L_PAREN "("
-      - PARAM
-        - NAMED_PATT
-          - IDENT "x"
-        - COLON ":"
-        - WHITESPACE " "
-        - PATH_TYPE
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "Int"
-      - R_PAREN ")"
+      - PARAM_LIST
+        - L_PAREN "("
+        - PARAM
+          - NAMED_PATT
+            - IDENT "x"
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Int"
+        - R_PAREN ")"
       - WHITESPACE " "
       - R_ARROW "->"
       - WHITESPACE " "

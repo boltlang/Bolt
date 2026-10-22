@@ -1,1 +1,1 @@
-fn (+)(a b) = add(a, b);
+fn (+)(a, b) = add(a, b);

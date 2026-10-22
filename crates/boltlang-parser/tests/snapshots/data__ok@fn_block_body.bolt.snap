@@ -8,11 +8,12 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_block_body.bolt
     - FN_KEYWORD "fn"
     - WHITESPACE " "
     - IDENT "id"
-    - L_PAREN "("
-    - PARAM
-      - NAMED_PATT
-        - IDENT "x"
-    - R_PAREN ")"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "x"
+      - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR
       - BLOCK

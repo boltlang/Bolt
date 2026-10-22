@@ -10,8 +10,9 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-empty_sheba
     - FN_KEYWORD "fn"
     - WHITESPACE " "
     - IDENT "main"
-    - L_PAREN "("
-    - R_PAREN ")"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR
       - BLOCK

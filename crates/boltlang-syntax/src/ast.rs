@@ -604,8 +604,11 @@ impl Block {
 pub struct FunExpr(SyntaxNode);
 
 impl FunExpr {
-    pub fn params(&self) -> ChildrenIter<Param> {
-        ChildrenIter::new(&self.0)
+    pub fn param_list(&self) -> Option<ParamList> {
+        self.find_node()
+    }
+    pub fn params(&self) -> Vec<Param> {
+        self.param_list().map(|list| list.params().collect()).unwrap_or_default()
     }
     pub fn body(&self) -> Option<Expr> {
         self.find_node()
@@ -729,6 +732,47 @@ impl Node for TypeSignature {
     }
 }
 
+/// `(a, b: T = 1)`
+pub struct ParamList(SyntaxNode);
+
+simple_node!(ParamList, PARAM_LIST);
+
+impl ParamList {
+    /// The ordinary parameters, leaving out `self` and variadic ones.
+    pub fn params(&self) -> ChildrenIter<Param> {
+        ChildrenIter::new(&self.0)
+    }
+    pub fn self_param(&self) -> Option<SelfParam> {
+        self.find_node()
+    }
+    pub fn variadic_param(&self) -> Option<VariadicParam> {
+        self.find_node()
+    }
+}
+
+/// `self` or `mut self`
+pub struct SelfParam(SyntaxNode);
+
+simple_node!(SelfParam, SELF_PARAM);
+
+impl SelfParam {
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
+}
+
+/// `...` or `args: ...`
+pub struct VariadicParam(SyntaxNode);
+
+simple_node!(VariadicParam, VARIADIC_PARAM);
+
+impl VariadicParam {
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+}
+
+/// A parameter like `x`, `x: T` or `x: T = 1`.
 pub struct Param(SyntaxNode);
 
 impl Node for Param {
@@ -744,6 +788,10 @@ impl Node for Param {
 }
 
 impl Param {
+
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
 
     pub fn pattern(&self) -> Option<Pattern> {
         self.find_node()
@@ -783,8 +831,12 @@ impl FuncDecl {
         self.find_token(IDENT)
     }
 
-    pub fn params(&self) -> ChildrenIter<Param> {
-        ChildrenIter::new(&self.0)
+    pub fn param_list(&self) -> Option<ParamList> {
+        self.find_node()
+    }
+
+    pub fn params(&self) -> Vec<Param> {
+        self.param_list().map(|list| list.params().collect()).unwrap_or_default()
     }
 
     pub fn type_signature(&self ) -> Option<Type> {

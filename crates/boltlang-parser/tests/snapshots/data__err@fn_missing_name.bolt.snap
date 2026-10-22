@@ -7,13 +7,11 @@ input_file: crates/boltlang-parser/tests/data/err/fn_missing_name.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - PARAM
-      - ERROR
+    - BLOCK_EXPR
+      - BLOCK
         - L_BRACE "{"
-    - PARAM
-      - ERROR
         - R_BRACE "}"
-      - WHITESPACE "\n"
+  - WHITESPACE "\n"
 ---
 !ExpectedToken
 message: expected an identifier or an operator wrapped between '(' and ')'
@@ -26,21 +24,3 @@ message: expected '('
 span:
   start: 3
   end: 3
----
-!ExpectedToken
-message: expected pattern
-span:
-  start: 3
-  end: 3
----
-!ExpectedToken
-message: expected pattern
-span:
-  start: 4
-  end: 4
----
-!ExpectedToken
-message: expected ';' or '}'
-span:
-  start: 6
-  end: 6

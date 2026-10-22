@@ -1,0 +1,36 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/params_missing_comma.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "f"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "a"
+        - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - IDENT "b"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "a"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ','
+span:
+  start: 7
+  end: 7

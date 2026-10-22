@@ -8,15 +8,17 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_expr_body.bolt
     - FN_KEYWORD "fn"
     - WHITESPACE " "
     - IDENT "add"
-    - L_PAREN "("
-    - PARAM
-      - NAMED_PATT
-        - IDENT "a"
-    - WHITESPACE " "
-    - PARAM
-      - NAMED_PATT
-        - IDENT "b"
-    - R_PAREN ")"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "a"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - IDENT "b"
+      - R_PAREN ")"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

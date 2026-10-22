@@ -8,18 +8,19 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
     - FN_KEYWORD "fn"
     - WHITESPACE " "
     - IDENT "foo"
-    - L_PAREN "("
-    - PARAM
-      - NAMED_PATT
-        - IDENT "str"
-      - COLON ":"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "c_char"
-    - R_PAREN ")"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "str"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "c_char"
+      - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR
       - BLOCK
@@ -30,18 +31,19 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
     - FN_KEYWORD "fn"
     - WHITESPACE " "
     - IDENT "bar"
-    - L_PAREN "("
-    - PARAM
-      - NAMED_PATT
-        - IDENT "bool"
-      - COLON ":"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "bool"
-    - R_PAREN ")"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "bool"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "bool"
+      - R_PAREN ")"
     - WHITESPACE " "
     - BLOCK_EXPR
       - BLOCK

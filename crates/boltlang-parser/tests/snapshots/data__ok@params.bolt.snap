@@ -1,0 +1,261 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/params.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "f"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "a"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - IDENT "b"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - IDENT "c"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - LIT_EXPR
+          - INT_NUMBER "1"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - IDENT "d"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - LIT_EXPR
+          - INT_NUMBER "2"
+      - COMMA ","
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "a"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "g"
+    - PARAM_LIST
+      - L_PAREN "("
+      - SELF_PARAM
+        - SELF_KEYWORD "self"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - MUT_KEYWORD "mut"
+        - WHITESPACE " "
+        - NAMED_PATT
+          - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "T"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "x"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "h"
+    - PARAM_LIST
+      - L_PAREN "("
+      - SELF_PARAM
+        - MUT_KEYWORD "mut"
+        - WHITESPACE " "
+        - SELF_KEYWORD "self"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - SELF_KEYWORD "self"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "i"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAME
+          - SELF_KEYWORD "self"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Box"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "Self"
+                - R_BRACKET "]"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - SELF_KEYWORD "self"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "j"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "format"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "str"
+      - COMMA ","
+      - WHITESPACE " "
+      - VARIADIC_PARAM
+        - NAMED_PATT
+          - IDENT "args"
+        - COLON ":"
+        - WHITESPACE " "
+        - DOTDOTDOT "..."
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "format"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "k"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - IDENT "format"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "str"
+      - COMMA ","
+      - WHITESPACE " "
+      - VARIADIC_PARAM
+        - DOTDOTDOT "..."
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "format"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "l"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FUN_EXPR
+      - FN_KEYWORD "fn"
+      - WHITESPACE " "
+      - PARAM_LIST
+        - L_PAREN "("
+        - PARAM
+          - NAMED_PATT
+            - IDENT "x"
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "i32"
+        - COMMA ","
+        - WHITESPACE " "
+        - PARAM
+          - NAMED_PATT
+            - IDENT "y"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - EQUALS "="
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+    - SEMI ";"
+  - WHITESPACE "\n"
