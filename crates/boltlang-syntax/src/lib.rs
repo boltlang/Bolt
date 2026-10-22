@@ -190,6 +190,12 @@ pub enum SyntaxKind {
 
     // Expressions
     AWAIT_EXPR,
+    /// `if cond { } else { }`
+    IF_EXPR,
+    /// `let pattern = value` in the condition of an `if` or `while`
+    LET_EXPR,
+    /// `while cond { }`
+    WHILE_EXPR,
     BIN_EXPR,
     BLOCK_EXPR,
     CALL_EXPR,
@@ -334,6 +340,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            IF_EXPR => "an if expression",
+            LET_EXPR => "a let condition",
+            WHILE_EXPR => "a while loop",
             EXPR_STMT => "an expression statement",
             WILDCARD_PATT => "a wildcard pattern",
             PATH_PATT => "a path pattern",

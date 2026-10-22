@@ -1,0 +1,51 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/if_else_assignment.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "b"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - WHITESPACE " "
+      - ELSE_KEYWORD "else"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "c"
+          - WHITESPACE " "
+          - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"

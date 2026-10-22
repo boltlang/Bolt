@@ -3,9 +3,9 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 
-use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents};
+use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct};
 use crate::{
-    grammar::{expr_path, is_path_start, opt_ret_type, param_list},
+    grammar::{expr_path, is_path_start, opt_ret_type, param_list, parse_pattern},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -30,6 +30,9 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T!['{'],
     T![return],
     T![fn],
+    T![if],
+    T![let],
+    T![while],
 ]));
 
 /// Where expression parsing gives up and leaves the token to an enclosing
@@ -47,7 +50,7 @@ pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
     Some(m.complete(p, LIT_EXPR))
 }
 
-pub(super) fn atom_expr(p: &mut Parser, _r: Restrictions) -> Option<(CompletedMarker, BlockLike)> {
+pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> {
     if let Some(m) = parse_literal_expr(p) {
         return Some((m, BlockLike::NotBlock));
     }
@@ -59,6 +62,9 @@ pub(super) fn atom_expr(p: &mut Parser, _r: Restrictions) -> Option<(CompletedMa
         T!['{'] => return Some((parse_block_expr(p), BlockLike::Block)),
         T![return] => return_expr(p),
         T![fn] => fun_expr(p),
+        T![if] => return Some((if_expr(p), BlockLike::Block)),
+        T![while] => return Some((while_expr(p), BlockLike::Block)),
+        T![let] => let_expr(p, r),
         _ => {
             p.err_recover("expected an expression", EXPR_RECOVERY_SET);
             return None;
@@ -144,4 +150,41 @@ fn fun_expr(p: &mut Parser) -> CompletedMarker {
         p.error("expected '=' or '{' to start the function body");
     }
     m.complete(p, FUN_EXPR)
+}
+
+/// `if cond { } else if cond { } else { }`
+fn if_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![if]);
+    expr_no_struct(p);
+    parse_block_expr(p);
+    if p.eat(T![else]) {
+        if p.at(T![if]) {
+            if_expr(p);
+        } else {
+            parse_block_expr(p);
+        }
+    }
+    m.complete(p, IF_EXPR)
+}
+
+/// `while cond { }`
+fn while_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![while]);
+    expr_no_struct(p);
+    parse_block_expr(p);
+    m.complete(p, WHILE_EXPR)
+}
+
+/// `let pattern = value` in a condition, like in `if let Some(x) = y`. The
+/// value binds tighter than `&&`, so `if let a = b && c` checks `c`
+/// separately, as in the grammar's `let_condition`.
+fn let_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![let]);
+    parse_pattern(p);
+    p.expect(T![=]);
+    expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 5);
+    m.complete(p, LET_EXPR)
 }

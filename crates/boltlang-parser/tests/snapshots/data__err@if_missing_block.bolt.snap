@@ -1,0 +1,53 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/if_missing_block.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE "\n"
+      - BLOCK_EXPR
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - WHITESPACE "\n"
+      - BLOCK_EXPR
+---
+!ExpectedToken
+message: expected '{'
+span:
+  start: 5
+  end: 5
+---
+!ExpectedToken
+message: expected '{'
+span:
+  start: 23
+  end: 23

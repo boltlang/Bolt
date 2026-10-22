@@ -599,6 +599,9 @@ ast_enum!(
         Ret(RetExpr) = RET_EXPR,
         Field(FieldExpr) = FIELD_EXPR,
         Await(AwaitExpr) = AWAIT_EXPR,
+        If(IfExpr) = IF_EXPR,
+        Let(LetExpr) = LET_EXPR,
+        While(WhileExpr) = WHILE_EXPR,
     }
 );
 
@@ -689,6 +692,58 @@ impl FieldExpr {
     /// The field name or tuple index.
     pub fn name_ref(&self) -> Option<NameRef> {
         self.find_node()
+    }
+}
+
+/// `if cond { } else { }`
+pub struct IfExpr(SyntaxNode);
+
+simple_node!(IfExpr, IF_EXPR);
+
+impl IfExpr {
+    pub fn condition(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn then_branch(&self) -> Option<BlockExpr> {
+        self.0.children().filter_map(Expr::cast).nth(1).and_then(|e| match e {
+            Expr::Block(block) => Some(block),
+            _ => None,
+        })
+    }
+    /// The block or `if` after `else`.
+    pub fn else_branch(&self) -> Option<Expr> {
+        self.0.children().filter_map(Expr::cast).nth(2)
+    }
+}
+
+/// `let pattern = value` in a condition
+pub struct LetExpr(SyntaxNode);
+
+simple_node!(LetExpr, LET_EXPR);
+
+impl LetExpr {
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `while cond { }`
+pub struct WhileExpr(SyntaxNode);
+
+simple_node!(WhileExpr, WHILE_EXPR);
+
+impl WhileExpr {
+    pub fn condition(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn body(&self) -> Option<BlockExpr> {
+        self.0.children().filter_map(Expr::cast).nth(1).and_then(|e| match e {
+            Expr::Block(block) => Some(block),
+            _ => None,
+        })
     }
 }
 
