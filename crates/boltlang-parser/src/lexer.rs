@@ -195,32 +195,36 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENT)
             }
-            '0' => match self.get() {
+            '0' => match self.peek(0) {
                 'b' => {
+                    self.get();
                     while is_bin_num(self.peek(0)) {
                         self.get();
                     }
                     BIN_INT
                 }
                 'o' => {
+                    self.get();
                     while is_oct_num(self.peek(0)) {
                         self.get();
                     }
                     OCT_INT
                 }
                 'x' => {
+                    self.get();
                     while is_hex_num(self.peek(0)) {
                         self.get();
                     }
                     HEX_INT
                 }
                 c1 if is_dec_num(c1) => {
-                    while is_dec_num(c1) {
+                    while is_dec_num(self.peek(0)) {
                         self.get();
                     }
                     DEC_INT
                 }
                 c1 if is_ident_part(c1) => {
+                    self.get();
                     self.error("identifiers may not begin with decimal digits", self.pos.offset-1..self.pos.offset);
                     ERROR
                 }
