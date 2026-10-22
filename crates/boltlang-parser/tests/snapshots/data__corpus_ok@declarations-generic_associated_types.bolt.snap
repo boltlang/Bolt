@@ -1,0 +1,262 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-generic_associated_types.bolt
+---
+- SOURCE_FILE
+  - TRAIT
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - TRAIT_KEYWORD "trait"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Database"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - TYPE_ALIAS
+        - TYPE_KEYWORD "type"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "F"
+        - GENERIC_PARAM_LIST
+          - L_BRACKET "["
+          - TYPE_PARAM
+            - NAME
+              - IDENT "A"
+          - COMMA ","
+          - WHITESPACE " "
+          - TYPE_PARAM
+            - NAME
+              - IDENT "D"
+          - R_BRACKET "]"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Future"
+                - GENERIC_ARG_LIST
+                  - L_BRACKET "["
+                  - ASSOC_TYPE_ARG
+                    - NAME_REF
+                      - IDENT "Output"
+                    - WHITESPACE " "
+                    - EQUALS "="
+                    - WHITESPACE " "
+                    - PATH_TYPE
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "D"
+                  - R_BRACKET "]"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Send"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Database"
+    - WHITESPACE " "
+    - FOR_KEYWORD "for"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Foo"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - TYPE_ALIAS
+        - TYPE_KEYWORD "type"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "F"
+        - GENERIC_PARAM_LIST
+          - L_BRACKET "["
+          - TYPE_PARAM
+            - NAME
+              - IDENT "A"
+          - COMMA ","
+          - WHITESPACE " "
+          - TYPE_PARAM
+            - NAME
+              - IDENT "D"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "DatabaseFuture"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "A"
+                - COMMA ","
+                - WHITESPACE " "
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "D"
+                - R_BRACKET "]"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "use_database1"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "D"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Database"
+                - GENERIC_ARG_LIST
+                  - L_BRACKET "["
+                  - ASSOC_TYPE_ARG
+                    - NAME_REF
+                      - IDENT "F"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "A"
+                      - COMMA ","
+                      - WHITESPACE " "
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "TD"
+                      - R_BRACKET "]"
+                    - WHITESPACE " "
+                    - EQUALS "="
+                    - WHITESPACE " "
+                    - PATH_TYPE
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "F"
+                  - R_BRACKET "]"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "use_database2"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "D"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE "\n"
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
+      - WHITESPACE "\n    "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "D"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Database"
+                - GENERIC_ARG_LIST
+                  - L_BRACKET "["
+                  - ASSOC_TYPE_ARG
+                    - NAME_REF
+                      - IDENT "F"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "A"
+                      - COMMA ","
+                      - WHITESPACE " "
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "TD"
+                      - R_BRACKET "]"
+                    - WHITESPACE " "
+                    - EQUALS "="
+                    - WHITESPACE " "
+                    - PATH_TYPE
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "F"
+                  - R_BRACKET "]"
+      - COMMA ","
+    - WHITESPACE "\n"
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

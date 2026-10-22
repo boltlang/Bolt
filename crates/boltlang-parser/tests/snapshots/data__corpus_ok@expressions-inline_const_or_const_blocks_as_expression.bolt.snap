@@ -1,0 +1,125 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-inline_const_or_const_blocks_as_expression.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - BLOCK_EXPR
+      - CONST_KEYWORD "const"
+      - WHITESPACE " "
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - BIN_EXPR
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "3"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - BIN_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - WHITESPACE " "
+        - LT "<"
+        - WHITESPACE " "
+        - LIT_EXPR
+          - INT_NUMBER "0"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - BLOCK_EXPR
+            - CONST_KEYWORD "const"
+            - WHITESPACE " "
+            - BLOCK
+              - L_BRACE "{"
+              - WHITESPACE " "
+              - CALL_EXPR
+                - FIELD_EXPR
+                  - LIT_EXPR
+                    - INT_NUMBER "4i32"
+                  - DOT "."
+                  - NAME_REF
+                    - IDENT "pow"
+                - ARG_LIST
+                  - L_PAREN "("
+                  - LIT_EXPR
+                    - INT_NUMBER "4"
+                  - R_PAREN ")"
+              - WHITESPACE " "
+              - R_BRACE "}"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - WHITESPACE " "
+      - ELSE_KEYWORD "else"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "x"
+          - WHITESPACE " "
+          - R_BRACE "}"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "three_ranges"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - BLOCK_EXPR
+        - CONST_KEYWORD "const"
+        - WHITESPACE " "
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - CALL_EXPR
+            - FIELD_EXPR
+              - NEST_EXPR
+                - L_PAREN "("
+                - RANGE_EXPR
+                  - LIT_EXPR
+                    - INT_NUMBER "0"
+                  - DOTDOTEQUALS "..="
+                  - LIT_EXPR
+                    - INT_NUMBER "5"
+                - R_PAREN ")"
+              - DOT "."
+              - NAME_REF
+                - IDENT "into_inner"
+            - ARG_LIST
+              - L_PAREN "("
+              - R_PAREN ")"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - SEMI ";"
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "3"
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"

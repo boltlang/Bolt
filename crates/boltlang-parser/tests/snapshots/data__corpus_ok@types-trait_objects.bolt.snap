@@ -1,0 +1,114 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/types-trait_objects.bolt
+---
+- SOURCE_FILE
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "a"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Box"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - BOUNDED_TYPE
+                - PATH_TYPE
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "Something"
+                - WHITESPACE " "
+                - PLUS "+"
+                - WHITESPACE " "
+                - PATH_TYPE
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "Send"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "b"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Rc"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "Something"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "c"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "A"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "Box"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - FN_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "Fn"
+                          - PARAM_LIST
+                            - L_PAREN "("
+                            - PARAM
+                              - PATH_TYPE
+                                - PATH
+                                  - PATH_SEGMENT
+                                    - NAME_REF
+                                      - IDENT "B"
+                            - R_PAREN ")"
+                          - WHITESPACE " "
+                          - RET_TYPE
+                            - R_ARROW "->"
+                            - WHITESPACE " "
+                            - PATH_TYPE
+                              - PATH
+                                - PATH_SEGMENT
+                                  - NAME_REF
+                                    - IDENT "C"
+                      - R_BRACKET "]"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"

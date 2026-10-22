@@ -1,0 +1,83 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-visibility_modifiers.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "a"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+      - L_PAREN "("
+      - SUPER_KEYWORD "super"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "b"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+      - L_PAREN "("
+      - SELF_KEYWORD "self"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "c"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+      - L_PAREN "("
+      - PACKAGE_KEYWORD "package"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "c"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

@@ -1,0 +1,26 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/async-async_closure.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - WILDCARD_PATT
+      - UNDERSCORE "_"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CLOSURE_EXPR
+      - ASYNC_KEYWORD "async"
+      - WHITESPACE " "
+      - PARAM_LIST
+        - VBAR "|"
+        - VBAR "|"
+      - WHITESPACE " "
+      - TUPLE_EXPR
+        - L_PAREN "("
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"

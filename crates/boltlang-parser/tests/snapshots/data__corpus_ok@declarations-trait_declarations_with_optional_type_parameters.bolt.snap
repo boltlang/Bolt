@@ -1,0 +1,75 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_declarations_with_optional_type_parameters.bolt
+---
+- SOURCE_FILE
+  - TRAIT
+    - TRAIT_KEYWORD "trait"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Add"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "RHS"
+        - EQUALS "="
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Self"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - TYPE_ALIAS
+        - TYPE_KEYWORD "type"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "Output"
+        - SEMI ";"
+      - WHITESPACE "\n    "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "add"
+        - PARAM_LIST
+          - L_PAREN "("
+          - SELF_PARAM
+            - SELF_KEYWORD "self"
+          - COMMA ","
+          - WHITESPACE " "
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "rhs"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "RHS"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - RET_TYPE
+          - R_ARROW "->"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Self"
+              - DOT "."
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Output"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

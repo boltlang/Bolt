@@ -1,0 +1,61 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-associated_type_definitions.bolt
+---
+- SOURCE_FILE
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Trait"
+    - WHITESPACE " "
+    - FOR_KEYWORD "for"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "T"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - TYPE_ALIAS
+        - TYPE_KEYWORD "type"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "Associated"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "T"
+        - WHITESPACE " "
+        - WHERE_CLAUSE
+          - WHERE_KEYWORD "where"
+          - WHITESPACE " "
+          - WHERE_PRED
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
+            - TRAIT_BOUNDS
+              - COLON ":"
+              - WHITESPACE " "
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "Clone"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

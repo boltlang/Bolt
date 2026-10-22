@@ -1,0 +1,60 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/async-async_function.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - ASYNC_KEYWORD "async"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "abc"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - FUNC_DECL
+    - ASYNC_KEYWORD "async"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "main"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - LET_STMT
+          - LET_KEYWORD "let"
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "x"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - TRY_EXPR
+            - AWAIT_EXPR
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "futures"
+              - DOT "."
+              - AWAIT_KEYWORD "await"
+            - QUEST "?"
+          - SEMI ";"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

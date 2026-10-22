@@ -1,0 +1,104 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-inherent_impls.bolt
+---
+- SOURCE_FILE
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Person"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n  "
+      - CONST
+        - CONST_KEYWORD "const"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "leg_count"
+        - WHITESPACE " "
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "u32"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - LIT_EXPR
+          - INT_NUMBER "2"
+        - SEMI ";"
+      - WHITESPACE "\n\n  "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "walk"
+        - PARAM_LIST
+          - L_PAREN "("
+          - SELF_PARAM
+            - SELF_KEYWORD "self"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - BLOCK_EXPR
+          - BLOCK
+            - L_BRACE "{"
+            - R_BRACE "}"
+      - WHITESPACE "\n  "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "walk_mut"
+        - PARAM_LIST
+          - L_PAREN "("
+          - SELF_PARAM
+            - MUT_KEYWORD "mut"
+            - WHITESPACE " "
+            - SELF_KEYWORD "self"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - BLOCK_EXPR
+          - BLOCK
+            - L_BRACE "{"
+            - R_BRACE "}"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Machine"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - CONST_ARG
+              - BLOCK_EXPR
+                - BLOCK
+                  - L_BRACE "{"
+                  - FIELD_EXPR
+                    - PATH_EXPR
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "State"
+                    - DOT "."
+                    - NAME_REF
+                      - IDENT "Init"
+                  - R_BRACE "}"
+            - R_BRACKET "]"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

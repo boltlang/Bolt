@@ -1,0 +1,113 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/types-generic_types.bolt
+---
+- SOURCE_FILE
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "A"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "B"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "C"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "D"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "E"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "F"
+            - COMMA ","
+            - WHITESPACE " "
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "str"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "G"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "H"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "I"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "J"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "H"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - ASSOC_TYPE_ARG
+              - NAME_REF
+                - IDENT "K"
+              - EQUALS "="
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "L"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"

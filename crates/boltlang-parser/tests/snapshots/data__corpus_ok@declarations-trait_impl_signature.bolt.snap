@@ -1,0 +1,104 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impl_signature.bolt
+---
+- SOURCE_FILE
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "K"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Debug"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Ord"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Debug"
+    - WHITESPACE " "
+    - FOR_KEYWORD "for"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "OccupiedError"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "K"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "K"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Debug"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Ord"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Display"
+    - WHITESPACE " "
+    - FOR_KEYWORD "for"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "OccupiedError"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "K"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"

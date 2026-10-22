@@ -1,0 +1,134 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-range_expressions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - RANGE_EXPR
+      - LIT_EXPR
+        - INT_NUMBER "1"
+      - DOTDOT ".."
+      - LIT_EXPR
+        - INT_NUMBER "2"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - LIT_EXPR
+        - INT_NUMBER "3"
+      - DOTDOT ".."
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - DOTDOT ".."
+      - LIT_EXPR
+        - INT_NUMBER "4"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - DOTDOT ".."
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - LIT_EXPR
+        - INT_NUMBER "1"
+      - DOTDOT ".."
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - DOTDOT ".."
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - LIT_EXPR
+        - INT_NUMBER "1"
+      - DOTDOT ".."
+      - NEST_EXPR
+        - L_PAREN "("
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - NEST_EXPR
+        - L_PAREN "("
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - R_PAREN ")"
+      - DOTDOT ".."
+      - LIT_EXPR
+        - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - NEST_EXPR
+        - L_PAREN "("
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - R_PAREN ")"
+      - DOTDOT ".."
+      - NEST_EXPR
+        - L_PAREN "("
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - RANGE_EXPR
+      - LIT_EXPR
+        - INT_NUMBER "1"
+      - DOTDOT ".."
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - FOR_EXPR
+      - FOR_KEYWORD "for"
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "i"
+      - WHITESPACE " "
+      - IN_KEYWORD "in"
+      - WHITESPACE " "
+      - RANGE_EXPR
+        - LIT_EXPR
+          - INT_NUMBER "1"
+        - DOTDOT ".."
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE "\n"
+          - R_BRACE "}"
+  - WHITESPACE "\n"

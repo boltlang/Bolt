@@ -1,0 +1,51 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-reserved_keywords_in_path.bolt
+---
+- SOURCE_FILE
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "A"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n  "
+      - RECORD_FIELD
+        - NAME
+          - IDENT "a"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "default"
+            - DOT "."
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "B"
+      - COMMA ","
+      - WHITESPACE "\n  "
+      - RECORD_FIELD
+        - NAME
+          - IDENT "b"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "union"
+            - DOT "."
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "C"
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

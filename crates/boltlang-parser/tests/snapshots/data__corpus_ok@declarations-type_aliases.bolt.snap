@@ -1,0 +1,111 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-type_aliases.bolt
+---
+- SOURCE_FILE
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Inch"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "u64"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Name"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Vec"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "T"
+            - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - TYPE_ALIAS
+    - TYPE_KEYWORD "type"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "LazyResolve"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - IMPL_TRAIT_TYPE
+      - IMPL_KEYWORD "impl"
+      - WHITESPACE " "
+      - BOUNDED_TYPE
+        - BOUNDED_TYPE
+          - BOUNDED_TYPE
+            - TUPLE_TYPE
+              - L_PAREN "("
+              - FN_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "FnOnce"
+                - PARAM_LIST
+                  - L_PAREN "("
+                  - R_PAREN ")"
+                - WHITESPACE " "
+                - RET_TYPE
+                  - R_ARROW "->"
+                  - WHITESPACE " "
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "Capture"
+              - R_PAREN ")"
+            - WHITESPACE " "
+            - PLUS "+"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Send"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Sync"
+        - WHITESPACE " "
+        - PLUS "+"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "UnwindSafe"
+    - SEMI ";"
+  - WHITESPACE "\n"

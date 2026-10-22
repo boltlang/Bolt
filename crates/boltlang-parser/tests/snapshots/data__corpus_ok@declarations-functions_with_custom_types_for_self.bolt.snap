@@ -1,0 +1,46 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-functions_with_custom_types_for_self.bolt
+---
+- SOURCE_FILE
+  - TRAIT
+    - TRAIT_KEYWORD "trait"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Callback"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "call"
+        - PARAM_LIST
+          - L_PAREN "("
+          - PARAM
+            - NAME
+              - SELF_KEYWORD "self"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Box"
+                  - GENERIC_ARG_LIST
+                    - L_BRACKET "["
+                    - TYPE_ARG
+                      - PATH_TYPE
+                        - PATH
+                          - PATH_SEGMENT
+                            - NAME_REF
+                              - IDENT "Self"
+                    - R_BRACKET "]"
+          - R_PAREN ")"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

@@ -1,0 +1,37 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-compound_assignment_expressions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - BIN_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - ASSIGNMENT "+="
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - BIN_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - ASSIGNMENT "+="
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "y"
+    - SEMI ";"
+  - WHITESPACE "\n"

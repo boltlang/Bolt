@@ -1,0 +1,40 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-struct_expressions_with_update_initializers.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "u"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - RECORD_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "User"
+      - RECORD_EXPR_FIELD_LIST
+        - L_BRACE "{"
+        - RECORD_EXPR_FIELD
+          - NAME_REF
+            - IDENT "name"
+        - COMMA ","
+        - WHITESPACE " "
+        - DOTDOT ".."
+        - CALL_EXPR
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "current_user"
+          - ARG_LIST
+            - L_PAREN "("
+            - R_PAREN ")"
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"

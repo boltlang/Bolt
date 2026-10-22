@@ -1,0 +1,46 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-greek_letters_in_identifiers.bolt
+---
+- SOURCE_FILE
+  - CONST
+    - CONST_KEYWORD "const"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "σ1"
+    - WHITESPACE " "
+    - COLON ":"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Σ"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "0"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - CONST
+    - CONST_KEYWORD "const"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "ψ_2"
+    - WHITESPACE " "
+    - COLON ":"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Ψ"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"

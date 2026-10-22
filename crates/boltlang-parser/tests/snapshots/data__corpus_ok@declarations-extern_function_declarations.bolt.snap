@@ -1,0 +1,143 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-extern_function_declarations.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - ABI
+      - EXTERN_KEYWORD "extern"
+      - WHITESPACE " "
+      - STRING "\"C\""
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "foo"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - ABI
+      - EXTERN_KEYWORD "extern"
+      - WHITESPACE " "
+      - STRING "\"C\""
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "printf"
+    - PARAM_LIST
+      - L_PAREN "("
+      - WHITESPACE "\n    "
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "c_char"
+      - COMMA ","
+      - WHITESPACE "\n    "
+      - VARIADIC_PARAM
+        - DOTDOTDOT "..."
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - FUNC_DECL
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - ABI
+      - EXTERN_KEYWORD "extern"
+      - WHITESPACE " "
+      - STRING "\"C\""
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "c_variadic_no_use"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "fmt"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i8"
+      - COMMA ","
+      - WHITESPACE " "
+      - VARIADIC_PARAM
+        - MUT_KEYWORD "mut"
+        - WHITESPACE " "
+        - NAMED_PATT
+          - NAME
+            - IDENT "ap"
+        - COLON ":"
+        - WHITESPACE " "
+        - DOTDOTDOT "..."
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - RET_TYPE
+      - R_ARROW "->"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "i32"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - LINE_COMMENT "// CHECK: call void @llvm.va_start"
+        - WHITESPACE "\n    "
+        - CALL_EXPR
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "vprintf"
+          - ARG_LIST
+            - L_PAREN "("
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "fmt"
+            - COMMA ","
+            - WHITESPACE " "
+            - CALL_EXPR
+              - FIELD_EXPR
+                - PATH_EXPR
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "ap"
+                - DOT "."
+                - NAME_REF
+                  - IDENT "as_va_list"
+              - ARG_LIST
+                - L_PAREN "("
+                - R_PAREN ")"
+            - R_PAREN ")"
+        - WHITESPACE "\n    "
+        - LINE_COMMENT "// CHECK: call void @llvm.va_end"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
