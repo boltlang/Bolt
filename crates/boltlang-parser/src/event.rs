@@ -92,8 +92,10 @@ impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
         }
     }
 
-    fn push_token(&mut self) {
-        let kind = self.lexed.token_kind(self.pos);
+    /// Add the next token from the source text to the tree, as `kind`. This is
+    /// usually the kind the lexer gave it, but the parser can remap it, e.g. to
+    /// turn the identifier `default` into a keyword.
+    fn push_token(&mut self, kind: SyntaxKind) {
         let len = self.lexed.token_len(self.pos) as usize;
         let start = self.text_pos as usize;
         let end = start + len;
@@ -108,13 +110,8 @@ impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
             Event::Start { kind, ..  } => {
                 self.builder.start_node(kind.into());
             }
-            Event::Token { kind: expected } => {
-                #[cfg(debug_assertions)]
-                {
-                    let actual = self.lexed.token_kind(self.pos);
-                    assert!(actual == expected, "{actual:?} == {expected:?}");
-                }
-                self.push_token();
+            Event::Token { kind } => {
+                self.push_token(kind);
             }
             Event::Error { msg } => {
                 let start  = self.text_pos;
