@@ -8,7 +8,7 @@ input_file: crates/boltlang-parser/tests/data/ok/subtraction.bolt
     - PATH_EXPR
       - IDENT "a"
     - WHITESPACE " "
-    - OPERATOR "-"
+    - MINUS "-"
     - WHITESPACE " "
     - PATH_EXPR
       - IDENT "b"

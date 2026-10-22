@@ -29,7 +29,7 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_two_params.bolt
         - PATH_EXPR
           - IDENT "a"
         - WHITESPACE " "
-        - OPERATOR "+"
+        - PLUS "+"
         - WHITESPACE " "
         - PATH_EXPR
           - IDENT "b"

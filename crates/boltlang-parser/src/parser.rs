@@ -7,6 +7,16 @@ use crate::{event::Event, token_set::TokenSet};
 
 use SyntaxKind::*;
 
+/// Whether `kind` is a run of operator characters (see [`crate::lexer`]),
+/// leaving out `=` and compound assignments like `+=`.
+pub(crate) fn is_operator_kind(kind: SyntaxKind) -> bool {
+    matches!(
+        kind,
+        OPERATOR | R_ARROW | FAT_ARROW | VBAR | DOT | DOTDOT | DOTDOTDOT | DOTDOTEQUALS
+            | EXCL | QUEST | LT | GT | STAR | PLUS | MINUS | DOLLAR
+    )
+}
+
 pub(crate) struct Marker {
     pos: u32,
     bomb: DropBomb,
@@ -289,12 +299,14 @@ impl <'t> Parser<'t> {
         self.inp.values[self.pos].as_ref()
     }
 
+    /// The text of the current token if it's an operator, including operators
+    /// that have a kind of their own, like `|` and `<`. Leaves out `=` and
+    /// compound assignments like `+=`.
     pub(crate) fn op_text(&self) -> Option<&str> {
-        match self.current() {
-            OPERATOR => Some(self.value().unwrap().as_str()),
-            LT => Some("<"),
-            GT => Some(">"),
-            _ => None,
+        if is_operator_kind(self.current()) {
+            Some(self.value().unwrap().as_str())
+        } else {
+            None
         }
     }
 

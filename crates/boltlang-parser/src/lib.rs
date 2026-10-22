@@ -78,7 +78,7 @@ mod tests {
         assert_eq!(tokens, [
             (WHITESPACE, " ".to_string()),
             (GT, ">".to_string()),
-            (OPERATOR, ">".to_string()),
+            (GT, ">".to_string()),
             (WHITESPACE, " ".to_string()),
         ]);
     }

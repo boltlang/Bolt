@@ -340,12 +340,9 @@ fn current_op(p: &Parser<'_>) -> (u8, SyntaxKind, Associativity) {
     use Associativity::*;
     const NOT_AN_OP: (u8, SyntaxKind, Associativity) = (0, AT, Left);
     match p.current() {
-        OPERATOR => {
-            let name = match p.value() {
-                Some(text) => text,
-                None => return NOT_AN_OP,
-            };
-            let (bp, assoc) = match name.as_str() {
+        _ if p.op_text().is_some() => {
+            let name = p.op_text().unwrap();
+            let (bp, assoc) = match name {
                 "||"  => (3, Left),
                 "|="  => (1, Right),
                 "|"   => (6, Left),
@@ -378,7 +375,7 @@ fn current_op(p: &Parser<'_>) -> (u8, SyntaxKind, Associativity) {
                 "-"   => (10, Left),
                 _ => return NOT_AN_OP,
             };
-            (bp, OPERATOR, assoc)
+            (bp, p.current(), assoc)
         }
         AS_KEYWORD => (12, AS_KEYWORD,  Left),
         _ => NOT_AN_OP

@@ -77,10 +77,23 @@ fn is_hex_num(ch: char) -> bool {
 /// The kind of token for a run of operator characters, e.g. `->` or `+=`.
 pub(crate) fn operator_kind(text: &str) -> SyntaxKind {
     match text {
+        // Operators with a fixed role in the grammar get a kind of their own.
         "->" => R_ARROW,
+        "=>" => FAT_ARROW,
         "|" => VBAR,
         "." => DOT,
+        ".." => DOTDOT,
+        "..." => DOTDOTDOT,
+        "..=" => DOTDOTEQUALS,
         "=" => EQUALS,
+        "!" => EXCL,
+        "?" => QUEST,
+        "<" => LT,
+        ">" => GT,
+        "*" => STAR,
+        "+" => PLUS,
+        "-" => MINUS,
+        "$" => DOLLAR,
         "!=" | "<=" | ">=" => OPERATOR,
         // Things like +==% and -== should be parsed as a regular operator
         t if t.chars().filter(|c| *c == '=').count() > 1 => OPERATOR,
@@ -206,7 +219,25 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             '[' => L_BRACKET,
             ']' => R_BRACKET,
             ',' => COMMA,
+            ':' if self.peek(0) == ':' => {
+                self.get();
+                COLONCOLON
+            }
             ':' => COLON,
+            '@' => AT,
+            '$' if is_ident_start(self.peek(0)) => {
+                while is_ident_part(self.peek(0)) {
+                    self.get();
+                }
+                METAVARIABLE
+            }
+            // A label like `'outer`. Char literals like `'a'` end with a quote.
+            '\'' if is_ident_start(self.peek(0)) && self.peek(1) != '\'' => {
+                while is_ident_part(self.peek(0)) {
+                    self.get();
+                }
+                LABEL_IDENT
+            }
             ';' => SEMI,
             '"' => {
                 loop {
@@ -447,5 +478,60 @@ pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
         kinds,
         values,
         lens,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use boltlang_syntax::SyntaxKind::{self, *};
+
+    use crate::diagnostic::Diagnostics;
+
+    /// The (kind, text) of every non-whitespace token in `text`.
+    fn lex(text: &str) -> Vec<(SyntaxKind, &str)> {
+        let mut diags = Diagnostics::new();
+        let lexed = super::tokenize(text, &mut diags);
+        assert!(diags.take_diagnostics().is_empty(), "{text:?} has lexer errors");
+        let mut offset = 0;
+        let mut tokens = Vec::new();
+        for i in 0..lexed.len() {
+            let len = lexed.token_len(i) as usize;
+            let kind = lexed.token_kind(i);
+            if kind != WHITESPACE {
+                tokens.push((kind, &text[offset..offset + len]));
+            }
+            offset += len;
+        }
+        tokens
+    }
+
+    #[test]
+    fn punctuation() {
+        assert_eq!(lex("a::b"), [(IDENT, "a"), (COLONCOLON, "::"), (IDENT, "b")]);
+        assert_eq!(lex("a: b"), [(IDENT, "a"), (COLON, ":"), (IDENT, "b")]);
+        assert_eq!(lex("x @ y"), [(IDENT, "x"), (AT, "@"), (IDENT, "y")]);
+        assert_eq!(lex("$name $"), [(METAVARIABLE, "$name"), (DOLLAR, "$")]);
+        assert_eq!(lex("'outer: loop"), [(LABEL_IDENT, "'outer"), (COLON, ":"), (LOOP_KEYWORD, "loop")]);
+    }
+
+    #[test]
+    fn operators_with_a_role_of_their_own() {
+        let ops = [
+            ("->", R_ARROW), ("=>", FAT_ARROW), ("|", VBAR), (".", DOT), ("..", DOTDOT),
+            ("...", DOTDOTDOT), ("..=", DOTDOTEQUALS), ("=", EQUALS), ("!", EXCL), ("?", QUEST),
+            ("<", LT), (">", GT), ("*", STAR), ("+", PLUS), ("-", MINUS), ("$", DOLLAR),
+        ];
+        for (text, kind) in ops {
+            assert_eq!(lex(text), [(kind, text)], "{text}");
+        }
+    }
+
+    #[test]
+    fn other_operators_are_joined() {
+        assert_eq!(lex("a <$> b"), [(IDENT, "a"), (OPERATOR, "<$>"), (IDENT, "b")]);
+        assert_eq!(lex(">>"), [(OPERATOR, ">>")]);
+        assert_eq!(lex("||"), [(OPERATOR, "||")]);
+        assert_eq!(lex("<="), [(OPERATOR, "<=")]);
+        assert_eq!(lex("+="), [(ASSIGNMENT, "+=")]);
     }
 }

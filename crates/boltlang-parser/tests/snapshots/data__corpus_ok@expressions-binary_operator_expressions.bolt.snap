@@ -8,7 +8,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-binary_opera
     - PATH_EXPR
       - IDENT "a"
     - WHITESPACE " "
-    - OPERATOR "*"
+    - STAR "*"
     - WHITESPACE " "
     - PATH_EXPR
       - IDENT "b"
@@ -38,7 +38,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-binary_opera
     - PATH_EXPR
       - IDENT "a"
     - WHITESPACE " "
-    - OPERATOR "+"
+    - PLUS "+"
     - WHITESPACE " "
     - PATH_EXPR
       - IDENT "b"
@@ -48,7 +48,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-binary_opera
     - PATH_EXPR
       - IDENT "a"
     - WHITESPACE " "
-    - OPERATOR "-"
+    - MINUS "-"
     - WHITESPACE " "
     - PATH_EXPR
       - IDENT "b"

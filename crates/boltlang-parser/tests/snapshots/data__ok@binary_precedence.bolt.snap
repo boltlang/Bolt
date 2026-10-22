@@ -8,13 +8,13 @@ input_file: crates/boltlang-parser/tests/data/ok/binary_precedence.bolt
     - PATH_EXPR
       - IDENT "a"
     - WHITESPACE " "
-    - OPERATOR "+"
+    - PLUS "+"
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
         - IDENT "b"
       - WHITESPACE " "
-      - OPERATOR "*"
+      - STAR "*"
       - WHITESPACE " "
       - PATH_EXPR
         - IDENT "c"

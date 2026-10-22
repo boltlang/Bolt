@@ -313,12 +313,20 @@ pub struct BinExpr(SyntaxNode);
 
 simple_node!(BinExpr, BIN_EXPR);
 
+/// The first token directly inside `node` that isn't whitespace or a comment.
+fn first_non_trivia_token(node: &SyntaxNode) -> Option<SyntaxToken> {
+    node.children_with_tokens()
+        .filter_map(|x| x.into_token())
+        .find(|token| !token.kind().is_trivia())
+}
+
 impl BinExpr {
     pub fn lhs(&self) -> Option<Expr> {
         self.find_node()
     }
+    /// The operator, e.g. `+` or a user-defined `<$>`.
     pub fn operator(&self) -> Option<SyntaxToken> {
-        self.find_token(OPERATOR)
+        first_non_trivia_token(&self.0)
     }
     pub fn rhs(&self) -> Option<Expr> {
         self.0.children().filter_map(Expr::cast).nth(1)
@@ -332,7 +340,7 @@ simple_node!(PrefixExpr, PREFIX_EXPR);
 
 impl PrefixExpr {
     pub fn operator(&self) -> Option<SyntaxToken> {
-        self.find_token(OPERATOR)
+        first_non_trivia_token(&self.0)
     }
     pub fn expr(&self) -> Option<Expr> {
         self.find_node()

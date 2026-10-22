@@ -5,13 +5,13 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-unary_operat
 ---
 - SOURCE_FILE
   - PREFIX_EXPR
-    - OPERATOR "-"
+    - MINUS "-"
     - PATH_EXPR
       - IDENT "num"
   - SEMI ";"
   - WHITESPACE "\n"
   - PREFIX_EXPR
-    - OPERATOR "!"
+    - EXCL "!"
     - PATH_EXPR
       - IDENT "bits"
   - SEMI ";"

@@ -34,7 +34,7 @@ input_file: crates/boltlang-parser/tests/data/ok/block_comments.bolt
       - PATH_EXPR
         - IDENT "a"
       - WHITESPACE " "
-      - OPERATOR "+"
+      - PLUS "+"
       - BLOCK_COMMENT "/* after an operator */"
       - WHITESPACE " "
       - PATH_EXPR
@@ -53,7 +53,7 @@ input_file: crates/boltlang-parser/tests/data/ok/block_comments.bolt
       - PATH_EXPR
         - IDENT "a"
       - WHITESPACE " "
-      - OPERATOR "*"
+      - STAR "*"
       - BLOCK_COMMENT "/* after * */"
       - WHITESPACE " "
       - PATH_EXPR

@@ -34,7 +34,7 @@ input_file: crates/boltlang-parser/tests/data/ok/line_comments.bolt
       - PATH_EXPR
         - IDENT "a"
       - WHITESPACE " "
-      - OPERATOR "+"
+      - PLUS "+"
       - LINE_COMMENT "// right after an operator"
       - WHITESPACE "\n  "
       - PATH_EXPR

@@ -26,7 +26,7 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr.bolt
         - PATH_EXPR
           - IDENT "x"
         - WHITESPACE " "
-        - OPERATOR "+"
+        - PLUS "+"
         - WHITESPACE " "
         - LIT_EXPR
           - DEC_INT "1"

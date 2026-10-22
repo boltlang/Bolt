@@ -17,7 +17,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-grouped_expr
       - LIT_EXPR
         - DEC_INT "2"
       - WHITESPACE " "
-      - OPERATOR "*"
+      - STAR "*"
       - WHITESPACE " "
       - NEST_EXPR
         - L_PAREN "("
@@ -25,7 +25,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-grouped_expr
           - LIT_EXPR
             - DEC_INT "3"
           - WHITESPACE " "
-          - OPERATOR "+"
+          - PLUS "+"
           - WHITESPACE " "
           - LIT_EXPR
             - DEC_INT "4"

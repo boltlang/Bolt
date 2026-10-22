@@ -21,10 +21,13 @@ pub enum SyntaxKind {
     COLONCOLON,
     COMMA,
     DOT,
+    DOLLAR,
     DOTDOT,
+    DOTDOTDOT,
     DOTDOTEQUALS,
     EQUALS,
     EXCL,
+    FAT_ARROW,
     GT,
     HASHTAG,
     LT,
@@ -39,11 +42,16 @@ pub enum SyntaxKind {
     R_BRACKET,
     R_PAREN,
     SEMI,
+    STAR,
     UNDERSCORE,
     VBAR,
 
     // Tokens which can have a value
     IDENT,
+    /// A loop label like `'outer`
+    LABEL_IDENT,
+    /// A macro metavariable like `$name`
+    METAVARIABLE,
     OPERATOR,
     BYTE_STRING,
     BYTE,
@@ -178,6 +186,12 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            DOLLAR => "'$'",
+            DOTDOTDOT => "'...'",
+            FAT_ARROW => "'=>'",
+            STAR => "'*'",
+            LABEL_IDENT => "a label (like 'outer)",
+            METAVARIABLE => "a metavariable (like $name)",
             AS_KEYWORD => "'as'",
             ASYNC_KEYWORD => "'async'",
             AWAIT_KEYWORD => "'await'",

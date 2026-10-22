@@ -13,7 +13,7 @@ input_file: crates/boltlang-parser/tests/data/ok/let_negative.bolt
     - EQUALS "="
     - WHITESPACE " "
     - PREFIX_EXPR
-      - OPERATOR "-"
+      - MINUS "-"
       - LIT_EXPR
         - DEC_INT "1"
     - SEMI ";"

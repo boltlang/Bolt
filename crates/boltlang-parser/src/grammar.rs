@@ -10,7 +10,7 @@ pub use item::*;
 
 use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
-        parser::{CompletedMarker, Parser},
+        parser::{CompletedMarker, Parser, is_operator_kind},
         token_set::TokenSet
 };
 
@@ -71,7 +71,7 @@ fn count_modifiers(p: &Parser) -> usize {
 fn is_named_fn(p: &Parser, n: usize) -> bool {
     match p.nth(n + 1) {
         // `fn (+)(a b) = ...` declares an operator
-        L_PAREN => p.nth(n + 2) == OPERATOR && p.nth(n + 3) == R_PAREN,
+        L_PAREN => is_operator_kind(p.nth(n + 2)) && p.nth(n + 3) == R_PAREN,
         // Anything else is a name, or a missing one that
         // parse_named_function_declaration reports.
         _ => true,
@@ -110,7 +110,11 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
         IDENT => p.bump_any(),
         L_PAREN => {
             p.bump_any();
-            p.expect(OPERATOR);
+            if is_operator_kind(p.current()) {
+                p.bump_any();
+            } else {
+                p.error("expected an operator");
+            }
             p.expect(R_PAREN);
         },
         _ => {
