@@ -1,0 +1,2 @@
+if fn (x) = x {}
+let g = fn (x) = x + 1 * 2;

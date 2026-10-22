@@ -128,7 +128,7 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
             m.complete(p, YIELD_EXPR)
         }
         T![return] => return_expr(p, r),
-        T![fn] => fun_expr(p),
+        T![fn] => fun_expr(p, r),
         T![if] => return Some((if_expr(p), BlockLike::Block)),
         T![while] => {
             let m = p.start();
@@ -295,19 +295,22 @@ fn return_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     m.complete(p, RET_EXPR)
 }
 
-/// An anonymous function: `fn (x, y) = expr` or `fn (x, y) { ... }`,
-/// optionally with a return type: `fn (x) -> Int = x`.
-fn fun_expr(p: &mut Parser) -> CompletedMarker {
+/// An anonymous function: `fn (x, y) = x + y`, optionally with a return
+/// type: `fn (x) -> Int = x`. Like in the grammar's `function_expression`,
+/// the body extends as far as possible and, like a closure body, takes the
+/// restrictions of its context.
+fn fun_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     let m = p.start();
     p.bump(T![fn]);
     param_list(p);
     opt_ret_type(p);
     if p.eat(T![=]) {
-        expr(p);
-    } else if p.at(T!['{']) {
-        parse_block_expr(p);
+        expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 1);
     } else {
-        p.error("expected '=' or '{' to start the function body");
+        p.error("expected '=' before the body of the function");
+        if p.at(T!['{']) {
+            parse_block_expr(p);
+        }
     }
     m.complete(p, FUN_EXPR)
 }

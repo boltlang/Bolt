@@ -27,7 +27,7 @@ input_file: crates/boltlang-parser/tests/data/err/fun_expr_missing_body.bolt
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected '=' or '{' to start the function body
+message: expected '=' before the body of the function
 span:
   start: 14
   end: 14

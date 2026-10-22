@@ -1,0 +1,75 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/fun_expr_extent.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - FUN_EXPR
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - PARAM_LIST
+          - L_PAREN "("
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "x"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - R_BRACE "}"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "g"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - FUN_EXPR
+      - FN_KEYWORD "fn"
+      - WHITESPACE " "
+      - PARAM_LIST
+        - L_PAREN "("
+        - PARAM
+          - NAMED_PATT
+            - NAME
+              - IDENT "x"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - EQUALS "="
+      - WHITESPACE " "
+      - BIN_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - WHITESPACE " "
+        - PLUS "+"
+        - WHITESPACE " "
+        - BIN_EXPR
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - WHITESPACE " "
+          - STAR "*"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "2"
+    - SEMI ";"
+  - WHITESPACE "\n"

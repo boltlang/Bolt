@@ -24,6 +24,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_block_body.bolt
               - IDENT "x"
         - R_PAREN ")"
       - WHITESPACE " "
+      - EQUALS "="
+      - WHITESPACE " "
       - BLOCK_EXPR
         - BLOCK
           - L_BRACE "{"
