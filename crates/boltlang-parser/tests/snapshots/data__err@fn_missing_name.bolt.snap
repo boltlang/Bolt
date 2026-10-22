@@ -14,7 +14,7 @@ input_file: crates/boltlang-parser/tests/data/err/fn_missing_name.bolt
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected an identifier or an operator wrapped between '(' and ')'
+message: expected a name or an operator wrapped between '(' and ')'
 span:
   start: 3
   end: 3

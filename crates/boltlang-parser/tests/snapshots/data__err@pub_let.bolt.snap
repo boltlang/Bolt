@@ -5,8 +5,9 @@ input_file: crates/boltlang-parser/tests/data/err/pub_let.bolt
 ---
 - SOURCE_FILE
   - ERROR
-    - PUB_KEYWORD "pub"
-  - WHITESPACE " "
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+      - WHITESPACE " "
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "
@@ -22,7 +23,7 @@ input_file: crates/boltlang-parser/tests/data/err/pub_let.bolt
   - WHITESPACE "\n"
 ---
 !ExpectedToken
-message: expected an expression, an item or a let statement
+message: expected an item after the visibility
 span:
-  start: 0
-  end: 0
+  start: 4
+  end: 4

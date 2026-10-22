@@ -5,11 +5,13 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-generic_fun
 ---
 - SOURCE_FILE
   - FUNC_DECL
-    - PUB_KEYWORD "pub"
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
     - WHITESPACE " "
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "splice"
+    - NAME
+      - IDENT "splice"
     - GENERIC_PARAM_LIST
       - L_BRACKET "["
       - TYPE_PARAM
@@ -81,11 +83,13 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-generic_fun
         - R_BRACE "}"
   - WHITESPACE "\n"
   - FUNC_DECL
-    - PUB_KEYWORD "pub"
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
     - WHITESPACE " "
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "uninit_array"
+    - NAME
+      - IDENT "uninit_array"
     - GENERIC_PARAM_LIST
       - L_BRACKET "["
       - CONST_PARAM

@@ -1,0 +1,10 @@
+pub fn a() {}
+pub(package) fn b() -> i32 = 1;
+pub(super) async fn c() {}
+const fn d() {}
+extern "C" fn e(x: i32);
+async const extern fn f() {}
+fn g[T](x: T) -> T where T: Ord + Hash, Vec[T]: Clone, { x }
+fn $name() {}
+fn (+)(a, b) = add(a, b);
+pub(self) fn h();

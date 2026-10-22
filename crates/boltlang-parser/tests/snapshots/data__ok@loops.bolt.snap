@@ -341,7 +341,8 @@ input_file: crates/boltlang-parser/tests/data/ok/loops.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "g"
+    - NAME
+      - IDENT "g"
     - PARAM_LIST
       - L_PAREN "("
       - R_PAREN ")"
@@ -368,7 +369,8 @@ input_file: crates/boltlang-parser/tests/data/ok/loops.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "h"
+    - NAME
+      - IDENT "h"
     - PARAM_LIST
       - L_PAREN "("
       - R_PAREN ")"

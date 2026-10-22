@@ -1,62 +1,160 @@
+//! Items, as in the grammar's `_declaration_statement`: functions, structs,
+//! enums, traits, impls, imports and so on. Laid out like rust-analyzer's
+//! `items` module.
+
 use boltlang_syntax::{SyntaxKind::*, T};
+
 use crate::{
-    grammar::{generic_param_list, opt_ret_type, parse_block_expr, parse_expr, param_list},
-    parser::{CompletedMarker, Parser, is_operator_kind},
+    grammar::{
+        expr, function_modifiers, generic_param_list, opt_ret_type, param_list, parse_block_expr,
+        trait_bounds, type_no_bounds, TYPE_FIRST,
+    },
+    parser::{Marker, Parser, is_operator_kind},
+    token_set::TokenSet,
 };
 
-/// The number of modifier tokens (like `pub`) at the current position.
-pub(crate) fn count_modifiers(p: &Parser) -> usize {
-    let mut i = 0;
-    while p.nth(i) == PUB_KEYWORD {
-        i += 1;
+/// Where item parsing gives up and leaves the token to an enclosing rule.
+pub(crate) const ITEM_RECOVERY_SET: TokenSet = TokenSet::new(&[
+    T![fn],
+    T![struct],
+    T![enum],
+    T![trait],
+    T![impl],
+    T![import],
+    T![type],
+    T![const],
+    T![extern],
+    T![pub],
+    T![;],
+]);
+
+/// Parse an item if one starts here, completing `m` with it. `m` was
+/// started before the item, so that attributes can be part of it.
+pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
+    let has_visibility = opt_visibility(p);
+    if at_fn(p) {
+        fn_item(p, m);
+        return Ok(());
     }
-    i
+    if has_visibility {
+        p.error("expected an item after the visibility");
+        m.complete(p, ERROR);
+        return Ok(());
+    }
+    Err(m)
+}
+
+/// Whether a named function starts here, possibly after modifiers like
+/// `async` or `extern "C"`. `fn (x) = x` is an anonymous function instead.
+fn at_fn(p: &Parser) -> bool {
+    let mut n = 0;
+    loop {
+        match p.nth(n) {
+            T![async] | T![const] => n += 1,
+            T![extern] => {
+                n += 1;
+                if p.nth_at(n, STRING) {
+                    n += 1;
+                }
+            }
+            T![fn] => return is_named_fn(p, n),
+            _ => return false,
+        }
+    }
 }
 
 /// Whether the `fn` keyword at token `n` starts a named function or operator
 /// declaration, rather than an anonymous function like `fn (x) = x`.
-pub(crate) fn is_named_fn(p: &Parser, n: usize) -> bool {
+fn is_named_fn(p: &Parser, n: usize) -> bool {
     match p.nth(n + 1) {
-        // `fn (+)(a b) = ...` declares an operator
-        L_PAREN => is_operator_kind(p.nth(n + 2)) && p.nth(n + 3) == R_PAREN,
-        // Anything else is a name, or a missing one that
-        // parse_named_function_declaration reports.
+        // `fn (+)(a, b) = ...` declares an operator
+        T!['('] => is_operator_kind(p.nth(n + 2)) && p.nth_at(n + 3, T![')']),
+        // Anything else is a name, or a missing one that fn_item reports.
         _ => true,
     }
 }
 
-pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
+/// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
+pub(crate) fn opt_visibility(p: &mut Parser) -> bool {
+    if !p.at(T![pub]) {
+        return false;
+    }
     let m = p.start();
-    p.eat(PUB_KEYWORD);
-    p.expect(FN_KEYWORD);
+    p.bump(T![pub]);
+    if p.at(T!['(']) && matches!(p.nth(1), T![self] | T![super] | T![package]) && p.nth_at(2, T![')']) {
+        p.bump(T!['(']);
+        p.bump_any();
+        p.bump(T![')']);
+    }
+    m.complete(p, VISIBILITY);
+    true
+}
+
+/// A function, following the grammar's `function_item` and
+/// `function_signature_item`:
+///
+/// - `fn f[T](x: T) -> T where T: Ord { ... }`
+/// - `fn f(x: T) -> T;` without a body
+/// - `fn f(x: T) -> T = x;` with an expression body
+/// - `fn (+)(a, b) = add(a, b);` for an operator
+fn fn_item(p: &mut Parser, m: Marker) {
+    function_modifiers(p);
+    p.expect(T![fn]);
     match p.current() {
-        IDENT => p.bump_any(),
-        L_PAREN => {
+        IDENT | METAVARIABLE => {
+            let name = p.start();
             p.bump_any();
+            name.complete(p, NAME);
+        }
+        T!['('] => {
+            let name = p.start();
+            p.bump(T!['(']);
             if is_operator_kind(p.current()) {
                 p.bump_any();
             } else {
                 p.error("expected an operator");
             }
-            p.expect(R_PAREN);
-        },
-        _ => {
-            p.error("expected an identifier or an operator wrapped between '(' and ')'");
-            // TODO maybe bump
+            p.expect(T![')']);
+            name.complete(p, OPERATOR_NAME);
         }
+        _ => p.error("expected a name or an operator wrapped between '(' and ')'"),
     }
     if p.at(T!['[']) {
         generic_param_list(p);
     }
     param_list(p);
     opt_ret_type(p);
-    if p.eat(EQUALS) {
-        parse_expr(p);
+    opt_where_clause(p);
+    if p.eat(T![=]) {
+        expr(p);
         p.expect(T![;]);
-    } else if p.at(L_BRACE) {
+    } else if p.at(T!['{']) {
         parse_block_expr(p);
     } else {
         p.expect(T![;]);
     }
-    m.complete(p, FUNC_DECL)
+    m.complete(p, FUNC_DECL);
+}
+
+/// `where T: Ord, Vec[T]: Hash`
+pub(crate) fn opt_where_clause(p: &mut Parser) {
+    if !p.at(T![where]) {
+        return;
+    }
+    let m = p.start();
+    p.bump(T![where]);
+    while p.at_ts(TYPE_FIRST) {
+        let pred = p.start();
+        type_no_bounds(p);
+        if p.at(T![:]) {
+            trait_bounds(p);
+        } else {
+            p.error("expected ':'");
+        }
+        pred.complete(p, WHERE_PRED);
+        if !p.eat(T![,]) {
+            break;
+        }
+    }
+    m.complete(p, WHERE_CLAUSE);
 }

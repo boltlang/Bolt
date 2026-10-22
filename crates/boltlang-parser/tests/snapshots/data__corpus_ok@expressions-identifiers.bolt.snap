@@ -7,7 +7,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-identifiers.
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "main"
+    - NAME
+      - IDENT "main"
     - PARAM_LIST
       - L_PAREN "("
       - R_PAREN ")"

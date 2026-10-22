@@ -390,7 +390,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_types.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "high_order"
+    - NAME
+      - IDENT "high_order"
     - PARAM_LIST
       - L_PAREN "("
       - PARAM

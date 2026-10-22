@@ -137,7 +137,8 @@ input_file: crates/boltlang-parser/tests/data/ok/statements.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "g"
+    - NAME
+      - IDENT "g"
     - PARAM_LIST
       - L_PAREN "("
       - R_PAREN ")"
@@ -154,7 +155,8 @@ input_file: crates/boltlang-parser/tests/data/ok/statements.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "h"
+    - NAME
+      - IDENT "h"
     - PARAM_LIST
       - L_PAREN "("
       - R_PAREN ")"
@@ -176,7 +178,8 @@ input_file: crates/boltlang-parser/tests/data/ok/statements.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "i"
+    - NAME
+      - IDENT "i"
     - PARAM_LIST
       - L_PAREN "("
       - R_PAREN ")"

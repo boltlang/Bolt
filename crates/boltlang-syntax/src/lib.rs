@@ -249,17 +249,13 @@ pub enum SyntaxKind {
     FUNC_DECL,
     EXTERN_BLOCK,
     LET_STMT,
-    MODULE,
     RECORD_EXPR_FIELD_LIST,
     TYPE_ALIAS,
 
     // Impl helper syntax
-    IMPL_RESTRICTION,
 
     // Helper syntax
     BLOCK,
-    TYPE_SIGNATURE,
-    INITIALIZER,
     /// `(a, b: T)`
     PARAM_LIST,
     PARAM,
@@ -267,7 +263,14 @@ pub enum SyntaxKind {
     SELF_PARAM,
     /// `...` or `args: ...`
     VARIADIC_PARAM,
+    /// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
     VISIBILITY,
+    /// The `(+)` in `fn (+)(a, b)`
+    OPERATOR_NAME,
+    /// `where T: Ord, U: Hash`
+    WHERE_CLAUSE,
+    /// `T: Ord` in a where clause
+    WHERE_PRED,
 
     // Top-level
     SOURCE_FILE,
@@ -362,6 +365,9 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            OPERATOR_NAME => "an operator name",
+            WHERE_CLAUSE => "a where clause",
+            WHERE_PRED => "a where predicate",
             CLOSURE_EXPR => "a closure",
             ARRAY_EXPR => "an array expression",
             MATCH_ARM_LIST => "the arms of a match",
@@ -485,9 +491,7 @@ impl SyntaxKind {
             GT => "'>'",
             HASHTAG => "'#'",
             IDENT => "an identifier",
-            IMPL_RESTRICTION => "an restriction to an impl-block",
             INDEX_EXPR => "an index expression",
-            INITIALIZER => "an initializer",
             INT_NUMBER => "an integral number",
             LET_STMT => "a variable declaration",
             LINE_COMMENT => "a line comment",
@@ -501,7 +505,6 @@ impl SyntaxKind {
             MACRO_EXPR => "a macro expression'",
             MATCH_EXPR => "a match expression",
             MINUS => "'-'",
-            MODULE => "a module",
             NAMED_PATT => "a named pattern",
             NEST_EXPR => "a nested expression",
             OPERATOR => "an operator",
@@ -528,7 +531,6 @@ impl SyntaxKind {
             TUPLE_EXPR => "a tuple expression",
             TUPLE_PATT => "a tuple pattern",
             TYPE_ALIAS => "a type alias",
-            TYPE_SIGNATURE => "a type ascription",
             UNDERSCORE => "'_'",
             VBAR => "'|'",
             VISIBILITY => "a visibility modifier",

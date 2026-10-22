@@ -7,9 +7,10 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_operator.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - L_PAREN "("
-    - PLUS "+"
-    - R_PAREN ")"
+    - OPERATOR_NAME
+      - L_PAREN "("
+      - PLUS "+"
+      - R_PAREN ")"
     - PARAM_LIST
       - L_PAREN "("
       - PARAM

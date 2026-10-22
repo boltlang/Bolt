@@ -7,7 +7,8 @@ input_file: crates/boltlang-parser/tests/data/err/params_missing_comma.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "f"
+    - NAME
+      - IDENT "f"
     - PARAM_LIST
       - L_PAREN "("
       - PARAM

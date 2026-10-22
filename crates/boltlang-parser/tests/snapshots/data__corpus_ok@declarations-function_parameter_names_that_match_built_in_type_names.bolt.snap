@@ -7,7 +7,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "foo"
+    - NAME
+      - IDENT "foo"
     - PARAM_LIST
       - L_PAREN "("
       - PARAM
@@ -31,7 +32,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-function_pa
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - IDENT "bar"
+    - NAME
+      - IDENT "bar"
     - PARAM_LIST
       - L_PAREN "("
       - PARAM

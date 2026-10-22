@@ -1323,20 +1323,6 @@ impl VarDecl {
 
 }
 
-/// The `: Int` in e.g. `let foo : Int`
-pub struct TypeSignature(SyntaxNode);
-
-impl Node for TypeSignature {
-    fn kind() -> SyntaxKind {
-        TYPE_SIGNATURE
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        TypeSignature(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
 
 /// `(a, b: T = 1)`
 pub struct ParamList(SyntaxNode);
@@ -1429,12 +1415,29 @@ impl Node for FuncDecl {
 
 impl FuncDecl {
 
-    pub fn pub_keyword(&self) -> Option<SyntaxToken> {
-        self.find_token(PUB_KEYWORD)
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
     }
 
-    pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENT)
+    pub fn async_token(&self) -> Option<SyntaxToken> {
+        self.find_token(ASYNC_KEYWORD)
+    }
+
+    pub fn const_token(&self) -> Option<SyntaxToken> {
+        self.find_token(CONST_KEYWORD)
+    }
+
+    pub fn abi(&self) -> Option<Abi> {
+        self.find_node()
+    }
+
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+
+    /// The `(+)` of an operator definition like `fn (+)(a, b)`.
+    pub fn operator_name(&self) -> Option<OperatorName> {
+        self.find_node()
     }
 
     pub fn generic_param_list(&self) -> Option<GenericParamList> {
@@ -1453,10 +1456,70 @@ impl FuncDecl {
         self.find_node()
     }
 
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        self.find_node()
+    }
+
+    /// The block, or the expression after `=`. `None` for a signature like
+    /// `fn f();`.
     pub fn body(&self) -> Option<Expr> {
         self.find_node()
     }
 
+}
+
+/// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
+pub struct Visibility(SyntaxNode);
+
+simple_node!(Visibility, VISIBILITY);
+
+impl Visibility {
+    /// The `self`, `super` or `package` between parentheses.
+    pub fn restriction(&self) -> Option<SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|x| x.into_token())
+            .find(|token| matches!(token.kind(), SELF_KEYWORD | SUPER_KEYWORD | PACKAGE_KEYWORD))
+    }
+}
+
+/// The `(+)` in `fn (+)(a, b)`
+pub struct OperatorName(SyntaxNode);
+
+simple_node!(OperatorName, OPERATOR_NAME);
+
+impl OperatorName {
+    pub fn operator(&self) -> Option<SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|x| x.into_token())
+            .find(|token| !token.kind().is_trivia() && !matches!(token.kind(), L_PAREN | R_PAREN))
+    }
+}
+
+/// `where T: Ord, U: Hash`
+pub struct WhereClause(SyntaxNode);
+
+simple_node!(WhereClause, WHERE_CLAUSE);
+
+impl WhereClause {
+    pub fn predicates(&self) -> ChildrenIter<WherePred> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `T: Ord` in a where clause
+pub struct WherePred(SyntaxNode);
+
+simple_node!(WherePred, WHERE_PRED);
+
+impl WherePred {
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+    pub fn bounds(&self) -> Option<TraitBounds> {
+        self.find_node()
+    }
 }
 
 ast_enum!(

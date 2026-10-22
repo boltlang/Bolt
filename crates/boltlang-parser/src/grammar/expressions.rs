@@ -9,7 +9,7 @@ pub(crate) use atom::*;
 use boltlang_syntax::{SyntaxKind::{self, *}, T};
 
 use crate::{
-    grammar::{count_modifiers, is_named_fn, parse_named_function_declaration, parse_pattern, type_, type_no_bounds},
+    grammar::{opt_item, parse_pattern, type_, type_no_bounds},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -86,16 +86,16 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
         let_stmt(p, semicolon);
         return;
     }
-    let n = count_modifiers(p);
-    if p.nth_at(n, T![fn]) && is_named_fn(p, n) {
-        parse_named_function_declaration(p);
-        return;
-    }
+    let m = p.start();
+    let m = match opt_item(p, m) {
+        Ok(()) => return,
+        Err(m) => m,
+    };
     if !at_expr_start(p) {
+        m.abandon(p);
         p.error_and_bump("expected an expression, an item or a let statement");
         return;
     }
-    let m = p.start();
     if let Some((cm, blocklike)) = expr_stmt(p, Some(m)) {
         // An expression at the end of a block is its value, not a statement.
         if p.at(T!['}']) {
