@@ -535,7 +535,11 @@ impl CallExpr {
         self.find_node()
     }
     pub fn args(&self) -> impl Iterator<Item = Expr> {
-        self.0.children().filter_map(Expr::cast).skip(1)
+        self.0
+            .children()
+            .find(|node| node.kind() == ARG_LIST)
+            .into_iter()
+            .flat_map(|list| list.children().filter_map(Expr::cast))
     }
 }
 

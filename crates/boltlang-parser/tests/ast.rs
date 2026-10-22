@@ -79,3 +79,11 @@ fn func_decl_block_body() {
     let Some(SourceElement::FuncDecl(decl)) = file.elements().next() else { panic!() };
     assert!(matches!(decl.body(), Some(Expr::Block(_))));
 }
+
+#[test]
+fn call_expr_args() {
+    let Expr::Call(call) = let_expr("let x = f(a, b + c);") else { panic!() };
+    assert_eq!(text(call.operator()), "f");
+    let args: Vec<_> = call.args().map(|e| e.syntax().text().to_string()).collect();
+    assert_eq!(args, ["a", "b + c"]);
+}
