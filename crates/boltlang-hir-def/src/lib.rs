@@ -11,6 +11,7 @@
 //! - [`body`] lowers the bodies of functions, consts, enum discriminants and
 //!   the top-level statements of files.
 //! - [`signatures`] lowers everything about items except their bodies.
+//! - [`scope`] finds which local variables are visible where in a body.
 
 pub mod arena;
 pub mod body;
@@ -20,6 +21,7 @@ pub mod ids;
 pub mod item_tree;
 mod name;
 pub mod nameres;
+pub mod scope;
 pub mod signatures;
 
 pub use name::Name;
