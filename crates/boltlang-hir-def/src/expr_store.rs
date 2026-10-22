@@ -7,6 +7,8 @@
 //! [`ExpressionStoreSourceMap`]. So edits that only move code leave the store
 //! unchanged, and Salsa doesn't redo the type checking that depends on it.
 
+mod lower;
+
 use std::collections::HashMap;
 
 use boltlang_syntax::{SyntaxKind, SyntaxNode};
@@ -15,6 +17,8 @@ use crate::{
     arena::{Arena, ArenaMap},
     hir::{Binding, BindingId, Expr, ExprId, Label, LabelId, Pat, PatId, TypeRef, TypeRefId},
 };
+
+pub use lower::ExprCollector;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ExpressionStore {
@@ -126,7 +130,10 @@ impl ExpressionStoreSourceMap {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests;
+
+#[cfg(test)]
+mod ptr_tests {
     use boltlang_syntax::{SyntaxKind, SyntaxNode};
 
     use super::SyntaxPtr;
