@@ -267,6 +267,22 @@ pub enum SyntaxKind {
     VISIBILITY,
     /// The `(+)` in `fn (+)(a, b)`
     OPERATOR_NAME,
+    /// `struct Point { x: i32 }`, `struct Pair(A, B);` or `struct Unit;`
+    STRUCT,
+    /// `enum Option[T] { None, Some(T) }`
+    ENUM,
+    /// The `{ ... }` of an enum
+    VARIANT_LIST,
+    /// `None`, `Some(T)`, `Point { x: i32 }` or `A = 1` in an enum
+    VARIANT,
+    /// `{ x: i32, pub y: i32 }`
+    RECORD_FIELD_LIST,
+    /// `x: i32` in a struct or variant
+    RECORD_FIELD,
+    /// `(i32, pub String)`
+    TUPLE_FIELD_LIST,
+    /// `i32` or `pub String` in a tuple struct or variant
+    TUPLE_FIELD,
     /// `where T: Ord, U: Hash`
     WHERE_CLAUSE,
     /// `T: Ord` in a where clause
@@ -365,6 +381,14 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            STRUCT => "a struct",
+            ENUM => "an enum",
+            VARIANT_LIST => "the variants of an enum",
+            VARIANT => "an enum variant",
+            RECORD_FIELD_LIST => "a list of named fields",
+            RECORD_FIELD => "a named field",
+            TUPLE_FIELD_LIST => "a list of tuple fields",
+            TUPLE_FIELD => "a tuple field",
             OPERATOR_NAME => "an operator name",
             WHERE_CLAUSE => "a where clause",
             WHERE_PRED => "a where predicate",

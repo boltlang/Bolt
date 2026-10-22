@@ -1529,8 +1529,150 @@ ast_enum!(
         VarDecl(VarDecl) = LET_STMT,
         FuncDecl(FuncDecl) = FUNC_DECL,
         ExprStmt(ExprStmt) = EXPR_STMT,
+        Struct(Struct) = STRUCT,
+        Enum(Enum) = ENUM,
     }
 );
+
+/// `struct Point { x: i32 }`, `struct Pair(A, B);` or `struct Unit;`
+pub struct Struct(SyntaxNode);
+
+simple_node!(Struct, STRUCT);
+
+impl Struct {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        self.find_node()
+    }
+    /// `None` for a unit struct like `struct Unit;`.
+    pub fn field_list(&self) -> Option<FieldList> {
+        self.find_node()
+    }
+}
+
+/// `enum Option[T] { None, Some(T) }`
+pub struct Enum(SyntaxNode);
+
+simple_node!(Enum, ENUM);
+
+impl Enum {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    pub fn where_clause(&self) -> Option<WhereClause> {
+        self.find_node()
+    }
+    pub fn variants(&self) -> Vec<Variant> {
+        self.find_node::<VariantList>().map(|list| list.variants().collect()).unwrap_or_default()
+    }
+}
+
+/// The `{ ... }` of an enum
+pub struct VariantList(SyntaxNode);
+
+simple_node!(VariantList, VARIANT_LIST);
+
+impl VariantList {
+    pub fn variants(&self) -> ChildrenIter<Variant> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `None`, `Some(T)`, `Point { x: i32 }` or `A = 1`
+pub struct Variant(SyntaxNode);
+
+simple_node!(Variant, VARIANT);
+
+impl Variant {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn field_list(&self) -> Option<FieldList> {
+        self.find_node()
+    }
+    /// The discriminant after `=`.
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+ast_enum!(
+    /// The fields of a struct or variant.
+    FieldList {
+        Record(RecordFieldList) = RECORD_FIELD_LIST,
+        Tuple(TupleFieldList) = TUPLE_FIELD_LIST,
+    }
+);
+
+/// `{ x: i32, pub y: i32 }`
+pub struct RecordFieldList(SyntaxNode);
+
+simple_node!(RecordFieldList, RECORD_FIELD_LIST);
+
+impl RecordFieldList {
+    pub fn fields(&self) -> ChildrenIter<RecordField> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `x: i32` in a struct or variant
+pub struct RecordField(SyntaxNode);
+
+simple_node!(RecordField, RECORD_FIELD);
+
+impl RecordField {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// `(i32, pub String)`
+pub struct TupleFieldList(SyntaxNode);
+
+simple_node!(TupleFieldList, TUPLE_FIELD_LIST);
+
+impl TupleFieldList {
+    pub fn fields(&self) -> ChildrenIter<TupleField> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `i32` or `pub String` in a tuple struct or variant
+pub struct TupleField(SyntaxNode);
+
+simple_node!(TupleField, TUPLE_FIELD);
+
+impl TupleField {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
 
 /// An expression used as a statement, like `f(x);` or `if x { }`.
 pub struct ExprStmt(SyntaxNode);

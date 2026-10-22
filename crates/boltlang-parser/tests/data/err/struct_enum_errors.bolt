@@ -1,0 +1,3 @@
+struct S { x i32 }
+enum E { A B }
+struct T

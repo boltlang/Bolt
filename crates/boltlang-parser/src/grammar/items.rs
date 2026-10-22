@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        expr, function_modifiers, generic_param_list, opt_ret_type, param_list, parse_block_expr,
+        delimited, expr, function_modifiers, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -35,6 +35,17 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
     if at_fn(p) {
         fn_item(p, m);
         return Ok(());
+    }
+    match p.current() {
+        T![struct] => {
+            struct_item(p, m);
+            return Ok(());
+        }
+        T![enum] => {
+            enum_item(p, m);
+            return Ok(());
+        }
+        _ => {}
     }
     if has_visibility {
         p.error("expected an item after the visibility");
@@ -157,4 +168,134 @@ pub(crate) fn opt_where_clause(p: &mut Parser) {
         }
     }
     m.complete(p, WHERE_CLAUSE);
+}
+
+/// `struct Point[T] where T: Num { x: T, y: T }`, `struct Pair(A, B);` or
+/// `struct Unit;`. Like in the grammar, a `where` clause goes before named
+/// fields but after tuple fields.
+fn struct_item(p: &mut Parser, m: Marker) {
+    p.bump(T![struct]);
+    name(p);
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+    match p.current() {
+        T![;] => p.bump(T![;]),
+        T!['('] => {
+            tuple_field_list(p);
+            opt_where_clause(p);
+            p.expect(T![;]);
+        }
+        _ => {
+            opt_where_clause(p);
+            if p.at(T!['{']) {
+                record_field_list(p);
+            } else {
+                p.error("expected '{', '(' or ';'");
+            }
+        }
+    }
+    m.complete(p, STRUCT);
+}
+
+/// `enum Option[T] { None, Some(T) }`
+fn enum_item(p: &mut Parser, m: Marker) {
+    p.bump(T![enum]);
+    name(p);
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+    opt_where_clause(p);
+    if p.at(T!['{']) {
+        variant_list(p);
+    } else {
+        p.error("expected '{'");
+    }
+    m.complete(p, ENUM);
+}
+
+fn variant_list(p: &mut Parser) {
+    let m = p.start();
+    delimited(
+        p,
+        T!['{'],
+        T!['}'],
+        T![,],
+        || "expected a variant".into(),
+        TokenSet::new(&[IDENT, T![pub]]),
+        |p| {
+            if !p.at(IDENT) && !p.at(T![pub]) {
+                return false;
+            }
+            variant(p);
+            true
+        },
+    );
+    m.complete(p, VARIANT_LIST);
+}
+
+/// `None`, `Some(T)`, `Point { x: i32 }` or `A = 1`
+fn variant(p: &mut Parser) {
+    let m = p.start();
+    opt_visibility(p);
+    name(p);
+    match p.current() {
+        T!['{'] => record_field_list(p),
+        T!['('] => tuple_field_list(p),
+        _ => {}
+    }
+    if p.eat(T![=]) {
+        expr(p);
+    }
+    m.complete(p, VARIANT);
+}
+
+/// `{ x: i32, pub y: i32 }`
+pub(crate) fn record_field_list(p: &mut Parser) {
+    let m = p.start();
+    delimited(
+        p,
+        T!['{'],
+        T!['}'],
+        T![,],
+        || "expected a field".into(),
+        TokenSet::new(&[IDENT, T![pub]]),
+        |p| {
+            if !p.at(IDENT) && !p.at(T![pub]) {
+                return false;
+            }
+            let field = p.start();
+            opt_visibility(p);
+            name(p);
+            p.expect(T![:]);
+            type_(p);
+            field.complete(p, RECORD_FIELD);
+            true
+        },
+    );
+    m.complete(p, RECORD_FIELD_LIST);
+}
+
+/// `(i32, pub String)`
+pub(crate) fn tuple_field_list(p: &mut Parser) {
+    let m = p.start();
+    delimited(
+        p,
+        T!['('],
+        T![')'],
+        T![,],
+        || "expected a type".into(),
+        TYPE_FIRST.union(TokenSet::new(&[T![pub]])),
+        |p| {
+            if !p.at_ts(TYPE_FIRST) && !p.at(T![pub]) {
+                return false;
+            }
+            let field = p.start();
+            opt_visibility(p);
+            type_(p);
+            field.complete(p, TUPLE_FIELD);
+            true
+        },
+    );
+    m.complete(p, TUPLE_FIELD_LIST);
 }
