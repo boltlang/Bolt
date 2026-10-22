@@ -245,10 +245,11 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                     R_ARROW
                 } else if text == "=" {
                     EQUALS
-                // FIXME what if something like =+=?
-                } else if text.ends_with("==") {
+                } else if text.chars().filter(|c| *c == '=').count() > 1 {
+                    // Things like +==% and -== should be parsed as a regular operator
                     OPERATOR
                 } else if text.ends_with('=') {
+                    // Previous check made sure there is no other '=' in text
                     ASSIGNMENT
                 } else {
                     OPERATOR
