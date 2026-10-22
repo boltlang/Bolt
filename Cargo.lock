@@ -107,6 +107,7 @@ dependencies = [
 name = "boltlang"
 version = "0.1.0"
 dependencies = [
+ "boltlang-base-db",
  "boltlang-parser",
  "boltlang-syntax",
  "crossbeam-channel",
@@ -123,6 +124,21 @@ dependencies = [
  "thiserror",
  "tracing",
  "unicode-ident",
+]
+
+[[package]]
+name = "boltlang-base-db"
+version = "0.1.0"
+dependencies = [
+ "boltlang-parser",
+ "boltlang-syntax",
+ "dashmap",
+ "filetime",
+ "fluent-uri 0.4.1",
+ "rustc-hash 2.1.1",
+ "salsa",
+ "thiserror",
+ "tracing",
 ]
 
 [[package]]

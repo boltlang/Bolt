@@ -7,7 +7,7 @@ use crate::{rowan::SyntaxNode, Db, File, Node, SourceFile, parse_file};
 #[salsa::tracked]
 pub fn import_paths(db: &dyn Db, file: File) -> Vec<File> {
     let root_green_node = parse_file(db, file);
-    let syntax = SyntaxNode::new_root(root_green_node.node(db).clone());
+    let syntax = SyntaxNode::new_root(root_green_node.tree(db).clone());
     let mut out = Vec::new();
     if let Some(sf) = SourceFile::cast(syntax) {
         for element in sf.elements() {

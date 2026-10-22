@@ -12,5 +12,4 @@ pub use memory::InMemorySystem;
 pub use os::OsSystem;
 pub use path::{SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf};
 
-#[cfg(test)]
 pub use test::TestSystem;

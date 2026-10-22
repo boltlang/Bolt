@@ -1,77 +1,51 @@
 
-mod error;
 
-mod vfs;
 
-mod system;
-mod files;
 mod diagnostic;
-mod db;
 
-mod text;
 mod import;
 mod tc;
 
 mod emit;
 
-use std::{collections::HashMap, hash::BuildHasherDefault};
-use rustc_hash::FxHasher;
+use std::collections::HashMap;
 use salsa::Accumulator;
-use rowan::GreenNode;
 
-use crate::{tc::InferContext, text::source_text};
+use crate::tc::InferContext;
 
-/// Re-export of the Salsa library that boltlang uses
-pub use salsa;
-
-/// Re-export of the Rowan library that boltlang uses
-pub use boltlang_syntax::rowan;
-
-pub type OwnedUri = String;
-
-pub type BorrowedUri = str;
-
-pub type FxDashMap<K, V> = dashmap::DashMap<K, V, BuildHasherDefault<FxHasher>>;
-pub type FxDashSet<K> = dashmap::DashSet<K, BuildHasherDefault<FxHasher>>;
+pub use boltlang_base_db::{
+    salsa, rowan, OwnedUri, BorrowedUri, FxDashMap, FxDashSet,
+    Db, Error, Result, File, FilePath, Files, Parse,
+    System, SystemPath, SystemPathBuf, WritableSystem, OsSystem, InMemorySystem,
+    LineIndex, index_lines, source_text,
+    FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf,
+};
 
 pub use {
-    db::Db,
     diagnostic::{DbDiagnostic, Diagnostic, Severity},
-    error::{Error, Result},
-    files::{File, FilePath, Files},
     boltlang_parser::{LineColumn},
     boltlang_syntax::{SyntaxKind, SyntaxNode, SyntaxToken, SyntaxElement, ast::*},
-    system::{System, SystemPath, SystemPathBuf, WritableSystem, OsSystem, InMemorySystem},
     tc::{Type, CheckResult, Constraints},
-    text::{LineIndex, index_lines},
-    vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
     emit::{Formatter, Emit},
 };
 
 #[cfg(test)]
-pub use crate::system::TestSystem;
+pub use boltlang_base_db::TestSystem;
 
+/// Parse a file and report its parse errors as diagnostics.
 #[salsa::tracked]
-pub struct DbNode<'db> {
-    #[tracked]
-    #[returns(ref)]
-    pub node: GreenNode,
-}
-
-#[salsa::tracked]
-pub fn parse_file(db: &dyn Db, file: File) -> DbNode<'_> {
-    let text = source_text(db, file);
-    let (node, diagnostics) = boltlang_parser::parse_file(&text);
-    for d in diagnostics {
-        DbDiagnostic::new(Diagnostic::Parse(d.into()).with_file(file)).accumulate(db);
+pub fn parse_file(db: &dyn Db, file: File) -> Parse<'_> {
+    let parse = boltlang_base_db::parse_file(db, file);
+    for d in parse.errors(db) {
+        DbDiagnostic::new(Diagnostic::Parse(d.clone().into()).with_file(file)).accumulate(db);
     }
-    DbNode::new(db, node)
+    *parse
 }
 
 #[salsa::tracked]
 pub fn check_file(db: &dyn Db, file: File) -> CheckResult {
     let raw_node = parse_file(db, file);
-    let node = SyntaxNode::new_root(raw_node.node(db).clone());
+    let node = SyntaxNode::new_root(raw_node.tree(db).clone());
     let source_file = SourceFile::wrap(node);
     let mapping = HashMap::new();
     let mut infer = InferContext::new();

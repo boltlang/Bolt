@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
 boltlang-parser = { version = "0.1.0", path = "../boltlang-parser" }
 boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
 crossbeam-channel = "0.5.15"

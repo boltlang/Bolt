@@ -1,0 +1,15 @@
+[package]
+name = "boltlang-base-db"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+boltlang-parser = { version = "0.1.0", path = "../boltlang-parser" }
+boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+dashmap = "6.1.0"
+filetime = "0.2.27"
+fluent-uri = "0.4.1"
+rustc-hash = "2.1.1"
+salsa = "0.28.5"
+thiserror = "2.0.18"
+tracing = "0.1.44"
