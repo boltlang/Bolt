@@ -23,27 +23,28 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impls
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Iterator"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "Self"
-        - DOT "."
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "Iter"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
               - PATH_TYPE
                 - PATH
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "Self"
+                  - DOT "."
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "T"
+                      - IDENT "Iter"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "T"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
@@ -66,16 +67,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impls
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
+                      - IDENT "i32"
+            - COMMA ","
+            - WHITESPACE " "
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
                       - IDENT "i64"
             - R_BRACKET "]"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "i32"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

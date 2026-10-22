@@ -4,38 +4,54 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-macro_invocations_inside_trait_declarations.bolt
 ---
 - SOURCE_FILE
-  - TRAIT
+  - CLASS
     - VISIBILITY
       - PUB_KEYWORD "pub"
     - WHITESPACE " "
-    - TRAIT_KEYWORD "trait"
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "A"
-    - TRAIT_BOUNDS
-      - COLON ":"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
       - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "B"
-      - WHITESPACE " "
-      - PLUS "+"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "C"
-      - WHITESPACE " "
-      - PLUS "+"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "D"
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "T"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "B"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "C"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "D"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

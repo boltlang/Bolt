@@ -1,1 +1,1 @@
-impl[T: AstDeref[Target: HasNodeId]] HasNodeId for T {}
+impl[T: AstDeref[Target: HasNodeId]] HasNodeId[T] {}

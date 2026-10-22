@@ -161,11 +161,17 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-operator_fu
         - WHITESPACE " "
         - R_BRACE "}"
   - WHITESPACE "\n"
-  - TRAIT
-    - TRAIT_KEYWORD "trait"
+  - CLASS
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "Num"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"
@@ -217,14 +223,15 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-operator_fu
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Num"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "V"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "V"
+            - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

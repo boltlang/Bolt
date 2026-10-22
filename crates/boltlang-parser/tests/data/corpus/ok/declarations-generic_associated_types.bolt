@@ -1,8 +1,8 @@
-pub trait Database {
+pub class Database[T] {
     type F[A, D]: Future[Output = D] + Send;
 }
 
-impl Database for Foo {
+impl Database[Foo] {
     type F[A, D] = DatabaseFuture[A, D];
 }
 

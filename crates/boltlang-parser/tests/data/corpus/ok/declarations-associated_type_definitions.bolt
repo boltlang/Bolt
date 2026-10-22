@@ -1,3 +1,3 @@
-impl Trait for T {
+impl Trait[T] {
     type Associated = T where T: Clone;
 }

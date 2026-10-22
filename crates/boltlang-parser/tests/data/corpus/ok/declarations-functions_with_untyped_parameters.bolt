@@ -1,7 +1,7 @@
 fn id(x) { x }
 fn add(a, b: i32, mut c, (d, e)) {}
 fn (+) (a, b) { a }
-trait T {
+class C[T] {
     fn f(self, x);
 }
 let f: fn(i32, String) -> i32 = g;

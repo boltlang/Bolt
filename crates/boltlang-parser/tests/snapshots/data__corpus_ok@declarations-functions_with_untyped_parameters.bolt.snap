@@ -116,11 +116,17 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-functions_w
         - WHITESPACE " "
         - R_BRACE "}"
   - WHITESPACE "\n"
-  - TRAIT
-    - TRAIT_KEYWORD "trait"
+  - CLASS
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
-      - IDENT "T"
+      - IDENT "C"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

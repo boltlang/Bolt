@@ -121,14 +121,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Iterator"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "Iter"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -136,7 +128,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "T"
+                      - IDENT "Iter"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "T"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE " "
     - WHERE_CLAUSE
@@ -176,14 +177,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "A"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "B"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -191,7 +184,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "T"
+                      - IDENT "B"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "T"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE "\n    "
     - WHERE_CLAUSE
@@ -296,14 +298,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "A"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "B"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -311,7 +305,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "T"
+                      - IDENT "B"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "T"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE " "
     - WHERE_CLAUSE
@@ -368,14 +371,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "A"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "B"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -383,7 +378,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "T"
+                      - IDENT "B"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "T"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE "\n    "
     - WHERE_CLAUSE
@@ -428,11 +432,11 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
       - WHITESPACE "\n"
       - R_BRACE "}"
   - WHITESPACE "\n\n"
-  - TRAIT
+  - CLASS
     - VISIBILITY
       - PUB_KEYWORD "pub"
     - WHITESPACE " "
-    - TRAIT_KEYWORD "trait"
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "A"
@@ -561,14 +565,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Default"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "B"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -576,7 +572,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-where_claus
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "A"
+                      - IDENT "B"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "A"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - WHITESPACE " "
     - WHERE_CLAUSE

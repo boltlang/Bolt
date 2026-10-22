@@ -34,14 +34,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impl_
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Debug"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "OccupiedError"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -49,7 +41,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impl_
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "K"
+                      - IDENT "OccupiedError"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "K"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - SEMI ";"
   - WHITESPACE "\n"
@@ -83,14 +84,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impl_
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "Display"
-    - WHITESPACE " "
-    - FOR_KEYWORD "for"
-    - WHITESPACE " "
-    - PATH_TYPE
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "OccupiedError"
           - GENERIC_ARG_LIST
             - L_BRACKET "["
             - TYPE_ARG
@@ -98,7 +91,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_impl_
                 - PATH
                   - PATH_SEGMENT
                     - NAME_REF
-                      - IDENT "K"
+                      - IDENT "OccupiedError"
+                    - GENERIC_ARG_LIST
+                      - L_BRACKET "["
+                      - TYPE_ARG
+                        - PATH_TYPE
+                          - PATH
+                            - PATH_SEGMENT
+                              - NAME_REF
+                                - IDENT "K"
+                      - R_BRACKET "]"
             - R_BRACKET "]"
     - SEMI ";"
   - WHITESPACE "\n"

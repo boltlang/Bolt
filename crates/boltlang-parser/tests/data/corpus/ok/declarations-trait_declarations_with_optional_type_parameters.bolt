@@ -1,4 +1,4 @@
-trait Add[RHS=Self] {
+class Add[RHS=Self] {
     type Output;
     fn add(self, rhs: RHS) -> Self.Output;
 }

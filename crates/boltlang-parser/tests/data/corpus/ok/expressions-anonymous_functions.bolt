@@ -1,0 +1,8 @@
+let f = fn () = 42;
+let add = fn (x, y: i32) -> i32 = x + y;
+map(xs, fn (x) = x * 2);
+let curried = fn (x) = fn (y) = x + y;
+let d = fn (x = 1) = x;
+fn (x) = x;
+fn (-1) = 0;
+fn (-) (a, b) = sub(a, b);

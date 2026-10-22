@@ -4,11 +4,17 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-functions_with_custom_types_for_self.bolt
 ---
 - SOURCE_FILE
-  - TRAIT
-    - TRAIT_KEYWORD "trait"
+  - CLASS
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "Callback"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

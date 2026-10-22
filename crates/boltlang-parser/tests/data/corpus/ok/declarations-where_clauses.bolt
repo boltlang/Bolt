@@ -4,10 +4,10 @@ fn walk[F](self, it: F) -> bool
   return false
 }
 
-impl[T: Clone + Item] Iterator for Iter[T] where Self: Sized {
+impl[T: Clone + Item] Iterator[Iter[T]] where Self: Sized {
 }
 
-impl[T] A for B[T]
+impl[T] A[B[T]]
     where C[T]: D,
           T: Clone,
 {
@@ -18,17 +18,17 @@ where E: Read,
 {
 }
 
-impl[T] A for B[T] where (T, T, T): C, {}
+impl[T] A[B[T]] where (T, T, T): C, {}
 
-impl[T] A for B[T]
+impl[T] A[B[T]]
     where D[T]: E[T],
 {
 }
 
-pub trait A[B] where B: C,
+pub class A[B] where B: C,
 {
 }
 
 fn foo[A]() where A: B + As[f64], f64: As[A] {}
 
-impl[A] Default for B[A] where A: C + D {}
+impl[A] Default[B[A]] where A: C + D {}

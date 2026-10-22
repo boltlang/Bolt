@@ -1,0 +1,356 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-classes_and_where_constraints.bolt
+---
+- SOURCE_FILE
+  - CLASS
+    - CLASS_KEYWORD "class"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Convert"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - TYPE_PARAM
+        - NAME
+          - IDENT "B"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "convert"
+        - PARAM_LIST
+          - L_PAREN "("
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "x"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "A"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - RET_TYPE
+          - R_ARROW "->"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "B"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - CLASS
+    - CLASS_KEYWORD "class"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Ord"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Eq"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "T"
+                - R_BRACKET "]"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "compare"
+        - PARAM_LIST
+          - L_PAREN "("
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "a"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
+          - COMMA ","
+          - WHITESPACE " "
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "b"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - RET_TYPE
+          - R_ARROW "->"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Ordering"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "convert_all"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - TYPE_PARAM
+        - NAME
+          - IDENT "B"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "xs"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "List"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "A"
+                - R_BRACKET "]"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - RET_TYPE
+      - R_ARROW "->"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "List"
+            - GENERIC_ARG_LIST
+              - L_BRACKET "["
+              - TYPE_ARG
+                - PATH_TYPE
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "B"
+              - R_BRACKET "]"
+    - WHITESPACE " "
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Convert"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "A"
+                - COMMA ","
+                - WHITESPACE " "
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "B"
+                - R_BRACKET "]"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CALL_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "map"
+      - ARG_LIST
+        - L_PAREN "("
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "xs"
+        - COMMA ","
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "convert"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "show_both"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - TYPE_PARAM
+        - NAME
+          - IDENT "B"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "a"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "b"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "B"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "A"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Show"
+      - COMMA ","
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Convert"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "A"
+                - COMMA ","
+                - WHITESPACE " "
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "B"
+                - R_BRACKET "]"
+      - COMMA ","
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Show"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "B"
+                - R_BRACKET "]"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

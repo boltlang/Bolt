@@ -1,4 +1,4 @@
-pub trait A: B + C + D {
+pub class A[T] where T: B + C + D {
     private_decl!{}
     fn f(self);
 }

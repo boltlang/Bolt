@@ -33,7 +33,7 @@ TS_TO_OURS = {
     "function_signature_item": "FUNC_DECL", "struct_item": "STRUCT", "enum_item": "ENUM",
     "let_declaration": "LET_STMT", "for_expression": "FOR_EXPR",
     "while_expression": "WHILE_EXPR", "loop_expression": "LOOP_EXPR",
-    "impl_item": "IMPL", "trait_item": "TRAIT", "macro_invocation": "MACRO_CALL",
+    "impl_item": "IMPL", "class_item": "CLASS", "function_expression": "FUN_EXPR", "macro_invocation": "MACRO_CALL",
     "tuple_pattern": "TUPLE_PATT", "tuple_struct_pattern": "TUPLE_STRUCT_PATT",
     "struct_pattern": "STRUCT_PATT", "range_pattern": "RANGE_PATT",
     "captured_pattern": "CAPTURED_PATT", "slice_pattern": "SLICE_PATT",

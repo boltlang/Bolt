@@ -4,8 +4,8 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-trait_declarations_with_optional_type_parameters.bolt
 ---
 - SOURCE_FILE
-  - TRAIT
-    - TRAIT_KEYWORD "trait"
+  - CLASS
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "Add"
