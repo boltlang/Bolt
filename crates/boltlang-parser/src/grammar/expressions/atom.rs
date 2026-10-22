@@ -94,9 +94,9 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     let done = match p.current() {
         T!['('] => paren_or_tuple_expr(p),
         T!['['] => array_expr(p),
-        T![|] => closure_expr(p),
-        _ if p.at_op("||") => closure_expr(p),
-        T![async] if p.nth_at(1, T![|]) || p.nth_at_op(1, "||") => closure_expr(p),
+        T![|] => closure_expr(p, r),
+        _ if p.at_op("||") => closure_expr(p, r),
+        T![async] if p.nth_at(1, T![|]) || p.nth_at_op(1, "||") => closure_expr(p, r),
         T!['{'] => return Some((parse_block_expr(p), BlockLike::Block)),
         T![async] | T![const] if p.nth_at(1, T!['{']) => {
             let m = p.start();
@@ -458,7 +458,9 @@ fn match_arm(p: &mut Parser) {
 }
 
 /// `|a, b| a + b`, `|x: i32| -> i32 { x }`, `async |x| ...` or `|| x`.
-fn closure_expr(p: &mut Parser) -> CompletedMarker {
+/// The body takes the restrictions of the context: in `if let f = || a {`,
+/// the `{` starts the body of the `if`.
+fn closure_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     let m = p.start();
     p.eat(T![async]);
     let params = p.start();
@@ -486,7 +488,7 @@ fn closure_expr(p: &mut Parser) -> CompletedMarker {
             p.error("expected a block after the return type");
         }
     } else if !p.eat(T![_]) {
-        expr(p);
+        expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 1);
     }
     m.complete(p, CLOSURE_EXPR)
 }

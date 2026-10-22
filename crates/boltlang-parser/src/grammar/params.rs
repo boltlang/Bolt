@@ -2,12 +2,12 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
-    grammar::{delimited, outer_attrs, parse_expr, pattern_single, type_},
+    grammar::{PATTERN_FIRST, delimited, outer_attrs, parse_expr, pattern_single, type_},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
 
-const PARAM_FIRST: TokenSet = TokenSet::new(&[IDENT, T![_], T![mut], T![self], T!['('], T![...], T![#]]);
+const PARAM_FIRST: TokenSet = PATTERN_FIRST.union(TokenSet::new(&[T![self], T![...], T![#]]));
 
 /// `(a, b: T = 1, ...)`
 pub(crate) fn param_list(p: &mut Parser) {
