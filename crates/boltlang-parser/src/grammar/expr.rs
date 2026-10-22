@@ -344,7 +344,7 @@ fn current_op(p: &Parser<'_>) -> (u8, SyntaxKind, Associativity) {
                 ".."  => (2, Left),
                 "!="  => (5, Left),
                 "-="  => (1, Right),
-                "-:"  => (10, Left),
+                "-"   => (10, Left),
                 _ => return NOT_AN_OP,
             };
             (bp, OPERATOR, assoc)
