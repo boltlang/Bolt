@@ -8,6 +8,7 @@ mod files;
 mod parse;
 mod system;
 mod text;
+mod test_db;
 mod vfs;
 
 use std::hash::BuildHasherDefault;
@@ -38,3 +39,4 @@ pub use {
 };
 
 pub use crate::system::TestSystem;
+pub use crate::test_db::TestDb;

@@ -30,4 +30,6 @@ pub mod signatures;
 pub use name::Name;
 
 #[cfg(test)]
-mod test_db;
+mod test_db {
+    pub(crate) use boltlang_base_db::TestDb;
+}
