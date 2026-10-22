@@ -3,7 +3,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{LITERAL_FIRST, PATH_SEGMENT_FIRST, delimited, dotted_path, name, name_ref, parse_block_expr},
+    grammar::{LITERAL_FIRST, at_macro_call, macro_call, PATH_SEGMENT_FIRST, delimited, dotted_path, name, name_ref, parse_block_expr},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -102,6 +102,11 @@ fn atom_pattern(p: &mut Parser) -> Option<CompletedMarker> {
             p.bump(T![const]);
             parse_block_expr(p);
             m.complete(p, CONST_BLOCK_PATT)
+        }
+        _ if at_macro_call(p) => {
+            let m = p.start();
+            macro_call(p);
+            m.complete(p, MACRO_PATT)
         }
         IDENT if p.nth_at(1, T![@]) => {
             let m = p.start();

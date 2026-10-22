@@ -5,7 +5,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use super::{BlockLike, at_expr_start, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
 use crate::{
-    grammar::{attr, at_inner_attr, at_outer_attr, dotted_path, outer_attrs, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern, pattern_single, type_},
+    grammar::{at_macro_call, macro_call, attr, at_inner_attr, at_outer_attr, dotted_path, outer_attrs, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern, pattern_single, type_},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -64,6 +64,12 @@ pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
 pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> {
     if let Some(m) = parse_literal_expr(p) {
         return Some((m, BlockLike::NotBlock));
+    }
+    if at_macro_call(p) {
+        let m = p.start();
+        let (_, braces) = macro_call(p);
+        let blocklike = if braces { BlockLike::Block } else { BlockLike::NotBlock };
+        return Some((m.complete(p, MACRO_EXPR), blocklike));
     }
     if is_path_start(p) {
         if !r.forbid_structs && at_struct_literal(p) {

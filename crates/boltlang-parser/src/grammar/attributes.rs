@@ -19,13 +19,6 @@ pub(crate) fn at_outer_attr(p: &Parser) -> bool {
     p.at(T![#]) && p.nth_at(1, T!['['])
 }
 
-/// Any number of `#![...]`.
-pub(crate) fn inner_attrs(p: &mut Parser) {
-    while at_inner_attr(p) {
-        attr(p, true);
-    }
-}
-
 /// Any number of `#[...]`.
 pub(crate) fn outer_attrs(p: &mut Parser) -> bool {
     let mut any = false;

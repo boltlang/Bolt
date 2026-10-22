@@ -1,0 +1,9 @@
+println!("{}", x);
+let v = vec![1, 2, 3];
+m! { a b c }
+n!{};
+let x: ty!() = y;
+match x { pat!() => 1, _ => 2 }
+trait T { #[a] decl!{} other!(); fn f(self); }
+a!(${$([ a ])});
+a!($a $a:ident $($a);*);

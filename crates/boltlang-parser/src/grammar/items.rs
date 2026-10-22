@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        abi, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        abi, at_macro_call, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
@@ -425,6 +425,16 @@ pub(crate) fn item_list(p: &mut Parser) {
         }
         if has_attrs && p.at(T!['}']) {
             item.abandon(p);
+            continue;
+        }
+        if at_macro_call(p) {
+            let (call, braces) = macro_call(p);
+            call.extend_to(p, item);
+            if !braces {
+                p.expect(T![;]);
+            } else {
+                p.eat(T![;]);
+            }
             continue;
         }
         if let Err(item) = opt_item(p, item) {

@@ -3,7 +3,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{delimited, outer_attrs, generic_param_list, is_path_start, parse_expr, pattern_single, type_path},
+    grammar::{at_macro_call, macro_call, delimited, outer_attrs, generic_param_list, is_path_start, parse_expr, pattern_single, type_path},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -56,6 +56,11 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
         T![!] => never_type(p),
         T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
         T![impl] => impl_trait_type(p),
+        _ if at_macro_call(p) => {
+            let m = p.start();
+            macro_call(p);
+            m.complete(p, MACRO_TYPE)
+        }
         _ if is_path_start(p) => path_or_fn_trait_type(p),
         _ => {
             p.err_recover("expected a type", TYPE_RECOVERY_SET);

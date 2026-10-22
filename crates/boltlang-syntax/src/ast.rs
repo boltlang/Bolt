@@ -127,6 +127,7 @@ ast_enum!(
         Bounded(BoundedType) = BOUNDED_TYPE,
         Fn(FnType) = FN_TYPE,
         ImplTrait(ImplTraitType) = IMPL_TRAIT_TYPE,
+        Macro(MacroType) = MACRO_TYPE,
     }
 );
 
@@ -382,6 +383,7 @@ ast_enum!(
         Range(RangePattern) = RANGE_PATT,
         Or(OrPattern) = OR_PATT,
         ConstBlock(ConstBlockPattern) = CONST_BLOCK_PATT,
+        Macro(MacroPattern) = MACRO_PATT,
     }
 );
 
@@ -612,8 +614,56 @@ ast_enum!(
         Array(ArrayExpr) = ARRAY_EXPR,
         Closure(ClosureExpr) = CLOSURE_EXPR,
         Range(RangeExpr) = RANGE_EXPR,
+        Macro(MacroExpr) = MACRO_EXPR,
     }
 );
+
+/// `name!(tokens)`, `name![tokens]` or `name!{tokens}`
+pub struct MacroCall(SyntaxNode);
+
+simple_node!(MacroCall, MACRO_CALL);
+
+impl MacroCall {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    pub fn token_tree(&self) -> Option<TokenTree> {
+        self.find_node()
+    }
+}
+
+/// A macro invocation used as an expression
+pub struct MacroExpr(SyntaxNode);
+
+simple_node!(MacroExpr, MACRO_EXPR);
+
+impl MacroExpr {
+    pub fn macro_call(&self) -> Option<MacroCall> {
+        self.find_node()
+    }
+}
+
+/// A macro invocation used as a pattern
+pub struct MacroPattern(SyntaxNode);
+
+simple_node!(MacroPattern, MACRO_PATT);
+
+impl MacroPattern {
+    pub fn macro_call(&self) -> Option<MacroCall> {
+        self.find_node()
+    }
+}
+
+/// A macro invocation used as a type
+pub struct MacroType(SyntaxNode);
+
+simple_node!(MacroType, MACRO_TYPE);
+
+impl MacroType {
+    pub fn macro_call(&self) -> Option<MacroCall> {
+        self.find_node()
+    }
+}
 
 
 /// A reference to a variable or function, like `x` or `self`.
@@ -1537,6 +1587,7 @@ ast_enum!(
         Impl(Impl) = IMPL,
         ExternBlock(ExternBlock) = EXTERN_BLOCK,
         Import(Import) = IMPORT,
+        MacroCall(MacroCall) = MACRO_CALL,
     }
 );
 

@@ -190,8 +190,14 @@ pub enum SyntaxKind {
     ATTR,
     /// `path`, `path = value` or `path(tokens)` in an attribute
     META,
+    /// A macro invocation used as an expression
     MACRO_EXPR,
+    /// `name!(tokens)`, `name![tokens]` or `name!{tokens}`
     MACRO_CALL,
+    /// A macro invocation used as a pattern
+    MACRO_PATT,
+    /// A macro invocation used as a type
+    MACRO_TYPE,
     TOKEN_TREE,
 
     // Expressions
@@ -403,6 +409,8 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            MACRO_PATT => "a macro invocation as a pattern",
+            MACRO_TYPE => "a macro invocation as a type",
             ATTR => "an attribute",
             META => "the contents of an attribute",
             QUOTE => "'\''",

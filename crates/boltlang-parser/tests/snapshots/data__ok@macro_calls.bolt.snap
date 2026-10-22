@@ -1,0 +1,241 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/macro_calls.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "println"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - STRING "\"{}\""
+          - COMMA ","
+          - WHITESPACE " "
+          - IDENT "x"
+          - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "v"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "vec"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_BRACKET "["
+          - INT_NUMBER "1"
+          - COMMA ","
+          - WHITESPACE " "
+          - INT_NUMBER "2"
+          - COMMA ","
+          - WHITESPACE " "
+          - INT_NUMBER "3"
+          - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "m"
+        - EXCL "!"
+        - WHITESPACE " "
+        - TOKEN_TREE
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - IDENT "a"
+          - WHITESPACE " "
+          - IDENT "b"
+          - WHITESPACE " "
+          - IDENT "c"
+          - WHITESPACE " "
+          - R_BRACE "}"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "n"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_BRACE "{"
+          - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "x"
+    - COLON ":"
+    - WHITESPACE " "
+    - MACRO_TYPE
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "ty"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "y"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - MATCH_ARM
+          - MACRO_PATT
+            - MACRO_CALL
+              - NAME_REF
+                - IDENT "pat"
+              - EXCL "!"
+              - TOKEN_TREE
+                - L_PAREN "("
+                - R_PAREN ")"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - COMMA ","
+        - WHITESPACE " "
+        - MATCH_ARM
+          - WILDCARD_PATT
+            - UNDERSCORE "_"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "2"
+        - WHITESPACE " "
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - TRAIT
+    - TRAIT_KEYWORD "trait"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "T"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - MACRO_CALL
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
+          - R_BRACKET "]"
+        - WHITESPACE " "
+        - NAME_REF
+          - IDENT "decl"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_BRACE "{"
+          - R_BRACE "}"
+      - WHITESPACE " "
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "other"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - R_PAREN ")"
+      - SEMI ";"
+      - WHITESPACE " "
+      - FUNC_DECL
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "f"
+        - PARAM_LIST
+          - L_PAREN "("
+          - SELF_PARAM
+            - SELF_KEYWORD "self"
+          - R_PAREN ")"
+        - SEMI ";"
+      - WHITESPACE " "
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "a"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_BRACE "{"
+            - DOLLAR "$"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - TOKEN_TREE
+                - L_BRACKET "["
+                - WHITESPACE " "
+                - IDENT "a"
+                - WHITESPACE " "
+                - R_BRACKET "]"
+              - R_PAREN ")"
+            - R_BRACE "}"
+          - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - MACRO_EXPR
+      - MACRO_CALL
+        - NAME_REF
+          - IDENT "a"
+        - EXCL "!"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - METAVARIABLE "$a"
+          - WHITESPACE " "
+          - METAVARIABLE "$a"
+          - COLON ":"
+          - IDENT "ident"
+          - WHITESPACE " "
+          - DOLLAR "$"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - METAVARIABLE "$a"
+            - R_PAREN ")"
+          - SEMI ";"
+          - STAR "*"
+          - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
