@@ -169,6 +169,84 @@ pub enum SyntaxKind {
     // Top-level
     SOURCE_FILE,
 }
+
+/// The [`SyntaxKind`] of a punctuation token or keyword, e.g. `T![;]` for
+/// `SEMI` and `T![fn]` for `FN_KEYWORD`. Modelled after rust-analyzer's macro
+/// of the same name.
+///
+/// Operators that are not in this list are lexed as `OPERATOR`; see
+/// `boltlang_parser`'s lexer.
+#[macro_export]
+macro_rules! T {
+    [;] => { $crate::SyntaxKind::SEMI };
+    [,] => { $crate::SyntaxKind::COMMA };
+    [:] => { $crate::SyntaxKind::COLON };
+    [::] => { $crate::SyntaxKind::COLONCOLON };
+    [.] => { $crate::SyntaxKind::DOT };
+    [..] => { $crate::SyntaxKind::DOTDOT };
+    [...] => { $crate::SyntaxKind::DOTDOTDOT };
+    [..=] => { $crate::SyntaxKind::DOTDOTEQUALS };
+    ['('] => { $crate::SyntaxKind::L_PAREN };
+    [')'] => { $crate::SyntaxKind::R_PAREN };
+    ['{'] => { $crate::SyntaxKind::L_BRACE };
+    ['}'] => { $crate::SyntaxKind::R_BRACE };
+    ['['] => { $crate::SyntaxKind::L_BRACKET };
+    [']'] => { $crate::SyntaxKind::R_BRACKET };
+    [=] => { $crate::SyntaxKind::EQUALS };
+    [=>] => { $crate::SyntaxKind::FAT_ARROW };
+    [->] => { $crate::SyntaxKind::R_ARROW };
+    [|] => { $crate::SyntaxKind::VBAR };
+    [!] => { $crate::SyntaxKind::EXCL };
+    [?] => { $crate::SyntaxKind::QUEST };
+    [<] => { $crate::SyntaxKind::LT };
+    [>] => { $crate::SyntaxKind::GT };
+    [*] => { $crate::SyntaxKind::STAR };
+    [+] => { $crate::SyntaxKind::PLUS };
+    [-] => { $crate::SyntaxKind::MINUS };
+    [$] => { $crate::SyntaxKind::DOLLAR };
+    [#] => { $crate::SyntaxKind::HASHTAG };
+    [@] => { $crate::SyntaxKind::AT };
+    [_] => { $crate::SyntaxKind::UNDERSCORE };
+    [as] => { $crate::SyntaxKind::AS_KEYWORD };
+    [async] => { $crate::SyntaxKind::ASYNC_KEYWORD };
+    [await] => { $crate::SyntaxKind::AWAIT_KEYWORD };
+    [break] => { $crate::SyntaxKind::BREAK_KEYWORD };
+    [const] => { $crate::SyntaxKind::CONST_KEYWORD };
+    [continue] => { $crate::SyntaxKind::CONTINUE_KEYWORD };
+    [default] => { $crate::SyntaxKind::DEFAULT_KEYWORD };
+    [else] => { $crate::SyntaxKind::ELSE_KEYWORD };
+    [enum] => { $crate::SyntaxKind::ENUM_KEYWORD };
+    [extern] => { $crate::SyntaxKind::EXTERN_KEYWORD };
+    [false] => { $crate::SyntaxKind::FALSE_KEYWORD };
+    [fn] => { $crate::SyntaxKind::FN_KEYWORD };
+    [for] => { $crate::SyntaxKind::FOR_KEYWORD };
+    [gen] => { $crate::SyntaxKind::GEN_KEYWORD };
+    [if] => { $crate::SyntaxKind::IF_KEYWORD };
+    [impl] => { $crate::SyntaxKind::IMPL_KEYWORD };
+    [import] => { $crate::SyntaxKind::IMPORT_KEYWORD };
+    [in] => { $crate::SyntaxKind::IN_KEYWORD };
+    [let] => { $crate::SyntaxKind::LET_KEYWORD };
+    [loop] => { $crate::SyntaxKind::LOOP_KEYWORD };
+    [macro_rules] => { $crate::SyntaxKind::MACRO_RULES_KEYWORD };
+    [match] => { $crate::SyntaxKind::MATCH_KEYWORD };
+    [mod] => { $crate::SyntaxKind::MOD_KEYWORD };
+    [mut] => { $crate::SyntaxKind::MUT_KEYWORD };
+    [package] => { $crate::SyntaxKind::PACKAGE_KEYWORD };
+    [pub] => { $crate::SyntaxKind::PUB_KEYWORD };
+    [return] => { $crate::SyntaxKind::RETURN_KEYWORD };
+    [self] => { $crate::SyntaxKind::SELF_KEYWORD };
+    [static] => { $crate::SyntaxKind::STATIC_KEYWORD };
+    [struct] => { $crate::SyntaxKind::STRUCT_KEYWORD };
+    [super] => { $crate::SyntaxKind::SUPER_KEYWORD };
+    [trait] => { $crate::SyntaxKind::TRAIT_KEYWORD };
+    [true] => { $crate::SyntaxKind::TRUE_KEYWORD };
+    [type] => { $crate::SyntaxKind::TYPE_KEYWORD };
+    [where] => { $crate::SyntaxKind::WHERE_KEYWORD };
+    [while] => { $crate::SyntaxKind::WHILE_KEYWORD };
+    [yield] => { $crate::SyntaxKind::YIELD_KEYWORD };
+    [ident] => { $crate::SyntaxKind::IDENT };
+}
+
 use SyntaxKind::*;
 use rowan::GreenNode;
 
@@ -360,3 +438,20 @@ pub struct DbNode<'db> {
     pub node: GreenNode,
 }
 
+
+#[cfg(test)]
+mod tests {
+    use super::SyntaxKind::*;
+
+    #[test]
+    fn t_macro() {
+        assert_eq!(T![;], SEMI);
+        assert_eq!(T![::], COLONCOLON);
+        assert_eq!(T![..=], DOTDOTEQUALS);
+        assert_eq!(T!['{'], L_BRACE);
+        assert_eq!(T![$], DOLLAR);
+        assert_eq!(T![fn], FN_KEYWORD);
+        assert_eq!(T![macro_rules], MACRO_RULES_KEYWORD);
+        assert_eq!(T![ident], IDENT);
+    }
+}
