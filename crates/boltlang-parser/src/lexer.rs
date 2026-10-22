@@ -163,7 +163,6 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             ',' => COMMA,
             ':' => COLON,
             ';' => SEMI,
-            '=' => EQUALS,
             '"' => {
                 loop {
                     let c1 = self.get();
@@ -244,6 +243,8 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 if text == "->" {
                     R_ARROW
+                } else if text == "=" {
+                    EQUALS
                 // FIXME what if something like =+=?
                 } else if text.ends_with("==") {
                     OPERATOR
