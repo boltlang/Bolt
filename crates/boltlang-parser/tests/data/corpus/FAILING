@@ -96,7 +96,6 @@ ok/patterns-tuple_struct_patterns.bolt
 ok/source_files-empty_shebang_with_code_after.bolt
 ok/source_files-greek_letters_in_identifiers.bolt
 ok/source_files-immediate_inner_attribute.bolt
-ok/source_files-shebang_line_containing_spaces.bolt
 ok/types-array_types.bolt
 ok/types-extern_function_types.bolt
 ok/types-function_types.bolt

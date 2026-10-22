@@ -46,8 +46,9 @@ pub struct Lexer<'d, I> {
     diags: &'d mut Diagnostics,
 }
 
-const fn is_whitespace(ch: char) -> bool {
-    matches!(ch, ' ' | '\n' | '\t' | '\r')
+/// Unicode whitespace, like the grammar's `\s`.
+fn is_whitespace(ch: char) -> bool {
+    ch.is_whitespace()
 }
 
 fn is_ident_start(ch: char) -> bool {
@@ -318,6 +319,15 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
         }
     }
 
+    /// Whether `![` follows, skipping whitespace after the `!`.
+    fn at_inner_attribute(&mut self) -> bool {
+        let mut i = 1;
+        while matches!(self.peek(i), ' ' | '\t' | '\r' | '\x0b' | '\x0c') {
+            i += 1;
+        }
+        self.peek(i) == '['
+    }
+
     /// Consume characters while `pred` holds for them.
     fn eat_while(&mut self, pred: impl Fn(char) -> bool) {
         while pred(self.peek(0)) {
@@ -432,6 +442,12 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 STRING
             }
             '\'' => self.scan_char_body(CHAR),
+            // `#!` at the start of a file is a shebang, unless it starts an
+            // inner attribute like `#![allow(unused)]`.
+            '#' if self.pos.offset == 1 && self.peek(0) == '!' && !self.at_inner_attribute() => {
+                self.eat_while(|ch| ch != '\n' && ch != CHAR_EOF);
+                SHEBANG
+            }
             '#' => HASHTAG,
             '/' if self.peek(0) == '*' => {
                 // Block comments nest, like in Rust: `/* a /* b */ c */`.
@@ -744,6 +760,18 @@ mod tests {
         assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
         assert_eq!(lex_errors("'ab'").len(), 1);
         assert_eq!(lex_errors(r##"r#"no end""##).len(), 1);
+    }
+
+    #[test]
+    fn shebang() {
+        assert_eq!(lex("#!/usr/bin/env bolt\nx"), [(SHEBANG, "#!/usr/bin/env bolt"), (IDENT, "x")]);
+        assert_eq!(lex("#![attr]"), [(HASHTAG, "#"), (EXCL, "!"), (L_BRACKET, "["), (IDENT, "attr"), (R_BRACKET, "]")]);
+        assert_eq!(lex("x #!y")[1], (HASHTAG, "#"));
+    }
+
+    #[test]
+    fn unicode_whitespace() {
+        assert_eq!(lex("a\u{a0}b\u{2028}c"), [(IDENT, "a"), (IDENT, "b"), (IDENT, "c")]);
     }
 
     #[test]

@@ -191,6 +191,7 @@ pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
 
 pub fn parse_source_file(p: &mut Parser) {
     let m = p.start();
+    p.eat(SHEBANG);
     while !p.at(EOF) {
         // Nothing else consumes a `}` outside a block, so skip it here to
         // make progress.

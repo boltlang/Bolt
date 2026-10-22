@@ -15,6 +15,9 @@ pub enum SyntaxKind {
     LINE_COMMENT,
     BLOCK_COMMENT,
 
+    /// A `#!/usr/bin/env bolt` line at the very start of a file.
+    SHEBANG,
+
     // Static tokens
     AT,
     COLON,
@@ -182,6 +185,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            SHEBANG => "a shebang line",
             C_STRING => "a C string (like c\"foo\")",
             DOLLAR => "'$'",
             DOTDOTDOT => "'...'",
