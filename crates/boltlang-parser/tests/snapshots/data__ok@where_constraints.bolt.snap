@@ -1,0 +1,152 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/where_constraints.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "f"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - TYPE_PARAM
+        - NAME
+          - IDENT "B"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "A"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - RET_TYPE
+      - R_ARROW "->"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "B"
+    - WHITESPACE " "
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Convert"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "A"
+                - COMMA ","
+                - WHITESPACE " "
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "B"
+                - R_BRACKET "]"
+      - COMMA ","
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "A"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Show"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Eq"
+      - COMMA ","
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - CALL_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "convert"
+      - ARG_LIST
+        - L_PAREN "("
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - CLASS
+    - CLASS_KEYWORD "class"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Ord"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - WHERE_CLAUSE
+      - WHERE_KEYWORD "where"
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Eq"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "T"
+                - R_BRACKET "]"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - R_BRACE "}"
+  - WHITESPACE "\n"

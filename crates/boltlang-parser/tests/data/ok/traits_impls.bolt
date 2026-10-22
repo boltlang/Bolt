@@ -1,5 +1,5 @@
 class Show[T] { fn show(x: T) -> String; }
-pub class Iterator[I] where I: Clone + Debug + Ord {
+pub class Iterator[I] where I: Clone + Debug, Ord[I] {
     type Item;
     const MAX: usize = 10;
     fn next(it: I) -> Option[I.Item];

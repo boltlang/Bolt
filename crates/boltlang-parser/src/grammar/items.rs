@@ -160,7 +160,8 @@ fn fn_item(p: &mut Parser, m: Marker) {
     m.complete(p, FUNC_DECL);
 }
 
-/// `where T: Ord, Vec[T]: Hash`
+/// `where T: Ord, Vec[T]: Hash, Convert[A, B]`, following the grammar's
+/// `where_clause`.
 pub(crate) fn opt_where_clause(p: &mut Parser) {
     if !p.at(T![where]) {
         return;
@@ -168,12 +169,11 @@ pub(crate) fn opt_where_clause(p: &mut Parser) {
     let m = p.start();
     p.bump(T![where]);
     while p.at_ts(TYPE_FIRST) {
+        // `T: Show + Eq`, or a class constraint on its own: `Convert[A, B]`.
         let pred = p.start();
         type_no_bounds(p);
         if p.at(T![:]) {
             trait_bounds(p);
-        } else {
-            p.error("expected ':'");
         }
         pred.complete(p, WHERE_PRED);
         if !p.eat(T![,]) {

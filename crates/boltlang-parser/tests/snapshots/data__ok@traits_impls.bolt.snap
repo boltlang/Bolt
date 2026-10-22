@@ -91,14 +91,23 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
               - PATH_SEGMENT
                 - NAME_REF
                   - IDENT "Debug"
-          - WHITESPACE " "
-          - PLUS "+"
-          - WHITESPACE " "
-          - PATH_TYPE
-            - PATH
-              - PATH_SEGMENT
-                - NAME_REF
-                  - IDENT "Ord"
+      - COMMA ","
+      - WHITESPACE " "
+      - WHERE_PRED
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Ord"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "I"
+                - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

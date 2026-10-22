@@ -1558,15 +1558,18 @@ impl WhereClause {
     }
 }
 
-/// `T: Ord` in a where clause
+/// `T: Ord`, or a class constraint like `Convert[A, B]`, in a where clause
 pub struct WherePred(SyntaxNode);
 
 simple_node!(WherePred, WHERE_PRED);
 
 impl WherePred {
+    /// The constrained type, or the whole class constraint if there are no
+    /// bounds.
     pub fn ty(&self) -> Option<Type> {
         self.find_node()
     }
+    /// `None` for a class constraint like `Convert[A, B]`.
     pub fn bounds(&self) -> Option<TraitBounds> {
         self.find_node()
     }

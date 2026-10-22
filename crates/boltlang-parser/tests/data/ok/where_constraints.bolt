@@ -1,0 +1,2 @@
+fn f[A, B](x: A) -> B where Convert[A, B], A: Show + Eq, = convert(x);
+class Ord[T] where Eq[T] { }
