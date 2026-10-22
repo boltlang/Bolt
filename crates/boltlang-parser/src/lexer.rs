@@ -442,7 +442,12 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 self.scan_string_body();
                 STRING
             }
-            '\'' => self.scan_char_body(CHAR),
+            // `'a'` or `'\n'` is a character, but a `'` that doesn't start one
+            // is a token of its own, like in the grammar's token trees.
+            '\'' if self.peek(0) == '\\' || (self.peek(0) != '\n' && self.peek(1) == '\'') => {
+                self.scan_char_body(CHAR)
+            }
+            '\'' => QUOTE,
             // `#!` at the start of a file is a shebang, unless it starts an
             // inner attribute like `#![allow(unused)]`.
             '#' if self.pos.offset == 1 && self.peek(0) == '!' && !self.at_inner_attribute() => {
@@ -751,6 +756,12 @@ mod tests {
     }
 
     #[test]
+    fn lone_quote() {
+        assert_eq!(lex("';"), [(QUOTE, "'"), (SEMI, ";")]);
+        assert_eq!(lex("' "), [(QUOTE, "'")]);
+    }
+
+    #[test]
     fn raw_identifiers() {
         assert_eq!(lex("r#match r#abc"), [(IDENT, "r#match"), (IDENT, "r#abc")]);
         assert_eq!(lex("r b c"), [(IDENT, "r"), (IDENT, "b"), (IDENT, "c")]);
@@ -760,7 +771,7 @@ mod tests {
     fn invalid_literals() {
         assert_eq!(lex_errors(r#""\x7""#).len(), 1);
         assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
-        assert_eq!(lex_errors("'ab'").len(), 1);
+        assert!(!lex_errors("b'ab'").is_empty());
         assert_eq!(lex_errors(r##"r#"no end""##).len(), 1);
     }
 

@@ -20,6 +20,8 @@ pub enum SyntaxKind {
 
     // Static tokens
     AT,
+    /// A lone `'`, which can appear in token trees
+    QUOTE,
     COLON,
     COLONCOLON,
     COMMA,
@@ -343,6 +345,7 @@ macro_rules! T {
     [$] => { $crate::SyntaxKind::DOLLAR };
     [#] => { $crate::SyntaxKind::HASHTAG };
     [@] => { $crate::SyntaxKind::AT };
+    ['\''] => { $crate::SyntaxKind::QUOTE };
     [_] => { $crate::SyntaxKind::UNDERSCORE };
     [as] => { $crate::SyntaxKind::AS_KEYWORD };
     [async] => { $crate::SyntaxKind::ASYNC_KEYWORD };
@@ -396,6 +399,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            QUOTE => "'\''",
             IMPORT => "an import",
             IMPORT_LIST => "a list of imported names",
             IMPORT_ALIAS => "an imported name with an alias",
