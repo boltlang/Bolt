@@ -1,0 +1,23 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/cast.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - CAST_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - AS_KEYWORD "as"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Int"
+    - SEMI ";"
+  - WHITESPACE "\n"
