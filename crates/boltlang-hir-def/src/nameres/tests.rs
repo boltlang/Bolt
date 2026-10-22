@@ -35,7 +35,7 @@ fn f() {}
 fn (+)(a, b) = a;
 struct S;
 enum E { A }
-class C[T] {}
+class C[T] { fn show(x: T); }
 const K: i32 = 1;
 type T = S;
 impl S {}
@@ -45,7 +45,7 @@ fn f() {}
 "#,
     );
     let scope = local_scope(&db, file);
-    assert_eq!(names(&scope.scope, Namespace::Values), ["+", "K", "f", "malloc"]);
+    assert_eq!(names(&scope.scope, Namespace::Values), ["+", "K", "f", "malloc", "show"]);
     assert_eq!(names(&scope.scope, Namespace::Types), ["C", "E", "S", "T"]);
     assert_eq!(names(&scope.scope, Namespace::Macros), ["m"]);
     assert_eq!(scope.scope.impls().len(), 1);

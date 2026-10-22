@@ -147,8 +147,17 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             }
             ModItem::Class(idx) => {
                 let c = &tree.classes[idx.index()];
-                let def = ModuleDefId::Class(ClassId::new(db, file, idx));
-                define(&mut out, Namespace::Types, &c.name, def, c.visibility, c.ast_id);
+                let class = ClassId::new(db, file, idx);
+                define(&mut out, Namespace::Types, &c.name, ModuleDefId::Class(class), c.visibility, c.ast_id);
+                // Class methods are called like functions, as in Haskell, so
+                // they're in the file's scope, with the class's visibility.
+                for item in &c.items {
+                    if let AssocItem::Function(idx) = *item {
+                        let f = &tree.functions[idx.index()];
+                        let def = ModuleDefId::Function(FunctionId::new(db, ItemContainerId::Class(class), idx));
+                        define(&mut out, Namespace::Values, &function_name(&f.name), def, c.visibility, f.ast_id);
+                    }
+                }
             }
             ModItem::Const(idx) => {
                 let c = &tree.consts[idx.index()];
