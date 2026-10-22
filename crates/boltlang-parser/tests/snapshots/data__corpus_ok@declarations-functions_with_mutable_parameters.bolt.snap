@@ -1,0 +1,34 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-functions_with_mutable_parameters.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "foo"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - MUT_KEYWORD "mut"
+        - WHITESPACE " "
+        - NAMED_PATT
+          - NAME
+            - IDENT "x"
+        - WHITESPACE " "
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "u32"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

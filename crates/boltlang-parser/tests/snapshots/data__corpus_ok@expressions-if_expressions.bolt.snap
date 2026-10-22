@@ -1,0 +1,174 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-if_expressions.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "main"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n  "
+        - IF_EXPR
+          - IF_KEYWORD "if"
+          - WHITESPACE " "
+          - BIN_EXPR
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "n"
+            - WHITESPACE " "
+            - OPERATOR "=="
+            - WHITESPACE " "
+            - LIT_EXPR
+              - INT_NUMBER "1"
+          - WHITESPACE " "
+          - BLOCK_EXPR
+            - BLOCK
+              - L_BRACE "{"
+              - WHITESPACE "\n  "
+              - R_BRACE "}"
+          - WHITESPACE " "
+          - ELSE_KEYWORD "else"
+          - WHITESPACE " "
+          - IF_EXPR
+            - IF_KEYWORD "if"
+            - WHITESPACE " "
+            - BIN_EXPR
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "n"
+              - WHITESPACE " "
+              - OPERATOR "=="
+              - WHITESPACE " "
+              - LIT_EXPR
+                - INT_NUMBER "2"
+            - WHITESPACE " "
+            - BLOCK_EXPR
+              - BLOCK
+                - L_BRACE "{"
+                - WHITESPACE "\n  "
+                - R_BRACE "}"
+            - WHITESPACE " "
+            - ELSE_KEYWORD "else"
+            - WHITESPACE " "
+            - BLOCK_EXPR
+              - BLOCK
+                - L_BRACE "{"
+                - WHITESPACE "\n  "
+                - R_BRACE "}"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - BIN_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
+        - WHITESPACE " "
+        - OPERATOR "=="
+        - WHITESPACE " "
+        - LIT_EXPR
+          - INT_NUMBER "5"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "10"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - WHITESPACE " "
+      - ELSE_KEYWORD "else"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "15"
+          - WHITESPACE " "
+          - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n\n"
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - BIN_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "foo"
+        - WHITESPACE " "
+        - OPERATOR "&&"
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "bar"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - EXPR_STMT
+    - IF_EXPR
+      - IF_KEYWORD "if"
+      - WHITESPACE " "
+      - BIN_EXPR
+        - BIN_EXPR
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "foo"
+          - WHITESPACE " "
+          - OPERATOR "&&"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "bar"
+        - WHITESPACE " "
+        - OPERATOR "||"
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "baz"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - R_BRACE "}"
+  - WHITESPACE "\n"

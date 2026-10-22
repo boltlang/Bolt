@@ -1,0 +1,96 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/patterns-ignored_patterns.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE "\n  "
+        - MATCH_ARM
+          - TUPLE_PATT
+            - L_PAREN "("
+            - NAMED_PATT
+              - NAME
+                - IDENT "a"
+            - COMMA ","
+            - WHITESPACE " "
+            - REST_PATT
+              - DOTDOT ".."
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
+          - COMMA ","
+        - WHITESPACE "\n  "
+        - MATCH_ARM
+          - TUPLE_STRUCT_PATT
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "B"
+            - L_PAREN "("
+            - REST_PATT
+              - DOTDOT ".."
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "c"
+          - COMMA ","
+        - WHITESPACE "\n  "
+        - MATCH_ARM
+          - STRUCT_PATT
+            - PATH
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "D"
+              - DOT "."
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "E"
+            - L_BRACE "{"
+            - FIELD_PATT
+              - NAME_REF
+                - IDENT "f"
+              - COLON ":"
+              - WHITESPACE " "
+              - NAMED_PATT
+                - NAME
+                  - IDENT "g"
+            - COMMA ","
+            - WHITESPACE " "
+            - REST_PATT
+              - DOTDOT ".."
+            - R_BRACE "}"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "g"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

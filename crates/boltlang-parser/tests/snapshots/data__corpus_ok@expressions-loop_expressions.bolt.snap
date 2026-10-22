@@ -1,0 +1,49 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-loop_expressions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - LOOP_EXPR
+      - LABEL
+        - LABEL_IDENT "'outer"
+      - COLON ":"
+      - WHITESPACE " "
+      - LOOP_KEYWORD "loop"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE "\n  "
+          - LOOP_EXPR
+            - LABEL
+              - LABEL_IDENT "'inner"
+            - COLON ":"
+            - WHITESPACE " "
+            - LOOP_KEYWORD "loop"
+            - WHITESPACE " "
+            - BLOCK_EXPR
+              - BLOCK
+                - L_BRACE "{"
+                - WHITESPACE "\n    "
+                - EXPR_STMT
+                  - BREAK_EXPR
+                    - BREAK_KEYWORD "break"
+                    - WHITESPACE " "
+                    - LABEL
+                      - LABEL_IDENT "'outer"
+                  - SEMI ";"
+                - WHITESPACE "\n    "
+                - EXPR_STMT
+                  - BREAK_EXPR
+                    - BREAK_KEYWORD "break"
+                    - WHITESPACE " "
+                    - LIT_EXPR
+                      - TRUE_KEYWORD "true"
+                  - SEMI ";"
+                - WHITESPACE "\n  "
+                - R_BRACE "}"
+          - WHITESPACE "\n"
+          - R_BRACE "}"
+  - WHITESPACE "\n"

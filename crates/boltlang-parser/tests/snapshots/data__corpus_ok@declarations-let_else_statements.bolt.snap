@@ -1,0 +1,163 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-let_else_statements.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - STRUCT_PATT
+      - PATH
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Foo"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Bar"
+      - WHITESPACE " "
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - FIELD_PATT
+        - NAME
+          - IDENT "texts"
+      - COMMA ","
+      - WHITESPACE "\n    "
+      - FIELD_PATT
+        - NAME
+          - IDENT "values"
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - TRY_EXPR
+      - AWAIT_EXPR
+        - CALL_EXPR
+          - FIELD_EXPR
+            - CALL_EXPR
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "foo"
+              - ARG_LIST
+                - L_PAREN "("
+                - R_PAREN ")"
+            - DOT "."
+            - NAME_REF
+              - IDENT "bar"
+          - ARG_LIST
+            - L_PAREN "("
+            - R_PAREN ")"
+        - DOT "."
+        - AWAIT_KEYWORD "await"
+      - QUEST "?"
+    - WHITESPACE " "
+    - ELSE_KEYWORD "else"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - RET_EXPR
+          - RETURN_KEYWORD "return"
+          - WHITESPACE " "
+          - CALL_EXPR
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Err"
+            - ARG_LIST
+              - L_PAREN "("
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "index"
+              - R_PAREN ")"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TUPLE_STRUCT_PATT
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Some"
+      - L_PAREN "("
+      - NAMED_PATT
+        - NAME
+          - IDENT "x"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "y"
+    - WHITESPACE " "
+    - ELSE_KEYWORD "else"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - LET_STMT
+          - LET_KEYWORD "let"
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "None"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - PATH_EXPR
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "z"
+          - WHITESPACE " "
+          - ELSE_KEYWORD "else"
+          - WHITESPACE " "
+          - BLOCK_EXPR
+            - BLOCK
+              - L_BRACE "{"
+              - WHITESPACE "\n        "
+              - EXPR_STMT
+                - CALL_EXPR
+                  - PATH_EXPR
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "foo"
+                  - ARG_LIST
+                    - L_PAREN "("
+                    - R_PAREN ")"
+                - SEMI ";"
+              - WHITESPACE "\n        "
+              - EXPR_STMT
+                - BREAK_EXPR
+                  - BREAK_KEYWORD "break"
+                - SEMI ";"
+              - WHITESPACE "\n    "
+              - R_BRACE "}"
+          - SEMI ";"
+        - WHITESPACE "\n    "
+        - EXPR_STMT
+          - CONTINUE_EXPR
+            - CONTINUE_KEYWORD "continue"
+          - SEMI ";"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+    - SEMI ";"
+  - WHITESPACE "\n"

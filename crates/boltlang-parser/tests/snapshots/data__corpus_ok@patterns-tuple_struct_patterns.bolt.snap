@@ -1,0 +1,58 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/patterns-tuple_struct_patterns.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "x"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE "\n  "
+        - MATCH_ARM
+          - TUPLE_STRUCT_PATT
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Some"
+            - L_PAREN "("
+            - NAMED_PATT
+              - NAME
+                - IDENT "x"
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - STRING "\"some\""
+          - COMMA ","
+        - WHITESPACE "\n  "
+        - MATCH_ARM
+          - TUPLE_STRUCT_PATT
+            - PATH
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "std"
+              - DOT "."
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "None"
+            - L_PAREN "("
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - STRING "\"none\""
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

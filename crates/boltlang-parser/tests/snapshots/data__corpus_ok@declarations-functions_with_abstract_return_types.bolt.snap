@@ -1,0 +1,61 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-functions_with_abstract_return_types.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "triples"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "a"
+        - COLON ":"
+        - WHITESPACE " "
+        - IMPL_TRAIT_TYPE
+          - IMPL_KEYWORD "impl"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "B"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - RET_TYPE
+      - R_ARROW "->"
+      - WHITESPACE " "
+      - IMPL_TRAIT_TYPE
+        - IMPL_KEYWORD "impl"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Iterator"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - ASSOC_TYPE_ARG
+                  - NAME_REF
+                    - IDENT "Item"
+                  - EQUALS "="
+                  - TUPLE_TYPE
+                    - L_PAREN "("
+                    - PATH_TYPE
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "usize"
+                    - R_PAREN ")"
+                - R_BRACKET "]"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

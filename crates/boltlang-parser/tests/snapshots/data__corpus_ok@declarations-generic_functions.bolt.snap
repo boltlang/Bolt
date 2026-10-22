@@ -1,0 +1,131 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-generic_functions.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "splice"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Into"
+                - GENERIC_ARG_LIST
+                  - L_BRACKET "["
+                  - TYPE_ARG
+                    - PATH_TYPE
+                      - PATH
+                        - PATH_SEGMENT
+                          - NAME_REF
+                            - IDENT "Text"
+                  - R_BRACKET "]"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - SELF_PARAM
+        - SELF_KEYWORD "self"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "old_range"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Range"
+              - GENERIC_ARG_LIST
+                - L_BRACKET "["
+                - TYPE_ARG
+                  - PATH_TYPE
+                    - PATH
+                      - PATH_SEGMENT
+                        - NAME_REF
+                          - IDENT "usize"
+                - R_BRACKET "]"
+      - COMMA ","
+      - WHITESPACE " "
+      - PARAM
+        - NAMED_PATT
+          - NAME
+            - IDENT "new_text"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "T"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - IDENT "uninit_array"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - CONST_PARAM
+        - CONST_KEYWORD "const"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "LEN"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "usize"
+      - R_BRACKET "]"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - RET_TYPE
+      - R_ARROW "->"
+      - WHITESPACE " "
+      - ARRAY_TYPE
+        - L_BRACKET "["
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "Self"
+        - SEMI ";"
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "LEN"
+        - R_BRACKET "]"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

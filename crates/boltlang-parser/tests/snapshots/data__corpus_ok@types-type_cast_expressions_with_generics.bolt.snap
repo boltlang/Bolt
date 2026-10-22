@@ -1,0 +1,32 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/types-type_cast_expressions_with_generics.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - CAST_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - WHITESPACE " "
+      - AS_KEYWORD "as"
+      - WHITESPACE " "
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "B"
+            - GENERIC_ARG_LIST
+              - L_BRACKET "["
+              - TYPE_ARG
+                - PATH_TYPE
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "C"
+              - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"

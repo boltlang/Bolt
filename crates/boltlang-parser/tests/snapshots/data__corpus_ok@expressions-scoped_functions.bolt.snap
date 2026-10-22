@@ -1,0 +1,22 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-scoped_functions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - CALL_EXPR
+      - FIELD_EXPR
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "a"
+        - DOT "."
+        - NAME_REF
+          - IDENT "b"
+      - ARG_LIST
+        - L_PAREN "("
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"

@@ -1,0 +1,97 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-yield_expressions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - YIELD_EXPR
+      - YIELD_KEYWORD "yield"
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "42"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - YIELD_EXPR
+      - YIELD_KEYWORD "yield"
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "42"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - YIELD_EXPR
+      - YIELD_KEYWORD "yield"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - CALL_EXPR
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "f"
+      - ARG_LIST
+        - L_PAREN "("
+        - YIELD_EXPR
+          - YIELD_KEYWORD "yield"
+          - WHITESPACE " "
+          - BIN_EXPR
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "a"
+            - WHITESPACE " "
+            - PLUS "+"
+            - WHITESPACE " "
+            - PATH_EXPR
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "b"
+        - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "z"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BIN_EXPR
+      - NEST_EXPR
+        - L_PAREN "("
+        - YIELD_EXPR
+          - YIELD_KEYWORD "yield"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - PLUS "+"
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "2"
+    - SEMI ";"
+  - WHITESPACE "\n"

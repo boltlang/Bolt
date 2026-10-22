@@ -1,0 +1,38 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-while_let_expressions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - WHILE_EXPR
+      - WHILE_KEYWORD "while"
+      - WHITESPACE " "
+      - LET_EXPR
+        - LET_KEYWORD "let"
+        - WHITESPACE " "
+        - TUPLE_PATT
+          - L_PAREN "("
+          - LIT_PATT
+            - STRING "\"Bacon\""
+          - COMMA ","
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "b"
+          - R_PAREN ")"
+        - WHITESPACE " "
+        - EQUALS "="
+        - WHITESPACE " "
+        - PATH_EXPR
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "dish"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE "\n"
+          - R_BRACE "}"
+  - WHITESPACE "\n"
