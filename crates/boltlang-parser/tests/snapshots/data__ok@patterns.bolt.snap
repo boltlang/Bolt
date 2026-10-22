@@ -1,0 +1,626 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/patterns.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - MUT_KEYWORD "mut"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - WILDCARD_PATT
+      - UNDERSCORE "_"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TUPLE_PATT
+      - L_PAREN "("
+      - NAMED_PATT
+        - NAME
+          - IDENT "a"
+      - COMMA ","
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "b"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "t"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TUPLE_PATT
+      - L_PAREN "("
+      - NAMED_PATT
+        - NAME
+          - IDENT "a"
+      - COMMA ","
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "t"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TUPLE_PATT
+      - L_PAREN "("
+      - NAMED_PATT
+        - NAME
+          - IDENT "a"
+      - COMMA ","
+      - WHITESPACE " "
+      - REST_PATT
+        - DOTDOT ".."
+      - COMMA ","
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "b"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "t"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - SLICE_PATT
+      - L_BRACKET "["
+      - NAMED_PATT
+        - NAME
+          - IDENT "a"
+      - COMMA ","
+      - WHITESPACE " "
+      - REST_PATT
+        - DOTDOT ".."
+      - COMMA ","
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "b"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "s"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TUPLE_STRUCT_PATT
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Some"
+      - L_PAREN "("
+      - NAMED_PATT
+        - NAME
+          - IDENT "x"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "o"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - STRUCT_PATT
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Point"
+      - WHITESPACE " "
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - FIELD_PATT
+        - NAME
+          - IDENT "x"
+      - COMMA ","
+      - WHITESPACE " "
+      - FIELD_PATT
+        - MUT_KEYWORD "mut"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "y"
+      - COMMA ","
+      - WHITESPACE " "
+      - FIELD_PATT
+        - NAME_REF
+          - IDENT "z"
+        - COLON ":"
+        - WHITESPACE " "
+        - TUPLE_PATT
+          - L_PAREN "("
+          - NAMED_PATT
+            - NAME
+              - IDENT "a"
+          - COMMA ","
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "b"
+          - R_PAREN ")"
+      - COMMA ","
+      - WHITESPACE " "
+      - REST_PATT
+        - DOTDOT ".."
+      - WHITESPACE " "
+      - R_BRACE "}"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "p"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - STRUCT_PATT
+      - PATH
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Shape"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Circle"
+      - WHITESPACE " "
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - FIELD_PATT
+        - NAME
+          - IDENT "radius"
+      - WHITESPACE " "
+      - R_BRACE "}"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "s"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - PATH_PATT
+      - PATH
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Color"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Red"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "c"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TUPLE_STRUCT_PATT
+      - PATH
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Bar"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "T1"
+      - L_PAREN "("
+      - WILDCARD_PATT
+        - UNDERSCORE "_"
+      - COMMA ","
+      - WHITESPACE " "
+      - TUPLE_STRUCT_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Some"
+        - L_PAREN "("
+        - NAMED_PATT
+          - NAME
+            - IDENT "x"
+        - R_PAREN ")"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "y"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - CAPTURED_PATT
+      - NAME
+        - IDENT "v"
+      - WHITESPACE " "
+      - AT "@"
+      - WHITESPACE " "
+      - TUPLE_STRUCT_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Some"
+        - L_PAREN "("
+        - WILDCARD_PATT
+          - UNDERSCORE "_"
+        - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "o"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - MUT_KEYWORD "mut"
+    - WHITESPACE " "
+    - CAPTURED_PATT
+      - NAME
+        - IDENT "w"
+      - WHITESPACE " "
+      - AT "@"
+      - WHITESPACE " "
+      - TUPLE_PATT
+        - L_PAREN "("
+        - OR_PATT
+          - NAMED_PATT
+            - NAME
+              - IDENT "A"
+          - WHITESPACE " "
+          - VBAR "|"
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "B"
+          - WHITESPACE " "
+          - VBAR "|"
+          - WHITESPACE " "
+          - NAMED_PATT
+            - NAME
+              - IDENT "C"
+        - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "c"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - OR_PATT
+      - TUPLE_STRUCT_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Ok"
+        - L_PAREN "("
+        - NAMED_PATT
+          - NAME
+            - IDENT "i"
+        - R_PAREN ")"
+      - WHITESPACE " "
+      - VBAR "|"
+      - WHITESPACE " "
+      - TUPLE_STRUCT_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "Err"
+        - L_PAREN "("
+        - NAMED_PATT
+          - NAME
+            - IDENT "i"
+        - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "r"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - OR_PATT
+      - VBAR "|"
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "A"
+      - WHITESPACE " "
+      - VBAR "|"
+      - WHITESPACE " "
+      - NAMED_PATT
+        - NAME
+          - IDENT "B"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "c"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - RANGE_PATT
+      - LIT_PATT
+        - INT_NUMBER "1"
+      - DOTDOTEQUALS "..="
+      - LIT_PATT
+        - INT_NUMBER "5"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - RANGE_PATT
+      - LIT_PATT
+        - MINUS "-"
+        - INT_NUMBER "5"
+      - DOTDOT ".."
+      - LIT_PATT
+        - INT_NUMBER "0"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - RANGE_PATT
+      - PATH_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
+      - DOTDOT ".."
+      - PATH_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - RANGE_PATT
+      - PATH_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "d"
+      - DOTDOT ".."
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - RANGE_PATT
+      - DOTDOTEQUALS "..="
+      - PATH_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "d"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - RANGE_PATT
+      - DOTDOT ".."
+      - PATH_PATT
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "d"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - CONST_BLOCK_PATT
+      - CONST_KEYWORD "const"
+      - WHITESPACE " "
+      - BLOCK_EXPR
+        - BLOCK
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - INT_NUMBER "1"
+          - WHITESPACE " "
+          - R_BRACE "}"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - LIT_PATT
+      - STRING "\"s\""
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - LIT_PATT
+      - MINUS "-"
+      - INT_NUMBER "1"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "n"
+    - SEMI ";"
+  - WHITESPACE "\n"

@@ -8,14 +8,16 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -27,7 +29,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - COLON ":"
     - WHITESPACE " "
     - PATH_TYPE
@@ -41,7 +44,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - COLON ":"
     - WHITESPACE " "
     - PATH_TYPE
@@ -62,7 +66,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - MUT_KEYWORD "mut"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -74,7 +79,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "y"
+      - NAME
+        - IDENT "y"
     - COLON ":"
     - WHITESPACE " "
     - PATH_TYPE
@@ -93,7 +99,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "bool"
+      - NAME
+        - IDENT "bool"
     - COLON ":"
     - WHITESPACE " "
     - PATH_TYPE
@@ -112,7 +119,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "u32"
+      - NAME
+        - IDENT "u32"
     - COLON ":"
     - WHITESPACE " "
     - PATH_TYPE

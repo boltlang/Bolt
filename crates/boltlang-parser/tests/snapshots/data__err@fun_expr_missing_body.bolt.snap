@@ -8,7 +8,8 @@ input_file: crates/boltlang-parser/tests/data/err/fun_expr_missing_body.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "f"
+      - NAME
+        - IDENT "f"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -19,7 +20,8 @@ input_file: crates/boltlang-parser/tests/data/err/fun_expr_missing_body.bolt
         - L_PAREN "("
         - PARAM
           - NAMED_PATT
-            - IDENT "x"
+            - NAME
+              - IDENT "x"
         - R_PAREN ")"
     - SEMI ";"
   - WHITESPACE "\n"

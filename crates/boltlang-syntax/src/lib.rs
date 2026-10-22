@@ -112,10 +112,36 @@ pub enum SyntaxKind {
     PATH_SEGMENT,
 
     // Patterns
+    /// A binding like `x`
     NAMED_PATT,
+    /// `1`, `-1` or `"s"`
     LIT_PATT,
+    /// `_`
+    WILDCARD_PATT,
+    /// A constant or variant like `Color.Red`
+    PATH_PATT,
+    /// `(a, b)`
     TUPLE_PATT,
-    NEST_PATT,
+    /// `Some(x)`
+    TUPLE_STRUCT_PATT,
+    /// `Point { x, y: 0, .. }`
+    STRUCT_PATT,
+    /// `x`, `mut x` or `x: pattern` in a struct pattern
+    FIELD_PATT,
+    /// `..` in a tuple, slice or struct pattern
+    REST_PATT,
+    /// `[a, .., b]`
+    SLICE_PATT,
+    /// `x @ pattern`
+    CAPTURED_PATT,
+    /// `mut x`
+    MUT_PATT,
+    /// `1..=5`, `a..` or `..=b`
+    RANGE_PATT,
+    /// `a | b`
+    OR_PATT,
+    /// `const { ... }`
+    CONST_BLOCK_PATT,
 
     // Type expressions
     /// A type named by a path, like `Vec[T]` or `Shape.Circle`
@@ -305,6 +331,18 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            WILDCARD_PATT => "a wildcard pattern",
+            PATH_PATT => "a path pattern",
+            TUPLE_STRUCT_PATT => "a tuple struct pattern",
+            STRUCT_PATT => "a struct pattern",
+            FIELD_PATT => "a field pattern",
+            REST_PATT => "a rest pattern (..)",
+            SLICE_PATT => "a slice pattern",
+            CAPTURED_PATT => "a captured pattern",
+            MUT_PATT => "a mutable pattern",
+            RANGE_PATT => "a range pattern",
+            OR_PATT => "an or-pattern",
+            CONST_BLOCK_PATT => "a const block pattern",
             IMPL_TRAIT_TYPE => "an impl trait type",
             GENERIC_PARAM_LIST => "a list of generic parameters",
             TYPE_PARAM => "a type parameter",
@@ -421,7 +459,6 @@ impl SyntaxKind {
             MODULE => "a module",
             NAMED_PATT => "a named pattern",
             NEST_EXPR => "a nested expression",
-            NEST_PATT => "a pattern between '(' and ')'",
             OPERATOR => "an operator",
             PARAM => "a function parameter",
             PATH_EXPR => "a path expression",

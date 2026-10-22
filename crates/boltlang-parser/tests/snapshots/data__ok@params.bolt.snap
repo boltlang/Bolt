@@ -12,12 +12,14 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "a"
+          - NAME
+            - IDENT "a"
       - COMMA ","
       - WHITESPACE " "
       - PARAM
         - NAMED_PATT
-          - IDENT "b"
+          - NAME
+            - IDENT "b"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -29,7 +31,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
       - WHITESPACE " "
       - PARAM
         - NAMED_PATT
-          - IDENT "c"
+          - NAME
+            - IDENT "c"
         - WHITESPACE " "
         - EQUALS "="
         - WHITESPACE " "
@@ -39,7 +42,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
       - WHITESPACE " "
       - PARAM
         - NAMED_PATT
-          - IDENT "d"
+          - NAME
+            - IDENT "d"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -78,7 +82,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
         - MUT_KEYWORD "mut"
         - WHITESPACE " "
         - NAMED_PATT
-          - IDENT "x"
+          - NAME
+            - IDENT "x"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -162,7 +167,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "format"
+          - NAME
+            - IDENT "format"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -174,7 +180,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
       - WHITESPACE " "
       - VARIADIC_PARAM
         - NAMED_PATT
-          - IDENT "args"
+          - NAME
+            - IDENT "args"
         - COLON ":"
         - WHITESPACE " "
         - DOTDOTDOT "..."
@@ -197,7 +204,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "format"
+          - NAME
+            - IDENT "format"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -224,7 +232,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "l"
+      - NAME
+        - IDENT "l"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -235,7 +244,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
         - L_PAREN "("
         - PARAM
           - NAMED_PATT
-            - IDENT "x"
+            - NAME
+              - IDENT "x"
           - COLON ":"
           - WHITESPACE " "
           - PATH_TYPE
@@ -247,7 +257,8 @@ input_file: crates/boltlang-parser/tests/data/ok/params.bolt
         - WHITESPACE " "
         - PARAM
           - NAMED_PATT
-            - IDENT "y"
+            - NAME
+              - IDENT "y"
         - R_PAREN ")"
       - WHITESPACE " "
       - EQUALS "="

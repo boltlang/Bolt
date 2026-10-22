@@ -12,7 +12,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_return_type.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "x"
+          - NAME
+            - IDENT "x"
       - R_PAREN ")"
     - WHITESPACE " "
     - RET_TYPE

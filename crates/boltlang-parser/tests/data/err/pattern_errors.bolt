@@ -1,0 +1,2 @@
+let (a, b = t;
+let Point { x: } = p;

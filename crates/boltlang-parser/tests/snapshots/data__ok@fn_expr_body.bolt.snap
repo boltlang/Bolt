@@ -12,12 +12,14 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_expr_body.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "a"
+          - NAME
+            - IDENT "a"
       - COMMA ","
       - WHITESPACE " "
       - PARAM
         - NAMED_PATT
-          - IDENT "b"
+          - NAME
+            - IDENT "b"
       - R_PAREN ")"
     - WHITESPACE " "
     - EQUALS "="

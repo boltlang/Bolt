@@ -2,7 +2,7 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
-    grammar::{delimited, parse_expr, parse_pattern, type_},
+    grammar::{delimited, parse_expr, pattern_single, type_},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -55,7 +55,7 @@ fn param(p: &mut Parser) -> CompletedMarker {
         p.bump(T![self]);
         name.complete(p, NAME);
     } else {
-        parse_pattern(p);
+        pattern_single(p);
     }
     if p.eat(T![:]) {
         if p.eat(T![...]) {

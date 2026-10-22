@@ -10,7 +10,8 @@ input_file: crates/boltlang-parser/tests/data/ok/non_ascii.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "naïve"
+      - NAME
+        - IDENT "naïve"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

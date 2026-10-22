@@ -16,7 +16,7 @@ pub(crate) use generic_params::*;
 pub use items::*;
 pub(crate) use params::*;
 pub(crate) use paths::*;
-pub use patterns::*;
+pub(crate) use patterns::*;
 pub use types::*;
 
 use boltlang_syntax::{SyntaxKind::{self, *}, T};

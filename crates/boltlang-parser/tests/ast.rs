@@ -128,3 +128,19 @@ fn func_decl_params() {
     assert!(matches!(params[1].type_expr(), Some(Type::Path(_))));
     assert!(matches!(params[1].default(), Some(Expr::Lit(_))));
 }
+
+#[test]
+fn struct_pattern() {
+    let (green, diags) = parse_file("let Shape.Circle { radius, center: (x, _), .. } = s;");
+    assert!(diags.is_empty(), "{diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    let Some(SourceElement::VarDecl(decl)) = file.elements().next() else { panic!() };
+    let Some(Pattern::Struct(pattern)) = decl.pattern() else { panic!() };
+    let path: Vec<_> = pattern.path().unwrap().segments().iter().map(|s| s.name_ref().unwrap().text()).collect();
+    assert_eq!(path, ["Shape", "Circle"]);
+    let fields: Vec<_> = pattern.fields().collect();
+    assert_eq!(fields[0].name().unwrap().text(), "radius");
+    assert_eq!(fields[1].name_ref().unwrap().text(), "center");
+    assert!(matches!(fields[1].pattern(), Some(Pattern::Tuple(_))));
+    assert!(pattern.rest().is_some());
+}

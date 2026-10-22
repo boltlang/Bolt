@@ -8,7 +8,8 @@ input_file: crates/boltlang-parser/tests/data/err/unterminated_string.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "s"
+      - NAME
+        - IDENT "s"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

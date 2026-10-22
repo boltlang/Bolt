@@ -18,7 +18,8 @@ input_file: crates/boltlang-parser/tests/data/ok/generic_params.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "x"
+          - NAME
+            - IDENT "x"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -99,7 +100,8 @@ input_file: crates/boltlang-parser/tests/data/ok/generic_params.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "xs"
+          - NAME
+            - IDENT "xs"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE
@@ -238,7 +240,8 @@ input_file: crates/boltlang-parser/tests/data/ok/generic_params.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "f"
+      - NAME
+        - IDENT "f"
     - COLON ":"
     - WHITESPACE " "
     - IMPL_TRAIT_TYPE
@@ -281,7 +284,8 @@ input_file: crates/boltlang-parser/tests/data/ok/generic_params.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "h"
+      - NAME
+        - IDENT "h"
     - COLON ":"
     - WHITESPACE " "
     - IMPL_TRAIT_TYPE
@@ -332,7 +336,8 @@ input_file: crates/boltlang-parser/tests/data/ok/generic_params.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "i"
+      - NAME
+        - IDENT "i"
     - COLON ":"
     - WHITESPACE " "
     - IMPL_TRAIT_TYPE

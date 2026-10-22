@@ -8,7 +8,8 @@ input_file: crates/boltlang-parser/tests/data/ok/underscore_names.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "_x"
+      - NAME
+        - IDENT "_x"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -20,7 +21,8 @@ input_file: crates/boltlang-parser/tests/data/ok/underscore_names.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "__"
+      - NAME
+        - IDENT "__"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

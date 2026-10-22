@@ -10,7 +10,8 @@ input_file: crates/boltlang-parser/tests/data/ok/line_comments.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -26,7 +27,8 @@ input_file: crates/boltlang-parser/tests/data/ok/line_comments.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "y"
+      - NAME
+        - IDENT "y"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

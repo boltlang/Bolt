@@ -21,7 +21,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "character"
+      - NAME
+        - IDENT "character"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -45,7 +46,8 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "size"
+      - NAME
+        - IDENT "size"
     - COLON ":"
     - WHITESPACE " "
     - PATH_TYPE

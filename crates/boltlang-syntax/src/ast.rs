@@ -365,55 +365,219 @@ impl TraitBounds {
     }
 }
 
-pub enum Pattern {
-    Named(NamedPattern),
-}
-
-impl Node for Pattern {
-
-    fn can_cast(kind: SyntaxKind) -> bool {
-        matches!(kind, NAMED_PATT)
+ast_enum!(
+    /// A pattern, as in the grammar's `_pattern`.
+    Pattern {
+        Named(NamedPattern) = NAMED_PATT,
+        Lit(LitPattern) = LIT_PATT,
+        Wildcard(WildcardPattern) = WILDCARD_PATT,
+        Path(PathPattern) = PATH_PATT,
+        Tuple(TuplePattern) = TUPLE_PATT,
+        TupleStruct(TupleStructPattern) = TUPLE_STRUCT_PATT,
+        Struct(StructPattern) = STRUCT_PATT,
+        Rest(RestPattern) = REST_PATT,
+        Slice(SlicePattern) = SLICE_PATT,
+        Captured(CapturedPattern) = CAPTURED_PATT,
+        Mut(MutPattern) = MUT_PATT,
+        Range(RangePattern) = RANGE_PATT,
+        Or(OrPattern) = OR_PATT,
+        ConstBlock(ConstBlockPattern) = CONST_BLOCK_PATT,
     }
+);
 
-    fn wrap(syntax: SyntaxNode) -> Self {
-        match syntax.kind() {
-            NAMED_PATT => Self::Named(NamedPattern(syntax)),
-            _ => unreachable!(),
-        }
-    }
-
-    fn syntax(&self) -> &SyntaxNode {
-        match self {
-            Self::Named(node) => node.syntax(),
-        }
-    }
-
-}
-
+/// A binding like `x`
 pub struct NamedPattern(SyntaxNode);
 
+simple_node!(NamedPattern, NAMED_PATT);
+
 impl NamedPattern {
-
-    pub fn mut_keyword(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
     }
-
-    pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENT)
-    }
-
 }
 
+/// `1`, `-1` or `"s"`
+pub struct LitPattern(SyntaxNode);
 
-impl Node for NamedPattern {
-    fn kind() -> SyntaxKind {
-        NAMED_PATT
+simple_node!(LitPattern, LIT_PATT);
+
+impl LitPattern {
+    pub fn minus_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MINUS)
     }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        NamedPattern(syntax)
+    /// The literal token, without the `-`.
+    pub fn literal(&self) -> Option<SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|x| x.into_token())
+            .find(|token| !token.kind().is_trivia() && token.kind() != MINUS)
     }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
+}
+
+/// `_`
+pub struct WildcardPattern(SyntaxNode);
+
+simple_node!(WildcardPattern, WILDCARD_PATT);
+
+/// A constant or variant like `Color.Red`
+pub struct PathPattern(SyntaxNode);
+
+simple_node!(PathPattern, PATH_PATT);
+
+impl PathPattern {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+}
+
+/// `(a, b)`
+pub struct TuplePattern(SyntaxNode);
+
+simple_node!(TuplePattern, TUPLE_PATT);
+
+impl TuplePattern {
+    pub fn fields(&self) -> ChildrenIter<Pattern> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `Some(x)`
+pub struct TupleStructPattern(SyntaxNode);
+
+simple_node!(TupleStructPattern, TUPLE_STRUCT_PATT);
+
+impl TupleStructPattern {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+    pub fn fields(&self) -> ChildrenIter<Pattern> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `Point { x, y: 0, .. }`
+pub struct StructPattern(SyntaxNode);
+
+simple_node!(StructPattern, STRUCT_PATT);
+
+impl StructPattern {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+    pub fn fields(&self) -> ChildrenIter<FieldPattern> {
+        ChildrenIter::new(&self.0)
+    }
+    /// The `..` at the end, if there is one.
+    pub fn rest(&self) -> Option<RestPattern> {
+        self.find_node()
+    }
+}
+
+/// `x`, `mut x` or `x: pattern` in a struct pattern
+pub struct FieldPattern(SyntaxNode);
+
+simple_node!(FieldPattern, FIELD_PATT);
+
+impl FieldPattern {
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
+    /// The field name in `x: pattern`.
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+    /// The name bound by the shorthand form `x`.
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+}
+
+/// `..` in a tuple, slice or struct pattern
+pub struct RestPattern(SyntaxNode);
+
+simple_node!(RestPattern, REST_PATT);
+
+/// `[a, .., b]`
+pub struct SlicePattern(SyntaxNode);
+
+simple_node!(SlicePattern, SLICE_PATT);
+
+impl SlicePattern {
+    pub fn elements(&self) -> ChildrenIter<Pattern> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `x @ pattern`
+pub struct CapturedPattern(SyntaxNode);
+
+simple_node!(CapturedPattern, CAPTURED_PATT);
+
+impl CapturedPattern {
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+}
+
+/// `mut x`
+pub struct MutPattern(SyntaxNode);
+
+simple_node!(MutPattern, MUT_PATT);
+
+impl MutPattern {
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+}
+
+/// `1..=5`, `a..` or `..=b`
+pub struct RangePattern(SyntaxNode);
+
+simple_node!(RangePattern, RANGE_PATT);
+
+impl RangePattern {
+    /// The operator: `..` or `..=`.
+    pub fn op_token(&self) -> Option<SyntaxToken> {
+        self.0
+            .children_with_tokens()
+            .filter_map(|x| x.into_token())
+            .find(|token| matches!(token.kind(), DOTDOT | DOTDOTEQUALS))
+    }
+    pub fn start(&self) -> Option<Pattern> {
+        let op = self.op_token()?;
+        self.0.children().filter(|n| n.text_range().end() <= op.text_range().start()).find_map(Pattern::cast)
+    }
+    pub fn end(&self) -> Option<Pattern> {
+        let op = self.op_token()?;
+        self.0.children().filter(|n| n.text_range().start() >= op.text_range().end()).find_map(Pattern::cast)
+    }
+}
+
+/// `a | b`
+pub struct OrPattern(SyntaxNode);
+
+simple_node!(OrPattern, OR_PATT);
+
+impl OrPattern {
+    pub fn patterns(&self) -> ChildrenIter<Pattern> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+/// `const { ... }`
+pub struct ConstBlockPattern(SyntaxNode);
+
+simple_node!(ConstBlockPattern, CONST_BLOCK_PATT);
+
+impl ConstBlockPattern {
+    pub fn block(&self) -> Option<BlockExpr> {
+        self.find_node()
     }
 }
 

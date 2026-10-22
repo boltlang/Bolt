@@ -3,7 +3,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{delimited, generic_param_list, is_path_start, parse_expr, parse_pattern, type_path},
+    grammar::{delimited, generic_param_list, is_path_start, parse_expr, pattern_single, type_path},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -188,7 +188,7 @@ fn fn_type_param(p: &mut Parser) {
             p.bump(T![self]);
             name.complete(p, NAME);
         } else {
-            parse_pattern(p);
+            pattern_single(p);
         }
         p.bump(T![:]);
         if p.eat(T![...]) {

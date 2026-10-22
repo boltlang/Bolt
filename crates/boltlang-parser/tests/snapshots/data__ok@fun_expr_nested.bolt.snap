@@ -8,7 +8,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_nested.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "k"
+      - NAME
+        - IDENT "k"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -19,7 +20,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_nested.bolt
         - L_PAREN "("
         - PARAM
           - NAMED_PATT
-            - IDENT "x"
+            - NAME
+              - IDENT "x"
         - R_PAREN ")"
       - WHITESPACE " "
       - EQUALS "="
@@ -31,7 +33,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_nested.bolt
           - L_PAREN "("
           - PARAM
             - NAMED_PATT
-              - IDENT "y"
+              - NAME
+                - IDENT "y"
           - R_PAREN ")"
         - WHITESPACE " "
         - EQUALS "="

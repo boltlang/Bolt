@@ -8,7 +8,8 @@ input_file: crates/boltlang-parser/tests/data/ok/casts_and_indexing.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "a"
+      - NAME
+        - IDENT "a"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -41,7 +42,8 @@ input_file: crates/boltlang-parser/tests/data/ok/casts_and_indexing.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "b"
+      - NAME
+        - IDENT "b"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -73,7 +75,8 @@ input_file: crates/boltlang-parser/tests/data/ok/casts_and_indexing.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "c"
+      - NAME
+        - IDENT "c"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -93,7 +96,8 @@ input_file: crates/boltlang-parser/tests/data/ok/casts_and_indexing.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "d"
+      - NAME
+        - IDENT "d"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -124,7 +128,8 @@ input_file: crates/boltlang-parser/tests/data/ok/casts_and_indexing.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "e"
+      - NAME
+        - IDENT "e"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

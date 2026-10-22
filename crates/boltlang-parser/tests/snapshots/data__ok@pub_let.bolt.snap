@@ -10,7 +10,8 @@ input_file: crates/boltlang-parser/tests/data/ok/pub_let.bolt
     - LET_KEYWORD "let"
     - WHITESPACE " "
     - NAMED_PATT
-      - IDENT "x"
+      - NAME
+        - IDENT "x"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

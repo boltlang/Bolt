@@ -12,7 +12,8 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_expr_body_types.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "x"
+          - NAME
+            - IDENT "x"
         - COLON ":"
         - WHITESPACE " "
         - PATH_TYPE

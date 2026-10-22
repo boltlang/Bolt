@@ -12,11 +12,13 @@ input_file: crates/boltlang-parser/tests/data/err/params_missing_comma.bolt
       - L_PAREN "("
       - PARAM
         - NAMED_PATT
-          - IDENT "a"
+          - NAME
+            - IDENT "a"
         - WHITESPACE " "
       - PARAM
         - NAMED_PATT
-          - IDENT "b"
+          - NAME
+            - IDENT "b"
       - R_PAREN ")"
     - WHITESPACE " "
     - EQUALS "="
