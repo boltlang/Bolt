@@ -71,10 +71,10 @@ mod tests {
         let tokens = tokens("macro_rules <$> x", |p| {
             let m = p.start();
             assert!(p.at_contextual_kw(MACRO_RULES_KEYWORD));
-            assert!(p.eat_contextual_kw(MACRO_RULES_KEYWORD));
+            p.bump_remap(MACRO_RULES_KEYWORD);
             assert!(p.at_op("<$>"));
             assert!(!p.at_op("<"));
-            assert!(p.eat_op("<$>"));
+            p.bump_any();
             assert!(!p.at_contextual_kw(MACRO_RULES_KEYWORD));
             p.bump_any();
             m.complete(p, SOURCE_FILE);

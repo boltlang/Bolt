@@ -13,21 +13,6 @@ use crate::{
     token_set::TokenSet,
 };
 
-/// Where item parsing gives up and leaves the token to an enclosing rule.
-pub(crate) const ITEM_RECOVERY_SET: TokenSet = TokenSet::new(&[
-    T![fn],
-    T![struct],
-    T![enum],
-    T![trait],
-    T![impl],
-    T![import],
-    T![type],
-    T![const],
-    T![extern],
-    T![pub],
-    T![;],
-]);
-
 /// Parse an item if one starts here, completing `m` with it. `m` was
 /// started before the item, so that attributes can be part of it.
 pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {

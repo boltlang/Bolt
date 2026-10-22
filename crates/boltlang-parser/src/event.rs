@@ -125,22 +125,6 @@ impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
 
 }
 
-fn with_text<'text, 'event, I: Iterator<Item = &'event Event>>(iter: I, lexed: &LexResult, text: &'text str) -> impl Iterator<Item = &'text str> {
-    let mut text_pos = 0;
-    let mut pos = 0;
-    iter
-        .filter(|ev| matches!(ev, Event::Token { .. }))
-        .map(move |_ev| {
-            let start = text_pos;
-            let len = lexed.token_len(pos) as usize;
-            let end = start + len;
-            let text = &text[start..end];
-            text_pos += len;
-            pos += 1;
-            text
-        })
-}
-
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 enum IntersperseState {
     PendingEnter,

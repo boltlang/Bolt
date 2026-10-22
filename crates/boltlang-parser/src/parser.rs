@@ -71,24 +71,21 @@ impl Marker {
             _ => unreachable!(),
         }
         p.push_event(Event::Finish);
-        let end_pos = p.events.len() as u32;
-        CompletedMarker::new(self.pos, end_pos, kind)
+        CompletedMarker::new(self.pos, kind)
     }
 
 }
 
 pub struct CompletedMarker {
     start_pos: u32,
-    end_pos: u32,
     kind: SyntaxKind,
 }
 
 impl CompletedMarker {
 
-    pub(crate) fn new(start_pos: u32, end_pos: u32, kind: SyntaxKind) -> Self {
+    pub(crate) fn new(start_pos: u32, kind: SyntaxKind) -> Self {
         Self {
             start_pos,
-            end_pos,
             kind
         }
     }
@@ -135,15 +132,6 @@ impl CompletedMarker {
         self.kind
     }
 
-    pub(crate) fn last_token(&self, p: &Parser<'_>) -> Option<SyntaxKind> {
-        let end_pos = self.end_pos as usize;
-        debug_assert_eq!(p.events[end_pos - 1], Event::Finish);
-        p.events[..end_pos].iter().rev().find_map(|event| match event {
-            Event::Token { kind, .. } => Some(*kind),
-            _ => None,
-        })
-    }
-
 }
 
 #[derive(Clone)]
@@ -167,7 +155,7 @@ impl Input {
 pub struct Parser<'t> {
     inp: Input,
     pos: usize,
-    pub events: Vec<Event>,
+    events: Vec<Event>,
     /// Tokens that were split in two by [`Parser::split_bump`].
     splits: Vec<Split>,
     /// How often the parser looked at a token since it last consumed one.
@@ -223,15 +211,6 @@ impl <'t> Parser<'t> {
         self.nth(n) == IDENT && self.nth_text(n) == text
     }
 
-    /// Consume the contextual keyword `kw` as a keyword, if it's next.
-    pub(crate) fn eat_contextual_kw(&mut self, kw: SyntaxKind) -> bool {
-        if !self.at_contextual_kw(kw) {
-            return false;
-        }
-        self.bump_remap(kw);
-        true
-    }
-
     /// Whether the current token is the operator `op`, e.g. `"&&"`. Use this
     /// for operators that have no kind of their own (see [`is_operator_kind`]).
     pub(crate) fn at_op(&self, op: &str) -> bool {
@@ -240,15 +219,6 @@ impl <'t> Parser<'t> {
 
     pub(crate) fn nth_at_op(&self, n: usize, op: &str) -> bool {
         is_operator_kind(self.nth(n)) && self.nth_text(n) == op
-    }
-
-    /// Consume the operator `op`, if it's next.
-    pub(crate) fn eat_op(&mut self, op: &str) -> bool {
-        if !self.at_op(op) {
-            return false;
-        }
-        self.bump_any();
-        true
     }
 
     pub(crate) fn nth_at_ts(&self, n: usize, ts: TokenSet) -> bool {

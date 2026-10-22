@@ -70,10 +70,11 @@ fn expr_stmt(p: &mut Parser, m: Option<Marker>) -> Option<(CompletedMarker, Bloc
     expr_bp(p, m, r, 1)
 }
 
+/// Whether a statement needs a `;`. Only the one kind for now; kept as a
+/// parameter to follow rust-analyzer, which also has optional ones.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Semicolon {
     Required,
-    Optional,
 }
 
 /// A statement: `;`, a `let`, an item like a function, or an expression.
@@ -124,9 +125,6 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
             Semicolon::Required => {
                 p.expect(T![;]);
             }
-            Semicolon::Optional => {
-                p.eat(T![;]);
-            }
         }
         m.complete(p, EXPR_STMT);
     }
@@ -150,9 +148,6 @@ pub(crate) fn let_stmt(p: &mut Parser, m: Marker, semicolon: Semicolon) {
     match semicolon {
         Semicolon::Required => {
             p.expect(T![;]);
-        }
-        Semicolon::Optional => {
-            p.eat(T![;]);
         }
     }
     m.complete(p, LET_STMT);
