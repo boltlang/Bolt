@@ -250,6 +250,7 @@ pub enum SyntaxKind {
     EXTERN_BLOCK,
     LET_STMT,
     RECORD_EXPR_FIELD_LIST,
+    /// `type A = B;`, or `type Item: Bound;` in a trait
     TYPE_ALIAS,
 
     // Impl helper syntax
@@ -267,6 +268,8 @@ pub enum SyntaxKind {
     VISIBILITY,
     /// The `(+)` in `fn (+)(a, b)`
     OPERATOR_NAME,
+    /// `const NAME: Type = value;`
+    CONST,
     /// `struct Point { x: i32 }`, `struct Pair(A, B);` or `struct Unit;`
     STRUCT,
     /// `enum Option[T] { None, Some(T) }`
@@ -381,6 +384,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            CONST => "a constant",
             STRUCT => "a struct",
             ENUM => "an enum",
             VARIANT_LIST => "the variants of an enum",

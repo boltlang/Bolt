@@ -1531,8 +1531,59 @@ ast_enum!(
         ExprStmt(ExprStmt) = EXPR_STMT,
         Struct(Struct) = STRUCT,
         Enum(Enum) = ENUM,
+        Const(Const) = CONST,
+        TypeAlias(TypeAlias) = TYPE_ALIAS,
     }
 );
+
+/// `const NAME: Type = value;`
+pub struct Const(SyntaxNode);
+
+simple_node!(Const, CONST);
+
+impl Const {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `type A = B;`, or `type Item: Bound;` in a trait
+pub struct TypeAlias(SyntaxNode);
+
+simple_node!(TypeAlias, TYPE_ALIAS);
+
+impl TypeAlias {
+    pub fn visibility(&self) -> Option<Visibility> {
+        self.find_node()
+    }
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    /// The bounds of an associated type, like `: Iterator`.
+    pub fn bounds(&self) -> Option<TraitBounds> {
+        self.find_node()
+    }
+    /// The `where` clauses, before and after the type.
+    pub fn where_clauses(&self) -> ChildrenIter<WhereClause> {
+        ChildrenIter::new(&self.0)
+    }
+    /// The type after `=`. `None` for an associated type without a default.
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
 
 /// `struct Point { x: i32 }`, `struct Pair(A, B);` or `struct Unit;`
 pub struct Struct(SyntaxNode);

@@ -4,36 +4,29 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string_literal_prefixes.bolt
 ---
 - SOURCE_FILE
-  - ERROR
+  - CONST
     - CONST_KEYWORD "const"
-  - WHITESPACE " "
-  - EXPR_STMT
-    - PATH_EXPR
-      - PATH
-        - PATH_SEGMENT
-          - NAME_REF
-            - IDENT "A"
-  - ERROR
+    - WHITESPACE " "
+    - NAME
+      - IDENT "A"
     - COLON ":"
-  - WHITESPACE " "
-  - EXPR_STMT
-    - BIN_EXPR
-      - ARRAY_EXPR
-        - L_BRACKET "["
-        - PATH_EXPR
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "str"
-        - R_BRACKET "]"
-      - WHITESPACE " "
-      - EQUALS "="
-      - WHITESPACE " "
-      - ARRAY_EXPR
-        - L_BRACKET "["
-        - WHITESPACE "\n    "
-        - ERROR
-          - AT "@"
+    - WHITESPACE " "
+    - ARRAY_TYPE
+      - L_BRACKET "["
+      - PATH_TYPE
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "str"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - WHITESPACE "\n    "
+      - ERROR
+        - AT "@"
   - EXPR_STMT
     - LIT_EXPR
       - STRING "\"asdf\""
@@ -66,24 +59,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string
     - R_BRACKET "]"
   - SEMI ";"
   - WHITESPACE "\n"
----
-!ExpectedToken
-message: expected an expression
-span:
-  start: 0
-  end: 0
----
-!ExpectedToken
-message: expected ';'
-span:
-  start: 7
-  end: 7
----
-!ExpectedToken
-message: expected an expression, an item or a let statement
-span:
-  start: 7
-  end: 7
 ---
 !ExpectedToken
 message: expected an expression

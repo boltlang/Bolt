@@ -45,6 +45,14 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
             enum_item(p, m);
             return Ok(());
         }
+        T![const] if p.nth_at(1, IDENT) => {
+            const_item(p, m);
+            return Ok(());
+        }
+        T![type] => {
+            type_alias(p, m);
+            return Ok(());
+        }
         _ => {}
     }
     if has_visibility {
@@ -298,4 +306,38 @@ pub(crate) fn tuple_field_list(p: &mut Parser) {
         },
     );
     m.complete(p, TUPLE_FIELD_LIST);
+}
+
+/// `const NAME: Type = value;`, with the value optional.
+fn const_item(p: &mut Parser, m: Marker) {
+    p.bump(T![const]);
+    name(p);
+    p.expect(T![:]);
+    type_(p);
+    if p.eat(T![=]) {
+        expr(p);
+    }
+    p.expect(T![;]);
+    m.complete(p, CONST);
+}
+
+/// `type A[T] where T: Ord = B[T];`, following the grammar's `type_item`,
+/// or `type Item[T]: Bound where T: Ord;` in a trait, following its
+/// `associated_type`. A `where` clause can also come after the type.
+fn type_alias(p: &mut Parser, m: Marker) {
+    p.bump(T![type]);
+    name(p);
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+    if p.at(T![:]) {
+        trait_bounds(p);
+    }
+    opt_where_clause(p);
+    if p.eat(T![=]) {
+        type_(p);
+        opt_where_clause(p);
+    }
+    p.expect(T![;]);
+    m.complete(p, TYPE_ALIAS);
 }

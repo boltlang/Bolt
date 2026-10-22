@@ -1,0 +1,8 @@
+const A: i32 = 1;
+pub const B: str;
+type C = D;
+pub type E[T] = Vec[T];
+type F[T] where T: Ord = G[T];
+type H = I where I: Clone;
+type Item;
+type Iter: Iterator + Clone where Self: Sized;
