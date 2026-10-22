@@ -13,6 +13,7 @@ const CHAR_EOF: char = '\u{FFFF}';
 
 #[derive(Debug, Clone)]
 pub struct Pos {
+    /// Byte offset into the source text.
     offset: usize,
     line: usize,
     column: usize,
@@ -117,7 +118,7 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             None => self.read(),
         };
         if ch != CHAR_EOF {
-            self.pos.offset += 1;
+            self.pos.offset += ch.len_utf8();
             if ch == '\n' {
                 self.pos.line += 1;
                 self.pos.column = 1;
@@ -223,7 +224,7 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 c1 if is_ident_part(c1) => {
                     self.get();
-                    self.error("identifiers may not begin with decimal digits", self.pos.offset-1..self.pos.offset);
+                    self.error("identifiers may not begin with decimal digits", self.pos.offset-c1.len_utf8()..self.pos.offset);
                     ERROR
                 }
                 _ => DEC_INT
