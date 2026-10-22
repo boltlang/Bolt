@@ -196,6 +196,18 @@ pub enum SyntaxKind {
     LET_EXPR,
     /// `while cond { }`
     WHILE_EXPR,
+    /// `loop { }`
+    LOOP_EXPR,
+    /// `for pattern in iterable { }`
+    FOR_EXPR,
+    /// `break`, `break 'label` or `break value`
+    BREAK_EXPR,
+    /// `continue` or `continue 'label`
+    CONTINUE_EXPR,
+    /// `yield` or `yield value`
+    YIELD_EXPR,
+    /// `'outer`, before a loop or block or after `break` and `continue`
+    LABEL,
     BIN_EXPR,
     BLOCK_EXPR,
     CALL_EXPR,
@@ -340,6 +352,12 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            LOOP_EXPR => "a loop",
+            FOR_EXPR => "a for loop",
+            BREAK_EXPR => "a break expression",
+            CONTINUE_EXPR => "a continue expression",
+            YIELD_EXPR => "a yield expression",
+            LABEL => "a label",
             IF_EXPR => "an if expression",
             LET_EXPR => "a let condition",
             WHILE_EXPR => "a while loop",

@@ -602,6 +602,11 @@ ast_enum!(
         If(IfExpr) = IF_EXPR,
         Let(LetExpr) = LET_EXPR,
         While(WhileExpr) = WHILE_EXPR,
+        Loop(LoopExpr) = LOOP_EXPR,
+        For(ForExpr) = FOR_EXPR,
+        Break(BreakExpr) = BREAK_EXPR,
+        Continue(ContinueExpr) = CONTINUE_EXPR,
+        Yield(YieldExpr) = YIELD_EXPR,
     }
 );
 
@@ -736,6 +741,9 @@ pub struct WhileExpr(SyntaxNode);
 simple_node!(WhileExpr, WHILE_EXPR);
 
 impl WhileExpr {
+    pub fn label(&self) -> Option<Label> {
+        self.find_node()
+    }
     pub fn condition(&self) -> Option<Expr> {
         self.find_node()
     }
@@ -744,6 +752,95 @@ impl WhileExpr {
             Expr::Block(block) => Some(block),
             _ => None,
         })
+    }
+}
+
+/// The first child of `node` that is a block expression.
+fn find_block(node: &SyntaxNode) -> Option<BlockExpr> {
+    node.children().find_map(BlockExpr::cast)
+}
+
+/// `'outer`
+pub struct Label(SyntaxNode);
+
+simple_node!(Label, LABEL);
+
+impl Label {
+    pub fn ident(&self) -> Option<SyntaxToken> {
+        self.find_token(LABEL_IDENT)
+    }
+}
+
+/// `loop { }`
+pub struct LoopExpr(SyntaxNode);
+
+simple_node!(LoopExpr, LOOP_EXPR);
+
+impl LoopExpr {
+    pub fn label(&self) -> Option<Label> {
+        self.find_node()
+    }
+    pub fn body(&self) -> Option<BlockExpr> {
+        find_block(&self.0)
+    }
+}
+
+/// `for pattern in iterable { }`
+pub struct ForExpr(SyntaxNode);
+
+simple_node!(ForExpr, FOR_EXPR);
+
+impl ForExpr {
+    pub fn label(&self) -> Option<Label> {
+        self.find_node()
+    }
+    pub fn pattern(&self) -> Option<Pattern> {
+        self.find_node()
+    }
+    pub fn iterable(&self) -> Option<Expr> {
+        self.find_node()
+    }
+    pub fn body(&self) -> Option<BlockExpr> {
+        self.0.children().filter_map(Expr::cast).nth(1).and_then(|e| match e {
+            Expr::Block(block) => Some(block),
+            _ => None,
+        })
+    }
+}
+
+/// `break`, `break 'outer` or `break value`
+pub struct BreakExpr(SyntaxNode);
+
+simple_node!(BreakExpr, BREAK_EXPR);
+
+impl BreakExpr {
+    pub fn label(&self) -> Option<Label> {
+        self.find_node()
+    }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `continue` or `continue 'outer`
+pub struct ContinueExpr(SyntaxNode);
+
+simple_node!(ContinueExpr, CONTINUE_EXPR);
+
+impl ContinueExpr {
+    pub fn label(&self) -> Option<Label> {
+        self.find_node()
+    }
+}
+
+/// `yield` or `yield value`
+pub struct YieldExpr(SyntaxNode);
+
+simple_node!(YieldExpr, YIELD_EXPR);
+
+impl YieldExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
     }
 }
 
@@ -886,6 +983,18 @@ impl Node for BlockExpr {
 impl BlockExpr {
     pub fn block(&self) -> Option<Block> {
         self.find_node()
+    }
+    /// The label of `'a: { }`.
+    pub fn label(&self) -> Option<Label> {
+        self.find_node()
+    }
+    /// The `async` of `async { }`.
+    pub fn async_token(&self) -> Option<SyntaxToken> {
+        self.find_token(ASYNC_KEYWORD)
+    }
+    /// The `const` of `const { }`.
+    pub fn const_token(&self) -> Option<SyntaxToken> {
+        self.find_token(CONST_KEYWORD)
     }
 }
 

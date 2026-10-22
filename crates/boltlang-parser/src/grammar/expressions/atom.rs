@@ -6,7 +6,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct};
 use crate::{
     grammar::{expr_path, is_path_start, opt_ret_type, param_list, parse_pattern},
-    parser::{CompletedMarker, Parser},
+    parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
 
@@ -33,6 +33,14 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T![if],
     T![let],
     T![while],
+    T![loop],
+    T![for],
+    T![break],
+    T![continue],
+    T![yield],
+    T![async],
+    T![const],
+    LABEL_IDENT,
 ]));
 
 /// Where expression parsing gives up and leaves the token to an enclosing
@@ -57,13 +65,58 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     if is_path_start(p) {
         return Some((path_expr(p), BlockLike::NotBlock));
     }
+    // `'label: loop { }` and other labelled loops and blocks
+    if p.at(LABEL_IDENT) && p.nth_at(1, T![:]) {
+        let m = p.start();
+        label(p);
+        p.bump(T![:]);
+        let kind = match p.current() {
+            T![loop] => loop_expr(p, m),
+            T![while] => while_expr(p, m),
+            T![for] => for_expr(p, m),
+            T!['{'] => {
+                block(p);
+                m.complete(p, BLOCK_EXPR)
+            }
+            _ => {
+                p.error("expected a loop or block after a label");
+                m.complete(p, ERROR)
+            }
+        };
+        return Some((kind, BlockLike::Block));
+    }
     let done = match p.current() {
         T!['('] => paren_or_tuple_expr(p),
         T!['{'] => return Some((parse_block_expr(p), BlockLike::Block)),
-        T![return] => return_expr(p),
+        T![async] | T![const] if p.nth_at(1, T!['{']) => {
+            let m = p.start();
+            p.bump_any();
+            block(p);
+            return Some((m.complete(p, BLOCK_EXPR), BlockLike::Block));
+        }
+        T![loop] => {
+            let m = p.start();
+            return Some((loop_expr(p, m), BlockLike::Block));
+        }
+        T![for] => {
+            let m = p.start();
+            return Some((for_expr(p, m), BlockLike::Block));
+        }
+        T![break] => break_expr(p, r),
+        T![continue] => continue_expr(p),
+        T![yield] => {
+            let m = p.start();
+            p.bump(T![yield]);
+            opt_value(p, r);
+            m.complete(p, YIELD_EXPR)
+        }
+        T![return] => return_expr(p, r),
         T![fn] => fun_expr(p),
         T![if] => return Some((if_expr(p), BlockLike::Block)),
-        T![while] => return Some((while_expr(p), BlockLike::Block)),
+        T![while] => {
+            let m = p.start();
+            return Some((while_expr(p, m), BlockLike::Block));
+        }
         T![let] => let_expr(p, r),
         _ => {
             p.err_recover("expected an expression", EXPR_RECOVERY_SET);
@@ -126,12 +179,10 @@ fn block(p: &mut Parser) {
 }
 
 /// `return` or `return x`
-fn return_expr(p: &mut Parser) -> CompletedMarker {
+fn return_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     let m = p.start();
     p.bump(T![return]);
-    if p.at_ts(EXPR_FIRST) {
-        expr(p);
-    }
+    opt_value(p, r);
     m.complete(p, RET_EXPR)
 }
 
@@ -168,9 +219,8 @@ fn if_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, IF_EXPR)
 }
 
-/// `while cond { }`
-fn while_expr(p: &mut Parser) -> CompletedMarker {
-    let m = p.start();
+/// `while cond { }`. `m` was started before an optional label.
+fn while_expr(p: &mut Parser, m: Marker) -> CompletedMarker {
     p.bump(T![while]);
     expr_no_struct(p);
     parse_block_expr(p);
@@ -187,4 +237,57 @@ fn let_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
     p.expect(T![=]);
     expr_bp(p, None, Restrictions { prefer_stmt: false, ..r }, 5);
     m.complete(p, LET_EXPR)
+}
+
+/// `loop { }`. `m` was started before an optional label.
+fn loop_expr(p: &mut Parser, m: Marker) -> CompletedMarker {
+    p.bump(T![loop]);
+    parse_block_expr(p);
+    m.complete(p, LOOP_EXPR)
+}
+
+/// `for pattern in iterable { }`. `m` was started before an optional label.
+fn for_expr(p: &mut Parser, m: Marker) -> CompletedMarker {
+    p.bump(T![for]);
+    parse_pattern(p);
+    p.expect(T![in]);
+    expr_no_struct(p);
+    parse_block_expr(p);
+    m.complete(p, FOR_EXPR)
+}
+
+/// `'outer`
+fn label(p: &mut Parser) {
+    let m = p.start();
+    p.bump(LABEL_IDENT);
+    m.complete(p, LABEL);
+}
+
+/// `break`, `break 'outer`, `break value` or `break 'outer value`
+fn break_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![break]);
+    if p.at(LABEL_IDENT) {
+        label(p);
+    }
+    opt_value(p, r);
+    m.complete(p, BREAK_EXPR)
+}
+
+/// `continue` or `continue 'outer`
+fn continue_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![continue]);
+    if p.at(LABEL_IDENT) {
+        label(p);
+    }
+    m.complete(p, CONTINUE_EXPR)
+}
+
+/// The optional value of `break`, `return` or `yield`. In a condition, a
+/// `{` starts the body, not the value: `if x { break } {`.
+fn opt_value(p: &mut Parser, r: Restrictions) {
+    if p.at_ts(EXPR_FIRST) && !(r.forbid_structs && p.at(T!['{'])) {
+        expr(p);
+    }
 }

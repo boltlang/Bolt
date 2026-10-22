@@ -1,0 +1,13 @@
+loop { break; }
+'outer: loop { continue 'outer; }
+for x in xs { f(x); }
+for (i, x) in xs.iter().enumerate() { }
+for A | B in c {}
+'a: for x in xs { break 'a; }
+'b: while x { break 'b x; }
+let v = loop { break 42; };
+let w = 'c: { break 'c 1; };
+let a = async { f().await };
+let c = const { 1 + 2 };
+fn g() { yield; yield 1; }
+fn h() { if x { return } else { continue } }
