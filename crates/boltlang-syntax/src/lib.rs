@@ -192,6 +192,8 @@ pub enum SyntaxKind {
     AWAIT_EXPR,
     /// `[a, b]` or `[x; n]`
     ARRAY_EXPR,
+    /// `|a, b| a + b`
+    CLOSURE_EXPR,
     /// `if cond { } else { }`
     IF_EXPR,
     /// `let pattern = value` in the condition of an `if` or `while`
@@ -360,6 +362,7 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            CLOSURE_EXPR => "a closure",
             ARRAY_EXPR => "an array expression",
             MATCH_ARM_LIST => "the arms of a match",
             MATCH_ARM => "a match arm",

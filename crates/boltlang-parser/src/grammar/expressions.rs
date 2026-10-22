@@ -42,6 +42,12 @@ const EXPR_FIRST: TokenSet = LHS_FIRST;
 
 const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!]]));
 
+/// Whether an expression can start here. Besides [`EXPR_FIRST`], `||` can
+/// start a closure without parameters; the lexer joins it into an operator.
+pub(crate) fn at_expr_start(p: &Parser) -> bool {
+    p.at_ts(EXPR_FIRST) || p.at_op("||")
+}
+
 /// An expression.
 pub fn parse_expr(p: &mut Parser) -> Option<CompletedMarker> {
     expr(p)
@@ -85,7 +91,7 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
         parse_named_function_declaration(p);
         return;
     }
-    if !p.at_ts(EXPR_FIRST) {
+    if !at_expr_start(p) {
         p.error_and_bump("expected an expression, an item or a let statement");
         return;
     }
@@ -182,7 +188,7 @@ fn current_op(p: &Parser) -> (u8, SyntaxKind, Associativity) {
 /// Parse an expression whose operators bind at least as tightly as `bp`.
 fn expr_bp(p: &mut Parser, m: Option<Marker>, r: Restrictions, bp: u8) -> Option<(CompletedMarker, BlockLike)> {
     let m = m.unwrap_or_else(|| p.start());
-    if !p.at_ts(EXPR_FIRST) {
+    if !at_expr_start(p) {
         p.err_recover("expected an expression", EXPR_RECOVERY_SET);
         m.abandon(p);
         return None;

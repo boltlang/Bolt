@@ -3,9 +3,9 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 
-use super::{BlockLike, EXPR_FIRST, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
+use super::{BlockLike, at_expr_start, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
 use crate::{
-    grammar::{dotted_path, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern},
+    grammar::{dotted_path, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern, pattern_single, type_},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -29,6 +29,7 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T!['('],
     T!['{'],
     T!['['],
+    T![|],
     T![return],
     T![fn],
     T![if],
@@ -93,6 +94,9 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     let done = match p.current() {
         T!['('] => paren_or_tuple_expr(p),
         T!['['] => array_expr(p),
+        T![|] => closure_expr(p),
+        _ if p.at_op("||") => closure_expr(p),
+        T![async] if p.nth_at(1, T![|]) || p.nth_at_op(1, "||") => closure_expr(p),
         T!['{'] => return Some((parse_block_expr(p), BlockLike::Block)),
         T![async] | T![const] if p.nth_at(1, T!['{']) => {
             let m = p.start();
@@ -210,14 +214,14 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     let mut saw_expr = false;
     while !p.at(EOF) && !p.at(T![')']) {
         saw_expr = true;
-        if !p.at_ts(EXPR_FIRST) {
+        if !at_expr_start(p) {
             p.error("expected an expression");
             break;
         }
         expr(p);
         if p.eat(T![,]) {
             saw_comma = true;
-        } else if p.at_ts(EXPR_FIRST) {
+        } else if at_expr_start(p) {
             // `(a b)`: assume a comma is missing.
             p.error("expected ','");
             saw_comma = true;
@@ -235,7 +239,7 @@ fn array_expr(p: &mut Parser) -> CompletedMarker {
     p.bump(T!['[']);
     let mut first = true;
     while !p.at(EOF) && !p.at(T![']']) {
-        if !p.at_ts(EXPR_FIRST) {
+        if !at_expr_start(p) {
             p.err_recover("expected an expression", TokenSet::new(&[T![']'], T![,]]));
             break;
         }
@@ -248,7 +252,7 @@ fn array_expr(p: &mut Parser) -> CompletedMarker {
         if p.eat(T![,]) {
             continue;
         }
-        if p.at_ts(EXPR_FIRST) {
+        if at_expr_start(p) {
             p.error("expected ','");
         } else {
             break;
@@ -385,7 +389,7 @@ fn continue_expr(p: &mut Parser) -> CompletedMarker {
 /// The optional value of `break`, `return` or `yield`. In a condition, a
 /// `{` starts the body, not the value: `if x { break } {`.
 fn opt_value(p: &mut Parser, r: Restrictions) {
-    if p.at_ts(EXPR_FIRST) && !(r.forbid_structs && p.at(T!['{'])) {
+    if at_expr_start(p) && !(r.forbid_structs && p.at(T!['{'])) {
         expr(p);
     }
 }
@@ -441,4 +445,48 @@ fn match_arm(p: &mut Parser) {
         p.error("expected ','");
     }
     m.complete(p, MATCH_ARM);
+}
+
+/// `|a, b| a + b`, `|x: i32| -> i32 { x }`, `async |x| ...` or `|| x`.
+fn closure_expr(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.eat(T![async]);
+    let params = p.start();
+    if p.at_op("||") {
+        // The lexer joined the two `|` of an empty parameter list.
+        p.split_bump(T![|], 1);
+        p.bump(T![|]);
+    } else {
+        p.bump(T![|]);
+        while !p.at(EOF) && !p.at(T![|]) {
+            closure_param(p);
+            if !p.eat(T![,]) {
+                break;
+            }
+        }
+        p.expect(T![|]);
+    }
+    params.complete(p, PARAM_LIST);
+    if p.at(T![->]) {
+        // With a return type, the body must be a block.
+        opt_ret_type(p);
+        if p.at(T!['{']) {
+            parse_block_expr(p);
+        } else {
+            p.error("expected a block after the return type");
+        }
+    } else if !p.eat(T![_]) {
+        expr(p);
+    }
+    m.complete(p, CLOSURE_EXPR)
+}
+
+/// `x`, `(a, b)` or `x: T`
+fn closure_param(p: &mut Parser) {
+    let m = p.start();
+    pattern_single(p);
+    if p.eat(T![:]) {
+        type_(p);
+    }
+    m.complete(p, PARAM);
 }

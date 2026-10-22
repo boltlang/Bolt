@@ -610,6 +610,7 @@ ast_enum!(
         Match(MatchExpr) = MATCH_EXPR,
         Record(RecordExpr) = RECORD_EXPR,
         Array(ArrayExpr) = ARRAY_EXPR,
+        Closure(ClosureExpr) = CLOSURE_EXPR,
     }
 );
 
@@ -761,6 +762,27 @@ impl WhileExpr {
 /// The first child of `node` that is a block expression.
 fn find_block(node: &SyntaxNode) -> Option<BlockExpr> {
     node.children().find_map(BlockExpr::cast)
+}
+
+/// `|a, b| a + b`
+pub struct ClosureExpr(SyntaxNode);
+
+simple_node!(ClosureExpr, CLOSURE_EXPR);
+
+impl ClosureExpr {
+    pub fn async_token(&self) -> Option<SyntaxToken> {
+        self.find_token(ASYNC_KEYWORD)
+    }
+    pub fn param_list(&self) -> Option<ParamList> {
+        self.find_node()
+    }
+    pub fn ret_type(&self) -> Option<RetType> {
+        self.find_node()
+    }
+    /// The body, or `None` if it is `_`.
+    pub fn body(&self) -> Option<Expr> {
+        self.find_node()
+    }
 }
 
 /// `[a, b, c]` or `[x; n]`

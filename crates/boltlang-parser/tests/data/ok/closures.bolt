@@ -1,0 +1,9 @@
+let a = |x| x + 1;
+let b = |x, y| x * y;
+let c = || 42;
+let d = |x: i32| -> i32 { x };
+let e = async |x| f(x).await;
+let f = |(Ok(x) | Err(x))| x;
+let g = |_| _;
+map(xs, |x| x || y);
+let h = || || 1;
