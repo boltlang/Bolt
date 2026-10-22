@@ -20,7 +20,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "42"
+      - INT_NUMBER "42"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -49,7 +49,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "42"
+      - INT_NUMBER "42"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -63,7 +63,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bi
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "5"
+      - INT_NUMBER "5"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT

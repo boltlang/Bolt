@@ -18,6 +18,6 @@ input_file: crates/boltlang-parser/tests/data/ok/let_with_type.bolt
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "42"
+      - INT_NUMBER "42"
     - SEMI ";"
   - WHITESPACE "\n"

@@ -61,11 +61,6 @@ pub enum SyntaxKind {
     FLOAT_NUMBER,
     INT_NUMBER,
 
-    // TODO remove
-    BIN_INT,
-    OCT_INT,
-    DEC_INT,
-    HEX_INT,
 
     // Keywords. `default`, `gen` and `macro_rules` are contextual: the lexer
     // produces an IDENT and the parser remaps it where it acts as a keyword.
@@ -235,7 +230,6 @@ impl SyntaxKind {
             ASSIGNMENT => "an assignment operator",
             AWAIT_EXPR => "an await expression",
             BIN_EXPR => "an infix-expression",
-            BIN_INT | OCT_INT | DEC_INT | HEX_INT => "an integer literal",
             BLOCK => "a block of statement",
             BLOCK_COMMENT => "a block comment",
             BLOCK_EXPR => "a block expression",

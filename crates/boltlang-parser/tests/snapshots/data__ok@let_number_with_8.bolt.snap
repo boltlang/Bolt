@@ -13,6 +13,6 @@ input_file: crates/boltlang-parser/tests/data/ok/let_number_with_8.bolt
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "18"
+      - INT_NUMBER "18"
     - SEMI ";"
   - WHITESPACE "\n"

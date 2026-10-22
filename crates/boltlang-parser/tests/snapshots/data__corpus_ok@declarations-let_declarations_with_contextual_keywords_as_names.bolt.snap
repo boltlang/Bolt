@@ -13,7 +13,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-let_declara
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "1"
+      - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -25,6 +25,6 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-let_declara
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "2"
+      - INT_NUMBER "2"
     - SEMI ";"
   - WHITESPACE "\n"

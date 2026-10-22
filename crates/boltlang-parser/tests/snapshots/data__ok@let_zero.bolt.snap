@@ -13,6 +13,6 @@ input_file: crates/boltlang-parser/tests/data/ok/let_zero.bolt
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "0"
+      - INT_NUMBER "0"
     - SEMI ";"
   - WHITESPACE "\n"

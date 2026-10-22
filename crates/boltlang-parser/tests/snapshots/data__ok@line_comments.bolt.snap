@@ -15,7 +15,7 @@ input_file: crates/boltlang-parser/tests/data/ok/line_comments.bolt
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "1"
+      - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE " "
   - LINE_COMMENT "// trailing comment"

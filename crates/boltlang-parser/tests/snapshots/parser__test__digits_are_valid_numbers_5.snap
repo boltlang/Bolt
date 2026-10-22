@@ -3,4 +3,4 @@ source: crates/boltlang-parser/tests/parser.rs
 expression: "&output(\"0xffab23\", parse_expr)"
 ---
 - LIT_EXPR
-  - HEX_INT "0xffab23"
+  - INT_NUMBER "0xffab23"

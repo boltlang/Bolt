@@ -13,7 +13,7 @@ input_file: crates/boltlang-parser/tests/data/err/missing_semi.bolt
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "1"
+      - INT_NUMBER "1"
       - WHITESPACE "\n"
     - LET_KEYWORD "let"
     - WHITESPACE " "
@@ -21,7 +21,7 @@ input_file: crates/boltlang-parser/tests/data/err/missing_semi.bolt
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
-    - DEC_INT "2"
+    - INT_NUMBER "2"
     - SEMI ";"
   - WHITESPACE "\n"
 ---

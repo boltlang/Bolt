@@ -21,6 +21,6 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_no_params.bolt
       - EQUALS "="
       - WHITESPACE " "
       - LIT_EXPR
-        - DEC_INT "1"
+        - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"

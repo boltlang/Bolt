@@ -3,4 +3,4 @@ source: crates/boltlang-parser/tests/parser.rs
 expression: "&output(\"123456\", parse_expr)"
 ---
 - LIT_EXPR
-  - DEC_INT "123456"
+  - INT_NUMBER "123456"

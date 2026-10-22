@@ -13,6 +13,6 @@ input_file: crates/boltlang-parser/tests/data/ok/let_number_with_leading_zero.bo
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "0123"
+      - INT_NUMBER "0123"
     - SEMI ";"
   - WHITESPACE "\n"

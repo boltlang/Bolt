@@ -13,7 +13,7 @@ input_file: crates/boltlang-parser/tests/data/err/unterminated_block_comment.bol
     - EQUALS "="
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "1"
+      - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"
   - BLOCK_COMMENT "/* never closed\nlet y = 2;\n"

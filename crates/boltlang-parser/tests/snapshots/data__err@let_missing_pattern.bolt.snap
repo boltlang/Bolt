@@ -10,7 +10,7 @@ input_file: crates/boltlang-parser/tests/data/err/let_missing_pattern.bolt
     - ERROR
       - EQUALS "="
       - WHITESPACE " "
-    - DEC_INT "1"
+    - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"
 ---

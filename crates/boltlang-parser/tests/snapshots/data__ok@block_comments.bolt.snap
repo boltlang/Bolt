@@ -17,7 +17,7 @@ input_file: crates/boltlang-parser/tests/data/ok/block_comments.bolt
     - BLOCK_COMMENT "/* inline */"
     - WHITESPACE " "
     - LIT_EXPR
-      - DEC_INT "1"
+      - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"
   - BLOCK_COMMENT "/*\n * Spanning\n * lines\n */"

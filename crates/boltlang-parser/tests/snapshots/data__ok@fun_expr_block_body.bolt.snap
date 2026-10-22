@@ -31,7 +31,7 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_block_body.bolt
             - PLUS "+"
             - WHITESPACE " "
             - LIT_EXPR
-              - DEC_INT "1"
+              - INT_NUMBER "1"
           - WHITESPACE " "
           - R_BRACE "}"
     - SEMI ";"

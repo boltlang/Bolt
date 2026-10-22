@@ -491,7 +491,7 @@ impl LitExpr {
         self.0.children_with_tokens().find_map(|x| match x {
             SyntaxElement::Token(token) if matches!(
                 token.kind(),
-                BIN_INT | OCT_INT | DEC_INT | HEX_INT | STRING | TRUE_KEYWORD | FALSE_KEYWORD
+                INT_NUMBER | FLOAT_NUMBER | STRING | TRUE_KEYWORD | FALSE_KEYWORD
             ) => Some(token),
             _ => None,
         })

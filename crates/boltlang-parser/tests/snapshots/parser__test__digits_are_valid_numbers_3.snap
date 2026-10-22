@@ -3,4 +3,4 @@ source: crates/boltlang-parser/tests/parser.rs
 expression: "&output(\"42\", parse_expr)"
 ---
 - LIT_EXPR
-  - DEC_INT "42"
+  - INT_NUMBER "42"

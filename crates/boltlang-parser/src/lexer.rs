@@ -103,6 +103,11 @@ pub(crate) fn operator_kind(text: &str) -> SyntaxKind {
     }
 }
 
+/// The numeric types a number literal can have as a suffix, like `10u8`.
+const NUMERIC_SUFFIXES: &[&str] = &[
+    "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "isize", "usize", "f32", "f64",
+];
+
 fn is_operator(ch: char) -> bool {
     matches!(ch, '+' | '-' | '*' | '/' | '%' | '&' | '^' | '|' | '<' | '>' | '=' | '$' | '?' | '!' | '.')
 }
@@ -202,6 +207,78 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
         self.pos.clone()
     }
 
+    /// Consume characters while `pred` holds for them.
+    fn eat_while(&mut self, pred: impl Fn(char) -> bool) {
+        while pred(self.peek(0)) {
+            self.get();
+        }
+    }
+
+    /// Lex an integer or float literal whose first digit `c0` was consumed,
+    /// following the grammar's `integer_literal` and `float_literal`:
+    /// `1_000`, `0xff`, `0b1010`, `0o17`, `1.5`, `1.`, `2.5e-3` and any of
+    /// those with a type suffix like `u8` or `f64`.
+    fn scan_number(&mut self, c0: char) -> SyntaxKind {
+        if c0 == '0' && matches!(self.peek(0), 'b' | 'o' | 'x') {
+            let is_digit: fn(char) -> bool = match self.peek(0) {
+                'b' => is_bin_num,
+                'o' => is_oct_num,
+                _ => is_hex_num,
+            };
+            if is_digit(self.peek(1)) || self.peek(1) == '_' {
+                self.get();
+                self.eat_while(|ch| is_digit(ch) || ch == '_');
+                self.scan_number_suffix(false);
+                return INT_NUMBER;
+            }
+        }
+        self.eat_while(|ch| is_dec_num(ch) || ch == '_');
+        let mut is_float = false;
+        // `1.5` and `1.` are floats, but `1..2` is a range and `1.foo()` a
+        // method call.
+        if self.peek(0) == '.' && self.peek(1) != '.' && !is_ident_start(self.peek(1)) {
+            self.get();
+            self.eat_while(|ch| is_dec_num(ch) || ch == '_');
+            is_float = true;
+        }
+        if matches!(self.peek(0), 'e' | 'E')
+            && (is_dec_num(self.peek(1)) || (matches!(self.peek(1), '+' | '-') && is_dec_num(self.peek(2))))
+        {
+            self.get();
+            if matches!(self.peek(0), '+' | '-') {
+                self.get();
+            }
+            self.eat_while(|ch| is_dec_num(ch) || ch == '_');
+            is_float = true;
+        }
+        if self.scan_number_suffix(is_float) {
+            is_float = true;
+        }
+        if is_float { FLOAT_NUMBER } else { INT_NUMBER }
+    }
+
+    /// Lex a type suffix like `u8` after a number, if there is one. Returns
+    /// whether it was a float suffix.
+    fn scan_number_suffix(&mut self, is_float: bool) -> bool {
+        if !is_ident_start(self.peek(0)) {
+            return false;
+        }
+        let suffix_start = self.pos.offset;
+        let mut suffix = String::new();
+        while is_ident_part(self.peek(0)) {
+            suffix.push(self.get());
+        }
+        let valid = if is_float {
+            matches!(suffix.as_str(), "f32" | "f64")
+        } else {
+            NUMERIC_SUFFIXES.contains(&suffix.as_str())
+        };
+        if !valid {
+            self.error(format!("invalid suffix `{suffix}` for a number literal"), suffix_start..self.pos.offset);
+        }
+        matches!(suffix.as_str(), "f32" | "f64")
+    }
+
     pub fn scan(&mut self) -> SyntaxKind {
         let c0 = self.get();
         match c0 {
@@ -299,47 +376,7 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENT)
             }
-            '0' => match self.peek(0) {
-                'b' => {
-                    self.get();
-                    while is_bin_num(self.peek(0)) {
-                        self.get();
-                    }
-                    BIN_INT
-                }
-                'o' => {
-                    self.get();
-                    while is_oct_num(self.peek(0)) {
-                        self.get();
-                    }
-                    OCT_INT
-                }
-                'x' => {
-                    self.get();
-                    while is_hex_num(self.peek(0)) {
-                        self.get();
-                    }
-                    HEX_INT
-                }
-                c1 if is_dec_num(c1) => {
-                    while is_dec_num(self.peek(0)) {
-                        self.get();
-                    }
-                    DEC_INT
-                }
-                c1 if is_ident_part(c1) => {
-                    self.get();
-                    self.error("identifiers may not begin with decimal digits", self.pos.offset-c1.len_utf8()..self.pos.offset);
-                    ERROR
-                }
-                _ => DEC_INT
-            }
-            c0 if is_dec_num(c0) => {
-                while is_dec_num(self.peek(0)) {
-                    self.get();
-                }
-                DEC_INT
-            }
+            c0 if is_dec_num(c0) => self.scan_number(c0),
             c0 if is_operator(c0) => {
                 let mut text = String::new();
                 text.push(c0);
@@ -503,6 +540,40 @@ mod tests {
             offset += len;
         }
         tokens
+    }
+
+    /// The diagnostics the lexer reports for `text`.
+    fn lex_errors(text: &str) -> Vec<String> {
+        let mut diags = Diagnostics::new();
+        super::tokenize(text, &mut diags);
+        diags.take_diagnostics().iter().map(|d| d.to_string()).collect()
+    }
+
+    #[test]
+    fn integers() {
+        for text in ["0", "42", "1_000", "0xff", "0xFF_FF", "0b1010", "0o17", "10u8", "0xffi64", "1usize"] {
+            assert_eq!(lex(text), [(INT_NUMBER, text)], "{text}");
+        }
+    }
+
+    #[test]
+    fn floats() {
+        for text in ["1.5", "1.", "1e10", "2.5E-3", "1_000.000_1", "1f32", "2.0f64", "1e+3"] {
+            assert_eq!(lex(text), [(FLOAT_NUMBER, text)], "{text}");
+        }
+    }
+
+    #[test]
+    fn numbers_next_to_dots() {
+        assert_eq!(lex("1..2"), [(INT_NUMBER, "1"), (DOTDOT, ".."), (INT_NUMBER, "2")]);
+        assert_eq!(lex("1.max"), [(INT_NUMBER, "1"), (DOT, "."), (IDENT, "max")]);
+        assert_eq!(lex("x.0"), [(IDENT, "x"), (DOT, "."), (INT_NUMBER, "0")]);
+    }
+
+    #[test]
+    fn invalid_number_suffix() {
+        assert_eq!(lex_errors("1abc").len(), 1);
+        assert_eq!(lex_errors("1.5u8").len(), 1);
     }
 
     #[test]

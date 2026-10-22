@@ -15,6 +15,6 @@ input_file: crates/boltlang-parser/tests/data/ok/let_negative.bolt
     - PREFIX_EXPR
       - MINUS "-"
       - LIT_EXPR
-        - DEC_INT "1"
+        - INT_NUMBER "1"
     - SEMI ";"
   - WHITESPACE "\n"
