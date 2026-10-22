@@ -142,6 +142,11 @@ pub struct File {
 
 impl File {
 
+    /// Whether the file exists and is a file rather than a directory.
+    pub fn exists(self, db: &dyn Db) -> bool {
+        *self.status(db) == FileStatus::Exists
+    }
+
     pub fn read_to_string(&self, db: &dyn Db) -> std::io::Result<String> {
         let path = self.path(db);
 
