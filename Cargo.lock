@@ -177,6 +177,13 @@ dependencies = [
 [[package]]
 name = "boltlang-hir-ty"
 version = "0.1.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-hir-def",
+ "boltlang-parser",
+ "boltlang-syntax",
+ "salsa",
+]
 
 [[package]]
 name = "boltlang-parser"

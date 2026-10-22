@@ -1,14 +1,13 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Type checking, on top of hir-def.
+//!
+//! Like the old checker, inference generates constraints, which the
+//! [`solve::Solver`] solves with the help of a [`unify::Unifier`] that only
+//! knows about types.
+//!
+//! - [`ty`] defines the types.
+//! - [`unify`] makes types equal by binding inference variables.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod ty;
+pub mod unify;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use ty::{AdtId, GenericParamId, Ty, TyVar, VarKind};
