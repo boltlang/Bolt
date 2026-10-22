@@ -15,11 +15,17 @@ input_file: crates/boltlang-parser/tests/data/ok/try.bolt
     - TRY_EXPR
       - CALL_EXPR
         - PATH_EXPR
-          - IDENT "f"
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "f"
         - ARG_LIST
           - L_PAREN "("
           - PATH_EXPR
-            - IDENT "a"
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "a"
           - R_PAREN ")"
       - QUEST "?"
     - SEMI ";"

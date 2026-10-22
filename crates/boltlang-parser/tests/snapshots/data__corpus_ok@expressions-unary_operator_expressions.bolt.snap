@@ -7,12 +7,18 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-unary_operat
   - PREFIX_EXPR
     - MINUS "-"
     - PATH_EXPR
-      - IDENT "num"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "num"
   - SEMI ";"
   - WHITESPACE "\n"
   - PREFIX_EXPR
     - EXCL "!"
     - PATH_EXPR
-      - IDENT "bits"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "bits"
   - SEMI ";"
   - WHITESPACE "\n"

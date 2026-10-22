@@ -6,17 +6,26 @@ input_file: crates/boltlang-parser/tests/data/ok/binary_precedence.bolt
 - SOURCE_FILE
   - BIN_EXPR
     - PATH_EXPR
-      - IDENT "a"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "a"
     - WHITESPACE " "
     - PLUS "+"
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
       - WHITESPACE " "
       - STAR "*"
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "c"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "c"
   - SEMI ";"
   - WHITESPACE "\n"

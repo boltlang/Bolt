@@ -24,7 +24,10 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_return_type.bolt
         - L_BRACE "{"
         - WHITESPACE " "
         - PATH_EXPR
-          - IDENT "x"
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
         - WHITESPACE " "
         - R_BRACE "}"
   - WHITESPACE "\n"

@@ -32,13 +32,19 @@ input_file: crates/boltlang-parser/tests/data/ok/line_comments.bolt
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
-        - IDENT "a"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
       - WHITESPACE " "
       - PLUS "+"
       - LINE_COMMENT "// right after an operator"
       - WHITESPACE "\n  "
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
     - SEMI ";"
   - WHITESPACE "\n"
   - LINE_COMMENT "// at end of file without newline"

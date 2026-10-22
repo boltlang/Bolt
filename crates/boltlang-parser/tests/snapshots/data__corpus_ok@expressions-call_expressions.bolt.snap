@@ -6,7 +6,10 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-call_express
 - SOURCE_FILE
   - CALL_EXPR
     - PATH_EXPR
-      - IDENT "foo"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "foo"
     - ARG_LIST
       - L_PAREN "("
       - R_PAREN ")"
@@ -14,7 +17,10 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-call_express
   - WHITESPACE "\n"
   - CALL_EXPR
     - PATH_EXPR
-      - IDENT "add"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "add"
     - ARG_LIST
       - L_PAREN "("
       - LIT_EXPR
@@ -28,7 +34,10 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-call_express
   - WHITESPACE "\n"
   - CALL_EXPR
     - PATH_EXPR
-      - IDENT "add"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "add"
     - ARG_LIST
       - L_PAREN "("
       - WHITESPACE "\n    "

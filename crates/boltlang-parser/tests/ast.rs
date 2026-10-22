@@ -87,3 +87,12 @@ fn call_expr_args() {
     let args: Vec<_> = call.args().map(|e| e.syntax().text().to_string()).collect();
     assert_eq!(args, ["a", "b + c"]);
 }
+
+#[test]
+fn path_expr() {
+    let Expr::Path(path_expr) = let_expr("let x = foo;") else { panic!() };
+    let path = path_expr.path().unwrap();
+    assert!(path.qualifier().is_none());
+    let segments: Vec<_> = path.segments().iter().map(|s| s.name_ref().unwrap().text()).collect();
+    assert_eq!(segments, ["foo"]);
+}

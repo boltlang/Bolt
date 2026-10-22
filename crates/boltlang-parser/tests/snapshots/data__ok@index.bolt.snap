@@ -6,7 +6,10 @@ input_file: crates/boltlang-parser/tests/data/ok/index.bolt
 - SOURCE_FILE
   - INDEX_EXPR
     - PATH_EXPR
-      - IDENT "xs"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "xs"
     - L_BRACKET "["
     - LIT_EXPR
       - INT_NUMBER "0"

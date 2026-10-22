@@ -25,6 +25,9 @@ input_file: crates/boltlang-parser/tests/data/ok/underscore_names.bolt
     - EQUALS "="
     - WHITESPACE " "
     - PATH_EXPR
-      - IDENT "_y_"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "_y_"
     - SEMI ";"
   - WHITESPACE "\n"

@@ -1,19 +1,12 @@
 use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
     Parser,
-    grammar::{PATH_NAME_REF_KINDS, count_modifiers, delimited, is_named_fn, parse_named_function_declaration, parse_pattern, parse_type_expression},
+    grammar::{PATH_NAME_REF_KINDS, count_modifiers, expr_path, is_path_start, delimited, is_named_fn, parse_named_function_declaration, parse_pattern, parse_type_expression},
     parser::{CompletedMarker, Marker},
     token_set::TokenSet
 };
 
-pub(super) const PATH_FIRST: TokenSet = TokenSet::new(&[
-    IDENT,
-    SELF_KEYWORD,
-    SUPER_KEYWORD,
-    PACKAGE_KEYWORD,
-    COLON,
-    LT
-]);
+pub(super) const PATH_FIRST: TokenSet = TokenSet::new(&[IDENT, SELF_KEYWORD, METAVARIABLE]);
 
 pub(crate) const LITERAL_FIRST: TokenSet = TokenSet::new(&[
     TRUE_KEYWORD,
@@ -56,14 +49,13 @@ pub(in crate::grammar) const EXPR_RECOVERY_SET: TokenSet =
     TokenSet::new(&[R_BRACE, R_PAREN, R_BRACKET, COMMA]);
 
 pub fn parse_reference_expression(p: &mut Parser) -> Option<CompletedMarker> {
-    if p.at_ts(PATH_NAME_REF_KINDS) {
-        let m = p.start();
-        p.bump_any();
-        Some(m.complete(p, PATH_EXPR))
-    } else {
+    let m = p.start();
+    if expr_path(p).is_none() {
+        m.abandon(p);
         p.error_and_bump("expected identifier");
-        None
+        return None;
     }
+    Some(m.complete(p, PATH_EXPR))
 }
 
 pub fn parse_block_expr(p: &mut Parser) -> CompletedMarker {
@@ -142,7 +134,7 @@ pub fn parse_fun_expr(p: &mut Parser) -> CompletedMarker {
 pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     match p.current() {
         STRING | BYTE_STRING | C_STRING | CHAR | BYTE | INT_NUMBER | FLOAT_NUMBER | TRUE_KEYWORD | FALSE_KEYWORD => parse_literal_expr(p),
-        IDENT => parse_reference_expression(p),
+        _ if is_path_start(p) => parse_reference_expression(p),
         L_BRACE => Some(parse_block_expr(p)),
         L_PAREN => Some(parse_nest_expr(p)),
         RETURN_KEYWORD => Some(parse_return_expr(p)),

@@ -15,6 +15,9 @@ input_file: crates/boltlang-parser/tests/data/ok/let_not.bolt
     - PREFIX_EXPR
       - EXCL "!"
       - PATH_EXPR
-        - IDENT "y"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "y"
     - SEMI ";"
   - WHITESPACE "\n"

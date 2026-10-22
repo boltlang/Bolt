@@ -6,18 +6,27 @@ input_file: crates/boltlang-parser/tests/data/err/call_missing_argument.bolt
 - SOURCE_FILE
   - CALL_EXPR
     - PATH_EXPR
-      - IDENT "f"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "f"
     - ARG_LIST
       - L_PAREN "("
       - PATH_EXPR
-        - IDENT "a"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
       - COMMA ","
       - WHITESPACE " "
       - ERROR
         - COMMA ","
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
       - R_PAREN ")"
   - SEMI ";"
   - WHITESPACE "\n"

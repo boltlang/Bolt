@@ -227,7 +227,7 @@ impl Node for NamedPattern {
 }
 
 pub enum Expr {
-    Named(NamedExpr),
+    Path(PathExpr),
     Lit(LitExpr),
     Call(CallExpr),
     Fun(FunExpr),
@@ -246,7 +246,7 @@ impl Node for Expr {
 
     fn wrap(syntax: SyntaxNode) -> Self {
         match syntax.kind() {
-            PATH_EXPR => Expr::Named(NamedExpr(syntax)),
+            PATH_EXPR => Expr::Path(PathExpr(syntax)),
             LIT_EXPR => Expr::Lit(LitExpr(syntax)),
             CALL_EXPR => Expr::Call(CallExpr(syntax)),
             FUN_EXPR => Expr::Fun(FunExpr(syntax)),
@@ -267,7 +267,7 @@ impl Node for Expr {
         match self {
             Expr::Lit(node) => node.syntax(),
             Expr::Call(node) => node.syntax(),
-            Expr::Named(node) => node.syntax(),
+            Expr::Path(node) => node.syntax(),
             Expr::Fun(node) => node.syntax(),
             Expr::Block(node) => node.syntax(),
             Expr::Bin(node) => node.syntax(),
@@ -306,6 +306,77 @@ macro_rules! simple_node {
             }
         }
     };
+}
+
+/// A reference to a variable or function, like `x` or `self`.
+pub struct PathExpr(SyntaxNode);
+
+simple_node!(PathExpr, PATH_EXPR);
+
+impl PathExpr {
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+}
+
+/// `a.b.c`: a qualifier (`a.b`) and a segment (`c`).
+pub struct Path(SyntaxNode);
+
+simple_node!(Path, PATH);
+
+impl Path {
+    /// The path before the last `.`, if there is one.
+    pub fn qualifier(&self) -> Option<Path> {
+        self.find_node()
+    }
+    /// The last segment.
+    pub fn segment(&self) -> Option<PathSegment> {
+        self.find_node()
+    }
+    /// All segments, from first to last.
+    pub fn segments(&self) -> Vec<PathSegment> {
+        let mut segments = self.qualifier().map(|q| q.segments()).unwrap_or_default();
+        segments.extend(self.segment());
+        segments
+    }
+}
+
+pub struct PathSegment(SyntaxNode);
+
+simple_node!(PathSegment, PATH_SEGMENT);
+
+impl PathSegment {
+    pub fn name_ref(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+}
+
+/// A reference to a name: an identifier, `self` or a metavariable.
+pub struct NameRef(SyntaxNode);
+
+simple_node!(NameRef, NAME_REF);
+
+impl NameRef {
+    pub fn token(&self) -> Option<SyntaxToken> {
+        first_non_trivia_token(&self.0)
+    }
+    pub fn text(&self) -> String {
+        self.token().map(|t| t.text().to_string()).unwrap_or_default()
+    }
+}
+
+/// The name of something being declared, like the `f` in `fn f()`.
+pub struct Name(SyntaxNode);
+
+simple_node!(Name, NAME);
+
+impl Name {
+    pub fn ident(&self) -> Option<SyntaxToken> {
+        self.find_token(IDENT)
+    }
+    pub fn text(&self) -> String {
+        self.ident().map(|t| t.text().to_string()).unwrap_or_default()
+    }
 }
 
 /// `a + b`
@@ -525,19 +596,6 @@ impl Node for CallExpr {
     }
 }
 
-pub struct NamedExpr(SyntaxNode);
-
-impl Node for NamedExpr {
-    fn kind() -> SyntaxKind {
-        PATH_EXPR
-    }
-    fn wrap(syntax: SyntaxNode) -> Self {
-        NamedExpr(syntax)
-    }
-    fn syntax(&self) -> &SyntaxNode {
-        &self.0
-    }
-}
 
 impl CallExpr {
     pub fn operator(&self) -> Option<Expr> {
@@ -552,11 +610,6 @@ impl CallExpr {
     }
 }
 
-impl NamedExpr {
-    pub fn name(&self) -> Option<SyntaxToken> {
-        self.find_token(IDENT)
-    }
-}
 
 pub struct VarDecl(SyntaxNode);
 

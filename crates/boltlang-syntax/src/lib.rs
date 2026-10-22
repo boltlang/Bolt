@@ -102,6 +102,15 @@ pub enum SyntaxKind {
     WHILE_KEYWORD,
     YIELD_KEYWORD,
 
+    // Names and paths
+    /// The name of something being declared, like the `f` in `fn f()`
+    NAME,
+    /// A reference to a name, like a segment of a path
+    NAME_REF,
+    /// `a.b.c`: an optional qualifier `PATH` (`a.b`) and a `PATH_SEGMENT` (`c`)
+    PATH,
+    PATH_SEGMENT,
+
     // Patterns
     NAMED_PATT,
     LIT_PATT,
@@ -255,6 +264,10 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            NAME => "a name",
+            NAME_REF => "a reference to a name",
+            PATH => "a path",
+            PATH_SEGMENT => "a segment of a path",
             SHEBANG => "a shebang line",
             C_STRING => "a C string (like c\"foo\")",
             DOLLAR => "'$'",

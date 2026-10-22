@@ -242,6 +242,10 @@ impl <'t> Parser<'t> {
         true
     }
 
+    pub(crate) fn nth_at_ts(&self, n: usize, ts: TokenSet) -> bool {
+        ts.contains(self.nth(n))
+    }
+
     /// Check whether the current token falls into the given [TokenSet].
     pub(crate) fn at_ts(&self, ts: TokenSet) -> bool {
         ts.contains(self.current())

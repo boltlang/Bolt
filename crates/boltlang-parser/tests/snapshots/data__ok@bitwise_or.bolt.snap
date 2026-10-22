@@ -14,11 +14,17 @@ input_file: crates/boltlang-parser/tests/data/ok/bitwise_or.bolt
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
-        - IDENT "a"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
       - WHITESPACE " "
       - VBAR "|"
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
     - SEMI ";"
   - WHITESPACE "\n"

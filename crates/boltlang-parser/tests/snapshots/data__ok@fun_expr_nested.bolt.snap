@@ -33,6 +33,9 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_nested.bolt
         - EQUALS "="
         - WHITESPACE " "
         - PATH_EXPR
-          - IDENT "x"
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
     - SEMI ";"
   - WHITESPACE "\n"

@@ -34,7 +34,10 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_types.bolt
       - WHITESPACE " "
       - BIN_EXPR
         - PATH_EXPR
-          - IDENT "x"
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "x"
         - WHITESPACE " "
         - PLUS "+"
         - WHITESPACE " "

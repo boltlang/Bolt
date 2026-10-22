@@ -24,7 +24,10 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
     - WHITESPACE " "
     - CAST_EXPR
       - PATH_EXPR
-        - IDENT "integer"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "integer"
       - WHITESPACE " "
       - AS_KEYWORD "as"
       - WHITESPACE " "
@@ -57,11 +60,17 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-type_cast_ex
             - MINUS "-"
             - CALL_EXPR
               - PATH_EXPR
-                - IDENT "len"
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "len"
               - ARG_LIST
                 - L_PAREN "("
                 - PATH_EXPR
-                  - IDENT "values"
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "values"
                 - R_PAREN ")"
           - WHITESPACE " "
           - AS_KEYWORD "as"

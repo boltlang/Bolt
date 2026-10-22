@@ -4,22 +4,46 @@
 mod expressions;
 mod items;
 mod params;
+mod paths;
 mod patterns;
 mod types;
 
 pub use expressions::*;
 pub use items::*;
 pub use params::*;
+pub(crate) use paths::*;
 pub use patterns::*;
 pub use types::*;
 
-use boltlang_syntax::SyntaxKind::{self, *};
+use boltlang_syntax::{SyntaxKind::{self, *}, T};
 use crate::{
         parser::Parser,
         token_set::TokenSet
 };
 
 const PATH_NAME_REF_KINDS: TokenSet = TokenSet::new(&[IDENT]);
+
+/// The name of something being declared, like the `f` in `fn f()`.
+pub(crate) fn name(p: &mut Parser) {
+    if p.at(IDENT) {
+        let m = p.start();
+        p.bump(IDENT);
+        m.complete(p, NAME);
+    } else {
+        p.err_recover("expected a name", TokenSet::EMPTY);
+    }
+}
+
+/// A reference to a name: an identifier, `self` or a metavariable.
+pub(crate) fn name_ref(p: &mut Parser) {
+    if p.at_ts(TokenSet::new(&[IDENT, T![self], METAVARIABLE])) {
+        let m = p.start();
+        p.bump_any();
+        m.complete(p, NAME_REF);
+    } else {
+        p.error_and_bump("expected a name");
+    }
+}
 
 /// The `parser` passed this is required to at least consume one token if it returns `true`.
 /// If the `parser` returns false, parsing will stop.

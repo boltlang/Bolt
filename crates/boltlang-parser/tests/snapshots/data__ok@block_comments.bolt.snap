@@ -32,13 +32,19 @@ input_file: crates/boltlang-parser/tests/data/ok/block_comments.bolt
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
-        - IDENT "a"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
       - WHITESPACE " "
       - PLUS "+"
       - BLOCK_COMMENT "/* after an operator */"
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
     - SEMI ";"
   - WHITESPACE "\n"
   - LET_STMT
@@ -51,13 +57,19 @@ input_file: crates/boltlang-parser/tests/data/ok/block_comments.bolt
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
-        - IDENT "a"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
       - WHITESPACE " "
       - STAR "*"
       - BLOCK_COMMENT "/* after * */"
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
     - SEMI ";"
   - WHITESPACE "\n"
   - BLOCK_COMMENT "/**/"

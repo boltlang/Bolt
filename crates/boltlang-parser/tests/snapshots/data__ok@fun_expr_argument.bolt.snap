@@ -6,7 +6,10 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_argument.bolt
 - SOURCE_FILE
   - CALL_EXPR
     - PATH_EXPR
-      - IDENT "map"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "map"
     - ARG_LIST
       - L_PAREN "("
       - FUN_EXPR
@@ -21,7 +24,10 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_argument.bolt
         - WHITESPACE " "
         - BIN_EXPR
           - PATH_EXPR
-            - IDENT "x"
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "x"
           - WHITESPACE " "
           - STAR "*"
           - WHITESPACE " "
@@ -30,7 +36,10 @@ input_file: crates/boltlang-parser/tests/data/ok/fun_expr_argument.bolt
       - COMMA ","
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "xs"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "xs"
       - R_PAREN ")"
   - SEMI ";"
   - WHITESPACE "\n"

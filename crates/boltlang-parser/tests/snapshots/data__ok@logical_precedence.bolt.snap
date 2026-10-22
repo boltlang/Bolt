@@ -6,17 +6,26 @@ input_file: crates/boltlang-parser/tests/data/ok/logical_precedence.bolt
 - SOURCE_FILE
   - BIN_EXPR
     - PATH_EXPR
-      - IDENT "a"
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "a"
     - WHITESPACE " "
     - OPERATOR "||"
     - WHITESPACE " "
     - BIN_EXPR
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
       - WHITESPACE " "
       - OPERATOR "&&"
       - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "c"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "c"
   - SEMI ";"
   - WHITESPACE "\n"

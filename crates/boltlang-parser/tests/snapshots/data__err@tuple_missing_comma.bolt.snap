@@ -15,10 +15,16 @@ input_file: crates/boltlang-parser/tests/data/err/tuple_missing_comma.bolt
     - TUPLE_EXPR
       - L_PAREN "("
       - PATH_EXPR
-        - IDENT "a"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "a"
         - WHITESPACE " "
       - PATH_EXPR
-        - IDENT "b"
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "b"
       - R_PAREN ")"
     - SEMI ";"
   - WHITESPACE "\n"
