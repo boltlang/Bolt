@@ -74,6 +74,7 @@ pub enum SyntaxKind {
     ASYNC_KEYWORD,
     AWAIT_KEYWORD,
     BREAK_KEYWORD,
+    CLASS_KEYWORD,
     CONST_KEYWORD,
     CONTINUE_KEYWORD,
     ELSE_KEYWORD,
@@ -97,7 +98,6 @@ pub enum SyntaxKind {
     SELF_KEYWORD,
     STRUCT_KEYWORD,
     SUPER_KEYWORD,
-    TRAIT_KEYWORD,
     TRUE_KEYWORD,
     TYPE_KEYWORD,
     WHERE_KEYWORD,
@@ -295,11 +295,11 @@ pub enum SyntaxKind {
     IMPORT_LIST,
     /// `b as c` in an import list
     IMPORT_ALIAS,
-    /// `trait Name: Bounds { items }`
-    TRAIT,
+    /// `class Show[T] { items }`
+    CLASS,
     /// `impl Type { items }` or `impl Trait for Type { items }`
     IMPL,
-    /// The `{ items }` of a trait, impl or extern block
+    /// The `{ items }` of a class, impl or extern block
     ITEM_LIST,
     /// `struct Point { x: i32 }`, `struct Pair(A, B);` or `struct Unit;`
     STRUCT,
@@ -391,7 +391,7 @@ macro_rules! T {
     [self] => { $crate::SyntaxKind::SELF_KEYWORD };
     [struct] => { $crate::SyntaxKind::STRUCT_KEYWORD };
     [super] => { $crate::SyntaxKind::SUPER_KEYWORD };
-    [trait] => { $crate::SyntaxKind::TRAIT_KEYWORD };
+    [class] => { $crate::SyntaxKind::CLASS_KEYWORD };
     [true] => { $crate::SyntaxKind::TRUE_KEYWORD };
     [type] => { $crate::SyntaxKind::TYPE_KEYWORD };
     [where] => { $crate::SyntaxKind::WHERE_KEYWORD };
@@ -428,7 +428,7 @@ impl SyntaxKind {
             IMPORT => "an import",
             IMPORT_LIST => "a list of imported names",
             IMPORT_ALIAS => "an imported name with an alias",
-            TRAIT => "a trait",
+            CLASS => "a class",
             IMPL => "an impl",
             ITEM_LIST => "a list of items",
             CONST => "a constant",
@@ -529,7 +529,7 @@ impl SyntaxKind {
             SELF_KEYWORD => "'self'",
             STRUCT_KEYWORD => "'struct'",
             SUPER_KEYWORD => "'super'",
-            TRAIT_KEYWORD => "'trait'",
+            CLASS_KEYWORD => "'class'",
             TRUE_KEYWORD => "'true'",
             TYPE_KEYWORD => "'type'",
             WHERE_KEYWORD => "'where'",

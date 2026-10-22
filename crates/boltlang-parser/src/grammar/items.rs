@@ -42,8 +42,8 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
             type_alias(p, m);
             return Ok(());
         }
-        T![trait] => {
-            trait_item(p, m);
+        T![class] => {
+            class_item(p, m);
             return Ok(());
         }
         T![impl] => {
@@ -350,15 +350,16 @@ fn type_alias(p: &mut Parser, m: Marker) {
     m.complete(p, TYPE_ALIAS);
 }
 
-/// `trait Name[T]: Bounds where ... { items }`
-fn trait_item(p: &mut Parser, m: Marker) {
-    p.bump(T![trait]);
+/// `class Show[T] where T: Eq { items }`, following the grammar's
+/// `class_item`. The class parameters are required, and superclasses go in
+/// the `where` clause.
+fn class_item(p: &mut Parser, m: Marker) {
+    p.bump(T![class]);
     name(p);
     if p.at(T!['[']) {
         generic_param_list(p);
-    }
-    if p.at(T![:]) {
-        trait_bounds(p);
+    } else {
+        p.error("expected the parameters of the class, like `[T]`");
     }
     opt_where_clause(p);
     if p.at(T!['{']) {
@@ -366,7 +367,7 @@ fn trait_item(p: &mut Parser, m: Marker) {
     } else {
         p.error("expected '{'");
     }
-    m.complete(p, TRAIT);
+    m.complete(p, CLASS);
 }
 
 /// `impl[T] Type { }`, `impl Trait for Type { }`, `impl !Send for T {}` or

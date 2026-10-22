@@ -4,6 +4,6 @@ m! { a b c }
 n!{};
 let x: ty!() = y;
 match x { pat!() => 1, _ => 2 }
-trait T { #[a] decl!{} other!(); fn f(self); }
+class C[T] { #[a] decl!{} other!(); fn f(x: T); }
 a!(${$([ a ])});
 a!($a $a:ident $($a);*);

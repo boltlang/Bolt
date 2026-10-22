@@ -1,3 +1,14 @@
 # Corpus cases the parser can't handle yet. The test runner reports them as
 # ignored; run `cargo test --test data -- --ignored corpus` to check them.
 # Remove a line once that case parses.
+ok/declarations-associated_types.bolt
+ok/declarations-constant_items.bolt
+ok/declarations-functions_with_custom_types_for_self.bolt
+ok/declarations-functions_with_default_parameter_values.bolt
+ok/declarations-functions_with_untyped_parameters.bolt
+ok/declarations-macro_invocations_inside_trait_declarations.bolt
+ok/declarations-trait_declarations_with_optional_type_parameters.bolt
+ok/declarations-generic_associated_types.bolt
+ok/declarations-trait_declarations.bolt
+ok/declarations-operator_function_definitions.bolt
+ok/declarations-where_clauses.bolt

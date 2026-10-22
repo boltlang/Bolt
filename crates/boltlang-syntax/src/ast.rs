@@ -1583,7 +1583,7 @@ ast_enum!(
         Enum(Enum) = ENUM,
         Const(Const) = CONST,
         TypeAlias(TypeAlias) = TYPE_ALIAS,
-        Trait(Trait) = TRAIT,
+        Class(Class) = CLASS,
         Impl(Impl) = IMPL,
         ExternBlock(ExternBlock) = EXTERN_BLOCK,
         Import(Import) = IMPORT,
@@ -1690,24 +1690,23 @@ impl ExternBlock {
     }
 }
 
-/// `trait Name: Bounds { items }`
-pub struct Trait(SyntaxNode);
+/// `class Show[T] where T: Eq { items }`
+pub struct Class(SyntaxNode);
 
-simple_node!(Trait, TRAIT);
+simple_node!(Class, CLASS);
 
-impl Trait {
+impl Class {
     pub fn visibility(&self) -> Option<Visibility> {
         self.find_node()
     }
     pub fn name(&self) -> Option<Name> {
         self.find_node()
     }
+    /// The class parameters, like the `[T]` of `class Show[T]`.
     pub fn generic_param_list(&self) -> Option<GenericParamList> {
         self.find_node()
     }
-    pub fn bounds(&self) -> Option<TraitBounds> {
-        self.find_node()
-    }
+    /// Superclasses go here: `class Ord[T] where T: Eq`.
     pub fn where_clause(&self) -> Option<WhereClause> {
         self.find_node()
     }
@@ -1747,7 +1746,7 @@ impl Impl {
     }
 }
 
-/// The `{ items }` of a trait, impl or extern block
+/// The `{ items }` of a class, impl or extern block
 pub struct ItemList(SyntaxNode);
 
 simple_node!(ItemList, ITEM_LIST);
@@ -2032,7 +2031,7 @@ macro_rules! has_attrs {
 
 has_attrs!(
     SourceFile, FuncDecl, VarDecl, ExprStmt, Struct, Enum, Variant, RecordField, TupleField, Const,
-    TypeAlias, Trait, Impl, ItemList, ExternBlock, Import, Param, MatchArm, MatchArmList,
+    TypeAlias, Class, Impl, ItemList, ExternBlock, Import, Param, MatchArm, MatchArmList,
     RecordExprField, Block,
 );
 
@@ -2137,6 +2136,6 @@ macro_rules! has_docs {
 }
 
 has_docs!(
-    SourceFile, FuncDecl, Struct, Enum, Variant, RecordField, TupleField, Const, TypeAlias, Trait, Impl,
+    SourceFile, FuncDecl, Struct, Enum, Variant, RecordField, TupleField, Const, TypeAlias, Class, Impl,
     ExternBlock, Import, MacroRules, Block, ItemList,
 );

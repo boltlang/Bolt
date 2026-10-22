@@ -1,0 +1,23 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/class_without_params.bolt
+---
+- SOURCE_FILE
+  - CLASS
+    - CLASS_KEYWORD "class"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "NoParams"
+      - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE " "
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected the parameters of the class, like `[T]`
+span:
+  start: 15
+  end: 15

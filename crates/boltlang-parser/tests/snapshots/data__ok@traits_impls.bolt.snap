@@ -4,11 +4,17 @@ expression: "dump(&node, &diags)"
 input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
 ---
 - SOURCE_FILE
-  - TRAIT
-    - TRAIT_KEYWORD "trait"
+  - CLASS
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "Show"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"
@@ -20,8 +26,17 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
           - IDENT "show"
         - PARAM_LIST
           - L_PAREN "("
-          - SELF_PARAM
-            - SELF_KEYWORD "self"
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "x"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
           - R_PAREN ")"
         - WHITESPACE " "
         - RET_TYPE
@@ -36,11 +51,11 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
       - WHITESPACE " "
       - R_BRACE "}"
   - WHITESPACE "\n"
-  - TRAIT
+  - CLASS
     - VISIBILITY
       - PUB_KEYWORD "pub"
     - WHITESPACE " "
-    - TRAIT_KEYWORD "trait"
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
       - IDENT "Iterator"
@@ -48,24 +63,8 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
       - L_BRACKET "["
       - TYPE_PARAM
         - NAME
-          - IDENT "T"
+          - IDENT "I"
       - R_BRACKET "]"
-    - TRAIT_BOUNDS
-      - COLON ":"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "Clone"
-      - WHITESPACE " "
-      - PLUS "+"
-      - WHITESPACE " "
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "Debug"
     - WHITESPACE " "
     - WHERE_CLAUSE
       - WHERE_KEYWORD "where"
@@ -75,9 +74,25 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
           - PATH
             - PATH_SEGMENT
               - NAME_REF
-                - IDENT "T"
+                - IDENT "I"
         - TRAIT_BOUNDS
           - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Clone"
+          - WHITESPACE " "
+          - PLUS "+"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Debug"
+          - WHITESPACE " "
+          - PLUS "+"
           - WHITESPACE " "
           - PATH_TYPE
             - PATH
@@ -121,10 +136,17 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
           - IDENT "next"
         - PARAM_LIST
           - L_PAREN "("
-          - SELF_PARAM
-            - MUT_KEYWORD "mut"
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "it"
+            - COLON ":"
             - WHITESPACE " "
-            - SELF_KEYWORD "self"
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "I"
           - R_PAREN ")"
         - WHITESPACE " "
         - RET_TYPE
@@ -143,7 +165,7 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
                         - PATH
                           - PATH_SEGMENT
                             - NAME_REF
-                              - IDENT "Self"
+                              - IDENT "I"
                         - DOT "."
                         - PATH_SEGMENT
                           - NAME_REF
@@ -158,8 +180,17 @@ input_file: crates/boltlang-parser/tests/data/ok/traits_impls.bolt
           - IDENT "count"
         - PARAM_LIST
           - L_PAREN "("
-          - SELF_PARAM
-            - SELF_KEYWORD "self"
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "it"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "I"
           - R_PAREN ")"
         - WHITESPACE " "
         - RET_TYPE

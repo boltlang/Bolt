@@ -1,9 +1,9 @@
-trait Show { fn show(self) -> String; }
-pub trait Iterator[T]: Clone + Debug where T: Ord {
+class Show[T] { fn show(x: T) -> String; }
+pub class Iterator[I] where I: Clone + Debug + Ord {
     type Item;
     const MAX: usize = 10;
-    fn next(mut self) -> Option[Self.Item];
-    fn count(self) -> usize { 0 }
+    fn next(it: I) -> Option[I.Item];
+    fn count(it: I) -> usize { 0 }
 }
 impl Point { fn new() -> Self = Point { x: 0, y: 0 }; }
 impl[T] Show for Vec[T] where T: Show { fn show(self) -> String { "" } }

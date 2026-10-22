@@ -125,6 +125,7 @@ lazy_static! {
         m.insert("async", ASYNC_KEYWORD);
         m.insert("await", AWAIT_KEYWORD);
         m.insert("break", BREAK_KEYWORD);
+        m.insert("class", CLASS_KEYWORD);
         m.insert("const", CONST_KEYWORD);
         m.insert("continue", CONTINUE_KEYWORD);
         m.insert("else", ELSE_KEYWORD);
@@ -147,7 +148,6 @@ lazy_static! {
         m.insert("self", SELF_KEYWORD);
         m.insert("struct", STRUCT_KEYWORD);
         m.insert("super", SUPER_KEYWORD);
-        m.insert("trait", TRAIT_KEYWORD);
         m.insert("true", TRUE_KEYWORD);
         m.insert("type", TYPE_KEYWORD);
         m.insert("where", WHERE_KEYWORD);

@@ -140,11 +140,17 @@ input_file: crates/boltlang-parser/tests/data/ok/macro_calls.bolt
         - WHITESPACE " "
         - R_BRACE "}"
   - WHITESPACE "\n"
-  - TRAIT
-    - TRAIT_KEYWORD "trait"
+  - CLASS
+    - CLASS_KEYWORD "class"
     - WHITESPACE " "
     - NAME
-      - IDENT "T"
+      - IDENT "C"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"
@@ -183,8 +189,17 @@ input_file: crates/boltlang-parser/tests/data/ok/macro_calls.bolt
           - IDENT "f"
         - PARAM_LIST
           - L_PAREN "("
-          - SELF_PARAM
-            - SELF_KEYWORD "self"
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "x"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
           - R_PAREN ")"
         - SEMI ";"
       - WHITESPACE " "
