@@ -1,0 +1,67 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/block_comments.bolt
+---
+- SOURCE_FILE
+  - BLOCK_COMMENT "/* A block comment */"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BLOCK_COMMENT "/* inline */"
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - BLOCK_COMMENT "/*\n * Spanning\n * lines\n */"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BIN_EXPR
+      - PATH_EXPR
+        - IDENT "a"
+      - WHITESPACE " "
+      - OPERATOR "+"
+      - BLOCK_COMMENT "/* after an operator */"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "z"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - BIN_EXPR
+      - PATH_EXPR
+        - IDENT "a"
+      - WHITESPACE " "
+      - OPERATOR "*"
+      - BLOCK_COMMENT "/* after * */"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - IDENT "b"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - BLOCK_COMMENT "/**/"
+  - WHITESPACE "\n"
+  - BLOCK_COMMENT "/* outer /* nested */ still a comment */"
+  - WHITESPACE "\n"
+  - BLOCK_COMMENT "/* at end of file */"

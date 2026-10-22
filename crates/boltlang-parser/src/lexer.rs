@@ -179,6 +179,33 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 STRING
             }
             '#' => HASHTAG,
+            '/' if self.peek(0) == '*' => {
+                // Block comments nest, like in Rust: `/* a /* b */ c */`.
+                let start = self.pos.offset - 1;
+                self.get();
+                let mut depth = 1;
+                loop {
+                    match self.get() {
+                        CHAR_EOF => {
+                            self.error("unterminated block comment", start..start + 2);
+                            break;
+                        }
+                        '*' if self.peek(0) == '/' => {
+                            self.get();
+                            depth -= 1;
+                            if depth == 0 {
+                                break;
+                            }
+                        }
+                        '/' if self.peek(0) == '*' => {
+                            self.get();
+                            depth += 1;
+                        }
+                        _ => {}
+                    }
+                }
+                BLOCK_COMMENT
+            }
             '/' if self.peek(0) == '/' => {
                 // The newline isn't part of the comment.
                 while !matches!(self.peek(0), '\n' | CHAR_EOF) {
@@ -238,8 +265,8 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             c0 if is_operator(c0) => {
                 let mut text = String::new();
                 text.push(c0);
-                // Stop before `//`, so `a +// note` is `+` followed by a comment.
-                while is_operator(self.peek(0)) && !(self.peek(0) == '/' && self.peek(1) == '/') {
+                // Stop before `//` and `/*`, so `a +// note` is `+` followed by a comment.
+                while is_operator(self.peek(0)) && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*')) {
                     text.push(self.get());
                 }
                 if text == "->" {

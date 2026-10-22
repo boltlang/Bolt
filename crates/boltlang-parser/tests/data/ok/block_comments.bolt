@@ -1,0 +1,11 @@
+/* A block comment */
+let x = /* inline */ 1;
+/*
+ * Spanning
+ * lines
+ */
+let y = a +/* after an operator */ b;
+let z = a */* after * */ b;
+/**/
+/* outer /* nested */ still a comment */
+/* at end of file */
