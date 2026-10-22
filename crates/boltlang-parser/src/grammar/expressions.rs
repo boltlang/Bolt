@@ -1,7 +1,7 @@
 use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
     Parser,
-    grammar::{PATH_NAME_REF_KINDS, delimited, parse_block, parse_pattern, parse_type_expression},
+    grammar::{PATH_NAME_REF_KINDS, count_modifiers, delimited, is_named_fn, parse_named_function_declaration, parse_pattern, parse_type_expression},
     parser::{CompletedMarker, Marker},
     token_set::TokenSet
 };
@@ -191,7 +191,7 @@ fn parse_cast_expr(p: &mut Parser<'_>, lhs: CompletedMarker) -> CompletedMarker 
     p.bump(AS_KEYWORD);
     // Use type_no_bounds(), because cast expressions are not
     // allowed to have bounds.
-    super::ty::type_no_bounds(p);
+    super::types::type_no_bounds(p);
     m.complete(p, CAST_EXPR)
 }
 
@@ -377,4 +377,68 @@ fn current_op(p: &Parser<'_>) -> (u8, SyntaxKind, Associativity) {
         AS_KEYWORD => (12, AS_KEYWORD,  Left),
         _ => NOT_AN_OP
     }
+}
+
+/// Parse a statement that starts with `let`, a named `fn`, or an expression.
+pub(crate) fn parse_statement(p: &mut Parser) -> Option<CompletedMarker> {
+    let n = count_modifiers(p);
+    match p.nth(n) {
+        LET_KEYWORD => Some(parse_variable_declaration(p)),
+        FN_KEYWORD if is_named_fn(p, n) => Some(parse_named_function_declaration(p)),
+        _ => parse_expression_statement(p),
+    }
+}
+
+pub fn parse_type_ascription(p: &mut Parser) {
+    p.bump(COLON);
+    parse_type_expression(p);
+}
+
+pub fn parse_variable_declaration(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.eat(PUB_KEYWORD);
+    p.expect(LET_KEYWORD);
+    p.eat(MUT_KEYWORD);
+    parse_pattern(p);
+    if p.current() == COLON {
+        parse_type_ascription(p);
+    }
+    if p.eat(EQUALS) {
+        parse_expr(p);
+    }
+    check_semi(p);
+    m.complete(p, LET_STMT)
+}
+
+pub(crate) fn check_semi(p: &mut Parser) {
+    if !p.at(R_BRACE) && !p.eat(SEMI) {
+        p.error("expected ';' or '}'");
+        // TODO handle newlines
+        while !p.at(R_BRACE) && !p.at(EOF) && !p.eat(SEMI) {
+            p.bump_any();
+        }
+    }
+}
+
+pub fn parse_expression_statement(p: &mut Parser) -> Option<CompletedMarker> {
+    let m = parse_expr(p);
+    check_semi(p);
+    m
+}
+
+pub fn parse_block(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.expect(L_BRACE);
+    while !p.at(EOF) && !p.eat(R_BRACE) {
+        parse_body_element(p);
+    }
+    m.complete(p, BLOCK)
+}
+
+pub fn parse_body_element(p: &mut Parser) -> Option<CompletedMarker> {
+    parse_statement(p)
+}
+
+pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
+    parse_statement(p)
 }
