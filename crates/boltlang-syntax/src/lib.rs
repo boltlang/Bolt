@@ -134,6 +134,16 @@ pub enum SyntaxKind {
     RET_TYPE,
     /// `extern` or `extern "C"`
     ABI,
+    /// `impl Trait` or `impl for[T] Trait`
+    IMPL_TRAIT_TYPE,
+
+    // Generic parameters
+    /// `[T, const N: usize]` after the name of a function or type
+    GENERIC_PARAM_LIST,
+    /// `T`, `T: Bound` or `T = Default`
+    TYPE_PARAM,
+    /// `const N: usize` or `const N: usize = 3`
+    CONST_PARAM,
 
     // Generic arguments
     /// `[A, B]` after a type
@@ -295,6 +305,10 @@ impl SyntaxKind {
     pub fn pretty(&self) -> &str {
         match *self {
             TOMBSTONE => unreachable!(),
+            IMPL_TRAIT_TYPE => "an impl trait type",
+            GENERIC_PARAM_LIST => "a list of generic parameters",
+            TYPE_PARAM => "a type parameter",
+            CONST_PARAM => "a const parameter",
             FN_TYPE => "a function type",
             RET_TYPE => "a return type",
             ABI => "an ABI (like extern \"C\")",

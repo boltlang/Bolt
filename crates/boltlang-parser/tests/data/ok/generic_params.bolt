@@ -1,0 +1,6 @@
+fn id[T](x: T) -> T = x;
+fn sort[T: Ord + Hash, U = Vec[T],](xs: U) = xs;
+fn arr[const N: usize, const M: usize = 3, const K: i32 = -1, const L: usize = N, const B: bool = { true }]() = 0;
+let f: impl Fn(i32) -> i32 = g;
+let h: impl for[T] Fn(T) -> T = g;
+let i: impl A + B = g;

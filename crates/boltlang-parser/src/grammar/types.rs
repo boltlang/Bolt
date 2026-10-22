@@ -3,7 +3,7 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{delimited, is_path_start, parse_expr, parse_pattern, type_path},
+    grammar::{delimited, generic_param_list, is_path_start, parse_expr, parse_pattern, type_path},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -19,6 +19,7 @@ pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     T![async],
     T![const],
     T![extern],
+    T![impl],
 ]);
 
 pub(crate) const TYPE_RECOVERY_SET: TokenSet =
@@ -54,6 +55,7 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
         T!['['] => array_type(p),
         T![!] => never_type(p),
         T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
+        T![impl] => impl_trait_type(p),
         _ if is_path_start(p) => path_or_fn_trait_type(p),
         _ => {
             p.err_recover("expected a type", TYPE_RECOVERY_SET);
@@ -80,6 +82,23 @@ pub(crate) fn path_type_after_path(p: &mut Parser, path: CompletedMarker) -> Com
         return m.complete(p, FN_TYPE);
     }
     m.complete(p, PATH_TYPE)
+}
+
+/// `impl Trait`, or `impl for[T] Trait` to introduce generic parameters.
+/// Like the grammar's `abstract_type`, the trait can have bounds:
+/// `impl A + B` is one impl type of `A + B`.
+fn impl_trait_type(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump(T![impl]);
+    if p.eat(T![for]) {
+        if p.at(T!['[']) {
+            generic_param_list(p);
+        } else {
+            p.error("expected generic parameters like `[T]`");
+        }
+    }
+    type_(p);
+    m.complete(p, IMPL_TRAIT_TYPE)
 }
 
 /// `fn(A) -> B`, with optional modifiers: `async`, `const`, `extern "C"`.

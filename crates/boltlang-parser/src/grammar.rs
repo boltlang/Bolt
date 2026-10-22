@@ -3,6 +3,7 @@
 
 mod expressions;
 mod generic_args;
+mod generic_params;
 mod items;
 mod params;
 mod paths;
@@ -11,8 +12,9 @@ mod types;
 
 pub use expressions::*;
 pub(crate) use generic_args::*;
+pub(crate) use generic_params::*;
 pub use items::*;
-pub use params::*;
+pub(crate) use params::*;
 pub(crate) use paths::*;
 pub use patterns::*;
 pub use types::*;

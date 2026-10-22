@@ -1,6 +1,6 @@
-use boltlang_syntax::SyntaxKind::*;
+use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
-    grammar::{opt_ret_type, check_semi, parse_block_expr, parse_expr, param_list, type_},
+    grammar::{generic_param_list, opt_ret_type, check_semi, parse_block_expr, parse_expr, param_list},
     parser::{CompletedMarker, Parser, is_operator_kind},
 };
 
@@ -44,6 +44,9 @@ pub fn parse_named_function_declaration(p: &mut Parser) -> CompletedMarker {
             p.error("expected an identifier or an operator wrapped between '(' and ')'");
             // TODO maybe bump
         }
+    }
+    if p.at(T!['[']) {
+        generic_param_list(p);
     }
     param_list(p);
     opt_ret_type(p);

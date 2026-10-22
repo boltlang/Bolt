@@ -3,7 +3,6 @@ use std::{marker::PhantomData};
 
 use rowan::SyntaxElement;
 
-use boltlang_common::IterExt;
 use crate::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
 
 pub trait Node : Sized {
@@ -127,6 +126,7 @@ ast_enum!(
         Never(NeverType) = NEVER_TYPE,
         Bounded(BoundedType) = BOUNDED_TYPE,
         Fn(FnType) = FN_TYPE,
+        ImplTrait(ImplTraitType) = IMPL_TRAIT_TYPE,
     }
 );
 
@@ -205,6 +205,71 @@ impl FnType {
         self.find_node()
     }
     pub fn ret_type(&self) -> Option<RetType> {
+        self.find_node()
+    }
+}
+
+/// `impl Trait` or `impl for[T] Trait`
+pub struct ImplTraitType(SyntaxNode);
+
+simple_node!(ImplTraitType, IMPL_TRAIT_TYPE);
+
+impl ImplTraitType {
+    /// The parameters after `for`, if there are any.
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// `[T, U: Bound = Default, const N: usize]`
+pub struct GenericParamList(SyntaxNode);
+
+simple_node!(GenericParamList, GENERIC_PARAM_LIST);
+
+impl GenericParamList {
+    pub fn params(&self) -> ChildrenIter<GenericParam> {
+        ChildrenIter::new(&self.0)
+    }
+}
+
+ast_enum!(GenericParam {
+    Type(TypeParam) = TYPE_PARAM,
+    Const(ConstParam) = CONST_PARAM,
+});
+
+/// `T`, `T: Bound` or `T = Default`. Can also be a metavariable in a macro.
+pub struct TypeParam(SyntaxNode);
+
+simple_node!(TypeParam, TYPE_PARAM);
+
+impl TypeParam {
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn bounds(&self) -> Option<TraitBounds> {
+        self.find_node()
+    }
+    pub fn default_type(&self) -> Option<Type> {
+        self.find_node()
+    }
+}
+
+/// `const N: usize = 3`
+pub struct ConstParam(SyntaxNode);
+
+simple_node!(ConstParam, CONST_PARAM);
+
+impl ConstParam {
+    pub fn name(&self) -> Option<Name> {
+        self.find_node()
+    }
+    pub fn ty(&self) -> Option<Type> {
+        self.find_node()
+    }
+    pub fn default_value(&self) -> Option<Expr> {
         self.find_node()
     }
 }
@@ -876,6 +941,10 @@ impl FuncDecl {
 
     pub fn name(&self) -> Option<SyntaxToken> {
         self.find_token(IDENT)
+    }
+
+    pub fn generic_param_list(&self) -> Option<GenericParamList> {
+        self.find_node()
     }
 
     pub fn param_list(&self) -> Option<ParamList> {
