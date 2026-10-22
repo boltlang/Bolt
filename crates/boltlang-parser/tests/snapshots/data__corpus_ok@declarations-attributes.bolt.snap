@@ -1,0 +1,138 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-attributes.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "test"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "test_foo"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - STRUCT
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "derive"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - IDENT "Debug"
+          - R_PAREN ")"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Baz"
+    - SEMI ";"
+  - WHITESPACE "\n\n"
+  - STRUCT
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "derive"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - IDENT "Debug"
+          - COMMA ","
+          - WHITESPACE " "
+          - IDENT "Eq"
+          - COMMA ","
+          - R_PAREN ")"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Foo"
+    - SEMI ";"
+  - WHITESPACE "\n\n"
+  - STRUCT
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "cfg"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - IDENT "target_os"
+          - WHITESPACE " "
+          - EQUALS "="
+          - WHITESPACE " "
+          - STRING "\"macos\""
+          - R_PAREN ")"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "MacosOnly"
+    - SEMI ";"
+  - WHITESPACE "\n\n"
+  - ATTR
+    - HASHTAG "#"
+    - EXCL "!"
+    - L_BRACKET "["
+    - META
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "allow"
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "clippy"
+        - DOT "."
+        - IDENT "useless_transmute"
+        - R_PAREN ")"
+    - R_BRACKET "]"
+  - WHITESPACE "\n\n"
+  - ATTR
+    - HASHTAG "#"
+    - L_BRACKET "["
+    - META
+      - PATH
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "clippy"
+        - DOT "."
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "cyclomatic_complexity"
+      - WHITESPACE " "
+      - EQUALS "="
+      - WHITESPACE " "
+      - LIT_EXPR
+        - STRING "\"100\""
+    - R_BRACKET "]"
+  - WHITESPACE "\n"

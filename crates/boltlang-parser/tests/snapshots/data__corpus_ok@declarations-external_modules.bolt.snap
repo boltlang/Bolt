@@ -1,0 +1,49 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-external_modules.bolt
+---
+- SOURCE_FILE
+  - EXTERN_BLOCK
+    - ABI
+      - EXTERN_KEYWORD "extern"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n  "
+      - FUNC_DECL
+        - VISIBILITY
+          - PUB_KEYWORD "pub"
+        - WHITESPACE " "
+        - FN_KEYWORD "fn"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "napi_module_register"
+        - PARAM_LIST
+          - L_PAREN "("
+          - PARAM
+            - NAMED_PATT
+              - NAME
+                - IDENT "mod_"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "napi_module"
+          - R_PAREN ")"
+        - SEMI ";"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - EXTERN_BLOCK
+    - ABI
+      - EXTERN_KEYWORD "extern"
+      - WHITESPACE " "
+      - STRING "\"C\""
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

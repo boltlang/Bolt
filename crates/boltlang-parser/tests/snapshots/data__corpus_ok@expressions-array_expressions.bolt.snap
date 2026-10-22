@@ -1,0 +1,99 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-array_expressions.bolt
+---
+- SOURCE_FILE
+  - EXPR_STMT
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - LIT_EXPR
+        - INT_NUMBER "1"
+      - COMMA ","
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "2"
+      - COMMA ","
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "3"
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - LIT_EXPR
+        - STRING "\"a\""
+      - COMMA ","
+      - WHITESPACE " "
+      - LIT_EXPR
+        - STRING "\"b\""
+      - COMMA ","
+      - WHITESPACE " "
+      - LIT_EXPR
+        - STRING "\"c\""
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - LIT_EXPR
+        - INT_NUMBER "0"
+      - SEMI ";"
+      - WHITESPACE " "
+      - LIT_EXPR
+        - INT_NUMBER "128"
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - EXPR_STMT
+    - ARRAY_EXPR
+      - L_BRACKET "["
+      - WHITESPACE "\n    "
+      - LIT_EXPR
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "cfg"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - IDENT "foo"
+              - R_PAREN ")"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - STRING "\"foo\""
+      - COMMA ","
+      - WHITESPACE "\n    "
+      - LIT_EXPR
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "cfg"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - IDENT "bar"
+              - R_PAREN ")"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - STRING "\"bar\""
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_BRACKET "]"
+    - SEMI ";"
+  - WHITESPACE "\n"

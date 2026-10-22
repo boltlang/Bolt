@@ -1,0 +1,35 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-immediate_inner_attribute.bolt
+---
+- SOURCE_FILE
+  - ATTR
+    - HASHTAG "#"
+    - EXCL "!"
+    - L_BRACKET "["
+    - META
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "feature"
+      - TOKEN_TREE
+        - L_PAREN "("
+        - IDENT "thing"
+        - R_PAREN ")"
+    - R_BRACKET "]"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "main"
+    - PARAM_LIST
+      - L_PAREN "("
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

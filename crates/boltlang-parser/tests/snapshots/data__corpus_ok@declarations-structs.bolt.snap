@@ -1,0 +1,174 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-structs.bolt
+---
+- SOURCE_FILE
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Proton"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Electron"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Person"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - RECORD_FIELD
+        - VISIBILITY
+          - PUB_KEYWORD "pub"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "name"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "String"
+      - COMMA ","
+      - WHITESPACE " "
+      - RECORD_FIELD
+        - VISIBILITY
+          - PUB_KEYWORD "pub"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "age"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "u32"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Point"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n  "
+      - RECORD_FIELD
+        - NAME
+          - IDENT "x"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - COMMA ","
+      - WHITESPACE "\n\n  "
+      - RECORD_FIELD
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "attribute1"
+          - R_BRACKET "]"
+        - WHITESPACE "\n  "
+        - NAME
+          - IDENT "y"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Color"
+    - TUPLE_FIELD_LIST
+      - L_PAREN "("
+      - TUPLE_FIELD
+        - VISIBILITY
+          - PUB_KEYWORD "pub"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - COMMA ","
+      - WHITESPACE " "
+      - TUPLE_FIELD
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - COMMA ","
+      - WHITESPACE " "
+      - TUPLE_FIELD
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Inches"
+    - TUPLE_FIELD_LIST
+      - L_PAREN "("
+      - TUPLE_FIELD
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Empty"
+    - TUPLE_FIELD_LIST
+      - L_PAREN "("
+      - TUPLE_FIELD
+        - VISIBILITY
+          - PUB_KEYWORD "pub"
+        - WHITESPACE " "
+        - TUPLE_TYPE
+          - L_PAREN "("
+          - R_PAREN ")"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n"

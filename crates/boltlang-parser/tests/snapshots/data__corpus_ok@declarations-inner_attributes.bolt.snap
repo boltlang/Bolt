@@ -1,0 +1,131 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-inner_attributes.bolt
+---
+- SOURCE_FILE
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "MacosOnly"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n  "
+      - ATTR
+        - HASHTAG "#"
+        - EXCL "!"
+        - L_BRACKET "["
+        - META
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "cfg"
+          - TOKEN_TREE
+            - L_PAREN "("
+            - IDENT "target_os"
+            - WHITESPACE " "
+            - EQUALS "="
+            - WHITESPACE " "
+            - STRING "\"macos\""
+            - R_PAREN ")"
+        - R_BRACKET "]"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - EXPR_STMT
+    - MATCH_EXPR
+      - MATCH_KEYWORD "match"
+      - WHITESPACE " "
+      - PATH_EXPR
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "ty"
+      - WHITESPACE " "
+      - MATCH_ARM_LIST
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - MATCH_ARM
+          - ATTR
+            - HASHTAG "#"
+            - EXCL "!"
+            - L_BRACKET "["
+            - META
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "cfg_attr"
+              - TOKEN_TREE
+                - L_PAREN "("
+                - IDENT "all"
+                - TOKEN_TREE
+                  - L_PAREN "("
+                  - IDENT "test"
+                  - COMMA ","
+                  - WHITESPACE " "
+                  - IDENT "exhaustive"
+                  - R_PAREN ")"
+                - COMMA ","
+                - WHITESPACE " "
+                - IDENT "deny"
+                - TOKEN_TREE
+                  - L_PAREN "("
+                  - IDENT "non_exhaustive_omitted_patterns"
+                  - R_PAREN ")"
+                - R_PAREN ")"
+            - R_BRACKET "]"
+          - WHITESPACE "\n    "
+          - TUPLE_STRUCT_PATT
+            - PATH
+              - PATH
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "syn"
+                - DOT "."
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Type"
+              - DOT "."
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Array"
+            - L_PAREN "("
+            - NAMED_PATT
+              - NAME
+                - IDENT "ty"
+            - R_PAREN ")"
+          - WHITESPACE " "
+          - FAT_ARROW "=>"
+          - WHITESPACE " "
+          - CALL_EXPR
+            - FIELD_EXPR
+              - PATH_EXPR
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - SELF_KEYWORD "self"
+              - DOT "."
+              - NAME_REF
+                - IDENT "visit_type"
+            - ARG_LIST
+              - L_PAREN "("
+              - FIELD_EXPR
+                - PATH_EXPR
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "ty"
+                - DOT "."
+                - NAME_REF
+                  - IDENT "elem"
+              - R_PAREN ")"
+          - COMMA ","
+        - WHITESPACE "\n"
+        - R_BRACE "}"
+  - WHITESPACE "\n"

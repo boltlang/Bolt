@@ -1,0 +1,164 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-enums.bolt
+---
+- SOURCE_FILE
+  - ENUM
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - ENUM_KEYWORD "enum"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Option"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - VARIANT_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - VARIANT
+        - NAME
+          - IDENT "None"
+      - COMMA ","
+      - WHITESPACE "\n    "
+      - VARIANT
+        - NAME
+          - IDENT "Some"
+        - TUPLE_FIELD_LIST
+          - L_PAREN "("
+          - TUPLE_FIELD
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
+          - R_PAREN ")"
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n\n"
+  - ENUM
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - ENUM_KEYWORD "enum"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Node"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+        - TRAIT_BOUNDS
+          - COLON ":"
+          - WHITESPACE " "
+          - PATH_TYPE
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "Item"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - VARIANT_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - VARIANT
+        - NAME
+          - IDENT "Internal"
+        - WHITESPACE " "
+        - RECORD_FIELD_LIST
+          - L_BRACE "{"
+          - WHITESPACE "\n        "
+          - RECORD_FIELD
+            - NAME
+              - IDENT "children"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Vec"
+                  - GENERIC_ARG_LIST
+                    - L_BRACKET "["
+                    - TYPE_ARG
+                      - PATH_TYPE
+                        - PATH
+                          - PATH_SEGMENT
+                            - NAME_REF
+                              - IDENT "Tree"
+                            - GENERIC_ARG_LIST
+                              - L_BRACKET "["
+                              - TYPE_ARG
+                                - PATH_TYPE
+                                  - PATH
+                                    - PATH_SEGMENT
+                                      - NAME_REF
+                                        - IDENT "T"
+                              - R_BRACKET "]"
+                    - R_BRACKET "]"
+          - COMMA ","
+          - WHITESPACE "\n        "
+          - RECORD_FIELD
+            - NAME
+              - IDENT "height"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "u16"
+          - WHITESPACE "\n    "
+          - R_BRACE "}"
+      - COMMA ","
+      - WHITESPACE "\n    "
+      - VARIANT
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "attribute1"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "attribute2"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - NAME
+          - IDENT "Leaf"
+        - WHITESPACE " "
+        - RECORD_FIELD_LIST
+          - L_BRACE "{"
+          - WHITESPACE "\n        "
+          - RECORD_FIELD
+            - NAME
+              - IDENT "value"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "T"
+          - WHITESPACE "\n    "
+          - R_BRACE "}"
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

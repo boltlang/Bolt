@@ -1,0 +1,146 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-derive_macro_helper_attributes.bolt
+---
+- SOURCE_FILE
+  - LINE_COMMENT "// Example from https://github.com/dtolnay/thiserror/blob/21c26903e29cb92ba1a7ff11e82ae2001646b60d/README.md"
+  - WHITESPACE "\n\n"
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - STRING "\"thiserror\""
+    - WHITESPACE " "
+    - IMPORT_LIST
+      - L_PAREN "("
+      - NAME_REF
+        - IDENT "Error"
+      - R_PAREN ")"
+    - SEMI ";"
+  - WHITESPACE "\n\n"
+  - ENUM
+    - ATTR
+      - HASHTAG "#"
+      - L_BRACKET "["
+      - META
+        - PATH
+          - PATH_SEGMENT
+            - NAME_REF
+              - IDENT "derive"
+        - TOKEN_TREE
+          - L_PAREN "("
+          - IDENT "Error"
+          - COMMA ","
+          - WHITESPACE " "
+          - IDENT "Debug"
+          - R_PAREN ")"
+      - R_BRACKET "]"
+    - WHITESPACE "\n"
+    - VISIBILITY
+      - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - ENUM_KEYWORD "enum"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "Error"
+    - WHITESPACE " "
+    - VARIANT_LIST
+      - L_BRACE "{"
+      - WHITESPACE "\n    "
+      - VARIANT
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "error"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - STRING "\"first letter must be lowercase but was {:?}\""
+              - COMMA ","
+              - WHITESPACE " "
+              - IDENT "first_char"
+              - TOKEN_TREE
+                - L_PAREN "("
+                - DOT "."
+                - INT_NUMBER "0"
+                - R_PAREN ")"
+              - R_PAREN ")"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - NAME
+          - IDENT "WrongCase"
+        - TUPLE_FIELD_LIST
+          - L_PAREN "("
+          - TUPLE_FIELD
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "String"
+          - R_PAREN ")"
+      - COMMA ","
+      - WHITESPACE "\n    "
+      - VARIANT
+        - ATTR
+          - HASHTAG "#"
+          - L_BRACKET "["
+          - META
+            - PATH
+              - PATH_SEGMENT
+                - NAME_REF
+                  - IDENT "error"
+            - TOKEN_TREE
+              - L_PAREN "("
+              - STRING "\"invalid index {idx}, expected at least {} and at most {}\""
+              - COMMA ","
+              - WHITESPACE " "
+              - DOT "."
+              - IDENT "limits"
+              - DOT "."
+              - IDENT "lo"
+              - COMMA ","
+              - WHITESPACE " "
+              - DOT "."
+              - IDENT "limits"
+              - DOT "."
+              - IDENT "hi"
+              - R_PAREN ")"
+          - R_BRACKET "]"
+        - WHITESPACE "\n    "
+        - NAME
+          - IDENT "OutOfBounds"
+        - WHITESPACE " "
+        - RECORD_FIELD_LIST
+          - L_BRACE "{"
+          - WHITESPACE " "
+          - RECORD_FIELD
+            - NAME
+              - IDENT "idx"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "usize"
+          - COMMA ","
+          - WHITESPACE " "
+          - RECORD_FIELD
+            - NAME
+              - IDENT "limits"
+            - COLON ":"
+            - WHITESPACE " "
+            - PATH_TYPE
+              - PATH
+                - PATH_SEGMENT
+                  - NAME_REF
+                    - IDENT "Limits"
+          - WHITESPACE " "
+          - R_BRACE "}"
+      - COMMA ","
+      - WHITESPACE "\n"
+      - R_BRACE "}"
+  - WHITESPACE "\n"

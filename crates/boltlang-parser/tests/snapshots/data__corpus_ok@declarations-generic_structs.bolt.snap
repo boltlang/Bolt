@@ -1,0 +1,111 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-generic_structs.bolt
+---
+- SOURCE_FILE
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "A"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "B"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "C"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - WHITESPACE " "
+      - TYPE_PARAM
+        - NAME
+          - IDENT "B"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "C"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "A"
+      - COMMA ","
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "D"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - CONST_PARAM
+        - CONST_KEYWORD "const"
+        - WHITESPACE " "
+        - NAME
+          - IDENT "SIZE"
+        - COLON ":"
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "usize"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - STRUCT
+    - STRUCT_KEYWORD "struct"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "E"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - ATTR
+        - HASHTAG "#"
+        - L_BRACKET "["
+        - META
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "attr"
+        - R_BRACKET "]"
+      - WHITESPACE " "
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - RECORD_FIELD_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
