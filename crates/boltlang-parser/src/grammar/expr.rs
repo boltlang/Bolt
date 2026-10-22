@@ -132,10 +132,15 @@ pub fn parse_atom_expr(p: &mut Parser) -> Option<CompletedMarker> {
     }
 }
 
+/// Whether the current token is an operator that can start a prefix expression.
+fn at_prefix_op(p: &Parser) -> bool {
+    matches!(p.op_text(), Some("-" | "+" | "!"))
+}
+
 fn parse_lhs(p: &mut Parser) -> Option<CompletedMarker> {
     let m;
     let kind = match p.current() {
-        MINUS | PLUS | EXCL => {
+        _ if at_prefix_op(p) => {
             m = p.start();
             p.bump_any();
             PREFIX_EXPR
@@ -263,7 +268,7 @@ pub fn parse_expr_bp(p: &mut Parser, m: Option<Marker>, min_bp: u8) -> Option<Co
         m
     });
 
-    if !p.at_ts(EXPR_FIRST) {
+    if !p.at_ts(EXPR_FIRST) && !at_prefix_op(p) {
         p.err_recover("expected expression", EXPR_RECOVERY_SET);
         m.abandon(p);
         return None;
