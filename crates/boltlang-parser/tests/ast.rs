@@ -161,3 +161,20 @@ fn block_statements_and_tail() {
     assert!(matches!(stmt.expr(), Some(Expr::Call(_))));
     assert!(matches!(block.tail_expr(), Some(Expr::Bin(_))));
 }
+
+#[test]
+fn doc_comments() {
+    use boltlang_syntax::ast::{CommentKind, HasDocs};
+    let source = "//! The file\n\n// plain\n/// First\n/** Second */\nfn f() {}\n//// not a doc\nfn g() {}\n";
+    let (green, diags) = parse_file(source);
+    assert!(diags.is_empty(), "{diags:?}");
+    let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
+    let inner: Vec<_> = file.inner_doc_comments().iter().map(|c| c.doc_text().unwrap().to_string()).collect();
+    assert_eq!(inner, [" The file"]);
+    let items: Vec<_> = file.elements().collect();
+    let SourceElement::FuncDecl(f) = &items[0] else { panic!() };
+    let docs: Vec<_> = f.doc_comments().iter().map(|c| (c.kind(), c.doc_text().unwrap().to_string())).collect();
+    assert_eq!(docs, [(CommentKind::OuterDoc, " First".to_string()), (CommentKind::OuterDoc, " Second ".to_string())]);
+    let SourceElement::FuncDecl(g) = &items[1] else { panic!() };
+    assert!(g.doc_comments().is_empty());
+}

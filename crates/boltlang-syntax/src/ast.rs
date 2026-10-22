@@ -2035,3 +2035,108 @@ has_attrs!(
     TypeAlias, Trait, Impl, ItemList, ExternBlock, Import, Param, MatchArm, MatchArmList,
     RecordExprField, Block,
 );
+
+/// What kind of comment a [`Comment`] is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommentKind {
+    /// `// ...` or `/* ... */`
+    Plain,
+    /// `/// ...` or `/** ... */`, documenting the item after it
+    OuterDoc,
+    /// `//! ...` or `/*! ... */`, documenting the item it's in
+    InnerDoc,
+}
+
+/// A line or block comment. Doc comments are ordinary comment tokens; this
+/// tells them apart by their text, following the grammar's `line_comment`
+/// and `block_comment`.
+pub struct Comment(SyntaxToken);
+
+impl Comment {
+    pub fn cast(token: SyntaxToken) -> Option<Self> {
+        matches!(token.kind(), LINE_COMMENT | BLOCK_COMMENT).then_some(Comment(token))
+    }
+
+    pub fn syntax(&self) -> &SyntaxToken {
+        &self.0
+    }
+
+    pub fn kind(&self) -> CommentKind {
+        let text = self.0.text();
+        if self.0.kind() == LINE_COMMENT {
+            if text.starts_with("///") && !text.starts_with("////") {
+                CommentKind::OuterDoc
+            } else if text.starts_with("//!") {
+                CommentKind::InnerDoc
+            } else {
+                CommentKind::Plain
+            }
+        } else if text.starts_with("/**") && !text.starts_with("/***") && text != "/**/" {
+            CommentKind::OuterDoc
+        } else if text.starts_with("/*!") {
+            CommentKind::InnerDoc
+        } else {
+            CommentKind::Plain
+        }
+    }
+
+    /// The text of a doc comment without its markers, like ` Hello` for
+    /// `/// Hello`. `None` for a plain comment.
+    pub fn doc_text(&self) -> Option<&str> {
+        if self.kind() == CommentKind::Plain {
+            return None;
+        }
+        let text = self.0.text();
+        Some(if self.0.kind() == LINE_COMMENT {
+            &text[3..]
+        } else {
+            text[3..].strip_suffix("*/").unwrap_or(&text[3..])
+        })
+    }
+}
+
+/// A node that can be documented with doc comments.
+pub trait HasDocs: Node {
+    /// The outer doc comments right before this node, like `/// Hello`
+    /// above a function, from first to last.
+    fn doc_comments(&self) -> Vec<Comment> {
+        let mut comments = Vec::new();
+        let mut current = self.syntax().prev_sibling_or_token();
+        while let Some(element) = current {
+            let Some(token) = element.as_token() else { break };
+            if !token.kind().is_trivia() {
+                break;
+            }
+            if let Some(comment) = Comment::cast(token.clone()) {
+                if comment.kind() == CommentKind::OuterDoc {
+                    comments.push(comment);
+                }
+            }
+            current = token.prev_sibling_or_token();
+        }
+        comments.reverse();
+        comments
+    }
+
+    /// The inner doc comments at the start of this node, like `//! Hello`
+    /// at the top of a file.
+    fn inner_doc_comments(&self) -> Vec<Comment> {
+        self.syntax()
+            .children_with_tokens()
+            .map_while(|element| element.into_token().filter(|token| token.kind().is_trivia()))
+            .filter_map(Comment::cast)
+            .filter(|comment| comment.kind() == CommentKind::InnerDoc)
+            .collect()
+    }
+}
+
+macro_rules! has_docs {
+    ($($name:ident),* $(,)?) => {
+        $(impl HasDocs for $name {})*
+    };
+}
+
+has_docs!(
+    SourceFile, FuncDecl, Struct, Enum, Variant, RecordField, TupleField, Const, TypeAlias, Trait, Impl,
+    ExternBlock, Import, MacroRules, Block, ItemList,
+);
