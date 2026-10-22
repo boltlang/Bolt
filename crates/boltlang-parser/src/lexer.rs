@@ -51,7 +51,7 @@ const fn is_whitespace(ch: char) -> bool {
 }
 
 fn is_ident_start(ch: char) -> bool {
-    is_xid_start(ch)
+    ch == '_' || is_xid_start(ch)
 }
 
 fn is_ident_part(ch: char) -> bool {
@@ -234,6 +234,9 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 name.push(c0);
                 while is_ident_part(self.peek(0)) {
                     name.push(self.get());
+                }
+                if name == "_" {
+                    return UNDERSCORE;
                 }
                 KEYWORDS.get(name.as_str()).copied().unwrap_or(IDENT)
             }
