@@ -1,0 +1,74 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/if_without_keyword.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "if"
+      - WHITESPACE " "
+    - IDENT "a"
+    - WHITESPACE " "
+    - L_BRACE "{"
+    - WHITESPACE " "
+    - IDENT "b"
+  - WHITESPACE " "
+  - ERROR
+    - R_BRACE "}"
+  - WHITESPACE " "
+  - PATH_EXPR
+    - IDENT "else"
+    - WHITESPACE " "
+  - L_BRACE "{"
+  - WHITESPACE " "
+  - IDENT "c"
+  - WHITESPACE " "
+  - ERROR
+    - R_BRACE "}"
+  - ERROR
+    - SEMI ";"
+    - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 11
+  end: 11
+---
+!ExpectedToken
+message: unexpected '}'
+span:
+  start: 17
+  end: 17
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 24
+  end: 24
+---
+!ExpectedToken
+message: unexpected '}'
+span:
+  start: 28
+  end: 28
+---
+!ExpectedToken
+message: expected expression
+span:
+  start: 29
+  end: 29
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 31
+  end: 31

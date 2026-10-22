@@ -188,6 +188,12 @@ pub fn parse_source_element(p: &mut Parser) -> Option<CompletedMarker> {
 pub fn parse_source_file(p: &mut Parser) {
     let m = p.start();
     while !p.at(EOF) {
+        // Nothing else consumes a `}` outside a block, so skip it here to
+        // make progress.
+        if p.at(R_BRACE) {
+            p.error_and_bump("unexpected '}'");
+            continue;
+        }
         parse_source_element(p);
     }
     m.complete(p, SOURCE_FILE);
