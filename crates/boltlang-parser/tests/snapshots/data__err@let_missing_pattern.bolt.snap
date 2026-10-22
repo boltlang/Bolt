@@ -1,0 +1,27 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/let_missing_pattern.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - ERROR
+      - EQUALS "="
+      - WHITESPACE " "
+    - DEC_INT "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected pattern
+span:
+  start: 4
+  end: 4
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 6
+  end: 6

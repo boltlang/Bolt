@@ -1,0 +1,23 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/let_with_type.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TYPED_PATT
+      - NAMED_PATT
+        - IDENT "x"
+      - COLON ":"
+      - WHITESPACE " "
+      - NAMED_TYPE_EXPR
+        - IDENT "Int"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "42"
+    - SEMI ";"
+  - WHITESPACE "\n"

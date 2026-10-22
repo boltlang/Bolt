@@ -1,0 +1,20 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/ok/pub_let.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - PUB_KEYWORD "pub"
+    - WHITESPACE " "
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "1"
+    - SEMI ";"
+  - WHITESPACE "\n"

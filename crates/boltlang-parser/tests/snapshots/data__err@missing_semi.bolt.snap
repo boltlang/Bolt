@@ -1,0 +1,32 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/missing_semi.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "1"
+      - WHITESPACE "\n"
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - IDENT "y"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - DEC_INT "2"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 10
+  end: 10
