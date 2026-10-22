@@ -1,0 +1,6 @@
+impl[T] iter.Iterator for Self.Iter[T] {
+}
+
+impl ConvertTo[i64] for i32 {
+    fn convert(self) -> i64 { self as i64 }
+}

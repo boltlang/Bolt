@@ -1,0 +1,11 @@
+fn high_order1(value: i32, f: fn(i32)) -> i32 {}
+
+fn high_order2(value: i32, f: fn(i32) -> i32) -> i32 {
+    f(value)
+}
+
+fn high_order3(value: i32, f: Box[FnOnce(i32) -> i32]) -> i32 {
+    f(value)
+}
+
+type F = fn(x: Ref[A], y: RefMut[B[I, T]],) -> C;

@@ -1,0 +1,3 @@
+pub fn splice[T: Into[Text]](self, old_range: Range[usize], new_text: T) {
+}
+pub fn uninit_array[const LEN: usize]() -> [Self; LEN] {}

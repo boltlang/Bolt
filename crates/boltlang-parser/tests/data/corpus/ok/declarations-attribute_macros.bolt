@@ -1,0 +1,3 @@
+foo(#[attr(=> arbitrary tokens <=)] x, y);
+
+foo(#[bar(some tokens are special in other contexts: $/';()*()+.)] x);

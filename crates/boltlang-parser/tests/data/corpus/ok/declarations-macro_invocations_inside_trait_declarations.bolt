@@ -1,0 +1,4 @@
+pub trait A: B + C + D {
+    private_decl!{}
+    fn f(self);
+}

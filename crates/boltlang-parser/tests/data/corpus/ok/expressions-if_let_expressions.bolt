@@ -1,0 +1,9 @@
+if let ("Bacon", b) = dish {
+}
+
+if let Some("chained") = a && b && let (C, D) = e {
+}
+
+if foo && let bar = || baz && quux {}
+
+if a && let b = || c || d && e {}

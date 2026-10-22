@@ -1,0 +1,5 @@
+extern {
+  pub fn napi_module_register(mod_: napi_module);
+}
+
+extern "C" {}

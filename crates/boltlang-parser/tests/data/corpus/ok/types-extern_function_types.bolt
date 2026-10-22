@@ -1,0 +1,2 @@
+type a = extern "C" fn(c_void);
+type b = extern "C" fn() -> c_void;

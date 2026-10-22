@@ -1,0 +1,2 @@
+fn foo(str: c_char) {}
+fn bar(bool: bool) {}

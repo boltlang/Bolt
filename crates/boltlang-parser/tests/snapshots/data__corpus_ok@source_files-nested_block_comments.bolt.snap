@@ -1,0 +1,18 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-nested_block_comments.bolt
+---
+- SOURCE_FILE
+  - BLOCK_COMMENT "/* /* double nested */ */"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "// ---"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/*/*/* triple nested */*/*/"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "// ---"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/****\n  /****\n    nested with extra stars which makes it a regular block comment\n    and not a block doc comment\n  ****/\n****/"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "// ---"
+  - WHITESPACE "\n"

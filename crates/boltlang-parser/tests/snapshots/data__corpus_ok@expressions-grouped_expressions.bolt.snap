@@ -1,0 +1,35 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-grouped_expressions.bolt
+---
+- SOURCE_FILE
+  - NEST_EXPR
+    - L_PAREN "("
+    - LIT_EXPR
+      - DEC_INT "0"
+    - R_PAREN ")"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - NEST_EXPR
+    - L_PAREN "("
+    - BIN_EXPR
+      - LIT_EXPR
+        - DEC_INT "2"
+      - WHITESPACE " "
+      - OPERATOR "*"
+      - WHITESPACE " "
+      - NEST_EXPR
+        - L_PAREN "("
+        - BIN_EXPR
+          - LIT_EXPR
+            - DEC_INT "3"
+          - WHITESPACE " "
+          - OPERATOR "+"
+          - WHITESPACE " "
+          - LIT_EXPR
+            - DEC_INT "4"
+        - R_PAREN ")"
+    - R_PAREN ")"
+  - SEMI ";"
+  - WHITESPACE "\n"

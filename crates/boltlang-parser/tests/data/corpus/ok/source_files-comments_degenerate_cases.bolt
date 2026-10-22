@@ -1,0 +1,12 @@
+//!
+
+/*!*/
+
+//
+
+///
+let x; // <- immediate item after an empty line doc comment
+
+/**/
+
+/***/

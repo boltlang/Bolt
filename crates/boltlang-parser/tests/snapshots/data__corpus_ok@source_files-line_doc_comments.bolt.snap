@@ -1,0 +1,18 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-line_doc_comments.bolt
+---
+- SOURCE_FILE
+  - LINE_COMMENT "//!  - Inner line doc"
+  - WHITESPACE "\n"
+  - LINE_COMMENT "//!! - Still an inner line doc (but with a bang at the beginning)"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "//   - Only a comment"
+  - WHITESPACE "\n"
+  - LINE_COMMENT "///  - Outer line doc (exactly 3 slashes)"
+  - WHITESPACE "\n"
+  - LINE_COMMENT "///"
+  - WHITESPACE "\n"
+  - LINE_COMMENT "//// - Only a comment"
+  - WHITESPACE "\n"

@@ -1,0 +1,1 @@
+pub struct Loaf[T: Sized, const N: usize = 1]([T; N]);

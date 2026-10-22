@@ -1,0 +1,15 @@
+#[test]
+fn test_foo() {}
+
+#[derive(Debug)]
+struct Baz;
+
+#[derive(Debug, Eq,)]
+struct Foo;
+
+#[cfg(target_os = "macos")]
+struct MacosOnly;
+
+#![allow(clippy.useless_transmute)]
+
+#[clippy.cyclomatic_complexity = "100"]

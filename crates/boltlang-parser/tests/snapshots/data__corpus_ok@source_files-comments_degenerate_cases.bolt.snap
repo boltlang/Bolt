@@ -1,0 +1,27 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-comments_degenerate_cases.bolt
+---
+- SOURCE_FILE
+  - LINE_COMMENT "//!"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/*!*/"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "//"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "///"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - SEMI ";"
+  - WHITESPACE " "
+  - LINE_COMMENT "// <- immediate item after an empty line doc comment"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/**/"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/***/"
+  - WHITESPACE "\n"

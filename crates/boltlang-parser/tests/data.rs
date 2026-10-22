@@ -7,6 +7,10 @@
 //! - `todo/ok/`, `todo/err/`: cases the parser can't handle correctly yet.
 //!   They show up as ignored; run them with `-- --ignored`. They aren't
 //!   snapshotted. Move a file into `ok/` or `err/` once it works.
+//! - `corpus/ok/`, `corpus/err/`: the tree-sitter-bolt test corpus, imported
+//!   with `scripts/import_corpus.py`. They're checked like `ok/` and `err/`,
+//!   except that the files listed in `corpus/FAILING` show up as ignored.
+//!   Remove a file from that list once it parses.
 //!
 //! Add a test by adding a file, then run `cargo insta test --review`.
 //! Run a single file with `cargo test --test data let_mut`.
@@ -40,14 +44,28 @@ struct Group {
     /// Snapshot name prefix, or `None` to skip snapshotting.
     snapshot: Option<&'static str>,
     ignored: bool,
+    /// Whether files listed in `corpus/FAILING` are ignored.
+    known_failures: bool,
 }
 
 const GROUPS: &[Group] = &[
-    Group { dir: "ok", expect: Expect::Ok, snapshot: Some("ok"), ignored: false },
-    Group { dir: "err", expect: Expect::Err, snapshot: Some("err"), ignored: false },
-    Group { dir: "todo/ok", expect: Expect::Ok, snapshot: None, ignored: true },
-    Group { dir: "todo/err", expect: Expect::Err, snapshot: None, ignored: true },
+    Group { dir: "ok", expect: Expect::Ok, snapshot: Some("ok"), ignored: false, known_failures: false },
+    Group { dir: "err", expect: Expect::Err, snapshot: Some("err"), ignored: false, known_failures: false },
+    Group { dir: "todo/ok", expect: Expect::Ok, snapshot: None, ignored: true, known_failures: false },
+    Group { dir: "todo/err", expect: Expect::Err, snapshot: None, ignored: true, known_failures: false },
+    Group { dir: "corpus/ok", expect: Expect::Ok, snapshot: Some("corpus_ok"), ignored: false, known_failures: true },
+    Group { dir: "corpus/err", expect: Expect::Err, snapshot: Some("corpus_err"), ignored: false, known_failures: true },
 ];
+
+/// Paths relative to `tests/data/corpus`, e.g. `ok/expressions-identifiers.bolt`.
+fn known_failures(root: &Path) -> Vec<String> {
+    let list = std::fs::read_to_string(root.join("corpus/FAILING")).unwrap_or_default();
+    list.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty() && !line.starts_with('#'))
+        .map(str::to_string)
+        .collect()
+}
 
 fn bolt_files(dir: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(dir) else {
@@ -110,9 +128,13 @@ fn run_captured(f: impl FnOnce() -> Result<(), Failed>) -> Result<(), Failed> {
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+    let failing = known_failures(&root);
     let mut trials = Vec::new();
     for group in GROUPS {
         for path in bolt_files(&root.join(group.dir)) {
+            let relative = path.strip_prefix(root.join("corpus")).ok().and_then(Path::to_str);
+            let ignored = group.ignored
+                || (group.known_failures && relative.is_some_and(|r| failing.iter().any(|f| f == r)));
             let name = format!(
                 "{}::{}",
                 group.dir.replace('/', "::"),
@@ -121,7 +143,7 @@ fn main() {
             let (expect, snapshot) = (group.expect, group.snapshot);
             trials.push(
                 Trial::test(name, move || run_captured(|| check(&path, expect, snapshot)))
-                    .with_ignored_flag(group.ignored),
+                    .with_ignored_flag(ignored),
             );
         }
     }

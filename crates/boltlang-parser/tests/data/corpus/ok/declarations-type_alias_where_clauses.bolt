@@ -1,0 +1,2 @@
+type Foo[T] where T: Copy = Box[T];
+type Assoc3 where = () where;

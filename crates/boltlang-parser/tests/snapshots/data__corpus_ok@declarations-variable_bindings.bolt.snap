@@ -1,0 +1,119 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/declarations-variable_bindings.bolt
+---
+- SOURCE_FILE
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "42"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TYPED_PATT
+      - NAMED_PATT
+        - IDENT "x"
+      - COLON ":"
+      - WHITESPACE " "
+      - NAMED_TYPE_EXPR
+        - IDENT "i32"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TYPED_PATT
+      - NAMED_PATT
+        - IDENT "x"
+      - COLON ":"
+      - WHITESPACE " "
+      - NAMED_TYPE_EXPR
+        - IDENT "i8"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "42"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - MUT_KEYWORD "mut"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - DEC_INT "5"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TYPED_PATT
+      - NAMED_PATT
+        - IDENT "y"
+      - COLON ":"
+      - WHITESPACE " "
+      - NAMED_TYPE_EXPR
+        - IDENT "bool"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "false"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TYPED_PATT
+      - NAMED_PATT
+        - IDENT "bool"
+      - COLON ":"
+      - WHITESPACE " "
+      - NAMED_TYPE_EXPR
+        - IDENT "bool"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "false"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - TYPED_PATT
+      - NAMED_PATT
+        - IDENT "u32"
+      - COLON ":"
+      - WHITESPACE " "
+      - NAMED_TYPE_EXPR
+        - IDENT "str"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - STRING "\"\""
+    - SEMI ";"
+  - WHITESPACE "\n"

@@ -1,0 +1,4 @@
+pub trait Graph {
+    type N: fmt.Display;
+    type E;
+}

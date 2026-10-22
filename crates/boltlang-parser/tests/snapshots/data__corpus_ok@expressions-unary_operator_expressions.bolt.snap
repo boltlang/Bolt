@@ -1,0 +1,18 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-unary_operator_expressions.bolt
+---
+- SOURCE_FILE
+  - PREFIX_EXPR
+    - OPERATOR "-"
+    - PATH_EXPR
+      - IDENT "num"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - PREFIX_EXPR
+    - OPERATOR "!"
+    - PATH_EXPR
+      - IDENT "bits"
+  - SEMI ";"
+  - WHITESPACE "\n"

@@ -1,0 +1,6 @@
+if let Some(a) = b
+    && c
+    && d
+    && let Some(e) = f
+{
+}

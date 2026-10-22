@@ -1,0 +1,12 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-line_comments.bolt
+---
+- SOURCE_FILE
+  - LINE_COMMENT "// Comment"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "/// Outer line doc comment"
+  - WHITESPACE "\n\n"
+  - LINE_COMMENT "//! Inner line doc comment"
+  - WHITESPACE "\n"

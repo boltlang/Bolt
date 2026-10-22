@@ -1,0 +1,7 @@
+fn foo(x = 1) {}
+fn shoot(direction: Vec3, strength: f32 = 1.0, mut n: i32 = a + b * 2) {}
+fn greet(name = "world", (a, b) = (1, 2),) {}
+fn (+) (a, b = 0) { a }
+trait T {
+    fn f(self, x = default());
+}

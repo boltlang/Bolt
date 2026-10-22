@@ -1,0 +1,16 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-block_comments.bolt
+---
+- SOURCE_FILE
+  - BLOCK_COMMENT "/*\n * Block comments\n */"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/* Comment with asterisks **/"
+  - WHITESPACE "\n\n"
+  - BLOCK_COMMENT "/** Outer block comment */"
+  - WHITESPACE "\n\n\n"
+  - BLOCK_COMMENT "/*! Inner block comment */"
+  - WHITESPACE "\n"
+  - BLOCK_COMMENT "/**/"
+  - WHITESPACE "\n"

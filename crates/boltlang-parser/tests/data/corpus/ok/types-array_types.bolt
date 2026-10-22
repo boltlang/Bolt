@@ -1,0 +1,2 @@
+type A = [B; 4];
+type C = [D];

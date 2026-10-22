@@ -1,0 +1,4 @@
+pub enum c_style_enum {
+    val1 = 1,
+    val2 = 2
+}

@@ -1,0 +1,106 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-binary_operator_expressions.bolt
+---
+- SOURCE_FILE
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "*"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "/"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "%"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "+"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "-"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR ">>"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "<<"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "=="
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "&&"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"
+  - BIN_EXPR
+    - PATH_EXPR
+      - IDENT "a"
+    - WHITESPACE " "
+    - OPERATOR "||"
+    - WHITESPACE " "
+    - PATH_EXPR
+      - IDENT "b"
+  - SEMI ";"
+  - WHITESPACE "\n"

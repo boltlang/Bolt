@@ -1,0 +1,3 @@
+trait Callback {
+    fn call(self: Box[Self]);
+}

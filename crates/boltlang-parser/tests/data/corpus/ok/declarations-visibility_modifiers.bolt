@@ -1,0 +1,4 @@
+pub fn a() {}
+pub(super) fn b() {}
+pub(self) fn c() {}
+pub(package) fn c() {}

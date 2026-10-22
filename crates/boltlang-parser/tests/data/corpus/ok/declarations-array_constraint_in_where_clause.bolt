@@ -1,0 +1,5 @@
+fn foo[D](val: D)
+where
+    [u8; 32]: From[D],
+
+{}

@@ -1,0 +1,6 @@
+let m: HashMap[String, Vec[i32]] = HashMap.new();
+let x = xs[0];
+let y = grid[i][j];
+let z = x as Vec[i32];
+let w = (x as T)[0];
+impl[T] [T; 3] {}

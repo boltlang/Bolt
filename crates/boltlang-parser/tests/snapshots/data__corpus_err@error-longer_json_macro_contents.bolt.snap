@@ -1,0 +1,105 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/err/error-longer_json_macro_contents.bolt
+---
+- SOURCE_FILE
+  - TUPLE_EXPR
+    - L_PAREN "("
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE "\n    "
+        - LIT_EXPR
+          - STRING "\"src\""
+        - COLON ":"
+        - WHITESPACE " "
+        - L_BRACE "{"
+        - WHITESPACE "\n        "
+        - STRING "\"file1.rs\""
+        - COLON ":"
+        - WHITESPACE " "
+        - STRING "\"fn foo() {}\""
+        - WHITESPACE "\n        "
+        - STRING "\"file2.rs\""
+        - COLON ":"
+        - WHITESPACE " "
+        - STRING "\"fn bar() {}\""
+        - COMMA ","
+        - WHITESPACE "\n    "
+        - R_BRACE "}"
+    - COMMA ","
+    - WHITESPACE "\n    "
+    - LIT_EXPR
+      - STRING "\"test\""
+    - ERROR
+      - COLON ":"
+      - WHITESPACE " "
+  - L_BRACE "{"
+  - WHITESPACE "\n        "
+  - STRING "\"foo\""
+  - COLON ":"
+  - WHITESPACE " "
+  - STRING "\"bar\""
+  - WHITESPACE "\n    "
+  - ERROR
+    - R_BRACE "}"
+  - WHITESPACE "\n"
+  - ERROR
+    - R_BRACE "}"
+  - R_PAREN ")"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 12
+  end: 12
+---
+!ExpectedToken
+message: expected ','
+span:
+  start: 102
+  end: 102
+---
+!ExpectedToken
+message: expected expression
+span:
+  start: 102
+  end: 102
+---
+!ExpectedToken
+message: expected ')'
+span:
+  start: 104
+  end: 104
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 104
+  end: 104
+---
+!ExpectedToken
+message: unexpected '}'
+span:
+  start: 131
+  end: 131
+---
+!ExpectedToken
+message: unexpected '}'
+span:
+  start: 133
+  end: 133
+---
+!ExpectedToken
+message: expected expression
+span:
+  start: 134
+  end: 134
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 134
+  end: 134

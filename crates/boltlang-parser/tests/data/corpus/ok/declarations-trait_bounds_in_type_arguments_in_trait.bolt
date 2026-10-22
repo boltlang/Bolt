@@ -1,0 +1,1 @@
+impl[T: AstDeref[Target: HasNodeId]] HasNodeId for T {}

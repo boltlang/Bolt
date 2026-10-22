@@ -1,0 +1,39 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/corpus/err/error-json_macro_contents.bolt
+---
+- SOURCE_FILE
+  - NEST_EXPR
+    - L_PAREN "("
+    - BLOCK_EXPR
+      - BLOCK
+        - L_BRACE "{"
+        - WHITESPACE " "
+        - LIT_EXPR
+          - STRING "\"session_id\""
+        - COLON ":"
+        - WHITESPACE " "
+        - IDENT "session_id"
+        - COMMA ","
+        - WHITESPACE " "
+        - STRING "\"output\""
+        - COLON ":"
+        - WHITESPACE " "
+        - IDENT "output"
+        - WHITESPACE " "
+        - R_BRACE "}"
+    - R_PAREN ")"
+    - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 15
+  end: 15
+---
+!ExpectedToken
+message: expected ';' or '}'
+span:
+  start: 49
+  end: 49

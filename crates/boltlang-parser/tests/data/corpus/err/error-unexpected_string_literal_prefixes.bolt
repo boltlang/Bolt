@@ -1,0 +1,6 @@
+const A: [str] = [
+    @"asdf",
+    <"asdf",
+    >"asdf",
+    :"asdf"
+];

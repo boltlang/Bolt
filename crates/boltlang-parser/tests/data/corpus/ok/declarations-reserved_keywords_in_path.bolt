@@ -1,0 +1,4 @@
+struct A {
+  a: default.B,
+  b: union.C,
+}

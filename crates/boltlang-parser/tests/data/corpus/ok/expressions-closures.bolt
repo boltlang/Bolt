@@ -1,0 +1,6 @@
+a.map(|(b, c)| b.push(c));
+d.map(|mut e| {
+    f(e);
+    g(e)
+});
+h(|| -> i { j });

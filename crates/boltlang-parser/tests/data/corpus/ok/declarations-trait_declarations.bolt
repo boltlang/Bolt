@@ -1,0 +1,3 @@
+pub trait Item: Clone + Eq + fmt.Debug {
+    fn summarize(self) -> Self.Summary;
+}
