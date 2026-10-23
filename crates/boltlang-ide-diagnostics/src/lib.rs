@@ -63,6 +63,8 @@ impl DiagnosticCode {
     pub const RECURSIVE_ALIAS: Self = Self("E0211");
     pub const CYCLIC_INFERENCE: Self = Self("E0212");
     pub const BREAK_OUTSIDE: Self = Self("E0213");
+    pub const NOT_A_METHOD_OF: Self = Self("E0214");
+    pub const MISSING_METHODS: Self = Self("E0215");
 
     pub const UNSUPPORTED: Self = Self("W0001");
 
@@ -185,6 +187,16 @@ fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticC
                 .into(),
         ),
         K::BreakOutside => (C::BREAK_OUTSIDE, "there is no loop or label to break out of".into()),
+        K::NotAMethodOf { name, class } => {
+            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            (C::NOT_A_METHOD_OF, format!("`{name}` is not a method of class `{class}`"))
+        }
+        K::MissingMethods { names, class } => {
+            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let list = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
+            let noun = if names.len() == 1 { "method" } else { "methods" };
+            (C::MISSING_METHODS, format!("missing {noun} {list} of class `{class}`"))
+        }
 
         K::Unsupported => (C::UNSUPPORTED, "the type checker doesn't support this yet".into()),
     }

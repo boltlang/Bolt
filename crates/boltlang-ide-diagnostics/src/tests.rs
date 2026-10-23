@@ -392,3 +392,38 @@ let b: bool = List.len(l);
         ),
     ]);
 }
+
+#[test]
+fn methods_must_be_declared_by_the_class() {
+    check(
+        r#"
+class Show[T] { fn show(x: T) -> str; }
+impl Show[i32] {
+  fn show(x) = "int";
+  fn shwo(x) = x + 1;
+   //^^^^ error: `shwo` is not a method of class `Show`
+}
+struct Dog;
+impl Dog { fn bark(d) = d; }
+   //^^^ error: `Dog` is not a class
+"#,
+    );
+}
+
+#[test]
+fn impls_must_define_the_methods_of_their_class() {
+    check(
+        r#"
+class Eq[T] {
+  fn eq(a: T, b: T) -> bool;
+  fn ne(a: T, b: T) -> bool = !eq(a, b);
+}
+class Ord[T] { fn lt(a: T, b: T) -> bool; fn gt(a: T, b: T) -> bool; }
+impl Eq[i32] { fn eq(a, b) = true; }
+impl Eq[bool] {}
+   //^^^^^^^^ error: missing method `eq` of class `Eq`
+impl Ord[i32];
+   //^^^^^^^^ error: missing methods `lt`, `gt` of class `Ord`
+"#,
+    );
+}

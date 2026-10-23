@@ -32,6 +32,7 @@ use boltlang_hir_ty::{
         ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
         impl_header, struct_field_types, type_alias_ty,
     },
+    scheme::class_impl_method_sig,
     solve::{ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
@@ -93,6 +94,11 @@ pub enum DiagnosticKind<'db> {
     CyclicInference,
     /// A `break` or `continue` without a loop or label to leave.
     BreakOutside,
+    /// A function in an impl that its class doesn't declare.
+    NotAMethodOf { name: Name, class: ClassId<'db> },
+    /// Methods of the class without a default that the impl doesn't define,
+    /// in the order the class declares them.
+    MissingMethods { names: Vec<Name>, class: ClassId<'db> },
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
@@ -215,6 +221,7 @@ impl<'db> Collector<'db> {
                     let (_, map) = impl_signature_with_source_map(db, id);
                     self.lower(map, &impl_header(db, id).diagnostics);
                     self.lower(map, &generic_predicates(db, GenericDefId::Impl(id)).diagnostics);
+                    self.impl_methods(id, map);
                     self.assoc_items(ItemContainerId::Impl(id), &id.item(db).items);
                 }
                 ModItem::Const(idx) => self.const_(ConstId::new(db, container, idx)),
@@ -226,6 +233,41 @@ impl<'db> Collector<'db> {
                 // Imports are checked by name resolution.
                 ModItem::Import(_) | ModItem::MacroRules(_) => {}
             }
+        }
+    }
+
+    /// Check the functions of an impl against the methods of its class:
+    /// those the class doesn't declare, like one with a typo in its name,
+    /// and those the class declares without a default that are missing.
+    /// `map` is the source map of the impl's signature.
+    fn impl_methods(&mut self, imp: ImplId<'db>, map: &ExpressionStoreSourceMap) {
+        let db = self.db;
+        let Some(class) = impl_header(db, imp).class.as_ref().map(|c| c.class) else { return };
+        let functions = |items: &'db [AssocItem], container| {
+            items.iter().filter_map(move |item| match *item {
+                AssocItem::Function(idx) => Some(FunctionId::new(db, container, idx)),
+                _ => None,
+            })
+        };
+        let mut defined = Vec::new();
+        for f in functions(&imp.item(db).items, ItemContainerId::Impl(imp)) {
+            let Some(name) = &f.item(db).name else { continue };
+            defined.push(name);
+            if class_impl_method_sig(db, f).is_none() {
+                let range = self.item_range(f.item(db).ast_id);
+                self.push(Some(range), DiagnosticKind::NotAMethodOf { name: function_name(name), class });
+            }
+        }
+        let names: Vec<Name> = functions(&class.item(db).items, ItemContainerId::Class(class))
+            .filter(|m| !m.item(db).has_body)
+            .filter_map(|m| m.item(db).name.as_ref())
+            .filter(|name| !defined.contains(name))
+            .map(function_name)
+            .collect();
+        if !names.is_empty() {
+            let (sig, _) = impl_signature_with_source_map(db, imp);
+            let range = map.type_syntax(sig.class).map(ptr_range);
+            self.push(range, DiagnosticKind::MissingMethods { names, class });
         }
     }
 
@@ -456,6 +498,12 @@ impl<'db> Collector<'db> {
             .filter(|n| n.text() == name.as_str())
             .last();
         Some(found.unwrap_or(node).text_range())
+    }
+}
+
+fn function_name(name: &FunctionName) -> Name {
+    match name {
+        FunctionName::Name(n) | FunctionName::Operator(n) => n.clone(),
     }
 }
 
