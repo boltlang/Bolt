@@ -41,13 +41,15 @@ use boltlang_base_db::{TestDb, source_text};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
-    hir::{Expr, Statement},
+    hir::{Expr, Statement, TypeRefId},
     ids::{FunctionId, ItemContainerId},
     item_tree::{FunctionName, ModItem, item_tree},
+    resolver::GenericDefId,
+    signatures::function_signature_with_source_map,
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
-    lower::LowerDiagnostic,
+    lower::{LowerDiagnostic, fn_sig, generic_predicates},
     solve::{ExprOrPat, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -164,6 +166,10 @@ fn check(input: &str) -> Result<(String, String), String> {
     for &(file, ref path) in &files {
         let prefix = if files.len() > 1 { format!("{path}: ") } else { String::new() };
         let tree = item_tree(&db, file);
+        let text = source_text(&db, file);
+        let type_snippet = |map: &ExpressionStoreSourceMap, id| {
+            map.type_syntax(id).map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
+        };
         let mut defs = Vec::new();
         for item in &tree.top_level {
             let ModItem::Function(idx) = *item else { continue };
@@ -176,6 +182,13 @@ fn check(input: &str) -> Result<(String, String), String> {
                 Err(()) => "<cycle>".into(),
             };
             types.push(format!("{prefix}{name}: {ty}"));
+            // The problems with the types in its signature.
+            let (_, map) = function_signature_with_source_map(&db, f);
+            let sig = fn_sig(&db, f);
+            let predicates = generic_predicates(&db, GenericDefId::Function(f));
+            for lower in sig.diagnostics.iter().chain(&predicates.diagnostics) {
+                diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+            }
             if f.item(&db).has_body {
                 defs.push(DefWithBodyId::new(&db, DefWithBody::Function(f)));
             }
@@ -183,7 +196,6 @@ fn check(input: &str) -> Result<(String, String), String> {
         let top = DefWithBodyId::new(&db, DefWithBody::File(file));
         defs.push(top);
         let (top_body, top_map) = body_with_source_map(&db, top);
-        let text = source_text(&db, file);
         let snippet = |map: &ExpressionStoreSourceMap, node: ExprOrPat| {
             let ptr = match node {
                 ExprOrPat::Expr(e) => map.expr_syntax(e),
@@ -208,9 +220,6 @@ fn check(input: &str) -> Result<(String, String), String> {
                 Statement::Item => {}
             }
         }
-        let type_snippet = |map: &ExpressionStoreSourceMap, id| {
-            map.type_syntax(id).map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
-        };
         for def in defs {
             let (_, map) = body_with_source_map(&db, def);
             for diagnostic in &infer_body(&db, def).diagnostics {
@@ -260,17 +269,7 @@ fn check(input: &str) -> Result<(String, String), String> {
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }
-                    InferenceDiagnostic::Lower(lower) => match lower {
-                        LowerDiagnostic::UnresolvedType(id) => format!("error at `{}`: unresolved type", at_type(*id)),
-                        LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at_type(*id)),
-                        LowerDiagnostic::NotAClass(id) => format!("error at `{}`: not a class", at_type(*id)),
-                        LowerDiagnostic::WrongArgCount { type_ref, expected, found } => format!(
-                            "error at `{}`: expected {expected} type arguments, found {found}",
-                            at_type(*type_ref)
-                        ),
-                        LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at_type(*id)),
-                        LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at_type(*id)),
-                    },
+                    InferenceDiagnostic::Lower(lower) => lower_line(lower, &at_type),
                     InferenceDiagnostic::CyclicInference => "error: cyclic inference between files".to_string(),
                 };
                 diagnostics.push(format!("{prefix}{line}"));
@@ -278,6 +277,20 @@ fn check(input: &str) -> Result<(String, String), String> {
         }
     }
     Ok((types.join("\n"), diagnostics.join("\n")))
+}
+
+/// A problem with a type annotation, with `at` giving its code.
+fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> String {
+    match lower {
+        LowerDiagnostic::UnresolvedType(id) => format!("error at `{}`: unresolved type", at(*id)),
+        LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at(*id)),
+        LowerDiagnostic::NotAClass(id) => format!("error at `{}`: not a class", at(*id)),
+        LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
+            format!("error at `{}`: expected {expected} type arguments, found {found}", at(*type_ref))
+        }
+        LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at(*id)),
+        LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
+    }
 }
 
 /// What the checker finds for a case, or why it couldn't check it: its
