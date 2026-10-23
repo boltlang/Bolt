@@ -6,8 +6,9 @@ use boltlang_syntax::{SyntaxNode, ast::{self, Node}};
 
 use crate::{
     expr_store::{ExprCollector, ExpressionStore, ExpressionStoreSourceMap},
-    hir::{BlockKind, Expr, ExprId, Pat, PatId},
-    ids::{ConstId, EnumVariantId, FunctionId},
+    hir::{BlockKind, Expr, ExprId, Pat, PatId, Path},
+    ids::{ConstId, EnumVariantId, FunctionId, ModuleDefId},
+    nameres::{Namespace, file_scope},
 };
 
 /// Something with a body.
@@ -99,8 +100,30 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
             })
         }
     };
-    let (store, source_map) = collector.finish();
+    let (mut store, source_map) = collector.finish();
+    resolve_variant_patterns(db, file, &mut store);
     (Body { store, params: params.into(), body_expr }, source_map)
+}
+
+/// A name on its own in a pattern that's a variant in the scope of the
+/// file, like the `None` of `match o { None => 0 }` after `import Option.*;`,
+/// matches that variant instead of binding a new name, as in Rust.
+fn resolve_variant_patterns(db: &dyn Db, file: File, store: &mut ExpressionStore) {
+    let scope = &file_scope(db, file).scope;
+    let variants: Vec<_> = store
+        .pats
+        .iter()
+        .filter_map(|(pat, p)| match p {
+            Pat::Bind { id, subpat: None } => Some((pat, store.bindings[*id].name.clone())),
+            _ => None,
+        })
+        .filter(|(_, name)| {
+            matches!(scope.get(Namespace::Values, name).map(|entry| entry.def), Some(ModuleDefId::Variant(_)))
+        })
+        .collect();
+    for (pat, name) in variants {
+        store.pats[pat] = Pat::Path(Path::from_name(name));
+    }
 }
 
 /// The body of `def`. Unlike [`body_with_source_map`], this doesn't change

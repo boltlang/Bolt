@@ -286,6 +286,26 @@ let c: i32 = Circle(1.0);
 }
 
 #[test]
+fn imported_variant_in_a_pattern_matches_the_variant() {
+    // Without the import, `None` would bind a new name and match anything.
+    check(
+        r#"
+  import Opt.*;
+  enum Opt { Some(i32), None }
+  fn f(n: i32) -> i32 = match n {
+    None => 0,
+  //^^^^ error: expected `i32`, found `Opt`
+    other => other,
+  };
+  fn g(o: Opt) -> Opt = match o {
+    None => None,
+    Some(x) => Some(x + 1),
+  };
+"#,
+    );
+}
+
+#[test]
 fn cyclic_inference() {
     let a = r#"
 import "./b" (g);
