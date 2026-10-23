@@ -40,7 +40,7 @@ fn setup(db: &TestDb) -> (Setup<'_>, File) {
     };
     let ModItem::Enum(idx) = tree.top_level[3] else { panic!() };
     let body = DefWithBodyId::new(db, DefWithBody::File(file));
-    let origin = Origin { body, node: ExprOrPat::Expr(ExprId::new(0)) };
+    let origin = Origin::new(body, ExprOrPat::Expr(ExprId::new(0)));
     (Setup { eq: class(0), ord: class(1), show: class(2), list: EnumId::new(db, file, idx), origin }, file)
 }
 

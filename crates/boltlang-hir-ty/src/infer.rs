@@ -10,13 +10,14 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{
     Name,
     arena::ArenaMap,
-    body::{Body, DefWithBodyId},
+    body::{Body, DefWithBody, DefWithBodyId},
     builtin_type::{BuiltinType, BuiltinUint},
     hir::{
         ArithOp, BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
         PrefixOp, RecordField, Statement, TypeRefId,
     },
     ids::{FunctionId, ItemContainerId},
+    signatures::function_signature,
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     scope::expr_scopes,
 };
@@ -28,7 +29,7 @@ use crate::{
     },
     check::function_scheme,
     scheme::Scheme,
-    solve::{ExprOrPat, Origin, Solver, TypeError, visible_impls},
+    solve::{ExprOrPat, Origin, Reason, Solver, TypeError, visible_impls},
     ty::{AdtId, Ty, VarKind},
 };
 
@@ -116,6 +117,23 @@ pub(crate) struct FnEnv<'db> {
     pub done: HashMap<FunctionId<'db>, Scheme<'db>>,
 }
 
+/// The type an expression is expected to have, and why.
+#[derive(Clone, Copy)]
+struct Expectation<'a, 'db> {
+    ty: &'a Ty<'db>,
+    reason: Reason<'db>,
+}
+
+/// The reason for the `index`th of several expressions that must have the
+/// same type, like the arms of a `match`: the reason they all have, or else
+/// the first of them.
+fn reason_for_nth<'db>(reason: Reason<'db>, first: ExprId, index: usize) -> Reason<'db> {
+    match reason {
+        Reason::None if index > 0 => Reason::SameAs(first),
+        reason => reason,
+    }
+}
+
 struct Breakable<'db> {
     label: Option<LabelId>,
     /// Whether it's a loop, which `break` without a label leaves.
@@ -133,6 +151,8 @@ pub(crate) struct InferenceContext<'a, 'db> {
     env: &'a FnEnv<'db>,
     pub result: InferenceResult<'db>,
     return_ty: Ty<'db>,
+    /// Why values returned must have `return_ty`.
+    return_reason: Reason<'db>,
     breakables: Vec<Breakable<'db>>,
 }
 
@@ -147,12 +167,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             env,
             result: InferenceResult::default(),
             return_ty: Ty::Error,
+            return_reason: Reason::None,
             breakables: Vec::new(),
         }
     }
 
     fn origin(&self, expr: ExprId) -> Origin<'db> {
-        Origin { body: self.def, node: ExprOrPat::Expr(expr) }
+        Origin::new(self.def, ExprOrPat::Expr(expr))
     }
 
     fn new_var(&mut self) -> Ty<'db> {
@@ -183,16 +204,24 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.check_pat(pat, &ty);
         }
         self.return_ty = ret.clone();
+        self.return_reason = match self.def.def(self.db) {
+            DefWithBody::Function(f) if function_signature(self.db, f).ret_type.is_some() => Reason::ReturnType,
+            _ => Reason::None,
+        };
         let body_expr = self.body.body_expr;
-        self.check_expr(body_expr, ret);
+        self.check_expr_because(body_expr, ret, self.return_reason);
     }
 
     /// Infer a body that's an expression, like that of a const.
     pub fn infer_expr_body(&mut self, expected: Option<&Ty<'db>>) -> Ty<'db> {
         let body_expr = self.body.body_expr;
+        let reason = match self.def.def(self.db) {
+            DefWithBody::Const(_) => Reason::ConstType,
+            _ => Reason::None,
+        };
         match expected {
             Some(ty) => {
-                self.check_expr(body_expr, ty);
+                self.check_expr_because(body_expr, ty, reason);
                 ty.clone()
             }
             None => self.infer_expr(body_expr),
@@ -200,8 +229,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     pub fn check_expr(&mut self, expr: ExprId, expected: &Ty<'db>) {
-        let actual = self.infer_expr_expect(expr, Some(expected));
-        self.solver.equal(expected, &actual, self.origin(expr));
+        self.check_expr_because(expr, expected, Reason::None);
+    }
+
+    fn check_expr_because(&mut self, expr: ExprId, expected: &Ty<'db>, reason: Reason<'db>) {
+        let actual = self.infer_expr_expect(expr, Some(Expectation { ty: expected, reason }));
+        self.solver.equal(expected, &actual, Origin { reason, ..self.origin(expr) });
     }
 
     pub fn infer_expr(&mut self, expr: ExprId) -> Ty<'db> {
@@ -210,23 +243,24 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     /// Infer the type of an expression. `expected` is a hint, for branches
     /// and lambdas; the caller checks the result against it.
-    fn infer_expr_expect(&mut self, expr: ExprId, expected: Option<&Ty<'db>>) -> Ty<'db> {
+    fn infer_expr_expect(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
         let ty = self.infer_expr_inner(expr, expected);
         self.result.expr_types.insert(expr, ty.clone());
         ty
     }
 
-    fn infer_expr_inner(&mut self, expr: ExprId, expected: Option<&Ty<'db>>) -> Ty<'db> {
+    fn infer_expr_inner(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
         let body = self.body;
+        let reason = expected.map_or(Reason::None, |e| e.reason);
         match &body[expr] {
             Expr::Missing => Ty::Error,
             Expr::Path(path) => self.infer_path(expr, path),
             Expr::Literal(lit) => self.literal_ty(lit),
             Expr::Block { statements, tail, label, .. } => {
                 if let Some(label) = label {
-                    let ty = expected.cloned().unwrap_or_else(|| self.new_var());
+                    let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
                     self.breakables.push(Breakable { label: Some(*label), is_loop: false, ty: Some(ty.clone()), broken: false });
-                    let actual = self.infer_block(statements, *tail, Some(&ty));
+                    let actual = self.infer_block(statements, *tail, Some(Expectation { ty: &ty, reason }));
                     self.breakables.pop();
                     self.solver.equal(&ty, &actual, self.origin(expr));
                     ty
@@ -270,24 +304,24 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Error
             }
             Expr::Tuple { exprs } => {
-                let hints: Option<Vec<Ty<'db>>> = match expected.map(|t| self.solver.unifier.shallow_resolve(t)) {
+                let hints: Option<Vec<Ty<'db>>> = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
                     Some(Ty::Tuple(tys)) if tys.len() == exprs.len() => Some(tys.into_vec()),
                     _ => None,
                 };
                 let tys = exprs
                     .iter()
                     .enumerate()
-                    .map(|(i, e)| self.infer_expr_expect(*e, hints.as_ref().map(|h| &h[i])))
+                    .map(|(i, e)| self.infer_expr_expect(*e, hints.as_ref().map(|h| Expectation { ty: &h[i], reason })))
                     .collect();
                 Ty::Tuple(tys)
             }
             Expr::Array { exprs } => {
-                let elem = match expected.map(|t| self.solver.unifier.shallow_resolve(t)) {
+                let elem = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
                     Some(Ty::Array(elem)) => *elem,
                     _ => self.new_var(),
                 };
-                for e in exprs.iter() {
-                    self.check_expr(*e, &elem);
+                for (i, e) in exprs.iter().enumerate() {
+                    self.check_expr_because(*e, &elem, reason_for_nth(reason, exprs[0], i));
                 }
                 Ty::Array(Box::new(elem))
             }
@@ -301,9 +335,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_expr(*condition, &Ty::bool());
                 match else_branch {
                     Some(else_branch) => {
-                        let ty = expected.cloned().unwrap_or_else(|| self.new_var());
-                        self.check_expr(*then_branch, &ty);
-                        self.check_expr(*else_branch, &ty);
+                        let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
+                        self.check_expr_because(*then_branch, &ty, reason);
+                        self.check_expr_because(*else_branch, &ty, reason_for_nth(reason, *then_branch, 1));
                         ty
                     }
                     None => {
@@ -319,13 +353,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Match { expr: scrutinee, arms } => {
                 let scrutinee_ty = self.infer_expr(*scrutinee);
-                let ty = expected.cloned().unwrap_or_else(|| self.new_var());
-                for arm in arms.iter() {
+                let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
+                for (i, arm) in arms.iter().enumerate() {
                     self.check_pat(arm.pat, &scrutinee_ty);
                     if let Some(guard) = arm.guard {
                         self.check_expr(guard, &Ty::bool());
                     }
-                    self.check_expr(arm.expr, &ty);
+                    self.check_expr_because(arm.expr, &ty, reason_for_nth(reason, arms[0].expr, i));
                 }
                 if arms.is_empty() { Ty::Never } else { ty }
             }
@@ -337,7 +371,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::unit()
             }
             Expr::Loop { body: loop_body, label } => {
-                let ty = expected.cloned().unwrap_or_else(|| self.new_var());
+                let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
                 self.breakables.push(Breakable { label: *label, is_loop: true, ty: Some(ty.clone()), broken: false });
                 self.check_expr(*loop_body, &Ty::unit());
                 let breakable = self.breakables.pop().unwrap();
@@ -386,8 +420,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Expr::Return { expr: value } => {
                 let ret = self.return_ty.clone();
                 match value {
-                    Some(value) => self.check_expr(*value, &ret),
-                    None => self.solver.equal(&ret, &Ty::unit(), self.origin(expr)),
+                    Some(value) => self.check_expr_because(*value, &ret, self.return_reason),
+                    None => self.solver.equal(&ret, &Ty::unit(), Origin { reason: self.return_reason, ..self.origin(expr) }),
                 }
                 Ty::Never
             }
@@ -399,7 +433,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::unit()
             }
             Expr::Lambda { params, param_types, ret_type, body: lambda_body, .. } => {
-                let (hint_params, hint_ret) = match expected.map(|t| self.solver.unifier.shallow_resolve(t)) {
+                let (hint_params, hint_ret) = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
                     Some(Ty::Fn(ps, r)) if ps.len() == params.len() => (Some(ps), Some(*r)),
                     _ => (None, None),
                 };
@@ -418,10 +452,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     (None, Some(hint)) => hint,
                     (None, None) => self.new_var(),
                 };
+                let ret_reason = ret_type.map_or(Reason::None, Reason::Annotation);
                 let outer_return = std::mem::replace(&mut self.return_ty, ret.clone());
+                let outer_reason = std::mem::replace(&mut self.return_reason, ret_reason);
                 let outer_breakables = std::mem::take(&mut self.breakables);
-                self.check_expr(*lambda_body, &ret);
+                self.check_expr_because(*lambda_body, &ret, ret_reason);
                 self.breakables = outer_breakables;
+                self.return_reason = outer_reason;
                 self.return_ty = outer_return;
                 Ty::Fn(param_tys.into(), Box::new(ret))
             }
@@ -429,7 +466,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    fn infer_block(&mut self, statements: &[Statement], tail: Option<ExprId>, expected: Option<&Ty<'db>>) -> Ty<'db> {
+    fn infer_block(
+        &mut self,
+        statements: &[Statement],
+        tail: Option<ExprId>,
+        expected: Option<Expectation<'_, 'db>>,
+    ) -> Ty<'db> {
         let mut diverges = false;
         for statement in statements {
             match statement {
@@ -442,7 +484,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         None => self.new_var(),
                     };
                     if let Some(init) = initializer {
-                        self.check_expr(*init, &ty);
+                        self.check_expr_because(*init, &ty, type_ref.map_or(Reason::None, Reason::Annotation));
                     }
                     if let Some(else_branch) = else_branch {
                         self.check_expr(*else_branch, &Ty::Never);
@@ -464,8 +506,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match (tail, expected) {
             // Check the last expression itself, so that errors point at it.
             (Some(tail), Some(expected)) => {
-                self.check_expr(tail, expected);
-                expected.clone()
+                self.check_expr_because(tail, expected.ty, expected.reason);
+                expected.ty.clone()
             }
             (Some(tail), None) => self.infer_expr(tail),
             (None, _) if diverges => Ty::Never,
@@ -693,7 +735,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         }
         let callee_ty = self.infer_expr(callee);
-        self.apply(expr, callee, &callee_ty, args, None)
+        let function = match &self.body[callee] {
+            Expr::Path(path) => match self.resolver(callee).resolve_path_in_value_ns(self.db, path) {
+                Some(ValueResolution::Value(ValueNs::Function(f))) => Some(f),
+                _ => None,
+            },
+            _ => None,
+        };
+        self.apply(expr, callee, &callee_ty, function, args, None)
     }
 
     /// `x.f(y)` as `f(x, y)`. `f` is a function in scope, or else a function
@@ -737,16 +786,17 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         };
         self.result.expr_types.insert(callee, callee_ty.clone());
-        self.apply(expr, callee, &callee_ty, args, Some((receiver, receiver_ty)))
+        self.apply(expr, callee, &callee_ty, function, args, Some((receiver, receiver_ty)))
     }
 
     /// Call a value of type `callee_ty` with `args`, after `receiver` if
-    /// there's one.
+    /// there's one. `function` is the function it is, if it's known.
     fn apply(
         &mut self,
         expr: ExprId,
         callee: ExprId,
         callee_ty: &Ty<'db>,
+        function: Option<FunctionId<'db>>,
         args: &[ExprId],
         receiver: Option<(ExprId, &Ty<'db>)>,
     ) -> Ty<'db> {
@@ -781,15 +831,20 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 found: count,
             });
         }
+        let reason = |index: usize| match function {
+            Some(function) => Reason::Argument { function, index: index as u32 },
+            None => Reason::None,
+        };
         let mut params = params.iter();
         if let Some((receiver, receiver_ty)) = receiver
             && let Some(param) = params.next()
         {
-            self.solver.equal(param, receiver_ty, self.origin(receiver));
+            self.solver.equal(param, receiver_ty, Origin { reason: reason(0), ..self.origin(receiver) });
         }
-        for &arg in args {
+        let first = receiver.is_some() as usize;
+        for (i, &arg) in args.iter().enumerate() {
             match params.next() {
-                Some(param) => self.check_expr(arg, param),
+                Some(param) => self.check_expr_because(arg, param, reason(first + i)),
                 None => {
                     self.infer_expr(arg);
                 }
@@ -808,12 +863,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             BinaryOp::Arith(_) => {
                 let ty = self.infer_expr(lhs);
-                self.check_expr(rhs, &ty);
+                self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 ty
             }
             BinaryOp::Cmp(_) => {
                 let ty = self.infer_expr(lhs);
-                self.check_expr(rhs, &ty);
+                self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 Ty::bool()
             }
             BinaryOp::Logic(_) => {
@@ -823,21 +878,27 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             BinaryOp::Assign(_) => {
                 let ty = self.infer_expr(lhs);
-                self.check_expr(rhs, &ty);
+                self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 Ty::unit()
             }
             // `a <$> b` calls the function `(<$>)`.
             BinaryOp::Custom(name) => {
                 let resolver = self.resolver(expr);
+                let mut function = None;
                 let callee_ty = match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
-                    Some(ValueResolution::Value(value)) => self.value_ty(expr, value),
+                    Some(ValueResolution::Value(value)) => {
+                        if let ValueNs::Function(f) = value {
+                            function = Some(f);
+                        }
+                        self.value_ty(expr, value)
+                    }
                     _ => {
                         self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
                         Ty::Error
                     }
                 };
                 let lhs_ty = self.infer_expr(lhs);
-                self.apply(expr, expr, &callee_ty, &[rhs], Some((lhs, &lhs_ty)))
+                self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)))
             }
         }
     }
@@ -875,7 +936,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Some((index, field_ty)) => {
                     seen.push(index);
                     let field_ty = subst_params(field_ty, generic_def, &args);
-                    self.check_expr(field.expr, &field_ty);
+                    let reason = Reason::Field { variant: def, index: index as u32 };
+                    self.check_expr_because(field.expr, &field_ty, reason);
                 }
                 None => {
                     self.infer_expr(field.expr);

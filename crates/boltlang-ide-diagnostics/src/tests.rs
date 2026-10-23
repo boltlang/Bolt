@@ -7,33 +7,40 @@ use crate::diagnostics;
 ///
 /// ```text
 /// let x: i32 = true;
+///    //^^^ label: expected because of this annotation
 ///             //^^^^ error: expected `i32`, found `bool`
 /// ```
 ///
 /// marks the columns of the carets in the line above it, which is the
-/// closest line that isn't an annotation. A diagnostic at an empty range,
-/// like a missing token, is marked by one caret.
+/// closest line that isn't an annotation. `label:` marks the labels of
+/// diagnostics. A diagnostic at an empty range, like a missing token, is
+/// marked by one caret.
 #[track_caller]
 fn check(fixture: &str) {
     check_files(&[("/main.bolt", fixture)]);
 }
 
-/// Like [`check`], for several files that can import each other.
+/// Like [`check`], for several files that can import each other. Labels
+/// are marked in the file they're in, which can be another file than that
+/// of their diagnostic.
 #[track_caller]
 fn check_files(files: &[(&str, &str)]) {
     let db = TestDb::new();
     let files: Vec<_> = files.iter().map(|(path, text)| (*path, db.file(path, text))).collect();
-    for (path, file) in files {
+    let all: Vec<_> = files.iter().flat_map(|&(_, file)| diagnostics(&db, file)).collect();
+    for &(path, file) in &files {
         let text = source_text(&db, file);
         let mut expected: Vec<String> =
             annotations(&text).into_iter().map(|(range, message)| show(path, &text, range, &message)).collect();
-        let mut actual: Vec<String> = diagnostics(&db, file)
-            .into_iter()
-            .map(|d| {
-                let range = if d.range.is_empty() { TextRange::at(d.range.start(), 1.into()) } else { d.range };
-                show(path, &text, range, &format!("{}: {}", d.severity, d.message))
-            })
-            .collect();
+        let mut actual = Vec::new();
+        for d in &all {
+            if d.file == file {
+                actual.push(show(path, &text, d.range, &format!("{}: {}", d.severity, d.message)));
+            }
+            for label in d.labels.iter().filter(|l| l.file == file) {
+                actual.push(show(path, &text, label.range, &format!("label: {}", label.message)));
+            }
+        }
         expected.sort();
         actual.sort();
         assert_eq!(expected.join("\n"), actual.join("\n"));
@@ -62,6 +69,7 @@ fn annotations(text: &str) -> Vec<(TextRange, String)> {
 
 /// A diagnostic as `path:line:column-column message`, to compare them.
 fn show(path: &str, text: &str, range: TextRange, message: &str) -> String {
+    let range = if range.is_empty() { TextRange::at(range.start(), 1.into()) } else { range };
     let start = usize::from(range.start());
     let line_start = text[..start].rfind('\n').map_or(0, |i| i + 1);
     let line = text[..start].matches('\n').count() + 1;
@@ -88,6 +96,7 @@ fn type_mismatch() {
 fn id(x) { return x }
   id(1) + 1;
   id("foo") + 1;
+//^^^^^^^^^ label: this has type `str`
             //^ error: expected `str`, found `i32`
 "#,
     );
@@ -98,6 +107,7 @@ fn mismatch_in_declared_function() {
     check(
         r#"
 fn f(x: i32) -> bool { x }
+              //^^^^ label: expected because of the return type
                      //^ error: expected `bool`, found `i32`
 "#,
     );
@@ -250,10 +260,90 @@ fn bodies_of_items_in_impls_and_enums() {
 struct Counter { n: i32 }
 impl Counter {
   fn get(c: Counter) -> bool = c.n;
+                      //^^^^ label: expected because of the return type
                              //^^^ error: expected `bool`, found `i32`
 }
 enum E { A = true }
            //^^^^ error: expected `i32`, found `bool`
+"#,
+    );
+}
+
+#[test]
+fn mismatches_point_at_annotations() {
+    check(
+        r#"
+const C: bool = 1;
+       //^^^^ label: expected because of the type of the constant
+              //^ error: expected `bool`, found `i32`
+fn f() {
+  let x: i32 = true;
+       //^^^ label: expected because of this annotation
+             //^^^^ error: expected `i32`, found `bool`
+  x
+}
+fn g() -> i32 { return true; }
+        //^^^ label: expected because of the return type
+                     //^^^^ error: expected `i32`, found `bool`
+"#,
+    );
+}
+
+#[test]
+fn mismatches_point_at_parameters() {
+    check(
+        r#"
+fn takes(n: i32, b: bool) -> i32 = n;
+                  //^^^^ label: expected because of this parameter of `takes`
+  takes(1, 2);
+         //^ error: expected `bool`, found `i32`
+"#,
+    );
+}
+
+#[test]
+fn parameters_can_be_in_other_files() {
+    check_files(&[
+        (
+            "/lib.bolt",
+            r#"
+pub fn negate(x) = !x;
+            //^ label: expected because of this parameter of `negate`
+"#,
+        ),
+        (
+            "/main.bolt",
+            r#"
+import "./lib" (negate);
+  negate(1);
+       //^ error: expected `bool`, found `i32`
+"#,
+        ),
+    ]);
+}
+
+#[test]
+fn mismatches_point_at_fields() {
+    check(
+        r#"
+struct Point { x: i32, y: bool }
+                        //^^^^ label: expected because of the type of field `y`
+let p = Point { x: 1, y: 2 };
+                       //^ error: expected `bool`, found `i32`
+"#,
+    );
+}
+
+#[test]
+fn branches_point_at_each_other() {
+    check(
+        r#"
+let a = if true { 1 } else { "no" };
+              //^^^^^ label: this has type `i32`
+                           //^^^^ error: expected `i32`, found `str`
+fn f(b) = match b { true => 1, false => "no" };
+                          //^ label: this has type `i32`
+                                      //^^^^ error: expected `i32`, found `str`
 "#,
     );
 }

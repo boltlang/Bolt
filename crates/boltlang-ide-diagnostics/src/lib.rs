@@ -15,7 +15,7 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File, source_text};
-use boltlang_hir::DiagnosticKind;
+use boltlang_hir::{Because, BecauseKind, DiagnosticKind};
 use boltlang_hir_ty::lower::ClassConstraint;
 use boltlang_syntax::rowan::TextRange;
 
@@ -89,6 +89,18 @@ pub struct Diagnostic {
     pub file: File,
     pub range: TextRange,
     pub message: String,
+    /// Other code that helps explain the problem, like the annotation that
+    /// made a type expected.
+    pub labels: Vec<Label>,
+}
+
+/// A place in the source with a note about it. It can be in another file
+/// than its diagnostic.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Label {
+    pub file: File,
+    pub range: TextRange,
+    pub message: String,
 }
 
 /// The diagnostics of `file`, sorted by where they are.
@@ -97,8 +109,12 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
     boltlang_hir::file_diagnostics(db, file)
         .into_iter()
         .map(|d| {
+            let labels = match &d.kind {
+                DiagnosticKind::TypeMismatch { because: Some(because), .. } => vec![because_label(db, because)],
+                _ => Vec::new(),
+            };
             let (code, message) = describe(db, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
-            Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message }
+            Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message, labels }
         })
         .collect()
 }
@@ -128,7 +144,7 @@ fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticC
         K::NotAType => (C::NOT_A_TYPE, format!("`{source}` is not a type")),
         K::NotAClass => (C::NOT_A_CLASS, format!("`{source}` is not a class")),
 
-        K::TypeMismatch { expected, actual } => (
+        K::TypeMismatch { expected, actual, .. } => (
             C::TYPE_MISMATCH,
             format!("expected `{}`, found `{}`", expected.display(db), actual.display(db)),
         ),
@@ -172,6 +188,19 @@ fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticC
 
         K::Unsupported => (C::UNSUPPORTED, "the type checker doesn't support this yet".into()),
     }
+}
+
+fn because_label(db: &dyn Db, because: &Because<'_>) -> Label {
+    let message = match &because.kind {
+        BecauseKind::Annotation => "expected because of this annotation".to_string(),
+        BecauseKind::ReturnType => "expected because of the return type".to_string(),
+        BecauseKind::ConstType => "expected because of the type of the constant".to_string(),
+        BecauseKind::Parameter { function: Some(name) } => format!("expected because of this parameter of `{name}`"),
+        BecauseKind::Parameter { function: None } => "expected because of this parameter".to_string(),
+        BecauseKind::Field { name } => format!("expected because of the type of field `{name}`"),
+        BecauseKind::SameAs { ty } => format!("this has type `{}`", ty.display(db)),
+    };
+    Label { file: because.file, range: because.range, message }
 }
 
 fn constraint_display(db: &dyn Db, constraint: &ClassConstraint<'_>) -> String {

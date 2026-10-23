@@ -16,23 +16,23 @@ use boltlang_hir_def::{
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
     hir::TypeRefId,
     ids::{ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
-    item_tree::{AssocItem, AstId, ModItem, item_tree},
+    item_tree::{AssocItem, AstId, FunctionName, ModItem, item_tree},
     nameres::{NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
-        class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map,
+        FieldList, class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map,
         function_signature_with_source_map, impl_signature_with_source_map, struct_signature_with_source_map,
         type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
-    InferenceDiagnostic, Ty,
+    InferenceDiagnostic, InferenceResult, Ty,
     infer_body,
     lower::{
-        ClassConstraint, LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header,
-        struct_field_types, type_alias_ty,
+        ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
+        impl_header, struct_field_types, type_alias_ty,
     },
-    solve::{ExprOrPat, TypeError},
+    solve::{ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
     SyntaxKind::{self, NAME, NAME_REF, STRING},
@@ -72,7 +72,8 @@ pub enum DiagnosticKind<'db> {
     NotAClass,
 
     // Types
-    TypeMismatch { expected: Ty<'db>, actual: Ty<'db> },
+    /// `because` is what made the expected type expected, if it's known.
+    TypeMismatch { expected: Ty<'db>, actual: Ty<'db>, because: Option<Because<'db>> },
     InfiniteType { ty: Ty<'db> },
     NoInstance { constraint: ClassConstraint<'db> },
     /// A class constraint whose types are never found, so it's not known
@@ -95,6 +96,32 @@ pub enum DiagnosticKind<'db> {
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
+}
+
+/// The code that made a type expected, like the annotation of a `let`. It
+/// can be in another file, like the parameter of an imported function.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Because<'db> {
+    pub file: File,
+    pub range: TextRange,
+    pub kind: BecauseKind<'db>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BecauseKind<'db> {
+    /// A type annotation, like that of `let x: i32`.
+    Annotation,
+    /// The declared return type of the function.
+    ReturnType,
+    /// The declared type of the const.
+    ConstType,
+    /// A parameter of the function being called: its type, or its pattern
+    /// if no type is written.
+    Parameter { function: Option<Name> },
+    /// The declared type of a field.
+    Field { name: Name },
+    /// Another expression that must have the same type, and its type.
+    SameAs { ty: Ty<'db> },
 }
 
 /// The diagnostics of `file`, sorted by where they are.
@@ -281,7 +308,8 @@ impl<'db> Collector<'db> {
         let id = DefWithBodyId::new(db, def);
         let (_, map) = body_with_source_map(db, id);
         let at = |node: ExprOrPat| node_range(map, node);
-        for diagnostic in infer_body(db, id).diagnostics.iter().cloned() {
+        let result = infer_body(db, id);
+        for diagnostic in result.diagnostics.iter().cloned() {
             let (range, kind) = match diagnostic {
                 InferenceDiagnostic::Type(error) => {
                     // The origin is always in the body being inferred.
@@ -290,7 +318,8 @@ impl<'db> Collector<'db> {
                             if has_error(&expected) || has_error(&actual) {
                                 continue;
                             }
-                            (origin, DiagnosticKind::TypeMismatch { expected, actual })
+                            let because = self.because(origin, result);
+                            (origin, DiagnosticKind::TypeMismatch { expected, actual, because })
                         }
                         TypeError::InfiniteType { origin, ty } => (origin, DiagnosticKind::InfiniteType { ty }),
                         TypeError::NoInstance { origin, constraint } => {
@@ -335,6 +364,66 @@ impl<'db> Collector<'db> {
             };
             self.push(range, kind);
         }
+    }
+
+    /// Where the reason of `origin` is, in a body of this file.
+    fn because(&self, origin: Origin<'db>, result: &InferenceResult<'db>) -> Option<Because<'db>> {
+        let db = self.db;
+        let (_, body_map) = body_with_source_map(db, origin.body);
+        let (file, ptr, kind) = match origin.reason {
+            Reason::None => return None,
+            Reason::Annotation(type_ref) => (self.file, body_map.type_syntax(type_ref)?, BecauseKind::Annotation),
+            Reason::ReturnType => {
+                let DefWithBody::Function(f) = origin.body.def(db) else { return None };
+                let (sig, map) = function_signature_with_source_map(db, f);
+                (self.file, map.type_syntax(sig.ret_type?)?, BecauseKind::ReturnType)
+            }
+            Reason::ConstType => {
+                let DefWithBody::Const(c) = origin.body.def(db) else { return None };
+                let (sig, map) = const_signature_with_source_map(db, c);
+                (self.file, map.type_syntax(sig.type_ref)?, BecauseKind::ConstType)
+            }
+            Reason::Argument { function, index } => {
+                let (sig, map) = function_signature_with_source_map(db, function);
+                // The parameters of the signature leave out `self`.
+                let index = match sig.self_param {
+                    Some(_) => (index as usize).checked_sub(1)?,
+                    None => index as usize,
+                };
+                let name = function.item(db).name.as_ref().map(|n| match n {
+                    FunctionName::Name(n) | FunctionName::Operator(n) => n.clone(),
+                });
+                let ptr = match sig.params.get(index)?.type_ref {
+                    Some(type_ref) => map.type_syntax(type_ref)?,
+                    None => {
+                        let def = DefWithBodyId::new(db, DefWithBody::Function(function));
+                        let (body, map) = body_with_source_map(db, def);
+                        map.pat_syntax(*body.params.get(index)?)?
+                    }
+                };
+                (function.file(db), ptr, BecauseKind::Parameter { function: name })
+            }
+            Reason::Field { variant, index } => {
+                let (file, fields, map) = match variant {
+                    VariantDef::Struct(s) => {
+                        let (sig, map) = struct_signature_with_source_map(db, s);
+                        (s.file(db), &sig.fields, map)
+                    }
+                    VariantDef::Variant(v) => {
+                        let (sig, map) = enum_signature_with_source_map(db, v.parent);
+                        (v.parent.file(db), &sig.variants.get(v.index as usize)?.fields, map)
+                    }
+                };
+                let (FieldList::Record(fields) | FieldList::Tuple(fields)) = fields else { return None };
+                let field = fields.get(index as usize)?;
+                (file, map.type_syntax(field.type_ref)?, BecauseKind::Field { name: field.name.clone() })
+            }
+            Reason::SameAs(expr) => {
+                let ty = result.expr_ty(expr).clone();
+                (self.file, body_map.expr_syntax(expr)?, BecauseKind::SameAs { ty })
+            }
+        };
+        Some(Because { file, range: ptr_range(ptr), kind })
     }
 
     /// The name of an item, or the whole item if it has none.

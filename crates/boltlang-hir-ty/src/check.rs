@@ -65,7 +65,7 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
             // A method of a class impl must have the class's types.
             if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
-                let origin = Origin { body: def, node: crate::solve::ExprOrPat::Expr(ctx.body.body_expr) };
+                let origin = Origin::new(def, crate::solve::ExprOrPat::Expr(ctx.body.body_expr));
                 for (own, class) in params.iter().zip(class_params.iter()) {
                     ctx.solver.equal(class, own, origin);
                 }

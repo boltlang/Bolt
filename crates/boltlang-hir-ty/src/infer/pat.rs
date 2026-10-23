@@ -14,7 +14,7 @@ use crate::{
 
 impl<'db> InferenceContext<'_, 'db> {
     fn pat_origin(&self, pat: PatId) -> Origin<'db> {
-        Origin { body: self.def, node: ExprOrPat::Pat(pat) }
+        Origin::new(self.def, ExprOrPat::Pat(pat))
     }
 
     /// Check that `pat` can match a value of type `expected`, and give its

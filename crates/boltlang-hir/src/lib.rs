@@ -6,4 +6,4 @@
 
 pub mod diagnostics;
 
-pub use diagnostics::{Diagnostic, DiagnosticKind, file_diagnostics};
+pub use diagnostics::{Because, BecauseKind, Diagnostic, DiagnosticKind, file_diagnostics};

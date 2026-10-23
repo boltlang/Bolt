@@ -7,14 +7,15 @@ use std::collections::HashMap;
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     body::DefWithBodyId,
-    hir::{ExprId, PatId},
+    hir::{ExprId, PatId, TypeRefId},
+    ids::FunctionId,
     item_tree::{ModItem, item_tree},
     nameres::{file_scope, resolve_import_path},
     resolver::GenericDefId,
 };
 
 use crate::{
-    lower::{ClassConstraint, ImplTarget, generic_predicates, impl_header},
+    lower::{ClassConstraint, ImplTarget, VariantDef, generic_predicates, impl_header},
     ty::{GenericParamId, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
@@ -23,7 +24,36 @@ use crate::{
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub struct Origin<'db> {
     pub body: DefWithBodyId<'db>,
+    /// What must have the expected type. Errors are reported here.
     pub node: ExprOrPat,
+    /// Why the expected type is expected, so that errors can point at it.
+    pub reason: Reason<'db>,
+}
+
+impl<'db> Origin<'db> {
+    pub fn new(body: DefWithBodyId<'db>, node: ExprOrPat) -> Self {
+        Origin { body, node, reason: Reason::None }
+    }
+}
+
+/// Why a type is expected of an expression.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Reason<'db> {
+    /// Nothing worth pointing at, like the `bool` of a condition.
+    None,
+    /// A type annotation in the body, like that of `let x: i32`.
+    Annotation(TypeRefId),
+    /// The declared return type of the function the body is of.
+    ReturnType,
+    /// The declared type of the const the body is of.
+    ConstType,
+    /// The `index`th parameter of the function being called, counting
+    /// `self` or the receiver of a method call.
+    Argument { function: FunctionId<'db>, index: u32 },
+    /// The `index`th field of a struct or variant.
+    Field { variant: VariantDef<'db>, index: u32 },
+    /// The type of another expression, like the other branch of an `if`.
+    SameAs(ExprId),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
