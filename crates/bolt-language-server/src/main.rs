@@ -1,70 +1,96 @@
-use std::borrow::Cow;
-use std::path::PathBuf;
-use std::sync::Mutex;
-
-use boltlang::{Db, DbDiagnostic, LineColumn, WritableSystem, check_file, index_lines, parse_file};
-use boltlang::salsa::Database;
-use tower_lsp_server::{LspService, jsonrpc, ls_types};
-use tower_lsp_server::ls_types::{DiagnosticSeverity, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult, FullDocumentDiagnosticReport, InitializeResult, InitializedParams, MessageType, RelatedFullDocumentDiagnosticReport, ServerCapabilities, ServerInfo, Uri};
-use tower_lsp_server::{Client, LanguageServer, ls_types::InitializeParams};
-
-use crate::db::LspDatabase;
-
 mod db;
+mod position;
+mod system;
+mod workspace;
+
+use std::{
+    path::PathBuf,
+    sync::{
+        Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
+};
+
+use boltlang_base_db::{SystemPath, SystemPathBuf};
+use tower_lsp_server::{
+    Client, LanguageServer, LspService, Server, jsonrpc,
+    ls_types::{
+        DiagnosticOptions, DiagnosticServerCapabilities, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
+        DidOpenTextDocumentParams, DocumentDiagnosticParams, DocumentDiagnosticReport,
+        DocumentDiagnosticReportResult, FullDocumentDiagnosticReport, InitializeParams, InitializeResult,
+        InitializedParams, MessageType, RelatedFullDocumentDiagnosticReport, ServerCapabilities, ServerInfo,
+        TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, Uri,
+    },
+};
+
+use crate::{position::Encoding, workspace::Workspace};
 
 const LANGUAGE_SERVER_NAME: &str = "bolt-language-server";
-const LANGUAGE_SERVER_VERSION: &str = "0.0.1";
+const LANGUAGE_SERVER_VERSION: &str = env!("CARGO_PKG_VERSION");
 
-pub struct Backend {
+struct Backend {
     client: Client,
-    db: Mutex<LspDatabase>,
-    root_dir: Option<PathBuf>,
+    workspace: Mutex<Workspace>,
+    /// Whether the client can be asked to pull the diagnostics of all its
+    /// documents again, which an edit of one can change.
+    refresh_support: AtomicBool,
 }
 
-const E_IO_ERROR: i64 = 1;
-const E_FILE_NOT_FOUND: i64 = 2;
-const E_COMPILER_ERROR: i64 = 3;
-
-macro_rules! logged {
-    ($self:ident, $expr:expr) => {
-        {
-            let result = $expr;
-            if let Err(error) = result {
-                $self.client.log_message(MessageType::ERROR, format!("{}", error)).await;
-                return;
+impl Backend {
+    /// The path of a document, or `None` after logging that it's not a file.
+    async fn path_of(&self, uri: &Uri) -> Option<SystemPathBuf> {
+        match uri.to_file_path() {
+            Some(path) => Some(SystemPathBuf::from(path.into_owned())),
+            None => {
+                self.client.log_message(MessageType::WARNING, format!("only files are supported, not {}", uri.as_str())).await;
+                None
             }
         }
-    };
+    }
+
+    /// Ask the client for new diagnostics of every document, after an edit.
+    async fn refresh_diagnostics(&self) {
+        if !self.refresh_support.load(Ordering::Relaxed) {
+            return;
+        }
+        if let Err(error) = self.client.workspace_diagnostic_refresh().await {
+            self.client.log_message(MessageType::ERROR, format!("refreshing diagnostics failed: {error}")).await;
+        }
+    }
 }
 
 impl LanguageServer for Backend {
-
-    async fn initialize(&self, _: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+    async fn initialize(&self, params: InitializeParams) -> jsonrpc::Result<InitializeResult> {
+        let capabilities = &params.capabilities;
+        let encodings = capabilities.general.as_ref().and_then(|g| g.position_encodings.as_deref());
+        let encoding = Encoding::choose(encodings);
+        self.workspace.lock().unwrap().encoding = encoding;
+        let refresh = capabilities
+            .workspace
+            .as_ref()
+            .and_then(|w| w.diagnostics.as_ref())
+            .and_then(|d| d.refresh_support)
+            .unwrap_or(false);
+        self.refresh_support.store(refresh, Ordering::Relaxed);
         Ok(InitializeResult {
             server_info: Some(ServerInfo {
-                version: Some(LANGUAGE_SERVER_VERSION.to_string()),
                 name: LANGUAGE_SERVER_NAME.to_string(),
+                version: Some(LANGUAGE_SERVER_VERSION.to_string()),
             }),
             capabilities: ServerCapabilities {
-                text_document_sync: Some(ls_types::TextDocumentSyncCapability::Options(
-                    ls_types::TextDocumentSyncOptions {
-                        open_close: Some(true),
-                        change: Some(ls_types::TextDocumentSyncKind::FULL), // TODO INCREMENTAL
-                        will_save: Some(false),
-                        will_save_wait_until: Some(false),
-                        save: Some(ls_types::TextDocumentSyncSaveOptions::Supported(true)),
-                    }
-                )),
-                diagnostic_provider: Some(ls_types::DiagnosticServerCapabilities::Options(
-                    ls_types::DiagnosticOptions {
-                        identifier: None,
-                        inter_file_dependencies: false, // TODO
-                        workspace_diagnostics: true,
-                        work_done_progress_options: ls_types::WorkDoneProgressOptions {
-                            work_done_progress: Some(false),
-                        },
-                    }
-                )),
+                position_encoding: Some(encoding.kind()),
+                text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
+                    open_close: Some(true),
+                    change: Some(TextDocumentSyncKind::FULL),
+                    ..Default::default()
+                })),
+                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
+                    identifier: Some("bolt".to_string()),
+                    // Imports and labels make diagnostics depend on other files.
+                    inter_file_dependencies: true,
+                    workspace_diagnostics: false,
+                    ..Default::default()
+                })),
                 ..ServerCapabilities::default()
             },
         })
@@ -73,208 +99,50 @@ impl LanguageServer for Backend {
     async fn initialized(&self, _: InitializedParams) {
         self.client.log_message(MessageType::INFO, "Bolt language server initialized").await;
     }
-    
-    async fn did_open(&self, params: ls_types::DidOpenTextDocumentParams) {
-        logged!(self, self.db.lock().unwrap().system.write_file_bytes_virtual(
-            params.text_document.uri.as_str(),
-            params.text_document.text.as_bytes()
-        ));
+
+    async fn did_open(&self, params: DidOpenTextDocumentParams) {
+        let Some(path) = self.path_of(&params.text_document.uri).await else { return };
+        self.workspace.lock().unwrap().set_text(&path, params.text_document.text);
+        self.refresh_diagnostics().await;
     }
 
-    async fn did_change(&self, params: ls_types::DidChangeTextDocumentParams) {
-        let result: boltlang::Result<()> = {
-            let db = self.db.lock().unwrap();
-            let path = params.text_document.uri.as_str();
-            let file = db.files().resolve_virtual(&*db, path);
-            db.attach(|db| {
-                let real_path = file.path(db).clone();
-                let mut contents = file.read_to_string(db)?;
-                let index = index_lines(db, file).lines(db);
-                for change in params.content_changes {
-                    match change.range {
-                        Some(range) => {
-                            let start = index.offset_from_line_column(&LineColumn::new(
-                                    range.start.line.try_into().unwrap(),
-                                    range.start.character.try_into().unwrap()
-                                ));
-                            let end = index.offset_from_line_column(
-                                    &LineColumn::new(range.end.line.try_into().unwrap(),
-                                    range.end.character.try_into().unwrap()
-                                ));
-                            contents.replace_range(start..end, &change.text);
-                        },
-                        None => contents = change.text,
-                    }
-                }
-                db.system.write_file_bytes_virtual(path, contents.as_bytes())?;
-                Ok(())
-            })
-        };
-        if let Err(error) = result {
-            self.client.log_message(MessageType::ERROR, error).await;
-        }
-        // self.client.publish_diagnostics(
-        //     params.text_document.uri.clone(),
-        //     logged!(self.diagnostics_for_file(&params.text_document.uri).await),
-        //     None,
-        // ).await;
+    async fn did_change(&self, params: DidChangeTextDocumentParams) {
+        let Some(path) = self.path_of(&params.text_document.uri).await else { return };
+        // With full sync, the last change is the whole document.
+        let Some(change) = params.content_changes.into_iter().last() else { return };
+        self.workspace.lock().unwrap().set_text(&path, change.text);
+        self.refresh_diagnostics().await;
     }
 
-    async fn did_save(&self, params: ls_types::DidSaveTextDocumentParams) {
-
-
-        macro_rules! logged {
-            ($expr:expr) => {
-                {
-                    let result = $expr;
-                    match result {
-                        Ok(value) => value,
-                        Err(error) => {
-                            self.client.log_message(MessageType::ERROR, format!("{}", error)).await;
-                            return;
-                        }
-                    }
-                }
-            };
-        }
-
-        if let Some(text) = params.text {
-            logged!(self.db.lock().unwrap().system.write_file_bytes_virtual(params.text_document.uri.as_str(), text.as_bytes()));
-        }
-
+    async fn did_close(&self, params: DidCloseTextDocumentParams) {
+        let Some(path) = self.path_of(&params.text_document.uri).await else { return };
+        self.workspace.lock().unwrap().close(&path);
+        self.refresh_diagnostics().await;
     }
 
     async fn diagnostic(&self, params: DocumentDiagnosticParams) -> jsonrpc::Result<DocumentDiagnosticReportResult> {
-        let items = self.diagnostics_for_file(&params.text_document.uri).await?;
+        let items = match self.path_of(&params.text_document.uri).await {
+            Some(path) => self.workspace.lock().unwrap().diagnostics(&path),
+            None => Vec::new(),
+        };
         Ok(DocumentDiagnosticReportResult::Report(DocumentDiagnosticReport::Full(
             RelatedFullDocumentDiagnosticReport {
                 related_documents: None,
-                full_document_diagnostic_report: FullDocumentDiagnosticReport {
-                    result_id: None,
-                    items
-                }
-            }
+                full_document_diagnostic_report: FullDocumentDiagnosticReport { result_id: None, items },
+            },
         )))
     }
 
-    // async fn workspace_diagnostic(&self, params: ls_types::WorkspaceDiagnosticParams) -> Result<ls_types::WorkspaceDiagnosticReportResult> {
-    //     // let roots = {
-    //     //     let db = self.db.lock().unwrap();
-    //     //     root_paths(db, self.root_dir.unwrap())
-    //     // };
-    //     // let items = futures::future::try_join_all(
-    //     //     roots
-    //     //         .iter()
-    //     //         .map(async |path| WorkspaceDocumentDiagnosticReport::Full(WorkspaceFullDocumentDiagnosticReport {
-    //     //             uri: Uri::from_file_path(path).ok_or(server_error(format!("could not find {} on the file system", path)))?,
-    //     //             version: None, // FIXME
-    //     //             full_document_diagnostic_report: FullDocumentDiagnosticReport {
-    //     //                 result_id: None,
-    //     //                 items: self.diagnostics_for_file(path).await?,
-    //     //             }
-    //     //         }))
-    //     // ).await?;
-    //     // TODO process errors
-    //     self.client.log_message(MessageType::ERROR, "TEEEEEEST").await;
-    //     let pos = ls_types::Position { line: 0, character: 0 };
-    //     Ok(WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport {
-    //         items: vec![
-    //             WorkspaceDocumentDiagnosticReport::Full(WorkspaceFullDocumentDiagnosticReport {
-    //                 uri: Uri::from_str("file:///home/samvv/Projects/bolt/test.bolt").unwrap(),
-    //                 version: None,
-    //                 full_document_diagnostic_report: FullDocumentDiagnosticReport {
-    //                     result_id: None,
-    //                     items: vec![
-    //                         ls_types::Diagnostic {
-    //                             code: None,
-    //                             code_description: None,
-    //                             severity: Some(DiagnosticSeverity::ERROR),
-    //                             message: "This is a test".to_string(),
-    //                             data: None,
-    //                             source: None,
-    //                             related_information: None,
-    //                             tags: None,
-    //                             range: ls_types::Range { start: pos, end: pos },
-    //                         },
-    //                     ]
-    //                 },
-    //             })
-    //         ],
-    //     }))
-    // }
-
-    async  fn shutdown(&self) -> jsonrpc::Result<()> {
+    async fn shutdown(&self) -> jsonrpc::Result<()> {
         Ok(())
     }
-
-}
-
-fn server_error(code: i64, message: String) -> jsonrpc::Error {
-    jsonrpc::Error {
-        code: jsonrpc::ErrorCode::ServerError(code),
-        data: None,
-        message: Cow::Owned(message),
-    }
-}
-
-fn from_boltlang_error(error: boltlang::Error) -> jsonrpc::Error {
-    server_error(E_COMPILER_ERROR, format!("{}", error))
-}
-
-impl Backend {
-
-    async fn diagnostics_for_file(&self, uri: &Uri) -> jsonrpc::Result<Vec<ls_types::Diagnostic>> {
-
-        self.db.lock().unwrap().attach(|db| {
-
-            let file = db.files().resolve_virtual(db, uri.as_str());
-            let _result = check_file(db, file);
-            let index = index_lines(db, file).lines(db);
-
-            Ok(parse_file::accumulated::<DbDiagnostic>(db, file)
-                .into_iter()
-                .filter_map(|e| {
-                    let source = e.source();
-                    let start = index.line_column_of_offset(source.span().start);
-                    let end = index.line_column_of_offset(source.span().end);
-                    Some(ls_types::Diagnostic {
-                        code: Some(ls_types::NumberOrString::Number(e.code().into())),
-                        code_description: None, // TODO
-                        data: None,
-                        message: format!("{}", e),
-                        range: ls_types::Range {
-                            start: ls_types::Position {
-                                line: start.line.try_into().ok()?,
-                                character: start.column.try_into().ok()?,
-                            },
-                            end: ls_types::Position {
-                                line: end.line.try_into().ok()?,
-                                character: end.column.try_into().ok()?,
-                            }
-                        },
-                        related_information: None, // TODO
-                        severity: Some(DiagnosticSeverity::ERROR),
-                        source: Some(LANGUAGE_SERVER_NAME.to_string()),
-                        tags: None,
-                    })
-                })
-                .collect())
-
-        })
-
-    }
-
 }
 
 #[tokio::main]
 async fn main() {
-    let db = Mutex::new(LspDatabase::default());
-    let stdin = tokio::io::stdin();
-    let stdout = tokio::io::stdout();
-    let (service, socket) = LspService::new(|client| Backend {
-        client,
-        db,
-        root_dir: None
-    });
-    tower_lsp_server::Server::new(stdin, stdout, socket).serve(service).await;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
+    let workspace = Mutex::new(Workspace::new(SystemPath::new(&cwd)));
+    let (service, socket) =
+        LspService::new(|client| Backend { client, workspace, refresh_support: AtomicBool::new(false) });
+    Server::new(tokio::io::stdin(), tokio::io::stdout(), socket).serve(service).await;
 }

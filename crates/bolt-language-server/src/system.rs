@@ -1,27 +1,80 @@
-use boltlang::{System, SystemPath};
+//! The files the server sees: those on disk, with the text of the documents
+//! open in the editor in their place, since that text isn't saved yet.
 
+use std::{
+    collections::HashMap,
+    io::Result,
+    sync::{
+        Arc, RwLock,
+        atomic::{AtomicU64, Ordering},
+    },
+};
+
+use boltlang_base_db::{
+    FileRevision, FileType, Metadata, OsSystem, System, SystemPath, SystemPathBuf, SystemVirtualPath,
+};
+
+/// The text of an open document, and a revision that changes with each
+/// edit, so that Salsa notices it.
+struct Document {
+    text: String,
+    revision: u64,
+}
 
 #[derive(Clone)]
 pub struct LspSystem {
-    fs: MemoryFs,
+    disk: OsSystem,
+    open: Arc<RwLock<HashMap<SystemPathBuf, Document>>>,
+    revisions: Arc<AtomicU64>,
+}
+
+impl LspSystem {
+    pub fn new(cwd: &SystemPath) -> Self {
+        LspSystem { disk: OsSystem::new(cwd), open: Arc::default(), revisions: Arc::new(AtomicU64::new(1)) }
+    }
+
+    /// Use `text` for the file at `path`, instead of what's on disk.
+    pub fn set_text(&self, path: &SystemPath, text: String) {
+        let revision = self.revisions.fetch_add(1, Ordering::Relaxed);
+        self.open.write().unwrap().insert(path.to_system_path_buf(), Document { text, revision });
+    }
+
+    /// Go back to what's on disk for the file at `path`.
+    pub fn remove_text(&self, path: &SystemPath) {
+        self.open.write().unwrap().remove(path);
+    }
 }
 
 impl System for LspSystem {
-
-    fn path_metadata(&self, path: &SystemPath) -> Result<Metadata> {
-        self.fs.metadata(path)
+    fn read_to_string(&self, path: &SystemPath) -> Result<String> {
+        match self.open.read().unwrap().get(path) {
+            Some(document) => Ok(document.text.clone()),
+            None => self.disk.read_to_string(path),
+        }
     }
 
-    fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf> {
-        self.fs.canonicalize_path(path)
+    fn read_virtual_path_to_string(&self, path: &SystemVirtualPath) -> Result<String> {
+        self.disk.read_virtual_path_to_string(path)
+    }
+
+    fn path_metadata(&self, path: &SystemPath) -> Result<Metadata> {
+        match self.open.read().unwrap().get(path) {
+            Some(document) => {
+                Ok(Metadata::new(FileRevision::new(document.revision.into()), None, FileType::File))
+            }
+            None => self.disk.path_metadata(path),
+        }
+    }
+
+    fn virtual_path_metadata(&self, path: &SystemVirtualPath) -> Result<Metadata> {
+        self.disk.virtual_path_metadata(path)
     }
 
     fn current_directory(&self) -> Result<SystemPathBuf> {
-        self.fs.current_directory()
+        self.disk.current_directory()
     }
 
-    fn read_to_string(&self, path: &SystemPath) -> Result<String> {
-        self.fs.read_to_string(path)
+    fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf> {
+        self.disk.canonicalize_path(path)
     }
-
 }

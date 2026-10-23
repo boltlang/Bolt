@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
+boltlang-ide-diagnostics = { version = "0.1.0", path = "../boltlang-ide-diagnostics" }
+boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
 tokio = { version = "1.49.0", features = ["full"] }
-itertools = "0.15.0"
-futures = "0.3.31"
 tower-lsp-server = "0.23.0"

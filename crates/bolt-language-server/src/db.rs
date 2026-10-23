@@ -1,20 +1,18 @@
-use boltlang::{Db, Files, InMemorySystem, System, salsa};
+use boltlang_base_db::{Db, Files, System, SystemPath, salsa};
+
+use crate::system::LspSystem;
 
 #[salsa::db]
 #[derive(Clone)]
 pub struct LspDatabase {
     storage: salsa::Storage<Self>,
-    pub files: Files,
-    pub system: InMemorySystem,
+    files: Files,
+    pub system: LspSystem,
 }
 
-impl Default for LspDatabase {
-    fn default() -> Self {
-        Self {
-            storage: salsa::Storage::new(None),
-            files: Files::new(),
-            system: InMemorySystem::new(),
-        }
+impl LspDatabase {
+    pub fn new(cwd: &SystemPath) -> Self {
+        Self { storage: salsa::Storage::new(None), files: Files::new(), system: LspSystem::new(cwd) }
     }
 }
 
@@ -22,10 +20,10 @@ impl salsa::Database for LspDatabase {}
 
 #[salsa::db]
 impl Db for LspDatabase {
-    fn files(&self) ->  &Files {
+    fn files(&self) -> &Files {
         &self.files
     }
-    fn system(&self) ->  &dyn System {
+    fn system(&self) -> &dyn System {
         &self.system
     }
 }

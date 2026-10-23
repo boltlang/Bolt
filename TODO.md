@@ -125,6 +125,10 @@ other errors.
       `Reason::None`. *(hir-ty, hir)*
 - [ ] Leave out type errors inside the range of a syntax error, which are
       usually caused by it. *(hir)*
+- [ ] When the file of an import can't be found, the names it imports are
+      also reported where they're used, as "cannot find `negate`". Name
+      resolution could remember them as coming from a broken import, so
+      that only the import is reported. *(hir-def, hir-ty)*
 - [ ] `file_diagnostics` isn't a Salsa query, so each call converts every
       diagnostic again (the queries below it are cached). Make it one when
       the language server asks for diagnostics on every change. *(hir)*
@@ -146,13 +150,13 @@ other errors.
 
 ## Language server
 
-- [ ] Port to the new crates. The server still imports the removed `boltlang`
-      crate and doesn't build. *(bolt-language-server)*
-- [ ] Get diagnostics from `boltlang-ide-diagnostics`.
-      *(bolt-language-server, ide-diagnostics)*
-  - [ ] Turn labels into `related_information`.
-  - [ ] Set `inter_file_dependencies: true`, since names, types and labels
-        can come from other files.
+- [ ] Watch the files on disk (`workspace/didChangeWatchedFiles`). A file
+      that isn't open in the editor is read once, so changes to it made
+      elsewhere, like by `git checkout`, aren't seen. *(bolt-language-server)*
+- [ ] Clients that can't be asked to refresh diagnostics only pull them for
+      the document that changed, so errors that an edit causes or fixes in
+      other open documents show up late. Pushing diagnostics with
+      `publishDiagnostics` would work for them too. *(bolt-language-server)*
 - [ ] Incremental text sync instead of the whole file on every change.
       *(bolt-language-server)*
 - [ ] Completion after `x.`: the functions in scope whose first parameter can
