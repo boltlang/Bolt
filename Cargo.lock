@@ -161,6 +161,7 @@ dependencies = [
  "boltlang-hir-def",
  "boltlang-parser",
  "boltlang-syntax",
+ "libtest-mimic",
  "salsa",
 ]
 

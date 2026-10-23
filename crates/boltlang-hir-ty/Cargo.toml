@@ -11,3 +11,8 @@ salsa = "0.28.5"
 
 [dev-dependencies]
 boltlang-parser = { version = "0.1.0", path = "../boltlang-parser" }
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "check"
+harness = false

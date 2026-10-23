@@ -1,0 +1,56 @@
+================================================================================
+Data types and patterns
+================================================================================
+enum Option[T] { None, Some(T) }
+struct Point { x: i32, y: i32 }
+fn get(o, d) = match o { Option.Some(v) => v, Option.None => d };
+fn norm(p) = p.x * p.x;
+let p = Point { x: 1, y: 2 };
+let Point { x, .. } = p;
+get(Option.Some(p), Point { x: 0 });
+p.z;
+--------------------------------------------------------------------------------
+get: forall a. fn(Option[a], a) -> a
+norm: forall a b. a.x: b => fn(a) -> b
+let p: Point
+let Point { x, .. }: Point
+get(Option.Some(p), Point { x: 0 }): Point
+p.z: {error}
+--------------------------------------------------------------------------------
+error at `Point { x: 0 }`: missing y
+error at `p.z`: Point has no field z
+
+================================================================================
+Fields of unknown types become part of the function type
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Size { x: u8 }
+struct Line { start: Point }
+fn get_x(p) = p.x;
+fn start_x(l) = l.start.x;
+get_x(Point { x: 1, y: 2 });
+get_x(Size { x: 3u8 });
+start_x(Line { start: Point { x: 1, y: 2 } });
+get_x((1, 2));
+let t = (true, 1);
+t.0;
+--------------------------------------------------------------------------------
+get_x: forall a b. a.x: b => fn(a) -> b
+start_x: forall a b c. a.start: c => c.x: b => fn(a) -> b
+get_x(Point { x: 1, y: 2 }): i32
+get_x(Size { x: 3u8 }): u8
+start_x(Line { start: Point { x: 1, y: 2 } }): i32
+get_x((1, 2)): {error}
+let t: (bool, i32)
+t.0: bool
+--------------------------------------------------------------------------------
+error at `get_x`: (i32, i32) has no field x
+
+================================================================================
+Fields of types never found are reported
+================================================================================
+fn f() { let g = |p| p.x; 1 }
+--------------------------------------------------------------------------------
+f: fn() -> i32
+--------------------------------------------------------------------------------
+error at `p.x`: type needed

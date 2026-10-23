@@ -1,0 +1,27 @@
+================================================================================
+Class constraints are inferred and solved
+================================================================================
+class Show[T] { fn show(x: T) -> str; }
+impl Show[i32] { fn show(x) = "int"; }
+fn twice(x) = (show(x), show(x));
+twice(1);
+twice(true);
+--------------------------------------------------------------------------------
+twice: forall a. Show[a] => fn(a) -> (str, str)
+twice(1): (str, str)
+twice(true): (str, str)
+--------------------------------------------------------------------------------
+error at `twice`: no instance Show[bool]
+
+================================================================================
+Where clauses are assumed
+================================================================================
+class Eq[T] { fn eq(a: T, b: T) -> bool; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
+fn le[T](a: T, b: T) -> bool where Ord[T] = lt(a, b) || eq(a, b);
+fn bad[T](a: T) -> bool = eq(a, a);
+--------------------------------------------------------------------------------
+le: forall T. Ord[T] => fn(T, T) -> bool
+bad: forall T. fn(T) -> bool
+--------------------------------------------------------------------------------
+error at `eq`: no instance Eq[T]
