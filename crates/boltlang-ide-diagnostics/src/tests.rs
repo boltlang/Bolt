@@ -126,6 +126,17 @@ fn unresolved_name_does_not_cascade() {
 }
 
 #[test]
+fn unresolved_type_is_reported_without_its_arguments() {
+    check(
+        r#"
+  let x: List[T, i32] = 1;
+       //^^^^ error: cannot find type `List`
+            //^ error: cannot find type `T`
+"#,
+    );
+}
+
+#[test]
 fn custom_operator_calls_its_definition() {
     check(
         r#"

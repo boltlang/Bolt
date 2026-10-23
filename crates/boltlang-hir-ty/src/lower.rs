@@ -82,8 +82,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     fn lower_path_ty(&mut self, id: TypeRefId, path: &Path) -> Ty<'db> {
+        let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
         let Some(resolution) = self.resolver.resolve_path_in_type_ns(self.db, path) else {
             self.diagnostics.push(LowerDiagnostic::UnresolvedType(id));
+            // Still report the problems in the arguments, like the `T` of
+            // `List[T]` when `T` isn't declared either.
+            self.lower_args_unchecked(id, args);
             return Ty::Error;
         };
         if resolution.unresolved.is_some() {
@@ -91,7 +95,6 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return Ty::Error;
         }
-        let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
         match resolution.ty {
             TypeNs::Struct(s) => {
                 let count = struct_signature(self.db, s).generic_params.type_params.len();
@@ -134,7 +137,17 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
 
     /// The type arguments of a path, padded with errors or cut to `count`.
     fn lower_args(&mut self, id: TypeRefId, args: Option<&[GenericArg]>, count: usize) -> Box<[Ty<'db>]> {
-        let mut tys: Vec<Ty<'db>> = Vec::new();
+        let mut tys = self.lower_args_unchecked(id, args);
+        if tys.len() != count && !(tys.is_empty() && args.is_none() && count == 0) {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount { type_ref: id, expected: count, found: tys.len() });
+        }
+        tys.resize(count, Ty::Error);
+        tys.into()
+    }
+
+    /// The type arguments of a path, however many there are.
+    fn lower_args_unchecked(&mut self, id: TypeRefId, args: Option<&[GenericArg]>) -> Vec<Ty<'db>> {
+        let mut tys = Vec::new();
         for arg in args.unwrap_or_default() {
             match arg {
                 GenericArg::Type { type_ref, .. } => tys.push(self.lower_ty(*type_ref)),
@@ -143,11 +156,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 }
             }
         }
-        if tys.len() != count && !(tys.is_empty() && args.is_none() && count == 0) {
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount { type_ref: id, expected: count, found: tys.len() });
-        }
-        tys.resize(count, Ty::Error);
-        tys.into()
+        tys
     }
 
     /// Lower a class constraint like `Convert[A, B]`. With `target`, it's a

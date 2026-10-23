@@ -35,7 +35,7 @@ use boltlang_hir_ty::{
     solve::{ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
-    SyntaxKind::{self, FIELD_EXPR, NAME, NAME_REF, STRING},
+    SyntaxKind::{self, FIELD_EXPR, NAME, NAME_REF, PATH, PATH_SEGMENT, PATH_TYPE, STRING},
     SyntaxNode,
     rowan::{TextRange, TextSize},
 };
@@ -427,6 +427,10 @@ impl<'db> Collector<'db> {
     /// Report problems with type references, from the store `map` is for.
     fn lower(&mut self, map: &ExpressionStoreSourceMap, diagnostics: &[LowerDiagnostic]) {
         for diagnostic in diagnostics {
+            let names_the_type = matches!(
+                diagnostic,
+                LowerDiagnostic::UnresolvedType(_) | LowerDiagnostic::NotAType(_) | LowerDiagnostic::NotAClass(_)
+            );
             let (type_ref, kind): (TypeRefId, _) = match diagnostic {
                 LowerDiagnostic::UnresolvedType(id) => (*id, DiagnosticKind::UnresolvedType),
                 LowerDiagnostic::NotAType(id) => (*id, DiagnosticKind::NotAType),
@@ -437,7 +441,12 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
             };
-            self.push(map.type_syntax(type_ref).map(ptr_range), kind);
+            let ptr = map.type_syntax(type_ref);
+            let range = match ptr {
+                Some(ptr) if names_the_type => self.type_name_range(ptr).or(Some(ptr_range(ptr))),
+                _ => ptr.map(ptr_range),
+            };
+            self.push(range, kind);
         }
     }
 
@@ -585,6 +594,18 @@ impl<'db> Collector<'db> {
         }
         let name = ptr.to_node(&self.root)?.children().filter(|n| n.kind() == NAME_REF).last();
         name.map(|n| n.text_range()).or(range)
+    }
+
+    /// The path of a type like `a.List[T]` without its arguments: `a.List`.
+    /// Errors about the name of a type point there, and say only that.
+    fn type_name_range(&self, ptr: SyntaxPtr) -> Option<TextRange> {
+        if ptr.kind != PATH_TYPE {
+            return None;
+        }
+        let path = ptr.to_node(&self.root)?.children().find(|n| n.kind() == PATH)?;
+        let segment = path.children().filter(|n| n.kind() == PATH_SEGMENT).last()?;
+        let name = segment.children().find(|n| n.kind() == NAME_REF)?;
+        Some(TextRange::new(path.text_range().start(), name.text_range().end()))
     }
 
     /// The name of an item, or the whole item if it has none.
