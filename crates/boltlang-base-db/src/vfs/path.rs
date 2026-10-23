@@ -2,6 +2,13 @@ use std::{borrow::Borrow, ops::Deref, path::Component};
 
 use crate::system::SystemPathBuf;
 
+/// `std::path::Path::is_absolute` is always false on wasm32-unknown-unknown,
+/// which only counts a root as absolute on Unix and WASI. Paths there are
+/// like on Unix, so outside Windows, a path with a root is absolute.
+fn is_absolute(path: &std::path::Path) -> bool {
+    if cfg!(windows) { path.is_absolute() } else { path.has_root() }
+}
+
 #[repr(transparent)]
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Path(std::path::Path);
@@ -25,8 +32,10 @@ impl Path {
         &self.0
     }
 
+    /// Whether the path starts at the root, like `/a.bolt`, or on Windows,
+    /// also with a drive, like `C:\a.bolt`.
     pub fn is_absolute(&self) -> bool {
-        self.0.is_absolute()
+        is_absolute(&self.0)
     }
 
     pub fn absolute(path: impl AsRef<Path>, cwd: impl AsRef<Path>) -> PathBuf {
@@ -129,7 +138,7 @@ impl PathBuf {
     }
 
     pub fn is_absolute(&self) -> bool {
-        self.0.is_absolute()
+        is_absolute(&self.0)
     }
 
     pub fn as_path(&self) -> &Path {

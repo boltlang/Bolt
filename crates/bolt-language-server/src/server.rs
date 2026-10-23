@@ -128,8 +128,9 @@ pub fn path_of(uri: &Uri) -> Result<SystemPathBuf, NotAFile> {
     if !uri.scheme().as_str().eq_ignore_ascii_case("file") {
         return Err(NotAFile(uri.clone()));
     }
-    match uri.to_file_path() {
-        Some(path) if path.is_absolute() => Ok(SystemPathBuf::from(path.into_owned())),
+    let path = uri.to_file_path().map(|path| SystemPathBuf::from(path.into_owned()));
+    match path {
+        Some(path) if path.is_absolute() => Ok(path),
         _ => Err(NotAFile(uri.clone())),
     }
 }
