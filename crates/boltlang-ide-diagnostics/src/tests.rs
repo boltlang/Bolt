@@ -427,3 +427,41 @@ impl Ord[i32];
 "#,
     );
 }
+
+#[test]
+fn impls_must_define_the_consts_and_types_of_their_class() {
+    check(
+        r#"
+class Sized[T] {
+  const SIZE: usize;
+            //^^^^^ label: expected because of the declaration in class `Sized`
+  const ALIGN: usize = 8;
+  type Repr;
+  type Out = T;
+  fn size(x: T) -> usize;
+}
+impl Sized[i32] {
+  const SIZE: usize = 4;
+  type Repr = i32;
+  fn size(x) = 4;
+}
+impl Sized[bool] {}
+   //^^^^^^^^^^^ error: missing method `size`, constant `SIZE` and type `Repr` of class `Sized`
+impl Sized[u8] {
+   //^^^^^^^^^ error: missing type `Repr` of class `Sized`
+  const SIZE: bool = true;
+            //^^^^ error: expected `usize`, found `bool`
+  const SIZ: usize = 1;
+      //^^^ error: `SIZ` is not a constant of class `Sized`
+  type Rep = u8;
+     //^^^ error: `Rep` is not a type of class `Sized`
+  fn size(x) = 1;
+}
+class Default[T] { const VALUE: T; }
+                              //^ label: expected because of the declaration in class `Default`
+impl Default[i32] { const VALUE: i32 = 0; }
+impl Default[bool] { const VALUE: i32 = 0; }
+                                //^^^ error: expected `bool`, found `i32`
+"#,
+    );
+}

@@ -199,6 +199,9 @@ pub struct Impl {
 pub struct Const {
     pub name: Option<Name>,
     pub visibility: RawVisibility,
+    /// Whether it has a value, as opposed to a declaration in a class like
+    /// `const N: usize;`.
+    pub has_value: bool,
     pub ast_id: AstId,
 }
 
@@ -206,6 +209,9 @@ pub struct Const {
 pub struct TypeAlias {
     pub name: Option<Name>,
     pub visibility: RawVisibility,
+    /// Whether it has a type, as opposed to an associated type in a class
+    /// like `type Item;`.
+    pub has_value: bool,
     pub ast_id: AstId,
 }
 
@@ -419,7 +425,12 @@ impl ItemTree {
 
     fn lower_const(&mut self, c: &ast::Const) -> Idx<Const> {
         let ast_id = self.next_ast_id(CONST);
-        self.consts.push(Const { name: name(c.name()), visibility: RawVisibility::from_ast(c.visibility()), ast_id });
+        self.consts.push(Const {
+            name: name(c.name()),
+            visibility: RawVisibility::from_ast(c.visibility()),
+            has_value: c.expr().is_some(),
+            ast_id,
+        });
         Idx::new(self.consts.len() - 1)
     }
 
@@ -428,6 +439,7 @@ impl ItemTree {
         self.type_aliases.push(TypeAlias {
             name: name(t.name()),
             visibility: RawVisibility::from_ast(t.visibility()),
+            has_value: t.ty().is_some(),
             ast_id,
         });
         Idx::new(self.type_aliases.len() - 1)

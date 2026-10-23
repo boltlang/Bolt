@@ -30,9 +30,8 @@ use boltlang_hir_ty::{
     infer_body,
     lower::{
         ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
-        impl_header, struct_field_types, type_alias_ty,
+        impl_header, struct_field_types, subst_params, type_alias_ty,
     },
-    scheme::class_impl_method_sig,
     solve::{ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
@@ -94,11 +93,11 @@ pub enum DiagnosticKind<'db> {
     CyclicInference,
     /// A `break` or `continue` without a loop or label to leave.
     BreakOutside,
-    /// A function in an impl that its class doesn't declare.
-    NotAMethodOf { name: Name, class: ClassId<'db> },
-    /// Methods of the class without a default that the impl doesn't define,
+    /// An item in an impl that its class doesn't declare.
+    NotInClass { kind: ClassItemKind, name: Name, class: ClassId<'db> },
+    /// Items of the class without a default that the impl doesn't define,
     /// in the order the class declares them.
-    MissingMethods { names: Vec<Name>, class: ClassId<'db> },
+    MissingItems { items: Vec<(ClassItemKind, Name)>, class: ClassId<'db> },
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
@@ -128,6 +127,72 @@ pub enum BecauseKind<'db> {
     Field { name: Name },
     /// Another expression that must have the same type, and its type.
     SameAs { ty: Ty<'db> },
+    /// The declaration of the item in the class an impl is for.
+    ClassItem { class: ClassId<'db> },
+}
+
+/// What an item of a class or impl is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ClassItemKind {
+    Method,
+    Const,
+    Type,
+}
+
+/// An item of a class or impl.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ClassItem<'db> {
+    Function(FunctionId<'db>),
+    Const(ConstId<'db>),
+    TypeAlias(TypeAliasId<'db>),
+}
+
+impl<'db> ClassItem<'db> {
+    fn all(db: &'db dyn Db, container: ItemContainerId<'db>, items: &[AssocItem]) -> Vec<Self> {
+        items
+            .iter()
+            .filter_map(|item| match *item {
+                AssocItem::Function(idx) => Some(ClassItem::Function(FunctionId::new(db, container, idx))),
+                AssocItem::Const(idx) => Some(ClassItem::Const(ConstId::new(db, container, idx))),
+                AssocItem::TypeAlias(idx) => Some(ClassItem::TypeAlias(TypeAliasId::new(db, container, idx))),
+                AssocItem::MacroCall(_) => None,
+            })
+            .collect()
+    }
+
+    fn kind(self) -> ClassItemKind {
+        match self {
+            ClassItem::Function(_) => ClassItemKind::Method,
+            ClassItem::Const(_) => ClassItemKind::Const,
+            ClassItem::TypeAlias(_) => ClassItemKind::Type,
+        }
+    }
+
+    fn name(self, db: &'db dyn Db) -> Option<Name> {
+        match self {
+            ClassItem::Function(id) => id.item(db).name.as_ref().map(function_name),
+            ClassItem::Const(id) => id.item(db).name.clone(),
+            ClassItem::TypeAlias(id) => id.item(db).name.clone(),
+        }
+    }
+
+    fn ast_id(self, db: &'db dyn Db) -> AstId {
+        match self {
+            ClassItem::Function(id) => id.item(db).ast_id,
+            ClassItem::Const(id) => id.item(db).ast_id,
+            ClassItem::TypeAlias(id) => id.item(db).ast_id,
+        }
+    }
+
+    /// Whether an impl can leave it out: a method with a body, a const with a
+    /// value, or a type with a definition.
+    fn has_default(self, db: &'db dyn Db) -> bool {
+        match self {
+            ClassItem::Function(id) => id.item(db).has_body,
+            ClassItem::Const(id) => id.item(db).has_value,
+            ClassItem::TypeAlias(id) => id.item(db).has_value,
+        }
+    }
 }
 
 /// The diagnostics of `file`, sorted by where they are.
@@ -221,7 +286,7 @@ impl<'db> Collector<'db> {
                     let (_, map) = impl_signature_with_source_map(db, id);
                     self.lower(map, &impl_header(db, id).diagnostics);
                     self.lower(map, &generic_predicates(db, GenericDefId::Impl(id)).diagnostics);
-                    self.impl_methods(id, map);
+                    self.impl_items(id, map);
                     self.assoc_items(ItemContainerId::Impl(id), &id.item(db).items);
                 }
                 ModItem::Const(idx) => self.const_(ConstId::new(db, container, idx)),
@@ -236,39 +301,66 @@ impl<'db> Collector<'db> {
         }
     }
 
-    /// Check the functions of an impl against the methods of its class:
-    /// those the class doesn't declare, like one with a typo in its name,
-    /// and those the class declares without a default that are missing.
-    /// `map` is the source map of the impl's signature.
-    fn impl_methods(&mut self, imp: ImplId<'db>, map: &ExpressionStoreSourceMap) {
+    /// Check the items of an impl against those of its class: the ones the
+    /// class doesn't declare, like a method with a typo in its name, the
+    /// ones the class declares without a default that are missing, and the
+    /// types of consts. `map` is the source map of the impl's signature.
+    fn impl_items(&mut self, imp: ImplId<'db>, map: &ExpressionStoreSourceMap) {
         let db = self.db;
-        let Some(class) = impl_header(db, imp).class.as_ref().map(|c| c.class) else { return };
-        let functions = |items: &'db [AssocItem], container| {
-            items.iter().filter_map(move |item| match *item {
-                AssocItem::Function(idx) => Some(FunctionId::new(db, container, idx)),
-                _ => None,
-            })
-        };
+        let Some(constraint) = impl_header(db, imp).class.as_ref() else { return };
+        let class = constraint.class;
+        let declared = ClassItem::all(db, ItemContainerId::Class(class), &class.item(db).items);
         let mut defined = Vec::new();
-        for f in functions(&imp.item(db).items, ItemContainerId::Impl(imp)) {
-            let Some(name) = &f.item(db).name else { continue };
-            defined.push(name);
-            if class_impl_method_sig(db, f).is_none() {
-                let range = self.item_range(f.item(db).ast_id);
-                self.push(Some(range), DiagnosticKind::NotAMethodOf { name: function_name(name), class });
+        for item in ClassItem::all(db, ItemContainerId::Impl(imp), &imp.item(db).items) {
+            let Some(name) = item.name(db) else { continue };
+            let kind = item.kind();
+            let declaration = declared.iter().find(|d| d.kind() == kind && d.name(db).as_ref() == Some(&name));
+            match (item, declaration) {
+                (_, None) => {
+                    let range = self.item_range(item.ast_id(db));
+                    self.push(Some(range), DiagnosticKind::NotInClass { kind, name: name.clone(), class });
+                }
+                (ClassItem::Const(c), Some(&ClassItem::Const(declaration))) => {
+                    self.impl_const_ty(c, declaration, constraint);
+                }
+                _ => {}
             }
+            defined.push((kind, name));
         }
-        let names: Vec<Name> = functions(&class.item(db).items, ItemContainerId::Class(class))
-            .filter(|m| !m.item(db).has_body)
-            .filter_map(|m| m.item(db).name.as_ref())
-            .filter(|name| !defined.contains(name))
-            .map(function_name)
+        let missing: Vec<(ClassItemKind, Name)> = declared
+            .iter()
+            .filter(|d| !d.has_default(db))
+            .filter_map(|d| Some((d.kind(), d.name(db)?)))
+            .filter(|item| !defined.contains(item))
             .collect();
-        if !names.is_empty() {
+        if !missing.is_empty() {
             let (sig, _) = impl_signature_with_source_map(db, imp);
+            self.fallback = self.item_range(imp.item(db).ast_id);
             let range = map.type_syntax(sig.class).map(ptr_range);
-            self.push(range, DiagnosticKind::MissingMethods { names, class });
+            self.push(range, DiagnosticKind::MissingItems { items: missing, class });
         }
+    }
+
+    /// Check that a const of an impl has the type its class declares, in
+    /// terms of the impl's class arguments.
+    fn impl_const_ty(&mut self, c: ConstId<'db>, declaration: ConstId<'db>, constraint: &ClassConstraint<'db>) {
+        let db = self.db;
+        let class_def = GenericDefId::Class(constraint.class);
+        let expected = subst_params(&const_ty(db, declaration).ty, class_def, &constraint.args);
+        let actual = const_ty(db, c).ty.clone();
+        if expected == actual || has_error(&expected) || has_error(&actual) {
+            return;
+        }
+        let (sig, map) = const_signature_with_source_map(db, c);
+        let (declared_sig, declared_map) = const_signature_with_source_map(db, declaration);
+        let because = declared_map.type_syntax(declared_sig.type_ref).map(|ptr| Because {
+            file: declaration.file(db),
+            range: ptr_range(ptr),
+            kind: BecauseKind::ClassItem { class: constraint.class },
+        });
+        self.fallback = self.item_range(c.item(db).ast_id);
+        let range = map.type_syntax(sig.type_ref).map(ptr_range);
+        self.push(range, DiagnosticKind::TypeMismatch { expected, actual, because });
     }
 
     fn assoc_items(&mut self, container: ItemContainerId<'db>, items: &[AssocItem]) {

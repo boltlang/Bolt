@@ -15,7 +15,7 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File, source_text};
-use boltlang_hir::{Because, BecauseKind, DiagnosticKind};
+use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind};
 use boltlang_hir_ty::lower::ClassConstraint;
 use boltlang_syntax::rowan::TextRange;
 
@@ -63,8 +63,8 @@ impl DiagnosticCode {
     pub const RECURSIVE_ALIAS: Self = Self("E0211");
     pub const CYCLIC_INFERENCE: Self = Self("E0212");
     pub const BREAK_OUTSIDE: Self = Self("E0213");
-    pub const NOT_A_METHOD_OF: Self = Self("E0214");
-    pub const MISSING_METHODS: Self = Self("E0215");
+    pub const NOT_IN_CLASS: Self = Self("E0214");
+    pub const MISSING_ITEMS: Self = Self("E0215");
 
     pub const UNSUPPORTED: Self = Self("W0001");
 
@@ -187,15 +187,13 @@ fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticC
                 .into(),
         ),
         K::BreakOutside => (C::BREAK_OUTSIDE, "there is no loop or label to break out of".into()),
-        K::NotAMethodOf { name, class } => {
+        K::NotInClass { kind, name, class } => {
             let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
-            (C::NOT_A_METHOD_OF, format!("`{name}` is not a method of class `{class}`"))
+            (C::NOT_IN_CLASS, format!("`{name}` is not a {} of class `{class}`", item_noun(kind, 1)))
         }
-        K::MissingMethods { names, class } => {
+        K::MissingItems { items, class } => {
             let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
-            let list = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
-            let noun = if names.len() == 1 { "method" } else { "methods" };
-            (C::MISSING_METHODS, format!("missing {noun} {list} of class `{class}`"))
+            (C::MISSING_ITEMS, format!("missing {} of class `{class}`", item_list(&items)))
         }
 
         K::Unsupported => (C::UNSUPPORTED, "the type checker doesn't support this yet".into()),
@@ -211,8 +209,39 @@ fn because_label(db: &dyn Db, because: &Because<'_>) -> Label {
         BecauseKind::Parameter { function: None } => "expected because of this parameter".to_string(),
         BecauseKind::Field { name } => format!("expected because of the type of field `{name}`"),
         BecauseKind::SameAs { ty } => format!("this has type `{}`", ty.display(db)),
+        BecauseKind::ClassItem { class } => {
+            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            format!("expected because of the declaration in class `{class}`")
+        }
     };
     Label { file: because.file, range: because.range, message }
+}
+
+fn item_noun(kind: ClassItemKind, count: usize) -> &'static str {
+    match (kind, count) {
+        (ClassItemKind::Method, 1) => "method",
+        (ClassItemKind::Method, _) => "methods",
+        (ClassItemKind::Const, 1) => "constant",
+        (ClassItemKind::Const, _) => "constants",
+        (ClassItemKind::Type, 1) => "type",
+        (ClassItemKind::Type, _) => "types",
+    }
+}
+
+/// Items grouped by kind, like "methods `a`, `b` and type `T`".
+fn item_list(items: &[(ClassItemKind, impl fmt::Display)]) -> String {
+    let groups: Vec<String> = [ClassItemKind::Method, ClassItemKind::Const, ClassItemKind::Type]
+        .into_iter()
+        .filter_map(|kind| {
+            let names: Vec<String> = items.iter().filter(|(k, _)| *k == kind).map(|(_, n)| format!("`{n}`")).collect();
+            (!names.is_empty()).then(|| format!("{} {}", item_noun(kind, names.len()), names.join(", ")))
+        })
+        .collect();
+    match groups.split_last() {
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+        None => String::new(),
+    }
 }
 
 fn constraint_display(db: &dyn Db, constraint: &ClassConstraint<'_>) -> String {
