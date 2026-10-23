@@ -4,9 +4,11 @@ mod system;
 mod workspace;
 
 use std::{
+    any::Any,
+    panic::{self, AssertUnwindSafe},
     path::PathBuf,
     sync::{
-        Mutex,
+        Mutex, PoisonError,
         atomic::{AtomicBool, Ordering},
     },
 };
@@ -37,6 +39,16 @@ struct Backend {
 }
 
 impl Backend {
+    /// Run `f` on the workspace. A panic in it, like a bug in the type
+    /// checker, fails only this request: it's logged and returned as an error.
+    async fn with_workspace<T>(&self, f: impl FnOnce(&mut Workspace) -> T) -> Result<T, String> {
+        let result = guarded(&self.workspace, f);
+        if let Err(message) = &result {
+            self.client.log_message(MessageType::ERROR, format!("internal error: {message}")).await;
+        }
+        result
+    }
+
     /// The path of a document, or `None` after logging that it's not a file.
     async fn path_of(&self, uri: &Uri) -> Option<SystemPathBuf> {
         match uri.to_file_path() {
@@ -64,7 +76,7 @@ impl LanguageServer for Backend {
         let capabilities = &params.capabilities;
         let encodings = capabilities.general.as_ref().and_then(|g| g.position_encodings.as_deref());
         let encoding = Encoding::choose(encodings);
-        self.workspace.lock().unwrap().encoding = encoding;
+        let _ = self.with_workspace(|workspace| workspace.encoding = encoding).await;
         let refresh = capabilities
             .workspace
             .as_ref()
@@ -102,7 +114,7 @@ impl LanguageServer for Backend {
 
     async fn did_open(&self, params: DidOpenTextDocumentParams) {
         let Some(path) = self.path_of(&params.text_document.uri).await else { return };
-        self.workspace.lock().unwrap().set_text(&path, params.text_document.text);
+        let _ = self.with_workspace(|workspace| workspace.set_text(&path, params.text_document.text)).await;
         self.refresh_diagnostics().await;
     }
 
@@ -110,19 +122,23 @@ impl LanguageServer for Backend {
         let Some(path) = self.path_of(&params.text_document.uri).await else { return };
         // With full sync, the last change is the whole document.
         let Some(change) = params.content_changes.into_iter().last() else { return };
-        self.workspace.lock().unwrap().set_text(&path, change.text);
+        let _ = self.with_workspace(|workspace| workspace.set_text(&path, change.text)).await;
         self.refresh_diagnostics().await;
     }
 
     async fn did_close(&self, params: DidCloseTextDocumentParams) {
         let Some(path) = self.path_of(&params.text_document.uri).await else { return };
-        self.workspace.lock().unwrap().close(&path);
+        let _ = self.with_workspace(|workspace| workspace.close(&path)).await;
         self.refresh_diagnostics().await;
     }
 
     async fn diagnostic(&self, params: DocumentDiagnosticParams) -> jsonrpc::Result<DocumentDiagnosticReportResult> {
         let items = match self.path_of(&params.text_document.uri).await {
-            Some(path) => self.workspace.lock().unwrap().diagnostics(&path),
+            Some(path) => self.with_workspace(|workspace| workspace.diagnostics(&path)).await.map_err(|message| {
+                let mut error = jsonrpc::Error::internal_error();
+                error.message = message.into();
+                error
+            })?,
             None => Vec::new(),
         };
         Ok(DocumentDiagnosticReportResult::Report(DocumentDiagnosticReport::Full(
@@ -138,6 +154,22 @@ impl LanguageServer for Backend {
     }
 }
 
+/// Run `f` on what `mutex` holds, catching a panic in it. The lock is
+/// released normally then, so it isn't poisoned and later requests still
+/// work; a lock poisoned some other way is used anyway.
+fn guarded<W, T>(mutex: &Mutex<W>, f: impl FnOnce(&mut W) -> T) -> Result<T, String> {
+    let mut value = mutex.lock().unwrap_or_else(PoisonError::into_inner);
+    panic::catch_unwind(AssertUnwindSafe(|| f(&mut value))).map_err(|payload| panic_message(&*payload))
+}
+
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    match (payload.downcast_ref::<&str>(), payload.downcast_ref::<String>()) {
+        (Some(message), _) => message.to_string(),
+        (_, Some(message)) => message.clone(),
+        _ => "the server panicked".to_string(),
+    }
+}
+
 #[tokio::main]
 async fn main() {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
@@ -145,4 +177,18 @@ async fn main() {
     let (service, socket) =
         LspService::new(|client| Backend { client, workspace, refresh_support: AtomicBool::new(false) });
     Server::new(tokio::io::stdin(), tokio::io::stdout(), socket).serve(service).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_panic_fails_only_its_own_call() {
+        let mutex = Mutex::new(0);
+        let result: Result<(), _> = guarded(&mutex, |_| panic!("oops"));
+        assert_eq!(result, Err("oops".to_string()));
+        assert!(!mutex.is_poisoned());
+        assert_eq!(guarded(&mutex, |n| { *n += 1; *n }), Ok(1));
+    }
 }
