@@ -19,11 +19,15 @@
 //! after a line of `-` what the checker found: the types of the functions,
 //! then of the top-level statements. The diagnostics come after another line
 //! of `-`, which is left out when there are none. Separators are at least
-//! three characters long and start at the beginning of a line.
+//! three characters long and start at the beginning of a line. A new case
+//! can leave out its output: running with `UPDATE_EXPECT=1` fills it in.
 //!
-//! Run a single case with `cargo test --test check mutual_recursion`.
+//! Run a single case with `cargo test --test check mutual_recursion`. To
+//! write what the checker finds into the files instead of comparing it, run
+//! with `UPDATE_EXPECT=1`, and review the changes with `git diff`.
 
 use std::{
+    ops::Range,
     panic::{AssertUnwindSafe, catch_unwind},
     path::{Path, PathBuf},
 };
@@ -48,6 +52,8 @@ struct Case {
     input: String,
     /// The types, then the diagnostics.
     expected: (String, String),
+    /// The lines of the title and the input, which an update keeps.
+    head: Range<usize>,
 }
 
 /// Whether `line` is made of at least three `c`s.
@@ -67,6 +73,7 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
     }
     while i < lines.len() {
         // The title, between two lines of `=`.
+        let head_start = i;
         let start = i + 1;
         i = start;
         while i < lines.len() && !is_separator(lines[i], '=') {
@@ -79,8 +86,10 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
         i += 1;
         // The sections, up to the next case.
         let mut sections = vec![Vec::new()];
+        let mut head_end = None;
         while i < lines.len() && !is_separator(lines[i], '=') {
             if is_separator(lines[i], '-') {
+                head_end.get_or_insert(i);
                 sections.push(Vec::new());
             } else {
                 sections.last_mut().unwrap().push(lines[i]);
@@ -88,10 +97,13 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
             i += 1;
         }
         let section = |n: usize| sections.get(n).map(|s: &Vec<&str>| s.join("\n").trim().to_string()).unwrap_or_default();
-        if sections.len() < 2 || sections.len() > 3 {
+        // Without a line of `-`, the case has no output yet: it fails, and
+        // `UPDATE_EXPECT=1` writes it.
+        if sections.len() > 3 {
             return Err(format!("`{title}`: expected the input, the types and optionally the diagnostics"));
         }
-        cases.push(Case { input: section(0) + "\n", expected: (section(1), section(2)), title });
+        let head = head_start..head_end.unwrap_or(i);
+        cases.push(Case { input: section(0) + "\n", expected: (section(1), section(2)), title, head });
     }
     Ok(cases)
 }
@@ -197,25 +209,55 @@ fn check(source: &str) -> (String, String) {
     (types.join("\n"), diagnostics.join("\n"))
 }
 
+/// What the checker finds for a case, or the message of its panic.
+fn check_caught(case: &Case) -> Result<(String, String), String> {
+    catch_unwind(AssertUnwindSafe(|| check(&case.input))).map_err(|payload| {
+        let message = payload
+            .downcast_ref::<&str>()
+            .map(|s| s.to_string())
+            .or_else(|| payload.downcast_ref::<String>().cloned())
+            .unwrap_or_default();
+        format!("the checker panicked: {message}")
+    })
+}
+
 fn run(case: &Case) -> Result<(), Failed> {
-    let actual = match catch_unwind(AssertUnwindSafe(|| check(&case.input))) {
-        Ok(actual) => actual,
-        Err(payload) => {
-            let message = payload
-                .downcast_ref::<&str>()
-                .map(|s| s.to_string())
-                .or_else(|| payload.downcast_ref::<String>().cloned())
-                .unwrap_or_default();
-            return Err(format!("the checker panicked: {message}").into());
-        }
-    };
+    let actual = check_caught(case)?;
     if actual == case.expected {
         return Ok(());
     }
-    let show = |(types, diagnostics): &(String, String)| {
-        if diagnostics.is_empty() { format!("{types}\n") } else { format!("{types}\n{SECTION}\n{diagnostics}\n") }
-    };
     Err(format!("expected:\n{}\nfound:\n{}", show(&case.expected), show(&actual)).into())
+}
+
+/// The output sections of a case, without the line of `-` before them.
+fn show((types, diagnostics): &(String, String)) -> String {
+    if diagnostics.is_empty() { format!("{types}\n") } else { format!("{types}\n{SECTION}\n{diagnostics}\n") }
+}
+
+/// Write what the checker finds into the output sections of the cases in
+/// `text`. A case that panics keeps its sections, and fails when it runs.
+fn update(text: &str, cases: &[Case]) -> String {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut out = String::new();
+    let first = cases.first().map_or(lines.len(), |c| c.head.start);
+    for line in &lines[..first] {
+        out.push_str(line);
+        out.push('\n');
+    }
+    for (i, case) in cases.iter().enumerate() {
+        if i > 0 {
+            out.push('\n');
+        }
+        for line in &lines[case.head.clone()] {
+            out.push_str(line);
+            out.push('\n');
+        }
+        let found = check_caught(case).unwrap_or_else(|_| case.expected.clone());
+        out.push_str(SECTION);
+        out.push('\n');
+        out.push_str(&show(&found));
+    }
+    out
 }
 
 const SECTION: &str = "--------------------------------------------------------------------------------";
@@ -234,10 +276,18 @@ fn data_files(dir: &Path) -> Vec<PathBuf> {
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+    let updating = std::env::var_os("UPDATE_EXPECT").is_some_and(|v| !v.is_empty() && v != "0");
     let mut trials = Vec::new();
     for path in data_files(&root) {
         let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
-        let text = std::fs::read_to_string(&path).unwrap();
+        let mut text = std::fs::read_to_string(&path).unwrap();
+        if updating && let Ok(cases) = parse_cases(&text) {
+            let updated = update(&text, &cases);
+            if updated != text {
+                std::fs::write(&path, &updated).unwrap();
+                text = updated;
+            }
+        }
         let cases = match parse_cases(&text) {
             Ok(cases) => cases,
             Err(error) => {
