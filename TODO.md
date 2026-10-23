@@ -82,6 +82,10 @@ updating.
   - [ ] Operator characters next to each other need spaces: `x=-1` lexes
         `=-` as one operator, and `x.+` as `x` followed by `.+`.
 
+- [ ] `import Option.*;`, which brings the variants of an enum into scope.
+      The path can go through files imported with `as`, like
+      `import m.Shape.*;`. *(tree-sitter-bolt, parser)*
+
 ### Possible improvements
 
 - [ ] Error recovery reports one error per unexpected token after a missing

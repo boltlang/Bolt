@@ -1624,6 +1624,10 @@ impl Import {
     pub fn source(&self) -> Option<SyntaxToken> {
         self.find_token(STRING)
     }
+    /// The enum of `import Option.*;`, whose variants it imports.
+    pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
     pub fn import_list(&self) -> Option<ImportList> {
         self.find_node()
     }
@@ -1631,7 +1635,7 @@ impl Import {
     pub fn alias(&self) -> Option<Name> {
         self.find_node()
     }
-    /// The `*` of `import "./path" *;`.
+    /// The `*` of `import "./path" *;` or `import Option.*;`.
     pub fn star_token(&self) -> Option<SyntaxToken> {
         self.find_token(STAR)
     }

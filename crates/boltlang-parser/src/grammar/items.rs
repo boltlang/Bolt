@@ -7,7 +7,7 @@ use boltlang_syntax::{SyntaxKind::{self, *}, T};
 use crate::{
     grammar::{
         abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param, param_list, parse_block_expr,
-        trait_bounds, type_no_bounds, is_path_start, TYPE_FIRST,
+        trait_bounds, type_no_bounds, is_path_start, dotted_path, TYPE_FIRST,
     },
     parser::{Marker, Parser},
     token_set::TokenSet,
@@ -549,9 +549,27 @@ fn extern_block(p: &mut Parser, m: Marker) {
 
 /// `import "./path";`, `import "./path" (a, b as c);`,
 /// `import "./path" as name;` or `import "./path" *;`, following the
-/// grammar's `import_declaration`.
+/// grammar's `import_declaration`, and `import Option.*;`, which the grammar
+/// doesn't have yet.
 fn import_item(p: &mut Parser, m: Marker) {
     p.bump(T![import]);
+    if is_path_start(p) {
+        // `import Option.*;` brings the variants of an enum into scope.
+        dotted_path(p);
+        if p.at_op(".*") {
+            // The lexer joined `.` and `*`.
+            p.split_bump(T![.], 1);
+            p.bump(T![*]);
+        } else if p.at(T![.]) && p.nth_at(1, T![*]) {
+            p.bump(T![.]);
+            p.bump(T![*]);
+        } else {
+            p.error("expected '.*' after the path, to import the variants of an enum");
+        }
+        p.expect(T![;]);
+        m.complete(p, IMPORT);
+        return;
+    }
     if !p.eat(STRING) {
         p.error("expected a string with the path to import");
     }

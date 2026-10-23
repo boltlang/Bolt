@@ -1,0 +1,54 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/import_variants_without_star.bolt
+---
+- SOURCE_FILE
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - PATH
+      - PATH_SEGMENT
+        - NAME_REF
+          - IDENT "Option"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - IMPORT
+    - IMPORT_KEYWORD "import"
+    - WHITESPACE " "
+    - PATH
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Option"
+      - DOT "."
+      - PATH_SEGMENT
+        - NAME_REF
+          - IDENT "Some"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - LET_STMT
+    - LET_KEYWORD "let"
+    - WHITESPACE " "
+    - NAMED_PATT
+      - NAME
+        - IDENT "x"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected '.*' after the path, to import the variants of an enum
+span:
+  start: 13
+  end: 13
+---
+!ExpectedToken
+message: expected '.*' after the path, to import the variants of an enum
+span:
+  start: 33
+  end: 33
