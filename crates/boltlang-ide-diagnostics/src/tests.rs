@@ -257,11 +257,11 @@ fn f(x: i32) -> i32 = x?;
 fn bodies_of_items_in_impls_and_enums() {
     check(
         r#"
+class Get[T] { fn get(x: T) -> i32; }
 struct Counter { n: i32 }
-impl Counter {
-  fn get(c: Counter) -> bool = c.n;
-                      //^^^^ label: expected because of the return type
-                             //^^^ error: expected `bool`, found `i32`
+impl Get[Counter] {
+  fn get(c) = c;
+            //^ error: expected `i32`, found `Counter`
 }
 enum E { A = true }
            //^^^^ error: expected `i32`, found `bool`
@@ -346,4 +346,49 @@ fn f(b) = match b { true => 1, false => "no" };
                                       //^^^^ error: expected `i32`, found `str`
 "#,
     );
+}
+
+#[test]
+fn impls_are_only_for_classes() {
+    check(
+        r#"
+struct Counter { n: i32 }
+impl Counter {
+   //^^^^^^^ error: `Counter` is not a class
+  fn get(c) = c.n;
+}
+"#,
+    );
+}
+
+#[test]
+fn methods_are_functions_in_scope() {
+    check(
+        r#"
+struct Counter { n: i32 }
+fn get(c: Counter) -> i32 = c.n;
+let c = Counter { n: 1 };
+let n: i32 = c.get();
+  c.size();
+  //^^^^ error: cannot find `size`
+"#,
+    );
+}
+
+#[test]
+fn one_type_per_file() {
+    check_files(&[
+        ("/list.bolt", "pub struct List { n: i32 }\npub fn new() -> List = List { n: 0 };\npub fn len(l: List) -> i32 = l.n;\n"),
+        (
+            "/main.bolt",
+            r#"
+import "./list" as List;
+let l = List.new();
+let n: i32 = List.len(l);
+let b: bool = List.len(l);
+     //^^^^ label: expected because of this annotation
+            //^^^^^^^^^^^ error: expected `bool`, found `i32`
+"#,
+        ),
+    ]);
 }

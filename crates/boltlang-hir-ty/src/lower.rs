@@ -154,9 +154,14 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// bound like the `Show` of `T: Show`, and the target is the first
     /// argument.
     pub fn lower_class_constraint(&mut self, id: TypeRefId, target: Option<Ty<'db>>) -> Option<ClassConstraint<'db>> {
-        let TypeRef::Path(path) = &self.store[id] else {
-            self.diagnostics.push(LowerDiagnostic::NotAClass(id));
-            return None;
+        let path = match &self.store[id] {
+            TypeRef::Path(path) => path,
+            // Already a syntax error.
+            TypeRef::Error => return None,
+            _ => {
+                self.diagnostics.push(LowerDiagnostic::NotAClass(id));
+                return None;
+            }
         };
         let class = match self.resolver.resolve_path_in_type_ns(self.db, path) {
             Some(r) if r.unresolved.is_none() && matches!(r.ty, TypeNs::Class(_)) => {
@@ -288,13 +293,11 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
 /// The declared types of a function.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct FnSig<'db> {
-    /// The type of each parameter, with `self` first if there is one;
-    /// `None` where no type is written.
+    /// The type of each parameter; `None` where no type is written.
     pub params: Box<[Option<Ty<'db>>]>,
     /// The return type, if written. A function without a body and without
     /// a return type, like a class method, returns `()`.
     pub ret: Option<Ty<'db>>,
-    pub has_self: bool,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -311,16 +314,13 @@ pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let sig = function_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Function(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
-    let has_self = sig.self_param.is_some();
-    let params = std::iter::repeat_n(None, has_self as usize)
-        .chain(sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref)))
-        .collect();
+    let params = sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref)).collect();
     let ret = match sig.ret_type {
         Some(ret) => Some(ctx.lower_ty(ret)),
         None if !id.item(db).has_body => Some(Ty::unit()),
         None => None,
     };
-    FnSig { params, ret, has_self, diagnostics: ctx.diagnostics }
+    FnSig { params, ret, diagnostics: ctx.diagnostics }
 }
 
 /// A struct or a variant: something with fields.
@@ -396,36 +396,20 @@ fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList) -
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
-pub enum ImplTarget<'db> {
-    /// `impl Dog { }`: functions for a type.
-    Inherent(Ty<'db>),
-    /// `impl Show[Dog] { }`: an instance of a class.
-    Class(ClassConstraint<'db>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ImplHeader<'db> {
-    pub target: ImplTarget<'db>,
+    /// The instance, like `Show[Dog]`. `None` if it's not a class.
+    pub class: Option<ClassConstraint<'db>>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
-/// What an impl is for, in terms of its own type parameters.
+/// The instance an impl is for, in terms of its own type parameters.
 #[salsa::tracked(returns(ref))]
 pub fn impl_header<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplHeader<'db> {
     let sig = impl_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Impl(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
-    let is_class = match &sig.store[sig.self_ty] {
-        TypeRef::Path(path) => {
-            matches!(resolver.resolve_path_in_type_ns(db, path), Some(r) if matches!(r.ty, TypeNs::Class(_)))
-        }
-        _ => false,
-    };
-    let target = match is_class.then(|| ctx.lower_class_constraint(sig.self_ty, None)).flatten() {
-        Some(constraint) => ImplTarget::Class(constraint),
-        None => ImplTarget::Inherent(ctx.lower_ty(sig.self_ty)),
-    };
-    ImplHeader { target, diagnostics: ctx.diagnostics }
+    let class = ctx.lower_class_constraint(sig.class, None);
+    ImplHeader { class, diagnostics: ctx.diagnostics }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]

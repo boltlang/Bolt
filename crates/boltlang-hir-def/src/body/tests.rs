@@ -15,10 +15,9 @@ fn function<'db>(db: &'db TestDb, file: File, index: usize) -> DefWithBodyId<'db
 #[test]
 fn function_bodies_and_params() {
     let db = TestDb::new();
-    let file = db.file("/main.bolt", "fn f(mut self, a, (b, c): (i32, i32)) { a + b }\nfn g(x) = x;\nfn h();\n");
+    let file = db.file("/main.bolt", "fn f(a, (b, c): (i32, i32)) { a + b }\nfn g(x) = x;\nfn h();\n");
     let f = body(&db, function(&db, file, 0));
     assert_eq!(f.params.len(), 2);
-    assert!(f.store[f.self_param.unwrap()].mutable);
     assert!(matches!(f.store[f.body_expr], Expr::Block { .. }));
     let g = body(&db, function(&db, file, 1));
     assert!(matches!(g.store[g.body_expr], Expr::Path(_)));

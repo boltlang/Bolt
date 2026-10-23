@@ -47,9 +47,6 @@ impl ExprScopes {
     pub fn new(body: &Body) -> ExprScopes {
         let mut scopes = ExprScopes { scopes: Arena::default(), scope_by_expr: ArenaMap::default() };
         let root = scopes.new_scope(None);
-        if let Some(id) = body.self_param {
-            scopes.add_binding(body, root, id);
-        }
         for &param in body.params.iter() {
             scopes.add_pat_bindings(body, root, param);
         }

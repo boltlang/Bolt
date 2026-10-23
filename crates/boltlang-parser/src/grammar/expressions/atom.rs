@@ -24,7 +24,6 @@ pub(crate) const LITERAL_FIRST: TokenSet = TokenSet::new(&[
 
 pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&[
     IDENT,
-    T![self],
     METAVARIABLE,
     T!['('],
     T!['{'],
@@ -143,7 +142,7 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     Some((done, BlockLike::NotBlock))
 }
 
-/// `x`, `self` or `$x`
+/// `x` or `$x`
 fn path_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     expr_path(p);

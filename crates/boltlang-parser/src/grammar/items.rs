@@ -7,7 +7,7 @@ use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
     grammar::{
         abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
-        trait_bounds, type_no_bounds, TYPE_FIRST,
+        trait_bounds, type_no_bounds, is_path_start, TYPE_FIRST,
     },
     parser::{Marker, Parser, is_operator_kind},
     token_set::TokenSet,
@@ -370,22 +370,23 @@ fn class_item(p: &mut Parser, m: Marker) {
     m.complete(p, CLASS);
 }
 
-/// `impl Dog { }` or `impl[T] Show[Vec[T]] where T: Show { }`, or without a
-/// body: `impl Marker[i32];`. Following the grammar's `impl_item`, both add
-/// functions to a type and declare class instances; the compiler tells them
-/// apart by name.
+/// A class instance: `impl Show[i32] { }` or
+/// `impl[T] Show[Vec[T]] where T: Show { }`, or without a body:
+/// `impl Marker[i32];`. Functions for a type are defined at the top level
+/// instead, and called like `x.f()`.
 fn impl_item(p: &mut Parser, m: Marker) {
     p.bump(T![impl]);
     // Like in the grammar, `[` right after `impl` starts generic parameters.
     if p.at(T!['[']) {
         generic_param_list(p);
     }
-    type_no_bounds(p);
-    // Recover from the old `impl Class for Type` syntax.
-    if p.at(T![for]) {
+    // Whether the path names a class is up to name resolution. Another kind
+    // of type is still parsed, so that the items after it are too.
+    if is_path_start(p) {
+        type_no_bounds(p);
+    } else {
         let e = p.start();
-        p.error("expected '{' or ';'; write `impl Class for Type` as `impl Class[Type]`");
-        p.bump(T![for]);
+        p.error("expected a class, like `Show[i32]`");
         type_no_bounds(p);
         e.complete(p, ERROR);
     }

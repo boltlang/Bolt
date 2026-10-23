@@ -188,8 +188,7 @@ pub struct Class {
     pub ast_id: AstId,
 }
 
-/// `impl Dog { }` or `impl Show[Dog] { }`. Which one it is depends on name
-/// resolution, so the item tree doesn't tell them apart.
+/// `impl Show[Dog] { }`: an instance of a class.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Impl {
     pub items: Vec<AssocItem>,

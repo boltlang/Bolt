@@ -11,13 +11,13 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body},
     hir::{BinaryOp, Expr, Path},
     ids::{FunctionId, ItemContainerId},
-    item_tree::{AssocItem, ModItem, item_tree},
+    item_tree::{ModItem, item_tree},
     resolver::{Resolver, ValueNs, ValueResolution},
 };
 
 use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
-    lower::{ClassConstraint, ImplTarget, const_ty, fn_sig, impl_header},
+    lower::{ClassConstraint, const_ty, fn_sig},
     scheme::{Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, is_declared},
     solve::{Origin, Solver, TypeError, vars_in},
     ty::{GenericParamId, Ty, TyVar, VarKind},
@@ -230,29 +230,18 @@ fn error_origin<'a, 'db>(error: &'a TypeError<'db>) -> &'a Origin<'db> {
 }
 
 /// The functions of a file whose types are inferred from their bodies: those
-/// with incomplete signatures, at the top level or in inherent impls.
+/// at the top level with incomplete signatures.
 #[salsa::tracked(returns(ref))]
 pub fn inferred_functions<'db>(db: &'db dyn Db, file: File) -> Vec<FunctionId<'db>> {
-    let tree = item_tree(db, file);
-    let mut out = Vec::new();
-    for item in &tree.top_level {
-        match *item {
-            ModItem::Function(idx) => out.push(FunctionId::new(db, ItemContainerId::File(file), idx)),
-            ModItem::Impl(idx) => {
-                let imp = boltlang_hir_def::ids::ImplId::new(db, file, idx);
-                if matches!(impl_header(db, imp).target, ImplTarget::Inherent(_)) {
-                    for item in &imp.item(db).items {
-                        if let AssocItem::Function(idx) = *item {
-                            out.push(FunctionId::new(db, ItemContainerId::Impl(imp), idx));
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-    out.retain(|&f| !is_declared(db, f));
-    out
+    item_tree(db, file)
+        .top_level
+        .iter()
+        .filter_map(|item| match *item {
+            ModItem::Function(idx) => Some(FunctionId::new(db, ItemContainerId::File(file), idx)),
+            _ => None,
+        })
+        .filter(|&f| !is_declared(db, f))
+        .collect()
 }
 
 /// The functions a function's body refers to by name.

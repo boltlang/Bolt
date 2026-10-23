@@ -5,9 +5,8 @@ use boltlang_base_db::{Db, File, parse_file};
 use boltlang_syntax::{SyntaxNode, ast::{self, Node}};
 
 use crate::{
-    Name,
     expr_store::{ExprCollector, ExpressionStore, ExpressionStoreSourceMap},
-    hir::{Binding, BindingId, BlockKind, Expr, ExprId, Pat, PatId},
+    hir::{BlockKind, Expr, ExprId, Pat, PatId},
     ids::{ConstId, EnumVariantId, FunctionId},
 };
 
@@ -33,11 +32,8 @@ pub struct DefWithBodyId<'db> {
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Body {
     pub store: ExpressionStore,
-    /// The patterns of the parameters of a function, in order, leaving out
-    /// `self`.
+    /// The patterns of the parameters of a function, in order.
     pub params: Box<[PatId]>,
-    /// The binding for `self`, if the function has a `self` parameter.
-    pub self_param: Option<BindingId>,
     /// The expression the body evaluates.
     pub body_expr: ExprId,
 }
@@ -62,17 +58,12 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
     let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
     let mut collector = ExprCollector::new();
     let mut params = Vec::new();
-    let mut self_param = None;
     let body_expr = match def {
         DefWithBody::Function(id) => {
             let decl = id.item(db).ast_id.to_node(&root).and_then(ast::FuncDecl::cast);
             match decl {
                 Some(decl) => {
                     if let Some(list) = decl.param_list() {
-                        if let Some(param) = list.self_param() {
-                            let mutable = param.mut_token().is_some();
-                            self_param = Some(collector.store.bindings.alloc(Binding { name: Name::new("self"), mutable }));
-                        }
                         params = list.params().map(|p| collector.lower_opt_pat(p.pattern())).collect();
                     }
                     collector.lower_opt_expr(decl.body())
@@ -109,7 +100,7 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
         }
     };
     let (store, source_map) = collector.finish();
-    (Body { store, params: params.into(), self_param, body_expr }, source_map)
+    (Body { store, params: params.into(), body_expr }, source_map)
 }
 
 /// The body of `def`. Unlike [`body_with_source_map`], this doesn't change

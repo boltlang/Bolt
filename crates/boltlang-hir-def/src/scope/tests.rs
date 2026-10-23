@@ -26,7 +26,7 @@ fn resolutions(source: &str) -> Vec<String> {
             .iter()
             .find(|(_, pat)| matches!(pat, Pat::Bind { id, .. } if *id == binding))
             .and_then(|(id, _)| source_map.pat_syntax(id))
-            .map_or("self".to_string(), |ptr| ptr.start.to_string())
+            .map_or("?".to_string(), |ptr| ptr.start.to_string())
     };
 
     let mut paths: Vec<_> = body
@@ -53,8 +53,8 @@ fn resolutions(source: &str) -> Vec<String> {
 #[test]
 fn params_and_shadowing() {
     assert_eq!(
-        resolutions("fn f(self, x) { let x = x + 1; let y = x; y + z + self }"),
-        ["x@11", "x@20", "y@35", "z-", "self@self"]
+        resolutions("fn f(x) { let x = x + 1; let y = x; y + z }"),
+        ["x@5", "x@14", "y@29", "z-"]
     );
 }
 

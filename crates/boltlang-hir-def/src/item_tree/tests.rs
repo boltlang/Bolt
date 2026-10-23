@@ -66,7 +66,7 @@ fn ast_ids_point_back_to_their_items() {
     let db = TestDb::new();
     let file = db.file(
         "/main.bolt",
-        "fn a() { fn not_an_item() {} }\nclass C[T] { fn b(x: T); }\nfn c() {}\nimpl D { fn d() {} }\n",
+        "fn a() { fn not_an_item() {} }\nclass C[T] { fn b(x: T); }\nfn c() {}\nimpl D[i32] { fn d() {} }\n",
     );
     let tree = item_tree(&db, file);
     let root = root(&db, file);

@@ -23,7 +23,7 @@ pub(crate) use paths::*;
 pub(crate) use patterns::*;
 pub use types::*;
 
-use boltlang_syntax::{SyntaxKind::{self, *}, T};
+use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
         parser::Parser,
         token_set::TokenSet
@@ -41,9 +41,9 @@ pub(crate) fn name(p: &mut Parser) {
     }
 }
 
-/// A reference to a name: an identifier, `self` or a metavariable.
+/// A reference to a name: an identifier or a metavariable.
 pub(crate) fn name_ref(p: &mut Parser) {
-    if p.at_ts(TokenSet::new(&[IDENT, T![self], METAVARIABLE])) {
+    if p.at_ts(TokenSet::new(&[IDENT, METAVARIABLE])) {
         let m = p.start();
         p.bump_any();
         m.complete(p, NAME_REF);

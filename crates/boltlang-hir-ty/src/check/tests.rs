@@ -200,18 +200,19 @@ fn method_call_syntax() {
     assert_eq!(
         check(
             "struct Counter { n: i32 }\n\
-             impl Counter { fn get(c: Counter) -> i32 = c.n; }\n\
+             fn get(c: Counter) -> i32 = c.n;\n\
              fn inc(x: i32) -> i32 = x + 1;\n\
              let c = Counter { n: 1 };\n\
              c.get().inc();\n\
              c.n.inc();\n\
-             Counter.get(c);\n"
+             get(c);\n"
         ),
-        "inc: fn(i32) -> i32\n\
+        "get: fn(Counter) -> i32\n\
+         inc: fn(i32) -> i32\n\
          let c: Counter\n\
          c.get().inc(): i32\n\
          c.n.inc(): i32\n\
-         Counter.get(c): i32"
+         get(c): i32"
     );
 }
 

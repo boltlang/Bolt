@@ -10,7 +10,6 @@ use crate::{
 
 pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     IDENT,
-    T![self],
     METAVARIABLE,
     T!['('],
     T!['['],
@@ -178,24 +177,12 @@ fn fn_type_param(p: &mut Parser) {
         m.complete(p, VARIADIC_PARAM);
         return;
     }
-    let after_mut = if p.at(T![mut]) { 1 } else { 0 };
-    if p.nth_at(after_mut, T![self]) && !p.nth_at(after_mut + 1, T![:]) {
-        p.eat(T![mut]);
-        p.bump(T![self]);
-        m.complete(p, SELF_PARAM);
-        return;
-    }
     // `x: T` or `mut x: T`
-    let named = matches!(p.nth(after_mut), IDENT | T![_] | T![self]) && p.nth_at(after_mut + 1, T![:]);
+    let after_mut = if p.at(T![mut]) { 1 } else { 0 };
+    let named = matches!(p.nth(after_mut), IDENT | T![_]) && p.nth_at(after_mut + 1, T![:]);
     if named {
         p.eat(T![mut]);
-        if p.at(T![self]) {
-            let name = p.start();
-            p.bump(T![self]);
-            name.complete(p, NAME);
-        } else {
-            pattern_single(p);
-        }
+        pattern_single(p);
         p.bump(T![:]);
         if p.eat(T![...]) {
             m.complete(p, VARIADIC_PARAM);

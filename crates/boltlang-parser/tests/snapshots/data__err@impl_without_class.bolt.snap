@@ -1,0 +1,69 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/impl_without_class.bolt
+---
+- SOURCE_FILE
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - GENERIC_PARAM_LIST
+      - L_BRACKET "["
+      - TYPE_PARAM
+        - NAME
+          - IDENT "T"
+      - R_BRACKET "]"
+    - WHITESPACE " "
+    - ERROR
+      - ARRAY_TYPE
+        - L_BRACKET "["
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "T"
+        - SEMI ";"
+        - WHITESPACE " "
+        - LIT_EXPR
+          - INT_NUMBER "3"
+        - R_BRACKET "]"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+  - IMPL
+    - IMPL_KEYWORD "impl"
+    - WHITESPACE " "
+    - ERROR
+      - TUPLE_TYPE
+        - L_PAREN "("
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "i32"
+        - COMMA ","
+        - WHITESPACE " "
+        - PATH_TYPE
+          - PATH
+            - PATH_SEGMENT
+              - NAME_REF
+                - IDENT "bool"
+        - R_PAREN ")"
+    - WHITESPACE " "
+    - ITEM_LIST
+      - L_BRACE "{"
+      - R_BRACE "}"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected a class, like `Show[i32]`
+span:
+  start: 8
+  end: 8
+---
+!ExpectedToken
+message: expected a class, like `Show[i32]`
+span:
+  start: 23
+  end: 23

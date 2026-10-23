@@ -15,7 +15,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    lower::{ClassConstraint, ImplTarget, VariantDef, generic_predicates, impl_header},
+    lower::{ClassConstraint, VariantDef, generic_predicates, impl_header},
     ty::{GenericParamId, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
@@ -47,8 +47,8 @@ pub enum Reason<'db> {
     ReturnType,
     /// The declared type of the const the body is of.
     ConstType,
-    /// The `index`th parameter of the function being called, counting
-    /// `self` or the receiver of a method call.
+    /// The `index`th parameter of the function being called, counting the
+    /// receiver of a method call like `x.f(y)`.
     Argument { function: FunctionId<'db>, index: u32 },
     /// The `index`th field of a struct or variant.
     Field { variant: VariantDef<'db>, index: u32 },
@@ -219,7 +219,7 @@ impl<'db> Solver<'db> {
         let mut found = None;
         let mut maybe = has_vars && self.assumptions.iter().any(|a| a.class == goal.class);
         for &imp in self.impls {
-            let ImplTarget::Class(target) = &impl_header(self.db, imp).target else { continue };
+            let Some(target) = &impl_header(self.db, imp).class else { continue };
             if target.class != goal.class {
                 continue;
             }

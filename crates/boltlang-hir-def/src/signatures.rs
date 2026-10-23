@@ -54,11 +54,9 @@ pub struct FunctionSignature {
     pub name: Option<FunctionName>,
     pub visibility: RawVisibility,
     pub generic_params: GenericParams,
-    /// The parameters, leaving out `self`, with their types and default
-    /// values. Their patterns are in the body.
+    /// The parameters, with their types and default values. Their patterns
+    /// are in the body.
     pub params: Box<[ParamData]>,
-    /// Whether there is a `self` parameter, and whether it's `mut self`.
-    pub self_param: Option<bool>,
     pub is_variadic: bool,
     pub ret_type: Option<TypeRefId>,
     pub is_async: bool,
@@ -129,8 +127,9 @@ pub struct ClassSignature {
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ImplSignature {
     pub generic_params: GenericParams,
-    /// The type, like `Dog`, or the class instance, like `Show[Dog]`.
-    pub self_ty: TypeRefId,
+    /// The class instance, like `Show[Dog]`. Name resolution checks that
+    /// it's a class.
+    pub class: TypeRefId,
     pub store: ExpressionStore,
 }
 
@@ -236,7 +235,6 @@ fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignatu
     let decl = item.ast_id.to_node(&root(db, id.file(db))).and_then(ast::FuncDecl::cast);
     let mut c = ExprCollector::new();
     let mut params = Vec::new();
-    let mut self_param = None;
     let mut is_variadic = false;
     let mut generic_params = GenericParams::default();
     let mut ret_type = None;
@@ -244,7 +242,6 @@ fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignatu
     if let Some(decl) = &decl {
         generic_params = lower_generic_params(&mut c, decl.generic_param_list(), decl.where_clause().into_iter());
         if let Some(list) = decl.param_list() {
-            self_param = list.self_param().map(|p| p.mut_token().is_some());
             is_variadic = list.variadic_param().is_some();
             for param in list.params() {
                 let type_ref = param.type_expr().map(|t| c.lower_type(t));
@@ -261,7 +258,6 @@ fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignatu
         visibility: item.visibility,
         generic_params,
         params: params.into(),
-        self_param,
         is_variadic,
         ret_type,
         is_async: item.is_async,
@@ -324,7 +320,7 @@ fn lower_impl<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, Expressi
     let item = id.item(db);
     let node = item.ast_id.to_node(&root(db, id.file(db))).and_then(ast::Impl::cast);
     let mut c = ExprCollector::new();
-    let (generic_params, self_ty) = match &node {
+    let (generic_params, class) = match &node {
         Some(node) => (
             lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter()),
             c.lower_opt_type(node.ty()),
@@ -332,7 +328,7 @@ fn lower_impl<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, Expressi
         None => (GenericParams::default(), c.lower_opt_type(None)),
     };
     let (store, source_map) = c.finish();
-    (ImplSignature { generic_params, self_ty, store }, source_map)
+    (ImplSignature { generic_params, class, store }, source_map)
 }
 
 fn lower_const<'db>(db: &'db dyn Db, id: ConstId<'db>) -> (ConstSignature, ExpressionStoreSourceMap) {

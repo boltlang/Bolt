@@ -106,13 +106,15 @@ fn fields_impls_and_consts() {
 
     let ModItem::Impl(idx) = item(&db, file, 10) else { panic!() };
     let imp = ImplId::new(&db, file, idx);
-    let ImplTarget::Class(c) = &impl_header(&db, imp).target else { panic!() };
+    let c = impl_header(&db, imp).class.as_ref().unwrap();
     assert_eq!(c.args[0].display(&db).to_string(), "List[T]");
     assert_eq!(generic_predicates(&db, GenericDefId::Impl(imp)).predicates.len(), 1);
 
+    // Only classes have impls.
     let ModItem::Impl(idx) = item(&db, file, 11) else { panic!() };
-    let ImplTarget::Inherent(ty) = &impl_header(&db, ImplId::new(&db, file, idx)).target else { panic!() };
-    assert_eq!(ty.display(&db).to_string(), "List[T]");
+    let header = impl_header(&db, ImplId::new(&db, file, idx));
+    assert!(header.class.is_none());
+    assert!(matches!(&header.diagnostics[..], [LowerDiagnostic::NotAClass(_)]));
 
     let ModItem::Const(idx) = item(&db, file, 12) else { panic!() };
     let n = const_ty(&db, ConstId::new(&db, ItemContainerId::File(file), idx));

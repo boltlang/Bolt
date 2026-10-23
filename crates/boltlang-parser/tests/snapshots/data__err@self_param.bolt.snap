@@ -1,0 +1,106 @@
+---
+source: crates/boltlang-parser/tests/data.rs
+expression: "dump(&node, &diags)"
+input_file: crates/boltlang-parser/tests/data/err/self_param.bolt
+---
+- SOURCE_FILE
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "f"
+    - PARAM_LIST
+      - L_PAREN "("
+  - ERROR
+    - SELF_KEYWORD "self"
+  - ERROR
+    - COMMA ","
+  - WHITESPACE " "
+  - EXPR_STMT
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "x"
+  - ERROR
+    - R_PAREN ")"
+  - WHITESPACE " "
+  - ERROR
+    - EQUALS "="
+  - WHITESPACE " "
+  - EXPR_STMT
+    - PATH_EXPR
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "x"
+    - SEMI ";"
+  - WHITESPACE "\n"
+  - FUNC_DECL
+    - FN_KEYWORD "fn"
+    - WHITESPACE " "
+    - NAME
+      - IDENT "g"
+    - PARAM_LIST
+      - L_PAREN "("
+      - PARAM
+        - MUT_KEYWORD "mut"
+        - WHITESPACE " "
+        - ERROR
+          - SELF_KEYWORD "self"
+      - R_PAREN ")"
+    - WHITESPACE " "
+    - EQUALS "="
+    - WHITESPACE " "
+    - LIT_EXPR
+      - INT_NUMBER "1"
+    - SEMI ";"
+  - WHITESPACE "\n"
+---
+!ExpectedToken
+message: expected ')'
+span:
+  start: 5
+  end: 5
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 5
+  end: 5
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 5
+  end: 5
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 9
+  end: 9
+---
+!ExpectedToken
+message: expected ';'
+span:
+  start: 12
+  end: 12
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 12
+  end: 12
+---
+!ExpectedToken
+message: expected an expression, an item or a let statement
+span:
+  start: 14
+  end: 14
+---
+!ExpectedToken
+message: expected a pattern
+span:
+  start: 28
+  end: 28

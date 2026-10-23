@@ -23,14 +23,13 @@ fn function_signatures() {
     let db = TestDb::new();
     let file = db.file(
         "/main.bolt",
-        "pub async fn f[T: Show, const N: usize = 3](mut self, x: T, y: i32 = N, ...) -> [T; N] where T: Eq, Convert[T, i32] {}\n",
+        "pub async fn f[T: Show, const N: usize = 3](x: T, y: i32 = N, ...) -> [T; N] where T: Eq, Convert[T, i32] {}\n",
     );
     let ModItem::Function(idx) = top(&db, file, 0) else { panic!() };
     let sig = function_signature(&db, FunctionId::new(&db, ItemContainerId::File(file), idx));
     let s = &sig.store;
     assert_eq!(sig.visibility, RawVisibility::Public);
     assert!(sig.is_async && !sig.is_const);
-    assert_eq!(sig.self_param, Some(true));
     assert!(sig.is_variadic);
     assert_eq!(sig.params.len(), 2);
     assert_eq!(type_name(s, sig.params[0].type_ref.unwrap()), "T");
@@ -90,7 +89,7 @@ fn class_impl_const_and_type_alias_signatures() {
     let db = TestDb::new();
     let file = db.file(
         "/main.bolt",
-        "class Show[T] where Eq[T] { type Out: Show; fn show(self) -> String; }\nimpl[T] Show[Vec[T]] where Show[T] {}\nconst N: usize = 1;\ntype Map[K] = HashMap[K, i32];\n",
+        "class Show[T] where Eq[T] { type Out: Show; fn show(x: T) -> String; }\nimpl[T] Show[Vec[T]] where Show[T] {}\nconst N: usize = 1;\ntype Map[K] = HashMap[K, i32];\n",
     );
     let ModItem::Class(idx) = top(&db, file, 0) else { panic!() };
     let class = ClassId::new(&db, file, idx);
@@ -106,12 +105,12 @@ fn class_impl_const_and_type_alias_signatures() {
 
     let AssocItem::Function(idx) = class.item(&db).items[1] else { panic!() };
     let show = function_signature(&db, FunctionId::new(&db, ItemContainerId::Class(class), idx));
-    assert_eq!(show.self_param, Some(false));
+    assert_eq!(show.params.len(), 1);
     assert_eq!(type_name(&show.store, show.ret_type.unwrap()), "String");
 
     let ModItem::Impl(idx) = top(&db, file, 1) else { panic!() };
     let imp = impl_signature(&db, ImplId::new(&db, file, idx));
-    let TypeRef::Path(path) = &imp.store[imp.self_ty] else { panic!() };
+    let TypeRef::Path(path) = &imp.store[imp.class] else { panic!() };
     assert_eq!(path.segments[0].name.as_str(), "Show");
     assert!(path.segments[0].generic_args.is_some());
     assert_eq!(imp.generic_params.type_params.len(), 1);

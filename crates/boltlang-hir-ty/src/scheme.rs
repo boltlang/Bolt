@@ -11,7 +11,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    lower::{ClassConstraint, ImplTarget, fn_sig, generic_predicates, identity_args, impl_header, subst_params},
+    lower::{ClassConstraint, fn_sig, generic_predicates, identity_args, impl_header, subst_params},
     solve::{Constraint, Origin, Solver},
     ty::{GenericParamId, Ty, VarKind, bound_name},
 };
@@ -101,7 +101,7 @@ pub fn assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<ClassConstra
 /// in `impl Show[i32]`, `fn(i32) -> String`.
 pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<(Box<[Ty<'db>]>, Ty<'db>)> {
     let ItemContainerId::Impl(imp) = f.container(db) else { return None };
-    let ImplTarget::Class(target) = &impl_header(db, imp).target else { return None };
+    let target = impl_header(db, imp).class.as_ref()?;
     let name = f.item(db).name.as_ref()?;
     let method = target.class.item(db).items.iter().find_map(|item| match *item {
         AssocItem::Function(idx) => {
@@ -120,12 +120,11 @@ pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option
 
 /// Whether a function's type comes from its declaration alone, so that its
 /// body can be checked on its own: its signature is complete, it has no
-/// body, or it's a class method or the method of a class impl.
+/// body, or it's in a class or an impl, whose class declares its type.
 pub fn is_declared(db: &dyn Db, f: FunctionId<'_>) -> bool {
     fn_sig(db, f).is_complete()
         || !f.item(db).has_body
-        || matches!(f.container(db), ItemContainerId::Class(_))
-        || class_impl_method_sig(db, f).is_some()
+        || matches!(f.container(db), ItemContainerId::Class(_) | ItemContainerId::Impl(_))
 }
 
 /// The type of a function whose type comes from its declaration. Missing

@@ -229,7 +229,16 @@ input_file: crates/boltlang-parser/tests/data/ok/classes_impls.bolt
       - PATH
         - PATH_SEGMENT
           - NAME_REF
-            - IDENT "Point"
+            - IDENT "Default"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - PATH_TYPE
+                - PATH
+                  - PATH_SEGMENT
+                    - NAME_REF
+                      - IDENT "Point"
+            - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"
@@ -238,7 +247,7 @@ input_file: crates/boltlang-parser/tests/data/ok/classes_impls.bolt
         - FN_KEYWORD "fn"
         - WHITESPACE " "
         - NAME
-          - IDENT "new"
+          - IDENT "default"
         - PARAM_LIST
           - L_PAREN "("
           - R_PAREN ")"
@@ -250,7 +259,7 @@ input_file: crates/boltlang-parser/tests/data/ok/classes_impls.bolt
             - PATH
               - PATH_SEGMENT
                 - NAME_REF
-                  - IDENT "Self"
+                  - IDENT "Point"
         - WHITESPACE " "
         - EQUALS "="
         - WHITESPACE " "
@@ -406,30 +415,4 @@ input_file: crates/boltlang-parser/tests/data/ok/classes_impls.bolt
                       - IDENT "i32"
             - R_BRACKET "]"
     - SEMI ";"
-  - WHITESPACE "\n"
-  - IMPL
-    - IMPL_KEYWORD "impl"
-    - GENERIC_PARAM_LIST
-      - L_BRACKET "["
-      - TYPE_PARAM
-        - NAME
-          - IDENT "T"
-      - R_BRACKET "]"
-    - WHITESPACE " "
-    - ARRAY_TYPE
-      - L_BRACKET "["
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "T"
-      - SEMI ";"
-      - WHITESPACE " "
-      - LIT_EXPR
-        - INT_NUMBER "3"
-      - R_BRACKET "]"
-    - WHITESPACE " "
-    - ITEM_LIST
-      - L_BRACE "{"
-      - R_BRACE "}"
   - WHITESPACE "\n"

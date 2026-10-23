@@ -7,7 +7,7 @@ use crate::{
     token_set::TokenSet,
 };
 
-const PARAM_FIRST: TokenSet = PATTERN_FIRST.union(TokenSet::new(&[T![self], T![...], T![#]]));
+const PARAM_FIRST: TokenSet = PATTERN_FIRST.union(TokenSet::new(&[T![...], T![#]]));
 
 /// `(a, b: T = 1, ...)`
 pub(crate) fn param_list(p: &mut Parser) {
@@ -35,8 +35,8 @@ pub(crate) fn param_list(p: &mut Parser) {
     m.complete(p, PARAM_LIST);
 }
 
-/// One parameter: `self`, `mut self`, `...`, `args: ...`, or a pattern with
-/// an optional type and default value, like `x`, `x: T` or `x: T = 1`.
+/// One parameter: `...`, `args: ...`, or a pattern with an optional type
+/// and default value, like `x`, `x: T` or `x: T = 1`.
 fn param(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     outer_attrs(p);
@@ -44,20 +44,8 @@ fn param(p: &mut Parser) -> CompletedMarker {
         p.bump(T![...]);
         return m.complete(p, VARIADIC_PARAM);
     }
-    let self_at = if p.at(T![mut]) { 1 } else { 0 };
-    if p.nth_at(self_at, T![self]) && !p.nth_at(self_at + 1, T![:]) {
-        p.eat(T![mut]);
-        p.bump(T![self]);
-        return m.complete(p, SELF_PARAM);
-    }
     p.eat(T![mut]);
-    if p.at(T![self]) {
-        let name = p.start();
-        p.bump(T![self]);
-        name.complete(p, NAME);
-    } else {
-        pattern_single(p);
-    }
+    pattern_single(p);
     if p.eat(T![:]) {
         if p.eat(T![...]) {
             return m.complete(p, VARIADIC_PARAM);

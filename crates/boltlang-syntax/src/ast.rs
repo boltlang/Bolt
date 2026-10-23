@@ -666,7 +666,7 @@ impl MacroType {
 }
 
 
-/// A reference to a variable or function, like `x` or `self`.
+/// A reference to a variable or function, like `x`.
 pub struct PathExpr(SyntaxNode);
 
 simple_node!(PathExpr, PATH_EXPR);
@@ -712,7 +712,7 @@ impl PathSegment {
     }
 }
 
-/// A reference to a name: an identifier, `self` or a metavariable.
+/// A reference to a name: an identifier or a metavariable.
 pub struct NameRef(SyntaxNode);
 
 simple_node!(NameRef, NAME_REF);
@@ -1380,26 +1380,12 @@ pub struct ParamList(SyntaxNode);
 simple_node!(ParamList, PARAM_LIST);
 
 impl ParamList {
-    /// The ordinary parameters, leaving out `self` and variadic ones.
+    /// The ordinary parameters, leaving out variadic ones.
     pub fn params(&self) -> ChildrenIter<Param> {
         ChildrenIter::new(&self.0)
     }
-    pub fn self_param(&self) -> Option<SelfParam> {
-        self.find_node()
-    }
     pub fn variadic_param(&self) -> Option<VariadicParam> {
         self.find_node()
-    }
-}
-
-/// `self` or `mut self`
-pub struct SelfParam(SyntaxNode);
-
-simple_node!(SelfParam, SELF_PARAM);
-
-impl SelfParam {
-    pub fn mut_token(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
     }
 }
 
@@ -1718,7 +1704,7 @@ impl Class {
     }
 }
 
-/// `impl Dog { items }` or `impl Show[Dog] { items }`
+/// `impl Show[Dog] { items }`
 pub struct Impl(SyntaxNode);
 
 simple_node!(Impl, IMPL);
@@ -1727,7 +1713,7 @@ impl Impl {
     pub fn generic_param_list(&self) -> Option<GenericParamList> {
         self.find_node()
     }
-    /// The type, like `Dog`, or the class instance, like `Show[Dog]`.
+    /// The class instance, like `Show[Dog]`.
     pub fn ty(&self) -> Option<Type> {
         self.find_node()
     }

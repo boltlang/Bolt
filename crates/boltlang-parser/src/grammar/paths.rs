@@ -14,7 +14,7 @@ use crate::{
 };
 
 /// The tokens that can start a path segment.
-pub(crate) const PATH_SEGMENT_FIRST: TokenSet = TokenSet::new(&[IDENT, T![self], METAVARIABLE]);
+pub(crate) const PATH_SEGMENT_FIRST: TokenSet = TokenSet::new(&[IDENT, METAVARIABLE]);
 
 pub(crate) fn is_path_start(p: &Parser) -> bool {
     p.at_ts(PATH_SEGMENT_FIRST)
@@ -71,7 +71,7 @@ pub(crate) fn path_for_qualifier(p: &mut Parser, qualifier: CompletedMarker, mod
 
 fn path_segment(p: &mut Parser, mode: PathMode) -> Option<CompletedMarker> {
     if !is_path_start(p) {
-        p.error("expected a name, `self` or a metavariable");
+        p.error("expected a name or a metavariable");
         return None;
     }
     let m = p.start();

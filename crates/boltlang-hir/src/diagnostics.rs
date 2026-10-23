@@ -35,7 +35,7 @@ use boltlang_hir_ty::{
     solve::{ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
-    SyntaxKind::{self, NAME, NAME_REF, STRING},
+    SyntaxKind::{self, FIELD_EXPR, NAME, NAME_REF, STRING},
     SyntaxNode,
     rowan::{TextRange, TextSize},
 };
@@ -342,7 +342,9 @@ impl<'db> Collector<'db> {
                     self.lower(map, &[diagnostic]);
                     continue;
                 }
-                InferenceDiagnostic::UnresolvedName { expr } => (at(expr), DiagnosticKind::UnresolvedName),
+                InferenceDiagnostic::UnresolvedName { expr } => {
+                    (self.unresolved_range(map, expr), DiagnosticKind::UnresolvedName)
+                }
                 InferenceDiagnostic::NotAFunction { expr, ty } => {
                     if has_error(&ty) {
                         continue;
@@ -385,11 +387,7 @@ impl<'db> Collector<'db> {
             }
             Reason::Argument { function, index } => {
                 let (sig, map) = function_signature_with_source_map(db, function);
-                // The parameters of the signature leave out `self`.
-                let index = match sig.self_param {
-                    Some(_) => (index as usize).checked_sub(1)?,
-                    None => index as usize,
-                };
+                let index = index as usize;
                 let name = function.item(db).name.as_ref().map(|n| match n {
                     FunctionName::Name(n) | FunctionName::Operator(n) => n.clone(),
                 });
@@ -424,6 +422,19 @@ impl<'db> Collector<'db> {
             }
         };
         Some(Because { file, range: ptr_range(ptr), kind })
+    }
+
+    /// Where a name that can't be found is. For `x.f` or `x.f()`, that's the
+    /// `f`.
+    fn unresolved_range(&self, map: &ExpressionStoreSourceMap, node: ExprOrPat) -> Option<TextRange> {
+        let range = node_range(map, node);
+        let ExprOrPat::Expr(expr) = node else { return range };
+        let ptr = map.expr_syntax(expr)?;
+        if ptr.kind != FIELD_EXPR {
+            return range;
+        }
+        let name = ptr.to_node(&self.root)?.children().filter(|n| n.kind() == NAME_REF).last();
+        name.map(|n| n.text_range()).or(range)
     }
 
     /// The name of an item, or the whole item if it has none.

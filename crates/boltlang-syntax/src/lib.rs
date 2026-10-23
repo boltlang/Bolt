@@ -279,8 +279,6 @@ pub enum SyntaxKind {
     /// `(a, b: T)`
     PARAM_LIST,
     PARAM,
-    /// `self` or `mut self`
-    SELF_PARAM,
     /// `...` or `args: ...`
     VARIADIC_PARAM,
     /// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
@@ -478,7 +476,6 @@ impl SyntaxKind {
             RET_TYPE => "a return type",
             ABI => "an ABI (like extern \"C\")",
             PARAM_LIST => "a parameter list",
-            SELF_PARAM => "a self parameter",
             VARIADIC_PARAM => "a variadic parameter",
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",

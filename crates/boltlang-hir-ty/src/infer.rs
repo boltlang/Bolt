@@ -16,7 +16,7 @@ use boltlang_hir_def::{
         ArithOp, BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
         PrefixOp, RecordField, Statement, TypeRefId,
     },
-    ids::{FunctionId, ItemContainerId},
+    ids::FunctionId,
     signatures::function_signature,
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     scope::expr_scopes,
@@ -24,12 +24,12 @@ use boltlang_hir_def::{
 
 use crate::{
     lower::{
-        FieldsKind, ImplTarget, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, identity_args,
-        impl_header, subst_params,
+        FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, identity_args,
+        subst_params,
     },
     check::function_scheme,
     scheme::Scheme,
-    solve::{ExprOrPat, Origin, Reason, Solver, TypeError, visible_impls},
+    solve::{ExprOrPat, Origin, Reason, Solver, TypeError},
     ty::{AdtId, Ty, VarKind},
 };
 
@@ -195,10 +195,6 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// Infer a function body with the given parameter and return types.
     pub fn infer_fn_body(&mut self, params: &[Ty<'db>], ret: &Ty<'db>) {
         let mut params = params.iter();
-        if let Some(id) = self.body.self_param {
-            let ty = params.next().cloned().unwrap_or(Ty::Error);
-            self.result.binding_types.insert(id, ty);
-        }
         for &pat in self.body.params.iter() {
             let ty = params.next().cloned().unwrap_or(Ty::Error);
             self.check_pat(pat, &ty);
@@ -550,7 +546,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let resolver = self.resolver(expr);
         match resolver.resolve_path_in_value_ns(self.db, path) {
             Some(ValueResolution::Value(value)) => self.value_ty(expr, value),
-            Some(ValueResolution::Type(resolution)) => self.type_as_value(expr, path, resolution),
+            Some(ValueResolution::Type(resolution)) => self.type_as_value(expr, resolution),
             None => {
                 self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
                 Ty::Error
@@ -587,56 +583,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    /// A path that names a type: a constructor, or an inherent function of
-    /// the type like `List.new`.
-    fn type_as_value(&mut self, expr: ExprId, path: &Path, resolution: TypeResolution<'db>) -> Ty<'db> {
+    /// A path that names a type used as a value: a constructor.
+    fn type_as_value(&mut self, expr: ExprId, resolution: TypeResolution<'db>) -> Ty<'db> {
         match (resolution.ty, resolution.unresolved) {
             (TypeNs::Struct(s), None) => self.constructor_ty(VariantDef::Struct(s)),
             (TypeNs::Variant(v), None) => self.constructor_ty(VariantDef::Variant(v)),
-            (TypeNs::Struct(s), Some(i)) if i + 1 == path.segments.len() => {
-                self.inherent_fn_ty(expr, AdtId::Struct(s), &path.segments[i].name)
-            }
-            (TypeNs::Enum(e), Some(i)) if i + 1 == path.segments.len() => {
-                self.inherent_fn_ty(expr, AdtId::Enum(e), &path.segments[i].name)
-            }
             _ => {
                 self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
                 Ty::Error
             }
         }
-    }
-
-    fn inherent_fn_ty(&mut self, expr: ExprId, adt: AdtId<'db>, name: &Name) -> Ty<'db> {
-        match self.inherent_fn(adt, name) {
-            Some(f) => self.function_ty(expr, f),
-            None => {
-                self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
-                Ty::Error
-            }
-        }
-    }
-
-    /// A function named `name` in an impl like `impl List[T] { }`.
-    fn inherent_fn(&self, adt: AdtId<'db>, name: &Name) -> Option<FunctionId<'db>> {
-        let file = crate::check::def_file(self.db, self.def);
-        visible_impls(self.db, file).iter().find_map(|&imp| {
-            let ImplTarget::Inherent(Ty::Adt(target, _)) = &impl_header(self.db, imp).target else { return None };
-            if *target != adt {
-                return None;
-            }
-            imp.item(self.db).items.iter().find_map(|item| match *item {
-                boltlang_hir_def::item_tree::AssocItem::Function(idx) => {
-                    let f = FunctionId::new(self.db, ItemContainerId::Impl(imp), idx);
-                    let fname = f.item(self.db).name.as_ref()?;
-                    let matches = match fname {
-                        boltlang_hir_def::item_tree::FunctionName::Name(n) => n == name,
-                        boltlang_hir_def::item_tree::FunctionName::Operator(_) => false,
-                    };
-                    matches.then_some(f)
-                }
-                _ => None,
-            })
-        })
     }
 
     /// Whether `expr` is a path that doesn't name a value, like `Color` or
@@ -745,8 +701,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.apply(expr, callee, &callee_ty, function, args, None)
     }
 
-    /// `x.f(y)` as `f(x, y)`. `f` is a function in scope, or else a function
-    /// of an inherent impl of the type of `x`.
+    /// `x.f(y)` as `f(x, y)`, with the `f` in scope. Functions for a type are
+    /// found like any other: by importing them.
     fn infer_method_call(
         &mut self,
         expr: ExprId,
@@ -760,10 +716,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let path = Path::from_name(name.clone());
         let function = match resolver.resolve_path_in_value_ns(self.db, &path) {
             Some(ValueResolution::Value(ValueNs::Function(f))) => Some(f),
-            _ => match self.solver.unifier.shallow_resolve(receiver_ty) {
-                Ty::Adt(adt, _) => self.inherent_fn(adt, name),
-                _ => None,
-            },
+            _ => None,
         };
         let callee_ty = match function {
             Some(f) => {
