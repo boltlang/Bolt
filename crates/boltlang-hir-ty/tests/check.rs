@@ -47,6 +47,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, function_scheme, infer_body,
+    lower::LowerDiagnostic,
     solve::{ExprOrPat, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -201,10 +202,14 @@ fn check(input: &str) -> Result<(String, String), String> {
                 Statement::Item => {}
             }
         }
+        let type_snippet = |map: &ExpressionStoreSourceMap, id| {
+            map.type_syntax(id).map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
+        };
         for def in defs {
             let (_, map) = body_with_source_map(&db, def);
             for diagnostic in &infer_body(&db, def).diagnostics {
                 let at = |node| snippet(map, node);
+                let at_type = |id| type_snippet(map, id);
                 let line = match diagnostic {
                     InferenceDiagnostic::Type(TypeError::Mismatch { origin, expected, actual }) => format!(
                         "error at `{}`: expected {}, found {}",
@@ -239,8 +244,30 @@ fn check(input: &str) -> Result<(String, String), String> {
                         at(ExprOrPat::Expr(*expr)),
                         names.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
                     ),
+                    InferenceDiagnostic::Type(TypeError::InfiniteType { origin, ty }) => {
+                        format!("error at `{}`: infinite type {}", at(origin.node), ty.display(&db))
+                    }
+                    InferenceDiagnostic::NotAFunction { expr, ty } => {
+                        format!("error at `{}`: {} is not a function", at(ExprOrPat::Expr(*expr)), ty.display(&db))
+                    }
+                    InferenceDiagnostic::BreakOutside { expr } => {
+                        format!("error at `{}`: nothing to break out of", at(ExprOrPat::Expr(*expr)))
+                    }
+                    InferenceDiagnostic::Unsupported { expr } => {
+                        format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
+                    }
+                    InferenceDiagnostic::Lower(lower) => match lower {
+                        LowerDiagnostic::UnresolvedType(id) => format!("error at `{}`: unresolved type", at_type(*id)),
+                        LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at_type(*id)),
+                        LowerDiagnostic::NotAClass(id) => format!("error at `{}`: not a class", at_type(*id)),
+                        LowerDiagnostic::WrongArgCount { type_ref, expected, found } => format!(
+                            "error at `{}`: expected {expected} type arguments, found {found}",
+                            at_type(*type_ref)
+                        ),
+                        LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at_type(*id)),
+                        LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at_type(*id)),
+                    },
                     InferenceDiagnostic::CyclicInference => "error: cyclic inference between files".to_string(),
-                    other => format!("error: {other:?}"),
                 };
                 diagnostics.push(format!("{prefix}{line}"));
             }
