@@ -46,7 +46,7 @@ use boltlang_hir_def::{
     item_tree::{FunctionName, ModItem, item_tree},
 };
 use boltlang_hir_ty::{
-    InferenceDiagnostic, function_scheme, infer_body,
+    InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
     lower::LowerDiagnostic,
     solve::{ExprOrPat, TypeError},
 };
@@ -152,6 +152,12 @@ fn split_files(input: &str) -> Result<Vec<(String, String)>, String> {
 /// about. With several files, each line starts with the path of its file.
 fn check(input: &str) -> Result<(String, String), String> {
     let db = TestDb::new();
+    // The types of a line, with names like `a` for the unknown ones, as in
+    // the diagnostics of the compiler.
+    let show = |tys: &[&Ty]| -> Vec<String> {
+        let names = TyNames::new(&db, tys);
+        tys.iter().map(|ty| ty.display_with(&db, &names).to_string()).collect()
+    };
     let files: Vec<_> = split_files(input)?.into_iter().map(|(path, text)| (db.file(&path, &text), path)).collect();
     let mut types = Vec::new();
     let mut diagnostics = Vec::new();
@@ -192,12 +198,12 @@ fn check(input: &str) -> Result<(String, String), String> {
                 Statement::Expr { expr, .. } => types.push(format!(
                     "{prefix}{}: {}",
                     snippet(top_map, ExprOrPat::Expr(*expr)),
-                    top_result.expr_ty(*expr).display(&db)
+                    show(&[top_result.expr_ty(*expr)])[0]
                 )),
                 Statement::Let { pat, .. } => types.push(format!(
                     "{prefix}let {}: {}",
                     snippet(top_map, ExprOrPat::Pat(*pat)),
-                    top_result.pat_ty(*pat).display(&db)
+                    show(&[top_result.pat_ty(*pat)])[0]
                 )),
                 Statement::Item => {}
             }
@@ -211,17 +217,15 @@ fn check(input: &str) -> Result<(String, String), String> {
                 let at = |node| snippet(map, node);
                 let at_type = |id| type_snippet(map, id);
                 let line = match diagnostic {
-                    InferenceDiagnostic::Type(TypeError::Mismatch { origin, expected, actual }) => format!(
-                        "error at `{}`: expected {}, found {}",
-                        at(origin.node),
-                        expected.display(&db),
-                        actual.display(&db)
-                    ),
+                    InferenceDiagnostic::Type(TypeError::Mismatch { origin, expected, actual }) => {
+                        let tys = show(&[expected, actual]);
+                        format!("error at `{}`: expected {}, found {}", at(origin.node), tys[0], tys[1])
+                    }
                     InferenceDiagnostic::Type(TypeError::NoInstance { origin, constraint }) => format!(
                         "error at `{}`: no instance {}[{}]",
                         at(origin.node),
                         constraint.class.item(&db).name.as_ref().unwrap(),
-                        constraint.args.iter().map(|t| t.display(&db).to_string()).collect::<Vec<_>>().join(", ")
+                        show(&constraint.args.iter().collect::<Vec<_>>()).join(", ")
                     ),
                     InferenceDiagnostic::Type(TypeError::Ambiguous { origin, .. }) => {
                         format!("error at `{}`: ambiguous", at(origin.node))
@@ -237,7 +241,7 @@ fn check(input: &str) -> Result<(String, String), String> {
                         format!("error at `{}`: type needed", at(origin.node))
                     }
                     InferenceDiagnostic::Type(TypeError::NoSuchField { origin, ty, name }) => {
-                        format!("error at `{}`: {} has no field {name}", at(origin.node), ty.display(&db))
+                        format!("error at `{}`: {} has no field {name}", at(origin.node), show(&[ty])[0])
                     }
                     InferenceDiagnostic::MissingFields { expr, names } => format!(
                         "error at `{}`: missing {}",
@@ -245,10 +249,10 @@ fn check(input: &str) -> Result<(String, String), String> {
                         names.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
                     ),
                     InferenceDiagnostic::Type(TypeError::InfiniteType { origin, ty }) => {
-                        format!("error at `{}`: infinite type {}", at(origin.node), ty.display(&db))
+                        format!("error at `{}`: infinite type {}", at(origin.node), show(&[ty])[0])
                     }
                     InferenceDiagnostic::NotAFunction { expr, ty } => {
-                        format!("error at `{}`: {} is not a function", at(ExprOrPat::Expr(*expr)), ty.display(&db))
+                        format!("error at `{}`: {} is not a function", at(ExprOrPat::Expr(*expr)), show(&[ty])[0])
                     }
                     InferenceDiagnostic::BreakOutside { expr } => {
                         format!("error at `{}`: nothing to break out of", at(ExprOrPat::Expr(*expr)))
