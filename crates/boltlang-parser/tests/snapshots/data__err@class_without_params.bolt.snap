@@ -9,7 +9,7 @@ input_file: crates/boltlang-parser/tests/data/err/class_without_params.bolt
     - WHITESPACE " "
     - NAME
       - IDENT "NoParams"
-      - WHITESPACE " "
+    - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"
       - WHITESPACE " "

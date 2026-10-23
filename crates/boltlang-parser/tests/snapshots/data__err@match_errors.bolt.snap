@@ -29,7 +29,7 @@ input_file: crates/boltlang-parser/tests/data/err/match_errors.bolt
               - PATH_SEGMENT
                 - NAME_REF
                   - IDENT "b"
-            - WHITESPACE " "
+          - WHITESPACE " "
         - MATCH_ARM
           - NAMED_PATT
             - NAME
@@ -62,7 +62,7 @@ input_file: crates/boltlang-parser/tests/data/err/match_errors.bolt
           - NAMED_PATT
             - NAME
               - IDENT "a"
-            - WHITESPACE " "
+          - WHITESPACE " "
           - PATH_EXPR
             - PATH
               - PATH_SEGMENT

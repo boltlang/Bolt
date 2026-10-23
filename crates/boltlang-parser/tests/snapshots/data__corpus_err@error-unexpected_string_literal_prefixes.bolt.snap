@@ -54,7 +54,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-unexpected_string
   - EXPR_STMT
     - LIT_EXPR
       - STRING "\"asdf\""
-      - WHITESPACE "\n"
+    - WHITESPACE "\n"
   - ERROR
     - R_BRACKET "]"
   - SEMI ";"

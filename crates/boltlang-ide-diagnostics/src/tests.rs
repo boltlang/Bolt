@@ -126,6 +126,18 @@ fn unresolved_name_does_not_cascade() {
 }
 
 #[test]
+fn range_before_a_syntax_error_leaves_out_whitespace() {
+    check(
+        r#"
+  fn f() = g x;
+         //^ error: cannot find `g`
+           //^ error: expected ';'
+           //^ error: cannot find `x`
+"#,
+    );
+}
+
+#[test]
 fn syntax_error() {
     check(
         r#"

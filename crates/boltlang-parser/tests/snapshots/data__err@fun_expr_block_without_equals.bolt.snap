@@ -23,7 +23,7 @@ input_file: crates/boltlang-parser/tests/data/err/fun_expr_block_without_equals.
             - NAME
               - IDENT "x"
         - R_PAREN ")"
-        - WHITESPACE " "
+      - WHITESPACE " "
       - BLOCK_EXPR
         - BLOCK
           - L_BRACE "{"

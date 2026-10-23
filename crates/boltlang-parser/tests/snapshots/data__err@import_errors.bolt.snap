@@ -24,7 +24,7 @@ input_file: crates/boltlang-parser/tests/data/err/import_errors.bolt
       - L_PAREN "("
       - NAME_REF
         - IDENT "x"
-        - WHITESPACE " "
+      - WHITESPACE " "
       - NAME_REF
         - IDENT "y"
       - R_PAREN ")"

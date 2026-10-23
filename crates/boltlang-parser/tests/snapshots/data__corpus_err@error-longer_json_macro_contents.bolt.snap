@@ -31,7 +31,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-longer_json_macro
                 - EXPR_STMT
                   - LIT_EXPR
                     - STRING "\"fn foo() {}\""
-                    - WHITESPACE "\n        "
+                  - WHITESPACE "\n        "
                 - EXPR_STMT
                   - LIT_EXPR
                     - STRING "\"file2.rs\""
@@ -71,7 +71,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-longer_json_macro
           - WHITESPACE "\n"
           - R_BRACE "}"
       - R_PAREN ")"
-      - WHITESPACE "\n"
+    - WHITESPACE "\n"
 ---
 !ExpectedToken
 message: expected ';'

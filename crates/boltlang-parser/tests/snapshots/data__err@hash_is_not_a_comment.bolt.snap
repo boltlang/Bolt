@@ -13,21 +13,21 @@ input_file: crates/boltlang-parser/tests/data/err/hash_is_not_a_comment.bolt
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "not"
-      - WHITESPACE " "
+    - WHITESPACE " "
   - EXPR_STMT
     - PATH_EXPR
       - PATH
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "a"
-      - WHITESPACE " "
+    - WHITESPACE " "
   - EXPR_STMT
     - PATH_EXPR
       - PATH
         - PATH_SEGMENT
           - NAME_REF
             - IDENT "comment"
-      - WHITESPACE "\n"
+    - WHITESPACE "\n"
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "

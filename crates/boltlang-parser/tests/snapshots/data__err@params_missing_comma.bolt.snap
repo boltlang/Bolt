@@ -15,7 +15,7 @@ input_file: crates/boltlang-parser/tests/data/err/params_missing_comma.bolt
         - NAMED_PATT
           - NAME
             - IDENT "a"
-        - WHITESPACE " "
+      - WHITESPACE " "
       - PARAM
         - NAMED_PATT
           - NAME

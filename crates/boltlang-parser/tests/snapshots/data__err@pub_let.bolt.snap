@@ -7,7 +7,7 @@ input_file: crates/boltlang-parser/tests/data/err/pub_let.bolt
   - ERROR
     - VISIBILITY
       - PUB_KEYWORD "pub"
-      - WHITESPACE " "
+    - WHITESPACE " "
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "

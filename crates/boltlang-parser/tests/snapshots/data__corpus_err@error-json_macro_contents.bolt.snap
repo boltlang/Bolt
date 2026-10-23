@@ -40,7 +40,7 @@ input_file: crates/boltlang-parser/tests/data/corpus/err/error-json_macro_conten
           - WHITESPACE " "
           - R_BRACE "}"
       - R_PAREN ")"
-      - WHITESPACE "\n"
+    - WHITESPACE "\n"
 ---
 !ExpectedToken
 message: expected ';'

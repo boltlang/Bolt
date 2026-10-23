@@ -20,7 +20,7 @@ input_file: crates/boltlang-parser/tests/data/err/tuple_missing_comma.bolt
           - PATH_SEGMENT
             - NAME_REF
               - IDENT "a"
-        - WHITESPACE " "
+      - WHITESPACE " "
       - PATH_EXPR
         - PATH
           - PATH_SEGMENT

@@ -15,7 +15,7 @@ input_file: crates/boltlang-parser/tests/data/err/missing_semi.bolt
     - WHITESPACE " "
     - LIT_EXPR
       - INT_NUMBER "1"
-      - WHITESPACE "\n"
+    - WHITESPACE "\n"
   - LET_STMT
     - LET_KEYWORD "let"
     - WHITESPACE " "

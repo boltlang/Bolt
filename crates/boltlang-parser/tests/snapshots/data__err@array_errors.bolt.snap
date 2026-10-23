@@ -17,7 +17,7 @@ input_file: crates/boltlang-parser/tests/data/err/array_errors.bolt
       - L_BRACKET "["
       - LIT_EXPR
         - INT_NUMBER "1"
-        - WHITESPACE " "
+      - WHITESPACE " "
       - LIT_EXPR
         - INT_NUMBER "2"
       - R_BRACKET "]"

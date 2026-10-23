@@ -16,7 +16,7 @@ input_file: crates/boltlang-parser/tests/data/err/struct_enum_errors.bolt
       - RECORD_FIELD
         - NAME
           - IDENT "x"
-          - WHITESPACE " "
+        - WHITESPACE " "
         - PATH_TYPE
           - PATH
             - PATH_SEGMENT
@@ -37,7 +37,7 @@ input_file: crates/boltlang-parser/tests/data/err/struct_enum_errors.bolt
       - VARIANT
         - NAME
           - IDENT "A"
-        - WHITESPACE " "
+      - WHITESPACE " "
       - VARIANT
         - NAME
           - IDENT "B"
@@ -49,7 +49,7 @@ input_file: crates/boltlang-parser/tests/data/err/struct_enum_errors.bolt
     - WHITESPACE " "
     - NAME
       - IDENT "T"
-      - WHITESPACE "\n"
+    - WHITESPACE "\n"
 ---
 !ExpectedToken
 message: expected ':'

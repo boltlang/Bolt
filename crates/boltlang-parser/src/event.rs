@@ -260,6 +260,12 @@ impl <'a> IntersperseTrivia<'a> {
                 }
             }
             e@Event::Error { .. } => {
+                // Close a finished node first, or the trivia before the error
+                // would end up inside it, like the space in `g ` of `g x`.
+                if self.state == IntersperseState::PendingExit {
+                    self.output.push(Event::Finish);
+                    self.state = IntersperseState::Normal;
+                }
                 self.eat_trivias();
                 self.output.push(e)
             }

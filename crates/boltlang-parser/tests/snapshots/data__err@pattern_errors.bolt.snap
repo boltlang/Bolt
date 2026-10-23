@@ -17,7 +17,7 @@ input_file: crates/boltlang-parser/tests/data/err/pattern_errors.bolt
       - NAMED_PATT
         - NAME
           - IDENT "b"
-        - WHITESPACE " "
+      - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
     - PATH_EXPR
