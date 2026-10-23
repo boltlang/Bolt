@@ -5,9 +5,14 @@
   "type": "module",
   "scripts": {
     "build": "sh scripts/build.sh",
+    "check": "tsc --noEmit",
+    "watch": "tsc --watch",
     "serve": "python3 -m http.server --directory . 8000"
   },
   "dependencies": {
     "web-tree-sitter": "^0.26.13"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

@@ -10,24 +10,46 @@
 //   query says, and painted over the rest, like `println!` in a
 //   `macro_rules!`.
 
+import type { Parser, Query, QueryCapture, Range } from "web-tree-sitter";
+
 /** How deep injections can be inside each other. */
 const MAX_DEPTH = 4;
 
+export interface Queries {
+  highlights: Query;
+  injections?: Query;
+}
+
+/**
+ * A capture of a highlights query, with the indices of JavaScript strings,
+ * as tree-sitter gives them.
+ */
+export interface Capture {
+  name: string;
+  start: number;
+  end: number;
+}
+
+/** A stretch of text with one capture name, or `null` for none. */
+export interface Run {
+  start: number;
+  end: number;
+  name: string | null;
+}
+
 /**
  * The captures of `text`, as layers to paint in order: those of the whole
- * text, then those of each part injected into it. A capture is
- * `{ name, start, end }`, with the indices of JavaScript strings, as
- * tree-sitter gives them.
- *
- * @param {import("web-tree-sitter").Parser} parser for Bolt
- * @param {{ highlights: import("web-tree-sitter").Query, injections?: import("web-tree-sitter").Query }} queries
- * @param {string} text
+ * text, then those of each part injected into it.
  */
-export function layers(parser, queries, text, ranges = undefined, depth = 0) {
+export function layers(parser: Parser, queries: Queries, text: string, ranges?: Range[], depth = 0): Capture[][] {
   const tree = parser.parse(text, null, ranges ? { includedRanges: ranges } : undefined);
   if (!tree) return [];
   try {
-    const plain = (capture) => ({ name: capture.name, start: capture.node.startIndex, end: capture.node.endIndex });
+    const plain = (capture: QueryCapture): Capture => ({
+      name: capture.name,
+      start: capture.node.startIndex,
+      end: capture.node.endIndex,
+    });
     const out = [queries.highlights.captures(tree.rootNode).map(plain)];
     if (queries.injections && depth < MAX_DEPTH) {
       for (const capture of queries.injections.captures(tree.rootNode)) {
@@ -45,18 +67,12 @@ export function layers(parser, queries, text, ranges = undefined, depth = 0) {
   }
 }
 
-/**
- * The highlighted runs of `text`: `{ start, end, name }` for each stretch
- * with one capture name, or `name: null` for none.
- *
- * @param {string} text
- * @param {{ name: string, start: number, end: number }[][]} layers in the order to paint them
- */
-export function runs(text, layers) {
-  const names = new Array(text.length).fill(null);
+/** The highlighted runs of `text`, from layers of captures in the order to paint them. */
+export function runs(text: string, layers: Capture[][]): Run[] {
+  const names: (string | null)[] = new Array(text.length).fill(null);
   for (const captures of layers) {
     // The last capture of each node.
-    const byNode = new Map();
+    const byNode = new Map<string, Capture>();
     for (const capture of captures) {
       if (capture.start < capture.end) byNode.set(`${capture.start}:${capture.end}`, capture);
     }
@@ -66,11 +82,11 @@ export function runs(text, layers) {
       names.fill(name, start, Math.min(end, text.length));
     }
   }
-  const out = [];
+  const out: Run[] = [];
   let start = 0;
   for (let i = 1; i <= text.length; i++) {
     if (i === text.length || names[i] !== names[start]) {
-      out.push({ start, end: i, name: names[start] });
+      out.push({ start, end: i, name: names[start] ?? null });
       start = i;
     }
   }
@@ -82,7 +98,7 @@ export function runs(text, layers) {
  * `type.builtin` gives the classes `hl-type hl-type-builtin`, so that the
  * style of `type` applies unless `type.builtin` has its own.
  */
-export function toHtml(text, runs) {
+export function toHtml(text: string, runs: Run[]): string {
   let html = "";
   for (const { start, end, name } of runs) {
     const part = escape(text.slice(start, end));
@@ -91,11 +107,13 @@ export function toHtml(text, runs) {
   return html;
 }
 
-function classes(name) {
+function classes(name: string): string {
   const parts = name.split(".");
   return parts.map((_, i) => "hl-" + parts.slice(0, i + 1).join("-")).join(" ");
 }
 
-function escape(text) {
-  return text.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+const ENTITIES: Record<string, string> = { "&": "&amp;", "<": "&lt;", ">": "&gt;" };
+
+function escape(text: string): string {
+  return text.replace(/[&<>]/g, (c) => ENTITIES[c] ?? c);
 }

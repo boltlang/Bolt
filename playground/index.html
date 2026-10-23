@@ -5,7 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Bolt Playground</title>
     <link rel="stylesheet" href="style.css" />
-    <script type="module" src="main.js"></script>
+    <!-- The compiled code imports web-tree-sitter by name, as in src/. -->
+    <script type="importmap">
+      { "imports": { "web-tree-sitter": "./vendor/web-tree-sitter.js" } }
+    </script>
+    <script type="module" src="dist/main.js"></script>
   </head>
   <body>
     <header>
