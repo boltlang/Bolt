@@ -1,2 +1,6 @@
 /target
 /trash
+
+# nested repositories
+/tree-sitter-bolt
+/vim-bolt
