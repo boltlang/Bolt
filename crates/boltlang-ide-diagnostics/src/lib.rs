@@ -188,7 +188,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::UnresolvedImportName { name } => {
             (C::UNRESOLVED_IMPORT_NAME, format!("the imported file has nothing named `{name}`"))
         }
-        K::PrivateImport { name } => (C::PRIVATE_IMPORT, format!("`{name}` is private")),
+        K::PrivateImport { name, package_only: false } => (C::PRIVATE_IMPORT, format!("`{name}` is private")),
+        K::PrivateImport { name, package_only: true } => {
+            (C::PRIVATE_IMPORT, format!("`{name}` is only visible inside its package"))
+        }
         K::UnresolvedName => (C::UNRESOLVED_NAME, format!("cannot find `{source}`")),
         K::UnresolvedType => (C::UNRESOLVED_TYPE, format!("cannot find type `{source}`")),
         K::NotAType => (C::NOT_A_TYPE, format!("`{source}` is not a type")),

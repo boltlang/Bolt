@@ -21,8 +21,7 @@ use crate::{
         ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId, StructId,
         TypeAliasId,
     },
-    item_tree::RawVisibility,
-    nameres::{Namespace, file_scope},
+    nameres::{Namespace, file_scope, is_visible_from},
     scope::{ExprScopes, ScopeId, expr_scopes},
     signatures::{
         GenericParams, class_signature, enum_signature, function_signature, impl_signature, struct_signature,
@@ -207,8 +206,8 @@ impl<'db> Resolver<'db> {
         if let Some(Local::Type(ty)) = self.resolve_local(Namespace::Types, &first.name) {
             return Some(TypeResolution { ty, unresolved: rest(segments, 1) });
         }
-        let (file, external, i) = self.walk_files(db, segments);
-        let Some(def) = lookup(db, file, external, Namespace::Types, &segments.get(i)?.name) else {
+        let (file, i) = self.walk_files(db, segments);
+        let Some(def) = lookup(db, file, self.file, Namespace::Types, &segments.get(i)?.name) else {
             // `i32`, or `u8.MAX`, unless it's in another file, like `m.i32`.
             let builtin = if i == 0 { BuiltinType::by_name(first.name.as_str()) } else { None };
             return builtin.map(|ty| TypeResolution { ty: TypeNs::Builtin(ty), unresolved: rest(segments, 1) });
@@ -241,9 +240,9 @@ impl<'db> Resolver<'db> {
             return Some(ValueResolution::Value(value));
         }
         // A value directly in this file, or in an imported one: `f`, `m.f`.
-        let (file, external, i) = self.walk_files(db, segments);
+        let (file, i) = self.walk_files(db, segments);
         if i + 1 == segments.len() {
-            let value = lookup(db, file, external, Namespace::Values, &segments[i].name).and_then(|def| match def {
+            let value = lookup(db, file, self.file, Namespace::Values, &segments[i].name).and_then(|def| match def {
                 ModuleDefId::Function(id) => Some(ValueNs::Function(id)),
                 ModuleDefId::Const(id) => Some(ValueNs::Const(id)),
                 ModuleDefId::Variant(id) => Some(ValueNs::Variant(id)),
@@ -270,27 +269,26 @@ impl<'db> Resolver<'db> {
     }
 
     /// Follow the leading segments of a path that name imported files, like
-    /// `m` in `m.f`. Returns the file the rest of the path is in, whether
-    /// that's another file, and the index of the first segment after them.
+    /// `m` in `m.f`. Returns the file the rest of the path is in, and the
+    /// index of the first segment after them.
     /// The last segment is never followed, since it's what's being looked
     /// up.
-    fn walk_files(&self, db: &'db dyn Db, segments: &[PathSegment]) -> (File, bool, usize) {
-        let (mut file, mut external, mut i) = (self.file, false, 0);
+    fn walk_files(&self, db: &'db dyn Db, segments: &[PathSegment]) -> (File, usize) {
+        let (mut file, mut i) = (self.file, 0);
         // A type parameter shadows a file with the same name.
         if self.resolve_local(Namespace::Types, &segments[0].name).is_some() {
-            return (file, external, i);
+            return (file, i);
         }
         while i + 1 < segments.len() {
-            match lookup(db, file, external, Namespace::Types, &segments[i].name) {
+            match lookup(db, file, self.file, Namespace::Types, &segments[i].name) {
                 Some(ModuleDefId::File(next)) => {
                     file = next;
-                    external = true;
                     i += 1;
                 }
                 _ => break,
             }
         }
-        (file, external, i)
+        (file, i)
     }
 }
 
@@ -299,11 +297,35 @@ enum Local<'db> {
     Value(ValueNs<'db>),
 }
 
-/// Look up a name in a file. From another file, only public names are
-/// visible.
-fn lookup<'db>(db: &'db dyn Db, file: File, external: bool, ns: Namespace, name: &Name) -> Option<ModuleDefId<'db>> {
+/// Look up a name in a file, for a path in `from`. From another file, only
+/// the names visible there can be used: see [`is_visible_from`].
+fn lookup<'db>(db: &'db dyn Db, file: File, from: File, ns: Namespace, name: &Name) -> Option<ModuleDefId<'db>> {
     let entry = file_scope(db, file).scope.get(ns, name)?;
-    (!external || entry.visibility != RawVisibility::Private).then_some(entry.def)
+    if file == from {
+        return Some(entry.def);
+    }
+    // An imported name is visible like the item it names. A file imported
+    // with `as` belongs to the file that imports it.
+    let owner = match (entry.import, entry.def) {
+        (Some(_), def) if !matches!(def, ModuleDefId::File(_)) => def_file(db, def).unwrap_or(file),
+        _ => file,
+    };
+    is_visible_from(db, entry.visibility, owner, from).then_some(entry.def)
+}
+
+/// The file an item is defined in.
+fn def_file<'db>(db: &'db dyn Db, def: ModuleDefId<'db>) -> Option<File> {
+    Some(match def {
+        ModuleDefId::File(_) => return None,
+        ModuleDefId::Function(id) => id.file(db),
+        ModuleDefId::Struct(id) => id.file(db),
+        ModuleDefId::Enum(id) => id.file(db),
+        ModuleDefId::Variant(id) => id.parent.file(db),
+        ModuleDefId::Class(id) => id.file(db),
+        ModuleDefId::Const(id) => id.file(db),
+        ModuleDefId::TypeAlias(id) => id.file(db),
+        ModuleDefId::MacroRules(id) => id.file(db),
+    })
 }
 
 fn rest(segments: &[PathSegment], index: usize) -> Option<usize> {

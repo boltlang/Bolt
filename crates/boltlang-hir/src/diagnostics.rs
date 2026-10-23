@@ -62,8 +62,9 @@ pub enum DiagnosticKind<'db> {
     UnresolvedImportPath { path: String, error: ImportPathError },
     /// The file to import from has no item with this name.
     UnresolvedImportName { name: Name },
-    /// The item to import exists but isn't public.
-    PrivateImport { name: Name },
+    /// The item to import exists but isn't visible here: it's private, or
+    /// `pub(package)` in another package when `package_only` is set.
+    PrivateImport { name: Name, package_only: bool },
     UnresolvedName,
     UnresolvedType,
     /// A path that names something other than a type, like a class.
@@ -250,8 +251,9 @@ impl<'db> Collector<'db> {
                 NameResDiagnostic::UnresolvedImportName { import, name } => {
                     (self.name_in(*import, name), DiagnosticKind::UnresolvedImportName { name: name.clone() })
                 }
-                NameResDiagnostic::PrivateImport { import, name } => {
-                    (self.name_in(*import, name), DiagnosticKind::PrivateImport { name: name.clone() })
+                NameResDiagnostic::PrivateImport { import, name, package_only } => {
+                    let kind = DiagnosticKind::PrivateImport { name: name.clone(), package_only: *package_only };
+                    (self.name_in(*import, name), kind)
                 }
             };
             self.push(range, kind);

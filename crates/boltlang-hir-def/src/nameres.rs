@@ -12,7 +12,7 @@
 
 use std::collections::BTreeMap;
 
-use boltlang_base_db::{Db, File, SystemPath};
+use boltlang_base_db::{Db, File, SystemPath, SystemPathBuf};
 
 use crate::{
     Name,
@@ -105,8 +105,9 @@ pub enum NameResDiagnostic {
     UnresolvedImportPath { import: AstId, path: String, error: ImportPathError },
     /// The file to import from has no item with this name.
     UnresolvedImportName { import: AstId, name: Name },
-    /// The item to import exists but isn't public.
-    PrivateImport { import: AstId, name: Name },
+    /// The item to import exists but isn't visible here: it's private, or
+    /// `pub(package)` in another package when `package_only` is set.
+    PrivateImport { import: AstId, name: Name, package_only: bool },
 }
 
 /// The names in a file and the problems found resolving them.
@@ -245,11 +246,11 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                 for (name, alias) in names {
                     let local_name = alias.as_ref().unwrap_or(name);
                     let mut found = false;
-                    let mut private = false;
+                    let mut hidden = None;
                     for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
                         let Some(entry) = exports.get(ns, name) else { continue };
-                        if entry.visibility == RawVisibility::Private {
-                            private = true;
+                        if !is_visible_from(db, entry.visibility, target, file) {
+                            hidden = Some(entry.visibility);
                             continue;
                         }
                         found = true;
@@ -259,20 +260,23 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                         }
                     }
                     if !found {
-                        out.diagnostics.push(if private {
-                            NameResDiagnostic::PrivateImport { import: import.ast_id, name: name.clone() }
-                        } else {
-                            NameResDiagnostic::UnresolvedImportName { import: import.ast_id, name: name.clone() }
+                        out.diagnostics.push(match hidden {
+                            Some(visibility) => NameResDiagnostic::PrivateImport {
+                                import: import.ast_id,
+                                name: name.clone(),
+                                package_only: visibility == RawVisibility::Package,
+                            },
+                            None => NameResDiagnostic::UnresolvedImportName { import: import.ast_id, name: name.clone() },
                         });
                     }
                 }
             }
-            // A glob import brings in all public names, but doesn't replace
-            // names that are already in scope.
+            // A glob import brings in all the names visible here, but doesn't
+            // replace names that are already in scope.
             ImportKind::Glob => {
                 for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
                     for (name, entry) in exports.entries(ns) {
-                        if entry.visibility != RawVisibility::Private {
+                        if is_visible_from(db, entry.visibility, target, file) {
                             out.scope.insert(ns, name.clone(), imported(entry));
                         }
                     }
@@ -308,9 +312,11 @@ pub enum ImportPathError {
 ///   `.bolt/packages`, and the nearest one wins: the one in the directory of
 ///   `importer`, or else in its parent, and so on.
 ///
-/// Symbolic links are resolved, so that a file has one [`File`] however it's
-/// reached. Salsa doesn't track that part: changing a link takes effect
-/// when the file is synced.
+/// Symbolic links are resolved for the files of the project, so that a file
+/// has one [`File`] however it's reached. Paths through `.bolt/packages` are
+/// kept, since they say which package a file is in (see [`package_of`]):
+/// a linked package stays a package. Salsa doesn't track symbolic links, so
+/// changing one takes effect when the file is synced.
 pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<File, ImportPathError> {
     let dir = importer
         .path(db)
@@ -329,11 +335,11 @@ pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<
     }
     let path = with_extension(std::path::PathBuf::from(path));
     for dir in dir.ancestors() {
-        let package_dir = dir.join(".bolt").join("packages").join(package);
-        if !db.files().resolve(db, SystemPath::new(&package_dir)).is_directory(db) {
+        let root = dir.join(".bolt").join("packages").join(package);
+        if !db.files().resolve(db, SystemPath::new(&root)).is_directory(db) {
             continue;
         }
-        let file = db.files().resolve(db, SystemPath::new(&package_dir.join(&path)));
+        let file = db.files().resolve(db, SystemPath::new(&root.join(&path)));
         if file.exists(db) {
             return Ok(canonical(db, file));
         }
@@ -357,9 +363,13 @@ fn is_package_name(name: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
 }
 
-/// The file with the symbolic links in its path resolved.
+/// The file with the symbolic links in its path resolved, unless it's in a
+/// package.
 fn canonical(db: &dyn Db, file: File) -> File {
     let Some(path) = file.path(db).as_system_path_buf() else { return file };
+    if package_dir(path.as_std_path()).is_some() {
+        return file;
+    }
     match db.system().canonicalize_path(path) {
         Ok(real) if real != *path => db.files().resolve(db, &real),
         _ => file,
@@ -368,3 +378,30 @@ fn canonical(db: &dyn Db, file: File) -> File {
 
 #[cfg(test)]
 mod tests;
+
+/// The package `file` is in: the directory `.bolt/packages/<name>` in its
+/// path, the innermost one if there are several. `None` for the files of
+/// the project itself.
+pub fn package_of(db: &dyn Db, file: File) -> Option<SystemPathBuf> {
+    let path = file.path(db).as_system_path_buf()?;
+    package_dir(path.as_std_path()).map(|dir| SystemPathBuf::from(dir.to_path_buf()))
+}
+
+fn package_dir(path: &std::path::Path) -> Option<&std::path::Path> {
+    path.ancestors().skip(1).find(|dir| {
+        let Some(packages) = dir.parent() else { return false };
+        packages.file_name() == Some("packages".as_ref())
+            && packages.parent().and_then(|bolt| bolt.file_name()) == Some(".bolt".as_ref())
+    })
+}
+
+/// Whether an item defined in `owner` with `visibility` can be used in
+/// `from`: a private item only in its own file, and a `pub(package)` one
+/// only in the files of the same package.
+pub fn is_visible_from(db: &dyn Db, visibility: RawVisibility, owner: File, from: File) -> bool {
+    match visibility {
+        RawVisibility::Private => owner == from,
+        RawVisibility::Package => owner == from || package_of(db, owner) == package_of(db, from),
+        RawVisibility::Public | RawVisibility::Super => true,
+    }
+}

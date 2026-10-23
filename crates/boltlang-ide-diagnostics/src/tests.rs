@@ -517,3 +517,21 @@ print(1);
         ),
     ]);
 }
+
+#[test]
+fn package_items_through_an_alias() {
+    check_files(&[
+        ("/proj/.bolt/packages/geo/lib.bolt", "pub(package) fn helper() -> i32 = 1;\npub fn area() -> i32 = helper();\n"),
+        (
+            "/proj/main.bolt",
+            r#"
+import "geo" (helper);
+            //^^^^^^ error: `helper` is only visible inside its package
+import "geo" as G;
+let a: i32 = G.area();
+let h: i32 = G.helper();
+             //^^^^^^ error: cannot find `helper`
+"#,
+        ),
+    ]);
+}

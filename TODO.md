@@ -10,10 +10,12 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 - [ ] A prelude. It would bring `String`, numeric classes for arithmetic and
       iteration, which also lets `for` loop over more than arrays.
       *(base-db, hir-def, hir-ty)*
-- [ ] `pub(package)` is treated like `pub`. With packages in
-      `.bolt/packages`, an item marked `pub(package)` should only be
-      importable from files of the same package; files outside
-      `.bolt/packages` are the project's own package. *(hir-def)*
+- [ ] The visibility of fields isn't checked: a private field can be read
+      and set from any file. *(hir-def, hir-ty)*
+- [ ] `G.helper` where `helper` is `pub(package)` in another package says
+      "cannot find `helper`"; it could say that `helper` isn't visible, like
+      an import does. *(hir-def, hir-ty, hir)*
+- [ ] `pub(super)` is treated like `pub`. *(hir-def)*
 - [ ] A `std` that comes with the compiler, so that projects don't need a
       copy in `.bolt/packages`. Packages would be looked up in the nearest
       `.bolt/packages` first, then in the bundled ones. *(base-db, hir-def,

@@ -20,7 +20,8 @@ fn diagnostics(scope: &FileScope) -> Vec<String> {
             NameResDiagnostic::Duplicate { name, .. } => format!("duplicate {name}"),
             NameResDiagnostic::UnresolvedImportPath { path, error, .. } => format!("unresolved path {path}: {error:?}"),
             NameResDiagnostic::UnresolvedImportName { name, .. } => format!("unresolved name {name}"),
-            NameResDiagnostic::PrivateImport { name, .. } => format!("private {name}"),
+            NameResDiagnostic::PrivateImport { name, package_only: false, .. } => format!("private {name}"),
+            NameResDiagnostic::PrivateImport { name, package_only: true, .. } => format!("package-only {name}"),
         })
         .collect()
 }
@@ -157,4 +158,39 @@ fn import_paths_must_be_relative_or_in_a_package() {
     for source in ["/proj/main", "1std/io", "std/../io", "std/./io", "std//io", "std/", ""] {
         assert_eq!(resolve_import_path(&db, main, source), Err(ImportPathError::Invalid), "{source}");
     }
+}
+
+#[test]
+fn package_items_are_only_visible_in_their_package() {
+    let db = TestDb::new();
+    db.file("/proj/.bolt/packages/geo/lib.bolt", "pub(package) fn helper() {}\npub fn area() {}\nfn secret() {}\n");
+    let inside = db.file("/proj/.bolt/packages/geo/shapes.bolt", "import \"./lib\" (helper, area);\n");
+    let glob_inside = db.file("/proj/.bolt/packages/geo/all.bolt", "import \"geo\" *;\n");
+    let outside = db.file("/proj/main.bolt", "import \"geo\" (helper, area, secret);\n");
+    let glob_outside = db.file("/proj/src/all.bolt", "import \"geo\" *;\n");
+    assert!(diagnostics(file_scope(&db, inside)).is_empty());
+    assert_eq!(names(&file_scope(&db, glob_inside).scope, Namespace::Values), ["area (imported)", "helper (imported)"]);
+    assert_eq!(diagnostics(file_scope(&db, outside)), ["package-only helper", "private secret"]);
+    assert_eq!(names(&file_scope(&db, glob_outside).scope, Namespace::Values), ["area (imported)"]);
+}
+
+#[test]
+fn files_are_in_the_innermost_package() {
+    let db = TestDb::new();
+    let geo = db.file("/proj/.bolt/packages/geo/lib.bolt", "");
+    let math = db.file("/proj/.bolt/packages/geo/.bolt/packages/math/lib.bolt", "");
+    let deep = db.file("/proj/.bolt/packages/geo/src/deep.bolt", "");
+    let a = db.file("/proj/a/x.bolt", "");
+    let b = db.file("/proj/b/y.bolt", "");
+    let dir = |p: &str| Some(SystemPathBuf::from(p));
+    assert_eq!(package_of(&db, geo), dir("/proj/.bolt/packages/geo"));
+    assert_eq!(package_of(&db, deep), dir("/proj/.bolt/packages/geo"));
+    assert_eq!(package_of(&db, math), dir("/proj/.bolt/packages/geo/.bolt/packages/math"));
+    // The files of the project are one package, wherever they are.
+    assert_eq!(package_of(&db, a), None);
+    assert!(is_visible_from(&db, RawVisibility::Package, a, b));
+    assert!(!is_visible_from(&db, RawVisibility::Package, geo, a));
+    assert!(!is_visible_from(&db, RawVisibility::Package, math, geo));
+    assert!(!is_visible_from(&db, RawVisibility::Private, a, b));
+    assert!(is_visible_from(&db, RawVisibility::Private, a, a));
 }
