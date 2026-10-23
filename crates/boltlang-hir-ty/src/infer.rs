@@ -699,7 +699,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let count = args.len() + receiver.is_some() as usize;
         let (params, ret) = match self.solver.unifier.shallow_resolve(callee_ty) {
             Ty::Fn(params, ret) => (params, *ret),
-            Ty::Var(_) => {
+            // A number literal's type isn't known yet, but it's no function.
+            Ty::Var(v) if self.solver.unifier.var_kind(v) == Some(VarKind::General) => {
                 let params: Box<[Ty<'db>]> = (0..count).map(|_| self.new_var()).collect();
                 let ret = self.new_var();
                 let fn_ty = Ty::Fn(params.clone(), Box::new(ret.clone()));
