@@ -114,31 +114,95 @@ impl<'db> Ty<'db> {
         found
     }
 
-    /// A value that shows this type as Bolt code.
+    /// A value that shows this type as Bolt code. Types still being
+    /// inferred are shown as `?0`, `?1`, ...; see [`Ty::display_with`] for
+    /// readable names.
     pub fn display(&self, db: &'db dyn Db) -> DisplayTy<'_, 'db> {
-        DisplayTy { ty: self, db }
+        DisplayTy { ty: self, db, names: None }
     }
+
+    /// Like [`Ty::display`], with the names `names` gives unknown types.
+    pub fn display_with<'a>(&'a self, db: &'db dyn Db, names: &'a TyNames) -> DisplayTy<'a, 'db> {
+        DisplayTy { ty: self, db, names: Some(names) }
+    }
+}
+
+/// A type the user can't see the name of: one still being inferred, or a
+/// type variable of an inferred function.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Unknown {
+    Var(TyVar),
+    Bound(u32),
+}
+
+/// Names for the unknown types of a message, so that they read like type
+/// parameters: `a`, `b`, ... in the order they first appear. Names that the
+/// type parameters in the message already have are skipped.
+#[derive(Debug, Default)]
+pub struct TyNames {
+    names: Vec<(Unknown, String)>,
+}
+
+impl TyNames {
+    /// Names for the unknown types in `tys`, which are shown in this order.
+    pub fn new<'db>(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Self {
+        let mut taken = Vec::new();
+        let mut unknowns = Vec::new();
+        for ty in tys {
+            ty.any(&mut |t| {
+                match t {
+                    Ty::Param(p) => taken.push(param_name(db, *p).to_string()),
+                    Ty::Var(v) => unknowns.push(Unknown::Var(*v)),
+                    Ty::Bound(i) => unknowns.push(Unknown::Bound(*i)),
+                    _ => {}
+                }
+                false
+            });
+        }
+        let mut out = TyNames::default();
+        let mut candidates = (0..).map(bound_name).filter(|n| !taken.contains(n));
+        for unknown in unknowns {
+            if !out.names.iter().any(|(u, _)| *u == unknown) {
+                out.names.push((unknown, candidates.next().unwrap()));
+            }
+        }
+        out
+    }
+
+    fn get(&self, unknown: Unknown) -> Option<&str> {
+        self.names.iter().find(|(u, _)| *u == unknown).map(|(_, n)| n.as_str())
+    }
+}
+
+fn param_name<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> &'db boltlang_hir_def::Name {
+    &param.def.generic_params(db).type_params[param.index as usize].name
 }
 
 pub struct DisplayTy<'a, 'db> {
     ty: &'a Ty<'db>,
     db: &'db dyn Db,
+    names: Option<&'a TyNames>,
 }
 
 impl fmt::Display for DisplayTy<'_, '_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let db = self.db;
+        let show = |ty| DisplayTy { ty, db, names: self.names };
         let list = |f: &mut fmt::Formatter<'_>, tys: &[Ty<'_>]| {
             for (i, ty) in tys.iter().enumerate() {
                 if i > 0 {
                     f.write_str(", ")?;
                 }
-                write!(f, "{}", ty.display(db))?;
+                write!(f, "{}", DisplayTy { ty, db, names: self.names })?;
             }
             Ok(())
         };
+        let named = |unknown| self.names.and_then(|n| n.get(unknown));
         match self.ty {
-            Ty::Var(var) => write!(f, "?{}", var.0),
+            Ty::Var(var) => match named(Unknown::Var(*var)) {
+                Some(name) => f.write_str(name),
+                None => write!(f, "?{}", var.0),
+            },
             Ty::Adt(id, args) => {
                 let name = match id {
                     AdtId::Struct(id) => id.item(db).name.as_ref(),
@@ -161,17 +225,17 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 }
                 f.write_str(")")
             }
-            Ty::Array(elem) => write!(f, "[{}]", elem.display(db)),
+            Ty::Array(elem) => write!(f, "[{}]", show(elem)),
             Ty::Fn(params, ret) => {
                 f.write_str("fn(")?;
                 list(f, params)?;
-                write!(f, ") -> {}", ret.display(db))
+                write!(f, ") -> {}", show(ret))
             }
-            Ty::Param(param) => {
-                let name = &param.def.generic_params(db).type_params[param.index as usize].name;
-                write!(f, "{name}")
-            }
-            Ty::Bound(index) => write!(f, "{}", bound_name(*index)),
+            Ty::Param(param) => write!(f, "{}", param_name(db, *param)),
+            Ty::Bound(index) => match named(Unknown::Bound(*index)) {
+                Some(name) => f.write_str(name),
+                None => write!(f, "{}", bound_name(*index)),
+            },
             Ty::Never => f.write_str("!"),
             Ty::Error => f.write_str("{error}"),
         }

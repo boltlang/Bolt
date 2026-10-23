@@ -16,7 +16,7 @@ use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind};
-use boltlang_hir_ty::lower::ClassConstraint;
+use boltlang_hir_ty::{Ty, TyNames, lower::ClassConstraint};
 use boltlang_syntax::rowan::{TextRange, TextSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -111,11 +111,12 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
     boltlang_hir::file_diagnostics(db, file)
         .into_iter()
         .map(|d| {
+            let names = TyNames::new(db, &types_in(&d.kind));
             let labels = match &d.kind {
-                DiagnosticKind::TypeMismatch { because: Some(because), .. } => vec![because_label(db, because)],
+                DiagnosticKind::TypeMismatch { because: Some(because), .. } => vec![because_label(db, &names, because)],
                 _ => Vec::new(),
             };
-            let (code, message) = describe(db, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
+            let (code, message) = describe(db, &names, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
             Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message, labels }
         })
         .collect()
@@ -140,8 +141,28 @@ pub fn syntax_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
         .collect()
 }
 
+/// The types in a diagnostic, in the order they're shown: in the message,
+/// then in the labels.
+fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
+    match kind {
+        DiagnosticKind::TypeMismatch { expected, actual, because } => {
+            let mut tys = vec![expected, actual];
+            if let Some(Because { kind: BecauseKind::SameAs { ty }, .. }) = because {
+                tys.push(ty);
+            }
+            tys
+        }
+        DiagnosticKind::InfiniteType { ty } | DiagnosticKind::NotAFunction { ty } => vec![ty],
+        DiagnosticKind::NoInstance { constraint } | DiagnosticKind::AmbiguousConstraint { constraint } => {
+            constraint.args.iter().collect()
+        }
+        _ => Vec::new(),
+    }
+}
+
 /// The code and message of a diagnostic about `source`, the text it's at.
-fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticCode, String) {
+/// `names` names the unknown types in it.
+fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticCode, String) {
     use DiagnosticCode as C;
     use DiagnosticKind as K;
     match kind {
@@ -167,22 +188,22 @@ fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticC
 
         K::TypeMismatch { expected, actual, .. } => (
             C::TYPE_MISMATCH,
-            format!("expected `{}`, found `{}`", expected.display(db), actual.display(db)),
+            format!("expected `{}`, found `{}`", expected.display_with(db, names), actual.display_with(db, names)),
         ),
         K::InfiniteType { ty } => {
-            (C::INFINITE_TYPE, format!("this would need the infinite type `{}`", ty.display(db)))
+            (C::INFINITE_TYPE, format!("this would need the infinite type `{}`", ty.display_with(db, names)))
         }
         K::NoInstance { constraint } => {
-            (C::NO_INSTANCE, format!("there is no instance `{}`", constraint_display(db, &constraint)))
+            (C::NO_INSTANCE, format!("there is no instance `{}`", constraint_display(db, names, &constraint)))
         }
         K::AmbiguousConstraint { constraint } => (
             C::AMBIGUOUS_CONSTRAINT,
             format!(
                 "cannot tell which instance of `{}` to use; add a type annotation",
-                constraint_display(db, &constraint)
+                constraint_display(db, names, &constraint)
             ),
         ),
-        K::NotAFunction { ty } => (C::NOT_A_FUNCTION, format!("expected a function, found `{}`", ty.display(db))),
+        K::NotAFunction { ty } => (C::NOT_A_FUNCTION, format!("expected a function, found `{}`", ty.display_with(db, names))),
         K::WrongArgCount { expected, found } => (
             C::WRONG_ARG_COUNT,
             format!("expected {}, found {found}", count(expected, "argument", "arguments")),
@@ -219,7 +240,7 @@ fn describe(db: &dyn Db, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticC
     }
 }
 
-fn because_label(db: &dyn Db, because: &Because<'_>) -> Label {
+fn because_label(db: &dyn Db, names: &TyNames, because: &Because<'_>) -> Label {
     let message = match &because.kind {
         BecauseKind::Annotation => "expected because of this annotation".to_string(),
         BecauseKind::ReturnType => "expected because of the return type".to_string(),
@@ -227,7 +248,7 @@ fn because_label(db: &dyn Db, because: &Because<'_>) -> Label {
         BecauseKind::Parameter { function: Some(name) } => format!("expected because of this parameter of `{name}`"),
         BecauseKind::Parameter { function: None } => "expected because of this parameter".to_string(),
         BecauseKind::Field { name } => format!("expected because of the type of field `{name}`"),
-        BecauseKind::SameAs { ty } => format!("this has type `{}`", ty.display(db)),
+        BecauseKind::SameAs { ty } => format!("this has type `{}`", ty.display_with(db, names)),
         BecauseKind::ClassItem { class } => {
             let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
             format!("expected because of the declaration in class `{class}`")
@@ -263,9 +284,9 @@ fn item_list(items: &[(ClassItemKind, impl fmt::Display)]) -> String {
     }
 }
 
-fn constraint_display(db: &dyn Db, constraint: &ClassConstraint<'_>) -> String {
+fn constraint_display(db: &dyn Db, names: &TyNames, constraint: &ClassConstraint<'_>) -> String {
     let name = constraint.class.item(db).name.as_ref().map_or("?", |n| n.as_str());
-    let args: Vec<_> = constraint.args.iter().map(|t| t.display(db).to_string()).collect();
+    let args: Vec<_> = constraint.args.iter().map(|t| t.display_with(db, names).to_string()).collect();
     format!("{name}[{}]", args.join(", "))
 }
 

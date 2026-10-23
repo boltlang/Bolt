@@ -465,3 +465,29 @@ impl Default[bool] { const VALUE: i32 = 0; }
 "#,
     );
 }
+
+#[test]
+fn unknown_types_are_named_per_message() {
+    check(
+        r#"
+let f = |x| x;
+  f + 1;
+//^ label: this has type `fn(a) -> a`
+    //^ error: expected `fn(a) -> a`, found `i32`
+class Show[T] { fn show(x: T) -> str; }
+let s = show([]);
+      //^^^^ error: cannot tell which instance of `Show[[a]]` to use; add a type annotation
+"#,
+    );
+}
+
+#[test]
+fn unknown_types_skip_the_names_of_type_parameters() {
+    check(
+        r#"
+fn g[a](x: a) = x + (|y| y);
+              //^ label: this has type `a`
+                   //^^^^^ error: expected `a`, found `fn(b) -> b`
+"#,
+    );
+}
