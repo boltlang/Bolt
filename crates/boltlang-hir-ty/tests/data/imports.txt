@@ -29,3 +29,82 @@ pub fn g(x) = f(x);
 --------------------------------------------------------------------------------
 /a.bolt: error: cyclic inference between files
 /b.bolt: error: cyclic inference between files
+
+================================================================================
+Imported generic functions are instantiated at each use
+================================================================================
+//- /lib.bolt
+pub fn id(x) = x;
+//- /main.bolt
+import "./lib" (id);
+id(1);
+id("a");
+
+--------------------------------------------------------------------------------
+/lib.bolt: id: forall a. fn(a) -> a
+/main.bolt: id(1): i32
+/main.bolt: id("a"): str
+
+================================================================================
+Imported types and constructors
+================================================================================
+//- /shapes.bolt
+pub struct Point { x: i32, y: i32 }
+pub enum Shape { Circle(f64), Square(f64) }
+//- /main.bolt
+import "./shapes" (Point, Shape);
+let p = Point { x: 1, y: 2 };
+let s = Shape.Circle(1.0);
+p.x;
+
+--------------------------------------------------------------------------------
+/main.bolt: let p: Point
+/main.bolt: let s: Shape
+/main.bolt: p.x: i32
+
+================================================================================
+Imported classes and their impls
+================================================================================
+//- /show.bolt
+pub class Show[T] { fn show(x: T) -> str; }
+impl Show[i32] { fn show(x) = "int"; }
+//- /main.bolt
+import "./show" (Show, show);
+show(1);
+show(true);
+
+--------------------------------------------------------------------------------
+/main.bolt: show(1): str
+/main.bolt: show(true): str
+--------------------------------------------------------------------------------
+/main.bolt: error at `show`: no instance Show[bool]
+
+================================================================================
+Files imported with as
+================================================================================
+//- /math.bolt
+pub fn double(x: i32) -> i32 = x * 2;
+pub struct V { x: i32 }
+//- /main.bolt
+import "./math" as m;
+m.double(2);
+let v: m.V = m.V { x: 1 };
+
+--------------------------------------------------------------------------------
+/math.bolt: double: fn(i32) -> i32
+/main.bolt: m.double(2): i32
+/main.bolt: let v: V
+
+================================================================================
+Imported variants
+================================================================================
+//- /option.bolt
+pub enum Option[T] { Some(T), None }
+//- /main.bolt
+import "./option" (Option);
+import Option.*;
+fn get(o, d) = match o { Some(x) => x, None => d };
+get(Some(1), 2);
+--------------------------------------------------------------------------------
+/main.bolt: get: forall a. fn(Option[a], a) -> a
+/main.bolt: get(Some(1), 2): i32
