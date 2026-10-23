@@ -7,5 +7,10 @@ edition = "2024"
 boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
 boltlang-ide-diagnostics = { version = "0.1.0", path = "../boltlang-ide-diagnostics" }
 boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+# The version tower-lsp-server uses, so that the types are the same.
+ls-types = "0.0.2"
+
+# The binary runs the server over stdio, which the browser doesn't have.
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { version = "1.49.0", features = ["full"] }
 tower-lsp-server = "0.23.0"

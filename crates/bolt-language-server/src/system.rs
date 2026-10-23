@@ -1,5 +1,6 @@
-//! The files the server sees: those on disk, with the text of the documents
-//! open in the editor in their place, since that text isn't saved yet.
+//! The files the server sees: those of another system, like the disk, with
+//! the text of the documents open in the editor in their place, since that
+//! text isn't saved yet.
 
 use std::{
     collections::HashMap,
@@ -10,9 +11,7 @@ use std::{
     },
 };
 
-use boltlang_base_db::{
-    FileRevision, FileType, Metadata, OsSystem, System, SystemPath, SystemPathBuf, SystemVirtualPath,
-};
+use boltlang_base_db::{FileRevision, FileType, Metadata, System, SystemPath, SystemPathBuf, SystemVirtualPath};
 
 /// The text of an open document, and a revision that changes with each
 /// edit, so that Salsa notices it.
@@ -23,14 +22,16 @@ struct Document {
 
 #[derive(Clone)]
 pub struct LspSystem {
-    disk: OsSystem,
+    /// Where the files that aren't open come from: the disk, or in the
+    /// browser, the files the page gives the server.
+    disk: Arc<dyn System>,
     open: Arc<RwLock<HashMap<SystemPathBuf, Document>>>,
     revisions: Arc<AtomicU64>,
 }
 
 impl LspSystem {
-    pub fn new(cwd: &SystemPath) -> Self {
-        LspSystem { disk: OsSystem::new(cwd), open: Arc::default(), revisions: Arc::new(AtomicU64::new(1)) }
+    pub fn new(disk: Arc<dyn System>) -> Self {
+        LspSystem { disk, open: Arc::default(), revisions: Arc::new(AtomicU64::new(1)) }
     }
 
     /// Use `text` for the file at `path`, instead of what's on disk.

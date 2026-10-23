@@ -93,6 +93,7 @@ dependencies = [
  "boltlang-base-db",
  "boltlang-ide-diagnostics",
  "boltlang-syntax",
+ "ls-types",
  "tokio",
  "tower-lsp-server",
 ]

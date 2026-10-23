@@ -1,9 +1,11 @@
 //! What the server knows about the files it works on, without the protocol
 //! around it: the documents open in the editor, and their diagnostics.
 
-use boltlang_base_db::{Db, File, FilePath, SystemPath, source_text};
+use std::sync::Arc;
+
+use boltlang_base_db::{Db, File, FilePath, System, SystemPath, source_text};
 use boltlang_ide_diagnostics::{Severity, diagnostics};
-use tower_lsp_server::ls_types::{self, DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Uri};
+use ls_types::{DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Uri};
 
 use crate::{
     db::LspDatabase,
@@ -16,8 +18,9 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    pub fn new(cwd: &SystemPath) -> Self {
-        Workspace { db: LspDatabase::new(cwd), encoding: Encoding::Utf16 }
+    /// A workspace whose files that aren't open come from `disk`.
+    pub fn new(disk: Arc<dyn System>) -> Self {
+        Workspace { db: LspDatabase::new(disk), encoding: Encoding::Utf16 }
     }
 
     /// Use `text` for the document at `path`, when it's opened or edited.
@@ -32,7 +35,12 @@ impl Workspace {
         self.sync(path);
     }
 
-    /// Let Salsa know that the file at `path` changed.
+    /// Let Salsa know that the file at `path` changed, like a file that
+    /// isn't open and was written to the disk.
+    pub fn file_changed(&mut self, path: &SystemPath) {
+        self.sync(path);
+    }
+
     fn sync(&mut self, path: &SystemPath) {
         let file = self.db.files().resolve(&self.db, path);
         file.sync(&mut self.db);
@@ -88,11 +96,17 @@ fn uri_of(db: &dyn Db, file: File) -> Option<Uri> {
 
 #[cfg(test)]
 mod tests {
+    use boltlang_base_db::{InMemorySystem, WritableSystem};
+
     use super::*;
 
-    // Paths that don't exist on disk, so that only the open documents count.
-    const MAIN: &str = "/nonexistent/bolt-language-server-test/main.bolt";
-    const LIB: &str = "/nonexistent/bolt-language-server-test/lib.bolt";
+    const MAIN: &str = "/project/main.bolt";
+    const LIB: &str = "/project/lib.bolt";
+
+    fn workspace() -> (Workspace, InMemorySystem) {
+        let disk = InMemorySystem::new();
+        (Workspace::new(Arc::new(disk.clone())), disk)
+    }
 
     fn messages(workspace: &Workspace, path: &str) -> Vec<String> {
         workspace.diagnostics(SystemPath::new(path)).into_iter().map(|d| d.message).collect()
@@ -100,7 +114,7 @@ mod tests {
 
     #[test]
     fn diagnostics_follow_edits() {
-        let mut workspace = Workspace::new(SystemPath::new("/"));
+        let (mut workspace, _) = workspace();
         workspace.set_text(SystemPath::new(MAIN), "let x: i32 = true;\n".into());
         assert_eq!(messages(&workspace, MAIN), ["expected `i32`, found `bool`"]);
         workspace.set_text(SystemPath::new(MAIN), "let x: i32 = 1;\n".into());
@@ -112,7 +126,7 @@ mod tests {
 
     #[test]
     fn open_documents_can_import_each_other() {
-        let mut workspace = Workspace::new(SystemPath::new("/"));
+        let (mut workspace, _) = workspace();
         workspace.set_text(SystemPath::new(MAIN), "import \"./lib\" (negate);\nnegate(1);\n".into());
         assert_eq!(messages(&workspace, MAIN), ["cannot find the file `./lib`", "cannot find `negate`"]);
         workspace.set_text(SystemPath::new(LIB), "pub fn negate(x) = !x;\n".into());
@@ -123,5 +137,17 @@ mod tests {
         assert!(related[0].location.uri.as_str().ends_with("lib.bolt"));
         assert_eq!(related[0].message, "expected because of this parameter of `negate`");
         assert_eq!(related[0].location.range.start, ls_types::Position { line: 0, character: 14 });
+    }
+
+    #[test]
+    fn files_that_aren_t_open_come_from_the_disk() {
+        let (mut workspace, disk) = workspace();
+        disk.write_file_bytes(SystemPath::new(LIB), b"pub fn negate(x: bool) -> bool = !x;\n").unwrap();
+        workspace.set_text(SystemPath::new(MAIN), "import \"./lib\" (negate);\nnegate(1);\n".into());
+        assert_eq!(messages(&workspace, MAIN), ["expected `bool`, found an integer"]);
+        // A change on the disk is seen once it's reported.
+        disk.write_file_bytes(SystemPath::new(LIB), b"pub fn negate(x: i32) -> i32 = -x;\n").unwrap();
+        workspace.file_changed(SystemPath::new(LIB));
+        assert!(messages(&workspace, MAIN).is_empty());
     }
 }

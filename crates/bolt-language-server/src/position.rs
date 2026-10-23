@@ -3,7 +3,7 @@
 //! client.
 
 use boltlang_syntax::rowan::TextRange;
-use tower_lsp_server::ls_types::{Position, PositionEncodingKind, Range};
+use ls_types::{Position, PositionEncodingKind, Range};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Encoding {

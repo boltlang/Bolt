@@ -1,4 +1,6 @@
-use boltlang_base_db::{Db, Files, System, SystemPath, salsa};
+use std::sync::Arc;
+
+use boltlang_base_db::{Db, Files, System, salsa};
 
 use crate::system::LspSystem;
 
@@ -11,8 +13,8 @@ pub struct LspDatabase {
 }
 
 impl LspDatabase {
-    pub fn new(cwd: &SystemPath) -> Self {
-        Self { storage: salsa::Storage::new(None), files: Files::new(), system: LspSystem::new(cwd) }
+    pub fn new(disk: Arc<dyn System>) -> Self {
+        Self { storage: salsa::Storage::new(None), files: Files::new(), system: LspSystem::new(disk) }
     }
 }
 
