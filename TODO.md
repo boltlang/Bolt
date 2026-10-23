@@ -132,6 +132,10 @@ other errors.
 
 ### Gaps
 
+- [ ] Matches and `let` patterns aren't checked for missing cases:
+      `match s { Shape.Circle(r) => r }` is accepted when `Shape` has more
+      variants, and so is `match x {}` on an `i32`. Unreachable arms aren't
+      reported either. *(hir-ty, hir, ide-diagnostics)*
 - [ ] `for` only loops over arrays, until there's an iterator class.
       *(hir-ty)*
 - [ ] Array lengths aren't checked: `[T; 3]` is the same type as `[T]`.
@@ -162,6 +166,16 @@ other errors.
 - [ ] A label for the arguments of tuple-variant constructors, like `true` in
       `Opt.Some(true)`. The callee isn't a function, so the argument gets
       `Reason::None`. *(hir-ty, hir)*
+- [ ] `fn g(c: bool) -> i32 = if c { 1 };` gives two errors: the branch
+      isn't `()`, and the `if` isn't an `i32`. One error that says the `if`
+      has no `else` would be clearer, as in Rust. *(hir-ty, hir,
+      ide-diagnostics)*
+- [ ] A literal that doesn't fit an annotation is reported as a whole: for
+      `let p: Pair[bool, i32] = Pair { first: 1, second: true };`, the error
+      is "expected `Pair[bool, i32]`, found `Pair[i32, bool]`" at the whole
+      literal. Passing the expected type down to the fields would report
+      `1` and `true` instead, as arrays already do for their elements.
+      *(hir-ty)*
 - [ ] Leave out type errors inside the range of a syntax error, which are
       usually caused by it. *(hir)*
 - [ ] When the file of an import can't be found, the names it imports are
