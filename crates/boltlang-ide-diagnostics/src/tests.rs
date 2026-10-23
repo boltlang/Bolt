@@ -306,6 +306,22 @@ fn imported_variant_in_a_pattern_matches_the_variant() {
 }
 
 #[test]
+fn unknown_fields_are_reported_at_their_name() {
+    check(
+        r#"
+  struct Point { x: i32, y: i32 }
+  let z = 3;
+  Point { x: 1, y: 2, w: 3 };
+                    //^ error: there is no field `w`
+  Point { x: 1, y: 2, z };
+                    //^ error: there is no field `z`
+  fn f(p: Point) = match p { Point { x, v, .. } => x };
+                                      //^ error: there is no field `v`
+"#,
+    );
+}
+
+#[test]
 fn cyclic_inference() {
     let a = r#"
 import "./b" (g);

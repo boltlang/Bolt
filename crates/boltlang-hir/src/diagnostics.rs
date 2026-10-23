@@ -35,7 +35,10 @@ use boltlang_hir_ty::{
     solve::{ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
-    SyntaxKind::{self, FIELD_EXPR, NAME, NAME_REF, PATH, PATH_SEGMENT, PATH_TYPE, STRING},
+    SyntaxKind::{
+        self, FIELD_EXPR, FIELD_PATT, NAME, NAME_REF, PATH, PATH_SEGMENT, PATH_TYPE, RECORD_EXPR_FIELD, STRING,
+        STRUCT_PATT,
+    },
     SyntaxNode,
     rowan::{TextRange, TextSize},
 };
@@ -523,7 +526,8 @@ impl<'db> Collector<'db> {
                     (at(expr), DiagnosticKind::WrongArgCount { expected, found })
                 }
                 InferenceDiagnostic::NoSuchField { expr, name } => {
-                    (at(expr), DiagnosticKind::NoSuchField { ty: None, name })
+                    let range = self.field_name_range(map, expr, &name).or_else(|| at(expr));
+                    (range, DiagnosticKind::NoSuchField { ty: None, name })
                 }
                 InferenceDiagnostic::MissingFields { expr, names } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::MissingFields { names })
@@ -623,6 +627,30 @@ impl<'db> Collector<'db> {
         let node = import.to_node(&self.root)?;
         let path = node.children().find(|n| n.kind() == PATH);
         Some(path.unwrap_or(node).text_range())
+    }
+
+    /// The name of the field `name` of a record: the `z` of `Point { z: 1 }`,
+    /// for its value `1`, or of the pattern `Point { z, .. }`.
+    fn field_name_range(&self, map: &ExpressionStoreSourceMap, node: ExprOrPat, name: &Name) -> Option<TextRange> {
+        let ptr = match node {
+            ExprOrPat::Expr(e) => map.expr_syntax(e),
+            ExprOrPat::Pat(p) => map.pat_syntax(p),
+        }?;
+        let node = ptr.to_node(&self.root)?;
+        let name_in = |field: &SyntaxNode| {
+            field.children().find(|n| matches!(n.kind(), NAME | NAME_REF)).map(|n| n.text_range())
+        };
+        if node.kind() == STRUCT_PATT {
+            let field = node.children().filter(|n| n.kind() == FIELD_PATT).find(|field| {
+                field.children().any(|n| matches!(n.kind(), NAME | NAME_REF) && n.text() == name.as_str())
+            })?;
+            return name_in(&field);
+        }
+        let field = if node.kind() == RECORD_EXPR_FIELD { node } else { node.parent()? };
+        if field.kind() != RECORD_EXPR_FIELD {
+            return None;
+        }
+        name_in(&field)
     }
 
     /// The name of an item, or the whole item if it has none.
