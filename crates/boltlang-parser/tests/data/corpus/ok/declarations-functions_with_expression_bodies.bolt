@@ -1,6 +1,6 @@
 fn id(x) = x;
 pub fn add(a, b: i32) -> i32 = a + b;
-fn (+) (a, b) = add(a, b);
+fn a + b = add(a, b);
 fn pick[T](c, a: T, b: T) -> T = if c { a } else { b };
 fn scale(x, by = 2) = x * by;
 class Show[T] {

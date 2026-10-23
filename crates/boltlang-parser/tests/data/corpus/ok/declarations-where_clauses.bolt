@@ -13,7 +13,7 @@ impl[T] A[B[T]]
 {
 }
 
-impl[E] Read
+impl[E] Read[E]
 where E: Read,
 {
 }

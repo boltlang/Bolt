@@ -1,4 +1,4 @@
-impl Person {
+impl Walk[Person] {
   const leg_count : u32 = 2;
 
   fn walk(self) {}

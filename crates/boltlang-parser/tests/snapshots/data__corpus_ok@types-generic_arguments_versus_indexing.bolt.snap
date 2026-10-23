@@ -190,18 +190,27 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/types-generic_arguments_
           - IDENT "T"
       - R_BRACKET "]"
     - WHITESPACE " "
-    - ARRAY_TYPE
-      - L_BRACKET "["
-      - PATH_TYPE
-        - PATH
-          - PATH_SEGMENT
-            - NAME_REF
-              - IDENT "T"
-      - SEMI ";"
-      - WHITESPACE " "
-      - LIT_EXPR
-        - INT_NUMBER "3"
-      - R_BRACKET "]"
+    - PATH_TYPE
+      - PATH
+        - PATH_SEGMENT
+          - NAME_REF
+            - IDENT "Show"
+          - GENERIC_ARG_LIST
+            - L_BRACKET "["
+            - TYPE_ARG
+              - ARRAY_TYPE
+                - L_BRACKET "["
+                - PATH_TYPE
+                  - PATH
+                    - PATH_SEGMENT
+                      - NAME_REF
+                        - IDENT "T"
+                - SEMI ";"
+                - WHITESPACE " "
+                - LIT_EXPR
+                  - INT_NUMBER "3"
+                - R_BRACKET "]"
+            - R_BRACKET "]"
     - WHITESPACE " "
     - ITEM_LIST
       - L_BRACE "{"

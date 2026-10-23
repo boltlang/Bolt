@@ -1,4 +1,4 @@
-impl MacosOnly {
+impl Show[MacosOnly] {
   #![cfg(target_os = "macos")]
 }
 

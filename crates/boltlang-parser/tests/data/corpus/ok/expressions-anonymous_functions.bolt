@@ -5,4 +5,4 @@ let curried = fn (x) = fn (y) = x + y;
 let d = fn (x = 1) = x;
 fn (x) = x;
 fn (-1) = 0;
-fn (-) (a, b) = sub(a, b);
+fn -x = neg(x);

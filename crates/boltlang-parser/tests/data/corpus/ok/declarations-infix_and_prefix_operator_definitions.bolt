@@ -1,0 +1,10 @@
+fn a + b = add(a, b);
+fn (a: Vec2) + (b: Vec2) -> Vec2 { a }
+fn[T] (a: T) * (b: T) -> T where Num[T] = mul(a, b);
+pub fn a == b = eq(a, b);
+fn -x = neg(x);
+fn !(f: Flag) -> Flag { flip(f) }
+class Num[T] {
+    fn (a: T) - (b: T) -> T;
+    fn -(x: T) -> T;
+}

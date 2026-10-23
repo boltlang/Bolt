@@ -1,6 +1,6 @@
 fn id(x) { x }
 fn add(a, b: i32, mut c, (d, e)) {}
-fn (+) (a, b) { a }
+fn a + b { a }
 class C[T] {
     fn f(self, x);
 }

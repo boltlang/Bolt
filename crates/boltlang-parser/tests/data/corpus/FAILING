@@ -2,20 +2,23 @@
 # ignored; run `cargo test --test data -- --ignored corpus` to check them.
 # Remove a line once that case parses.
 
-# These use `self` parameters or impls of types, which were removed. Drop
-# them after updating grammar.js and re-importing the corpus.
+# These use `self` parameters, which the parser no longer accepts. Drop
+# them after removing `self` from grammar.js and re-importing the corpus.
+ok/declarations-class_instances.bolt
+ok/declarations-class_instances_with_items.bolt
 ok/declarations-function_declarations.bolt
 ok/declarations-functions_with_custom_types_for_self.bolt
 ok/declarations-functions_with_default_parameter_values.bolt
 ok/declarations-functions_with_expression_bodies.bolt
 ok/declarations-functions_with_untyped_parameters.bolt
 ok/declarations-generic_functions.bolt
-ok/declarations-inherent_impls.bolt
 ok/declarations-inner_attributes.bolt
 ok/declarations-macro_invocations_inside_trait_declarations.bolt
-ok/declarations-operator_function_definitions.bolt
 ok/declarations-trait_declarations.bolt
 ok/declarations-trait_declarations_with_optional_type_parameters.bolt
-ok/declarations-trait_impls.bolt
 ok/declarations-where_clauses.bolt
-ok/types-generic_arguments_versus_indexing.bolt
+
+# These define operators like `fn a + b`, which the parser doesn't support
+# yet.
+ok/declarations-infix_and_prefix_operator_definitions.bolt
+ok/expressions-anonymous_functions.bolt
