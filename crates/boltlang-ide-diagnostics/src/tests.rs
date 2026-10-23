@@ -179,7 +179,7 @@ struct Point { x: i32, y: i32 }
 let p = Point { x: 1 };
       //^^^^^^^^^^^^^^ error: missing field `y`
   p.z;
-//^^^ error: there is no field `z`
+  //^ error: `Point` has no field `z`
 "#,
     );
 }
@@ -534,4 +534,19 @@ let h: i32 = G.helper();
 "#,
         ),
     ]);
+}
+
+#[test]
+fn fields_of_values_of_unknown_types() {
+    check(
+        r#"
+struct Point { x: i32 }
+struct Size { x: u8 }
+fn get_x(p) = p.x;
+let a: i32 = get_x(Point { x: 1 });
+let b: u8 = get_x(Size { x: 2u8 });
+let c = get_x(true);
+      //^^^^^ error: `bool` has no field `x`
+"#,
+    );
 }

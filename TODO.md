@@ -31,6 +31,14 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 - [ ] `pub import` doesn't re-export: an import only sees the items defined
       in the file it imports from, not what that file imports. *(hir-def)*
 
+- [ ] Anonymous records like `{ x: 1, y: 2 }`, as structural types that
+      have fields like structs do, so that field constraints work on them
+      too. Row polymorphism is only needed for typing record extension and
+      update, like `{ r | z: 3 }`, on any record. *(parser, hir-def, hir-ty)*
+- [ ] Decide how field constraints are compiled: the offset of the field as
+      a hidden argument, like a class dictionary, or one copy of the
+      function per type. *(hir-ty, codegen)*
+
 ## Grammar and parser
 
 The parser covers the whole grammar: the cases of the tree-sitter corpus
@@ -127,8 +135,10 @@ other errors.
 - [ ] "Did you mean `foo`?" for unresolved names, types and imported names,
       from the names in scope by edit distance. *(hir-def, hir,
       ide-diagnostics)*
-- [ ] Labels for "no instance", "ambiguous" and "infinite type" errors,
-      pointing at the call or annotation that introduced the constraint.
+- [ ] Labels for "no instance", "ambiguous", "infinite type" and "no
+      field" errors, pointing at the call or annotation that introduced the
+      constraint. For `get_x(true)`, where `fn get_x(p) = p.x`, the label
+      would point at the `p.x`.
       Class constraints from instantiating a scheme only have
       `Reason::None` now. *(hir-ty, hir, ide-diagnostics)*
 - [ ] A label for the arguments of tuple-variant constructors, like `true` in

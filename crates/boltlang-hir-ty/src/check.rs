@@ -19,7 +19,7 @@ use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
     lower::{ClassConstraint, const_ty, fn_sig},
     scheme::{Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, is_declared},
-    solve::{Origin, Solver, TypeError, vars_in},
+    solve::{FieldConstraint, Origin, Solver, TypeError, vars_in},
     ty::{GenericParamId, Ty, TyVar, VarKind},
 };
 
@@ -166,10 +166,11 @@ fn infer_group<'db>(
     }
 
     // Integer variables don't become type parameters; they default first.
-    solver.solve_classes();
+    solver.solve();
     solver.unifier.default_numeric_vars();
-    solver.solve_classes();
+    solver.solve();
     let pending = solver.take_pending();
+    let pending_fields = solver.take_pending_fields();
     let mut errors = std::mem::take(&mut solver.errors);
 
     for (&f, (def, mut result)) in group.iter().zip(results) {
@@ -182,6 +183,38 @@ fn infer_group<'db>(
                 _ => None,
             })
         };
+        // The fields of values of the function's type become part of it,
+        // and the types of those fields with them. That can make more
+        // constraints about the function's type, like `b.y: c` after
+        // `a.x: b` for `p.x.y`, so this goes on until nothing changes.
+        let mut own_fields: Vec<_> = pending_fields.iter().filter(|(_, origin)| origin.body == def).collect();
+        let mut fields: Vec<FieldConstraint<'db>> = Vec::new();
+        let mut accepted = Vec::new();
+        loop {
+            let before = accepted.len();
+            own_fields.retain(|(constraint, _)| {
+                let mut ty_vars = Vec::new();
+                vars_in(&constraint.ty, &mut ty_vars);
+                if ty_vars.is_empty() || !ty_vars.iter().all(|v| vars.contains(v)) {
+                    return true;
+                }
+                vars_in(&constraint.field, &mut vars);
+                accepted.push(constraint.clone());
+                false
+            });
+            if accepted.len() == before {
+                break;
+            }
+        }
+        for constraint in &accepted {
+            let field = constraint.map(|t| generalize(t, &vars));
+            if !fields.contains(&field) {
+                fields.push(field);
+            }
+        }
+        for (_, origin) in own_fields {
+            errors.push(TypeError::TypeNeeded { origin: *origin });
+        }
         // The constraints on this function's type become part of it.
         let mut predicates: Vec<ClassConstraint<'db>> = assumptions(db, f);
         for (constraint, origin) in &pending {
@@ -204,8 +237,13 @@ fn infer_group<'db>(
             let count = def.generic_params(db).type_params.len();
             params.extend((0..count).map(|index| GenericParamId { def, index: index as u32 }));
         }
-        let scheme =
-            Scheme { params: params.into(), bound: vars.len() as u32, predicates: predicates.into(), ty: generalize(&ty, &vars) };
+        let scheme = Scheme {
+            params: params.into(),
+            bound: vars.len() as u32,
+            predicates: predicates.into(),
+            fields: fields.into(),
+            ty: generalize(&ty, &vars),
+        };
 
         result.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
         let own_errors = errors.iter().filter(|e| error_origin(e).body == def).cloned();
@@ -225,7 +263,9 @@ fn error_origin<'a, 'db>(error: &'a TypeError<'db>) -> &'a Origin<'db> {
         TypeError::Mismatch { origin, .. }
         | TypeError::InfiniteType { origin, .. }
         | TypeError::NoInstance { origin, .. }
-        | TypeError::Ambiguous { origin, .. } => origin,
+        | TypeError::Ambiguous { origin, .. }
+        | TypeError::NoSuchField { origin, .. }
+        | TypeError::TypeNeeded { origin } => origin,
     }
 }
 

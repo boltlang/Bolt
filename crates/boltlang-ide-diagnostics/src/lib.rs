@@ -152,7 +152,9 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
             }
             tys
         }
-        DiagnosticKind::InfiniteType { ty } | DiagnosticKind::NotAFunction { ty } => vec![ty],
+        DiagnosticKind::InfiniteType { ty }
+        | DiagnosticKind::NotAFunction { ty }
+        | DiagnosticKind::NoSuchField { ty: Some(ty), .. } => vec![ty],
         DiagnosticKind::NoInstance { constraint } | DiagnosticKind::AmbiguousConstraint { constraint } => {
             constraint.args.iter().collect()
         }
@@ -223,7 +225,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             C::WRONG_TYPE_ARG_COUNT,
             format!("expected {}, found {found}", count(expected, "type argument", "type arguments")),
         ),
-        K::NoSuchField { name } => (C::NO_SUCH_FIELD, format!("there is no field `{name}`")),
+        K::NoSuchField { ty: Some(ty), name } => {
+            (C::NO_SUCH_FIELD, format!("`{}` has no field `{name}`", ty.display_with(db, names)))
+        }
+        K::NoSuchField { ty: None, name } => (C::NO_SUCH_FIELD, format!("there is no field `{name}`")),
         K::MissingFields { names } => {
             let list = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
             let noun = if names.len() == 1 { "field" } else { "fields" };

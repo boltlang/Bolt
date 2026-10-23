@@ -84,7 +84,12 @@ fn check(source: &str) -> String {
                     format!("error at `{}`: expected {expected} arguments, found {found}", at(*expr))
                 }
                 InferenceDiagnostic::NoSuchField { expr, name } => format!("error at `{}`: no field {name}", at(*expr)),
-                InferenceDiagnostic::TypeNeeded { expr } => format!("error at `{}`: type needed", at(ExprOrPat::Expr(*expr))),
+                InferenceDiagnostic::Type(TypeError::TypeNeeded { origin }) => {
+                    format!("error at `{}`: type needed", at(origin.node))
+                }
+                InferenceDiagnostic::Type(TypeError::NoSuchField { origin, ty, name }) => {
+                    format!("error at `{}`: {} has no field {name}", at(origin.node), ty.display(&db))
+                }
                 InferenceDiagnostic::MissingFields { expr, names } => format!(
                     "error at `{}`: missing {}",
                     at(ExprOrPat::Expr(*expr)),
@@ -185,13 +190,50 @@ fn data_types_and_patterns() {
              p.z;\n"
         ),
         "get: forall a. fn(Option[a], a) -> a\n\
-         norm: fn(Point) -> i32\n\
+         norm: forall a b. a.x: b => fn(a) -> b\n\
          let p: Point\n\
          let Point { x, .. }: Point\n\
          get(Option.Some(p), Point { x: 0 }): Point\n\
          p.z: {error}\n\
          error at `Point { x: 0 }`: missing y\n\
-         error at `p.z`: no field z"
+         error at `p.z`: Point has no field z"
+    );
+}
+
+#[test]
+fn fields_of_unknown_types_become_part_of_the_function_type() {
+    assert_eq!(
+        check(
+            "struct Point { x: i32, y: i32 }\n\
+             struct Size { x: u8 }\n\
+             struct Line { start: Point }\n\
+             fn get_x(p) = p.x;\n\
+             fn start_x(l) = l.start.x;\n\
+             get_x(Point { x: 1, y: 2 });\n\
+             get_x(Size { x: 3u8 });\n\
+             start_x(Line { start: Point { x: 1, y: 2 } });\n\
+             get_x((1, 2));\n\
+             let t = (true, 1);\n\
+             t.0;\n"
+        ),
+        "get_x: forall a b. a.x: b => fn(a) -> b\n\
+         start_x: forall a b c. a.start: c => c.x: b => fn(a) -> b\n\
+         get_x(Point { x: 1, y: 2 }): i32\n\
+         get_x(Size { x: 3u8 }): u8\n\
+         start_x(Line { start: Point { x: 1, y: 2 } }): i32\n\
+         get_x((1, 2)): {error}\n\
+         let t: (bool, i32)\n\
+         t.0: bool\n\
+         error at `get_x`: (i32, i32) has no field x"
+    );
+}
+
+#[test]
+fn fields_of_types_never_found_are_reported() {
+    assert_eq!(
+        check("fn f() { let g = |p| p.x; 1 }\n"),
+        "f: fn() -> i32\n\
+         error at `p.x`: type needed"
     );
 }
 

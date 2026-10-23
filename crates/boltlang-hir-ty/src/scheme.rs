@@ -1,5 +1,5 @@
 //! Type schemes: the types of functions, which can be generic, with the
-//! class constraints that must hold where they're used.
+//! class and field constraints that must hold where they're used.
 
 use std::collections::HashMap;
 
@@ -12,7 +12,7 @@ use boltlang_hir_def::{
 
 use crate::{
     lower::{ClassConstraint, fn_sig, generic_predicates, identity_args, impl_header, subst_params},
-    solve::{Constraint, Origin, Solver},
+    solve::{Constraint, FieldConstraint, Origin, Solver},
     ty::{GenericParamId, Ty, VarKind, bound_name},
 };
 
@@ -24,12 +24,15 @@ pub struct Scheme<'db> {
     /// [`Ty::Bound`] in `ty`.
     pub bound: u32,
     pub predicates: Box<[ClassConstraint<'db>]>,
+    /// The fields the types must have, for a function that uses fields of
+    /// values whose types it doesn't decide.
+    pub fields: Box<[FieldConstraint<'db>]>,
     pub ty: Ty<'db>,
 }
 
 impl<'db> Scheme<'db> {
     pub fn mono(ty: Ty<'db>) -> Self {
-        Scheme { params: Box::new([]), bound: 0, predicates: Box::new([]), ty }
+        Scheme { params: Box::new([]), bound: 0, predicates: Box::new([]), fields: Box::new([]), ty }
     }
 
     /// The type with fresh variables for the parameters, adding the
@@ -47,10 +50,14 @@ impl<'db> Scheme<'db> {
         for pred in self.predicates.iter() {
             solver.add(Constraint::Class { constraint: pred.map(&mut subst), origin });
         }
+        for field in self.fields.iter() {
+            solver.add(Constraint::Field { constraint: field.map(&mut subst), origin });
+        }
         subst(&self.ty)
     }
 
-    /// Show the scheme like `forall a. Show[a] => fn(a) -> a`.
+    /// Show the scheme like `forall a. Show[a] => fn(a) -> a`, with fields
+    /// like `a.x: i32 => `.
     pub fn display(&self, db: &'db dyn Db) -> String {
         let mut out = String::new();
         let mut names: Vec<String> = self.params.iter().map(|p| Ty::Param(*p).display(db).to_string()).collect();
@@ -62,6 +69,9 @@ impl<'db> Scheme<'db> {
             let args: Vec<_> = pred.args.iter().map(|t| t.display(db).to_string()).collect();
             let name = pred.class.item(db).name.as_ref().map_or("?", |n| n.as_str());
             out.push_str(&format!("{name}[{}] => ", args.join(", ")));
+        }
+        for field in self.fields.iter() {
+            out.push_str(&format!("{}.{}: {} => ", field.ty.display(db), field.name, field.field.display(db)));
         }
         out.push_str(&self.ty.display(db).to_string());
         out
@@ -153,6 +163,7 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         params: type_params.into(),
         bound: 0,
         predicates: assumptions(db, f).into(),
+        fields: Box::new([]),
         ty: Ty::Fn(params, Box::new(ret)),
     }
 }

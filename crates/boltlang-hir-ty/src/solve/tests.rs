@@ -72,9 +72,9 @@ fn waits_for_variables() {
     solver.add(Constraint::Class { constraint: class(s.show, var.clone()), origin: s.origin });
     solver.add(Constraint::Class { constraint: class(s.show, int), origin: s.origin });
     solver.add(Constraint::Class { constraint: class(s.show, unknown.clone()), origin: s.origin });
-    assert!(!solver.solve_classes());
+    assert!(!solver.solve());
     solver.equal(&var, &i32(), s.origin);
-    assert!(solver.solve_classes());
+    assert!(solver.solve());
     // The integer variable defaults to `i32`; the other stays unknown.
     solver.finish();
     assert!(matches!(&solver.errors[..], [TypeError::Ambiguous { .. }]));

@@ -85,6 +85,15 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// Make `ty` the error type if it's a variable, after reporting an error
+    /// about it, so that it doesn't cause more. [`Unifier::unify`] doesn't,
+    /// since the error type fits anywhere.
+    pub fn set_error(&mut self, ty: &Ty<'db>) {
+        if let Ty::Var(var) = self.shallow_resolve(ty) {
+            let _ = self.bind(var, &Ty::Error);
+        }
+    }
+
     pub fn unify(&mut self, a: &Ty<'db>, b: &Ty<'db>) -> Result<(), UnifyError<'db>> {
         let a = self.shallow_resolve(a);
         let b = self.shallow_resolve(b);

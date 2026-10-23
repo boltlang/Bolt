@@ -6,6 +6,7 @@ use std::collections::HashMap;
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
+    Name,
     body::DefWithBodyId,
     hir::{ExprId, PatId, TypeRefId},
     ids::FunctionId,
@@ -15,8 +16,8 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    lower::{ClassConstraint, VariantDef, generic_predicates, impl_header},
-    ty::{GenericParamId, Ty, TyVar, VarKind},
+    lower::{ClassConstraint, VariantDef, field_types, generic_predicates, impl_header, subst_params},
+    ty::{AdtId, GenericParamId, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
 
@@ -62,12 +63,31 @@ pub enum ExprOrPat {
     Pat(PatId),
 }
 
+/// That `ty` has a field `name` of type `field`, like `x` in `p.x`. It's
+/// solved once `ty` is known, and a function whose argument's type isn't
+/// known keeps it as part of its type, like `forall a. a.x: i32 => fn(a)
+/// -> i32`, so that it works on any struct with that field.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct FieldConstraint<'db> {
+    pub ty: Ty<'db>,
+    pub name: Name,
+    pub field: Ty<'db>,
+}
+
+impl<'db> FieldConstraint<'db> {
+    pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
+        FieldConstraint { ty: f(&self.ty), name: self.name.clone(), field: f(&self.field) }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Constraint<'db> {
     /// The type found must be the type expected.
     Equal { expected: Ty<'db>, actual: Ty<'db>, origin: Origin<'db> },
     /// The types must have an instance of the class.
     Class { constraint: ClassConstraint<'db>, origin: Origin<'db> },
+    /// The type must have the field.
+    Field { constraint: FieldConstraint<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -79,6 +99,10 @@ pub enum TypeError<'db> {
     NoInstance { origin: Origin<'db>, constraint: ClassConstraint<'db> },
     /// The types weren't known well enough to choose an instance.
     Ambiguous { origin: Origin<'db>, constraint: ClassConstraint<'db> },
+    /// The type has no field with this name.
+    NoSuchField { origin: Origin<'db>, ty: Ty<'db>, name: Name },
+    /// The type of a value whose field is used was never found.
+    TypeNeeded { origin: Origin<'db> },
 }
 
 pub struct Solver<'db> {
@@ -89,6 +113,7 @@ pub struct Solver<'db> {
     assumptions: Vec<ClassConstraint<'db>>,
     impls: &'db [boltlang_hir_def::ids::ImplId<'db>],
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
+    pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pub errors: Vec<TypeError<'db>>,
 }
 
@@ -101,6 +126,7 @@ impl<'db> Solver<'db> {
             assumptions: Vec::new(),
             impls: visible_impls(db, file),
             pending: Vec::new(),
+            pending_fields: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -141,19 +167,62 @@ impl<'db> Solver<'db> {
                 }
             }
             Constraint::Class { constraint, origin } => self.pending.push((constraint, origin)),
+            // Solved right away when possible, so that the field's type is
+            // known for what follows.
+            Constraint::Field { constraint, origin } => {
+                if !self.solve_field(&constraint, origin) {
+                    self.pending_fields.push((constraint, origin));
+                }
+            }
         }
+    }
+
+    /// Solve a field constraint if the type is known well enough. Returns
+    /// `false` if it has to wait.
+    fn solve_field(&mut self, constraint: &FieldConstraint<'db>, origin: Origin<'db>) -> bool {
+        let ty = self.unifier.shallow_resolve(&constraint.ty);
+        let field = match &ty {
+            Ty::Var(_) => return false,
+            // An error was already reported, or the value is never made.
+            Ty::Error | Ty::Never => {
+                self.unifier.set_error(&constraint.field);
+                return true;
+            }
+            Ty::Adt(AdtId::Struct(s), args) => {
+                let fields = field_types(self.db, VariantDef::Struct(*s));
+                fields.field(&constraint.name).map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), args))
+            }
+            Ty::Tuple(tys) => constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned()),
+            _ => None,
+        };
+        match field {
+            Some(declared) => self.equal(&declared, &constraint.field, origin),
+            None => {
+                let ty = self.unifier.resolve(&ty);
+                self.errors.push(TypeError::NoSuchField { origin, ty, name: constraint.name.clone() });
+                self.unifier.set_error(&constraint.field);
+            }
+        }
+        true
     }
 
     pub fn equal(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
         self.add(Constraint::Equal { expected: expected.clone(), actual: actual.clone(), origin });
     }
 
-    /// Solve the class constraints that can be solved now. Returns whether
-    /// any were.
-    pub fn solve_classes(&mut self) -> bool {
+    /// Solve the class and field constraints that can be solved now.
+    /// Returns whether any were.
+    pub fn solve(&mut self) -> bool {
         let mut progress_ever = false;
         loop {
             let mut progress = false;
+            for (constraint, origin) in std::mem::take(&mut self.pending_fields) {
+                if self.solve_field(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_fields.push((constraint, origin));
+                }
+            }
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
@@ -180,14 +249,25 @@ impl<'db> Solver<'db> {
             .collect()
     }
 
+    /// The field constraints that couldn't be solved yet, resolved.
+    pub fn take_pending_fields(&mut self) -> Vec<(FieldConstraint<'db>, Origin<'db>)> {
+        std::mem::take(&mut self.pending_fields)
+            .into_iter()
+            .map(|(c, origin)| (c.map(|t| self.unifier.resolve(t)), origin))
+            .collect()
+    }
+
     /// Finish solving: default numeric variables, solve what can be, and
     /// report the rest as ambiguous.
     pub fn finish(&mut self) {
-        self.solve_classes();
+        self.solve();
         self.unifier.default_numeric_vars();
-        self.solve_classes();
+        self.solve();
         for (constraint, origin) in self.take_pending() {
             self.errors.push(TypeError::Ambiguous { origin, constraint });
+        }
+        for (_, origin) in self.take_pending_fields() {
+            self.errors.push(TypeError::TypeNeeded { origin });
         }
         let errors = std::mem::take(&mut self.errors);
         self.errors = errors.into_iter().map(|e| self.resolve_error(e)).collect();
@@ -204,6 +284,8 @@ impl<'db> Solver<'db> {
                 TypeError::NoInstance { origin, constraint: constraint.map(r) }
             }
             TypeError::Ambiguous { origin, constraint } => TypeError::Ambiguous { origin, constraint: constraint.map(r) },
+            TypeError::NoSuchField { origin, ty, name } => TypeError::NoSuchField { origin, ty: r(&ty), name },
+            TypeError::TypeNeeded { origin } => TypeError::TypeNeeded { origin },
         }
     }
 

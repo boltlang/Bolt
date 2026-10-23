@@ -83,7 +83,9 @@ pub enum DiagnosticKind<'db> {
     NotAFunction { ty: Ty<'db> },
     WrongArgCount { expected: usize, found: usize },
     WrongTypeArgCount { expected: usize, found: usize },
-    NoSuchField { name: Name },
+    /// A field that the type doesn't have. `ty` is `None` for a field in a
+    /// struct literal or pattern, where the struct is named.
+    NoSuchField { ty: Option<Ty<'db>>, name: Name },
     MissingFields { names: Vec<Name> },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
@@ -470,6 +472,17 @@ impl<'db> Collector<'db> {
                             }
                             (origin, DiagnosticKind::AmbiguousConstraint { constraint })
                         }
+                        TypeError::NoSuchField { origin, ty, name } => {
+                            if has_error(&ty) {
+                                continue;
+                            }
+                            debug_assert_eq!(origin.body, id);
+                            // At the name of the field, for `p.z`.
+                            let range = self.unresolved_range(map, origin.node);
+                            self.push(range, DiagnosticKind::NoSuchField { ty: Some(ty), name });
+                            continue;
+                        }
+                        TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
                     };
                     debug_assert_eq!(origin.body, id);
                     (at(origin.node), kind)
@@ -490,11 +503,12 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::WrongArgCount { expr, expected, found } => {
                     (at(expr), DiagnosticKind::WrongArgCount { expected, found })
                 }
-                InferenceDiagnostic::NoSuchField { expr, name } => (at(expr), DiagnosticKind::NoSuchField { name }),
+                InferenceDiagnostic::NoSuchField { expr, name } => {
+                    (at(expr), DiagnosticKind::NoSuchField { ty: None, name })
+                }
                 InferenceDiagnostic::MissingFields { expr, names } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::MissingFields { names })
                 }
-                InferenceDiagnostic::TypeNeeded { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::TypeNeeded),
                 InferenceDiagnostic::BreakOutside { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::BreakOutside),
                 InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),
                 // Reported at the function, which is the fallback.

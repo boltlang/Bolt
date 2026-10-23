@@ -29,7 +29,7 @@ use crate::{
     },
     check::function_scheme,
     scheme::Scheme,
-    solve::{ExprOrPat, Origin, Reason, Solver, TypeError},
+    solve::{Constraint, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
     ty::{AdtId, Ty, VarKind},
 };
 
@@ -78,8 +78,6 @@ pub enum InferenceDiagnostic<'db> {
     WrongArgCount { expr: ExprOrPat, expected: usize, found: usize },
     NoSuchField { expr: ExprOrPat, name: Name },
     MissingFields { expr: ExprId, names: Vec<Name> },
-    /// A field or index of a value whose type isn't known yet.
-    TypeNeeded { expr: ExprId },
     /// A label or loop to break out of that doesn't exist.
     BreakOutside { expr: ExprId },
     /// Something the checker doesn't support yet, like `?` or ranges.
@@ -96,9 +94,8 @@ impl<'db> InferenceDiagnostic<'db> {
                 *expected = f(expected);
                 *actual = f(actual);
             }
-            InferenceDiagnostic::Type(TypeError::InfiniteType { ty, .. }) | InferenceDiagnostic::NotAFunction { ty, .. } => {
-                *ty = f(ty)
-            }
+            InferenceDiagnostic::Type(TypeError::InfiniteType { ty, .. } | TypeError::NoSuchField { ty, .. })
+            | InferenceDiagnostic::NotAFunction { ty, .. } => *ty = f(ty),
             InferenceDiagnostic::Type(
                 TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. },
             ) => *constraint = constraint.map(f),
@@ -613,66 +610,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return self.infer_path(expr, &path);
         }
         let base_ty = self.infer_expr(base);
-        match self.field_ty(expr, &base_ty, name) {
-            Some(ty) => ty,
-            None => Ty::Error,
-        }
-    }
-
-    /// The type of the field `name` of a value of type `ty`, reporting a
-    /// diagnostic if there's none.
-    fn field_ty(&mut self, expr: ExprId, ty: &Ty<'db>, name: &Name) -> Option<Ty<'db>> {
-        match self.solver.unifier.shallow_resolve(ty) {
-            Ty::Adt(AdtId::Struct(s), args) => {
-                let fields = field_types(self.db, VariantDef::Struct(s));
-                if let Some((_, field_ty)) = fields.field(name) {
-                    return Some(subst_params(field_ty, boltlang_hir_def::resolver::GenericDefId::Struct(s), &args));
-                }
-            }
-            Ty::Tuple(tys) => {
-                if let Some(ty) = name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i)) {
-                    return Some(ty.clone());
-                }
-            }
-            Ty::Var(_) => {
-                // Like OCaml: the struct in scope with a field of this name.
-                return match self.struct_with_field(name) {
-                    Some(s) => {
-                        let def = boltlang_hir_def::resolver::GenericDefId::Struct(s);
-                        let args: Box<[Ty<'db>]> = identity_args(self.db, def).iter().map(|_| self.new_var()).collect();
-                        self.solver.equal(&Ty::Adt(AdtId::Struct(s), args.clone()), ty, self.origin(expr));
-                        let fields = field_types(self.db, VariantDef::Struct(s));
-                        Some(subst_params(fields.field(name).unwrap().1, def, &args))
-                    }
-                    None => {
-                        self.result.diagnostics.push(InferenceDiagnostic::TypeNeeded { expr });
-                        None
-                    }
-                };
-            }
-            Ty::Error => return None,
-            _ => {}
-        }
-        self.result.diagnostics.push(InferenceDiagnostic::NoSuchField { expr: ExprOrPat::Expr(expr), name: name.clone() });
-        None
-    }
-
-    /// The one struct in the file's scope with a field named `name`.
-    fn struct_with_field(&self, name: &Name) -> Option<boltlang_hir_def::ids::StructId<'db>> {
-        let file = crate::check::def_file(self.db, self.def);
-        let scope = &boltlang_hir_def::nameres::file_scope(self.db, file).scope;
-        let mut found = None;
-        for (_, entry) in scope.entries(boltlang_hir_def::nameres::Namespace::Types) {
-            let boltlang_hir_def::ids::ModuleDefId::Struct(s) = entry.def else { continue };
-            let fields = field_types(self.db, VariantDef::Struct(s));
-            if fields.kind == FieldsKind::Record && fields.field(name).is_some() {
-                if found.is_some() {
-                    return None;
-                }
-                found = Some(s);
-            }
-        }
-        found
+        // The solver finds the field once the type is known; until then, a
+        // variable stands for the field's type.
+        let field = self.new_var();
+        let constraint = FieldConstraint { ty: base_ty, name: name.clone(), field: field.clone() };
+        self.solver.add(Constraint::Field { constraint, origin: self.origin(expr) });
+        field
     }
 
     fn infer_call(&mut self, expr: ExprId, callee: ExprId, args: &[ExprId]) -> Ty<'db> {
