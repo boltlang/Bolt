@@ -1,14 +1,9 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! The semantic model of a Bolt program, on top of hir-def and hir-ty, for
+//! the tools that show it to users.
+//!
+//! - [`diagnostics`] collects the problems found in a file, from parsing
+//!   to type checking, and finds where in the source they are.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod diagnostics;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use diagnostics::{Diagnostic, DiagnosticKind, file_diagnostics};

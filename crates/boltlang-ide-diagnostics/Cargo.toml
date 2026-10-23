@@ -1,0 +1,10 @@
+[package]
+name = "boltlang-ide-diagnostics"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
+boltlang-hir = { version = "0.1.0", path = "../boltlang-hir" }
+boltlang-hir-ty = { version = "0.1.0", path = "../boltlang-hir-ty" }
+boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
