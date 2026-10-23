@@ -1,0 +1,229 @@
+/* The colors of the capture names in tree-sitter-bolt/queries/highlights.scm.
+   A name like `type.builtin` has the classes `hl-type hl-type-builtin`. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fbfaf8;
+  --fg: #24292f;
+  --muted: #6e7781;
+  --border: #d8dee4;
+  --header: #f1efeb;
+  --selection: #b6d4fe;
+
+  --comment: #6e7781;
+  --keyword: #a0306a;
+  --string: #2b6a30;
+  --escape: #0b6e78;
+  --type: #6639ba;
+  --constructor: #8a4b00;
+  --function: #0550ae;
+  --property: #1f5f8b;
+  --parameter: #953800;
+  --constant: #8a4b00;
+  --operator: #a0306a;
+  --punctuation: #57606a;
+  --attribute: #6e7781;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #16181d;
+    --fg: #d6dae0;
+    --muted: #8b949e;
+    --border: #30363d;
+    --header: #1d2027;
+    --selection: #264f78;
+
+    --comment: #7d8590;
+    --keyword: #f08ab8;
+    --string: #8ccf7e;
+    --escape: #6fd3dd;
+    --type: #c3a6ff;
+    --constructor: #f0b46e;
+    --function: #79b8ff;
+    --property: #8fc7ef;
+    --parameter: #ffab70;
+    --constant: #f0b46e;
+    --operator: #f08ab8;
+    --punctuation: #9aa4ae;
+    --attribute: #8b949e;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #16181d;
+  --fg: #d6dae0;
+  --muted: #8b949e;
+  --border: #30363d;
+  --header: #1d2027;
+  --selection: #264f78;
+
+  --comment: #7d8590;
+  --keyword: #f08ab8;
+  --string: #8ccf7e;
+  --escape: #6fd3dd;
+  --type: #c3a6ff;
+  --constructor: #f0b46e;
+  --function: #79b8ff;
+  --property: #8fc7ef;
+  --parameter: #ffab70;
+  --constant: #f0b46e;
+  --operator: #f08ab8;
+  --punctuation: #9aa4ae;
+  --attribute: #8b949e;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--fg);
+  font: 14px/1.4 system-ui, sans-serif;
+}
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  background: var(--header);
+  border-bottom: 1px solid var(--border);
+}
+
+h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+#status {
+  flex: 1;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#status.error {
+  color: #cf222e;
+}
+
+button {
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 10px;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+/* The textarea lies over the highlighted code with transparent text, so
+   that what's typed shows highlighted. Both must lay out text the same. */
+.editor {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.editor pre,
+.editor textarea {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  padding: 16px;
+  border: 0;
+  font: 14px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  tab-size: 2;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.editor pre {
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.editor textarea {
+  width: 100%;
+  height: 100%;
+  resize: none;
+  overflow: auto;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  caret-color: var(--fg);
+}
+
+.editor textarea::selection {
+  background: var(--selection);
+  color: transparent;
+}
+
+.hl-comment {
+  color: var(--comment);
+  font-style: italic;
+}
+.hl-keyword {
+  color: var(--keyword);
+}
+.hl-string {
+  color: var(--string);
+}
+.hl-escape {
+  color: var(--escape);
+}
+.hl-type {
+  color: var(--type);
+}
+.hl-constructor {
+  color: var(--constructor);
+}
+.hl-function {
+  color: var(--function);
+}
+.hl-property {
+  color: var(--property);
+}
+.hl-variable-parameter {
+  color: var(--parameter);
+}
+.hl-variable-builtin {
+  color: var(--keyword);
+}
+.hl-constant {
+  color: var(--constant);
+}
+.hl-operator {
+  color: var(--operator);
+}
+.hl-punctuation {
+  color: var(--punctuation);
+}
+.hl-attribute {
+  color: var(--attribute);
+}

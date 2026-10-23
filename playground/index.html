@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Bolt Playground</title>
+    <link rel="stylesheet" href="style.css" />
+    <script type="module" src="main.js"></script>
+  </head>
+  <body>
+    <header>
+      <h1>Bolt playground</h1>
+      <span id="status" role="status">Loading tree-sitter…</span>
+      <button id="reset" type="button" disabled>Reset</button>
+    </header>
+    <main>
+      <div class="editor">
+        <pre aria-hidden="true"><code id="highlighted"></code></pre>
+        <textarea
+          id="source"
+          aria-label="Bolt code"
+          spellcheck="false"
+          autocapitalize="off"
+          autocomplete="off"
+          autocorrect="off"
+          disabled
+        ></textarea>
+      </div>
+    </main>
+  </body>
+</html>
