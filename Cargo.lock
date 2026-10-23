@@ -117,8 +117,10 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "ariadne",
+ "boltlang-base-db",
+ "boltlang-ide-diagnostics",
+ "boltlang-syntax",
  "clap",
- "fluent-uri 0.4.1",
  "serde_json",
 ]
 

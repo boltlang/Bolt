@@ -1,5 +1,5 @@
 
-use boltlang::{Db, Files, OsSystem, System, SystemPath, salsa};
+use boltlang_base_db::{Db, Files, OsSystem, System, SystemPath, salsa};
 
 #[salsa::db]
 #[derive(Clone)]

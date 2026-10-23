@@ -14,10 +14,10 @@
 
 use std::fmt;
 
-use boltlang_base_db::{Db, File, source_text};
+use boltlang_base_db::{Db, File, parse_file, source_text};
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind};
 use boltlang_hir_ty::lower::ClassConstraint;
-use boltlang_syntax::rowan::TextRange;
+use boltlang_syntax::rowan::{TextRange, TextSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
@@ -117,6 +117,25 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
             };
             let (code, message) = describe(db, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
             Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message, labels }
+        })
+        .collect()
+}
+
+/// The syntax errors of `file`, without checking anything else.
+pub fn syntax_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
+    parse_file(db, file)
+        .errors(db)
+        .iter()
+        .map(|error| {
+            let span = error.span();
+            Diagnostic {
+                code: DiagnosticCode::SYNTAX,
+                severity: Severity::Error,
+                file,
+                range: TextRange::new(TextSize::from(span.start as u32), TextSize::from(span.end as u32)),
+                message: error.message(),
+                labels: Vec::new(),
+            }
         })
         .collect()
 }
