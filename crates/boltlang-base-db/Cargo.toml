@@ -13,3 +13,7 @@ rustc-hash = "2.1.1"
 salsa = "0.28.5"
 thiserror = "2.0.18"
 tracing = "0.1.44"
+
+# The time of the browser, for the revisions of files.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+web-time = "1.1.0"

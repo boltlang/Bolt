@@ -1,4 +1,7 @@
-use std::{os::unix::fs::PermissionsExt, sync::Arc};
+//! The file system of the operating system. There's none in the browser,
+//! so this isn't built for `wasm32`.
+
+use std::sync::Arc;
 
 use filetime::FileTime;
 
@@ -69,11 +72,14 @@ impl System for OsSystem {
             return Err(other_error("path {} points to an unsupported file type"));
         };
 
-        Ok(Metadata::new(
-            FileTime::from_last_modification_time(&metadata).into(),
-            Some(metadata.permissions().mode()),
-            file_type,
-        ))
+        #[cfg(unix)]
+        let permissions = {
+            use std::os::unix::fs::PermissionsExt;
+            Some(metadata.permissions().mode())
+        };
+        #[cfg(not(unix))]
+        let permissions = None;
+        Ok(Metadata::new(FileTime::from_last_modification_time(&metadata).into(), permissions, file_type))
     }
 
     fn virtual_path_metadata(&self, _path: &SystemVirtualPath) -> Result<Metadata> {

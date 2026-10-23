@@ -33,10 +33,12 @@ pub use {
     error::{Error, Result},
     files::{File, FilePath, Files},
     parse::{Parse, parse_file},
-    system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf, WritableSystem, OsSystem, InMemorySystem},
+    system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf, WritableSystem, InMemorySystem},
     text::{LineIndex, index_lines, source_text},
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
 };
 
+#[cfg(not(target_arch = "wasm32"))]
+pub use crate::system::OsSystem;
 pub use crate::system::TestSystem;
 pub use crate::test_db::TestDb;
