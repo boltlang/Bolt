@@ -217,7 +217,7 @@ fn import_errors() {
 import "./missing" (x);
      //^^^^^^^^^^^ error: cannot find the file `./missing`
 import "std/io" (print);
-     //^^^^^^^^ error: cannot import `std/io`: only paths starting with `./` or `../` are supported
+     //^^^^^^^^ error: cannot find the package `std` in `.bolt/packages`
 import "./lib" (nope, hidden, a);
               //^^^^ error: the imported file has nothing named `nope`
                     //^^^^^^ error: `hidden` is private
@@ -490,4 +490,30 @@ fn g[a](x: a) = x + (|y| y);
                    //^^^^^ error: expected `a`, found `fn(b) -> b`
 "#,
     );
+}
+
+#[test]
+fn package_imports() {
+    check_files(&[
+        (
+            "/proj/.bolt/packages/std/io.bolt",
+            r#"
+pub fn print(s: str) -> () = ();
+              //^^^ label: expected because of this parameter of `print`
+"#,
+        ),
+        (
+            "/proj/main.bolt",
+            r#"
+import "std/io" (print);
+import "std" (x);
+     //^^^^^ error: the package `std` has no file `lib.bolt`
+import "std/../secret" (y);
+     //^^^^^^^^^^^^^^^ error: cannot import `std/../secret`: import a file with a path like `./file`, or a package with its name, like `std/io`
+print("hello");
+print(1);
+    //^ error: expected `str`, found `i32`
+"#,
+        ),
+    ]);
 }

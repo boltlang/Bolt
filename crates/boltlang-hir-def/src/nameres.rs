@@ -101,8 +101,8 @@ impl<'db> ItemScope<'db> {
 pub enum NameResDiagnostic {
     /// Two definitions or imports of the same name in the same namespace.
     Duplicate { name: Name, ast_id: AstId },
-    /// The file to import from doesn't exist, or the path isn't relative.
-    UnresolvedImportPath { import: AstId, path: String },
+    /// The path of an import doesn't lead to a file.
+    UnresolvedImportPath { import: AstId, path: String, error: ImportPathError },
     /// The file to import from has no item with this name.
     UnresolvedImportName { import: AstId, name: Name },
     /// The item to import exists but isn't public.
@@ -223,9 +223,13 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let mut out = local_scope(db, file).clone();
     for import in &tree.imports {
         let Some(source) = &import.source else { continue };
-        let Some(target) = resolve_import_path(db, file, source) else {
-            out.diagnostics.push(NameResDiagnostic::UnresolvedImportPath { import: import.ast_id, path: source.clone() });
-            continue;
+        let target = match resolve_import_path(db, file, source) {
+            Ok(target) => target,
+            Err(error) => {
+                let path = source.clone();
+                out.diagnostics.push(NameResDiagnostic::UnresolvedImportPath { import: import.ast_id, path, error });
+                continue;
+            }
         };
         let exports = &local_scope(db, target).scope;
         let imported = |entry: &ScopeEntry<'db>| ScopeEntry { import: Some(import.ast_id), ..*entry };
@@ -279,24 +283,87 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     out
 }
 
-/// The file that the path in `import "path"` refers to, relative to the
-/// directory of `importer`. A missing extension means `.bolt`.
+/// Why the path of an import doesn't lead to a file.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub enum ImportPathError {
+    /// A relative path to a file that doesn't exist.
+    FileNotFound,
+    /// No `.bolt/packages/<package>` in the directory of the importer or in
+    /// one of its parents.
+    PackageNotFound { package: String },
+    /// The package exists, but the file in it doesn't. `path` is relative to
+    /// the package, like `io.bolt`.
+    NotInPackage { package: String, path: String },
+    /// Neither a relative path nor one in a package: an absolute path, a
+    /// package name that isn't one, or a path that leaves its package.
+    Invalid,
+}
+
+/// The file that the path in `import "path"` refers to. A missing extension
+/// means `.bolt`.
 ///
-/// Only relative paths (`./a`, `../b`) are supported for now; paths like
-/// `std/io` need a package system.
-pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Option<File> {
-    if !(source.starts_with("./") || source.starts_with("../")) {
-        return None;
+/// - `./a` and `../b` are relative to the directory of `importer`.
+/// - `std/io` is the file `io.bolt` of the package `std`, and `std` alone
+///   is the package's `lib.bolt`. Packages are the directories in
+///   `.bolt/packages`, and the nearest one wins: the one in the directory of
+///   `importer`, or else in its parent, and so on.
+///
+/// Symbolic links are resolved, so that a file has one [`File`] however it's
+/// reached. Salsa doesn't track that part: changing a link takes effect
+/// when the file is synced.
+pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<File, ImportPathError> {
+    let dir = importer
+        .path(db)
+        .as_system_path_buf()
+        .and_then(|p| p.as_std_path().parent())
+        .ok_or(ImportPathError::FileNotFound)?;
+    if source.starts_with("./") || source.starts_with("../") {
+        let path = SystemPath::absolute(SystemPath::new(&with_extension(dir.join(source))), SystemPath::new("/"));
+        let file = db.files().resolve(db, &path);
+        return if file.exists(db) { Ok(canonical(db, file)) } else { Err(ImportPathError::FileNotFound) };
     }
-    let importer_path = importer.path(db).as_system_path_buf()?;
-    let dir = importer_path.as_std_path().parent()?;
-    let mut path = dir.join(source);
+    let (package, path) = source.split_once('/').unwrap_or((source, "lib"));
+    let segments_ok = path.split('/').all(|s| !s.is_empty() && s != "." && s != "..");
+    if !is_package_name(package) || !segments_ok {
+        return Err(ImportPathError::Invalid);
+    }
+    let path = with_extension(std::path::PathBuf::from(path));
+    for dir in dir.ancestors() {
+        let package_dir = dir.join(".bolt").join("packages").join(package);
+        if !db.files().resolve(db, SystemPath::new(&package_dir)).is_directory(db) {
+            continue;
+        }
+        let file = db.files().resolve(db, SystemPath::new(&package_dir.join(&path)));
+        if file.exists(db) {
+            return Ok(canonical(db, file));
+        }
+        let path = path.to_string_lossy().into_owned();
+        return Err(ImportPathError::NotInPackage { package: package.to_string(), path });
+    }
+    Err(ImportPathError::PackageNotFound { package: package.to_string() })
+}
+
+fn with_extension(mut path: std::path::PathBuf) -> std::path::PathBuf {
     if path.extension().is_none() {
         path.set_extension("bolt");
     }
-    let path = SystemPath::absolute(SystemPath::new(&path), SystemPath::new("/"));
-    let file = db.files().resolve(db, &path);
-    file.exists(db).then_some(file)
+    path
+}
+
+/// Like an identifier, with `-` allowed after the first character.
+fn is_package_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// The file with the symbolic links in its path resolved.
+fn canonical(db: &dyn Db, file: File) -> File {
+    let Some(path) = file.path(db).as_system_path_buf() else { return file };
+    match db.system().canonicalize_path(path) {
+        Ok(real) if real != *path => db.files().resolve(db, &real),
+        _ => file,
+    }
 }
 
 #[cfg(test)]

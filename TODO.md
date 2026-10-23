@@ -10,8 +10,17 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 - [ ] A prelude. It would bring `String`, numeric classes for arithmetic and
       iteration, which also lets `for` loop over more than arrays.
       *(base-db, hir-def, hir-ty)*
-- [ ] Import paths like `std/io`, which need a package system. Only relative
-      paths (`./a`, `../b`) work now. *(base-db, hir-def)*
+- [ ] `pub(package)` is treated like `pub`. With packages in
+      `.bolt/packages`, an item marked `pub(package)` should only be
+      importable from files of the same package; files outside
+      `.bolt/packages` are the project's own package. *(hir-def)*
+- [ ] A `std` that comes with the compiler, so that projects don't need a
+      copy in `.bolt/packages`. Packages would be looked up in the nearest
+      `.bolt/packages` first, then in the bundled ones. *(base-db, hir-def,
+      cli, bolt-language-server)*
+- [ ] A global cache of packages in the home directory, looked up after
+      `.bolt/packages`. It needs versions, so a project file like
+      `bolt.toml` that lists the dependencies. *(hir-def, cli)*
 - [ ] Items in bodies, like a function inside a function, aren't lowered:
       they're `Statement::Item` and can't be referred to. *(hir-def)*
 - [ ] Macro invocations aren't expanded. They're opaque in expressions,

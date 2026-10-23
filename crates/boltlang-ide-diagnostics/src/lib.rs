@@ -15,7 +15,7 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
-use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind};
+use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
 use boltlang_hir_ty::{Ty, TyNames, lower::ClassConstraint};
 use boltlang_syntax::rowan::{TextRange, TextSize};
 
@@ -169,11 +169,19 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::Syntax(message) => (C::SYNTAX, message),
 
         K::DuplicateDefinition { name } => (C::DUPLICATE_DEFINITION, format!("`{name}` is defined more than once")),
-        K::UnresolvedImportPath { path } => {
-            let message = if path.starts_with("./") || path.starts_with("../") {
-                format!("cannot find the file `{path}`")
-            } else {
-                format!("cannot import `{path}`: only paths starting with `./` or `../` are supported")
+        K::UnresolvedImportPath { path, error } => {
+            let message = match error {
+                ImportPathError::FileNotFound => format!("cannot find the file `{path}`"),
+                ImportPathError::PackageNotFound { package } => {
+                    format!("cannot find the package `{package}` in `.bolt/packages`")
+                }
+                ImportPathError::NotInPackage { package, path } => {
+                    format!("the package `{package}` has no file `{path}`")
+                }
+                ImportPathError::Invalid => format!(
+                    "cannot import `{path}`: import a file with a path like `./file`, \
+                     or a package with its name, like `std/io`"
+                ),
             };
             (C::UNRESOLVED_IMPORT_PATH, message)
         }

@@ -112,6 +112,11 @@ impl MemoryFs {
         // Not `canonicalize`, which fails if the file doesn't exist yet.
         let path = self.normalize_path(path);
         let mut lock = self.inner.by_path.write().map_err(other_error)?;
+        // Like on disk, the directories of a file exist.
+        for dir in path.as_std_path().ancestors().skip(1) {
+            lock.entry(PathBuf::from_std_path_buf(dir.to_path_buf()))
+                .or_insert_with(|| Entry::Directory(Directory { last_modified: FileTime::now() }));
+        }
         match lock.entry(path) {
             HashMapEntry::Occupied(mut entry) => match entry.get_mut() {
                 Entry::File(file) => {
@@ -184,5 +189,15 @@ mod tests {
         fs.write_file_bytes(path, b"two").unwrap();
         assert_eq!(fs.read_to_string(path).unwrap(), "two");
         assert_ne!(fs.metadata(path).unwrap().revision(), before);
+    }
+
+    #[test]
+    fn the_directories_of_files_exist() {
+        let fs = MemoryFs::new();
+        fs.write_file_bytes(SystemPath::new("/a/b/c.bolt"), b"").unwrap();
+        for dir in ["/a/b", "/a", "/"] {
+            assert!(fs.metadata(SystemPath::new(dir)).unwrap().file_type().is_directory(), "{dir}");
+        }
+        assert!(fs.read_to_string(SystemPath::new("/a")).is_err());
     }
 }

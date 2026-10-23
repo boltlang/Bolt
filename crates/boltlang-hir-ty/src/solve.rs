@@ -337,7 +337,7 @@ pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<boltlang_hir_def::
         for item in &tree.top_level {
             let ModItem::Import(idx) = *item else { continue };
             let Some(source) = &tree.imports[idx.index()].source else { continue };
-            if let Some(imported) = resolve_import_path(db, file, source)
+            if let Ok(imported) = resolve_import_path(db, file, source)
                 && !seen.contains(&imported)
             {
                 seen.push(imported);

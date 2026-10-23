@@ -147,6 +147,11 @@ impl File {
         *self.status(db) == FileStatus::Exists
     }
 
+    /// Whether the path is that of a directory.
+    pub fn is_directory(self, db: &dyn Db) -> bool {
+        *self.status(db) == FileStatus::IsADirectory
+    }
+
     pub fn read_to_string(&self, db: &dyn Db) -> std::io::Result<String> {
         let path = self.path(db);
 

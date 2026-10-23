@@ -17,7 +17,7 @@ use boltlang_hir_def::{
     hir::TypeRefId,
     ids::{ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     item_tree::{AssocItem, AstId, FunctionName, ModItem, item_tree},
-    nameres::{NameResDiagnostic, file_scope},
+    nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
         FieldList, class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map,
@@ -58,8 +58,8 @@ pub enum DiagnosticKind<'db> {
     // Names
     /// Two definitions or imports of the same name in the same namespace.
     DuplicateDefinition { name: Name },
-    /// The file to import from doesn't exist, or the path isn't relative.
-    UnresolvedImportPath { path: String },
+    /// The path of an import doesn't lead to a file.
+    UnresolvedImportPath { path: String, error: ImportPathError },
     /// The file to import from has no item with this name.
     UnresolvedImportName { name: Name },
     /// The item to import exists but isn't public.
@@ -239,13 +239,13 @@ impl<'db> Collector<'db> {
                 NameResDiagnostic::Duplicate { name, ast_id } => {
                     (self.name_in(*ast_id, name), DiagnosticKind::DuplicateDefinition { name: name.clone() })
                 }
-                NameResDiagnostic::UnresolvedImportPath { import, path } => {
+                NameResDiagnostic::UnresolvedImportPath { import, path, error } => {
                     let node = import.to_node(&self.root);
                     let string = node.as_ref().and_then(|n| {
                         n.children_with_tokens().filter_map(|e| e.into_token()).find(|t| t.kind() == STRING)
                     });
                     let range = string.map(|t| t.text_range()).or(node.map(|n| n.text_range()));
-                    (range, DiagnosticKind::UnresolvedImportPath { path: path.clone() })
+                    (range, DiagnosticKind::UnresolvedImportPath { path: path.clone(), error: error.clone() })
                 }
                 NameResDiagnostic::UnresolvedImportName { import, name } => {
                     (self.name_in(*import, name), DiagnosticKind::UnresolvedImportName { name: name.clone() })

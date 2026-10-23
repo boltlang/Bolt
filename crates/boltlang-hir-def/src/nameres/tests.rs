@@ -18,7 +18,7 @@ fn diagnostics(scope: &FileScope) -> Vec<String> {
         .iter()
         .map(|d| match d {
             NameResDiagnostic::Duplicate { name, .. } => format!("duplicate {name}"),
-            NameResDiagnostic::UnresolvedImportPath { path, .. } => format!("unresolved path {path}"),
+            NameResDiagnostic::UnresolvedImportPath { path, error, .. } => format!("unresolved path {path}: {error:?}"),
             NameResDiagnostic::UnresolvedImportName { name, .. } => format!("unresolved name {name}"),
             NameResDiagnostic::PrivateImport { name, .. } => format!("private {name}"),
         })
@@ -97,7 +97,13 @@ fn a() {}
     let scope = file_scope(&db, main);
     assert_eq!(
         diagnostics(scope),
-        ["unresolved path ./missing", "unresolved path std/io", "unresolved name nope", "private hidden", "duplicate a"]
+        [
+            "unresolved path ./missing: FileNotFound",
+            "unresolved path std/io: PackageNotFound { package: \"std\" }",
+            "unresolved name nope",
+            "private hidden",
+            "duplicate a"
+        ]
     );
 }
 
@@ -115,7 +121,40 @@ fn import_paths_are_relative_to_the_importing_file() {
     let db = TestDb::new();
     let target = db.file("/src/util.bolt", "");
     let importer = db.file("/src/app/main.bolt", "");
-    assert_eq!(resolve_import_path(&db, importer, "../util"), Some(target));
-    assert_eq!(resolve_import_path(&db, importer, "../util.bolt"), Some(target));
-    assert_eq!(resolve_import_path(&db, importer, "./util"), None);
+    assert_eq!(resolve_import_path(&db, importer, "../util"), Ok(target));
+    assert_eq!(resolve_import_path(&db, importer, "../util.bolt"), Ok(target));
+    assert_eq!(resolve_import_path(&db, importer, "./util"), Err(ImportPathError::FileNotFound));
+}
+
+#[test]
+fn packages_are_in_the_nearest_bolt_packages() {
+    let db = TestDb::new();
+    let io = db.file("/proj/.bolt/packages/std/io.bolt", "");
+    let lib = db.file("/proj/.bolt/packages/std/lib.bolt", "");
+    let nested = db.file("/proj/.bolt/packages/std/fs/path.bolt", "");
+    let inner_io = db.file("/proj/sub/.bolt/packages/std/io.bolt", "");
+    let main = db.file("/proj/src/main.bolt", "");
+    let inner = db.file("/proj/sub/deep/main.bolt", "");
+    let resolve = |importer, source| resolve_import_path(&db, importer, source);
+    assert_eq!(resolve(main, "std/io"), Ok(io));
+    assert_eq!(resolve(main, "std/io.bolt"), Ok(io));
+    assert_eq!(resolve(main, "std"), Ok(lib));
+    assert_eq!(resolve(main, "std/fs/path"), Ok(nested));
+    // The nearest package wins, even when it doesn't have the file.
+    assert_eq!(resolve(inner, "std/io"), Ok(inner_io));
+    assert_eq!(
+        resolve(inner, "std"),
+        Err(ImportPathError::NotInPackage { package: "std".into(), path: "lib.bolt".into() })
+    );
+    assert_eq!(resolve(main, "json"), Err(ImportPathError::PackageNotFound { package: "json".into() }));
+}
+
+#[test]
+fn import_paths_must_be_relative_or_in_a_package() {
+    let db = TestDb::new();
+    db.file("/proj/.bolt/packages/std/io.bolt", "");
+    let main = db.file("/proj/main.bolt", "");
+    for source in ["/proj/main", "1std/io", "std/../io", "std/./io", "std//io", "std/", ""] {
+        assert_eq!(resolve_import_path(&db, main, source), Err(ImportPathError::Invalid), "{source}");
+    }
 }
