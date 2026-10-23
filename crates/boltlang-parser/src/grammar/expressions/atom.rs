@@ -416,6 +416,8 @@ fn match_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, MATCH_EXPR)
 }
 
+const MATCH_ARM_SKIP: TokenSet = TokenSet::new(&[T![')'], T![']'], T![;]]);
+
 fn match_arm_list(p: &mut Parser) {
     let m = p.start();
     p.bump(T!['{']);
@@ -428,7 +430,18 @@ fn match_arm_list(p: &mut Parser) {
             e.complete(p, ERROR);
             continue;
         }
+        // Patterns and values leave closing tokens like `)` for an enclosing
+        // list to recover on, so an arm would consume nothing and the loop
+        // would never end. Skip them instead.
+        if p.at_ts(MATCH_ARM_SKIP) {
+            p.error_and_bump("expected a match arm");
+            continue;
+        }
+        let start = p.pos();
         match_arm(p);
+        if p.pos() == start {
+            p.error_and_bump("expected a match arm");
+        }
     }
     p.expect(T!['}']);
     m.complete(p, MATCH_ARM_LIST);

@@ -185,6 +185,11 @@ impl <'t> Parser<'t> {
         self.nth(0)
     }
 
+    /// How many tokens were consumed, to check that a loop makes progress.
+    pub(crate) fn pos(&self) -> usize {
+        self.pos
+    }
+
     pub(crate) fn nth(&self, n: usize) -> SyntaxKind {
         let steps = self.steps.get();
         assert!(steps < PARSER_STEP_LIMIT, "the parser seems stuck");
