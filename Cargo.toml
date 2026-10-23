@@ -9,7 +9,6 @@ members = [
   "crates/boltlang-hir",
   "crates/boltlang-hir-ty",
   "crates/boltlang-ide-diagnostics",
-  "crates/boltlang",
   "crates/boltlang-cli",
   "crates/bolt-language-server",
 ]
