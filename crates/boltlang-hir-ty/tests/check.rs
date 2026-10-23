@@ -42,14 +42,14 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
     hir::{Expr, Statement, TypeRefId},
-    ids::{FunctionId, ItemContainerId},
-    item_tree::{FunctionName, ModItem, item_tree},
+    ids::{FunctionId, ImplId, ItemContainerId},
+    item_tree::{AssocItem, FunctionName, ModItem, item_tree},
     resolver::GenericDefId,
-    signatures::function_signature_with_source_map,
+    signatures::{function_signature_with_source_map, impl_signature_with_source_map},
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
-    lower::{LowerDiagnostic, fn_sig, generic_predicates},
+    lower::{LowerDiagnostic, fn_sig, generic_predicates, impl_header},
     solve::{ExprOrPat, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -171,11 +171,39 @@ fn check(input: &str) -> Result<(String, String), String> {
             map.type_syntax(id).map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
         };
         let mut defs = Vec::new();
+        // The functions of the file and of its impls, those of an impl named
+        // after its instance, like `Show[i32].show`.
+        let mut functions = Vec::new();
         for item in &tree.top_level {
-            let ModItem::Function(idx) = *item else { continue };
-            let f = FunctionId::new(&db, ItemContainerId::File(file), idx);
+            match *item {
+                ModItem::Function(idx) => functions.push((String::new(), FunctionId::new(&db, ItemContainerId::File(file), idx))),
+                ModItem::Impl(idx) => {
+                    let id = ImplId::new(&db, file, idx);
+                    let header = impl_header(&db, id);
+                    let instance = match &header.class {
+                        Some(c) => format!(
+                            "{}[{}].",
+                            c.class.item(&db).name.as_ref().unwrap(),
+                            show(&c.args.iter().collect::<Vec<_>>()).join(", ")
+                        ),
+                        None => "impl.".to_string(),
+                    };
+                    let (_, map) = impl_signature_with_source_map(&db, id);
+                    for lower in &header.diagnostics {
+                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    }
+                    for item in &id.item(&db).items {
+                        if let AssocItem::Function(f) = *item {
+                            functions.push((instance.clone(), FunctionId::new(&db, ItemContainerId::Impl(id), f)));
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (instance, f) in functions {
             let name = match f.item(&db).name.as_ref().unwrap() {
-                FunctionName::Name(n) | FunctionName::Operator(n) => n.to_string(),
+                FunctionName::Name(n) | FunctionName::Operator(n) => format!("{instance}{n}"),
             };
             let ty = match function_scheme(&db, f) {
                 Ok(scheme) => scheme.display(&db),
