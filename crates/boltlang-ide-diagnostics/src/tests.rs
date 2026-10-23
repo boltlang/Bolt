@@ -97,7 +97,7 @@ fn id(x) { return x }
   id(1) + 1;
   id("foo") + 1;
 //^^^^^^^^^ label: this has type `str`
-            //^ error: expected `str`, found `i32`
+            //^ error: expected `str`, found an integer
 "#,
     );
 }
@@ -144,7 +144,7 @@ fn custom_operator_calls_its_definition() {
   let x: i32 = 1 <> 2;
   let y: bool = 1 <> 2;
        //^^^^ label: expected because of this annotation
-              //^^^^^^ error: expected `bool`, found `i32`
+              //^^^^^^ error: expected `bool`, found an integer
 "#,
     );
 }
@@ -359,7 +359,7 @@ impl Get[Counter] {
             //^ error: expected `i32`, found `Counter`
 }
 enum E { A = true }
-           //^^^^ error: expected `i32`, found `bool`
+           //^^^^ error: expected an integer, found `bool`
 "#,
     );
 }
@@ -370,7 +370,7 @@ fn mismatches_point_at_annotations() {
         r#"
 const C: bool = 1;
        //^^^^ label: expected because of the type of the constant
-              //^ error: expected `bool`, found `i32`
+              //^ error: expected `bool`, found an integer
 fn f() {
   let x: i32 = true;
        //^^^ label: expected because of this annotation
@@ -391,7 +391,7 @@ fn mismatches_point_at_parameters() {
 fn takes(n: i32, b: bool) -> i32 = n;
                   //^^^^ label: expected because of this parameter of `takes`
   takes(1, 2);
-         //^ error: expected `bool`, found `i32`
+         //^ error: expected `bool`, found an integer
 "#,
     );
 }
@@ -411,7 +411,7 @@ pub fn negate(x) = !x;
             r#"
 import "./lib" (negate);
   negate(1);
-       //^ error: expected `bool`, found `i32`
+       //^ error: expected `bool`, found an integer
 "#,
         ),
     ]);
@@ -424,7 +424,7 @@ fn mismatches_point_at_fields() {
 struct Point { x: i32, y: bool }
                         //^^^^ label: expected because of the type of field `y`
 let p = Point { x: 1, y: 2 };
-                       //^ error: expected `bool`, found `i32`
+                       //^ error: expected `bool`, found an integer
 "#,
     );
 }
@@ -435,10 +435,10 @@ fn branches_point_at_each_other() {
         r#"
 let a = if true { 1 } else { "no" };
               //^^^^^ label: this has type `i32`
-                           //^^^^ error: expected `i32`, found `str`
+                           //^^^^ error: expected an integer, found `str`
 fn f(b) = match b { true => 1, false => "no" };
                           //^ label: this has type `i32`
-                                      //^^^^ error: expected `i32`, found `str`
+                                      //^^^^ error: expected an integer, found `str`
 "#,
     );
 }
@@ -568,7 +568,7 @@ fn unknown_types_are_named_per_message() {
 let f = |x| x;
   f + 1;
 //^ label: this has type `fn(a) -> a`
-    //^ error: expected `fn(a) -> a`, found `i32`
+    //^ error: expected `fn(a) -> a`, found an integer
 class Show[T] { fn show(x: T) -> str; }
 let s = show([]);
       //^^^^ error: cannot tell which instance of `Show[[a]]` to use; add a type annotation
@@ -607,7 +607,7 @@ import "std/../secret" (y);
      //^^^^^^^^^^^^^^^ error: cannot import `std/../secret`: import a file with a path like `./file`, or a package with its name, like `std/io`
 print("hello");
 print(1);
-    //^ error: expected `str`, found `i32`
+    //^ error: expected `str`, found an integer
 "#,
         ),
     ]);

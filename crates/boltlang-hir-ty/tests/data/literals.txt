@@ -60,9 +60,9 @@ let a: f64
 let b: i32
 1 + 1.5: i32
 --------------------------------------------------------------------------------
-error at `1`: expected f64, found i32
-error at `1.5`: expected i32, found f64
-error at `1.5`: expected i32, found f64
+error at `1`: expected f64, found {integer}
+error at `1.5`: expected i32, found {float}
+error at `1.5`: expected {integer}, found {float}
 
 ================================================================================
 Other literals
@@ -92,6 +92,6 @@ let a: bool
 let b: str
 let c: char
 --------------------------------------------------------------------------------
-error at `1`: expected bool, found i32
+error at `1`: expected bool, found {integer}
 error at `'x'`: expected str, found char
 error at `"x"`: expected char, found str

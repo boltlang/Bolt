@@ -270,26 +270,10 @@ impl<'db> Solver<'db> {
             self.errors.push(TypeError::TypeNeeded { origin });
         }
         let errors = std::mem::take(&mut self.errors);
-        self.errors = errors.into_iter().map(|e| self.resolve_error(e)).collect();
+        self.errors = errors.into_iter().map(|e| resolve_error(&self.unifier, e)).collect();
         // After resolving the errors, which would otherwise be left out for
         // having the error type in them.
         self.unifier.error_unknowns();
-    }
-
-    fn resolve_error(&self, error: TypeError<'db>) -> TypeError<'db> {
-        let r = |t: &Ty<'db>| self.unifier.resolve(t);
-        match error {
-            TypeError::Mismatch { origin, expected, actual } => {
-                TypeError::Mismatch { origin, expected: r(&expected), actual: r(&actual) }
-            }
-            TypeError::InfiniteType { origin, ty } => TypeError::InfiniteType { origin, ty: r(&ty) },
-            TypeError::NoInstance { origin, constraint } => {
-                TypeError::NoInstance { origin, constraint: constraint.map(r) }
-            }
-            TypeError::Ambiguous { origin, constraint } => TypeError::Ambiguous { origin, constraint: constraint.map(r) },
-            TypeError::NoSuchField { origin, ty, name } => TypeError::NoSuchField { origin, ty: r(&ty), name },
-            TypeError::TypeNeeded { origin } => TypeError::TypeNeeded { origin },
-        }
     }
 
     fn try_solve(&self, goal: &ClassConstraint<'db>) -> Step<'db> {
@@ -452,3 +436,23 @@ pub fn vars_in(ty: &Ty<'_>, out: &mut Vec<TyVar>) {
 
 #[cfg(test)]
 mod tests;
+
+/// The types of an error as far as `unifier` knows them. A mismatch shows a
+/// number literal whose type nothing decided as `{integer}` or `{float}`,
+/// rather than the default it was given: that's not what was found. Other
+/// errors, like a missing instance, are about the default.
+pub fn resolve_error<'db>(unifier: &Unifier<'db>, error: TypeError<'db>) -> TypeError<'db> {
+    let r = |t: &Ty<'db>| unifier.resolve(t);
+    match error {
+        TypeError::Mismatch { origin, expected, actual } => TypeError::Mismatch {
+            origin,
+            expected: unifier.resolve_literals(&expected),
+            actual: unifier.resolve_literals(&actual),
+        },
+        TypeError::InfiniteType { origin, ty } => TypeError::InfiniteType { origin, ty: r(&ty) },
+        TypeError::NoInstance { origin, constraint } => TypeError::NoInstance { origin, constraint: constraint.map(r) },
+        TypeError::Ambiguous { origin, constraint } => TypeError::Ambiguous { origin, constraint: constraint.map(r) },
+        TypeError::NoSuchField { origin, ty, name } => TypeError::NoSuchField { origin, ty: r(&ty), name },
+        TypeError::TypeNeeded { origin } => TypeError::TypeNeeded { origin },
+    }
+}

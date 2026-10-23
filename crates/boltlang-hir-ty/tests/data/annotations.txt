@@ -40,7 +40,7 @@ let p: Pair[bool] = (true, 1);
 f: fn(i32) -> (i32, i32)
 let p: (bool, bool)
 --------------------------------------------------------------------------------
-error at `(true, 1)`: expected (bool, bool), found (bool, i32)
+error at `(true, 1)`: expected (bool, bool), found (bool, {integer})
 
 ================================================================================
 Unknown types in annotations
@@ -128,8 +128,8 @@ let d: [i32]
 a[0]: i32
 a[true]: i32
 --------------------------------------------------------------------------------
-error at `"a"`: expected i32, found str
-error at `true`: expected i32, found bool
+error at `"a"`: expected {integer}, found str
+error at `true`: expected {integer}, found bool
 
 ================================================================================
 An empty array without a use

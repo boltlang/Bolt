@@ -23,6 +23,13 @@ pub enum VarKind {
     Float,
 }
 
+/// Whether a number literal is an integer or a float.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum NumberKind {
+    Int,
+    Float,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum AdtId<'db> {
     Struct(StructId<'db>),
@@ -54,6 +61,10 @@ pub enum Ty<'db> {
     Param(GenericParamId<'db>),
     /// A type variable bound by an inferred [`Scheme`](crate::Scheme).
     Bound(u32),
+    /// The type of a number literal whose type nothing decided, which was
+    /// given the default `i32` or `f64`. Only in type errors, where it reads
+    /// as `{integer}`: `let a: f64 = 1;` didn't find an `i32`.
+    Number(NumberKind),
     /// `!`, the type of `return` and other expressions that don't finish.
     /// It fits wherever any type is expected.
     Never,
@@ -84,7 +95,7 @@ impl<'db> Ty<'db> {
                 params.iter().for_each(&mut f);
                 f(ret);
             }
-            Ty::Var(_) | Ty::Builtin(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Never | Ty::Error => {}
+            Ty::Var(_) | Ty::Builtin(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Number(_) | Ty::Never | Ty::Error => {}
         }
     }
 
@@ -100,7 +111,9 @@ impl<'db> Ty<'db> {
             Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
             Ty::Array(elem) => Ty::Array(Box::new(elem.fold(f))),
             Ty::Fn(params, ret) => Ty::Fn(fold_all(params, f), Box::new(ret.fold(f))),
-            Ty::Var(_) | Ty::Builtin(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Never | Ty::Error => self.clone(),
+            Ty::Var(_) | Ty::Builtin(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Number(_) | Ty::Never | Ty::Error => {
+                self.clone()
+            }
         }
     }
 
@@ -236,6 +249,8 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 Some(name) => f.write_str(name),
                 None => write!(f, "{}", bound_name(*index)),
             },
+            Ty::Number(NumberKind::Int) => f.write_str("{integer}"),
+            Ty::Number(NumberKind::Float) => f.write_str("{float}"),
             Ty::Never => f.write_str("!"),
             Ty::Error => f.write_str("{error}"),
         }

@@ -70,7 +70,7 @@ let p: Pair[i32, str]
 p.first: i32
 let q: Pair[bool, i32]
 --------------------------------------------------------------------------------
-error at `Pair { first: 1, second: true }`: expected Pair[bool, i32], found Pair[i32, bool]
+error at `Pair { first: 1, second: true }`: expected Pair[bool, i32], found Pair[{integer}, bool]
 
 ================================================================================
 Tuple structs and unit structs
@@ -103,7 +103,7 @@ let a: Either[i32, a]
 let b: Either[i32, str]
 let c: Either[i32, str]
 --------------------------------------------------------------------------------
-error at `Either.Right(1)`: expected Either[i32, str], found Either[i32, i32]
+error at `Either.Right(1)`: expected Either[i32, str], found Either[i32, {integer}]
 
 ================================================================================
 Record variants
@@ -151,7 +151,7 @@ let p: Point
 Point { x: 3, ..p }: Point
 Point { x: 3, ..(1, 2) }: Point
 --------------------------------------------------------------------------------
-error at `(1, 2)`: expected Point, found (i32, i32)
+error at `(1, 2)`: expected Point, found ({integer}, {integer})
 
 ================================================================================
 Field shorthand

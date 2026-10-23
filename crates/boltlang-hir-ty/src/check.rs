@@ -19,7 +19,7 @@ use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
     lower::{ClassConstraint, const_ty, fn_sig},
     scheme::{Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, is_declared},
-    solve::{FieldConstraint, Origin, Solver, TypeError, vars_in},
+    solve::{FieldConstraint, Origin, Solver, TypeError, resolve_error, vars_in},
     ty::{GenericParamId, Ty, TyVar, VarKind},
 };
 
@@ -252,8 +252,8 @@ fn infer_group<'db>(
         result.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
         let own_errors = errors.iter().filter(|e| error_origin(e).body == def).cloned();
         result.diagnostics.extend(own_errors.map(|e| {
-            let mut d = InferenceDiagnostic::Type(e);
-            d.map_types(&mut |t| generalize(&error_unifier.resolve(t), &vars));
+            let mut d = InferenceDiagnostic::Type(resolve_error(&error_unifier, e));
+            d.map_types(&mut |t| generalize(t, &vars));
             d
         }));
         env.done.insert(f, scheme.clone());

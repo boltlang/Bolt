@@ -16,7 +16,7 @@ use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
-use boltlang_hir_ty::{Ty, TyNames, lower::ClassConstraint};
+use boltlang_hir_ty::{NumberKind, Ty, TyNames, lower::ClassConstraint};
 use boltlang_syntax::rowan::{TextRange, TextSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -207,7 +207,7 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
 
         K::TypeMismatch { expected, actual, .. } => (
             C::TYPE_MISMATCH,
-            format!("expected `{}`, found `{}`", expected.display_with(db, names), actual.display_with(db, names)),
+            format!("expected {}, found {}", ty_phrase(db, names, &expected), ty_phrase(db, names, &actual)),
         ),
         K::InfiniteType { ty } => {
             (C::INFINITE_TYPE, format!("this would need the infinite type `{}`", ty.display_with(db, names)))
@@ -259,6 +259,16 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         }
 
         K::Unsupported => (C::UNSUPPORTED, "the type checker doesn't support this yet".into()),
+    }
+}
+
+/// A type in a sentence: `` `i32` ``, or "an integer" for a number literal
+/// whose type nothing decided. Inside other types, that's `{integer}`.
+fn ty_phrase(db: &dyn Db, names: &TyNames, ty: &Ty<'_>) -> String {
+    match ty {
+        Ty::Number(NumberKind::Int) => "an integer".to_string(),
+        Ty::Number(NumberKind::Float) => "a float".to_string(),
+        ty => format!("`{}`", ty.display_with(db, names)),
     }
 }
 

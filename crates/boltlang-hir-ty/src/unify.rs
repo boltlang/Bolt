@@ -7,7 +7,7 @@
 
 use boltlang_hir_def::builtin_type::BuiltinType;
 
-use crate::ty::{Ty, TyVar, VarKind};
+use crate::ty::{NumberKind, Ty, TyVar, VarKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnifyError<'db> {
@@ -29,6 +29,9 @@ pub struct Unifier<'db> {
     /// Whether each variable met the error type, so that it becomes the
     /// error type if nothing else decides it: see [`Unifier::error_unknowns`].
     met_error: Vec<bool>,
+    /// The variables of number literals that got their default type, so that
+    /// type errors can say they are numbers: see [`Unifier::resolve_literals`].
+    defaulted: Vec<Option<NumberKind>>,
 }
 
 impl<'db> Unifier<'db> {
@@ -40,6 +43,7 @@ impl<'db> Unifier<'db> {
         let var = TyVar(self.vars.len() as u32);
         self.vars.push(VarState::Unbound(kind));
         self.met_error.push(false);
+        self.defaulted.push(None);
         Ty::Var(var)
     }
 
@@ -76,17 +80,42 @@ impl<'db> Unifier<'db> {
 
     /// Give unbound integer and float variables their default types.
     pub fn default_numeric_vars(&mut self) {
-        for state in &mut self.vars {
+        for (state, defaulted) in self.vars.iter_mut().zip(&mut self.defaulted) {
             match state {
-                VarState::Unbound(VarKind::Int) => *state = VarState::Bound(Ty::Builtin(BuiltinType::Int(
-                    boltlang_hir_def::builtin_type::BuiltinInt::I32,
-                ))),
-                VarState::Unbound(VarKind::Float) => *state = VarState::Bound(Ty::Builtin(BuiltinType::Float(
-                    boltlang_hir_def::builtin_type::BuiltinFloat::F64,
-                ))),
+                VarState::Unbound(VarKind::Int) => {
+                    *state = VarState::Bound(Ty::Builtin(BuiltinType::Int(
+                        boltlang_hir_def::builtin_type::BuiltinInt::I32,
+                    )));
+                    *defaulted = Some(NumberKind::Int);
+                }
+                VarState::Unbound(VarKind::Float) => {
+                    *state = VarState::Bound(Ty::Builtin(BuiltinType::Float(
+                        boltlang_hir_def::builtin_type::BuiltinFloat::F64,
+                    )));
+                    *defaulted = Some(NumberKind::Float);
+                }
                 _ => {}
             }
         }
+    }
+
+    /// Like [`Unifier::resolve`], but a number literal whose type only comes
+    /// from defaulting is [`Ty::Number`], for type errors: the `1` of
+    /// `let a: f64 = 1;` is `{integer}`, not `i32`.
+    pub fn resolve_literals(&self, ty: &Ty<'db>) -> Ty<'db> {
+        ty.fold(&mut |t| {
+            let &Ty::Var(mut var) = t else { return None };
+            loop {
+                if let Some(kind) = self.defaulted[var.0 as usize] {
+                    return Some(Ty::Number(kind));
+                }
+                match &self.vars[var.0 as usize] {
+                    VarState::Unbound(_) => return Some(Ty::Var(var)),
+                    VarState::Bound(Ty::Var(next)) => var = *next,
+                    VarState::Bound(ty) => return Some(self.resolve_literals(ty)),
+                }
+            }
+        })
     }
 
     /// Make the variables that met the error type and are still unknown the

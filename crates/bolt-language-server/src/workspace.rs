@@ -117,7 +117,7 @@ mod tests {
         assert_eq!(messages(&workspace, MAIN), ["cannot find the file `./lib`", "cannot find `negate`"]);
         workspace.set_text(SystemPath::new(LIB), "pub fn negate(x) = !x;\n".into());
         let found = workspace.diagnostics(SystemPath::new(MAIN));
-        assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `bool`, found `i32`"]);
+        assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `bool`, found an integer"]);
         // The label points at the parameter in the other file.
         let related = found[0].related_information.as_ref().unwrap();
         assert!(related[0].location.uri.as_str().ends_with("lib.bolt"));

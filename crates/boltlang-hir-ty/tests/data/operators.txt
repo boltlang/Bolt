@@ -27,8 +27,8 @@ Arithmetic needs operands of the same type
 "a" - 1: str
 --------------------------------------------------------------------------------
 error at `1i32`: expected u8, found i32
-error at `true`: expected i32, found bool
-error at `1`: expected str, found i32
+error at `true`: expected {integer}, found bool
+error at `1`: expected str, found {integer}
 
 ================================================================================
 Shifts can shift by any integer type
@@ -54,7 +54,7 @@ Comparisons give a bool
 "a" != "b": bool
 1 <= true: bool
 --------------------------------------------------------------------------------
-error at `true`: expected i32, found bool
+error at `true`: expected {integer}, found bool
 
 ================================================================================
 Logical operators take and give bools
@@ -68,7 +68,7 @@ true && false: bool
 !true || false: bool
 1 && true: bool
 --------------------------------------------------------------------------------
-error at `1`: expected bool, found i32
+error at `1`: expected bool, found {integer}
 
 ================================================================================
 Negation keeps the type
@@ -105,7 +105,7 @@ fn f() {
 --------------------------------------------------------------------------------
 f: fn() -> ()
 --------------------------------------------------------------------------------
-error at `true`: expected i32, found bool
+error at `true`: expected {integer}, found bool
 
 ================================================================================
 Custom operators call their definition
@@ -121,7 +121,7 @@ true <> false;
 true <> false: (bool, bool)
 1 <> true: (i32, i32)
 --------------------------------------------------------------------------------
-error at `true`: expected i32, found bool
+error at `true`: expected {integer}, found bool
 
 ================================================================================
 A custom operator that isn't defined
