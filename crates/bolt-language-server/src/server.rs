@@ -123,8 +123,29 @@ impl Server {
 
 /// The path of the file a document is, from its `file:` URI.
 pub fn path_of(uri: &Uri) -> Result<SystemPathBuf, NotAFile> {
+    // `to_file_path` doesn't check the scheme: `untitled:Untitled-1` would
+    // be the relative path `Untitled-1`.
+    if !uri.scheme().as_str().eq_ignore_ascii_case("file") {
+        return Err(NotAFile(uri.clone()));
+    }
     match uri.to_file_path() {
-        Some(path) => Ok(SystemPathBuf::from(path.into_owned())),
-        None => Err(NotAFile(uri.clone())),
+        Some(path) if path.is_absolute() => Ok(SystemPathBuf::from(path.into_owned())),
+        _ => Err(NotAFile(uri.clone())),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::str::FromStr;
+
+    use super::*;
+
+    #[test]
+    fn only_file_uris_are_files() {
+        let path = |uri: &str| path_of(&Uri::from_str(uri).unwrap()).map(|p| p.as_std_path().to_string_lossy().into_owned());
+        assert_eq!(path("file:///project/main.bolt"), Ok("/project/main.bolt".to_string()));
+        assert_eq!(path("file:///a%20b.bolt"), Ok("/a b.bolt".to_string()));
+        assert!(path("untitled:Untitled-1").is_err());
+        assert!(path("inmemory://model/1").is_err());
     }
 }
