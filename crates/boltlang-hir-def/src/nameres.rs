@@ -155,13 +155,23 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                 let c = &tree.classes[idx.index()];
                 let class = ClassId::new(db, file, idx);
                 define(&mut out, Namespace::Types, &c.name, ModuleDefId::Class(class), c.visibility, c.ast_id);
-                // Class methods are called like functions, as in Haskell, so
-                // they're in the file's scope, with the class's visibility.
+                // Class methods are called like functions, as in Haskell, and
+                // class constants are used like constants, so they're in the
+                // file's scope, with the class's visibility.
+                let container = ItemContainerId::Class(class);
                 for item in &c.items {
-                    if let AssocItem::Function(idx) = *item {
-                        let f = &tree.functions[idx.index()];
-                        let def = ModuleDefId::Function(FunctionId::new(db, ItemContainerId::Class(class), idx));
-                        define(&mut out, Namespace::Values, &function_name(&f.name), def, c.visibility, f.ast_id);
+                    match *item {
+                        AssocItem::Function(idx) => {
+                            let f = &tree.functions[idx.index()];
+                            let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
+                            define(&mut out, Namespace::Values, &function_name(&f.name), def, c.visibility, f.ast_id);
+                        }
+                        AssocItem::Const(idx) => {
+                            let k = &tree.consts[idx.index()];
+                            let def = ModuleDefId::Const(ConstId::new(db, container, idx));
+                            define(&mut out, Namespace::Values, &k.name, def, c.visibility, k.ast_id);
+                        }
+                        AssocItem::TypeAlias(_) | AssocItem::MacroCall(_) => {}
                     }
                 }
             }

@@ -16,21 +16,21 @@ use boltlang_hir_def::{
         ArithOp, BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
         PrefixOp, RecordField, Statement, TypeRefId,
     },
-    ids::FunctionId,
+    ids::{ConstId, FunctionId, ItemContainerId},
     signatures::function_signature,
-    resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
+    resolver::{GenericDefId, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     scope::expr_scopes,
 };
 
 use crate::{
     lower::{
-        FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, identity_args,
-        subst_params,
+        ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types,
+        identity_args, subst_params,
     },
     check::function_scheme,
     scheme::Scheme,
     solve::{Constraint, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
-    ty::{AdtId, Ty, VarKind},
+    ty::{AdtId, GenericParamId, Ty, VarKind},
 };
 
 /// The types found in a body, and what went wrong.
@@ -555,11 +555,29 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match value {
             ValueNs::Local(binding) => self.result.binding_types.get(binding).cloned().unwrap_or(Ty::Error),
             ValueNs::Function(f) => self.function_ty(expr, f),
-            ValueNs::Const(c) => const_ty(self.db, c).ty.clone(),
+            ValueNs::Const(c) => self.const_value_ty(expr, c),
             // Const generics aren't supported yet.
             ValueNs::ConstParam { .. } => Ty::Error,
             ValueNs::Variant(v) => self.constructor_ty(VariantDef::Variant(v)),
         }
+    }
+
+    /// The type of a constant used as a value. A class constant, like the
+    /// `ZERO` of `class Zero[T] { const ZERO: T; }`, is generic in the
+    /// class's parameters and needs an instance, like a class method.
+    fn const_value_ty(&mut self, expr: ExprId, c: ConstId<'db>) -> Ty<'db> {
+        let ty = const_ty(self.db, c).ty.clone();
+        let ItemContainerId::Class(class) = c.container(self.db) else { return ty };
+        let def = GenericDefId::Class(class);
+        let count = def.generic_params(self.db).type_params.len();
+        let scheme = Scheme {
+            params: (0..count).map(|index| GenericParamId { def, index: index as u32 }).collect(),
+            bound: 0,
+            predicates: Box::new([ClassConstraint { class, args: identity_args(self.db, def) }]),
+            fields: Box::new([]),
+            ty,
+        };
+        scheme.instantiate(self.solver, self.origin(expr))
     }
 
     /// The type of a struct or variant used as a value: a function for a

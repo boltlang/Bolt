@@ -112,11 +112,19 @@ Class constants
 class Zero[T] { const ZERO: T; }
 impl Zero[i32] { const ZERO: i32 = 0; }
 fn f() -> i32 = ZERO;
-
+fn g() -> bool = ZERO;
+fn zeros() = (ZERO, ZERO);
+fn h[T]() -> T where Zero[T] = ZERO;
+fn k() { let z = ZERO; }
 --------------------------------------------------------------------------------
 f: fn() -> i32
+g: fn() -> bool
+zeros: forall a b. Zero[a] => Zero[b] => fn() -> (a, b)
+h: forall T. Zero[T] => fn() -> T
+k: fn() -> ()
 --------------------------------------------------------------------------------
-error at `ZERO`: unresolved
+error at `ZERO`: no instance Zero[bool]
+error at `ZERO`: ambiguous
 
 ================================================================================
 Method call syntax with class methods
