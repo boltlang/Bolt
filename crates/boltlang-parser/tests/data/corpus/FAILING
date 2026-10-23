@@ -17,8 +17,3 @@ ok/declarations-macro_invocations_inside_trait_declarations.bolt
 ok/declarations-trait_declarations.bolt
 ok/declarations-trait_declarations_with_optional_type_parameters.bolt
 ok/declarations-where_clauses.bolt
-
-# These define operators like `fn a + b`, which the parser doesn't support
-# yet.
-ok/declarations-infix_and_prefix_operator_definitions.bolt
-ok/expressions-anonymous_functions.bolt

@@ -16,6 +16,12 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
       "cannot find `helper`"; it could say that `helper` isn't visible, like
       an import does. *(hir-def, hir-ty, hir)*
 - [ ] `pub(super)` is treated like `pub`. *(hir-def)*
+- [ ] `fn -x` and `fn a - b` define the same name, `-`, so defining both is
+      "defined more than once". Prefix operators need names of their own.
+      *(hir-def)*
+- [ ] Defining a built-in operator, like `fn a + b`, has no effect: `+` in
+      expressions is still built in. Only other operators, like `<>`, call
+      their definition. *(hir-ty)*
 - [ ] A `std` that comes with the compiler, so that projects don't need a
       copy in `.bolt/packages`. Packages would be looked up in the nearest
       `.bolt/packages` first, then in the bundled ones. *(base-db, hir-def,
@@ -43,17 +49,16 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 
 The parser covers the whole grammar: the cases of the tree-sitter corpus
 parse without errors (`crates/boltlang-parser/tests/data/corpus`), except the
-15 that use syntax the parser no longer accepts (see below).
+13 that use syntax the parser no longer accepts (see below).
 `scripts/compare_corpus.py` compares our trees with tree-sitter's expected
 ones; the only differences left are the deliberate ones listed at the end of
 this section.
 
 ### Removed from the parser, still in the grammar
 
-- [ ] `self` parameters and impls of types are gone: functions for a type are
-      top-level functions called like `x.f()`, and the head of an impl must
-      be a class, like `Show[i32]`. Remove them from `grammar.js` too, then
-      re-import the corpus with `scripts/import_corpus.py` and remove the 15
+- [ ] `self` parameters are gone: functions for a type are top-level
+      functions called like `x.f()`. Remove them from `grammar.js` too, then
+      re-import the corpus with `scripts/import_corpus.py` and remove the 13
       entries at the end of `tests/data/corpus/FAILING`.
       *(tree-sitter-bolt, parser)*
 

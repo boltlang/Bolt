@@ -33,7 +33,7 @@ fn local_items_are_in_their_namespaces() {
         "/main.bolt",
         r#"
 fn f() {}
-fn (+)(a, b) = a;
+fn a + b = a;
 struct S;
 enum E { A }
 class C[T] { fn show(x: T); }

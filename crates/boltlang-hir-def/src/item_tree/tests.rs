@@ -15,7 +15,7 @@ pub import "./b" (x, y as z);
 import "./c" as c;
 import "./d" *;
 pub fn f(x: i32) -> i32 = x;
-fn (+)(a, b) = add(a, b);
+fn a + b = add(a, b);
 async const fn g();
 pub(package) struct Point { x: i32 }
 enum Color { Red, Green = 2 }

@@ -2,14 +2,14 @@
 //! enums, traits, impls, imports and so on. Laid out like rust-analyzer's
 //! `items` module.
 
-use boltlang_syntax::{SyntaxKind::*, T};
+use boltlang_syntax::{SyntaxKind::{self, *}, T};
 
 use crate::{
     grammar::{
-        abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param_list, parse_block_expr,
+        abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param, param_list, parse_block_expr,
         trait_bounds, type_no_bounds, is_path_start, TYPE_FIRST,
     },
-    parser::{Marker, Parser, is_operator_kind},
+    parser::{Marker, Parser},
     token_set::TokenSet,
 };
 
@@ -88,14 +88,57 @@ fn at_fn(p: &Parser) -> bool {
 }
 
 /// Whether the `fn` keyword at token `n` starts a named function or operator
-/// declaration, rather than an anonymous function like `fn (x) = x`.
+/// definition, rather than an anonymous function like `fn (x) = x`.
 fn is_named_fn(p: &Parser, n: usize) -> bool {
     match p.nth(n + 1) {
-        // `fn (+)(a, b) = ...` declares an operator
-        T!['('] => is_operator_kind(p.nth(n + 2)) && p.nth_at(n + 3, T![')']),
-        // Anything else is a name, or a missing one that fn_item reports.
+        // `fn (a: T) + (b: T)` defines an operator.
+        T!['('] => closing_paren(p, n + 1).is_some_and(|close| is_infix_operator(p.nth(close + 1))),
+        // Anything else is a name, an operator definition, or a missing name
+        // that fn_item reports.
         _ => true,
     }
+}
+
+/// Whether an operator definition starts at the current token, just after
+/// `fn`: `fn[T] ...`, `fn a + b`, `fn (a: T) + (b: T)` or `fn -x`.
+fn at_operator_def(p: &Parser) -> bool {
+    match p.current() {
+        T!['['] => true,
+        IDENT => is_infix_operator(p.nth(1)),
+        T!['('] => closing_paren(p, 0).is_some_and(|close| is_infix_operator(p.nth(close + 1))),
+        kind => is_prefix_operator(kind),
+    }
+}
+
+/// The operators that `fn a + b` can define: the built-in binary operators
+/// and others like `<>`, but not those with another role, like `->` or `.`.
+fn is_infix_operator(kind: SyntaxKind) -> bool {
+    matches!(kind, OPERATOR | VBAR | LT | GT | STAR | PLUS | MINUS)
+}
+
+/// The operators that `fn -x` can define.
+fn is_prefix_operator(kind: SyntaxKind) -> bool {
+    matches!(kind, MINUS | EXCL)
+}
+
+/// The position of the `)` that closes the `(` at token `open`, if it's
+/// before the end of the statement.
+fn closing_paren(p: &Parser, open: usize) -> Option<usize> {
+    let mut depth = 0;
+    for n in open.. {
+        match p.nth(n) {
+            T!['('] => depth += 1,
+            T![')'] => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(n);
+                }
+            }
+            T![;] | T!['{'] | T!['}'] | EOF => return None,
+            _ => {}
+        }
+    }
+    None
 }
 
 /// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
@@ -120,33 +163,27 @@ pub(crate) fn opt_visibility(p: &mut Parser) -> bool {
 /// - `fn f[T](x: T) -> T where T: Ord { ... }`
 /// - `fn f(x: T) -> T;` without a body
 /// - `fn f(x: T) -> T = x;` with an expression body
-/// - `fn (+)(a, b) = add(a, b);` for an operator
+/// - `fn a + b = add(a, b);` or `fn -x = neg(x);` for an operator, see
+///   [`operator_def`]
 fn fn_item(p: &mut Parser, m: Marker) {
     function_modifiers(p);
     p.expect(T![fn]);
-    match p.current() {
-        IDENT | METAVARIABLE => {
-            let name = p.start();
-            p.bump_any();
-            name.complete(p, NAME);
-        }
-        T!['('] => {
-            let name = p.start();
-            p.bump(T!['(']);
-            if is_operator_kind(p.current()) {
+    if at_operator_def(p) {
+        operator_def(p);
+    } else {
+        match p.current() {
+            IDENT | METAVARIABLE => {
+                let name = p.start();
                 p.bump_any();
-            } else {
-                p.error("expected an operator");
+                name.complete(p, NAME);
             }
-            p.expect(T![')']);
-            name.complete(p, OPERATOR_NAME);
+            _ => p.error("expected a name or an operator definition"),
         }
-        _ => p.error("expected a name or an operator wrapped between '(' and ')'"),
+        if p.at(T!['[']) {
+            generic_param_list(p);
+        }
+        param_list(p);
     }
-    if p.at(T!['[']) {
-        generic_param_list(p);
-    }
-    param_list(p);
     opt_ret_type(p);
     opt_where_clause(p);
     if p.eat(T![=]) {
@@ -158,6 +195,55 @@ fn fn_item(p: &mut Parser, m: Marker) {
         p.expect(T![;]);
     }
     m.complete(p, FUNC_DECL);
+}
+
+/// The head of an operator definition, after `fn`, following the grammar's
+/// `operator_definition`: `fn a + b`, `fn[T] (a: T) + (b: T)`, `fn -x` or
+/// `fn !(f: Flag)`. The operands are the parameters, so they go in a
+/// PARAM_LIST, with the OPERATOR_NAME between or before them.
+fn operator_def(p: &mut Parser) {
+    if p.at(T!['[']) {
+        generic_param_list(p);
+    }
+    let params = p.start();
+    if is_prefix_operator(p.current()) {
+        operator_name(p);
+        operand(p);
+    } else {
+        operand(p);
+        if is_infix_operator(p.current()) {
+            operator_name(p);
+        } else {
+            p.error("expected an operator");
+        }
+        operand(p);
+    }
+    params.complete(p, PARAM_LIST);
+}
+
+fn operator_name(p: &mut Parser) {
+    let m = p.start();
+    p.bump_any();
+    m.complete(p, OPERATOR_NAME);
+}
+
+/// A name, or a parameter in parentheses: `a` or `(a: T)`.
+fn operand(p: &mut Parser) {
+    match p.current() {
+        IDENT => {
+            let param = p.start();
+            let pat = p.start();
+            name(p);
+            pat.complete(p, NAMED_PATT);
+            param.complete(p, PARAM);
+        }
+        T!['('] => {
+            p.bump(T!['(']);
+            param(p);
+            p.expect(T![')']);
+        }
+        _ => p.error("expected an operand: a name, or a parameter in parentheses"),
+    }
 }
 
 /// `where T: Ord, Vec[T]: Hash, Convert[A, B]`, following the grammar's

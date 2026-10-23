@@ -37,7 +37,7 @@ pub(crate) fn param_list(p: &mut Parser) {
 
 /// One parameter: `...`, `args: ...`, or a pattern with an optional type
 /// and default value, like `x`, `x: T` or `x: T = 1`.
-fn param(p: &mut Parser) -> CompletedMarker {
+pub(crate) fn param(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     outer_attrs(p);
     if p.at(T![...]) {

@@ -6,5 +6,5 @@ extern "C" fn e(x: i32);
 async const extern fn f() {}
 fn g[T](x: T) -> T where T: Ord + Hash, Vec[T]: Clone, { x }
 fn $name() {}
-fn (+)(a, b) = add(a, b);
+fn a + b = add(a, b);
 pub(self) fn h();

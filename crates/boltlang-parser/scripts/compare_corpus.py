@@ -30,7 +30,7 @@ TS_TO_OURS = {
     "await_expression": "AWAIT_EXPR", "struct_expression": "RECORD_EXPR",
     "array_expression": "ARRAY_EXPR", "tuple_expression": "TUPLE_EXPR",
     "parenthesized_expression": "NEST_EXPR", "function_item": "FUNC_DECL",
-    "function_signature_item": "FUNC_DECL", "struct_item": "STRUCT", "enum_item": "ENUM",
+    "function_signature_item": "FUNC_DECL", "operator_definition": "FUNC_DECL", "struct_item": "STRUCT", "enum_item": "ENUM",
     "let_declaration": "LET_STMT", "for_expression": "FOR_EXPR",
     "while_expression": "WHILE_EXPR", "loop_expression": "LOOP_EXPR",
     "impl_item": "IMPL", "class_item": "CLASS", "function_expression": "FUN_EXPR", "macro_invocation": "MACRO_CALL",

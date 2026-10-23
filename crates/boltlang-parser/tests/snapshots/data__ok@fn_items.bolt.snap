@@ -252,23 +252,19 @@ input_file: crates/boltlang-parser/tests/data/ok/fn_items.bolt
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - OPERATOR_NAME
-      - L_PAREN "("
-      - PLUS "+"
-      - R_PAREN ")"
     - PARAM_LIST
-      - L_PAREN "("
       - PARAM
         - NAMED_PATT
           - NAME
             - IDENT "a"
-      - COMMA ","
+      - WHITESPACE " "
+      - OPERATOR_NAME
+        - PLUS "+"
       - WHITESPACE " "
       - PARAM
         - NAMED_PATT
           - NAME
             - IDENT "b"
-      - R_PAREN ")"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "

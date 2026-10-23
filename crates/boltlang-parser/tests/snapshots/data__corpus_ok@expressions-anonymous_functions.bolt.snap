@@ -256,24 +256,13 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-anonymous_fu
   - FUNC_DECL
     - FN_KEYWORD "fn"
     - WHITESPACE " "
-    - OPERATOR_NAME
-      - L_PAREN "("
-      - MINUS "-"
-      - R_PAREN ")"
-    - WHITESPACE " "
     - PARAM_LIST
-      - L_PAREN "("
+      - OPERATOR_NAME
+        - MINUS "-"
       - PARAM
         - NAMED_PATT
           - NAME
-            - IDENT "a"
-      - COMMA ","
-      - WHITESPACE " "
-      - PARAM
-        - NAMED_PATT
-          - NAME
-            - IDENT "b"
-      - R_PAREN ")"
+            - IDENT "x"
     - WHITESPACE " "
     - EQUALS "="
     - WHITESPACE " "
@@ -282,21 +271,14 @@ input_file: crates/boltlang-parser/tests/data/corpus/ok/expressions-anonymous_fu
         - PATH
           - PATH_SEGMENT
             - NAME_REF
-              - IDENT "sub"
+              - IDENT "neg"
       - ARG_LIST
         - L_PAREN "("
         - PATH_EXPR
           - PATH
             - PATH_SEGMENT
               - NAME_REF
-                - IDENT "a"
-        - COMMA ","
-        - WHITESPACE " "
-        - PATH_EXPR
-          - PATH
-            - PATH_SEGMENT
-              - NAME_REF
-                - IDENT "b"
+                - IDENT "x"
         - R_PAREN ")"
     - SEMI ";"
   - WHITESPACE "\n"

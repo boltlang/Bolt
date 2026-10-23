@@ -126,6 +126,19 @@ fn unresolved_name_does_not_cascade() {
 }
 
 #[test]
+fn custom_operator_calls_its_definition() {
+    check(
+        r#"
+  fn[T] (a: T) <> (b: T) -> T = a;
+  let x: i32 = 1 <> 2;
+  let y: bool = 1 <> 2;
+       //^^^^ label: expected because of this annotation
+              //^^^^^^ error: expected `bool`, found `i32`
+"#,
+    );
+}
+
+#[test]
 fn range_before_a_syntax_error_leaves_out_whitespace() {
     check(
         r#"

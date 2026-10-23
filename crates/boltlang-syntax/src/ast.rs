@@ -1471,9 +1471,10 @@ impl FuncDecl {
         self.find_node()
     }
 
-    /// The `(+)` of an operator definition like `fn (+)(a, b)`.
+    /// The `+` of an operator definition like `fn a + b`, which is in the
+    /// parameter list, between the operands.
     pub fn operator_name(&self) -> Option<OperatorName> {
-        self.find_node()
+        self.param_list()?.find_node()
     }
 
     pub fn generic_param_list(&self) -> Option<GenericParamList> {
@@ -1519,7 +1520,7 @@ impl Visibility {
     }
 }
 
-/// The `(+)` in `fn (+)(a, b)`
+/// The `+` in `fn a + b`, or the `-` in `fn -x`
 pub struct OperatorName(SyntaxNode);
 
 simple_node!(OperatorName, OPERATOR_NAME);
@@ -1529,7 +1530,7 @@ impl OperatorName {
         self.0
             .children_with_tokens()
             .filter_map(|x| x.into_token())
-            .find(|token| !token.kind().is_trivia() && !matches!(token.kind(), L_PAREN | R_PAREN))
+            .find(|token| !token.kind().is_trivia())
     }
 }
 

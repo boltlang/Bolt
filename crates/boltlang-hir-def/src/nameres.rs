@@ -209,7 +209,7 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
 }
 
 /// The name a function is defined under: its name, or for an operator like
-/// `fn (+)`, the operator.
+/// `fn a + b`, the operator.
 fn function_name(name: &Option<FunctionName>) -> Option<Name> {
     match name {
         Some(FunctionName::Name(name) | FunctionName::Operator(name)) => Some(name.clone()),

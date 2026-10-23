@@ -146,7 +146,7 @@ impl RawVisibility {
 }
 
 /// The name of a function: an identifier, or an operator like `+` for
-/// `fn (+)(a, b)`.
+/// `fn a + b`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum FunctionName {
     Name(Name),

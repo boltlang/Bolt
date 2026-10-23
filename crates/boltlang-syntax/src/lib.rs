@@ -283,7 +283,7 @@ pub enum SyntaxKind {
     VARIADIC_PARAM,
     /// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
     VISIBILITY,
-    /// The `(+)` in `fn (+)(a, b)`
+    /// The `+` in `fn a + b`
     OPERATOR_NAME,
     /// `const NAME: Type = value;`
     CONST,
