@@ -28,7 +28,7 @@ Output:
 True
 ```
 
-Any object that implements the `Display` trait is printable.
+Any object that implements the `Show` trait is printable.
 
 ## Debug Printing
 
@@ -125,9 +125,9 @@ fn shoot(direction: Vec3, strength: Float32 = 1.0) {
     todo!()
 }
 
-shoot(Vec3::new(1.0, -1.0, 0.0)); // strength is 1.0
-shoot(Vec3::new(1.0, -1.0, 0.0), 2.0); // strength is 2.0
-shoot(Vec3::new(1.0, -1.0, 0.0), strength=0.5); // strength is 0.5
+shoot(Vec3.new(1.0, -1.0, 0.0)); // strength is 1.0
+shoot(Vec3.new(1.0, -1.0, 0.0), 2.0); // strength is 2.0
+shoot(Vec3.new(1.0, -1.0, 0.0), strength=0.5); // strength is 0.5
 ```
 
 ## Garbage Collection
@@ -141,43 +141,40 @@ allowed. Some might consider the use of cycles bad practice, but it is
 occasionally useful for prototyping:
 
 ```rust
-struct Node<T> {
+type Node[T] = {
     value: Int32,
-    next: Option<Node<T>>,
-    prev: Option<Node<T>>,
+    next: Option[Node[T]],
+    prev: Option[Node[T]],
 }
 
-let first = Node { 1, None, None }
-let second = Node { 2, None, first }
+let first = Node { 1, None, None };
+let second = Node { 2, None, first };
 second.prev = first; // create the cycle
 ```
 
-## No `mut`
-
-Because references are not explicit in Bolt, Rust's `mut` keyword becomes irrelevant.
+## `mut`
 
 ```rust
-let foo = 1;
-foo = 2;
-print(foo);
+let mut foo = 1;
+foo = 2; // ok
+print(foo); // prints 2
 ```
 
-Output:
-
-```
-2
+```rust
+let bar = 1;
+bar = 2; // compile-time error
 ```
 
 ## Typeclasses
 
-Bolt will also support traits/typeclasses, like in Rust and Haskell:
+Bolt also supports traits/typeclasses, like in Rust and Haskell:
 
 ```rust
-class Shout<T> {
+class Shout[T] {
   fn shout(self: T) -> String;
 }
 
-impl Shout<Dog> {
+impl Shout[Dog] {
     fn shout(self) {
         print("Bark, bark!");
     }
@@ -185,7 +182,7 @@ impl Shout<Dog> {
 
 // Imagine somewhere in another library Cat is defined ...
 
-impl Shout<Cat> {
+impl Shout[Cat] {
     fn shout(self) {
         print("Miau! Miau!");
     }
@@ -199,7 +196,7 @@ Here's an example of a [React](https://react.dev/)-like framework in Bolt:
 _Note that this example is very experimental._
 
 ```rust
-import "html" ( Html )
+import "html" (Html, h1)
 
 fn app() -> Html {
 
