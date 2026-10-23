@@ -212,5 +212,12 @@ other errors.
       `publishDiagnostics` would work for them too. *(bolt-language-server)*
 - [ ] Incremental text sync instead of the whole file on every change.
       *(bolt-language-server)*
+- [ ] In the browser (`bolt-language-server-wasm`), the page has to give
+      the server every file that isn't open, like those of
+      `.bolt/packages`, with `writeFile`. A request from the server for a
+      file it can't find would let the page load files as they're needed.
+      *(bolt-language-server)*
+- [ ] A panic ends the server in the browser, since wasm can't catch it,
+      and the page has to start a new one. *(bolt-language-server)*
 - [ ] Completion after `x.`: the functions in scope whose first parameter can
       take the type of `x`. *(bolt-language-server, hir, hir-ty)*
