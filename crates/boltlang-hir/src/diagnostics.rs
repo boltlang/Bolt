@@ -65,6 +65,10 @@ pub enum DiagnosticKind<'db> {
     /// The item to import exists but isn't visible here: it's private, or
     /// `pub(package)` in another package when `package_only` is set.
     PrivateImport { name: Name, package_only: bool },
+    /// The enum of `import Option.*;` can't be found.
+    UnresolvedImportEnum { path: String },
+    /// The path of `import Point.*;` isn't an enum.
+    NotAnEnum { path: String },
     UnresolvedName,
     UnresolvedType,
     /// A path that names something other than a type, like a class.
@@ -256,6 +260,12 @@ impl<'db> Collector<'db> {
                 NameResDiagnostic::PrivateImport { import, name, package_only } => {
                     let kind = DiagnosticKind::PrivateImport { name: name.clone(), package_only: *package_only };
                     (self.name_in(*import, name), kind)
+                }
+                NameResDiagnostic::UnresolvedImportEnum { import, path } => {
+                    (self.import_path_range(*import), DiagnosticKind::UnresolvedImportEnum { path: path.clone() })
+                }
+                NameResDiagnostic::NotAnEnum { import, path } => {
+                    (self.import_path_range(*import), DiagnosticKind::NotAnEnum { path: path.clone() })
                 }
             };
             self.push(range, kind);
@@ -606,6 +616,13 @@ impl<'db> Collector<'db> {
         let segment = path.children().filter(|n| n.kind() == PATH_SEGMENT).last()?;
         let name = segment.children().find(|n| n.kind() == NAME_REF)?;
         Some(TextRange::new(path.text_range().start(), name.text_range().end()))
+    }
+
+    /// The path of `import Option.*;`, or the whole import.
+    fn import_path_range(&self, import: AstId) -> Option<TextRange> {
+        let node = import.to_node(&self.root)?;
+        let path = node.children().find(|n| n.kind() == PATH);
+        Some(path.unwrap_or(node).text_range())
     }
 
     /// The name of an item, or the whole item if it has none.

@@ -49,6 +49,8 @@ impl DiagnosticCode {
     pub const UNRESOLVED_TYPE: Self = Self("E0106");
     pub const NOT_A_TYPE: Self = Self("E0107");
     pub const NOT_A_CLASS: Self = Self("E0108");
+    pub const UNRESOLVED_IMPORT_ENUM: Self = Self("E0109");
+    pub const NOT_AN_ENUM: Self = Self("E0110");
 
     pub const TYPE_MISMATCH: Self = Self("E0201");
     pub const INFINITE_TYPE: Self = Self("E0202");
@@ -193,6 +195,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::PrivateImport { name, package_only: false } => (C::PRIVATE_IMPORT, format!("`{name}` is private")),
         K::PrivateImport { name, package_only: true } => {
             (C::PRIVATE_IMPORT, format!("`{name}` is only visible inside its package"))
+        }
+        K::UnresolvedImportEnum { path } => (C::UNRESOLVED_IMPORT_ENUM, format!("cannot find the enum `{path}`")),
+        K::NotAnEnum { path } => {
+            (C::NOT_AN_ENUM, format!("`{path}` is not an enum, so it has no variants to import"))
         }
         K::UnresolvedName => (C::UNRESOLVED_NAME, format!("cannot find `{source}`")),
         K::UnresolvedType => (C::UNRESOLVED_TYPE, format!("cannot find type `{source}`")),

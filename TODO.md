@@ -34,6 +34,10 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 - [ ] Macro invocations aren't expanded. They're opaque in expressions,
       patterns and types, and the type checker gives them the error type.
       *(hir-def, hir-ty)*
+- [ ] When two glob imports, or imports of variants like `import Option.*;`,
+      bring in the same name, the first one wins without a word. Using such
+      a name could be reported as ambiguous, as in Rust. *(hir-def, hir,
+      ide-diagnostics)*
 - [ ] `pub import` doesn't re-export: an import only sees the items defined
       in the file it imports from, not what that file imports. *(hir-def)*
 

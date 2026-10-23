@@ -220,7 +220,7 @@ pub struct TypeAlias {
 pub struct Import {
     pub visibility: RawVisibility,
     /// The path in the string, without quotes. `None` if it's missing or
-    /// can't be read.
+    /// can't be read, and for `import Option.*;`, which has no string.
     pub source: Option<String>,
     pub kind: ImportKind,
     pub ast_id: AstId,
@@ -236,6 +236,9 @@ pub enum ImportKind {
     Alias(Name),
     /// `import "./path" *;`
     Glob,
+    /// `import Option.*;`, with the path of the enum, whose variants it
+    /// brings into scope.
+    Variants(Box<[Name]>),
 }
 
 /// `extern "C" { items }`. Its items are part of the file it's in.
@@ -341,7 +344,17 @@ impl ItemTree {
             E::TypeAlias(t) => ModItem::TypeAlias(self.lower_type_alias(&t)),
             E::Import(i) => {
                 let ast_id = self.next_ast_id(IMPORT);
-                let kind = if let Some(list) = i.import_list() {
+                let kind = if let Some(path) = i.path() {
+                    // Pre-order, so `a.b` is `PATH(PATH(a) . b)` from left to right.
+                    let names = path
+                        .syntax()
+                        .descendants()
+                        .filter(|n| n.kind() == PATH_SEGMENT)
+                        .filter_map(|segment| segment.children().find(|n| n.kind() == NAME_REF))
+                        .map(|name_ref| Name::new(name_ref.text().to_string()))
+                        .collect();
+                    ImportKind::Variants(names)
+                } else if let Some(list) = i.import_list() {
                     // Keep the order of the names as written.
                     let mut entries: Vec<(u32, Name, Option<Name>)> = Vec::new();
                     for name_ref in list.names() {

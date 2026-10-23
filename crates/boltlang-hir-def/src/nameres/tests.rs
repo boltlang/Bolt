@@ -22,6 +22,8 @@ fn diagnostics(scope: &FileScope) -> Vec<String> {
             NameResDiagnostic::UnresolvedImportName { name, .. } => format!("unresolved name {name}"),
             NameResDiagnostic::PrivateImport { name, package_only: false, .. } => format!("private {name}"),
             NameResDiagnostic::PrivateImport { name, package_only: true, .. } => format!("package-only {name}"),
+            NameResDiagnostic::UnresolvedImportEnum { path, .. } => format!("unresolved enum {path}"),
+            NameResDiagnostic::NotAnEnum { path, .. } => format!("not an enum {path}"),
         })
         .collect()
 }
@@ -80,6 +82,63 @@ fn area() {}
         scope.scope.get(Namespace::Types, &Name::new("io")).unwrap().def,
         ModuleDefId::File(_)
     ));
+}
+
+#[test]
+fn imports_of_variants() {
+    let db = TestDb::new();
+    db.file("/shapes.bolt", "pub enum Shape { Circle { r: f64 }, Square(f64) }\nenum Hidden { A }\n");
+    db.file("/option.bolt", "pub enum Option[T] { Some(T), None }\n");
+    let main = db.file(
+        "/main.bolt",
+        r#"
+import Option.*;
+import "./option" (Option);
+import "./shapes" as s;
+import s.Shape.*;
+import Color.*;
+enum Color { Red, Square }
+fn Red() {}
+"#,
+    );
+    let scope = file_scope(&db, main);
+    // The enum can come from a later import. Like a glob import, a variant
+    // doesn't replace a name that's already in scope: the function `Red`
+    // stays, and `Square` is the one of `Shape`, imported first.
+    assert_eq!(names(&scope.scope, Namespace::Values), [
+        "Circle (imported)",
+        "None (imported)",
+        "Red",
+        "Some (imported)",
+        "Square (imported)",
+    ]);
+    assert!(names(&scope.scope, Namespace::Types).contains(&"Circle (imported)".to_string()));
+    let square = scope.scope.get(Namespace::Values, &Name::new("Square")).unwrap().def;
+    let ModuleDefId::Variant(square) = square else { panic!("{square:?}") };
+    assert_eq!(square.parent.item(&db).name, Some(Name::new("Shape")));
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+}
+
+#[test]
+fn import_of_variants_errors() {
+    let db = TestDb::new();
+    db.file("/shapes.bolt", "enum Hidden { A }\npub struct Point;\n");
+    let main = db.file(
+        "/main.bolt",
+        r#"
+import "./shapes" as s;
+import Nope.*;
+import s.Hidden.*;
+import s.Point.*;
+import Color.Red.*;
+import s.Nope.*;
+enum Color { Red }
+"#,
+    );
+    assert_eq!(
+        diagnostics(file_scope(&db, main)),
+        ["unresolved enum Nope", "private Hidden", "not an enum s.Point", "unresolved enum Color.Red", "unresolved enum s.Nope"]
+    );
 }
 
 #[test]

@@ -263,6 +263,29 @@ import "./lib" (nope, hidden, a);
 }
 
 #[test]
+fn imports_of_variants() {
+    check_files(&[
+        ("/shapes.bolt", "pub enum Shape { Circle(f64), Square(f64) }\npub struct Point;\n"),
+        (
+            "/main.bolt",
+            r#"
+import "./shapes" as s;
+import s.Shape.*;
+import s.Point.*;
+     //^^^^^^^ error: `s.Point` is not an enum, so it has no variants to import
+import Nope.*;
+     //^^^^ error: cannot find the enum `Nope`
+let a = Circle(1.0);
+let b: s.Shape = Square(2.0);
+let c: i32 = Circle(1.0);
+           //^^^^^^^^^^^ error: expected `i32`, found `Shape`
+     //^^^ label: expected because of this annotation
+"#,
+        ),
+    ]);
+}
+
+#[test]
 fn cyclic_inference() {
     let a = r#"
 import "./b" (g);

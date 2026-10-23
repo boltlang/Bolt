@@ -17,7 +17,7 @@ use boltlang_base_db::{Db, File, SystemPath, SystemPathBuf};
 use crate::{
     Name,
     ids::{
-        ClassId, ConstId, EnumId, ExternBlockId, FunctionId, ImplId, ItemContainerId, MacroRulesId, ModuleDefId,
+        ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, MacroRulesId, ModuleDefId,
         StructId, TypeAliasId,
     },
     item_tree::{AssocItem, AstId, FunctionName, ImportKind, ModItem, RawVisibility, item_tree},
@@ -108,6 +108,11 @@ pub enum NameResDiagnostic {
     /// The item to import exists but isn't visible here: it's private, or
     /// `pub(package)` in another package when `package_only` is set.
     PrivateImport { import: AstId, name: Name, package_only: bool },
+    /// The enum of `import Option.*;` can't be found. `path` is as far as
+    /// the path got, like `Option.Some` for `import Option.Some.*;`.
+    UnresolvedImportEnum { import: AstId, path: String },
+    /// The path of `import Point.*;` names something other than an enum.
+    NotAnEnum { import: AstId, path: String },
 }
 
 /// The names in a file and the problems found resolving them.
@@ -282,9 +287,70 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                     }
                 }
             }
+            // Handled below.
+            ImportKind::Variants(_) => {}
+        }
+    }
+    // `import Option.*;` comes after the other imports, so that the enum can
+    // be one of the names they bring in, wherever the import is.
+    for import in &tree.imports {
+        let ImportKind::Variants(path) = &import.kind else { continue };
+        let (id, visibility) = match import_enum(db, file, import.ast_id, &out.scope, path) {
+            Ok(found) => found,
+            Err(error) => {
+                out.diagnostics.push(error);
+                continue;
+            }
+        };
+        for (index, name) in id.item(db).variants.iter().enumerate() {
+            let variant = EnumVariantId { parent: id, index: index as u32 };
+            let entry = ScopeEntry { def: ModuleDefId::Variant(variant), visibility, import: Some(import.ast_id) };
+            // Like a glob import, it doesn't replace names already in scope.
+            // A variant is a value, like `None`, and can be the type of a
+            // record literal, like `Circle { r: 1 }`.
+            for ns in [Namespace::Values, Namespace::Types] {
+                out.scope.insert(ns, name.clone(), entry);
+            }
         }
     }
     out
+}
+
+/// The enum of `import Option.*;`, the import `import` in `file` whose
+/// names so far are `scope`, and its visibility. The path can go through
+/// files imported with `as`, like `m.Shape`, and then sees the items defined
+/// in them, as other imports do.
+fn import_enum<'db>(
+    db: &'db dyn Db,
+    file: File,
+    import: AstId,
+    scope: &ItemScope<'db>,
+    path: &[Name],
+) -> Result<(EnumId<'db>, RawVisibility), NameResDiagnostic> {
+    let joined = |count: usize| path[..count].iter().map(Name::as_str).collect::<Vec<_>>().join(".");
+    let (mut scope, mut owner) = (scope, file);
+    for (i, name) in path.iter().enumerate() {
+        let last = i + 1 == path.len();
+        let Some(entry) = scope.get(Namespace::Types, name) else {
+            return Err(NameResDiagnostic::UnresolvedImportEnum { import, path: joined(i + 1) });
+        };
+        if owner != file && !is_visible_from(db, entry.visibility, owner, file) {
+            let package_only = entry.visibility == RawVisibility::Package;
+            return Err(NameResDiagnostic::PrivateImport { import, name: name.clone(), package_only });
+        }
+        match entry.def {
+            ModuleDefId::File(next) if !last => {
+                owner = next;
+                scope = &local_scope(db, next).scope;
+            }
+            ModuleDefId::Enum(id) if last => return Ok((id, entry.visibility)),
+            _ if last => return Err(NameResDiagnostic::NotAnEnum { import, path: joined(i + 1) }),
+            // Only files can be in the middle of the path.
+            _ => return Err(NameResDiagnostic::UnresolvedImportEnum { import, path: joined(i + 2) }),
+        }
+    }
+    // An empty path, after a syntax error.
+    Err(NameResDiagnostic::UnresolvedImportEnum { import, path: String::new() })
 }
 
 /// Why the path of an import doesn't lead to a file.
