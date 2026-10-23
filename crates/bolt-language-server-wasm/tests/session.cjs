@@ -22,6 +22,12 @@ const opened = send({ jsonrpc: "2.0", method: "textDocument/didOpen",
   params: { textDocument: { uri, languageId: "bolt", version: 1, text } } });
 assert.equal(opened[0].method, "workspace/diagnostic/refresh");
 assert.deepEqual(diagnostics(), ["1:13 expected `str`, found an integer", "2:4 expected `bool`, found an integer"]);
+// The labels, like that of the annotation that says which type was expected.
+const [first] = send({ jsonrpc: "2.0", id: 8, method: "textDocument/diagnostic", params: { textDocument: { uri } } })[0]
+  .result.items;
+assert.deepEqual(first.relatedInformation.map((r) => [r.location.uri, r.location.range.start, r.message]), [
+  [uri, { line: 1, character: 7 }, "expected because of this annotation"],
+]);
 
 send({ jsonrpc: "2.0", method: "textDocument/didChange",
   params: { textDocument: { uri, version: 2 }, contentChanges: [{ text: 'import "std" (id);\nlet a: str = id("x");\n' }] } });

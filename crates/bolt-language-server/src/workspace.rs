@@ -89,9 +89,30 @@ impl Workspace {
 
 fn uri_of(db: &dyn Db, file: File) -> Option<Uri> {
     match file.path(db) {
-        FilePath::System(path) => Uri::from_file_path(path.as_std_path()),
+        FilePath::System(path) => file_uri(path),
         FilePath::SystemVirtual(_) => None,
     }
+}
+
+/// The `file:` URI of an absolute path. `Uri::from_file_path` asks the file
+/// system for a path that `std` doesn't think is absolute, and in the
+/// browser, `std` thinks no path is and there's no file system to ask.
+fn file_uri(path: &SystemPath) -> Option<Uri> {
+    if !path.is_absolute() {
+        return None;
+    }
+    if cfg!(windows) {
+        return Uri::from_file_path(path.as_std_path());
+    }
+    let mut uri = String::from("file://");
+    for byte in path.as_std_path().to_str()?.bytes() {
+        if byte.is_ascii_alphanumeric() || b"/-._~".contains(&byte) {
+            uri.push(byte as char);
+        } else {
+            uri.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    uri.parse().ok()
 }
 
 #[cfg(test)]
@@ -137,6 +158,17 @@ mod tests {
         assert!(related[0].location.uri.as_str().ends_with("lib.bolt"));
         assert_eq!(related[0].message, "expected because of this parameter of `negate`");
         assert_eq!(related[0].location.range.start, ls_types::Position { line: 0, character: 14 });
+    }
+
+    #[test]
+    fn file_uris() {
+        let uri = |path: &str| file_uri(SystemPath::new(path)).map(|u| u.as_str().to_string());
+        assert_eq!(uri("/project/main.bolt").as_deref(), Some("file:///project/main.bolt"));
+        assert_eq!(uri("/a b/ü.bolt").as_deref(), Some("file:///a%20b/%C3%BC.bolt"));
+        assert_eq!(uri("relative.bolt"), None);
+        // It's the path again.
+        let back = crate::path_of(&file_uri(SystemPath::new("/a b/ü.bolt")).unwrap()).unwrap();
+        assert_eq!(back.as_path(), SystemPath::new("/a b/ü.bolt"));
     }
 
     #[test]
