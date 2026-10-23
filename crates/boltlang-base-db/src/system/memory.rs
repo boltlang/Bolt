@@ -28,6 +28,11 @@ impl InMemorySystem {
         }
     }
 
+    /// Remove the file at `path`.
+    pub fn remove_file(&self, path: &SystemPath) -> Result<()> {
+        self.fs.remove_file(path)
+    }
+
 }
 
 
