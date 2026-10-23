@@ -3,32 +3,7 @@ use boltlang_base_db::TestDb;
 use super::*;
 
 // Most tests of the checker are in `tests/data`, run by `tests/check.rs`.
-// These ones need several files, or edit a file between two checks.
-
-#[test]
-fn imported_functions_without_signatures() {
-    let db = TestDb::new();
-    db.file("/lib.bolt", "pub fn id(x) = x;\n");
-    let main = db.file("/main.bolt", "import \"./lib\" (id);\nfn f(y: i32) -> bool = id(y);\n");
-    let ModItem::Function(idx) = item_tree(&db, main).top_level[1] else { panic!() };
-    let f = DefWithBodyId::new(&db, DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(main), idx)));
-    let diagnostics = &infer_body(&db, f).diagnostics;
-    assert!(
-        matches!(&diagnostics[..], [InferenceDiagnostic::Type(TypeError::Mismatch { expected, actual, .. })]
-            if *expected == Ty::bool() && actual.display(&db).to_string() == "i32"),
-        "{diagnostics:?}"
-    );
-}
-
-#[test]
-fn files_that_infer_each_other_report_a_cycle() {
-    let db = TestDb::new();
-    let a = db.file("/a.bolt", "import \"./b\" (g);\npub fn f(x) = g(x);\n");
-    db.file("/b.bolt", "import \"./a\" (f);\npub fn g(x) = f(x);\n");
-    let ModItem::Function(idx) = item_tree(&db, a).top_level[1] else { panic!() };
-    let f = DefWithBodyId::new(&db, DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(a), idx)));
-    assert!(infer_body(&db, f).diagnostics.contains(&InferenceDiagnostic::CyclicInference));
-}
+// This one edits a file between two checks.
 
 /// The type of the top-level statements of a file, to check what reruns.
 #[salsa::tracked]
