@@ -51,7 +51,7 @@ impl<'db> InferenceContext<'_, 'db> {
                     }
                     (_, None) => {
                         let tys: Vec<_> = args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
-                        self.solver.equal(expected, &Ty::Tuple(tys.clone().into()), self.pat_origin(pat));
+                        self.expect_shape(pat, expected, &Ty::Tuple(tys.clone().into()), &tys);
                         tys
                     }
                 };
@@ -91,7 +91,7 @@ impl<'db> InferenceContext<'_, 'db> {
             }
             Pat::Slice { args, rest } => {
                 let elem = self.solver.new_var(VarKind::General);
-                self.solver.equal(expected, &Ty::Array(Box::new(elem.clone())), self.pat_origin(pat));
+                self.expect_shape(pat, expected, &Ty::Array(Box::new(elem.clone())), std::slice::from_ref(&elem));
                 let _ = rest;
                 for &arg in args.iter() {
                     self.check_pat(arg, &elem);
@@ -108,6 +108,20 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
             }
             Pat::ConstBlock(expr) => self.check_expr(*expr, expected),
+        }
+    }
+
+    /// Check that `pat` can match `expected`, as `shape`: a tuple or array
+    /// of the new variables `parts`. If it can't, like `(a, b)` for a
+    /// struct, the parts met an error, so that the names in the pattern
+    /// don't become type parameters.
+    fn expect_shape(&mut self, pat: PatId, expected: &Ty<'db>, shape: &Ty<'db>, parts: &[Ty<'db>]) {
+        let errors = self.solver.errors.len();
+        self.solver.equal(expected, shape, self.pat_origin(pat));
+        if self.solver.errors.len() > errors {
+            for part in parts {
+                self.solver.unifier.met_error(part);
+            }
         }
     }
 

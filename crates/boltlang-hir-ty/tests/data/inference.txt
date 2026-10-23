@@ -46,3 +46,18 @@ f(true): bool
 --------------------------------------------------------------------------------
 error at `x`: expected bool, found i32
 error at `true`: expected i32, found bool
+
+================================================================================
+What is only unknown because of an error becomes the error type
+================================================================================
+fn f() = nope;
+fn g(c: bool) = if c { nope } else { 1 };
+fn h(x) = { nope(x); x };
+--------------------------------------------------------------------------------
+f: fn() -> {error}
+g: fn(bool) -> i32
+h: forall a. fn(a) -> a
+--------------------------------------------------------------------------------
+error at `nope`: unresolved
+error at `nope`: unresolved
+error at `nope`: unresolved

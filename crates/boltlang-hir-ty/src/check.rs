@@ -169,6 +169,10 @@ fn infer_group<'db>(
     solver.solve();
     solver.unifier.default_numeric_vars();
     solver.solve();
+    // The errors are resolved before what's unknown because of them becomes
+    // the error type, or they'd be left out for having it in them.
+    let error_unifier = solver.unifier.clone();
+    solver.unifier.error_unknowns();
     let pending = solver.take_pending();
     let pending_fields = solver.take_pending_fields();
     let mut errors = std::mem::take(&mut solver.errors);
@@ -249,7 +253,7 @@ fn infer_group<'db>(
         let own_errors = errors.iter().filter(|e| error_origin(e).body == def).cloned();
         result.diagnostics.extend(own_errors.map(|e| {
             let mut d = InferenceDiagnostic::Type(e);
-            d.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
+            d.map_types(&mut |t| generalize(&error_unifier.resolve(t), &vars));
             d
         }));
         env.done.insert(f, scheme.clone());

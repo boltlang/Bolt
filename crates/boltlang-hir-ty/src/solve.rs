@@ -271,6 +271,9 @@ impl<'db> Solver<'db> {
         }
         let errors = std::mem::take(&mut self.errors);
         self.errors = errors.into_iter().map(|e| self.resolve_error(e)).collect();
+        // After resolving the errors, which would otherwise be left out for
+        // having the error type in them.
+        self.unifier.error_unknowns();
     }
 
     fn resolve_error(&self, error: TypeError<'db>) -> TypeError<'db> {

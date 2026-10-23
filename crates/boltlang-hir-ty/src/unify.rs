@@ -26,6 +26,9 @@ enum VarState<'db> {
 #[derive(Debug, Default, Clone)]
 pub struct Unifier<'db> {
     vars: Vec<VarState<'db>>,
+    /// Whether each variable met the error type, so that it becomes the
+    /// error type if nothing else decides it: see [`Unifier::error_unknowns`].
+    met_error: Vec<bool>,
 }
 
 impl<'db> Unifier<'db> {
@@ -36,6 +39,7 @@ impl<'db> Unifier<'db> {
     pub fn new_var(&mut self, kind: VarKind) -> Ty<'db> {
         let var = TyVar(self.vars.len() as u32);
         self.vars.push(VarState::Unbound(kind));
+        self.met_error.push(false);
         Ty::Var(var)
     }
 
@@ -85,6 +89,30 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// Make the variables that met the error type and are still unknown the
+    /// error type, once inference is done. Otherwise a type that's only
+    /// unknown because of an error would become a type parameter, like the
+    /// `a` of `forall a. fn() -> a` for `fn h() = 1..2`. A variable isn't
+    /// bound when it meets the error, so that what comes after can still
+    /// decide it: the second arm of `match s { Nope(x) => x, _ => 0.0 }`
+    /// makes it a float.
+    pub fn error_unknowns(&mut self) {
+        for (state, met_error) in self.vars.iter_mut().zip(&self.met_error) {
+            if *met_error && matches!(state, VarState::Unbound(_)) {
+                *state = VarState::Bound(Ty::Error);
+            }
+        }
+    }
+
+    /// Remember that `ty` met an error if it's a variable, like the parts of
+    /// a pattern that can't match, so that [`Unifier::error_unknowns`] makes
+    /// it the error type if nothing else decides it.
+    pub fn met_error(&mut self, ty: &Ty<'db>) {
+        if let Ty::Var(var) = self.shallow_resolve(ty) {
+            self.met_error[var.0 as usize] = true;
+        }
+    }
+
     /// Make `ty` the error type if it's a variable, after reporting an error
     /// about it, so that it doesn't cause more. [`Unifier::unify`] doesn't,
     /// since the error type fits anywhere.
@@ -98,6 +126,10 @@ impl<'db> Unifier<'db> {
         let a = self.shallow_resolve(a);
         let b = self.shallow_resolve(b);
         match (&a, &b) {
+            (Ty::Var(var), Ty::Error) | (Ty::Error, Ty::Var(var)) => {
+                self.met_error[var.0 as usize] = true;
+                Ok(())
+            }
             // `!` and errors fit anywhere, without deciding a variable.
             (Ty::Never | Ty::Error, _) | (_, Ty::Never | Ty::Error) => Ok(()),
             (Ty::Var(x), Ty::Var(y)) if x == y => Ok(()),
@@ -110,6 +142,9 @@ impl<'db> Unifier<'db> {
                 };
                 self.vars[y.0 as usize] = VarState::Unbound(kind);
                 self.vars[x.0 as usize] = VarState::Bound(b.clone());
+                if self.met_error[x.0 as usize] {
+                    self.met_error[y.0 as usize] = true;
+                }
                 Ok(())
             }
             (Ty::Var(var), ty) | (ty, Ty::Var(var)) => self.bind(*var, ty),

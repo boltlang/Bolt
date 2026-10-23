@@ -9,7 +9,7 @@ fn k() { yield 1; }
 --------------------------------------------------------------------------------
 f: forall a. fn(a) -> ()
 g: forall a. fn(a) -> ()
-h: forall a. fn() -> a
+h: fn() -> {error}
 k: fn() -> ()
 --------------------------------------------------------------------------------
 warning at `x?`: unsupported
@@ -24,8 +24,8 @@ fn f(x: impl Show) = x;
 fn g[T](x: T.Item) = x;
 
 --------------------------------------------------------------------------------
-f: forall a. fn({error}) -> a
-g: forall T a. fn({error}) -> a
+f: fn({error}) -> {error}
+g: forall T. fn({error}) -> {error}
 --------------------------------------------------------------------------------
 warning at `impl Show`: unsupported
 warning at `T.Item`: unsupported
