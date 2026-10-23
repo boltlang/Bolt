@@ -37,6 +37,11 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 - [ ] `pub import` doesn't re-export: an import only sees the items defined
       in the file it imports from, not what that file imports. *(hir-def)*
 
+- [ ] Higher-kinded types: a class parameter applied to arguments, like the
+      `F[A]` of `class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A])
+      -> F[B]; }`, with impls for a type constructor like `Functor[Option]`.
+      For now `F[A]` is "expected 0 type arguments". *(hir-ty)*
+
 - [ ] Anonymous records like `{ x: 1, y: 2 }`, as structural types that
       have fields like structs do, so that field constraints work on them
       too. Row polymorphism is only needed for typing record extension and
