@@ -8,9 +8,12 @@ A web page where you type Bolt code and see it highlighted and checked:
   and run in a web worker, reports its errors, as wavy lines in the code
   and in a list under it.
 
-The code is `file:///playground/main.bolt` for the server. It can import
-the tiny `std` package in `std/`, which the page gives the server as
-`/playground/.bolt/packages/std`.
+The code is `file:///playground/main.bolt` for the server. The page gives
+the server the package `std` of `../packages/std` as
+`/playground/.bolt/packages/std`, so the code gets its prelude and can
+import its files. `npm run build` copies it to `vendor/std`, with the list
+of its files in `vendor/std/files.json`, so the playground always has the
+`std` it was built with.
 
 ```sh
 npm install

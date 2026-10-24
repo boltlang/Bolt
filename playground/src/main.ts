@@ -14,8 +14,12 @@ const STORAGE_KEY = "bolt-playground:source";
 /** Where the document is for the language server, which finds imports from it. */
 const URI = "file:///playground/main.bolt";
 
-/** The packages the code can import, as files of the playground. */
-const PACKAGE_FILES = [{ url: "std/io.bolt", path: "/playground/.bolt/packages/std/io.bolt" }];
+/**
+ * Where the server finds the package `std`, whose prelude the code gets
+ * and which it can import. `npm run build` copies it to vendor/std, with
+ * the list of its files in vendor/std/files.json.
+ */
+const STD_PATH = "/playground/.bolt/packages/std";
 
 /** The element with `id`, which index.html has. */
 function element<T extends HTMLElement>(id: string, type: new () => T): T {
@@ -124,7 +128,10 @@ async function start(): Promise<void> {
     injections: new Query(language, await fetchText("vendor/injections.scm")),
   };
   const sample = await fetchText("sample.bolt");
-  const files = await Promise.all(PACKAGE_FILES.map(async ({ url, path }) => ({ path, text: await fetchText(url) })));
+  const stdFiles: string[] = JSON.parse(await fetchText("vendor/std/files.json"));
+  const files = await Promise.all(
+    stdFiles.map(async (file) => ({ path: `${STD_PATH}/${file}`, text: await fetchText(`vendor/std/${file}`) })),
+  );
 
   const client = new Client({
     worker: new URL("./worker.js", import.meta.url),

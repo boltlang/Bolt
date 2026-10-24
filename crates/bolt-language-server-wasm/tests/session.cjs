@@ -33,6 +33,12 @@ send({ jsonrpc: "2.0", method: "textDocument/didChange",
   params: { textDocument: { uri, version: 2 }, contentChanges: [{ text: 'import "std" (id);\nlet a: str = id("x");\n' }] } });
 assert.deepEqual(diagnostics(), []);
 
+// The prelude of `std`, which the code gets without importing it.
+server.writeFile("/project/.bolt/packages/std/__prelude__/lib.bolt", "pub fn twice(x: i32) -> i32 = x * 2;\n");
+send({ jsonrpc: "2.0", method: "textDocument/didChange",
+  params: { textDocument: { uri, version: 3 }, contentChanges: [{ text: 'let a: str = twice(1);\n' }] } });
+assert.deepEqual(diagnostics(), ["0:13 expected `str`, found `i32`"]);
+
 const untitled = send({ jsonrpc: "2.0", method: "textDocument/didOpen",
   params: { textDocument: { uri: "untitled:Untitled-1", languageId: "bolt", version: 1, text: "" } } });
 assert.equal(untitled[0].params.message, "only files are supported, not untitled:Untitled-1");

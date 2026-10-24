@@ -1,7 +1,7 @@
 // Edit this code to see it highlighted by tree-sitter and checked by the
 // Bolt language server. Try a mistake, like `let n: i32 = "one";`.
 
-import "std/io" (print);
+// `print`, `Option` and the rest of the prelude of `std` need no import.
 
 /// A shape, with its size.
 pub enum Shape {
