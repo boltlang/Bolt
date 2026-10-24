@@ -49,9 +49,9 @@ component loads the worker and its wasm files with `new URL("./…",
 import.meta.url)`, which bundlers like Vite and webpack follow, so they
 need no configuration: the files end up in the app's assets. The package
 isn't bundled itself, so it also works in a browser as it is, with an
-import map for `react`. It comes with its own copy of web-tree-sitter,
-without the imports of Node's modules that webpack and Rspack can't
-resolve.
+import map for `react` and `web-tree-sitter`. web-tree-sitter imports
+some of Node's modules only when it runs in Node; its `browser` field in
+package.json, which bundlers follow for the browser, leaves them out.
 
 ## Working on it
 

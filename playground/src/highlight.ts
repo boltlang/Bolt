@@ -10,7 +10,7 @@
 //   query says, and painted over the rest, like `println!` in a
 //   `macro_rules!`.
 
-import type { Parser, Query, QueryCapture, Range } from "./vendor/web-tree-sitter.js";
+import type { Parser, Query, QueryCapture, Range } from "web-tree-sitter";
 
 /** How deep injections can be inside each other. */
 const MAX_DEPTH = 4;

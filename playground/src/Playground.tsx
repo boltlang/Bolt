@@ -15,7 +15,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Language, Parser, Query } from "./vendor/web-tree-sitter.js";
+import { Language, Parser, Query } from "web-tree-sitter";
 import { type Queries, layers, runs, toHtml } from "./highlight.js";
 import { lineAndColumn, underlines } from "./diagnostics.js";
 import { Client, type Diagnostic } from "./lsp.js";

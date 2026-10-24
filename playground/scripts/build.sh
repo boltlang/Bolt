@@ -2,9 +2,8 @@
 # Build the component and the demo page.
 #
 # 1. src/vendor/: what the component needs from outside this folder: the
-#    grammar compiled to wasm, the language server compiled to wasm,
-#    web-tree-sitter without its imports of Node's modules, and as modules
-#    the highlighting queries and the files of ../packages/std.
+#    grammar compiled to wasm, the language server compiled to wasm, and as
+#    modules the highlighting queries and the files of ../packages/std.
 # 2. dist/: the component, compiled from src/ with its types, the wasm
 #    files and its style sheet. That's the package.
 # 3. out/: the demo page, built by Vite from demo/ with the component of
@@ -28,13 +27,11 @@ cargo build --quiet --release --target wasm32-unknown-unknown -p bolt-language-s
 wasm-bindgen --target web --out-dir "$vendor/bolt-language-server" \
   "$root/target/wasm32-unknown-unknown/release/bolt_language_server_wasm.wasm"
 node "$here/scripts/generate.mjs" "$grammar/queries" "$root/packages/std" "$vendor"
-node "$here/scripts/web-tree-sitter.mjs" "$vendor"
 
 rm -rf "$here/dist"
 tsc -p "$here"
 mkdir -p "$here/dist/vendor/bolt-language-server"
-cp "$vendor/tree-sitter-bolt.wasm" "$vendor/web-tree-sitter.js" "$vendor/web-tree-sitter.wasm" \
-  "$vendor/web-tree-sitter.d.ts" "$here/dist/vendor/"
+cp "$vendor/tree-sitter-bolt.wasm" "$here/dist/vendor/"
 cp "$vendor/bolt-language-server/bolt_language_server_wasm.js" \
   "$vendor/bolt-language-server/bolt_language_server_wasm_bg.wasm" "$here/dist/vendor/bolt-language-server/"
 cp "$here/src/playground.css" "$here/dist/"
