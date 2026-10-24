@@ -1,0 +1,19 @@
+{
+  // The demo page, which Vite builds. It uses the library as an app would,
+  // through `@boltlang/playground`, so it type-checks against dist/.
+  "compilerOptions": {
+    "target": "es2022",
+    "lib": ["es2022", "dom", "dom.iterable"],
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    "strict": true,
+    "noEmit": true,
+    "verbatimModuleSyntax": true,
+    "skipLibCheck": true,
+    "paths": { "@boltlang/playground": ["../dist/index.d.ts"] }
+  },
+  "include": ["."],
+  "exclude": ["vite.config.ts"]
+}

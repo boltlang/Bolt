@@ -1,8 +1,11 @@
-/* The colors of the capture names in tree-sitter-bolt/queries/highlights.scm.
-   A name like `type.builtin` has the classes `hl-type hl-type-builtin`. */
+/* The styles of the playground component, all under `.bolt-playground`.
+   Its colors are the custom properties below, which a page can override.
 
-:root {
-  color-scheme: light dark;
+   The colors of the capture names in tree-sitter-bolt/queries/highlights.scm:
+   a name like `type.builtin` has the classes `hl-type hl-type-builtin`. */
+
+.bolt-playground {
+  color-scheme: light;
   --bg: #fbfaf8;
   --fg: #24292f;
   --muted: #6e7781;
@@ -30,7 +33,8 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
+  .bolt-playground:not([data-theme="light"]) {
+    color-scheme: dark;
     --bg: #16181d;
     --fg: #d6dae0;
     --muted: #8b949e;
@@ -58,7 +62,8 @@
   }
 }
 
-:root[data-theme="dark"] {
+.bolt-playground[data-theme="dark"] {
+  color-scheme: dark;
   --error: #ff7b72;
   --warning: #d29922;
   --information: #58a6ff;
@@ -84,25 +89,21 @@
   --attribute: #8b949e;
 }
 
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  height: 100%;
-  margin: 0;
-}
-
-body {
+.bolt-playground {
   display: flex;
   flex-direction: column;
+  height: 100%;
+  min-height: 0;
   background: var(--bg);
   color: var(--fg);
   font: 14px/1.4 system-ui, sans-serif;
 }
 
-header {
+.bolt-playground * {
+  box-sizing: border-box;
+}
+
+.bolt-playground .bp-toolbar {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -111,13 +112,14 @@ header {
   border-bottom: 1px solid var(--border);
 }
 
-h1 {
+.bolt-playground .bp-title,
+.bolt-playground .bp-title :is(h1, h2, h3, h4, h5, h6) {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
 }
 
-#status {
+.bolt-playground .bp-status {
   flex: 1;
   min-width: 0;
   color: var(--muted);
@@ -127,11 +129,11 @@ h1 {
   white-space: nowrap;
 }
 
-#status.error {
+.bolt-playground .bp-status.bp-error {
   color: var(--error);
 }
 
-button {
+.bolt-playground .bp-button {
   font: inherit;
   font-size: 13px;
   padding: 3px 10px;
@@ -142,29 +144,17 @@ button {
   cursor: pointer;
 }
 
-button:disabled {
-  cursor: default;
-  opacity: 0.5;
-}
-
-main {
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-
 /* The textarea lies over the highlighted code with transparent text, so
    that what's typed shows highlighted. Both must lay out text the same. */
-.editor {
+.bolt-playground .bp-editor {
   position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
 }
 
-.editor pre,
-.editor textarea {
+.bolt-playground .bp-editor pre,
+.bolt-playground .bp-editor textarea {
   position: absolute;
   inset: 0;
   margin: 0;
@@ -176,56 +166,55 @@ main {
   overflow-wrap: normal;
 }
 
-.editor pre {
+.bolt-playground .bp-editor pre {
   overflow: hidden;
   pointer-events: none;
 }
 
 /* The diagnostics, as wavy lines under transparent text. */
-.editor .underlines {
+.bolt-playground .bp-underlines {
   color: transparent;
 }
 
-.diagnostic {
+.bolt-playground .diagnostic {
   text-decoration: underline wavy;
   text-decoration-skip-ink: none;
   text-underline-offset: 3px;
 }
-.diagnostic-error {
+.bolt-playground .diagnostic-error {
   text-decoration-color: var(--error);
 }
-.diagnostic-warning {
+.bolt-playground .diagnostic-warning {
   text-decoration-color: var(--warning);
 }
-.diagnostic-information,
-.diagnostic-hint {
+.bolt-playground .diagnostic-information,
+.bolt-playground .diagnostic-hint {
   text-decoration-color: var(--information);
 }
 
 /* The list of diagnostics, under the editor. */
-#problems {
+.bolt-playground .bp-problems {
   max-height: 30%;
   overflow: auto;
   border-top: 1px solid var(--border);
   background: var(--header);
 }
 
-#problems:has(#problem-list:empty) {
-  display: none;
-}
-
-#problem-list {
+.bolt-playground .bp-problem-list {
   list-style: none;
   margin: 0;
   padding: 4px 0;
 }
 
-#problem-list.outdated {
+.bolt-playground .bp-problem-list.bp-outdated {
   opacity: 0.6;
 }
 
-.problem {
+.bolt-playground .bp-problem {
   display: block;
+  font: inherit;
+  color: var(--fg);
+  cursor: pointer;
   width: 100%;
   padding: 4px 16px;
   border: 0;
@@ -235,36 +224,36 @@ main {
   font-size: 13px;
 }
 
-.problem:hover,
-.problem:focus-visible {
+.bolt-playground .bp-problem:hover,
+.bolt-playground .bp-problem:focus-visible {
   background: var(--bg);
 }
 
-.problem .where {
+.bolt-playground .bp-problem .bp-where {
   color: var(--muted);
   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   margin-right: 8px;
 }
 
-.problem .severity-error {
+.bolt-playground .bp-problem .bp-severity-error {
   color: var(--error);
 }
-.problem .severity-warning {
+.bolt-playground .bp-problem .bp-severity-warning {
   color: var(--warning);
 }
 
-.problem .code {
+.bolt-playground .bp-problem .bp-code {
   color: var(--muted);
   margin-left: 8px;
 }
 
-.problem .related {
+.bolt-playground .bp-problem .bp-related {
   display: block;
   margin-left: 24px;
   color: var(--muted);
 }
 
-.editor textarea {
+.bolt-playground .bp-editor textarea {
   width: 100%;
   height: 100%;
   resize: none;
@@ -275,51 +264,51 @@ main {
   caret-color: var(--fg);
 }
 
-.editor textarea::selection {
+.bolt-playground .bp-editor textarea::selection {
   background: var(--selection);
   color: transparent;
 }
 
-.hl-comment {
+.bolt-playground .hl-comment {
   color: var(--comment);
   font-style: italic;
 }
-.hl-keyword {
+.bolt-playground .hl-keyword {
   color: var(--keyword);
 }
-.hl-string {
+.bolt-playground .hl-string {
   color: var(--string);
 }
-.hl-escape {
+.bolt-playground .hl-escape {
   color: var(--escape);
 }
-.hl-type {
+.bolt-playground .hl-type {
   color: var(--type);
 }
-.hl-constructor {
+.bolt-playground .hl-constructor {
   color: var(--constructor);
 }
-.hl-function {
+.bolt-playground .hl-function {
   color: var(--function);
 }
-.hl-property {
+.bolt-playground .hl-property {
   color: var(--property);
 }
-.hl-variable-parameter {
+.bolt-playground .hl-variable-parameter {
   color: var(--parameter);
 }
-.hl-variable-builtin {
+.bolt-playground .hl-variable-builtin {
   color: var(--keyword);
 }
-.hl-constant {
+.bolt-playground .hl-constant {
   color: var(--constant);
 }
-.hl-operator {
+.bolt-playground .hl-operator {
   color: var(--operator);
 }
-.hl-punctuation {
+.bolt-playground .hl-punctuation {
   color: var(--punctuation);
 }
-.hl-attribute {
+.bolt-playground .hl-attribute {
   color: var(--attribute);
 }

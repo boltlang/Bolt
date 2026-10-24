@@ -1,14 +1,17 @@
 {
+  // The library: src/ compiled to dist/ as ES modules, one per file, with
+  // their types. It isn't bundled, so that the bundler of the app that uses
+  // it finds the worker and the wasm files through `new URL(…,
+  // import.meta.url)`, and so that it also works in a browser as it is.
   "compilerOptions": {
     "target": "es2022",
     "lib": ["es2022", "dom", "dom.iterable"],
     "module": "esnext",
-    // `web-tree-sitter` resolves to its types in node_modules. In the
-    // browser, the import map in index.html points it at vendor/.
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "rootDir": "src",
     "outDir": "dist",
-    "sourceMap": true,
+    "declaration": true,
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,

@@ -1,6 +1,7 @@
 // A small LSP client for the playground: it runs the Bolt language server
 // in a worker, keeps it up to date with one document, and pulls the
-// diagnostics of the document after it changes.
+// diagnostics of the document after it changes. Each client has a worker,
+// and so a server, of its own.
 
 import type { FromWorker, ToWorker } from "./protocol.js";
 
@@ -18,12 +19,15 @@ export interface Diagnostic {
 }
 
 export interface ClientOptions {
-  /** The URL of the worker script, `dist/worker.js`. */
-  worker: URL;
   /** The `file:` URI of the document. */
   uri: string;
-  /** Files that aren't open, like those of packages. */
+  /** Files that aren't open, like those of packages, at absolute paths. */
   files: { path: string; text: string }[];
+  /**
+   * The package whose prelude the code gets, `null` for none, or
+   * `undefined` for the server's default, `std`.
+   */
+  prelude?: string | null;
   /** New diagnostics for `text`, the text they're about. */
   onDiagnostics(diagnostics: Diagnostic[], text: string): void;
   onStatus(status: string, isError: boolean): void;
@@ -84,17 +88,32 @@ export class Client {
   private ready = false;
   /** Counts starts, so that a start that was replaced stays quiet. */
   private generation = 0;
+  private disposed = false;
 
   constructor(private readonly options: ClientOptions) {}
 
   /** Start the server, with `text` as the document. */
   async start(text: string): Promise<void> {
+    if (this.disposed) return;
     const generation = ++this.generation;
     try {
       await this.startServer(text);
     } catch (error) {
-      if (generation === this.generation) this.options.onStatus((error as Error).message, true);
+      if (generation === this.generation && !this.disposed) this.options.onStatus((error as Error).message, true);
     }
+  }
+
+  /** Stop the server for good. Nothing is reported after this. */
+  dispose(): void {
+    this.disposed = true;
+    this.generation += 1;
+    if (this.timer !== null) clearTimeout(this.timer);
+    this.timer = null;
+    this.worker?.terminate();
+    this.worker = null;
+    this.ready = false;
+    for (const pending of this.pending.values()) pending.reject(new Error("the client was disposed"));
+    this.pending.clear();
   }
 
   private async startServer(text: string): Promise<void> {
@@ -109,6 +128,7 @@ export class Client {
       rootUri: null,
       // JavaScript strings count UTF-16 units, like the protocol by default.
       capabilities: { general: { positionEncodings: ["utf-16"] }, textDocument: { diagnostic: {} } },
+      ...(this.options.prelude === undefined ? {} : { initializationOptions: { prelude: this.options.prelude } }),
     });
     this.notify("initialized", {});
     for (const file of this.options.files) this.post({ type: "file", path: file.path, text: file.text });
@@ -144,10 +164,10 @@ export class Client {
       };
     } catch (error) {
       // A restart checks again.
-      if (version === this.version) this.options.onStatus(`Checking failed: ${(error as Error).message}`, true);
+      if (version === this.version && !this.disposed) this.options.onStatus(`Checking failed: ${(error as Error).message}`, true);
       return;
     }
-    if (version !== this.version) return;
+    if (version !== this.version || this.disposed) return;
     this.restarts = 0;
     const diagnostics = (report.items ?? []).map((d) => toDiagnostic(d, text, this.options.uri));
     this.options.onDiagnostics(diagnostics, text);
@@ -159,7 +179,8 @@ export class Client {
 
   private spawn(): void {
     this.worker?.terminate();
-    const worker = new Worker(this.options.worker, { type: "module" });
+    // Written out like this, so that bundlers find the worker and bundle it.
+    const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
     worker.onmessage = (event: MessageEvent<FromWorker>) => this.receive(event.data);
     worker.onerror = (event) => {
       event.preventDefault();
@@ -169,6 +190,7 @@ export class Client {
   }
 
   private receive(message: FromWorker): void {
+    if (this.disposed) return;
     switch (message.type) {
       case "lsp":
         this.receiveLsp(JSON.parse(message.json) as Message);
@@ -208,6 +230,7 @@ export class Client {
 
   /** The server crashed: start a new one, unless it keeps crashing. */
   private crashed(message: string): void {
+    if (this.disposed) return;
     console.error(`the language server crashed: ${message}`);
     this.worker?.terminate();
     this.worker = null;

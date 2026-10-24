@@ -2,7 +2,7 @@
 // checking doesn't hold up typing. It passes JSON-RPC messages between the
 // page and the server.
 
-import init, { LanguageServer } from "../vendor/bolt-language-server/bolt_language_server_wasm.js";
+import init, { LanguageServer } from "./vendor/bolt-language-server/bolt_language_server_wasm.js";
 import type { FromWorker, ToWorker } from "./protocol.js";
 
 // The DOM types of the rest of the playground don't describe a worker.

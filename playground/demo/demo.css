@@ -1,0 +1,8 @@
+/* The page around the playground, which fills it. */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}

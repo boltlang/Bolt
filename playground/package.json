@@ -1,19 +1,43 @@
 {
-  "name": "bolt-playground",
+  "name": "@boltlang/playground",
+  "version": "0.1.0",
   "private": true,
-  "description": "Bolt code highlighted with tree-sitter in the browser",
+  "description": "A React component to edit Bolt code, highlighted with tree-sitter and checked by the Bolt language server in the browser",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./style.css": "./dist/playground.css"
+  },
+  "files": [
+    "dist"
+  ],
+  "sideEffects": [
+    "*.css"
+  ],
   "scripts": {
     "build": "sh scripts/build.sh",
-    "check": "tsc --noEmit",
-    "watch": "tsc --watch",
-    "serve": "python3 -m http.server --directory . 8000"
+    "check": "tsc --noEmit -p . && tsc --noEmit -p demo",
+    "watch": "tsc --watch -p .",
+    "dev": "vite demo",
+    "serve": "vite preview demo --port 8000"
+  },
+  "peerDependencies": {
+    "react": ">=18"
   },
   "dependencies": {
     "web-tree-sitter": "^0.26.13"
   },
   "devDependencies": {
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
     "tree-sitter-cli": "^0.27.1",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vite": "^8.3.5"
   }
 }
