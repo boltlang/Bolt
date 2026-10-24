@@ -18,5 +18,5 @@ export default defineConfig({
       { find: /^@boltlang\/playground\/style\.css$/, replacement: dist("playground.css") },
     ],
   },
-  build: { outDir: "../out", emptyOutDir: true },
+  build: { emptyOutDir: true },
 });
