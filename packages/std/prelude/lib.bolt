@@ -1,0 +1,12 @@
+
+// Type classes
+import "./functor" *;
+import "./semigroup" *;
+import "./monoid" *;
+
+// Types
+import "./bool" *;
+import "./option" *;
+import "./list" *;
+
+import "./io" *;

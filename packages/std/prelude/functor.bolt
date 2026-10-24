@@ -1,0 +1,5 @@
+
+pub class Functor[F] {
+  fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B];
+}
+

@@ -1,0 +1,25 @@
+
+/// The class of types with an associative binary operation.
+///
+/// ## Laws
+///
+/// **Associativity**
+/// `x <> (y <> z) = (x <> y) <> z`
+pub class Semigroup[T] {
+
+  /// An associative operation.
+  ///
+  /// ```
+  /// [1, 2].concat([3, 4, 5]) // yields [1, 2, 3, 4, 5]
+  /// ```
+  fn concat(a: T, b: T) -> T;
+
+}
+
+/// A shorthand operator for the `concat` function.
+///
+/// ```
+/// [1, 2 ] <> [3, 4, 5] // yields [1, 2, 3, 4, 5]
+/// ```
+pub fn[T] (a: T) <> (b: T) -> T where Semigroup[T] = concat(a, b);
+

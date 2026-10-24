@@ -1,0 +1,13 @@
+
+pub enum Option[T] {
+  None,
+  Some(T),
+}
+
+pub import Option.*;
+
+pub fn unwrap[T](x: Option[T]) = match x {
+  None => panic("trying to unwrap a None-valued option"), // TODO print T in the panic message
+  Some(x) => x
+};
+

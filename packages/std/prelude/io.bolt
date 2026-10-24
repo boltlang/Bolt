@@ -1,0 +1,2 @@
+
+pub fn print(text: str);

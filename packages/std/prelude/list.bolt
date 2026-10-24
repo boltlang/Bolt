@@ -1,0 +1,43 @@
+
+import "./functor" (Functor);
+import "./semigroup" (Semigroup);
+import "./monoid" (Monoid);
+import "./option" (None, Some, Option);
+
+pub enum List[T] {
+  Cons(T, List[T]),
+  Nil
+}
+
+import List.*;
+
+impl Functor[List] {
+  fn fmap[T, R](f: fn (T) -> R, xs: List[T]) -> List[R] = match xs {
+    Nil => Nil,
+    Cons(h, t) => Cons(f(h), map(f, t)),
+  };
+}
+
+impl[T] Semigroup[List[T]] {
+  fn concat(a, b) = match a {
+    Nil => b,
+    Cons(x, y) => (Cons(x, concat(y, b))),
+  };
+}
+
+impl[T] Monoid[List[T]] {
+  const empty: List[T] = Nil;
+}
+
+pub fn cons[T](h: T, t: List[T]) -> List[T] = Cons(h, t);
+
+pub fn head[T](t: List[T]) -> Option[T] = match t {
+  Nil => None,
+  Cons(h, _) => Some(h),
+};
+
+pub fn tail[T](l: List[T]) -> Option[List[T]] = match l {
+  Nil => None,
+  Cons(h, t) => Some(t),
+};
+

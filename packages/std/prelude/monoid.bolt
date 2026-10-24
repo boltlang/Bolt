@@ -1,0 +1,25 @@
+
+import "./semigroup" (Semigroup);
+
+/// The class of types with an associative binary operation that has an identity.
+///
+/// ## Laws
+///
+/// **Right identity**
+/// `x <> empty = x`
+///
+/// **Left identity**
+/// `empty <> x = x`
+///
+/// **Associativity**
+/// `x <> (y <> z) = (x <> y) <> z` (Semigroup law)
+///
+/// **Concatenation**
+/// concat = foldr (<>) empty
+pub class Monoid[T] where Semigroup[T] {
+
+  /// The identity of [concat].
+  const empty: T;
+
+}
+
