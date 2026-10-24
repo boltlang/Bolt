@@ -39,6 +39,7 @@ jobs:
     - name: Build
       run: npm run build
       working-directory: ./playground
+    - run: cp playground/index.html playground/dist/
     - name: Setup Pages
       uses: actions/configure-pages@v5
     - name: Upload artifact
