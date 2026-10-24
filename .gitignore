@@ -1,8 +1,11 @@
 /target
 /trash
 
-# npm
+# npm packages
 node_modules/
+
+# bolt packages
+.bolt/packages/
 
 # nested repositories
 /tree-sitter-bolt
