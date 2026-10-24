@@ -139,3 +139,50 @@ Show[i32].show: fn(i32) -> str
 true.show(): str
 --------------------------------------------------------------------------------
 error at `true.show`: no instance Show[bool]
+
+================================================================================
+Methods in an impl can call themselves without importing them
+================================================================================
+//- /semigroup.bolt
+pub class Semigroup[T] { fn concat(a: T, b: T) -> T; }
+//- /main.bolt
+import "./semigroup" (Semigroup);
+enum List[T] { Cons(T, List[T]), Nil }
+import List.*;
+impl[T] Semigroup[List[T]] {
+  fn concat(a, b) = match a {
+    Nil => b,
+    Cons(x, y) => Cons(x, concat(y, b)),
+  };
+}
+
+--------------------------------------------------------------------------------
+/main.bolt: Semigroup[List[T]].concat: forall T. fn(List[T], List[T]) -> List[T]
+
+================================================================================
+Methods in an impl can use the other items of the class
+================================================================================
+class Monoid[T] {
+  const empty: T;
+  fn concat(a: T, b: T) -> T;
+  fn concat3(a: T, b: T, c: T) -> T;
+}
+enum Option[T] { Some(T), None }
+impl Monoid[i32] {
+  const empty: i32 = 0;
+  fn concat(a, b) = if a == empty { b } else { a + b };
+  fn concat3(a, b, c) = concat(a, concat(b, c));
+}
+impl[T] Monoid[Option[T]] where Monoid[T] {
+  const empty: Option[T] = Option.None;
+  fn concat(a, b) = match a {
+    Option.Some(x) => match b { Option.Some(y) => Option.Some(concat(x, y)), Option.None => a },
+    Option.None => b,
+  };
+  fn concat3(a, b, c) = concat(concat(a, b), c);
+}
+--------------------------------------------------------------------------------
+Monoid[i32].concat: fn(i32, i32) -> i32
+Monoid[i32].concat3: fn(i32, i32, i32) -> i32
+Monoid[Option[T]].concat: forall T. Monoid[T] => fn(Option[T], Option[T]) -> Option[T]
+Monoid[Option[T]].concat3: forall T. Monoid[T] => fn(Option[T], Option[T], Option[T]) -> Option[T]

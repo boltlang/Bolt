@@ -109,3 +109,17 @@ get(Some(1), 2);
 --------------------------------------------------------------------------------
 /main.bolt: get: forall a. fn(Option[a], a) -> a
 /main.bolt: get(Some(1), 2): i32
+
+================================================================================
+Variants imported with pub import are exported
+================================================================================
+//- /option.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+//- /main.bolt
+import "./option" (Option, Some, None);
+fn get(o, d) = match o { Some(x) => x, None => d };
+get(Some(1), 2);
+--------------------------------------------------------------------------------
+/main.bolt: get: forall a. fn(Option[a], a) -> a
+/main.bolt: get(Some(1), 2): i32

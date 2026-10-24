@@ -16,7 +16,8 @@ use crate::{
     Name,
     builtin_type::BuiltinType,
     body::{DefWithBody, DefWithBodyId},
-    hir::{BindingId, ExprId, Path, PathSegment},
+    hir::{BindingId, ExprId, Path, PathSegment, TypeRef},
+    item_tree::{AssocItem, FunctionName, item_tree},
     ids::{
         ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId, StructId,
         TypeAliasId,
@@ -239,6 +240,13 @@ impl<'db> Resolver<'db> {
         {
             return Some(ValueResolution::Value(value));
         }
+        // In an impl, the methods and constants of its class, so that a
+        // method can call itself or the others without importing them.
+        if segments.len() == 1
+            && let Some(value) = self.resolve_impl_class_item(db, &first.name)
+        {
+            return Some(ValueResolution::Value(value));
+        }
         // A value directly in this file, or in an imported one: `f`, `m.f`.
         let (file, i) = self.walk_files(db, segments);
         if i + 1 == segments.len() {
@@ -257,6 +265,28 @@ impl<'db> Resolver<'db> {
         Some(match resolution {
             TypeResolution { ty: TypeNs::Variant(id), unresolved: None } => ValueResolution::Value(ValueNs::Variant(id)),
             resolution => ValueResolution::Type(resolution),
+        })
+    }
+
+    /// The method or constant `name` of the class of the innermost impl
+    /// around this position, like `concat` in `impl Semigroup[List[T]]`.
+    fn resolve_impl_class_item(&self, db: &'db dyn Db, name: &Name) -> Option<ValueNs<'db>> {
+        let imp = self.scopes.iter().rev().find_map(|scope| match scope {
+            Scope::Generics(GenericDefId::Impl(id), _) => Some(*id),
+            _ => None,
+        })?;
+        let class = impl_class(db, imp)?;
+        let container = ItemContainerId::Class(class);
+        let tree = item_tree(db, class.file(db));
+        class.item(db).items.iter().find_map(|item| match *item {
+            AssocItem::Function(idx) => {
+                let f = &tree.functions[idx.index()];
+                matches!(&f.name, Some(FunctionName::Name(n)) if n == name)
+                    .then(|| ValueNs::Function(FunctionId::new(db, container, idx)))
+            }
+            AssocItem::Const(idx) => (tree.consts[idx.index()].name.as_ref() == Some(name))
+                .then(|| ValueNs::Const(ConstId::new(db, container, idx))),
+            AssocItem::TypeAlias(_) | AssocItem::MacroCall(_) => None,
         })
     }
 
@@ -326,6 +356,16 @@ fn def_file<'db>(db: &'db dyn Db, def: ModuleDefId<'db>) -> Option<File> {
         ModuleDefId::TypeAlias(id) => id.file(db),
         ModuleDefId::MacroRules(id) => id.file(db),
     })
+}
+
+/// The class an impl is an instance of, like `Show` for `impl Show[Dog]`.
+pub fn impl_class<'db>(db: &'db dyn Db, id: ImplId<'db>) -> Option<ClassId<'db>> {
+    let sig = impl_signature(db, id);
+    let TypeRef::Path(path) = &sig.store[sig.class] else { return None };
+    match Resolver::for_generic_def(db, GenericDefId::Impl(id)).resolve_path_in_type_ns(db, path)? {
+        TypeResolution { ty: TypeNs::Class(class), unresolved: None } => Some(class),
+        _ => None,
+    }
 }
 
 fn rest(segments: &[PathSegment], index: usize) -> Option<usize> {
