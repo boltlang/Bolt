@@ -11,6 +11,52 @@ import Heading from '@theme/Heading';
 
 import styles from './index.module.css';
 
+const sample = `
+// Edit this code to see it highlighted by tree-sitter and checked by the
+// Bolt language server. Try a mistake, like \`let n: i32 = "one";\`.
+
+// \`print\`, \`Option\` and the rest of the prelude of \`std\` need no import.
+
+/// A shape, with its size.
+pub enum Shape {
+  Circle(f64),
+  Rect { w: f64, h: f64 },
+}
+
+class Show[T] {
+  fn show(x: T) -> str;
+}
+
+impl Show[Shape] {
+  fn show(s) = match s {
+    Shape.Circle(_) => "circle",
+    Shape.Rect { .. } => "rectangle",
+  };
+}
+
+const PI: f64 = 3.14159;
+
+fn area(s: Shape) -> f64 = match s {
+  Shape.Circle(r) => PI * r * r,
+  Shape.Rect { w, h } => w * h,
+};
+
+struct Vec2 { x: f64, y: f64 }
+
+fn (a: Vec2) + (b: Vec2) -> Vec2 = Vec2 { x: a.x + b.x, y: a.y + b.y };
+
+let shapes = [Shape.Circle(1.0), Shape.Rect { w: 2.0, h: 3.0 }];
+for s in shapes {
+  if area(s) > 1.0 {
+    print(s.show());
+  }
+}
+
+macro_rules! twice {
+  ($e:expr) => { ($e, $e) };
+}
+`;
+
 function HomepageHeader() {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -35,7 +81,7 @@ function HomepageHeader() {
 // The playground, in the colors of the site, which has a toggle of its own.
 function HomepagePlayground(): ReactNode {
   const {colorMode} = useColorMode();
-  return <Playground theme={colorMode} style={{height: 500}} />;
+  return <Playground theme={colorMode} style={{height: 500}} defaultValue={sample} />;
 }
 
 export default function Home(): ReactNode {
