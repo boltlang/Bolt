@@ -1,0 +1,5 @@
+// A tiny stand-in for the standard library, which the playground gives
+// the language server as the package `std`.
+
+/// Print `text`. The playground has nowhere to print it.
+pub fn print(text: str) {}

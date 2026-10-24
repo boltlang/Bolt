@@ -1,11 +1,21 @@
 // The playground: Bolt code in a textarea, highlighted by tree-sitter as
-// it's typed. `npm run build` puts the grammar, its queries and
-// web-tree-sitter in vendor/, and compiles this to dist/.
+// it's typed, and checked by the Bolt language server, compiled to wasm and
+// run in a worker. `npm run build` puts the grammar, its queries,
+// web-tree-sitter and the language server in vendor/, and compiles this to
+// dist/.
 
 import { Language, Parser, Query } from "web-tree-sitter";
 import { type Queries, layers, runs, toHtml } from "./highlight.js";
+import { lineAndColumn, underlines } from "./diagnostics.js";
+import { Client, type Diagnostic } from "./lsp.js";
 
 const STORAGE_KEY = "bolt-playground:source";
+
+/** Where the document is for the language server, which finds imports from it. */
+const URI = "file:///playground/main.bolt";
+
+/** The packages the code can import, as files of the playground. */
+const PACKAGE_FILES = [{ url: "std/io.bolt", path: "/playground/.bolt/packages/std/io.bolt" }];
 
 /** The element with `id`, which index.html has. */
 function element<T extends HTMLElement>(id: string, type: new () => T): T {
@@ -16,6 +26,8 @@ function element<T extends HTMLElement>(id: string, type: new () => T): T {
 
 const source = element("source", HTMLTextAreaElement);
 const highlighted = element("highlighted", HTMLElement);
+const underlined = element("underlines", HTMLElement);
+const problemList = element("problem-list", HTMLUListElement);
 const status = element("status", HTMLElement);
 const reset = element("reset", HTMLButtonElement);
 
@@ -42,6 +54,66 @@ function save(text: string): void {
   }
 }
 
+// The status line: what the checker says, then how long highlighting took.
+let checkStatus = { text: "", isError: false };
+let highlightStatus = "";
+
+function showStatus(): void {
+  status.textContent = [checkStatus.text, highlightStatus].filter(Boolean).join(" · ");
+  status.classList.toggle("error", checkStatus.isError);
+}
+
+// The latest diagnostics, and the text they're about.
+let checked: { diagnostics: Diagnostic[]; text: string } = { diagnostics: [], text: "" };
+
+/** Show the diagnostics, if they're about the text as it is now. */
+function showDiagnostics(): void {
+  const text = source.value;
+  const current = checked.text === text;
+  // Underlines for another text would be in the wrong places.
+  underlined.innerHTML = current ? underlines(text, checked.diagnostics) + "\n" : "";
+  problemList.classList.toggle("outdated", !current);
+}
+
+function listProblems(): void {
+  const { diagnostics, text } = checked;
+  problemList.replaceChildren(
+    ...diagnostics.map((d) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "problem";
+      const { line, column } = lineAndColumn(text, d.start);
+      button.append(
+        span("where", `${line}:${column}`),
+        span(`severity-${d.severity}`, d.severity),
+        ": ",
+        d.message,
+        ...(d.code ? [span("code", d.code)] : []),
+        ...d.related.map((r) => {
+          const at = lineAndColumn(text, r.start);
+          return span("related", `${at.line}:${at.column} ${r.message}`);
+        }),
+      );
+      button.addEventListener("click", () => {
+        // Only where the text hasn't changed since.
+        if (source.value !== text) return;
+        source.focus();
+        source.setSelectionRange(d.start, Math.max(d.end, d.start));
+      });
+      item.append(button);
+      return item;
+    }),
+  );
+}
+
+function span(className: string, text: string): HTMLSpanElement {
+  const span = document.createElement("span");
+  span.className = className;
+  span.textContent = text;
+  return span;
+}
+
 async function start(): Promise<void> {
   await Parser.init();
   const language = await Language.load("vendor/tree-sitter-bolt.wasm");
@@ -52,12 +124,30 @@ async function start(): Promise<void> {
     injections: new Query(language, await fetchText("vendor/injections.scm")),
   };
   const sample = await fetchText("sample.bolt");
+  const files = await Promise.all(PACKAGE_FILES.map(async ({ url, path }) => ({ path, text: await fetchText(url) })));
+
+  const client = new Client({
+    worker: new URL("./worker.js", import.meta.url),
+    uri: URI,
+    files,
+    onDiagnostics(diagnostics, text) {
+      checked = { diagnostics, text };
+      listProblems();
+      showDiagnostics();
+    },
+    onStatus(text, isError) {
+      checkStatus = { text, isError };
+      showStatus();
+    },
+  });
 
   const syncScroll = (): void => {
-    const pre = highlighted.parentElement;
-    if (!pre) return;
-    pre.scrollTop = source.scrollTop;
-    pre.scrollLeft = source.scrollLeft;
+    for (const layer of [highlighted, underlined]) {
+      const pre = layer.parentElement;
+      if (!pre) continue;
+      pre.scrollTop = source.scrollTop;
+      pre.scrollLeft = source.scrollLeft;
+    }
   };
 
   const render = (): void => {
@@ -65,8 +155,9 @@ async function start(): Promise<void> {
     const before = performance.now();
     // The newline gives an empty last line its height, as in the textarea.
     highlighted.innerHTML = toHtml(text, runs(text, layers(parser, queries, text))) + "\n";
-    const ms = (performance.now() - before).toFixed(1);
-    status.textContent = `Highlighted with tree-sitter in ${ms} ms`;
+    highlightStatus = `highlighted in ${(performance.now() - before).toFixed(1)} ms`;
+    showStatus();
+    showDiagnostics();
     syncScroll();
   };
 
@@ -81,7 +172,10 @@ async function start(): Promise<void> {
     });
   };
 
-  source.addEventListener("input", scheduleRender);
+  source.addEventListener("input", () => {
+    scheduleRender();
+    client.change(source.value);
+  });
   source.addEventListener("scroll", syncScroll);
   source.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
@@ -91,6 +185,7 @@ async function start(): Promise<void> {
     if (event.key !== "Tab" || event.shiftKey || event.ctrlKey || event.metaKey || event.altKey) return;
     // Indent instead of leaving the editor. Escape, then Tab, still leaves.
     // `execCommand` is deprecated, but it's what keeps the edit undoable.
+    // It also fires `input`, which renders and checks.
     event.preventDefault();
     document.execCommand("insertText", false, "  ");
   });
@@ -98,6 +193,7 @@ async function start(): Promise<void> {
     source.value = sample;
     render();
     save(sample);
+    client.change(sample);
     source.focus();
   });
 
@@ -105,11 +201,13 @@ async function start(): Promise<void> {
   source.disabled = false;
   reset.disabled = false;
   render();
+  // Highlighting doesn't wait for the language server.
+  void client.start(source.value);
 }
 
 start().catch((error: unknown) => {
   console.error(error);
   const message = error instanceof Error ? error.message : String(error);
-  status.classList.add("error");
-  status.textContent = `${message}. Did you run \`npm run build\`?`;
+  checkStatus = { text: `${message}. Did you run \`npm run build\`?`, isError: true };
+  showStatus();
 });

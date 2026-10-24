@@ -23,6 +23,10 @@
   --operator: #a0306a;
   --punctuation: #57606a;
   --attribute: #6e7781;
+
+  --error: #cf222e;
+  --warning: #9a6700;
+  --information: #0969da;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -47,10 +51,17 @@
     --operator: #f08ab8;
     --punctuation: #9aa4ae;
     --attribute: #8b949e;
+
+    --error: #ff7b72;
+    --warning: #d29922;
+    --information: #58a6ff;
   }
 }
 
 :root[data-theme="dark"] {
+  --error: #ff7b72;
+  --warning: #d29922;
+  --information: #58a6ff;
   --bg: #16181d;
   --fg: #d6dae0;
   --muted: #8b949e;
@@ -117,7 +128,7 @@ h1 {
 }
 
 #status.error {
-  color: #cf222e;
+  color: var(--error);
 }
 
 button {
@@ -140,6 +151,7 @@ main {
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
 }
 
 /* The textarea lies over the highlighted code with transparent text, so
@@ -148,6 +160,7 @@ main {
   position: relative;
   flex: 1;
   min-width: 0;
+  min-height: 0;
 }
 
 .editor pre,
@@ -166,6 +179,89 @@ main {
 .editor pre {
   overflow: hidden;
   pointer-events: none;
+}
+
+/* The diagnostics, as wavy lines under transparent text. */
+.editor .underlines {
+  color: transparent;
+}
+
+.diagnostic {
+  text-decoration: underline wavy;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+}
+.diagnostic-error {
+  text-decoration-color: var(--error);
+}
+.diagnostic-warning {
+  text-decoration-color: var(--warning);
+}
+.diagnostic-information,
+.diagnostic-hint {
+  text-decoration-color: var(--information);
+}
+
+/* The list of diagnostics, under the editor. */
+#problems {
+  max-height: 30%;
+  overflow: auto;
+  border-top: 1px solid var(--border);
+  background: var(--header);
+}
+
+#problems:has(#problem-list:empty) {
+  display: none;
+}
+
+#problem-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+}
+
+#problem-list.outdated {
+  opacity: 0.6;
+}
+
+.problem {
+  display: block;
+  width: 100%;
+  padding: 4px 16px;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  text-align: left;
+  font-size: 13px;
+}
+
+.problem:hover,
+.problem:focus-visible {
+  background: var(--bg);
+}
+
+.problem .where {
+  color: var(--muted);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  margin-right: 8px;
+}
+
+.problem .severity-error {
+  color: var(--error);
+}
+.problem .severity-warning {
+  color: var(--warning);
+}
+
+.problem .code {
+  color: var(--muted);
+  margin-left: 8px;
+}
+
+.problem .related {
+  display: block;
+  margin-left: 24px;
+  color: var(--muted);
 }
 
 .editor textarea {

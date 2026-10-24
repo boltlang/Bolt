@@ -1,4 +1,5 @@
-// Edit this code to see it highlighted by tree-sitter.
+// Edit this code to see it highlighted by tree-sitter and checked by the
+// Bolt language server. Try a mistake, like `let n: i32 = "one";`.
 
 import "std/io" (print);
 
