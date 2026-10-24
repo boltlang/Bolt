@@ -11,7 +11,7 @@
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
 ```rust
-fn fac(n: Int) -> Int {
+fn fac(n: i32) -> i32 {
     match n {
       0 | 1 => 1
       k => k * fac(k-1)
