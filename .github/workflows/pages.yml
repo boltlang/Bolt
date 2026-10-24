@@ -40,7 +40,7 @@ jobs:
       run: npm run build
       working-directory: ./playground
     - run: mkdir out
-    - run: cp playground/{index.html,dist,vendor,style.css,sample.bolt} out
+    - run: cp -r playground/{index.html,dist,vendor,style.css,sample.bolt} out
     - name: Setup Pages
       uses: actions/configure-pages@v5
     - name: Upload artifact
