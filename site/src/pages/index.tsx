@@ -91,8 +91,7 @@ export default function Home(): ReactNode {
       title={`Hello from ${siteConfig.title}`}
       description="Bolt is a language for quickly writing highly performant and safe (web) applications.">
       <HomepageHeader />
-      <main>
-        <a id="playground" />
+      <main id="playground">
         <BrowserOnly>
           {() => <HomepagePlayground />}
         </BrowserOnly>
