@@ -21,7 +21,9 @@ trait Exec {
     fn exec(&self) -> anyhow::Result<bool>;
 }
 
+/// The Bolt compiler.
 #[derive(clap::Parser)]
+#[command(name = "bolt", version)]
 struct Cli {
     #[command(subcommand)]
     command: Command,

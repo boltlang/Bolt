@@ -1,10 +1,11 @@
 [package]
 name = "boltlang-ide-diagnostics"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
-boltlang-hir = { version = "0.1.0", path = "../boltlang-hir" }
-boltlang-hir-ty = { version = "0.1.0", path = "../boltlang-hir-ty" }
-boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+boltlang-base-db.workspace = true
+boltlang-hir.workspace = true
+boltlang-hir-ty.workspace = true
+boltlang-syntax.workspace = true

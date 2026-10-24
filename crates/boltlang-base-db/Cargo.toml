@@ -1,11 +1,12 @@
 [package]
 name = "boltlang-base-db"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-boltlang-parser = { version = "0.1.0", path = "../boltlang-parser" }
-boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+boltlang-parser.workspace = true
+boltlang-syntax.workspace = true
 dashmap = "6.1.0"
 filetime = "0.2.27"
 fluent-uri = "0.4.1"

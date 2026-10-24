@@ -1,12 +1,13 @@
 [package]
 name = "boltlang-hir-def"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
-boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+boltlang-base-db.workspace = true
+boltlang-syntax.workspace = true
 salsa = "0.28.5"
 
 [dev-dependencies]
-boltlang-parser = { version = "0.1.0", path = "../boltlang-parser" }
+boltlang-parser.workspace = true

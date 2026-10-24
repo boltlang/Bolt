@@ -13,3 +13,22 @@ members = [
   "crates/bolt-language-server",
   "crates/bolt-language-server-wasm",
 ]
+
+# One version for all crates: they're parts of one compiler, released
+# together. `bolt --version` and the language server report it.
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+# The crates of the workspace, so that their version is only written here.
+[workspace.dependencies]
+bolt-language-server = { version = "0.1.0", path = "crates/bolt-language-server" }
+boltlang-base-db = { version = "0.1.0", path = "crates/boltlang-base-db" }
+boltlang-common = { version = "0.1.0", path = "crates/boltlang-common" }
+boltlang-hir = { version = "0.1.0", path = "crates/boltlang-hir" }
+boltlang-hir-def = { version = "0.1.0", path = "crates/boltlang-hir-def" }
+boltlang-hir-ty = { version = "0.1.0", path = "crates/boltlang-hir-ty" }
+boltlang-ide-diagnostics = { version = "0.1.0", path = "crates/boltlang-ide-diagnostics" }
+boltlang-parser = { version = "0.1.0", path = "crates/boltlang-parser" }
+boltlang-syntax = { version = "0.1.0", path = "crates/boltlang-syntax" }

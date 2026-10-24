@@ -1,12 +1,13 @@
 [package]
 name = "bolt-language-server"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
-boltlang-ide-diagnostics = { version = "0.1.0", path = "../boltlang-ide-diagnostics" }
-boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+boltlang-base-db.workspace = true
+boltlang-ide-diagnostics.workspace = true
+boltlang-syntax.workspace = true
 # The version tower-lsp-server uses, so that the types are the same.
 ls-types = "0.0.2"
 

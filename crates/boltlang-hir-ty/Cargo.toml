@@ -1,16 +1,17 @@
 [package]
 name = "boltlang-hir-ty"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-boltlang-base-db = { version = "0.1.0", path = "../boltlang-base-db" }
-boltlang-hir-def = { version = "0.1.0", path = "../boltlang-hir-def" }
-boltlang-syntax = { version = "0.1.0", path = "../boltlang-syntax" }
+boltlang-base-db.workspace = true
+boltlang-hir-def.workspace = true
+boltlang-syntax.workspace = true
 salsa = "0.28.5"
 
 [dev-dependencies]
-boltlang-parser = { version = "0.1.0", path = "../boltlang-parser" }
+boltlang-parser.workspace = true
 libtest-mimic = "0.8.2"
 
 [[test]]
