@@ -2,6 +2,7 @@ import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import { Playground } from "@boltlang/playground";
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
@@ -37,6 +38,7 @@ export default function Home(): ReactNode {
       <HomepageHeader />
       <main>
         <a id="playground" />
+        <Playground />
       </main>
     </Layout>
   );
