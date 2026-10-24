@@ -277,3 +277,67 @@ fn files_are_in_the_innermost_package() {
     assert!(!is_visible_from(&db, RawVisibility::Private, a, b));
     assert!(is_visible_from(&db, RawVisibility::Private, a, a));
 }
+
+#[test]
+fn pub_imports_re_export() {
+    let db = TestDb::new();
+    db.file("/a.bolt", "pub fn f() {}\npub fn g() {}\npub struct S;\n");
+    db.file("/list.bolt", "pub import \"./a\" (f, S as T);\n");
+    db.file("/glob.bolt", "pub import \"./a\" *;\n");
+    db.file("/private.bolt", "import \"./a\" (f);\n");
+    db.file("/alias.bolt", "pub import \"./a\" as m;\n");
+    let main = db.file(
+        "/main.bolt",
+        r#"
+import "./list" (f, T);
+import "./glob" (g);
+import "./alias" (m);
+"#,
+    );
+    let scope = file_scope(&db, main);
+    assert_eq!(names(&scope.scope, Namespace::Values), ["f (imported)", "g (imported)"]);
+    assert_eq!(names(&scope.scope, Namespace::Types), ["T (imported)", "m (imported)"]);
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+    // A plain import keeps the name to the file.
+    let other = db.file("/other.bolt", "import \"./private\" (f);\nimport \"./private\" *;\n");
+    assert_eq!(diagnostics(file_scope(&db, other)), ["private f"]);
+    assert!(names(&file_scope(&db, other).scope, Namespace::Values).is_empty());
+}
+
+#[test]
+fn re_exports_go_through_several_files() {
+    let db = TestDb::new();
+    db.file("/option.bolt", "pub enum Option[T] { None, Some(T) }\n");
+    db.file("/types.bolt", "pub import \"./option\" (Option);\npub import Option.*;\n");
+    db.file("/lib.bolt", "pub import \"./types\" *;\n");
+    let main = db.file("/main.bolt", "import \"./lib\" *;\n");
+    let scope = file_scope(&db, main);
+    assert_eq!(names(&scope.scope, Namespace::Values), ["None (imported)", "Some (imported)"]);
+    assert!(names(&scope.scope, Namespace::Types).contains(&"Option (imported)".to_string()));
+}
+
+#[test]
+fn files_can_re_export_from_each_other() {
+    let db = TestDb::new();
+    let a = db.file("/a.bolt", "pub import \"./b\" *;\npub fn a() {}\n");
+    let b = db.file("/b.bolt", "pub import \"./a\" *;\npub fn b() {}\n");
+    let main = db.file("/main.bolt", "import \"./a\" (a, b);\n");
+    assert_eq!(names(&file_scope(&db, a).scope, Namespace::Values), ["a", "b (imported)"]);
+    assert_eq!(names(&file_scope(&db, b).scope, Namespace::Values), ["a (imported)", "b"]);
+    assert_eq!(names(&file_scope(&db, main).scope, Namespace::Values), ["a (imported)", "b (imported)"]);
+    assert!(diagnostics(file_scope(&db, main)).is_empty());
+}
+
+#[test]
+fn re_exports_are_as_visible_as_the_import_and_the_item() {
+    let db = TestDb::new();
+    db.file("/proj/.bolt/packages/geo/shapes.bolt", "pub fn area() {}\npub(package) fn helper() {}\n");
+    db.file(
+        "/proj/.bolt/packages/geo/lib.bolt",
+        "pub import \"./shapes\" (area, helper);\npub(package) import \"./shapes\" (area as area2);\n",
+    );
+    let inside = db.file("/proj/.bolt/packages/geo/user.bolt", "import \"./lib\" (area, helper, area2);\n");
+    let outside = db.file("/proj/main.bolt", "import \"geo\" (area, helper, area2);\n");
+    assert!(diagnostics(file_scope(&db, inside)).is_empty(), "{:?}", diagnostics(file_scope(&db, inside)));
+    assert_eq!(diagnostics(file_scope(&db, outside)), ["package-only helper", "package-only area2"]);
+}

@@ -38,8 +38,6 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
       bring in the same name, the first one wins without a word. Using such
       a name could be reported as ambiguous, as in Rust. *(hir-def, hir,
       ide-diagnostics)*
-- [ ] `pub import` doesn't re-export: an import only sees the items defined
-      in the file it imports from, not what that file imports. *(hir-def)*
 
 - [ ] Higher-kinded types: a class parameter applied to arguments, like the
       `F[A]` of `class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A])

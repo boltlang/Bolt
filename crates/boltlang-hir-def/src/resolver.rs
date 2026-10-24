@@ -328,34 +328,12 @@ enum Local<'db> {
 }
 
 /// Look up a name in a file, for a path in `from`. From another file, only
-/// the names visible there can be used: see [`is_visible_from`].
+/// the names visible there can be used: see [`is_visible_from`]. An
+/// imported name has the visibility of its import, so `m.f` only sees the
+/// names `m` defines or re-exports.
 fn lookup<'db>(db: &'db dyn Db, file: File, from: File, ns: Namespace, name: &Name) -> Option<ModuleDefId<'db>> {
     let entry = file_scope(db, file).scope.get(ns, name)?;
-    if file == from {
-        return Some(entry.def);
-    }
-    // An imported name is visible like the item it names. A file imported
-    // with `as` belongs to the file that imports it.
-    let owner = match (entry.import, entry.def) {
-        (Some(_), def) if !matches!(def, ModuleDefId::File(_)) => def_file(db, def).unwrap_or(file),
-        _ => file,
-    };
-    is_visible_from(db, entry.visibility, owner, from).then_some(entry.def)
-}
-
-/// The file an item is defined in.
-fn def_file<'db>(db: &'db dyn Db, def: ModuleDefId<'db>) -> Option<File> {
-    Some(match def {
-        ModuleDefId::File(_) => return None,
-        ModuleDefId::Function(id) => id.file(db),
-        ModuleDefId::Struct(id) => id.file(db),
-        ModuleDefId::Enum(id) => id.file(db),
-        ModuleDefId::Variant(id) => id.parent.file(db),
-        ModuleDefId::Class(id) => id.file(db),
-        ModuleDefId::Const(id) => id.file(db),
-        ModuleDefId::TypeAlias(id) => id.file(db),
-        ModuleDefId::MacroRules(id) => id.file(db),
-    })
+    is_visible_from(db, entry.visibility, file, from).then_some(entry.def)
 }
 
 /// The class an impl is an instance of, like `Show` for `impl Show[Dog]`.

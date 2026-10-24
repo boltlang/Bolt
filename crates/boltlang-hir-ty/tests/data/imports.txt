@@ -123,3 +123,43 @@ get(Some(1), 2);
 --------------------------------------------------------------------------------
 /main.bolt: get: forall a. fn(Option[a], a) -> a
 /main.bolt: get(Some(1), 2): i32
+
+================================================================================
+Names imported with pub import are exported
+================================================================================
+//- /option.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub fn unwrap_or[T](o: Option[T], d: T) -> T = match o { Some(x) => x, None => d };
+//- /lib.bolt
+pub import "./option" *;
+pub import "./option" as option;
+//- /main.bolt
+import "./lib" (Some, unwrap_or, option);
+unwrap_or(Some(1), 2);
+option.unwrap_or(option.None, true);
+
+--------------------------------------------------------------------------------
+/option.bolt: unwrap_or: forall T. fn(Option[T], T) -> T
+/main.bolt: unwrap_or(Some(1), 2): i32
+/main.bolt: option.unwrap_or(option.None, true): bool
+
+================================================================================
+Names imported without pub stay in the file
+================================================================================
+//- /math.bolt
+pub fn double(x: i32) -> i32 = x * 2;
+//- /lib.bolt
+import "./math" (double);
+pub fn quadruple(x: i32) -> i32 = double(double(x));
+//- /main.bolt
+import "./lib" as lib;
+lib.quadruple(1);
+lib.double(1);
+--------------------------------------------------------------------------------
+/math.bolt: double: fn(i32) -> i32
+/lib.bolt: quadruple: fn(i32) -> i32
+/main.bolt: lib.quadruple(1): i32
+/main.bolt: lib.double(1): {error}
+--------------------------------------------------------------------------------
+/main.bolt: error at `lib.double`: unresolved

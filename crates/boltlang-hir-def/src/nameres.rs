@@ -4,13 +4,14 @@
 //! every file is a module, and imports name the file they import from.
 //!
 //! - [`local_scope`] has the items defined in a file.
-//! - [`exports`] is what other files can import from a file: its own items
-//!   and the variants of `pub import Option.*;`.
-//! - [`file_scope`] adds what the file's imports bring in.
+//! - [`file_scope`] adds what the file's imports bring in. It's also what
+//!   other files can import: an imported name has the narrower of the
+//!   visibilities of the import and of the item, so `import` keeps it to
+//!   the file and `pub import` re-exports it.
 //!
-//! Imports see the exports of the file they import from, not what that file
-//! imports from other files, so `pub import "./a" (x);` doesn't re-export
-//! yet. That also means files can import each other without cycles.
+//! Files can import each other, so the scopes of files can depend on each
+//! other. They're computed by fixed-point iteration, starting from the
+//! items of each file: imports only add names, so this ends.
 
 use std::collections::BTreeMap;
 
@@ -235,7 +236,7 @@ fn function_name(name: &Option<FunctionName>) -> Option<Name> {
 }
 
 /// The names in `file`: its own items and what its imports bring in.
-#[salsa::tracked(returns(ref))]
+#[salsa::tracked(returns(ref), cycle_initial = file_scope_initial)]
 pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let tree = item_tree(db, file);
     let mut out = local_scope(db, file).clone();
@@ -249,8 +250,12 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                 continue;
             }
         };
-        let exports = exports(db, target);
-        let imported = |entry: &ScopeEntry<'db>| ScopeEntry { import: Some(import.ast_id), ..*entry };
+        let exports = &file_scope(db, target).scope;
+        let imported = |entry: &ScopeEntry<'db>| ScopeEntry {
+            def: entry.def,
+            visibility: narrower(import.visibility, entry.visibility),
+            import: Some(import.ast_id),
+        };
         match &import.kind {
             ImportKind::Plain => {}
             ImportKind::Alias(alias) => {
@@ -308,7 +313,7 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     for import in &tree.imports {
         let ImportKind::Variants(path) = &import.kind else { continue };
         let (id, visibility) = match import_enum(db, file, import.ast_id, &out.scope, path) {
-            Ok(found) => found,
+            Ok((id, visibility)) => (id, narrower(import.visibility, visibility)),
             Err(error) => {
                 out.diagnostics.push(error);
                 continue;
@@ -328,45 +333,10 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     out
 }
 
-/// What other files can import from `file`: its own items, and the variants
-/// brought in by `pub import Option.*;`, with the visibility of the import
-/// (or of the enum, if that's narrower).
-///
-/// The enum is looked up in the file's own items and in the files imported
-/// with `as`, never in what other imports bring in, so that this doesn't
-/// depend on the exports of other files.
-#[salsa::tracked(returns(ref))]
-pub fn exports<'db>(db: &'db dyn Db, file: File) -> ItemScope<'db> {
-    let tree = item_tree(db, file);
-    let mut out = local_scope(db, file).scope.clone();
-    if !tree.imports.iter().any(|i| matches!(i.kind, ImportKind::Variants(_)) && i.visibility != RawVisibility::Private) {
-        return out;
-    }
-    let mut lookup = out.clone();
-    for import in &tree.imports {
-        let (ImportKind::Alias(alias), Some(source)) = (&import.kind, &import.source) else { continue };
-        if let Ok(target) = resolve_import_path(db, file, source) {
-            let entry = ScopeEntry { def: ModuleDefId::File(target), visibility: import.visibility, import: Some(import.ast_id) };
-            lookup.insert(Namespace::Types, alias.clone(), entry);
-        }
-    }
-    for import in &tree.imports {
-        let ImportKind::Variants(path) = &import.kind else { continue };
-        if import.visibility == RawVisibility::Private {
-            continue;
-        }
-        // Errors are reported by `file_scope`.
-        let Ok((id, enum_visibility)) = import_enum(db, file, import.ast_id, &lookup, path) else { continue };
-        let visibility = narrower(import.visibility, enum_visibility);
-        for (index, name) in id.item(db).variants.iter().enumerate() {
-            let variant = EnumVariantId { parent: id, index: index as u32 };
-            let entry = ScopeEntry { def: ModuleDefId::Variant(variant), visibility, import: Some(import.ast_id) };
-            for ns in [Namespace::Values, Namespace::Types] {
-                out.insert(ns, name.clone(), entry);
-            }
-        }
-    }
-    out
+/// Where the fixed-point iteration of [`file_scope`] starts, for files that
+/// import each other.
+fn file_scope_initial<'db>(db: &'db dyn Db, _id: salsa::Id, file: File) -> FileScope<'db> {
+    local_scope(db, file).clone()
 }
 
 /// The more restrictive of two visibilities.
@@ -381,8 +351,8 @@ fn narrower(a: RawVisibility, b: RawVisibility) -> RawVisibility {
 
 /// The enum of `import Option.*;`, the import `import` in `file` whose
 /// names so far are `scope`, and its visibility. The path can go through
-/// files imported with `as`, like `m.Shape`, and then sees the items defined
-/// in them, as other imports do.
+/// files imported with `as`, like `m.Shape`, and then sees what those files
+/// export, as other imports do.
 fn import_enum<'db>(
     db: &'db dyn Db,
     file: File,
@@ -404,7 +374,7 @@ fn import_enum<'db>(
         match entry.def {
             ModuleDefId::File(next) if !last => {
                 owner = next;
-                scope = &local_scope(db, next).scope;
+                scope = &file_scope(db, next).scope;
             }
             ModuleDefId::Enum(id) if last => return Ok((id, entry.visibility)),
             _ if last => return Err(NameResDiagnostic::NotAnEnum { import, path: joined(i + 1) }),
