@@ -1,6 +1,9 @@
 /target
 /trash
 
+# npm
+node_modules/
+
 # nested repositories
 /tree-sitter-bolt
 /vim-bolt
