@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "sh scripts/build.sh",
+    "build-demo": "vite build demo",
     "check": "tsc --noEmit -p . && tsc --noEmit -p demo",
     "watch": "tsc --watch -p .",
     "dev": "vite demo",

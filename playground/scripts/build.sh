@@ -38,5 +38,3 @@ cp "$vendor/tree-sitter-bolt.wasm" "$vendor/web-tree-sitter.js" "$vendor/web-tre
 cp "$vendor/bolt-language-server/bolt_language_server_wasm.js" \
   "$vendor/bolt-language-server/bolt_language_server_wasm_bg.wasm" "$here/dist/vendor/bolt-language-server/"
 cp "$here/src/playground.css" "$here/dist/"
-
-vite build "$here/demo"
