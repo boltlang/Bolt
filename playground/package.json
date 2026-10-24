@@ -36,6 +36,6 @@
     "tree-sitter-cli": "^0.27.1",
     "typescript": "^7.0.2",
     "vite": "^8.3.5",
-    "web-tree-sitter": "^0.26.13"
+    "web-tree-sitter": "^0.27.1"
   }
 }
