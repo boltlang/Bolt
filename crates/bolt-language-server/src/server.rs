@@ -46,6 +46,11 @@ impl Server {
         let encodings = capabilities.general.as_ref().and_then(|g| g.position_encodings.as_deref());
         let encoding = Encoding::choose(encodings);
         self.workspace.encoding = encoding;
+        // `{ "prelude": "name" }` picks the prelude, and `{ "prelude": null }`
+        // turns it off. Without it, the default prelude is used.
+        if let Some(prelude) = params.initialization_options.as_ref().and_then(|o| o.get("prelude")) {
+            self.workspace.set_prelude(prelude.as_str().map(str::to_string));
+        }
         self.refresh_support = capabilities
             .workspace
             .as_ref()

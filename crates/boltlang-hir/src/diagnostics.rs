@@ -72,6 +72,8 @@ pub enum DiagnosticKind<'db> {
     UnresolvedImportEnum { path: String },
     /// The path of `import Point.*;` isn't an enum.
     NotAnEnum { path: String },
+    /// The prelude that was asked for can't be found.
+    UnresolvedPrelude { package: String, error: ImportPathError },
     UnresolvedName,
     UnresolvedType,
     /// A path that names something other than a type, like a class.
@@ -270,6 +272,11 @@ impl<'db> Collector<'db> {
                 NameResDiagnostic::NotAnEnum { import, path } => {
                     (self.import_path_range(*import), DiagnosticKind::NotAnEnum { path: path.clone() })
                 }
+                // It's about the whole file, so it's at its start.
+                NameResDiagnostic::UnresolvedPrelude { package, error } => (
+                    Some(TextRange::empty(TextSize::from(0))),
+                    DiagnosticKind::UnresolvedPrelude { package: package.clone(), error: error.clone() },
+                ),
             };
             self.push(range, kind);
         }

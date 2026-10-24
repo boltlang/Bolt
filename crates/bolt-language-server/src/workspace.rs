@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use boltlang_base_db::{Db, File, FilePath, System, SystemPath, source_text};
+use boltlang_base_db::{Db, File, FilePath, Settings, System, SystemPath, source_text};
 use boltlang_ide_diagnostics::{Severity, diagnostics};
 use ls_types::{DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Uri};
 
@@ -21,6 +21,13 @@ impl Workspace {
     /// A workspace whose files that aren't open come from `disk`.
     pub fn new(disk: Arc<dyn System>) -> Self {
         Workspace { db: LspDatabase::new(disk), encoding: Encoding::Utf16 }
+    }
+
+    /// Use the prelude of `prelude`, or none. A prelude asked for by name
+    /// that can't be found is an error.
+    pub fn set_prelude(&mut self, prelude: Option<String>) {
+        let required = prelude.is_some();
+        Settings::change_prelude(&mut self.db, prelude, required);
     }
 
     /// Use `text` for the document at `path`, when it's opened or edited.
@@ -131,6 +138,22 @@ mod tests {
 
     fn messages(workspace: &Workspace, path: &str) -> Vec<String> {
         workspace.diagnostics(SystemPath::new(path)).into_iter().map(|d| d.message).collect()
+    }
+
+    #[test]
+    fn diagnostics_follow_the_prelude() {
+        let (mut workspace, disk) = workspace();
+        disk.write_file_bytes(SystemPath::new("/project/.bolt/packages/std/__prelude__/lib.bolt"), b"pub fn id(x: i32) -> i32 = x;\n")
+            .unwrap();
+        workspace.set_text(SystemPath::new(MAIN), "id(1);\n".into());
+        assert!(messages(&workspace, MAIN).is_empty());
+        workspace.set_prelude(None);
+        assert_eq!(messages(&workspace, MAIN), ["cannot find `id`"]);
+        workspace.set_prelude(Some("mine".into()));
+        assert_eq!(messages(&workspace, MAIN), [
+            "cannot find the package `mine` of the prelude in `.bolt/packages`",
+            "cannot find `id`"
+        ]);
     }
 
     #[test]

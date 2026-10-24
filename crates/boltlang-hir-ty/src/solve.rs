@@ -11,7 +11,7 @@ use boltlang_hir_def::{
     hir::{ExprId, PatId, TypeRefId},
     ids::FunctionId,
     item_tree::{ModItem, item_tree},
-    nameres::{file_scope, resolve_import_path},
+    nameres::{file_scope, prelude_file, resolve_import_path},
     resolver::GenericDefId,
 };
 
@@ -393,12 +393,16 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
     }
 }
 
-/// The impls code in `file` can use: those of the file and of the files it
-/// imports, directly or not.
+/// The impls code in `file` can use: those of the file, of its prelude,
+/// and of the files they import, directly or not.
 #[salsa::tracked(returns(ref))]
 pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<boltlang_hir_def::ids::ImplId<'db>> {
     let mut seen = vec![file];
     let mut stack = vec![file];
+    if let Ok(Some(prelude)) = *prelude_file(db, file) {
+        seen.push(prelude);
+        stack.push(prelude);
+    }
     let mut impls = Vec::new();
     while let Some(file) = stack.pop() {
         impls.extend(file_scope(db, file).scope.impls().iter().copied());

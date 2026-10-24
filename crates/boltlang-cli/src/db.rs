@@ -1,5 +1,5 @@
 
-use boltlang_base_db::{Db, Files, OsSystem, System, SystemPath, salsa};
+use boltlang_base_db::{Db, Files, OsSystem, Settings, System, SystemPath, salsa};
 
 #[salsa::db]
 #[derive(Clone)]
@@ -10,12 +10,12 @@ pub struct CliDatabase {
 }
 
 impl CliDatabase {
-    pub fn new(cwd: &SystemPath) -> Self {
-        Self {
-            storage: salsa::Storage::new(None),
-            files: Files::new(),
-            system: OsSystem::new(cwd),
-        }
+    /// A database for the files in `cwd`, with the prelude of `prelude`;
+    /// see [`Settings`].
+    pub fn new(cwd: &SystemPath, prelude: Option<String>, prelude_required: bool) -> Self {
+        let db = Self { storage: salsa::Storage::new(None), files: Files::new(), system: OsSystem::new(cwd) };
+        Settings::init(&db, prelude, prelude_required);
+        db
     }
 }
 

@@ -7,9 +7,11 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 
 ## Language
 
-- [ ] A prelude. It would bring `String`, numeric classes for arithmetic and
-      iteration, which also lets `for` loop over more than arrays.
-      *(base-db, hir-def, hir-ty)*
+- [ ] The prelude of `std` (its `__prelude__/lib.bolt`) could bring
+      `String`, numeric classes for arithmetic and iteration, which also
+      lets `for` loop over more than arrays. *(hir-ty, std)*
+- [ ] The prelude is set for the whole database. With a project file, it
+      could be set per project. *(base-db, cli, bolt-language-server)*
 - [ ] The visibility of fields isn't checked: a private field can be read
       and set from any file. *(hir-def, hir-ty)*
 - [ ] `G.helper` where `helper` is `pub(package)` in another package says

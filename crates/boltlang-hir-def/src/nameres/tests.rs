@@ -7,7 +7,13 @@ fn names(scope: &ItemScope, ns: Namespace) -> Vec<String> {
     scope
         .entries(ns)
         .map(|(name, entry)| {
-            if entry.import.is_some() { format!("{name} (imported)") } else { name.to_string() }
+            if entry.prelude {
+                format!("{name} (prelude)")
+            } else if entry.import.is_some() {
+                format!("{name} (imported)")
+            } else {
+                name.to_string()
+            }
         })
         .collect()
 }
@@ -24,6 +30,7 @@ fn diagnostics(scope: &FileScope) -> Vec<String> {
             NameResDiagnostic::PrivateImport { name, package_only: true, .. } => format!("package-only {name}"),
             NameResDiagnostic::UnresolvedImportEnum { path, .. } => format!("unresolved enum {path}"),
             NameResDiagnostic::NotAnEnum { path, .. } => format!("not an enum {path}"),
+            NameResDiagnostic::UnresolvedPrelude { package, error } => format!("unresolved prelude {package}: {error:?}"),
         })
         .collect()
 }
@@ -340,4 +347,61 @@ fn re_exports_are_as_visible_as_the_import_and_the_item() {
     let outside = db.file("/proj/main.bolt", "import \"geo\" (area, helper, area2);\n");
     assert!(diagnostics(file_scope(&db, inside)).is_empty(), "{:?}", diagnostics(file_scope(&db, inside)));
     assert_eq!(diagnostics(file_scope(&db, outside)), ["package-only helper", "package-only area2"]);
+}
+
+#[test]
+fn the_prelude_comes_last() {
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
+    db.file("/.bolt/packages/std/__prelude__/option.bolt", "pub enum Option[T] { None, Some(T) }\n");
+    db.file(
+        "/.bolt/packages/std/__prelude__/lib.bolt",
+        "pub import \"./option\" (Option);\npub import Option.*;\npub fn id() {}\nfn hidden() {}\n",
+    );
+    let main = db.file(
+        "/main.bolt",
+        "enum Maybe { Some, Nothing }\nimport Maybe.*;\nimport Option.*;\nfn id() {}\n",
+    );
+    let scope = file_scope(&db, main);
+    // `Some` is the one of `Maybe`, and `None` the one of `Option`, whose
+    // enum is found in the prelude. The prelude's `id` is replaced.
+    assert_eq!(names(&scope.scope, Namespace::Values), [
+        "None (imported)",
+        "Nothing (imported)",
+        "Some (imported)",
+        "id"
+    ]);
+    assert_eq!(names(&scope.scope, Namespace::Types), ["Maybe", "None (imported)", "Nothing (imported)", "Option (prelude)", "Some (imported)"]);
+    let some = scope.scope.get(Namespace::Values, &Name::new("Some")).unwrap().def;
+    let ModuleDefId::Variant(some) = some else { panic!("{some:?}") };
+    assert_eq!(some.parent.item(&db).name, Some(Name::new("Maybe")));
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+}
+
+#[test]
+fn the_prelude_package_has_no_prelude() {
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
+    let lib = db.file("/.bolt/packages/std/__prelude__/lib.bolt", "pub fn id() {}\n");
+    let io = db.file("/.bolt/packages/std/io.bolt", "pub fn print() {}\n");
+    assert_eq!(prelude_file(&db, lib), &Ok(None));
+    assert_eq!(prelude_file(&db, io), &Ok(None));
+    assert!(names(&file_scope(&db, io).scope, Namespace::Values) == ["print"]);
+}
+
+#[test]
+fn a_missing_prelude_is_an_error_only_when_asked_for() {
+    let mut db = TestDb::new();
+    db.file("/.bolt/packages/empty/lib.bolt", "");
+    let main = db.file("/main.bolt", "fn f() {}\n");
+    db.set_prelude(Some("std"), false);
+    assert!(diagnostics(file_scope(&db, main)).is_empty());
+    db.set_prelude(Some("std"), true);
+    assert_eq!(diagnostics(file_scope(&db, main)), ["unresolved prelude std: PackageNotFound { package: \"std\" }"]);
+    db.set_prelude(Some("empty"), true);
+    assert_eq!(diagnostics(file_scope(&db, main)), [
+        "unresolved prelude empty: NotInPackage { package: \"empty\", path: \"__prelude__/lib.bolt\" }"
+    ]);
+    db.set_prelude(None, true);
+    assert!(diagnostics(file_scope(&db, main)).is_empty());
 }

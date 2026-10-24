@@ -15,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use boltlang_base_db::{Db, File, SystemPath, SystemPathBuf};
+use boltlang_base_db::{Db, File, Settings, SystemPath, SystemPathBuf};
 
 use crate::{
     Name,
@@ -44,6 +44,8 @@ pub struct ScopeEntry<'db> {
     pub visibility: RawVisibility,
     /// The import that brought the name in, if it's not defined here.
     pub import: Option<AstId>,
+    /// Whether the name comes from the prelude.
+    pub prelude: bool,
 }
 
 /// The names at the top level of a file.
@@ -86,6 +88,15 @@ impl<'db> ItemScope<'db> {
         }
     }
 
+    /// Add the names of `other` that aren't here yet.
+    fn extend(&mut self, other: &ItemScope<'db>) {
+        for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
+            for (name, entry) in other.entries(ns) {
+                self.insert(ns, name.clone(), *entry);
+            }
+        }
+    }
+
     /// Add a name, unless it's already there. Returns whether it was added.
     fn insert(&mut self, ns: Namespace, name: Name, entry: ScopeEntry<'db>) -> bool {
         use std::collections::btree_map::Entry;
@@ -116,6 +127,9 @@ pub enum NameResDiagnostic {
     UnresolvedImportEnum { import: AstId, path: String },
     /// The path of `import Point.*;` names something other than an enum.
     NotAnEnum { import: AstId, path: String },
+    /// The prelude of [`Settings::prelude`] can't be found, and it was
+    /// asked for.
+    UnresolvedPrelude { package: String, error: ImportPathError },
 }
 
 /// The names in a file and the problems found resolving them.
@@ -133,7 +147,7 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let container = ItemContainerId::File(file);
     let define = |out: &mut FileScope<'db>, ns, name: &Option<Name>, def, visibility, ast_id| {
         let Some(name) = name else { return };
-        if !out.scope.insert(ns, name.clone(), ScopeEntry { def, visibility, import: None }) {
+        if !out.scope.insert(ns, name.clone(), ScopeEntry { def, visibility, import: None, prelude: false }) {
             out.diagnostics.push(NameResDiagnostic::Duplicate { name: name.clone(), ast_id });
         }
     };
@@ -255,11 +269,17 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             def: entry.def,
             visibility: narrower(import.visibility, entry.visibility),
             import: Some(import.ast_id),
+            prelude: false,
         };
         match &import.kind {
             ImportKind::Plain => {}
             ImportKind::Alias(alias) => {
-                let entry = ScopeEntry { def: ModuleDefId::File(target), visibility: import.visibility, import: Some(import.ast_id) };
+                let entry = ScopeEntry {
+                    def: ModuleDefId::File(target),
+                    visibility: import.visibility,
+                    import: Some(import.ast_id),
+                    prelude: false,
+                };
                 if !out.scope.insert(Namespace::Types, alias.clone(), entry) {
                     out.diagnostics.push(NameResDiagnostic::Duplicate { name: alias.clone(), ast_id: import.ast_id });
                 }
@@ -308,11 +328,36 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             ImportKind::Variants(_) => {}
         }
     }
+    // The prelude's names come last, so that everything else replaces them.
+    // They aren't re-exported.
+    let mut prelude = ItemScope::default();
+    match prelude_file(db, file).clone() {
+        Ok(Some(source)) => {
+            for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
+                for (name, entry) in file_scope(db, source).scope.entries(ns) {
+                    if is_visible_from(db, entry.visibility, source, file) {
+                        let entry = ScopeEntry { visibility: RawVisibility::Private, import: None, prelude: true, ..*entry };
+                        prelude.insert(ns, name.clone(), entry);
+                    }
+                }
+            }
+        }
+        Ok(None) => {}
+        Err(error) => {
+            if *Settings::get(db).prelude_required(db) {
+                let package = Settings::get(db).prelude(db).clone().unwrap_or_default();
+                out.diagnostics.push(NameResDiagnostic::UnresolvedPrelude { package, error });
+            }
+        }
+    }
     // `import Option.*;` comes after the other imports, so that the enum can
-    // be one of the names they bring in, wherever the import is.
+    // be one of the names they bring in, wherever the import is, or one of
+    // the prelude.
+    let mut enums = out.scope.clone();
+    enums.extend(&prelude);
     for import in &tree.imports {
         let ImportKind::Variants(path) = &import.kind else { continue };
-        let (id, visibility) = match import_enum(db, file, import.ast_id, &out.scope, path) {
+        let (id, visibility) = match import_enum(db, file, import.ast_id, &enums, path) {
             Ok((id, visibility)) => (id, narrower(import.visibility, visibility)),
             Err(error) => {
                 out.diagnostics.push(error);
@@ -321,7 +366,8 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         };
         for (index, name) in id.item(db).variants.iter().enumerate() {
             let variant = EnumVariantId { parent: id, index: index as u32 };
-            let entry = ScopeEntry { def: ModuleDefId::Variant(variant), visibility, import: Some(import.ast_id) };
+            let entry =
+                ScopeEntry { def: ModuleDefId::Variant(variant), visibility, import: Some(import.ast_id), prelude: false };
             // Like a glob import, it doesn't replace names already in scope.
             // A variant is a value, like `None`, and can be the type of a
             // record literal, like `Circle { r: 1 }`.
@@ -330,7 +376,20 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             }
         }
     }
+    out.scope.extend(&prelude);
     out
+}
+
+/// The entry file of the prelude that `file` gets: `__prelude__/lib.bolt`
+/// in the package of [`Settings::prelude`], looked up like an import of
+/// it. `Ok(None)` when there's no prelude, and for the files of the
+/// prelude's own package, which would otherwise import themselves.
+#[salsa::tracked]
+pub fn prelude_file(db: &dyn Db, file: File) -> Result<Option<File>, ImportPathError> {
+    let Some(package) = Settings::get(db).prelude(db) else { return Ok(None) };
+    let prelude = resolve_import_path(db, file, &format!("{package}/__prelude__/lib"))?;
+    let own = package_of(db, prelude);
+    Ok((own.is_none() || package_of(db, file) != own).then_some(prelude))
 }
 
 /// Where the fixed-point iteration of [`file_scope`] starts, for files that

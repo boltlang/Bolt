@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use boltlang_base_db::{Db, Files, System, salsa};
+use boltlang_base_db::{DEFAULT_PRELUDE, Db, Files, Settings, System, salsa};
 
 use crate::system::LspSystem;
 
@@ -13,8 +13,12 @@ pub struct LspDatabase {
 }
 
 impl LspDatabase {
+    /// A database with the default prelude, until the client says
+    /// otherwise.
     pub fn new(disk: Arc<dyn System>) -> Self {
-        Self { storage: salsa::Storage::new(None), files: Files::new(), system: LspSystem::new(disk) }
+        let db = Self { storage: salsa::Storage::new(None), files: Files::new(), system: LspSystem::new(disk) };
+        Settings::init(&db, Some(DEFAULT_PRELUDE.to_string()), false);
+        db
     }
 }
 

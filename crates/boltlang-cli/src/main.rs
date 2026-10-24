@@ -9,7 +9,7 @@ use std::{
 };
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
-use boltlang_base_db::{Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
+use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
 use boltlang_ide_diagnostics::{Diagnostic, Severity, diagnostics, syntax_diagnostics};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
 use clap::Parser;
@@ -25,6 +25,30 @@ trait Exec {
 struct Cli {
     #[command(subcommand)]
     command: Command,
+}
+
+/// Which prelude files get: the names of a package's `__prelude__/lib.bolt`
+/// that can be used without importing them.
+#[derive(clap::Args, Clone, Debug, Default)]
+struct PreludeArgs {
+    /// The package whose prelude to use [default: std]
+    #[arg(long, value_name = "PACKAGE", conflicts_with = "no_prelude")]
+    prelude: Option<String>,
+    /// Don't use a prelude.
+    #[arg(long)]
+    no_prelude: bool,
+}
+
+impl PreludeArgs {
+    fn database(&self) -> anyhow::Result<CliDatabase> {
+        // Only the default prelude may be missing, so that `std` isn't needed.
+        let (prelude, required) = match (&self.prelude, self.no_prelude) {
+            (_, true) => (None, false),
+            (Some(package), false) => (Some(package.clone()), true),
+            (None, false) => (Some(DEFAULT_PRELUDE.to_string()), false),
+        };
+        Ok(CliDatabase::new(&current_dir()?, prelude, required))
+    }
 }
 
 #[derive(clap::Subcommand)]
@@ -46,6 +70,8 @@ impl Exec for Command {
 #[derive(clap::Parser)]
 struct DumpAstCommand {
     file: PathBuf,
+    #[command(flatten)]
+    prelude: PreludeArgs,
     #[clap(long, default_value_t, value_enum)]
     format: OutputFormat,
 }
@@ -59,7 +85,7 @@ enum OutputFormat {
 
 impl Exec for DumpAstCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = CliDatabase::new(&current_dir()?);
+        let db = self.prelude.database()?;
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
         let errors = syntax_diagnostics(&db, file);
         report(&db, &errors)?;
@@ -78,11 +104,13 @@ impl Exec for DumpAstCommand {
 #[derive(clap::Parser)]
 struct CheckCommand {
     files: Vec<PathBuf>,
+    #[command(flatten)]
+    prelude: PreludeArgs,
 }
 
 impl Exec for CheckCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = CliDatabase::new(&current_dir()?);
+        let db = self.prelude.database()?;
         let mut ok = true;
         for path in &self.files {
             let Some(file) = open(&db, path) else {

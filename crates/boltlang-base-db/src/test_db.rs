@@ -3,7 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::{Db, File, Files, InMemorySystem, System, SystemPath, WritableSystem};
+use crate::{Db, File, Files, InMemorySystem, Settings, System, SystemPath, WritableSystem};
 
 #[salsa::db]
 #[derive(Clone)]
@@ -27,7 +27,14 @@ impl TestDb {
                 }
             }
         })));
-        Self { storage, files: Files::default(), system: InMemorySystem::new(), executed }
+        let db = Self { storage, files: Files::default(), system: InMemorySystem::new(), executed };
+        Settings::init(&db, None, false);
+        db
+    }
+
+    /// Change the prelude, which is off by default. See [`Settings`].
+    pub fn set_prelude(&mut self, prelude: Option<&str>, required: bool) {
+        Settings::change_prelude(self, prelude.map(str::to_string), required);
     }
 
     /// Create a file with the given contents.

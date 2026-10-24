@@ -26,6 +26,8 @@
 //! `//- /lib.bolt`, so that they can import each other. Without such lines,
 //! the code is `/main.bolt`. With several files, each line of the output
 //! starts with the path of its file, like `/lib.bolt: id: fn(a) -> a`.
+//! As in the compiler, files get the prelude of `std` when there's one, so a
+//! case can have one in `/.bolt/packages/std/__prelude__/lib.bolt`.
 //!
 //! Run a single case with `cargo test --test check mutual_recursion`. To
 //! write what the checker finds into the files instead of comparing it, run
@@ -153,7 +155,9 @@ fn split_files(input: &str) -> Result<Vec<(String, String)>, String> {
 /// top-level statements, and the diagnostics, each with the code it's
 /// about. With several files, each line starts with the path of its file.
 fn check(input: &str) -> Result<(String, String), String> {
-    let db = TestDb::new();
+    let mut db = TestDb::new();
+    // As in the compiler, the prelude is the one of `std`, if there is one.
+    db.set_prelude(Some("std"), false);
     // The types of a line, with names like `a` for the unknown ones, as in
     // the diagnostics of the compiler.
     let show = |tys: &[&Ty]| -> Vec<String> {

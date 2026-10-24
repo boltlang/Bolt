@@ -6,6 +6,7 @@ mod db;
 mod error;
 mod files;
 mod parse;
+mod settings;
 mod system;
 mod text;
 mod test_db;
@@ -33,6 +34,7 @@ pub use {
     error::{Error, Result},
     files::{File, FilePath, Files},
     parse::{Parse, parse_file},
+    settings::{DEFAULT_PRELUDE, Settings},
     system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf, WritableSystem, InMemorySystem},
     text::{LineIndex, index_lines, source_text},
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
