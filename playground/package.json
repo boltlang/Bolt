@@ -1,7 +1,6 @@
 {
   "name": "@boltlang/playground",
   "version": "0.1.0",
-  "private": true,
   "description": "A React component to edit Bolt code, highlighted with tree-sitter and checked by the Bolt language server in the browser",
   "type": "module",
   "exports": {
