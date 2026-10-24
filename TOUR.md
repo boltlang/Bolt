@@ -125,9 +125,11 @@ fn shoot(direction: Vec3, strength: Float32 = 1.0) {
     todo!()
 }
 
-shoot(Vec3.new(1.0, -1.0, 0.0)); // strength is 1.0
-shoot(Vec3.new(1.0, -1.0, 0.0), 2.0); // strength is 2.0
-shoot(Vec3.new(1.0, -1.0, 0.0), strength=0.5); // strength is 0.5
+let there = Vec3.new(1.0, -1.0, 0.0);
+
+shoot(there); // strength is 1.0
+shoot(there, 2.0); // strength is 2.0
+shoot(there, strength=0.5); // strength is 0.5
 ```
 
 ## Garbage Collection
