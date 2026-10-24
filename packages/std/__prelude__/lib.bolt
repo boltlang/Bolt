@@ -1,12 +1,12 @@
 
 // Type classes
-import "./functor" *;
-import "./semigroup" *;
-import "./monoid" *;
+pub import "./functor" *;
+pub import "./semigroup" *;
+pub import "./monoid" *;
 
 // Types
-import "./bool" *;
-import "./option" *;
-import "./list" *;
+pub import "./bool" *;
+pub import "./option" *;
+pub import "./list" *;
 
-import "./io" *;
+pub import "./io" *;
