@@ -4,11 +4,13 @@
 //! every file is a module, and imports name the file they import from.
 //!
 //! - [`local_scope`] has the items defined in a file.
+//! - [`exports`] is what other files can import from a file: its own items
+//!   and the variants of `pub import Option.*;`.
 //! - [`file_scope`] adds what the file's imports bring in.
 //!
-//! Imports only see the items defined in the file they import from, not
-//! what that file imports itself, so `pub import` doesn't re-export yet. That
-//! also means files can import each other without cycles.
+//! Imports see the exports of the file they import from, not what that file
+//! imports from other files, so `pub import "./a" (x);` doesn't re-export
+//! yet. That also means files can import each other without cycles.
 
 use std::collections::BTreeMap;
 
@@ -247,7 +249,7 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                 continue;
             }
         };
-        let exports = &local_scope(db, target).scope;
+        let exports = exports(db, target);
         let imported = |entry: &ScopeEntry<'db>| ScopeEntry { import: Some(import.ast_id), ..*entry };
         match &import.kind {
             ImportKind::Plain => {}
@@ -324,6 +326,57 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         }
     }
     out
+}
+
+/// What other files can import from `file`: its own items, and the variants
+/// brought in by `pub import Option.*;`, with the visibility of the import
+/// (or of the enum, if that's narrower).
+///
+/// The enum is looked up in the file's own items and in the files imported
+/// with `as`, never in what other imports bring in, so that this doesn't
+/// depend on the exports of other files.
+#[salsa::tracked(returns(ref))]
+pub fn exports<'db>(db: &'db dyn Db, file: File) -> ItemScope<'db> {
+    let tree = item_tree(db, file);
+    let mut out = local_scope(db, file).scope.clone();
+    if !tree.imports.iter().any(|i| matches!(i.kind, ImportKind::Variants(_)) && i.visibility != RawVisibility::Private) {
+        return out;
+    }
+    let mut lookup = out.clone();
+    for import in &tree.imports {
+        let (ImportKind::Alias(alias), Some(source)) = (&import.kind, &import.source) else { continue };
+        if let Ok(target) = resolve_import_path(db, file, source) {
+            let entry = ScopeEntry { def: ModuleDefId::File(target), visibility: import.visibility, import: Some(import.ast_id) };
+            lookup.insert(Namespace::Types, alias.clone(), entry);
+        }
+    }
+    for import in &tree.imports {
+        let ImportKind::Variants(path) = &import.kind else { continue };
+        if import.visibility == RawVisibility::Private {
+            continue;
+        }
+        // Errors are reported by `file_scope`.
+        let Ok((id, enum_visibility)) = import_enum(db, file, import.ast_id, &lookup, path) else { continue };
+        let visibility = narrower(import.visibility, enum_visibility);
+        for (index, name) in id.item(db).variants.iter().enumerate() {
+            let variant = EnumVariantId { parent: id, index: index as u32 };
+            let entry = ScopeEntry { def: ModuleDefId::Variant(variant), visibility, import: Some(import.ast_id) };
+            for ns in [Namespace::Values, Namespace::Types] {
+                out.insert(ns, name.clone(), entry);
+            }
+        }
+    }
+    out
+}
+
+/// The more restrictive of two visibilities.
+fn narrower(a: RawVisibility, b: RawVisibility) -> RawVisibility {
+    let rank = |v| match v {
+        RawVisibility::Private => 0,
+        RawVisibility::Package => 1,
+        RawVisibility::Public | RawVisibility::Super => 2,
+    };
+    if rank(a) <= rank(b) { a } else { b }
 }
 
 /// The enum of `import Option.*;`, the import `import` in `file` whose

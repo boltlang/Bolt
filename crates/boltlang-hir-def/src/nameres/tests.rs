@@ -120,6 +120,30 @@ fn Red() {}
 }
 
 #[test]
+fn pub_imports_of_variants_are_exported() {
+    let db = TestDb::new();
+    db.file(
+        "/option.bolt",
+        "pub enum Option[T] { None, Some(T) }\npub import Option.*;\npub enum Hidden { A }\nimport Hidden.*;\n\
+         enum Private { B }\npub import Private.*;\n",
+    );
+    db.file("/shapes.bolt", "pub enum Shape { Circle }\n");
+    db.file("/reexport.bolt", "import \"./shapes\" as s;\npub import s.Shape.*;\n");
+    let main = db.file(
+        "/main.bolt",
+        r#"
+import "./option" (Option, None, Some);
+import "./option" *;
+import "./reexport" (Circle);
+"#,
+    );
+    let scope = file_scope(&db, main);
+    // `A` isn't exported by a private import, nor `B` by a private enum.
+    assert_eq!(names(&scope.scope, Namespace::Values), ["Circle (imported)", "None (imported)", "Some (imported)"]);
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+}
+
+#[test]
 fn import_of_variants_errors() {
     let db = TestDb::new();
     db.file("/shapes.bolt", "enum Hidden { A }\npub struct Point;\n");
