@@ -3,7 +3,9 @@ import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import BrowserOnly from '@docusaurus/BrowserOnly';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
+import { useColorMode } from '@docusaurus/theme-common';
 import { Playground } from "@boltlang/playground";
+import "@boltlang/playground/style.css";
 import Layout from '@theme/Layout';
 import Heading from '@theme/Heading';
 
@@ -30,6 +32,12 @@ function HomepageHeader() {
   );
 }
 
+// The playground, in the colors of the site, which has a toggle of its own.
+function HomepagePlayground(): ReactNode {
+  const {colorMode} = useColorMode();
+  return <Playground theme={colorMode} style={{height: 500}} />;
+}
+
 export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
   return (
@@ -40,7 +48,7 @@ export default function Home(): ReactNode {
       <main>
         <a id="playground" />
         <BrowserOnly>
-          {() => <Playground />}
+          {() => <HomepagePlayground />}
         </BrowserOnly>
       </main>
     </Layout>
