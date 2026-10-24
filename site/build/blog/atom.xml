@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?><?xml-stylesheet type="text/xsl" href="atom.xsl"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+    <id>https://boltlang.net/blog</id>
+    <title>The Bolt Programming Language Blog</title>
+    <updated>2026-10-24T00:00:00.000Z</updated>
+    <generator>https://github.com/jpmonette/feed</generator>
+    <link rel="alternate" href="https://boltlang.net/blog"/>
+    <subtitle>The Bolt Programming Language Blog</subtitle>
+    <icon>https://boltlang.net/img/favicon.ico</icon>
+    <entry>
+        <title type="html"><![CDATA[The Resurrection of Bolt]]></title>
+        <id>https://boltlang.net/blog/hello-bolt</id>
+        <link href="https://boltlang.net/blog/hello-bolt"/>
+        <updated>2026-10-24T00:00:00.000Z</updated>
+        <summary type="html"><![CDATA[For a long time, I've been an avid opposer of generative AI. My queries were]]></summary>
+        <content type="html"><![CDATA[<p>For a long time, I've been an avid opposer of generative AI. My queries were
+limited to some targeted questions about certain libraries and how to manage
+Kubernetes. I mainly used Gemini, and didn't put much thought in that decision.
+The craze about AI coding agents went largely past me.</p>
+<p>That is until now.</p>
+<!-- -->
+<h2 class="anchor anchorTargetStickyNavbar_tleR" id="a-sisyphean-task">A Sisyphean Task<a href="https://boltlang.net/blog/hello-bolt#a-sisyphean-task" class="hash-link" aria-label="Direct link to A Sisyphean Task" title="Direct link to A Sisyphean Task" translate="no">​</a></h2>
+<p>Writing a compiler is an enourmous undertaking. Especially with elaborate
+syntax such as the one Bolt uses, there are hundreds, if not thousands of cases
+to cover in the parser and type checker alone. Elaborating to a core language
+during type checking may make the backend more feasible, but since Bolt
+requires a garbage collector it still is a tremendous amount of work on its own.</p>
+<p>As a consequence, the Bolt parser and a small but essential part of the type
+checker was the furthest I ever was able to go. I made prototypes in different
+languages, eventually settling for Rust. Things like tuples, polymorphic
+functions and extensible records worked beautifully. However, the more features
+I added, the bigger the backlog grew, and eventually I gave up.</p>
+<p>For example: I noticed way too late that using the CST (backed by Rowan)
+directly in the type checker is far from ideal. rust-analyzer takes a whole
+different approach by collecting properties in different structures in its
+<code>hir</code> and <code>hir-def</code> crates. This opens the door for the type checker to be
+simpler, more effient, and allows it to make use of the Salsa database. I
+simply didn't have the remaining energy to perform this refactor.</p>
+<h2 class="anchor anchorTargetStickyNavbar_tleR" id="ai-to-the-rescue">AI To The Rescue<a href="https://boltlang.net/blog/hello-bolt#ai-to-the-rescue" class="hash-link" aria-label="Direct link to AI To The Rescue" title="Direct link to AI To The Rescue" translate="no">​</a></h2>
+<p>Because I was completely burried under the amount of work to do, I made a
+desparate move. A week ago, I subscribed to Claude code. Not expecting much
+from it, I instructed it to fork the Rust tree-sitter grammar and clean it up
+so that it might become a base for a Bolt grammar. In a later stage I would
+then use this grammar to correctly implement the compiler's parser.</p>
+<p>To my great surprise the AI did remarkably well. It found all the occurrences
+of productions that should be removed and cleanly reduced the grammar to its
+essence. When I asked it to add some new rules based on some examples alone, it
+did not fail to disappoint. In under half an hour I had my first prototype of a
+Bolt tree-sitter grammar.</p>
+<p>The surprises didn't stop there. I asked Claude simply to synchronize the
+compiler's parser with the grammar. This would have taken me several days, if
+not weeks to complete. The AI not only succeeded in making the parser comply to
+the tree-sitter grammar, but also wrote additional tests and even imported the
+test corpus of the tree-sitter grammar so that it could run it with the
+compiler's parser.</p>
+<p>I was sold.</p>
+<p>A week later, and Claude has written a type checker and name resolution system
+that deeply integrates with Salsa. The compiler now has basic support for
+typeclasses, something that I only managed to accomplish once on a prototype
+years ago. I now have a playground, and a testing infrastructure that is both
+readable and integrates neatly with <code>cargo test</code>. I could never have imagined
+that it would go this fast.</p>
+<p>Looking to the future, I see myself continue using Claude for Bolt. I had
+the idea that the tests should be thoroughly reviewed by a human, and that any
+implementation of the Bolt compiler should pass all tests. That way one can be
+sure the compiler behaves correctly, no matter how bad or good the code is, or
+whether it is generated by AI or not.</p>
+<p>In the end, I want to ship software, and AI makes that possible.</p>]]></content>
+        <author>
+            <name>Sam Vervaeck</name>
+            <uri>https://linkedin.com/in/vervaeck-sam</uri>
+        </author>
+        <category label="Announcements" term="Announcements"/>
+        <category label="Reflections" term="Reflections"/>
+    </entry>
+</feed>
