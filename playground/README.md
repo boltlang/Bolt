@@ -43,6 +43,11 @@ changes, and `npm run check` only type-checks it; both need the files of
 
 Run it again after changing the grammar, its queries or the compiler.
 
+`npm run build` also puts the files the page loads, and nothing else, in
+`out/`: no source maps, type declarations or sources. That's the folder
+the Pages workflow deploys, and it can be served as it is, like with
+`python3 -m http.server --directory out`.
+
 The highlighting follows `tree-sitter highlight`: when several patterns
 capture a node, the last one wins, and the token trees of macros are
 highlighted as Bolt. See `src/highlight.ts`.
