@@ -12,7 +12,7 @@ here=$(cd "$(dirname "$0")/.." && pwd)
 root=$(cd "$here/.." && pwd)
 grammar="$root/tree-sitter-bolt"
 mkdir -p "$here/vendor"
-tree-sitter build --wasm -o "$here/vendor/tree-sitter-bolt.wasm" "$grammar"
+npx tree-sitter build --wasm -o "$here/vendor/tree-sitter-bolt.wasm" "$grammar"
 cp "$grammar/queries/highlights.scm" "$grammar/queries/injections.scm" "$here/vendor/"
 cp "$here/node_modules/web-tree-sitter/web-tree-sitter.js" "$here/node_modules/web-tree-sitter/web-tree-sitter.wasm" "$here/vendor/"
 cargo build --quiet --release --target wasm32-unknown-unknown -p bolt-language-server-wasm --manifest-path "$root/Cargo.toml"
