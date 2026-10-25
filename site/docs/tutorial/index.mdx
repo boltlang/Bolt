@@ -1,0 +1,64 @@
+---
+sidebar_position: 1
+title: Introduction
+description: A hands-on tour of the Bolt programming language.
+---
+
+# Learn Bolt
+
+Welcome! This tutorial walks you through the Bolt programming language, one
+feature at a time. Each page is short, shows small programs you can run
+yourself, and builds on the pages before it.
+
+Bolt is a statically typed, functional-first language. If you know Rust, much
+of the syntax will look familiar. The type system comes from the ML and
+Haskell family: you rarely have to write types down, because the compiler
+infers them for you, and classes give you overloading in the style of
+Haskell's type classes.
+
+```bolt
+enum Shape {
+  Circle(f64),
+  Rect { w: f64, h: f64 },
+}
+
+fn area(s) = match s {
+  Shape.Circle(r) => 3.14 * r * r,
+  Shape.Rect { w, h } => w * h,
+};
+
+area(Shape.Rect { w: 2.0, h: 3.0 });
+```
+
+```text
+6.0
+```
+
+:::warning[Bolt is experimental]
+
+The compiler can check programs for errors and run them with a simple
+interpreter, but there is no code generator yet, and the language changes
+often. This tutorial only shows what works today. Where a feature is
+missing or incomplete, a note says so.
+
+:::
+
+## What you'll learn
+
+1. [Getting started](./quickstart.mdx): install the compiler and run your
+   first program.
+2. [Values and variables](./basics.mdx): numbers, strings, booleans, tuples,
+   arrays and `let`.
+3. [Functions](./functions.mdx): functions, closures and operators.
+4. [Control flow](./control-flow.mdx): `if`, loops and `break`.
+5. [Structs and enums](./data-types.mdx): defining your own types.
+6. [Pattern matching](./pattern-matching.mdx): `match`, `if let` and
+   destructuring.
+7. [Types and inference](./types.mdx): how Bolt figures out types, generics,
+   and reading type errors.
+8. [Classes](./classes.mdx): overloading with classes and impls.
+9. [Modules](./modules.mdx): splitting code into files, imports and the
+   prelude.
+
+If you want to know how the compiler works inside, see the
+[internals](/docs/internals/type-checking) instead.

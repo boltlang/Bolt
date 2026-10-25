@@ -1,0 +1,163 @@
+---
+sidebar_position: 5
+title: Control flow
+description: if expressions, loops, break and continue in Bolt.
+---
+
+# Control flow
+
+## `if`
+
+```bolt
+let temperature = 25;
+if temperature > 20 { "warm" } else { "cold" };
+```
+
+```text
+"warm"
+```
+
+`if` is an *expression*: it has a value, so you can use it anywhere a value
+fits. Both branches must then have the same type. Chain conditions with
+`else if`:
+
+```bolt
+fn sign(n: i32) -> str =
+  if n < 0 { "negative" } else if n == 0 { "zero" } else { "positive" };
+
+[sign(-3), sign(0), sign(8)];
+```
+
+```text
+["negative", "zero", "positive"]
+```
+
+The condition must be a `bool`. There's no "truthiness" like in JavaScript
+or Python: `if 1 { ... }` is an error.
+
+An `if` without `else` has the value `()`, so its branch can't have a value
+either:
+
+```bolt
+fn bad(c: bool) -> i32 = if c { 1 };
+```
+
+```text
+[E0201] Error: expected `i32`, found `()`
+```
+
+## `while`
+
+`while` runs its body as long as its condition holds:
+
+```bolt
+let mut n = 1;
+while n < 100 {
+  n *= 2;
+}
+n;
+```
+
+```text
+128
+```
+
+## `for`
+
+`for` runs its body once for every element of an array:
+
+```bolt
+let mut total = 0;
+for price in [3, 10, 7] {
+  total += price;
+}
+total;
+```
+
+```text
+20
+```
+
+:::note
+
+`for` only loops over arrays for now. Loops over ranges like `0..10` and over
+other collections need classes that the standard library doesn't have yet.
+
+:::
+
+## `loop`
+
+`loop` runs forever, until a `break` leaves it. `break` can give the loop a
+value, which makes `loop` handy for searching:
+
+```bolt
+let mut n = 1;
+let first_square_over_50 = loop {
+  if n * n > 50 {
+    break n * n;
+  }
+  n += 1;
+};
+first_square_over_50;
+```
+
+```text
+64
+```
+
+`continue` skips the rest of the body and starts the next round:
+
+```bolt
+let mut odd_sum = 0;
+for x in [1, 2, 3, 4, 5] {
+  if x % 2 == 0 {
+    continue;
+  }
+  odd_sum += x;
+}
+odd_sum;
+```
+
+```text
+9
+```
+
+## Labels
+
+When loops are nested, `break` and `continue` apply to the innermost one. To
+leave an outer loop, give it a *label*, written with a leading `'`:
+
+```bolt
+let mut steps = 0;
+'search: for row in [1, 2, 3] {
+  for col in [1, 2, 3] {
+    steps += 1;
+    if row * col == 4 {
+      break 'search;
+    }
+  }
+}
+steps;
+```
+
+```text
+5
+```
+
+A block can have a label too, and `break` can leave it early with a value:
+
+```bolt
+let size = 'check: {
+  if 12 > 10 {
+    break 'check "big";
+  }
+  "small"
+};
+size;
+```
+
+```text
+"big"
+```
+
+Next: [structs and enums](./data-types.mdx).

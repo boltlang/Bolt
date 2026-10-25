@@ -1,0 +1,168 @@
+---
+sidebar_position: 8
+title: Types and inference
+description: How Bolt infers types, generic functions, and how to read type errors.
+---
+
+# Types and inference
+
+Bolt checks the types of your whole program before it runs, but you rarely
+have to write them. This page explains what the compiler works out for you,
+and when writing types helps.
+
+## Inference
+
+The compiler looks at how every value is used to find its type. Take this
+function:
+
+```bolt
+fn average(a, b) = (a + b) / 2.0;
+```
+
+`2.0` is a float, `/` needs both sides to have the same type, and so does
+`+`. So `a` and `b` are floats, and so is the result: `average` has type
+`fn(f64, f64) -> f64`, without a single annotation.
+
+When a number's type isn't decided by anything, it gets a default: `i32` for
+integers and `f64` for floats.
+
+## Generic functions
+
+Some functions don't care about the types of their arguments:
+
+```bolt
+fn first(a, b) = a;
+
+(first(1, "one"), first("one", 1));
+```
+
+```text
+(1, "one")
+```
+
+`first` works for arguments of any type. The compiler gives it the type
+
+```text
+forall a b. fn(a, b) -> a
+```
+
+which you can read as "for any types `a` and `b`, a function from an `a`
+and a `b` to an `a`". A function like this is *generic*, and every call
+can use it with different types.
+
+You can also write the type parameters yourself, between `[` and `]` after
+the name:
+
+```bolt
+fn first[A, B](a: A, b: B) -> A = a;
+
+first(true, 2.5);
+```
+
+```text
+true
+```
+
+A function with a written type parameter must work for *every* type,
+so this is an error:
+
+```bolt
+fn broken[T](x: T) -> T = 1;
+```
+
+```text
+[E0201] Error: expected `T`, found an integer
+```
+
+## Fields of any type
+
+A function that uses a field works on any struct that has a field with that
+name:
+
+```bolt
+struct Point2 { x: i32, y: i32 }
+struct Point3 { x: i32, y: i32, z: i32 }
+
+fn length_squared(p) = p.x * p.x + p.y * p.y;
+
+(length_squared(Point2 { x: 3, y: 4 }), length_squared(Point3 { x: 1, y: 2, z: 3 }));
+```
+
+```text
+(25, 5)
+```
+
+The type of `length_squared` says that its argument needs the fields `x` and
+`y`, of the same type, which is also the type of the result:
+
+```text
+forall a b. a.x: b => a.y: b => fn(a) -> b
+```
+
+Calling it with a value that doesn't have those fields is an error:
+
+```bolt
+struct Point2 { x: i32, y: i32 }
+
+fn length_squared(p) = p.x * p.x + p.y * p.y;
+
+length_squared((1, 2));
+```
+
+```text
+[E0208] Error: `(i32, i32)` has no field `x`
+```
+
+## When to write types
+
+Inference is convenient, but writing the types of a function's parameters
+and result has advantages:
+
+- **The type documents the function.** Readers don't have to work it out
+  from the body.
+- **Errors point at the right place.** With a written type, a mistake in the
+  body is reported in the body, not at a call somewhere else.
+- **It's faster.** The compiler checks a function with a complete signature
+  on its own, so changing its body doesn't make it check the code that calls
+  it again.
+
+A good habit is to write types for functions other code uses, and to leave
+them out for small helpers.
+
+Local variables never need types, and their types aren't generic: a
+variable holding a closure has one type, decided by how it's used.
+
+## Reading type errors
+
+A type error says what type the compiler expected, what it found, and often
+*why* it expected that type:
+
+```bolt
+fn area(w: f64, h: f64) -> f64 = w * h;
+
+area(2.0, "three");
+```
+
+```text
+[E0201] Error: expected `f64`, found `str`
+   ╭─[ main.bolt:3:11 ]
+   │
+ 3 │ area(2.0, "three");
+   │           ───┬───
+   │              ╰───── expected `f64`, found `str`
+   │
+   ├─[ main.bolt:3:11 ]
+   │
+ 1 │ fn area(w: f64, h: f64) -> f64 = w * h;
+   │                    ─┬─
+   │                     ╰─── expected because of this parameter of `area`
+───╯
+```
+
+The first part points at the argument. The second points at the parameter
+it was passed to, which is where the expected type comes from.
+
+An integer whose type was never decided is called "an integer" in errors,
+rather than `i32`, since you didn't write `i32` anywhere.
+
+Next: [classes](./classes.mdx).

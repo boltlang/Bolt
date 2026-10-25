@@ -1,0 +1,182 @@
+---
+sidebar_position: 7
+title: Pattern matching
+description: match, if let, let else and destructuring patterns in Bolt.
+---
+
+# Pattern matching
+
+## `match`
+
+`match` compares a value against a list of *patterns*, and runs the code of
+the first one that fits:
+
+```bolt
+enum Shape {
+  Circle(f64),
+  Rect { w: f64, h: f64 },
+  Dot,
+}
+
+fn area(s: Shape) -> f64 = match s {
+  Shape.Circle(r) => 3.14 * r * r,
+  Shape.Rect { w, h } => w * h,
+  Shape.Dot => 0.0,
+};
+
+[area(Shape.Circle(1.0)), area(Shape.Rect { w: 2.0, h: 3.0 }), area(Shape.Dot)];
+```
+
+```text
+[3.14, 6.0, 0.0]
+```
+
+Each line of a `match` is an *arm*: a pattern, `=>`, and an expression.
+Arms are separated by commas. A pattern can give names to the parts of the
+value it matches, like `r`, `w` and `h` above, which the arm can then use.
+
+Like `if`, `match` is an expression, and all its arms must have the same
+type.
+
+:::note
+
+Bolt doesn't check yet that a `match` covers every case. A value that no arm
+matches is an error when the program runs.
+
+:::
+
+## Kinds of patterns
+
+| Pattern | Matches |
+|---|---|
+| `x` | anything, and names it `x` |
+| `_` | anything, without naming it |
+| `42`, `"hi"`, `'c'`, `true` | that exact value |
+| `1..=9` | numbers from 1 to 9, inclusive |
+| `a \| b` | what `a` or `b` matches |
+| `(a, b)` | a tuple, with patterns for its elements |
+| `[first, .., last]` | an array; `..` stands for any number of elements |
+| `Some(x)`, `Shape.Circle(r)` | a variant or tuple struct |
+| `Point { x, y: 0 }` | a struct or variant with named fields |
+| `name @ pattern` | what `pattern` matches, and names the whole value |
+
+Patterns nest, so they can look deep inside a value:
+
+```bolt
+fn describe(n: i32) -> str = match n {
+  0 => "zero",
+  1 | 2 | 3 => "a few",
+  4..=9 => "several",
+  _ => "many",
+};
+
+[describe(0), describe(2), describe(7), describe(42)];
+```
+
+```text
+["zero", "a few", "several", "many"]
+```
+
+```bolt
+fn label(o: Option[i32]) -> str = match o {
+  Some(0) => "zero",
+  Some(n @ 1..=9) => "a digit",
+  Some(_) => "a big number",
+  None => "nothing",
+};
+
+[label(Some(0)), label(Some(5)), label(Some(50)), label(None)];
+```
+
+```text
+["zero", "a digit", "a big number", "nothing"]
+```
+
+## Guards
+
+An arm can have a *guard*: an extra condition after `if`. The arm is only
+chosen when the pattern matches and the guard is `true`:
+
+```bolt
+fn classify(n: i32) -> str = match n {
+  x if x < 0 => "negative",
+  x if x % 2 == 0 => "even",
+  _ => "odd",
+};
+
+[classify(-1), classify(4), classify(7)];
+```
+
+```text
+["negative", "even", "odd"]
+```
+
+## Destructuring with `let`
+
+`let` takes a pattern too, which takes a value apart into variables:
+
+```bolt
+struct Point { x: i32, y: i32 }
+
+let (a, b) = (1, 2);
+let Point { x, y: height } = Point { x: 10, y: 20 };
+let [first, .., last] = [3, 1, 4, 1, 5];
+(a + b, x, height, first, last);
+```
+
+```text
+(3, 10, 20, 3, 5)
+```
+
+`y: height` matches the field `y` and names it `height`. Patterns work in
+function parameters as well:
+
+```bolt
+fn add_pair((a, b)) = a + b;
+
+add_pair((20, 22));
+```
+
+```text
+42
+```
+
+## `if let`
+
+When you only care about one pattern, `if let` is shorter than a `match`:
+
+```bolt
+fn or_zero(o: Option[i32]) -> i32 {
+  if let Some(n) = o { n } else { 0 }
+}
+
+(or_zero(Some(7)), or_zero(None));
+```
+
+```text
+(7, 0)
+```
+
+## `let` ... `else`
+
+`let pattern = value else { ... };` is for patterns that may not match. When
+the value doesn't fit, the `else` block runs, and it must leave the
+function, with `return` for example. After the `let`, the variables of the
+pattern can be used as usual:
+
+```bolt
+fn double_or_fail(o: Option[i32]) -> i32 {
+  let Some(n) = o else {
+    return -1;
+  };
+  n * 2
+}
+
+(double_or_fail(Some(21)), double_or_fail(None));
+```
+
+```text
+(42, -1)
+```
+
+Next: [types and inference](./types.mdx).

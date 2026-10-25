@@ -1,0 +1,229 @@
+---
+sidebar_position: 4
+title: Functions
+description: Functions, closures, higher-order functions and custom operators in Bolt.
+---
+
+# Functions
+
+## Defining functions
+
+`fn` defines a function. The parameters have types after a `:`, and the
+return type comes after `->`:
+
+```bolt
+fn add(a: i32, b: i32) -> i32 {
+  a + b
+}
+
+add(2, 3);
+```
+
+```text
+5
+```
+
+A body in braces is a *block*. Its value is the value of its last
+expression, the one without a `;` after it. So `a + b` is what `add`
+returns.
+
+When the body is a single expression, write it after `=` instead, and end
+the definition with a `;`:
+
+```bolt
+fn square(x: i32) -> i32 = x * x;
+
+square(9);
+```
+
+```text
+81
+```
+
+Functions can be used before they're defined, and they can call themselves:
+
+```bolt
+fn main_value() -> i32 = fac(5);
+
+fn fac(n: i32) -> i32 = if n == 0 { 1 } else { n * fac(n - 1) };
+
+main_value();
+```
+
+```text
+120
+```
+
+### Returning early
+
+`return` leaves a function right away. A function that doesn't return a
+value returns `()`, and its return type can be left out:
+
+```bolt
+fn first_negative(xs: [i32]) -> i32 {
+  for x in xs {
+    if x < 0 {
+      return x;
+    }
+  }
+  0
+}
+
+first_negative([3, 1, -4, 1, -5]);
+```
+
+```text
+-4
+```
+
+## Leaving out types
+
+The types of parameters and return values are optional. Without them, Bolt
+works them out from the body:
+
+```bolt
+fn double(x) = x * 2;
+
+double(21);
+```
+
+```text
+42
+```
+
+Here Bolt sees that `x` is multiplied by the integer `2`, so `x` must be an
+integer too.
+
+A function whose body works for any type becomes *generic*. This `pair`
+works for values of any two types:
+
+```bolt
+fn pair(a, b) = (a, b);
+
+(pair(1, "one"), pair(true, 2.0));
+```
+
+```text
+((1, "one"), (true, 2.0))
+```
+
+[Types and inference](./types.mdx) explains how this works and when you'd
+want to write types anyway.
+
+## Functions are values
+
+A function can be passed to another function, stored in a variable, and
+returned:
+
+```bolt
+fn twice(f, x) = f(f(x));
+fn inc(n: i32) -> i32 = n + 1;
+
+let g = inc;
+twice(g, 10);
+```
+
+```text
+12
+```
+
+## Closures
+
+A *closure* is a function without a name, written between `|` bars. Its
+body is a single expression, or a block:
+
+```bolt
+let inc = |x| x + 1;
+let add = |a, b| a + b;
+let clamp = |x: i32| -> i32 {
+  if x > 100 { 100 } else { x }
+};
+
+(inc(1), add(2, 3), clamp(250));
+```
+
+```text
+(2, 5, 100)
+```
+
+`fn (params) = body` is another way to write one, if you prefer the look of
+a function:
+
+```bolt
+let mul = fn (a, b) = a * b;
+mul(6, 7);
+```
+
+```text
+42
+```
+
+A closure can use the variables around it, and change them when they're
+`mut`:
+
+```bolt
+let mut count = 0;
+let tick = || { count += 1; };
+tick();
+tick();
+tick();
+count;
+```
+
+```text
+3
+```
+
+Closures make functions that build functions easy:
+
+```bolt
+fn compose(f, g) = |x| f(g(x));
+fn adder(n) = |x| x + n;
+
+let add_then_double = compose(|x| x * 2, adder(1));
+add_then_double(5);
+```
+
+```text
+12
+```
+
+## Method call syntax
+
+`x.f(y)` is another way to write `f(x, y)`. It calls the function `f` that's
+in scope, with `x` as its first argument. That lets you chain calls from left
+to right:
+
+```bolt
+fn bump(n: i32, by: i32) -> i32 = n + by;
+fn halve(n: i32) -> i32 = n / 2;
+
+10.bump(4).halve();
+```
+
+```text
+7
+```
+
+Unlike in many languages, functions don't belong to a type: any function in
+scope can be called this way.
+
+## Custom operators
+
+You can define your own binary operators, made of symbols like `<>` or
+`<$>`. The definition looks like the operator in use:
+
+```bolt
+fn a <> b = (a, b);
+
+1 <> 2 <> 3;
+```
+
+```text
+((1, 2), 3)
+```
+
+Custom operators bind tighter than the built-in ones, and group from left
+to right. The built-in operators, like `+`, can't be redefined yet.
+
+Next: [control flow](./control-flow.mdx).

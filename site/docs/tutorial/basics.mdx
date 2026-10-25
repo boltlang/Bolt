@@ -1,0 +1,205 @@
+---
+sidebar_position: 3
+title: Values and variables
+description: Numbers, strings, booleans, tuples, arrays and variables in Bolt.
+---
+
+# Values and variables
+
+## Variables
+
+`let` gives a value a name:
+
+```bolt
+let answer = 42;
+let greeting = "hello";
+answer;
+```
+
+```text
+42
+```
+
+Variables are *immutable* by default. To change a variable later, declare it
+with `mut`:
+
+```bolt
+let mut count = 1;
+count = count + 1;
+count += 10;
+count;
+```
+
+```text
+12
+```
+
+:::note
+
+The compiler doesn't check `mut` yet, so assigning to a variable without
+`mut` isn't reported. Write `mut` anyway, both because it tells readers the
+variable changes and because a future version of the compiler will check
+it.
+
+:::
+
+You can declare a new variable with the same name as an old one. The new one
+*shadows* the old one from then on:
+
+```bolt
+let x = 1;
+let x = x + 1;
+x;
+```
+
+```text
+2
+```
+
+### Type annotations
+
+Bolt infers the type of every variable, so you usually don't write types.
+When you want to, put the type after the name:
+
+```bolt
+let ratio: f64 = 0.75;
+let flag: bool = true;
+ratio;
+```
+
+```text
+0.75
+```
+
+## Numbers
+
+Bolt has signed integers `i8`, `i16`, `i32`, `i64`, `i128` and `isize`,
+unsigned integers `u8` through `u128` and `usize`, and floating-point numbers
+`f32` and `f64`.
+
+A number literal gets its type from how it's used. When nothing decides,
+an integer is an `i32` and a number with a decimal point is an `f64`. A
+suffix gives a literal a type directly:
+
+```bolt
+(1_000_000, 0xff, 10u8, 2.5f32);
+```
+
+```text
+(1000000, 255, 10, 2.5)
+```
+
+The usual arithmetic operators work on numbers. Integer division rounds
+towards zero, and `%` is the remainder:
+
+```bolt
+(7 / 2, 7 % 2, 7.0 / 2.0, -(3 * 4));
+```
+
+```text
+(3, 1, 3.5, -12)
+```
+
+Both sides of an operator must have the same type: Bolt never converts
+numbers for you. Use `as` to convert explicitly:
+
+```bolt
+(7 as f64 / 2.0, 3.9 as i32);
+```
+
+```text
+(3.5, 3)
+```
+
+## Booleans
+
+`true` and `false` are of type `bool`. Compare values with `==`, `!=`, `<`,
+`<=`, `>` and `>=`, and combine booleans with `&&`, `||` and `!`:
+
+```bolt
+(1 < 2, 3 == 4, !(1 < 2) || 2 >= 2);
+```
+
+```text
+(true, false, true)
+```
+
+`&&` and `||` only evaluate their right side when they need to.
+
+## Characters and strings
+
+A character is written between single quotes and has type `char`. A string
+is written between double quotes and has type `str`. Both understand escapes
+like `\n` and `\t`:
+
+```bolt
+let c = 'B';
+let s = "Bolt\tlang";
+(c, s, "con" + "cat");
+```
+
+```text
+('B', "Bolt\tlang", "concat")
+```
+
+`+` joins two strings.
+
+## Tuples
+
+A tuple groups a fixed number of values, which can have different types.
+Its fields are numbered from `0`:
+
+```bolt
+let point = (3, "three", 3.0);
+(point.0, point.1);
+```
+
+```text
+(3, "three")
+```
+
+The empty tuple `()` is called *unit*. It's the value of statements and of
+functions that don't return anything.
+
+## Arrays
+
+An array holds any number of values of the same type. Index it with `[]`,
+counting from `0`:
+
+```bolt
+let primes = [2, 3, 5, 7];
+let zeros = [0; 3];
+(primes[2], zeros);
+```
+
+```text
+(5, [0, 0, 0])
+```
+
+`[value; count]` makes an array of `count` copies of `value`. Indexing past
+the end is an error at run time:
+
+```bolt
+[1, 2, 3][5];
+```
+
+```text
+[E0301] Error: index 5 is out of bounds for length 3
+```
+
+## Comments
+
+```bolt
+// A comment runs to the end of the line.
+/* A block comment can span lines,
+   /* and can be nested. */ */
+/// A doc comment describes the item after it.
+fn one() -> i32 = 1;
+one();
+```
+
+```text
+1
+```
+
+Next: [functions](./functions.mdx).

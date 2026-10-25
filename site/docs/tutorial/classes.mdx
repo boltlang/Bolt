@@ -1,0 +1,202 @@
+---
+sidebar_position: 9
+title: Classes
+description: Overloading in Bolt with classes, impls and where clauses.
+---
+
+# Classes
+
+Sometimes one name should mean different code for different types: turning
+a number into text isn't the same as turning a list into text. Bolt does
+this with *classes*, which work like Haskell's type classes and Rust's
+traits.
+
+:::note[Classes can be checked, but not run yet]
+
+The interpreter doesn't know which impl a call should use yet, so calling a
+class method stops with "has no body" when you run the program. Everything
+on this page type-checks, so try the examples with `bolt check`.
+
+:::
+
+## Defining a class
+
+A class names some functions that a type can provide:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> str;
+}
+```
+
+`T` stands for the type that the class is for. This says: a type `T` is
+*describable* if there's a function `describe` that takes a `T` and gives a
+`str`.
+
+## Impls
+
+An `impl` provides the functions of a class for one type:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> str;
+}
+
+struct Dog { name: str }
+
+impl Describe[Dog] {
+  fn describe(d) = "a dog called " + d.name;
+}
+
+impl Describe[bool] {
+  fn describe(b) = if b { "yes" } else { "no" };
+}
+
+describe(Dog { name: "Rex" });
+describe(true);
+```
+
+The methods of an impl don't need types: they come from the class. Here
+`d` is a `Dog` and `b` is a `bool`.
+
+Calling `describe` on a type without an impl is an error:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> str;
+}
+
+impl Describe[bool] {
+  fn describe(b) = if b { "yes" } else { "no" };
+}
+
+describe(42);
+```
+
+```text
+[E0203] Error: there is no instance `Describe[i32]`
+```
+
+## Using classes in generic functions
+
+A function that calls a class method on a value of unknown type only works
+for types that have an impl. Bolt infers that too:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> str;
+}
+
+fn shout(x) = describe(x) + "!";
+```
+
+`shout` gets the type
+
+```text
+forall a. Describe[a] => fn(a) -> str
+```
+
+The part before `=>` is a *constraint*: `shout` works for any type `a`
+that has an impl of `Describe`.
+
+With written type parameters, write the constraint after the parameter, or
+in a `where` clause:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> str;
+}
+
+fn shout[T: Describe](x: T) -> str = describe(x) + "!";
+
+fn both[A, B](a: A, b: B) -> str where Describe[A], Describe[B] =
+  describe(a) + " and " + describe(b);
+```
+
+## Generic impls
+
+An impl can have type parameters too, and constraints on them. This one
+describes any `Option` whose content can be described:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> str;
+}
+
+impl Describe[i32] {
+  fn describe(n) = "a number";
+}
+
+impl[T] Describe[Option[T]] where Describe[T] {
+  fn describe(o) = match o {
+    Some(x) => "some " + describe(x),
+    None => "nothing",
+  };
+}
+
+describe(Some(Some(5)));
+```
+
+To check `describe(Some(Some(5)))`, Bolt needs `Describe[Option[Option[i32]]]`.
+The generic impl provides it if there's `Describe[Option[i32]]`, which it
+provides if there's `Describe[i32]`, which there is.
+
+## Superclasses
+
+A class can require another one. Every type that's `Ord` must also be `Eq`:
+
+```bolt
+class Eq[T] {
+  fn eq(a: T, b: T) -> bool;
+}
+
+class Ord[T] where Eq[T] {
+  fn lt(a: T, b: T) -> bool;
+}
+
+fn less_or_equal[T: Ord](a: T, b: T) -> bool = lt(a, b) || eq(a, b);
+```
+
+`less_or_equal` only asks for `Ord`, but it can use `eq` as well, since
+`Ord` implies `Eq`.
+
+## Constants in classes
+
+A class can have constants as well as functions:
+
+```bolt
+class Zero[T] {
+  const ZERO: T;
+}
+
+impl Zero[i32] {
+  const ZERO: i32 = 0;
+}
+
+impl Zero[f64] {
+  const ZERO: f64 = 0.0;
+}
+
+let a: i32 = ZERO;
+let b: f64 = ZERO;
+```
+
+Which `ZERO` is meant depends on the type that's expected.
+
+## Classes with several parameters
+
+A class can relate several types:
+
+```bolt
+class Convert[A, B] {
+  fn convert(a: A) -> B;
+}
+
+impl Convert[i32, str] {
+  fn convert(n) = "a number";
+}
+
+let s: str = convert(42);
+```
+
+Next: [modules](./modules.mdx).

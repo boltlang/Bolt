@@ -1,0 +1,199 @@
+---
+sidebar_position: 6
+title: Structs and enums
+description: Defining your own types in Bolt with structs and enums.
+---
+
+# Structs and enums
+
+## Structs
+
+A *struct* groups named values, its *fields*:
+
+```bolt
+struct User {
+  name: str,
+  age: i32,
+}
+
+let ada = User { name: "Ada", age: 36 };
+ada.name;
+```
+
+```text
+"Ada"
+```
+
+Every field must be given when you make a struct. When a variable has the
+same name as a field, you can write just the name:
+
+```bolt
+struct Point { x: i32, y: i32 }
+
+let x = 3;
+let y = 4;
+Point { x, y };
+```
+
+```text
+Point { x: 3, y: 4 }
+```
+
+Change a field by assigning to it:
+
+```bolt
+struct Point { x: i32, y: i32 }
+
+let mut p = Point { x: 0, y: 0 };
+p.x = 5;
+p;
+```
+
+```text
+Point { x: 5, y: 0 }
+```
+
+`..` makes a struct from another one, with some fields changed:
+
+```bolt
+struct Config { width: i32, height: i32, fullscreen: bool }
+
+let default = Config { width: 800, height: 600, fullscreen: false };
+let big = Config { fullscreen: true, ..default };
+big;
+```
+
+```text
+Config { width: 800, height: 600, fullscreen: true }
+```
+
+### Tuple structs and unit structs
+
+A *tuple struct* has numbered fields instead of named ones. It's useful to
+give a type to a value, so that it can't be mixed up with others:
+
+```bolt
+struct Meters(f64);
+struct Seconds(f64);
+
+let distance = Meters(100.0);
+let time = Seconds(9.58);
+distance.0 / time.0;
+```
+
+```text
+10.438413361169102
+```
+
+A *unit struct* has no fields at all: `struct Marker;`.
+
+## Enums
+
+An *enum* is a type whose values are one of several *variants*:
+
+```bolt
+enum Direction { North, East, South, West }
+
+let heading = Direction.East;
+heading;
+```
+
+```text
+East
+```
+
+Variants are named after their enum, as in `Direction.East`. Variants can
+carry data, like tuple structs or structs do:
+
+```bolt
+enum Shape {
+  Circle(f64),
+  Rect { w: f64, h: f64 },
+  Dot,
+}
+
+[Shape.Circle(1.0), Shape.Rect { w: 2.0, h: 3.0 }, Shape.Dot];
+```
+
+```text
+[Circle(1.0), Rect { w: 2.0, h: 3.0 }, Dot]
+```
+
+To look inside an enum value, you use [pattern
+matching](./pattern-matching.mdx).
+
+If you use the variants of an enum a lot, `import Name.*;` lets you write
+them without the enum's name:
+
+```bolt
+enum Direction { North, East, South, West }
+import Direction.*;
+
+fn turn_right(d: Direction) -> Direction = match d {
+  North => East,
+  East => South,
+  South => West,
+  West => North,
+};
+
+turn_right(West);
+```
+
+```text
+North
+```
+
+## Generic types
+
+Structs and enums can have *type parameters*, between `[` and `]`, so that
+they work for any type of content:
+
+```bolt
+struct Pair[A, B] { first: A, second: B }
+
+let p = Pair { first: 1, second: "one" };
+let q: Pair[bool, f64] = Pair { first: true, second: 0.5 };
+(p.second, q.first);
+```
+
+```text
+("one", true)
+```
+
+`Pair[bool, f64]` is the type of a pair of a `bool` and an `f64`.
+
+### `Option`
+
+One generic enum is so useful that the prelude defines it for you:
+
+```bolt
+enum Option[T] { None, Some(T) }
+```
+
+An `Option[T]` is either a value of type `T` (`Some(value)`), or nothing
+(`None`). Bolt has no `null`. A function that may not have a result returns
+an `Option` instead, so the possibility is part of its type: an
+`Option[i32]` can't be used where an `i32` is expected, and you have to look
+inside it first:
+
+```bolt
+fn find_even(xs: [i32]) -> Option[i32] {
+  for x in xs {
+    if x % 2 == 0 {
+      return Some(x);
+    }
+  }
+  None
+}
+
+(find_even([1, 3, 4, 5]), find_even([1, 3]));
+```
+
+```text
+(Some(4), None)
+```
+
+The prelude also has `List[T]`, a linked list made of `List.Cons(head,
+tail)` and `List.Nil`, with the functions `cons`, `head` and `tail`.
+
+Next: [pattern matching](./pattern-matching.mdx).

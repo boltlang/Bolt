@@ -1,0 +1,134 @@
+---
+sidebar_position: 10
+title: Modules
+description: Splitting Bolt programs into files, imports, visibility, packages and the prelude.
+---
+
+# Modules
+
+## Every file is a module
+
+In Bolt, each file is a module. There's nothing to declare: a file's
+top-level items are its contents, and other files use them by importing the
+file.
+
+Here's a file with some geometry:
+
+```bolt title="geometry.bolt"
+pub struct Point { x: i32, y: i32 }
+
+pub fn origin() -> Point = Point { x: 0, y: 0 };
+
+pub fn manhattan(a: Point, b: Point) -> i32 = abs(a.x - b.x) + abs(a.y - b.y);
+
+fn abs(n: i32) -> i32 = if n < 0 { -n } else { n };
+```
+
+and a file next to it that uses it:
+
+```bolt title="main.bolt"
+import "./geometry" (Point, origin, manhattan);
+
+manhattan(origin(), Point { x: 3, y: -4 });
+```
+
+```bash
+bolt run main.bolt
+```
+
+```text
+7
+```
+
+## Visibility
+
+Items are *private* by default: only their own file can use them. `pub`
+makes an item usable from other files. In `geometry.bolt`, `abs` is
+private, so `main.bolt` can't import it:
+
+```text
+[E0104] Error: `abs` is private
+```
+
+`pub(package)` is in between: the item can be used by the files of the same
+[package](#packages), but not by other packages.
+
+## Kinds of imports
+
+The path of an import is a string. A path starting with `./` or `../` is
+relative to the importing file, and `.bolt` is added to it.
+
+| Import | Brings into scope |
+|---|---|
+| `import "./geometry" (Point, origin);` | the names in the list |
+| `import "./geometry" (Point as P);` | `Point`, under the name `P` |
+| `import "./geometry" as geo;` | the file, as `geo`: write `geo.origin()` |
+| `import "./geometry" *;` | every public name of the file |
+| `import "./geometry";` | nothing, but the file's impls become visible |
+| `import Shape.*;` | the variants of the enum `Shape` |
+
+With `as`, the file's names are used through the name you give it:
+
+```bolt title="main.bolt"
+import "./geometry" as geo;
+
+geo.manhattan(geo.origin(), geo.Point { x: 1, y: 1 });
+```
+
+```text
+2
+```
+
+An import can be public too. `pub import "./geometry" *;` makes the names of
+`geometry.bolt` available to the files that import this one.
+
+### Impls and imports
+
+[Impls](./classes.mdx) don't have names, so they aren't imported one by one.
+A file can use the impls of every file it imports, directly or through other
+imports, and those of the prelude.
+
+## Packages
+
+A path that doesn't start with `./` or `../` names a *package*. Packages are
+the directories in `.bolt/packages`, in the directory of the importing file
+or in one of its parents:
+
+```text
+my-project/
+├── .bolt/
+│   └── packages/
+│       └── shapes/
+│           ├── lib.bolt
+│           └── circle.bolt
+└── main.bolt
+```
+
+`import "shapes";` imports `lib.bolt` of the package `shapes`, and
+`import "shapes/circle";` imports `circle.bolt`.
+
+## The prelude
+
+Every file gets the names of the prelude of the `std` package without
+importing them. They're defined in
+`.bolt/packages/std/__prelude__/lib.bolt`, and include:
+
+- `Option`, with `Some` and `None`;
+- `List`, with `cons`, `head` and `tail`;
+- the classes `Semigroup`, `Monoid` and `Functor`.
+
+The names of the prelude can be shadowed: a file that defines its own
+`Option` uses that one.
+
+To check a file without the prelude, use `bolt check --no-prelude`. To use
+another package's prelude, use `--prelude=<package>`.
+
+## What's next
+
+That's the end of the tutorial! From here you can:
+
+- read the [language internals](/docs/internals/type-checking) to see how
+  the type checker works;
+- read the standard library in `packages/std`;
+- look at `TODO.md` in the repository for what's coming, and what you could
+  help with.
