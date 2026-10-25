@@ -2,7 +2,8 @@ use boltlang_base_db::TestDb;
 
 use super::*;
 
-// Most tests of the checker are in `tests/data`, run by `tests/check.rs`.
+// Most tests of the checker are in `tests/checker` at the root of the
+// repository, run by `tests/check.rs`.
 // This one edits a file between two checks.
 
 /// The type of the top-level statements of a file, to check what reruns.

@@ -1,6 +1,7 @@
-//! Type checker tests driven by the `.txt` files in `tests/data`, in the
-//! format of the tree-sitter corpus. Each case is a separate test, named
-//! after its file and title, e.g. `inference::mutual_recursion`.
+//! Type checker tests driven by the `.txt` files in `tests/checker` at the
+//! root of the repository, in the format of the tree-sitter corpus. Each
+//! case is a separate test, named after its file and title, e.g.
+//! `inference::mutual_recursion`.
 //!
 //! ```text
 //! ================================================================================
@@ -481,7 +482,7 @@ fn data_files(dir: &Path) -> Vec<PathBuf> {
 
 fn main() {
     let args = Arguments::from_args();
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/data");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/checker");
     let updating = std::env::var_os("UPDATE_EXPECT").is_some_and(|v| !v.is_empty() && v != "0");
     let mut trials = Vec::new();
     for path in data_files(&root) {
