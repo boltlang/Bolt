@@ -10,6 +10,8 @@
 
 💬 Got some questions or feedback? Just open an issue and we'll be glad to respond!
 
+[Try it out on our playground!](https://boltlang.net/)
+
 ```rust
 fn fac(n: i32) -> i32 {
     match n {
