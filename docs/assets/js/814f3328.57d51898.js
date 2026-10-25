@@ -1,0 +1,1 @@
+"use strict";(self.webpackChunksite=self.webpackChunksite||[]).push([["1833"],{5513(e){e.exports=JSON.parse('{"title":"Recent posts","items":[{"title":"The Resurrection of Bolt","permalink":"/blog/hello-bolt","unlisted":false,"date":"2026-10-24T00:00:00.000Z"}]}')}}]);
