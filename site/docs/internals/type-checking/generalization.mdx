@@ -1,0 +1,197 @@
+---
+sidebar_position: 6
+title: Generalization
+description: How boltlang-hir-ty infers the types of functions, in binding groups, and keeps checking incremental.
+---
+
+# Generalization
+
+The queries in `check.rs` decide which bodies are checked together and turn
+what inference finds into type schemes.
+
+## Declared and inferred functions
+
+Every function is one of two kinds, decided by `is_declared` in `scheme.rs`:
+
+- A **declared** function's type comes from its declaration alone. Its
+  signature is complete (every parameter type and the return type are
+  written), or it has no body, or it's in a class or impl, whose class
+  declares its type.
+- An **inferred** function is any other top-level function. Its type comes
+  from its body.
+
+The difference matters for incrementality. A declared function's scheme
+(`declared_scheme`) only depends on its signature, so editing its body
+re-checks that body and nothing else. Callers only see the scheme, and
+Salsa sees that it didn't change.
+
+### Declared functions
+
+`infer_body` checks a declared function on its own, with a fresh solver:
+
+1. Assume its `where` clauses, those of its impl, and for a class method
+   the class itself (see [Assumptions](./constraints.mdx#assumptions)).
+2. Check the parameters and body against the declared types. Declared type
+   parameters are `Ty::Param`, which only equal themselves, so a body that
+   isn't as general as its signature is an error:
+
+   ```bolt
+   fn wrong[T](x: T) -> T = 1;
+   ```
+
+   ```text
+   error at `1`: expected T, found {integer}
+   ```
+
+3. For a method in an impl, also emit equalities between its types and the
+   class's declaration of the method, with the impl's types substituted for
+   the class's parameters (`class_impl_method_sig`). In `impl Show[i32]`,
+   `fn show(x)` gets the type `fn(i32) -> str` from `class Show[T]`.
+   Parameter types the method leaves out are taken from the class.
+4. Solve. Any class constraint that's left is ambiguous, and any field
+   constraint that's left needs a type.
+
+## Binding groups
+
+Inferred functions can call each other in any order, and recursively:
+
+```bolt
+fn even(n) = if n == 0 { true } else { odd(n - 1) };
+fn odd(n) = if n == 0 { false } else { even(n - 1) };
+```
+
+Inferring them one at a time doesn't work, since each needs the other's
+type. Inferring all functions of a file together does work, but it's slow
+and gives types that are less general than they could be: a function used
+at two types by another function would be monomorphic. Haskell's solution
+[Peyton Jones 2003, Jones 1999] is used here
+too:
+
+1. `inferred_functions` lists the inferred functions of a file.
+2. `called_functions` finds which of them each one refers to, by resolving
+   the paths in its body. That includes the `f` of `x.f()` and the
+   functions of custom operators, which may be calls.
+3. Tarjan's algorithm [Tarjan 1972] (`strongly_connected`)
+   splits this call graph into *strongly connected components*, the
+   *binding groups*. It gives them in dependency order: each group comes
+   after the groups it calls.
+4. Each group is inferred with one solver, and generalized, before the next.
+
+`file_inference` does this for a whole file, as one Salsa query.
+
+### Inferring a group
+
+`infer_group` gives every function of the group a type made from its
+signature, with a fresh variable wherever no type is written. These
+*monomorphic* types go in `FnEnv::mono`, so that calls within the group
+use them directly. Then it infers each body with the shared solver.
+
+Recursion within a group is therefore *monomorphic*. A function can't call
+itself at a different type unless it has a signature. Inferring
+*polymorphic recursion* is undecidable
+[Henglein 1993, Kfoury et al. 1993], and needs a
+signature in Haskell for the same reason [Mycroft 1984].
+
+### Generalizing a group
+
+When every body of the group is inferred, the solver:
+
+1. Solves what it can, defaults numeric variables, and solves again. The
+   defaulting comes first so that a number literal doesn't become a type
+   parameter: `fn one() = 1` gets `fn() -> i32`, not `forall a. fn() -> a`.
+2. Resolves the errors found so far, then binds the variables that are only
+   unknown because of an error to the error type. See
+   [Never and error](./unification.mdx#never-and-error).
+
+Then each function of the group gets its scheme. With $\tau$ its resolved
+type:
+
+$$
+\mathrm{gen}(\tau, Q) = \forall \bar P\, \bar a.\ Q' \Rightarrow \tau[\bar\alpha \mapsto \bar a]
+\qquad \text{where } \bar\alpha = \mathrm{fv}(\tau)
+$$
+
+- **Every** inference variable $\bar\alpha$ left in $\tau$ becomes a bound
+  variable $a_i$. Damas–Milner only generalizes variables that aren't free
+  in the environment [Damas & Milner 1982]. Here that
+  check isn't needed: the only types in the environment are those of other
+  functions in the same group, which are generalized at the same time.
+- $\bar P$ are the function's declared type parameters, like the `T` of
+  `fn pair[T](x: T, y) = (x, y)`.
+- $Q'$ are the deferred constraints that belong in the type:
+  - the function's own assumptions;
+  - the pending class constraints from its body whose variables are all in
+    $\bar\alpha$. A constraint with a variable that isn't in the type, like
+    the $\mathsf{Show}[\beta]$ of `fn f() = show(read())`, can never be
+    decided by a caller. It's *ambiguous*, as in Haskell
+    [Jones 1994], and is reported;
+  - the pending field constraints on its type variables. A field's own type
+    can mention new variables, which then also become bound, and can make
+    more field constraints relevant. For `p.x.y`, after $a.x : b$ the
+    constraint $b.y : c$ is about the type too. So this repeats until
+    nothing changes. A field constraint that never becomes relevant needs a
+    type.
+
+The result is stored in `FnEnv::done` for the groups that follow, and in
+the `FileInference` for everyone else. The types in the function's
+`InferenceResult` are generalized the same way, so the IDE shows `a` rather
+than `?3`.
+
+### Examples
+
+From `tests/data/inference.txt` and `tests/data/classes.txt`:
+
+```bolt
+fn pair(x) = (first(x), first(true));
+fn first(y) = y;
+fn twice(x) = (show(x), show(x));
+```
+
+```text
+pair: forall a. fn(a) -> (a, bool)
+first: forall a. fn(a) -> a
+twice: forall a. Show[a] => fn(a) -> (str, str)
+```
+
+`first` is in its own group, which comes before `pair`'s, so `pair` uses
+its generalized scheme twice, at `a` and at `bool`.
+
+## Across files
+
+A function's callers get its type through the `function_scheme` query. For
+a declared function that's `declared_scheme`. For an inferred one it's the
+`file_inference` of the function's file, so inference never crosses a file
+boundary within one group.
+
+That breaks down when two files import each other and have inferred
+functions that call each other: each `file_inference` would need the other
+first. Salsa detects the cycle, `file_inference_cycle` gives an empty
+result, and the checker reports that one of the functions needs a
+signature.
+
+## The other bodies
+
+Consts, enum discriminants and the top-level statements of files are never
+generalized. Each is checked on its own by `infer_body`, against its
+declared type if it has one.
+
+## References
+
+- L. Damas and R. Milner. *Principal type-schemes
+  for functional programs.* POPL 1982.
+- S. Peyton Jones (editor). *Haskell 98 Language
+  and Libraries: The Revised Report.* Cambridge University Press, 2003.
+  Section 4.5.1, "Dependency Analysis".
+- M. P. Jones. *Typing Haskell in Haskell.* Haskell
+  Workshop, 1999.
+- R. Tarjan. *Depth-First Search and Linear Graph
+  Algorithms.* SIAM Journal on Computing 1(2), 1972.
+- A. Mycroft. *Polymorphic type schemes and recursive
+  definitions.* International Symposium on Programming, LNCS 167, 1984.
+- F. Henglein. *Type Inference with Polymorphic
+  Recursion.* TOPLAS 15(2), 1993.
+- A. J. Kfoury, J. Tiuryn and P. Urzyczyn. *Type
+  Reconstruction in the Presence of Polymorphic Recursion.* TOPLAS 15(2),
+  1993.
+- M. P. Jones. *Qualified Types: Theory and
+  Practice.* Cambridge University Press, 1994.

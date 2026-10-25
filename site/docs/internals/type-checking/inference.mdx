@@ -1,0 +1,286 @@
+---
+sidebar_position: 3
+title: Constraint generation
+description: How boltlang-hir-ty walks a body and generates type constraints.
+---
+
+# Constraint generation
+
+`InferenceContext` in `infer.rs` walks one body: a function, a const, the
+discriminant of an enum variant, or the top-level statements of a file. It
+gives every expression and pattern a type and hands constraints to the
+[solver](./constraints.mdx). The types it finds are stored in an
+`InferenceResult`, keyed by `ExprId`, `PatId` and `BindingId`, for the IDE
+and for diagnostics.
+
+## Judgements
+
+The walk has two modes, as in bidirectional type checking
+[Pierce & Turner 2000, Dunfield & Krishnaswami 2013]:
+
+- **Inference**, $\Gamma \vdash e \Rightarrow \tau$ (`infer_expr`): find the
+  type of $e$.
+- **Checking**, $\Gamma \vdash e \Leftarrow \tau$ (`check_expr`): $e$ must
+  have type $\tau$.
+
+Unlike a full bidirectional system, checking is *defined* in terms of
+inference. It infers the type, with $\tau$ as a hint, and then emits an
+equality:
+
+$$
+\frac{\Gamma \vdash e \Rightarrow \tau' \text{ (with hint } \tau) }
+     {\Gamma \vdash e \Leftarrow \tau \qquad \text{emit } \tau \doteq \tau'}
+$$
+
+The hint is an `Expectation`: a type, and the `Reason` it's expected, like an
+annotation or the declared return type. Only some expressions use it. Most
+just infer their type and let the equality do the work. The ones that do
+are:
+
+- **Lambdas** take their parameter and return types from an expected
+  function type, so `apply(|x| x + 1, 2)` knows `x` before checking the
+  body.
+- **Tuples and arrays** pass the expected element types on to their
+  elements.
+- **`if`, `match`, `loop` and labeled blocks** check every branch, and every
+  `break` value, against the expected type itself, instead of a fresh
+  variable that's unified afterwards. An error is then reported at the
+  branch that's wrong, not at the whole `if`.
+- **A block** checks its tail expression against the expected type, for the
+  same reason.
+
+The hint is meant to change where errors point and how early types are
+known, not which programs are accepted. Inference itself stays plain
+Hindley–Milner.
+
+Equalities are solved as soon as they're emitted, as in Algorithm W
+[Milner 1978], so a hint that's a variable when it's passed may
+already be bound by the time it's used. That's why the code calls
+`shallow_resolve` on hints before looking at them.
+
+## Expressions
+
+Below, $\beta$ is always a fresh inference variable. "Emit
+$\tau_1 \doteq \tau_2$" means the equality goes to the unifier at once.
+$C[\bar\tau]$ and $\tau.\ell : \tau'$ are class and field constraints, which
+the solver defers.
+
+### Variables and paths
+
+A path is resolved with hir-def's `Resolver` in the scope of the expression:
+
+$$
+\frac{x \text{ is a local with type } \tau}{\Gamma \vdash x \Rightarrow \tau}
+\qquad
+\frac{f : \sigma \qquad \tau = \mathrm{instantiate}(\sigma)}{\Gamma \vdash f \Rightarrow \tau}
+$$
+
+Locals are monomorphic. Their type is whatever their pattern gave them (see
+[Patterns](#patterns)). A function's scheme comes from one of three places,
+in `function_ty`:
+
+1. A function in the *same binding group* has no scheme yet. It uses its
+   monomorphic type from `FnEnv::mono`, so recursion within a group is
+   monomorphic. See [Generalization](./generalization.mdx).
+2. A function of the same file inferred *earlier* has its scheme in
+   `FnEnv::done`.
+3. Anything else goes through the `function_scheme` query.
+
+A variant or tuple struct used as a value is a constructor. `Some` has type
+$\mathsf{fn}(\beta) \to \mathsf{Option}[\beta]$, and a unit variant like
+`None` has type $\mathsf{Option}[\beta]$. A const in a class, like the
+`ZERO` of `class Zero[T] { const ZERO: T; }`, is instantiated like a class
+method: its type is $\beta$ with the constraint $\mathsf{Zero}[\beta]$.
+
+### Literals
+
+$$
+\frac{}{\Gamma \vdash \texttt{1} \Rightarrow \beta_{\mathsf{Int}}}
+\qquad
+\frac{}{\Gamma \vdash \texttt{1u8} \Rightarrow \mathsf{u8}}
+\qquad
+\frac{}{\Gamma \vdash \texttt{"s"} \Rightarrow \mathsf{str}}
+$$
+
+An integer literal without a suffix gets an `Int` variable
+$\beta_{\mathsf{Int}}$, which defaults to `i32`. A float literal gets a
+`Float` variable, which defaults to `f64`.
+
+### Calls
+
+$$
+\frac{\Gamma \vdash f \Rightarrow \tau_f
+      \qquad \tau_f \doteq \mathsf{fn}(\beta_1, \dots, \beta_n) \to \beta
+      \qquad \Gamma \vdash e_i \Leftarrow \beta_i}
+     {\Gamma \vdash f(e_1, \dots, e_n) \Rightarrow \beta}
+$$
+
+`apply` only makes up the function type when $\tau_f$ is still an unknown
+`General` variable. If it's already a function type, the arguments are
+checked against its parameter types directly. That gives better errors and
+lets lambda arguments use the parameter types as hints. A wrong number of
+arguments is reported, and the extra arguments are still inferred, so that
+their own errors are found.
+
+**Method calls.** `x.f(y)` can mean three things, tried in this order:
+
+1. A longer path, like `module.f(y)` or `Shape.Circle(1)`. This is the case
+   when `x` doesn't name a value.
+2. A call of a struct field that holds a function.
+3. Otherwise, `f(x, y)` with the `f` in scope at the call. Bolt has no
+   methods attached to types: a function is made available for a type by
+   importing it.
+
+**Custom operators** like `a <$> b` are calls of the function `(<$>)`, with
+`a` as the first argument.
+
+### Fields
+
+$$
+\frac{\Gamma \vdash e \Rightarrow \tau}
+     {\Gamma \vdash e.\ell \Rightarrow \beta \qquad \text{constraint } \tau.\ell : \beta}
+$$
+
+The field's type is always a fresh variable, and the constraint is handed to
+the solver. The solver solves it at once if $\tau$ is already known, and
+otherwise waits. A field access whose base names a type or module, like
+`Color.Red`, is a path instead, as with method calls.
+
+### Operators
+
+| Expression | Rule |
+|---|---|
+| `a + b`, `a * b`, ... | Infer $\tau$ for `a`, check `b` against $\tau$. The result is $\tau$. |
+| `a << b`, `a >> b` | Infer $\tau$ for `a`, check `b` against an `Int` variable. The result is $\tau$. |
+| `a == b`, `a < b`, ... | Infer $\tau$ for `a`, check `b` against $\tau$. The result is `bool`. |
+| `a && b`, `a \|\| b` | Check both against `bool`. |
+| `a = b`, `a += b` | Infer $\tau$ for `a`, check `b` against $\tau$. The result is `()`. |
+| `-a` | The type of `a`. |
+| `!a` | The type of `a`. If that's still unknown, it's assumed to be `bool`. |
+
+There's no numeric class yet, so arithmetic doesn't constrain its operands
+beyond being equal: `"a" + "b"` has type `str`.
+
+### Control flow
+
+$$
+\frac{\Gamma \vdash c \Leftarrow \mathsf{bool}
+      \quad \Gamma \vdash e_1 \Leftarrow \beta
+      \quad \Gamma \vdash e_2 \Leftarrow \beta}
+     {\Gamma \vdash \texttt{if } c\ e_1 \texttt{ else } e_2 \Rightarrow \beta}
+\qquad
+\frac{\Gamma \vdash c \Leftarrow \mathsf{bool}
+      \quad \Gamma \vdash e \Leftarrow ()}
+     {\Gamma \vdash \texttt{if } c\ e \Rightarrow ()}
+$$
+
+When there's an expected type, it's used in place of $\beta$. A `match`
+infers the scrutinee's type $\tau_s$, checks every arm's pattern against
+$\tau_s$ and every arm's body against $\beta$. A `match` without arms has
+type `!`.
+
+`while` and `for` have type `()`. `for` only loops over arrays for now: the
+iterable must be $[\beta]$ and the pattern is checked against $\beta$.
+
+`loop`, and blocks with a label, push a *breakable* with a result variable.
+`break v` checks `v` against the result of the loop or block it leaves, and
+`break` without a value checks `()` against it. A `loop` that's never left
+with `break` has type `!`, so `fn f() -> i32 = loop {}` is accepted.
+
+`return e` checks `e` against the return type of the innermost function or
+lambda. `break`, `continue` and `return` all have type `!`.
+
+### Lambdas
+
+$$
+\frac{\Gamma, \bar p : \bar\tau \vdash e \Leftarrow \tau_r}
+     {\Gamma \vdash |\bar p|\ e \Rightarrow \mathsf{fn}(\bar\tau) \to \tau_r}
+$$
+
+Each $\tau_i$ is the written type if there is one, then the hint, then a
+fresh variable, in that order of preference. The same goes for $\tau_r$.
+While checking the body, the return type is $\tau_r$, and the breakables of
+the enclosing function are hidden, so that `break` can't leave a lambda.
+
+### Struct literals
+
+`Point { x: 1, y: 2 }` instantiates the struct's parameters with fresh
+variables, checks each field against its declared type after substitution,
+and reports unknown and missing fields. With `..base`, `base` is checked
+against the struct type, and missing fields are fine.
+
+### Unsupported expressions
+
+`?`, `await`, `yield`, ranges and macro calls have type $\bot$ and report
+that they aren't supported yet. Their subexpressions are still inferred.
+Casts `e as T` infer `e` and have type `T`, without checking that the cast
+is valid.
+
+## Statements and blocks
+
+$$
+\frac{\Gamma \vdash e \Leftarrow \tau
+      \qquad \Gamma \vdash p \Leftarrow \tau \leadsto \Gamma'
+      \qquad \Gamma' \vdash \textit{rest} \Rightarrow \tau'}
+     {\Gamma \vdash \texttt{let } p : \tau = e;\ \textit{rest} \Rightarrow \tau'}
+$$
+
+$\tau$ is the annotation if there is one, otherwise a fresh variable. Note
+what's missing: **no generalization**. A local `let` is monomorphic, even
+when its value is a lambda. As Vytiniotis et al. argue
+[Vytiniotis et al. 2010], local let-polymorphism is
+rarely used and complicates inference with deferred constraints a lot. Only
+top-level functions are generalized.
+
+`let p = e else { ... }` checks the `else` block against `!`: it must not
+finish.
+
+An expression statement without a `;` that isn't the block's tail, like an
+`if` used as a statement, must have type `()`. If any statement has type
+`!`, the block *diverges*, and a block without a tail then has type `!`.
+That makes this check:
+
+```bolt
+fn f(x: i32) -> i32 { return x; }
+```
+
+## Patterns
+
+`check_pat` in `infer/pat.rs` checks a pattern against the type of the value
+it matches. It records the type of each binding, which is how locals get
+their types:
+
+$$
+\frac{}{x \Leftarrow \tau \leadsto x : \tau}
+\qquad
+\frac{\text{literal } l \Rightarrow \tau_l}{l \Leftarrow \tau \qquad \text{emit } \tau \doteq \tau_l}
+\qquad
+\frac{K : \mathsf{fn}(\bar\tau_K) \to T[\bar\beta] \qquad p_i \Leftarrow \tau_{K,i}}
+     {K(\bar p) \Leftarrow \tau \qquad \text{emit } \tau \doteq T[\bar\beta]}
+$$
+
+Tuple patterns with `..` need to know the tuple's length. If it isn't known
+yet, each subpattern gets a fresh variable, since there's no way to tell
+which elements `..` covers. Record patterns look up each field in the
+variant's declared fields.
+
+## Bodies
+
+`infer_fn_body` checks each parameter pattern against its parameter type,
+then checks the body against the return type. Where the types come from
+depends on whether the function is *declared* or *inferred*; see
+[Generalization](./generalization.mdx). Consts check their body against
+their declared type, enum discriminants against an `Int` variable, and the
+top-level statements of a file are only inferred.
+
+## References
+
+- R. Milner. *A Theory of Type Polymorphism in
+  Programming.* Journal of Computer and System Sciences, 1978.
+- B. C. Pierce and D. N. Turner. *Local Type
+  Inference.* TOPLAS 22(1), 2000.
+- J. Dunfield and N. Krishnaswami. *Complete
+  and Easy Bidirectional Typechecking for Higher-Rank Polymorphism.* ICFP
+  2013.
+- D. Vytiniotis, S. Peyton Jones and
+  T. Schrijvers. *Let Should Not Be Generalised.* TLDI 2010.

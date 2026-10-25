@@ -1,0 +1,145 @@
+---
+sidebar_position: 2
+title: Types and schemes
+description: The type representation of boltlang-hir-ty and the type schemes of functions.
+---
+
+# Types and schemes
+
+## Types
+
+The checker's types are the `Ty` enum in `ty.rs`. Unlike the `TypeRef`s of
+hir-def, which are types as written, a `Ty` points at definitions: a struct
+is its `StructId`, not its name.
+
+$$
+\begin{array}{rcll}
+\tau & ::= & \alpha & \text{inference variable (\texttt{Var})} \\
+     & \mid & T[\tau_1, \dots, \tau_n] & \text{struct or enum (\texttt{Adt})} \\
+     & \mid & \mathsf{i32} \mid \mathsf{bool} \mid \mathsf{str} \mid \dots & \text{primitive (\texttt{Builtin})} \\
+     & \mid & (\tau_1, \dots, \tau_n) & \text{tuple; } () \text{ is unit} \\
+     & \mid & [\tau] & \text{array} \\
+     & \mid & \mathsf{fn}(\tau_1, \dots, \tau_n) \to \tau & \text{function} \\
+     & \mid & P & \text{declared type parameter (\texttt{Param})} \\
+     & \mid & a_i & \text{bound variable of a scheme (\texttt{Bound})} \\
+     & \mid & ! & \text{never} \\
+     & \mid & \bot & \text{error}
+\end{array}
+$$
+
+A few of these need explaining.
+
+**Inference variables** are `TyVar(u32)`, indices into the unifier's table
+(see [Unification](./unification.mdx)). Each also has a `VarKind`:
+
+- `General` variables can become any type.
+- `Int` and `Float` variables come from number literals without a suffix,
+  like `1` or `2.5`. They can only become integer or float types, and they
+  default to `i32` and `f64` when nothing else decides them.
+
+This replaces Haskell's `Num` and `Fractional` classes and their defaulting
+rules with something much simpler. There's no class for numbers, so
+arithmetic operators only require both sides to have the same type.
+
+**Type parameters and bound variables** are both "type variables" in the
+literature, but the checker keeps them apart:
+
+- `Param` is a parameter someone *declared*, like the `T` of
+  `fn id[T](x: T) -> T`. Inside the item that declares it, it's *rigid*: it
+  stands for an unknown type and only equals itself. In the literature this
+  is a *skolem constant*. When the item is used, its parameters are replaced
+  by fresh inference variables.
+- `Bound(i)` is a variable that generalization introduced in the scheme of a
+  function *without* a complete signature. These are the `a`, `b`, ... in
+  `forall a. fn(a) -> a`.
+
+**Never**, written `!`, is the type of `return`, `break`, `continue`, a
+`loop` that's never left, and a `match` without arms. It fits wherever any
+type is expected. Bolt has no subtyping, so the checker handles this in
+unification: `!` unifies with every type without binding anything. See
+[Unification](./unification.mdx#never-and-error).
+
+**The error type** $\bot$ is what a type becomes once an error has been
+reported about it, like an unresolved name. It also unifies with everything,
+so that one error doesn't cause more. See [Errors](./errors.mdx).
+
+There's also `Number`, which only appears in diagnostics. It shows a literal
+that got its type from defaulting as `{integer}` or `{float}`.
+
+## Lowering written types
+
+`lower.rs` turns `TypeRef`s into `Ty`s with a `TyLoweringContext`, which
+resolves paths with hir-def's `Resolver`. Signatures are lowered by their
+own queries, so they're computed once and shared:
+
+| Query | Result |
+|---|---|
+| `fn_sig` | The parameter and return types of a function. Each is `None` where no type is written. |
+| `struct_field_types`, `enum_field_types` | Field types in terms of the type's own parameters. |
+| `generic_predicates` | The class constraints of `[T: Show]` bounds and `where` clauses. For a class, these are its superclasses. |
+| `impl_header` | The instance an impl provides, like `Show[Option[T]]`. |
+| `type_alias_ty` | The type an alias stands for. A cycle is caught with Salsa's cycle recovery and reported as a recursive alias. |
+| `const_ty` | The declared type of a const. |
+
+Type aliases are expanded during lowering by substituting their arguments,
+so later stages never see them. Lowering also checks that type constructors
+get the right number of arguments.
+
+## Type schemes
+
+A function has a *type scheme* (`Scheme` in `scheme.rs`). It's a type with
+quantified variables and the constraints that must hold wherever the
+function is used:
+
+$$
+\sigma ::= \forall \bar{P}\, \bar{a}.\ Q_1 \Rightarrow \dots \Rightarrow Q_n \Rightarrow \tau
+\qquad
+Q ::= C[\tau_1, \dots, \tau_k] \mid \tau.\ell : \tau'
+$$
+
+A constraint $Q$ is one of:
+
+- A *class constraint* $C[\bar\tau]$ (a `ClassConstraint`): the types have an
+  instance of class $C$, like $\mathsf{Show}[a]$. These are the predicates of
+  Jones's qualified types [Jones 1994].
+- A *field constraint* $\tau.\ell : \tau'$ (a `FieldConstraint`): values of
+  type $\tau$ have a field $\ell$ of type $\tau'$. A function that uses a
+  field of a value whose type it doesn't decide keeps the constraint:
+
+  ```bolt
+  fn norm(p) = p.x * p.x;
+  ```
+
+  ```text
+  norm: forall a b. a.x: b => fn(a) -> b
+  ```
+
+  `norm` then works on any struct with a field `x`. This is close to the
+  kinded record types of Ohori's polymorphic record calculus
+  [Ohori 1995]. In GHC's terms, it's a `HasField "x" a b`
+  constraint.
+
+`Scheme` stores the declared parameters $\bar P$ and the number of bound
+variables $\bar a$ separately. Its `display` prints both after one
+`forall`.
+
+### Instantiation
+
+Using a function *instantiates* its scheme (`Scheme::instantiate`). Every
+parameter and bound variable is replaced by a fresh inference variable, and
+the constraints are added to the solver with those variables:
+
+$$
+\frac{x : \forall \bar{v}.\ \bar{Q} \Rightarrow \tau \qquad \bar\beta \text{ fresh}}
+     {\text{type } \tau[\bar v \mapsto \bar\beta], \text{ constraints } \bar Q[\bar v \mapsto \bar\beta]}
+$$
+
+This is the only way polymorphism enters a body. Each use of `id` gets its
+own copy of its type, so `id(1)` and `id(true)` don't interfere.
+
+## References
+
+- M. P. Jones. *Qualified Types: Theory and
+  Practice.* Cambridge University Press, 1994.
+- A. Ohori. *A Polymorphic Record Calculus and Its
+  Compilation.* TOPLAS 17(6), 1995.

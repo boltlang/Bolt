@@ -1,0 +1,182 @@
+---
+sidebar_position: 5
+title: Class and field constraints
+description: How the solver of boltlang-hir-ty resolves class instances and struct fields.
+---
+
+# Class and field constraints
+
+The `Solver` in `solve.rs` takes the three kinds of `Constraint`:
+
+| Constraint | Meaning | When it's solved |
+|---|---|---|
+| `Equal` | $\tau_1 \doteq \tau_2$ | Right away, by the [unifier](./unification.mdx). |
+| `Class` | $C[\tau_1, \dots, \tau_n]$ | When an impl or assumption can be chosen. |
+| `Field` | $\tau.\ell : \tau'$ | When $\tau$ is known. |
+
+Solving equalities eagerly and deferring the rest makes the checker an
+instance of HM(X) [Odersky et al. 1999]: Hindley–Milner
+parameterized by a constraint domain $X$, here classes and fields. Deferred
+constraints that can't be solved in a function's body become part of its
+type when it's [generalized](./generalization.mdx). This is the treatment of
+predicates in Jones's qualified types [Jones 1994] and
+in "Typing Haskell in Haskell" [Jones 1999].
+
+## Classes
+
+Bolt classes are type classes [Wadler & Blott 1989], with
+any number of parameters
+[Peyton Jones et al. 1997]:
+
+```bolt
+class Show[T] { fn show(x: T) -> str; }
+class Convert[A, B] { fn convert(a: A) -> B; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
+
+impl Show[i32] { fn show(x) = "int"; }
+impl[T] Show[Option[T]] where Show[T] { fn show(x) = "option"; }
+```
+
+A method of a class has the class's parameters and the class itself as a
+constraint: `show` has the scheme
+$\forall T.\ \mathsf{Show}[T] \Rightarrow \mathsf{fn}(T) \to \mathsf{str}$.
+Using a method, or a const of a class, adds that constraint.
+
+### Assumptions
+
+Inside a function, some constraints are known to hold. The `assumptions`
+query gives them:
+
+- the bounds and `where` clauses of the function, and of the impl it's in;
+- for a method in a class, the class itself, like $\mathsf{Show}[T]$ inside
+  the default methods of `Show`.
+
+`Solver::assume` adds an assumption *and its superclasses*, transitively: in
+`fn le[T](a: T, b: T) -> bool where Ord[T]`, the assumption $\mathsf{Ord}[T]$
+gives $\mathsf{Eq}[T]$ as well, because `class Ord[T] where Eq[T]`. This is
+the superclass closure of Haskell's entailment relation
+[Hall et al. 1996].
+
+### Instance resolution
+
+`Solver::solve` runs until it makes no more progress. It tries every pending
+class constraint with `try_solve`, which works like one step of backward
+chaining in Prolog: find a rule (an impl) whose head matches the goal, and
+replace the goal by the rule's premises (its `where` clauses).
+
+1. If an argument contains the error type, the constraint is solved. An
+   error was already reported about it.
+2. If the constraint is one of the assumptions, it's solved.
+3. Otherwise, each impl visible from the file is *matched* against the
+   constraint. Matching is one-way: the impl's parameters can stand for any
+   type, but the constraint's inference variables are never bound. Each
+   match has one of three outcomes:
+   - **Yes**: the impl's head matches, with a substitution for its
+     parameters.
+   - **No**: it can't match, whatever the variables become.
+   - **Maybe**: it depends on variables that aren't known yet. For example,
+     `impl Show[i32]` against $\mathsf{Show}[\beta]$.
+
+   An assumption of the same class also counts as a `Maybe` when the
+   constraint has variables, since the variables might turn out to be the
+   assumption's types.
+4. With exactly one `Yes` and no `Maybe`, that impl is chosen. Its own
+   `where` clauses, with the substitution applied, become new constraints:
+   choosing `impl[T] Show[Option[T]] where Show[T]` for
+   $\mathsf{Show}[\mathsf{Option}[\mathsf{i32}]]$ leaves
+   $\mathsf{Show}[\mathsf{i32}]$.
+5. If there are several `Yes`es, or a `Yes` and a `Maybe`, the solver
+   *waits*. Something later may decide the variables and rule impls out.
+6. With no candidate at all, it waits if the constraint has variables, and
+   reports "no instance" if it doesn't.
+
+The solver never backtracks and never guesses. It only commits to an impl
+when no other impl or assumption could still apply. Every solution is then
+the only one, which keeps the meaning of a program independent of the order
+constraints are solved in. It's the rule GHC uses for overlapping
+instances: an instance is chosen only if it matches the constraint and no
+other instance *unifies* with it [GHC User's Guide].
+
+`visible_impls` decides which impls a file can use: those of the file
+itself, of its prelude, and of every file they import, directly or not.
+
+### What's left
+
+When a body is done, `Solver::finish` solves what it can, defaults the
+numeric variables, and solves again, since defaulting can decide
+constraints like $\mathsf{Show}[\beta_{\mathsf{Int}}]$. A class constraint
+that's still pending after that is *ambiguous*: the types were never known
+well enough to choose an impl.
+
+For an inferred function, [generalization](./generalization.mdx) first
+turns the pending constraints that are about the function's own type
+variables into part of its scheme. Only the rest are ambiguous.
+
+## Fields
+
+A field access `e.x` emits $\tau.x : \beta$, where $\tau$ is the type of `e`.
+`solve_field` looks at $\tau$:
+
+- A **variable**: wait.
+- A **struct** $S[\bar\tau]$: look up the field `x` in `struct_field_types`,
+  substitute the struct's arguments, and emit an equality with $\beta$. If
+  there's no such field, report "no field" and make $\beta$ the error type.
+- A **tuple**, for a field like `0`: the element type, if the index is in
+  range.
+- **`!` or the error type**: the field is the error type too, without an
+  error.
+
+Field constraints are tried as soon as they're added, unlike class
+constraints, because the field's type often decides what follows. In
+`p.x + 1`, knowing the field is `i32` makes the `1` an `i32`.
+
+A field constraint whose type is never decided becomes part of the scheme of
+the function it's in:
+
+```bolt
+struct Line { start: Point }
+fn start_x(l) = l.start.x;
+```
+
+```text
+start_x: forall a b c. a.start: c => c.x: b => fn(a) -> b
+```
+
+When `start_x` is called with a `Line`, instantiation adds
+$\mathsf{Line}.\mathsf{start} : \gamma$ and $\gamma.x : \beta$. The first
+decides $\gamma$, and then the second can be solved.
+
+These constraints work like the kinded types of Ohori's polymorphic record
+calculus [Ohori 1995], where a type variable's kind lists the
+fields its values must have. Row polymorphism
+[Rémy 1989, Gaster & Jones 1996] solves the same
+problem with row variables instead. Bolt's structs are nominal, so a field
+constraint is solved by looking up a declaration, much like GHC's `HasField`
+class.
+
+A field constraint whose type is never decided in a body that isn't
+generalized, like the top level of a file, is reported as "type needed".
+
+## References
+
+- M. Odersky, M. Sulzmann and M. Wehr. *Type Inference with
+  Constrained Types.* Theory and Practice of Object Systems 5(1), 1999.
+- M. P. Jones. *Qualified Types: Theory and
+  Practice.* Cambridge University Press, 1994.
+- M. P. Jones. *Typing Haskell in Haskell.* Haskell
+  Workshop, 1999.
+- P. Wadler and S. Blott. *How to make ad-hoc
+  polymorphism less ad hoc.* POPL 1989.
+- S. Peyton Jones, M. Jones and E. Meijer. *Type
+  classes: an exploration of the design space.* Haskell Workshop, 1997.
+- The GHC Team. *GHC User's Guide*, section
+  "Overlapping instances".
+- C. Hall, K. Hammond, S. Peyton Jones and P. Wadler.
+  *Type Classes in Haskell.* TOPLAS 18(2), 1996.
+- A. Ohori. *A Polymorphic Record Calculus and Its
+  Compilation.* TOPLAS 17(6), 1995.
+- D. Rémy. *Type checking records and variants in a
+  natural extension of ML.* POPL 1989.
+- B. R. Gaster and M. P. Jones. *A Polymorphic Type
+  System for Extensible Records and Variants.* Technical report NOTTCS-TR-96-3,
+  University of Nottingham, 1996.

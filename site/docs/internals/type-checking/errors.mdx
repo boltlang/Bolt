@@ -1,0 +1,126 @@
+---
+sidebar_position: 7
+title: Errors
+description: How boltlang-hir-ty attributes type errors and keeps them from cascading.
+---
+
+# Errors
+
+A type checker for an editor runs on code that's wrong most of the time.
+The checker is built to report each mistake once, at the place that caused
+it, and to keep checking the rest.
+
+## Where an error is reported
+
+Every constraint carries an `Origin` (in `solve.rs`):
+
+- `body`: the body it's in;
+- `node`: the expression or pattern that must have the expected type. The
+  error is reported there;
+- `reason`: *why* that type is expected, so that the error can point at it
+  as well.
+
+The reasons are:
+
+| `Reason` | Example | What the error points at |
+|---|---|---|
+| `None` | the `bool` of a condition | nothing more |
+| `Annotation` | `let x: i32 = ...` | the annotation |
+| `ReturnType` | a function's declared return type | the return type |
+| `ConstType` | a const's declared type | the type |
+| `Argument` | the `index`th parameter of a call | the parameter |
+| `Field` | a field of a struct literal | the field's declaration |
+| `SameAs` | the other branch of an `if` | the other expression |
+
+Several expressions that must have the same type, like the arms of a
+`match`, are checked against one type. The first arm gets the reason of the
+whole `match`, and the others `SameAs` the first, so the error at a wrong
+arm can point at the first arm as the reason for the expected type:
+
+```bolt
+fn g(c: i32) = match c { 1 => 1, _ => "x" };
+```
+
+```text
+error at `"x"`: expected {integer}, found str
+```
+
+### Pushing expectations down
+
+With plain Algorithm W, an error is found wherever unification happens to
+fail, which is often far from the mistake. The checker pushes expected
+types *into* expressions instead, the strategy of the "folklore" algorithm
+M [Lee & Yi 1998]. An `if`, a `match` or a block checks its
+branches and its tail against the expected type, rather than unifying its
+own type afterwards. So in
+
+```bolt
+fn f(c: bool) -> i32 = if c { 1 } else { "no" };
+```
+
+the error is reported at `"no"`, with the return type as the reason, not at
+the whole `if`.
+
+This only moves errors to better places. Which constraint fails first still
+depends on the order constraints are generated in, a bias every
+unification-based checker has. Constraint-based approaches that look at all
+the constraints before blaming one exist [Heeren 2005,
+Wand 1986], but they need the constraints of a whole group up
+front, which conflicts with solving equalities eagerly.
+
+A mismatch is reported with the *whole* expected and found types of the
+constraint, resolved as far as inference got, rather than the innermost
+types that differ. "expected `Option[i32]`, found `Option[str]`" says more
+than "expected `i32`, found `str`".
+
+## Keeping errors from cascading
+
+Once an error is reported, its consequences shouldn't be reported too.
+
+- **The error type** $\bot$ unifies with everything (see
+  [Never and error](./unification.mdx#never-and-error)). An unresolved name,
+  an unknown field or an unsupported expression has type $\bot$, so nothing
+  that uses it reports a mismatch.
+- `set_error` makes a variable $\bot$ after an error about it. For example,
+  the field variable of an unknown field.
+- A **class constraint** with $\bot$ in it is considered solved, and
+  calling a value of type $\bot$ still infers the arguments, but reports
+  nothing about the call.
+- A variable that only **met** an error isn't bound right away, because
+  later constraints may still decide it. It becomes $\bot$ at the end if
+  nothing did (`error_unknowns`). That also keeps it from being generalized
+  into a type parameter.
+- Errors are **resolved before** the unknown variables become $\bot$.
+  Otherwise an error whose type contains such a variable would look like a
+  consequence of another error.
+
+## How types are shown
+
+`Ty::display` shows types as Bolt code. Two details make errors readable:
+
+- **Unknown types get names.** `TyNames` names the inference and bound
+  variables of a message `a`, `b`, ... in the order they appear, skipping
+  names that type parameters in the same message already use. So
+  "expected `fn(a) -> T`" and not "expected `fn(?17) -> T`".
+- **Defaulted literals are numbers.** `resolve_error` shows a literal whose
+  type only came from defaulting as `{integer}` or `{float}` in a mismatch.
+  In `let a: f64 = 1;` the error is "expected `f64`, found `{integer}`",
+  since nobody wrote an `i32`. Other errors, like a missing instance, are
+  about the default type, which is what the program will use.
+
+## Diagnostics
+
+Inference collects `InferenceDiagnostic`s in the `InferenceResult` of each
+body. Some come from constraint generation, like an unresolved name or a
+wrong number of arguments. Others are the `TypeError`s of the solver, and
+others still are `LowerDiagnostic`s from type annotations in the body. The
+`boltlang-ide-diagnostics` crate turns all of them into diagnostics with a
+code, a range and labels, for the CLI and the language server.
+
+## References
+
+- O. Lee and K. Yi. *Proofs about a Folklore
+  Let-Polymorphic Type Inference Algorithm.* TOPLAS 20(4), 1998.
+- B. Heeren. *Top Quality Type Error Messages.* PhD
+  thesis, Utrecht University, 2005.
+- M. Wand. *Finding the Source of Type Errors.* POPL 1986.

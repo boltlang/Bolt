@@ -1,0 +1,129 @@
+---
+sidebar_position: 1
+title: Type checking
+description: How Bolt's type checker in boltlang-hir-ty infers and checks types.
+---
+
+# Type checking
+
+The type checker lives in the `boltlang-hir-ty` crate. It works on the
+lowered bodies and signatures of `boltlang-hir-def`, so it never looks at
+syntax: names are already resolved to definitions, parentheses are gone and
+every expression has an `ExprId` in an arena.
+
+The algorithm belongs to the Hindley–Milner family
+[Hindley 1969, Milner 1978, Damas & Milner 1982],
+extended with *qualified types* for classes [Jones 1994]
+and with structural *field constraints* in the spirit of Ohori's record
+calculus [Ohori 1995]. In short:
+
+- **Constraints are generated** by walking a body once. Every expression
+  gets a type, often a fresh inference variable, and the walk emits three
+  kinds of constraints: two types are equal, some types have an instance of a
+  class, or a type has a field.
+- **Equalities are solved right away** by a unifier, as in Algorithm W. Class
+  and field constraints are *deferred* until the types involved are known
+  well enough, which makes the checker an instance of the HM(X) framework
+  [Odersky et al. 1999], with deferral in the style of OutsideIn(X)
+  [Vytiniotis et al. 2011].
+- **Expected types flow inwards** as hints, so that lambdas, tuples, arrays
+  and branches can use the type their context expects. This is a light form
+  of bidirectional type checking [Pierce & Turner 2000,
+  Dunfield & Krishnaswami 2021].
+- **Functions without complete signatures are generalized** in groups of
+  functions that call each other, found with Tarjan's algorithm
+  [Tarjan 1972]. Local `let`s are never generalized
+  [Vytiniotis et al. 2010].
+- **Functions with complete signatures are checked on their own**, so that
+  editing their bodies never makes their callers be checked again.
+
+The type checker runs inside [Salsa](https://github.com/salsa-rs/salsa), like
+the rest of the compiler. Every step is a query, so the language server only
+redoes what an edit affects.
+
+## The pages of this article
+
+1. [Types and schemes](./types.mdx): what the checker computes with.
+2. [Constraint generation](./inference.mdx): the rules for each expression,
+   statement and pattern.
+3. [Unification](./unification.mdx): how equalities are solved.
+4. [Class and field constraints](./constraints.mdx): instance resolution,
+   superclasses and fields.
+5. [Generalization](./generalization.mdx): binding groups, schemes and
+   incrementality.
+6. [Errors](./errors.mdx): how errors are attributed and kept from
+   cascading.
+
+## A first example
+
+```bolt
+class Show[T] { fn show(x: T) -> str; }
+impl Show[i32] { fn show(x) = "int"; }
+fn twice(x) = (show(x), show(x));
+twice(1);
+twice(true);
+```
+
+The checker finds:
+
+```text
+twice: forall a. Show[a] => fn(a) -> (str, str)
+error at `twice`: no instance Show[bool]
+```
+
+Here is what happens:
+
+1. `twice` has no signature, so it's *inferred*. Its parameter gets a
+   variable $\alpha$. `show` has the declared scheme
+   $\forall T.\ \mathsf{Show}[T] \Rightarrow \mathsf{fn}(T) \to \mathsf{str}$.
+   Each use instantiates $T$ with a fresh variable and adds a deferred
+   constraint $\mathsf{Show}[\beta]$.
+2. Unification makes $\beta = \alpha$. Nothing decides $\alpha$, so the
+   constraint $\mathsf{Show}[\alpha]$ can't be solved inside `twice`.
+3. When `twice` is generalized, $\alpha$ becomes the bound variable `a`. The
+   pending constraint mentions only `a`, so it becomes part of the scheme
+   instead of an error.
+4. The top-level statements are checked as a separate body. `twice(true)`
+   instantiates the scheme with `bool` and emits $\mathsf{Show}[\mathsf{bool}]$,
+   for which no impl exists.
+
+## Where things are
+
+| Module | Contents |
+|---|---|
+| `ty.rs` | The type representation `Ty` and its display. |
+| `lower.rs` | Turning written types and signatures into `Ty`s. |
+| `infer.rs`, `infer/pat.rs` | Constraint generation for expressions and patterns. |
+| `unify.rs` | The unifier. |
+| `solve.rs` | Constraints, the solver and instance resolution. |
+| `scheme.rs` | Type schemes, declared signatures and assumptions. |
+| `check.rs` | The queries: binding groups, generalization, `infer_body`. |
+
+The tests in `tests/data/*.txt` are the best place to see what the checker
+does. Each case shows code, the types found and the errors.
+
+## References
+
+- R. Hindley. *The Principal Type-Scheme of an Object in
+  Combinatory Logic.* Transactions of the AMS, 1969.
+- R. Milner. *A Theory of Type Polymorphism in
+  Programming.* Journal of Computer and System Sciences, 1978.
+- L. Damas and R. Milner. *Principal type-schemes
+  for functional programs.* POPL 1982.
+- M. P. Jones. *Qualified Types: Theory and
+  Practice.* Cambridge University Press, 1994.
+- A. Ohori. *A Polymorphic Record Calculus and Its
+  Compilation.* TOPLAS 17(6), 1995.
+- M. Odersky, M. Sulzmann and M. Wehr. *Type Inference with
+  Constrained Types.* Theory and Practice of Object Systems 5(1), 1999.
+- D. Vytiniotis, S. Peyton Jones, T. Schrijvers and
+  M. Sulzmann. *OutsideIn(X): Modular type inference with local
+  assumptions.* Journal of Functional Programming 21(4–5), 2011.
+- B. C. Pierce and D. N. Turner. *Local Type
+  Inference.* TOPLAS 22(1), 2000.
+- J. Dunfield and N. Krishnaswami.
+  *Bidirectional Typing.* ACM Computing Surveys 54(5), 2021.
+- R. Tarjan. *Depth-First Search and Linear Graph
+  Algorithms.* SIAM Journal on Computing 1(2), 1972.
+- D. Vytiniotis, S. Peyton Jones and
+  T. Schrijvers. *Let Should Not Be Generalised.* TLDI 2010.

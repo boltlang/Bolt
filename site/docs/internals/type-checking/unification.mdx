@@ -1,0 +1,136 @@
+---
+sidebar_position: 4
+title: Unification
+description: How the unifier of boltlang-hir-ty solves equalities between types.
+---
+
+# Unification
+
+The `Unifier` in `unify.rs` solves equalities $\tau_1 \doteq \tau_2$ by
+binding inference variables. It's syntactic, first-order unification
+[Robinson 1965], and it knows nothing about where types come
+from. It returns a `UnifyError`, and the [solver](./constraints.mdx) turns
+that into a diagnostic with an origin.
+
+## The variable table
+
+Variables are indices into a table, where each entry is either
+`Unbound(kind)` or `Bound(ty)`. A variable can be bound to another variable,
+so the table is a union-find structure [Tarjan 1975],
+which is the usual way to implement unification efficiently
+[Huet 1976]:
+
+- `shallow_resolve` follows bound variables until it reaches a type that
+  isn't a bound variable. It's the *find* operation, without path
+  compression.
+- `resolve` replaces every bound variable inside a type, recursively. It's
+  used when a type has to be shown or stored, like in an `InferenceResult`.
+
+The unifier never substitutes into types eagerly. A type stays as it was
+built, with variables in it, and is resolved when someone looks at it.
+
+## The algorithm
+
+`unify(a, b)` first resolves both sides shallowly, then matches on them:
+
+$$
+\begin{array}{lcl}
+\alpha \doteq \alpha & \leadsto & \text{done} \\
+\alpha \doteq \beta & \leadsto & \text{bind } \alpha := \beta \text{, joining their kinds} \\
+\alpha \doteq \tau & \leadsto & \text{bind } \alpha := \tau \text{ if } \tau \text{ fits the kind of } \alpha \text{ and } \alpha \notin \mathrm{fv}(\tau) \\
+T[\bar\tau] \doteq T[\bar\tau'] & \leadsto & \tau_i \doteq \tau'_i \text{ for each } i \\
+(\bar\tau) \doteq (\bar\tau') & \leadsto & \tau_i \doteq \tau'_i \text{, if the lengths are equal} \\
+[\tau] \doteq [\tau'] & \leadsto & \tau \doteq \tau' \\
+\mathsf{fn}(\bar\tau) \to \tau_r \doteq \mathsf{fn}(\bar\tau') \to \tau'_r & \leadsto & \tau_i \doteq \tau'_i,\ \tau_r \doteq \tau'_r \text{, if the arities are equal} \\
+P \doteq P,\ a_i \doteq a_i,\ \mathsf{i32} \doteq \mathsf{i32}, \dots & \leadsto & \text{done} \\
+\text{anything else} & \leadsto & \text{mismatch}
+\end{array}
+$$
+
+Equalities are unified the moment they're emitted, so the order of
+constraint generation decides which mismatch is reported when a program has
+several. See [Errors](./errors.mdx) for how errors are attributed.
+
+### The occurs check
+
+Binding $\alpha := \tau$ when $\tau$ contains $\alpha$ would make an
+infinite type. In `fn f(x) = f([x]);`, `x` has type $\alpha$ and the
+recursive call needs $\alpha \doteq [\alpha]$. `bind` resolves $\tau$ fully and checks that $\alpha$ isn't in
+it. If it is, it returns `UnifyError::Occurs`, which becomes an "infinite
+type" error.
+
+### Numeric variables
+
+Each variable has a `VarKind`, and binding respects it:
+
+| Kind | Can be bound to |
+|---|---|
+| `General` | Any type. |
+| `Int` | Integer types, like `i32` or `u8`. |
+| `Float` | `f32` and `f64`. |
+
+Unifying two variables joins their kinds. `General` joined with `Int` gives
+`Int`, but `Int` joined with `Float` is a mismatch. So in
+`fn inc(y) = y + 1;`, the variable of `y` meets the `Int` variable of `1`
+and becomes an `Int` variable, which later defaults: `inc` has type
+`fn(i32) -> i32`.
+
+When a body is done, `default_numeric_vars` binds the `Int` and `Float`
+variables that are still unbound to `i32` and `f64`, and remembers which
+variables were defaulted. Error messages use that to show a literal as
+`{integer}` rather than `i32`: in `let a: f64 = 1;`, nobody wrote an `i32`.
+
+These kinds are a small case of what the type class literature calls
+*defaulting*; Haskell does the same with `Num` and `Fractional`
+[Peyton Jones 2003].
+
+## Never and error
+
+Two types are special:
+
+$$
+! \doteq \tau \leadsto \text{done}
+\qquad
+\bot \doteq \tau \leadsto \text{done}
+$$
+
+**`!` fits everywhere.** A diverging expression has type `!`, and Bolt has no
+subtyping or coercions, so the unifier accepts `!` against any type. It
+*doesn't bind* a variable to `!`. In `if c { return 1 } else { 2 }`, the
+branches have types `!` and $\beta_{\mathsf{Int}}$, and the `if` gets the
+integer type, not `!`.
+
+**The error type fits everywhere**, so that an error doesn't cause others.
+Here too the variable isn't bound, because later constraints may still
+decide it:
+
+```bolt
+match s { Nope(x) => x, _ => 0.0 }
+```
+
+If `Nope` doesn't exist, the first arm has type $\bot$, but the second arm
+still makes the `match` a float. Instead of binding, the unifier records in
+`met_error` that the variable met an error. When inference is done,
+`error_unknowns` binds the variables that met an error *and are still
+unknown* to $\bot$. Otherwise a variable that's only unknown because of an
+error would be generalized: `fn h() = 1..2` would get the type
+`forall a. fn() -> a`, which is wrong and causes confusing errors at its
+callers.
+
+## Tests
+
+The unit tests at the bottom of `unify.rs` cover binding, mismatches, the
+occurs check, numeric kinds and the special types.
+
+## References
+
+- J. A. Robinson. *A Machine-Oriented Logic Based on
+  the Resolution Principle.* Journal of the ACM 12(1), 1965.
+- R. Tarjan. *Efficiency of a Good But Not
+  Linear Set Union Algorithm.* Journal of the ACM 22(2), 1975.
+- G. Huet. *Résolution d'équations dans des langages
+  d'ordre 1, 2, ..., ω.* PhD thesis, Université Paris VII, 1976.
+- S. Peyton Jones (editor). *Haskell 98 Language
+  and Libraries: The Revised Report.* Cambridge University Press, 2003.
+  Section 4.3.4, "Ambiguous Types, and Defaults for Overloaded Numeric
+  Operations".
