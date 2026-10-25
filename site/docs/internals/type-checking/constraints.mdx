@@ -77,6 +77,10 @@ replace the goal by the rule's premises (its `where` clauses).
    - **Maybe**: it depends on variables that aren't known yet. For example,
      `impl Show[i32]` against $\mathsf{Show}[\beta]$.
 
+   Applications are matched like they're unified: `impl[E] Functor[Either[E]]`
+   matches $\mathsf{Functor}[\mathsf{Either}[\mathsf{str}]]$ with
+   $E := \mathsf{str}$ (see [Kinds](./kinds.mdx#instances)).
+
    An assumption of the same class also counts as a `Maybe` when the
    constraint has variables, since the variables might turn out to be the
    assumption's types.

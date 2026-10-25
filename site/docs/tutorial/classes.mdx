@@ -199,4 +199,53 @@ impl Convert[i32, str] {
 let s: str = convert(42);
 ```
 
+## Classes of type constructors
+
+A class can also be for *type constructors* like `Option` or `List`: types
+that still need an argument. The prelude's `Functor` is the class of
+containers whose contents can be transformed with a function:
+
+```bolt
+class Mappable[F] {
+  fn map_all[A, B](f: fn (A) -> B, x: F[A]) -> F[B];
+}
+
+impl Mappable[Option] {
+  fn map_all[A, B](f: fn (A) -> B, x: Option[A]) -> Option[B] = match x {
+    Some(a) => Some(f(a)),
+    None => None,
+  };
+}
+
+let doubled: Option[i32] = map_all(|n| n * 2, Some(21));
+```
+
+`F[A]` applies `F` to `A`, so `F` must be something that takes a type, like
+`Option`. Bolt works this out by itself from how `F` is used. The impl is
+for `Option` on its own, without an argument, and inside it `F[A]` becomes
+`Option[A]`.
+
+A constructor that takes two types, like a `Result[E, A]`, can be given its
+first one: `impl[E] Mappable[Result[E]]` maps the successful values and
+leaves the errors alone.
+
+Using a type that doesn't take an argument there is an error:
+
+```bolt
+class Mappable[F] {
+  fn map_all[A, B](f: fn (A) -> B, x: F[A]) -> F[B];
+}
+
+impl Mappable[i32] {
+  fn map_all(f, x) = x;
+}
+```
+
+```text
+[E0216] Error: expected a type of kind `Type -> Type`, found `i32` of kind `Type`
+```
+
+A *kind* is the type of a type: `i32` is a `Type`, and `Option` is a
+`Type -> Type`, which gives a `Type` when it's given one.
+
 Next: [modules](./modules.mdx).

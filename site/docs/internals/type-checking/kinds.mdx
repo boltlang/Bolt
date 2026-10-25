@@ -1,0 +1,191 @@
+---
+sidebar_position: 2.5
+title: Kinds
+description: Higher-kinded types in boltlang-hir-ty, kind inference, and how applications are unified.
+---
+
+# Kinds
+
+A type parameter can stand for a *type constructor*, not only a type:
+
+```bolt
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+
+impl Functor[Option] { ... }
+impl[E] Functor[Either[E]] { ... }
+
+fn double[F](x: F[i32]) -> F[i32] where Functor[F] = fmap(|n| n * 2, x);
+```
+
+`F` is applied to arguments, as in `F[A]`, and `Option` is used without
+any. The design is Jones's *constructor classes* [Jones 1995], which
+Haskell 98 adopted. Type variables can stand for constructors, but there
+are no type-level functions, so unification stays first-order and type
+inference keeps its principal types.
+
+## What kinds are
+
+A *kind* is the type of a type (`Kind` in `kind.rs`):
+
+$$
+\kappa ::= \mathsf{Type} \mid \kappa_1 \to \kappa_2
+$$
+
+`i32` and `Option[i32]` are of kind $\mathsf{Type}$. `Option` is of kind
+$\mathsf{Type} \to \mathsf{Type}$, `Either` of kind
+$\mathsf{Type} \to \mathsf{Type} \to \mathsf{Type}$, and the `F` of `Functor`
+of kind $\mathsf{Type} \to \mathsf{Type}$. Applying a constructor of kind
+$\kappa_1 \to \kappa_2$ to a type of kind $\kappa_1$ gives a type of kind
+$\kappa_2$, so `Either[str]` is of kind $\mathsf{Type} \to \mathsf{Type}$.
+
+Kinds are not to be confused with the `VarKind` of inference variables,
+which says whether a variable is for any type or for a number.
+
+## Kind inference
+
+Kinds are never written. They're inferred from how type parameters are used,
+by the same algorithm as type inference, one level up [Peyton Jones 2003,
+section 4.6]:
+
+1. Every type parameter gets a kind variable.
+2. Every use of a type gives an equation:
+   - a type that values have, like a field, parameter or return type, is of
+     kind $\mathsf{Type}$;
+   - an application $T[\tau_1, \dots, \tau_n]$ gives
+     $\kappa_T = \kappa_{\tau_1} \to \dots \to \kappa_{\tau_n} \to \beta$,
+     where $\beta$ is the kind of the application;
+   - the arguments of a class constraint $C[\bar\tau]$ have the kinds of
+     $C$'s parameters, and so do the targets of bounds like `T: Functor`.
+3. The equations are solved by unification, with an occurs check.
+4. Kind variables that nothing decided become $\mathsf{Type}$.
+
+The last step is Haskell 98's defaulting. It means there's no kind
+polymorphism: an unused parameter is of kind $\mathsf{Type}$.
+
+### Groups
+
+Parameters are inferred together when their uses are in the same
+definitions. `group_kinds` infers one *group* at a time:
+
+- a class with its methods, consts and associated types: the kind of
+  `Functor`'s `F` comes from the signature of `fmap`;
+- an impl with its items;
+- a struct, enum, type alias or top-level function on its own.
+
+A use of another definition, like `Option` in a field, takes that
+definition's kinds from its own group. When definitions of different groups
+refer to each other, like two structs with fields of each other's type,
+Salsa detects the cycle and their parameters are all of kind
+$\mathsf{Type}$ (`group_kinds_cycle`). Haskell infers kinds per strongly
+connected group of declarations instead, which would handle that case. Xie,
+Eisenberg and Oliveira describe the subtleties of kind inference for
+datatypes in detail [Xie et al. 2020].
+
+Kind inference doesn't report errors. When the uses of a parameter
+disagree, the first one wins, and lowering reports the others.
+
+## Checking kinds when lowering
+
+`TyLoweringContext` checks the kind of every type it lowers. A type in a
+position for values must be of kind $\mathsf{Type}$. An argument must have
+the kind its constructor expects, and the arguments of a class constraint
+the kinds of the class's parameters. A mismatch is reported in one of two
+ways:
+
+- A constructor missing arguments where a type is expected, like the
+  `Option` of `fn f(x: Option)`, is reported as "expected 1 type argument,
+  found 0", which is easier to understand. The type becomes `Option[⊥]`,
+  so what's known of it is kept.
+- Anything else is a kind mismatch (`E0216`), like
+  "expected a type of kind `Type -> Type`, found `i32` of kind `Type`" for
+  `impl Functor[i32]`.
+
+A type alias must be given all its arguments, since lowering expands it by
+substitution, and a partially applied alias would be a type-level function.
+
+## Types
+
+Two forms of `Ty` stand for constructors and their applications:
+
+- `Adt(T, args)` can have fewer arguments than `T` has parameters.
+  `Adt(Either, [str])` is the constructor `Either[str]`.
+- `App(head, args)` is a type parameter or inference variable applied to
+  arguments, like `F[A]` or $\beta[\mathsf{i32}]$.
+
+Every type has one form. `Ty::app` builds applications and normalizes them:
+an `Adt` applied to more arguments is a longer `Adt`, and an `App` applied
+to more arguments is a longer `App`. `Ty::fold`, and so every substitution,
+rebuilds applications with `Ty::app`. So replacing `F` by `Option` in
+`F[A]` gives `Option[A]` and not an application of `Option`, which is what
+lets an impl's methods be checked against the class's signatures without
+any special case.
+
+## Unification
+
+Type constructors are *generative* and *injective*: $F[A] = G[B]$ only when
+$F = G$ and $A = B$. That makes unifying applications first-order
+[Jones 1995]. Arguments are matched from the right, and whichever side has
+more arguments gives the rest of them to its head:
+
+$$
+\begin{array}{lcl}
+F[\tau_1, \dots, \tau_m] \doteq T[\sigma_1, \dots, \sigma_n] & \leadsto &
+  F \doteq T[\sigma_1, \dots, \sigma_{n-m}],\ \tau_i \doteq \sigma_{n-m+i}
+  \quad \text{if } n \ge m \\
+F[\tau_1, \dots, \tau_m] \doteq G[\sigma_1, \dots, \sigma_n] & \leadsto &
+  F[\tau_1, \dots, \tau_{m-n}] \doteq G,\ \tau_{m-n+i} \doteq \sigma_i
+  \quad \text{if } m \ge n
+\end{array}
+$$
+
+So $\beta[\alpha] \doteq \mathsf{Either}[\mathsf{str}, \mathsf{i32}]$ gives
+$\beta := \mathsf{Either}[\mathsf{str}]$ and $\alpha := \mathsf{i32}$.
+`shallow_resolve` resolves the head of an application as well, so that
+$\beta[\mathsf{i32}]$ with $\beta := \mathsf{Option}$ is
+$\mathsf{Option}[\mathsf{i32}]$.
+
+The price of keeping this first-order is that only the *last* arguments of
+a constructor can be abstracted over. `Either[E]` is a constructor, but
+"`Either` with its first argument missing" isn't, and needs a struct that
+swaps the arguments, as in Haskell.
+
+## Instances
+
+Matching an impl against a class constraint (`match_ty` in `solve.rs`)
+splits applications in the same way, with `match_app`. The impl head
+`Functor[Either[E]]` matches the constraint
+$\mathsf{Functor}[\mathsf{Either}[\mathsf{str}]]$ with $E := \mathsf{str}$.
+A constraint whose argument is an application of an unknown variable, like
+$\mathsf{Show}[\beta[\mathsf{i32}]]$, is a `Maybe` for every impl whose
+arguments could still match, and waits like any other constraint.
+
+## Generalization
+
+Nothing changes: an inference variable at the head of an application is
+generalized like any other.
+
+```bolt
+fn double(x) = fmap(|n| n * 2, x);
+```
+
+```text
+double: forall a. Functor[a] => fn(a[i32]) -> a[i32]
+```
+
+### Methods with type parameters
+
+A class method can have type parameters of its own, like the `A` and `B` of
+`fmap`. An impl's method that declares as many is checked with its own in
+their place, so `fn fmap[T, R](f: fn (T) -> R, xs: List[T]) -> List[R]` in
+`impl Functor[List]` fits. A method that declares none, like
+`fn fmap(f, x) = ...`, is checked with the class method's parameters, and
+they're part of its scheme.
+
+## References
+
+- M. P. Jones. *A system of constructor classes: overloading and implicit
+  higher-order polymorphism.* Journal of Functional Programming 5(1), 1995.
+- S. Peyton Jones (editor). *Haskell 98 Language and Libraries: The Revised
+  Report.* Cambridge University Press, 2003. Section 4.6, "Kind Inference".
+- N. Xie, R. A. Eisenberg and B. C. d. S. Oliveira. *Kind Inference for
+  Datatypes.* POPL 2020.

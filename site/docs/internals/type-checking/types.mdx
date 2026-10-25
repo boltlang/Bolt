@@ -15,7 +15,8 @@ is its `StructId`, not its name.
 $$
 \begin{array}{rcll}
 \tau & ::= & \alpha & \text{inference variable (\texttt{Var})} \\
-     & \mid & T[\tau_1, \dots, \tau_n] & \text{struct or enum (\texttt{Adt})} \\
+     & \mid & T[\tau_1, \dots, \tau_n] & \text{struct or enum, maybe partially applied (\texttt{Adt})} \\
+     & \mid & F[\tau_1, \dots, \tau_n] & \text{parameter or variable applied to types (\texttt{App})} \\
      & \mid & \mathsf{i32} \mid \mathsf{bool} \mid \mathsf{str} \mid \dots & \text{primitive (\texttt{Builtin})} \\
      & \mid & (\tau_1, \dots, \tau_n) & \text{tuple; } () \text{ is unit} \\
      & \mid & [\tau] & \text{array} \\
@@ -36,6 +37,8 @@ A few of these need explaining.
 - `Int` and `Float` variables come from number literals without a suffix,
   like `1` or `2.5`. They can only become integer or float types, and they
   default to `i32` and `f64` when nothing else decides them.
+
+`VarKind`s have nothing to do with the [kinds](./kinds.mdx) of types.
 
 This replaces Haskell's `Num` and `Fractional` classes and their defaulting
 rules with something much simpler. There's no class for numbers, so
@@ -82,8 +85,9 @@ own queries, so they're computed once and shared:
 | `const_ty` | The declared type of a const. |
 
 Type aliases are expanded during lowering by substituting their arguments,
-so later stages never see them. Lowering also checks that type constructors
-get the right number of arguments.
+so later stages never see them. Lowering also checks the
+[kind](./kinds.mdx) of every type, which includes that type constructors get
+the right number of arguments.
 
 ## Type schemes
 

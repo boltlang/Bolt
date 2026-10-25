@@ -39,6 +39,7 @@ $$
 \alpha \doteq \beta & \leadsto & \text{bind } \alpha := \beta \text{, joining their kinds} \\
 \alpha \doteq \tau & \leadsto & \text{bind } \alpha := \tau \text{ if } \tau \text{ fits the kind of } \alpha \text{ and } \alpha \notin \mathrm{fv}(\tau) \\
 T[\bar\tau] \doteq T[\bar\tau'] & \leadsto & \tau_i \doteq \tau'_i \text{ for each } i \\
+F[\bar\tau] \doteq T[\bar\sigma] & \leadsto & \text{split from the right; see } \textit{Kinds} \\
 (\bar\tau) \doteq (\bar\tau') & \leadsto & \tau_i \doteq \tau'_i \text{, if the lengths are equal} \\
 [\tau] \doteq [\tau'] & \leadsto & \tau \doteq \tau' \\
 \mathsf{fn}(\bar\tau) \to \tau_r \doteq \mathsf{fn}(\bar\tau') \to \tau'_r & \leadsto & \tau_i \doteq \tau'_i,\ \tau_r \doteq \tau'_r \text{, if the arities are equal} \\
@@ -46,6 +47,9 @@ P \doteq P,\ a_i \doteq a_i,\ \mathsf{i32} \doteq \mathsf{i32}, \dots & \leadsto
 \text{anything else} & \leadsto & \text{mismatch}
 \end{array}
 $$
+
+Applications of type parameters and variables, like `F[A]`, are unified by
+their last arguments first; [Kinds](./kinds.mdx#unification) explains how.
 
 Equalities are unified the moment they're emitted, so the order of
 constraint generation decides which mismatch is reported when a program has

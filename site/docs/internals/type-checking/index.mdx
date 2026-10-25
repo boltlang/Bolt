@@ -44,14 +44,15 @@ redoes what an edit affects.
 ## The pages of this article
 
 1. [Types and schemes](./types.mdx): what the checker computes with.
-2. [Constraint generation](./inference.mdx): the rules for each expression,
+2. [Kinds](./kinds.mdx): higher-kinded types and kind inference.
+3. [Constraint generation](./inference.mdx): the rules for each expression,
    statement and pattern.
-3. [Unification](./unification.mdx): how equalities are solved.
-4. [Class and field constraints](./constraints.mdx): instance resolution,
+4. [Unification](./unification.mdx): how equalities are solved.
+5. [Class and field constraints](./constraints.mdx): instance resolution,
    superclasses and fields.
-5. [Generalization](./generalization.mdx): binding groups, schemes and
+6. [Generalization](./generalization.mdx): binding groups, schemes and
    incrementality.
-6. [Errors](./errors.mdx): how errors are attributed and kept from
+7. [Errors](./errors.mdx): how errors are attributed and kept from
    cascading.
 
 ## A first example
@@ -92,7 +93,8 @@ Here is what happens:
 | Module | Contents |
 |---|---|
 | `ty.rs` | The type representation `Ty` and its display. |
-| `lower.rs` | Turning written types and signatures into `Ty`s. |
+| `kind.rs` | Kinds, and inferring those of type parameters. |
+| `lower.rs` | Turning written types and signatures into `Ty`s, checking their kinds. |
 | `infer.rs`, `infer/pat.rs` | Constraint generation for expressions and patterns. |
 | `unify.rs` | The unifier. |
 | `solve.rs` | Constraints, the solver and instance resolution. |
