@@ -69,8 +69,15 @@ function HomepageHeader() {
         <div className={styles.buttons}>
           <Link
             className="button button--secondary button--lg"
+            style={{ margin: '1rem' }}
             to="#playground">
             To the playground
+          </Link>
+          <Link
+            className="button button--secondary button--lg"
+            style={{ margin: '1rem' }}
+            to="/docs/tutorial">
+            Learn how to write Bolt
           </Link>
         </div>
       </div>
