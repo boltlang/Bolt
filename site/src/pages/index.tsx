@@ -2,6 +2,7 @@ import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import BrowserOnly from '@docusaurus/BrowserOnly';
+import useBrokenLinks from '@docusaurus/useBrokenLinks';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
 import { useColorMode } from '@docusaurus/theme-common';
 import { Playground } from "@boltlang/playground";
@@ -93,6 +94,9 @@ function HomepagePlayground(): ReactNode {
 
 export default function Home(): ReactNode {
   const {siteConfig} = useDocusaurusContext();
+  // Docusaurus only knows the anchors that components report, like those of
+  // headings, so the check of the link to `#playground` needs this one.
+  useBrokenLinks().collectAnchor('playground');
   return (
     <Layout
       title={`Hello from ${siteConfig.title}`}
