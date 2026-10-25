@@ -320,6 +320,9 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
             format!("error at `{}`: expected {expected} type arguments, found {found}", at(*type_ref))
         }
+        LowerDiagnostic::KindMismatch { type_ref, expected, found } => {
+            format!("error at `{}`: expected kind {expected}, found {found}", at(*type_ref))
+        }
         LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at(*id)),
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
     }

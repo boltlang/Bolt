@@ -14,7 +14,7 @@ import List.*;
 impl Functor[List] {
   fn fmap[T, R](f: fn (T) -> R, xs: List[T]) -> List[R] = match xs {
     Nil => Nil,
-    Cons(h, t) => Cons(f(h), map(f, t)),
+    Cons(h, t) => Cons(f(h), fmap(f, t)),
   };
 }
 

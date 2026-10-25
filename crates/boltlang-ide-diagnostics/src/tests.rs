@@ -645,3 +645,22 @@ let c = get_x(true);
 "#,
     );
 }
+
+#[test]
+fn kinds() {
+    check(
+        r#"
+enum Either[E, A] { Left(E), Right(A) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[i32] {}
+           //^^^ error: expected a type of kind `Type -> Type`, found `i32` of kind `Type`
+   //^^^^^^^^^^^^ error: missing method `fmap` of class `Functor`
+impl Functor[Either] {}
+           //^^^^^^ error: expected a type of kind `Type -> Type`, found `Either` of kind `Type -> Type -> Type`
+   //^^^^^^^^^^^^^^^ error: missing method `fmap` of class `Functor`
+// `x: F` comes first, so it makes `F` a type.
+fn f[F](x: F) -> i32 where Functor[F] = 1;
+                                 //^ error: expected a type of kind `Type -> Type`, found `F` of kind `Type`
+"#,
+    );
+}

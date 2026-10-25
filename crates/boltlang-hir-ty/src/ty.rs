@@ -47,8 +47,14 @@ pub struct GenericParamId<'db> {
 pub enum Ty<'db> {
     /// A type still being inferred.
     Var(TyVar),
-    /// A struct or enum with its type arguments.
+    /// A struct or enum with its type arguments. It can have fewer
+    /// arguments than parameters: `Adt(Option, [])` is the type
+    /// constructor `Option`, which is of kind `Type -> Type`.
     Adt(AdtId<'db>, Box<[Ty<'db>]>),
+    /// A type parameter or variable applied to arguments, like `F[A]`. The
+    /// head is never a struct or enum, nor another `App`: [`Ty::app`] makes
+    /// those an `Adt` or one `App`, so that each type has one form.
+    App(Box<Ty<'db>>, Box<[Ty<'db>]>),
     Builtin(BuiltinType),
     /// `(A, B)`; the unit type is the empty tuple.
     Tuple(Box<[Ty<'db>]>),
@@ -82,6 +88,22 @@ impl<'db> Ty<'db> {
         Ty::Builtin(BuiltinType::Bool)
     }
 
+    /// `head` applied to `args`, in its normal form: `Option` applied to
+    /// `i32` is `Option[i32]`, and `F[A]` applied to `B` is `F[A, B]`.
+    pub fn app(head: Ty<'db>, args: impl IntoIterator<Item = Ty<'db>>) -> Self {
+        let mut args = args.into_iter().peekable();
+        if args.peek().is_none() {
+            return head;
+        }
+        match head {
+            Ty::Adt(id, xs) => Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect()),
+            Ty::App(head, xs) => Ty::App(head, xs.into_vec().into_iter().chain(args).collect()),
+            // An error applied to anything is still an error.
+            Ty::Error => Ty::Error,
+            head => Ty::App(Box::new(head), args.collect()),
+        }
+    }
+
     pub fn is_unit(&self) -> bool {
         matches!(self, Ty::Tuple(tys) if tys.is_empty())
     }
@@ -90,6 +112,10 @@ impl<'db> Ty<'db> {
     pub fn walk_children(&self, mut f: impl FnMut(&Ty<'db>)) {
         match self {
             Ty::Adt(_, args) | Ty::Tuple(args) => args.iter().for_each(f),
+            Ty::App(head, args) => {
+                f(head);
+                args.iter().for_each(f);
+            }
             Ty::Array(elem) => f(elem),
             Ty::Fn(params, ret) => {
                 params.iter().for_each(&mut f);
@@ -108,6 +134,9 @@ impl<'db> Ty<'db> {
         let fold_all = |tys: &[Ty<'db>], f: &mut _| tys.iter().map(|t| t.fold(f)).collect();
         match self {
             Ty::Adt(id, args) => Ty::Adt(*id, fold_all(args, f)),
+            // The head can become a struct or enum, like `F` in `F[A]` when
+            // `F` is replaced by `Option`.
+            Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
             Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
             Ty::Array(elem) => Ty::Array(Box::new(elem.fold(f))),
             Ty::Fn(params, ret) => Ty::Fn(fold_all(params, f), Box::new(ret.fold(f))),
@@ -228,6 +257,11 @@ impl fmt::Display for DisplayTy<'_, '_> {
                     f.write_str("]")?;
                 }
                 Ok(())
+            }
+            Ty::App(head, args) => {
+                write!(f, "{}[", show(head))?;
+                list(f, args)?;
+                f.write_str("]")
             }
             Ty::Builtin(ty) => write!(f, "{ty}"),
             Ty::Tuple(tys) => {

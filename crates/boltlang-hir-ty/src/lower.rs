@@ -14,7 +14,10 @@ use boltlang_hir_def::{
     },
 };
 
-use crate::ty::{AdtId, GenericParamId, Ty};
+use crate::{
+    kind::{Kind, def_kind, generic_param_kinds},
+    ty::{AdtId, GenericParamId, Ty},
+};
 
 /// A class applied to types, like `Show[T]` or `Convert[A, B]`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -38,6 +41,9 @@ pub enum LowerDiagnostic {
     /// A bound or `where` predicate that isn't a class.
     NotAClass(TypeRefId),
     WrongArgCount { type_ref: TypeRefId, expected: usize, found: usize },
+    /// A type of the wrong kind, like `i32` in `Functor[i32]`, where a type
+    /// constructor like `Option` is expected.
+    KindMismatch { type_ref: TypeRefId, expected: Kind, found: Kind },
     /// A type alias that refers to itself.
     RecursiveAlias(TypeRefId),
     /// Something the checker doesn't support yet, like `impl Trait` or
@@ -57,10 +63,63 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         TyLoweringContext { db, resolver, store, diagnostics: Vec::new() }
     }
 
+    /// Lower a type that values have, of kind `Type`.
     pub fn lower_ty(&mut self, id: TypeRefId) -> Ty<'db> {
-        match &self.store[id] {
-            TypeRef::Error => Ty::Error,
-            TypeRef::Path(path) => self.lower_path_ty(id, path),
+        self.lower_ty_expect(id, &Kind::Type)
+    }
+
+    pub fn lower_opt_ty(&mut self, id: Option<TypeRefId>) -> Option<Ty<'db>> {
+        id.map(|id| self.lower_ty(id))
+    }
+
+    /// Lower a type that must be of kind `expected`, like the argument of
+    /// `Functor[F]`, which is `Type -> Type`.
+    fn lower_ty_expect(&mut self, id: TypeRefId, expected: &Kind) -> Ty<'db> {
+        match self.lower_ty_kinded(id) {
+            (ty, Some(kind)) if kind != *expected => {
+                self.kind_mismatch(id, expected, &kind);
+                // A struct or enum missing arguments, like `Pair[i32]`, is
+                // still that type, with errors for what's missing, so that
+                // the rest of it is known.
+                match ty {
+                    Ty::Adt(adt, args) if *expected == Kind::Type && kind.is_first_order() => {
+                        let missing = kind.split().0.len();
+                        Ty::Adt(adt, args.into_vec().into_iter().chain(std::iter::repeat_n(Ty::Error, missing)).collect())
+                    }
+                    _ => Ty::Error,
+                }
+            }
+            (ty, _) => ty,
+        }
+    }
+
+    /// Report that the type `id` is of kind `found` where `expected` is
+    /// expected. A type constructor missing arguments where a type is
+    /// expected, like the `Option` of `let x: Option`, is reported as a
+    /// wrong number of type arguments, which is easier to understand.
+    fn kind_mismatch(&mut self, id: TypeRefId, expected: &Kind, found: &Kind) {
+        if *expected == Kind::Type && found.is_first_order() {
+            let given = match &self.store[id] {
+                TypeRef::Path(path) => path.segments.last().and_then(|s| s.generic_args.as_deref()).map_or(0, <[_]>::len),
+                _ => 0,
+            };
+            let missing = found.split().0.len();
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount { type_ref: id, expected: given + missing, found: given });
+        } else {
+            self.diagnostics.push(LowerDiagnostic::KindMismatch {
+                type_ref: id,
+                expected: expected.clone(),
+                found: found.clone(),
+            });
+        }
+    }
+
+    /// Lower a type of any kind, and give its kind. The kind is `None` for a
+    /// type that couldn't be lowered, which was already reported.
+    fn lower_ty_kinded(&mut self, id: TypeRefId) -> (Ty<'db>, Option<Kind>) {
+        let ty = match &self.store[id] {
+            TypeRef::Error => return (Ty::Error, None),
+            TypeRef::Path(path) => return self.lower_path_ty(id, path),
             TypeRef::Tuple(tys) => Ty::Tuple(tys.iter().map(|t| self.lower_ty(*t)).collect()),
             TypeRef::Array { element, .. } => Ty::Array(Box::new(self.lower_ty(*element))),
             TypeRef::Never => Ty::Never,
@@ -72,97 +131,131 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
             TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
                 self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                Ty::Error
+                return (Ty::Error, None);
             }
-        }
+        };
+        (ty, Some(Kind::Type))
     }
 
-    pub fn lower_opt_ty(&mut self, id: Option<TypeRefId>) -> Option<Ty<'db>> {
-        id.map(|id| self.lower_ty(id))
-    }
-
-    fn lower_path_ty(&mut self, id: TypeRefId, path: &Path) -> Ty<'db> {
+    fn lower_path_ty(&mut self, id: TypeRefId, path: &Path) -> (Ty<'db>, Option<Kind>) {
         let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
         let Some(resolution) = self.resolver.resolve_path_in_type_ns(self.db, path) else {
             self.diagnostics.push(LowerDiagnostic::UnresolvedType(id));
             // Still report the problems in the arguments, like the `T` of
             // `List[T]` when `T` isn't declared either.
             self.lower_args_unchecked(id, args);
-            return Ty::Error;
+            return (Ty::Error, None);
         };
         if resolution.unresolved.is_some() {
             // `T.Item` and other associated types.
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-            return Ty::Error;
+            return (Ty::Error, None);
         }
-        match resolution.ty {
-            TypeNs::Struct(s) => {
-                let count = struct_signature(self.db, s).generic_params.type_params.len();
-                Ty::Adt(AdtId::Struct(s), self.lower_args(id, args, count))
-            }
-            TypeNs::Enum(e) => {
-                let count = enum_signature(self.db, e).generic_params.type_params.len();
-                Ty::Adt(AdtId::Enum(e), self.lower_args(id, args, count))
-            }
-            TypeNs::Builtin(ty) => {
-                self.lower_args(id, args, 0);
-                Ty::Builtin(ty)
-            }
+        let (head, kind) = match resolution.ty {
+            TypeNs::Struct(s) => (Ty::Adt(AdtId::Struct(s), Box::new([])), def_kind(self.db, GenericDefId::Struct(s))),
+            TypeNs::Enum(e) => (Ty::Adt(AdtId::Enum(e), Box::new([])), def_kind(self.db, GenericDefId::Enum(e))),
+            TypeNs::Builtin(ty) => (Ty::Builtin(ty), Kind::Type),
             TypeNs::GenericParam { def, index } => {
-                self.lower_args(id, args, 0);
-                Ty::Param(GenericParamId { def, index })
+                let kind = generic_param_kinds(self.db, def).get(index as usize).cloned().unwrap_or(Kind::Type);
+                (Ty::Param(GenericParamId { def, index }), kind)
             }
-            TypeNs::TypeAlias(alias) => {
-                let count = type_alias_signature(self.db, alias).generic_params.type_params.len();
-                let args = self.lower_args(id, args, count);
-                match &type_alias_ty(self.db, alias).ty {
-                    Some(ty) if *ty == Ty::Error && type_alias_ty(self.db, alias).recursive => {
-                        self.diagnostics.push(LowerDiagnostic::RecursiveAlias(id));
-                        Ty::Error
-                    }
-                    Some(ty) => subst_params(ty, GenericDefId::TypeAlias(alias), &args),
-                    // An associated type without a definition.
-                    None => {
-                        self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                        Ty::Error
-                    }
-                }
-            }
+            TypeNs::TypeAlias(alias) => return self.lower_alias(id, alias, args),
             TypeNs::Class(_) | TypeNs::Variant(_) => {
                 self.diagnostics.push(LowerDiagnostic::NotAType(id));
+                return (Ty::Error, None);
+            }
+        };
+        // A constructor can be given fewer arguments than it takes, like
+        // `Either[str]`, which is then a constructor itself.
+        let (param_kinds, _) = kind.split();
+        let type_args = self.type_args(id, args);
+        if type_args.len() > param_kinds.len() {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: param_kinds.len(),
+                found: type_args.len(),
+            });
+            for &arg in &type_args {
+                self.lower_ty_kinded(arg);
+            }
+            return (Ty::Error, None);
+        }
+        let param_kinds: Vec<Kind> = param_kinds.into_iter().cloned().collect();
+        let tys: Vec<Ty<'db>> = type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
+        let result = kind.apply(tys.len()).cloned();
+        (Ty::app(head, tys), result)
+    }
+
+    /// A type alias, which must be given all its arguments.
+    fn lower_alias(
+        &mut self,
+        id: TypeRefId,
+        alias: TypeAliasId<'db>,
+        args: Option<&[GenericArg]>,
+    ) -> (Ty<'db>, Option<Kind>) {
+        let kinds = generic_param_kinds(self.db, GenericDefId::TypeAlias(alias));
+        let type_args = self.type_args(id, args);
+        if type_args.len() != kinds.len() {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: kinds.len(),
+                found: type_args.len(),
+            });
+        }
+        let args: Vec<Ty<'db>> = (0..kinds.len())
+            .map(|i| match type_args.get(i) {
+                Some(&arg) => self.lower_ty_expect(arg, &kinds[i]),
+                None => Ty::Error,
+            })
+            .collect();
+        for &extra in type_args.iter().skip(kinds.len()) {
+            self.lower_ty_kinded(extra);
+        }
+        let ty = match &type_alias_ty(self.db, alias).ty {
+            Some(ty) if *ty == Ty::Error && type_alias_ty(self.db, alias).recursive => {
+                self.diagnostics.push(LowerDiagnostic::RecursiveAlias(id));
                 Ty::Error
             }
-        }
+            Some(ty) => subst_params(ty, GenericDefId::TypeAlias(alias), &args),
+            // An associated type without a definition.
+            None => {
+                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                Ty::Error
+            }
+        };
+        (ty, Some(Kind::Type))
     }
 
-    /// The type arguments of a path, padded with errors or cut to `count`.
-    fn lower_args(&mut self, id: TypeRefId, args: Option<&[GenericArg]>, count: usize) -> Box<[Ty<'db>]> {
-        let mut tys = self.lower_args_unchecked(id, args);
-        if tys.len() != count && !(tys.is_empty() && args.is_none() && count == 0) {
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount { type_ref: id, expected: count, found: tys.len() });
-        }
-        tys.resize(count, Ty::Error);
-        tys.into()
-    }
-
-    /// The type arguments of a path, however many there are.
-    fn lower_args_unchecked(&mut self, id: TypeRefId, args: Option<&[GenericArg]>) -> Vec<Ty<'db>> {
-        let mut tys = Vec::new();
+    /// The type arguments of a path. Other arguments aren't supported yet.
+    fn type_args(&mut self, id: TypeRefId, args: Option<&[GenericArg]>) -> Vec<TypeRefId> {
+        let mut out = Vec::new();
         for arg in args.unwrap_or_default() {
             match arg {
-                GenericArg::Type { type_ref, .. } => tys.push(self.lower_ty(*type_ref)),
+                GenericArg::Type { type_ref, .. } => out.push(*type_ref),
                 GenericArg::AssocType { .. } | GenericArg::Const(_) => {
                     self.diagnostics.push(LowerDiagnostic::Unsupported(id));
                 }
             }
         }
-        tys
+        out
+    }
+
+    /// The type arguments of a path, however many there are, for their
+    /// diagnostics.
+    fn lower_args_unchecked(&mut self, id: TypeRefId, args: Option<&[GenericArg]>) {
+        for arg in self.type_args(id, args) {
+            self.lower_ty_kinded(arg);
+        }
     }
 
     /// Lower a class constraint like `Convert[A, B]`. With `target`, it's a
     /// bound like the `Show` of `T: Show`, and the target is the first
-    /// argument.
-    pub fn lower_class_constraint(&mut self, id: TypeRefId, target: Option<Ty<'db>>) -> Option<ClassConstraint<'db>> {
+    /// argument, given with its kind.
+    pub fn lower_class_constraint(
+        &mut self,
+        id: TypeRefId,
+        target: Option<(Ty<'db>, Option<Kind>)>,
+    ) -> Option<ClassConstraint<'db>> {
         let path = match &self.store[id] {
             TypeRef::Path(path) => path,
             // Already a syntax error.
@@ -186,11 +279,40 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 return None;
             }
         };
-        let count = class_signature(self.db, class).generic_params.type_params.len();
+        let kinds = generic_param_kinds(self.db, GenericDefId::Class(class));
+        let mut args = Vec::new();
+        if let Some((ty, kind)) = target {
+            match (kind, kinds.first()) {
+                (Some(kind), Some(expected)) if kind != *expected => {
+                    self.diagnostics.push(LowerDiagnostic::KindMismatch {
+                        type_ref: id,
+                        expected: expected.clone(),
+                        found: kind,
+                    });
+                    args.push(Ty::Error);
+                }
+                _ => args.push(ty),
+            }
+        }
+        let explicit = &kinds[args.len().min(kinds.len())..];
         let given = path.segments.last().and_then(|s| s.generic_args.as_deref());
-        let mut args: Vec<Ty<'db>> = target.into_iter().collect();
-        let explicit = self.lower_args(id, given, count.saturating_sub(args.len()));
-        args.extend(explicit);
+        let type_args = self.type_args(id, given);
+        if type_args.len() != explicit.len() {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: explicit.len(),
+                found: type_args.len(),
+            });
+        }
+        for (i, kind) in explicit.iter().enumerate() {
+            args.push(match type_args.get(i) {
+                Some(&arg) => self.lower_ty_expect(arg, kind),
+                None => Ty::Error,
+            });
+        }
+        for &extra in type_args.iter().skip(explicit.len()) {
+            self.lower_ty_kinded(extra);
+        }
         Some(ClassConstraint { class, args: args.into() })
     }
 
@@ -198,10 +320,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// `[T: Show]` and the `where` predicates.
     pub fn lower_predicates(&mut self, def: GenericDefId<'db>, params: &GenericParams) -> Vec<ClassConstraint<'db>> {
         let mut out = Vec::new();
+        let kinds = generic_param_kinds(self.db, def);
         for (index, param) in params.type_params.iter().enumerate() {
             let target = Ty::Param(GenericParamId { def, index: index as u32 });
+            let kind = kinds.get(index).cloned();
             for &bound in param.bounds.iter() {
-                out.extend(self.lower_class_constraint(bound, Some(target.clone())));
+                out.extend(self.lower_class_constraint(bound, Some((target.clone(), kind.clone()))));
             }
         }
         for pred in params.where_predicates.iter() {
@@ -209,7 +333,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 // A bare constraint like `Convert[A, B]`.
                 out.extend(self.lower_class_constraint(pred.target, None));
             } else {
-                let target = self.lower_ty(pred.target);
+                let target = self.lower_ty_kinded(pred.target);
                 for &bound in pred.bounds.iter() {
                     out.extend(self.lower_class_constraint(bound, Some(target.clone())));
                 }

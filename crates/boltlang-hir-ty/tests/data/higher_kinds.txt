@@ -1,0 +1,146 @@
+================================================================================
+A class of type constructors
+================================================================================
+enum Option[T] { None, Some(T) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[Option] {
+  fn fmap[A, B](f: fn (A) -> B, x: Option[A]) -> Option[B] = match x {
+    Option.None => Option.None,
+    Option.Some(a) => Option.Some(f(a)),
+  };
+}
+fmap(|n| n + 1, Option.Some(1));
+fmap(|n| n == 0, Option.Some(1));
+
+--------------------------------------------------------------------------------
+Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+fmap(|n| n + 1, Option.Some(1)): Option[i32]
+fmap(|n| n == 0, Option.Some(1)): Option[bool]
+
+================================================================================
+Impl methods without types
+================================================================================
+enum Option[T] { None, Some(T) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[Option] {
+  fn fmap(f, x) = match x {
+    Option.None => Option.None,
+    Option.Some(a) => Option.Some(f(a)),
+  };
+}
+
+--------------------------------------------------------------------------------
+Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+
+================================================================================
+Generic functions over type constructors
+================================================================================
+enum Option[T] { None, Some(T) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[Option] {
+  fn fmap[A, B](f: fn (A) -> B, x: Option[A]) -> Option[B] = Option.None;
+}
+fn double[F](x: F[i32]) -> F[i32] where Functor[F] = fmap(|n| n * 2, x);
+fn inferred(x) = fmap(|n| n * 2, x);
+fn bad[F](x: F[i32]) -> F[i32] = fmap(|n| n * 2, x);
+double(Option.Some(1));
+inferred(Option.Some(1));
+
+--------------------------------------------------------------------------------
+Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+double: forall F. Functor[F] => fn(F[i32]) -> F[i32]
+inferred: forall a. Functor[a] => fn(a[i32]) -> a[i32]
+bad: forall F. fn(F[i32]) -> F[i32]
+double(Option.Some(1)): Option[i32]
+inferred(Option.Some(1)): Option[i32]
+--------------------------------------------------------------------------------
+error at `fmap`: no instance Functor[F]
+
+================================================================================
+Partially applied constructors
+================================================================================
+enum Either[E, A] { Left(E), Right(A) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl[E] Functor[Either[E]] {
+  fn fmap[A, B](f: fn (A) -> B, x: Either[E, A]) -> Either[E, B] = match x {
+    Either.Left(e) => Either.Left(e),
+    Either.Right(a) => Either.Right(f(a)),
+  };
+}
+let r: Either[str, i32] = Either.Right(1);
+fmap(|n| n > 0, r);
+
+--------------------------------------------------------------------------------
+Functor[Either[E]].fmap: forall E A B. fn(fn(A) -> B, Either[E, A]) -> Either[E, B]
+let r: Either[str, i32]
+fmap(|n| n > 0, r): Either[str, bool]
+
+================================================================================
+No instance for a constructor
+================================================================================
+enum Option[T] { None, Some(T) }
+struct Box[T] { value: T }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[Option] {
+  fn fmap[A, B](f: fn (A) -> B, x: Option[A]) -> Option[B] = Option.None;
+}
+fmap(|n| n, Box { value: 1 });
+
+--------------------------------------------------------------------------------
+Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
+fmap(|n| n, Box { value: 1 }): Box[i32]
+--------------------------------------------------------------------------------
+error at `fmap`: no instance Functor[Box]
+
+================================================================================
+Kind errors
+================================================================================
+enum Option[T] { None, Some(T) }
+enum Either[E, A] { Left(E), Right(A) }
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[i32] {}
+impl Functor[Either] {}
+fn f(x: Option) -> i32 = 1;
+fn g[F](x: F[i32], y: F) -> i32 = 1;
+fn h[T: Functor](x: T) -> T = x;
+
+--------------------------------------------------------------------------------
+f: fn(Option[{error}]) -> i32
+g: forall F. fn(F[i32], {error}) -> i32
+h: forall T. Functor[{error}] => fn(T) -> T
+--------------------------------------------------------------------------------
+error at `i32`: expected kind Type -> Type, found Type
+error at `Either`: expected kind Type -> Type, found Type -> Type -> Type
+error at `Option`: expected 1 type arguments, found 0
+error at `F`: expected 1 type arguments, found 0
+error at `Functor`: expected kind Type -> Type, found Type
+
+================================================================================
+Higher-kinded parameters of structs
+================================================================================
+enum Option[T] { None, Some(T) }
+struct Wrap[F, A] { inner: F[A] }
+fn unwrap[F, A](w: Wrap[F, A]) -> F[A] = w.inner;
+let w = Wrap { inner: Option.Some(true) };
+unwrap(w);
+--------------------------------------------------------------------------------
+unwrap: forall F A. fn(Wrap[F, A]) -> F[A]
+let w: Wrap[Option, bool]
+unwrap(w): Option[bool]
+
+================================================================================
+Recursive impls
+================================================================================
+enum List[T] { Cons(T, List[T]), Nil }
+import List.*;
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+impl Functor[List] {
+  fn fmap[T, R](f: fn (T) -> R, xs: List[T]) -> List[R] = match xs {
+    Nil => Nil,
+    Cons(h, t) => Cons(f(h), fmap(f, t)),
+  };
+}
+fmap(|x| x * 2, Cons(1, Cons(2, Nil)));
+--------------------------------------------------------------------------------
+Functor[List].fmap: forall T R. fn(fn(T) -> R, List[T]) -> List[R]
+fmap(|x| x * 2, Cons(1, Cons(2, Nil))): List[i32]

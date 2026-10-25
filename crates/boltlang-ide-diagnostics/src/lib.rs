@@ -68,6 +68,7 @@ impl DiagnosticCode {
     pub const BREAK_OUTSIDE: Self = Self("E0213");
     pub const NOT_IN_CLASS: Self = Self("E0214");
     pub const MISSING_ITEMS: Self = Self("E0215");
+    pub const KIND_MISMATCH: Self = Self("E0216");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -248,6 +249,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::WrongTypeArgCount { expected, found } => (
             C::WRONG_TYPE_ARG_COUNT,
             format!("expected {}, found {found}", count(expected, "type argument", "type arguments")),
+        ),
+        K::KindMismatch { expected, found } => (
+            C::KIND_MISMATCH,
+            format!("expected a type of kind `{expected}`, found `{source}` of kind `{found}`"),
         ),
         K::NoSuchField { ty: Some(ty), name } => {
             (C::NO_SUCH_FIELD, format!("`{}` has no field `{name}`", ty.display_with(db, names)))

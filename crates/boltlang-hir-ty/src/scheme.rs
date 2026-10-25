@@ -112,20 +112,46 @@ pub fn assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<ClassConstra
 pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<(Box<[Ty<'db>]>, Ty<'db>)> {
     let ItemContainerId::Impl(imp) = f.container(db) else { return None };
     let target = impl_header(db, imp).class.as_ref()?;
-    let name = f.item(db).name.as_ref()?;
-    let method = target.class.item(db).items.iter().find_map(|item| match *item {
-        AssocItem::Function(idx) => {
-            let m = FunctionId::new(db, ItemContainerId::Class(target.class), idx);
-            (m.item(db).name.as_ref() == Some(name)).then_some(m)
-        }
-        _ => None,
-    })?;
+    let method = class_method_of(db, f)?;
     let sig = fn_sig(db, method);
     let class_def = GenericDefId::Class(target.class);
-    let subst = |t: &Ty<'db>| subst_params(t, class_def, &target.args);
+    // The method's own type parameters, like the `A` and `B` of
+    // `fn fmap[A, B]`, are those of the impl's method, in order, when it
+    // has as many. Otherwise they stay the class's, which the impl's
+    // method can't know anything about either.
+    let method_def = GenericDefId::Function(method);
+    let own_def = GenericDefId::Function(f);
+    let own_params = same_generic_count(db, method, f).then(|| identity_args(db, own_def));
+    let subst = |t: &Ty<'db>| {
+        let t = subst_params(t, class_def, &target.args);
+        match &own_params {
+            Some(params) => subst_params(&t, method_def, params),
+            None => t,
+        }
+    };
     let params = sig.params.iter().map(|t| t.as_ref().map_or(Ty::Error, subst)).collect();
     let ret = sig.ret.as_ref().map_or(Ty::Error, subst);
     Some((params, ret))
+}
+
+/// The declaration in the class of a method of a class impl, like the
+/// `show` of `class Show[T]` for the `show` of `impl Show[i32]`.
+fn class_method_of<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<FunctionId<'db>> {
+    let ItemContainerId::Impl(imp) = f.container(db) else { return None };
+    let class = impl_header(db, imp).class.as_ref()?.class;
+    let name = f.item(db).name.as_ref()?;
+    class.item(db).items.iter().find_map(|item| match *item {
+        AssocItem::Function(idx) => {
+            let m = FunctionId::new(db, ItemContainerId::Class(class), idx);
+            (m.item(db).name.as_ref() == Some(name)).then_some(m)
+        }
+        _ => None,
+    })
+}
+
+fn same_generic_count<'db>(db: &'db dyn Db, a: FunctionId<'db>, b: FunctionId<'db>) -> bool {
+    let count = |f| GenericDefId::Function(f).generic_params(db).type_params.len();
+    count(a) == count(b)
 }
 
 /// Whether a function's type comes from its declaration alone, so that its
@@ -154,8 +180,18 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         }
         None => (sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect(), sig.ret.clone().unwrap_or(Ty::Error)),
     };
+    let mut defs = generic_chain(db, f);
+    // An impl method without type parameters of its own, like the `fmap` of
+    // `impl Functor[Option] { fn fmap(f, x) = ... }`, has those of the
+    // class's method.
+    if let Some(method) = class_method_of(db, f)
+        && !same_generic_count(db, method, f)
+        && GenericDefId::Function(f).generic_params(db).type_params.is_empty()
+    {
+        defs.push(GenericDefId::Function(method));
+    }
     let mut type_params = Vec::new();
-    for def in generic_chain(db, f) {
+    for def in defs {
         let count = def.generic_params(db).type_params.len();
         type_params.extend((0..count).map(|index| GenericParamId { def, index: index as u32 }));
     }

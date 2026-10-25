@@ -41,10 +41,21 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
       a name could be reported as ambiguous, as in Rust. *(hir-def, hir,
       ide-diagnostics)*
 
-- [ ] Higher-kinded types: a class parameter applied to arguments, like the
-      `F[A]` of `class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A])
-      -> F[B]; }`, with impls for a type constructor like `Functor[Option]`.
-      For now `F[A]` is "expected 0 type arguments". *(hir-ty)*
+- [ ] Kind annotations for parameters whose kind can't be inferred from
+      their uses, like unused ones, which are `Type`. `[F: ...]` is already
+      a bound, so they need a syntax of their own. *(parser, hir-def,
+      hir-ty)*
+- [ ] Kinds are inferred per group (a class and its items, an impl and its
+      items, or one item). Definitions of different groups that refer to
+      each other, like two structs with fields of each other's type, have
+      parameters of kind `Type`, even when one is applied to arguments. Kind
+      inference over strongly connected groups, as in Haskell, would fix
+      this. *(hir-ty)*
+- [ ] Only structs, enums and type parameters can be type constructors:
+      `Functor[Array]` or a partially applied tuple or function type can't
+      be written. *(hir-ty)*
+- [ ] `Functor` impls for `Option`, and `Monad`-like classes, in the prelude
+      of `std`. *(std)*
 
 - [ ] Anonymous records like `{ x: 1, y: 2 }`, as structural types that
       have fields like structs do, so that field constraints work on them

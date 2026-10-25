@@ -55,16 +55,24 @@ impl<'db> Unifier<'db> {
         }
     }
 
-    /// Follow bound variables until reaching a type that isn't one.
+    /// Follow bound variables until reaching a type that isn't one. The
+    /// head of an application is resolved too, so that `?0[i32]` with `?0`
+    /// bound to `Option` is `Option[i32]`.
     pub fn shallow_resolve(&self, ty: &Ty<'db>) -> Ty<'db> {
         let mut ty = ty.clone();
-        while let Ty::Var(var) = ty {
-            match &self.vars[var.0 as usize] {
-                VarState::Bound(bound) => ty = bound.clone(),
-                VarState::Unbound(_) => break,
+        loop {
+            match ty {
+                Ty::Var(var) => match &self.vars[var.0 as usize] {
+                    VarState::Bound(bound) => ty = bound.clone(),
+                    VarState::Unbound(_) => return ty,
+                },
+                Ty::App(head, args) => {
+                    let head = self.shallow_resolve(&head);
+                    return Ty::app(head, args.into_vec());
+                }
+                _ => return ty,
             }
         }
-        ty
     }
 
     /// Replace every bound variable in a type by what it's bound to.
@@ -178,6 +186,27 @@ impl<'db> Unifier<'db> {
             }
             (Ty::Var(var), ty) | (ty, Ty::Var(var)) => self.bind(*var, ty),
             (Ty::Adt(x, xs), Ty::Adt(y, ys)) if x == y && xs.len() == ys.len() => self.unify_all(xs, ys),
+            // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
+            // the last arguments are equal, and so are the rest of each
+            // side. With more arguments on one side, its head takes the
+            // first ones: `?m[a] = Either[str, i32]` makes `?m` the
+            // constructor `Either[str]` and `a` the type `i32`.
+            (Ty::App(f, ys), Ty::Adt(id, xs)) | (Ty::Adt(id, xs), Ty::App(f, ys)) if xs.len() >= ys.len() => {
+                let split = xs.len() - ys.len();
+                self.unify(f, &Ty::Adt(*id, xs[..split].into()))?;
+                self.unify_all(&xs[split..], ys)
+            }
+            (Ty::App(f, xs), Ty::App(g, ys)) => {
+                if xs.len() >= ys.len() {
+                    let split = xs.len() - ys.len();
+                    self.unify(&Ty::app((**f).clone(), xs[..split].to_vec()), g)?;
+                    self.unify_all(&xs[split..], ys)
+                } else {
+                    let split = ys.len() - xs.len();
+                    self.unify(f, &Ty::app((**g).clone(), ys[..split].to_vec()))?;
+                    self.unify_all(xs, &ys[split..])
+                }
+            }
             (Ty::Tuple(xs), Ty::Tuple(ys)) if xs.len() == ys.len() => self.unify_all(xs, ys),
             (Ty::Array(x), Ty::Array(y)) => self.unify(x, y),
             (Ty::Fn(xs, x), Ty::Fn(ys, y)) if xs.len() == ys.len() => {
@@ -280,5 +309,55 @@ mod tests {
         u.unify(&a, &i32()).unwrap();
         u.unify(&Ty::Error, &Ty::bool()).unwrap();
         assert_eq!(u.resolve(&a), i32());
+    }
+
+    /// Unify types with the enums of a small file, `Either[E, A]` and
+    /// `Option[T]`.
+    fn with_enums(f: impl for<'db> FnOnce(&mut Unifier<'db>, Ty<'db>, Ty<'db>)) {
+        use boltlang_hir_def::{ids::EnumId, item_tree::{ModItem, item_tree}};
+        let db = boltlang_base_db::TestDb::new();
+        let file = db.file("/main.bolt", "enum Either[E, A] { L(E), R(A) }\nenum Option[T] { N, S(T) }");
+        let enums: Vec<_> = item_tree(&db, file)
+            .top_level
+            .iter()
+            .filter_map(|item| match *item {
+                ModItem::Enum(idx) => Some(Ty::Adt(crate::ty::AdtId::Enum(EnumId::new(&db, file, idx)), Box::new([]))),
+                _ => None,
+            })
+            .collect();
+        f(&mut Unifier::new(), enums[0].clone(), enums[1].clone());
+    }
+
+    #[test]
+    fn applications_split_from_the_right() {
+        with_enums(|u, either, option| {
+            // `?m[?a] = Either[str, i32]` gives `?m = Either[str]`, `?a = i32`.
+            let m = u.new_var(VarKind::General);
+            let a = u.new_var(VarKind::General);
+            let str_ty = Ty::Builtin(BuiltinType::Str);
+            let target = Ty::app(either.clone(), [str_ty.clone(), i32()]);
+            u.unify(&Ty::app(m.clone(), [a.clone()]), &target).unwrap();
+            assert_eq!(u.resolve(&m), Ty::app(either.clone(), [str_ty.clone()]));
+            assert_eq!(u.resolve(&a), i32());
+            // Applying the solved head gives the type back, in its normal form.
+            assert_eq!(u.resolve(&Ty::app(m.clone(), [a.clone()])), target);
+
+            // A constructor of the wrong kind doesn't fit: `Option[i32]` has
+            // one argument, `?f[?x, ?y]` two.
+            let f = u.new_var(VarKind::General);
+            let x = u.new_var(VarKind::General);
+            let y = u.new_var(VarKind::General);
+            let err = u.unify(&Ty::app(f, [x, y]), &Ty::app(option.clone(), [i32()]));
+            assert!(matches!(err, Err(UnifyError::Mismatch(..))));
+
+            // Two applications of variables.
+            let g = u.new_var(VarKind::General);
+            let h = u.new_var(VarKind::General);
+            let b = u.new_var(VarKind::General);
+            u.unify(&Ty::app(g.clone(), [i32()]), &Ty::app(h.clone(), [b.clone()])).unwrap();
+            assert_eq!(u.resolve(&b), i32());
+            u.unify(&h, &option).unwrap();
+            assert_eq!(u.resolve(&Ty::app(g, [i32()])), Ty::app(option, [i32()]));
+        });
     }
 }

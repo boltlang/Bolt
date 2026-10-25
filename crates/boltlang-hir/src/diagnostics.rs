@@ -27,6 +27,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, InferenceResult, Ty,
+    kind::Kind,
     infer_body,
     lower::{
         ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
@@ -92,6 +93,9 @@ pub enum DiagnosticKind<'db> {
     NotAFunction { ty: Ty<'db> },
     WrongArgCount { expected: usize, found: usize },
     WrongTypeArgCount { expected: usize, found: usize },
+    /// A type of the wrong kind, like `i32` where a type constructor like
+    /// `Option` is expected.
+    KindMismatch { expected: Kind, found: Kind },
     /// A field that the type doesn't have. `ty` is `None` for a field in a
     /// struct literal or pattern, where the struct is named.
     NoSuchField { ty: Option<Ty<'db>>, name: Name },
@@ -457,6 +461,9 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::NotAClass(id) => (*id, DiagnosticKind::NotAClass),
                 LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
                     (*type_ref, DiagnosticKind::WrongTypeArgCount { expected: *expected, found: *found })
+                }
+                LowerDiagnostic::KindMismatch { type_ref, expected, found } => {
+                    (*type_ref, DiagnosticKind::KindMismatch { expected: expected.clone(), found: found.clone() })
                 }
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),

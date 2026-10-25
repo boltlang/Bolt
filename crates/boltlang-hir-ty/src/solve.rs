@@ -182,7 +182,9 @@ impl<'db> Solver<'db> {
     fn solve_field(&mut self, constraint: &FieldConstraint<'db>, origin: Origin<'db>) -> bool {
         let ty = self.unifier.shallow_resolve(&constraint.ty);
         let field = match &ty {
+            // `F[A]` could be any struct until `F` is known.
             Ty::Var(_) => return false,
+            Ty::App(head, _) if matches!(**head, Ty::Var(_)) => return false,
             // An error was already reported, or the value is never made.
             Ty::Error | Ty::Never => {
                 self.unifier.set_error(&constraint.field);
@@ -377,7 +379,17 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
             }
         },
         (_, Ty::Var(_)) => Match::Maybe,
-        (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b => match_all(xs, ys, subst),
+        (_, Ty::App(head, _)) if matches!(**head, Ty::Var(_)) => match pattern {
+            // `F[A]` against `?0[i32]`: decided by what `?0` becomes, unless
+            // the arguments can't match anyway.
+            Ty::App(..) | Ty::Adt(..) => match match_app(pattern, ty, subst) {
+                Match::No => Match::No,
+                _ => Match::Maybe,
+            },
+            _ => Match::No,
+        },
+        (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b && xs.len() == ys.len() => match_all(xs, ys, subst),
+        (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
         (Ty::Array(x), Ty::Array(y)) => match_ty(x, y, subst),
         (Ty::Fn(xs, x), Ty::Fn(ys, y)) => match match_all(xs, ys, subst) {
@@ -390,6 +402,32 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
         },
         (x, y) if x == y => Match::Yes,
         _ => Match::No,
+    }
+}
+
+/// Match two applications by their last arguments, and their heads with
+/// the arguments before them, as in unification: the pattern `F[A]` matches
+/// `Either[str, i32]` with `F` the constructor `Either[str]`.
+fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
+    let split = |t: &Ty<'db>| -> (Ty<'db>, Vec<Ty<'db>>) {
+        match t {
+            Ty::Adt(id, args) => (Ty::Adt(*id, Box::new([])), args.to_vec()),
+            Ty::App(head, args) => ((**head).clone(), args.to_vec()),
+            t => (t.clone(), Vec::new()),
+        }
+    };
+    let (p_head, p_args) = split(pattern);
+    let (t_head, t_args) = split(ty);
+    let n = p_args.len().min(t_args.len());
+    let p_rest = Ty::app(p_head, p_args[..p_args.len() - n].to_vec());
+    let t_rest = Ty::app(t_head, t_args[..t_args.len() - n].to_vec());
+    match match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst) {
+        Match::No => Match::No,
+        args => match (match_ty(&p_rest, &t_rest, subst), args) {
+            (Match::No, _) => Match::No,
+            (Match::Yes, Match::Yes) => Match::Yes,
+            _ => Match::Maybe,
+        },
     }
 }
 
