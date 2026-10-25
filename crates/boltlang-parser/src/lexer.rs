@@ -145,7 +145,6 @@ lazy_static! {
         m.insert("package", PACKAGE_KEYWORD);
         m.insert("pub", PUB_KEYWORD);
         m.insert("return", RETURN_KEYWORD);
-        m.insert("self", SELF_KEYWORD);
         m.insert("struct", STRUCT_KEYWORD);
         m.insert("super", SUPER_KEYWORD);
         m.insert("true", TRUE_KEYWORD);

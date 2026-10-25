@@ -152,14 +152,19 @@ fn closing_paren(p: &Parser, open: usize) -> Option<usize> {
     None
 }
 
-/// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
+/// `pub`, `pub(super)` or `pub(package)`
 pub(crate) fn opt_visibility(p: &mut Parser) -> bool {
     if !p.at(T![pub]) {
         return false;
     }
     let m = p.start();
     p.bump(T![pub]);
-    if p.at(T!['(']) && matches!(p.nth(1), T![self] | T![super] | T![package]) && p.nth_at(2, T![')']) {
+    if p.at(T!['(']) && matches!(p.nth(1), T![super] | T![package] | IDENT) && p.nth_at(2, T![')']) {
+        // Another name, like the `self` of Rust's `pub(self)`, is parsed
+        // like these, so that only it is reported.
+        if p.nth_at(1, IDENT) {
+            p.error("a visibility takes `super` or `package`, like `pub(package)`");
+        }
         p.bump(T!['(']);
         p.bump_any();
         p.bump(T![')']);

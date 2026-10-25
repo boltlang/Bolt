@@ -1,6 +1,5 @@
 ================================================================================
 Function declarations
-:error
 ================================================================================
 fn main() {}
 
@@ -28,7 +27,7 @@ fn foo(x: impl FnOnce() -> result.Result[T, E]) {}
 
 fn foo(#[attr] x: i32, #[attr] x: i64) {}
 
-fn accumulate(self) -> Machine[{State.Accumulate}] {}
+fn accumulate(machine) -> Machine[{State.Accumulate}] {}
 
 ================================================================================
 Const function declarations
@@ -176,9 +175,8 @@ pub enum c_style_enum {
 
 ================================================================================
 Generic functions
-:error
 ================================================================================
-pub fn splice[T: Into[Text]](self, old_range: Range[usize], new_text: T) {
+pub fn splice[T: Into[Text]](text: Text, old_range: Range[usize], new_text: T) {
 }
 pub fn uninit_array[const LEN: usize]() -> [Self; LEN] {}
 
@@ -196,11 +194,10 @@ fn f2(x: Y) {}
 fn f3((x, y): (T, U)) {}
 
 ================================================================================
-Functions with custom types for self
-:error
+Class methods with typed parameters
 ================================================================================
 class Callback[T] {
-    fn call(self: Box[Self]);
+    fn call(callback: Box[T]);
 }
 
 ================================================================================
@@ -253,7 +250,6 @@ struct MacosOnly;
 
 ================================================================================
 Inner attributes
-:error
 ================================================================================
 impl Show[MacosOnly] {
   #![cfg(target_os = "macos")]
@@ -261,7 +257,7 @@ impl Show[MacosOnly] {
 
 match ty {
     #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-    syn.Type.Array(ty) => self.visit_type(ty.elem),
+    syn.Type.Array(ty) => visitor.visit_type(ty.elem),
 }
 
 ================================================================================
@@ -308,26 +304,24 @@ fn foo() {
 
 ================================================================================
 Class instances with items
-:error
 ================================================================================
 impl Walk[Person] {
   const leg_count : u32 = 2;
 
-  fn walk(self) {}
-  fn walk_mut(mut self) {}
+  fn walk(person: Person) {}
+  fn walk_mut(mut person: Person) {}
 }
 
 impl Machine[{State.Init}] {}
 
 ================================================================================
 Class instances
-:error
 ================================================================================
 impl[T] iter.Iterator[Self.Iter[T]] {
 }
 
 impl ConvertTo[i32, i64] {
-    fn convert(self) -> i64 { self as i64 }
+    fn convert(x: i32) -> i64 { x as i64 }
 }
 
 ================================================================================
@@ -338,19 +332,17 @@ impl[K: Debug + Ord] Display[OccupiedError[K]];
 
 ================================================================================
 Trait declarations
-:error
 ================================================================================
 pub class Item[T] where T: Clone + Eq + fmt.Debug {
-    fn summarize(self) -> Self.Summary;
+    fn summarize(item: T) -> Self.Summary;
 }
 
 ================================================================================
 Trait declarations with optional type parameters
-:error
 ================================================================================
 class Add[RHS=Self] {
     type Output;
-    fn add(self, rhs: RHS) -> Self.Output;
+    fn add(lhs: Self, rhs: RHS) -> Self.Output;
 }
 
 ================================================================================
@@ -360,11 +352,10 @@ impl[T: AstDeref[Target: HasNodeId]] HasNodeId[T] {}
 
 ================================================================================
 Macro invocations inside trait declarations
-:error
 ================================================================================
 pub class A[T] where T: B + C + D {
     private_decl!{}
-    fn f(self);
+    fn f(a: T);
 }
 
 ================================================================================
@@ -405,7 +396,6 @@ Visibility modifiers
 ================================================================================
 pub fn a() {}
 pub(super) fn b() {}
-pub(self) fn c() {}
 pub(package) fn c() {}
 
 ================================================================================
@@ -416,9 +406,8 @@ fn bar(bool: bool) {}
 
 ================================================================================
 Where clauses
-:error
 ================================================================================
-fn walk[F](self, it: F) -> bool
+fn walk[F](pat: Pat, it: F) -> bool
     where F: FnMut(Pat) -> bool
 {
   return false
@@ -486,30 +475,27 @@ pub struct Loaf[T: Sized, const N: usize = 1]([T; N]);
 
 ================================================================================
 Functions with untyped parameters
-:error
 ================================================================================
 fn id(x) { x }
 fn add(a, b: i32, mut c, (d, e)) {}
 fn a + b { a }
 class C[T] {
-    fn f(self, x);
+    fn f(c, x);
 }
 let f: fn(i32, String) -> i32 = g;
 
 ================================================================================
 Functions with default parameter values
-:error
 ================================================================================
 fn foo(x = 1) {}
 fn shoot(direction: Vec3, strength: f32 = 1.0, mut n: i32 = a + b * 2) {}
 fn greet(name = "world", (a, b) = (1, 2),) {}
 class C[T] {
-    fn f(self, x = default());
+    fn f(c, x = default());
 }
 
 ================================================================================
 Functions with expression bodies
-:error
 ================================================================================
 fn id(x) = x;
 pub fn add(a, b: i32) -> i32 = a + b;
@@ -517,11 +503,11 @@ fn a + b = add(a, b);
 fn pick[T](c, a: T, b: T) -> T = if c { a } else { b };
 fn scale(x, by = 2) = x * by;
 class Show[T] {
-    fn show(self) -> String;
-    fn print(self) = print(self.show());
+    fn show(x: T) -> String;
+    fn print(x: T) = print(x.show());
 }
 impl Show[bool] {
-    fn show(self) -> String = if self { "yes" } else { "no" };
+    fn show(b: bool) -> String = if b { "yes" } else { "no" };
 }
 
 ================================================================================
@@ -611,7 +597,7 @@ async const extern fn f() {}
 fn g[T](x: T) -> T where T: Ord + Hash, Vec[T]: Clone, { x }
 fn $name() {}
 fn a + b = add(a, b);
-pub(self) fn h();
+fn h();
 
 ================================================================================
 Operator definitions
@@ -745,8 +731,13 @@ Visibility on a let
 pub let x = 1;
 
 ================================================================================
-Self parameters
+Visibility `pub(self)`
 :error
+================================================================================
+pub(self) fn f() {}
+
+================================================================================
+Parameters named self
 ================================================================================
 fn f(self, x) = x;
 fn g(mut self) = 1;

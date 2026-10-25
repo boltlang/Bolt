@@ -95,7 +95,6 @@ pub enum SyntaxKind {
     PACKAGE_KEYWORD,
     PUB_KEYWORD,
     RETURN_KEYWORD,
-    SELF_KEYWORD,
     STRUCT_KEYWORD,
     SUPER_KEYWORD,
     TRUE_KEYWORD,
@@ -281,7 +280,7 @@ pub enum SyntaxKind {
     PARAM,
     /// `...` or `args: ...`
     VARIADIC_PARAM,
-    /// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
+    /// `pub`, `pub(super)` or `pub(package)`
     VISIBILITY,
     /// The `+` in `fn a + b`
     OPERATOR_NAME,
@@ -386,7 +385,6 @@ macro_rules! T {
     [package] => { $crate::SyntaxKind::PACKAGE_KEYWORD };
     [pub] => { $crate::SyntaxKind::PUB_KEYWORD };
     [return] => { $crate::SyntaxKind::RETURN_KEYWORD };
-    [self] => { $crate::SyntaxKind::SELF_KEYWORD };
     [struct] => { $crate::SyntaxKind::STRUCT_KEYWORD };
     [super] => { $crate::SyntaxKind::SUPER_KEYWORD };
     [class] => { $crate::SyntaxKind::CLASS_KEYWORD };
@@ -523,7 +521,6 @@ impl SyntaxKind {
             PACKAGE_KEYWORD => "'package'",
             PUB_KEYWORD => "'pub'",
             RETURN_KEYWORD => "'return'",
-            SELF_KEYWORD => "'self'",
             STRUCT_KEYWORD => "'struct'",
             SUPER_KEYWORD => "'super'",
             CLASS_KEYWORD => "'class'",

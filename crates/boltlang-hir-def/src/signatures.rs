@@ -414,7 +414,6 @@ fn lower_field_list(c: &mut ExprCollector, list: Option<ast::FieldList>) -> Fiel
         None => RawVisibility::Private,
         Some(vis) => match vis.restriction().map(|t| t.kind()) {
             None => RawVisibility::Public,
-            Some(SELF_KEYWORD) => RawVisibility::Private,
             Some(SUPER_KEYWORD) => RawVisibility::Super,
             Some(_) => RawVisibility::Package,
         },

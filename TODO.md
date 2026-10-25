@@ -69,10 +69,9 @@ Each item links to its issue on GitHub.
 ## Grammar and parser
 
 The parser covers the whole grammar. The tests of both are in `tests/parser`,
-which has the cases of the tree-sitter corpus and the parser's own; 13 of the
-corpus's cases are marked `:error` because they use syntax the parser no
-longer accepts (see below). `crates/boltlang-parser/scripts/compare_trees.py`
-compares our trees with tree-sitter's for these cases.
+which has the cases of the tree-sitter corpus and the parser's own.
+`crates/boltlang-parser/scripts/compare_trees.py` compares our trees with
+tree-sitter's for these cases.
 
 - [ ] Give the cases of `tests/parser` expected trees, once both parsers
       give the same trees, and run them against the grammar too. A case
@@ -81,13 +80,6 @@ compares our trees with tree-sitter's for these cases.
 - [ ] The grammar's `test/corpus` is a second copy of its cases. Generate
       it from `tests/parser`, or point `tree-sitter test` at it.
       *(tree-sitter-bolt)* (#108)
-
-### Removed from the parser, still in the grammar
-
-- [ ] `self` parameters are gone: functions for a type are top-level
-      functions called like `x.f()`. Remove them from `grammar.js` too, then
-      rewrite the 13 cases of `tests/parser` that use them without `self`,
-      and remove their `:error`. *(tree-sitter-bolt, parser)* (#109)
 
 ### Not in the grammar yet
 
@@ -114,9 +106,8 @@ updating.
       `;`, like rust-analyzer. That can be noisy for badly broken input.
       *(parser)* (#114)
 - [ ] A token that can't start a parameter ends the parameter list, so the
-      rest of it is parsed as statements: `fn f(self, x) = x;` gives several
-      errors ("Self parameters" in `tests/parser/declarations.txt`). Skipping to the next `,` or
-      `)` would give one. *(parser)* (#115)
+      rest of it is parsed as statements: `fn f(=, x) = x;` gives several
+      errors. Skipping to the next `,` or `)` would give one. *(parser)* (#115)
 - [ ] Validation that the grammar leaves to a later stage: e.g. `..base` in a
       struct literal must come last, a `let` expression only makes sense in a
       condition, and the fragment specifier of `$x:frag` is any identifier.

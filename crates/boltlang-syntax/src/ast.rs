@@ -1505,18 +1505,18 @@ impl FuncDecl {
 
 }
 
-/// `pub`, `pub(self)`, `pub(super)` or `pub(package)`
+/// `pub`, `pub(super)` or `pub(package)`
 pub struct Visibility(SyntaxNode);
 
 simple_node!(Visibility, VISIBILITY);
 
 impl Visibility {
-    /// The `self`, `super` or `package` between parentheses.
+    /// The `super` or `package` between parentheses.
     pub fn restriction(&self) -> Option<SyntaxToken> {
         self.0
             .children_with_tokens()
             .filter_map(|x| x.into_token())
-            .find(|token| matches!(token.kind(), SELF_KEYWORD | SUPER_KEYWORD | PACKAGE_KEYWORD))
+            .find(|token| matches!(token.kind(), SUPER_KEYWORD | PACKAGE_KEYWORD))
     }
 }
 

@@ -121,7 +121,7 @@ pub enum AssocItem {
 /// A visibility as written, before it's resolved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum RawVisibility {
-    /// No `pub`, or `pub(self)`
+    /// No `pub`
     Private,
     /// `pub`
     Public,
@@ -138,7 +138,6 @@ impl RawVisibility {
         };
         match vis.restriction().map(|token| token.kind()) {
             None => RawVisibility::Public,
-            Some(SELF_KEYWORD) => RawVisibility::Private,
             Some(SUPER_KEYWORD) => RawVisibility::Super,
             Some(_) => RawVisibility::Package,
         }
