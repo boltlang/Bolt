@@ -99,7 +99,7 @@ export default function Home(): ReactNode {
   useBrokenLinks().collectAnchor('playground');
   return (
     <Layout
-      title={`Hello from ${siteConfig.title}`}
+      title={siteConfig.title}
       description="Bolt is a language for quickly writing highly performant and safe (web) applications.">
       <HomepageHeader />
       <main id="playground">
