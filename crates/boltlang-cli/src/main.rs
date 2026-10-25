@@ -10,6 +10,7 @@ use std::{
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
+use boltlang_codegen_wasm::link;
 use boltlang_eval::{EvalError, Evaluator, Limits};
 use boltlang_ide_diagnostics::{Diagnostic, DiagnosticCode, Severity, diagnostics, syntax_diagnostics};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
@@ -59,6 +60,7 @@ enum Command {
     DumpAst(DumpAstCommand),
     Check(CheckCommand),
     Run(RunCommand),
+    Build(BuildCommand),
 }
 
 impl Exec for Command {
@@ -67,6 +69,7 @@ impl Exec for Command {
             Self::Check(cmd) => cmd.exec(),
             Self::DumpAst(cmd) => cmd.exec(),
             Self::Run(cmd) => cmd.exec(),
+            Self::Build(cmd) => cmd.exec(),
         }
     }
 }
@@ -170,21 +173,64 @@ impl Exec for RunCommand {
     }
 }
 
+/// Check a file, then compile it to a WebAssembly module. The top-level
+/// statements are its exported function `main`.
+#[derive(clap::Parser)]
+struct BuildCommand {
+    file: PathBuf,
+    /// Where to write the module [default: the file with the extension `.wasm`]
+    #[arg(short, long, value_name = "FILE")]
+    output: Option<PathBuf>,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+}
+
+impl Exec for BuildCommand {
+    fn exec(&self) -> anyhow::Result<bool> {
+        let db = self.prelude.database()?;
+        let Some(file) = open(&db, &self.file) else { return Ok(false) };
+        let found = diagnostics(&db, file);
+        report(&db, &found)?;
+        if found.iter().any(|d| d.severity == Severity::Error) {
+            return Ok(false);
+        }
+        match link(&db, file) {
+            Ok(bytes) => {
+                let output = self.output.clone().unwrap_or_else(|| self.file.with_extension("wasm"));
+                std::fs::write(&output, bytes)?;
+                Ok(true)
+            }
+            Err(errors) => {
+                let found: Vec<_> = errors
+                    .iter()
+                    .map(|e| located_diagnostic(file, e.source_range(&db), DiagnosticCode::CODEGEN_ERROR, e.to_string()))
+                    .collect();
+                report(&db, &found)?;
+                Ok(false)
+            }
+        }
+    }
+}
+
 /// An error of the evaluator as a diagnostic, at the expression where it
 /// happened, or at the start of `file` when that isn't known.
 fn runtime_diagnostic<'db>(db: &'db dyn Db, file: File, error: &EvalError<'db>) -> Diagnostic {
-    let (file, range) = match error.source_range(db) {
+    located_diagnostic(file, error.source_range(db), DiagnosticCode::RUNTIME_ERROR, error.to_string())
+}
+
+/// A diagnostic at a byte range of a file, or at the start of `file` when
+/// it's not known where.
+fn located_diagnostic(
+    file: File,
+    at: Option<(File, std::ops::Range<u32>)>,
+    code: DiagnosticCode,
+    message: String,
+) -> Diagnostic {
+    let (file, range) = match at {
         Some((file, range)) => (file, TextRange::new(range.start.into(), range.end.into())),
         None => (file, TextRange::default()),
     };
-    Diagnostic {
-        code: DiagnosticCode::RUNTIME_ERROR,
-        severity: Severity::Error,
-        file,
-        range,
-        message: error.to_string(),
-        labels: Vec::new(),
-    }
+    Diagnostic { code, severity: Severity::Error, file, range, message, labels: Vec::new() }
 }
 
 fn current_dir() -> anyhow::Result<SystemPathBuf> {

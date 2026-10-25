@@ -73,6 +73,9 @@ impl DiagnosticCode {
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
 
+    /// Code that the code generator can't compile.
+    pub const CODEGEN_ERROR: Self = Self("E0401");
+
     pub const UNSUPPORTED: Self = Self("W0001");
 
     pub fn as_str(self) -> &'static str {

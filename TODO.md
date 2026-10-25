@@ -175,6 +175,28 @@ other errors.
 - [ ] `function_scheme` returns `Result<_, ()>`; a type for the cycle error
       would say what went wrong (clippy's `result_unit_err`). *(hir-ty)*
 
+## Code generation
+
+`boltlang-codegen-wasm` compiles scalar types, functions, control flow and
+`match` on scalars to WebAssembly; `bolt build` runs it.
+
+- [ ] Structs, tuples, enums, and `match` on them, with WasmGC.
+      *(codegen-wasm)*
+- [ ] Strings, and the prelude's `print` as an import of the host.
+      *(codegen-wasm, std)*
+- [ ] Closures, and functions as values. *(codegen-wasm)*
+- [ ] Class methods: record the impl that the solver chooses at each call,
+      which the evaluator needs too. *(hir-ty, codegen-wasm, eval)*
+- [ ] Integers wrap around when they overflow, where the evaluator reports
+      an error; decide which is right. `300.0 as u8` saturates to the range
+      of `i32` and then wraps around, where Rust gives 255.
+      *(codegen-wasm, eval)*
+- [ ] `i128` and `u128`, which Wasm doesn't have. *(codegen-wasm)*
+- [ ] Run the compiled code: `bolt run --wasm`, and in the playground.
+      *(cli, playground)*
+- [ ] Debug information: the names of locals, and source maps.
+      *(codegen-wasm)*
+
 ## Diagnostics
 
 - [ ] "Did you mean `foo`?" for unresolved names, types and imported names,

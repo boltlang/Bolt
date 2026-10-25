@@ -12,6 +12,7 @@ path = "src/main.rs"
 anyhow = "1.0.100"
 ariadne = "0.6.0"
 boltlang-base-db.workspace = true
+boltlang-codegen-wasm.workspace = true
 boltlang-eval.workspace = true
 boltlang-ide-diagnostics.workspace = true
 boltlang-syntax.workspace = true

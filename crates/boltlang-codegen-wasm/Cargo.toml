@@ -1,0 +1,17 @@
+[package]
+name = "boltlang-codegen-wasm"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+boltlang-base-db.workspace = true
+boltlang-eval.workspace = true
+boltlang-hir-def.workspace = true
+boltlang-hir-ty.workspace = true
+salsa = "0.28.5"
+wasm-encoder = "0.262.0"
+wasmparser = "0.262.0"
+
+[dev-dependencies]
+wasmi = "2.0.0"
