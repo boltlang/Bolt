@@ -167,9 +167,6 @@ dependencies = [
 [[package]]
 name = "boltlang-common"
 version = "0.1.0"
-dependencies = [
- "salsa",
-]
 
 [[package]]
 name = "boltlang-eval"
@@ -229,7 +226,6 @@ version = "0.1.0"
 dependencies = [
  "boltlang-common",
  "boltlang-syntax",
- "drop_bomb",
  "itertools",
  "lazy_static",
  "libtest-mimic",
@@ -242,7 +238,6 @@ dependencies = [
 name = "boltlang-syntax"
 version = "0.1.0"
 dependencies = [
- "boltlang-common",
  "rowan",
  "salsa",
 ]
@@ -396,12 +391,6 @@ dependencies = [
  "once_cell",
  "parking_lot_core",
 ]
-
-[[package]]
-name = "drop_bomb"
-version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9bda8e21c04aca2ae33ffc2fd8c23134f3cac46db123ba97bd9d3f3b8a4a85e1"
 
 [[package]]
 name = "either"
