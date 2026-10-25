@@ -1,2 +1,0 @@
-impl[T] [T; 3] {}
-impl (i32, bool) {}

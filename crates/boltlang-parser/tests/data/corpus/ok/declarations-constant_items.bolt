@@ -1,5 +1,0 @@
-const N: i32 = 5;
-
-class Foo[T] {
-    const X: u8;
-}

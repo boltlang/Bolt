@@ -1,2 +1,0 @@
-fn triples(a: impl B) -> impl Iterator[Item=(usize)] {
-}

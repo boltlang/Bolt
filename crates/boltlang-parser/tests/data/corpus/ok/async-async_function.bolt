@@ -1,5 +1,0 @@
-async fn abc() {}
-
-async fn main() {
-    let x = futures.await?;
-}

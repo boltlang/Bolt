@@ -1,6 +1,0 @@
----
-source: crates/boltlang-parser/tests/parser.rs
-expression: "&output(\"\\\"foobar\\\"\", parse_expr)"
----
-- LIT_EXPR
-  - STRING "\"foobar\""

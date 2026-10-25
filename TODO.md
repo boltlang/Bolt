@@ -68,20 +68,26 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
 
 ## Grammar and parser
 
-The parser covers the whole grammar: the cases of the tree-sitter corpus
-parse without errors (`crates/boltlang-parser/tests/data/corpus`), except the
-13 that use syntax the parser no longer accepts (see below).
-`scripts/compare_corpus.py` compares our trees with tree-sitter's expected
-ones; the only differences left are the deliberate ones listed at the end of
-this section.
+The parser covers the whole grammar. The tests of both are in `tests/parser`,
+which has the cases of the tree-sitter corpus and the parser's own; 13 of the
+corpus's cases are marked `:error` because they use syntax the parser no
+longer accepts (see below). `crates/boltlang-parser/scripts/compare_trees.py`
+compares our trees with tree-sitter's for these cases.
+
+- [ ] Give the cases of `tests/parser` expected trees, once both parsers
+      give the same trees, and run them against the grammar too. A case
+      only says whether the code parses for now. *(tree-sitter-bolt,
+      parser)*
+- [ ] The grammar's `test/corpus` is a second copy of its cases. Generate
+      it from `tests/parser`, or point `tree-sitter test` at it.
+      *(tree-sitter-bolt)*
 
 ### Removed from the parser, still in the grammar
 
 - [ ] `self` parameters are gone: functions for a type are top-level
       functions called like `x.f()`. Remove them from `grammar.js` too, then
-      re-import the corpus with `scripts/import_corpus.py` and remove the 13
-      entries at the end of `tests/data/corpus/FAILING`.
-      *(tree-sitter-bolt, parser)*
+      rewrite the 13 cases of `tests/parser` that use them without `self`,
+      and remove their `:error`. *(tree-sitter-bolt, parser)*
 
 ### Not in the grammar yet
 
@@ -109,7 +115,7 @@ updating.
       *(parser)*
 - [ ] A token that can't start a parameter ends the parameter list, so the
       rest of it is parsed as statements: `fn f(self, x) = x;` gives several
-      errors (`tests/data/err/self_param.bolt`). Skipping to the next `,` or
+      errors ("Self parameters" in `tests/parser/declarations.txt`). Skipping to the next `,` or
       `)` would give one. *(parser)*
 - [ ] Validation that the grammar leaves to a later stage: e.g. `..base` in a
       struct literal must come last, a `let` expression only makes sense in a

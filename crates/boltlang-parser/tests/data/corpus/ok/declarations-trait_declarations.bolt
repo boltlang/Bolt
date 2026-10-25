@@ -1,3 +1,0 @@
-pub class Item[T] where T: Clone + Eq + fmt.Debug {
-    fn summarize(self) -> Self.Summary;
-}

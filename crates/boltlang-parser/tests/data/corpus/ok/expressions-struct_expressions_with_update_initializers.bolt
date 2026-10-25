@@ -1,1 +1,0 @@
-let u = User{name, ..current_user()};

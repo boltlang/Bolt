@@ -1,8 +1,0 @@
-impl Show[MacosOnly] {
-  #![cfg(target_os = "macos")]
-}
-
-match ty {
-    #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-    syn.Type.Array(ty) => self.visit_type(ty.elem),
-}

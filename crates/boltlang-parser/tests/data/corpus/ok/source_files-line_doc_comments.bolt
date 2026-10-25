@@ -1,7 +1,0 @@
-//!  - Inner line doc
-//!! - Still an inner line doc (but with a bang at the beginning)
-
-//   - Only a comment
-///  - Outer line doc (exactly 3 slashes)
-///
-//// - Only a comment

@@ -1,9 +1,0 @@
-struct Unit;
-pub struct Point { x: i32, pub y: i32, }
-struct Pair(A, pub B);
-struct Wrapper[T](T) where T: Clone;
-struct Node[T] where T: Ord { value: T, next: Option[Box[Node[T]]] }
-enum Empty {}
-pub enum Option[T] { None, Some(T) }
-enum Shape { Circle { radius: f64 }, Square(f64), }
-enum Color { Red = 1, Green = 2, Blue }

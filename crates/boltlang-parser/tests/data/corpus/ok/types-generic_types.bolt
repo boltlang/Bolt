@@ -1,4 +1,0 @@
-type A = B[C];
-type D = E[F, str];
-type G = H[I];
-type J = H[K=L];

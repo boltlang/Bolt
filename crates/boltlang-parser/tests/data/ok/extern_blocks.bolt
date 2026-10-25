@@ -1,4 +1,0 @@
-extern "C" { fn malloc(size: usize) -> Ptr; const N: i32; }
-extern { }
-extern "C";
-extern "C" fn f() {}

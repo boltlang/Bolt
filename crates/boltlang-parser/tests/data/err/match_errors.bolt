@@ -1,2 +1,0 @@
-match x { a => b c => d }
-match x { a b }

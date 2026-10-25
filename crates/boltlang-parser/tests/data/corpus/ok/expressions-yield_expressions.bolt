@@ -1,5 +1,0 @@
-yield 42;
-let x = yield 42;
-let y = yield;
-f(yield a + b);
-let z = (yield 1) + 2;

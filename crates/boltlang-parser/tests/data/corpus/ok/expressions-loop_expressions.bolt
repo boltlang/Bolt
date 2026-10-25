@@ -1,6 +1,0 @@
-'outer: loop {
-  'inner: loop {
-    break 'outer;
-    break true;
-  }
-}

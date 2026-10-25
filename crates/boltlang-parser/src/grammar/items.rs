@@ -13,6 +13,17 @@ use crate::{
     token_set::TokenSet,
 };
 
+/// Parse a single item, like a function or a struct, with the attributes
+/// before it.
+pub fn parse_item(p: &mut Parser) {
+    let m = p.start();
+    outer_attrs(p);
+    if let Err(m) = opt_item(p, m) {
+        m.abandon(p);
+        p.error("expected an item");
+    }
+}
+
 /// Parse an item if one starts here, completing `m` with it. `m` was
 /// started before the item, so that attributes can be part of it.
 pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {

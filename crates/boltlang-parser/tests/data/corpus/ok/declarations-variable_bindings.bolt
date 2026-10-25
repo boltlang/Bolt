@@ -1,8 +1,0 @@
-let x;
-let x = 42;
-let x: i32;
-let x: i8 = 42;
-let mut x = 5;
-let y: bool = false;
-let bool: bool = false;
-let u32: str = "";

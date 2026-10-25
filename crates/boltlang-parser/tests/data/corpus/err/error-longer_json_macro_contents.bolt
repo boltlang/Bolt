@@ -1,9 +1,0 @@
-({
-    "src": {
-        "file1.rs": "fn foo() {}"
-        "file2.rs": "fn bar() {}",
-    },
-    "test": {
-        "foo": "bar"
-    }
-})

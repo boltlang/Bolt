@@ -5,7 +5,7 @@ mod parser;
 pub mod grammar;
 mod diagnostic;
 
-use boltlang_syntax::SyntaxKind::EOF;
+use boltlang_syntax::SyntaxKind::{EOF, ERROR};
 pub use boltlang_syntax::rowan;
 
 use rowan::GreenNode;
@@ -31,9 +31,22 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
     let mut lexed = tokenize(text, &mut diags);
     let inp = lexed.to_input();
     let mut p = Parser::new(&inp);
+    // The tree needs one root. A rule like `parse_expr` that stops before
+    // the end, or that finds nothing to parse, is wrapped in an `ERROR`
+    // node with the rest of the input. Otherwise the marker is abandoned
+    // and the rule's node is the root.
+    let m = p.start();
     rule(&mut p);
-    if !p.at(EOF) {
-        p.error("parser not at end of file");
+    if p.at(EOF) && m.has_node_since(&p) {
+        m.abandon(&mut p);
+    } else {
+        if !p.at(EOF) {
+            p.error("expected the end of the input");
+            while !p.at(EOF) {
+                p.bump_any();
+            }
+        }
+        m.complete(&mut p, ERROR);
     }
     let (events, splits) = p.finish();
     for split in splits {

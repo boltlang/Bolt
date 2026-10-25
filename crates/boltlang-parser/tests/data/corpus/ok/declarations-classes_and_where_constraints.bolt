@@ -1,8 +1,0 @@
-class Convert[A, B] {
-    fn convert(x: A) -> B;
-}
-class Ord[T] where Eq[T] {
-    fn compare(a: T, b: T) -> Ordering;
-}
-fn convert_all[A, B](xs: List[A]) -> List[B] where Convert[A, B] = map(xs, convert);
-fn show_both[A, B](a: A, b: B) where A: Show, Convert[A, B], Show[B] {}

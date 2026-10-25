@@ -1,5 +1,0 @@
-fn f(a, b: i32, c = 1, d: i32 = 2,) = a;
-fn g(mut x: T) = x;
-fn j(format: str, args: ...) = format;
-fn k(format: str, ...) = format;
-let l = fn (x: i32, y) = x;

@@ -1,4 +1,0 @@
-match x {
-  Some(x) => "some",
-  std.None() => "none"
-}

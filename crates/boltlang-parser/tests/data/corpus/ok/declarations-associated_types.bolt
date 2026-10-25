@@ -1,4 +1,0 @@
-pub class Graph[T] {
-    type N: fmt.Display;
-    type E;
-}

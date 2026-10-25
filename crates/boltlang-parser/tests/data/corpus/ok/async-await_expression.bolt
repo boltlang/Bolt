@@ -1,4 +1,0 @@
-futures.await;
-futures.await?;
-futures.await?.await?;
-futures.await?.function().await?;

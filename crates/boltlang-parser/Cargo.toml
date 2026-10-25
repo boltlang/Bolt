@@ -15,10 +15,8 @@ serde = { version = "1.0.229", features = ["derive"] }
 unicode-ident = "1.0.26"
 
 [dev-dependencies]
-insta = { version = "1.48.0", features = ["yaml"] }
 libtest-mimic = "0.8.2"
-yaml_serde = "0.10.7"
 
 [[test]]
-name = "data"
+name = "parser"
 harness = false

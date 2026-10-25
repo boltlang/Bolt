@@ -1,5 +1,0 @@
-struct A[B] {}
-struct C[A, B] {}
-struct C[A,] {}
-struct D[const SIZE: usize] {}
-struct E[#[attr] T] {}

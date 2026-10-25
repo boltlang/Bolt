@@ -1,2 +1,0 @@
-async {}
-async { let x = 10; }

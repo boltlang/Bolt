@@ -1,3 +1,0 @@
-class Callback[T] {
-    fn call(self: Box[Self]);
-}

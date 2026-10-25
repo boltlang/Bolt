@@ -1,3 +1,0 @@
-fn main() {
-  (r#abc as r#Def).r#ghi;
-}

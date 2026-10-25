@@ -1,8 +1,0 @@
-let a = Point { x, y: 1 };
-let b = Point { x: 1, ..base };
-let c = Shape.Circle { radius: 1.0 };
-let d = Pair { 0: a, 1: b, };
-let e = Empty {};
-if x == Point { x } { }
-let f = a.b;
-for p in points { }

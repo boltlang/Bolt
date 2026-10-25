@@ -1,4 +1,0 @@
-import "./a";
-pub import "./b" (x, y as z,);
-import "./c" as c;
-import "./d" *;

@@ -1,1 +1,0 @@
-let k = fn (x) = fn (y) = x;

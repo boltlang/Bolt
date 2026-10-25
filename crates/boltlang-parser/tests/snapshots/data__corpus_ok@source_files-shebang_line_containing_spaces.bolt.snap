@@ -1,8 +1,0 @@
----
-source: crates/boltlang-parser/tests/data.rs
-expression: "dump(&node, &diags)"
-input_file: crates/boltlang-parser/tests/data/corpus/ok/source_files-shebang_line_containing_spaces.bolt
----
-- SOURCE_FILE
-  - SHEBANG "#!/usr/bin/env -S cargo +nightly -Zscript"
-  - WHITESPACE "\n"

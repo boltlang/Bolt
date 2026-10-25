@@ -1,7 +1,0 @@
-let a = 'x';
-let b = b'y';
-let c = "tab\there \"quoted\"";
-let d = b"bytes";
-let e = c"c";
-let f = r#"raw "string""#;
-let r#match = 1.5;

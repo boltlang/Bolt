@@ -1,6 +1,0 @@
----
-source: crates/boltlang-parser/tests/parser.rs
-expression: "&output(\"\\\"Hello, world!\\\"\", parse_expr)"
----
-- LIT_EXPR
-  - STRING "\"Hello, world!\""

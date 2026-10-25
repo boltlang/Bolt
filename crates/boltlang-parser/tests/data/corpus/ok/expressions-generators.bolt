@@ -1,7 +1,0 @@
-|| {
-    while i <= n {
-        yield i;
-        i += 1;
-    }
-    return;
-};

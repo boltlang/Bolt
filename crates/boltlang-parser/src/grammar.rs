@@ -23,6 +23,10 @@ pub(crate) use paths::*;
 pub(crate) use patterns::*;
 pub use types::*;
 
+// Entry points for single rules, which `crate::parse` can start from.
+pub use items::parse_item;
+pub use patterns::parse_pattern;
+
 use boltlang_syntax::SyntaxKind::{self, *};
 use crate::{
         parser::Parser,

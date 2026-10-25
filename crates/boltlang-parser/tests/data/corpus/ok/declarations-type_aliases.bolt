@@ -1,3 +1,0 @@
-type Inch = u64;
-type Name[T] = Vec[T];
-type LazyResolve = impl (FnOnce() -> Capture) + Send + Sync + UnwindSafe;

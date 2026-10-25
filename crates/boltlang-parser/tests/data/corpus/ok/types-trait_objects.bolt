@@ -1,3 +1,0 @@
-type a = Box[Something + Send];
-type b = Rc[Something];
-type c = A[Box[Fn(B) -> C]];

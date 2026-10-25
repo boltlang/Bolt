@@ -1,2 +1,0 @@
-fn f(self, x) = x;
-fn g(mut self) = 1;

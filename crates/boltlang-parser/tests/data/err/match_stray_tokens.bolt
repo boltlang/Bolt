@@ -1,2 +1,0 @@
-match x { (h:t) => 1, }
-match x { a => 1, ] b => 2 }

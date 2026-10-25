@@ -1,7 +1,0 @@
-fn a + b = add(a, b);
-fn (a: Vec2) <> (b: Vec2) -> Vec2 { a }
-fn[T] (a: T) * (b: T) -> T where Num[T] = mul(a, b);
-fn -x = neg(x);
-fn !(f: Flag) -> Flag { flip(f) }
-let f = fn (x) = x;
-fn (-1) = 0;

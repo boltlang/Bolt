@@ -1,2 +1,0 @@
-impl[K: Debug + Ord] Debug[OccupiedError[K]];
-impl[K: Debug + Ord] Display[OccupiedError[K]];

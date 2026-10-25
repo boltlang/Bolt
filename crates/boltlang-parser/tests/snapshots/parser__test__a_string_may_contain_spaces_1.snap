@@ -1,6 +1,0 @@
----
-source: crates/boltlang-parser/tests/parser.rs
-expression: "&output(\"0b1100110\", parse_expr)"
----
-- LIT_EXPR
-  - INT_NUMBER "0b1100110"

@@ -1,8 +1,0 @@
-impl Walk[Person] {
-  const leg_count : u32 = 2;
-
-  fn walk(self) {}
-  fn walk_mut(mut self) {}
-}
-
-impl Machine[{State.Init}] {}

@@ -1,9 +1,0 @@
-if x { a } else { b }
-if x { a } else if y { b } else { c }
-if x == y { a }
-if let Some(x) = y { x }
-if let Some(x) = y && x > 0 && let Ok(z) = f(x) { z }
-let v = if a { 1 } else { 2 };
-while x < 10 { f(x); }
-while let Some(x) = it.next() { f(x); }
-if a { b } - 1;

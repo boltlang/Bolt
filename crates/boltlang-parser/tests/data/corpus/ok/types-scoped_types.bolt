@@ -1,4 +1,0 @@
-type A = B.C;
-type D = E.F.G;
-type H = I.J[K];
-type L = M[N].O;

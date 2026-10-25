@@ -1,5 +1,0 @@
-#[doc = include_str!("foo-doc.md")]
-fn foo() {}
-
-#[namespace = foo.bar]
-fn baz() {}
