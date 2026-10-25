@@ -33,3 +33,12 @@
   scroll-behavior: smooth;
 }
 
+/* Fix the hero headings on small screens */
+@media screen and (max-width: 450px) {
+  .hero__title {
+    font-size: 2rem !important;
+  }
+  .hero__subtitle {
+    font-size: 1.3rem !important;
+  }
+}
