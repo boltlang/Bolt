@@ -77,6 +77,7 @@ impl DiagnosticCode {
     pub const CODEGEN_ERROR: Self = Self("E0401");
 
     pub const UNSUPPORTED: Self = Self("W0001");
+    pub const NO_VALUES: Self = Self("W0002");
 
     pub fn as_str(self) -> &'static str {
         self.0
@@ -164,7 +165,8 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         }
         DiagnosticKind::InfiniteType { ty }
         | DiagnosticKind::NotAFunction { ty }
-        | DiagnosticKind::NoSuchField { ty: Some(ty), .. } => vec![ty],
+        | DiagnosticKind::NoSuchField { ty: Some(ty), .. }
+        | DiagnosticKind::NoValues { field_ty: ty, .. } => vec![ty],
         DiagnosticKind::NoInstance { constraint } | DiagnosticKind::AmbiguousConstraint { constraint } => {
             constraint.args.iter().collect()
         }
@@ -252,6 +254,21 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::WrongTypeArgCount { expected, found } => (
             C::WRONG_TYPE_ARG_COUNT,
             format!("expected {}, found {found}", count(expected, "type argument", "type arguments")),
+        ),
+        K::NoValues { name, variant: None, field, field_ty } => (
+            C::NO_VALUES,
+            format!(
+                "`{name}` has no values, since its field `{field}` needs a value of `{}`, which has none",
+                field_ty.display_with(db, names)
+            ),
+        ),
+        K::NoValues { name, variant: Some(variant), field_ty, .. } => (
+            C::NO_VALUES,
+            format!(
+                "`{name}` has no values, since none of its variants can be built: `{variant}` needs a value of `{}`, \
+                 which has none",
+                field_ty.display_with(db, names)
+            ),
         ),
         K::KindMismatch { expected, found } => (
             C::KIND_MISMATCH,

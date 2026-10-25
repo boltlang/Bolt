@@ -664,3 +664,45 @@ fn f[F](x: F) -> i32 where Functor[F] = 1;
 "#,
     );
 }
+
+#[test]
+fn types_without_values() {
+    check(
+        r#"
+enum Node[T] { Ref(Node[T]) }
+   //^^^^ warning: `Node` has no values, since none of its variants can be built: `Ref` needs a value of `Node[T]`, which has none
+struct S { s: S }
+     //^ warning: `S` has no values, since its field `s` needs a value of `S`, which has none
+struct A { b: B }
+     //^ warning: `A` has no values, since its field `b` needs a value of `B`, which has none
+struct B { a: A }
+     //^ warning: `B` has no values, since its field `a` needs a value of `A`, which has none
+enum Never {}
+struct Wrap { n: Never }
+     //^^^^ warning: `Wrap` has no values, since its field `n` needs a value of `Never`, which has none
+enum List[T] { Cons(T, List[T]), Nil }
+struct Tree { children: [Tree] }
+"#,
+    );
+}
+
+#[test]
+fn types_without_values_in_other_files() {
+    check_files(&[
+        (
+            "/a.bolt",
+            r#"import "./b" (B);
+pub struct A { b: B }
+         //^ warning: `A` has no values, since its field `b` needs a value of `B`, which has none
+"#,
+        ),
+        (
+            "/b.bolt",
+            r#"
+import "./a" (A);
+pub struct B { a: A }
+         //^ warning: `B` has no values, since its field `a` needs a value of `A`, which has none
+"#,
+        ),
+    ]);
+}

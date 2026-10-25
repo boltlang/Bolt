@@ -7,6 +7,7 @@
 //! - [`ty`] defines the types.
 //! - [`unify`] makes types equal by binding inference variables.
 //! - [`kind`] infers the kinds of type parameters, like `Type -> Type`.
+//! - [`inhabited`] finds the structs and enums that have no values.
 //! - [`lower`] turns type references and signatures into types.
 //! - [`solve`] solves equality and class constraints.
 //! - [`scheme`] has the types of functions, which can be generic.
@@ -15,6 +16,7 @@
 
 pub mod check;
 pub mod infer;
+pub mod inhabited;
 pub mod kind;
 pub mod lower;
 pub mod scheme;

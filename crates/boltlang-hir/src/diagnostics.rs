@@ -28,6 +28,7 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::{
     InferenceDiagnostic, InferenceResult, Ty,
     kind::Kind,
+    inhabited::{field_without_values, has_values},
     infer_body,
     lower::{
         ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
@@ -114,6 +115,11 @@ pub enum DiagnosticKind<'db> {
     /// Items of the class without a default that the impl doesn't define,
     /// in the order the class declares them.
     MissingItems { items: Vec<(ClassItemKind, Name)>, class: ClassId<'db> },
+
+    /// A struct or enum without values: building one needs a value of a
+    /// type without values, like itself. `field` is a field of the struct,
+    /// or of `variant` for an enum, that needs such a value.
+    NoValues { name: Name, variant: Option<Name>, field: Name, field_ty: Ty<'db> },
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
@@ -299,6 +305,7 @@ impl<'db> Collector<'db> {
                     let (_, map) = struct_signature_with_source_map(db, id);
                     self.lower(map, &struct_field_types(db, id).diagnostics);
                     self.lower(map, &generic_predicates(db, GenericDefId::Struct(id)).diagnostics);
+                    self.no_values(GenericDefId::Struct(id));
                 }
                 ModItem::Enum(idx) => self.enum_(EnumId::new(db, file, idx)),
                 ModItem::Class(idx) => {
@@ -424,6 +431,33 @@ impl<'db> Collector<'db> {
         for index in 0..id.item(db).variants.len() {
             self.body(DefWithBody::Variant(EnumVariantId { parent: id, index: index as u32 }));
         }
+        self.no_values(GenericDefId::Enum(id));
+    }
+
+    /// Warn about a struct or enum that has no values, at its name. An enum
+    /// without variants is left alone: it's meant to have none, like `!`.
+    fn no_values(&mut self, def: GenericDefId<'db>) {
+        let db = self.db;
+        if has_values(db, def) {
+            return;
+        }
+        let (ast_id, name, culprit) = match def {
+            GenericDefId::Struct(id) => {
+                let fields = &struct_field_types(db, id).fields;
+                (id.item(db).ast_id, &id.item(db).name, field_without_values(db, fields).map(|f| (None, f)))
+            }
+            GenericDefId::Enum(id) => {
+                let variants = &enum_signature_with_source_map(db, id).0.variants;
+                let culprit = variants.iter().zip(enum_field_types(db, id)).find_map(|(variant, fields)| {
+                    field_without_values(db, &fields.fields).map(|f| (Some(variant.name.clone()), f))
+                });
+                (id.item(db).ast_id, &id.item(db).name, culprit)
+            }
+            _ => return,
+        };
+        let (Some(name), Some((variant, (field, field_ty)))) = (name, culprit) else { return };
+        let kind = DiagnosticKind::NoValues { name: name.clone(), variant, field: field.clone(), field_ty: field_ty.clone() };
+        self.push(Some(self.item_range(ast_id)), kind);
     }
 
     fn const_(&mut self, id: ConstId<'db>) {
