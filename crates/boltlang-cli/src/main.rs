@@ -10,7 +10,7 @@ use std::{
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
-use boltlang_codegen_wasm::link;
+use boltlang_codegen::link;
 use boltlang_eval::{EvalError, Evaluator, Limits};
 use boltlang_ide_diagnostics::{Diagnostic, DiagnosticCode, Severity, diagnostics, syntax_diagnostics};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};

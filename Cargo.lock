@@ -142,7 +142,7 @@ dependencies = [
  "anyhow",
  "ariadne",
  "boltlang-base-db",
- "boltlang-codegen-wasm",
+ "boltlang-codegen",
  "boltlang-eval",
  "boltlang-ide-diagnostics",
  "boltlang-syntax",
@@ -151,7 +151,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "boltlang-codegen-wasm"
+name = "boltlang-codegen"
 version = "0.1.0"
 dependencies = [
  "boltlang-base-db",

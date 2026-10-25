@@ -1,5 +1,5 @@
 [package]
-name = "boltlang-codegen-wasm"
+name = "boltlang-codegen"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
