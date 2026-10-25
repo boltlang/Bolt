@@ -95,6 +95,12 @@ const config: Config = {
         },
         {to: '/blog', label: 'Blog', position: 'left'},
         {
+          type: 'docSidebar',
+          sidebarId: 'internalsSidebar',
+          position: 'right',
+          label: 'Internals',
+        },
+        {
           href: 'https://github.com/boltlang/bolt',
           label: 'GitHub',
           position: 'right',
