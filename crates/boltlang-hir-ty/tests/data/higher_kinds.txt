@@ -77,6 +77,7 @@ fmap(|n| n > 0, r): Either[str, bool]
 
 ================================================================================
 No instance for a constructor
+:error
 ================================================================================
 enum Option[T] { None, Some(T) }
 struct Box[T] { value: T }
@@ -94,6 +95,7 @@ error at `fmap`: no instance Functor[Box]
 
 ================================================================================
 Kind errors
+:error
 ================================================================================
 enum Option[T] { None, Some(T) }
 enum Either[E, A] { Left(E), Right(A) }
@@ -144,3 +146,14 @@ fmap(|x| x * 2, Cons(1, Cons(2, Nil)));
 --------------------------------------------------------------------------------
 Functor[List].fmap: forall T R. fn(fn(T) -> R, List[T]) -> List[R]
 fmap(|x| x * 2, Cons(1, Cons(2, Nil))): List[i32]
+
+================================================================================
+Kinds of definitions that refer to each other
+:todo
+================================================================================
+enum Option[T] { None, Some(T) }
+struct A[F] { b: B[F] }
+struct B[F] { a: Option[A[F]], x: F[i32] }
+fn f(a: A[Option]) -> A[Option] = a;
+--------------------------------------------------------------------------------
+f: fn(A[Option]) -> A[Option]

@@ -32,6 +32,27 @@
 //! Run a single case with `cargo test --test check mutual_recursion`. To
 //! write what the checker finds into the files instead of comparing it, run
 //! with `UPDATE_EXPECT=1`, and review the changes with `git diff`.
+//!
+//! Lines starting with `:` after the title are attributes, as in the
+//! tree-sitter corpus:
+//!
+//! ```text
+//! ================================================================================
+//! Polymorphic recursion
+//! :todo
+//! ================================================================================
+//! ```
+//!
+//! - `:skip`: never run the case, not even with `--ignored`, and report it
+//!   as ignored. For a case that crashes or hangs.
+//! - `:todo`: the output is what the checker should find, but doesn't yet.
+//!   The case is reported as ignored; run the cases with
+//!   `cargo test --test check -- --ignored` to see how far along they are.
+//! - `:error`: the case must find at least one error, so that an update
+//!   can't make it a case without errors by accident.
+//!
+//! `UPDATE_EXPECT=1` leaves the output of `:skip` and `:todo` cases alone,
+//! since it's written by hand, and that of an `:error` case without errors.
 
 use std::{
     ops::Range,
@@ -59,11 +80,30 @@ use libtest_mimic::{Arguments, Failed, Trial};
 /// One test case of a data file.
 struct Case {
     title: String,
+    attributes: Attributes,
     input: String,
     /// The types, then the diagnostics.
     expected: (String, String),
     /// The lines of the title and the input, which an update keeps.
     head: Range<usize>,
+    /// All the lines of the case, which an update keeps for `:skip` and
+    /// `:todo` cases.
+    lines: Range<usize>,
+}
+
+/// The attributes of a case, like `:todo`.
+#[derive(Default)]
+struct Attributes {
+    skip: bool,
+    todo: bool,
+    error: bool,
+}
+
+impl Attributes {
+    /// Whether the output is written by hand, so that updates keep it.
+    fn manual(&self) -> bool {
+        self.skip || self.todo
+    }
 }
 
 /// Whether `line` is made of at least three `c`s.
@@ -92,7 +132,22 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
         if i == lines.len() {
             return Err(format!("line {start}: the title isn't followed by a line of `=`"));
         }
-        let title = lines[start..i].join(" ").trim().to_string();
+        let (attribute_lines, title_lines): (Vec<&str>, Vec<&str>) =
+            lines[start..i].iter().partition(|line| line.trim_start().starts_with(':'));
+        let title = title_lines.join(" ").trim().to_string();
+        let mut attributes = Attributes::default();
+        for line in attribute_lines {
+            match line.trim() {
+                ":skip" => attributes.skip = true,
+                ":todo" => attributes.todo = true,
+                ":error" => attributes.error = true,
+                other => {
+                    return Err(format!(
+                        "`{title}`: unknown attribute `{other}`; the attributes are `:skip`, `:todo` and `:error`"
+                    ));
+                }
+            }
+        }
         i += 1;
         // The sections, up to the next case.
         let mut sections = vec![Vec::new()];
@@ -113,7 +168,9 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
             return Err(format!("`{title}`: expected the input, the types and optionally the diagnostics"));
         }
         let head = head_start..head_end.unwrap_or(i);
-        cases.push(Case { input: section(0) + "\n", expected: (section(1), section(2)), title, head });
+        let input = section(0) + "\n";
+        let expected = (section(1), section(2));
+        cases.push(Case { title, attributes, input, expected, head, lines: head_start..i });
     }
     Ok(cases)
 }
@@ -343,10 +400,22 @@ fn check_caught(case: &Case) -> Result<(String, String), String> {
 
 fn run(case: &Case) -> Result<(), Failed> {
     let actual = check_caught(case)?;
-    if actual == case.expected {
-        return Ok(());
+    if actual != case.expected {
+        return Err(format!("expected:\n{}\nfound:\n{}", show(&case.expected), show(&actual)).into());
     }
-    Err(format!("expected:\n{}\nfound:\n{}", show(&case.expected), show(&actual)).into())
+    if case.attributes.error && !has_errors(&actual) {
+        return Err("the case is marked `:error`, but the checker found no errors".into());
+    }
+    Ok(())
+}
+
+/// Whether the diagnostics of an output have an error, like
+/// `error at ...` or `/lib.bolt: error at ...`.
+fn has_errors((_, diagnostics): &(String, String)) -> bool {
+    diagnostics.lines().any(|line| {
+        let line = line.split_once(": ").filter(|(path, _)| path.starts_with('/')).map_or(line, |(_, rest)| rest);
+        line.starts_with("error")
+    })
 }
 
 /// The output sections of a case, without the line of `-` before them.
@@ -369,11 +438,27 @@ fn update(text: &str, cases: &[Case]) -> String {
         if i > 0 {
             out.push('\n');
         }
+        if case.attributes.manual() {
+            let mut kept = &lines[case.lines.clone()];
+            while let [rest @ .., last] = kept
+                && last.trim().is_empty()
+            {
+                kept = rest;
+            }
+            for line in kept {
+                out.push_str(line);
+                out.push('\n');
+            }
+            continue;
+        }
         for line in &lines[case.head.clone()] {
             out.push_str(line);
             out.push('\n');
         }
-        let found = check_caught(case).unwrap_or_else(|_| case.expected.clone());
+        let found = match check_caught(case) {
+            Ok(found) if !case.attributes.error || has_errors(&found) => found,
+            _ => case.expected.clone(),
+        };
         out.push_str(SECTION);
         out.push('\n');
         out.push_str(&show(&found));
@@ -426,7 +511,16 @@ fn main() {
                 continue;
             }
             seen.push(name.clone());
-            trials.push(Trial::test(name, move || run(&case)));
+            let manual = case.attributes.manual();
+            let trial = if case.attributes.skip {
+                // Never run, even with `--ignored`, since it may hang.
+                Trial::test(name, || Ok(())).with_kind("skip")
+            } else if case.attributes.todo {
+                Trial::test(name, move || run(&case)).with_kind("todo")
+            } else {
+                Trial::test(name, move || run(&case))
+            };
+            trials.push(trial.with_ignored_flag(manual));
         }
     }
     libtest_mimic::run(&args, trials).exit();

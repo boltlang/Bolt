@@ -50,7 +50,8 @@ touches, without their `boltlang-` prefix: `hir-ty` is `boltlang-hir-ty`.
       each other, like two structs with fields of each other's type, have
       parameters of kind `Type`, even when one is applied to arguments. Kind
       inference over strongly connected groups, as in Haskell, would fix
-      this. *(hir-ty)*
+      this. A `:todo` case in `tests/data/higher_kinds.txt` shows it.
+      *(hir-ty)*
 - [ ] Only structs, enums and type parameters can be type constructors:
       `Functor[Array]` or a partially applied tuple or function type can't
       be written. *(hir-ty)*
