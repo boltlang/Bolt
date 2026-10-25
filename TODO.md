@@ -138,6 +138,11 @@ other errors.
       reported either. *(hir-ty, hir, ide-diagnostics)*
 - [ ] `for` only loops over arrays, until there's an iterator class.
       *(hir-ty)*
+- [ ] Assigning to a variable that isn't `mut` isn't reported:
+      `let x = 1; x = 2;` is accepted, and so is `x += 1`. Decide whether
+      assigning to a field or an element, like `p.x = 1` or `xs[0] = 1`,
+      needs the variable to be `mut` too, as in Rust. *(hir-ty, hir,
+      ide-diagnostics)*
 - [ ] Array lengths aren't checked: `[T; 3]` is the same type as `[T]`.
       *(hir-ty)*
 - [ ] `FnOnce(A) -> B` and other function classes are plain function types.
