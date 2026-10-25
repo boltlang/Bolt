@@ -5,6 +5,7 @@
 //! knows about types.
 //!
 //! - [`ty`] defines the types.
+//! - [`builtin`] lists the functions the compiler provides, like `print`.
 //! - [`unify`] makes types equal by binding inference variables.
 //! - [`kind`] infers the kinds of type parameters, like `Type -> Type`.
 //! - [`inhabited`] finds the structs and enums that have no values.
@@ -14,6 +15,7 @@
 //! - [`infer`] infers the types in a body, and [`check`] has the queries
 //!   that run it.
 
+pub mod builtin;
 pub mod check;
 pub mod infer;
 pub mod inhabited;

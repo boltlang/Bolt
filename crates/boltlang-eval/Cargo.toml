@@ -7,4 +7,5 @@ publish.workspace = true
 [dependencies]
 boltlang-base-db.workspace = true
 boltlang-hir-def.workspace = true
+boltlang-hir-ty.workspace = true
 stacker = "0.1.25"

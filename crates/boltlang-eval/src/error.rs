@@ -44,6 +44,11 @@ pub enum ErrorKind {
     /// More steps than [`Limits::fuel`](crate::Limits).
     OutOfFuel,
     Unsupported(&'static str),
+    /// An effect, like printing, where effects aren't allowed: in a const,
+    /// or while compiling.
+    Effect(&'static str),
+    /// A call of the builtin `panic`, with its message.
+    Panic(String),
 }
 
 impl<'db> EvalError<'db> {
@@ -92,6 +97,8 @@ impl fmt::Display for ErrorKind {
             ErrorKind::StackOverflow => write!(f, "too many nested calls"),
             ErrorKind::OutOfFuel => write!(f, "evaluation took too many steps"),
             ErrorKind::Unsupported(what) => write!(f, "{what} is not supported by the evaluator yet"),
+            ErrorKind::Effect(builtin) => write!(f, "`{builtin}` can't be used here, since it has an effect"),
+            ErrorKind::Panic(message) => write!(f, "panicked: {message}"),
         }
     }
 }

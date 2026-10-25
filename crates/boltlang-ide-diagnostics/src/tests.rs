@@ -706,3 +706,18 @@ pub struct B { a: A }
         ),
     ]);
 }
+
+#[test]
+fn builtin_declarations() {
+    check(
+        r#"
+extern "bolt" {
+  fn print(text: str);
+  fn prnt(text: str);
+   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`
+  fn panic(message: str) -> i32;
+   //^^^^^ error: the builtin `panic` must have the type `fn(str) -> !`
+}
+"#,
+    );
+}

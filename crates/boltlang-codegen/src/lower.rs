@@ -18,7 +18,11 @@ use boltlang_hir_def::{
     ids::{ConstId, FunctionId, ItemContainerId},
     resolver::{Resolver, ValueNs, ValueResolution},
 };
-use boltlang_hir_ty::{InferenceResult, Scheme, Ty, function_scheme, infer_body};
+use boltlang_hir_ty::{
+    InferenceResult, Scheme, Ty,
+    builtin::{Builtin, builtin},
+    function_scheme, infer_body,
+};
 
 use crate::{
     CodegenError, ErrorKind, Instance,
@@ -35,6 +39,8 @@ enum Scalar {
     F64,
     Bool,
     Char,
+    /// A pointer to a string in linear memory.
+    Str,
 }
 
 impl Scalar {
@@ -43,7 +49,7 @@ impl Scalar {
         Some(match ty {
             BuiltinType::Bool => Scalar::Bool,
             BuiltinType::Char => Scalar::Char,
-            BuiltinType::Str => return None,
+            BuiltinType::Str => Scalar::Str,
             BuiltinType::Int(int) => match int {
                 BuiltinInt::I8 => Scalar::Int { bits: 8, signed: true },
                 BuiltinInt::I16 => Scalar::Int { bits: 16, signed: true },
@@ -66,7 +72,7 @@ impl Scalar {
     fn val_ty(self) -> ValTy {
         match self {
             Scalar::Int { bits: 64, .. } => ValTy::I64,
-            Scalar::Int { .. } | Scalar::Bool | Scalar::Char => ValTy::I32,
+            Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str => ValTy::I32,
             Scalar::F32 => ValTy::F32,
             Scalar::F64 => ValTy::F64,
         }
@@ -510,6 +516,7 @@ impl<'db> Compiler<'db> {
             Value::Bool(b) => self.int_const(scalar, b as i128),
             Value::Char(c) => self.int_const(scalar, c as i128),
             Value::Float(x) => self.float_const(scalar, x),
+            Value::Str(s) => self.push(Inst::Str(s.as_ref().into())),
             _ => return Err(self.unsupported(expr, "a const of this type")),
         }
         Ok(())
@@ -546,8 +553,9 @@ impl<'db> Compiler<'db> {
                 let x: f64 = text.parse().map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
                 self.float_const(scalar, sign as f64 * x);
             }
-            Literal::String(_) | Literal::CString(_) | Literal::ByteString(_) => {
-                return Err(self.unsupported(expr, "a string"));
+            Literal::String(s) => self.push(Inst::Str(s.as_str().into())),
+            Literal::CString(_) | Literal::ByteString(_) => {
+                return Err(self.unsupported(expr, "a C string or a byte string"));
             }
         }
         Ok(())
@@ -635,6 +643,9 @@ impl<'db> Compiler<'db> {
             }
             BinaryOp::Arith(op) => {
                 let scalar = self.scalar(lhs)?;
+                if scalar == Scalar::Str {
+                    return Err(self.unsupported(expr, "joining strings"));
+                }
                 self.expr(lhs)?;
                 self.expr(rhs)?;
                 self.shift_amount(*op, scalar, rhs)?;
@@ -642,6 +653,9 @@ impl<'db> Compiler<'db> {
             }
             BinaryOp::Cmp(op) => {
                 let scalar = self.scalar(lhs)?;
+                if scalar == Scalar::Str {
+                    return Err(self.unsupported(expr, "comparing strings"));
+                }
                 self.expr(lhs)?;
                 self.expr(rhs)?;
                 self.op(cmp_op(*op, scalar));
@@ -708,6 +722,9 @@ impl<'db> Compiler<'db> {
         if to == Scalar::Bool && from != Scalar::Bool {
             return Err(self.unsupported(expr, "a cast to `bool`"));
         }
+        if (from == Scalar::Str) != (to == Scalar::Str) {
+            return Err(self.unsupported(expr, "a cast from or to `str`"));
+        }
         self.expr(inner)?;
         use ValTy::*;
         let ops: &[Op] = match (from.val_ty(), to.val_ty()) {
@@ -773,7 +790,10 @@ impl<'db> Compiler<'db> {
         args: &[ExprId],
     ) -> Result<'db, ()> {
         let db = self.db;
-        let target = if f.item(db).has_body {
+        let builtin = builtin(db, f);
+        let target = if let Some(builtin) = builtin {
+            Callee::Builtin(builtin)
+        } else if f.item(db).has_body {
             Callee::Instance(self.instance(expr, f, callee, args)?)
         } else {
             match f.container(db) {
@@ -789,6 +809,10 @@ impl<'db> Compiler<'db> {
             self.callees.push(target);
         }
         self.push(Inst::Call(target));
+        if builtin == Some(Builtin::Panic) {
+            // The host doesn't return from `panic`.
+            self.push(Inst::Unreachable);
+        }
         Ok(())
     }
 
@@ -883,7 +907,7 @@ impl<'db> Compiler<'db> {
 
     fn pattern_operand(&self, ty: &Ty<'db>, local: Option<u32>, at: ExprId) -> Result<'db, (Scalar, u32)> {
         match (Scalar::of(ty), local) {
-            (Some(scalar), Some(local)) => Ok((scalar, local)),
+            (Some(scalar), Some(local)) if scalar != Scalar::Str => Ok((scalar, local)),
             _ => Err(self.unsupported(at, format!("matching a value of type `{}`", ty.display(self.db)))),
         }
     }
@@ -1067,7 +1091,7 @@ fn arith_op(op: ArithOp, scalar: Scalar) -> Option<Op> {
             Div => Op::F64Div,
             _ => return None,
         },
-        Scalar::Char => return None,
+        Scalar::Char | Scalar::Str => return None,
     })
 }
 
@@ -1086,7 +1110,7 @@ fn cmp_op(op: CmpOp, scalar: Scalar) -> Op {
             (GtEq, true) => Op::I64GeS,
             (GtEq, false) => Op::I64GeU,
         },
-        Scalar::Int { .. } | Scalar::Bool | Scalar::Char => match (op, scalar.signed()) {
+        Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str => match (op, scalar.signed()) {
             (Eq, _) => Op::I32Eq,
             (NotEq, _) => Op::I32Ne,
             (Lt, true) => Op::I32LtS,

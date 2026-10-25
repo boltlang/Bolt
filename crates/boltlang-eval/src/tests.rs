@@ -225,3 +225,44 @@ fn a_file_has_the_value_of_its_last_expression_statement() {
     assert_eq!(run("fn f(x) = x + 1; f(1);"), "2");
     assert_eq!(run("1; let x = 2;"), "()");
 }
+
+/// A prelude that declares the builtins, as `std`'s does.
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: str);\n  pub fn panic(message: str) -> !;\n}\n";
+
+fn db_with_builtins(code: &str) -> (TestDb, boltlang_base_db::File) {
+    let mut db = TestDb::new();
+    db.file("/.bolt/packages/std/__prelude__/lib.bolt", BUILTINS);
+    db.set_prelude(Some("std"), true);
+    let file = db.file("/main.bolt", code);
+    (db, file)
+}
+
+#[test]
+fn print_goes_to_the_host() {
+    let (db, file) = db_with_builtins("fn greet(name: str) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
+    let recorder = crate::Recorder::default();
+    let mut evaluator = Evaluator::new(&db).with_host(recorder.clone());
+    evaluator.eval_file(file).unwrap();
+    assert_eq!(recorder.output(), "hello\nBolt\nbye\n");
+}
+
+#[test]
+fn effects_are_refused_without_a_host_and_in_consts() {
+    let (db, file) = db_with_builtins("print(\"hi\");");
+    assert_eq!(Evaluator::new(&db).eval_file(file).unwrap_err().kind, ErrorKind::Effect("print"));
+
+    // Even with a host, a const can't print.
+    let (db, file) = db_with_builtins("fn noisy() -> i32 { print(\"evaluating\"); 1 }\nconst N: i32 = noisy();\nN;");
+    let recorder = crate::Recorder::default();
+    let error = Evaluator::new(&db).with_host(recorder.clone()).eval_file(file).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Effect("print"));
+    assert_eq!(recorder.output(), "");
+}
+
+#[test]
+fn panic_stops_with_its_message() {
+    let (db, file) = db_with_builtins("fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);");
+    let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Panic("negative".into()));
+    assert_eq!(error.to_string(), "panicked: negative");
+}

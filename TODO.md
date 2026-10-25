@@ -182,8 +182,13 @@ other errors.
 
 - [ ] Structs, tuples, enums, and `match` on them, with WasmGC.
       *(codegen)*
-- [ ] Strings, and the prelude's `print` as an import of the host.
-      *(codegen, std)*
+- [ ] Strings made while the program runs, like `a + b`, which need an
+      allocator in linear memory, or WasmGC. Literals are data segments.
+      *(codegen)*
+- [ ] More builtins: reading input, the clock, converting numbers to
+      strings, and a `debug` that shows a value of any type, which Wasm can
+      only do per type, after monomorphization. *(hir-ty, eval, codegen,
+      std)*
 - [ ] Closures, and functions as values. *(codegen)*
 - [ ] Class methods: record the impl that the solver chooses at each call,
       which the evaluator needs too. *(hir-ty, codegen, eval)*

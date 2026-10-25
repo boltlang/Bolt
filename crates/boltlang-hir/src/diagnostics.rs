@@ -27,6 +27,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, InferenceResult, Ty,
+    builtin::{Builtin, is_builtin_block},
     kind::Kind,
     inhabited::{field_without_values, has_values},
     infer_body,
@@ -120,6 +121,11 @@ pub enum DiagnosticKind<'db> {
     /// type without values, like itself. `field` is a field of the struct,
     /// or of `variant` for an enum, that needs such a value.
     NoValues { name: Name, variant: Option<Name>, field: Name, field_ty: Ty<'db> },
+
+    /// An item of an `extern "bolt"` block that isn't a builtin.
+    UnknownBuiltin { name: Name },
+    /// A builtin declared with another type than it has.
+    BuiltinSignature { name: Name, expected: Ty<'db> },
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
@@ -329,6 +335,9 @@ impl<'db> Collector<'db> {
                 ModItem::ExternBlock(idx) => {
                     let id = ExternBlockId::new(db, file, idx);
                     self.assoc_items(ItemContainerId::ExternBlock(id), &id.item(db).items);
+                    if is_builtin_block(db, id) {
+                        self.builtins(id);
+                    }
                 }
                 // Imports are checked by name resolution.
                 ModItem::Import(_) | ModItem::MacroRules(_) => {}
@@ -432,6 +441,47 @@ impl<'db> Collector<'db> {
             self.body(DefWithBody::Variant(EnumVariantId { parent: id, index: index as u32 }));
         }
         self.no_values(GenericDefId::Enum(id));
+    }
+
+    /// Check the declarations of an `extern "bolt"` block: they must be
+    /// builtins, with their types.
+    fn builtins(&mut self, block: ExternBlockId<'db>) {
+        let db = self.db;
+        let tree = item_tree(db, self.file);
+        for item in &block.item(db).items {
+            let (name, ast_id, function) = match *item {
+                AssocItem::Function(idx) => {
+                    let f = FunctionId::new(db, ItemContainerId::ExternBlock(block), idx);
+                    let name = match &f.item(db).name {
+                        Some(name) => function_name(name),
+                        None => continue,
+                    };
+                    (name, f.item(db).ast_id, Some(f))
+                }
+                AssocItem::Const(idx) => match &tree.consts[idx.index()].name {
+                    Some(name) => (name.clone(), tree.consts[idx.index()].ast_id, None),
+                    None => continue,
+                },
+                AssocItem::TypeAlias(idx) => match &tree.type_aliases[idx.index()].name {
+                    Some(name) => (name.clone(), tree.type_aliases[idx.index()].ast_id, None),
+                    None => continue,
+                },
+                AssocItem::MacroCall(_) => continue,
+            };
+            let range = Some(self.item_range(ast_id));
+            let (Some(f), Some(builtin)) = (function, Builtin::by_name(name.as_str())) else {
+                self.push(range, DiagnosticKind::UnknownBuiltin { name });
+                continue;
+            };
+            let sig = fn_sig(db, f);
+            let declared = Ty::Fn(
+                sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect(),
+                Box::new(sig.ret.clone().unwrap_or(Ty::Error)),
+            );
+            if declared != builtin.signature() && !has_error(&declared) {
+                self.push(range, DiagnosticKind::BuiltinSignature { name, expected: builtin.signature() });
+            }
+        }
     }
 
     /// Warn about a struct or enum that has no values, at its name. An enum

@@ -14,6 +14,10 @@
 //!   method that only has a signature in a class is an error.
 //! - Macros, `async`, `await` and `yield` aren't supported.
 //!
+//! Builtins like `print` are Rust code here. What they do to the world goes
+//! through a [`Host`]: by default [`NoEffects`], which refuses, so that code
+//! evaluated while compiling can't print. Consts never have effects.
+//!
 //! Every evaluation can be bounded with [`Limits`], so that code from an
 //! editor can't loop forever or overflow the stack.
 //!
@@ -21,10 +25,12 @@
 
 mod error;
 mod eval;
+mod host;
 mod value;
 
 pub use error::{ErrorKind, EvalError};
 pub use eval::{Evaluator, Limits};
+pub use host::{Host, NoEffects, Recorder, Stdout};
 pub use value::{Closure, Ctor, Value};
 
 #[cfg(test)]

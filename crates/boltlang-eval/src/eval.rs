@@ -16,8 +16,11 @@ use boltlang_hir_def::{
     signatures::{FieldList, enum_signature, struct_signature},
 };
 
+use boltlang_hir_ty::builtin::{Builtin, builtin};
+
 use crate::{
     error::{ErrorKind, EvalError},
+    host::{Host, NoEffects},
     value::{Closure, Ctor, Locals, Slot, Value},
 };
 
@@ -88,6 +91,9 @@ pub struct Evaluator<'db> {
     depth: usize,
     /// `None` while the const is being evaluated, to find cycles.
     consts: HashMap<ConstId<'db>, Option<Value<'db>>>,
+    host: Box<dyn Host>,
+    /// How many consts are being evaluated, which can't have effects.
+    in_consts: usize,
     resolutions: HashMap<(DefWithBodyId<'db>, ExprId), Option<ValueResolution<'db>>>,
 }
 
@@ -104,7 +110,15 @@ impl<'db> Evaluator<'db> {
             depth: 0,
             consts: HashMap::new(),
             resolutions: HashMap::new(),
+            host: Box::new(NoEffects),
+            in_consts: 0,
         }
+    }
+
+    /// Use `host` for effects, like printing, instead of refusing them.
+    pub fn with_host(mut self, host: impl Host + 'static) -> Self {
+        self.host = Box::new(host);
+        self
     }
 
     /// Give back all the fuel of the [`Limits`].
@@ -189,8 +203,10 @@ impl<'db> Evaluator<'db> {
         let body = body(db, def);
         self.consts.insert(id, None);
         self.enter()?;
+        self.in_consts += 1;
         let mut frame = Frame { def, body, locals: Locals::new() };
         let result = self.eval_body(&mut frame, body.body_expr);
+        self.in_consts -= 1;
         self.depth -= 1;
         match result {
             Ok(value) => {
@@ -216,6 +232,9 @@ impl<'db> Evaluator<'db> {
 
     fn call_function_inner(&mut self, function: FunctionId<'db>, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
         let db = self.db;
+        if let Some(builtin) = builtin(db, function) {
+            return self.call_builtin(builtin, args);
+        }
         let item = function.item(db);
         if !item.has_body {
             if let ItemContainerId::ExternBlock(_) = function.container(db) {
@@ -244,6 +263,22 @@ impl<'db> Evaluator<'db> {
         })();
         self.depth -= 1;
         result
+    }
+
+    fn call_builtin(&mut self, builtin: Builtin, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
+        if builtin.is_effect() && self.in_consts > 0 {
+            return fail(ErrorKind::Effect(builtin.name()));
+        }
+        let [Value::Str(text)] = &args[..] else {
+            return mismatch(format!("`{}` takes a string", builtin.name()));
+        };
+        match builtin {
+            Builtin::Print => {
+                self.host.print(text)?;
+                Ok(Value::unit())
+            }
+            Builtin::Panic => fail(ErrorKind::Panic(text.to_string())),
+        }
     }
 
     fn apply(&mut self, callee: Value<'db>, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {

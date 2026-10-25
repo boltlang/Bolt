@@ -2,15 +2,26 @@
 //! agree on what a program gives.
 
 use boltlang_base_db::{File, TestDb};
-use boltlang_eval::{Evaluator, Value};
-use wasmi::{Caller, Engine, Linker, Module, Store, Val};
+use boltlang_eval::{Evaluator, Recorder, Value};
+use wasmi::{Caller, Engine, Extern, Linker, Module, Store, Val};
 
 use crate::{link, reachable_instances};
 
-/// What the host saw: the values passed to the imports `log` and `log64`.
+/// What the host saw: the values passed to the imports `log` and `log64`,
+/// and what was printed.
 #[derive(Default)]
 struct Host {
     logged: Vec<i64>,
+    printed: String,
+}
+
+/// The string at `address` in the memory of the module.
+fn read_str(caller: &Caller<'_, Host>, address: i32) -> String {
+    let memory = caller.get_export("memory").and_then(Extern::into_memory).expect("the module exports its memory");
+    let data = memory.data(caller);
+    let start = address as usize;
+    let len = u32::from_le_bytes(data[start..start + 4].try_into().unwrap()) as usize;
+    String::from_utf8(data[start + 4..start + 4 + len].to_vec()).unwrap()
 }
 
 fn compile(db: &TestDb, file: File) -> Vec<u8> {
@@ -31,6 +42,19 @@ fn instantiate(bytes: &[u8]) -> (Store<Host>, wasmi::Instance) {
         .unwrap();
     linker
         .func_wrap("env", "log64", |mut caller: Caller<'_, Host>, x: i64| caller.data_mut().logged.push(x))
+        .unwrap();
+    linker
+        .func_wrap("bolt", "print", |mut caller: Caller<'_, Host>, text: i32| {
+            let text = read_str(&caller, text);
+            let printed = &mut caller.data_mut().printed;
+            printed.push_str(&text);
+            printed.push('\n');
+        })
+        .unwrap();
+    linker
+        .func_wrap("bolt", "panic", |caller: Caller<'_, Host>, message: i32| -> Result<(), wasmi::Error> {
+            Err(wasmi::Error::new(format!("panicked: {}", read_str(&caller, message))))
+        })
         .unwrap();
     let instance = linker.instantiate_and_start(&mut store, &module).unwrap();
     (store, instance)
@@ -216,4 +240,62 @@ fn editing_a_function_recompiles_only_that_function() {
     });
     let compiled: Vec<_> = executed.iter().filter(|q| q.starts_with("compile_instance")).collect();
     assert_eq!(compiled.len(), 1, "{executed:#?}");
+}
+
+/// A prelude that declares the builtins, as `std`'s does.
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: str);\n  pub fn panic(message: str) -> !;\n}\n";
+
+fn db_with_builtins(code: &str) -> (TestDb, File) {
+    let mut db = TestDb::new();
+    db.file("/.bolt/packages/std/__prelude__/lib.bolt", BUILTINS);
+    db.set_prelude(Some("std"), true);
+    let file = db.file("/main.bolt", code);
+    (db, file)
+}
+
+/// The evaluator and the compiled code print the same.
+#[track_caller]
+fn prints_the_same(code: &str, expected: &str) {
+    let (db, file) = db_with_builtins(code);
+    let recorder = Recorder::default();
+    Evaluator::new(&db).with_host(recorder.clone()).eval_file(file).unwrap();
+    assert_eq!(recorder.output(), expected, "the evaluator");
+    let (mut store, instance) = instantiate(&compile(&db, file));
+    call(&mut store, &instance, "main", &[]);
+    assert_eq!(store.data().printed, expected, "the compiled code");
+}
+
+#[test]
+fn print() {
+    prints_the_same("print(\"Hello, world!\");", "Hello, world!\n");
+    prints_the_same(
+        "fn greet(name: str) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\ngreet(\"Wasm\");",
+        "hello\nBolt\nhello\nWasm\n",
+    );
+    // Strings are values like others, in variables, consts and results.
+    prints_the_same(
+        "const GREETING: str = \"hi\";\nfn pick(b: bool) -> str = if b { GREETING } else { \"bye\" };\nlet s = pick(false);\nprint(pick(true));\nprint(s);",
+        "hi\nbye\n",
+    );
+    prints_the_same("print(\"héllo, wörld ✓\");", "héllo, wörld ✓\n");
+}
+
+#[test]
+fn strings_are_stored_once() {
+    let (db, file) = db_with_builtins("print(\"twice\");\nprint(\"twice\");\nprint(\"other\");");
+    let bytes = compile(&db, file);
+    let count = |needle: &[u8]| bytes.windows(needle.len()).filter(|w| *w == needle).count();
+    assert_eq!(count(b"twice"), 1);
+    assert_eq!(count(b"other"), 1);
+}
+
+#[test]
+fn panic_traps_with_its_message() {
+    let (db, file) =
+        db_with_builtins("fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);");
+    let (mut store, instance) = instantiate(&compile(&db, file));
+    let func = instance.get_func(&store, "main").unwrap();
+    let mut results = [Val::I32(0)];
+    let error = func.call(&mut store, &[], &mut results).unwrap_err();
+    assert!(error.to_string().contains("panicked: negative"), "{error}");
 }

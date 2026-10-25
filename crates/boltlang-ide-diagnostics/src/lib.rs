@@ -16,7 +16,7 @@ use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
-use boltlang_hir_ty::{NumberKind, Ty, TyNames, lower::ClassConstraint};
+use boltlang_hir_ty::{NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
 use boltlang_syntax::rowan::{TextRange, TextSize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -69,6 +69,8 @@ impl DiagnosticCode {
     pub const NOT_IN_CLASS: Self = Self("E0214");
     pub const MISSING_ITEMS: Self = Self("E0215");
     pub const KIND_MISMATCH: Self = Self("E0216");
+    pub const UNKNOWN_BUILTIN: Self = Self("E0217");
+    pub const BUILTIN_SIGNATURE: Self = Self("E0218");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -166,7 +168,8 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         DiagnosticKind::InfiniteType { ty }
         | DiagnosticKind::NotAFunction { ty }
         | DiagnosticKind::NoSuchField { ty: Some(ty), .. }
-        | DiagnosticKind::NoValues { field_ty: ty, .. } => vec![ty],
+        | DiagnosticKind::NoValues { field_ty: ty, .. }
+        | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::NoInstance { constraint } | DiagnosticKind::AmbiguousConstraint { constraint } => {
             constraint.args.iter().collect()
         }
@@ -269,6 +272,14 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                  which has none",
                 field_ty.display_with(db, names)
             ),
+        ),
+        K::UnknownBuiltin { name } => {
+            let names: Vec<_> = Builtin::ALL.iter().map(|b| format!("`{}`", b.name())).collect();
+            (C::UNKNOWN_BUILTIN, format!("there is no builtin `{name}`; the builtins are {}", names.join(", ")))
+        }
+        K::BuiltinSignature { name, expected } => (
+            C::BUILTIN_SIGNATURE,
+            format!("the builtin `{name}` must have the type `{}`", expected.display_with(db, names)),
         ),
         K::KindMismatch { expected, found } => (
             C::KIND_MISMATCH,

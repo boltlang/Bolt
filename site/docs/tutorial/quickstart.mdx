@@ -23,12 +23,27 @@ This installs the `bolt` command. Check that it works:
 bolt --version
 ```
 
+## The standard library
+
+Bolt has a small standard library, `std`, which gives every file some names
+without importing them, like `print`, `Option`, `Some` and `None`. This set
+of names is called the *prelude*.
+
+For now, a project needs its own copy of `std` in a `.bolt/packages`
+directory. From the root of your project, link the one in the Bolt
+repository:
+
+```bash
+mkdir -p .bolt/packages
+ln -s /path/to/Bolt/packages/std .bolt/packages/std
+```
+
 ## Your first program
 
 Create a file called `hello.bolt`:
 
 ```bolt title="hello.bolt"
-"Hello, world!";
+print("Hello, world!");
 ```
 
 and run it:
@@ -38,24 +53,15 @@ bolt run hello.bolt
 ```
 
 ```text
-"Hello, world!"
+Hello, world!
 ```
 
 A Bolt file is a list of statements, which run from top to bottom. Every
 statement at the top level of a file ends with a `;`.
 
-`bolt run` prints the value of the last statement, which here is the string
-itself. That's why the output has quotes: it shows the value the way you'd
-write it in Bolt.
-
-:::note[No printing yet]
-
-The standard library declares a `print` function, but the interpreter can't
-call it yet. Until it can, `bolt run` printing the last value is how a
-program shows its result. The examples in this tutorial end with the value
-they want to show.
-
-:::
+`bolt run` also prints the value of the last statement, if it has one. So a
+file that ends with `1 + 2;` prints `3`. The examples in this tutorial use
+that to show their result.
 
 ## Checking for errors
 
@@ -85,24 +91,6 @@ let x: bool = 1;
 ```
 
 Bolt points at the mistake, and at the code that made it a mistake.
-
-## The standard library
-
-Bolt has a small standard library, `std`, which gives every file some names
-without importing them, like `Option`, `Some` and `None`. This set of names is
-called the *prelude*.
-
-For now, a project needs its own copy of `std` in a `.bolt/packages`
-directory. From the root of your project, link the one in the Bolt
-repository:
-
-```bash
-mkdir -p .bolt/packages
-ln -s /path/to/Bolt/packages/std .bolt/packages/std
-```
-
-Without it, everything in this tutorial still works except the examples that
-use `Option` and `List`.
 
 ## Editor support
 

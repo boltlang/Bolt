@@ -11,7 +11,7 @@ use std::{
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
 use boltlang_codegen::link;
-use boltlang_eval::{EvalError, Evaluator, Limits};
+use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
 use boltlang_ide_diagnostics::{Diagnostic, DiagnosticCode, Severity, diagnostics, syntax_diagnostics};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
 use clap::Parser;
@@ -157,7 +157,8 @@ impl Exec for RunCommand {
         if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
             return Ok(false);
         }
-        let mut evaluator = Evaluator::with_limits(&db, Limits { fuel: self.fuel, ..Limits::default() });
+        let limits = Limits { fuel: self.fuel, ..Limits::default() };
+        let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
         match evaluator.eval_file(file) {
             Ok(value) => {
                 if !value.is_unit() {

@@ -5,6 +5,7 @@
 //! the function does.
 
 use boltlang_hir_def::ids::FunctionId;
+use boltlang_hir_ty::builtin::Builtin;
 
 use crate::Instance;
 
@@ -36,8 +37,11 @@ impl From<Option<ValTy>> for BlockTy {
 pub enum Callee<'db> {
     /// A Bolt function, with its type arguments.
     Instance(Instance<'db>),
-    /// A function of an `extern` block, which the host provides.
+    /// A function of an `extern` block, which the host provides in the
+    /// module `env`.
     Import(FunctionId<'db>),
+    /// A builtin, which the host provides in the module `bolt`.
+    Builtin(Builtin),
 }
 
 /// A Wasm instruction. Floats are kept as bits, so that code can be
@@ -48,6 +52,9 @@ pub enum Inst<'db> {
     I64Const(i64),
     F32Const(u32),
     F64Const(u64),
+    /// The address of a string literal, which linking decides: a `str` is
+    /// the address of its length, as a `u32`, followed by its UTF-8 bytes.
+    Str(Box<str>),
     LocalGet(u32),
     LocalSet(u32),
     LocalTee(u32),

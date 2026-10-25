@@ -1,10 +1,19 @@
 //! A code generator from Bolt to WebAssembly.
 //!
 //! It's minimal for now: it compiles the scalar types (integers, floats,
-//! `bool`, `char` and `()`), functions, `let`, `if`, loops, `break`,
-//! `continue`, `return`, and `match` on scalars. Calls to functions of
-//! `extern` blocks are imports from the host, in the module `env`. Anything
+//! `bool`, `char` and `()`), string literals, functions, `let`, `if`,
+//! loops, `break`, `continue`, `return`, and `match` on scalars. Anything
 //! else is an [`ErrorKind::Unsupported`] error.
+//!
+//! The module exports its memory as `memory`. A `str` is the address in it
+//! of the string's length, as a little-endian `u32`, followed by its UTF-8
+//! bytes; literals are data segments. The host provides:
+//!
+//! - the builtins, like `print`, in the module `bolt`, which take strings
+//!   as addresses: see [`Builtin`](boltlang_hir_ty::builtin::Builtin);
+//! - the functions of `extern` blocks, in the module `env`.
+//!
+//! `runtime/bolt.mjs` provides the module `bolt` for browsers and Node.
 //!
 //! The code generator works on the bodies of hir-def and the types that
 //! hir-ty infers for them, through Salsa queries:

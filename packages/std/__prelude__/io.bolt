@@ -1,2 +1,10 @@
+// Functions that the compiler provides.
+extern "bolt" {
 
-pub fn print(text: str);
+  /// Write `text` and a newline.
+  pub fn print(text: str);
+
+  /// Stop the program with an error, with `message`.
+  pub fn panic(message: str) -> !;
+
+}
