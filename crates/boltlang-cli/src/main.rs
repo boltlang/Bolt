@@ -10,7 +10,8 @@ use std::{
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
-use boltlang_ide_diagnostics::{Diagnostic, Severity, diagnostics, syntax_diagnostics};
+use boltlang_eval::{EvalError, Evaluator, Limits};
+use boltlang_ide_diagnostics::{Diagnostic, DiagnosticCode, Severity, diagnostics, syntax_diagnostics};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
 use clap::Parser;
 
@@ -57,6 +58,7 @@ impl PreludeArgs {
 enum Command {
     DumpAst(DumpAstCommand),
     Check(CheckCommand),
+    Run(RunCommand),
 }
 
 impl Exec for Command {
@@ -64,6 +66,7 @@ impl Exec for Command {
         match self {
             Self::Check(cmd) => cmd.exec(),
             Self::DumpAst(cmd) => cmd.exec(),
+            Self::Run(cmd) => cmd.exec(),
         }
     }
 }
@@ -124,6 +127,63 @@ impl Exec for CheckCommand {
             ok &= found.iter().all(|d| d.severity != Severity::Error);
         }
         Ok(ok)
+    }
+}
+
+/// Check a file, then run the statements at its top level. The value of
+/// the last one is printed, if it's an expression with a value.
+#[derive(clap::Parser)]
+struct RunCommand {
+    file: PathBuf,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Run the file even when the checker finds errors.
+    #[arg(long)]
+    no_check: bool,
+    /// Stop after evaluating this many expressions.
+    #[arg(long, value_name = "STEPS")]
+    fuel: Option<u64>,
+}
+
+impl Exec for RunCommand {
+    fn exec(&self) -> anyhow::Result<bool> {
+        let db = self.prelude.database()?;
+        let Some(file) = open(&db, &self.file) else { return Ok(false) };
+        let found = diagnostics(&db, file);
+        report(&db, &found)?;
+        if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
+            return Ok(false);
+        }
+        let mut evaluator = Evaluator::with_limits(&db, Limits { fuel: self.fuel, ..Limits::default() });
+        match evaluator.eval_file(file) {
+            Ok(value) => {
+                if !value.is_unit() {
+                    println!("{}", value.display(&db));
+                }
+                Ok(true)
+            }
+            Err(error) => {
+                report(&db, &[runtime_diagnostic(&db, file, &error)])?;
+                Ok(false)
+            }
+        }
+    }
+}
+
+/// An error of the evaluator as a diagnostic, at the expression where it
+/// happened, or at the start of `file` when that isn't known.
+fn runtime_diagnostic<'db>(db: &'db dyn Db, file: File, error: &EvalError<'db>) -> Diagnostic {
+    let (file, range) = match error.source_range(db) {
+        Some((file, range)) => (file, TextRange::new(range.start.into(), range.end.into())),
+        None => (file, TextRange::default()),
+    };
+    Diagnostic {
+        code: DiagnosticCode::RUNTIME_ERROR,
+        severity: Severity::Error,
+        file,
+        range,
+        message: error.to_string(),
+        labels: Vec::new(),
     }
 }
 

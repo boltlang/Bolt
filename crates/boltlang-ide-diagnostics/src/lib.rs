@@ -69,6 +69,9 @@ impl DiagnosticCode {
     pub const NOT_IN_CLASS: Self = Self("E0214");
     pub const MISSING_ITEMS: Self = Self("E0215");
 
+    /// An error while running a program, like a division by zero.
+    pub const RUNTIME_ERROR: Self = Self("E0301");
+
     pub const UNSUPPORTED: Self = Self("W0001");
 
     pub fn as_str(self) -> &'static str {

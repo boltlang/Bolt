@@ -1,0 +1,10 @@
+[package]
+name = "boltlang-eval"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+boltlang-base-db.workspace = true
+boltlang-hir-def.workspace = true
+stacker = "0.1.25"
