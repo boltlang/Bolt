@@ -168,7 +168,8 @@ other errors.
 ## Code generation
 
 `boltlang-codegen` compiles scalar types, functions, control flow and
-`match` on scalars to WebAssembly; `bolt build` runs it.
+`match` on scalars to WebAssembly; `bolt build` runs it, and
+`bolt run --wasm` runs the module with wasmi.
 
 - [ ] Structs, tuples, enums, and `match` on them, with WasmGC.
       *(codegen)* (#6)
@@ -187,10 +188,12 @@ other errors.
       of `i32` and then wraps around, where Rust gives 255.
       *(codegen, eval)* (#6)
 - [ ] `i128` and `u128`, which Wasm doesn't have. *(codegen)* (#6)
-- [ ] Run the compiled code: `bolt run --wasm`, and in the playground.
-      *(cli, playground)* (#6)
-- [ ] Debug information: the names of locals, and source maps.
-      *(codegen)* (#6)
+- [ ] Run the compiled code in the playground. *(playground)* (#6)
+- [ ] Debug information: the names of locals, and source maps. Without
+      them, `bolt run --wasm` reports a panic or trap at the start of the
+      file, not where it happened. *(codegen, cli)* (#6)
+- [ ] `bolt run --wasm` can't run programs with `extern` functions, which
+      only a host that embeds the module provides. *(cli)* (#6)
 
 ## Diagnostics
 
