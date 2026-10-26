@@ -721,3 +721,18 @@ extern "bolt" {
 "#,
     );
 }
+
+#[test]
+fn assign_to_immutable() {
+    check(
+        r#"
+fn f() {
+  let x = 1;
+  x = 2;
+//^ error: cannot assign to `x`, which isn't `mut`
+  let mut y = 1;
+  y = 2;
+}
+"#,
+    );
+}

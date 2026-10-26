@@ -80,6 +80,9 @@ pub enum InferenceDiagnostic<'db> {
     MissingFields { expr: ExprId, names: Vec<Name> },
     /// A label or loop to break out of that doesn't exist.
     BreakOutside { expr: ExprId },
+    /// An assignment to a variable, or to a field or element of one, that
+    /// isn't `mut`. `expr` is the left side.
+    AssignToImmutable { expr: ExprId, binding: BindingId },
     /// Something the checker doesn't support yet, like `?` or ranges.
     Unsupported { expr: ExprId },
     /// Functions without complete signatures in files that import each
@@ -151,6 +154,10 @@ pub(crate) struct InferenceContext<'a, 'db> {
     /// Why values returned must have `return_ty`.
     return_reason: Reason<'db>,
     breakables: Vec<Breakable<'db>>,
+    /// Variables declared by a `let` without a value, like `let x;`, that
+    /// haven't been assigned yet. The first `x = ...` initializes them, so
+    /// it's allowed even if they aren't `mut`.
+    uninitialized: Vec<BindingId>,
 }
 
 impl<'a, 'db> InferenceContext<'a, 'db> {
@@ -166,6 +173,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return_ty: Ty::Error,
             return_reason: Reason::None,
             breakables: Vec::new(),
+            uninitialized: Vec::new(),
         }
     }
 
@@ -478,6 +486,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     };
                     if let Some(init) = initializer {
                         self.check_expr_because(*init, &ty, type_ref.map_or(Reason::None, Reason::Annotation));
+                    } else if let Pat::Bind { id, subpat: None } = &self.body[*pat] {
+                        self.uninitialized.push(*id);
                     }
                     if let Some(else_branch) = else_branch {
                         self.check_expr(*else_branch, &Ty::Never);
@@ -791,9 +801,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_expr(rhs, &Ty::bool());
                 Ty::bool()
             }
-            BinaryOp::Assign(_) => {
+            BinaryOp::Assign(op) => {
                 let ty = self.infer_expr(lhs);
                 self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
+                self.check_mutable(lhs, op.is_none());
                 Ty::unit()
             }
             // `a <$> b` calls the function `(<$>)`.
@@ -815,6 +826,31 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let lhs_ty = self.infer_expr(lhs);
                 self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)))
             }
+        }
+    }
+
+    /// Report an assignment to `place` if the variable it changes isn't
+    /// `mut`. Like in Rust, `p.x = 1` and `xs[0] = 1` change the variable
+    /// too, since values are copied rather than shared. `plain` is whether
+    /// it's `=` rather than a compound assignment like `+=`.
+    fn check_mutable(&mut self, place: ExprId, plain: bool) {
+        let body = self.body;
+        let mut root = place;
+        while let Expr::Field { expr, .. } | Expr::Index { base: expr, .. } = &body[root] {
+            root = *expr;
+        }
+        let Expr::Path(path) = &body[root] else { return };
+        let resolver = self.resolver(root);
+        if let Some(ValueResolution::Value(ValueNs::Local(binding))) =
+            resolver.resolve_path_in_value_ns(self.db, path)
+            && !body[binding].mutable
+        {
+            // The first `x = ...` after `let x;` initializes `x`.
+            if plain && root == place && let Some(i) = self.uninitialized.iter().position(|&b| b == binding) {
+                self.uninitialized.swap_remove(i);
+                return;
+            }
+            self.result.diagnostics.push(InferenceDiagnostic::AssignToImmutable { expr: place, binding });
         }
     }
 
