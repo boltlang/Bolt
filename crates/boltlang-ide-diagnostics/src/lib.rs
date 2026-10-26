@@ -72,6 +72,7 @@ impl DiagnosticCode {
     pub const UNKNOWN_BUILTIN: Self = Self("E0217");
     pub const BUILTIN_SIGNATURE: Self = Self("E0218");
     pub const ASSIGN_TO_IMMUTABLE: Self = Self("E0219");
+    pub const NOT_A_PLACE: Self = Self("E0220");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -306,6 +307,9 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::BreakOutside => (C::BREAK_OUTSIDE, "there is no loop or label to break out of".into()),
         K::AssignToImmutable { name } => {
             (C::ASSIGN_TO_IMMUTABLE, format!("cannot assign to `{name}`, which isn't `mut`"))
+        }
+        K::NotAPlace => {
+            (C::NOT_A_PLACE, "cannot assign to this; only a variable, a field or an element can be assigned to".into())
         }
         K::NotInClass { kind, name, class } => {
             let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());

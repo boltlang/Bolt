@@ -136,6 +136,36 @@ error at `xs[0]`: not mut
 error at `z`: not mut
 
 ================================================================================
+Assigning to something that isn't a place is an error
+================================================================================
+struct Point { x: i32 }
+const C: i32 = 1;
+fn g() -> i32 = 1;
+fn h() -> Point = Point { x: 1 };
+fn f() {
+  1 = 2;
+  g() = 3;
+  g = g;
+  C += 1;
+  h().x = 2;
+  (1, 2).0 = 3;
+  nope = 1;
+}
+
+--------------------------------------------------------------------------------
+g: fn() -> i32
+h: fn() -> Point
+f: fn() -> ()
+--------------------------------------------------------------------------------
+error at `1`: not a place
+error at `g()`: not a place
+error at `g`: not a place
+error at `C`: not a place
+error at `h().x`: not a place
+error at `(1, 2).0`: not a place
+error at `nope`: unresolved
+
+================================================================================
 Custom operators call their definition
 ================================================================================
 fn[T] (a: T) <> (b: T) -> (T, T) = (a, b);

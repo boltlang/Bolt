@@ -114,6 +114,9 @@ pub enum DiagnosticKind<'db> {
     /// An assignment to the variable `name`, or to a field or element of
     /// it, while it isn't `mut`.
     AssignToImmutable { name: Name },
+    /// An assignment whose left side isn't a variable, a field or an
+    /// element.
+    NotAPlace,
     /// An item in an impl that its class doesn't declare.
     NotInClass { kind: ClassItemKind, name: Name, class: ClassId<'db> },
     /// Items of the class without a default that the impl doesn't define,
@@ -637,6 +640,7 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::AssignToImmutable { expr, binding } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::AssignToImmutable { name: body[binding].name.clone() })
                 }
+                InferenceDiagnostic::NotAPlace { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace),
                 InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),
                 // Reported at the function, which is the fallback.
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),

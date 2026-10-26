@@ -359,6 +359,9 @@ fn check(input: &str) -> Result<(String, String), String> {
                     InferenceDiagnostic::AssignToImmutable { expr, .. } => {
                         format!("error at `{}`: not mut", at(ExprOrPat::Expr(*expr)))
                     }
+                    InferenceDiagnostic::NotAPlace { expr } => {
+                        format!("error at `{}`: not a place", at(ExprOrPat::Expr(*expr)))
+                    }
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }
