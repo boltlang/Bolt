@@ -27,9 +27,9 @@ A list that contains itself has an infinite type
 fn f(x) = [x, [x]];
 
 --------------------------------------------------------------------------------
-f: forall a. fn(a) -> [a]
+f: forall a. fn(a) -> imm [a]
 --------------------------------------------------------------------------------
-error at `[x]`: infinite type [a]
+error at `[x]`: infinite type imm [a]
 
 ================================================================================
 Polymorphic recursion with a signature
@@ -42,7 +42,7 @@ f: forall T. fn(T) -> i32
 ================================================================================
 Polymorphic recursion through a nested type
 ================================================================================
-enum Nested[T] { Flat(T), Nest(Nested[[T]]) }
+enum Nested[T] { Flat(T), Nest(Nested[imm [T]]) }
 fn depth[T](n: Nested[T]) -> i32 = match n {
   Nested.Flat(_) => 0,
   Nested.Nest(m) => 1 + depth(m),
@@ -55,7 +55,7 @@ depth: forall T. fn(Nested[T]) -> i32
 Polymorphic recursion without a signature
 :error
 ================================================================================
-enum Nested[T] { Flat(T), Nest(Nested[[T]]) }
+enum Nested[T] { Flat(T), Nest(Nested[imm [T]]) }
 fn depth(n) = match n {
   Nested.Flat(_) => 0,
   Nested.Nest(m) => 1 + depth(m),
@@ -64,7 +64,7 @@ fn depth(n) = match n {
 --------------------------------------------------------------------------------
 depth: forall a. fn(Nested[a]) -> i32
 --------------------------------------------------------------------------------
-error at `m`: infinite type [a]
+error at `m`: infinite type imm [a]
 
 ================================================================================
 Mutual recursion where one function has a signature

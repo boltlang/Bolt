@@ -15,7 +15,8 @@ use crate::{
     arena::{Arena, ArenaMap, Idx},
     hir::{
         ArithOp, BinaryOp, Binding, BlockKind, CmpOp, Expr, ExprId, GenericArg, Label, LambdaKind, Literal, LogicOp,
-        MatchArm, Pat, PatId, Path, PathSegment, PrefixOp, RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
+        MatchArm, Mutability, Pat, PatId, Path, PathSegment, PrefixOp, RecordField, RecordFieldPat, Statement, TypeRef,
+        TypeRefId,
     },
 };
 
@@ -74,7 +75,14 @@ impl ExprCollector {
             ast::Type::Array(ty) => {
                 let element = self.lower_opt_type(ty.element());
                 let len = ty.length().map(|e| self.lower_expr(e));
-                TypeRef::Array { element, len }
+                let mutability = if ty.mut_token().is_some() {
+                    Some(Mutability::Mut)
+                } else if ty.imm_token().is_some() {
+                    Some(Mutability::Imm)
+                } else {
+                    None
+                };
+                TypeRef::Array { element, len, mutability }
             }
             ast::Type::Never(_) => TypeRef::Never,
             ast::Type::Bounded(_) => {
@@ -265,12 +273,13 @@ impl ExprCollector {
             }
             E::Tuple(e) => Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() },
             E::Array(e) => {
+                let is_mut = e.mut_token().is_some();
                 if e.is_repeat() {
                     let value = self.lower_opt_expr(e.elements().next());
                     let count = self.lower_opt_expr(e.repeat_count());
-                    Expr::ArrayRepeat { value, count }
+                    Expr::ArrayRepeat { value, count, is_mut }
                 } else {
-                    Expr::Array { exprs: e.elements().map(|x| self.lower_expr(x)).collect() }
+                    Expr::Array { exprs: e.elements().map(|x| self.lower_expr(x)).collect(), is_mut }
                 }
             }
             E::Record(e) => {

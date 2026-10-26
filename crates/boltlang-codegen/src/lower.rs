@@ -1050,7 +1050,10 @@ fn bind_type_args<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, fo
         }
         (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b => all(found, xs, ys),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => all(found, xs, ys),
-        (Ty::Array(x), Ty::Array(y)) => bind_type_args(x, y, scheme, found),
+        (Ty::Array(m, x), Ty::Array(n, y)) => {
+            bind_type_args(m, n, scheme, found);
+            bind_type_args(x, y, scheme, found);
+        }
         (Ty::Fn(xs, x), Ty::Fn(ys, y)) => {
             all(found, xs, ys);
             bind_type_args(x, y, scheme, found);

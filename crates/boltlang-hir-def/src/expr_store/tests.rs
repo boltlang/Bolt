@@ -127,8 +127,12 @@ impl Printer<'_> {
                 format!("({} {} {})", if *inclusive { "..=" } else { ".." }, self.opt_expr(*lhs), self.opt_expr(*rhs))
             }
             Expr::Tuple { exprs } => format!("(tuple {})", self.list(exprs, Self::expr)),
-            Expr::Array { exprs } => format!("[{}]", self.list(exprs, Self::expr)),
-            Expr::ArrayRepeat { value, count } => format!("[{}; {}]", self.expr(*value), self.expr(*count)),
+            Expr::Array { exprs, is_mut } => {
+                format!("{}[{}]", if *is_mut { "mut " } else { "" }, self.list(exprs, Self::expr))
+            }
+            Expr::ArrayRepeat { value, count, is_mut } => {
+                format!("{}[{}; {}]", if *is_mut { "mut " } else { "" }, self.expr(*value), self.expr(*count))
+            }
             Expr::Record { path, fields, spread } => format!(
                 "(record {} {}{})",
                 path.as_ref().map_or("_".into(), |p| self.path(p)),
@@ -235,10 +239,17 @@ impl Printer<'_> {
             TypeRef::Error => "<error>".into(),
             TypeRef::Path(p) => self.path(p),
             TypeRef::Tuple(ts) => format!("({})", self.list(ts, Self::ty)),
-            TypeRef::Array { element, len } => match len {
-                Some(len) => format!("[{}; {}]", self.ty(*element), self.expr(*len)),
-                None => format!("[{}]", self.ty(*element)),
-            },
+            TypeRef::Array { element, len, mutability } => {
+                let prefix = match mutability {
+                    Some(Mutability::Mut) => "mut ",
+                    Some(Mutability::Imm) => "imm ",
+                    None => "",
+                };
+                match len {
+                    Some(len) => format!("{prefix}[{}; {}]", self.ty(*element), self.expr(*len)),
+                    None => format!("{prefix}[{}]", self.ty(*element)),
+                }
+            }
             TypeRef::Never => "!".into(),
             TypeRef::Fn { params, is_variadic, ret_type, abi, .. } => format!(
                 "{}fn({}{}){}",
@@ -391,6 +402,20 @@ fn types() {
          (let h : A + B + C)\n\
          (let i : H[K = L, 3, {n}, T: Ord])\n\
          (let j : M[N].O)"
+    );
+}
+
+#[test]
+fn mutability_of_arrays() {
+    assert_eq!(
+        render(
+            "let a: mut [i32] = mut [1, 2];\nlet b: imm [mut [u8; 4]] = [mut [0; 4]];\nlet c: [Bool] = mut [];\n\
+             let d: fn(mut [i32]) -> imm [i32];"
+        ),
+        "(let a : mut [i32] = mut [1 2])\n\
+         (let b : imm [mut [u8; 4]] = [mut [0; 4]])\n\
+         (let c : [Bool] = mut [])\n\
+         (let d : fn(mut [i32]) -> imm [i32])"
     );
 }
 

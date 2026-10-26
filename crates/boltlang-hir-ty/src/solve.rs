@@ -295,8 +295,8 @@ impl<'db> Solver<'db> {
         self.solve();
     }
 
-    /// Finish solving: default numeric variables, solve what can be, and
-    /// report the rest as ambiguous.
+    /// Finish solving: default numeric variables and mutabilities, solve
+    /// what can be, and report the rest as ambiguous.
     pub fn finish(&mut self) {
         self.solve_with_defaults();
         for (constraint, origin) in self.take_pending() {
@@ -307,6 +307,9 @@ impl<'db> Solver<'db> {
         }
         let errors = std::mem::take(&mut self.errors);
         self.errors = errors.into_iter().map(|e| resolve_error(&self.unifier, e)).collect();
+        // After resolving the errors, so that an array whose mutability
+        // nothing decided is shown as `[T]` in them, not as `imm [T]`.
+        self.unifier.default_mutability_vars();
         // After resolving the errors, which would otherwise be left out for
         // having the error type in them.
         self.unifier.error_unknowns();
@@ -438,7 +441,7 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
         (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b && xs.len() == ys.len() => match_all(xs, ys, subst),
         (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
-        (Ty::Array(x), Ty::Array(y)) => match_ty(x, y, subst),
+        (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
         (Ty::Fn(xs, x), Ty::Fn(ys, y)) => match_all(xs, ys, subst).and(|| match_ty(x, y, subst)),
         (x, y) if x == y => Match::Yes,
         _ => Match::No,

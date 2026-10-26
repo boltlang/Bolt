@@ -7,7 +7,7 @@
 
 use boltlang_hir_def::builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType};
 
-use crate::ty::{NumberKind, Ty, TyVar, VarKind};
+use crate::ty::{Mutability, NumberKind, Ty, TyVar, VarKind};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UnifyError<'db> {
@@ -100,6 +100,16 @@ impl<'db> Unifier<'db> {
             };
             var.state = VarState::Bound(Ty::Builtin(ty));
             var.defaulted = Some(kind);
+        }
+    }
+
+    /// Make the mutabilities that nothing decided `Imm`: an array that
+    /// nothing changes can't be changed.
+    pub fn default_mutability_vars(&mut self) {
+        for var in &mut self.vars {
+            if matches!(var.state, VarState::Unbound(VarKind::Mutability)) {
+                var.state = VarState::Bound(Ty::Mutability(Mutability::Imm));
+            }
         }
     }
 
@@ -205,7 +215,11 @@ impl<'db> Unifier<'db> {
                 }
             }
             (Ty::Tuple(xs), Ty::Tuple(ys)) if xs.len() == ys.len() => self.unify_all(xs, ys),
-            (Ty::Array(x), Ty::Array(y)) => self.unify(x, y),
+            (Ty::Array(m, x), Ty::Array(n, y)) => {
+                self.unify(x, y)?;
+                self.unify(m, n)
+            }
+            (Ty::Mutability(x), Ty::Mutability(y)) if x == y => Ok(()),
             (Ty::Fn(xs, x), Ty::Fn(ys, y)) if xs.len() == ys.len() => {
                 self.unify_all(xs, ys)?;
                 self.unify(x, y)
@@ -227,6 +241,9 @@ impl<'db> Unifier<'db> {
             VarKind::General => true,
             VarKind::Int => matches!(ty, Ty::Builtin(BuiltinType::Int(_) | BuiltinType::Uint(_))),
             VarKind::Float => matches!(ty, Ty::Builtin(BuiltinType::Float(_))),
+            // A parameter or bound variable in a mutability's place is a
+            // mutability too: the checker only puts them there.
+            VarKind::Mutability => matches!(ty, Ty::Mutability(_) | Ty::Param(_) | Ty::Bound(_)),
         };
         if !fits {
             return Err(UnifyError::Mismatch(Ty::Var(var), ty.clone()));
@@ -275,7 +292,7 @@ mod tests {
     fn occurs_check() {
         let mut u = Unifier::new();
         let a = u.new_var(VarKind::General);
-        let err = u.unify(&a, &Ty::Array(Box::new(a.clone())));
+        let err = u.unify(&a, &Ty::array(Ty::Mutability(Mutability::Imm), a.clone()));
         assert!(matches!(err, Err(UnifyError::Occurs(..))));
     }
 

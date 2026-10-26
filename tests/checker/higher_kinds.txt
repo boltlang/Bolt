@@ -171,7 +171,7 @@ both: forall F. fn(F[i32], F[Bool]) -> (F[i32], F[Bool])
 both(Option.Some(1), Option.None): (Option[i32], Option[Bool])
 both(Option.Some(1), [True]): (Option[i32], Option[Bool])
 --------------------------------------------------------------------------------
-error at `[True]`: expected Option[Bool], found [Bool]
+error at `[True]`: expected Option[Bool], found imm [Bool]
 
 ================================================================================
 A type constructor inferred from a partially applied enum
@@ -201,7 +201,7 @@ inner([1]): a[b]
 inner((1, True)): a[b]
 inner(|x: i32| x): a[b]
 --------------------------------------------------------------------------------
-error at `[1]`: expected a[b], found [{integer}]
+error at `[1]`: expected a[b], found imm [{integer}]
 error at `(1, True)`: expected a[b], found ({integer}, Bool)
 error at `|x: i32| x`: expected a[b], found fn(i32) -> i32
 

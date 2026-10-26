@@ -45,7 +45,8 @@ fn function_signatures() {
 
     let f = function(&db, file, 5);
     let sig = fn_sig(&db, f);
-    assert_eq!(show_sig(&db, sig), "fn(T, Pair[T, Bool], List[u8]) -> (T, [Pair[i32, i32]], !)");
+    // An array without `mut` or `imm` in the return type is `imm`.
+    assert_eq!(show_sig(&db, sig), "fn(T, Pair[T, Bool], List[u8]) -> (T, imm [Pair[i32, i32]], !)");
     assert!(sig.is_complete());
     assert!(sig.diagnostics.is_empty(), "{:?}", sig.diagnostics);
     let preds = &generic_predicates(&db, GenericDefId::Function(f)).predicates;

@@ -571,7 +571,24 @@ let f = |x| x;
     //^ error: expected `fn(a) -> a`, found an integer
 class Show[T] { fn show(x: T) -> String; }
 let s = show([]);
-      //^^^^ error: cannot tell which instance of `Show[[a]]` to use; add a type annotation
+      //^^^^ error: cannot tell which instance of `Show[imm [a]]` to use; add a type annotation
+"#,
+    );
+}
+
+#[test]
+fn changing_arrays_that_are_not_mut() {
+    check(
+        r#"
+let xs = [1, 2];
+  xs[0] = 3;
+//^^ error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed
+fn first(ys: [i32]) { ys[0] = 1; }
+                    //^^ error: cannot change an element of `ys`, which is `[i32]`; only a `mut` array can be changed
+let zs = mut [1, 2];
+zs[0] = 3;
+struct Inventory { items: [i32], tags: mut [String], names: imm [String] }
+                        //^^^^^ error: say whether the array in `[i32]` can be changed: write `mut [..]` or `imm [..]`
 "#,
     );
 }
@@ -681,7 +698,7 @@ enum Never {}
 struct Wrap { n: Never }
      //^^^^ warning: `Wrap` has no values, since its field `n` needs a value of `Never`, which has none
 enum List[T] { Cons(T, List[T]), Nil }
-struct Tree { children: [Tree] }
+struct Tree { children: imm [Tree] }
 "#,
     );
 }

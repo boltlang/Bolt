@@ -132,7 +132,7 @@ f: fn(Point, [i32]) -> ()
 error at `x`: not mut
 error at `x`: not mut
 error at `p.x`: not mut
-error at `xs[0]`: not mut
+error at `xs`: can't change [i32]
 error at `z`: not mut
 
 ================================================================================

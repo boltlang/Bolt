@@ -111,9 +111,14 @@ pub enum DiagnosticKind<'db> {
     CyclicInference,
     /// A `break` or `continue` without a loop or label to leave.
     BreakOutside,
-    /// An assignment to the variable `name`, or to a field or element of
-    /// it, while it isn't `mut`.
+    /// An assignment to the variable `name`, or to a field of it, while it
+    /// isn't `mut`.
     AssignToImmutable { name: Name },
+    /// An assignment to an element of an array of type `ty`, which isn't a
+    /// `mut` array.
+    ImmutableArray { ty: Ty<'db> },
+    /// An array type in a field without `mut` or `imm`.
+    MutabilityNeeded,
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -538,6 +543,7 @@ impl<'db> Collector<'db> {
                 }
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
+                LowerDiagnostic::MutabilityNeeded(id) => (*id, DiagnosticKind::MutabilityNeeded),
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {
@@ -620,6 +626,9 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::BreakOutside { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::BreakOutside),
                 InferenceDiagnostic::AssignToImmutable { expr, binding } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::AssignToImmutable { name: body[binding].name.clone() })
+                }
+                InferenceDiagnostic::ImmutableArray { expr, ty } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::ImmutableArray { ty })
                 }
                 InferenceDiagnostic::NotAPlace { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace),
                 InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),

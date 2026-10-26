@@ -63,14 +63,19 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
     hir::{Expr, Statement, TypeRefId},
-    ids::{FunctionId, ImplId, ItemContainerId},
+    ids::{ConstId, EnumId, FunctionId, ImplId, ItemContainerId, StructId},
     item_tree::{AssocItem, FunctionName, ModItem, item_tree},
     resolver::GenericDefId,
-    signatures::{function_signature_with_source_map, impl_signature_with_source_map},
+    signatures::{
+        const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
+        impl_signature_with_source_map, struct_signature_with_source_map,
+    },
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
-    lower::{LowerDiagnostic, fn_sig, generic_predicates, impl_header},
+    lower::{
+        LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, struct_field_types,
+    },
     solve::{ExprOrPat, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -140,9 +145,28 @@ fn check(input: &str) -> Result<(String, String), String> {
         // The functions of the file and of its impls, those of an impl named
         // after its instance, like `Show[i32].show`.
         let mut functions = Vec::new();
+        let mut consts = Vec::new();
         for item in &tree.top_level {
             match *item {
                 ModItem::Function(idx) => functions.push((String::new(), FunctionId::new(&db, ItemContainerId::File(file), idx))),
+                // The problems with the types of fields and consts.
+                ModItem::Struct(idx) => {
+                    let id = StructId::new(&db, file, idx);
+                    let (_, map) = struct_signature_with_source_map(&db, id);
+                    for lower in &struct_field_types(&db, id).diagnostics {
+                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    }
+                }
+                ModItem::Enum(idx) => {
+                    let id = EnumId::new(&db, file, idx);
+                    let (_, map) = enum_signature_with_source_map(&db, id);
+                    for variant in enum_field_types(&db, id) {
+                        for lower in &variant.diagnostics {
+                            diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                        }
+                    }
+                }
+                ModItem::Const(idx) => consts.push(ConstId::new(&db, ItemContainerId::File(file), idx)),
                 ModItem::Impl(idx) => {
                     let id = ImplId::new(&db, file, idx);
                     let header = impl_header(&db, id);
@@ -186,6 +210,13 @@ fn check(input: &str) -> Result<(String, String), String> {
             if f.item(&db).has_body {
                 defs.push(DefWithBodyId::new(&db, DefWithBody::Function(f)));
             }
+        }
+        for c in consts {
+            let (_, map) = const_signature_with_source_map(&db, c);
+            for lower in &const_ty(&db, c).diagnostics {
+                diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+            }
+            defs.push(DefWithBodyId::new(&db, DefWithBody::Const(c)));
         }
         let top = DefWithBodyId::new(&db, DefWithBody::File(file));
         defs.push(top);
@@ -263,6 +294,9 @@ fn check(input: &str) -> Result<(String, String), String> {
                     InferenceDiagnostic::AssignToImmutable { expr, .. } => {
                         format!("error at `{}`: not mut", at(ExprOrPat::Expr(*expr)))
                     }
+                    InferenceDiagnostic::ImmutableArray { expr, ty } => {
+                        format!("error at `{}`: can't change {}", at(ExprOrPat::Expr(*expr)), show(&[ty])[0])
+                    }
                     InferenceDiagnostic::NotAPlace { expr } => {
                         format!("error at `{}`: not a place", at(ExprOrPat::Expr(*expr)))
                     }
@@ -293,6 +327,7 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         }
         LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at(*id)),
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
+        LowerDiagnostic::MutabilityNeeded(id) => format!("error at `{}`: mut or imm needed", at(*id)),
     }
 }
 
