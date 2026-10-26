@@ -21,7 +21,8 @@ use crate::{
     scheme::{
         Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, generic_param_ids, is_declared,
     },
-    solve::{ExprOrPat, FieldConstraint, Solver, TypeError, Origin, resolve_error, vars_in},
+    solve::{ExprOrPat, FieldConstraint, Origin, Solver, TypeError, resolve_error, vars_in},
+    unify::Unifier,
     ty::{Ty, TyVar, VarKind},
 };
 
@@ -159,89 +160,159 @@ fn infer_group<'db>(
     solver.solve_with_defaults();
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
-    let mut errors: Vec<_> =
-        std::mem::take(&mut solver.errors).into_iter().map(|e| resolve_error(&solver.unifier, e)).collect();
+    let errors = std::mem::take(&mut solver.errors).into_iter().map(|e| resolve_error(&solver.unifier, e)).collect();
     solver.unifier.error_unknowns();
     let pending = solver.take_pending();
     let pending_fields = solver.take_pending_fields();
+    let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields };
+    for (&f, (def, result)) in group.iter().zip(results) {
+        let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
+        let (scheme, result) = solved.generalize(db, f, def, &ty, result);
+        env.done.insert(f, scheme.clone());
+        out.schemes.push((f, scheme));
+        out.results.push((f, result));
+    }
+}
 
-    for (&f, (def, mut result)) in group.iter().zip(results) {
-        let ty = solver.unifier.resolve(&env.mono.remove(&f).unwrap());
-        let mut vars = Vec::new();
-        vars_in(&ty, &mut vars);
-        let generalize = |t: &Ty<'db>, vars: &[TyVar]| {
-            t.fold(&mut |t| match t {
-                Ty::Var(v) => vars.iter().position(|w| w == v).map(|i| Ty::Bound(i as u32)),
-                _ => None,
-            })
+/// What's left once a group of functions is solved, for generalizing them.
+struct Solved<'a, 'db> {
+    unifier: &'a Unifier<'db>,
+    /// The errors of all the functions, resolved.
+    errors: Vec<TypeError<'db>>,
+    /// The class and field constraints that couldn't be solved, resolved.
+    pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
+    pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
+}
+
+impl<'db> Solved<'_, 'db> {
+    /// Make the type `ty` of the function `f` a scheme, generic over the
+    /// variables still in it, and put the types of its body, `result`, in
+    /// terms of the scheme's variables.
+    fn generalize(
+        &self,
+        db: &'db dyn Db,
+        f: FunctionId<'db>,
+        def: DefWithBodyId<'db>,
+        ty: &Ty<'db>,
+        mut result: InferenceResult<'db>,
+    ) -> (Scheme<'db>, InferenceResult<'db>) {
+        let mut vars = Generalization::default();
+        vars.add(ty);
+        let (fields, untyped) = self.function_fields(def, &mut vars);
+        let (predicates, ambiguous) = self.function_predicates(db, f, def, &vars);
+        let scheme = Scheme {
+            params: generic_param_ids(db, generic_chain(db, f)),
+            bound: vars.vars.len() as u32,
+            predicates,
+            fields,
+            ty: vars.generalize(ty),
         };
-        // The fields of values of the function's type become part of it,
-        // and the types of those fields with them. That can make more
-        // constraints about the function's type, like `b.y: c` after
-        // `a.x: b` for `p.x.y`, so this goes on until nothing changes.
-        let mut own_fields: Vec<_> = pending_fields.iter().filter(|(_, origin)| origin.body == def).collect();
-        let mut fields: Vec<FieldConstraint<'db>> = Vec::new();
+        result.map_types(&mut |t| vars.generalize(&self.unifier.resolve(t)));
+        let errors = self.errors.iter().filter(|e| e.origin().body == def).cloned();
+        let untyped = untyped.into_iter().map(|origin| TypeError::TypeNeeded { origin });
+        result.diagnostics.extend(errors.chain(untyped).chain(ambiguous).map(|error| {
+            let mut diagnostic = InferenceDiagnostic::Type(error);
+            diagnostic.map_types(&mut |t| vars.generalize(t));
+            diagnostic
+        }));
+        (scheme, result)
+    }
+
+    /// The field constraints that become part of the type of the function
+    /// with the body `def`: those about values of its types, and then those
+    /// about the types of their fields, like `b.y: c` after `a.x: b` for
+    /// `p.x.y`. The types of the fields join `vars`. Also gives the origins
+    /// of the function's other field constraints, whose types are never
+    /// found.
+    fn function_fields(
+        &self,
+        def: DefWithBodyId<'db>,
+        vars: &mut Generalization,
+    ) -> (Box<[FieldConstraint<'db>]>, Vec<Origin<'db>>) {
+        let mut rest: Vec<_> = self.pending_fields.iter().filter(|(_, origin)| origin.body == def).collect();
         let mut accepted = Vec::new();
+        // Accepting a constraint can make others about the function's types,
+        // so this goes on until nothing changes.
         loop {
             let before = accepted.len();
-            own_fields.retain(|(constraint, _)| {
-                let mut ty_vars = Vec::new();
-                vars_in(&constraint.ty, &mut ty_vars);
-                if ty_vars.is_empty() || !ty_vars.iter().all(|v| vars.contains(v)) {
+            rest.retain(|(constraint, _)| {
+                if !vars.covers([&constraint.ty]) {
                     return true;
                 }
-                vars_in(&constraint.field, &mut vars);
-                accepted.push(constraint.clone());
+                vars.add(&constraint.field);
+                accepted.push(constraint);
                 false
             });
             if accepted.len() == before {
                 break;
             }
         }
-        for constraint in &accepted {
-            let field = constraint.map(|t| generalize(t, &vars));
+        let mut fields = Vec::new();
+        for constraint in accepted {
+            let field = constraint.map(|t| vars.generalize(t));
             if !fields.contains(&field) {
                 fields.push(field);
             }
         }
-        for (_, origin) in own_fields {
-            errors.push(TypeError::TypeNeeded { origin: *origin });
-        }
-        // The constraints on this function's type become part of it.
-        let mut predicates: Vec<ClassConstraint<'db>> = assumptions(db, f);
-        for (constraint, origin) in &pending {
-            if origin.body != def {
-                continue;
-            }
-            let mut constraint_vars = Vec::new();
-            constraint.args.iter().for_each(|t| vars_in(t, &mut constraint_vars));
-            if constraint_vars.iter().all(|v| vars.contains(v)) && !constraint_vars.is_empty() {
-                let pred = constraint.map(|t| generalize(t, &vars));
-                if !predicates.contains(&pred) {
-                    predicates.push(pred);
+        (fields.into(), rest.into_iter().map(|(_, origin)| *origin).collect())
+    }
+
+    /// The class constraints that become part of the type of `f`: those it
+    /// assumes, and those of its body `def` about the types in `vars`. Also
+    /// gives the errors for those of its body about other types, which can't
+    /// be decided.
+    fn function_predicates(
+        &self,
+        db: &'db dyn Db,
+        f: FunctionId<'db>,
+        def: DefWithBodyId<'db>,
+        vars: &Generalization,
+    ) -> (Box<[ClassConstraint<'db>]>, Vec<TypeError<'db>>) {
+        let mut predicates = assumptions(db, f);
+        let mut ambiguous = Vec::new();
+        for (constraint, origin) in self.pending.iter().filter(|(_, origin)| origin.body == def) {
+            if vars.covers(constraint.args.iter()) {
+                let predicate = constraint.map(|t| vars.generalize(t));
+                if !predicates.contains(&predicate) {
+                    predicates.push(predicate);
                 }
             } else {
-                errors.push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
+                ambiguous.push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
             }
         }
-        let scheme = Scheme {
-            params: generic_param_ids(db, generic_chain(db, f)),
-            bound: vars.len() as u32,
-            predicates: predicates.into(),
-            fields: fields.into(),
-            ty: generalize(&ty, &vars),
-        };
+        (predicates.into(), ambiguous)
+    }
+}
 
-        result.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
-        let own_errors = errors.iter().filter(|e| e.origin().body == def).cloned();
-        result.diagnostics.extend(own_errors.map(|e| {
-            let mut d = InferenceDiagnostic::Type(e);
-            d.map_types(&mut |t| generalize(t, &vars));
-            d
-        }));
-        env.done.insert(f, scheme.clone());
-        out.schemes.push((f, scheme));
-        out.results.push((f, result));
+/// The inference variables a scheme is generic over: the `i`th becomes
+/// `Ty::Bound(i)`.
+#[derive(Default)]
+struct Generalization {
+    vars: Vec<TyVar>,
+}
+
+impl Generalization {
+    /// Make the scheme generic over the variables in `ty` too.
+    fn add(&mut self, ty: &Ty<'_>) {
+        vars_in(ty, &mut self.vars);
+    }
+
+    /// Whether `tys` have variables, and the scheme is generic over all of
+    /// them.
+    fn covers<'a, 'db: 'a>(&self, tys: impl IntoIterator<Item = &'a Ty<'db>>) -> bool {
+        let mut found = Vec::new();
+        for ty in tys {
+            vars_in(ty, &mut found);
+        }
+        !found.is_empty() && found.iter().all(|v| self.vars.contains(v))
+    }
+
+    /// `ty` with the scheme's variables as [`Ty::Bound`].
+    fn generalize<'db>(&self, ty: &Ty<'db>) -> Ty<'db> {
+        ty.fold(&mut |t| match t {
+            Ty::Var(v) => self.vars.iter().position(|w| w == v).map(|i| Ty::Bound(i as u32)),
+            _ => None,
+        })
     }
 }
 
