@@ -1,18 +1,17 @@
 ---
 sidebar_position: 6.5
-title: Mutability (design)
-description: A design for arrays that are shared, with whether they can be changed inferred as part of their type. Nothing of it is implemented.
+title: Mutability
+description: Arrays that are shared, with whether they can be changed inferred as part of their type.
 ---
 
-# Mutability (design)
+# Mutability
 
-:::warning[Not implemented]
-This page is a design. **Nothing on it is implemented**: arrays are values
-today, copied when they're assigned, and changing an element needs a
-`let mut` variable. It's discussed in
-[#195](https://github.com/boltlang/Bolt/issues/195) and
-[#196](https://github.com/boltlang/Bolt/issues/196). The syntax below may
-change.
+:::warning[Only in the type checker]
+The type checker implements this page. The evaluator still copies arrays
+when they're assigned, so programs don't share them yet, and the code
+generator doesn't compile arrays at all: see
+[#195](https://github.com/boltlang/Bolt/issues/195). The design was decided
+in [#196](https://github.com/boltlang/Bolt/issues/196).
 :::
 
 Arrays are going to be *shared*: `let ys = xs` makes `ys` another name for
@@ -159,8 +158,10 @@ fresh mutability, so each call can pass a different kind of array.
 
 ## Annotations
 
-**`[T]` in an annotation means either mutability**: a fresh mutability,
-like `_` stands for a fresh type. `mut [T]` and `imm [T]` ask for one.
+**`[T]` in the parameters of a function and in a body means either
+mutability**: a fresh mutability, like `_` stands for a fresh type.
+`mut [T]` and `imm [T]` ask for one. Where a type stands for one value, like
+a return type, `[T]` is `imm`: see [return types](#return-types).
 
 In a function's signature, a fresh mutability is a hidden parameter of the
 function, like the generalized $\mu$ of `first` above:
@@ -194,21 +195,56 @@ let a: [i32] = mut [1];     // `mut [i32]`
 let b: [i32] = [1];         // `imm [i32]`
 ```
 
+### Return types
+
+A hidden parameter is chosen by the caller, so it can't be the mutability
+of an array that the function makes: `fn make() -> [i32] = [1, 2]` would be
+wrong for a caller that asks for `mut`. So **in a return type, `[T]` is
+`imm`**, and `mut [T]` asks for an array that can be changed:
+
+```bolt
+fn primes() -> [i32] = [2, 3, 5];            // `fn() -> imm [i32]`
+fn buffer() -> mut [u8] = mut [0; 1024];
+fn wrong() -> [i32] = mut [];                // error: expected `imm [a]`, found `mut [a]`
+```
+
+The same goes for the other places where a type has one value: the type of
+a const, a field (see [below](#fields-of-structs)), and an array in a
+`where` predicate, like the `[T]` of `where Show[[T]]`, which can't be one
+of the hidden parameters of the signature.
+
+An impl gets hidden parameters like a function: `impl Size[[i32]]` is for
+arrays of either mutability, and `impl Size[mut [i32]]` only for those
+that can be changed.
+
+### Type aliases
+
+A type alias doesn't decide what `[T]` means in it: the type it's used in
+does. With `type Ints = [i32]`, `fn sum(xs: Ints)` takes either kind of
+array, and `fn make() -> Ints` gives an `imm` one.
+
 ### Fields of structs
 
-A field `items: [Item]` would give the struct a hidden mutability parameter,
-`Inventory[m]`, so that one `Inventory` can hold a `mut` array and another
-an `imm` one. That spreads to every type that contains an array, much like
-lifetimes do in Rust. Until it's needed, fields have to say which one they
-hold:
+**A field `[T]` is `imm`**, like a return type, and `mut [T]` asks for an
+array that can be changed:
 
 ```bolt
 struct Inventory {
   name: String,
-  items: mut [Item],
-  tags: imm [String],
+  items: mut [Item],   // can be changed
+  tags: [String],      // can't
 }
 ```
+
+The alternative, "either" as in parameters, would give the struct a hidden
+mutability parameter, `Inventory[m]`, so that one `Inventory` can hold a
+`mut` array and another an `imm` one. That spreads to every type that
+contains an array, much like lifetimes do in Rust.
+
+A field that was meant to be `mut` but isn't written so is found where the
+struct is built or its array is changed, rather than where it's declared:
+"expected `imm [Item]`, found `mut [Item]`", or "cannot change an element of
+`inv.items`, which is `imm [Item]`".
 
 A struct shares its arrays with everything else that refers to them, as
 `let` does.
@@ -229,55 +265,60 @@ array: that it's *unique*. Jane Street's OCaml has a mode for that
 
 ## Errors
 
-A mutability error can show up far from its cause: the `push` fails because
-of where the array was made, maybe much earlier.
-
-```bolt
-let xs = [1, 2];
-...
-xs.push(3);
-```
+Changing an element of an array that isn't `mut` is its own error (E0221):
 
 ```text
-[E0201] Error: `xs` can't be changed
-   │
- 1 │ let xs = [1, 2];
-   │          ───┬──
-   │             ╰──── it's made here without `mut`
-   │
- 3 │ xs.push(3);
-   │ ──────┬───
-   │       ╰───── `push` changes its argument
+[E0221] Error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed
 ```
 
-The error should point at where the `Imm` came from: the literal, the
-annotation, or the function whose result it is. That's what the labels for
-the causes of constraints in
+Passing or assigning an array of the wrong mutability is an ordinary type
+mismatch, which shows both:
+
+```text
+[E0201] Error: expected `mut [i32]`, found `imm [i32]`
+```
+
+These can show up far from their cause: the `push` fails because of where
+the array was made, maybe much earlier. The error should point at where the
+`Imm` came from: the literal, the annotation, or the function whose result
+it is. That's what the labels for the causes of constraints in
 [#127](https://github.com/boltlang/Bolt/issues/127) are for, and why
-unification has to remember the origin of `Imm` and `Mut`.
+unification will have to remember the origin of `Imm` and `Mut`.
 
-## Changes to the checker
+## Implementation
 
-- **Kinds:** a kind $\mathsf{Mutability}$ with the types `Mut` and `Imm`
-  (`kind.rs`, `ty.rs`).
-- **Lowering:** `mut [T]` lowers to `Array[Mut, T]` and `imm [T]` to
-  `Array[Imm, T]` (`lower.rs`). `[T]` lowers to a new mutability parameter
-  of the function in a signature, and to an inference variable in a body.
-  The parser accepts `mut` and `imm` before an array type, and `mut` before
-  an array expression.
-- **Inference:** an array literal's mutability is `Imm`, or `Mut` with `mut`
-  (`infer.rs`). `xs[i] = e` unifies the mutability of `xs` with `Mut`.
-  Indexing and `for` work for any mutability.
-- **The check of #166** stops requiring `let mut` for `xs[i] = e`.
-  Assigning to the variable itself still needs it. For fields of structs,
-  see the open questions.
-- **Defaulting:** a mutability variable that's left over when a body is
-  checked, and isn't generalized, defaults to `Imm`, like integer literals
-  default to `i32`.
-- **Showing types:** `mut [T]`, `imm [T]`, and `[T]` for a generalized or
-  unknown mutability.
-- **Tests:** cases in `tests/checker` for each example on this page, and in
-  `tests/run` for sharing.
+- **Types** (`ty.rs`): `Ty::Array` holds the mutability and the element
+  type. The mutability is `Ty::Mutability(Mut | Imm)`, an inference
+  variable of kind `VarKind::Mutability`, a type parameter, or the error
+  type. Mutabilities only ever appear in arrays, and can't be written as
+  type arguments, so kind inference doesn't need to know about them.
+- **Lowering** (`lower.rs`): `mut [T]` and `imm [T]` lower to their
+  mutability, and `[T]` to `Ty::Unwritten`, which each item then replaces
+  with `Ty::fill_unwritten`:
+  - in a function's parameters and an impl's instance, hidden parameters,
+    numbered after the declared type parameters (`FnSig::hidden`,
+    `ImplHeader::hidden`), so that instantiating a scheme and matching an
+    impl handle them like any other parameter;
+  - in a body, inference variables (`infer.rs`);
+  - in a return type, a const, a `where` predicate and a field, `Imm`;
+  - in a type alias, nothing: the type it's used in decides.
+- **Unification** (`unify.rs`): mutabilities are equal or they aren't;
+  there's no subtyping.
+- **Inference** (`infer.rs`): an array literal is `Imm`, or `Mut` with
+  `mut`. Indexing, `for` and slice patterns take either.
+  - `check_place` looks for the innermost index of the place that's
+    assigned to. With one, the array must be `mut`, and a mutability that
+    isn't known yet becomes `Mut`. Without one, the variable must be `mut`,
+    as before.
+- **Defaulting** (`solve.rs`): a mutability left over when a body is
+  checked, and not generalized, becomes `Imm`. That happens after the
+  errors are resolved, so that an undecided mutability is shown as `[T]` in
+  them.
+- **Showing types**: `mut [T]`, `imm [T]`, and `[T]` for a generalized or
+  unknown mutability. Schemes leave hidden parameters and generalized
+  mutabilities out of their `forall`.
+- **Tests**: `tests/checker/array_mutability.txt` has a case for each rule
+  on this page.
 
 `Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197))
 takes the mutability as a parameter too, `Vec[m, T]`, and `[T]` is
@@ -287,13 +328,18 @@ way, with `mut String` taking the place of a separate `StringBuilder`.
 
 ## Open questions
 
+- **Returning what a function is given.** `fn same(xs: [i32]) -> [i32] = xs`
+  is an error: `xs` has the hidden parameter's mutability, and the result
+  is `imm`. Saying that the result has the mutability of the parameter
+  needs a name for it, like a mutability variable. An inferred function,
+  `fn same(xs) = xs`, already works.
 - **Showing a mutability that's shared.** In
   `fn pick(c, a, b) = if c { a } else { b }`, `a` and `b` have the same
   mutability, and showing both as `[T]` hides that. Types could name the
   mutability only when it's shared, like `fn(Bool, [a]^m, [a]^m) -> [a]^m`,
   with some syntax to write it too.
-- **Fields of structs** with a hidden mutability parameter, instead of
-  having to write `mut` or `imm` (see [above](#fields-of-structs)).
+- **Fields of structs** with a hidden mutability parameter, so that a
+  struct can hold arrays of either kind (see [above](#fields-of-structs)).
 - **Structs that are shared.** If structs stay values, `p.x = 1` keeps
   needing `let mut p`. If they're shared like arrays, they need a
   mutability too.
