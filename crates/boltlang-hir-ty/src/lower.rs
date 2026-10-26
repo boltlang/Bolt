@@ -7,7 +7,7 @@ use boltlang_hir_def::{
     expr_store::ExpressionStore,
     hir::{GenericArg, Path, TypeRef, TypeRefId},
     ids::{ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, StructId, TypeAliasId},
-    resolver::{GenericDefId, Resolver, TypeNs},
+    resolver::{GenericDefId, Resolver, TypeNs, TypeResolution},
     signatures::{
         self, FieldList, GenericParams, class_signature, const_signature, enum_signature, function_signature,
         impl_signature, struct_signature, type_alias_signature,
@@ -100,7 +100,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     fn kind_mismatch(&mut self, id: TypeRefId, expected: &Kind, found: &Kind) {
         if *expected == Kind::Type && found.is_first_order() {
             let given = match &self.store[id] {
-                TypeRef::Path(path) => path.segments.last().and_then(|s| s.generic_args.as_deref()).map_or(0, <[_]>::len),
+                TypeRef::Path(path) => path.last_generic_args().len(),
                 _ => 0,
             };
             let missing = found.split().0.len();
@@ -137,7 +137,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     fn lower_path_ty(&mut self, id: TypeRefId, path: &Path) -> (Ty<'db>, Option<Kind>) {
-        let args = path.segments.last().and_then(|s| s.generic_args.as_deref());
+        let args = path.last_generic_args();
         let Some(resolution) = self.resolver.resolve_path_in_type_ns(self.db, path) else {
             self.diagnostics.push(LowerDiagnostic::UnresolvedType(id));
             // Still report the problems in the arguments, like the `T` of
@@ -186,30 +186,9 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     /// A type alias, which must be given all its arguments.
-    fn lower_alias(
-        &mut self,
-        id: TypeRefId,
-        alias: TypeAliasId<'db>,
-        args: Option<&[GenericArg]>,
-    ) -> (Ty<'db>, Option<Kind>) {
+    fn lower_alias(&mut self, id: TypeRefId, alias: TypeAliasId<'db>, args: &[GenericArg]) -> (Ty<'db>, Option<Kind>) {
         let kinds = generic_param_kinds(self.db, GenericDefId::TypeAlias(alias));
-        let type_args = self.type_args(id, args);
-        if type_args.len() != kinds.len() {
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
-                type_ref: id,
-                expected: kinds.len(),
-                found: type_args.len(),
-            });
-        }
-        let args: Vec<Ty<'db>> = (0..kinds.len())
-            .map(|i| match type_args.get(i) {
-                Some(&arg) => self.lower_ty_expect(arg, &kinds[i]),
-                None => Ty::Error,
-            })
-            .collect();
-        for &extra in type_args.iter().skip(kinds.len()) {
-            self.lower_ty_kinded(extra);
-        }
+        let args = self.lower_exact_args(id, args, &kinds);
         let ty = match &type_alias_ty(self.db, alias).ty {
             Some(ty) if *ty == Ty::Error && type_alias_ty(self.db, alias).recursive => {
                 self.diagnostics.push(LowerDiagnostic::RecursiveAlias(id));
@@ -225,10 +204,36 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         (ty, Some(Kind::Type))
     }
 
+    /// The arguments of something that must be given exactly one for each
+    /// of `kinds`: those missing are errors, and extra ones are only lowered
+    /// for their diagnostics.
+    fn lower_exact_args(&mut self, id: TypeRefId, args: &[GenericArg], kinds: &[Kind]) -> Vec<Ty<'db>> {
+        let type_args = self.type_args(id, args);
+        if type_args.len() != kinds.len() {
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: kinds.len(),
+                found: type_args.len(),
+            });
+        }
+        let tys = kinds
+            .iter()
+            .enumerate()
+            .map(|(i, kind)| match type_args.get(i) {
+                Some(&arg) => self.lower_ty_expect(arg, kind),
+                None => Ty::Error,
+            })
+            .collect();
+        for &extra in type_args.iter().skip(kinds.len()) {
+            self.lower_ty_kinded(extra);
+        }
+        tys
+    }
+
     /// The type arguments of a path. Other arguments aren't supported yet.
-    fn type_args(&mut self, id: TypeRefId, args: Option<&[GenericArg]>) -> Vec<TypeRefId> {
+    fn type_args(&mut self, id: TypeRefId, args: &[GenericArg]) -> Vec<TypeRefId> {
         let mut out = Vec::new();
-        for arg in args.unwrap_or_default() {
+        for arg in args {
             match arg {
                 GenericArg::Type { type_ref, .. } => out.push(*type_ref),
                 GenericArg::AssocType { .. } | GenericArg::Const(_) => {
@@ -241,7 +246,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
 
     /// The type arguments of a path, however many there are, for their
     /// diagnostics.
-    fn lower_args_unchecked(&mut self, id: TypeRefId, args: Option<&[GenericArg]>) {
+    fn lower_args_unchecked(&mut self, id: TypeRefId, args: &[GenericArg]) {
         for arg in self.type_args(id, args) {
             self.lower_ty_kinded(arg);
         }
@@ -265,10 +270,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
         };
         let class = match self.resolver.resolve_path_in_type_ns(self.db, path) {
-            Some(r) if r.unresolved.is_none() && matches!(r.ty, TypeNs::Class(_)) => {
-                let TypeNs::Class(class) = r.ty else { unreachable!() };
-                class
-            }
+            Some(TypeResolution { ty: TypeNs::Class(class), unresolved: None }) => class,
             Some(_) => {
                 self.diagnostics.push(LowerDiagnostic::NotAClass(id));
                 return None;
@@ -294,24 +296,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
         }
         let explicit = &kinds[args.len().min(kinds.len())..];
-        let given = path.segments.last().and_then(|s| s.generic_args.as_deref());
-        let type_args = self.type_args(id, given);
-        if type_args.len() != explicit.len() {
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
-                type_ref: id,
-                expected: explicit.len(),
-                found: type_args.len(),
-            });
-        }
-        for (i, kind) in explicit.iter().enumerate() {
-            args.push(match type_args.get(i) {
-                Some(&arg) => self.lower_ty_expect(arg, kind),
-                None => Ty::Error,
-            });
-        }
-        for &extra in type_args.iter().skip(explicit.len()) {
-            self.lower_ty_kinded(extra);
-        }
+        args.extend(self.lower_exact_args(id, path.last_generic_args(), explicit));
         Some(ClassConstraint { class, args: args.into() })
     }
 

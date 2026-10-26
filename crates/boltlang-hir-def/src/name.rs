@@ -9,6 +9,11 @@ impl Name {
         Name(text.into())
     }
 
+    /// The name an identifier stands for: `r#match` is the name `match`.
+    pub fn from_ident(text: &str) -> Self {
+        Name::new(text.strip_prefix("r#").unwrap_or(text))
+    }
+
     pub fn as_str(&self) -> &str {
         &self.0
     }

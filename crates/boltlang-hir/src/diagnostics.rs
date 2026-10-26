@@ -16,7 +16,7 @@ use boltlang_hir_def::{
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
     hir::TypeRefId,
     ids::{ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
-    item_tree::{AssocItem, AstId, FunctionName, ModItem, item_tree},
+    item_tree::{AssocItem, AstId, ModItem, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
@@ -173,22 +173,22 @@ pub enum ClassItemKind {
     Type,
 }
 
-/// An item of a class or impl.
+/// An item of a class, impl or extern block.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ClassItem<'db> {
+enum AssocItemDef<'db> {
     Function(FunctionId<'db>),
     Const(ConstId<'db>),
     TypeAlias(TypeAliasId<'db>),
 }
 
-impl<'db> ClassItem<'db> {
+impl<'db> AssocItemDef<'db> {
     fn all(db: &'db dyn Db, container: ItemContainerId<'db>, items: &[AssocItem]) -> Vec<Self> {
         items
             .iter()
             .filter_map(|item| match *item {
-                AssocItem::Function(idx) => Some(ClassItem::Function(FunctionId::new(db, container, idx))),
-                AssocItem::Const(idx) => Some(ClassItem::Const(ConstId::new(db, container, idx))),
-                AssocItem::TypeAlias(idx) => Some(ClassItem::TypeAlias(TypeAliasId::new(db, container, idx))),
+                AssocItem::Function(idx) => Some(AssocItemDef::Function(FunctionId::new(db, container, idx))),
+                AssocItem::Const(idx) => Some(AssocItemDef::Const(ConstId::new(db, container, idx))),
+                AssocItem::TypeAlias(idx) => Some(AssocItemDef::TypeAlias(TypeAliasId::new(db, container, idx))),
                 AssocItem::MacroCall(_) => None,
             })
             .collect()
@@ -196,25 +196,25 @@ impl<'db> ClassItem<'db> {
 
     fn kind(self) -> ClassItemKind {
         match self {
-            ClassItem::Function(_) => ClassItemKind::Method,
-            ClassItem::Const(_) => ClassItemKind::Const,
-            ClassItem::TypeAlias(_) => ClassItemKind::Type,
+            AssocItemDef::Function(_) => ClassItemKind::Method,
+            AssocItemDef::Const(_) => ClassItemKind::Const,
+            AssocItemDef::TypeAlias(_) => ClassItemKind::Type,
         }
     }
 
     fn name(self, db: &'db dyn Db) -> Option<Name> {
         match self {
-            ClassItem::Function(id) => id.item(db).name.as_ref().map(function_name),
-            ClassItem::Const(id) => id.item(db).name.clone(),
-            ClassItem::TypeAlias(id) => id.item(db).name.clone(),
+            AssocItemDef::Function(id) => id.item(db).name.as_ref().map(|n| n.name().clone()),
+            AssocItemDef::Const(id) => id.item(db).name.clone(),
+            AssocItemDef::TypeAlias(id) => id.item(db).name.clone(),
         }
     }
 
     fn ast_id(self, db: &'db dyn Db) -> AstId {
         match self {
-            ClassItem::Function(id) => id.item(db).ast_id,
-            ClassItem::Const(id) => id.item(db).ast_id,
-            ClassItem::TypeAlias(id) => id.item(db).ast_id,
+            AssocItemDef::Function(id) => id.item(db).ast_id,
+            AssocItemDef::Const(id) => id.item(db).ast_id,
+            AssocItemDef::TypeAlias(id) => id.item(db).ast_id,
         }
     }
 
@@ -222,9 +222,9 @@ impl<'db> ClassItem<'db> {
     /// value, or a type with a definition.
     fn has_default(self, db: &'db dyn Db) -> bool {
         match self {
-            ClassItem::Function(id) => id.item(db).has_body,
-            ClassItem::Const(id) => id.item(db).has_value,
-            ClassItem::TypeAlias(id) => id.item(db).has_value,
+            AssocItemDef::Function(id) => id.item(db).has_body,
+            AssocItemDef::Const(id) => id.item(db).has_value,
+            AssocItemDef::TypeAlias(id) => id.item(db).has_value,
         }
     }
 }
@@ -359,9 +359,9 @@ impl<'db> Collector<'db> {
         let db = self.db;
         let Some(constraint) = impl_header(db, imp).class.as_ref() else { return };
         let class = constraint.class;
-        let declared = ClassItem::all(db, ItemContainerId::Class(class), &class.item(db).items);
+        let declared = AssocItemDef::all(db, ItemContainerId::Class(class), &class.item(db).items);
         let mut defined = Vec::new();
-        for item in ClassItem::all(db, ItemContainerId::Impl(imp), &imp.item(db).items) {
+        for item in AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items) {
             let Some(name) = item.name(db) else { continue };
             let kind = item.kind();
             let declaration = declared.iter().find(|d| d.kind() == kind && d.name(db).as_ref() == Some(&name));
@@ -370,7 +370,7 @@ impl<'db> Collector<'db> {
                     let range = self.item_range(item.ast_id(db));
                     self.push(Some(range), DiagnosticKind::NotInClass { kind, name: name.clone(), class });
                 }
-                (ClassItem::Const(c), Some(&ClassItem::Const(declaration))) => {
+                (AssocItemDef::Const(c), Some(&AssocItemDef::Const(declaration))) => {
                     self.impl_const_ty(c, declaration, constraint);
                 }
                 _ => {}
@@ -453,29 +453,10 @@ impl<'db> Collector<'db> {
     /// builtins, with their types.
     fn builtins(&mut self, block: ExternBlockId<'db>) {
         let db = self.db;
-        let tree = item_tree(db, self.file);
-        for item in &block.item(db).items {
-            let (name, ast_id, function) = match *item {
-                AssocItem::Function(idx) => {
-                    let f = FunctionId::new(db, ItemContainerId::ExternBlock(block), idx);
-                    let name = match &f.item(db).name {
-                        Some(name) => function_name(name),
-                        None => continue,
-                    };
-                    (name, f.item(db).ast_id, Some(f))
-                }
-                AssocItem::Const(idx) => match &tree.consts[idx.index()].name {
-                    Some(name) => (name.clone(), tree.consts[idx.index()].ast_id, None),
-                    None => continue,
-                },
-                AssocItem::TypeAlias(idx) => match &tree.type_aliases[idx.index()].name {
-                    Some(name) => (name.clone(), tree.type_aliases[idx.index()].ast_id, None),
-                    None => continue,
-                },
-                AssocItem::MacroCall(_) => continue,
-            };
-            let range = Some(self.item_range(ast_id));
-            let (Some(f), Some(builtin)) = (function, Builtin::by_name(name.as_str())) else {
+        for item in AssocItemDef::all(db, ItemContainerId::ExternBlock(block), &block.item(db).items) {
+            let Some(name) = item.name(db) else { continue };
+            let range = Some(self.item_range(item.ast_id(db)));
+            let (AssocItemDef::Function(f), Some(builtin)) = (item, Builtin::by_name(name.as_str())) else {
                 self.push(range, DiagnosticKind::UnknownBuiltin { name });
                 continue;
             };
@@ -669,9 +650,7 @@ impl<'db> Collector<'db> {
             Reason::Argument { function, index } => {
                 let (sig, map) = function_signature_with_source_map(db, function);
                 let index = index as usize;
-                let name = function.item(db).name.as_ref().map(|n| match n {
-                    FunctionName::Name(n) | FunctionName::Operator(n) => n.clone(),
-                });
+                let name = function.item(db).name.as_ref().map(|n| n.name().clone());
                 let ptr = match sig.params.get(index)?.type_ref {
                     Some(type_ref) => map.type_syntax(type_ref)?,
                     None => {
@@ -740,10 +719,7 @@ impl<'db> Collector<'db> {
     /// The name of the field `name` of a record: the `z` of `Point { z: 1 }`,
     /// for its value `1`, or of the pattern `Point { z, .. }`.
     fn field_name_range(&self, map: &ExpressionStoreSourceMap, node: ExprOrPat, name: &Name) -> Option<TextRange> {
-        let ptr = match node {
-            ExprOrPat::Expr(e) => map.expr_syntax(e),
-            ExprOrPat::Pat(p) => map.pat_syntax(p),
-        }?;
+        let ptr = node_ptr(map, node)?;
         let node = ptr.to_node(&self.root)?;
         let name_in = |field: &SyntaxNode| {
             field.children().find(|n| matches!(n.kind(), NAME | NAME_REF)).map(|n| n.text_range())
@@ -783,22 +759,19 @@ impl<'db> Collector<'db> {
     }
 }
 
-fn function_name(name: &FunctionName) -> Name {
-    match name {
-        FunctionName::Name(n) | FunctionName::Operator(n) => n.clone(),
-    }
-}
-
 fn ptr_range(ptr: SyntaxPtr) -> TextRange {
     TextRange::new(ptr.start.into(), ptr.end.into())
 }
 
-fn node_range(map: &ExpressionStoreSourceMap, node: ExprOrPat) -> Option<TextRange> {
-    let ptr = match node {
+fn node_ptr(map: &ExpressionStoreSourceMap, node: ExprOrPat) -> Option<SyntaxPtr> {
+    match node {
         ExprOrPat::Expr(e) => map.expr_syntax(e),
         ExprOrPat::Pat(p) => map.pat_syntax(p),
-    };
-    ptr.map(ptr_range)
+    }
+}
+
+fn node_range(map: &ExpressionStoreSourceMap, node: ExprOrPat) -> Option<TextRange> {
+    node_ptr(map, node).map(ptr_range)
 }
 
 fn has_error(ty: &Ty<'_>) -> bool {

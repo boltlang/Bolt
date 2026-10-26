@@ -143,3 +143,14 @@ fn editing_a_body_does_not_rerun_what_depends_on_the_signature() {
     });
     assert!(!executed.iter().any(|q| q.contains("param_count")), "{executed:?}");
 }
+
+#[test]
+fn abis_are_unquoted_like_strings() {
+    let db = TestDb::new();
+    let file = db.file("/main.bolt", "extern \"C\" fn f();\nextern r#\"C\"# fn g();\n");
+    for index in 0..2 {
+        let ModItem::Function(idx) = top(&db, file, index) else { panic!() };
+        let sig = function_signature(&db, FunctionId::new(&db, ItemContainerId::File(file), idx));
+        assert_eq!(sig.abi, Some(Some("C".to_string())), "function {index}");
+    }
+}

@@ -11,7 +11,7 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     body::{Body, DefWithBodyId, body},
-    hir::{BindingId, Expr, ExprId, LabelId, Pat, PatId, Statement},
+    hir::{BinaryOp, BindingId, Expr, ExprId, LabelId, LogicOp, Pat, PatId, Statement},
 };
 
 pub type ScopeId = Idx<ScopeData>;
@@ -112,29 +112,19 @@ impl ExprScopes {
     /// others against it.
     fn add_pat_bindings(&mut self, body: &Body, scope: ScopeId, pat: PatId) {
         match &body[pat] {
-            Pat::Bind { id, subpat } => {
-                self.add_binding(body, scope, *id);
-                if let Some(subpat) = subpat {
-                    self.add_pat_bindings(body, scope, *subpat);
-                }
-            }
-            Pat::Tuple { args, .. } | Pat::TupleStruct { args, .. } | Pat::Slice { args, .. } => {
-                for &arg in args.iter() {
-                    self.add_pat_bindings(body, scope, arg);
-                }
-            }
-            Pat::Record { fields, .. } => {
-                for field in fields.iter() {
-                    self.add_pat_bindings(body, scope, field.pat);
-                }
-            }
+            Pat::Bind { id, .. } => self.add_binding(body, scope, *id),
             Pat::Or(alternatives) => {
                 if let Some(&first) = alternatives.first() {
                     self.add_pat_bindings(body, scope, first);
                 }
+                return;
             }
-            Pat::Missing | Pat::Wild | Pat::Lit { .. } | Pat::Path(_) | Pat::Range { .. } | Pat::ConstBlock(_) => {}
-            Pat::MacroCall { .. } => {}
+            // The ends of a range are literals or paths, not bindings.
+            Pat::Range { .. } => return,
+            _ => {}
+        }
+        for child in body[pat].children() {
+            self.add_pat_bindings(body, scope, child);
         }
     }
 
@@ -146,13 +136,7 @@ impl ExprScopes {
                 Pat::ConstBlock(expr) => {
                     self.walk_expr(body, *expr, scope);
                 }
-                Pat::Bind { subpat, .. } => stack.extend(*subpat),
-                Pat::Tuple { args, .. } | Pat::TupleStruct { args, .. } | Pat::Slice { args, .. } | Pat::Or(args) => {
-                    stack.extend(args.iter().copied())
-                }
-                Pat::Record { fields, .. } => stack.extend(fields.iter().map(|f| f.pat)),
-                Pat::Range { start, end, .. } => stack.extend(start.iter().chain(end.iter()).copied()),
-                _ => {}
+                pat => stack.extend(pat.children()),
             }
         }
     }
@@ -171,7 +155,7 @@ impl ExprScopes {
                 return inner;
             }
             // `a && let x = b && x > 0` chains bindings left to right.
-            Expr::Binary { op: crate::hir::BinaryOp::Logic(crate::hir::LogicOp::And), lhs, rhs } => {
+            Expr::Binary { op: BinaryOp::Logic(LogicOp::And), lhs, rhs } => {
                 let scope = self.walk_expr(body, *lhs, scope);
                 return self.walk_expr(body, *rhs, scope);
             }

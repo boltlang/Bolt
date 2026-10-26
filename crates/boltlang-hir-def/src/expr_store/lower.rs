@@ -7,9 +7,12 @@ use boltlang_syntax::{
     ast::{self, Node},
 };
 
+use std::collections::HashMap;
+
 use super::{ExpressionStore, ExpressionStoreSourceMap, SyntaxPtr};
 use crate::{
     Name,
+    arena::{Arena, ArenaMap, Idx},
     hir::{
         ArithOp, BinaryOp, Binding, BlockKind, CmpOp, Expr, ExprId, GenericArg, Label, LambdaKind, Literal, LogicOp,
         MatchArm, Pat, PatId, Path, PathSegment, PrefixOp, RecordField, RecordFieldPat, Statement, TypeRef, TypeRefId,
@@ -33,33 +36,18 @@ impl ExprCollector {
     }
 
     fn alloc_expr(&mut self, expr: Expr, node: Option<&SyntaxNode>) -> ExprId {
-        let id = self.store.exprs.alloc(expr);
-        if let Some(node) = node {
-            let ptr = SyntaxPtr::new(node);
-            self.source_map.expr_map.insert(ptr, id);
-            self.source_map.expr_map_back.insert(id, ptr);
-        }
-        id
+        let map = &mut self.source_map;
+        alloc(&mut self.store.exprs, &mut map.expr_map, &mut map.expr_map_back, expr, node)
     }
 
     fn alloc_pat(&mut self, pat: Pat, node: Option<&SyntaxNode>) -> PatId {
-        let id = self.store.pats.alloc(pat);
-        if let Some(node) = node {
-            let ptr = SyntaxPtr::new(node);
-            self.source_map.pat_map.insert(ptr, id);
-            self.source_map.pat_map_back.insert(id, ptr);
-        }
-        id
+        let map = &mut self.source_map;
+        alloc(&mut self.store.pats, &mut map.pat_map, &mut map.pat_map_back, pat, node)
     }
 
     fn alloc_type(&mut self, type_ref: TypeRef, node: Option<&SyntaxNode>) -> TypeRefId {
-        let id = self.store.types.alloc(type_ref);
-        if let Some(node) = node {
-            let ptr = SyntaxPtr::new(node);
-            self.source_map.type_map.insert(ptr, id);
-            self.source_map.type_map_back.insert(id, ptr);
-        }
-        id
+        let map = &mut self.source_map;
+        alloc(&mut self.store.types, &mut map.type_map, &mut map.type_map_back, type_ref, node)
     }
 
     pub fn missing_expr(&mut self) -> ExprId {
@@ -181,7 +169,7 @@ impl ExprCollector {
     pub fn lower_path(&mut self, path: ast::Path) -> Option<Path> {
         let mut segments = Vec::new();
         for segment in path.segments() {
-            let name = Name::new(strip_raw(&segment.name_ref()?.text()));
+            let name = Name::from_ident(&segment.name_ref()?.text());
             let generic_args = segment.generic_arg_list().map(|list| self.lower_generic_args(list));
             segments.push(PathSegment { name, generic_args });
         }
@@ -197,7 +185,7 @@ impl ExprCollector {
                     GenericArg::Type { type_ref, bounds }
                 }
                 ast::GenericArg::AssocType(arg) => GenericArg::AssocType {
-                    name: arg.name_ref().map(|n| Name::new(strip_raw(&n.text()))).unwrap_or_else(|| Name::new("")),
+                    name: arg.name_ref().map(|n| Name::from_ident(&n.text())).unwrap_or_else(|| Name::new("")),
                     generic_args: arg.generic_arg_list().map(|l| self.lower_generic_args(l)),
                     type_ref: self.lower_opt_type(arg.ty()),
                 },
@@ -241,7 +229,7 @@ impl ExprCollector {
             }
             E::Field(e) => {
                 let expr = self.lower_opt_expr(e.expr());
-                let name = e.name_ref().map(|n| Name::new(strip_raw(&n.text()))).unwrap_or_else(|| Name::new(""));
+                let name = e.name_ref().map(|n| Name::from_ident(&n.text())).unwrap_or_else(|| Name::new(""));
                 Expr::Field { expr, name }
             }
             E::Await(e) => Expr::Await { expr: self.lower_opt_expr(e.expr()) },
@@ -292,7 +280,7 @@ impl ExprCollector {
                 if let Some(list) = e.field_list() {
                     for field in list.fields() {
                         let Some(name_ref) = field.name_ref() else { continue };
-                        let name = Name::new(strip_raw(&name_ref.text()));
+                        let name = Name::from_ident(&name_ref.text());
                         // `x` is short for `x: x`.
                         let expr = match field.expr() {
                             Some(expr) => self.lower_expr(expr),
@@ -358,30 +346,31 @@ impl ExprCollector {
             E::Yield(e) => Expr::Yield { expr: e.expr().map(|x| self.lower_expr(x)) },
             E::Closure(e) => {
                 let kind = if e.async_token().is_some() { LambdaKind::AsyncClosure } else { LambdaKind::Closure };
-                let (params, param_types) = self.lower_lambda_params(e.param_list());
-                let ret_type = e.ret_type().map(|r| self.lower_opt_type(r.ty()));
-                let body = self.lower_opt_expr(e.body());
-                Expr::Lambda { params, param_types, ret_type, body, kind }
+                self.lower_lambda(e.param_list(), e.ret_type(), e.body(), kind)
             }
-            E::Fun(e) => {
-                let (params, param_types) = self.lower_lambda_params(e.param_list());
-                let ret_type = e.ret_type().map(|r| self.lower_opt_type(r.ty()));
-                let body = self.lower_opt_expr(e.body());
-                Expr::Lambda { params, param_types, ret_type, body, kind: LambdaKind::Function }
-            }
+            E::Fun(e) => self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Function),
             E::Macro(e) => Expr::MacroCall { name: macro_name(e.macro_call()) },
         };
         self.alloc_expr(lowered, Some(&node))
     }
 
-    fn lower_lambda_params(&mut self, list: Option<ast::ParamList>) -> (Box<[PatId]>, Box<[Option<TypeRefId>]>) {
+    /// A closure like `|x| x + 1`, or an anonymous function like `fn (x) = x + 1`.
+    fn lower_lambda(
+        &mut self,
+        list: Option<ast::ParamList>,
+        ret_type: Option<ast::RetType>,
+        body: Option<ast::Expr>,
+        kind: LambdaKind,
+    ) -> Expr {
         let mut params = Vec::new();
-        let mut types = Vec::new();
+        let mut param_types = Vec::new();
         for param in list.iter().flat_map(|l| l.params()) {
             params.push(self.lower_opt_pat(param.pattern()));
-            types.push(param.type_expr().map(|t| self.lower_type(t)));
+            param_types.push(param.type_expr().map(|t| self.lower_type(t)));
         }
-        (params.into(), types.into())
+        let ret_type = ret_type.map(|r| self.lower_opt_type(r.ty()));
+        let body = self.lower_opt_expr(body);
+        Expr::Lambda { params: params.into(), param_types: param_types.into(), ret_type, body, kind }
     }
 
     fn lower_label(&mut self, label: Option<ast::Label>) -> Option<crate::hir::LabelId> {
@@ -480,7 +469,7 @@ impl ExprCollector {
                 for field in p.fields() {
                     let mutable = field.mut_token().is_some();
                     if let Some(name_ref) = field.name_ref() {
-                        let name = Name::new(strip_raw(&name_ref.text()));
+                        let name = Name::from_ident(&name_ref.text());
                         let pat = self.lower_opt_pat(field.pattern());
                         if mutable {
                             self.mark_mutable(pat);
@@ -488,7 +477,7 @@ impl ExprCollector {
                         fields.push(RecordFieldPat { name, pat });
                     } else if let Some(n) = field.name() {
                         // `x` is short for `x: x`.
-                        let name = Name::new(strip_raw(&n.text()));
+                        let name = Name::from_ident(&n.text());
                         let bind = self.binding_pat(Some(n), mutable, None);
                         let pat = self.alloc_pat(bind, Some(field.syntax()));
                         fields.push(RecordFieldPat { name, pat });
@@ -531,7 +520,7 @@ impl ExprCollector {
 
     fn binding_pat(&mut self, name: Option<ast::Name>, mutable: bool, subpat: Option<PatId>) -> Pat {
         let Some(name) = name else { return Pat::Missing };
-        let id = self.store.bindings.alloc(Binding { name: Name::new(strip_raw(&name.text())), mutable });
+        let id = self.store.bindings.alloc(Binding { name: Name::from_ident(&name.text()), mutable });
         Pat::Bind { id, subpat }
     }
 
@@ -560,32 +549,41 @@ impl ExprCollector {
                     let id = *id;
                     self.store.bindings[id].mutable = true;
                 }
-                Pat::Tuple { args, .. } | Pat::TupleStruct { args, .. } | Pat::Slice { args, .. } | Pat::Or(args) => {
-                    stack.extend(args.iter().copied())
-                }
-                Pat::Record { fields, .. } => stack.extend(fields.iter().map(|f| f.pat)),
-                _ => {}
+                pat => stack.extend(pat.children()),
             }
         }
     }
 }
 
+/// Allocate `value` in `arena`, and if it was lowered from `node`, remember
+/// that in both directions.
+fn alloc<T>(
+    arena: &mut Arena<T>,
+    map: &mut HashMap<SyntaxPtr, Idx<T>>,
+    back: &mut ArenaMap<T, SyntaxPtr>,
+    value: T,
+    node: Option<&SyntaxNode>,
+) -> Idx<T> {
+    let id = arena.alloc(value);
+    if let Some(node) = node {
+        let ptr = SyntaxPtr::new(node);
+        map.insert(ptr, id);
+        back.insert(id, ptr);
+    }
+    id
+}
+
 fn name(name: Option<ast::Name>) -> Option<Name> {
-    name.map(|n| Name::new(strip_raw(&n.text())))
+    name.map(|n| Name::from_ident(&n.text()))
 }
 
 fn macro_name(call: Option<ast::MacroCall>) -> Option<Name> {
-    call?.name_ref().map(|n| Name::new(n.text()))
+    call?.name_ref().map(|n| Name::from_ident(&n.text()))
 }
 
 fn label_name(label: &ast::Label) -> Option<Name> {
     let ident = label.ident()?;
     Some(Name::new(ident.text().trim_start_matches('\'')))
-}
-
-/// `r#match` is the name `match`.
-fn strip_raw(text: &str) -> &str {
-    text.strip_prefix("r#").unwrap_or(text)
 }
 
 fn binary_op(op: &str) -> BinaryOp {
@@ -685,8 +683,9 @@ fn string_contents(text: &str) -> String {
     unescape(inner)
 }
 
-/// The text of a string or character without its quotes and prefix.
-fn unquote(text: &str) -> String {
+/// The contents of a string literal without its quotes and prefix, like the
+/// path of an import or an ABI: unescaped, unless it's a raw string.
+pub(crate) fn unquote(text: &str) -> String {
     string_contents(text.trim_start_matches(['b', 'c']))
 }
 

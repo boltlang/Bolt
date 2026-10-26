@@ -9,7 +9,7 @@ use boltlang_hir_def::{
     Name,
     body::DefWithBodyId,
     hir::{ExprId, PatId, TypeRefId},
-    ids::FunctionId,
+    ids::{FunctionId, ImplId},
     item_tree::{ModItem, item_tree},
     nameres::{file_scope, prelude_file, resolve_import_path},
     resolver::GenericDefId,
@@ -105,13 +105,41 @@ pub enum TypeError<'db> {
     TypeNeeded { origin: Origin<'db> },
 }
 
+impl<'db> TypeError<'db> {
+    pub fn origin(&self) -> &Origin<'db> {
+        match self {
+            TypeError::Mismatch { origin, .. }
+            | TypeError::InfiniteType { origin, .. }
+            | TypeError::NoInstance { origin, .. }
+            | TypeError::Ambiguous { origin, .. }
+            | TypeError::NoSuchField { origin, .. }
+            | TypeError::TypeNeeded { origin } => origin,
+        }
+    }
+
+    /// Replace the types in the error with `f` of them.
+    pub fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
+        match self {
+            TypeError::Mismatch { expected, actual, .. } => {
+                *expected = f(expected);
+                *actual = f(actual);
+            }
+            TypeError::InfiniteType { ty, .. } | TypeError::NoSuchField { ty, .. } => *ty = f(ty),
+            TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. } => {
+                *constraint = constraint.map(f)
+            }
+            TypeError::TypeNeeded { .. } => {}
+        }
+    }
+}
+
 pub struct Solver<'db> {
     db: &'db dyn Db,
     pub unifier: Unifier<'db>,
     /// The class constraints known to hold, like those of `where` clauses,
     /// with their superclasses.
     assumptions: Vec<ClassConstraint<'db>>,
-    impls: &'db [boltlang_hir_def::ids::ImplId<'db>],
+    impls: &'db [ImplId<'db>],
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pub errors: Vec<TypeError<'db>>,
@@ -145,7 +173,7 @@ impl<'db> Solver<'db> {
             // `class Ord[T] where Eq[T]`: `Ord[X]` gives `Eq[X]`.
             let class_def = GenericDefId::Class(c.class);
             for sup in generic_predicates(self.db, class_def).predicates.iter() {
-                stack.push(sup.map(|t| crate::lower::subst_params(t, class_def, &c.args)));
+                stack.push(sup.map(|t| subst_params(t, class_def, &c.args)));
             }
             self.assumptions.push(c);
         }
@@ -259,12 +287,18 @@ impl<'db> Solver<'db> {
             .collect()
     }
 
-    /// Finish solving: default numeric variables, solve what can be, and
-    /// report the rest as ambiguous.
-    pub fn finish(&mut self) {
+    /// Solve what can be, give numeric variables their default types, and
+    /// solve what that decides.
+    pub fn solve_with_defaults(&mut self) {
         self.solve();
         self.unifier.default_numeric_vars();
         self.solve();
+    }
+
+    /// Finish solving: default numeric variables, solve what can be, and
+    /// report the rest as ambiguous.
+    pub fn finish(&mut self) {
+        self.solve_with_defaults();
         for (constraint, origin) in self.take_pending() {
             self.errors.push(TypeError::Ambiguous { origin, constraint });
         }
@@ -286,7 +320,7 @@ impl<'db> Solver<'db> {
         if self.assumptions.contains(goal) {
             return Step::Solved(Vec::new());
         }
-        let has_vars = goal.args.iter().any(|t| t.any(&mut |t| matches!(t, Ty::Var(_))));
+        let has_vars = goal.args.iter().any(has_vars);
         let mut found = None;
         let mut maybe = has_vars && self.assumptions.iter().any(|a| a.class == goal.class);
         for &imp in self.impls {
@@ -339,11 +373,35 @@ enum Step<'db> {
     Wait,
 }
 
+#[derive(Clone, Copy)]
 enum Match {
     Yes,
     No,
     /// It depends on variables that aren't decided yet.
     Maybe,
+}
+
+impl Match {
+    /// Whether this and `other` both match. `other` isn't tried when this
+    /// doesn't match.
+    fn and(self, other: impl FnOnce() -> Match) -> Match {
+        match self {
+            Match::No => Match::No,
+            _ => match (self, other()) {
+                (_, Match::No) => Match::No,
+                (Match::Yes, Match::Yes) => Match::Yes,
+                _ => Match::Maybe,
+            },
+        }
+    }
+
+    /// `Maybe`, unless it's certainly no match.
+    fn at_most_maybe(self) -> Match {
+        match self {
+            Match::No => Match::No,
+            _ => Match::Maybe,
+        }
+    }
 }
 
 /// Match the types of an impl, where its parameters stand for any type,
@@ -356,22 +414,14 @@ fn match_all<'db>(
     if patterns.len() != tys.len() {
         return Match::No;
     }
-    let mut result = Match::Yes;
-    for (p, t) in patterns.iter().zip(tys) {
-        match match_ty(p, t, subst) {
-            Match::No => return Match::No,
-            Match::Maybe => result = Match::Maybe,
-            Match::Yes => {}
-        }
-    }
-    result
+    patterns.iter().zip(tys).fold(Match::Yes, |result, (p, t)| result.and(|| match_ty(p, t, subst)))
 }
 
 fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
     match (pattern, ty) {
         (Ty::Param(p), _) if matches!(p.def, GenericDefId::Impl(_)) => match subst.get(p) {
             Some(bound) if bound == ty => Match::Yes,
-            Some(bound) if bound.any(&mut |t| matches!(t, Ty::Var(_))) || matches!(ty, Ty::Var(_)) => Match::Maybe,
+            Some(bound) if has_vars(bound) || matches!(ty, Ty::Var(_)) => Match::Maybe,
             Some(_) => Match::No,
             None => {
                 subst.insert(*p, ty.clone());
@@ -382,24 +432,14 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
         (_, Ty::App(head, _)) if matches!(**head, Ty::Var(_)) => match pattern {
             // `F[A]` against `?0[i32]`: decided by what `?0` becomes, unless
             // the arguments can't match anyway.
-            Ty::App(..) | Ty::Adt(..) => match match_app(pattern, ty, subst) {
-                Match::No => Match::No,
-                _ => Match::Maybe,
-            },
+            Ty::App(..) | Ty::Adt(..) => match_app(pattern, ty, subst).at_most_maybe(),
             _ => Match::No,
         },
         (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b && xs.len() == ys.len() => match_all(xs, ys, subst),
         (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
         (Ty::Array(x), Ty::Array(y)) => match_ty(x, y, subst),
-        (Ty::Fn(xs, x), Ty::Fn(ys, y)) => match match_all(xs, ys, subst) {
-            Match::No => Match::No,
-            Match::Maybe => match match_ty(x, y, subst) {
-                Match::No => Match::No,
-                _ => Match::Maybe,
-            },
-            Match::Yes => match_ty(x, y, subst),
-        },
+        (Ty::Fn(xs, x), Ty::Fn(ys, y)) => match_all(xs, ys, subst).and(|| match_ty(x, y, subst)),
         (x, y) if x == y => Match::Yes,
         _ => Match::No,
     }
@@ -421,20 +461,13 @@ fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPa
     let n = p_args.len().min(t_args.len());
     let p_rest = Ty::app(p_head, p_args[..p_args.len() - n].to_vec());
     let t_rest = Ty::app(t_head, t_args[..t_args.len() - n].to_vec());
-    match match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst) {
-        Match::No => Match::No,
-        args => match (match_ty(&p_rest, &t_rest, subst), args) {
-            (Match::No, _) => Match::No,
-            (Match::Yes, Match::Yes) => Match::Yes,
-            _ => Match::Maybe,
-        },
-    }
+    match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst).and(|| match_ty(&p_rest, &t_rest, subst))
 }
 
 /// The impls code in `file` can use: those of the file, of its prelude,
 /// and of the files they import, directly or not.
 #[salsa::tracked(returns(ref))]
-pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<boltlang_hir_def::ids::ImplId<'db>> {
+pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<ImplId<'db>> {
     let mut seen = vec![file];
     let mut stack = vec![file];
     if let Ok(Some(prelude)) = *prelude_file(db, file) {
@@ -483,18 +516,10 @@ mod tests;
 /// number literal whose type nothing decided as `{integer}` or `{float}`,
 /// rather than the default it was given: that's not what was found. Other
 /// errors, like a missing instance, are about the default.
-pub fn resolve_error<'db>(unifier: &Unifier<'db>, error: TypeError<'db>) -> TypeError<'db> {
-    let r = |t: &Ty<'db>| unifier.resolve(t);
+pub fn resolve_error<'db>(unifier: &Unifier<'db>, mut error: TypeError<'db>) -> TypeError<'db> {
     match error {
-        TypeError::Mismatch { origin, expected, actual } => TypeError::Mismatch {
-            origin,
-            expected: unifier.resolve_literals(&expected),
-            actual: unifier.resolve_literals(&actual),
-        },
-        TypeError::InfiniteType { origin, ty } => TypeError::InfiniteType { origin, ty: r(&ty) },
-        TypeError::NoInstance { origin, constraint } => TypeError::NoInstance { origin, constraint: constraint.map(r) },
-        TypeError::Ambiguous { origin, constraint } => TypeError::Ambiguous { origin, constraint: constraint.map(r) },
-        TypeError::NoSuchField { origin, ty, name } => TypeError::NoSuchField { origin, ty: r(&ty), name },
-        TypeError::TypeNeeded { origin } => TypeError::TypeNeeded { origin },
+        TypeError::Mismatch { .. } => error.map_types(&mut |t| unifier.resolve_literals(t)),
+        _ => error.map_types(&mut |t| unifier.resolve(t)),
     }
+    error
 }

@@ -5,7 +5,7 @@
 //! The variables are a union-find table: a variable is either unbound, or
 //! bound to a type, which may be another variable.
 
-use boltlang_hir_def::builtin_type::BuiltinType;
+use boltlang_hir_def::builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType};
 
 use crate::ty::{NumberKind, Ty, TyVar, VarKind};
 
@@ -23,15 +23,21 @@ enum VarState<'db> {
     Bound(Ty<'db>),
 }
 
+#[derive(Debug, Clone)]
+struct Var<'db> {
+    state: VarState<'db>,
+    /// Whether the variable met the error type, so that it becomes the error
+    /// type if nothing else decides it: see [`Unifier::error_unknowns`].
+    met_error: bool,
+    /// Whether it's the variable of a number literal that got its default
+    /// type, so that type errors can say it's a number: see
+    /// [`Unifier::resolve_literals`].
+    defaulted: Option<NumberKind>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Unifier<'db> {
-    vars: Vec<VarState<'db>>,
-    /// Whether each variable met the error type, so that it becomes the
-    /// error type if nothing else decides it: see [`Unifier::error_unknowns`].
-    met_error: Vec<bool>,
-    /// The variables of number literals that got their default type, so that
-    /// type errors can say they are numbers: see [`Unifier::resolve_literals`].
-    defaulted: Vec<Option<NumberKind>>,
+    vars: Vec<Var<'db>>,
 }
 
 impl<'db> Unifier<'db> {
@@ -41,15 +47,13 @@ impl<'db> Unifier<'db> {
 
     pub fn new_var(&mut self, kind: VarKind) -> Ty<'db> {
         let var = TyVar(self.vars.len() as u32);
-        self.vars.push(VarState::Unbound(kind));
-        self.met_error.push(false);
-        self.defaulted.push(None);
+        self.vars.push(Var { state: VarState::Unbound(kind), met_error: false, defaulted: None });
         Ty::Var(var)
     }
 
     /// The kind of a variable, if it's still unbound.
     pub fn var_kind(&self, var: TyVar) -> Option<VarKind> {
-        match self.vars[var.0 as usize] {
+        match self.vars[var.0 as usize].state {
             VarState::Unbound(kind) => Some(kind),
             VarState::Bound(_) => None,
         }
@@ -62,7 +66,7 @@ impl<'db> Unifier<'db> {
         let mut ty = ty.clone();
         loop {
             match ty {
-                Ty::Var(var) => match &self.vars[var.0 as usize] {
+                Ty::Var(var) => match &self.vars[var.0 as usize].state {
                     VarState::Bound(bound) => ty = bound.clone(),
                     VarState::Unbound(_) => return ty,
                 },
@@ -88,22 +92,14 @@ impl<'db> Unifier<'db> {
 
     /// Give unbound integer and float variables their default types.
     pub fn default_numeric_vars(&mut self) {
-        for (state, defaulted) in self.vars.iter_mut().zip(&mut self.defaulted) {
-            match state {
-                VarState::Unbound(VarKind::Int) => {
-                    *state = VarState::Bound(Ty::Builtin(BuiltinType::Int(
-                        boltlang_hir_def::builtin_type::BuiltinInt::I32,
-                    )));
-                    *defaulted = Some(NumberKind::Int);
-                }
-                VarState::Unbound(VarKind::Float) => {
-                    *state = VarState::Bound(Ty::Builtin(BuiltinType::Float(
-                        boltlang_hir_def::builtin_type::BuiltinFloat::F64,
-                    )));
-                    *defaulted = Some(NumberKind::Float);
-                }
-                _ => {}
-            }
+        for var in &mut self.vars {
+            let (ty, kind) = match var.state {
+                VarState::Unbound(VarKind::Int) => (BuiltinType::Int(BuiltinInt::I32), NumberKind::Int),
+                VarState::Unbound(VarKind::Float) => (BuiltinType::Float(BuiltinFloat::F64), NumberKind::Float),
+                _ => continue,
+            };
+            var.state = VarState::Bound(Ty::Builtin(ty));
+            var.defaulted = Some(kind);
         }
     }
 
@@ -114,10 +110,11 @@ impl<'db> Unifier<'db> {
         ty.fold(&mut |t| {
             let &Ty::Var(mut var) = t else { return None };
             loop {
-                if let Some(kind) = self.defaulted[var.0 as usize] {
+                let info = &self.vars[var.0 as usize];
+                if let Some(kind) = info.defaulted {
                     return Some(Ty::Number(kind));
                 }
-                match &self.vars[var.0 as usize] {
+                match &info.state {
                     VarState::Unbound(_) => return Some(Ty::Var(var)),
                     VarState::Bound(Ty::Var(next)) => var = *next,
                     VarState::Bound(ty) => return Some(self.resolve_literals(ty)),
@@ -134,9 +131,9 @@ impl<'db> Unifier<'db> {
     /// decide it: the second arm of `match s { Nope(x) => x, _ => 0.0 }`
     /// makes it a float.
     pub fn error_unknowns(&mut self) {
-        for (state, met_error) in self.vars.iter_mut().zip(&self.met_error) {
-            if *met_error && matches!(state, VarState::Unbound(_)) {
-                *state = VarState::Bound(Ty::Error);
+        for var in &mut self.vars {
+            if var.met_error && matches!(var.state, VarState::Unbound(_)) {
+                var.state = VarState::Bound(Ty::Error);
             }
         }
     }
@@ -146,7 +143,7 @@ impl<'db> Unifier<'db> {
     /// it the error type if nothing else decides it.
     pub fn met_error(&mut self, ty: &Ty<'db>) {
         if let Ty::Var(var) = self.shallow_resolve(ty) {
-            self.met_error[var.0 as usize] = true;
+            self.vars[var.0 as usize].met_error = true;
         }
     }
 
@@ -164,7 +161,7 @@ impl<'db> Unifier<'db> {
         let b = self.shallow_resolve(b);
         match (&a, &b) {
             (Ty::Var(var), Ty::Error) | (Ty::Error, Ty::Var(var)) => {
-                self.met_error[var.0 as usize] = true;
+                self.vars[var.0 as usize].met_error = true;
                 Ok(())
             }
             // `!` and errors fit anywhere, without deciding a variable.
@@ -177,10 +174,10 @@ impl<'db> Unifier<'db> {
                     (k1, k2) if k1 == k2 => k1,
                     _ => return Err(UnifyError::Mismatch(a.clone(), b.clone())),
                 };
-                self.vars[y.0 as usize] = VarState::Unbound(kind);
-                self.vars[x.0 as usize] = VarState::Bound(b.clone());
-                if self.met_error[x.0 as usize] {
-                    self.met_error[y.0 as usize] = true;
+                self.vars[y.0 as usize].state = VarState::Unbound(kind);
+                self.vars[x.0 as usize].state = VarState::Bound(b.clone());
+                if self.vars[x.0 as usize].met_error {
+                    self.vars[y.0 as usize].met_error = true;
                 }
                 Ok(())
             }
@@ -238,15 +235,13 @@ impl<'db> Unifier<'db> {
         if ty.any(&mut |t| *t == Ty::Var(var)) {
             return Err(UnifyError::Occurs(var, ty));
         }
-        self.vars[var.0 as usize] = VarState::Bound(ty);
+        self.vars[var.0 as usize].state = VarState::Bound(ty);
         Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use boltlang_hir_def::builtin_type::{BuiltinInt, BuiltinType};
-
     use super::*;
 
     fn i32() -> Ty<'static> {
@@ -298,7 +293,7 @@ mod tests {
         u.default_numeric_vars();
         assert_eq!(u.resolve(&general), i32());
         assert_eq!(u.resolve(&other), i32());
-        assert_eq!(u.resolve(&float), Ty::Builtin(BuiltinType::Float(boltlang_hir_def::builtin_type::BuiltinFloat::F64)));
+        assert_eq!(u.resolve(&float), Ty::Builtin(BuiltinType::Float(BuiltinFloat::F64)));
     }
 
     #[test]

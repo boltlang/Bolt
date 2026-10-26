@@ -221,6 +221,24 @@ pub enum Pat {
     MacroCall { name: Option<Name> },
 }
 
+impl Pat {
+    /// The patterns directly inside this one, like the `x` and `y` of
+    /// `(x, y)`, or the `Some(y)` of `x @ Some(y)`.
+    pub fn children(&self) -> Vec<PatId> {
+        match self {
+            Pat::Bind { subpat, .. } => subpat.iter().copied().collect(),
+            Pat::Tuple { args, .. } | Pat::TupleStruct { args, .. } | Pat::Slice { args, .. } | Pat::Or(args) => {
+                args.to_vec()
+            }
+            Pat::Record { fields, .. } => fields.iter().map(|f| f.pat).collect(),
+            Pat::Range { start, end, .. } => start.iter().chain(end.iter()).copied().collect(),
+            Pat::Missing | Pat::Wild | Pat::Lit { .. } | Pat::Path(_) | Pat::ConstBlock(_) | Pat::MacroCall { .. } => {
+                Vec::new()
+            }
+        }
+    }
+}
+
 /// `x`, `mut x` or `x: pattern` in a struct pattern.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct RecordFieldPat {
@@ -245,6 +263,12 @@ impl Path {
             [PathSegment { name, generic_args: None }] => Some(name),
             _ => None,
         }
+    }
+
+    /// The generic arguments of the last segment, like the `i32` of
+    /// `m.Option[i32]`, which are those of what the path names.
+    pub fn last_generic_args(&self) -> &[GenericArg] {
+        self.segments.last().and_then(|s| s.generic_args.as_deref()).unwrap_or_default()
     }
 }
 
