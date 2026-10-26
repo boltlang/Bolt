@@ -1,0 +1,292 @@
+---
+sidebar_position: 6.5
+title: Mutability (design)
+description: A design for arrays that are shared, with whether they can be changed inferred as part of their type. Nothing of it is implemented.
+---
+
+# Mutability (design)
+
+:::warning[Not implemented]
+This page is a design. **Nothing on it is implemented**: arrays are values
+today, copied when they're assigned, and changing an element needs a
+`let mut` variable. It's discussed in
+[#195](https://github.com/boltlang/Bolt/issues/195) and
+[#196](https://github.com/boltlang/Bolt/issues/196). The syntax below may
+change.
+:::
+
+Arrays are going to be *shared*: `let ys = xs` makes `ys` another name for
+the same array, as in JavaScript, Java and OCaml. Passing an array to a
+function then passes a pointer, and a function can fill in an array that
+it's given.
+
+Sharing breaks what `mut` on a variable promises:
+
+```bolt
+let mut xs = [1, 2];
+let ys = xs;     // not `mut`
+xs[0] = 9;
+ys[0];           // 9: `ys` changed anyway
+```
+
+This page describes how the type checker keeps a promise that sharing
+can't break. **Whether an array can be changed is part of its type**, and
+every name for an array has the same type, so they all agree.
+
+## Arrays have a mutability
+
+The type of an array has a second argument, its *mutability*, which is
+`Mut` or `Imm`:
+
+$$
+[\tau] \;=\; \mathsf{Array}[\mu, \tau] \qquad \mu ::= \mathsf{Mut} \mid \mathsf{Imm} \mid \alpha
+$$
+
+`Mut` and `Imm` are types of a new [kind](./kinds.mdx), $\mathsf{Mutability}$,
+so $\mathsf{Array}$ is of kind
+$\mathsf{Mutability} \to \mathsf{Type} \to \mathsf{Type}$. A mutability can
+be an inference variable, like any type, and it's unified and generalized
+like one. That's all the type checker needs: no subtyping and no new kind
+of constraint.
+
+In source code, and when types are shown:
+
+| Written | Type |
+|---|---|
+| `[i32]` | $\mathsf{Array}[\mathsf{Imm}, \mathsf{i32}]$ |
+| `mut [i32]` | $\mathsf{Array}[\mathsf{Mut}, \mathsf{i32}]$ |
+
+An array can be changed only if its type is `mut`:
+
+```bolt
+fn push[T](xs: mut [T], x: T);    // in `std`
+
+let xs = mut [1, 2];
+xs.push(3);      // fine
+xs[0] = 9;       // fine
+
+let ys = [1, 2];
+ys.push(3);      // error: `ys` is `[i32]`, which can't be changed
+```
+
+Assigning to an element, `xs[i] = e`, needs `xs` to be a `mut` array. So
+does calling a function whose parameter is `mut`, like `push`.
+
+## Where the mutability comes from
+
+**The expression that makes an array decides** whether it can be changed.
+Variables only pass it on:
+
+- `[1, 2]` is an array that can't be changed: `[i32]`.
+- `mut [1, 2]` and `mut []` can be changed: `mut [i32]`.
+- A function's result has the mutability of its type: `Vec.new()` could
+  return `mut [T]`, and `xs.copy()` a new `mut [T]`.
+
+`let mut` no longer has anything to do with the contents of an array. It
+only means the variable can be assigned again:
+
+```bolt
+let xs = mut [1];
+xs.push(2);         // fine: the array is `mut`
+xs = mut [3];       // error: `xs` isn't `mut`
+
+let mut ys = [1];
+ys = [2, 3];        // fine: the variable is `mut`
+ys.push(4);         // error: the array isn't
+```
+
+## Aliases share the mutability
+
+`let ys = xs` unifies the types of `ys` and `xs`, mutability included. So an
+alias of a `mut` array is `mut` too, without saying so:
+
+```bolt
+let xs = mut [1, 2];
+let ys = xs;        // `mut [i32]`, like `xs`
+ys.push(3);         // fine, and `xs` sees it
+```
+
+Since this is unification, it works however the alias is made: through a
+function, a branch, a struct or a closure.
+
+```bolt
+fn id(x) = x;
+
+let a = id(xs);                         // `mut [i32]`
+let b = if c { xs } else { mut [] };    // `mut [i32]`
+let get = || xs;                        // `fn() -> mut [i32]`
+```
+
+An alias can't change the mutability. Unifying `Mut` with `Imm` is an error:
+
+```bolt
+let xs = mut [1, 2];
+let ys: [i32] = xs;   // error: expected `[i32]`, found `mut [i32]`
+```
+
+### What this guarantees
+
+**An array that isn't `mut` never changes.** All the names for an array
+have the same type, so if one of them can't change it, none can. That's
+what makes `[T]` worth having:
+
+- code can rely on an `[i32]` it's given staying the same;
+- arrays that can't be changed can be shared freely, and their literals can
+  be constants: a data segment in Wasm, made once;
+- the [reactive design](../reactive.mdx) knows which arrays can change, and
+  which calls change them, from their types
+  ([#200](https://github.com/boltlang/Bolt/issues/200)).
+
+It doesn't guarantee what Rust does, that nothing else changes a `mut`
+array while you have it. `mut` arrays are shared on purpose.
+
+## Functions
+
+A function without annotations gets the mutability it needs, and is
+generalized over the rest, like over any type:
+
+```bolt
+fn first(xs) = xs[0];             // forall m a. fn(Array[m, a]) -> a
+fn fill(xs, x) { xs[0] = x; }     // forall a. fn(mut [a], a) -> ()
+```
+
+`first` takes arrays of either mutability. `fill` only takes `mut` ones,
+since it changes its argument. Instantiating a scheme gives a fresh
+variable for `m`, so each call can pass a different kind of array.
+
+## Annotations
+
+**An annotation without `mut` means `Imm`.** `[T]` is an array that can't
+be changed, and `mut [T]` is needed where it can. That's the same everywhere
+a type is written: parameters, results, `let` and struct fields.
+
+```bolt
+struct Inventory {
+  name: String,
+  items: mut [Item],       // can be changed
+  tags: [String],          // can't
+}
+```
+
+Fields state their mutability, so a struct type doesn't get a hidden
+mutability parameter. A struct shares its arrays with everything else that
+refers to them, as `let` does.
+
+## Making an array that can't be changed from one that can
+
+A `mut` array can't become `[T]`, since a `mut` name for it may still
+exist. Turning one into the other copies it:
+
+```bolt
+fn freeze[T](xs: mut [T]) -> [T];    // a copy that can't be changed
+fn thaw[T](xs: [T]) -> mut [T];      // a copy that can
+```
+
+Freezing without a copy needs to know that no other name refers to the
+array: that it's *unique*. Jane Street's OCaml has a mode for that
+[Lorenzen et al. 2024], and it could come later.
+
+## Errors
+
+A mutability error can show up far from its cause: the `push` fails because
+of where the array was made, maybe much earlier.
+
+```bolt
+let xs = [1, 2];
+...
+xs.push(3);
+```
+
+```text
+[E0201] Error: `xs` can't be changed
+   │
+ 1 │ let xs = [1, 2];
+   │          ───┬──
+   │             ╰──── it's made here without `mut`
+   │
+ 3 │ xs.push(3);
+   │ ──────┬───
+   │       ╰───── `push` changes its argument
+```
+
+The error should point at where the `Imm` came from: the literal, the
+annotation, or the function whose result it is. That's what the labels for
+the causes of constraints in
+[#127](https://github.com/boltlang/Bolt/issues/127) are for, and why
+unification has to remember the origin of `Imm` and `Mut`.
+
+## Changes to the checker
+
+- **Kinds:** a kind $\mathsf{Mutability}$ with the types `Mut` and `Imm`
+  (`kind.rs`, `ty.rs`).
+- **Lowering:** `[T]` lowers to `Array[Imm, T]` and `mut [T]` to
+  `Array[Mut, T]` (`lower.rs`). The parser accepts `mut` before an array
+  type, and before an array expression.
+- **Inference:** an array literal's mutability is `Imm`, or `Mut` with `mut`
+  (`infer.rs`). `xs[i] = e` unifies the mutability of `xs` with `Mut`.
+  Indexing and `for` work for any mutability.
+- **The check of #166** stops requiring `let mut` for `xs[i] = e`.
+  Assigning to the variable itself still needs it. For fields of structs,
+  see the open questions.
+- **Defaulting:** a mutability variable that's left over when a body is
+  checked, and isn't generalized, defaults to `Imm`, like integer literals
+  default to `i32`.
+- **Showing types:** `[T]`, `mut [T]`, and a way to show a mutability
+  variable (see the open questions).
+- **Tests:** cases in `tests/checker` for each example on this page, and in
+  `tests/run` for sharing.
+
+`Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197))
+takes the mutability as a parameter too, `Vec[m, T]`, and `[T]` is
+shorthand for it. A `String`
+([#199](https://github.com/boltlang/Bolt/issues/199)) could work the same
+way, with `mut String` taking the place of a separate `StringBuilder`.
+
+## Open questions
+
+- **Parameters annotated `[T]`.** With annotations meaning `Imm`,
+  `fn sum(xs: [i32]) -> i32` doesn't accept a `mut [i32]`. That's a
+  common case: a list built with `push`, then summed. One fix: in a
+  *parameter*, `[T]` means "read-only here", an implicit mutability
+  parameter of the function, like the generalized `m` of an inferred
+  function. `sum` then takes both kinds of array but can't change them,
+  which is what `Imm` means to the function. Elsewhere, `[T]` stays `Imm`.
+  The cost is that `[T]` means two things, depending on where it's written.
+- **Syntax for a mutability variable**, to write and show
+  `forall m a. fn(Array[m, a]) -> a`: maybe `fn[M, A](xs: M [A]) -> A`, or
+  `mut? [A]` when it's shown.
+- **Fields of structs.** If structs stay values, `p.x = 1` keeps needing
+  `let mut p`. If they're shared like arrays, they need a mutability too,
+  with `mut` fields or a `mut` struct type.
+- **Other shared types.** Whether a `mut` before other types, like
+  `mut String` or `mut Map[K, V]`, is a general feature for types that have
+  a mutability parameter, or only for arrays.
+
+## Prior art
+
+- **OCaml** has no `mut` on variables. Whether a value can change is in its
+  type: an `array` always can, a `list` never, and a record field only if
+  it's declared `mutable`. Nothing is inferred.
+- **Reference immutability**, in Javari [Tschantz & Ernst 2005] and
+  ReIm [Huang et al. 2012], puts a read-only qualifier on references in
+  Java, and ReIm infers it. There, a read-only reference can point at an
+  object that others change. Here, `Imm` means that no one can.
+- **Pony's reference capabilities** [Clebsch et al. 2015] decide what each
+  reference allows: `iso` (unique), `val` (can't be changed by anyone),
+  `ref` (can be changed, and shared). `[T]` is like `val`, and `mut [T]`
+  like `ref`.
+- **Modes in Jane Street's OCaml** [Lorenzen et al. 2024] are qualifiers
+  like `unique` and `local`, inferred alongside types. `unique` is what
+  freezing without a copy would need.
+
+## References
+
+- M. S. Tschantz and M. D. Ernst. *Javari: Adding Reference Immutability
+  to Java.* OOPSLA 2005.
+- W. Huang, A. Milanova, W. Dietl and M. D. Ernst. *ReIm & ReImInfer:
+  Checking and Inference of Reference Immutability and Method Purity.*
+  OOPSLA 2012.
+- S. Clebsch, S. Drossopoulou, S. Blessing and A. McNeil. *Deny
+  Capabilities for Safe, Fast Actors.* AGERE 2015.
+- A. Lorenzen, L. White, S. Dolan, R. A. Eisenberg and S. Lindley.
+  *Oxidizing OCaml with Modal Memory Management.* ICFP 2024.
