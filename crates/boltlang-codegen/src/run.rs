@@ -194,7 +194,7 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, memory: &[u8]) -> Resu
         (Scalar::Char, Val::I32(n)) => Value::Char(char::from_u32(*n as u32).ok_or_else(unexpected)?),
         (Scalar::Str, Val::I32(address)) => Value::str(&read_str(memory, *address).ok_or_else(unexpected)?),
         (Scalar::Enum, Val::I32(index)) => {
-            let Ty::Adt(AdtId::Enum(parent), _) = ty else { return Err(unexpected()) };
+            let Ty::Adt(AdtId::Enum(parent), ..) = ty else { return Err(unexpected()) };
             let variant = EnumVariantId { parent: *parent, index: *index as u32 };
             Value::Adt { ctor: Ctor::Variant(variant), fields: Vec::new() }
         }

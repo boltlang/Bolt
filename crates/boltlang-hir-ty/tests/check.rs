@@ -294,8 +294,15 @@ fn check(input: &str) -> Result<(String, String), String> {
                     InferenceDiagnostic::AssignToImmutable { expr, .. } => {
                         format!("error at `{}`: not mut", at(ExprOrPat::Expr(*expr)))
                     }
-                    InferenceDiagnostic::ImmutableArray { expr, ty } => {
-                        format!("error at `{}`: can't change {}", at(ExprOrPat::Expr(*expr)), show(&[ty])[0])
+                    InferenceDiagnostic::Type(TypeError::CannotChange { origin, ty }) => {
+                        format!("error at `{}`: can't change {}", at(origin.node), show(&[ty])[0])
+                    }
+                    InferenceDiagnostic::NoMutability { expr } => {
+                        format!("error at `{}`: can't be mut", at(ExprOrPat::Expr(*expr)))
+                    }
+                    InferenceDiagnostic::MutInsideImm { at: node, ty, inner } => {
+                        let tys = show(&[ty, inner]);
+                        format!("error at `{}`: {} holds {}", at(*node), tys[0], tys[1])
                     }
                     InferenceDiagnostic::NotAPlace { expr } => {
                         format!("error at `{}`: not a place", at(ExprOrPat::Expr(*expr)))
@@ -327,6 +334,8 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         }
         LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at(*id)),
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
+        LowerDiagnostic::NoMutability(id) => format!("error at `{}`: can't be mut or imm", at(*id)),
+        LowerDiagnostic::MutField(id) => format!("error at `{}`: mut field", at(*id)),
     }
 }
 

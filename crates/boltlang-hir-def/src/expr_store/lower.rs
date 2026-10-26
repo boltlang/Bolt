@@ -84,6 +84,10 @@ impl ExprCollector {
                 };
                 TypeRef::Array { element, len, mutability }
             }
+            ast::Type::Mut(ty) => {
+                let mutability = if ty.mut_token().is_some() { Mutability::Mut } else { Mutability::Imm };
+                TypeRef::Mut { mutability, inner: self.lower_opt_type(ty.inner()) }
+            }
             ast::Type::Never(_) => TypeRef::Never,
             ast::Type::Bounded(_) => {
                 // `A + B + C` is nested to the left; flatten it.
@@ -233,7 +237,7 @@ impl ExprCollector {
             E::Call(e) => {
                 let callee = self.lower_opt_expr(e.operator());
                 let args = e.args().map(|a| self.lower_expr(a)).collect();
-                Expr::Call { callee, args }
+                Expr::Call { callee, args, is_mut: e.mut_token().is_some() }
             }
             E::Field(e) => {
                 let expr = self.lower_opt_expr(e.expr());
@@ -299,7 +303,7 @@ impl ExprCollector {
                     }
                     spread = list.spread().map(|s| self.lower_expr(s));
                 }
-                Expr::Record { path, fields: fields.into(), spread }
+                Expr::Record { path, fields: fields.into(), spread, is_mut: e.mut_token().is_some() }
             }
             E::If(e) => {
                 let condition = self.lower_opt_expr(e.condition());

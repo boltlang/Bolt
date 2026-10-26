@@ -53,7 +53,9 @@ fn type_with_bounds_cond(p: &mut Parser, allow_bounds: bool) {
 fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
     let m = match p.current() {
         T!['('] => tuple_type(p),
-        T!['['] | T![mut] | T![imm] => array_type(p),
+        T!['['] => array_type(p),
+        T![mut] | T![imm] if p.nth_at(1, T!['[']) => array_type(p),
+        T![mut] | T![imm] => mut_type(p),
         T![!] => never_type(p),
         T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
         T![impl] => impl_trait_type(p),
@@ -221,9 +223,8 @@ fn tuple_type(p: &mut Parser) -> CompletedMarker {
 /// changed, and `imm [T]` never changes.
 fn array_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    if (p.eat(T![mut]) || p.eat(T![imm])) && !p.at(T!['[']) {
-        p.error("expected an array type, like `mut [T]`; only arrays can be `mut` or `imm`");
-        return m.complete(p, ARRAY_TYPE);
+    if !p.eat(T![mut]) {
+        p.eat(T![imm]);
     }
     p.bump(T!['[']);
     type_(p);
@@ -232,6 +233,23 @@ fn array_type(p: &mut Parser) -> CompletedMarker {
     }
     p.expect(T![']']);
     m.complete(p, ARRAY_TYPE)
+}
+
+/// `mut T` or `imm T` for a type other than an array, like `mut Point`.
+/// Whether the type can have a mutability is checked later, once it's known
+/// what the type is.
+fn mut_type(p: &mut Parser) -> CompletedMarker {
+    let m = p.start();
+    p.bump_any();
+    if p.at(T![mut]) || p.at(T![imm]) {
+        p.error("a type can have only one `mut` or `imm`");
+    }
+    if p.at_ts(TYPE_FIRST) {
+        type_no_bounds(p);
+    } else {
+        p.error("expected a type after the mutability, like `mut Point`");
+    }
+    m.complete(p, MUT_TYPE)
 }
 
 /// `!`

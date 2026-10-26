@@ -58,7 +58,7 @@ let s = Shape.Circle(1.0);
 p.x;
 
 --------------------------------------------------------------------------------
-/main.bolt: let p: Point
+/main.bolt: let p: imm Point
 /main.bolt: let s: Shape
 /main.bolt: p.x: i32
 
@@ -94,7 +94,7 @@ let v: m.V = m.V { x: 1 };
 --------------------------------------------------------------------------------
 /math.bolt: double: fn(i32) -> i32
 /main.bolt: m.double(2): i32
-/main.bolt: let v: V
+/main.bolt: let v: imm V
 
 ================================================================================
 Imported variants
@@ -250,7 +250,7 @@ fn get(b: Box[i32]) -> i32 = b.value;
 
 --------------------------------------------------------------------------------
 /main.bolt: get: fn(Box[i32]) -> i32
-/main.bolt: let b: Box[Bool]
+/main.bolt: let b: imm Box[Bool]
 /main.bolt: b.value: Bool
 
 ================================================================================
@@ -286,4 +286,4 @@ Thing { x: 1 };
 --------------------------------------------------------------------------------
 /a.bolt: thing: fn() -> i32
 /main.bolt: thing(): i32
-/main.bolt: Thing { x: 1 }: Thing
+/main.bolt: Thing { x: 1 }: imm Thing

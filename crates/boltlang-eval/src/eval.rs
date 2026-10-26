@@ -346,7 +346,7 @@ impl<'db> Evaluator<'db> {
                     (result, _) => result,
                 }
             }
-            Expr::Call { callee, args } => self.eval_call(f, expr, *callee, args),
+            Expr::Call { callee, args, .. } => self.eval_call(f, expr, *callee, args),
             Expr::Field { expr: base, name } => {
                 if let Some(value) = self.eval_extended_path(f, expr)? {
                     return Ok(value);
@@ -419,7 +419,7 @@ impl<'db> Evaluator<'db> {
                 let count = usize::try_from(count).map_err(|_| ErrorKind::Overflow)?;
                 Ok(Value::Array(vec![value; count]))
             }
-            Expr::Record { path, fields, spread } => {
+            Expr::Record { path, fields, spread, .. } => {
                 let Some(path) = path else {
                     return fail(ErrorKind::Unsupported("a record without a name"));
                 };

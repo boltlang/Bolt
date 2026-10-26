@@ -25,7 +25,7 @@ use boltlang_hir_def::{
 use crate::{
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types,
-        identity_args, subst_params,
+        identity_args, struct_args, subst_params,
     },
     check::function_scheme,
     scheme::{Scheme, generic_param_ids},
@@ -57,6 +57,24 @@ impl<'db> InferenceResult<'db> {
         self.binding_types.get(binding).unwrap_or(&Ty::Error)
     }
 
+    /// Report the expressions and patterns whose type has a `mut` array or
+    /// struct inside an `imm` one, like `[mut [1]]`: `imm` is deep, so what
+    /// an `imm` value holds can't be changed either. Each such type is
+    /// reported once, where it first appears, once the types are resolved.
+    pub(crate) fn check_deep_immutability(&mut self) {
+        let mut seen = Vec::new();
+        let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(e), t));
+        let pats = self.pat_types.iter().map(|(p, t)| (ExprOrPat::Pat(p), t));
+        for (at, ty) in exprs.chain(pats) {
+            if let Some((outer, inner)) = mut_inside_imm(ty)
+                && !seen.contains(&outer)
+            {
+                seen.push(outer.clone());
+                self.diagnostics.push(InferenceDiagnostic::MutInsideImm { at, ty: outer, inner });
+            }
+        }
+    }
+
     /// Replace the types with `f` of them, once inference is done.
     pub(crate) fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
         for ty in self.expr_types.values_mut().chain(self.pat_types.values_mut()).chain(self.binding_types.values_mut()) {
@@ -83,9 +101,12 @@ pub enum InferenceDiagnostic<'db> {
     /// An assignment to a variable, or to a field of one, that isn't `mut`.
     /// `expr` is the left side.
     AssignToImmutable { expr: ExprId, binding: BindingId },
-    /// An assignment to an element of an array that isn't `mut`, like
-    /// `xs[0] = 1` with `xs` of type `imm [i32]`. `expr` is the array.
-    ImmutableArray { expr: ExprId, ty: Ty<'db> },
+    /// `mut` before something other than an array or a struct, like the
+    /// call of a function or an enum's variant: `mut f(x)`.
+    NoMutability { expr: ExprId },
+    /// A type `ty` with a `mut` array or struct, `inner`, inside an `imm`
+    /// one, which can't hold it: `imm` is deep.
+    MutInsideImm { at: ExprOrPat, ty: Ty<'db>, inner: Ty<'db> },
     /// An assignment whose left side isn't a variable, a field or an
     /// element, like `1 = 2` or `f() = 3`. `expr` is the left side.
     NotAPlace { expr: ExprId },
@@ -100,7 +121,11 @@ impl<'db> InferenceDiagnostic<'db> {
     pub(crate) fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
         match self {
             InferenceDiagnostic::Type(error) => error.map_types(f),
-            InferenceDiagnostic::NotAFunction { ty, .. } | InferenceDiagnostic::ImmutableArray { ty, .. } => *ty = f(ty),
+            InferenceDiagnostic::NotAFunction { ty, .. } => *ty = f(ty),
+            InferenceDiagnostic::MutInsideImm { ty, inner, .. } => {
+                *ty = f(ty);
+                *inner = f(inner);
+            }
             _ => {}
         }
     }
@@ -121,6 +146,38 @@ pub(crate) struct FnEnv<'db> {
 struct Expectation<'a, 'db> {
     ty: &'a Ty<'db>,
     reason: Reason<'db>,
+}
+
+/// The first `mut` array or struct in `ty` that an `imm` one holds, with
+/// the `imm` one. Functions aren't looked into: a function's type says what
+/// it takes, not what it holds.
+pub fn mut_inside_imm<'db>(ty: &Ty<'db>) -> Option<(Ty<'db>, Ty<'db>)> {
+    fn has(ty: &Ty<'_>, mutability: Mutability) -> bool {
+        ty.mutability() == Some(&Ty::Mutability(mutability))
+    }
+    fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
+        if has(ty, Mutability::Mut) {
+            return Some(ty.clone());
+        }
+        let mut found = None;
+        if !matches!(ty, Ty::Fn(..)) {
+            ty.walk_children(|t| found = found.take().or_else(|| find_mut(t)));
+        }
+        found
+    }
+    if matches!(ty, Ty::Fn(..)) {
+        return None;
+    }
+    if has(ty, Mutability::Imm) {
+        let mut found = None;
+        ty.walk_children(|t| found = found.take().or_else(|| find_mut(t)));
+        if let Some(inner) = found {
+            return Some((ty.clone(), inner));
+        }
+    }
+    let mut found = None;
+    ty.walk_children(|t| found = found.take().or_else(|| mut_inside_imm(t)));
+    found
 }
 
 /// The mutability of an array literal: `Mut` for `mut [a, b]`, and `Imm`
@@ -163,6 +220,10 @@ pub(crate) struct InferenceContext<'a, 'db> {
     /// haven't been assigned yet. The first `x = ...` initializes them, so
     /// it's allowed even if they aren't `mut`.
     uninitialized: Vec<BindingId>,
+    /// Whether the callee being inferred is that of `mut Wrapper(x)`, so
+    /// that the tuple struct it makes is `mut`. Taken by the struct's
+    /// constructor; if nothing takes it, `mut` was before something else.
+    mut_constructor: bool,
 }
 
 impl<'a, 'db> InferenceContext<'a, 'db> {
@@ -179,6 +240,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return_reason: Reason::None,
             breakables: Vec::new(),
             uninitialized: Vec::new(),
+            mut_constructor: false,
         }
     }
 
@@ -205,12 +267,19 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// The type of `def`'s struct or enum, with new variables for its type
-    /// arguments, and those arguments.
-    pub(crate) fn fresh_adt(&mut self, def: VariantDef<'db>) -> (Ty<'db>, Box<[Ty<'db>]>) {
+    /// arguments and, for a struct, the mutability `mutability`. Also gives
+    /// what to substitute in its field types: the arguments, then for a
+    /// struct its mutability (see [`struct_args`]).
+    pub(crate) fn fresh_adt(&mut self, def: VariantDef<'db>, mutability: Ty<'db>) -> (Ty<'db>, Box<[Ty<'db>]>) {
         let (adt, generic_def) = def.adt();
         let count = generic_def.generic_params(self.db).type_params.len();
-        let args: Box<[Ty<'db>]> = (0..count).map(|_| self.new_var()).collect();
-        (Ty::Adt(adt, args.clone()), args)
+        let args: Vec<Ty<'db>> = (0..count).map(|_| self.new_var()).collect();
+        let ty = Ty::adt(adt, args.clone(), mutability);
+        let subst = match &ty {
+            Ty::Adt(AdtId::Struct(_), args, mutability) => struct_args(args, mutability),
+            _ => args,
+        };
+        (ty, subst.into())
     }
 
     fn resolver(&self, expr: ExprId) -> Resolver<'db> {
@@ -299,7 +368,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     self.infer_block(statements, *tail, expected)
                 }
             }
-            Expr::Call { callee, args } => self.infer_call(expr, *callee, args),
+            Expr::Call { callee, args, is_mut } => self.infer_call(expr, *callee, args, *is_mut),
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
             Expr::Await { expr: inner } | Expr::Try { expr: inner } => {
                 self.infer_expr(*inner);
@@ -362,7 +431,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_expr(*count, &Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)));
                 Ty::array(literal_mutability(*is_mut), elem)
             }
-            Expr::Record { path, fields, spread } => self.infer_record(expr, path.as_ref(), fields, *spread),
+            Expr::Record { path, fields, spread, is_mut } => {
+                self.infer_record(expr, path.as_ref(), fields, *spread, *is_mut)
+            }
             Expr::If { condition, then_branch, else_branch } => {
                 self.check_expr(*condition, &Ty::bool());
                 match else_branch {
@@ -599,7 +670,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             ValueNs::Const(c) => self.const_value_ty(expr, c),
             // Const generics aren't supported yet.
             ValueNs::ConstParam { .. } => Ty::Error,
-            ValueNs::Variant(v) => self.constructor_ty(VariantDef::Variant(v)),
+            ValueNs::Variant(v) => self.constructor_ty(VariantDef::Variant(v), false),
             ValueNs::Builtin(v) => Ty::Builtin(v.ty()),
         }
     }
@@ -622,10 +693,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// The type of a struct or variant used as a value: a function for a
-    /// tuple struct, the type itself for a unit one.
-    fn constructor_ty(&mut self, def: VariantDef<'db>) -> Ty<'db> {
+    /// tuple struct, the type itself for a unit one. A struct is `imm`, or
+    /// `mut` when it's made by `mut Wrapper(x)`.
+    fn constructor_ty(&mut self, def: VariantDef<'db>, is_mut: bool) -> Ty<'db> {
         let (_, generic_def) = def.adt();
-        let (adt_ty, args) = self.fresh_adt(def);
+        let (adt_ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
         let fields = field_types(self.db, def);
         match fields.kind {
             FieldsKind::Unit => adt_ty,
@@ -641,8 +713,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// A path that names a type used as a value: a constructor.
     fn type_as_value(&mut self, expr: ExprId, resolution: TypeResolution<'db>) -> Ty<'db> {
         match (resolution.ty, resolution.unresolved) {
-            (TypeNs::Struct(s), None) => self.constructor_ty(VariantDef::Struct(s)),
-            (TypeNs::Variant(v), None) => self.constructor_ty(VariantDef::Variant(v)),
+            (TypeNs::Struct(s), None) => {
+                let is_mut = std::mem::take(&mut self.mut_constructor);
+                self.constructor_ty(VariantDef::Struct(s), is_mut)
+            }
+            (TypeNs::Variant(v), None) => self.constructor_ty(VariantDef::Variant(v), false),
             _ => {
                 self.unresolved(ExprOrPat::Expr(expr));
                 Ty::Error
@@ -671,27 +746,35 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         // The solver finds the field once the type is known; until then, a
         // variable stands for the field's type.
         let field = self.new_var();
-        let constraint = FieldConstraint { ty: base_ty, name: name.clone(), field: field.clone() };
+        let constraint = FieldConstraint { ty: base_ty, name: name.clone(), field: field.clone(), assign: false };
         self.solver.add(Constraint::Field { constraint, origin: self.origin(expr) });
         field
     }
 
-    fn infer_call(&mut self, expr: ExprId, callee: ExprId, args: &[ExprId]) -> Ty<'db> {
+    fn infer_call(&mut self, expr: ExprId, callee: ExprId, args: &[ExprId], is_mut: bool) -> Ty<'db> {
         // `x.f(y)`: a field holding a function, a longer path, or `f(x, y)`.
         if let Expr::Field { expr: receiver, name } = &self.body[callee] {
             let (receiver, name) = (*receiver, name.clone());
             if self.path_extended(receiver, &name).is_none() {
                 let receiver_ty = self.infer_expr(receiver);
                 let is_field = match self.solver.unifier.shallow_resolve(&receiver_ty) {
-                    Ty::Adt(AdtId::Struct(s), _) => field_types(self.db, VariantDef::Struct(s)).field(&name).is_some(),
+                    Ty::Adt(AdtId::Struct(s), ..) => field_types(self.db, VariantDef::Struct(s)).field(&name).is_some(),
                     _ => false,
                 };
                 if !is_field {
+                    if is_mut {
+                        self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
+                    }
                     return self.infer_method_call(expr, callee, receiver, &receiver_ty, &name, args);
                 }
             }
         }
+        // A tuple struct's constructor takes `mut_constructor`.
+        self.mut_constructor = is_mut;
         let callee_ty = self.infer_expr(callee);
+        if std::mem::take(&mut self.mut_constructor) {
+            self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
+        }
         let function = match &self.body[callee] {
             Expr::Path(path) => match self.resolver(callee).resolve_path_in_value_ns(self.db, path) {
                 Some(ValueResolution::Value(ValueNs::Function(f))) => Some(f),
@@ -863,7 +946,27 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let mut root = place;
         loop {
             match &body[root] {
-                Expr::Field { expr, .. } => root = *expr,
+                Expr::Field { expr: base, .. } => {
+                    let base = *base;
+                    // A path like `Color.Red` has no type of its own.
+                    let Some(base_ty) = self.result.expr_types.get(base) else {
+                        root = base;
+                        continue;
+                    };
+                    match self.solver.unifier.resolve(base_ty) {
+                        // A struct is shared, like an array.
+                        ty @ Ty::Adt(AdtId::Struct(_), ..) => {
+                            let mutability = ty.mutability().unwrap().clone();
+                            return self.solver.require_mut(&ty, &mutability, self.origin(base));
+                        }
+                        // Decided with the field constraint, once the type is
+                        // known.
+                        Ty::Var(_) => return self.solver.assign_field(self.origin(root)),
+                        Ty::Error | Ty::Never => return,
+                        // A tuple is a value: it's changed in its variable.
+                        _ => root = base,
+                    }
+                }
                 Expr::Index { base, .. } => return self.check_mut_array(*base),
                 _ => break,
             }
@@ -901,11 +1004,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// isn't `mut`. An array whose mutability isn't known yet becomes `mut`.
     fn check_mut_array(&mut self, expr: ExprId) {
         let ty = self.solver.unifier.resolve(self.result.expr_ty(expr));
-        let Ty::Array(mutability, _) = &ty else { return };
-        match &**mutability {
-            Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never => {}
-            Ty::Var(_) => self.solver.equal(&Ty::Mutability(Mutability::Mut), mutability, self.origin(expr)),
-            _ => self.result.diagnostics.push(InferenceDiagnostic::ImmutableArray { expr, ty }),
+        if let Ty::Array(mutability, _) = &ty {
+            self.solver.require_mut(&ty, mutability, self.origin(expr));
         }
     }
 
@@ -915,6 +1015,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         path: Option<&Path>,
         fields: &[RecordField],
         spread: Option<ExprId>,
+        is_mut: bool,
     ) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let def = match path.and_then(|p| resolver.resolve_path_in_type_ns(self.db, p)) {
@@ -933,7 +1034,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return Ty::Error;
         };
         let (_, generic_def) = def.adt();
-        let (ty, args) = self.fresh_adt(def);
+        // A variant can't be `mut`: an enum's values can't be changed.
+        if is_mut && matches!(def, VariantDef::Variant(_)) {
+            self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
+        }
+        let (ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
         let field_tys = field_types(self.db, def);
         let mut seen = Vec::new();
         for field in fields {
@@ -954,7 +1059,15 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         }
         match spread {
-            Some(spread) => self.check_expr(spread, &ty),
+            // The fields are copied from `base`, so it can have any
+            // mutability.
+            Some(spread) => {
+                let base = match &ty {
+                    Ty::Adt(id @ AdtId::Struct(_), args, _) => Ty::adt(*id, args.clone(), self.new_mutability()),
+                    ty => ty.clone(),
+                };
+                self.check_expr(spread, &base)
+            }
             None => {
                 let missing: Vec<Name> = field_tys
                     .fields
@@ -975,6 +1088,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     pub fn finish(mut self) -> InferenceResult<'db> {
         let unifier = &self.solver.unifier;
         self.result.map_types(&mut |t| unifier.resolve(t));
+        self.result.check_deep_immutability();
         self.result
     }
 

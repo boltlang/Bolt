@@ -109,7 +109,12 @@ impl Printer<'_> {
                 };
                 format!("{}{kind}{{{}}}", self.label(*label), parts.join(" "))
             }
-            Expr::Call { callee, args } => format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr)),
+            Expr::Call { callee, args, is_mut } => format!(
+                "({}call {} {})",
+                if *is_mut { "mut " } else { "" },
+                self.expr(*callee),
+                self.list(args, Self::expr)
+            ),
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
             Expr::Await { expr } => format!("(await {})", self.expr(*expr)),
             Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
@@ -133,8 +138,9 @@ impl Printer<'_> {
             Expr::ArrayRepeat { value, count, is_mut } => {
                 format!("{}[{}; {}]", if *is_mut { "mut " } else { "" }, self.expr(*value), self.expr(*count))
             }
-            Expr::Record { path, fields, spread } => format!(
-                "(record {} {}{})",
+            Expr::Record { path, fields, spread, is_mut } => format!(
+                "({}record {} {}{})",
+                if *is_mut { "mut " } else { "" },
                 path.as_ref().map_or("_".into(), |p| self.path(p)),
                 fields.iter().map(|f| format!("{}: {}", f.name, self.expr(f.expr))).collect::<Vec<_>>().join(", "),
                 spread.map_or(String::new(), |s| format!(" ..{}", self.expr(s))),
@@ -249,6 +255,9 @@ impl Printer<'_> {
                     Some(len) => format!("{prefix}[{}; {}]", self.ty(*element), self.expr(*len)),
                     None => format!("{prefix}[{}]", self.ty(*element)),
                 }
+            }
+            TypeRef::Mut { mutability, inner } => {
+                format!("{} {}", if *mutability == Mutability::Mut { "mut" } else { "imm" }, self.ty(*inner))
             }
             TypeRef::Never => "!".into(),
             TypeRef::Fn { params, is_variadic, ret_type, abi, .. } => format!(
@@ -416,6 +425,16 @@ fn mutability_of_arrays() {
          (let b : imm [mut [u8; 4]] = [mut [0; 4]])\n\
          (let c : [Bool] = mut [])\n\
          (let d : fn(mut [i32]) -> imm [i32])"
+    );
+}
+
+#[test]
+fn mutability_of_structs() {
+    assert_eq!(
+        render("let a: mut Point = mut Point { x: 1 };\nlet b: imm Pair[A, B] = mut Pair(1, 2);\nlet c: Option[mut Point] = f(1);"),
+        "(let a : mut Point = (mut record Point x: 1))\n\
+         (let b : imm Pair[A, B] = (mut call Pair 1 2))\n\
+         (let c : Option[mut Point] = (call f 1))"
     );
 }
 

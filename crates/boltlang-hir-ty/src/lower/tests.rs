@@ -45,9 +45,10 @@ fn function_signatures() {
 
     let f = function(&db, file, 5);
     let sig = fn_sig(&db, f);
-    // An array without `mut` or `imm` in the return type is `imm`.
-    assert_eq!(show_sig(&db, sig), "fn(T, Pair[T, Bool], List[u8]) -> (T, imm [Pair[i32, i32]], !)");
-    assert!(sig.is_complete());
+    // The body decides the mutabilities that a return type doesn't say, so
+    // the signature isn't complete.
+    assert_eq!(show_sig(&db, sig), "fn(T, Pair[T, Bool], List[u8]) -> (T, [Pair[i32, i32]], !)");
+    assert!(!sig.is_complete());
     assert!(sig.diagnostics.is_empty(), "{:?}", sig.diagnostics);
     let preds = &generic_predicates(&db, GenericDefId::Function(f)).predicates;
     let shown: Vec<_> = preds
@@ -119,5 +120,5 @@ fn fields_impls_and_consts() {
 
     let ModItem::Const(idx) = item(&db, file, 12) else { panic!() };
     let n = const_ty(&db, ConstId::new(&db, ItemContainerId::File(file), idx));
-    assert_eq!(n.ty.display(&db).to_string(), "Pair[Bool, u8]");
+    assert_eq!(n.ty.display(&db).to_string(), "imm Pair[Bool, u8]");
 }

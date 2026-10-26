@@ -135,7 +135,12 @@ fn infer_group<'db>(
         let sig = fn_sig(db, f);
         let params: Box<[Ty<'db>]> =
             sig.params.iter().map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General))).collect();
-        let ret = sig.ret.clone().unwrap_or_else(|| solver.new_var(VarKind::General));
+        // The body decides the mutabilities of the return type that aren't
+        // written.
+        let ret = match &sig.ret {
+            Some(ret) => ret.fill_unwritten(&mut || solver.new_var(VarKind::Mutability)),
+            None => solver.new_var(VarKind::General),
+        };
         env.mono.insert(f, Ty::Fn(params.clone(), Box::new(ret.clone())));
         signatures.push((params, ret));
     }
@@ -158,7 +163,8 @@ fn infer_group<'db>(
     let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields };
     for (&f, (def, result)) in group.iter().zip(results) {
         let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
-        let (scheme, result) = solved.generalize(db, f, def, &ty, result);
+        let (scheme, mut result) = solved.generalize(db, f, def, &ty, result);
+        result.check_deep_immutability();
         env.done.insert(f, scheme.clone());
         out.schemes.push((f, scheme));
         out.results.push((f, result));

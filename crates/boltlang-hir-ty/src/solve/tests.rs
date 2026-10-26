@@ -52,7 +52,7 @@ fn class<'db>(class: ClassId<'db>, ty: Ty<'db>) -> ClassConstraint<'db> {
 fn instances_from_impls() {
     let db = TestDb::new();
     let (s, file) = setup(&db);
-    let list = |t| Ty::Adt(AdtId::Enum(s.list), Box::new([t]));
+    let list = |t| Ty::adt(AdtId::Enum(s.list), [t], Ty::Error);
     let mut solver = Solver::new(&db, file);
     solver.add(Constraint::Class { constraint: class(s.show, list(list(i32()))), origin: s.origin });
     solver.add(Constraint::Class { constraint: class(s.show, list(Ty::bool())), origin: s.origin });

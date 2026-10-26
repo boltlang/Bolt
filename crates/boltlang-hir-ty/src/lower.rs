@@ -19,7 +19,7 @@ use crate::{
     ty::{AdtId, GenericParamId, Mutability, Ty},
 };
 
-fn imm<'db>() -> Ty<'db> {
+pub(crate) fn imm<'db>() -> Ty<'db> {
     Ty::Mutability(Mutability::Imm)
 }
 
@@ -75,6 +75,12 @@ pub enum LowerDiagnostic {
     /// Something the checker doesn't support yet, like `impl Trait` or
     /// associated types.
     Unsupported(TypeRefId),
+    /// `mut` or `imm` before a type that isn't an array or a struct, like
+    /// `mut i32`, or before one that already has the other.
+    NoMutability(TypeRefId),
+    /// `mut` in the type of a field. A field has the mutability of its
+    /// struct, so that what an `imm` struct holds can't be changed either.
+    MutField(TypeRefId),
 }
 
 pub struct TyLoweringContext<'a, 'db> {
@@ -108,9 +114,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 // still that type, with errors for what's missing, so that
                 // the rest of it is known.
                 match ty {
-                    Ty::Adt(adt, args) if *expected == Kind::Type && kind.is_first_order() => {
+                    Ty::Adt(adt, args, m) if *expected == Kind::Type && kind.is_first_order() => {
                         let missing = kind.split().0.len();
-                        Ty::Adt(adt, args.into_vec().into_iter().chain(std::iter::repeat_n(Ty::Error, missing)).collect())
+                        let args = args.into_vec().into_iter().chain(std::iter::repeat_n(Ty::Error, missing));
+                        Ty::Adt(adt, args.collect(), m)
                     }
                     _ => Ty::Error,
                 }
@@ -151,6 +158,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let mutability = mutability.map_or(Ty::Unwritten, Ty::Mutability);
                 Ty::array(mutability, self.lower_ty(*element))
             }
+            TypeRef::Mut { mutability, inner } => {
+                let (ty, kind) = self.lower_ty_kinded(*inner);
+                return (self.with_mutability(id, ty, *mutability), kind);
+            }
             TypeRef::Never => Ty::Never,
             TypeRef::Fn { params, ret_type, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
@@ -163,6 +174,22 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
         };
         (ty, Some(Kind::Type))
+    }
+
+    /// `ty` with the mutability written before it, as in `mut Point`: only
+    /// arrays and structs have one.
+    fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, mutability: Mutability) -> Ty<'db> {
+        let written = Ty::Mutability(mutability);
+        let fits = |old: &Ty<'db>| matches!(old, Ty::Unwritten) || *old == written;
+        match ty {
+            Ty::Adt(adt @ AdtId::Struct(_), args, old) if fits(&old) => Ty::Adt(adt, args, Box::new(written)),
+            Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
+            Ty::Error => Ty::Error,
+            ty => {
+                self.diagnostics.push(LowerDiagnostic::NoMutability(id));
+                ty
+            }
+        }
     }
 
     fn lower_path_ty(&mut self, id: TypeRefId, path: &Path) -> (Ty<'db>, Option<Kind>) {
@@ -180,8 +207,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             return (Ty::Error, None);
         }
         let (head, kind) = match resolution.ty {
-            TypeNs::Struct(s) => (Ty::Adt(AdtId::Struct(s), Box::new([])), def_kind(self.db, GenericDefId::Struct(s))),
-            TypeNs::Enum(e) => (Ty::Adt(AdtId::Enum(e), Box::new([])), def_kind(self.db, GenericDefId::Enum(e))),
+            // Like an array, a struct written without `mut` or `imm` has its
+            // mutability decided by where it's written.
+            TypeNs::Struct(s) => {
+                (Ty::adt(AdtId::Struct(s), [], Ty::Unwritten), def_kind(self.db, GenericDefId::Struct(s)))
+            }
+            TypeNs::Enum(e) => (Ty::adt(AdtId::Enum(e), [], imm()), def_kind(self.db, GenericDefId::Enum(e))),
             TypeNs::Builtin(ty) => (Ty::Builtin(ty), Kind::Type),
             TypeNs::GenericParam { def, index } => {
                 let kind = generic_param_kinds(self.db, def).get(index as usize).cloned().unwrap_or(Kind::Type);
@@ -446,21 +477,24 @@ pub struct FnSig<'db> {
     /// The type of each parameter; `None` where no type is written.
     pub params: Box<[Option<Ty<'db>>]>,
     /// The return type, if written. A function without a body and without
-    /// a return type, like a class method, returns `()`.
+    /// a return type, like a class method, returns `()`. An array or struct
+    /// in it without `mut` or `imm` is [`Ty::Unwritten`]: the body decides
+    /// its mutability, so the signature isn't complete. Without a body,
+    /// it's `imm`.
     pub ret: Option<Ty<'db>>,
     /// How many hidden mutability parameters the function has: one for each
-    /// array type without `mut` or `imm` in its parameters, so that it takes
-    /// arrays of either mutability. In the return type, such an array is
-    /// `imm`.
+    /// array or struct type without `mut` or `imm` in its parameters, so
+    /// that it takes values of either mutability.
     pub hidden: u32,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
 impl FnSig<'_> {
     /// Whether every type is written, so that callers can use the
-    /// signature without looking at the body.
+    /// signature without looking at the body. A return type with an array or
+    /// struct whose mutability isn't written needs the body.
     pub fn is_complete(&self) -> bool {
-        self.ret.is_some() && self.params.iter().all(Option::is_some)
+        self.ret.as_ref().is_some_and(|t| !t.has_unwritten()) && self.params.iter().all(Option::is_some)
     }
 }
 
@@ -472,7 +506,7 @@ pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let mut hidden = HiddenParams::new(db, GenericDefId::Function(id));
     let params = sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref).map(|t| hidden.fill(&t))).collect();
     let ret = match sig.ret_type {
-        Some(ret) => Some(ctx.lower_ty(ret).fill_unwritten(&mut imm)),
+        Some(ret) => Some(ctx.lower_ty(ret)),
         None if !id.item(db).has_body => Some(Ty::unit()),
         None => None,
     };
@@ -525,30 +559,62 @@ pub fn field_types<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> &'db FieldType
     }
 }
 
+/// The types of a struct's fields. An array or struct in them without `mut`
+/// or `imm` has the struct's own mutability, which is a hidden parameter of
+/// the struct after its type parameters: see [`struct_mutability`]. So what
+/// an `imm` struct holds can't be changed either.
 #[salsa::tracked(returns(ref))]
 pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes<'db> {
     let sig = struct_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Struct(id));
-    lower_fields(&mut TyLoweringContext::new(db, &resolver, &sig.store), &sig.fields)
+    let own = struct_mutability(db, id);
+    lower_fields(&mut TyLoweringContext::new(db, &resolver, &sig.store), &sig.fields, &own)
 }
 
-/// The field types of each variant of an enum.
+/// The mutability of a struct as seen from its fields: its hidden
+/// parameter, which [`struct_args`] gives the value of.
+pub fn struct_mutability<'db>(db: &'db dyn Db, id: StructId<'db>) -> Ty<'db> {
+    let def = GenericDefId::Struct(id);
+    Ty::Param(GenericParamId { def, index: def.generic_params(db).type_params.len() as u32 })
+}
+
+/// The arguments to substitute in the field types of a struct of type
+/// `Adt(id, args, mutability)`: its type arguments, then its mutability.
+pub fn struct_args<'db>(args: &[Ty<'db>], mutability: &Ty<'db>) -> Vec<Ty<'db>> {
+    args.iter().chain(std::iter::once(mutability)).cloned().collect()
+}
+
+/// The field types of each variant of an enum. An enum has no mutability,
+/// since its values can't be changed in place, so an array or struct in
+/// them without `mut` or `imm` is `imm`.
 #[salsa::tracked(returns(ref))]
 pub fn enum_field_types<'db>(db: &'db dyn Db, id: EnumId<'db>) -> Vec<FieldTypes<'db>> {
     let sig = enum_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Enum(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
-    sig.variants.iter().map(|v| lower_fields(&mut ctx, &v.fields)).collect()
+    sig.variants.iter().map(|v| lower_fields(&mut ctx, &v.fields, &imm())).collect()
 }
 
-fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList) -> FieldTypes<'db> {
+/// Lower fields, with `own` for the arrays and structs in them without `mut`
+/// or `imm`. A field can't say `mut`: whether what it holds can be changed
+/// is up to the struct.
+fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList, own: &Ty<'db>) -> FieldTypes<'db> {
     let (kind, list): (_, &[signatures::FieldData]) = match fields {
         FieldList::Record(fields) => (FieldsKind::Record, fields),
         FieldList::Tuple(fields) => (FieldsKind::Tuple, fields),
         FieldList::Unit => (FieldsKind::Unit, &[]),
     };
-    // A field holds one array, so one without `mut` or `imm` is `imm`.
-    let fields = list.iter().map(|f| (f.name.clone(), ctx.lower_ty(f.type_ref).fill_unwritten(&mut imm))).collect();
+    let fields = list
+        .iter()
+        .map(|f| {
+            let ty = ctx.lower_ty(f.type_ref);
+            if ty.any(&mut |t| *t == Ty::Mutability(Mutability::Mut)) {
+                ctx.diagnostics.push(LowerDiagnostic::MutField(f.type_ref));
+            }
+            let ty = ty.fold(&mut |t| (*t == Ty::Mutability(Mutability::Mut)).then(|| own.clone()));
+            (f.name.clone(), ty.fill_unwritten(&mut || own.clone()))
+        })
+        .collect();
     FieldTypes { kind, fields, diagnostics: std::mem::take(&mut ctx.diagnostics) }
 }
 

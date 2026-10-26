@@ -11,7 +11,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    lower::{ClassConstraint, fn_sig, generic_predicates, identity_args, impl_header, subst_params},
+    lower::{ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_header, subst_params},
     solve::{Constraint, FieldConstraint, Origin, Solver},
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
@@ -57,7 +57,7 @@ impl<'db> Scheme<'db> {
     }
 
     /// Show the scheme like `forall a. Show[a] => fn(a) -> a`, with fields
-    /// like `a.x: i32 => `. Mutabilities aren't shown: an array whose
+    /// like `a.x: i32 => `, or `mut a.x: i32 => ` for one that's assigned. Mutabilities aren't shown: an array whose
     /// mutability is generic is `[a]`.
     pub fn display(&self, db: &'db dyn Db) -> String {
         let mut tys = vec![&self.ty];
@@ -82,7 +82,8 @@ impl<'db> Scheme<'db> {
             out.push_str(&format!("{name}[{}] => ", args.join(", ")));
         }
         for field in self.fields.iter() {
-            out.push_str(&format!("{}.{}: {} => ", show(&field.ty), field.name, show(&field.field)));
+            let prefix = if field.assign { "mut " } else { "" };
+            out.push_str(&format!("{prefix}{}.{}: {} => ", show(&field.ty), field.name, show(&field.field)));
         }
         out.push_str(&show(&self.ty));
         out
@@ -160,7 +161,7 @@ pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option
         }
     };
     let params = sig.params.iter().map(|t| t.as_ref().map_or(Ty::Error, subst)).collect();
-    let ret = sig.ret.as_ref().map_or(Ty::Error, subst);
+    let ret = sig.ret.as_ref().map_or(Ty::Error, |t| subst(&t.fill_unwritten(&mut imm)));
     Some((params, ret))
 }
 
@@ -206,9 +207,14 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
                 .zip(class_params.iter().chain(std::iter::repeat(&Ty::Error)))
                 .map(|(own, class)| own.clone().unwrap_or_else(|| class.clone()))
                 .collect();
-            (params, sig.ret.clone().unwrap_or(class_ret))
+            (params, sig.ret.as_ref().map_or(class_ret, |t| t.fill_unwritten(&mut imm)))
         }
-        None => (sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect(), sig.ret.clone().unwrap_or(Ty::Error)),
+        // Without a body to decide them, mutabilities of the return type
+        // that aren't written are `imm`.
+        None => {
+            let params = sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect();
+            (params, sig.ret.as_ref().map_or(Ty::Error, |t| t.fill_unwritten(&mut imm)))
+        }
     };
     let mut defs = generic_chain(db, f);
     // An impl method without type parameters of its own, like the `fmap` of

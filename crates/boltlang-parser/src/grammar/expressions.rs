@@ -319,7 +319,7 @@ fn call_expr(p: &mut Parser, lhs: CompletedMarker) -> CompletedMarker {
     m.complete(p, CALL_EXPR)
 }
 
-fn arg_list(p: &mut Parser) {
+pub(super) fn arg_list(p: &mut Parser) {
     let m = p.start();
     crate::grammar::delimited(
         p,

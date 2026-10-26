@@ -131,9 +131,10 @@ f: fn(Point, [i32]) -> ()
 --------------------------------------------------------------------------------
 error at `x`: not mut
 error at `x`: not mut
-error at `p.x`: not mut
-error at `xs`: can't change [i32]
 error at `z`: not mut
+error at `p`: can't change Point
+error at `xs`: can't change [i32]
+error at `q`: can't change Point
 
 ================================================================================
 Assigning to something that isn't a place is an error
@@ -154,16 +155,16 @@ fn f() {
 
 --------------------------------------------------------------------------------
 g: fn() -> i32
-h: fn() -> Point
+h: fn() -> imm Point
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `1`: not a place
 error at `g()`: not a place
 error at `g`: not a place
 error at `C`: not a place
-error at `h().x`: not a place
 error at `(1, 2).0`: not a place
 error at `nope`: unresolved
+error at `h()`: can't change imm Point
 
 ================================================================================
 Custom operators call their definition

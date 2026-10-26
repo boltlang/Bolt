@@ -215,7 +215,7 @@ struct Point { x: i32, y: i32 }
 let p = Point { x: 1 };
       //^^^^^^^^^^^^^^ error: missing field `y`
   p.z;
-  //^ error: `Point` has no field `z`
+  //^ error: `imm Point` has no field `z`
 "#,
     );
 }
@@ -587,9 +587,32 @@ fn first(ys: [i32]) { ys[0] = 1; }
                     //^^ error: cannot change an element of `ys`, which is `[i32]`; only a `mut` array can be changed
 let zs = mut [1, 2];
 zs[0] = 3;
-struct Inventory { items: [i32], tags: mut [String] }
-fn clear(inv: Inventory) { inv.items[0] = 0; inv.tags[0] = ""; }
-                         //^^^^^^^^^ error: cannot change an element of `inv.items`, which is `imm [i32]`; only a `mut` array can be changed
+struct Inventory { items: [i32] }
+fn clear(inv: Inventory) { inv.items[0] = 0; }
+                         //^^^^^^^^^ error: cannot change an element of `inv.items`, which is `[i32]`; only a `mut` array can be changed
+"#,
+    );
+}
+
+#[test]
+fn changing_structs_that_are_not_mut() {
+    check(
+        r#"
+struct Point { x: i32, y: i32 }
+let p = Point { x: 1, y: 2 };
+  p.x = 3;
+//^ error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed
+let q = mut Point { x: 1, y: 2 };
+q.x = 3;
+fn move_x(r) { r.x = 1; }
+  move_x(p);
+//^^^^^^ error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed
+struct Bag { items: mut [i32] }
+                  //^^^^^^^^^ error: a field can't be `mut`: it has the mutability of its struct, so make the struct `mut` instead
+let a = [mut [1]];
+      //^^^^^^^^^ error: an `imm [mut [i32]]` can't hold a `mut [i32]`: what an `imm` value holds can't be changed either
+fn f(x: mut i32) {}
+      //^^^^^^^ error: only an array or a struct can be `mut` or `imm`
 "#,
     );
 }
