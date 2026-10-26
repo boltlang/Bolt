@@ -8,8 +8,8 @@ description: A design for a React-like UI framework in Bolt, built on algebraic 
 
 :::warning[Not implemented]
 This page is a design sketch. **Nothing on it is implemented**: there's no
-`reactive` keyword, no markup syntax, no `html` package and no effects in
-Bolt yet. The syntax below is a placeholder and will change.
+reactive state, no markup syntax, no `html` package and no effects in Bolt
+yet. The syntax below is a placeholder and will change.
 :::
 
 This section outlines a React-like framework for Bolt. This page writes down
@@ -26,7 +26,7 @@ effects*, compiled the way Svelte 5 compiles its components.
   one value, like `Loading | Failed(e) | Done(data)`, which the compiler
   checks for every case.
 - **Which state is which.** If a component reruns on each change, every
-  `let reactive` has to find the same cell again. React ties state to the
+  piece of state has to find the same cell again. React ties state to the
   order of hook calls, which is why hooks can't be called in `if` or in
   loops.
 - **What a component is.** A plain `fn` with hidden state isn't an ordinary
@@ -49,8 +49,8 @@ effect Async {
 }
 
 fn app() -> Html / { Reactive, Async } {
-    let reactive user = None;   // let user = state(<key>, None)
-    match user { ... }          // match read(user) { ... }
+    let mut user = None;   // state, see below: let user = state(<key>, None)
+    match user { ... }     // match read(user) { ... }
 }
 ```
 
@@ -69,6 +69,55 @@ This gives:
   shows a fallback, and resumes the component when the data is there. React's
   Suspense throws a promise and reruns the component instead, because
   JavaScript can't resume a function halfway.
+
+## Inferring state
+
+There's no keyword for state. A component's body runs once, and only the
+bindings in its markup rerun, so the compiler can tell from one function
+body which variables are state:
+
+```bolt
+fn counter() -> Html / { Reactive } {
+    let mut count = 0;          // written later, by on_click: state
+    let doubled = count * 2;    // reads state: derived
+    let mut total = 0;          // only used while drawing: a plain variable
+    for x in [1, 2, 3] { total += x; }
+    <button on_click={|| { count += 1; }}>{count} × 2 = {doubled}</button>
+}
+```
+
+- **State** is a `let mut` that a closure writes after drawing is done, like
+  an event handler. Closures already change the `mut` variables they capture,
+  so this is a check within one function.
+- **Derived** is a `let` whose value reads state. It's recomputed when the
+  state changes; otherwise `doubled` would be computed once and go stale.
+  Only an expression without effects can be derived, because running a
+  `print` again would change what the program does. The effects in its type
+  tell the compiler which expressions those are.
+- **Plain** is everything else, like `total`. It's an ordinary variable and
+  costs nothing.
+
+Bolt already infers types, and inferring `Reactive` is the same kind of
+work. It also has no split between component files and other files, like
+`.svelte` and `.js`.
+
+Inference has limits:
+
+- **Function boundaries.** Passing `count` to a function passes its value,
+  not its cell, so moving code into a helper would quietly lose reactivity.
+  This is why Svelte 5 dropped the inference of Svelte 4. A function that
+  reads or changes state says so, with a `Signal[T]` parameter or result.
+  The compiler could pass the cell itself when the parameter's type is
+  `Signal[T]`, but not when that type is inferred, so this stays explicit.
+- **Changes inside data.** `items.push(x)` or `user.name = "Sam"` changes an
+  object, not a variable. Objects are garbage-collected and can be shared, so
+  the compiler can't follow every path to them. To start with, only assigning
+  a whole new value counts, as in `items = items.push(x)`. Collections that
+  track their own changes can come later; Svelte 5 uses proxies for this.
+- **Predictability.** Small changes change the meaning: removing the last
+  event handler that writes `count` makes it a plain variable. The language
+  server shows what the compiler inferred, with an inlay hint or a highlight
+  on state and derived variables, like rust-analyzer shows inferred types.
 
 ## What effects don't solve
 
@@ -95,9 +144,9 @@ This gives:
    `read` resume right away, and such operations compile to a hidden
    argument, almost for free, as in Koka. Only `await` suspends; in wasm,
    JSPI and stack switching can help there.
-6. **Effect polymorphism.** `list.map(fn (x) => <Item ... />)` only type
+6. **Effect polymorphism.** `list.map(|x| <Item ... />)` only type
    checks if `map` passes on the effects of its callback. Effect rows are the
-   same idea as the rows of extensible records (`{ name: String, .. }`), so
+   same idea as the rows of extensible records (`{ name: str, .. }`), so
    the type checker may be able to reuse that.
 
 ## Compared with Svelte
@@ -112,7 +161,9 @@ This gives:
 
 | Svelte 5                                | Bolt with effects                                 |
 | --------------------------------------- | ------------------------------------------------- |
-| `$state(init)`                          | the `state(key, init)` operation                  |
+| `let count = $state(0)`                 | `let mut count = 0`, inferred to be state         |
+| `let doubled = $derived(count * 2)`     | `let doubled = count * 2`, inferred to be derived |
+| `$state(init)` at runtime               | the `state(key, init)` operation                  |
 | a read, `$.get(count)`                  | the `read(s)` operation, tracked by the handler   |
 | the global "active reaction"            | the handler in scope, which the types track       |
 | the template split per DOM node         | the same, each part under a tracking handler      |
@@ -121,15 +172,15 @@ This gives:
 
 So the design is a Svelte 5–style compiler on an effect-based runtime.
 Effects give the types, the tracking, async, and handlers that can be
-swapped. The compiler gives the keys of state, and splits markup into small
-updates.
+swapped. The compiler infers what is state, gives the keys of state, and
+splits markup into small updates.
 
 ## Using the rest of Bolt
 
 - **Props are keyword arguments.** `<Button label="Save" primary />` is
-  `Button(label="Save", primary=True)`, and parameter defaults are default
+  `Button(label="Save", primary=true)`, and parameter defaults are default
   props.
-- **Extensible records pass props on.** `props: { class: String, .. }` is
+- **Extensible records pass props on.** `props: { class: str, .. }` is
   React's `...rest`, but type-checked.
 - **A class for interpolation.** Like `Show` for `print`, a `ToHtml` class
   lets any type appear in markup, with text escaped by default.
@@ -142,19 +193,19 @@ import "html" (Html)
 enum Remote[T, E] { Loading, Failed(E), Done(T) }
 
 fn app() -> Html / { Reactive } {
-    let reactive user = None;
+    let mut user = None;
     match user {
-        None => <LoginForm on_login={fn (u) => user = Some(u)} />,
+        None => <LoginForm on_login={|u| { user = Some(u); }} />,
         Some({ username, .. }) => <h1>Welcome back, {username}!</h1>,
     }
 }
 
 fn login_form(on_login: fn(User) -> ()) -> Html / { Reactive } {
-    let reactive failed = False;
+    let mut failed = false;
     // An event handler runs after drawing, as a task of its own.
-    let submit = async fn () => match await fetch("/api/login") {
+    let submit = async || match await fetch("/api/login") {
         Ok(data) => on_login({ username = data.username }),
-        Err(_) => failed = True,
+        Err(_) => { failed = true; },
     };
     if failed {
         <h1>Something went wrong.</h1>
@@ -177,7 +228,7 @@ fn login_form(on_login: fn(User) -> ()) -> Html / { Reactive } {
 
 ## A first step
 
-The `Reactive` effect with only operations that resume right away, and the
-keys from the compiler. That gives state that behaves well and components in
-the types, without the hard parts of compiling effects. Splitting markup and
-`await` come later.
+The `Reactive` effect with only operations that resume right away, the
+inference of state, and the keys from the compiler. That gives state that
+behaves well and components in the types, without the hard parts of
+compiling effects. Derived values, splitting markup and `await` come later.
