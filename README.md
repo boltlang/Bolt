@@ -60,6 +60,22 @@ stand out from other programming languages.
 
 ## FAQ
 
+### Why is this project using AI?
+
+It is thanks to AI that this project is back alive. See [this blog post][whyai]
+for more information.
+
+I almost gave up on this project. In a desparate move, I tried out Claude Code,
+and it helped me tremendously. I judged the quality of the code Claude produces
+to be equal or even better than the code I write.
+
+I still try to validate as much as I can of the code Claude produces. The [test
+suite][tests] is growing every day, and should guarantee that the produced
+code is correct.
+
+[tests]: https://github.com/boltlang/Bolt/tree/main/tests
+[whyai]: https://boltlang.net/blog/hello-bolt/
+
 ### When will the compiler be ready to use?
 
 It is really difficult to say when the compiler will be ready. This project is
