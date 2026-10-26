@@ -301,9 +301,12 @@ mutability: `next(a)` is a `mut Node` for a `mut Node` `a`, and an
 
 That makes the signature incomplete: such a function is
 [inferred](./generalization.mdx), not checked on its own, so editing its
-body checks its callers again. Writing `mut` or `imm` in the return type
-makes it complete. A function without a body, like a class method, has no
-body to decide, so its return type is `imm` where it doesn't say.
+body checks its callers again. Writing `mut`, `imm` or a
+[name](#naming-a-mutability) in the return type makes it complete:
+`fn next(n: 'm Node) -> 'm Node` says what the body of `next` would
+decide, and is checked on its own. A function without a body, like a class
+method, has no body to decide, so its return type is `imm` where it
+doesn't say.
 
 The type of a const and an array or struct in a `where` predicate, like the
 `[T]` of `where Show[[T]]`, are `imm` too.
@@ -317,6 +320,48 @@ can be changed.
 A type alias doesn't decide what `[T]` or `Point` means in it: the type it's
 used in does. With `type Ints = [i32]`, `fn sum(xs: Ints)` takes either
 kind of array, and `mut Ints` is `mut [i32]`.
+
+## Naming a mutability
+
+A name like `'m`, written where `mut` or `imm` would be, is a mutability
+that's the same wherever the name is:
+
+```bolt
+fn next(n: 'm Node) -> 'm Node = n.next;
+fn both(a: 'm [i32], b: 'm [i32]) -> i32 = a[0] + b[0];
+fn pair(a: 'm [i32], b: 'n [i32]) -> ('m [i32], 'n [i32]) = (a, b);
+```
+
+`next` gives back a node with the mutability of the one it's given, `both`
+takes two arrays of the same kind, and `pair` two arrays of any kinds,
+which it gives back as they are. `'` marks the name, as for labels and
+Rust's lifetimes: without it, `m [i32]` would be the type `m` applied to
+`i32`.
+
+- **A name is a parameter of the function or impl** whose signature it's
+  in, like a hidden one, but shared: every `'m` in the signature, its
+  `where` predicates and its body is the same. Names don't need declaring:
+  using one is enough. Like a hidden parameter, the caller chooses it, so
+  the function can't change what has it, and
+  `fn make() -> 'm [i32] = [1]` is an error: `[1]` is `imm`, not whatever
+  the caller chooses.
+- **Only functions and impls have names.** A name elsewhere, like in a
+  field, a const, a type alias or a body that isn't its function's, is an
+  error (E0225). A name before a type that can't have a mutability, like
+  `'m i32`, is E0222.
+- **Types show names**, and a name for a mutability that's shared but not
+  written: one that a body decides, or a variable of an inferred function.
+  Such names start at `'m`, so that they don't read like the type variables
+  `a`, `b`, ...:
+
+  ```bolt
+  fn pick(c, a, b) = if c { a[0]; a } else { b };  // forall a. fn(Bool, 'm [a], 'm [a]) -> 'm [a]
+  fn same(xs: [i32]) -> [i32] = xs;                 // fn('m [i32]) -> 'm [i32]
+  fn first(xs) = xs[0];                             // forall a. fn([a]) -> a
+  ```
+
+  A mutability that appears once isn't named: it's either, and it isn't
+  linked to anything.
 
 ## Making a value that can't be changed from one that can
 
@@ -341,6 +386,7 @@ value: that it's *unique*. Jane Street's OCaml has a mode for that
 | E0222 | `mut` or `imm` before something that isn't an array or a struct |
 | E0223 | an `imm` value that holds a `mut` one |
 | E0224 | a `mut` field |
+| E0225 | a named mutability that isn't the function's or impl's |
 
 ```text
 [E0221] Error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed
@@ -384,6 +430,11 @@ unification will have to remember the origin of `Imm` and `Mut`.
   - in an enum's field, the return type of a function without a body, a
     const and a `where` predicate, `Imm`;
   - in a type alias, nothing: the type it's used in decides.
+
+  A name like `'m` lowers to a parameter of its function or impl
+  (`named_mutabilities`), numbered after the declared type parameters and
+  before the hidden ones. A body can use its function's names. A signature
+  whose return type only has written or named mutabilities is complete.
 - **Unification** (`unify.rs`): mutabilities are equal or they aren't;
   there's no subtyping.
 - **Inference** (`infer.rs`): an array or struct literal is `Imm`, or `Mut`
@@ -401,12 +452,14 @@ unification will have to remember the origin of `Imm` and `Mut`.
   checked, and not generalized, becomes `Imm`. That happens after the
   errors are resolved, so that an undecided mutability is shown as `[T]` in
   them.
-- **Showing types**: `mut T`, `imm T`, and `T` for a generalized or unknown
-  mutability. Schemes leave hidden parameters and generalized mutabilities
-  out of their `forall`, and show a field constraint that's assigned to as
-  `mut a.x: b`.
-- **Tests**: `tests/checker/array_mutability.txt` and
-  `tests/checker/struct_mutability.txt` have a case for each rule on this
+- **Showing types**: `mut T`, `imm T`, `'m T` for a named mutability, and
+  `T` for a generalized or unknown one. `TyNames` gives a name to each
+  generalized, unknown or hidden mutability that appears more than once.
+  Schemes leave mutabilities out of their `forall`, and show a field
+  constraint that's assigned to as `mut a.x: b`.
+- **Tests**: `tests/checker/array_mutability.txt`,
+  `tests/checker/struct_mutability.txt` and
+  `tests/checker/named_mutability.txt` have a case for each rule on this
   page.
 
 `Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197)) is
@@ -417,13 +470,11 @@ taking the place of a separate `StringBuilder`.
 
 ## Open questions
 
-- **Showing a mutability that's shared.** In
-  `fn pick(c, a, b) = if c { a } else { b }`, `a` and `b` have the same
-  mutability, and showing both as `[T]` hides that. Types could name the
-  mutability only when it's shared, like `fn(Bool, [a]^m, [a]^m) -> [a]^m`,
-  with some syntax to write it too. With that syntax, a return type could
-  say that it has the mutability of a parameter, and such functions could
-  be checked on their own again.
+- **Names in structs**, like `struct Pair['a, 'b] { x: 'a Point, y: 'b Point }`,
+  so that one field can be `mut` while another is `imm`. `imm` being deep
+  then needs a rule for how `'a` relates to the struct's own mutability.
+- **A name used once** says nothing that leaving it out doesn't, and could
+  be a warning.
 - **Impls for struct type constructors.** `impl Functor[Box]` is for boxes
   of either mutability, so `fmap` must return a `Box` with the mutability
   of the one it's given, which it can't make: `Box { item: f(b.item) }` is
