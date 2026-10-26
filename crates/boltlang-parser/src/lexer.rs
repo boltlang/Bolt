@@ -134,6 +134,7 @@ lazy_static! {
         m.insert("fn", FN_KEYWORD);
         m.insert("for", FOR_KEYWORD);
         m.insert("if", IF_KEYWORD);
+        m.insert("imm", IMM_KEYWORD);
         m.insert("impl", IMPL_KEYWORD);
         m.insert("import", IMPORT_KEYWORD);
         m.insert("in", IN_KEYWORD);

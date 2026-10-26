@@ -83,6 +83,7 @@ pub enum SyntaxKind {
     FN_KEYWORD,
     FOR_KEYWORD,
     IF_KEYWORD,
+    IMM_KEYWORD,
     IMPL_KEYWORD,
     IMPORT_KEYWORD,
     IN_KEYWORD,
@@ -371,6 +372,7 @@ macro_rules! T {
     [fn] => { $crate::SyntaxKind::FN_KEYWORD };
     [for] => { $crate::SyntaxKind::FOR_KEYWORD };
     [if] => { $crate::SyntaxKind::IF_KEYWORD };
+    [imm] => { $crate::SyntaxKind::IMM_KEYWORD };
     [impl] => { $crate::SyntaxKind::IMPL_KEYWORD };
     [import] => { $crate::SyntaxKind::IMPORT_KEYWORD };
     [in] => { $crate::SyntaxKind::IN_KEYWORD };
@@ -505,6 +507,7 @@ impl SyntaxKind {
             FN_KEYWORD => "'fn'",
             FOR_KEYWORD => "'for'",
             IF_KEYWORD => "'if'",
+            IMM_KEYWORD => "'imm'",
             IMPL_KEYWORD => "'impl'",
             IMPORT_KEYWORD => "'import'",
             IN_KEYWORD => "'in'",

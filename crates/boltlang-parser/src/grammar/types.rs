@@ -13,6 +13,8 @@ pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     METAVARIABLE,
     T!['('],
     T!['['],
+    T![mut],
+    T![imm],
     T![!],
     T![fn],
     T![async],
@@ -51,7 +53,7 @@ fn type_with_bounds_cond(p: &mut Parser, allow_bounds: bool) {
 fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
     let m = match p.current() {
         T!['('] => tuple_type(p),
-        T!['['] => array_type(p),
+        T!['['] | T![mut] | T![imm] => array_type(p),
         T![!] => never_type(p),
         T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
         T![impl] => impl_trait_type(p),
@@ -215,9 +217,14 @@ fn tuple_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, TUPLE_TYPE)
 }
 
-/// `[T]` or `[T; N]`
+/// `[T]` or `[T; N]`, maybe after `mut` or `imm`: `mut [T]` can be
+/// changed, and `imm [T]` never changes.
 fn array_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
+    if (p.eat(T![mut]) || p.eat(T![imm])) && !p.at(T!['[']) {
+        p.error("expected an array type, like `mut [T]`; only arrays can be `mut` or `imm`");
+        return m.complete(p, ARRAY_TYPE);
+    }
     p.bump(T!['[']);
     type_(p);
     if p.eat(T![;]) {

@@ -26,6 +26,7 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T!['('],
     T!['{'],
     T!['['],
+    T![mut],
     T![|],
     T![return],
     T![fn],
@@ -96,7 +97,7 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     }
     let done = match p.current() {
         T!['('] => paren_or_tuple_expr(p),
-        T!['['] => array_expr(p),
+        T!['['] | T![mut] => array_expr(p),
         T![|] => closure_expr(p, r),
         _ if p.at_op("||") => closure_expr(p, r),
         T![async] if p.nth_at(1, T![|]) || p.nth_at_op(1, "||") => closure_expr(p, r),
@@ -237,9 +238,14 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, if saw_expr && !saw_comma { NEST_EXPR } else { TUPLE_EXPR })
 }
 
-/// `[a, b, c]`, `[]` or `[x; n]`
+/// `[a, b, c]`, `[]` or `[x; n]`, or one of those after `mut`, like
+/// `mut [1, 2]`, for an array that can be changed.
 fn array_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
+    if p.eat(T![mut]) && !p.at(T!['[']) {
+        p.error("expected an array after `mut`, like `mut [1, 2]`");
+        return m.complete(p, ARRAY_EXPR);
+    }
     p.bump(T!['[']);
     let mut first = true;
     while !p.at(EOF) && !p.at(T![']']) {

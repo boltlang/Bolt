@@ -156,12 +156,20 @@ impl TupleType {
     }
 }
 
-/// `[T]` or `[T; N]`
+/// `[T]` or `[T; N]`, maybe after `mut` or `imm`
 pub struct ArrayType(SyntaxNode);
 
 simple_node!(ArrayType, ARRAY_TYPE);
 
 impl ArrayType {
+    /// The `mut` of `mut [T]`.
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
+    /// The `imm` of `imm [T]`.
+    pub fn imm_token(&self) -> Option<SyntaxToken> {
+        self.find_token(IMM_KEYWORD)
+    }
     pub fn element(&self) -> Option<Type> {
         self.find_node()
     }
@@ -855,12 +863,16 @@ impl ClosureExpr {
     }
 }
 
-/// `[a, b, c]` or `[x; n]`
+/// `[a, b, c]` or `[x; n]`, maybe after `mut`
 pub struct ArrayExpr(SyntaxNode);
 
 simple_node!(ArrayExpr, ARRAY_EXPR);
 
 impl ArrayExpr {
+    /// The `mut` of `mut [a, b]`.
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
     /// The elements of `[a, b, c]`, or the repeated value of `[x; n]`.
     pub fn elements(&self) -> ChildrenIter<Expr> {
         ChildrenIter::new(&self.0)
