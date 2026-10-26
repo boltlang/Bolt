@@ -154,7 +154,6 @@ other errors.
       ide-diagnostics)* (#44)
 - [ ] Array lengths aren't checked: `[T; 3]` is the same type as `[T]`.
       *(hir-ty)* (#122)
-- [ ] `FnOnce(A) -> B` and other function classes are plain function types.
       *(hir-ty)* (#123)
 - [ ] The bounds a class puts on its associated types, like `type Item:
       Show;`, aren't checked against the impls, which needs solving an

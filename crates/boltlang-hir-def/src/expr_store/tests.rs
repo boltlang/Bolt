@@ -240,10 +240,9 @@ impl Printer<'_> {
                 None => format!("[{}]", self.ty(*element)),
             },
             TypeRef::Never => "!".into(),
-            TypeRef::Fn { trait_path, params, is_variadic, ret_type, abi, .. } => format!(
-                "{}{}({}{}){}",
+            TypeRef::Fn { params, is_variadic, ret_type, abi, .. } => format!(
+                "{}fn({}{}){}",
                 abi.as_ref().map_or(String::new(), |a| format!("extern {} ", a.as_deref().unwrap_or("_"))),
-                trait_path.as_ref().map_or("fn".into(), |p| self.path(p)),
                 params
                     .iter()
                     .map(|(n, t)| match n {
@@ -379,7 +378,7 @@ fn types() {
     assert_eq!(
         render(
             "let a: Vec[Vec[i32]];\nlet b: (A, B);\nlet c: [u8; N + 1];\nlet d: fn(x: i32, ...) -> !;\n\
-             let e: extern \"C\" fn();\nlet f: Box[FnOnce(T) -> U];\nlet g: impl for[T] Fn(T) -> T + Send;\n\
+             let e: extern \"C\" fn();\nlet f: Box[fn(T) -> U];\nlet g: impl for[T] Show[T] + Send;\n\
              let h: A + B + C;\nlet i: H[K = L, 3, { n }, T: Ord];\nlet j: M[N].O;"
         ),
         "(let a : Vec[Vec[i32]])\n\
@@ -387,8 +386,8 @@ fn types() {
          (let c : [u8; (Arith(Add) N 1)])\n\
          (let d : fn(x: i32, ...) -> !)\n\
          (let e : extern C fn())\n\
-         (let f : Box[FnOnce(T) -> U])\n\
-         (let g : impl for[T] Fn(T) -> T + Send)\n\
+         (let f : Box[fn(T) -> U])\n\
+         (let g : impl for[T] Show[T] + Send)\n\
          (let h : A + B + C)\n\
          (let i : H[K = L, 3, {n}, T: Ord])\n\
          (let j : M[N].O)"

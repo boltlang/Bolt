@@ -60,7 +60,7 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
             macro_call(p);
             m.complete(p, MACRO_TYPE)
         }
-        _ if is_path_start(p) => path_or_fn_trait_type(p),
+        _ if is_path_start(p) => path_type(p),
         _ => {
             p.err_recover("expected a type", TYPE_RECOVERY_SET);
             return None;
@@ -69,21 +69,23 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
     Some(m)
 }
 
-/// `Vec[T]`, `Shape.Circle`, `M[N].O`, or a function type written with a
-/// trait, like `FnOnce(i32) -> i32`.
-fn path_or_fn_trait_type(p: &mut Parser) -> CompletedMarker {
+/// `Vec[T]`, `Shape.Circle` or `M[N].O`
+fn path_type(p: &mut Parser) -> CompletedMarker {
     let path = type_path(p).expect("called at the start of a path");
     path_type_after_path(p, path)
 }
 
-/// Turn a parsed path into a PATH_TYPE, or into an FN_TYPE if `(` follows,
-/// as in `FnOnce(i32) -> i32`.
+/// Turn a parsed path into a PATH_TYPE. Function types are only written
+/// `fn(A) -> B`: a `(` after the path, as in Rust's `FnOnce(i32) -> i32`, is
+/// an error, and all of it becomes an ERROR node, so that the path isn't
+/// looked up as a type.
 pub(crate) fn path_type_after_path(p: &mut Parser, path: CompletedMarker) -> CompletedMarker {
     let m = path.precede(p);
     if p.at(T!['(']) {
+        p.error("function types are written `fn(A) -> B`");
         fn_type_param_list(p);
         opt_ret_type(p);
-        return m.complete(p, FN_TYPE);
+        return m.complete(p, ERROR);
     }
     m.complete(p, PATH_TYPE)
 }
