@@ -16,6 +16,7 @@ pub struct TestDb {
 }
 
 impl TestDb {
+
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let executed: Arc<Mutex<Option<Vec<String>>>> = Default::default();
@@ -57,6 +58,18 @@ impl TestDb {
         f(self);
         self.executed.lock().unwrap().take().unwrap()
     }
+
+    #[cfg(test)]
+    #[allow(unused)]
+    pub fn take_logs(&mut self) -> Vec<String> {
+        let mut logs = self.executed.lock().unwrap();
+        if let Some(logs) = &mut *logs {
+            std::mem::take(logs)
+        } else {
+            vec![]
+        }
+    }
+
 }
 
 impl salsa::Database for TestDb {}
@@ -69,4 +82,18 @@ impl Db for TestDb {
     fn system(&self) -> &dyn System {
         &self.system
     }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{Db, FilePath, SystemPath, SystemPathBuf, TestDb};
+
+    #[test]
+    fn test_get_file() {
+        let db = TestDb::new();
+        let file = db.files().resolve(&db, SystemPath::new("foo/bar.txt"));
+        assert_eq!(file.path(&db), &FilePath::System(SystemPathBuf::from("/foo/bar.txt")));
+    }
+
 }
