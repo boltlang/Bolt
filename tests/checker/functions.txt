@@ -261,3 +261,24 @@ f: fn() -> i32
 g: fn() -> ()
 --------------------------------------------------------------------------------
 error at `2.not_a_function`: i32 is not a function
+
+================================================================================
+Raw identifiers name the items they declare
+================================================================================
+fn r#match(x: i32) -> i32 = x + 1;
+struct r#type { r#loop: i32 }
+enum r#enum { r#fn(i32) }
+fn r#where[r#T](x: r#T) -> r#T = x;
+r#match(1);
+let t = r#type { r#loop: 1 };
+t.r#loop;
+r#enum.r#fn(2);
+r#where(True);
+--------------------------------------------------------------------------------
+match: fn(i32) -> i32
+where: forall T. fn(T) -> T
+r#match(1): i32
+let t: type
+t.r#loop: i32
+r#enum.r#fn(2): enum
+r#where(True): Bool
