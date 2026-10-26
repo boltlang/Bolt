@@ -35,9 +35,9 @@ nice goodies, including:
 
 ## Examples
 
-Read the [tour of the language][tour] to learn more!
+Read the [tutorial][tutorial] to learn more!
 
-[tour]: https://github.com/boltlang/Bolt/blob/main/TOUR.md
+[tutorial]: https://boltlang.net/docs/tutorial
 
 ## Core Principles
 

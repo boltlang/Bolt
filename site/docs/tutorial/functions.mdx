@@ -110,6 +110,69 @@ fn pair(a, b) = (a, b);
 [Types and inference](./types.mdx) explains how this works and when you'd
 want to write types anyway.
 
+## Keyword arguments
+
+:::note[Not implemented yet]
+
+Keyword arguments are planned, but Bolt doesn't support them yet. A call
+like `register(name="Davis")` is read as an assignment to a variable
+`name`, so it fails with "cannot find `name`".
+
+:::
+
+An argument can be passed by the name of its parameter, like in Python. This
+makes calls with many arguments easier to read:
+
+```bolt
+fn register(name: str, email: str) -> str = name + " <" + email + ">";
+
+// These calls are the same.
+(
+  register("Davis", "davis@example.com"),
+  register(name="Davis", email="davis@example.com"),
+);
+```
+
+```text
+("Davis <davis@example.com>", "Davis <davis@example.com>")
+```
+
+## Default values of parameters
+
+:::note[Not implemented yet]
+
+Default values are planned, but Bolt doesn't support them yet. A function
+with a default value can be defined, but a call that leaves the argument out
+fails with "expected 2 arguments, found 1".
+
+:::
+
+A parameter can have a default value, written after `=`. A call can then
+leave that argument out:
+
+```bolt
+fn greet(name: str, greeting: str = "Hello") -> str = greeting + ", " + name + "!";
+
+(greet("Sam"), greet("Sam", "Welcome"));
+```
+
+```text
+("Hello, Sam!", "Welcome, Sam!")
+```
+
+With keyword arguments, a call can give only the defaults it wants to change:
+
+```bolt
+fn shoot(x: f64, y: f64, strength: f64 = 1.0, spin: f64 = 0.0) -> (f64, f64) =
+  (x * strength, y * strength + spin);
+
+(shoot(1.0, -1.0), shoot(1.0, -1.0, spin=0.5));
+```
+
+```text
+((1.0, -1.0), (1.0, -0.5))
+```
+
 ## Functions are values
 
 A function can be passed to another function, stored in a variable, and
