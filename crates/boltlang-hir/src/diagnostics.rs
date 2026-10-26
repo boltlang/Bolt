@@ -111,6 +111,9 @@ pub enum DiagnosticKind<'db> {
     CyclicInference,
     /// A `break` or `continue` without a loop or label to leave.
     BreakOutside,
+    /// An assignment to the variable `name`, or to a field or element of
+    /// it, while it isn't `mut`.
+    AssignToImmutable { name: Name },
     /// An item in an impl that its class doesn't declare.
     NotInClass { kind: ClassItemKind, name: Name, class: ClassId<'db> },
     /// Items of the class without a default that the impl doesn't define,
@@ -564,7 +567,7 @@ impl<'db> Collector<'db> {
     fn body(&mut self, def: DefWithBody<'db>) {
         let db = self.db;
         let id = DefWithBodyId::new(db, def);
-        let (_, map) = body_with_source_map(db, id);
+        let (body, map) = body_with_source_map(db, id);
         let at = |node: ExprOrPat| node_range(map, node);
         let result = infer_body(db, id);
         for diagnostic in result.diagnostics.iter().cloned() {
@@ -631,6 +634,9 @@ impl<'db> Collector<'db> {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::MissingFields { names })
                 }
                 InferenceDiagnostic::BreakOutside { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::BreakOutside),
+                InferenceDiagnostic::AssignToImmutable { expr, binding } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::AssignToImmutable { name: body[binding].name.clone() })
+                }
                 InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),
                 // Reported at the function, which is the fallback.
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),

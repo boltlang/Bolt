@@ -356,6 +356,9 @@ fn check(input: &str) -> Result<(String, String), String> {
                     InferenceDiagnostic::BreakOutside { expr } => {
                         format!("error at `{}`: nothing to break out of", at(ExprOrPat::Expr(*expr)))
                     }
+                    InferenceDiagnostic::AssignToImmutable { expr, .. } => {
+                        format!("error at `{}`: not mut", at(ExprOrPat::Expr(*expr)))
+                    }
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }
