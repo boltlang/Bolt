@@ -51,10 +51,11 @@ of constraint.
 
 In source code, and when types are shown:
 
-| Written | Type |
-|---|---|
-| `[i32]` | $\mathsf{Array}[\mathsf{Imm}, \mathsf{i32}]$ |
-| `mut [i32]` | $\mathsf{Array}[\mathsf{Mut}, \mathsf{i32}]$ |
+| Written | Type | Means |
+|---|---|---|
+| `mut [i32]` | $\mathsf{Array}[\mathsf{Mut}, \mathsf{i32}]$ | can be changed |
+| `imm [i32]` | $\mathsf{Array}[\mathsf{Imm}, \mathsf{i32}]$ | can never be changed, by anyone |
+| `[i32]` | $\mathsf{Array}[\alpha, \mathsf{i32}]$ | either: see [annotations](#annotations) |
 
 An array can be changed only if its type is `mut`:
 
@@ -66,7 +67,7 @@ xs.push(3);      // fine
 xs[0] = 9;       // fine
 
 let ys = [1, 2];
-ys.push(3);      // error: `ys` is `[i32]`, which can't be changed
+ys.push(3);      // error: `ys` is `imm [i32]`, which can't be changed
 ```
 
 Assigning to an element, `xs[i] = e`, needs `xs` to be a `mut` array. So
@@ -77,7 +78,7 @@ does calling a function whose parameter is `mut`, like `push`.
 **The expression that makes an array decides** whether it can be changed.
 Variables only pass it on:
 
-- `[1, 2]` is an array that can't be changed: `[i32]`.
+- `[1, 2]` is an array that can't be changed: `imm [i32]`.
 - `mut [1, 2]` and `mut []` can be changed: `mut [i32]`.
 - A function's result has the mutability of its type: `Vec.new()` could
   return `mut [T]`, and `xs.copy()` a new `mut [T]`.
@@ -121,16 +122,16 @@ An alias can't change the mutability. Unifying `Mut` with `Imm` is an error:
 
 ```bolt
 let xs = mut [1, 2];
-let ys: [i32] = xs;   // error: expected `[i32]`, found `mut [i32]`
+let ys: imm [i32] = xs;   // error: expected `imm [i32]`, found `mut [i32]`
 ```
 
 ### What this guarantees
 
-**An array that isn't `mut` never changes.** All the names for an array
-have the same type, so if one of them can't change it, none can. That's
-what makes `[T]` worth having:
+**An `imm` array never changes.** All the names for an array have the same
+type, so if one of them can't change it, none can. A `mut` array can't be
+seen as `imm`, which is what makes `imm` worth having:
 
-- code can rely on an `[i32]` it's given staying the same;
+- code can rely on an `imm [i32]` it's given staying the same;
 - arrays that can't be changed can be shared freely, and their literals can
   be constants: a data segment in Wasm, made once;
 - the [reactive design](../reactive.mdx) knows which arrays can change, and
@@ -146,39 +147,79 @@ A function without annotations gets the mutability it needs, and is
 generalized over the rest, like over any type:
 
 ```bolt
-fn first(xs) = xs[0];             // forall m a. fn(Array[m, a]) -> a
-fn fill(xs, x) { xs[0] = x; }     // forall a. fn(mut [a], a) -> ()
+fn first(xs) = xs[0];             // fn([a]) -> a
+fn fill(xs, x) { xs[0] = x; }     // fn(mut [a], a) -> ()
 ```
 
-`first` takes arrays of either mutability. `fill` only takes `mut` ones,
-since it changes its argument. Instantiating a scheme gives a fresh
-variable for `m`, so each call can pass a different kind of array.
+`first` is generalized over the mutability of its argument,
+$\forall \mu\, \alpha.\ \mathsf{Array}[\mu, \alpha] \to \alpha$, and that's
+shown as `[a]`. It takes arrays of either mutability. `fill` only takes
+`mut` ones, since it changes its argument. Instantiating a scheme gives a
+fresh mutability, so each call can pass a different kind of array.
 
 ## Annotations
 
-**An annotation without `mut` means `Imm`.** `[T]` is an array that can't
-be changed, and `mut [T]` is needed where it can. That's the same everywhere
-a type is written: parameters, results, `let` and struct fields.
+**`[T]` in an annotation means either mutability**: a fresh mutability,
+like `_` stands for a fresh type. `mut [T]` and `imm [T]` ask for one.
+
+In a function's signature, a fresh mutability is a hidden parameter of the
+function, like the generalized $\mu$ of `first` above:
+
+```bolt
+fn sum(xs: [i32]) -> i32 { ... }   // forall m. fn(Array[m, i32]) -> i32
+
+let xs = mut [];
+xs.push(1);
+sum(xs);           // fine
+sum([1, 2]);       // fine
+```
+
+`sum` takes both kinds of array. Inside its body, the mutability of `xs` is
+a parameter, not `Mut`, so `sum` can't change `xs`: `xs.push(1)` there is
+an error. That's the same rule as for any type parameter: a function that
+takes a `T` can't assume that `T` is `i32`. So a signature promises to
+leave an array alone unless it says `mut`, and callers don't have to care
+which kind they pass.
+
+It doesn't promise that the array stays the same while `sum` runs: the
+caller may have a `mut` name for it. `imm [T]` is for code that relies on
+the array never changing, like a cache keyed by it, or the reactive design deciding that something can't
+change. Few functions need it, which is why it isn't what `[T]` means.
+
+In a `let` annotation, `[T]` is an inference variable, which the value
+decides:
+
+```bolt
+let a: [i32] = mut [1];     // `mut [i32]`
+let b: [i32] = [1];         // `imm [i32]`
+```
+
+### Fields of structs
+
+A field `items: [Item]` would give the struct a hidden mutability parameter,
+`Inventory[m]`, so that one `Inventory` can hold a `mut` array and another
+an `imm` one. That spreads to every type that contains an array, much like
+lifetimes do in Rust. Until it's needed, fields have to say which one they
+hold:
 
 ```bolt
 struct Inventory {
   name: String,
-  items: mut [Item],       // can be changed
-  tags: [String],          // can't
+  items: mut [Item],
+  tags: imm [String],
 }
 ```
 
-Fields state their mutability, so a struct type doesn't get a hidden
-mutability parameter. A struct shares its arrays with everything else that
-refers to them, as `let` does.
+A struct shares its arrays with everything else that refers to them, as
+`let` does.
 
 ## Making an array that can't be changed from one that can
 
-A `mut` array can't become `[T]`, since a `mut` name for it may still
+A `mut` array can't become `imm [T]`, since a `mut` name for it may still
 exist. Turning one into the other copies it:
 
 ```bolt
-fn freeze[T](xs: mut [T]) -> [T];    // a copy that can't be changed
+fn freeze[T](xs: [T]) -> imm [T];    // a copy that can't be changed
 fn thaw[T](xs: [T]) -> mut [T];      // a copy that can
 ```
 
@@ -219,9 +260,11 @@ unification has to remember the origin of `Imm` and `Mut`.
 
 - **Kinds:** a kind $\mathsf{Mutability}$ with the types `Mut` and `Imm`
   (`kind.rs`, `ty.rs`).
-- **Lowering:** `[T]` lowers to `Array[Imm, T]` and `mut [T]` to
-  `Array[Mut, T]` (`lower.rs`). The parser accepts `mut` before an array
-  type, and before an array expression.
+- **Lowering:** `mut [T]` lowers to `Array[Mut, T]` and `imm [T]` to
+  `Array[Imm, T]` (`lower.rs`). `[T]` lowers to a new mutability parameter
+  of the function in a signature, and to an inference variable in a body.
+  The parser accepts `mut` and `imm` before an array type, and `mut` before
+  an array expression.
 - **Inference:** an array literal's mutability is `Imm`, or `Mut` with `mut`
   (`infer.rs`). `xs[i] = e` unifies the mutability of `xs` with `Mut`.
   Indexing and `for` work for any mutability.
@@ -231,8 +274,8 @@ unification has to remember the origin of `Imm` and `Mut`.
 - **Defaulting:** a mutability variable that's left over when a body is
   checked, and isn't generalized, defaults to `Imm`, like integer literals
   default to `i32`.
-- **Showing types:** `[T]`, `mut [T]`, and a way to show a mutability
-  variable (see the open questions).
+- **Showing types:** `mut [T]`, `imm [T]`, and `[T]` for a generalized or
+  unknown mutability.
 - **Tests:** cases in `tests/checker` for each example on this page, and in
   `tests/run` for sharing.
 
@@ -244,22 +287,18 @@ way, with `mut String` taking the place of a separate `StringBuilder`.
 
 ## Open questions
 
-- **Parameters annotated `[T]`.** With annotations meaning `Imm`,
-  `fn sum(xs: [i32]) -> i32` doesn't accept a `mut [i32]`. That's a
-  common case: a list built with `push`, then summed. One fix: in a
-  *parameter*, `[T]` means "read-only here", an implicit mutability
-  parameter of the function, like the generalized `m` of an inferred
-  function. `sum` then takes both kinds of array but can't change them,
-  which is what `Imm` means to the function. Elsewhere, `[T]` stays `Imm`.
-  The cost is that `[T]` means two things, depending on where it's written.
-- **Syntax for a mutability variable**, to write and show
-  `forall m a. fn(Array[m, a]) -> a`: maybe `fn[M, A](xs: M [A]) -> A`, or
-  `mut? [A]` when it's shown.
-- **Fields of structs.** If structs stay values, `p.x = 1` keeps needing
-  `let mut p`. If they're shared like arrays, they need a mutability too,
-  with `mut` fields or a `mut` struct type.
-- **Other shared types.** Whether a `mut` before other types, like
-  `mut String` or `mut Map[K, V]`, is a general feature for types that have
+- **Showing a mutability that's shared.** In
+  `fn pick(c, a, b) = if c { a } else { b }`, `a` and `b` have the same
+  mutability, and showing both as `[T]` hides that. Types could name the
+  mutability only when it's shared, like `fn(Bool, [a]^m, [a]^m) -> [a]^m`,
+  with some syntax to write it too.
+- **Fields of structs** with a hidden mutability parameter, instead of
+  having to write `mut` or `imm` (see [above](#fields-of-structs)).
+- **Structs that are shared.** If structs stay values, `p.x = 1` keeps
+  needing `let mut p`. If they're shared like arrays, they need a
+  mutability too.
+- **Other shared types.** Whether `mut` and `imm` before other types, like
+  `mut String` or `imm Map[K, V]`, are a general feature for types that have
   a mutability parameter, or only for arrays.
 
 ## Prior art
@@ -273,8 +312,10 @@ way, with `mut String` taking the place of a separate `StringBuilder`.
   object that others change. Here, `Imm` means that no one can.
 - **Pony's reference capabilities** [Clebsch et al. 2015] decide what each
   reference allows: `iso` (unique), `val` (can't be changed by anyone),
-  `ref` (can be changed, and shared). `[T]` is like `val`, and `mut [T]`
-  like `ref`.
+  `ref` (can be changed, and shared), and `box` (read-only, and either of
+  the last two). `imm [T]` is like `val`, `mut [T]` like `ref`, and a
+  parameter `[T]` like `box`, which Pony gets by subtyping and Bolt by
+  polymorphism.
 - **Modes in Jane Street's OCaml** [Lorenzen et al. 2024] are qualifiers
   like `unique` and `local`, inferred alongside types. `unique` is what
   freezing without a copy would need.
