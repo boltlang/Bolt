@@ -39,12 +39,13 @@ Point { x, y };
 Point { x: 3, y: 4 }
 ```
 
-Change a field by assigning to it:
+A struct can't be changed, unless it's made with `mut`. Then change a
+field by assigning to it:
 
 ```bolt
 struct Point { x: i32, y: i32 }
 
-let mut p = Point { x: 0, y: 0 };
+let p = mut Point { x: 0, y: 0 };
 p.x = 5;
 p;
 ```
@@ -52,6 +53,11 @@ p;
 ```text
 Point { x: 5, y: 0 }
 ```
+
+Like [arrays](./basics.mdx#arrays), the type says which kind a struct is:
+`p` is `mut Point`, and `Point { x: 0, y: 0 }` alone is `imm Point`. A
+function that takes `Point` takes both, and can't change them. What an
+`imm` struct holds can't be changed either: its fields are `imm` too.
 
 `..` makes a struct from another one, with some fields changed:
 
