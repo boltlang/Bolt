@@ -74,7 +74,7 @@ fn ast_ids_point_back_to_their_items() {
         .functions
         .iter()
         .map(|f| {
-            let node = f.ast_id.to_node(&root).unwrap();
+            let node = f.ast_id.to_node(&db, file, &root).unwrap();
             let decl = ast::FuncDecl::cast(node).unwrap();
             decl.name().unwrap().text()
         })
@@ -110,4 +110,50 @@ fn editing_a_body_does_not_change_the_item_tree() {
         assert_eq!(*function_count(db, file), 3);
     });
     assert!(executed.iter().any(|q| q.contains("function_count")), "{executed:?}");
+}
+
+#[test]
+fn every_ast_id_finds_its_node() {
+    let db = TestDb::new();
+    let text = r#"
+import "./a" (x);
+fn f() { fn not_an_item() {} }
+struct Point { x: i32 }
+enum Color { Red }
+class Show[T] { fn show(x: T) -> String; type Out; const N: T; }
+impl Show[Point] { fn show(x) = ""; type Out = i32; const N: Point = Point { x: 1 }; m!(); }
+extern "C" { fn malloc(size: usize) -> Ptr; }
+macro_rules! m { () => {} }
+const MAX: usize = 10;
+type Alias = Point;
+"#;
+    let file = db.file("/main.bolt", text);
+    let tree = item_tree(&db, file);
+    let root = root(&db, file);
+    let ast_ids: Vec<AstId> = std::iter::empty()
+        .chain(tree.imports.iter().map(|i| i.ast_id))
+        .chain(tree.functions.iter().map(|i| i.ast_id))
+        .chain(tree.structs.iter().map(|i| i.ast_id))
+        .chain(tree.enums.iter().map(|i| i.ast_id))
+        .chain(tree.classes.iter().map(|i| i.ast_id))
+        .chain(tree.impls.iter().map(|i| i.ast_id))
+        .chain(tree.consts.iter().map(|i| i.ast_id))
+        .chain(tree.type_aliases.iter().map(|i| i.ast_id))
+        .chain(tree.extern_blocks.iter().map(|i| i.ast_id))
+        .chain(tree.macro_rules.iter().map(|i| i.ast_id))
+        .chain(tree.macro_calls.iter().map(|i| i.ast_id))
+        .collect();
+    // Everything but the function in a body is an item.
+    assert_eq!(ast_ids.len(), 18);
+    let mut ranges = Vec::new();
+    for ast_id in ast_ids {
+        let node = ast_id.to_node(&db, file, &root).unwrap_or_else(|| panic!("no node for {ast_id:?}"));
+        assert_eq!(node.kind(), ast_id.kind);
+        ranges.push(node.text_range());
+    }
+    // Each finds a node of its own.
+    let count = ranges.len();
+    ranges.sort_by_key(|r| (r.start(), r.end()));
+    ranges.dedup();
+    assert_eq!(ranges.len(), count);
 }

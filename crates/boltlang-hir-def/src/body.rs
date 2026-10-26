@@ -69,7 +69,7 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
     let mut params = Vec::new();
     let body_expr = match def {
         DefWithBody::Function(id) => {
-            let decl = id.item(db).ast_id.to_node(&root).and_then(ast::FuncDecl::cast);
+            let decl = id.item(db).ast_id.to_node(db, file, &root).and_then(ast::FuncDecl::cast);
             match decl {
                 Some(decl) => {
                     if let Some(list) = decl.param_list() {
@@ -81,7 +81,7 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
             }
         }
         DefWithBody::Const(id) => {
-            let value = id.item(db).ast_id.to_node(&root).and_then(ast::Const::cast).and_then(|c| c.expr());
+            let value = id.item(db).ast_id.to_node(db, file, &root).and_then(ast::Const::cast).and_then(|c| c.expr());
             collector.lower_opt_expr(value)
         }
         DefWithBody::Variant(id) => {
@@ -89,7 +89,7 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
                 .parent
                 .item(db)
                 .ast_id
-                .to_node(&root)
+                .to_node(db, file, &root)
                 .and_then(ast::Enum::cast)
                 .and_then(|e| e.variants().into_iter().filter(|v| v.name().is_some()).nth(id.index as usize))
                 .and_then(|v| v.expr());
