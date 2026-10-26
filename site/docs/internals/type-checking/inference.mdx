@@ -152,14 +152,14 @@ otherwise waits. A field access whose base names a type or module, like
 |---|---|
 | `a + b`, `a * b`, ... | Infer $\tau$ for `a`, check `b` against $\tau$. The result is $\tau$. |
 | `a << b`, `a >> b` | Infer $\tau$ for `a`, check `b` against an `Int` variable. The result is $\tau$. |
-| `a == b`, `a < b`, ... | Infer $\tau$ for `a`, check `b` against $\tau$. The result is `bool`. |
-| `a && b`, `a \|\| b` | Check both against `bool`. |
+| `a == b`, `a < b`, ... | Infer $\tau$ for `a`, check `b` against $\tau$. The result is `Bool`. |
+| `a && b`, `a \|\| b` | Check both against `Bool`. |
 | `a = b`, `a += b` | Infer $\tau$ for `a`, check `b` against $\tau$. The result is `()`. |
 | `-a` | The type of `a`. |
-| `!a` | The type of `a`. If that's still unknown, it's assumed to be `bool`. |
+| `!a` | The type of `a`. If that's still unknown, it's assumed to be `Bool`. |
 
 There's no numeric class yet, so arithmetic doesn't constrain its operands
-beyond being equal: `"a" + "b"` has type `str`.
+beyond being equal: `"a" + "b"` has type `String`.
 
 ### Control flow
 

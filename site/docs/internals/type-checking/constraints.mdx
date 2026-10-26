@@ -29,9 +29,9 @@ any number of parameters
 [Peyton Jones et al. 1997]:
 
 ```bolt
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 class Convert[A, B] { fn convert(a: A) -> B; }
-class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 
 impl Show[i32] { fn show(x) = "int"; }
 impl[T] Show[Option[T]] where Show[T] { fn show(x) = "option"; }
@@ -52,7 +52,7 @@ query gives them:
   the default methods of `Show`.
 
 `Solver::assume` adds an assumption *and its superclasses*, transitively: in
-`fn le[T](a: T, b: T) -> bool where Ord[T]`, the assumption $\mathsf{Ord}[T]$
+`fn le[T](a: T, b: T) -> Bool where Ord[T]`, the assumption $\mathsf{Ord}[T]$
 gives $\mathsf{Eq}[T]$ as well, because `class Ord[T] where Eq[T]`. This is
 the superclass closure of Haskell's entailment relation
 [Hall et al. 1996].

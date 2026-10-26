@@ -36,7 +36,7 @@ $\mathsf{Type} \to \mathsf{Type}$, `Either` of kind
 $\mathsf{Type} \to \mathsf{Type} \to \mathsf{Type}$, and the `F` of `Functor`
 of kind $\mathsf{Type} \to \mathsf{Type}$. Applying a constructor of kind
 $\kappa_1 \to \kappa_2$ to a type of kind $\kappa_1$ gives a type of kind
-$\kappa_2$, so `Either[str]` is of kind $\mathsf{Type} \to \mathsf{Type}$.
+$\kappa_2$, so `Either[String]` is of kind $\mathsf{Type} \to \mathsf{Type}$.
 
 Kinds are not to be confused with the `VarKind` of inference variables,
 which says whether a variable is for any type or for a number.
@@ -108,7 +108,7 @@ substitution, and a partially applied alias would be a type-level function.
 Two forms of `Ty` stand for constructors and their applications:
 
 - `Adt(T, args)` can have fewer arguments than `T` has parameters.
-  `Adt(Either, [str])` is the constructor `Either[str]`.
+  `Adt(Either, [String])` is the constructor `Either[String]`.
 - `App(head, args)` is a type parameter or inference variable applied to
   arguments, like `F[A]` or $\beta[\mathsf{i32}]$.
 
