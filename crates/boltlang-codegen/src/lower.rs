@@ -6,7 +6,7 @@
 use std::collections::HashMap;
 
 use boltlang_base_db::Db;
-use boltlang_eval::{Evaluator, Value};
+use boltlang_eval::{Ctor, Evaluator, Value};
 use boltlang_hir_def::{
     Name,
     body::{Body, DefWithBody, DefWithBodyId, body},
@@ -15,11 +15,12 @@ use boltlang_hir_def::{
         ArithOp, BinaryOp, BindingId, BlockKind, CmpOp, Expr, ExprId, LabelId, Literal, LogicOp, MatchArm, Pat,
         PatId, Path, PathSegment, PrefixOp, Statement,
     },
-    ids::{ConstId, FunctionId, ItemContainerId},
+    ids::{ConstId, EnumId, EnumVariantId, FunctionId, ItemContainerId},
     resolver::{Resolver, ValueNs, ValueResolution},
+    signatures::{FieldList, enum_signature},
 };
 use boltlang_hir_ty::{
-    InferenceResult, Scheme, Ty,
+    AdtId, InferenceResult, Scheme, Ty,
     builtin::{Builtin, builtin},
     function_scheme, infer_body,
 };
@@ -41,11 +42,18 @@ enum Scalar {
     Char,
     /// A pointer to a string in linear memory.
     Str,
+    /// An enum whose variants have no fields, like `enum Color { Red, Green }`:
+    /// the index of the variant.
+    Enum,
 }
 
 impl Scalar {
-    fn of(ty: &Ty<'_>) -> Option<Scalar> {
-        let Ty::Builtin(ty) = ty else { return None };
+    fn of(db: &dyn Db, ty: &Ty<'_>) -> Option<Scalar> {
+        let ty = match ty {
+            Ty::Builtin(ty) => ty,
+            Ty::Adt(AdtId::Enum(id), _) if is_fieldless(db, *id) => return Some(Scalar::Enum),
+            _ => return None,
+        };
         Some(match ty {
             BuiltinType::Bool => Scalar::Bool,
             BuiltinType::Char => Scalar::Char,
@@ -72,7 +80,7 @@ impl Scalar {
     fn val_ty(self) -> ValTy {
         match self {
             Scalar::Int { bits: 64, .. } => ValTy::I64,
-            Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str => ValTy::I32,
+            Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str | Scalar::Enum => ValTy::I32,
             Scalar::F32 => ValTy::F32,
             Scalar::F64 => ValTy::F64,
         }
@@ -82,6 +90,12 @@ impl Scalar {
     fn signed(self) -> bool {
         matches!(self, Scalar::Int { signed: true, .. })
     }
+}
+
+/// Whether no variant of the enum has fields, so that a value is only the
+/// index of its variant. An enum without variants is one too.
+fn is_fieldless<'db>(db: &'db dyn Db, id: EnumId<'db>) -> bool {
+    enum_signature(db, id).variants.iter().all(|v| matches!(v.fields, FieldList::Unit))
 }
 
 /// What a structured instruction is for, to find the targets of `break`
@@ -203,7 +217,7 @@ impl<'db> Compiler<'db> {
             Ty::Never => Ok(None),
             Ty::Tuple(tys) if tys.is_empty() => Ok(None),
             Ty::Var(_) | Ty::Error | Ty::Bound(_) | Ty::Param(_) => Err(self.error(at, ErrorKind::UnknownType)),
-            _ => match Scalar::of(ty) {
+            _ => match Scalar::of(self.db, ty) {
                 Some(scalar) => Ok(Some(scalar.val_ty())),
                 None => Err(self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))),
             },
@@ -216,7 +230,7 @@ impl<'db> Compiler<'db> {
 
     fn scalar(&self, expr: ExprId) -> Result<'db, Scalar> {
         let ty = self.ty(expr);
-        Scalar::of(&ty).ok_or_else(|| self.unsupported(expr, format!("an operation on `{}`", ty.display(self.db))))
+        Scalar::of(self.db, &ty).ok_or_else(|| self.unsupported(expr, format!("an operation on `{}`", ty.display(self.db))))
     }
 
     // Locals
@@ -443,6 +457,10 @@ impl<'db> Compiler<'db> {
                 self.push(Inst::Return);
                 Ok(())
             }
+            Expr::Field { .. } => match expr_as_path(body, expr).and_then(|path| self.resolve(expr, &path)) {
+                Some(ValueResolution::Value(ValueNs::Variant(v))) => self.variant(expr, v),
+                _ => Err(self.unsupported(expr, "a field")),
+            },
             other => Err(self.unsupported(expr, describe(other))),
         }
     }
@@ -499,9 +517,18 @@ impl<'db> Compiler<'db> {
                 Ok(())
             }
             Some(ValueResolution::Value(ValueNs::Function(_))) => Err(self.unsupported(expr, "a function as a value")),
-            Some(ValueResolution::Value(ValueNs::Variant(_))) => Err(self.unsupported(expr, "an enum")),
+            Some(ValueResolution::Value(ValueNs::Variant(v))) => self.variant(expr, v),
             _ => Err(self.unsupported(expr, "this path")),
         }
+    }
+
+    /// A variant of an enum without fields: the index of the variant.
+    fn variant(&mut self, expr: ExprId, v: EnumVariantId<'db>) -> Result<'db, ()> {
+        if self.scalar(expr)? != Scalar::Enum {
+            return Err(self.unsupported(expr, "an enum with fields"));
+        }
+        self.push(Inst::I32Const(v.index as i32));
+        Ok(())
     }
 
     /// A const, whose value the evaluator computes at compile time.
@@ -509,7 +536,7 @@ impl<'db> Compiler<'db> {
         let value = Evaluator::new(self.db)
             .eval_const(id)
             .map_err(|e| self.unsupported(expr, format!("a const whose value can't be computed ({e})")))?;
-        let Some(scalar) = Scalar::of(&self.ty(expr)) else {
+        let Some(scalar) = Scalar::of(self.db, &self.ty(expr)) else {
             return match value {
                 Value::Tuple(items) if items.is_empty() => Ok(()),
                 _ => Err(self.unsupported(expr, "a const of this type")),
@@ -521,6 +548,9 @@ impl<'db> Compiler<'db> {
             Value::Char(c) => self.int_const(scalar, c as i128),
             Value::Float(x) => self.float_const(scalar, x),
             Value::Str(s) => self.push(Inst::Str(s.as_ref().into())),
+            Value::Adt { ctor: Ctor::Variant(v), .. } if scalar == Scalar::Enum => {
+                self.push(Inst::I32Const(v.index as i32))
+            }
             _ => return Err(self.unsupported(expr, "a const of this type")),
         }
         Ok(())
@@ -659,6 +689,9 @@ impl<'db> Compiler<'db> {
                 if scalar == Scalar::Str {
                     return Err(self.unsupported(expr, "comparing strings"));
                 }
+                if scalar == Scalar::Enum && !matches!(op, CmpOp::Eq | CmpOp::NotEq) {
+                    return Err(self.unsupported(expr, "ordering enums"));
+                }
                 self.expr(lhs)?;
                 self.expr(rhs)?;
                 self.op(cmp_op(*op, scalar));
@@ -727,6 +760,9 @@ impl<'db> Compiler<'db> {
         }
         if (from == Scalar::Str) != (to == Scalar::Str) {
             return Err(self.unsupported(expr, "a cast from or to `String`"));
+        }
+        if from == Scalar::Enum || to == Scalar::Enum {
+            return Err(self.unsupported(expr, "a cast from or to an enum"));
         }
         self.expr(inner)?;
         use ValTy::*;
@@ -909,7 +945,7 @@ impl<'db> Compiler<'db> {
     }
 
     fn pattern_operand(&self, ty: &Ty<'db>, local: Option<u32>, at: ExprId) -> Result<'db, (Scalar, u32)> {
-        match (Scalar::of(ty), local) {
+        match (Scalar::of(self.db, ty), local) {
             (Some(scalar), Some(local)) if scalar != Scalar::Str => Ok((scalar, local)),
             _ => Err(self.unsupported(at, format!("matching a value of type `{}`", ty.display(self.db)))),
         }
@@ -933,12 +969,19 @@ impl<'db> Compiler<'db> {
             },
             Pat::Path(path) => {
                 let resolution = Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path);
-                if let Some(ValueResolution::Value(ValueNs::Builtin(v))) = resolution {
-                    self.push(Inst::I32Const(v.as_bool() as i32));
-                    return Ok(());
+                match resolution {
+                    Some(ValueResolution::Value(ValueNs::Builtin(v))) => {
+                        self.push(Inst::I32Const(v.as_bool() as i32));
+                        return Ok(());
+                    }
+                    Some(ValueResolution::Value(ValueNs::Variant(v))) if scalar == Scalar::Enum => {
+                        self.push(Inst::I32Const(v.index as i32));
+                        return Ok(());
+                    }
+                    _ => {}
                 }
                 let Some(ValueResolution::Value(ValueNs::Const(id))) = resolution else {
-                    return Err(self.unsupported(at, "a pattern of an enum"));
+                    return Err(self.unsupported(at, "a pattern of an enum with fields"));
                 };
                 let value = Evaluator::new(self.db)
                     .eval_const(id)
@@ -948,6 +991,9 @@ impl<'db> Compiler<'db> {
                     Value::Bool(b) => self.int_const(scalar, b as i128),
                     Value::Char(c) => self.int_const(scalar, c as i128),
                     Value::Float(x) => self.float_const(scalar, x),
+                    Value::Adt { ctor: Ctor::Variant(v), .. } if scalar == Scalar::Enum => {
+                        self.push(Inst::I32Const(v.index as i32))
+                    }
                     _ => return Err(self.unsupported(at, "a const of this type in a pattern")),
                 }
             }
@@ -1097,7 +1143,7 @@ fn arith_op(op: ArithOp, scalar: Scalar) -> Option<Op> {
             Div => Op::F64Div,
             _ => return None,
         },
-        Scalar::Char | Scalar::Str => return None,
+        Scalar::Char | Scalar::Str | Scalar::Enum => return None,
     })
 }
 
@@ -1116,7 +1162,7 @@ fn cmp_op(op: CmpOp, scalar: Scalar) -> Op {
             (GtEq, true) => Op::I64GeS,
             (GtEq, false) => Op::I64GeU,
         },
-        Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str => match (op, scalar.signed()) {
+        Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str | Scalar::Enum => match (op, scalar.signed()) {
             (Eq, _) => Op::I32Eq,
             (NotEq, _) => Op::I32Ne,
             (Lt, true) => Op::I32LtS,
