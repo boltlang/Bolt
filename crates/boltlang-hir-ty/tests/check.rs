@@ -55,13 +55,10 @@
 //! `UPDATE_EXPECT=1` leaves the output of `:skip` and `:todo` cases alone,
 //! since it's written by hand, and that of an `:error` case without errors.
 
-use std::{
-    ops::Range,
-    panic::{AssertUnwindSafe, catch_unwind},
-    path::{Path, PathBuf},
-};
+use std::path::Path;
 
 use boltlang_base_db::{TestDb, source_text};
+use boltlang_corpus::{Case, catch, data_files, parse_cases, slug, split_files, update, updating};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
@@ -78,20 +75,6 @@ use boltlang_hir_ty::{
 };
 use libtest_mimic::{Arguments, Failed, Trial};
 
-/// One test case of a data file.
-struct Case {
-    title: String,
-    attributes: Attributes,
-    input: String,
-    /// The types, then the diagnostics.
-    expected: (String, String),
-    /// The lines of the title and the input, which an update keeps.
-    head: Range<usize>,
-    /// All the lines of the case, which an update keeps for `:skip` and
-    /// `:todo` cases.
-    lines: Range<usize>,
-}
-
 /// The attributes of a case, like `:todo`.
 #[derive(Default)]
 struct Attributes {
@@ -101,112 +84,33 @@ struct Attributes {
 }
 
 impl Attributes {
+    fn parse(case: &Case) -> Result<Self, String> {
+        let mut attributes = Attributes::default();
+        for attribute in &case.attributes {
+            match attribute.as_str() {
+                "skip" => attributes.skip = true,
+                "todo" => attributes.todo = true,
+                "error" => attributes.error = true,
+                other => {
+                    return Err(format!(
+                        "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo` and `:error`",
+                        case.title
+                    ));
+                }
+            }
+        }
+        Ok(attributes)
+    }
+
     /// Whether the output is written by hand, so that updates keep it.
     fn manual(&self) -> bool {
         self.skip || self.todo
     }
 }
 
-/// Whether `line` is made of at least three `c`s.
-fn is_separator(line: &str, c: char) -> bool {
-    let line = line.trim_end();
-    line.len() >= 3 && line.chars().all(|x| x == c)
-}
-
-/// The cases in the text of a data file.
-fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut cases = Vec::new();
-    let mut i = 0;
-    // Skip anything before the first case, like blank lines.
-    while i < lines.len() && !is_separator(lines[i], '=') {
-        i += 1;
-    }
-    while i < lines.len() {
-        // The title, between two lines of `=`.
-        let head_start = i;
-        let start = i + 1;
-        i = start;
-        while i < lines.len() && !is_separator(lines[i], '=') {
-            i += 1;
-        }
-        if i == lines.len() {
-            return Err(format!("line {start}: the title isn't followed by a line of `=`"));
-        }
-        let (attribute_lines, title_lines): (Vec<&str>, Vec<&str>) =
-            lines[start..i].iter().partition(|line| line.trim_start().starts_with(':'));
-        let title = title_lines.join(" ").trim().to_string();
-        let mut attributes = Attributes::default();
-        for line in attribute_lines {
-            match line.trim() {
-                ":skip" => attributes.skip = true,
-                ":todo" => attributes.todo = true,
-                ":error" => attributes.error = true,
-                other => {
-                    return Err(format!(
-                        "`{title}`: unknown attribute `{other}`; the attributes are `:skip`, `:todo` and `:error`"
-                    ));
-                }
-            }
-        }
-        i += 1;
-        // The sections, up to the next case.
-        let mut sections = vec![Vec::new()];
-        let mut head_end = None;
-        while i < lines.len() && !is_separator(lines[i], '=') {
-            if is_separator(lines[i], '-') {
-                head_end.get_or_insert(i);
-                sections.push(Vec::new());
-            } else {
-                sections.last_mut().unwrap().push(lines[i]);
-            }
-            i += 1;
-        }
-        let section = |n: usize| sections.get(n).map(|s: &Vec<&str>| s.join("\n").trim().to_string()).unwrap_or_default();
-        // Without a line of `-`, the case has no output yet: it fails, and
-        // `UPDATE_EXPECT=1` writes it.
-        if sections.len() > 3 {
-            return Err(format!("`{title}`: expected the input, the types and optionally the diagnostics"));
-        }
-        let head = head_start..head_end.unwrap_or(i);
-        let input = section(0) + "\n";
-        let expected = (section(1), section(2));
-        cases.push(Case { title, attributes, input, expected, head, lines: head_start..i });
-    }
-    Ok(cases)
-}
-
-/// The test name for a title: `Mutual recursion` is `mutual_recursion`.
-fn slug(title: &str) -> String {
-    let slug: String = title.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
-    slug.split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("_")
-}
-
-/// The files of a case: its input split at the lines like `//- /lib.bolt`
-/// that start a file, or `/main.bolt` without them.
-fn split_files(input: &str) -> Result<Vec<(String, String)>, String> {
-    if !input.lines().any(|line| line.starts_with("//-")) {
-        return Ok(vec![("/main.bolt".to_string(), input.to_string())]);
-    }
-    let mut files: Vec<(String, String)> = Vec::new();
-    for line in input.lines() {
-        if let Some(rest) = line.strip_prefix("//-") {
-            let path = rest.trim();
-            if !path.starts_with('/') || path.contains(char::is_whitespace) {
-                return Err(format!("expected an absolute path after `//-`, like `//- /lib.bolt`: `{line}`"));
-            }
-            if files.iter().any(|(p, _)| p == path) {
-                return Err(format!("two files are called `{path}`"));
-            }
-            files.push((path.to_string(), String::new()));
-        } else if let Some((_, text)) = files.last_mut() {
-            text.push_str(line);
-            text.push('\n');
-        } else if !line.trim().is_empty() {
-            return Err(format!("code before the first `//-` line: `{line}`"));
-        }
-    }
-    Ok(files)
+/// The types, then the diagnostics, that a case expects.
+fn expected(case: &Case) -> (String, String) {
+    (case.section(0).to_string(), case.section(1).to_string())
 }
 
 /// The types of the functions in the files of a case and of their
@@ -395,22 +299,16 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
 /// What the checker finds for a case, or why it couldn't check it: its
 /// files are wrong, or it panicked.
 fn check_caught(case: &Case) -> Result<(String, String), String> {
-    catch_unwind(AssertUnwindSafe(|| check(&case.input))).unwrap_or_else(|payload| {
-        let message = payload
-            .downcast_ref::<&str>()
-            .map(|s| s.to_string())
-            .or_else(|| payload.downcast_ref::<String>().cloned())
-            .unwrap_or_default();
-        Err(format!("the checker panicked: {message}"))
-    })
+    catch("the checker", || check(&case.input))
 }
 
-fn run(case: &Case) -> Result<(), Failed> {
+fn run(case: &Case, attributes: &Attributes) -> Result<(), Failed> {
     let actual = check_caught(case)?;
-    if actual != case.expected {
-        return Err(format!("expected:\n{}\nfound:\n{}", show(&case.expected), show(&actual)).into());
+    let expected = expected(case);
+    if actual != expected {
+        return Err(format!("expected:\n{}\nfound:\n{}", show_output(&expected), show_output(&actual)).into());
     }
-    if case.attributes.error && !has_errors(&actual) {
+    if attributes.error && !has_errors(&actual) {
         return Err("the case is marked `:error`, but the checker found no errors".into());
     }
     Ok(())
@@ -425,83 +323,42 @@ fn has_errors((_, diagnostics): &(String, String)) -> bool {
     })
 }
 
-/// The output sections of a case, without the line of `-` before them.
-fn show((types, diagnostics): &(String, String)) -> String {
-    if diagnostics.is_empty() { format!("{types}\n") } else { format!("{types}\n{SECTION}\n{diagnostics}\n") }
+fn show_output((types, diagnostics): &(String, String)) -> String {
+    boltlang_corpus::show(&[types.clone(), diagnostics.clone()])
 }
 
-/// Write what the checker finds into the output sections of the cases in
-/// `text`. A case that can't be checked keeps its sections, and fails when
-/// it runs.
-fn update(text: &str, cases: &[Case]) -> String {
-    let lines: Vec<&str> = text.lines().collect();
-    let mut out = String::new();
-    let first = cases.first().map_or(lines.len(), |c| c.head.start);
-    for line in &lines[..first] {
-        out.push_str(line);
-        out.push('\n');
+/// What an update writes for a case: what the checker finds, or `None` to
+/// keep it. A case that can't be checked keeps its sections, and fails
+/// when it runs.
+fn updated(case: &Case) -> Option<Vec<String>> {
+    let attributes = Attributes::parse(case).ok()?;
+    if attributes.manual() {
+        return None;
     }
-    for (i, case) in cases.iter().enumerate() {
-        if i > 0 {
-            out.push('\n');
-        }
-        if case.attributes.manual() {
-            let mut kept = &lines[case.lines.clone()];
-            while let [rest @ .., last] = kept
-                && last.trim().is_empty()
-            {
-                kept = rest;
-            }
-            for line in kept {
-                out.push_str(line);
-                out.push('\n');
-            }
-            continue;
-        }
-        for line in &lines[case.head.clone()] {
-            out.push_str(line);
-            out.push('\n');
-        }
-        let found = match check_caught(case) {
-            Ok(found) if !case.attributes.error || has_errors(&found) => found,
-            _ => case.expected.clone(),
-        };
-        out.push_str(SECTION);
-        out.push('\n');
-        out.push_str(&show(&found));
-    }
-    out
-}
-
-const SECTION: &str = "--------------------------------------------------------------------------------";
-
-/// The data files, in alphabetical order.
-fn data_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files: Vec<_> = std::fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display()))
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "txt"))
-        .collect();
-    files.sort();
-    files
+    let found = match check_caught(case) {
+        Ok(found) if !attributes.error || has_errors(&found) => found,
+        _ => expected(case),
+    };
+    Some(vec![found.0, found.1])
 }
 
 fn main() {
     let args = Arguments::from_args();
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/checker");
-    let updating = std::env::var_os("UPDATE_EXPECT").is_some_and(|v| !v.is_empty() && v != "0");
     let mut trials = Vec::new();
     for path in data_files(&root) {
         let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
         let mut text = std::fs::read_to_string(&path).unwrap();
-        if updating && let Ok(cases) = parse_cases(&text) {
-            let updated = update(&text, &cases);
-            if updated != text {
-                std::fs::write(&path, &updated).unwrap();
-                text = updated;
+        if updating()
+            && let Ok(cases) = parse_cases(&text, 2)
+        {
+            let new = update(&text, &cases, updated);
+            if new != text {
+                std::fs::write(&path, &new).unwrap();
+                text = new;
             }
         }
-        let cases = match parse_cases(&text) {
+        let cases = match parse_cases(&text, 2) {
             Ok(cases) => cases,
             Err(error) => {
                 let message = format!("{}: {error}", path.display());
@@ -518,14 +375,22 @@ fn main() {
                 continue;
             }
             seen.push(name.clone());
-            let manual = case.attributes.manual();
-            let trial = if case.attributes.skip {
+            let attributes = match Attributes::parse(&case) {
+                Ok(attributes) => attributes,
+                Err(error) => {
+                    let message = format!("{}: {error}", path.display());
+                    trials.push(Trial::test(name, move || Err(message.into())));
+                    continue;
+                }
+            };
+            let manual = attributes.manual();
+            let trial = if attributes.skip {
                 // Never run, even with `--ignored`, since it may hang.
                 Trial::test(name, || Ok(())).with_kind("skip")
-            } else if case.attributes.todo {
-                Trial::test(name, move || run(&case)).with_kind("todo")
+            } else if attributes.todo {
+                Trial::test(name, move || run(&case, &attributes)).with_kind("todo")
             } else {
-                Trial::test(name, move || run(&case))
+                Trial::test(name, move || run(&case, &attributes))
             };
             trials.push(trial.with_ignored_flag(manual));
         }

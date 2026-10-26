@@ -11,6 +11,7 @@ boltlang-syntax.workspace = true
 salsa = "0.28.5"
 
 [dev-dependencies]
+boltlang-corpus.workspace = true
 boltlang-parser.workspace = true
 libtest-mimic = "0.8.2"
 

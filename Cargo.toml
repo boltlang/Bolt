@@ -10,6 +10,7 @@ members = [
   "crates/boltlang-hir-ty",
   "crates/boltlang-eval",
   "crates/boltlang-codegen",
+  "crates/boltlang-corpus",
   "crates/boltlang-ide-diagnostics",
   "crates/boltlang-cli",
   "crates/bolt-language-server",
@@ -30,6 +31,7 @@ boltlang-base-db = { version = "0.1.0", path = "crates/boltlang-base-db" }
 boltlang-eval = { version = "0.1.0", path = "crates/boltlang-eval" }
 boltlang-codegen = { version = "0.1.0", path = "crates/boltlang-codegen" }
 boltlang-common = { version = "0.1.0", path = "crates/boltlang-common" }
+boltlang-corpus = { version = "0.1.0", path = "crates/boltlang-corpus" }
 boltlang-hir = { version = "0.1.0", path = "crates/boltlang-hir" }
 boltlang-hir-def = { version = "0.1.0", path = "crates/boltlang-hir-def" }
 boltlang-hir-ty = { version = "0.1.0", path = "crates/boltlang-hir-ty" }
