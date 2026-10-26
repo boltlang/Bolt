@@ -187,6 +187,30 @@ the end is an error at run time:
 [E0301] Error: index 5 is out of bounds for length 3
 ```
 
+An array can't be changed, unless it's made with `mut`:
+
+```bolt
+let scores = mut [0, 0, 0];
+scores[1] = 10;
+scores;
+```
+
+```text
+[0, 10, 0]
+```
+
+Changing an element of `primes` from above is an error:
+
+```text
+[E0221] Error: cannot change an element of `primes`, which is `imm [i32]`; only a `mut` array can be changed
+```
+
+The type of an array says which kind it is: `primes` is `imm [i32]`, and
+`scores` is `mut [i32]`. A function that takes `[i32]` takes both, and
+can't change them; one that changes its argument takes `mut [i32]`. The
+[internals](../internals/type-checking/mutability.mdx) explain how this
+works.
+
 ## Comments
 
 ```bolt
