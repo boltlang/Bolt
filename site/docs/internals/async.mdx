@@ -1,0 +1,157 @@
+---
+sidebar_position: 3
+title: Async (design)
+description: A design for code that waits, as an Async effect instead of async and await. Nothing of it is implemented.
+---
+
+# Async (design)
+
+:::warning[Not implemented]
+This page is a design sketch. **Nothing on it is implemented**: there are no
+effects in Bolt yet, and `async` and `await` are reserved words without a
+meaning. The syntax below is a placeholder and will change.
+:::
+
+Code that waits, for a network request or a timer, is usually marked with
+`async`, and its results are taken out of a future with `await`. With
+algebraic effects, neither keyword is needed: code that can wait has the
+`Async` effect in its type, and the compiler infers it like any other
+effect. The [reactive UI design](./reactive.mdx) builds on this.
+
+## Code that waits
+
+A function that waits says so in its type, and returns its result directly:
+
+```bolt
+fn fetch(url: str) -> Result[Response, HttpError] / { Async };
+
+fn is_up(url: str) -> bool / { Async } = match fetch(url) {
+    Ok(_) => true,
+    Err(_) => false,
+};
+```
+
+There's no `await`: `fetch` returns the response once it's there. Callers
+don't write `async` either; `Async` is inferred for every function and
+closure that calls `fetch`, like `is_up`.
+
+The effect itself has two operations:
+
+```bolt
+effect Async {
+    // Stop until `start` calls its callback with a value, then go on with it.
+    fn suspend[T](start: fn(fn(T) -> ()) -> ()) -> T;
+    // Run `task` next to the code that calls spawn.
+    fn spawn[T](task: fn() -> T / { Async }) -> Task[T];
+}
+
+// Wait until a task is done, and get its result.
+fn wait[T](task: Task[T]) -> T / { Async };
+```
+
+`suspend` connects Bolt to the outside world: `fetch` calls the `fetch` of
+the browser, and passes the callback of `suspend` to the promise it returns.
+Most code never calls `suspend` or `spawn` itself.
+
+## No function colours
+
+In JavaScript and Rust, `async` spreads up the call chain, and a function
+like `map` needs a second version for async callbacks. With effect
+polymorphism, one `map` is enough: the effects of its callback become its
+own.
+
+```bolt
+fn map[A, B, E](xs: [A], f: fn(A) -> B / E) -> [B] / E;
+
+map([1, 2, 3], |x| x * 2);   // no effects
+map(urls, is_up);            // / { Async }
+```
+
+Effect rows are like the rows of extensible records (`{ name: str, .. }`),
+so the type checker may be able to reuse what it does for those.
+
+## Running things at the same time
+
+Without futures, code runs one step after the other:
+
+```bolt
+let a = fetch(x);   // waits for x
+let b = fetch(y);   // and only then asks for y
+```
+
+To ask for both at once, `spawn` one of them, or use a function built on it:
+
+```bolt
+fn both[A, B](a: fn() -> A / { Async }, b: fn() -> B / { Async }) -> (A, B) / { Async } {
+    let task = spawn(a);
+    let result = b();
+    (wait(task), result)
+}
+
+let (a, b) = both(|| fetch(x), || fetch(y));
+```
+
+So the common case reads like code that doesn't wait, and running things at
+the same time is explicit. `Task[T]` is the only kind of future, for the
+places where it's needed.
+
+## One effect, many handlers
+
+What waiting means depends on the handler that runs the code:
+
+| Where                  | What the `Async` handler does                                  |
+| ---------------------- | -------------------------------------------------------------- |
+| An event handler       | runs it as a task of its own, next to the page                 |
+| A component            | shows a fallback, and draws again once the data is there       |
+| Rendering on a server  | waits for every request, then sends the page                   |
+| A test                 | runs tasks one by one in a fixed order, with a fake clock      |
+
+The code is the same in all of them. Tests in particular get easier: a
+handler with a fake clock runs timers and timeouts right away, and always
+in the same order.
+
+## Cancelling
+
+A task that isn't needed anymore should stop: a component that left the
+page, or a search whose text changed. A handler cancels a task by never
+resuming it. With effects, that's allowed: a continuation can be resumed
+once, or not at all.
+
+What's left to decide is cleanup. A task that's dropped while it holds
+something, like an open connection or a lock, has to release it. That needs
+a way to run code when a continuation is dropped, like `defer` or a
+`finally`, and a rule for where cancelling can happen: at any `suspend`, or
+only at some.
+
+## Compiling it
+
+`Async` is the one effect that truly suspends, so code that performs it is
+compiled differently: as a state machine or with a CPS transform, or with
+the stack switching of wasm. `async` tells a compiler which functions those
+are; effect types tell it the same, so nothing is lost.
+
+Effect-polymorphic functions like `map` are harder: they may or may not
+suspend, depending on their callback. They can be compiled twice, once for
+each case, or always use stack switching. In the browser, JSPI lets wasm
+wait for a promise of JavaScript, which is enough for `suspend` around
+`fetch`.
+
+## The keywords
+
+The syntax reserves `async` and `await`. This design doesn't need them, so
+they can be freed, or `await` can stay as another name for `wait`.
+
+## Seeing where code waits
+
+A call that can wait looks like any other call. That's the point, but
+sometimes you want to know. The language server can mark these calls, with
+a highlight or an inlay hint, like it can mark inferred
+[reactive state](./reactive.mdx#inferring-state).
+
+## Still to design
+
+- Cancelling and cleanup, as above.
+- Errors: `Result`, or an effect for failure that the handlers of `Async`
+  know about, so that a failed task can fail the code that waits for it.
+- Timeouts and racing, like `first(a, b)`, which need cancelling.
+- Whether threads come later, and what `spawn` means then.
