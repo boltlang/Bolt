@@ -155,9 +155,12 @@ name = "boltlang-codegen"
 version = "0.1.0"
 dependencies = [
  "boltlang-base-db",
+ "boltlang-corpus",
  "boltlang-eval",
  "boltlang-hir-def",
  "boltlang-hir-ty",
+ "boltlang-ide-diagnostics",
+ "libtest-mimic",
  "salsa",
  "wasm-encoder",
  "wasmi",

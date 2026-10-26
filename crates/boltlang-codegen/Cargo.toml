@@ -13,3 +13,12 @@ salsa = "0.28.5"
 wasm-encoder = "0.262.0"
 wasmi = "2.0.0"
 wasmparser = "0.262.0"
+
+[dev-dependencies]
+boltlang-corpus.workspace = true
+boltlang-ide-diagnostics.workspace = true
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "run"
+harness = false
