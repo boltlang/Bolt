@@ -143,7 +143,8 @@ impl PathType {
     }
 }
 
-/// `mut T` or `imm T`, for a type other than an array, like `mut Point`.
+/// `mut T` or `imm T`, for a type other than an array, like `mut Point`, or
+/// a named mutability, like `'m Point`.
 pub struct MutType(SyntaxNode);
 
 simple_node!(MutType, MUT_TYPE);
@@ -154,6 +155,10 @@ impl MutType {
     }
     pub fn imm_token(&self) -> Option<SyntaxToken> {
         self.find_token(IMM_KEYWORD)
+    }
+    /// The `'m` of `'m Point`.
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        self.find_token(LABEL_IDENT)
     }
     pub fn inner(&self) -> Option<Type> {
         self.find_node()

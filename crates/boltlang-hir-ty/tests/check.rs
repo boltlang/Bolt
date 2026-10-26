@@ -63,18 +63,19 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
     hir::{Expr, Statement, TypeRefId},
-    ids::{ConstId, EnumId, FunctionId, ImplId, ItemContainerId, StructId},
+    ids::{ConstId, EnumId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     item_tree::{AssocItem, FunctionName, ModItem, item_tree},
     resolver::GenericDefId,
     signatures::{
         const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
-        impl_signature_with_source_map, struct_signature_with_source_map,
+        impl_signature_with_source_map, struct_signature_with_source_map, type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
     lower::{
         LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, struct_field_types,
+        type_alias_ty,
     },
     solve::{ExprOrPat, TypeError},
 };
@@ -167,6 +168,13 @@ fn check(input: &str) -> Result<(String, String), String> {
                     }
                 }
                 ModItem::Const(idx) => consts.push(ConstId::new(&db, ItemContainerId::File(file), idx)),
+                ModItem::TypeAlias(idx) => {
+                    let id = TypeAliasId::new(&db, ItemContainerId::File(file), idx);
+                    let (_, map) = type_alias_signature_with_source_map(&db, id);
+                    for lower in &type_alias_ty(&db, id).diagnostics {
+                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    }
+                }
                 ModItem::Impl(idx) => {
                     let id = ImplId::new(&db, file, idx);
                     let header = impl_header(&db, id);
@@ -336,6 +344,7 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
         LowerDiagnostic::NoMutability(id) => format!("error at `{}`: can't be mut or imm", at(*id)),
         LowerDiagnostic::MutField(id) => format!("error at `{}`: mut field", at(*id)),
+        LowerDiagnostic::UnknownMutability(id) => format!("error at `{}`: unknown mutability", at(*id)),
     }
 }
 

@@ -123,6 +123,8 @@ pub enum DiagnosticKind<'db> {
     MutInsideImm { ty: Ty<'db>, inner: Ty<'db> },
     /// `mut` in the type of a field.
     MutField,
+    /// A named mutability that isn't one of the function's or impl's.
+    UnknownMutability,
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -549,6 +551,7 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
                 LowerDiagnostic::NoMutability(id) => (*id, DiagnosticKind::NoMutability),
                 LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
+                LowerDiagnostic::UnknownMutability(id) => (*id, DiagnosticKind::UnknownMutability),
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {

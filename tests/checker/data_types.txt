@@ -221,7 +221,7 @@ struct Loop { next: Loop }
 fn next(l: Loop) -> Loop = l.next;
 
 --------------------------------------------------------------------------------
-next: fn(Loop) -> Loop
+next: fn('m Loop) -> 'm Loop
 
 ================================================================================
 A generic struct with a parameter it doesn't use

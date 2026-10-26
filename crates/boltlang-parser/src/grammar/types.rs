@@ -15,6 +15,7 @@ pub(crate) const TYPE_FIRST: TokenSet = TokenSet::new(&[
     T!['['],
     T![mut],
     T![imm],
+    LABEL_IDENT,
     T![!],
     T![fn],
     T![async],
@@ -55,7 +56,7 @@ fn atom_type(p: &mut Parser) -> Option<CompletedMarker> {
         T!['('] => tuple_type(p),
         T!['['] => array_type(p),
         T![mut] | T![imm] if p.nth_at(1, T!['[']) => array_type(p),
-        T![mut] | T![imm] => mut_type(p),
+        T![mut] | T![imm] | LABEL_IDENT => mut_type(p),
         T![!] => never_type(p),
         T![fn] | T![async] | T![const] | T![extern] => fn_type(p),
         T![impl] => impl_trait_type(p),
@@ -235,13 +236,14 @@ fn array_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, ARRAY_TYPE)
 }
 
-/// `mut T` or `imm T` for a type other than an array, like `mut Point`.
+/// `mut T` or `imm T` for a type other than an array, like `mut Point`, or
+/// a named mutability before any type, like `'m Point` or `'m [i32]`.
 /// Whether the type can have a mutability is checked later, once it's known
 /// what the type is.
 fn mut_type(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
     p.bump_any();
-    if p.at(T![mut]) || p.at(T![imm]) {
+    if p.at(T![mut]) || p.at(T![imm]) || p.at(LABEL_IDENT) {
         p.error("a type can have only one `mut` or `imm`");
     }
     if p.at_ts(TYPE_FIRST) {

@@ -77,6 +77,7 @@ impl DiagnosticCode {
     pub const NO_MUTABILITY: Self = Self("E0222");
     pub const MUT_INSIDE_IMM: Self = Self("E0223");
     pub const MUT_FIELD: Self = Self("E0224");
+    pub const UNKNOWN_MUTABILITY: Self = Self("E0225");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -343,6 +344,13 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             );
             (C::MUT_INSIDE_IMM, message)
         }
+        K::UnknownMutability => (
+            C::UNKNOWN_MUTABILITY,
+            format!(
+                "the mutability of `{source}` isn't one of this function's: a name like `'m` can only be used in the \
+                 signature and the body of the function or impl that it's written in"
+            ),
+        ),
         K::MutField => (
             C::MUT_FIELD,
             "a field can't be `mut`: it has the mutability of its struct, so make the struct `mut` instead".into(),

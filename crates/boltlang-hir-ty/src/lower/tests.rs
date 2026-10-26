@@ -39,6 +39,16 @@ const N: Swap[u8, Bool] = 1;
 ";
 
 #[test]
+fn named_mutabilities_complete_a_signature() {
+    let db = TestDb::new();
+    let file = db.file("/main.bolt", "fn a(xs: 'm [i32]) -> 'm [i32] = xs;\nfn b(xs: [i32]) -> [i32] = xs;\n");
+    // The return type of `a` names its mutability, so `a` is checked on its
+    // own. That of `b` doesn't, so its body decides it.
+    assert!(fn_sig(&db, function(&db, file, 0)).is_complete());
+    assert!(!fn_sig(&db, function(&db, file, 1)).is_complete());
+}
+
+#[test]
 fn function_signatures() {
     let db = TestDb::new();
     let file = db.file("/main.bolt", SOURCE);

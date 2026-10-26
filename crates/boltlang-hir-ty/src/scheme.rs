@@ -11,7 +11,9 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    lower::{ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_header, subst_params},
+    lower::{
+        ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_header, named_mutabilities, subst_params,
+    },
     solve::{Constraint, FieldConstraint, Origin, Solver},
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
@@ -103,8 +105,9 @@ pub fn generic_chain<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<GenericDef
     chain
 }
 
-/// The type parameters of `defs`, in order, each followed by its hidden
-/// mutability parameters: see [`FnSig::hidden`](crate::lower::FnSig::hidden).
+/// The type parameters of `defs`, in order, each followed by its named
+/// mutabilities (see [`named_mutabilities`]) and its hidden ones (see
+/// [`FnSig::hidden`](crate::lower::FnSig::hidden)).
 pub fn generic_param_ids<'db>(
     db: &'db dyn Db,
     defs: impl IntoIterator<Item = GenericDefId<'db>>,
@@ -116,7 +119,8 @@ pub fn generic_param_ids<'db>(
                 GenericDefId::Impl(i) => impl_header(db, i).hidden,
                 _ => 0,
             };
-            let count = def.generic_params(db).type_params.len() as u32 + hidden;
+            let named = named_mutabilities(db, def).len() as u32;
+            let count = def.generic_params(db).type_params.len() as u32 + named + hidden;
             (0..count).map(move |index| GenericParamId { def, index })
         })
         .collect()
