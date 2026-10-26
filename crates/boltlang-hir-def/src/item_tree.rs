@@ -17,7 +17,7 @@ use boltlang_syntax::{
 };
 
 pub use crate::arena::Idx;
-use crate::Name;
+use crate::{Name, expr_store::unquote};
 
 /// The items of `file`.
 #[salsa::tracked(returns(ref))]
@@ -132,7 +132,7 @@ pub enum RawVisibility {
 }
 
 impl RawVisibility {
-    fn from_ast(vis: Option<ast::Visibility>) -> Self {
+    pub(crate) fn from_ast(vis: Option<ast::Visibility>) -> Self {
         let Some(vis) = vis else {
             return RawVisibility::Private;
         };
@@ -150,6 +150,15 @@ impl RawVisibility {
 pub enum FunctionName {
     Name(Name),
     Operator(Name),
+}
+
+impl FunctionName {
+    /// The name the function is defined under: its name, or the operator.
+    pub fn name(&self) -> &Name {
+        match self {
+            FunctionName::Name(name) | FunctionName::Operator(name) => name,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -292,106 +301,60 @@ impl ItemTree {
             E::FuncDecl(f) => ModItem::Function(self.lower_function(&f)),
             E::Struct(s) => {
                 let ast_id = self.next_ast_id(STRUCT);
-                self.structs.push(Struct {
-                    name: name(s.name()),
-                    visibility: RawVisibility::from_ast(s.visibility()),
-                    ast_id,
-                });
-                ModItem::Struct(Idx::new(self.structs.len() - 1))
+                let visibility = RawVisibility::from_ast(s.visibility());
+                ModItem::Struct(push(&mut self.structs, Struct { name: name(s.name()), visibility, ast_id }))
             }
             E::Enum(e) => {
                 let ast_id = self.next_ast_id(ENUM);
-                self.enums.push(Enum {
+                let enum_ = Enum {
                     name: name(e.name()),
                     visibility: RawVisibility::from_ast(e.visibility()),
                     variants: e.variants().iter().filter_map(|v| name(v.name())).collect(),
                     ast_id,
-                });
-                ModItem::Enum(Idx::new(self.enums.len() - 1))
+                };
+                ModItem::Enum(push(&mut self.enums, enum_))
             }
+            // The items inside get their `AstId`s after the item's own. A
+            // class, impl or extern block can't contain another, so it's
+            // pushed after them at the index it had before.
             E::Class(c) => {
                 let ast_id = self.next_ast_id(CLASS);
-                let idx = self.classes.len();
-                self.classes.push(Class {
-                    name: name(c.name()),
-                    visibility: RawVisibility::from_ast(c.visibility()),
-                    items: Vec::new(),
-                    ast_id,
-                });
                 let items = self.lower_assoc_items(c.item_list());
-                self.classes[idx].items = items;
-                ModItem::Class(Idx::new(idx))
+                let class = Class { name: name(c.name()), visibility: RawVisibility::from_ast(c.visibility()), items, ast_id };
+                ModItem::Class(push(&mut self.classes, class))
             }
             E::Impl(i) => {
                 let ast_id = self.next_ast_id(IMPL);
-                let idx = self.impls.len();
-                self.impls.push(Impl { items: Vec::new(), ast_id });
                 let items = self.lower_assoc_items(i.item_list());
-                self.impls[idx].items = items;
-                ModItem::Impl(Idx::new(idx))
+                ModItem::Impl(push(&mut self.impls, Impl { items, ast_id }))
             }
             E::ExternBlock(b) => {
                 let ast_id = self.next_ast_id(EXTERN_BLOCK);
-                let idx = self.extern_blocks.len();
                 let abi = b.abi().and_then(|abi| abi.string()).map(|s| unquote(s.text()));
-                self.extern_blocks.push(ExternBlock { abi, items: Vec::new(), ast_id });
                 let items = self.lower_assoc_items(b.item_list());
-                self.extern_blocks[idx].items = items;
-                ModItem::ExternBlock(Idx::new(idx))
+                ModItem::ExternBlock(push(&mut self.extern_blocks, ExternBlock { abi, items, ast_id }))
             }
             E::Const(c) => ModItem::Const(self.lower_const(&c)),
             E::TypeAlias(t) => ModItem::TypeAlias(self.lower_type_alias(&t)),
             E::Import(i) => {
                 let ast_id = self.next_ast_id(IMPORT);
-                let kind = if let Some(path) = i.path() {
-                    // Pre-order, so `a.b` is `PATH(PATH(a) . b)` from left to right.
-                    let names = path
-                        .syntax()
-                        .descendants()
-                        .filter(|n| n.kind() == PATH_SEGMENT)
-                        .filter_map(|segment| segment.children().find(|n| n.kind() == NAME_REF))
-                        .map(|name_ref| Name::new(name_ref.text().to_string()))
-                        .collect();
-                    ImportKind::Variants(names)
-                } else if let Some(list) = i.import_list() {
-                    // Keep the order of the names as written.
-                    let mut entries: Vec<(u32, Name, Option<Name>)> = Vec::new();
-                    for name_ref in list.names() {
-                        let start = name_ref.syntax().text_range().start().into();
-                        entries.push((start, Name::new(name_ref.text()), None));
-                    }
-                    for alias in list.aliases() {
-                        let start = alias.syntax().text_range().start().into();
-                        if let Some(name_ref) = alias.name_ref() {
-                            entries.push((start, Name::new(name_ref.text()), name(alias.alias())));
-                        }
-                    }
-                    entries.sort_by_key(|(start, ..)| *start);
-                    ImportKind::List(entries.into_iter().map(|(_, name, alias)| (name, alias)).collect())
-                } else if let Some(alias) = name(i.alias()) {
-                    ImportKind::Alias(alias)
-                } else if i.star_token().is_some() {
-                    ImportKind::Glob
-                } else {
-                    ImportKind::Plain
-                };
-                self.imports.push(Import {
+                let import = Import {
                     visibility: RawVisibility::from_ast(i.visibility()),
                     source: i.source().map(|s| unquote(s.text())),
-                    kind,
+                    kind: import_kind(&i),
                     ast_id,
-                });
-                ModItem::Import(Idx::new(self.imports.len() - 1))
+                };
+                ModItem::Import(push(&mut self.imports, import))
             }
             E::MacroRules(m) => {
                 let ast_id = self.next_ast_id(MACRO_RULES);
-                self.macro_rules.push(MacroRules { name: name(m.name()), ast_id });
-                ModItem::MacroRules(Idx::new(self.macro_rules.len() - 1))
+                ModItem::MacroRules(push(&mut self.macro_rules, MacroRules { name: name(m.name()), ast_id }))
             }
             E::VarDecl(_) | E::ExprStmt(_) | E::MacroCall(_) => return None,
         };
         Some(item)
     }
+
 
     fn lower_assoc_items(&mut self, list: Option<ast::ItemList>) -> Vec<AssocItem> {
         let Some(list) = list else {
@@ -406,9 +369,8 @@ impl ItemTree {
                     E::TypeAlias(t) => AssocItem::TypeAlias(self.lower_type_alias(&t)),
                     E::MacroCall(m) => {
                         let ast_id = self.next_ast_id(MACRO_CALL);
-                        let name = m.name_ref().map(|n| Name::new(n.text()));
-                        self.macro_calls.push(MacroCall { name, ast_id });
-                        AssocItem::MacroCall(Idx::new(self.macro_calls.len() - 1))
+                        let name = m.name_ref().map(|n| Name::from_ident(&n.text()));
+                        AssocItem::MacroCall(push(&mut self.macro_calls, MacroCall { name, ast_id }))
                     }
                     // Other items can't appear here; the parser reports them.
                     _ => return None,
@@ -424,49 +386,76 @@ impl ItemTree {
         } else {
             name(f.name()).map(FunctionName::Name)
         };
-        self.functions.push(Function {
+        let function = Function {
             name: fn_name,
             visibility: RawVisibility::from_ast(f.visibility()),
             is_async: f.async_token().is_some(),
             is_const: f.const_token().is_some(),
             has_body: f.body().is_some(),
             ast_id,
-        });
-        Idx::new(self.functions.len() - 1)
+        };
+        push(&mut self.functions, function)
     }
 
     fn lower_const(&mut self, c: &ast::Const) -> Idx<Const> {
         let ast_id = self.next_ast_id(CONST);
-        self.consts.push(Const {
-            name: name(c.name()),
-            visibility: RawVisibility::from_ast(c.visibility()),
-            has_value: c.expr().is_some(),
-            ast_id,
-        });
-        Idx::new(self.consts.len() - 1)
+        let visibility = RawVisibility::from_ast(c.visibility());
+        push(&mut self.consts, Const { name: name(c.name()), visibility, has_value: c.expr().is_some(), ast_id })
     }
 
     fn lower_type_alias(&mut self, t: &ast::TypeAlias) -> Idx<TypeAlias> {
         let ast_id = self.next_ast_id(TYPE_ALIAS);
-        self.type_aliases.push(TypeAlias {
-            name: name(t.name()),
-            visibility: RawVisibility::from_ast(t.visibility()),
-            has_value: t.ty().is_some(),
-            ast_id,
-        });
-        Idx::new(self.type_aliases.len() - 1)
+        let visibility = RawVisibility::from_ast(t.visibility());
+        push(&mut self.type_aliases, TypeAlias { name: name(t.name()), visibility, has_value: t.ty().is_some(), ast_id })
+    }
+}
+
+/// Add an item to the list of its kind, and give its index.
+fn push<T>(list: &mut Vec<T>, item: T) -> Idx<T> {
+    list.push(item);
+    Idx::new(list.len() - 1)
+}
+
+/// What an import brings in.
+fn import_kind(i: &ast::Import) -> ImportKind {
+    if let Some(path) = i.path() {
+        // Pre-order, so `a.b` is `PATH(PATH(a) . b)` from left to right.
+        let names = path
+            .syntax()
+            .descendants()
+            .filter(|n| n.kind() == PATH_SEGMENT)
+            .filter_map(|segment| segment.children().find(|n| n.kind() == NAME_REF))
+            .map(|name_ref| Name::from_ident(&name_ref.text().to_string()))
+            .collect();
+        ImportKind::Variants(names)
+    } else if let Some(list) = i.import_list() {
+        // Keep the order of the names as written.
+        let mut entries: Vec<(u32, Name, Option<Name>)> = Vec::new();
+        for name_ref in list.names() {
+            let start = name_ref.syntax().text_range().start().into();
+            entries.push((start, Name::from_ident(&name_ref.text()), None));
+        }
+        for alias in list.aliases() {
+            let start = alias.syntax().text_range().start().into();
+            if let Some(name_ref) = alias.name_ref() {
+                entries.push((start, Name::from_ident(&name_ref.text()), name(alias.alias())));
+            }
+        }
+        entries.sort_by_key(|(start, ..)| *start);
+        ImportKind::List(entries.into_iter().map(|(_, name, alias)| (name, alias)).collect())
+    } else if let Some(alias) = name(i.alias()) {
+        ImportKind::Alias(alias)
+    } else if i.star_token().is_some() {
+        ImportKind::Glob
+    } else {
+        ImportKind::Plain
     }
 }
 
 fn name(name: Option<ast::Name>) -> Option<Name> {
-    name.map(|n| Name::new(n.text()))
+    name.map(|n| Name::from_ident(&n.text()))
 }
 
-/// The contents of a string literal without its quotes. Escapes are left as
-/// they are, since import paths and ABIs rarely contain them.
-fn unquote(text: &str) -> String {
-    text.trim_start_matches(['b', 'c', 'r', '#']).trim_start_matches('"').trim_end_matches('#').trim_end_matches('"').to_string()
-}
 
 #[cfg(test)]
 mod tests;

@@ -19,6 +19,7 @@ use crate::{
 };
 
 pub use lower::ExprCollector;
+pub(crate) use lower::unquote;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ExpressionStore {
