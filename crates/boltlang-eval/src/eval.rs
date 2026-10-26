@@ -10,7 +10,6 @@ use boltlang_hir_def::{
         PathSegment, PrefixOp, Statement, TypeRef,
     },
     ids::{ConstId, FunctionId, ItemContainerId, ModuleDefId},
-    item_tree::FunctionName,
     nameres::{Namespace, file_scope},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     signatures::{FieldList, enum_signature, struct_signature},
@@ -241,7 +240,7 @@ impl<'db> Evaluator<'db> {
                 return fail(ErrorKind::Unsupported("calling an extern function"));
             }
             let name = match &item.name {
-                Some(FunctionName::Name(n) | FunctionName::Operator(n)) => n.to_string(),
+                Some(name) => name.name().to_string(),
                 None => "?".to_string(),
             };
             return fail(ErrorKind::NoBody(name));
