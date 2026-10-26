@@ -10,13 +10,13 @@ pub fn id[T](x: T) -> T = x;
 //- /main.bolt
 fn get(o, d) = match o { Some(x) => x, None => d };
 get(Some(id(1)), 2);
-let o: Option[bool] = None;
+let o: Option[Bool] = None;
 
 --------------------------------------------------------------------------------
 /.bolt/packages/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /main.bolt: get: forall a. fn(Option[a], a) -> a
 /main.bolt: get(Some(id(1)), 2): i32
-/main.bolt: let o: Option[bool]
+/main.bolt: let o: Option[Bool]
 
 ================================================================================
 Names in the file and its imports replace the ones of the prelude
@@ -25,33 +25,33 @@ Names in the file and its imports replace the ones of the prelude
 pub fn id[T](x: T) -> T = x;
 pub fn first(x: i32, y: i32) -> i32 = x;
 //- /lib.bolt
-pub fn first(x: bool, y: bool) -> bool = x;
+pub fn first(x: Bool, y: Bool) -> Bool = x;
 //- /main.bolt
 import "./lib" (first);
-fn id(x: i32) -> str = "mine";
+fn id(x: i32) -> String = "mine";
 id(1);
-first(true, false);
+first(True, False);
 
 --------------------------------------------------------------------------------
 /.bolt/packages/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /.bolt/packages/std/__prelude__/lib.bolt: first: fn(i32, i32) -> i32
-/lib.bolt: first: fn(bool, bool) -> bool
-/main.bolt: id: fn(i32) -> str
-/main.bolt: id(1): str
-/main.bolt: first(true, false): bool
+/lib.bolt: first: fn(Bool, Bool) -> Bool
+/main.bolt: id: fn(i32) -> String
+/main.bolt: id(1): String
+/main.bolt: first(True, False): Bool
 
 ================================================================================
 Instances in the prelude are found
 ================================================================================
 //- /.bolt/packages/std/__prelude__/lib.bolt
-pub class Show[T] { fn show(x: T) -> str; }
+pub class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 show(1);
 
 --------------------------------------------------------------------------------
-/.bolt/packages/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> str
-/main.bolt: show(1): str
+/.bolt/packages/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> String
+/main.bolt: show(1): String
 
 ================================================================================
 The names of the prelude aren't re-exported

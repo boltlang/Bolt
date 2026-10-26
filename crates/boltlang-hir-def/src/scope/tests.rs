@@ -82,7 +82,7 @@ fn let_chains_bind_for_the_rest_of_the_condition() {
 #[test]
 fn labels() {
     let db = TestDb::new();
-    let file = db.file("/main.bolt", "fn f() { 'a: loop { 'b: while true { break 'a; break; } } }");
+    let file = db.file("/main.bolt", "fn f() { 'a: loop { 'b: while True { break 'a; break; } } }");
     let ModItem::Function(idx) = item_tree(&db, file).top_level[0] else { panic!() };
     let def = DefWithBodyId::new(&db, DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(file), idx)));
     let body = body(&db, def);

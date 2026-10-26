@@ -44,8 +44,8 @@ match x {
 match name {
   | "IPV6_FLOWINFO"
   | "IPV6_FLOWLABEL_MGR"
-  | "IPV6_FLOWINFO_SEND" => true,
-  _ => false,
+  | "IPV6_FLOWINFO_SEND" => True,
+  _ => False,
 }
 
 ================================================================================

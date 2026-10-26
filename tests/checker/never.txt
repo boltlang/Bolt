@@ -1,21 +1,21 @@
 ================================================================================
 Panic has any type
 ================================================================================
-extern "bolt" { fn panic(message: str) -> !; }
-fn f(x: i32) -> str = if x > 0 { "positive" } else { panic("negative") };
+extern "bolt" { fn panic(message: String) -> !; }
+fn f(x: i32) -> String = if x > 0 { "positive" } else { panic("negative") };
 fn g() -> i32 = panic("never");
-let a: bool = panic("no");
+let a: Bool = panic("no");
 
 --------------------------------------------------------------------------------
-f: fn(i32) -> str
+f: fn(i32) -> String
 g: fn() -> i32
-let a: bool
+let a: Bool
 
 ================================================================================
 Panic needs a message
 :error
 ================================================================================
-extern "bolt" { fn panic(message: str) -> !; }
+extern "bolt" { fn panic(message: String) -> !; }
 panic(1);
 panic();
 
@@ -24,17 +24,17 @@ panic(1): !
 panic(): !
 --------------------------------------------------------------------------------
 error at `panic()`: expected 1 arguments, found 0
-error at `1`: expected str, found {integer}
+error at `1`: expected String, found {integer}
 
 ================================================================================
 A function that never returns
 ================================================================================
-extern "bolt" { fn panic(message: str) -> !; }
-fn fail(msg: str) -> ! = panic(msg);
+extern "bolt" { fn panic(message: String) -> !; }
+fn fail(msg: String) -> ! = panic(msg);
 fn f(x: i32) -> i32 = if x > 0 { x } else { fail("negative") };
 
 --------------------------------------------------------------------------------
-fail: fn(str) -> !
+fail: fn(String) -> !
 f: fn(i32) -> i32
 
 ================================================================================
@@ -73,7 +73,7 @@ error at `break`: expected !, found ()
 ================================================================================
 Never in a tuple and an array
 ================================================================================
-extern "bolt" { fn panic(message: str) -> !; }
+extern "bolt" { fn panic(message: String) -> !; }
 fn f() = (1, panic("x"));
 fn g() = [panic("x"), 1];
 fn h() = [panic("x")];
@@ -95,9 +95,9 @@ absurd: fn(Void) -> i32
 absurd2: forall T. fn(Void) -> T
 
 ================================================================================
-Print takes a str and gives unit
+Print takes a String and gives unit
 ================================================================================
-extern "bolt" { fn print(text: str); }
+extern "bolt" { fn print(text: String); }
 print("a");
 print(1);
 let x: i32 = print("b");
@@ -106,5 +106,5 @@ print("a"): ()
 print(1): ()
 let x: i32
 --------------------------------------------------------------------------------
-error at `1`: expected str, found {integer}
+error at `1`: expected String, found {integer}
 error at `print("b")`: expected i32, found ()

@@ -78,7 +78,7 @@ fn kinds_come_from_other_definitions() {
         struct Wrap[F, A] { value: F[A] }
         fn f[F](x: Wrap[F, i32]) -> i32 = 1;
         fn g[G](x: i32) -> i32 where Functor[G] = x;
-        struct Apply[T] { inner: T[i32, bool] }
+        struct Apply[T] { inner: T[i32, Bool] }
     ";
     let k = kinds(code);
     assert_eq!(k[2], ("f".into(), vec![arrow(star(), star())]));

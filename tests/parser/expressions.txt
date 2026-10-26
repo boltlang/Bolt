@@ -75,7 +75,7 @@ x += y;
 Type cast expressions
 ================================================================================
 1000 as u8;
-let character = integer as char;
+let character = integer as Char;
 let size: f64 = 1.0 + -len(values) as f64 + 1.0;
 
 ================================================================================
@@ -198,7 +198,7 @@ let msg = match x {
 While expressions
 ================================================================================
 while !done {
-  done = true;
+  done = True;
 }
 
 ================================================================================
@@ -207,7 +207,7 @@ Loop expressions
 'outer: loop {
   'inner: loop {
     break 'outer;
-    break true;
+    break True;
   }
 }
 

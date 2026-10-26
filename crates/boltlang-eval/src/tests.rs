@@ -36,10 +36,17 @@ fn arithmetic() {
 
 #[test]
 fn comparisons_and_logic() {
-    assert_eq!(run("1 < 2 && 2 <= 2"), "true");
-    assert_eq!(run("1 == 2 || !(3 != 3)"), "true");
-    assert_eq!(run("(1, 2) < (1, 3)"), "true");
-    assert_eq!(run("[1, 2] == [1, 2]"), "true");
+    assert_eq!(run("1 < 2 && 2 <= 2"), "True");
+    assert_eq!(run("1 == 2 || !(3 != 3)"), "True");
+    assert_eq!(run("(1, 2) < (1, 3)"), "True");
+    assert_eq!(run("[1, 2] == [1, 2]"), "True");
+}
+
+#[test]
+fn true_and_false_are_names() {
+    assert_eq!(run("(True, !True, False || True)"), "(True, False, True)");
+    assert_eq!(run("match 1 > 2 { True => \"yes\", False => \"no\" }"), "\"no\"");
+    assert_eq!(run("enum Answer { True, Maybe }\nimport Answer.*;\nmatch True { Maybe => 1, True => 2 }"), "2");
 }
 
 #[test]
@@ -60,11 +67,11 @@ fn recursion() {
 #[test]
 fn mutual_recursion() {
     let code = "
-        fn even(n) = if n == 0 { true } else { odd(n - 1) };
-        fn odd(n) = if n == 0 { false } else { even(n - 1) };
+        fn even(n) = if n == 0 { True } else { odd(n - 1) };
+        fn odd(n) = if n == 0 { False } else { even(n - 1) };
         (even(10), odd(7), even(3))
     ";
-    assert_eq!(run(code), "(true, true, false)");
+    assert_eq!(run(code), "(True, True, False)");
 }
 
 #[test]
@@ -227,7 +234,7 @@ fn a_file_has_the_value_of_its_last_expression_statement() {
 }
 
 /// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: str);\n  pub fn panic(message: str) -> !;\n}\n";
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n}\n";
 
 fn db_with_builtins(code: &str) -> (TestDb, boltlang_base_db::File) {
     let mut db = TestDb::new();
@@ -239,7 +246,7 @@ fn db_with_builtins(code: &str) -> (TestDb, boltlang_base_db::File) {
 
 #[test]
 fn print_goes_to_the_host() {
-    let (db, file) = db_with_builtins("fn greet(name: str) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
+    let (db, file) = db_with_builtins("fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
     let recorder = crate::Recorder::default();
     let mut evaluator = Evaluator::new(&db).with_host(recorder.clone());
     evaluator.eval_file(file).unwrap();
