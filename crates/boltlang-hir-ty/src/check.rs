@@ -18,9 +18,11 @@ use boltlang_hir_def::{
 use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
     lower::{ClassConstraint, const_ty, fn_sig},
-    scheme::{Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, is_declared},
-    solve::{FieldConstraint, Origin, Solver, TypeError, resolve_error, vars_in},
-    ty::{GenericParamId, Ty, TyVar, VarKind},
+    scheme::{
+        Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, generic_param_ids, is_declared,
+    },
+    solve::{ExprOrPat, FieldConstraint, Solver, TypeError, Origin, resolve_error, vars_in},
+    ty::{Ty, TyVar, VarKind},
 };
 
 pub fn def_file<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> File {
@@ -55,58 +57,46 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                 None => InferenceResult { diagnostics: vec![InferenceDiagnostic::CyclicInference], ..Default::default() },
             }
         }
-        DefWithBody::Function(f) => {
+        def_kind => {
+            // A body checked on its own.
             let env = FnEnv::default();
             let mut solver = Solver::new(db, file);
-            for assumption in assumptions(db, f) {
-                solver.assume(assumption);
-            }
-            let Ty::Fn(params, ret) = &declared_scheme(db, f).ty else { unreachable!() };
             let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
-            // A method of a class impl must have the class's types.
-            if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
-                let origin = Origin::new(def, crate::solve::ExprOrPat::Expr(ctx.body.body_expr));
-                for (own, class) in params.iter().zip(class_params.iter()) {
-                    ctx.solver.equal(class, own, origin);
+            match def_kind {
+                DefWithBody::Function(f) => {
+                    for assumption in assumptions(db, f) {
+                        ctx.solver.assume(assumption);
+                    }
+                    let Ty::Fn(params, ret) = &declared_scheme(db, f).ty else { unreachable!() };
+                    // A method of a class impl must have the class's types.
+                    if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
+                        let origin = Origin::new(def, ExprOrPat::Expr(ctx.body.body_expr));
+                        for (own, class) in params.iter().zip(class_params.iter()) {
+                            ctx.solver.equal(class, own, origin);
+                        }
+                        ctx.solver.equal(&class_ret, ret, origin);
+                    }
+                    ctx.infer_fn_body(params, ret);
                 }
-                ctx.solver.equal(&class_ret, ret, origin);
+                DefWithBody::Const(c) => {
+                    ctx.infer_expr_body(Some(&const_ty(db, c).ty));
+                }
+                // The value of a variant, like the `1` of `A = 1`.
+                DefWithBody::Variant(_) => {
+                    let int = ctx.solver.new_var(VarKind::Int);
+                    ctx.infer_expr_body(Some(&int));
+                }
+                DefWithBody::File(_) => {
+                    ctx.infer_expr_body(None);
+                }
             }
-            ctx.infer_fn_body(params, ret);
-            finish(ctx)
-        }
-        DefWithBody::Const(c) => {
-            let env = FnEnv::default();
-            let mut solver = Solver::new(db, file);
-            let ty = const_ty(db, c).ty.clone();
-            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
-            ctx.infer_expr_body(Some(&ty));
-            finish(ctx)
-        }
-        DefWithBody::Variant(_) => {
-            let env = FnEnv::default();
-            let mut solver = Solver::new(db, file);
-            let int = solver.new_var(VarKind::Int);
-            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
-            ctx.infer_expr_body(Some(&int));
-            finish(ctx)
-        }
-        DefWithBody::File(_) => {
-            let env = FnEnv::default();
-            let mut solver = Solver::new(db, file);
-            let mut ctx = InferenceContext::new(db, def, &mut solver, &env);
-            ctx.infer_expr_body(None);
-            finish(ctx)
+            ctx.solver.finish();
+            let errors = std::mem::take(&mut ctx.solver.errors);
+            let mut result = ctx.finish();
+            result.diagnostics.extend(errors.into_iter().map(InferenceDiagnostic::Type));
+            result
         }
     }
-}
-
-/// Solve what's left, and collect the diagnostics.
-fn finish<'db>(ctx: InferenceContext<'_, 'db>) -> InferenceResult<'db> {
-    ctx.solver.finish();
-    let errors = std::mem::take(&mut ctx.solver.errors);
-    let mut result = ctx.finish();
-    result.diagnostics.extend(errors.into_iter().map(InferenceDiagnostic::Type));
-    result
 }
 
 /// The functions of a file without complete signatures, inferred together.
@@ -166,9 +156,7 @@ fn infer_group<'db>(
     }
 
     // Integer variables don't become type parameters; they default first.
-    solver.solve();
-    solver.unifier.default_numeric_vars();
-    solver.solve();
+    solver.solve_with_defaults();
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
     let mut errors: Vec<_> =
@@ -236,13 +224,8 @@ fn infer_group<'db>(
                 errors.push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
             }
         }
-        let mut params: Vec<GenericParamId<'db>> = Vec::new();
-        for def in generic_chain(db, f) {
-            let count = def.generic_params(db).type_params.len();
-            params.extend((0..count).map(|index| GenericParamId { def, index: index as u32 }));
-        }
         let scheme = Scheme {
-            params: params.into(),
+            params: generic_param_ids(db, generic_chain(db, f)),
             bound: vars.len() as u32,
             predicates: predicates.into(),
             fields: fields.into(),
@@ -250,7 +233,7 @@ fn infer_group<'db>(
         };
 
         result.map_types(&mut |t| generalize(&solver.unifier.resolve(t), &vars));
-        let own_errors = errors.iter().filter(|e| error_origin(e).body == def).cloned();
+        let own_errors = errors.iter().filter(|e| e.origin().body == def).cloned();
         result.diagnostics.extend(own_errors.map(|e| {
             let mut d = InferenceDiagnostic::Type(e);
             d.map_types(&mut |t| generalize(t, &vars));
@@ -259,17 +242,6 @@ fn infer_group<'db>(
         env.done.insert(f, scheme.clone());
         out.schemes.push((f, scheme));
         out.results.push((f, result));
-    }
-}
-
-fn error_origin<'a, 'db>(error: &'a TypeError<'db>) -> &'a Origin<'db> {
-    match error {
-        TypeError::Mismatch { origin, .. }
-        | TypeError::InfiniteType { origin, .. }
-        | TypeError::NoInstance { origin, .. }
-        | TypeError::Ambiguous { origin, .. }
-        | TypeError::NoSuchField { origin, .. }
-        | TypeError::TypeNeeded { origin } => origin,
     }
 }
 

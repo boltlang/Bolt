@@ -91,6 +91,19 @@ pub fn generic_chain<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<GenericDef
     chain
 }
 
+/// The type parameters of `defs`, in order.
+pub fn generic_param_ids<'db>(
+    db: &'db dyn Db,
+    defs: impl IntoIterator<Item = GenericDefId<'db>>,
+) -> Box<[GenericParamId<'db>]> {
+    defs.into_iter()
+        .flat_map(|def| {
+            let count = def.generic_params(db).type_params.len() as u32;
+            (0..count).map(move |index| GenericParamId { def, index })
+        })
+        .collect()
+}
+
 /// The class constraints that hold inside a function: its own, those of
 /// its impl, and for a class method, the class itself.
 pub fn assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<ClassConstraint<'db>> {
@@ -190,13 +203,8 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
     {
         defs.push(GenericDefId::Function(method));
     }
-    let mut type_params = Vec::new();
-    for def in defs {
-        let count = def.generic_params(db).type_params.len();
-        type_params.extend((0..count).map(|index| GenericParamId { def, index: index as u32 }));
-    }
     Scheme {
-        params: type_params.into(),
+        params: generic_param_ids(db, defs),
         bound: 0,
         predicates: assumptions(db, f).into(),
         fields: Box::new([]),

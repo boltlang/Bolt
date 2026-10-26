@@ -7,7 +7,7 @@ use boltlang_hir_def::{
 
 use super::{InferenceContext, InferenceDiagnostic};
 use crate::{
-    lower::{FieldsKind, VariantDef, const_ty, field_types, identity_args, subst_params},
+    lower::{FieldsKind, VariantDef, const_ty, field_types, subst_params},
     solve::{ExprOrPat, Origin},
     ty::{Ty, VarKind},
 };
@@ -58,7 +58,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 self.check_pat_list(args, *rest, &elems);
             }
             Pat::TupleStruct { path, args, rest } => {
-                let Some((def, adt_ty, args_ty)) = self.variant_pat(pat, path, expected) else {
+                let Some((def, args_ty)) = self.variant_pat(pat, path, expected) else {
                     for &arg in args.iter() {
                         self.check_pat(arg, &Ty::Error);
                     }
@@ -67,7 +67,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 let (_, generic_def) = def.adt();
                 let fields = field_types(self.db, def);
                 if fields.kind != FieldsKind::Tuple {
-                    self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Pat(pat) });
+                    self.unresolved(ExprOrPat::Pat(pat));
                 }
                 let field_tys: Vec<_> = fields.fields.iter().map(|(_, t)| subst_params(t, generic_def, &args_ty)).collect();
                 if rest.is_none() && field_tys.len() != args.len() {
@@ -78,10 +78,9 @@ impl<'db> InferenceContext<'_, 'db> {
                     });
                 }
                 self.check_pat_list(args, *rest, &field_tys);
-                let _ = adt_ty;
             }
             Pat::Record { path, fields, .. } => {
-                let Some((def, _, args_ty)) = self.variant_pat(pat, path, expected) else {
+                let Some((def, args_ty)) = self.variant_pat(pat, path, expected) else {
                     for field in fields.iter() {
                         self.check_pat(field.pat, &Ty::Error);
                     }
@@ -89,10 +88,10 @@ impl<'db> InferenceContext<'_, 'db> {
                 };
                 self.check_record_fields(pat, def, &args_ty, fields);
             }
-            Pat::Slice { args, rest } => {
+            // Lengths aren't checked yet, so `..` doesn't matter.
+            Pat::Slice { args, .. } => {
                 let elem = self.solver.new_var(VarKind::General);
                 self.expect_shape(pat, expected, &Ty::Array(Box::new(elem.clone())), std::slice::from_ref(&elem));
-                let _ = rest;
                 for &arg in args.iter() {
                     self.check_pat(arg, &elem);
                 }
@@ -155,14 +154,9 @@ impl<'db> InferenceContext<'_, 'db> {
     }
 
     /// Resolve the path of a struct or variant pattern, and check that its
-    /// type is `expected`. Returns the struct or variant, its type and the
-    /// type's arguments.
-    fn variant_pat(
-        &mut self,
-        pat: PatId,
-        path: &Path,
-        expected: &Ty<'db>,
-    ) -> Option<(VariantDef<'db>, Ty<'db>, Box<[Ty<'db>]>)> {
+    /// type is `expected`. Returns the struct or variant, and the arguments
+    /// of its type.
+    fn variant_pat(&mut self, pat: PatId, path: &Path, expected: &Ty<'db>) -> Option<(VariantDef<'db>, Box<[Ty<'db>]>)> {
         let resolver = Resolver::for_body(self.db, self.def);
         let def = match resolver.resolve_path_in_type_ns(self.db, path) {
             Some(TypeResolution { ty: TypeNs::Struct(s), unresolved: None }) => VariantDef::Struct(s),
@@ -172,18 +166,15 @@ impl<'db> InferenceContext<'_, 'db> {
                 match resolver.resolve_path_in_value_ns(self.db, path) {
                     Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
                     _ => {
-                        self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Pat(pat) });
+                        self.unresolved(ExprOrPat::Pat(pat));
                         return None;
                     }
                 }
             }
         };
-        let (adt, generic_def) = def.adt();
-        let args: Box<[Ty<'db>]> =
-            identity_args(self.db, generic_def).iter().map(|_| self.solver.new_var(VarKind::General)).collect();
-        let ty = Ty::Adt(adt, args.clone());
+        let (ty, args) = self.fresh_adt(def);
         self.solver.equal(expected, &ty, self.pat_origin(pat));
-        Some((def, ty, args))
+        Some((def, args))
     }
 
     /// The type of a path pattern: a unit variant or struct, a const, or
@@ -198,12 +189,10 @@ impl<'db> InferenceContext<'_, 'db> {
                 VariantDef::Struct(s)
             }
             _ => {
-                self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Pat(pat) });
+                self.unresolved(ExprOrPat::Pat(pat));
                 return Ty::Error;
             }
         };
-        let (adt, generic_def) = def.adt();
-        let args = identity_args(self.db, generic_def).iter().map(|_| self.solver.new_var(VarKind::General)).collect();
-        Ty::Adt(adt, args)
+        self.fresh_adt(def).0
     }
 }

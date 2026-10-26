@@ -3,7 +3,7 @@
 //!
 //! ```text
 //! extern "bolt" {
-//!     pub fn print(text: str);
+//!     pub fn print(text: String);
 //! }
 //! ```
 //!

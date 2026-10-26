@@ -28,9 +28,9 @@ use crate::{
         identity_args, subst_params,
     },
     check::function_scheme,
-    scheme::Scheme,
+    scheme::{Scheme, generic_param_ids},
     solve::{Constraint, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
-    ty::{AdtId, GenericParamId, Ty, VarKind},
+    ty::{AdtId, Ty, VarKind},
 };
 
 /// The types found in a body, and what went wrong.
@@ -96,15 +96,8 @@ pub enum InferenceDiagnostic<'db> {
 impl<'db> InferenceDiagnostic<'db> {
     pub(crate) fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
         match self {
-            InferenceDiagnostic::Type(TypeError::Mismatch { expected, actual, .. }) => {
-                *expected = f(expected);
-                *actual = f(actual);
-            }
-            InferenceDiagnostic::Type(TypeError::InfiniteType { ty, .. } | TypeError::NoSuchField { ty, .. })
-            | InferenceDiagnostic::NotAFunction { ty, .. } => *ty = f(ty),
-            InferenceDiagnostic::Type(
-                TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. },
-            ) => *constraint = constraint.map(f),
+            InferenceDiagnostic::Type(error) => error.map_types(f),
+            InferenceDiagnostic::NotAFunction { ty, .. } => *ty = f(ty),
             _ => {}
         }
     }
@@ -188,6 +181,24 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.solver.new_var(VarKind::General)
     }
 
+    /// The expected type, or a new variable when nothing is expected.
+    fn expected_or_var(&mut self, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+        expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var())
+    }
+
+    pub(crate) fn unresolved(&mut self, expr: ExprOrPat) {
+        self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr });
+    }
+
+    /// The type of `def`'s struct or enum, with new variables for its type
+    /// arguments, and those arguments.
+    pub(crate) fn fresh_adt(&mut self, def: VariantDef<'db>) -> (Ty<'db>, Box<[Ty<'db>]>) {
+        let (adt, generic_def) = def.adt();
+        let count = generic_def.generic_params(self.db).type_params.len();
+        let args: Box<[Ty<'db>]> = (0..count).map(|_| self.new_var()).collect();
+        (Ty::Adt(adt, args.clone()), args)
+    }
+
     fn resolver(&self, expr: ExprId) -> Resolver<'db> {
         Resolver::for_expr(self.db, self.def, expr)
     }
@@ -262,7 +273,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Expr::Literal(lit) => self.literal_ty(lit),
             Expr::Block { statements, tail, label, .. } => {
                 if let Some(label) = label {
-                    let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
+                    let ty = self.expected_or_var(expected);
                     self.breakables.push(Breakable { label: Some(*label), is_loop: false, ty: Some(ty.clone()), broken: false });
                     let actual = self.infer_block(statements, *tail, Some(Expectation { ty: &ty, reason }));
                     self.breakables.pop();
@@ -339,7 +350,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_expr(*condition, &Ty::bool());
                 match else_branch {
                     Some(else_branch) => {
-                        let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
+                        let ty = self.expected_or_var(expected);
                         self.check_expr_because(*then_branch, &ty, reason);
                         self.check_expr_because(*else_branch, &ty, reason_for_nth(reason, *then_branch, 1));
                         ty
@@ -357,7 +368,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Match { expr: scrutinee, arms } => {
                 let scrutinee_ty = self.infer_expr(*scrutinee);
-                let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
+                let ty = self.expected_or_var(expected);
                 for (i, arm) in arms.iter().enumerate() {
                     self.check_pat(arm.pat, &scrutinee_ty);
                     if let Some(guard) = arm.guard {
@@ -375,7 +386,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::unit()
             }
             Expr::Loop { body: loop_body, label } => {
-                let ty = expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var());
+                let ty = self.expected_or_var(expected);
                 self.breakables.push(Breakable { label: *label, is_loop: true, ty: Some(ty.clone()), broken: false });
                 self.check_expr(*loop_body, &Ty::unit());
                 let breakable = self.breakables.pop().unwrap();
@@ -557,7 +568,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Some(ValueResolution::Value(value)) => self.value_ty(expr, value),
             Some(ValueResolution::Type(resolution)) => self.type_as_value(expr, resolution),
             None => {
-                self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
+                self.unresolved(ExprOrPat::Expr(expr));
                 Ty::Error
             }
         }
@@ -582,9 +593,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let ty = const_ty(self.db, c).ty.clone();
         let ItemContainerId::Class(class) = c.container(self.db) else { return ty };
         let def = GenericDefId::Class(class);
-        let count = def.generic_params(self.db).type_params.len();
         let scheme = Scheme {
-            params: (0..count).map(|index| GenericParamId { def, index: index as u32 }).collect(),
+            params: generic_param_ids(self.db, [def]),
             bound: 0,
             predicates: Box::new([ClassConstraint { class, args: identity_args(self.db, def) }]),
             fields: Box::new([]),
@@ -596,9 +606,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// The type of a struct or variant used as a value: a function for a
     /// tuple struct, the type itself for a unit one.
     fn constructor_ty(&mut self, def: VariantDef<'db>) -> Ty<'db> {
-        let (adt, generic_def) = def.adt();
-        let args: Box<[Ty<'db>]> = identity_args(self.db, generic_def).iter().map(|_| self.new_var()).collect();
-        let adt_ty = Ty::Adt(adt, args.clone());
+        let (_, generic_def) = def.adt();
+        let (adt_ty, args) = self.fresh_adt(def);
         let fields = field_types(self.db, def);
         match fields.kind {
             FieldsKind::Unit => adt_ty,
@@ -617,7 +626,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             (TypeNs::Struct(s), None) => self.constructor_ty(VariantDef::Struct(s)),
             (TypeNs::Variant(v), None) => self.constructor_ty(VariantDef::Variant(v)),
             _ => {
-                self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
+                self.unresolved(ExprOrPat::Expr(expr));
                 Ty::Error
             }
         }
@@ -686,30 +695,21 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         name: &Name,
         args: &[ExprId],
     ) -> Ty<'db> {
-        let resolver = self.resolver(expr);
         let path = Path::from_name(name.clone());
-        let function = match resolver.resolve_path_in_value_ns(self.db, &path) {
-            Some(ValueResolution::Value(ValueNs::Function(f))) => Some(f),
-            _ => None,
-        };
-        let callee_ty = match function {
-            Some(f) => {
+        let mut function = None;
+        let callee_ty = match self.resolver(expr).resolve_path_in_value_ns(self.db, &path) {
+            Some(ValueResolution::Value(ValueNs::Function(f))) => {
+                function = Some(f);
                 self.result.method_calls.insert(expr, f);
                 self.function_ty(callee, f)
             }
-            None => {
-                // A local holding a function works too.
-                match resolver.resolve_path_in_value_ns(self.db, &path) {
-                    Some(ValueResolution::Value(value)) => self.value_ty(callee, value),
-                    _ => {
-                        if !matches!(self.solver.unifier.shallow_resolve(receiver_ty), Ty::Error) {
-                            self.result
-                                .diagnostics
-                                .push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(callee) });
-                        }
-                        Ty::Error
-                    }
+            // A local holding a function works too.
+            Some(ValueResolution::Value(value)) => self.value_ty(callee, value),
+            _ => {
+                if !matches!(self.solver.unifier.shallow_resolve(receiver_ty), Ty::Error) {
+                    self.unresolved(ExprOrPat::Expr(callee));
                 }
+                Ty::Error
             }
         };
         self.result.expr_types.insert(callee, callee_ty.clone());
@@ -822,7 +822,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         self.value_ty(expr, value)
                     }
                     _ => {
-                        self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
+                        self.unresolved(ExprOrPat::Expr(expr));
                         Ty::Error
                     }
                 };
@@ -886,7 +886,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             _ => None,
         };
         let Some(def) = def else {
-            self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr: ExprOrPat::Expr(expr) });
+            self.unresolved(ExprOrPat::Expr(expr));
             for field in fields {
                 self.infer_expr(field.expr);
             }
@@ -895,9 +895,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             return Ty::Error;
         };
-        let (adt, generic_def) = def.adt();
-        let args: Box<[Ty<'db>]> = identity_args(self.db, generic_def).iter().map(|_| self.new_var()).collect();
-        let ty = Ty::Adt(adt, args.clone());
+        let (_, generic_def) = def.adt();
+        let (ty, args) = self.fresh_adt(def);
         let field_tys = field_types(self.db, def);
         let mut seen = Vec::new();
         for field in fields {
