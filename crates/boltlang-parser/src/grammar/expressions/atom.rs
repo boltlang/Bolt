@@ -11,8 +11,6 @@ use crate::{
 };
 
 pub(crate) const LITERAL_FIRST: TokenSet = TokenSet::new(&[
-    T![true],
-    T![false],
     INT_NUMBER,
     FLOAT_NUMBER,
     BYTE,
@@ -50,7 +48,7 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
 pub(crate) const EXPR_RECOVERY_SET: TokenSet =
     TokenSet::new(&[T![')'], T![']'], T!['}'], T![,], T![;], T![let]]);
 
-/// A literal like `1`, `"s"` or `true`.
+/// A literal like `1` or `"s"`. `True` and `False` are names, not literals.
 pub fn parse_literal_expr(p: &mut Parser) -> Option<CompletedMarker> {
     if !p.at_ts(LITERAL_FIRST) {
         return None;

@@ -2,9 +2,9 @@
 extern "bolt" {
 
   /// Write `text` and a newline.
-  pub fn print(text: str);
+  pub fn print(text: String);
 
   /// Stop the program with an error, with `message`.
-  pub fn panic(message: str) -> !;
+  pub fn panic(message: String) -> !;
 
 }

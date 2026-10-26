@@ -186,12 +186,14 @@ impl<'db> InferenceContext<'_, 'db> {
         Some((def, ty, args))
     }
 
-    /// The type of a path pattern: a unit variant or struct, or a const.
+    /// The type of a path pattern: a unit variant or struct, a const, or
+    /// `True` or `False`.
     fn path_pat_ty(&mut self, pat: PatId, path: &Path) -> Ty<'db> {
         let resolver = Resolver::for_body(self.db, self.def);
         let def = match resolver.resolve_path_in_value_ns(self.db, path) {
             Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
             Some(ValueResolution::Value(ValueNs::Const(c))) => return const_ty(self.db, c).ty.clone(),
+            Some(ValueResolution::Value(ValueNs::Builtin(v))) => return Ty::Builtin(v.ty()),
             Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(s), unresolved: None })) => {
                 VariantDef::Struct(s)
             }

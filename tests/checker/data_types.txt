@@ -32,7 +32,7 @@ get_x(Point { x: 1, y: 2 });
 get_x(Size { x: 3u8 });
 start_x(Line { start: Point { x: 1, y: 2 } });
 get_x((1, 2));
-let t = (true, 1);
+let t = (True, 1);
 t.0;
 --------------------------------------------------------------------------------
 get_x: forall a b. a.x: b => fn(a) -> b
@@ -41,8 +41,8 @@ get_x(Point { x: 1, y: 2 }): i32
 get_x(Size { x: 3u8 }): u8
 start_x(Line { start: Point { x: 1, y: 2 } }): i32
 get_x((1, 2)): {error}
-let t: (bool, i32)
-t.0: bool
+let t: (Bool, i32)
+t.0: Bool
 --------------------------------------------------------------------------------
 error at `get_x`: (i32, i32) has no field x
 
@@ -62,15 +62,15 @@ struct Pair[A, B] { first: A, second: B }
 fn swap(p) = Pair { first: p.second, second: p.first };
 let p = Pair { first: 1, second: "a" };
 p.first;
-let q: Pair[bool, i32] = Pair { first: 1, second: true };
+let q: Pair[Bool, i32] = Pair { first: 1, second: True };
 
 --------------------------------------------------------------------------------
 swap: forall a b c. a.second: b => a.first: c => fn(a) -> Pair[b, c]
-let p: Pair[i32, str]
+let p: Pair[i32, String]
 p.first: i32
-let q: Pair[bool, i32]
+let q: Pair[Bool, i32]
 --------------------------------------------------------------------------------
-error at `Pair { first: 1, second: true }`: expected Pair[bool, i32], found Pair[{integer}, bool]
+error at `Pair { first: 1, second: True }`: expected Pair[Bool, i32], found Pair[{integer}, Bool]
 
 ================================================================================
 Tuple structs and unit structs
@@ -88,22 +88,22 @@ let u: Unit
 Meters(1.0): Meters
 Meters("a"): Meters
 --------------------------------------------------------------------------------
-error at `"a"`: expected f64, found str
+error at `"a"`: expected f64, found String
 
 ================================================================================
 Generic enums
 ================================================================================
 enum Either[L, R] { Left(L), Right(R) }
 let a = Either.Left(1);
-let b: Either[i32, str] = Either.Right("a");
-let c: Either[i32, str] = Either.Right(1);
+let b: Either[i32, String] = Either.Right("a");
+let c: Either[i32, String] = Either.Right(1);
 
 --------------------------------------------------------------------------------
 let a: Either[i32, a]
-let b: Either[i32, str]
-let c: Either[i32, str]
+let b: Either[i32, String]
+let c: Either[i32, String]
 --------------------------------------------------------------------------------
-error at `Either.Right(1)`: expected Either[i32, str], found Either[i32, {integer}]
+error at `Either.Right(1)`: expected Either[i32, String], found Either[i32, {integer}]
 
 ================================================================================
 Record variants
@@ -125,18 +125,18 @@ error at `2.0`: no field z
 Struct literals check their fields
 ================================================================================
 struct Point { x: i32, y: i32 }
-Point { x: 1, y: true };
+Point { x: 1, y: True };
 Point { x: 1, y: 2, z: 3 };
 Nope { x: 1 };
 
 --------------------------------------------------------------------------------
-Point { x: 1, y: true }: Point
+Point { x: 1, y: True }: Point
 Point { x: 1, y: 2, z: 3 }: Point
 Nope { x: 1 }: {error}
 --------------------------------------------------------------------------------
 error at `3`: no field z
 error at `Nope { x: 1 }`: unresolved
-error at `true`: expected i32, found bool
+error at `True`: expected i32, found Bool
 
 ================================================================================
 Struct update syntax
@@ -165,18 +165,18 @@ make: fn(i32, i32) -> Point
 ================================================================================
 Fields of tuples
 ================================================================================
-let t = (1, "a", true);
+let t = (1, "a", True);
 t.0;
 t.2;
 t.3;
 
 --------------------------------------------------------------------------------
-let t: (i32, str, bool)
+let t: (i32, String, Bool)
 t.0: i32
-t.2: bool
+t.2: Bool
 t.3: {error}
 --------------------------------------------------------------------------------
-error at `t.3`: (i32, str, bool) has no field 3
+error at `t.3`: (i32, String, Bool) has no field 3
 
 ================================================================================
 Fields of generic structs
@@ -189,7 +189,7 @@ unbox(Box { value: "a" });
 --------------------------------------------------------------------------------
 get: fn(Box[i32]) -> i32
 unbox: forall a b. a.value: b => fn(a) -> b
-unbox(Box { value: "a" }): str
+unbox(Box { value: "a" }): String
 
 ================================================================================
 Fields of a value with a field constraint
@@ -228,15 +228,15 @@ A generic struct with a parameter it doesn't use
 ================================================================================
 struct Tag[T] { id: i32 }
 let a = Tag { id: 1 };
-let b: Tag[bool] = Tag { id: 1 };
-let c: Tag[str] = b;
+let b: Tag[Bool] = Tag { id: 1 };
+let c: Tag[String] = b;
 
 --------------------------------------------------------------------------------
 let a: Tag[a]
-let b: Tag[bool]
-let c: Tag[str]
+let b: Tag[Bool]
+let c: Tag[String]
 --------------------------------------------------------------------------------
-error at `b`: expected Tag[str], found Tag[bool]
+error at `b`: expected Tag[String], found Tag[Bool]
 
 ================================================================================
 A field given twice
@@ -254,12 +254,12 @@ error at `2`: x is given twice
 Struct update can't change the type of a generic struct
 ================================================================================
 struct Box[T] { value: T }
-Box { value: true, ..Box { value: 1 } };
+Box { value: True, ..Box { value: 1 } };
 
 --------------------------------------------------------------------------------
-Box { value: true, ..Box { value: 1 } }: Box[bool]
+Box { value: True, ..Box { value: 1 } }: Box[Bool]
 --------------------------------------------------------------------------------
-error at `Box { value: 1 }`: expected Box[bool], found Box[{integer}]
+error at `Box { value: 1 }`: expected Box[Bool], found Box[{integer}]
 
 ================================================================================
 Fields of what a function returns
@@ -294,9 +294,9 @@ A field used as two different types
 fn f(p) = (p.x + 1, !p.x);
 
 --------------------------------------------------------------------------------
-f: forall a. a.x: i32 => fn(a) -> (i32, bool)
+f: forall a. a.x: i32 => fn(a) -> (i32, Bool)
 --------------------------------------------------------------------------------
-error at `p.x`: expected bool, found {integer}
+error at `p.x`: expected Bool, found {integer}
 
 ================================================================================
 A field constraint that no struct has
@@ -330,15 +330,15 @@ Fields of tuples in functions without types
 ================================================================================
 fn first(t) = t.0;
 fn second(t) = t.1;
-first((1, true));
-second((1, true));
+first((1, True));
+second((1, True));
 second((1,));
 
 --------------------------------------------------------------------------------
 first: forall a b. a.0: b => fn(a) -> b
 second: forall a b. a.1: b => fn(a) -> b
-first((1, true)): i32
-second((1, true)): bool
+first((1, True)): i32
+second((1, True)): Bool
 second((1,)): {error}
 --------------------------------------------------------------------------------
 error at `second`: (i32,) has no field 1
@@ -346,21 +346,21 @@ error at `second`: (i32,) has no field 1
 ================================================================================
 Methods of fields
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 fn f(p) = p.x.show();
 struct P { x: i32 }
-struct Q { x: bool }
+struct Q { x: Bool }
 f(P { x: 1 });
-f(Q { x: true });
+f(Q { x: True });
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-f: forall a b. Show[b] => a.x: b => fn(a) -> str
-f(P { x: 1 }): str
-f(Q { x: true }): str
+Show[i32].show: fn(i32) -> String
+f: forall a b. Show[b] => a.x: b => fn(a) -> String
+f(P { x: 1 }): String
+f(Q { x: True }): String
 --------------------------------------------------------------------------------
-error at `f`: no instance Show[bool]
+error at `f`: no instance Show[Bool]
 
 ================================================================================
 A field of a value has one type
@@ -450,15 +450,15 @@ Nested generic types
 ================================================================================
 enum Option[T] { None, Some(T) }
 let a = Option.Some(Option.Some(1));
-let b: Option[Option[bool]] = Option.Some(Option.None);
-let c: Option[Option[bool]] = Option.Some(1);
+let b: Option[Option[Bool]] = Option.Some(Option.None);
+let c: Option[Option[Bool]] = Option.Some(1);
 
 --------------------------------------------------------------------------------
 let a: Option[Option[i32]]
-let b: Option[Option[bool]]
-let c: Option[Option[bool]]
+let b: Option[Option[Bool]]
+let c: Option[Option[Bool]]
 --------------------------------------------------------------------------------
-error at `Option.Some(1)`: expected Option[Option[bool]], found Option[{integer}]
+error at `Option.Some(1)`: expected Option[Option[Bool]], found Option[{integer}]
 
 ================================================================================
 Recursive generic enums
@@ -467,27 +467,27 @@ enum List[T] { Cons(T, List[T]), Nil }
 import List.*;
 fn len(xs) = match xs { Nil => 0, Cons(_, t) => 1 + len(t) };
 fn map(f, xs) = match xs { Nil => Nil, Cons(h, t) => Cons(f(h), map(f, t)) };
-Cons(1, Cons(true, Nil));
+Cons(1, Cons(True, Nil));
 
 --------------------------------------------------------------------------------
 len: forall a. fn(List[a]) -> i32
 map: forall a b. fn(fn(a) -> b, List[a]) -> List[b]
-Cons(1, Cons(true, Nil)): List[i32]
+Cons(1, Cons(True, Nil)): List[i32]
 --------------------------------------------------------------------------------
-error at `Cons(true, Nil)`: expected List[{integer}], found List[bool]
+error at `Cons(True, Nil)`: expected List[{integer}], found List[Bool]
 
 ================================================================================
 Variants with the same name in two enums
 ================================================================================
 enum A { X(i32) }
-enum B { X(bool) }
+enum B { X(Bool) }
 A.X(1);
-B.X(true);
-A.X(true);
+B.X(True);
+A.X(True);
 
 --------------------------------------------------------------------------------
 A.X(1): A
-B.X(true): B
-A.X(true): A
+B.X(True): B
+A.X(True): A
 --------------------------------------------------------------------------------
-error at `true`: expected i32, found bool
+error at `True`: expected i32, found Bool

@@ -721,6 +721,7 @@ impl<'db> Evaluator<'db> {
             ValueNs::Const(id) => self.eval_const_inner(id),
             ValueNs::Variant(id) => Ok(self.ctor_value(Ctor::Variant(id))),
             ValueNs::ConstParam { .. } => fail(ErrorKind::Unsupported("a const parameter")),
+            ValueNs::Builtin(v) => Ok(Value::Bool(v.as_bool())),
         }
     }
 
@@ -944,6 +945,7 @@ impl<'db> Evaluator<'db> {
             }
             Pat::Path(path) => match self.resolve_pat_path(f.def, path) {
                 Some(ValueResolution::Value(ValueNs::Const(id))) => self.eval_const_inner(id),
+                Some(ValueResolution::Value(ValueNs::Builtin(v))) => Ok(Value::Bool(v.as_bool())),
                 _ => fail(ErrorKind::UnresolvedName(path_to_string(path))),
             },
             _ => mismatch("expected a literal or a constant"),
@@ -1021,7 +1023,6 @@ fn pat_bindings(body: &Body, pat: PatId, out: &mut Vec<BindingId>) {
 
 fn literal_value<'db>(literal: &Literal) -> Res<'db, Value<'db>> {
     Ok(match literal {
-        Literal::Bool(b) => Value::Bool(*b),
         Literal::Int(n, _) => Value::Int(i128::try_from(*n).map_err(|_| ErrorKind::Overflow)?),
         Literal::Float(text, _) => match text.parse() {
             Ok(x) => Value::Float(x),

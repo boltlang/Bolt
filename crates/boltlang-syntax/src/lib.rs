@@ -80,7 +80,6 @@ pub enum SyntaxKind {
     ELSE_KEYWORD,
     ENUM_KEYWORD,
     EXTERN_KEYWORD,
-    FALSE_KEYWORD,
     FN_KEYWORD,
     FOR_KEYWORD,
     IF_KEYWORD,
@@ -97,7 +96,6 @@ pub enum SyntaxKind {
     RETURN_KEYWORD,
     STRUCT_KEYWORD,
     SUPER_KEYWORD,
-    TRUE_KEYWORD,
     TYPE_KEYWORD,
     WHERE_KEYWORD,
     WHILE_KEYWORD,
@@ -370,7 +368,6 @@ macro_rules! T {
     [else] => { $crate::SyntaxKind::ELSE_KEYWORD };
     [enum] => { $crate::SyntaxKind::ENUM_KEYWORD };
     [extern] => { $crate::SyntaxKind::EXTERN_KEYWORD };
-    [false] => { $crate::SyntaxKind::FALSE_KEYWORD };
     [fn] => { $crate::SyntaxKind::FN_KEYWORD };
     [for] => { $crate::SyntaxKind::FOR_KEYWORD };
     [if] => { $crate::SyntaxKind::IF_KEYWORD };
@@ -388,7 +385,6 @@ macro_rules! T {
     [struct] => { $crate::SyntaxKind::STRUCT_KEYWORD };
     [super] => { $crate::SyntaxKind::SUPER_KEYWORD };
     [class] => { $crate::SyntaxKind::CLASS_KEYWORD };
-    [true] => { $crate::SyntaxKind::TRUE_KEYWORD };
     [type] => { $crate::SyntaxKind::TYPE_KEYWORD };
     [where] => { $crate::SyntaxKind::WHERE_KEYWORD };
     [while] => { $crate::SyntaxKind::WHILE_KEYWORD };
@@ -506,7 +502,6 @@ impl SyntaxKind {
             ELSE_KEYWORD => "'else'",
             ENUM_KEYWORD => "'enum'",
             EXTERN_KEYWORD => "'extern'",
-            FALSE_KEYWORD => "'false'",
             FN_KEYWORD => "'fn'",
             FOR_KEYWORD => "'for'",
             IF_KEYWORD => "'if'",
@@ -524,7 +519,6 @@ impl SyntaxKind {
             STRUCT_KEYWORD => "'struct'",
             SUPER_KEYWORD => "'super'",
             CLASS_KEYWORD => "'class'",
-            TRUE_KEYWORD => "'true'",
             TYPE_KEYWORD => "'type'",
             WHERE_KEYWORD => "'where'",
             WHILE_KEYWORD => "'while'",

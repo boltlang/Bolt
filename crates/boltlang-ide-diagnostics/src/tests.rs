@@ -6,9 +6,9 @@ use crate::diagnostics;
 /// Check the diagnostics of a file against its annotations. A comment like
 ///
 /// ```text
-/// let x: i32 = true;
+/// let x: i32 = True;
 ///    //^^^ label: expected because of this annotation
-///             //^^^^ error: expected `i32`, found `bool`
+///             //^^^^ error: expected `i32`, found `Bool`
 /// ```
 ///
 /// marks the columns of the carets in the line above it, which is the
@@ -96,8 +96,8 @@ fn type_mismatch() {
 fn id(x) { return x }
   id(1) + 1;
   id("foo") + 1;
-//^^^^^^^^^ label: this has type `str`
-            //^ error: expected `str`, found an integer
+//^^^^^^^^^ label: this has type `String`
+            //^ error: expected `String`, found an integer
 "#,
     );
 }
@@ -106,9 +106,9 @@ fn id(x) { return x }
 fn mismatch_in_declared_function() {
     check(
         r#"
-fn f(x: i32) -> bool { x }
+fn f(x: i32) -> Bool { x }
               //^^^^ label: expected because of the return type
-                     //^ error: expected `bool`, found `i32`
+                     //^ error: expected `Bool`, found `i32`
 "#,
     );
 }
@@ -119,7 +119,7 @@ fn unresolved_name_does_not_cascade() {
         r#"
   foo + 1;
 //^^^ error: cannot find `foo`
-  true + foo;
+  True + foo;
        //^^^ error: cannot find `foo`
 "#,
     );
@@ -142,9 +142,9 @@ fn custom_operator_calls_its_definition() {
         r#"
   fn[T] (a: T) <> (b: T) -> T = a;
   let x: i32 = 1 <> 2;
-  let y: bool = 1 <> 2;
+  let y: Bool = 1 <> 2;
        //^^^^ label: expected because of this annotation
-              //^^^^^^ error: expected `bool`, found an integer
+              //^^^^^^ error: expected `Bool`, found an integer
 "#,
     );
 }
@@ -224,10 +224,10 @@ let p = Point { x: 1 };
 fn class_instances() {
     check(
         r#"
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
-  show(true);
-//^^^^ error: there is no instance `Show[bool]`
+  show(True);
+//^^^^ error: there is no instance `Show[Bool]`
 "#,
     );
 }
@@ -358,8 +358,8 @@ impl Get[Counter] {
   fn get(c) = c;
             //^ error: expected `i32`, found `Counter`
 }
-enum E { A = true }
-           //^^^^ error: expected an integer, found `bool`
+enum E { A = True }
+           //^^^^ error: expected an integer, found `Bool`
 "#,
     );
 }
@@ -368,18 +368,18 @@ enum E { A = true }
 fn mismatches_point_at_annotations() {
     check(
         r#"
-const C: bool = 1;
+const C: Bool = 1;
        //^^^^ label: expected because of the type of the constant
-              //^ error: expected `bool`, found an integer
+              //^ error: expected `Bool`, found an integer
 fn f() {
-  let x: i32 = true;
+  let x: i32 = True;
        //^^^ label: expected because of this annotation
-             //^^^^ error: expected `i32`, found `bool`
+             //^^^^ error: expected `i32`, found `Bool`
   x
 }
-fn g() -> i32 { return true; }
+fn g() -> i32 { return True; }
         //^^^ label: expected because of the return type
-                     //^^^^ error: expected `i32`, found `bool`
+                     //^^^^ error: expected `i32`, found `Bool`
 "#,
     );
 }
@@ -388,10 +388,10 @@ fn g() -> i32 { return true; }
 fn mismatches_point_at_parameters() {
     check(
         r#"
-fn takes(n: i32, b: bool) -> i32 = n;
+fn takes(n: i32, b: Bool) -> i32 = n;
                   //^^^^ label: expected because of this parameter of `takes`
   takes(1, 2);
-         //^ error: expected `bool`, found an integer
+         //^ error: expected `Bool`, found an integer
 "#,
     );
 }
@@ -411,7 +411,7 @@ pub fn negate(x) = !x;
             r#"
 import "./lib" (negate);
   negate(1);
-       //^ error: expected `bool`, found an integer
+       //^ error: expected `Bool`, found an integer
 "#,
         ),
     ]);
@@ -421,10 +421,10 @@ import "./lib" (negate);
 fn mismatches_point_at_fields() {
     check(
         r#"
-struct Point { x: i32, y: bool }
+struct Point { x: i32, y: Bool }
                         //^^^^ label: expected because of the type of field `y`
 let p = Point { x: 1, y: 2 };
-                       //^ error: expected `bool`, found an integer
+                       //^ error: expected `Bool`, found an integer
 "#,
     );
 }
@@ -433,12 +433,12 @@ let p = Point { x: 1, y: 2 };
 fn branches_point_at_each_other() {
     check(
         r#"
-let a = if true { 1 } else { "no" };
+let a = if True { 1 } else { "no" };
               //^^^^^ label: this has type `i32`
-                           //^^^^ error: expected an integer, found `str`
-fn f(b) = match b { true => 1, false => "no" };
+                           //^^^^ error: expected an integer, found `String`
+fn f(b) = match b { True => 1, False => "no" };
                           //^ label: this has type `i32`
-                                      //^^^^ error: expected an integer, found `str`
+                                      //^^^^ error: expected an integer, found `String`
 "#,
     );
 }
@@ -480,9 +480,9 @@ fn one_type_per_file() {
 import "./list" as List;
 let l = List.new();
 let n: i32 = List.len(l);
-let b: bool = List.len(l);
+let b: Bool = List.len(l);
      //^^^^ label: expected because of this annotation
-            //^^^^^^^^^^^ error: expected `bool`, found `i32`
+            //^^^^^^^^^^^ error: expected `Bool`, found `i32`
 "#,
         ),
     ]);
@@ -492,7 +492,7 @@ let b: bool = List.len(l);
 fn methods_must_be_declared_by_the_class() {
     check(
         r#"
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] {
   fn show(x) = "int";
   fn shwo(x) = x + 1;
@@ -510,12 +510,12 @@ fn impls_must_define_the_methods_of_their_class() {
     check(
         r#"
 class Eq[T] {
-  fn eq(a: T, b: T) -> bool;
-  fn ne(a: T, b: T) -> bool = !eq(a, b);
+  fn eq(a: T, b: T) -> Bool;
+  fn ne(a: T, b: T) -> Bool = !eq(a, b);
 }
-class Ord[T] { fn lt(a: T, b: T) -> bool; fn gt(a: T, b: T) -> bool; }
-impl Eq[i32] { fn eq(a, b) = true; }
-impl Eq[bool] {}
+class Ord[T] { fn lt(a: T, b: T) -> Bool; fn gt(a: T, b: T) -> Bool; }
+impl Eq[i32] { fn eq(a, b) = True; }
+impl Eq[Bool] {}
    //^^^^^^^^ error: missing method `eq` of class `Eq`
 impl Ord[i32];
    //^^^^^^^^ error: missing methods `lt`, `gt` of class `Ord`
@@ -540,12 +540,12 @@ impl Sized[i32] {
   type Repr = i32;
   fn size(x) = 4;
 }
-impl Sized[bool] {}
+impl Sized[Bool] {}
    //^^^^^^^^^^^ error: missing method `size`, constant `SIZE` and type `Repr` of class `Sized`
 impl Sized[u8] {
    //^^^^^^^^^ error: missing type `Repr` of class `Sized`
-  const SIZE: bool = true;
-            //^^^^ error: expected `usize`, found `bool`
+  const SIZE: Bool = True;
+            //^^^^ error: expected `usize`, found `Bool`
   const SIZ: usize = 1;
       //^^^ error: `SIZ` is not a constant of class `Sized`
   type Rep = u8;
@@ -555,8 +555,8 @@ impl Sized[u8] {
 class Default[T] { const VALUE: T; }
                               //^ label: expected because of the declaration in class `Default`
 impl Default[i32] { const VALUE: i32 = 0; }
-impl Default[bool] { const VALUE: i32 = 0; }
-                                //^^^ error: expected `bool`, found `i32`
+impl Default[Bool] { const VALUE: i32 = 0; }
+                                //^^^ error: expected `Bool`, found `i32`
 "#,
     );
 }
@@ -569,7 +569,7 @@ let f = |x| x;
   f + 1;
 //^ label: this has type `fn(a) -> a`
     //^ error: expected `fn(a) -> a`, found an integer
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 let s = show([]);
       //^^^^ error: cannot tell which instance of `Show[[a]]` to use; add a type annotation
 "#,
@@ -593,8 +593,8 @@ fn package_imports() {
         (
             "/proj/.bolt/packages/std/io.bolt",
             r#"
-pub fn print(s: str) -> () = ();
-              //^^^ label: expected because of this parameter of `print`
+pub fn print(s: String) -> () = ();
+              //^^^^^^ label: expected because of this parameter of `print`
 "#,
         ),
         (
@@ -607,7 +607,7 @@ import "std/../secret" (y);
      //^^^^^^^^^^^^^^^ error: cannot import `std/../secret`: import a file with a path like `./file`, or a package with its name, like `std/io`
 print("hello");
 print(1);
-    //^ error: expected `str`, found an integer
+    //^ error: expected `String`, found an integer
 "#,
         ),
     ]);
@@ -640,8 +640,8 @@ struct Size { x: u8 }
 fn get_x(p) = p.x;
 let a: i32 = get_x(Point { x: 1 });
 let b: u8 = get_x(Size { x: 2u8 });
-let c = get_x(true);
-      //^^^^^ error: `bool` has no field `x`
+let c = get_x(True);
+      //^^^^^ error: `Bool` has no field `x`
 "#,
     );
 }
@@ -712,11 +712,11 @@ fn builtin_declarations() {
     check(
         r#"
 extern "bolt" {
-  fn print(text: str);
-  fn prnt(text: str);
+  fn print(text: String);
+  fn prnt(text: String);
    //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`
-  fn panic(message: str) -> i32;
-   //^^^^^ error: the builtin `panic` must have the type `fn(str) -> !`
+  fn panic(message: String) -> i32;
+   //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
 }
 "#,
     );

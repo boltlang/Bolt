@@ -28,6 +28,7 @@ fn describe_value(db: &dyn Db, value: ValueResolution<'_>) -> String {
         },
         ValueResolution::Value(ValueNs::Const(id)) => format!("const {}", id.item(db).name.as_ref().unwrap()),
         ValueResolution::Value(ValueNs::Variant(id)) => format!("variant {}", id.name(db)),
+        ValueResolution::Value(ValueNs::Builtin(value)) => format!("builtin {value}"),
         ValueResolution::Value(ValueNs::ConstParam { def, index }) => {
             format!("const param {}", def.generic_params(db).const_params[index as usize].name)
         }

@@ -7,7 +7,7 @@ fn add(x: i32, y: i32) -> i32 {
     return x + y;
 }
 
-fn takes_slice(slice: str) {
+fn takes_slice(slice: String) {
     println!("Got: {}", slice);
 }
 
@@ -83,9 +83,9 @@ let x = 42;
 let x: i32;
 let x: i8 = 42;
 let mut x = 5;
-let y: bool = false;
-let bool: bool = false;
-let u32: str = "";
+let y: Bool = False;
+let Bool: Bool = False;
+let u32: String = "";
 
 ================================================================================
 Let-else Statements
@@ -401,16 +401,16 @@ pub(package) fn c() {}
 ================================================================================
 Function parameter names that match built-in type names
 ================================================================================
-fn foo(str: c_char) {}
-fn bar(bool: bool) {}
+fn foo(String: c_char) {}
+fn bar(Bool: Bool) {}
 
 ================================================================================
 Where clauses
 ================================================================================
-fn walk[F](pat: Pat, it: F) -> bool
-    where F: FnMut(Pat) -> bool
+fn walk[F](pat: Pat, it: F) -> Bool
+    where F: FnMut(Pat) -> Bool
 {
-  return false
+  return False
 }
 
 impl[T: Clone + Item] Iterator[Iter[T]] where Self: Sized {
@@ -506,8 +506,8 @@ class Show[T] {
     fn show(x: T) -> String;
     fn print(x: T) = print(x.show());
 }
-impl Show[bool] {
-    fn show(b: bool) -> String = if b { "yes" } else { "no" };
+impl Show[Bool] {
+    fn show(b: Bool) -> String = if b { "yes" } else { "no" };
 }
 
 ================================================================================
@@ -554,7 +554,7 @@ impl Marker[i32];
 Const with a type
 ================================================================================
 const A: i32 = 1;
-pub const B: str;
+pub const B: String;
 type C = D;
 pub type E[T] = Vec[T];
 type F[T] where T: Ord = G[T];
@@ -620,7 +620,7 @@ Generic parameters
 ================================================================================
 fn id[T](x: T) -> T = x;
 fn sort[T: Ord + Hash, U = Vec[T],](xs: U) = xs;
-fn arr[const N: usize, const M: usize = 3, const K: i32 = -1, const L: usize = N, const B: bool = { true }]() = 0;
+fn arr[const N: usize, const M: usize = 3, const K: i32 = -1, const L: usize = N, const B: Bool = { True }]() = 0;
 let f: impl Fn(i32) -> i32 = g;
 let h: impl for[T] Fn(T) -> T = g;
 let i: impl A + B = g;
@@ -655,8 +655,8 @@ Params
 ================================================================================
 fn f(a, b: i32, c = 1, d: i32 = 2,) = a;
 fn g(mut x: T) = x;
-fn j(format: str, args: ...) = format;
-fn k(format: str, ...) = format;
+fn j(format: String, args: ...) = format;
+fn k(format: String, ...) = format;
 let l = fn (x: i32, y) = x;
 
 ================================================================================
@@ -695,7 +695,7 @@ Impl without a class
 :error
 ================================================================================
 impl[T] [T; 3] {}
-impl (i32, bool) {}
+impl (i32, Bool) {}
 
 ================================================================================
 Import errors
@@ -902,7 +902,7 @@ enum E { A, B(i32), C { x: f64 } }
 Class item
 :rule item
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 
 ================================================================================
 Generic impl item with a where clause
@@ -914,6 +914,6 @@ impl[T] Show[List[T]] where Show[T] { fn show(xs) = "list"; }
 Extern block of builtins
 ================================================================================
 extern "bolt" {
-  pub fn print(text: str);
-  pub fn panic(message: str) -> !;
+  pub fn print(text: String);
+  pub fn panic(message: String) -> !;
 }

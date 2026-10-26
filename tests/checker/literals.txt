@@ -67,34 +67,34 @@ error at `1.5`: expected {integer}, found {float}
 ================================================================================
 Other literals
 ================================================================================
-let a = true;
+let a = True;
 let b = 'x';
 let c = b'x';
 let d = "text";
 let e = b"bytes";
 
 --------------------------------------------------------------------------------
-let a: bool
-let b: char
+let a: Bool
+let b: Char
 let c: u8
-let d: str
+let d: String
 let e: [u8]
 
 ================================================================================
 Literals that don't fit their type
 ================================================================================
-let a: bool = 1;
-let b: str = 'x';
-let c: char = "x";
+let a: Bool = 1;
+let b: String = 'x';
+let c: Char = "x";
 
 --------------------------------------------------------------------------------
-let a: bool
-let b: str
-let c: char
+let a: Bool
+let b: String
+let c: Char
 --------------------------------------------------------------------------------
-error at `1`: expected bool, found {integer}
-error at `'x'`: expected str, found char
-error at `"x"`: expected char, found str
+error at `1`: expected Bool, found {integer}
+error at `'x'`: expected String, found Char
+error at `"x"`: expected Char, found String
 
 ================================================================================
 Integer literals that don't fit their type

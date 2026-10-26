@@ -633,8 +633,6 @@ const NUMERIC_SUFFIXES: &[&str] =
 pub(crate) fn lower_literal(token: &SyntaxToken) -> Option<Literal> {
     let text = token.text();
     Some(match token.kind() {
-        TRUE_KEYWORD => Literal::Bool(true),
-        FALSE_KEYWORD => Literal::Bool(false),
         INT_NUMBER => {
             let (digits, suffix) = split_suffix(text, token.kind());
             let digits: String = digits.chars().filter(|c| *c != '_').collect();

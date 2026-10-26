@@ -117,7 +117,7 @@ fn arithmetic_and_comparisons() {
     same("1 + 2 * 3 - 4 / 2;");
     same("17 % 5;");
     same("7 - 10;");
-    same("1 < 2 && 2 <= 2 || false;");
+    same("1 < 2 && 2 <= 2 || False;");
     same("!(3 == 4);");
     same("1 << 4 | 1;");
     same("-(5 * 5);");
@@ -129,7 +129,7 @@ fn recursion() {
     same("fn fac(n: i32) -> i32 = match n { 0 | 1 => 1, k => k * fac(k - 1) };\nfac(10);");
     same("fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) };\nfib(15);");
     // Inferred, mutually recursive functions.
-    same("fn even(n) = if n == 0 { true } else { odd(n - 1) };\nfn odd(n) = if n == 0 { false } else { even(n - 1) };\neven(10);");
+    same("fn even(n) = if n == 0 { True } else { odd(n - 1) };\nfn odd(n) = if n == 0 { False } else { even(n - 1) };\neven(10);");
 }
 
 #[test]
@@ -162,6 +162,7 @@ fn patterns() {
     same("let x = 4;\nif let 1..=5 = x { 1 } else { 0 };");
     same("fn half(n: i32) -> i32 { let 0..=9 = n else { return -1; }; n / 2 }\nhalf(8);");
     same("fn half(n: i32) -> i32 { let 0..=9 = n else { return -1; }; n / 2 }\nhalf(80);");
+    same("fn pick(b: Bool) -> i32 = match b { True => 1, False => 2 };\npick(1 > 2);");
 }
 
 #[test]
@@ -243,7 +244,7 @@ fn editing_a_function_recompiles_only_that_function() {
 }
 
 /// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: str);\n  pub fn panic(message: str) -> !;\n}\n";
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n}\n";
 
 fn db_with_builtins(code: &str) -> (TestDb, File) {
     let mut db = TestDb::new();
@@ -269,12 +270,12 @@ fn prints_the_same(code: &str, expected: &str) {
 fn print() {
     prints_the_same("print(\"Hello, world!\");", "Hello, world!\n");
     prints_the_same(
-        "fn greet(name: str) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\ngreet(\"Wasm\");",
+        "fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\ngreet(\"Wasm\");",
         "hello\nBolt\nhello\nWasm\n",
     );
     // Strings are values like others, in variables, consts and results.
     prints_the_same(
-        "const GREETING: str = \"hi\";\nfn pick(b: bool) -> str = if b { GREETING } else { \"bye\" };\nlet s = pick(false);\nprint(pick(true));\nprint(s);",
+        "const GREETING: String = \"hi\";\nfn pick(b: Bool) -> String = if b { GREETING } else { \"bye\" };\nlet s = pick(False);\nprint(pick(True));\nprint(s);",
         "hi\nbye\n",
     );
     prints_the_same("print(\"héllo, wörld ✓\");", "héllo, wörld ✓\n");

@@ -1,11 +1,11 @@
 //! A code generator from Bolt to WebAssembly.
 //!
 //! It's minimal for now: it compiles the scalar types (integers, floats,
-//! `bool`, `char` and `()`), string literals, functions, `let`, `if`,
+//! `Bool`, `Char` and `()`), string literals, functions, `let`, `if`,
 //! loops, `break`, `continue`, `return`, and `match` on scalars. Anything
 //! else is an [`ErrorKind::Unsupported`] error.
 //!
-//! The module exports its memory as `memory`. A `str` is the address in it
+//! The module exports its memory as `memory`. A `String` is the address in it
 //! of the string's length, as a little-endian `u32`, followed by its UTF-8
 //! bytes; literals are data segments. The host provides:
 //!

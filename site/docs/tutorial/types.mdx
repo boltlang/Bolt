@@ -56,11 +56,11 @@ the name:
 ```bolt
 fn first[A, B](a: A, b: B) -> A = a;
 
-first(true, 2.5);
+first(True, 2.5);
 ```
 
 ```text
-true
+True
 ```
 
 A function with a written type parameter must work for *every* type,
@@ -144,12 +144,12 @@ area(2.0, "three");
 ```
 
 ```text
-[E0201] Error: expected `f64`, found `str`
+[E0201] Error: expected `f64`, found `String`
    ╭─[ main.bolt:3:11 ]
    │
  3 │ area(2.0, "three");
    │           ───┬───
-   │              ╰───── expected `f64`, found `str`
+   │              ╰───── expected `f64`, found `String`
    │
    ├─[ main.bolt:3:11 ]
    │

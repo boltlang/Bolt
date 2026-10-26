@@ -57,7 +57,7 @@ fn instances_from_impls() {
     solver.add(Constraint::Class { constraint: class(s.show, list(list(i32()))), origin: s.origin });
     solver.add(Constraint::Class { constraint: class(s.show, list(Ty::bool())), origin: s.origin });
     solver.finish();
-    // `Show[List[bool]]` needs `Show[bool]`, which has no impl.
+    // `Show[List[Bool]]` needs `Show[Bool]`, which has no impl.
     assert_eq!(solver.errors, [TypeError::NoInstance { origin: s.origin, constraint: class(s.show, Ty::bool()) }]);
 }
 

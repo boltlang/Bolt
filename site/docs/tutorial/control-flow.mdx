@@ -22,7 +22,7 @@ fits. Both branches must then have the same type. Chain conditions with
 `else if`:
 
 ```bolt
-fn sign(n: i32) -> str =
+fn sign(n: i32) -> String =
   if n < 0 { "negative" } else if n == 0 { "zero" } else { "positive" };
 
 [sign(-3), sign(0), sign(8)];
@@ -32,14 +32,14 @@ fn sign(n: i32) -> str =
 ["negative", "zero", "positive"]
 ```
 
-The condition must be a `bool`. There's no "truthiness" like in JavaScript
+The condition must be a `Bool`. There's no "truthiness" like in JavaScript
 or Python: `if 1 { ... }` is an error.
 
 An `if` without `else` has the value `()`, so its branch can't have a value
 either:
 
 ```bolt
-fn bad(c: bool) -> i32 = if c { 1 };
+fn bad(c: Bool) -> i32 = if c { 1 };
 ```
 
 ```text
