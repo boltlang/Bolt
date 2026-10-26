@@ -4,58 +4,58 @@ Generalizes functions without signatures
 fn id(x) { return x }
 id(1) + 1;
 id("foo") + 1;
-let b = id(true);
+let b = id(True);
 --------------------------------------------------------------------------------
 id: forall a. fn(a) -> a
 id(1) + 1: i32
-id("foo") + 1: str
-let b: bool
+id("foo") + 1: String
+let b: Bool
 --------------------------------------------------------------------------------
-error at `1`: expected str, found {integer}
+error at `1`: expected String, found {integer}
 
 ================================================================================
 Functions used before their definition
 ================================================================================
-fn pair(x) = (first(x), first(true));
+fn pair(x) = (first(x), first(True));
 fn first(y) = y;
 --------------------------------------------------------------------------------
-pair: forall a. fn(a) -> (a, bool)
+pair: forall a. fn(a) -> (a, Bool)
 first: forall a. fn(a) -> a
 
 ================================================================================
 Mutual recursion
 ================================================================================
-fn even(n) = if n == 0 { true } else { odd(n - 1) };
-fn odd(n) = if n == 0 { false } else { even(n - 1) };
+fn even(n) = if n == 0 { True } else { odd(n - 1) };
+fn odd(n) = if n == 0 { False } else { even(n - 1) };
 --------------------------------------------------------------------------------
-even: fn(i32) -> bool
-odd: fn(i32) -> bool
+even: fn(i32) -> Bool
+odd: fn(i32) -> Bool
 
 ================================================================================
 Declared signatures are checked
 ================================================================================
-fn f(x: i32) -> bool { x }
+fn f(x: i32) -> Bool { x }
 fn g[T](x: T) -> T = x;
 g(1u8);
-f(true);
+f(True);
 --------------------------------------------------------------------------------
-f: fn(i32) -> bool
+f: fn(i32) -> Bool
 g: forall T. fn(T) -> T
 g(1u8): u8
-f(true): bool
+f(True): Bool
 --------------------------------------------------------------------------------
-error at `x`: expected bool, found i32
-error at `true`: expected i32, found bool
+error at `x`: expected Bool, found i32
+error at `True`: expected i32, found Bool
 
 ================================================================================
 What is only unknown because of an error becomes the error type
 ================================================================================
 fn f() = nope;
-fn g(c: bool) = if c { nope } else { 1 };
+fn g(c: Bool) = if c { nope } else { 1 };
 fn h(x) = { nope(x); x };
 --------------------------------------------------------------------------------
 f: fn() -> {error}
-g: fn(bool) -> i32
+g: fn(Bool) -> i32
 h: forall a. fn(a) -> a
 --------------------------------------------------------------------------------
 error at `nope`: unresolved

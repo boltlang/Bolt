@@ -1,8 +1,7 @@
-//! The primitive types, like rust-analyzer's `BuiltinType`. Their names
-//! aren't keywords: they're found when nothing in scope has the name, so a
-//! program can define its own `i32`.
-//!
-//! Library types like `String` aren't built in; they're defined in Bolt.
+//! The primitive types, like rust-analyzer's `BuiltinType`, and the values
+//! `True` and `False` of `Bool`. Their names aren't keywords: they're found
+//! when nothing in scope has the name, so a program can define its own
+//! `i32` or `True`.
 
 use std::fmt;
 
@@ -36,7 +35,7 @@ pub enum BuiltinFloat {
 pub enum BuiltinType {
     Bool,
     Char,
-    Str,
+    String,
     Int(BuiltinInt),
     Uint(BuiltinUint),
     Float(BuiltinFloat),
@@ -44,9 +43,9 @@ pub enum BuiltinType {
 
 impl BuiltinType {
     pub const ALL: &[(&str, BuiltinType)] = &[
-        ("bool", BuiltinType::Bool),
-        ("char", BuiltinType::Char),
-        ("str", BuiltinType::Str),
+        ("Bool", BuiltinType::Bool),
+        ("Char", BuiltinType::Char),
+        ("String", BuiltinType::String),
         ("i8", BuiltinType::Int(BuiltinInt::I8)),
         ("i16", BuiltinType::Int(BuiltinInt::I16)),
         ("i32", BuiltinType::Int(BuiltinInt::I32)),
@@ -73,6 +72,41 @@ impl BuiltinType {
 }
 
 impl fmt::Display for BuiltinType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+/// A built-in value: `True` or `False`, the values of `Bool`. They work like
+/// the variants of an enum, in expressions and in patterns.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum BuiltinValue {
+    True,
+    False,
+}
+
+impl BuiltinValue {
+    pub const ALL: &[(&str, BuiltinValue)] = &[("True", BuiltinValue::True), ("False", BuiltinValue::False)];
+
+    pub fn by_name(name: &str) -> Option<BuiltinValue> {
+        Self::ALL.iter().find(|(n, _)| *n == name).map(|(_, v)| *v)
+    }
+
+    pub fn name(self) -> &'static str {
+        Self::ALL.iter().find(|(_, v)| *v == self).map(|(n, _)| *n).unwrap()
+    }
+
+    pub fn as_bool(self) -> bool {
+        self == BuiltinValue::True
+    }
+
+    /// The type of the value.
+    pub fn ty(self) -> BuiltinType {
+        BuiltinType::Bool
+    }
+}
+
+impl fmt::Display for BuiltinValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.name())
     }

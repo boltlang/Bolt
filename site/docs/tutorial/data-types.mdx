@@ -12,7 +12,7 @@ A *struct* groups named values, its *fields*:
 
 ```bolt
 struct User {
-  name: str,
+  name: String,
   age: i32,
 }
 
@@ -56,15 +56,15 @@ Point { x: 5, y: 0 }
 `..` makes a struct from another one, with some fields changed:
 
 ```bolt
-struct Config { width: i32, height: i32, fullscreen: bool }
+struct Config { width: i32, height: i32, fullscreen: Bool }
 
-let default = Config { width: 800, height: 600, fullscreen: false };
-let big = Config { fullscreen: true, ..default };
+let default = Config { width: 800, height: 600, fullscreen: False };
+let big = Config { fullscreen: True, ..default };
 big;
 ```
 
 ```text
-Config { width: 800, height: 600, fullscreen: true }
+Config { width: 800, height: 600, fullscreen: True }
 ```
 
 ### Tuple structs and unit structs
@@ -152,15 +152,15 @@ they work for any type of content:
 struct Pair[A, B] { first: A, second: B }
 
 let p = Pair { first: 1, second: "one" };
-let q: Pair[bool, f64] = Pair { first: true, second: 0.5 };
+let q: Pair[Bool, f64] = Pair { first: True, second: 0.5 };
 (p.second, q.first);
 ```
 
 ```text
-("one", true)
+("one", True)
 ```
 
-`Pair[bool, f64]` is the type of a pair of a `bool` and an `f64`.
+`Pair[Bool, f64]` is the type of a pair of a `Bool` and an `f64`.
 
 ### `Option`
 

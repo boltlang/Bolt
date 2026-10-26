@@ -123,7 +123,6 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             TypeRef::Tuple(tys) => Ty::Tuple(tys.iter().map(|t| self.lower_ty(*t)).collect()),
             TypeRef::Array { element, .. } => Ty::Array(Box::new(self.lower_ty(*element))),
             TypeRef::Never => Ty::Never,
-            // `FnOnce(A) -> B` is a function type too, for now.
             TypeRef::Fn { params, ret_type, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
                 let ret = ret_type.map_or_else(Ty::unit, |t| self.lower_ty(t));
@@ -166,7 +165,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
         };
         // A constructor can be given fewer arguments than it takes, like
-        // `Either[str]`, which is then a constructor itself.
+        // `Either[String]`, which is then a constructor itself.
         let (param_kinds, _) = kind.split();
         let type_args = self.type_args(id, args);
         if type_args.len() > param_kinds.len() {

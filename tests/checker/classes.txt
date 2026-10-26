@@ -1,29 +1,29 @@
 ================================================================================
 Class constraints are inferred and solved
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 fn twice(x) = (show(x), show(x));
 twice(1);
-twice(true);
+twice(True);
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-twice: forall a. Show[a] => fn(a) -> (str, str)
-twice(1): (str, str)
-twice(true): (str, str)
+Show[i32].show: fn(i32) -> String
+twice: forall a. Show[a] => fn(a) -> (String, String)
+twice(1): (String, String)
+twice(True): (String, String)
 --------------------------------------------------------------------------------
-error at `twice`: no instance Show[bool]
+error at `twice`: no instance Show[Bool]
 
 ================================================================================
 Where clauses are assumed
 ================================================================================
-class Eq[T] { fn eq(a: T, b: T) -> bool; }
-class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
-fn le[T](a: T, b: T) -> bool where Ord[T] = lt(a, b) || eq(a, b);
-fn bad[T](a: T) -> bool = eq(a, a);
+class Eq[T] { fn eq(a: T, b: T) -> Bool; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
+fn le[T](a: T, b: T) -> Bool where Ord[T] = lt(a, b) || eq(a, b);
+fn bad[T](a: T) -> Bool = eq(a, a);
 --------------------------------------------------------------------------------
-le: forall T. Ord[T] => fn(T, T) -> bool
-bad: forall T. fn(T) -> bool
+le: forall T. Ord[T] => fn(T, T) -> Bool
+bad: forall T. fn(T) -> Bool
 --------------------------------------------------------------------------------
 error at `eq`: no instance Eq[T]
 
@@ -31,40 +31,40 @@ error at `eq`: no instance Eq[T]
 Classes with several parameters
 ================================================================================
 class Convert[A, B] { fn convert(a: A) -> B; }
-impl Convert[i32, str] { fn convert(a) = "int"; }
-fn to_str(x: i32) -> str = convert(x);
-fn to_bool(x: i32) -> bool = convert(x);
+impl Convert[i32, String] { fn convert(a) = "int"; }
+fn to_str(x: i32) -> String = convert(x);
+fn to_bool(x: i32) -> Bool = convert(x);
 
 --------------------------------------------------------------------------------
-Convert[i32, str].convert: fn(i32) -> str
-to_str: fn(i32) -> str
-to_bool: fn(i32) -> bool
+Convert[i32, String].convert: fn(i32) -> String
+to_str: fn(i32) -> String
+to_bool: fn(i32) -> Bool
 --------------------------------------------------------------------------------
-error at `convert`: no instance Convert[i32, bool]
+error at `convert`: no instance Convert[i32, Bool]
 
 ================================================================================
 Generic impls
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 enum Option[T] { Some(T), None }
 impl Show[i32] { fn show(x) = "int"; }
 impl[T] Show[Option[T]] where Show[T] { fn show(x) = "option"; }
 show(Option.Some(1));
-show(Option.Some(true));
+show(Option.Some(True));
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-Show[Option[T]].show: forall T. Show[T] => fn(Option[T]) -> str
-show(Option.Some(1)): str
-show(Option.Some(true)): str
+Show[i32].show: fn(i32) -> String
+Show[Option[T]].show: forall T. Show[T] => fn(Option[T]) -> String
+show(Option.Some(1)): String
+show(Option.Some(True)): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[bool]
+error at `show`: no instance Show[Bool]
 
 ================================================================================
 Superclasses are assumed
 ================================================================================
-class Eq[T] { fn eq(a: T, b: T) -> bool; }
-class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
+class Eq[T] { fn eq(a: T, b: T) -> Bool; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn max[T](a: T, b: T) -> T where Ord[T] = if lt(a, b) || eq(a, b) { b } else { a };
 
 --------------------------------------------------------------------------------
@@ -73,12 +73,12 @@ max: forall T. Ord[T] => fn(T, T) -> T
 ================================================================================
 Constraints are inferred from several methods
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
-class Eq[T] { fn eq(a: T, b: T) -> bool; }
+class Show[T] { fn show(x: T) -> String; }
+class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 fn show_if_same(a, b) = if eq(a, b) { show(a) } else { "different" };
 
 --------------------------------------------------------------------------------
-show_if_same: forall a. Eq[a] => Show[a] => fn(a, a) -> str
+show_if_same: forall a. Eq[a] => Show[a] => fn(a, a) -> String
 
 ================================================================================
 A constraint on a type that is never known is ambiguous
@@ -98,13 +98,13 @@ error at `default`: ambiguous
 ================================================================================
 Methods of impls are checked against the class
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = 1; }
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
+Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
-error at `1`: expected str, found {integer}
+error at `1`: expected String, found {integer}
 
 ================================================================================
 Class constants
@@ -112,33 +112,33 @@ Class constants
 class Zero[T] { const ZERO: T; }
 impl Zero[i32] { const ZERO: i32 = 0; }
 fn f() -> i32 = ZERO;
-fn g() -> bool = ZERO;
+fn g() -> Bool = ZERO;
 fn zeros() = (ZERO, ZERO);
 fn h[T]() -> T where Zero[T] = ZERO;
 fn k() { let z = ZERO; }
 --------------------------------------------------------------------------------
 f: fn() -> i32
-g: fn() -> bool
+g: fn() -> Bool
 zeros: forall a b. Zero[a] => Zero[b] => fn() -> (a, b)
 h: forall T. Zero[T] => fn() -> T
 k: fn() -> ()
 --------------------------------------------------------------------------------
-error at `ZERO`: no instance Zero[bool]
+error at `ZERO`: no instance Zero[Bool]
 error at `ZERO`: ambiguous
 
 ================================================================================
 Method call syntax with class methods
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 1.show();
-true.show();
+True.show();
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-1.show(): str
-true.show(): str
+Show[i32].show: fn(i32) -> String
+1.show(): String
+True.show(): String
 --------------------------------------------------------------------------------
-error at `true.show`: no instance Show[bool]
+error at `True.show`: no instance Show[Bool]
 
 ================================================================================
 Methods in an impl can call themselves without importing them
@@ -191,15 +191,15 @@ Monoid[Option[T]].concat3: forall T. Monoid[T] => fn(Option[T], Option[T], Optio
 Two impls for the same type make uses ambiguous
 :error
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
 impl Show[i32] { fn show(x) = "two"; }
 show(1);
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-Show[i32].show: fn(i32) -> str
-show(1): str
+Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(i32) -> String
+show(1): String
 --------------------------------------------------------------------------------
 error at `show`: ambiguous
 
@@ -207,13 +207,13 @@ error at `show`: ambiguous
 Overlapping impls are reported where they're defined
 :todo
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
 impl Show[i32] { fn show(x) = "two"; }
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-Show[i32].show: fn(i32) -> str
+Show[i32].show: fn(i32) -> String
+Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
 error at `Show[i32]`: overlaps another impl of Show[i32]
 
@@ -221,15 +221,15 @@ error at `Show[i32]`: overlaps another impl of Show[i32]
 A generic impl that overlaps a specific one
 :error
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl[T] Show[T] { fn show(x) = "any"; }
 impl Show[i32] { fn show(x) = "int"; }
 show(1);
 
 --------------------------------------------------------------------------------
-Show[T].show: forall T. fn(T) -> str
-Show[i32].show: fn(i32) -> str
-show(1): str
+Show[T].show: forall T. fn(T) -> String
+Show[i32].show: fn(i32) -> String
+show(1): String
 --------------------------------------------------------------------------------
 error at `show`: ambiguous
 
@@ -237,11 +237,11 @@ error at `show`: ambiguous
 An impl method with the wrong number of parameters
 :todo
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x, y) = "int"; }
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
+Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
 error at `show`: expected 1 parameters, found 2
 
@@ -249,13 +249,13 @@ error at `show`: expected 1 parameters, found 2
 An impl method with a signature that doesn't match
 :todo
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
-impl Show[i32] { fn show(x: bool) -> str = "int"; }
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x: Bool) -> String = "int"; }
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
+Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
-error at `bool`: expected i32, found bool
+error at `Bool`: expected i32, found Bool
 
 ================================================================================
 An impl of something that isn't a class
@@ -275,50 +275,50 @@ error at `Nope[i32]`: unresolved type
 An impl with the wrong number of arguments
 :error
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
-impl Show[i32, bool] { fn show(x) = "int"; }
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32, Bool] { fn show(x) = "int"; }
 impl Show { fn show(x) = "int"; }
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-Show[{error}].show: fn({error}) -> str
+Show[i32].show: fn(i32) -> String
+Show[{error}].show: fn({error}) -> String
 --------------------------------------------------------------------------------
-error at `Show[i32, bool]`: expected 1 type arguments, found 2
+error at `Show[i32, Bool]`: expected 1 type arguments, found 2
 error at `Show`: expected 1 type arguments, found 0
 
 ================================================================================
 An impl of a class whose superclass has no impl
 :todo
 ================================================================================
-class Eq[T] { fn eq(a: T, b: T) -> bool; }
-class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
+class Eq[T] { fn eq(a: T, b: T) -> Bool; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 impl Ord[i32] { fn lt(a, b) = a < b; }
 
 --------------------------------------------------------------------------------
-Ord[i32].lt: fn(i32, i32) -> bool
+Ord[i32].lt: fn(i32, i32) -> Bool
 --------------------------------------------------------------------------------
 error at `Ord[i32]`: no instance Eq[i32]
 
 ================================================================================
 Superclass methods through a constraint that is inferred
 ================================================================================
-class Eq[T] { fn eq(a: T, b: T) -> bool; }
-class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> bool; }
+class Eq[T] { fn eq(a: T, b: T) -> Bool; }
+class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn le(a, b) = lt(a, b) || eq(a, b);
 
 --------------------------------------------------------------------------------
-le: forall a. Ord[a] => Eq[a] => fn(a, a) -> bool
+le: forall a. Ord[a] => Eq[a] => fn(a, a) -> Bool
 
 ================================================================================
 A class method whose type doesn't mention the class parameter
 :error
 ================================================================================
 class Weird[T] { fn weird(x: i32) -> i32; }
-impl Weird[bool] { fn weird(x) = x; }
+impl Weird[Bool] { fn weird(x) = x; }
 weird(1);
 
 --------------------------------------------------------------------------------
-Weird[bool].weird: fn(i32) -> i32
+Weird[Bool].weird: fn(i32) -> i32
 weird(1): i32
 --------------------------------------------------------------------------------
 error at `weird`: ambiguous
@@ -328,7 +328,7 @@ An impl that needs itself
 :skip
 ================================================================================
 // Hangs: looking for Show[i32] keeps finding the impl, which needs it again.
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl[T] Show[T] where Show[T] { fn show(x) = "loop"; }
 show(1);
 
@@ -339,7 +339,7 @@ An impl that needs a bigger type
 // Overflows the stack: Show[i32] needs Show[Option[i32]], which needs
 // Show[Option[Option[i32]]], and so on.
 enum Option[T] { None, Some(T) }
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl[T] Show[T] where Show[Option[T]] { fn show(x) = "grows"; }
 show(1);
 
@@ -347,45 +347,45 @@ show(1);
 A where clause on a type without an impl
 :error
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
-fn f() -> str where Show[bool] = show(true);
+class Show[T] { fn show(x: T) -> String; }
+fn f() -> String where Show[Bool] = show(True);
 f();
 
 --------------------------------------------------------------------------------
-f: Show[bool] => fn() -> str
-f(): str
+f: Show[Bool] => fn() -> String
+f(): String
 --------------------------------------------------------------------------------
-error at `f`: no instance Show[bool]
+error at `f`: no instance Show[Bool]
 
 ================================================================================
 Class methods as values
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 fn apply(f, x) = f(x);
-let s: fn(i32) -> str = show;
+let s: fn(i32) -> String = show;
 apply(show, 1);
-apply(show, true);
+apply(show, True);
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
+Show[i32].show: fn(i32) -> String
 apply: forall a b. fn(fn(a) -> b, a) -> b
-let s: fn(i32) -> str
-apply(show, 1): str
-apply(show, true): str
+let s: fn(i32) -> String
+apply(show, 1): String
+apply(show, True): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[bool]
+error at `show`: no instance Show[Bool]
 
 ================================================================================
 Method call syntax on a constrained parameter
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
-fn f[T](x: T) -> str where Show[T] = x.show();
-fn g[T](x: T) -> str = x.show();
+class Show[T] { fn show(x: T) -> String; }
+fn f[T](x: T) -> String where Show[T] = x.show();
+fn g[T](x: T) -> String = x.show();
 
 --------------------------------------------------------------------------------
-f: forall T. Show[T] => fn(T) -> str
-g: forall T. fn(T) -> str
+f: forall T. Show[T] => fn(T) -> String
+g: forall T. fn(T) -> String
 --------------------------------------------------------------------------------
 error at `x.show`: no instance Show[T]
 
@@ -394,11 +394,11 @@ A multi-parameter class whose result is never known
 :error
 ================================================================================
 class Convert[A, B] { fn convert(a: A) -> B; }
-impl Convert[i32, str] { fn convert(a) = "int"; }
+impl Convert[i32, String] { fn convert(a) = "int"; }
 fn f() { convert(1); }
 
 --------------------------------------------------------------------------------
-Convert[i32, str].convert: fn(i32) -> str
+Convert[i32, String].convert: fn(i32) -> String
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `convert`: ambiguous
@@ -406,75 +406,75 @@ error at `convert`: ambiguous
 ================================================================================
 Impls for function types and tuples
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
-impl Show[(i32, bool)] { fn show(x) = "pair"; }
+class Show[T] { fn show(x: T) -> String; }
+impl Show[(i32, Bool)] { fn show(x) = "pair"; }
 impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
-show((1, true));
+show((1, True));
 show(|x: i32| x);
-show((true, 1));
+show((True, 1));
 
 --------------------------------------------------------------------------------
-Show[(i32, bool)].show: fn((i32, bool)) -> str
-Show[fn(i32) -> i32].show: fn(fn(i32) -> i32) -> str
-show((1, true)): str
-show(|x: i32| x): str
-show((true, 1)): str
+Show[(i32, Bool)].show: fn((i32, Bool)) -> String
+Show[fn(i32) -> i32].show: fn(fn(i32) -> i32) -> String
+show((1, True)): String
+show(|x: i32| x): String
+show((True, 1)): String
 --------------------------------------------------------------------------------
-error at `show`: no instance Show[(bool, i32)]
+error at `show`: no instance Show[(Bool, i32)]
 
 ================================================================================
 An impl for a type alias
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 type Int = i32;
 impl Show[Int] { fn show(x) = "int"; }
 show(1);
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-show(1): str
+Show[i32].show: fn(i32) -> String
+show(1): String
 
 ================================================================================
 Defaults of class methods
 ================================================================================
 class Show[T] {
-  fn show(x: T) -> str;
-  fn show_twice(x: T) -> str = show(x) + show(x);
+  fn show(x: T) -> String;
+  fn show_twice(x: T) -> String = show(x) + show(x);
 }
 impl Show[i32] { fn show(x) = "int"; }
 show_twice(1);
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-show_twice(1): str
+Show[i32].show: fn(i32) -> String
+show_twice(1): String
 
 ================================================================================
 A constrained generic function called with a type without an impl
 :error
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
-fn twice[T](x: T) -> (str, str) where Show[T] = (show(x), show(x));
+fn twice[T](x: T) -> (String, String) where Show[T] = (show(x), show(x));
 fn call() = twice("a");
 
 --------------------------------------------------------------------------------
-Show[i32].show: fn(i32) -> str
-twice: forall T. Show[T] => fn(T) -> (str, str)
-call: fn() -> (str, str)
+Show[i32].show: fn(i32) -> String
+twice: forall T. Show[T] => fn(T) -> (String, String)
+call: fn() -> (String, String)
 --------------------------------------------------------------------------------
-error at `twice`: no instance Show[str]
+error at `twice`: no instance Show[String]
 
 ================================================================================
 A constraint that only a later use decides
 ================================================================================
 class Default[T] { fn default() -> T; }
 impl Default[i32] { fn default() = 0; }
-impl Default[bool] { fn default() = false; }
+impl Default[Bool] { fn default() = False; }
 fn f() {
   let x = default();
-  let y: bool = x;
+  let y: Bool = x;
 }
 --------------------------------------------------------------------------------
 Default[i32].default: fn() -> i32
-Default[bool].default: fn() -> bool
+Default[Bool].default: fn() -> Bool
 f: fn() -> ()

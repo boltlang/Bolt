@@ -189,16 +189,12 @@ impl BoundedType {
     }
 }
 
-/// `fn(A) -> B`, `extern "C" fn()`, or `FnOnce(A) -> B` with a trait.
+/// `fn(A) -> B` or `extern "C" fn()`
 pub struct FnType(SyntaxNode);
 
 simple_node!(FnType, FN_TYPE);
 
 impl FnType {
-    /// The trait, in `FnOnce(A) -> B`.
-    pub fn path(&self) -> Option<Path> {
-        self.find_node()
-    }
     pub fn abi(&self) -> Option<Abi> {
         self.find_node()
     }
@@ -1282,7 +1278,6 @@ impl LitExpr {
             SyntaxElement::Token(token) if matches!(
                 token.kind(),
                 INT_NUMBER | FLOAT_NUMBER | STRING | BYTE_STRING | C_STRING | CHAR | BYTE
-                    | TRUE_KEYWORD | FALSE_KEYWORD
             ) => Some(token),
             _ => None,
         })

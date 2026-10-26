@@ -159,8 +159,8 @@ mod tests {
     #[test]
     fn diagnostics_follow_edits() {
         let (mut workspace, _) = workspace();
-        workspace.set_text(SystemPath::new(MAIN), "let x: i32 = true;\n".into());
-        assert_eq!(messages(&workspace, MAIN), ["expected `i32`, found `bool`"]);
+        workspace.set_text(SystemPath::new(MAIN), "let x: i32 = True;\n".into());
+        assert_eq!(messages(&workspace, MAIN), ["expected `i32`, found `Bool`"]);
         workspace.set_text(SystemPath::new(MAIN), "let x: i32 = 1;\n".into());
         assert!(messages(&workspace, MAIN).is_empty());
         // A closed document that isn't on disk has no diagnostics.
@@ -175,7 +175,7 @@ mod tests {
         assert_eq!(messages(&workspace, MAIN), ["cannot find the file `./lib`", "cannot find `negate`"]);
         workspace.set_text(SystemPath::new(LIB), "pub fn negate(x) = !x;\n".into());
         let found = workspace.diagnostics(SystemPath::new(MAIN));
-        assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `bool`, found an integer"]);
+        assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `Bool`, found an integer"]);
         // The label points at the parameter in the other file.
         let related = found[0].related_information.as_ref().unwrap();
         assert!(related[0].location.uri.as_str().ends_with("lib.bolt"));
@@ -197,9 +197,9 @@ mod tests {
     #[test]
     fn files_that_aren_t_open_come_from_the_disk() {
         let (mut workspace, disk) = workspace();
-        disk.write_file_bytes(SystemPath::new(LIB), b"pub fn negate(x: bool) -> bool = !x;\n").unwrap();
+        disk.write_file_bytes(SystemPath::new(LIB), b"pub fn negate(x: Bool) -> Bool = !x;\n").unwrap();
         workspace.set_text(SystemPath::new(MAIN), "import \"./lib\" (negate);\nnegate(1);\n".into());
-        assert_eq!(messages(&workspace, MAIN), ["expected `bool`, found an integer"]);
+        assert_eq!(messages(&workspace, MAIN), ["expected `Bool`, found an integer"]);
         // A change on the disk is seen once it's reported.
         disk.write_file_bytes(SystemPath::new(LIB), b"pub fn negate(x: i32) -> i32 = -x;\n").unwrap();
         workspace.file_changed(SystemPath::new(LIB));

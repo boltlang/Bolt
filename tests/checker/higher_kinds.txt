@@ -15,7 +15,7 @@ fmap(|n| n == 0, Option.Some(1));
 --------------------------------------------------------------------------------
 Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
 fmap(|n| n + 1, Option.Some(1)): Option[i32]
-fmap(|n| n == 0, Option.Some(1)): Option[bool]
+fmap(|n| n == 0, Option.Some(1)): Option[Bool]
 
 ================================================================================
 Impl methods without types
@@ -67,13 +67,13 @@ impl[E] Functor[Either[E]] {
     Either.Right(a) => Either.Right(f(a)),
   };
 }
-let r: Either[str, i32] = Either.Right(1);
+let r: Either[String, i32] = Either.Right(1);
 fmap(|n| n > 0, r);
 
 --------------------------------------------------------------------------------
 Functor[Either[E]].fmap: forall E A B. fn(fn(A) -> B, Either[E, A]) -> Either[E, B]
-let r: Either[str, i32]
-fmap(|n| n > 0, r): Either[str, bool]
+let r: Either[String, i32]
+fmap(|n| n > 0, r): Either[String, Bool]
 
 ================================================================================
 No instance for a constructor
@@ -123,12 +123,12 @@ Higher-kinded parameters of structs
 enum Option[T] { None, Some(T) }
 struct Wrap[F, A] { inner: F[A] }
 fn unwrap[F, A](w: Wrap[F, A]) -> F[A] = w.inner;
-let w = Wrap { inner: Option.Some(true) };
+let w = Wrap { inner: Option.Some(True) };
 unwrap(w);
 --------------------------------------------------------------------------------
 unwrap: forall F A. fn(Wrap[F, A]) -> F[A]
-let w: Wrap[Option, bool]
-unwrap(w): Option[bool]
+let w: Wrap[Option, Bool]
+unwrap(w): Option[Bool]
 
 ================================================================================
 Recursive impls
@@ -162,29 +162,29 @@ f: fn(A[Option]) -> A[Option]
 A type constructor used with two different arguments
 ================================================================================
 enum Option[T] { None, Some(T) }
-fn both[F](a: F[i32], b: F[bool]) -> (F[i32], F[bool]) = (a, b);
+fn both[F](a: F[i32], b: F[Bool]) -> (F[i32], F[Bool]) = (a, b);
 both(Option.Some(1), Option.None);
-both(Option.Some(1), [true]);
+both(Option.Some(1), [True]);
 
 --------------------------------------------------------------------------------
-both: forall F. fn(F[i32], F[bool]) -> (F[i32], F[bool])
-both(Option.Some(1), Option.None): (Option[i32], Option[bool])
-both(Option.Some(1), [true]): (Option[i32], Option[bool])
+both: forall F. fn(F[i32], F[Bool]) -> (F[i32], F[Bool])
+both(Option.Some(1), Option.None): (Option[i32], Option[Bool])
+both(Option.Some(1), [True]): (Option[i32], Option[Bool])
 --------------------------------------------------------------------------------
-error at `[true]`: expected Option[bool], found [bool]
+error at `[True]`: expected Option[Bool], found [Bool]
 
 ================================================================================
 A type constructor inferred from a partially applied enum
 ================================================================================
 enum Either[E, A] { Left(E), Right(A) }
 fn inner[F, A](x: F[A]) -> F[A] = x;
-let r: Either[str, i32] = Either.Right(1);
+let r: Either[String, i32] = Either.Right(1);
 inner(r);
 
 --------------------------------------------------------------------------------
 inner: forall F A. fn(F[A]) -> F[A]
-let r: Either[str, i32]
-inner(r): Either[str, i32]
+let r: Either[String, i32]
+inner(r): Either[String, i32]
 
 ================================================================================
 Arrays, tuples and functions aren't applications of a type constructor
@@ -192,31 +192,31 @@ Arrays, tuples and functions aren't applications of a type constructor
 ================================================================================
 fn inner[F, A](x: F[A]) -> F[A] = x;
 inner([1]);
-inner((1, true));
+inner((1, True));
 inner(|x: i32| x);
 
 --------------------------------------------------------------------------------
 inner: forall F A. fn(F[A]) -> F[A]
 inner([1]): a[b]
-inner((1, true)): a[b]
+inner((1, True)): a[b]
 inner(|x: i32| x): a[b]
 --------------------------------------------------------------------------------
 error at `[1]`: expected a[b], found [{integer}]
-error at `(1, true)`: expected a[b], found ({integer}, bool)
+error at `(1, True)`: expected a[b], found ({integer}, Bool)
 error at `|x: i32| x`: expected a[b], found fn(i32) -> i32
 
 ================================================================================
 The kind of a type parameter comes from how it is used
 :error
 ================================================================================
-fn f[F](x: F[i32, bool]) -> i32 = 1;
-fn g[F](x: F[i32], y: F[i32, bool]) -> i32 = 1;
+fn f[F](x: F[i32, Bool]) -> i32 = 1;
+fn g[F](x: F[i32], y: F[i32, Bool]) -> i32 = 1;
 
 --------------------------------------------------------------------------------
-f: forall F. fn(F[i32, bool]) -> i32
+f: forall F. fn(F[i32, Bool]) -> i32
 g: forall F. fn(F[i32], {error}) -> i32
 --------------------------------------------------------------------------------
-error at `F[i32, bool]`: expected 1 type arguments, found 2
+error at `F[i32, Bool]`: expected 1 type arguments, found 2
 
 ================================================================================
 A type constructor applied to a type constructor
@@ -225,11 +225,11 @@ enum Option[T] { None, Some(T) }
 struct Apply[F, A] { value: F[A] }
 struct Compose[F, G, A] { value: F[G[A]] }
 let a = Apply { value: Option.Some(1) };
-let c = Compose { value: Option.Some(Option.Some(true)) };
+let c = Compose { value: Option.Some(Option.Some(True)) };
 
 --------------------------------------------------------------------------------
 let a: Apply[Option, i32]
-let c: Compose[Option, Option, bool]
+let c: Compose[Option, Option, Bool]
 
 ================================================================================
 A class of type constructors used with a type

@@ -2,7 +2,7 @@
 //! agree on what a program gives.
 
 use boltlang_base_db::{File, TestDb};
-use boltlang_eval::{Evaluator, Recorder, Value};
+use boltlang_eval::{Ctor, Evaluator, Recorder, Value};
 use wasmi::{Caller, Engine, Extern, Linker, Module, Store, Val};
 
 use crate::{link, reachable_instances};
@@ -107,6 +107,8 @@ fn same(code: &str) {
         Value::Char(c) => Num::Int(c as i128),
         Value::Float(x) => Num::Float(x),
         Value::Tuple(items) if items.is_empty() => Num::Unit,
+        // A variant without fields is the index of the variant.
+        Value::Adt { ctor: Ctor::Variant(v), fields } if fields.is_empty() => Num::Int(v.index as i128),
         other => panic!("the evaluator gave {}", other.display(&db)),
     };
     assert_eq!(from_wasm(run(code).0), expected, "{code}");
@@ -117,7 +119,7 @@ fn arithmetic_and_comparisons() {
     same("1 + 2 * 3 - 4 / 2;");
     same("17 % 5;");
     same("7 - 10;");
-    same("1 < 2 && 2 <= 2 || false;");
+    same("1 < 2 && 2 <= 2 || False;");
     same("!(3 == 4);");
     same("1 << 4 | 1;");
     same("-(5 * 5);");
@@ -129,7 +131,7 @@ fn recursion() {
     same("fn fac(n: i32) -> i32 = match n { 0 | 1 => 1, k => k * fac(k - 1) };\nfac(10);");
     same("fn fib(n: i32) -> i32 = if n < 2 { n } else { fib(n - 1) + fib(n - 2) };\nfib(15);");
     // Inferred, mutually recursive functions.
-    same("fn even(n) = if n == 0 { true } else { odd(n - 1) };\nfn odd(n) = if n == 0 { false } else { even(n - 1) };\neven(10);");
+    same("fn even(n) = if n == 0 { True } else { odd(n - 1) };\nfn odd(n) = if n == 0 { False } else { even(n - 1) };\neven(10);");
 }
 
 #[test]
@@ -162,6 +164,7 @@ fn patterns() {
     same("let x = 4;\nif let 1..=5 = x { 1 } else { 0 };");
     same("fn half(n: i32) -> i32 { let 0..=9 = n else { return -1; }; n / 2 }\nhalf(8);");
     same("fn half(n: i32) -> i32 { let 0..=9 = n else { return -1; }; n / 2 }\nhalf(80);");
+    same("fn pick(b: Bool) -> i32 = match b { True => 1, False => 2 };\npick(1 > 2);");
 }
 
 #[test]
@@ -217,6 +220,48 @@ fn functions_are_exported() {
     assert_eq!(result.and_then(|v| v.i64()), Some(2432902008176640000));
 }
 
+const COLOR: &str = "enum Color { Red, Green, Blue }\n";
+
+#[test]
+fn fieldless_enums() {
+    // A value is the index of its variant.
+    same(&format!("{COLOR}Color.Blue;"));
+    same(&format!("{COLOR}let c = Color.Green;\nc;"));
+    // In parameters, results and matches.
+    same(&format!(
+        "{COLOR}fn next(c: Color) -> Color = match c {{ Color.Red => Color.Green, Color.Green => Color.Blue, Color.Blue => Color.Red }};\nnext(next(Color.Red));"
+    ));
+    // Variants imported into scope, in expressions and patterns.
+    same(&format!(
+        "{COLOR}import Color.*;\nfn code(c) = match c {{ Red => 1, Green => 2, Blue => 3 }};\ncode(Blue) * 10 + code(Red);"
+    ));
+    same(&format!("{COLOR}import Color.*;\nfn warm(c: Color) -> Bool = match c {{ Red | Green => True, _ => False }};\nwarm(Green) && !warm(Blue);"));
+    // Equality.
+    same(&format!("{COLOR}Color.Red == Color.Red && Color.Red != Color.Blue;"));
+    // Variables that change.
+    same(&format!("{COLOR}let mut c = Color.Red;\nif c == Color.Red {{ c = Color.Blue; }}\nc;"));
+    // Generic enums without fields, and consts.
+    same("enum Tag[T] { A, B }\nfn tag(x: i32) -> Tag[i32] = if x > 0 { Tag.B } else { Tag.A };\ntag(5);");
+    same(&format!("{COLOR}const FAVORITE: Color = Color.Green;\nfn is_favorite(c: Color) -> Bool = match c {{ FAVORITE => True, _ => False }};\n(FAVORITE == Color.Green) && is_favorite(Color.Green);"));
+}
+
+#[test]
+fn enums_with_fields_and_ordering_are_errors() {
+    let errors = |code: &str| {
+        let db = TestDb::new();
+        let file = db.file("/main.bolt", code);
+        link(&db, file).unwrap_err().iter().map(|e| e.to_string()).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        errors("enum Shape { Dot, Circle(f64) }\nShape.Dot;"),
+        ["a value of type `Shape` is not supported by the code generator yet"]
+    );
+    assert_eq!(
+        errors(&format!("{COLOR}Color.Red < Color.Blue;")),
+        ["ordering enums is not supported by the code generator yet"]
+    );
+}
+
 #[test]
 fn unsupported_code_is_an_error() {
     let db = TestDb::new();
@@ -243,7 +288,7 @@ fn editing_a_function_recompiles_only_that_function() {
 }
 
 /// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: str);\n  pub fn panic(message: str) -> !;\n}\n";
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n}\n";
 
 fn db_with_builtins(code: &str) -> (TestDb, File) {
     let mut db = TestDb::new();
@@ -269,12 +314,12 @@ fn prints_the_same(code: &str, expected: &str) {
 fn print() {
     prints_the_same("print(\"Hello, world!\");", "Hello, world!\n");
     prints_the_same(
-        "fn greet(name: str) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\ngreet(\"Wasm\");",
+        "fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\ngreet(\"Wasm\");",
         "hello\nBolt\nhello\nWasm\n",
     );
     // Strings are values like others, in variables, consts and results.
     prints_the_same(
-        "const GREETING: str = \"hi\";\nfn pick(b: bool) -> str = if b { GREETING } else { \"bye\" };\nlet s = pick(false);\nprint(pick(true));\nprint(s);",
+        "const GREETING: String = \"hi\";\nfn pick(b: Bool) -> String = if b { GREETING } else { \"bye\" };\nlet s = pick(False);\nprint(pick(True));\nprint(s);",
         "hi\nbye\n",
     );
     prints_the_same("print(\"héllo, wörld ✓\");", "héllo, wörld ✓\n");

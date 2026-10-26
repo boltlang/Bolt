@@ -5,7 +5,6 @@ pub import "./semigroup" *;
 pub import "./monoid" *;
 
 // Types
-pub import "./bool" *;
 pub import "./option" *;
 pub import "./list" *;
 

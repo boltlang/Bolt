@@ -342,7 +342,7 @@ fn import_signature<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<Signatur
         use boltlang_hir_def::builtin_type::{BuiltinInt::*, BuiltinType::*, BuiltinUint::*, BuiltinFloat};
         match ty {
             Ty::Tuple(tys) if tys.is_empty() => Ok(None),
-            Ty::Builtin(Bool | Char | Str | Int(I8 | I16 | I32 | Isize) | Uint(U8 | U16 | U32 | Usize)) => {
+            Ty::Builtin(Bool | Char | String | Int(I8 | I16 | I32 | Isize) | Uint(U8 | U16 | U32 | Usize)) => {
                 Ok(Some(ValTy::I32))
             }
             Ty::Builtin(Int(I64) | Uint(U64)) => Ok(Some(ValTy::I64)),

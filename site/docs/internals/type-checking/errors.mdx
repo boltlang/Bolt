@@ -24,7 +24,7 @@ The reasons are:
 
 | `Reason` | Example | What the error points at |
 |---|---|---|
-| `None` | the `bool` of a condition | nothing more |
+| `None` | the `Bool` of a condition | nothing more |
 | `Annotation` | `let x: i32 = ...` | the annotation |
 | `ReturnType` | a function's declared return type | the return type |
 | `ConstType` | a const's declared type | the type |
@@ -42,7 +42,7 @@ fn g(c: i32) = match c { 1 => 1, _ => "x" };
 ```
 
 ```text
-error at `"x"`: expected {integer}, found str
+error at `"x"`: expected {integer}, found String
 ```
 
 ### Pushing expectations down
@@ -55,7 +55,7 @@ branches and its tail against the expected type, rather than unifying its
 own type afterwards. So in
 
 ```bolt
-fn f(c: bool) -> i32 = if c { 1 } else { "no" };
+fn f(c: Bool) -> i32 = if c { 1 } else { "no" };
 ```
 
 the error is reported at `"no"`, with the return type as the reason, not at
@@ -70,8 +70,8 @@ front, which conflicts with solving equalities eagerly.
 
 A mismatch is reported with the *whole* expected and found types of the
 constraint, resolved as far as inference got, rather than the innermost
-types that differ. "expected `Option[i32]`, found `Option[str]`" says more
-than "expected `i32`, found `str`".
+types that differ. "expected `Option[i32]`, found `Option[String]`" says more
+than "expected `i32`, found `String`".
 
 ## Keeping errors from cascading
 

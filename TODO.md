@@ -154,7 +154,6 @@ other errors.
       ide-diagnostics)* (#44)
 - [ ] Array lengths aren't checked: `[T; 3]` is the same type as `[T]`.
       *(hir-ty)* (#122)
-- [ ] `FnOnce(A) -> B` and other function classes are plain function types.
       *(hir-ty)* (#123)
 - [ ] The bounds a class puts on its associated types, like `type Item:
       Show;`, aren't checked against the impls, which needs solving an
@@ -200,22 +199,22 @@ other errors.
       ide-diagnostics)* (#126)
 - [ ] Labels for "no instance", "ambiguous", "infinite type" and "no
       field" errors, pointing at the call or annotation that introduced the
-      constraint. For `get_x(true)`, where `fn get_x(p) = p.x`, the label
+      constraint. For `get_x(True)`, where `fn get_x(p) = p.x`, the label
       would point at the `p.x`.
       Class constraints from instantiating a scheme only have
       `Reason::None` now. *(hir-ty, hir, ide-diagnostics)* (#127)
-- [ ] A label for the arguments of tuple-variant constructors, like `true` in
-      `Opt.Some(true)`. The callee isn't a function, so the argument gets
+- [ ] A label for the arguments of tuple-variant constructors, like `True` in
+      `Opt.Some(True)`. The callee isn't a function, so the argument gets
       `Reason::None`. *(hir-ty, hir)* (#128)
-- [ ] `fn g(c: bool) -> i32 = if c { 1 };` gives two errors: the branch
+- [ ] `fn g(c: Bool) -> i32 = if c { 1 };` gives two errors: the branch
       isn't `()`, and the `if` isn't an `i32`. One error that says the `if`
       has no `else` would be clearer, as in Rust. *(hir-ty, hir,
       ide-diagnostics)* (#129)
 - [ ] A literal that doesn't fit an annotation is reported as a whole: for
-      `let p: Pair[bool, i32] = Pair { first: 1, second: true };`, the error
-      is "expected `Pair[bool, i32]`, found `Pair[i32, bool]`" at the whole
+      `let p: Pair[Bool, i32] = Pair { first: 1, second: True };`, the error
+      is "expected `Pair[Bool, i32]`, found `Pair[i32, Bool]`" at the whole
       literal. Passing the expected type down to the fields would report
-      `1` and `true` instead, as arrays already do for their elements.
+      `1` and `True` instead, as arrays already do for their elements.
       *(hir-ty)* (#130)
 - [ ] Leave out type errors inside the range of a syntax error, which are
       usually caused by it. *(hir)* (#131)

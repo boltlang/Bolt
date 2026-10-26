@@ -26,9 +26,9 @@ pub const ABI: &str = "bolt";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Builtin {
-    /// `fn print(text: str)`: write the text and a newline.
+    /// `fn print(text: String)`: write the text and a newline.
     Print,
-    /// `fn panic(message: str) -> !`: stop the program with an error.
+    /// `fn panic(message: String) -> !`: stop the program with an error.
     Panic,
 }
 
@@ -58,7 +58,7 @@ impl Builtin {
 
     /// The type a declaration of it must have.
     pub fn signature<'db>(self) -> Ty<'db> {
-        let str_ty = Ty::Builtin(BuiltinType::Str);
+        let str_ty = Ty::Builtin(BuiltinType::String);
         match self {
             Builtin::Print => Ty::Fn(Box::new([str_ty]), Box::new(Ty::unit())),
             Builtin::Panic => Ty::Fn(Box::new([str_ty]), Box::new(Ty::Never)),

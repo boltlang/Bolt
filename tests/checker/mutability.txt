@@ -47,7 +47,7 @@ struct Point { x: i32, y: i32 }
 fn f() {
   let mut p = Point { x: 1, y: 2 };
   p.x = 3;
-  p.y = true;
+  p.y = True;
   let mut a = [1, 2];
   a[0] = 3;
   a[1] = "b";
@@ -56,8 +56,8 @@ fn f() {
 --------------------------------------------------------------------------------
 f: fn() -> ()
 --------------------------------------------------------------------------------
-error at `true`: expected i32, found bool
-error at `"b"`: expected {integer}, found str
+error at `True`: expected i32, found Bool
+error at `"b"`: expected {integer}, found String
 
 ================================================================================
 Compound assignment checks its operands
@@ -91,12 +91,12 @@ f: fn() -> i32
 ================================================================================
 A mut without a value takes the type of its first assignment
 ================================================================================
-fn f(c: bool) {
+fn f(c: Bool) {
   let mut x;
   if c { x = 1u8; } else { x = 2; }
   x = "three";
 }
 --------------------------------------------------------------------------------
-f: fn(bool) -> ()
+f: fn(Bool) -> ()
 --------------------------------------------------------------------------------
-error at `"three"`: expected u8, found str
+error at `"three"`: expected u8, found String

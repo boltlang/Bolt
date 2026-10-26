@@ -51,7 +51,7 @@ matches is an error when the program runs.
 |---|---|
 | `x` | anything, and names it `x` |
 | `_` | anything, without naming it |
-| `42`, `"hi"`, `'c'`, `true` | that exact value |
+| `42`, `"hi"`, `'c'`, `True` | that exact value |
 | `1..=9` | numbers from 1 to 9, inclusive |
 | `a \| b` | what `a` or `b` matches |
 | `(a, b)` | a tuple, with patterns for its elements |
@@ -63,7 +63,7 @@ matches is an error when the program runs.
 Patterns nest, so they can look deep inside a value:
 
 ```bolt
-fn describe(n: i32) -> str = match n {
+fn describe(n: i32) -> String = match n {
   0 => "zero",
   1 | 2 | 3 => "a few",
   4..=9 => "several",
@@ -78,7 +78,7 @@ fn describe(n: i32) -> str = match n {
 ```
 
 ```bolt
-fn label(o: Option[i32]) -> str = match o {
+fn label(o: Option[i32]) -> String = match o {
   Some(0) => "zero",
   Some(n @ 1..=9) => "a digit",
   Some(_) => "a big number",
@@ -95,10 +95,10 @@ fn label(o: Option[i32]) -> str = match o {
 ## Guards
 
 An arm can have a *guard*: an extra condition after `if`. The arm is only
-chosen when the pattern matches and the guard is `true`:
+chosen when the pattern matches and the guard is `True`:
 
 ```bolt
-fn classify(n: i32) -> str = match n {
+fn classify(n: i32) -> String = match n {
   x if x < 0 => "negative",
   x if x % 2 == 0 => "even",
   _ => "odd",

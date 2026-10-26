@@ -20,11 +20,11 @@ pub type TypeRefId = Idx<TypeRef>;
 pub type BindingId = Idx<Binding>;
 pub type LabelId = Idx<Label>;
 
-/// A literal like `1`, `"s"` or `true`. Floats are kept as text, so
-/// literals compare exactly.
+/// A literal like `1` or `"s"`. `True` and `False` aren't literals but
+/// names, which resolve to a [`BuiltinValue`](crate::builtin_type::BuiltinValue).
+/// Floats are kept as text, so literals compare exactly.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum Literal {
-    Bool(bool),
     /// The value and the type suffix, like `u8` in `10u8`.
     Int(u128, Option<Name>),
     /// The text without `_` separators or suffix, and the suffix.
@@ -277,9 +277,8 @@ pub enum TypeRef {
     Array { element: TypeRefId, len: Option<ExprId> },
     /// `!`
     Never,
-    /// `fn(A, B) -> C`, or `FnOnce(A) -> C` with a trait.
+    /// `fn(A, B) -> C`
     Fn {
-        trait_path: Option<Path>,
         params: Box<[(Option<Name>, TypeRefId)]>,
         is_variadic: bool,
         ret_type: Option<TypeRefId>,

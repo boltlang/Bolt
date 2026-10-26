@@ -6,12 +6,12 @@ pub fn id(x) = x;
 
 //- /main.bolt
 import "./lib" (id);
-fn f(y: i32) -> bool = id(y);
+fn f(y: i32) -> Bool = id(y);
 --------------------------------------------------------------------------------
 /lib.bolt: id: forall a. fn(a) -> a
-/main.bolt: f: fn(i32) -> bool
+/main.bolt: f: fn(i32) -> Bool
 --------------------------------------------------------------------------------
-/main.bolt: error at `id(y)`: expected bool, found i32
+/main.bolt: error at `id(y)`: expected Bool, found i32
 
 ================================================================================
 Files that infer each other report a cycle
@@ -43,7 +43,7 @@ id("a");
 --------------------------------------------------------------------------------
 /lib.bolt: id: forall a. fn(a) -> a
 /main.bolt: id(1): i32
-/main.bolt: id("a"): str
+/main.bolt: id("a"): String
 
 ================================================================================
 Imported types and constructors
@@ -66,19 +66,19 @@ p.x;
 Imported classes and their impls
 ================================================================================
 //- /show.bolt
-pub class Show[T] { fn show(x: T) -> str; }
+pub class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 import "./show" (Show, show);
 show(1);
-show(true);
+show(True);
 
 --------------------------------------------------------------------------------
-/show.bolt: Show[i32].show: fn(i32) -> str
-/main.bolt: show(1): str
-/main.bolt: show(true): str
+/show.bolt: Show[i32].show: fn(i32) -> String
+/main.bolt: show(1): String
+/main.bolt: show(True): String
 --------------------------------------------------------------------------------
-/main.bolt: error at `show`: no instance Show[bool]
+/main.bolt: error at `show`: no instance Show[Bool]
 
 ================================================================================
 Files imported with as
@@ -137,12 +137,12 @@ pub import "./option" as option;
 //- /main.bolt
 import "./lib" (Some, unwrap_or, option);
 unwrap_or(Some(1), 2);
-option.unwrap_or(option.None, true);
+option.unwrap_or(option.None, True);
 
 --------------------------------------------------------------------------------
 /option.bolt: unwrap_or: forall T. fn(Option[T], T) -> T
 /main.bolt: unwrap_or(Some(1), 2): i32
-/main.bolt: option.unwrap_or(option.None, true): bool
+/main.bolt: option.unwrap_or(option.None, True): Bool
 
 ================================================================================
 Names imported without pub stay in the file
@@ -244,20 +244,20 @@ Imported generic structs and their fields
 pub struct Box[T] { pub value: T }
 //- /main.bolt
 import "./lib" (Box);
-let b = Box { value: true };
+let b = Box { value: True };
 b.value;
 fn get(b: Box[i32]) -> i32 = b.value;
 
 --------------------------------------------------------------------------------
 /main.bolt: get: fn(Box[i32]) -> i32
-/main.bolt: let b: Box[bool]
-/main.bolt: b.value: bool
+/main.bolt: let b: Box[Bool]
+/main.bolt: b.value: Bool
 
 ================================================================================
 An impl in a file that is not imported is not found
 ================================================================================
 //- /show.bolt
-pub class Show[T] { fn show(x: T) -> str; }
+pub class Show[T] { fn show(x: T) -> String; }
 //- /impls.bolt
 import "./show" (Show);
 impl Show[i32] { fn show(x) = "int"; }
@@ -266,8 +266,8 @@ import "./show" (Show, show);
 show(1);
 
 --------------------------------------------------------------------------------
-/impls.bolt: Show[i32].show: fn(i32) -> str
-/main.bolt: show(1): str
+/impls.bolt: Show[i32].show: fn(i32) -> String
+/main.bolt: show(1): String
 --------------------------------------------------------------------------------
 /main.bolt: error at `show`: no instance Show[i32]
 

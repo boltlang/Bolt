@@ -52,7 +52,7 @@ pub enum Inst<'db> {
     I64Const(i64),
     F32Const(u32),
     F64Const(u64),
-    /// The address of a string literal, which linking decides: a `str` is
+    /// The address of a string literal, which linking decides: a `String` is
     /// the address of its length, as a `u32`, followed by its UTF-8 bytes.
     Str(Box<str>),
     LocalGet(u32),

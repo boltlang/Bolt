@@ -28,14 +28,14 @@ enum List[T] { Nil, Cons(T, List[T]) }
 type IntPair = Pair[i32, i32];
 type Swap[X, Y] = Pair[Y, X];
 class Show[T] { fn show(x: T) -> String; }
-fn f[T: Show](x: T, p: Swap[bool, T], l: List[u8]) -> (T, [IntPair], !) where Show[List[T]] {}
+fn f[T: Show](x: T, p: Swap[Bool, T], l: List[u8]) -> (T, [IntPair], !) where Show[List[T]] {}
 fn g(x, y: i32) {}
-fn h(x: Missing, y: Show, z: Pair[i32]) -> fn(i32) -> bool {}
+fn h(x: Missing, y: Show, z: Pair[i32]) -> fn(i32) -> Bool {}
 type Loop = Loop;
 fn k(l: Loop) -> i32 {}
 impl[T] Show[List[T]] where T: Show {}
 impl[T] List[T] {}
-const N: Swap[u8, bool] = 1;
+const N: Swap[u8, Bool] = 1;
 ";
 
 #[test]
@@ -45,7 +45,7 @@ fn function_signatures() {
 
     let f = function(&db, file, 5);
     let sig = fn_sig(&db, f);
-    assert_eq!(show_sig(&db, sig), "fn(T, Pair[T, bool], List[u8]) -> (T, [Pair[i32, i32]], !)");
+    assert_eq!(show_sig(&db, sig), "fn(T, Pair[T, Bool], List[u8]) -> (T, [Pair[i32, i32]], !)");
     assert!(sig.is_complete());
     assert!(sig.diagnostics.is_empty(), "{:?}", sig.diagnostics);
     let preds = &generic_predicates(&db, GenericDefId::Function(f)).predicates;
@@ -60,7 +60,7 @@ fn function_signatures() {
     assert!(!g.is_complete());
 
     let h = fn_sig(&db, function(&db, file, 7));
-    assert_eq!(show_sig(&db, h), "fn({error}, {error}, Pair[i32, {error}]) -> fn(i32) -> bool");
+    assert_eq!(show_sig(&db, h), "fn({error}, {error}, Pair[i32, {error}]) -> fn(i32) -> Bool");
     assert!(matches!(
         &h.diagnostics[..],
         [
@@ -118,5 +118,5 @@ fn fields_impls_and_consts() {
 
     let ModItem::Const(idx) = item(&db, file, 12) else { panic!() };
     let n = const_ty(&db, ConstId::new(&db, ItemContainerId::File(file), idx));
-    assert_eq!(n.ty.display(&db).to_string(), "Pair[bool, u8]");
+    assert_eq!(n.ty.display(&db).to_string(), "Pair[Bool, u8]");
 }

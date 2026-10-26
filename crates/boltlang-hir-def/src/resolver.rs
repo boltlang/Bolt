@@ -2,8 +2,8 @@
 //! from the file's names, through the generic parameters of the items
 //! around a position, to the local variables of a body.
 //!
-//! The primitive types, like `i32`, are found when nothing in scope has
-//! their name.
+//! The primitive types, like `i32`, and the values `True` and `False`, are
+//! found when nothing in scope has their name.
 //!
 //! In an expression, `Color.Red` and `module.f` are parsed as field
 //! accesses, since that's what `point.x` is. The type checker resolves them:
@@ -14,7 +14,7 @@ use boltlang_base_db::{Db, File};
 
 use crate::{
     Name,
-    builtin_type::BuiltinType,
+    builtin_type::{BuiltinType, BuiltinValue},
     body::{DefWithBody, DefWithBodyId},
     hir::{BindingId, ExprId, Path, PathSegment, TypeRef},
     item_tree::{AssocItem, FunctionName, item_tree},
@@ -78,6 +78,8 @@ pub enum ValueNs<'db> {
     Variant(EnumVariantId<'db>),
     /// The `index`th const parameter of `def`.
     ConstParam { def: GenericDefId<'db>, index: u32 },
+    /// `True` or `False`.
+    Builtin(BuiltinValue),
 }
 
 /// A resolved type path. `unresolved` is the index of the first segment
@@ -258,6 +260,12 @@ impl<'db> Resolver<'db> {
             });
             if let Some(value) = value {
                 return Some(ValueResolution::Value(value));
+            }
+            // `True`, unless it's in another file, like `m.True`.
+            if i == 0
+                && let Some(value) = BuiltinValue::by_name(segments[0].name.as_str())
+            {
+                return Some(ValueResolution::Value(ValueNs::Builtin(value)));
             }
         }
         // Otherwise a variant, like `Option.None`, or something of a type.
