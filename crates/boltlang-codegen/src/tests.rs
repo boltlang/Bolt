@@ -2,7 +2,7 @@
 //! agree on what a program gives.
 
 use boltlang_base_db::{File, TestDb};
-use boltlang_eval::{Evaluator, Recorder, Value};
+use boltlang_eval::{Ctor, Evaluator, Recorder, Value};
 use wasmi::{Caller, Engine, Extern, Linker, Module, Store, Val};
 
 use crate::{link, reachable_instances};
@@ -107,6 +107,8 @@ fn same(code: &str) {
         Value::Char(c) => Num::Int(c as i128),
         Value::Float(x) => Num::Float(x),
         Value::Tuple(items) if items.is_empty() => Num::Unit,
+        // A variant without fields is the index of the variant.
+        Value::Adt { ctor: Ctor::Variant(v), fields } if fields.is_empty() => Num::Int(v.index as i128),
         other => panic!("the evaluator gave {}", other.display(&db)),
     };
     assert_eq!(from_wasm(run(code).0), expected, "{code}");
@@ -216,6 +218,48 @@ fn functions_are_exported() {
     let (mut store, instance) = instantiate(&compile(&db, file));
     let result = call(&mut store, &instance, "fac", &[Val::I64(20)]);
     assert_eq!(result.and_then(|v| v.i64()), Some(2432902008176640000));
+}
+
+const COLOR: &str = "enum Color { Red, Green, Blue }\n";
+
+#[test]
+fn fieldless_enums() {
+    // A value is the index of its variant.
+    same(&format!("{COLOR}Color.Blue;"));
+    same(&format!("{COLOR}let c = Color.Green;\nc;"));
+    // In parameters, results and matches.
+    same(&format!(
+        "{COLOR}fn next(c: Color) -> Color = match c {{ Color.Red => Color.Green, Color.Green => Color.Blue, Color.Blue => Color.Red }};\nnext(next(Color.Red));"
+    ));
+    // Variants imported into scope, in expressions and patterns.
+    same(&format!(
+        "{COLOR}import Color.*;\nfn code(c) = match c {{ Red => 1, Green => 2, Blue => 3 }};\ncode(Blue) * 10 + code(Red);"
+    ));
+    same(&format!("{COLOR}import Color.*;\nfn warm(c: Color) -> Bool = match c {{ Red | Green => True, _ => False }};\nwarm(Green) && !warm(Blue);"));
+    // Equality.
+    same(&format!("{COLOR}Color.Red == Color.Red && Color.Red != Color.Blue;"));
+    // Variables that change.
+    same(&format!("{COLOR}let mut c = Color.Red;\nif c == Color.Red {{ c = Color.Blue; }}\nc;"));
+    // Generic enums without fields, and consts.
+    same("enum Tag[T] { A, B }\nfn tag(x: i32) -> Tag[i32] = if x > 0 { Tag.B } else { Tag.A };\ntag(5);");
+    same(&format!("{COLOR}const FAVORITE: Color = Color.Green;\nfn is_favorite(c: Color) -> Bool = match c {{ FAVORITE => True, _ => False }};\n(FAVORITE == Color.Green) && is_favorite(Color.Green);"));
+}
+
+#[test]
+fn enums_with_fields_and_ordering_are_errors() {
+    let errors = |code: &str| {
+        let db = TestDb::new();
+        let file = db.file("/main.bolt", code);
+        link(&db, file).unwrap_err().iter().map(|e| e.to_string()).collect::<Vec<_>>()
+    };
+    assert_eq!(
+        errors("enum Shape { Dot, Circle(f64) }\nShape.Dot;"),
+        ["a value of type `Shape` is not supported by the code generator yet"]
+    );
+    assert_eq!(
+        errors(&format!("{COLOR}Color.Red < Color.Blue;")),
+        ["ordering enums is not supported by the code generator yet"]
+    );
 }
 
 #[test]

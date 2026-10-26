@@ -1,9 +1,14 @@
 //! A code generator from Bolt to WebAssembly.
 //!
 //! It's minimal for now: it compiles the scalar types (integers, floats,
-//! `Bool`, `Char` and `()`), string literals, functions, `let`, `if`,
-//! loops, `break`, `continue`, `return`, and `match` on scalars. Anything
-//! else is an [`ErrorKind::Unsupported`] error.
+//! `Bool`, `Char` and `()`), enums whose variants have no fields, string
+//! literals, functions, `let`, `if`, loops, `break`, `continue`, `return`,
+//! and `match` on scalars and on those enums. Anything else is an
+//! [`ErrorKind::Unsupported`] error.
+//!
+//! A value of an enum without fields, like `enum Color { Red, Green }`, is
+//! an `i32`: the index of its variant, so `Color.Green` is 1. Enums can be
+//! compared with `==` and `!=`, but not ordered.
 //!
 //! The module exports its memory as `memory`. A `String` is the address in it
 //! of the string's length, as a little-endian `u32`, followed by its UTF-8
