@@ -123,6 +123,7 @@ ast_enum!(
         Path(PathType) = PATH_TYPE,
         Tuple(TupleType) = TUPLE_TYPE,
         Array(ArrayType) = ARRAY_TYPE,
+        Mut(MutType) = MUT_TYPE,
         Never(NeverType) = NEVER_TYPE,
         Bounded(BoundedType) = BOUNDED_TYPE,
         Fn(FnType) = FN_TYPE,
@@ -138,6 +139,23 @@ simple_node!(PathType, PATH_TYPE);
 
 impl PathType {
     pub fn path(&self) -> Option<Path> {
+        self.find_node()
+    }
+}
+
+/// `mut T` or `imm T`, for a type other than an array, like `mut Point`.
+pub struct MutType(SyntaxNode);
+
+simple_node!(MutType, MUT_TYPE);
+
+impl MutType {
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
+    pub fn imm_token(&self) -> Option<SyntaxToken> {
+        self.find_token(IMM_KEYWORD)
+    }
+    pub fn inner(&self) -> Option<Type> {
         self.find_node()
     }
 }
@@ -893,6 +911,10 @@ pub struct RecordExpr(SyntaxNode);
 simple_node!(RecordExpr, RECORD_EXPR);
 
 impl RecordExpr {
+    /// The `mut` of `mut Point { x: 1 }`.
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
     pub fn path(&self) -> Option<Path> {
         self.find_node()
     }
@@ -1324,6 +1346,11 @@ impl Node for CallExpr {
 
 
 impl CallExpr {
+    /// The `mut` of `mut Wrapper(1)`, which makes a tuple struct that can be
+    /// changed.
+    pub fn mut_token(&self) -> Option<SyntaxToken> {
+        self.find_token(MUT_KEYWORD)
+    }
     pub fn operator(&self) -> Option<Expr> {
         self.find_node()
     }

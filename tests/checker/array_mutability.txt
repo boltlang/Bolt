@@ -20,13 +20,11 @@ let f: mut [i32]
 Nested arrays have a mutability each
 ================================================================================
 let a = mut [[1], [2]];
-let b = [mut [1], mut [2]];
 let c = mut [mut [1]];
 let d = [[1]];
 
 --------------------------------------------------------------------------------
 let a: mut [imm [i32]]
-let b: imm [mut [i32]]
 let c: mut [mut [i32]]
 let d: imm [imm [i32]]
 
@@ -239,7 +237,7 @@ Nested arrays are changed through the innermost one
 let outer = mut [[1]];
 outer[0] = [2];
 outer[0][0] = 3;
-let inner = [mut [1]];
+let inner = mut [mut [1]];
 inner[0][0] = 3;
 inner[0] = mut [2];
 
@@ -247,12 +245,11 @@ inner[0] = mut [2];
 let outer: mut [imm [i32]]
 outer[0] = [2]: ()
 outer[0][0] = 3: ()
-let inner: imm [mut [i32]]
+let inner: mut [mut [i32]]
 inner[0][0] = 3: ()
 inner[0] = mut [2]: ()
 --------------------------------------------------------------------------------
 error at `outer[0]`: can't change imm [i32]
-error at `inner`: can't change imm [mut [i32]]
 
 ================================================================================
 Changing an element of an array that a function returns
@@ -358,24 +355,28 @@ error at `["a"]`: expected mut [String], found imm [String]
 error at `1`: expected String, found {integer}
 
 ================================================================================
-A return type without mut or imm is imm
+The body decides the mutability of a return type
 ================================================================================
 fn make() -> [i32] = [1, 2];
-fn make_mut() -> mut [i32] = mut [1, 2];
+fn make_mut() -> [i32] = mut [1, 2];
+fn make_imm() -> imm [i32] = [1, 2];
 let a = make();
 let b = make_mut();
+b[0] = 3;
 
 --------------------------------------------------------------------------------
 make: fn() -> imm [i32]
 make_mut: fn() -> mut [i32]
+make_imm: fn() -> imm [i32]
 let a: imm [i32]
 let b: mut [i32]
+b[0] = 3: ()
 
 ================================================================================
 Returning a mut array where the return type is imm
 :error
 ================================================================================
-fn make() -> [i32] = mut [1, 2];
+fn make() -> imm [i32] = mut [1, 2];
 
 --------------------------------------------------------------------------------
 make: fn() -> imm [i32]
@@ -383,13 +384,20 @@ make: fn() -> imm [i32]
 error at `mut [1, 2]`: expected imm [i32], found mut [i32]
 
 ================================================================================
-Returning a parameter without mut or imm
-:todo
+Returning a parameter keeps its mutability
+:error
 ================================================================================
 fn same(xs: [i32]) -> [i32] = xs;
+fn f() {
+  same(mut [1])[0] = 2;
+  same([1])[0] = 2;
+}
 
 --------------------------------------------------------------------------------
 same: fn([i32]) -> [i32]
+f: fn() -> ()
+--------------------------------------------------------------------------------
+error at `same([1])`: can't change imm [i32]
 
 ================================================================================
 Inferred functions are generic over mutability
@@ -489,99 +497,103 @@ let [a, b]: mut [i32]
 let [c, ..]: imm [Bool]
 
 ================================================================================
-A field without mut or imm is imm
+A field has the mutability of its struct
 :error
 ================================================================================
 struct Inventory { items: [i32] }
-enum Shape { Points([(f64, f64)]) }
-fn f(inv: Inventory, s: Shape) {
-  inv.items[0] = 1;
-  match s { Shape.Points(ps) => ps[0] = (0.0, 0.0) };
-}
+fn f(inv: Inventory) { inv.items[0] = 1; }
 let a = Inventory { items: [1] };
-let b = Inventory { items: mut [1] };
+let b = mut Inventory { items: mut [1] };
+b.items[0] = 2;
+a.items[0] = 2;
+let c = Inventory { items: mut [1] };
+let d = mut Inventory { items: [1] };
 
 --------------------------------------------------------------------------------
-f: fn(Inventory, Shape) -> ()
-let a: Inventory
-let b: Inventory
+f: fn(Inventory) -> ()
+let a: imm Inventory
+let b: mut Inventory
+b.items[0] = 2: ()
+a.items[0] = 2: ()
+let c: imm Inventory
+let d: mut Inventory
 --------------------------------------------------------------------------------
-error at `inv.items`: can't change imm [i32]
-error at `ps`: can't change imm [(f64, f64)]
+error at `inv.items`: can't change [i32]
+error at `a.items`: can't change imm [i32]
 error at `mut [1]`: expected imm [i32], found mut [i32]
+error at `[1]`: expected mut [i32], found imm [i32]
 
 ================================================================================
-Fields that say mut or imm
+A field with imm stays imm in a mut struct
 :error
 ================================================================================
-struct Inventory { items: mut [i32], tags: imm [String] }
-let inv = Inventory { items: mut [1], tags: ["a"] };
+struct Inventory { items: [i32], tags: imm [String] }
+let inv = mut Inventory { items: mut [1], tags: ["a"] };
 inv.items[0] = 2;
 inv.tags[0] = "b";
 
 --------------------------------------------------------------------------------
-let inv: Inventory
+let inv: mut Inventory
 inv.items[0] = 2: ()
 inv.tags[0] = "b": ()
 --------------------------------------------------------------------------------
 error at `inv.tags`: can't change imm [String]
 
 ================================================================================
-A field's array is changed without the struct being mut
-:error
+A mut struct's fields can be changed without let mut
 ================================================================================
-struct Inventory { items: mut [i32] }
+struct Inventory { items: [i32] }
 fn f() {
-  let inv = Inventory { items: mut [1] };
+  let inv = mut Inventory { items: mut [1] };
   inv.items[0] = 2;
   inv.items = mut [3];
 }
 
 --------------------------------------------------------------------------------
 f: fn() -> ()
---------------------------------------------------------------------------------
-error at `inv.items`: not mut
 
 ================================================================================
-A field that needs a mut array
+A field can't be mut
 :error
 ================================================================================
 struct Inventory { items: mut [i32] }
-let inv = Inventory { items: [1] };
+enum Shape { Points(mut [(f64, f64)]) }
 
 --------------------------------------------------------------------------------
-let inv: Inventory
+
 --------------------------------------------------------------------------------
-error at `[1]`: expected mut [i32], found imm [i32]
+error at `mut [i32]`: mut field
+error at `mut [(f64, f64)]`: mut field
 
 ================================================================================
-A variant with a mut array
+A variant's arrays can't be changed
 :error
 ================================================================================
-enum Shape { Points(mut [(f64, f64)]) }
+enum Shape { Points([(f64, f64)]) }
+fn f(s: Shape) = match s { Shape.Points(ps) => ps[0] = (0.0, 0.0) };
 let s = Shape.Points(mut [(0.0, 1.0)]);
-let t = Shape.Points([(0.0, 1.0)]);
 
 --------------------------------------------------------------------------------
+f: fn(Shape) -> ()
 let s: Shape
-let t: Shape
 --------------------------------------------------------------------------------
-error at `[(0.0, 1.0)]`: expected mut [(f64, f64)], found imm [(f64, f64)]
+error at `ps`: can't change imm [(f64, f64)]
+error at `mut [(0.0, 1.0)]`: expected imm [(f64, f64)], found mut [(f64, f64)]
 
 ================================================================================
 Generic structs hold arrays of either mutability
 :error
 ================================================================================
 struct Box[T] { item: T }
-let a = Box { item: mut [1] };
+let a = mut Box { item: mut [1] };
 a.item[0] = 2;
 let b = Box { item: [1] };
 b.item[0] = 2;
 
 --------------------------------------------------------------------------------
-let a: Box[mut [i32]]
+let a: mut Box[mut [i32]]
 a.item[0] = 2: ()
-let b: Box[imm [i32]]
+let b: imm Box[imm [i32]]
 b.item[0] = 2: ()
 --------------------------------------------------------------------------------
 error at `b.item`: can't change imm [i32]
@@ -629,8 +641,8 @@ let b = Board { cells: [[1]] };
 let c = Board { cells: mut [[1]] };
 
 --------------------------------------------------------------------------------
-let b: Board
-let c: Board
+let b: imm Board
+let c: imm Board
 --------------------------------------------------------------------------------
 error at `mut [[1]]`: expected imm [imm [i32]], found mut [imm [i32]]
 

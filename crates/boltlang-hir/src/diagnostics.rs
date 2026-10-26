@@ -114,9 +114,15 @@ pub enum DiagnosticKind<'db> {
     /// An assignment to the variable `name`, or to a field of it, while it
     /// isn't `mut`.
     AssignToImmutable { name: Name },
-    /// An assignment to an element of an array of type `ty`, which isn't a
-    /// `mut` array.
-    ImmutableArray { ty: Ty<'db> },
+    /// An assignment to an element of an array, or a field of a struct, of
+    /// type `ty`, which isn't `mut`.
+    CannotChange { ty: Ty<'db> },
+    /// `mut` or `imm` before something that isn't an array or a struct.
+    NoMutability,
+    /// An `imm` array or struct of type `ty` that holds a `mut` one, `inner`.
+    MutInsideImm { ty: Ty<'db>, inner: Ty<'db> },
+    /// `mut` in the type of a field.
+    MutField,
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -541,6 +547,8 @@ impl<'db> Collector<'db> {
                 }
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
+                LowerDiagnostic::NoMutability(id) => (*id, DiagnosticKind::NoMutability),
+                LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {
@@ -593,6 +601,7 @@ impl<'db> Collector<'db> {
                             continue;
                         }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
+                        TypeError::CannotChange { origin, ty } => (origin, DiagnosticKind::CannotChange { ty }),
                     };
                     debug_assert_eq!(origin.body, id);
                     (at(origin.node), kind)
@@ -624,8 +633,12 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::AssignToImmutable { expr, binding } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::AssignToImmutable { name: body[binding].name.clone() })
                 }
-                InferenceDiagnostic::ImmutableArray { expr, ty } => {
-                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::ImmutableArray { ty })
+                InferenceDiagnostic::NoMutability { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoMutability),
+                InferenceDiagnostic::MutInsideImm { at: node, ty, inner } => {
+                    if has_error(&ty) {
+                        continue;
+                    }
+                    (at(node), DiagnosticKind::MutInsideImm { ty, inner })
                 }
                 InferenceDiagnostic::NotAPlace { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace),
                 InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),

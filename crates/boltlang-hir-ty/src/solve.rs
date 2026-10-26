@@ -16,8 +16,8 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    lower::{ClassConstraint, VariantDef, field_types, generic_predicates, impl_header, subst_params},
-    ty::{AdtId, GenericParamId, Ty, TyVar, VarKind},
+    lower::{ClassConstraint, VariantDef, field_types, generic_predicates, impl_header, struct_args, subst_params},
+    ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
 
@@ -66,17 +66,20 @@ pub enum ExprOrPat {
 /// That `ty` has a field `name` of type `field`, like `x` in `p.x`. It's
 /// solved once `ty` is known, and a function whose argument's type isn't
 /// known keeps it as part of its type, like `forall a. a.x: i32 => fn(a)
-/// -> i32`, so that it works on any struct with that field.
+/// -> i32`, so that it works on any struct with that field. With `assign`,
+/// the field is assigned to, like in `p.x = 1`, so a struct must be `mut`:
+/// `forall a. mut a.x: i32 => fn(a) -> ()`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub struct FieldConstraint<'db> {
     pub ty: Ty<'db>,
     pub name: Name,
     pub field: Ty<'db>,
+    pub assign: bool,
 }
 
 impl<'db> FieldConstraint<'db> {
     pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
-        FieldConstraint { ty: f(&self.ty), name: self.name.clone(), field: f(&self.field) }
+        FieldConstraint { ty: f(&self.ty), name: self.name.clone(), field: f(&self.field), assign: self.assign }
     }
 }
 
@@ -103,6 +106,9 @@ pub enum TypeError<'db> {
     NoSuchField { origin: Origin<'db>, ty: Ty<'db>, name: Name },
     /// The type of a value whose field is used was never found.
     TypeNeeded { origin: Origin<'db> },
+    /// An element of an array, or a field of a struct, of type `ty` is
+    /// assigned to, but `ty` isn't `mut`.
+    CannotChange { origin: Origin<'db>, ty: Ty<'db> },
 }
 
 impl<'db> TypeError<'db> {
@@ -113,6 +119,7 @@ impl<'db> TypeError<'db> {
             | TypeError::NoInstance { origin, .. }
             | TypeError::Ambiguous { origin, .. }
             | TypeError::NoSuchField { origin, .. }
+            | TypeError::CannotChange { origin, .. }
             | TypeError::TypeNeeded { origin } => origin,
         }
     }
@@ -124,7 +131,9 @@ impl<'db> TypeError<'db> {
                 *expected = f(expected);
                 *actual = f(actual);
             }
-            TypeError::InfiniteType { ty, .. } | TypeError::NoSuchField { ty, .. } => *ty = f(ty),
+            TypeError::InfiniteType { ty, .. }
+            | TypeError::NoSuchField { ty, .. }
+            | TypeError::CannotChange { ty, .. } => *ty = f(ty),
             TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. } => {
                 *constraint = constraint.map(f)
             }
@@ -218,9 +227,13 @@ impl<'db> Solver<'db> {
                 self.unifier.set_error(&constraint.field);
                 return true;
             }
-            Ty::Adt(AdtId::Struct(s), args) => {
+            Ty::Adt(AdtId::Struct(s), args, mutability) => {
+                if constraint.assign {
+                    self.require_mut(&ty, mutability, origin);
+                }
                 let fields = field_types(self.db, VariantDef::Struct(*s));
-                fields.field(&constraint.name).map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), args))
+                let args = struct_args(args, mutability);
+                fields.field(&constraint.name).map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))
             }
             Ty::Tuple(tys) => constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned()),
             _ => None,
@@ -234,6 +247,25 @@ impl<'db> Solver<'db> {
             }
         }
         true
+    }
+
+    /// Report that `ty`, an array or struct with the mutability
+    /// `mutability`, is changed at `origin` but isn't `mut`. A mutability
+    /// that isn't known yet becomes `Mut`.
+    pub fn require_mut(&mut self, ty: &Ty<'db>, mutability: &Ty<'db>, origin: Origin<'db>) {
+        match self.unifier.shallow_resolve(mutability) {
+            Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never => {}
+            Ty::Var(_) => self.equal(&Ty::Mutability(Mutability::Mut), mutability, origin),
+            _ => self.errors.push(TypeError::CannotChange { origin, ty: self.unifier.resolve(ty) }),
+        }
+    }
+
+    /// Mark the field constraint of `origin` as being about a field that's
+    /// assigned to, if it's waiting for its type.
+    pub fn assign_field(&mut self, origin: Origin<'db>) {
+        if let Some((constraint, _)) = self.pending_fields.iter_mut().find(|(_, o)| *o == origin) {
+            constraint.assign = true;
+        }
     }
 
     pub fn equal(&mut self, expected: &Ty<'db>, actual: &Ty<'db>, origin: Origin<'db>) {
@@ -438,7 +470,9 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
             Ty::App(..) | Ty::Adt(..) => match_app(pattern, ty, subst).at_most_maybe(),
             _ => Match::No,
         },
-        (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b && xs.len() == ys.len() => match_all(xs, ys, subst),
+        (Ty::Adt(a, xs, m), Ty::Adt(b, ys, n)) if a == b && xs.len() == ys.len() => {
+            match_all(xs, ys, subst).and(|| match_ty(m, n, subst))
+        }
         (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
@@ -454,7 +488,7 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
 fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
     let split = |t: &Ty<'db>| -> (Ty<'db>, Vec<Ty<'db>>) {
         match t {
-            Ty::Adt(id, args) => (Ty::Adt(*id, Box::new([])), args.to_vec()),
+            Ty::Adt(id, args, m) => (Ty::Adt(*id, Box::new([]), m.clone()), args.to_vec()),
             Ty::App(head, args) => ((**head).clone(), args.to_vec()),
             t => (t.clone(), Vec::new()),
         }

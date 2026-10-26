@@ -113,7 +113,9 @@ pub enum Expr {
     Path(Path),
     Literal(Literal),
     Block { statements: Box<[Statement]>, tail: Option<ExprId>, label: Option<LabelId>, kind: BlockKind },
-    Call { callee: ExprId, args: Box<[ExprId]> },
+    /// `f(a, b)`, or `mut Wrapper(a)` with `is_mut`, which makes a tuple
+    /// struct that can be changed.
+    Call { callee: ExprId, args: Box<[ExprId]>, is_mut: bool },
     /// `x.name` or `t.0`; a tuple index is a name like `0`.
     Field { expr: ExprId, name: Name },
     Await { expr: ExprId },
@@ -130,7 +132,8 @@ pub enum Expr {
     /// `[value; count]`, or `mut [value; count]` with `is_mut`
     ArrayRepeat { value: ExprId, count: ExprId, is_mut: bool },
     /// `Point { x, y: 1, ..base }`
-    Record { path: Option<Path>, fields: Box<[RecordField]>, spread: Option<ExprId> },
+    /// With `is_mut`, `mut Point { x, y: 1 }`, a struct that can be changed.
+    Record { path: Option<Path>, fields: Box<[RecordField]>, spread: Option<ExprId>, is_mut: bool },
     If { condition: ExprId, then_branch: ExprId, else_branch: Option<ExprId> },
     /// `let pattern = value` in a condition
     Let { pat: PatId, expr: ExprId },
@@ -306,6 +309,8 @@ pub enum TypeRef {
     Tuple(Box<[TypeRefId]>),
     /// `[T]` or `[T; N]`, with the `mut` or `imm` written before it
     Array { element: TypeRefId, len: Option<ExprId>, mutability: Option<Mutability> },
+    /// `mut T` or `imm T` for a type other than an array, like `mut Point`.
+    Mut { mutability: Mutability, inner: TypeRefId },
     /// `!`
     Never,
     /// `fn(A, B) -> C`

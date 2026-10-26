@@ -150,6 +150,8 @@ pub enum SyntaxKind {
     TUPLE_TYPE,
     /// `[T]` or `[T; N]`
     ARRAY_TYPE,
+    /// `mut T` or `imm T` for a type other than an array, like `mut Point`
+    MUT_TYPE,
     /// `!`
     NEVER_TYPE,
     /// `A + B`
@@ -476,6 +478,7 @@ impl SyntaxKind {
             PATH_TYPE => "a type",
             TUPLE_TYPE => "a tuple type",
             ARRAY_TYPE => "an array type",
+            MUT_TYPE => "a type with a mutability",
             NEVER_TYPE => "the never type",
             BOUNDED_TYPE => "a type with bounds",
             GENERIC_ARG_LIST => "a list of generic arguments",

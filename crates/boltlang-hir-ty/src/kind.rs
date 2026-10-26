@@ -407,6 +407,7 @@ impl<'db> KindInference<'db> {
                 }
                 K::Type
             }
+            TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),
             TypeRef::Never => K::Type,
             TypeRef::Error | TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
                 self.new_var()

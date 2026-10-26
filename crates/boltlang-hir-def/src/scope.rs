@@ -245,7 +245,7 @@ fn children(expr: &Expr) -> Vec<ExprId> {
     let mut out = Vec::new();
     match expr {
         Expr::Missing | Expr::Path(_) | Expr::Literal(_) | Expr::Continue { .. } | Expr::MacroCall { .. } => {}
-        Expr::Call { callee, args } => {
+        Expr::Call { callee, args, .. } => {
             out.push(*callee);
             out.extend(args.iter().copied());
         }

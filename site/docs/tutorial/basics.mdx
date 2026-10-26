@@ -34,14 +34,15 @@ count;
 12
 ```
 
-:::note
+Assigning to a variable that isn't `mut` is an error:
 
-The compiler doesn't check `mut` yet, so assigning to a variable without
-`mut` isn't reported. Write `mut` anyway, both because it tells readers the
-variable changes and because a future version of the compiler will check
-it.
+```text
+[E0219] Error: cannot assign to `count`, which isn't `mut`
+```
 
-:::
+`mut` on a variable only means it can be assigned again. Whether an
+[array](#arrays) or a [struct](./data-types.mdx) can be changed is up to
+the array or struct itself.
 
 You can declare a new variable with the same name as an old one. The new one
 *shadows* the old one from then on:

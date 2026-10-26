@@ -51,7 +51,7 @@ impl Scalar {
     pub(crate) fn of(db: &dyn Db, ty: &Ty<'_>) -> Option<Scalar> {
         let ty = match ty {
             Ty::Builtin(ty) => ty,
-            Ty::Adt(AdtId::Enum(id), _) if is_fieldless(db, *id) => return Some(Scalar::Enum),
+            Ty::Adt(AdtId::Enum(id), ..) if is_fieldless(db, *id) => return Some(Scalar::Enum),
             _ => return None,
         };
         Some(match ty {
@@ -389,7 +389,7 @@ impl<'db> Compiler<'db> {
                 }
                 Ok(())
             }
-            Expr::Call { callee, args } => self.call(expr, *callee, args),
+            Expr::Call { callee, args, .. } => self.call(expr, *callee, args),
             Expr::Cast { expr: inner, .. } => self.cast(expr, *inner),
             Expr::Prefix { op, expr: inner } => self.prefix(expr, *op, *inner),
             Expr::Binary { op, lhs, rhs } => self.binary(expr, op, *lhs, *rhs),
@@ -1048,7 +1048,10 @@ fn bind_type_args<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, fo
                 slot.get_or_insert_with(|| ty.clone());
             }
         }
-        (Ty::Adt(a, xs), Ty::Adt(b, ys)) if a == b => all(found, xs, ys),
+        (Ty::Adt(a, xs, m), Ty::Adt(b, ys, n)) if a == b => {
+            all(found, xs, ys);
+            bind_type_args(m, n, scheme, found);
+        }
         (Ty::Tuple(xs), Ty::Tuple(ys)) => all(found, xs, ys),
         (Ty::Array(m, x), Ty::Array(n, y)) => {
             bind_type_args(m, n, scheme, found);

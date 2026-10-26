@@ -12,13 +12,13 @@ p.z;
 --------------------------------------------------------------------------------
 get: forall a. fn(Option[a], a) -> a
 norm: forall a b. a.x: b => fn(a) -> b
-let p: Point
-let Point { x, .. }: Point
-get(Option.Some(p), Point { x: 0 }): Point
+let p: imm Point
+let Point { x, .. }: imm Point
+get(Option.Some(p), Point { x: 0 }): imm Point
 p.z: {error}
 --------------------------------------------------------------------------------
 error at `Point { x: 0 }`: missing y
-error at `p.z`: Point has no field z
+error at `p.z`: imm Point has no field z
 
 ================================================================================
 Fields of unknown types become part of the function type
@@ -65,12 +65,12 @@ p.first;
 let q: Pair[Bool, i32] = Pair { first: 1, second: True };
 
 --------------------------------------------------------------------------------
-swap: forall a b c. a.second: b => a.first: c => fn(a) -> Pair[b, c]
-let p: Pair[i32, String]
+swap: forall a b c. a.second: b => a.first: c => fn(a) -> imm Pair[b, c]
+let p: imm Pair[i32, String]
 p.first: i32
-let q: Pair[Bool, i32]
+let q: imm Pair[Bool, i32]
 --------------------------------------------------------------------------------
-error at `Pair { first: 1, second: True }`: expected Pair[Bool, i32], found Pair[{integer}, Bool]
+error at `Pair { first: 1, second: True }`: expected Pair[Bool, i32], found imm Pair[{integer}, Bool]
 
 ================================================================================
 Tuple structs and unit structs
@@ -83,10 +83,10 @@ Meters(1.0);
 Meters("a");
 
 --------------------------------------------------------------------------------
-double: fn(Meters) -> Meters
-let u: Unit
-Meters(1.0): Meters
-Meters("a"): Meters
+double: fn(Meters) -> imm Meters
+let u: imm Unit
+Meters(1.0): imm Meters
+Meters("a"): imm Meters
 --------------------------------------------------------------------------------
 error at `"a"`: expected f64, found String
 
@@ -130,8 +130,8 @@ Point { x: 1, y: 2, z: 3 };
 Nope { x: 1 };
 
 --------------------------------------------------------------------------------
-Point { x: 1, y: True }: Point
-Point { x: 1, y: 2, z: 3 }: Point
+Point { x: 1, y: True }: imm Point
+Point { x: 1, y: 2, z: 3 }: imm Point
 Nope { x: 1 }: {error}
 --------------------------------------------------------------------------------
 error at `3`: no field z
@@ -147,9 +147,9 @@ Point { x: 3, ..p };
 Point { x: 3, ..(1, 2) };
 
 --------------------------------------------------------------------------------
-let p: Point
-Point { x: 3, ..p }: Point
-Point { x: 3, ..(1, 2) }: Point
+let p: imm Point
+Point { x: 3, ..p }: imm Point
+Point { x: 3, ..(1, 2) }: imm Point
 --------------------------------------------------------------------------------
 error at `(1, 2)`: expected Point, found ({integer}, {integer})
 
@@ -160,7 +160,7 @@ struct Point { x: i32, y: i32 }
 fn make(x, y) = Point { x, y };
 
 --------------------------------------------------------------------------------
-make: fn(i32, i32) -> Point
+make: fn(i32, i32) -> imm Point
 
 ================================================================================
 Fields of tuples
@@ -232,11 +232,11 @@ let b: Tag[Bool] = Tag { id: 1 };
 let c: Tag[String] = b;
 
 --------------------------------------------------------------------------------
-let a: Tag[a]
-let b: Tag[Bool]
-let c: Tag[String]
+let a: imm Tag[a]
+let b: imm Tag[Bool]
+let c: imm Tag[String]
 --------------------------------------------------------------------------------
-error at `b`: expected Tag[String], found Tag[Bool]
+error at `b`: expected Tag[String], found imm Tag[Bool]
 
 ================================================================================
 A field given twice
@@ -257,9 +257,9 @@ struct Box[T] { value: T }
 Box { value: True, ..Box { value: 1 } };
 
 --------------------------------------------------------------------------------
-Box { value: True, ..Box { value: 1 } }: Box[Bool]
+Box { value: True, ..Box { value: 1 } }: imm Box[Bool]
 --------------------------------------------------------------------------------
-error at `Box { value: 1 }`: expected Box[Bool], found Box[{integer}]
+error at `Box { value: 1 }`: expected Box[Bool], found imm Box[{integer}]
 
 ================================================================================
 Fields of what a function returns
@@ -270,11 +270,11 @@ origin().x;
 origin().z;
 
 --------------------------------------------------------------------------------
-origin: fn() -> Point
+origin: fn() -> imm Point
 origin().x: i32
 origin().z: {error}
 --------------------------------------------------------------------------------
-error at `origin().z`: Point has no field z
+error at `origin().z`: imm Point has no field z
 
 ================================================================================
 Fields of a type parameter
@@ -310,7 +310,7 @@ get_y(Point { x: 1 });
 get_y: forall a b. a.y: b => fn(a) -> b
 get_y(Point { x: 1 }): {error}
 --------------------------------------------------------------------------------
-error at `get_y`: Point has no field y
+error at `get_y`: imm Point has no field y
 
 ================================================================================
 Fields of fields
@@ -387,9 +387,9 @@ Pair(1);
 let Pair(a) = Pair(1, 2);
 
 --------------------------------------------------------------------------------
-Meters(1.0, 2.0): Meters
-Pair(1): Pair
-let Pair(a): Pair
+Meters(1.0, 2.0): imm Meters
+Pair(1): imm Pair
+let Pair(a): imm Pair
 --------------------------------------------------------------------------------
 error at `Meters(1.0, 2.0)`: expected 1 arguments, found 2
 error at `Pair(1)`: expected 2 arguments, found 1
@@ -405,7 +405,7 @@ Unit();
 --------------------------------------------------------------------------------
 Unit(): {error}
 --------------------------------------------------------------------------------
-error at `Unit`: Unit is not a function
+error at `Unit`: imm Unit is not a function
 
 ================================================================================
 A variant without fields isn't a function

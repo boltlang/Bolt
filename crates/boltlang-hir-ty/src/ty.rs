@@ -51,10 +51,13 @@ pub struct GenericParamId<'db> {
 pub enum Ty<'db> {
     /// A type still being inferred.
     Var(TyVar),
-    /// A struct or enum with its type arguments. It can have fewer
-    /// arguments than parameters: `Adt(Option, [])` is the type
-    /// constructor `Option`, which is of kind `Type -> Type`.
-    Adt(AdtId<'db>, Box<[Ty<'db>]>),
+    /// A struct or enum with its type arguments, and its mutability. It can
+    /// have fewer arguments than parameters: `Adt(Option, [], Imm)` is the
+    /// type constructor `Option`, which is of kind `Type -> Type`. The
+    /// mutability isn't an argument, so it doesn't change the kind. Only a
+    /// struct has one, like an array: an enum's is always `Imm`, since its
+    /// values can't be changed in place.
+    Adt(AdtId<'db>, Box<[Ty<'db>]>, Box<Ty<'db>>),
     /// A type parameter or variable applied to arguments, like `F[A]`. The
     /// head is never a struct or enum, nor another `App`: [`Ty::app`] makes
     /// those an `Adt` or one `App`, so that each type has one form.
@@ -109,6 +112,24 @@ impl<'db> Ty<'db> {
         Ty::Array(Box::new(mutability), Box::new(element))
     }
 
+    /// A struct or enum applied to `args`. `mutability` is a struct's; an
+    /// enum's is always `Imm`.
+    pub fn adt(id: AdtId<'db>, args: impl Into<Box<[Ty<'db>]>>, mutability: Ty<'db>) -> Self {
+        let mutability = match id {
+            AdtId::Struct(_) => mutability,
+            AdtId::Enum(_) => Ty::Mutability(Mutability::Imm),
+        };
+        Ty::Adt(id, args.into(), Box::new(mutability))
+    }
+
+    /// The mutability of an array or a struct.
+    pub fn mutability(&self) -> Option<&Ty<'db>> {
+        match self {
+            Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, mutability) => Some(mutability),
+            _ => None,
+        }
+    }
+
     /// Replace each [`Ty::Unwritten`] with what `fill` gives, in the order
     /// they're written.
     pub fn fill_unwritten(&self, fill: &mut impl FnMut() -> Ty<'db>) -> Ty<'db> {
@@ -128,7 +149,7 @@ impl<'db> Ty<'db> {
             return head;
         }
         match head {
-            Ty::Adt(id, xs) => Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect()),
+            Ty::Adt(id, xs, m) => Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect(), m),
             Ty::App(head, xs) => Ty::App(head, xs.into_vec().into_iter().chain(args).collect()),
             // An error applied to anything is still an error.
             Ty::Error => Ty::Error,
@@ -143,7 +164,11 @@ impl<'db> Ty<'db> {
     /// Call `f` on every type directly inside this one.
     pub fn walk_children(&self, mut f: impl FnMut(&Ty<'db>)) {
         match self {
-            Ty::Adt(_, args) | Ty::Tuple(args) => args.iter().for_each(f),
+            Ty::Adt(_, args, mutability) => {
+                args.iter().for_each(&mut f);
+                f(mutability);
+            }
+            Ty::Tuple(args) => args.iter().for_each(f),
             Ty::App(head, args) => {
                 f(head);
                 args.iter().for_each(f);
@@ -176,7 +201,7 @@ impl<'db> Ty<'db> {
         }
         let fold_all = |tys: &[Ty<'db>], f: &mut _| tys.iter().map(|t| t.fold(f)).collect();
         match self {
-            Ty::Adt(id, args) => Ty::Adt(*id, fold_all(args, f)),
+            Ty::Adt(id, args, mutability) => Ty::Adt(*id, fold_all(args, f), Box::new(mutability.fold(f))),
             // The head can become a struct or enum, like `F` in `F[A]` when
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
@@ -245,6 +270,7 @@ impl TyNames {
                 Ty::Var(v) => unknowns.push(Unknown::Var(*v)),
                 Ty::Bound(i) => unknowns.push(Unknown::Bound(*i)),
                 Ty::Array(_, elem) => collect(db, elem, taken, unknowns),
+                Ty::Adt(_, args, _) => args.iter().for_each(|t| collect(db, t, taken, unknowns)),
                 _ => ty.walk_children(|t| collect(db, t, taken, unknowns)),
             }
         }
@@ -314,7 +340,10 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 Some(name) => f.write_str(name),
                 None => write!(f, "?{}", var.0),
             },
-            Ty::Adt(id, args) => {
+            Ty::Adt(id, args, mutability) => {
+                if let AdtId::Struct(_) = id {
+                    write_mutability(f, mutability)?;
+                }
                 let name = match id {
                     AdtId::Struct(id) => id.item(db).name.as_ref(),
                     AdtId::Enum(id) => id.item(db).name.as_ref(),
@@ -342,11 +371,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 f.write_str(")")
             }
             Ty::Array(mutability, elem) => {
-                match **mutability {
-                    Ty::Mutability(Mutability::Mut) => f.write_str("mut ")?,
-                    Ty::Mutability(Mutability::Imm) => f.write_str("imm ")?,
-                    _ => {}
-                }
+                write_mutability(f, mutability)?;
                 write!(f, "[{}]", show(elem))
             }
             // Only inside an array, where it's shown by the array.
@@ -368,6 +393,16 @@ impl fmt::Display for DisplayTy<'_, '_> {
             Ty::Never => f.write_str("!"),
             Ty::Error => f.write_str("{error}"),
         }
+    }
+}
+
+/// `mut ` or `imm ` before an array or struct, or nothing when its
+/// mutability isn't known or is generic.
+fn write_mutability(f: &mut fmt::Formatter<'_>, mutability: &Ty<'_>) -> fmt::Result {
+    match mutability {
+        Ty::Mutability(Mutability::Mut) => f.write_str("mut "),
+        Ty::Mutability(Mutability::Imm) => f.write_str("imm "),
+        _ => Ok(()),
     }
 }
 

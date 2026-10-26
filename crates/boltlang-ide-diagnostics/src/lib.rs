@@ -73,7 +73,10 @@ impl DiagnosticCode {
     pub const BUILTIN_SIGNATURE: Self = Self("E0218");
     pub const ASSIGN_TO_IMMUTABLE: Self = Self("E0219");
     pub const NOT_A_PLACE: Self = Self("E0220");
-    pub const IMMUTABLE_ARRAY: Self = Self("E0221");
+    pub const CANNOT_CHANGE: Self = Self("E0221");
+    pub const NO_MUTABILITY: Self = Self("E0222");
+    pub const MUT_INSIDE_IMM: Self = Self("E0223");
+    pub const MUT_FIELD: Self = Self("E0224");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -170,15 +173,22 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         }
         DiagnosticKind::InfiniteType { ty }
         | DiagnosticKind::NotAFunction { ty }
-        | DiagnosticKind::ImmutableArray { ty }
+        | DiagnosticKind::CannotChange { ty }
         | DiagnosticKind::NoSuchField { ty: Some(ty), .. }
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
+        DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
         DiagnosticKind::NoInstance { constraint } | DiagnosticKind::AmbiguousConstraint { constraint } => {
             constraint.args.iter().collect()
         }
         _ => Vec::new(),
     }
+}
+
+/// "an" before a word that starts with a vowel, like `imm Point`, and "a"
+/// before others, like `mut Point`.
+fn article(word: &str) -> &'static str {
+    if word.starts_with(['a', 'e', 'i', 'o', 'u']) { "an" } else { "a" }
 }
 
 /// The code and message of a diagnostic about `source`, the text it's at.
@@ -310,12 +320,32 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::AssignToImmutable { name } => {
             (C::ASSIGN_TO_IMMUTABLE, format!("cannot assign to `{name}`, which isn't `mut`"))
         }
-        K::ImmutableArray { ty } => (
-            C::IMMUTABLE_ARRAY,
-            format!(
-                "cannot change an element of `{source}`, which is `{}`; only a `mut` array can be changed",
-                ty.display_with(db, names)
-            ),
+        K::CannotChange { ty } => {
+            let message = match ty {
+                Ty::Array(..) => format!(
+                    "cannot change an element of `{source}`, which is `{}`; only a `mut` array can be changed",
+                    ty.display_with(db, names)
+                ),
+                ty => {
+                    let ty = ty.display_with(db, names).to_string();
+                    format!("a field of {} `{ty}` is changed here, but only a `mut` struct can be changed", article(&ty))
+                }
+            };
+            (C::CANNOT_CHANGE, message)
+        }
+        K::NoMutability => (C::NO_MUTABILITY, "only an array or a struct can be `mut` or `imm`".into()),
+        K::MutInsideImm { ty, inner } => {
+            let (ty, inner) = (ty.display_with(db, names).to_string(), inner.display_with(db, names).to_string());
+            let message = format!(
+                "{} `{ty}` can't hold {} `{inner}`: what an `imm` value holds can't be changed either",
+                article(&ty),
+                article(&inner)
+            );
+            (C::MUT_INSIDE_IMM, message)
+        }
+        K::MutField => (
+            C::MUT_FIELD,
+            "a field can't be `mut`: it has the mutability of its struct, so make the struct `mut` instead".into(),
         ),
         K::NotAPlace => {
             (C::NOT_A_PLACE, "cannot assign to this; only a variable, a field or an element can be assigned to".into())

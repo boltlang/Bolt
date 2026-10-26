@@ -173,7 +173,9 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
             }
         };
-        let (ty, args) = self.fresh_adt(def);
+        // A pattern matches a struct of either mutability.
+        let mutability = self.new_mutability();
+        let (ty, args) = self.fresh_adt(def, mutability);
         self.solver.equal(expected, &ty, self.pat_origin(pat));
         Some((def, args))
     }
@@ -194,6 +196,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 return Ty::Error;
             }
         };
-        self.fresh_adt(def).0
+        let mutability = self.new_mutability();
+        self.fresh_adt(def, mutability).0
     }
 }

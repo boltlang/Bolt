@@ -89,9 +89,9 @@ fmap(|n| n, Box { value: 1 });
 
 --------------------------------------------------------------------------------
 Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
-fmap(|n| n, Box { value: 1 }): Box[i32]
+fmap(|n| n, Box { value: 1 }): imm Box[i32]
 --------------------------------------------------------------------------------
-error at `fmap`: no instance Functor[Box]
+error at `fmap`: no instance Functor[imm Box]
 
 ================================================================================
 Kind errors
@@ -127,7 +127,7 @@ let w = Wrap { inner: Option.Some(True) };
 unwrap(w);
 --------------------------------------------------------------------------------
 unwrap: forall F A. fn(Wrap[F, A]) -> F[A]
-let w: Wrap[Option, Bool]
+let w: imm Wrap[Option, Bool]
 unwrap(w): Option[Bool]
 
 ================================================================================
@@ -228,8 +228,8 @@ let a = Apply { value: Option.Some(1) };
 let c = Compose { value: Option.Some(Option.Some(True)) };
 
 --------------------------------------------------------------------------------
-let a: Apply[Option, i32]
-let c: Compose[Option, Option, Bool]
+let a: imm Apply[Option, i32]
+let c: imm Compose[Option, Option, Bool]
 
 ================================================================================
 A class of type constructors used with a type
