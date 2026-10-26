@@ -1,0 +1,643 @@
+================================================================================
+Struct literals can't be changed unless they're mut
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Meters(f64);
+struct Unit;
+let a = Point { x: 1, y: 2 };
+let b = mut Point { x: 1, y: 2 };
+let c = Meters(1.0);
+let d = mut Meters(1.0);
+let e = Unit;
+
+--------------------------------------------------------------------------------
+let a: imm Point
+let b: mut Point
+let c: imm Meters
+let d: mut Meters
+let e: imm Unit
+
+================================================================================
+Changing a field of a mut struct
+================================================================================
+struct Point { x: i32, y: i32 }
+let p = mut Point { x: 1, y: 2 };
+p.x = 3;
+p.y += 1;
+p;
+
+--------------------------------------------------------------------------------
+let p: mut Point
+p.x = 3: ()
+p.y += 1: ()
+p: mut Point
+
+================================================================================
+Changing a field of a struct that isn't mut
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+let p = Point { x: 1, y: 2 };
+p.x = 3;
+p.y += 1;
+
+--------------------------------------------------------------------------------
+let p: imm Point
+p.x = 3: ()
+p.y += 1: ()
+--------------------------------------------------------------------------------
+error at `p`: can't change imm Point
+error at `p`: can't change imm Point
+
+================================================================================
+let mut doesn't make a struct mut
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+let mut p = Point { x: 1, y: 2 };
+p.x = 3;
+p = Point { x: 5, y: 6 };
+
+--------------------------------------------------------------------------------
+let p: imm Point
+p.x = 3: ()
+p = Point { x: 5, y: 6 }: ()
+--------------------------------------------------------------------------------
+error at `p`: can't change imm Point
+
+================================================================================
+A field of a mut tuple struct
+:error
+================================================================================
+struct Meters(f64);
+let m = mut Meters(1.0);
+m.0 = 2.0;
+let n = Meters(1.0);
+n.0 = 2.0;
+
+--------------------------------------------------------------------------------
+let m: mut Meters
+m.0 = 2.0: ()
+let n: imm Meters
+n.0 = 2.0: ()
+--------------------------------------------------------------------------------
+error at `n`: can't change imm Meters
+
+================================================================================
+An alias of a mut struct is mut
+================================================================================
+struct Point { x: i32, y: i32 }
+fn id(x) = x;
+let p = mut Point { x: 1, y: 2 };
+let q = p;
+q.x = 3;
+id(p).y = 4;
+let r = if True { p } else { mut Point { x: 0, y: 0 } };
+r.x = 5;
+
+--------------------------------------------------------------------------------
+id: forall a. fn(a) -> a
+let p: mut Point
+let q: mut Point
+q.x = 3: ()
+id(p).y = 4: ()
+let r: mut Point
+r.x = 5: ()
+
+================================================================================
+Annotations of structs
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+let a: mut Point = mut Point { x: 1, y: 2 };
+let b: imm Point = Point { x: 1, y: 2 };
+let c: Point = mut Point { x: 1, y: 2 };
+let d: imm Point = mut Point { x: 1, y: 2 };
+let e: mut Point = Point { x: 1, y: 2 };
+c.x = 3;
+
+--------------------------------------------------------------------------------
+let a: mut Point
+let b: imm Point
+let c: mut Point
+let d: imm Point
+let e: mut Point
+c.x = 3: ()
+--------------------------------------------------------------------------------
+error at `mut Point { x: 1, y: 2 }`: expected imm Point, found mut Point
+error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
+
+================================================================================
+A parameter without mut or imm takes either kind of struct
+================================================================================
+struct Point { x: i32, y: i32 }
+fn norm(p: Point) -> i32 = p.x + p.y;
+norm(Point { x: 1, y: 2 });
+norm(mut Point { x: 1, y: 2 });
+
+--------------------------------------------------------------------------------
+norm: fn(Point) -> i32
+norm(Point { x: 1, y: 2 }): i32
+norm(mut Point { x: 1, y: 2 }): i32
+
+================================================================================
+A parameter without mut or imm can't be changed
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+fn reset(p: Point) { p.x = 0; }
+
+--------------------------------------------------------------------------------
+reset: fn(Point) -> ()
+--------------------------------------------------------------------------------
+error at `p`: can't change Point
+
+================================================================================
+A mut parameter needs a mut struct
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+fn reset(p: mut Point) { p.x = 0; }
+reset(mut Point { x: 1, y: 2 });
+reset(Point { x: 1, y: 2 });
+
+--------------------------------------------------------------------------------
+reset: fn(mut Point) -> ()
+reset(mut Point { x: 1, y: 2 }): ()
+reset(Point { x: 1, y: 2 }): ()
+--------------------------------------------------------------------------------
+error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
+
+================================================================================
+An imm parameter needs a struct that never changes
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+fn keep(p: imm Point) -> i32 = p.x;
+keep(Point { x: 1, y: 2 });
+keep(mut Point { x: 1, y: 2 });
+
+--------------------------------------------------------------------------------
+keep: fn(imm Point) -> i32
+keep(Point { x: 1, y: 2 }): i32
+keep(mut Point { x: 1, y: 2 }): i32
+--------------------------------------------------------------------------------
+error at `mut Point { x: 1, y: 2 }`: expected imm Point, found mut Point
+
+================================================================================
+The body decides the mutability of a returned struct
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+fn origin() -> Point = Point { x: 0, y: 0 };
+fn fresh() -> Point = mut Point { x: 0, y: 0 };
+fn fixed() -> imm Point = Point { x: 0, y: 0 };
+fn same(p: Point) -> Point = p;
+fn f() {
+  fresh().x = 1;
+  origin().x = 1;
+  same(mut Point { x: 1, y: 2 }).x = 3;
+  same(Point { x: 1, y: 2 }).x = 3;
+}
+
+--------------------------------------------------------------------------------
+origin: fn() -> imm Point
+fresh: fn() -> mut Point
+fixed: fn() -> imm Point
+same: fn(Point) -> Point
+f: fn() -> ()
+--------------------------------------------------------------------------------
+error at `origin()`: can't change imm Point
+error at `same(Point { x: 1, y: 2 })`: can't change imm Point
+
+================================================================================
+A struct in a struct has its mutability
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Line { a: Point, b: Point }
+let l = mut Line { a: mut Point { x: 0, y: 0 }, b: mut Point { x: 1, y: 1 } };
+l.a.x = 5;
+let k = Line { a: Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
+k.a.x = 5;
+
+--------------------------------------------------------------------------------
+let l: mut Line
+l.a.x = 5: ()
+let k: imm Line
+k.a.x = 5: ()
+--------------------------------------------------------------------------------
+error at `k.a`: can't change imm Point
+
+================================================================================
+An imm struct can't hold a mut struct
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Line { a: Point, b: Point }
+let a = Line { a: mut Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
+let b = mut Line { a: Point { x: 0, y: 0 }, b: mut Point { x: 1, y: 1 } };
+
+--------------------------------------------------------------------------------
+let a: imm Line
+let b: mut Line
+--------------------------------------------------------------------------------
+error at `mut Point { x: 0, y: 0 }`: expected imm Point, found mut Point
+error at `Point { x: 0, y: 0 }`: expected mut Point, found imm Point
+
+================================================================================
+A field of a parameter's struct can't be changed
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Line { a: Point, b: Point }
+fn f(l: Line) { l.a.x = 1; }
+fn g(l: mut Line) { l.a.x = 1; }
+
+--------------------------------------------------------------------------------
+f: fn(Line) -> ()
+g: fn(mut Line) -> ()
+--------------------------------------------------------------------------------
+error at `l.a`: can't change Point
+
+================================================================================
+A struct holding arrays
+:error
+================================================================================
+struct Bag { items: [i32], tags: imm [String] }
+let a = mut Bag { items: mut [1], tags: ["t"] };
+a.items[0] = 2;
+a.tags[0] = "u";
+let b = Bag { items: [1], tags: ["t"] };
+b.items[0] = 2;
+
+--------------------------------------------------------------------------------
+let a: mut Bag
+a.items[0] = 2: ()
+a.tags[0] = "u": ()
+let b: imm Bag
+b.items[0] = 2: ()
+--------------------------------------------------------------------------------
+error at `a.tags`: can't change imm [String]
+error at `b.items`: can't change imm [i32]
+
+================================================================================
+An imm generic struct can't hold a mut value
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Box[T] { item: T }
+let a = Box { item: mut Point { x: 0, y: 0 } };
+let b = mut Box { item: mut Point { x: 0, y: 0 } };
+let c = mut Box { item: Point { x: 0, y: 0 } };
+b.item.x = 1;
+c.item.x = 1;
+
+--------------------------------------------------------------------------------
+let a: imm Box[mut Point]
+let b: mut Box[mut Point]
+let c: mut Box[imm Point]
+b.item.x = 1: ()
+c.item.x = 1: ()
+--------------------------------------------------------------------------------
+error at `Box { item: mut Point { x: 0, y: 0 } }`: imm Box[mut Point] holds mut Point
+error at `c.item`: can't change imm Point
+
+================================================================================
+A generic function that wraps a mut value
+:error
+================================================================================
+struct Box[T] { item: T }
+fn wrap[T](x: T) -> Box[T] = Box { item: x };
+fn wrap_mut[T](x: T) -> Box[T] = mut Box { item: x };
+wrap(1);
+wrap(mut [1]);
+wrap_mut(mut [1]);
+
+--------------------------------------------------------------------------------
+wrap: forall T. fn(T) -> imm Box[T]
+wrap_mut: forall T. fn(T) -> mut Box[T]
+wrap(1): imm Box[i32]
+wrap(mut [1]): imm Box[mut [i32]]
+wrap_mut(mut [1]): mut Box[mut [i32]]
+--------------------------------------------------------------------------------
+error at `wrap(mut [1])`: imm Box[mut [i32]] holds mut [i32]
+
+================================================================================
+An imm array can't hold a mut struct
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+let a = [mut Point { x: 0, y: 0 }];
+let b = mut [mut Point { x: 0, y: 0 }];
+b[0].x = 1;
+let c = mut [Point { x: 0, y: 0 }];
+c[0].x = 1;
+
+--------------------------------------------------------------------------------
+let a: imm [mut Point]
+let b: mut [mut Point]
+b[0].x = 1: ()
+let c: mut [imm Point]
+c[0].x = 1: ()
+--------------------------------------------------------------------------------
+error at `[mut Point { x: 0, y: 0 }]`: imm [mut Point] holds mut Point
+error at `c[0]`: can't change imm Point
+
+================================================================================
+An imm array can't hold a tuple with a mut array
+:error
+================================================================================
+let a = [(mut [1], True)];
+let b = [|xs: mut [i32]| xs[0] = 1];
+
+--------------------------------------------------------------------------------
+let a: imm [(mut [i32], Bool)]
+let b: imm [fn(mut [i32]) -> ()]
+--------------------------------------------------------------------------------
+error at `[(mut [1], True)]`: imm [(mut [i32], Bool)] holds mut [i32]
+
+================================================================================
+Enums hold imm structs
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+enum Shape { Dot(Point) }
+let a = Shape.Dot(Point { x: 0, y: 0 });
+let b = Shape.Dot(mut Point { x: 0, y: 0 });
+fn f(s: Shape) = match s { Shape.Dot(p) => p.x = 1 };
+
+--------------------------------------------------------------------------------
+f: fn(Shape) -> ()
+let a: Shape
+let b: Shape
+--------------------------------------------------------------------------------
+error at `p`: can't change imm Point
+error at `mut Point { x: 0, y: 0 }`: expected imm Point, found mut Point
+
+================================================================================
+A generic enum can hold a mut struct
+================================================================================
+struct Point { x: i32, y: i32 }
+enum Maybe[T] { Just(T), Nothing }
+let a = Maybe.Just(mut Point { x: 0, y: 0 });
+match a { Maybe.Just(p) => p.x = 1, Maybe.Nothing => () };
+
+--------------------------------------------------------------------------------
+let a: Maybe[mut Point]
+match a { Maybe.Just(p) => p.x = 1, Maybe.Nothing => () }: ()
+
+================================================================================
+An enum can't be mut
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+enum Maybe[T] { Just(T), Nothing }
+enum Shape { Circle { radius: f64 } }
+fn f(x: i32) -> i32 = x;
+let a = mut Shape.Circle { radius: 1.0 };
+let b = mut Maybe.Just(1);
+let c = mut f(1);
+
+--------------------------------------------------------------------------------
+f: fn(i32) -> i32
+let a: Shape
+let b: Maybe[i32]
+let c: i32
+--------------------------------------------------------------------------------
+error at `mut Shape.Circle { radius: 1.0 }`: can't be mut
+error at `mut Maybe.Just(1)`: can't be mut
+error at `mut f(1)`: can't be mut
+
+================================================================================
+Types that can't be mut or imm
+:error
+================================================================================
+enum Maybe[T] { Just(T), Nothing }
+fn f[T](a: mut i32, b: imm (i32, i32), c: mut Maybe[i32], d: mut T) {}
+
+--------------------------------------------------------------------------------
+f: forall T. fn(i32, (i32, i32), Maybe[i32], T) -> ()
+--------------------------------------------------------------------------------
+error at `mut i32`: can't be mut or imm
+error at `imm (i32, i32)`: can't be mut or imm
+error at `mut Maybe[i32]`: can't be mut or imm
+error at `mut T`: can't be mut or imm
+
+================================================================================
+An inferred function that changes a field
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+fn move_x(p) { p.x = 5; }
+fn get_x(p) = p.x;
+move_x(mut Point { x: 1, y: 2 });
+move_x(Point { x: 1, y: 2 });
+get_x(Point { x: 1, y: 2 });
+
+--------------------------------------------------------------------------------
+move_x: forall a. mut a.x: i32 => fn(a) -> ()
+get_x: forall a b. a.x: b => fn(a) -> b
+move_x(mut Point { x: 1, y: 2 }): ()
+move_x(Point { x: 1, y: 2 }): ()
+get_x(Point { x: 1, y: 2 }): i32
+--------------------------------------------------------------------------------
+error at `move_x`: can't change imm Point
+
+================================================================================
+An inferred function that changes a field of a known struct
+================================================================================
+struct Point { x: i32, y: i32 }
+fn reset(p: Point, q) { q.x = p.x; }
+fn bump(p) {
+  let q: mut Point = p;
+  q.x += 1;
+}
+
+--------------------------------------------------------------------------------
+reset: forall a. mut a.x: i32 => fn(Point, a) -> ()
+bump: fn(mut Point) -> ()
+
+================================================================================
+Struct update copies from any mutability
+================================================================================
+struct Point { x: i32, y: i32 }
+let p = Point { x: 1, y: 2 };
+let q = mut Point { x: 3, ..p };
+let r = Point { y: 4, ..q };
+q.x = 5;
+
+--------------------------------------------------------------------------------
+let p: imm Point
+let q: mut Point
+let r: imm Point
+q.x = 5: ()
+
+================================================================================
+Patterns match structs of either mutability
+================================================================================
+struct Point { x: i32, y: i32 }
+let Point { x, y } = mut Point { x: 1, y: 2 };
+fn f(p: mut Point) -> i32 = match p { Point { x, .. } => x };
+fn g(p: imm Point) -> i32 = match p { Point { y, .. } => y };
+
+--------------------------------------------------------------------------------
+f: fn(mut Point) -> i32
+g: fn(imm Point) -> i32
+let Point { x, y }: mut Point
+
+================================================================================
+Tuples are still values
+:error
+================================================================================
+fn f() {
+  let t = (1, 2);
+  t.0 = 3;
+  let mut u = (1, 2);
+  u.0 = 3;
+}
+
+--------------------------------------------------------------------------------
+f: fn() -> ()
+--------------------------------------------------------------------------------
+error at `t.0`: not mut
+
+================================================================================
+A tuple in a mut struct
+:error
+================================================================================
+struct S { t: (i32, i32) }
+let s = mut S { t: (1, 2) };
+s.t.0 = 3;
+let r = S { t: (1, 2) };
+r.t.0 = 3;
+
+--------------------------------------------------------------------------------
+let s: mut S
+s.t.0 = 3: ()
+let r: imm S
+r.t.0 = 3: ()
+--------------------------------------------------------------------------------
+error at `r`: can't change imm S
+
+================================================================================
+An impl for structs without mut or imm is for both
+================================================================================
+struct Point { x: i32, y: i32 }
+class Size[T] { fn size(x: T) -> i32; }
+impl Size[Point] { fn size(p) = 2; }
+size(Point { x: 1, y: 2 });
+size(mut Point { x: 1, y: 2 });
+
+--------------------------------------------------------------------------------
+Size[Point].size: fn(Point) -> i32
+size(Point { x: 1, y: 2 }): i32
+size(mut Point { x: 1, y: 2 }): i32
+
+================================================================================
+An impl for mut structs only
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+class Size[T] { fn size(x: T) -> i32; }
+impl Size[mut Point] { fn size(p) = 2; }
+size(mut Point { x: 1, y: 2 });
+size(Point { x: 1, y: 2 });
+
+--------------------------------------------------------------------------------
+Size[mut Point].size: fn(mut Point) -> i32
+size(mut Point { x: 1, y: 2 }): i32
+size(Point { x: 1, y: 2 }): i32
+--------------------------------------------------------------------------------
+error at `size`: no instance Size[imm Point]
+
+================================================================================
+A method that changes its receiver
+:error
+================================================================================
+struct Circle { r: f64 }
+fn grow(c: mut Circle) { c.r = c.r * 2.0; }
+let a = mut Circle { r: 1.0 };
+a.grow();
+Circle { r: 1.0 }.grow();
+
+--------------------------------------------------------------------------------
+grow: fn(mut Circle) -> ()
+let a: mut Circle
+a.grow(): ()
+Circle { r: 1.0 }.grow(): ()
+--------------------------------------------------------------------------------
+error at `Circle { r: 1.0 }`: expected mut Circle, found imm Circle
+
+================================================================================
+A struct that refers to itself
+:error
+================================================================================
+enum Maybe[T] { Just(T), Nothing }
+struct Node { value: i32, next: Maybe[Node] }
+fn second(n: Node) -> Maybe[Node] = n.next;
+let a = mut Node { value: 1, next: Maybe.Just(mut Node { value: 2, next: Maybe.Nothing }) };
+let b = Node { value: 1, next: Maybe.Just(mut Node { value: 2, next: Maybe.Nothing }) };
+second(a);
+
+--------------------------------------------------------------------------------
+second: fn(Node) -> Maybe[Node]
+let a: mut Node
+let b: imm Node
+second(a): Maybe[mut Node]
+--------------------------------------------------------------------------------
+error at `Maybe.Just(mut Node { value: 2, next: Maybe.Nothing })`: expected Maybe[imm Node], found Maybe[mut Node]
+
+================================================================================
+An impl for a struct type constructor can't make new values yet
+================================================================================
+struct Box[T] { item: T }
+class Functor[F] { fn fmap[A, B](f: fn(A) -> B, x: F[A]) -> F[B]; }
+impl Functor[Box] { fn fmap(f, b) = Box { item: f(b.item) }; }
+fmap(|n| n + 1, Box { item: 1 });
+fmap(|n| n + 1, mut Box { item: 1 });
+
+--------------------------------------------------------------------------------
+Functor[Box].fmap: forall A B. fn(fn(A) -> B, Box[A]) -> Box[B]
+fmap(|n| n + 1, Box { item: 1 }): imm Box[i32]
+fmap(|n| n + 1, mut Box { item: 1 }): mut Box[i32]
+--------------------------------------------------------------------------------
+error at `Box { item: f(b.item) }`: expected Box[B], found imm Box[B]
+
+================================================================================
+A type alias of a struct
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+type P = Point;
+type MP = mut Point;
+fn f(p: P) -> i32 = p.x;
+fn g(p: MP) { p.x = 1; }
+f(mut Point { x: 1, y: 2 });
+g(Point { x: 1, y: 2 });
+let a: mut P = mut Point { x: 1, y: 2 };
+
+--------------------------------------------------------------------------------
+f: fn(Point) -> i32
+g: fn(mut Point) -> ()
+f(mut Point { x: 1, y: 2 }): i32
+g(Point { x: 1, y: 2 }): ()
+let a: mut Point
+--------------------------------------------------------------------------------
+error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
+
+================================================================================
+Mismatches show the mutability of structs
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+fn f(p: mut Point) {}
+f(Point { x: 1, y: 2 });
+let a: (mut Point, Bool) = (Point { x: 1, y: 2 }, True);
+--------------------------------------------------------------------------------
+f: fn(mut Point) -> ()
+f(Point { x: 1, y: 2 }): ()
+let a: (mut Point, Bool)
+--------------------------------------------------------------------------------
+error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
+error at `(Point { x: 1, y: 2 }, True)`: expected (mut Point, Bool), found (imm Point, Bool)
