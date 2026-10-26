@@ -169,6 +169,10 @@ name = "boltlang-common"
 version = "0.1.0"
 
 [[package]]
+name = "boltlang-corpus"
+version = "0.1.0"
+
+[[package]]
 name = "boltlang-eval"
 version = "0.1.0"
 dependencies = [
@@ -204,6 +208,7 @@ name = "boltlang-hir-ty"
 version = "0.1.0"
 dependencies = [
  "boltlang-base-db",
+ "boltlang-corpus",
  "boltlang-hir-def",
  "boltlang-parser",
  "boltlang-syntax",
