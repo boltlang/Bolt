@@ -63,7 +63,7 @@ When you want to, put the type after the name:
 
 ```bolt
 let ratio: f64 = 0.75;
-let flag: bool = true;
+let flag: Bool = True;
 ratio;
 ```
 
@@ -113,7 +113,7 @@ numbers for you. Use `as` to convert explicitly:
 
 ## Booleans
 
-`true` and `false` are of type `bool`. Compare values with `==`, `!=`, `<`,
+`True` and `False` are of type `Bool`. Compare values with `==`, `!=`, `<`,
 `<=`, `>` and `>=`, and combine booleans with `&&`, `||` and `!`:
 
 ```bolt
@@ -121,15 +121,15 @@ numbers for you. Use `as` to convert explicitly:
 ```
 
 ```text
-(true, false, true)
+(True, False, True)
 ```
 
 `&&` and `||` only evaluate their right side when they need to.
 
 ## Characters and strings
 
-A character is written between single quotes and has type `char`. A string
-is written between double quotes and has type `str`. Both understand escapes
+A character is written between single quotes and has type `Char`. A string
+is written between double quotes and has type `String`. Both understand escapes
 like `\n` and `\t`:
 
 ```bolt

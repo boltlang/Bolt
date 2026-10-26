@@ -166,7 +166,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
         };
         // A constructor can be given fewer arguments than it takes, like
-        // `Either[str]`, which is then a constructor itself.
+        // `Either[String]`, which is then a constructor itself.
         let (param_kinds, _) = kind.split();
         let type_args = self.type_args(id, args);
         if type_args.len() > param_kinds.len() {

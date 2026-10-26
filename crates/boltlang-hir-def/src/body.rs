@@ -5,6 +5,7 @@ use boltlang_base_db::{Db, File, parse_file};
 use boltlang_syntax::{SyntaxNode, ast::{self, Node}};
 
 use crate::{
+    builtin_type::BuiltinValue,
     expr_store::{ExprCollector, ExpressionStore, ExpressionStoreSourceMap},
     hir::{BlockKind, Expr, ExprId, Pat, PatId, Path},
     ids::{ConstId, EnumVariantId, FunctionId, ModuleDefId},
@@ -107,7 +108,8 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
 
 /// A name on its own in a pattern that's a variant in the scope of the
 /// file, like the `None` of `match o { None => 0 }` after `import Option.*;`,
-/// matches that variant instead of binding a new name, as in Rust.
+/// matches that variant instead of binding a new name, as in Rust. So do
+/// `True` and `False`, unless the file has a value with their name.
 fn resolve_variant_patterns(db: &dyn Db, file: File, store: &mut ExpressionStore) {
     let scope = &file_scope(db, file).scope;
     let variants: Vec<_> = store
@@ -117,8 +119,9 @@ fn resolve_variant_patterns(db: &dyn Db, file: File, store: &mut ExpressionStore
             Pat::Bind { id, subpat: None } => Some((pat, store.bindings[*id].name.clone())),
             _ => None,
         })
-        .filter(|(_, name)| {
-            matches!(scope.get(Namespace::Values, name).map(|entry| entry.def), Some(ModuleDefId::Variant(_)))
+        .filter(|(_, name)| match scope.get(Namespace::Values, name).map(|entry| entry.def) {
+            Some(def) => matches!(def, ModuleDefId::Variant(_)),
+            None => BuiltinValue::by_name(name.as_str()).is_some(),
         })
         .collect();
     for (pat, name) in variants {

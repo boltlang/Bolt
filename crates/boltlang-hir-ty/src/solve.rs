@@ -40,7 +40,7 @@ impl<'db> Origin<'db> {
 /// Why a type is expected of an expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Reason<'db> {
-    /// Nothing worth pointing at, like the `bool` of a condition.
+    /// Nothing worth pointing at, like the `Bool` of a condition.
     None,
     /// A type annotation in the body, like that of `let x: i32`.
     Annotation(TypeRefId),
@@ -407,7 +407,7 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
 
 /// Match two applications by their last arguments, and their heads with
 /// the arguments before them, as in unification: the pattern `F[A]` matches
-/// `Either[str, i32]` with `F` the constructor `Either[str]`.
+/// `Either[String, i32]` with `F` the constructor `Either[String]`.
 fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
     let split = |t: &Ty<'db>| -> (Ty<'db>, Vec<Ty<'db>>) {
         match t {

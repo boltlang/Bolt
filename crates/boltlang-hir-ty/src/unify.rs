@@ -189,8 +189,8 @@ impl<'db> Unifier<'db> {
             // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
             // the last arguments are equal, and so are the rest of each
             // side. With more arguments on one side, its head takes the
-            // first ones: `?m[a] = Either[str, i32]` makes `?m` the
-            // constructor `Either[str]` and `a` the type `i32`.
+            // first ones: `?m[a] = Either[String, i32]` makes `?m` the
+            // constructor `Either[String]` and `a` the type `i32`.
             (Ty::App(f, ys), Ty::Adt(id, xs)) | (Ty::Adt(id, xs), Ty::App(f, ys)) if xs.len() >= ys.len() => {
                 let split = xs.len() - ys.len();
                 self.unify(f, &Ty::Adt(*id, xs[..split].into()))?;
@@ -331,10 +331,10 @@ mod tests {
     #[test]
     fn applications_split_from_the_right() {
         with_enums(|u, either, option| {
-            // `?m[?a] = Either[str, i32]` gives `?m = Either[str]`, `?a = i32`.
+            // `?m[?a] = Either[String, i32]` gives `?m = Either[String]`, `?a = i32`.
             let m = u.new_var(VarKind::General);
             let a = u.new_var(VarKind::General);
-            let str_ty = Ty::Builtin(BuiltinType::Str);
+            let str_ty = Ty::Builtin(BuiltinType::String);
             let target = Ty::app(either.clone(), [str_ty.clone(), i32()]);
             u.unify(&Ty::app(m.clone(), [a.clone()]), &target).unwrap();
             assert_eq!(u.resolve(&m), Ty::app(either.clone(), [str_ty.clone()]));

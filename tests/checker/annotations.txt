@@ -2,19 +2,19 @@
 Annotations of lets
 ================================================================================
 let a: i32 = 1;
-let b: (bool, str) = (true, "a");
+let b: (Bool, String) = (True, "a");
 let c: [u8] = [1, 2];
-let d: fn(i32) -> bool = |x| x > 0;
+let d: fn(i32) -> Bool = |x| x > 0;
 let e: i32 = "a";
 
 --------------------------------------------------------------------------------
 let a: i32
-let b: (bool, str)
+let b: (Bool, String)
 let c: [u8]
-let d: fn(i32) -> bool
+let d: fn(i32) -> Bool
 let e: i32
 --------------------------------------------------------------------------------
-error at `"a"`: expected i32, found str
+error at `"a"`: expected i32, found String
 
 ================================================================================
 A let without a value takes the type it's used as
@@ -34,13 +34,13 @@ Type aliases
 type Int = i32;
 type Pair[T] = (T, T);
 fn f(x: Int) -> Pair[Int] = (x, x);
-let p: Pair[bool] = (true, 1);
+let p: Pair[Bool] = (True, 1);
 
 --------------------------------------------------------------------------------
 f: fn(i32) -> (i32, i32)
-let p: (bool, bool)
+let p: (Bool, Bool)
 --------------------------------------------------------------------------------
-error at `(true, 1)`: expected (bool, bool), found (bool, {integer})
+error at `(True, 1)`: expected (Bool, Bool), found (Bool, {integer})
 
 ================================================================================
 Unknown types in annotations
@@ -62,21 +62,21 @@ Types with the wrong number of arguments
 struct Box[T] { value: T }
 fn f() {
   let a: Box = Box { value: 1 };
-  let b: Box[i32, bool] = Box { value: 1 };
-  let c: i32[bool] = 1;
+  let b: Box[i32, Bool] = Box { value: 1 };
+  let c: i32[Bool] = 1;
 }
 
 --------------------------------------------------------------------------------
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `Box`: expected 1 type arguments, found 0
-error at `Box[i32, bool]`: expected 1 type arguments, found 2
-error at `i32[bool]`: expected 0 type arguments, found 1
+error at `Box[i32, Bool]`: expected 1 type arguments, found 2
+error at `i32[Bool]`: expected 0 type arguments, found 1
 
 ================================================================================
 Things that aren't types
 ================================================================================
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 fn f() { let x: Show = 1; }
 
 --------------------------------------------------------------------------------
@@ -89,7 +89,7 @@ Casts give the type cast to
 ================================================================================
 1 as u8;
 1.5 as i32;
-let x = true as i64;
+let x = True as i64;
 
 --------------------------------------------------------------------------------
 1 as u8: u8
@@ -114,22 +114,22 @@ unit(|| {}): ()
 Arrays
 ================================================================================
 let a = [1, 2, 3];
-let b = [true; 4];
+let b = [True; 4];
 let c = [[1], [2, 3]];
 let d = [1, "a"];
 a[0];
-a[true];
+a[True];
 
 --------------------------------------------------------------------------------
 let a: [i32]
-let b: [bool]
+let b: [Bool]
 let c: [[i32]]
 let d: [i32]
 a[0]: i32
-a[true]: i32
+a[True]: i32
 --------------------------------------------------------------------------------
-error at `"a"`: expected {integer}, found str
-error at `true`: expected {integer}, found bool
+error at `"a"`: expected {integer}, found String
+error at `True`: expected {integer}, found Bool
 
 ================================================================================
 An empty array without a use
@@ -192,8 +192,8 @@ error at `Pair`: expected 1 type arguments, found 0
 A type alias with a parameter it doesn't use
 ================================================================================
 type Const[T] = i32;
-let a: Const[bool] = 1;
-let b: Const[str] = a;
+let a: Const[Bool] = 1;
+let b: Const[String] = a;
 
 --------------------------------------------------------------------------------
 let a: i32
@@ -215,17 +215,17 @@ error at `Maybe[i32]`: expected 0 type arguments, found 1
 ================================================================================
 Type aliases of function types
 ================================================================================
-type Pred[T] = fn(T) -> bool;
-fn all[T](xs: [T], p: Pred[T]) -> bool = true;
+type Pred[T] = fn(T) -> Bool;
+fn all[T](xs: [T], p: Pred[T]) -> Bool = True;
 all([1, 2], |x| x > 0);
 all([1, 2], |x| x);
 
 --------------------------------------------------------------------------------
-all: forall T. fn([T], fn(T) -> bool) -> bool
-all([1, 2], |x| x > 0): bool
-all([1, 2], |x| x): bool
+all: forall T. fn([T], fn(T) -> Bool) -> Bool
+all([1, 2], |x| x > 0): Bool
+all([1, 2], |x| x): Bool
 --------------------------------------------------------------------------------
-error at `x`: expected bool, found {integer}
+error at `x`: expected Bool, found {integer}
 
 ================================================================================
 A type parameter that isn't declared
@@ -267,11 +267,11 @@ f(): i32
 A type parameter that shadows a type
 ================================================================================
 fn f[i32](x: i32) -> i32 = x;
-f(true);
+f(True);
 
 --------------------------------------------------------------------------------
 f: forall i32. fn(i32) -> i32
-f(true): bool
+f(True): Bool
 
 ================================================================================
 Unit and the empty tuple
@@ -306,26 +306,26 @@ error at `1`: expected (i32,), found {integer}
 ================================================================================
 A deeply nested type
 ================================================================================
-let a: [[[[[(i32, [bool])]]]]] = [[[[[(1, [true])]]]]];
+let a: [[[[[(i32, [Bool])]]]]] = [[[[[(1, [True])]]]]];
 
 --------------------------------------------------------------------------------
-let a: [[[[[(i32, [bool])]]]]]
+let a: [[[[[(i32, [Bool])]]]]]
 
 ================================================================================
 Annotations on lambda parameters that disagree with their use
 :error
 ================================================================================
 fn call(f: fn(i32) -> i32) -> i32 = f(1);
-call(|x: bool| 1);
-call(|x| -> bool { true });
+call(|x: Bool| 1);
+call(|x| -> Bool { True });
 
 --------------------------------------------------------------------------------
 call: fn(fn(i32) -> i32) -> i32
-call(|x: bool| 1): i32
-call(|x| -> bool { true }): i32
+call(|x: Bool| 1): i32
+call(|x| -> Bool { True }): i32
 --------------------------------------------------------------------------------
-error at `|x: bool| 1`: expected fn(i32) -> i32, found fn(bool) -> i32
-error at `|x| -> bool { true }`: expected fn(i32) -> i32, found fn(i32) -> bool
+error at `|x: Bool| 1`: expected fn(i32) -> i32, found fn(Bool) -> i32
+error at `|x| -> Bool { True }`: expected fn(i32) -> i32, found fn(i32) -> Bool
 
 ================================================================================
 A function type with the wrong number of parameters

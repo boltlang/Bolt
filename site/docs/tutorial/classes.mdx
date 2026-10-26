@@ -25,13 +25,13 @@ A class names some functions that a type can provide:
 
 ```bolt
 class Describe[T] {
-  fn describe(x: T) -> str;
+  fn describe(x: T) -> String;
 }
 ```
 
 `T` stands for the type that the class is for. This says: a type `T` is
 *describable* if there's a function `describe` that takes a `T` and gives a
-`str`.
+`String`.
 
 ## Impls
 
@@ -39,34 +39,34 @@ An `impl` provides the functions of a class for one type:
 
 ```bolt
 class Describe[T] {
-  fn describe(x: T) -> str;
+  fn describe(x: T) -> String;
 }
 
-struct Dog { name: str }
+struct Dog { name: String }
 
 impl Describe[Dog] {
   fn describe(d) = "a dog called " + d.name;
 }
 
-impl Describe[bool] {
+impl Describe[Bool] {
   fn describe(b) = if b { "yes" } else { "no" };
 }
 
 describe(Dog { name: "Rex" });
-describe(true);
+describe(True);
 ```
 
 The methods of an impl don't need types: they come from the class. Here
-`d` is a `Dog` and `b` is a `bool`.
+`d` is a `Dog` and `b` is a `Bool`.
 
 Calling `describe` on a type without an impl is an error:
 
 ```bolt
 class Describe[T] {
-  fn describe(x: T) -> str;
+  fn describe(x: T) -> String;
 }
 
-impl Describe[bool] {
+impl Describe[Bool] {
   fn describe(b) = if b { "yes" } else { "no" };
 }
 
@@ -84,7 +84,7 @@ for types that have an impl. Bolt infers that too:
 
 ```bolt
 class Describe[T] {
-  fn describe(x: T) -> str;
+  fn describe(x: T) -> String;
 }
 
 fn shout(x) = describe(x) + "!";
@@ -93,7 +93,7 @@ fn shout(x) = describe(x) + "!";
 `shout` gets the type
 
 ```text
-forall a. Describe[a] => fn(a) -> str
+forall a. Describe[a] => fn(a) -> String
 ```
 
 The part before `=>` is a *constraint*: `shout` works for any type `a`
@@ -104,12 +104,12 @@ in a `where` clause:
 
 ```bolt
 class Describe[T] {
-  fn describe(x: T) -> str;
+  fn describe(x: T) -> String;
 }
 
-fn shout[T: Describe](x: T) -> str = describe(x) + "!";
+fn shout[T: Describe](x: T) -> String = describe(x) + "!";
 
-fn both[A, B](a: A, b: B) -> str where Describe[A], Describe[B] =
+fn both[A, B](a: A, b: B) -> String where Describe[A], Describe[B] =
   describe(a) + " and " + describe(b);
 ```
 
@@ -120,7 +120,7 @@ describes any `Option` whose content can be described:
 
 ```bolt
 class Describe[T] {
-  fn describe(x: T) -> str;
+  fn describe(x: T) -> String;
 }
 
 impl Describe[i32] {
@@ -147,14 +147,14 @@ A class can require another one. Every type that's `Ord` must also be `Eq`:
 
 ```bolt
 class Eq[T] {
-  fn eq(a: T, b: T) -> bool;
+  fn eq(a: T, b: T) -> Bool;
 }
 
 class Ord[T] where Eq[T] {
-  fn lt(a: T, b: T) -> bool;
+  fn lt(a: T, b: T) -> Bool;
 }
 
-fn less_or_equal[T: Ord](a: T, b: T) -> bool = lt(a, b) || eq(a, b);
+fn less_or_equal[T: Ord](a: T, b: T) -> Bool = lt(a, b) || eq(a, b);
 ```
 
 `less_or_equal` only asks for `Ord`, but it can use `eq` as well, since
@@ -192,11 +192,11 @@ class Convert[A, B] {
   fn convert(a: A) -> B;
 }
 
-impl Convert[i32, str] {
+impl Convert[i32, String] {
   fn convert(n) = "a number";
 }
 
-let s: str = convert(42);
+let s: String = convert(42);
 ```
 
 ## Classes of type constructors

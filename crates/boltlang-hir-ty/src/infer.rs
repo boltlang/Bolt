@@ -524,12 +524,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     fn literal_ty(&mut self, lit: &Literal) -> Ty<'db> {
         let suffixed = |suffix: &Option<Name>| suffix.as_ref().and_then(|s| BuiltinType::by_name(s.as_str())).map(Ty::Builtin);
         match lit {
-            Literal::Bool(_) => Ty::bool(),
             Literal::Int(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Int)),
             Literal::Float(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Float)),
             Literal::Char(_) => Ty::Builtin(BuiltinType::Char),
             Literal::Byte(_) => Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
-            Literal::String(_) | Literal::CString(_) => Ty::Builtin(BuiltinType::Str),
+            Literal::String(_) | Literal::CString(_) => Ty::Builtin(BuiltinType::String),
             Literal::ByteString(_) => Ty::Array(Box::new(Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)))),
         }
     }
@@ -572,6 +571,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // Const generics aren't supported yet.
             ValueNs::ConstParam { .. } => Ty::Error,
             ValueNs::Variant(v) => self.constructor_ty(VariantDef::Variant(v)),
+            ValueNs::Builtin(v) => Ty::Builtin(v.ty()),
         }
     }
 

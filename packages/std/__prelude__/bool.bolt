@@ -1,8 +1,0 @@
-
-pub enum Bool {
-  True,
-  False,
-}
-
-pub import Bool.*;
-

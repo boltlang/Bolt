@@ -49,7 +49,7 @@ impl Scalar {
         Some(match ty {
             BuiltinType::Bool => Scalar::Bool,
             BuiltinType::Char => Scalar::Char,
-            BuiltinType::Str => Scalar::Str,
+            BuiltinType::String => Scalar::Str,
             BuiltinType::Int(int) => match int {
                 BuiltinInt::I8 => Scalar::Int { bits: 8, signed: true },
                 BuiltinInt::I16 => Scalar::Int { bits: 16, signed: true },
@@ -494,6 +494,10 @@ impl<'db> Compiler<'db> {
                 Ok(())
             }
             Some(ValueResolution::Value(ValueNs::Const(id))) => self.const_value(expr, id),
+            Some(ValueResolution::Value(ValueNs::Builtin(v))) => {
+                self.push(Inst::I32Const(v.as_bool() as i32));
+                Ok(())
+            }
             Some(ValueResolution::Value(ValueNs::Function(_))) => Err(self.unsupported(expr, "a function as a value")),
             Some(ValueResolution::Value(ValueNs::Variant(_))) => Err(self.unsupported(expr, "an enum")),
             _ => Err(self.unsupported(expr, "this path")),
@@ -541,7 +545,6 @@ impl<'db> Compiler<'db> {
     fn literal(&mut self, expr: ExprId, literal: &Literal, negative: bool) -> Result<'db, ()> {
         let sign = if negative { -1 } else { 1 };
         match literal {
-            Literal::Bool(b) => self.push(Inst::I32Const(*b as i32)),
             Literal::Char(c) => self.push(Inst::I32Const(*c as i32)),
             Literal::Byte(b) => self.push(Inst::I32Const(*b as i32)),
             Literal::Int(n, _) => {
@@ -720,10 +723,10 @@ impl<'db> Compiler<'db> {
         let from = self.scalar(inner)?;
         let to = self.scalar(expr)?;
         if to == Scalar::Bool && from != Scalar::Bool {
-            return Err(self.unsupported(expr, "a cast to `bool`"));
+            return Err(self.unsupported(expr, "a cast to `Bool`"));
         }
         if (from == Scalar::Str) != (to == Scalar::Str) {
-            return Err(self.unsupported(expr, "a cast from or to `str`"));
+            return Err(self.unsupported(expr, "a cast from or to `String`"));
         }
         self.expr(inner)?;
         use ValTy::*;
@@ -924,13 +927,16 @@ impl<'db> Compiler<'db> {
                     let x: f64 = text.parse().map_err(|_| self.error(at, ErrorKind::UnknownType))?;
                     self.float_const(scalar, if *negative { -x } else { x });
                 }
-                Literal::Bool(b) => self.push(Inst::I32Const(*b as i32)),
                 Literal::Char(c) => self.push(Inst::I32Const(*c as i32)),
                 Literal::Byte(b) => self.push(Inst::I32Const(*b as i32)),
                 _ => return Err(self.unsupported(at, "a string pattern")),
             },
             Pat::Path(path) => {
                 let resolution = Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path);
+                if let Some(ValueResolution::Value(ValueNs::Builtin(v))) = resolution {
+                    self.push(Inst::I32Const(v.as_bool() as i32));
+                    return Ok(());
+                }
                 let Some(ValueResolution::Value(ValueNs::Const(id))) = resolution else {
                     return Err(self.unsupported(at, "a pattern of an enum"));
                 };

@@ -285,9 +285,9 @@ fn operators() {
 #[test]
 fn literals() {
     assert_eq!(
-        render(r##"1_000u8; 0xff; 0xf32; 0b101; 1.5e3f64; 2.; 'a'; '\n'; b'x'; "a\tb\u{e9}"; r#"raw\n"#; b"hi"; c"c"; true;"##),
+        render(r##"1_000u8; 0xff; 0xf32; 0b101; 1.5e3f64; 2.; 'a'; '\n'; b'x'; "a\tb\u{e9}"; r#"raw\n"#; b"hi"; c"c";"##),
         "1000u8;\n255;\n3890;\n5;\n1.5e3f64;\n2.;\nChar('a');\nChar('\\n');\nByte(120);\n\
-         String(\"a\\tbé\");\nString(\"raw\\\\n\");\nByteString([104, 105]);\nCString(\"c\");\nBool(true);"
+         String(\"a\\tbé\");\nString(\"raw\\\\n\");\nByteString([104, 105]);\nCString(\"c\");"
     );
 }
 

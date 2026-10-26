@@ -58,18 +58,18 @@ redoes what an edit affects.
 ## A first example
 
 ```bolt
-class Show[T] { fn show(x: T) -> str; }
+class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 fn twice(x) = (show(x), show(x));
 twice(1);
-twice(true);
+twice(True);
 ```
 
 The checker finds:
 
 ```text
-twice: forall a. Show[a] => fn(a) -> (str, str)
-error at `twice`: no instance Show[bool]
+twice: forall a. Show[a] => fn(a) -> (String, String)
+error at `twice`: no instance Show[Bool]
 ```
 
 Here is what happens:
@@ -84,8 +84,8 @@ Here is what happens:
 3. When `twice` is generalized, $\alpha$ becomes the bound variable `a`. The
    pending constraint mentions only `a`, so it becomes part of the scheme
    instead of an error.
-4. The top-level statements are checked as a separate body. `twice(true)`
-   instantiates the scheme with `bool` and emits $\mathsf{Show}[\mathsf{bool}]$,
+4. The top-level statements are checked as a separate body. `twice(True)`
+   instantiates the scheme with `Bool` and emits $\mathsf{Show}[\mathsf{bool}]$,
    for which no impl exists.
 
 ## Where things are

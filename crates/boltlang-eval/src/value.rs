@@ -180,7 +180,7 @@ impl<'db> fmt::Display for DisplayValue<'_, 'db> {
             Ok(())
         };
         match self.value {
-            Value::Bool(b) => write!(f, "{b}"),
+            Value::Bool(b) => f.write_str(if *b { "True" } else { "False" }),
             Value::Int(n) => write!(f, "{n}"),
             Value::Float(x) => write!(f, "{x:?}"),
             Value::Char(c) => write!(f, "{c:?}"),

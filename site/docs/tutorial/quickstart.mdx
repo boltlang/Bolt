@@ -75,18 +75,18 @@ bolt check hello.bolt
 No output means no errors. Try a program with a mistake in it:
 
 ```bolt title="oops.bolt"
-let x: bool = 1;
+let x: Bool = 1;
 ```
 
 ```text
-[E0201] Error: expected `bool`, found an integer
+[E0201] Error: expected `Bool`, found an integer
    ╭─[ oops.bolt:1:15 ]
    │
- 1 │ let x: bool = 1;
+ 1 │ let x: Bool = 1;
    │        ──┬─   ┬
    │          ╰─────── expected because of this annotation
    │               │
-   │               ╰── expected `bool`, found an integer
+   │               ╰── expected `Bool`, found an integer
 ───╯
 ```
 

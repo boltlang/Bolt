@@ -131,7 +131,6 @@ lazy_static! {
         m.insert("else", ELSE_KEYWORD);
         m.insert("enum", ENUM_KEYWORD);
         m.insert("extern", EXTERN_KEYWORD);
-        m.insert("false", FALSE_KEYWORD);
         m.insert("fn", FN_KEYWORD);
         m.insert("for", FOR_KEYWORD);
         m.insert("if", IF_KEYWORD);
@@ -147,7 +146,6 @@ lazy_static! {
         m.insert("return", RETURN_KEYWORD);
         m.insert("struct", STRUCT_KEYWORD);
         m.insert("super", SUPER_KEYWORD);
-        m.insert("true", TRUE_KEYWORD);
         m.insert("type", TYPE_KEYWORD);
         m.insert("where", WHERE_KEYWORD);
         m.insert("while", WHILE_KEYWORD);

@@ -46,7 +46,7 @@ Salsa sees that it didn't change.
 3. For a method in an impl, also emit equalities between its types and the
    class's declaration of the method, with the impl's types substituted for
    the class's parameters (`class_impl_method_sig`). In `impl Show[i32]`,
-   `fn show(x)` gets the type `fn(i32) -> str` from `class Show[T]`.
+   `fn show(x)` gets the type `fn(i32) -> String` from `class Show[T]`.
    Parameter types the method leaves out are taken from the class.
 4. Solve. Any class constraint that's left is ambiguous, and any field
    constraint that's left needs a type.
@@ -56,8 +56,8 @@ Salsa sees that it didn't change.
 Inferred functions can call each other in any order, and recursively:
 
 ```bolt
-fn even(n) = if n == 0 { true } else { odd(n - 1) };
-fn odd(n) = if n == 0 { false } else { even(n - 1) };
+fn even(n) = if n == 0 { True } else { odd(n - 1) };
+fn odd(n) = if n == 0 { False } else { even(n - 1) };
 ```
 
 Inferring them one at a time doesn't work, since each needs the other's
@@ -142,19 +142,19 @@ than `?3`.
 From `tests/checker/inference.txt` and `tests/checker/classes.txt`:
 
 ```bolt
-fn pair(x) = (first(x), first(true));
+fn pair(x) = (first(x), first(True));
 fn first(y) = y;
 fn twice(x) = (show(x), show(x));
 ```
 
 ```text
-pair: forall a. fn(a) -> (a, bool)
+pair: forall a. fn(a) -> (a, Bool)
 first: forall a. fn(a) -> a
-twice: forall a. Show[a] => fn(a) -> (str, str)
+twice: forall a. Show[a] => fn(a) -> (String, String)
 ```
 
 `first` is in its own group, which comes before `pair`'s, so `pair` uses
-its generalized scheme twice, at `a` and at `bool`.
+its generalized scheme twice, at `a` and at `Bool`.
 
 ## Across files
 

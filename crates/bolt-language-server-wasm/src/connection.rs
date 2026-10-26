@@ -237,16 +237,16 @@ mod tests {
         let out = send(&mut connection, json!({ "jsonrpc": "2.0", "id": 1, "method": "shutdown" }));
         assert_eq!(out[0]["error"]["code"], SERVER_NOT_INITIALIZED);
         // Notifications before it are ignored.
-        assert!(open(&mut connection, MAIN, "let x: i32 = true;\n").is_empty());
+        assert!(open(&mut connection, MAIN, "let x: i32 = True;\n").is_empty());
     }
 
     #[test]
     fn diagnostics_of_documents() {
         let mut connection = initialized();
         // A change asks the client to pull the diagnostics again.
-        let out = open(&mut connection, MAIN, "let x: i32 = true;\n");
+        let out = open(&mut connection, MAIN, "let x: i32 = True;\n");
         assert_eq!(out, [json!({ "jsonrpc": "2.0", "id": 1, "method": "workspace/diagnostic/refresh" })]);
-        assert_eq!(messages(&mut connection, MAIN), ["expected `i32`, found `bool`"]);
+        assert_eq!(messages(&mut connection, MAIN), ["expected `i32`, found `Bool`"]);
         let change = json!({
             "textDocument": { "uri": MAIN, "version": 2 },
             "contentChanges": [{ "text": "let x: i32 = 1;\n" }],
@@ -261,9 +261,9 @@ mod tests {
     #[test]
     fn documents_import_the_files_of_the_page() {
         let mut connection = initialized();
-        connection.write_file("/project/lib.bolt", "pub fn negate(x: bool) -> bool = !x;\n").unwrap();
+        connection.write_file("/project/lib.bolt", "pub fn negate(x: Bool) -> Bool = !x;\n").unwrap();
         open(&mut connection, MAIN, "import \"./lib\" (negate);\nnegate(1);\n");
-        assert_eq!(messages(&mut connection, MAIN), ["expected `bool`, found an integer"]);
+        assert_eq!(messages(&mut connection, MAIN), ["expected `Bool`, found an integer"]);
         // Writing a file asks for new diagnostics, which see it.
         let out = parsed(connection.write_file("/project/lib.bolt", "pub fn negate(x: i32) -> i32 = -x;\n").unwrap());
         assert_eq!(out[0]["method"], "workspace/diagnostic/refresh");
@@ -277,7 +277,7 @@ mod tests {
     #[test]
     fn documents_that_are_not_files() {
         let mut connection = initialized();
-        let out = open(&mut connection, "untitled:Untitled-1", "let x: i32 = true;\n");
+        let out = open(&mut connection, "untitled:Untitled-1", "let x: i32 = True;\n");
         assert_eq!(out[0]["method"], "window/logMessage");
         assert_eq!(out[0]["params"]["message"], "only files are supported, not untitled:Untitled-1");
         assert!(messages(&mut connection, "untitled:Untitled-1").is_empty());

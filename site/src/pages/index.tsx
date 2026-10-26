@@ -25,7 +25,7 @@ pub enum Shape {
 }
 
 class Show[T] {
-  fn show(x: T) -> str;
+  fn show(x: T) -> String;
 }
 
 impl Show[Shape] {
