@@ -34,7 +34,7 @@ type Result<'db, T> = std::result::Result<T, CodegenError<'db>>;
 
 /// A type the code generator can compile, and how its values behave.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Scalar {
+pub(crate) enum Scalar {
     Int { bits: u8, signed: bool },
     F32,
     F64,
@@ -48,7 +48,7 @@ enum Scalar {
 }
 
 impl Scalar {
-    fn of(db: &dyn Db, ty: &Ty<'_>) -> Option<Scalar> {
+    pub(crate) fn of(db: &dyn Db, ty: &Ty<'_>) -> Option<Scalar> {
         let ty = match ty {
             Ty::Builtin(ty) => ty,
             Ty::Adt(AdtId::Enum(id), _) if is_fieldless(db, *id) => return Some(Scalar::Enum),

@@ -10,7 +10,7 @@ use std::{
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
-use boltlang_codegen::link;
+use boltlang_codegen::{CodegenError, link, run};
 use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
 use boltlang_ide_diagnostics::{Diagnostic, DiagnosticCode, Severity, diagnostics, syntax_diagnostics};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
@@ -143,9 +143,13 @@ struct RunCommand {
     /// Run the file even when the checker finds errors.
     #[arg(long)]
     no_check: bool,
-    /// Stop after evaluating this many expressions.
+    /// Stop after evaluating this many expressions, or with `--wasm`,
+    /// after about this many WebAssembly instructions.
     #[arg(long, value_name = "STEPS")]
     fuel: Option<u64>,
+    /// Compile the file to WebAssembly and run that, instead of evaluating it.
+    #[arg(long)]
+    wasm: bool,
 }
 
 impl Exec for RunCommand {
@@ -157,17 +161,31 @@ impl Exec for RunCommand {
         if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
             return Ok(false);
         }
-        let limits = Limits { fuel: self.fuel, ..Limits::default() };
-        let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
-        match evaluator.eval_file(file) {
+        let result = if self.wasm {
+            let bytes = match link(&db, file) {
+                Ok(bytes) => bytes,
+                Err(errors) => {
+                    report(&db, &codegen_diagnostics(&db, file, &errors))?;
+                    return Ok(false);
+                }
+            };
+            run(&db, file, &bytes, Stdout, self.fuel).map_err(|error| {
+                located_diagnostic(file, None, DiagnosticCode::RUNTIME_ERROR, error.to_string())
+            })
+        } else {
+            let limits = Limits { fuel: self.fuel, ..Limits::default() };
+            let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
+            evaluator.eval_file(file).map_err(|error| runtime_diagnostic(&db, file, &error))
+        };
+        match result {
             Ok(value) => {
                 if !value.is_unit() {
                     println!("{}", value.display(&db));
                 }
                 Ok(true)
             }
-            Err(error) => {
-                report(&db, &[runtime_diagnostic(&db, file, &error)])?;
+            Err(diagnostic) => {
+                report(&db, &[diagnostic])?;
                 Ok(false)
             }
         }
@@ -202,15 +220,19 @@ impl Exec for BuildCommand {
                 Ok(true)
             }
             Err(errors) => {
-                let found: Vec<_> = errors
-                    .iter()
-                    .map(|e| located_diagnostic(file, e.source_range(&db), DiagnosticCode::CODEGEN_ERROR, e.to_string()))
-                    .collect();
-                report(&db, &found)?;
+                report(&db, &codegen_diagnostics(&db, file, &errors))?;
                 Ok(false)
             }
         }
     }
+}
+
+/// Why `file` couldn't be compiled, as diagnostics.
+fn codegen_diagnostics<'db>(db: &'db dyn Db, file: File, errors: &[CodegenError<'db>]) -> Vec<Diagnostic> {
+    errors
+        .iter()
+        .map(|e| located_diagnostic(file, e.source_range(db), DiagnosticCode::CODEGEN_ERROR, e.to_string()))
+        .collect()
 }
 
 /// An error of the evaluator as a diagnostic, at the expression where it
