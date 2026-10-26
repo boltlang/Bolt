@@ -18,7 +18,7 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{
     expr_store::ExpressionStore,
     hir::{GenericArg, TypeRef, TypeRefId},
-    ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId, TypeAliasId},
+    ids::{ConstId, FunctionId, ItemContainerId, TypeAliasId},
     item_tree::AssocItem,
     resolver::{GenericDefId, Resolver, TypeNs},
     signatures::{
@@ -171,6 +171,11 @@ enum K {
 }
 
 impl K {
+    /// `k1 -> ... -> kn -> result`, like [`Kind::arrows`].
+    fn arrows(params: Vec<K>, result: K) -> K {
+        params.into_iter().rev().fold(result, |acc, k| K::Arrow(Box::new(k), Box::new(acc)))
+    }
+
     fn from_kind(kind: &Kind) -> K {
         match kind {
             Kind::Type => K::Type,
@@ -255,7 +260,7 @@ impl<'db> KindInference<'db> {
             Some(vars) => vars.clone(),
             None => generic_param_kinds(self.db, def).iter().map(K::from_kind).collect(),
         };
-        params.into_iter().rev().fold(K::Type, |acc, k| K::Arrow(Box::new(k), Box::new(acc)))
+        K::arrows(params, K::Type)
     }
 
     fn walk_def(&mut self, def: GenericDefId<'db>) {
@@ -282,8 +287,15 @@ impl<'db> KindInference<'db> {
                 }
                 self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
             }
-            GenericDefId::Class(id) => self.walk_class(def, &resolver, id),
-            GenericDefId::Impl(id) => self.walk_impl(def, &resolver, id),
+            GenericDefId::Class(id) => {
+                let sig = class_signature(db, id);
+                self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
+            }
+            GenericDefId::Impl(id) => {
+                let sig = impl_signature(db, id);
+                self.class_constraint(&resolver, &sig.store, sig.class, None);
+                self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
+            }
             GenericDefId::TypeAlias(id) => {
                 let sig = type_alias_signature(db, id);
                 if let Some(type_ref) = sig.type_ref {
@@ -292,17 +304,6 @@ impl<'db> KindInference<'db> {
                 self.walk_generics(def, &resolver, &sig.store, &sig.generic_params);
             }
         }
-    }
-
-    fn walk_class(&mut self, def: GenericDefId<'db>, resolver: &Resolver<'db>, id: ClassId<'db>) {
-        let sig = class_signature(self.db, id);
-        self.walk_generics(def, resolver, &sig.store, &sig.generic_params);
-    }
-
-    fn walk_impl(&mut self, def: GenericDefId<'db>, resolver: &Resolver<'db>, id: ImplId<'db>) {
-        let sig = impl_signature(self.db, id);
-        self.class_constraint(resolver, &sig.store, sig.class, None);
-        self.walk_generics(def, resolver, &sig.store, &sig.generic_params);
     }
 
     /// The types of the consts of a class or impl.
@@ -374,9 +375,8 @@ impl<'db> KindInference<'db> {
                     // path, which lowering reports.
                     _ => self.new_var(),
                 };
-                let args = path.segments.last().and_then(|s| s.generic_args.as_deref()).unwrap_or_default();
                 let mut arg_kinds = Vec::new();
-                for arg in args {
+                for arg in path.last_generic_args() {
                     if let GenericArg::Type { type_ref, .. } = arg {
                         arg_kinds.push(self.kind_of(resolver, store, *type_ref));
                     }
@@ -385,8 +385,7 @@ impl<'db> KindInference<'db> {
                     return head;
                 }
                 let result = self.new_var();
-                let expected = arg_kinds.into_iter().rev().fold(result.clone(), |acc, k| K::Arrow(Box::new(k), Box::new(acc)));
-                self.unify(&head, &expected);
+                self.unify(&head, &K::arrows(arg_kinds, result.clone()));
                 result
             }
             TypeRef::Tuple(tys) => {
@@ -431,8 +430,7 @@ impl<'db> KindInference<'db> {
         {
             self.unify(&target, &param);
         }
-        let args = path.segments.last().and_then(|s| s.generic_args.as_deref()).unwrap_or_default();
-        for (arg, param) in args.iter().zip(params) {
+        for (arg, param) in path.last_generic_args().iter().zip(params) {
             if let GenericArg::Type { type_ref, .. } = arg {
                 let kind = self.kind_of(resolver, store, *type_ref);
                 self.unify(&kind, &param);
