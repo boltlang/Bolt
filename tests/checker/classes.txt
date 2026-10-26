@@ -478,3 +478,17 @@ fn f() {
 Default[i32].default: fn() -> i32
 Default[Bool].default: fn() -> Bool
 f: fn() -> ()
+
+================================================================================
+An impl for a function type and a closure whose types aren't known
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
+fn f() = show(|x| x);
+fn g() = show(|x| x + 1);
+--------------------------------------------------------------------------------
+Show[fn(i32) -> i32].show: fn(fn(i32) -> i32) -> String
+f: fn() -> String
+g: fn() -> String
+--------------------------------------------------------------------------------
+error at `show`: ambiguous
