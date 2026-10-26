@@ -8,6 +8,9 @@
 //! Each item is stored in a list per kind, and refers back to its syntax by
 //! an [`AstId`]: its position among the items of the same kind in the file.
 //! Unlike a text range, that position doesn't change when a body is edited.
+//! The [`AstIdMap`] of a file finds the syntax of each one.
+
+use std::collections::HashMap;
 
 use boltlang_base_db::{Db, File, parse_file};
 use boltlang_syntax::{
@@ -17,7 +20,10 @@ use boltlang_syntax::{
 };
 
 pub use crate::arena::Idx;
-use crate::{Name, expr_store::unquote};
+use crate::{
+    Name,
+    expr_store::{SyntaxPtr, unquote},
+};
 
 /// The items of `file`.
 #[salsa::tracked(returns(ref))]
@@ -41,10 +47,37 @@ pub struct AstId {
 }
 
 impl AstId {
-    /// Find the syntax node this refers to in the syntax tree of the file.
-    pub fn to_node(self, root: &SyntaxNode) -> Option<SyntaxNode> {
-        item_nodes(root).filter(|node| node.kind() == self.kind).nth(self.index as usize)
+    /// Find the syntax node this refers to in `root`, the syntax tree of
+    /// `file`.
+    pub fn to_node(self, db: &dyn Db, file: File, root: &SyntaxNode) -> Option<SyntaxNode> {
+        ast_id_map(db, file).get(self)?.to_node(root)
     }
+}
+
+/// Where the syntax of each item of a file is, by [`AstId`], so that finding
+/// an item doesn't walk all the items before it. Unlike the [`AstId`]s, the
+/// pointers change whenever the text before them does.
+#[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct AstIdMap {
+    /// The items of each kind, in order.
+    items: HashMap<SyntaxKind, Vec<SyntaxPtr>>,
+}
+
+impl AstIdMap {
+    pub fn get(&self, ast_id: AstId) -> Option<SyntaxPtr> {
+        self.items.get(&ast_id.kind)?.get(ast_id.index as usize).copied()
+    }
+}
+
+/// The [`AstIdMap`] of `file`.
+#[salsa::tracked(returns(ref))]
+pub fn ast_id_map(db: &dyn Db, file: File) -> AstIdMap {
+    let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
+    let mut map = AstIdMap::default();
+    for node in item_nodes(&root) {
+        map.items.entry(node.kind()).or_default().push(SyntaxPtr::new(&node));
+    }
+    map
 }
 
 /// The nodes of the items in a file in the order they appear, including the

@@ -274,7 +274,7 @@ impl<'db> Collector<'db> {
                     (self.name_in(*ast_id, name), DiagnosticKind::DuplicateDefinition { name: name.clone() })
                 }
                 NameResDiagnostic::UnresolvedImportPath { import, path, error } => {
-                    let node = import.to_node(&self.root);
+                    let node = import.to_node(self.db, self.file, &self.root);
                     let string = node.as_ref().and_then(|n| {
                         n.children_with_tokens().filter_map(|e| e.into_token()).find(|t| t.kind() == STRING)
                     });
@@ -711,7 +711,7 @@ impl<'db> Collector<'db> {
 
     /// The path of `import Option.*;`, or the whole import.
     fn import_path_range(&self, import: AstId) -> Option<TextRange> {
-        let node = import.to_node(&self.root)?;
+        let node = import.to_node(self.db, self.file, &self.root)?;
         let path = node.children().find(|n| n.kind() == PATH);
         Some(path.unwrap_or(node).text_range())
     }
@@ -739,14 +739,14 @@ impl<'db> Collector<'db> {
 
     /// The name of an item, or the whole item if it has none.
     fn item_range(&self, ast_id: AstId) -> TextRange {
-        let Some(node) = ast_id.to_node(&self.root) else { return self.fallback };
+        let Some(node) = ast_id.to_node(self.db, self.file, &self.root) else { return self.fallback };
         node.children().find(|n| n.kind() == NAME).unwrap_or(node).text_range()
     }
 
     /// Where `name` is in the item or import `ast_id`. For an item, that's
     /// the name it defines; for an import, the name in its list.
     fn name_in(&self, ast_id: AstId, name: &Name) -> Option<TextRange> {
-        let node = ast_id.to_node(&self.root)?;
+        let node = ast_id.to_node(self.db, self.file, &self.root)?;
         if ast_id.kind != SyntaxKind::IMPORT {
             return Some(self.item_range(ast_id));
         }

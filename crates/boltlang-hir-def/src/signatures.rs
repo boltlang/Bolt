@@ -228,7 +228,7 @@ pub fn type_alias_signature<'db>(db: &'db dyn Db, id: TypeAliasId<'db>) -> TypeA
 
 /// The syntax of the item at `ast_id` in `file`, if it's an `N`.
 fn item_node<N: Node>(db: &dyn Db, file: File, ast_id: AstId) -> Option<N> {
-    ast_id.to_node(&SyntaxNode::new_root(parse_file(db, file).tree(db).clone())).and_then(N::cast)
+    ast_id.to_node(db, file, &SyntaxNode::new_root(parse_file(db, file).tree(db).clone())).and_then(N::cast)
 }
 
 fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignature, ExpressionStoreSourceMap) {
