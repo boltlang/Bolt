@@ -157,3 +157,87 @@ struct B[F] { a: Option[A[F]], x: F[i32] }
 fn f(a: A[Option]) -> A[Option] = a;
 --------------------------------------------------------------------------------
 f: fn(A[Option]) -> A[Option]
+
+================================================================================
+A type constructor used with two different arguments
+================================================================================
+enum Option[T] { None, Some(T) }
+fn both[F](a: F[i32], b: F[bool]) -> (F[i32], F[bool]) = (a, b);
+both(Option.Some(1), Option.None);
+both(Option.Some(1), [true]);
+
+--------------------------------------------------------------------------------
+both: forall F. fn(F[i32], F[bool]) -> (F[i32], F[bool])
+both(Option.Some(1), Option.None): (Option[i32], Option[bool])
+both(Option.Some(1), [true]): (Option[i32], Option[bool])
+--------------------------------------------------------------------------------
+error at `[true]`: expected Option[bool], found [bool]
+
+================================================================================
+A type constructor inferred from a partially applied enum
+================================================================================
+enum Either[E, A] { Left(E), Right(A) }
+fn inner[F, A](x: F[A]) -> F[A] = x;
+let r: Either[str, i32] = Either.Right(1);
+inner(r);
+
+--------------------------------------------------------------------------------
+inner: forall F A. fn(F[A]) -> F[A]
+let r: Either[str, i32]
+inner(r): Either[str, i32]
+
+================================================================================
+Arrays, tuples and functions aren't applications of a type constructor
+:error
+================================================================================
+fn inner[F, A](x: F[A]) -> F[A] = x;
+inner([1]);
+inner((1, true));
+inner(|x: i32| x);
+
+--------------------------------------------------------------------------------
+inner: forall F A. fn(F[A]) -> F[A]
+inner([1]): a[b]
+inner((1, true)): a[b]
+inner(|x: i32| x): a[b]
+--------------------------------------------------------------------------------
+error at `[1]`: expected a[b], found [{integer}]
+error at `(1, true)`: expected a[b], found ({integer}, bool)
+error at `|x: i32| x`: expected a[b], found fn(i32) -> i32
+
+================================================================================
+The kind of a type parameter comes from how it is used
+:error
+================================================================================
+fn f[F](x: F[i32, bool]) -> i32 = 1;
+fn g[F](x: F[i32], y: F[i32, bool]) -> i32 = 1;
+
+--------------------------------------------------------------------------------
+f: forall F. fn(F[i32, bool]) -> i32
+g: forall F. fn(F[i32], {error}) -> i32
+--------------------------------------------------------------------------------
+error at `F[i32, bool]`: expected 1 type arguments, found 2
+
+================================================================================
+A type constructor applied to a type constructor
+================================================================================
+enum Option[T] { None, Some(T) }
+struct Apply[F, A] { value: F[A] }
+struct Compose[F, G, A] { value: F[G[A]] }
+let a = Apply { value: Option.Some(1) };
+let c = Compose { value: Option.Some(Option.Some(true)) };
+
+--------------------------------------------------------------------------------
+let a: Apply[Option, i32]
+let c: Compose[Option, Option, bool]
+
+================================================================================
+A class of type constructors used with a type
+:error
+================================================================================
+class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
+fn f(x: i32) -> i32 where Functor[i32] = x;
+--------------------------------------------------------------------------------
+f: Functor[{error}] => fn(i32) -> i32
+--------------------------------------------------------------------------------
+error at `i32`: expected kind Type -> Type, found Type
