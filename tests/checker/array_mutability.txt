@@ -489,17 +489,26 @@ let [a, b]: mut [i32]
 let [c, ..]: imm [Bool]
 
 ================================================================================
-A field must say whether its array can be changed
+A field without mut or imm is imm
 :error
 ================================================================================
 struct Inventory { items: [i32] }
 enum Shape { Points([(f64, f64)]) }
+fn f(inv: Inventory, s: Shape) {
+  inv.items[0] = 1;
+  match s { Shape.Points(ps) => ps[0] = (0.0, 0.0) };
+}
+let a = Inventory { items: [1] };
+let b = Inventory { items: mut [1] };
 
 --------------------------------------------------------------------------------
-
+f: fn(Inventory, Shape) -> ()
+let a: Inventory
+let b: Inventory
 --------------------------------------------------------------------------------
-error at `[i32]`: mut or imm needed
-error at `[(f64, f64)]`: mut or imm needed
+error at `inv.items`: can't change imm [i32]
+error at `ps`: can't change imm [(f64, f64)]
+error at `mut [1]`: expected imm [i32], found mut [i32]
 
 ================================================================================
 Fields that say mut or imm
@@ -616,11 +625,14 @@ A type alias without mut or imm in a field
 ================================================================================
 type Grid = [[i32]];
 struct Board { cells: Grid }
+let b = Board { cells: [[1]] };
+let c = Board { cells: mut [[1]] };
 
 --------------------------------------------------------------------------------
-
+let b: Board
+let c: Board
 --------------------------------------------------------------------------------
-error at `Grid`: mut or imm needed
+error at `mut [[1]]`: expected imm [imm [i32]], found mut [imm [i32]]
 
 ================================================================================
 A const array can't be changed

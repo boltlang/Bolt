@@ -74,7 +74,6 @@ impl DiagnosticCode {
     pub const ASSIGN_TO_IMMUTABLE: Self = Self("E0219");
     pub const NOT_A_PLACE: Self = Self("E0220");
     pub const IMMUTABLE_ARRAY: Self = Self("E0221");
-    pub const MUTABILITY_NEEDED: Self = Self("E0222");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -317,10 +316,6 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                 "cannot change an element of `{source}`, which is `{}`; only a `mut` array can be changed",
                 ty.display_with(db, names)
             ),
-        ),
-        K::MutabilityNeeded => (
-            C::MUTABILITY_NEEDED,
-            format!("say whether the array in `{source}` can be changed: write `mut [..]` or `imm [..]`"),
         ),
         K::NotAPlace => {
             (C::NOT_A_PLACE, "cannot assign to this; only a variable, a field or an element can be assigned to".into())

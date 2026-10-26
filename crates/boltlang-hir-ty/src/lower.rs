@@ -75,9 +75,6 @@ pub enum LowerDiagnostic {
     /// Something the checker doesn't support yet, like `impl Trait` or
     /// associated types.
     Unsupported(TypeRefId),
-    /// An array type in a field without `mut` or `imm`, which a field must
-    /// say. The type is taken to be `imm`.
-    MutabilityNeeded(TypeRefId),
 }
 
 pub struct TyLoweringContext<'a, 'db> {
@@ -550,16 +547,8 @@ fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList) -
         FieldList::Tuple(fields) => (FieldsKind::Tuple, fields),
         FieldList::Unit => (FieldsKind::Unit, &[]),
     };
-    let fields = list
-        .iter()
-        .map(|f| {
-            let ty = ctx.lower_ty(f.type_ref);
-            if ty.has_unwritten() {
-                ctx.diagnostics.push(LowerDiagnostic::MutabilityNeeded(f.type_ref));
-            }
-            (f.name.clone(), ty.fill_unwritten(&mut imm))
-        })
-        .collect();
+    // A field holds one array, so one without `mut` or `imm` is `imm`.
+    let fields = list.iter().map(|f| (f.name.clone(), ctx.lower_ty(f.type_ref).fill_unwritten(&mut imm))).collect();
     FieldTypes { kind, fields, diagnostics: std::mem::take(&mut ctx.diagnostics) }
 }
 

@@ -117,8 +117,6 @@ pub enum DiagnosticKind<'db> {
     /// An assignment to an element of an array of type `ty`, which isn't a
     /// `mut` array.
     ImmutableArray { ty: Ty<'db> },
-    /// An array type in a field without `mut` or `imm`.
-    MutabilityNeeded,
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -543,7 +541,6 @@ impl<'db> Collector<'db> {
                 }
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
-                LowerDiagnostic::MutabilityNeeded(id) => (*id, DiagnosticKind::MutabilityNeeded),
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {

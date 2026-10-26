@@ -327,7 +327,6 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         }
         LowerDiagnostic::RecursiveAlias(id) => format!("error at `{}`: recursive alias", at(*id)),
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
-        LowerDiagnostic::MutabilityNeeded(id) => format!("error at `{}`: mut or imm needed", at(*id)),
     }
 }
 
