@@ -36,16 +36,13 @@ effects*, compiled the way Svelte 5 compiles its components.
 ## Components as effectful functions
 
 A component is a function whose type says it uses the `Reactive` effect,
-and maybe `Async`:
+and maybe `Async`, the effect of code that waits, like `fetch`. That one has
+a [page of its own](./async.mdx).
 
 ```bolt
 effect Reactive {
     fn state[T](key: Key, init: T) -> Signal[T];  // the key comes from the compiler
     fn read[T](s: Signal[T]) -> T;
-}
-
-effect Async {
-    fn await[T](f: Future[T]) -> T;
 }
 
 fn app() -> Html / { Reactive, Async } {
@@ -65,7 +62,8 @@ This gives:
   it can record what a computation depends on. Solid and Svelte 5 do this
   with a global "current listener" variable, which is an untyped effect
   handler in all but name.
-- **Async without rerunning.** `await` suspends the component: the handler
+- **Async without rerunning.** A call that waits, like `fetch`, suspends
+  the component: the handler
   shows a fallback, and resumes the component when the data is there. React's
   Suspense throws a promise and reruns the component instead, because
   JavaScript can't resume a function halfway.
@@ -142,7 +140,7 @@ Inference has limits:
 5. **The cost of compiling effects.** General effects need stack switching or
    a CPS transform, which is slow when compiled to JavaScript. But `state` and
    `read` resume right away, and such operations compile to a hidden
-   argument, almost for free, as in Koka. Only `await` suspends; in wasm,
+   argument, almost for free, as in Koka. Only `Async` suspends ([more on that](./async.mdx#compiling-it)); in wasm,
    JSPI and stack switching can help there.
 6. **Effect polymorphism.** `list.map(|x| <Item ... />)` only type
    checks if `map` passes on the effects of its callback. Effect rows are the
@@ -167,7 +165,7 @@ Inference has limits:
 | a read, `$.get(count)`                  | the `read(s)` operation, tracked by the handler   |
 | the global "active reaction"            | the handler in scope, which the types track       |
 | the template split per DOM node         | the same, each part under a tracking handler      |
-| `{#await}`, and Suspense in React       | the `await` operation, resumed once               |
+| `{#await}`, and Suspense in React       | a call with `Async`, like `fetch`, resumed once   |
 | server rendering as a compile mode      | another handler                                   |
 
 So the design is a Svelte 5–style compiler on an effect-based runtime.
@@ -202,8 +200,9 @@ fn app() -> Html / { Reactive } {
 
 fn login_form(on_login: fn(User) -> ()) -> Html / { Reactive } {
     let mut failed = false;
-    // An event handler runs after drawing, as a task of its own.
-    let submit = async || match await fetch("/api/login") {
+    // fetch waits, so the closure is inferred to be fn() -> () / { Async }.
+    // That's what on_click accepts: the page runs it as a task of its own.
+    let submit = || match fetch("/api/login") {
         Ok(data) => on_login({ username = data.username }),
         Err(_) => { failed = true; },
     };
@@ -231,4 +230,4 @@ fn login_form(on_login: fn(User) -> ()) -> Html / { Reactive } {
 The `Reactive` effect with only operations that resume right away, the
 inference of state, and the keys from the compiler. That gives state that
 behaves well and components in the types, without the hard parts of
-compiling effects. Derived values, splitting markup and `await` come later.
+compiling effects. Derived values, splitting markup and `Async` come later.
