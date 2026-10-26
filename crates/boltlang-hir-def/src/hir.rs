@@ -246,6 +246,12 @@ impl Path {
             _ => None,
         }
     }
+
+    /// The generic arguments of the last segment, like the `i32` of
+    /// `m.Option[i32]`, which are those of what the path names.
+    pub fn last_generic_args(&self) -> &[GenericArg] {
+        self.segments.last().and_then(|s| s.generic_args.as_deref()).unwrap_or_default()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
