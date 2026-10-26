@@ -277,9 +277,8 @@ pub enum TypeRef {
     Array { element: TypeRefId, len: Option<ExprId> },
     /// `!`
     Never,
-    /// `fn(A, B) -> C`, or `FnOnce(A) -> C` with a trait.
+    /// `fn(A, B) -> C`
     Fn {
-        trait_path: Option<Path>,
         params: Box<[(Option<Name>, TypeRefId)]>,
         is_variadic: bool,
         ret_type: Option<TypeRefId>,

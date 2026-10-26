@@ -123,7 +123,6 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             TypeRef::Tuple(tys) => Ty::Tuple(tys.iter().map(|t| self.lower_ty(*t)).collect()),
             TypeRef::Array { element, .. } => Ty::Array(Box::new(self.lower_ty(*element))),
             TypeRef::Never => Ty::Never,
-            // `FnOnce(A) -> B` is a function type too, for now.
             TypeRef::Fn { params, ret_type, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
                 let ret = ret_type.map_or_else(Ty::unit, |t| self.lower_ty(t));
