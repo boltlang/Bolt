@@ -26,15 +26,6 @@ use crate::{
     ty::{Ty, TyVar, VarKind},
 };
 
-pub fn def_file<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> File {
-    match def.def(db) {
-        DefWithBody::Function(id) => id.file(db),
-        DefWithBody::Const(id) => id.file(db),
-        DefWithBody::Variant(id) => id.parent.file(db),
-        DefWithBody::File(file) => file,
-    }
-}
-
 /// The type of a function, for its callers. `Err` if it can't be inferred
 /// because files that import each other have functions without complete
 /// signatures that call each other.
@@ -49,7 +40,7 @@ pub fn function_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db 
 /// The types in the body of `def`.
 #[salsa::tracked(returns(ref))]
 pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceResult<'db> {
-    let file = def_file(db, def);
+    let file = def.def(db).file(db);
     match def.def(db) {
         DefWithBody::Function(f) if !is_declared(db, f) => {
             let inference = file_inference(db, file);

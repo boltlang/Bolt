@@ -23,7 +23,7 @@ use crate::{
         ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, MacroRulesId, ModuleDefId,
         StructId, TypeAliasId,
     },
-    item_tree::{AssocItem, AstId, FunctionName, ImportKind, ModItem, RawVisibility, item_tree},
+    item_tree::{AssocItem, AstId, ImportKind, ItemTree, ModItem, RawVisibility, item_tree},
 };
 
 /// The namespaces a name can be in. A name can refer to a type, a value and
@@ -33,6 +33,10 @@ pub enum Namespace {
     Types,
     Values,
     Macros,
+}
+
+impl Namespace {
+    pub const ALL: [Namespace; 3] = [Namespace::Types, Namespace::Values, Namespace::Macros];
 }
 
 /// What a name in a scope refers to.
@@ -46,6 +50,13 @@ pub struct ScopeEntry<'db> {
     pub import: Option<AstId>,
     /// Whether the name comes from the prelude.
     pub prelude: bool,
+}
+
+impl<'db> ScopeEntry<'db> {
+    /// A name that `import` brings in.
+    fn imported(def: ModuleDefId<'db>, visibility: RawVisibility, import: AstId) -> Self {
+        ScopeEntry { def, visibility, import: Some(import), prelude: false }
+    }
 }
 
 /// The names at the top level of a file.
@@ -90,7 +101,7 @@ impl<'db> ItemScope<'db> {
 
     /// Add the names of `other` that aren't here yet.
     fn extend(&mut self, other: &ItemScope<'db>) {
-        for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
+        for ns in Namespace::ALL {
             for (name, entry) in other.entries(ns) {
                 self.insert(ns, name.clone(), *entry);
             }
@@ -139,114 +150,107 @@ pub struct FileScope<'db> {
     pub diagnostics: Vec<NameResDiagnostic>,
 }
 
+impl<'db> FileScope<'db> {
+    /// Add a name, or report that it's already there. `ast_id` is the item
+    /// or import that adds it.
+    fn define(&mut self, ns: Namespace, name: &Name, entry: ScopeEntry<'db>, ast_id: AstId) {
+        if !self.scope.insert(ns, name.clone(), entry) {
+            self.diagnostics.push(NameResDiagnostic::Duplicate { name: name.clone(), ast_id });
+        }
+    }
+
+    /// Add an item that's defined in the file.
+    fn define_item(&mut self, ns: Namespace, name: &Option<Name>, def: ModuleDefId<'db>, visibility: RawVisibility, ast_id: AstId) {
+        if let Some(name) = name {
+            self.define(ns, name, ScopeEntry { def, visibility, import: None, prelude: false }, ast_id);
+        }
+    }
+
+    /// Add a function, const or type alias of `container`. `visibility` is
+    /// the one it gets, if it's not its own.
+    fn define_assoc(
+        &mut self,
+        db: &'db dyn Db,
+        tree: &ItemTree,
+        container: ItemContainerId<'db>,
+        item: AssocItem,
+        visibility: Option<RawVisibility>,
+    ) {
+        match item {
+            AssocItem::Function(idx) => {
+                let f = &tree.functions[idx.index()];
+                let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
+                let name = f.name.as_ref().map(|name| name.name().clone());
+                self.define_item(Namespace::Values, &name, def, visibility.unwrap_or(f.visibility), f.ast_id);
+            }
+            AssocItem::Const(idx) => {
+                let c = &tree.consts[idx.index()];
+                let def = ModuleDefId::Const(ConstId::new(db, container, idx));
+                self.define_item(Namespace::Values, &c.name, def, visibility.unwrap_or(c.visibility), c.ast_id);
+            }
+            AssocItem::TypeAlias(idx) => {
+                let t = &tree.type_aliases[idx.index()];
+                let def = ModuleDefId::TypeAlias(TypeAliasId::new(db, container, idx));
+                self.define_item(Namespace::Types, &t.name, def, visibility.unwrap_or(t.visibility), t.ast_id);
+            }
+            AssocItem::MacroCall(_) => {}
+        }
+    }
+}
+
 /// The items defined in `file`, without imports.
 #[salsa::tracked(returns(ref))]
 pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let tree = item_tree(db, file);
     let mut out = FileScope::default();
     let container = ItemContainerId::File(file);
-    let define = |out: &mut FileScope<'db>, ns, name: &Option<Name>, def, visibility, ast_id| {
-        let Some(name) = name else { return };
-        if !out.scope.insert(ns, name.clone(), ScopeEntry { def, visibility, import: None, prelude: false }) {
-            out.diagnostics.push(NameResDiagnostic::Duplicate { name: name.clone(), ast_id });
-        }
-    };
     for item in &tree.top_level {
         match *item {
-            ModItem::Function(idx) => {
-                let f = &tree.functions[idx.index()];
-                let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
-                define(&mut out, Namespace::Values, &function_name(&f.name), def, f.visibility, f.ast_id);
-            }
+            ModItem::Function(idx) => out.define_assoc(db, tree, container, AssocItem::Function(idx), None),
+            ModItem::Const(idx) => out.define_assoc(db, tree, container, AssocItem::Const(idx), None),
+            ModItem::TypeAlias(idx) => out.define_assoc(db, tree, container, AssocItem::TypeAlias(idx), None),
             ModItem::Struct(idx) => {
                 let s = &tree.structs[idx.index()];
                 let def = ModuleDefId::Struct(StructId::new(db, file, idx));
-                define(&mut out, Namespace::Types, &s.name, def, s.visibility, s.ast_id);
+                out.define_item(Namespace::Types, &s.name, def, s.visibility, s.ast_id);
             }
             ModItem::Enum(idx) => {
                 let e = &tree.enums[idx.index()];
                 let def = ModuleDefId::Enum(EnumId::new(db, file, idx));
-                define(&mut out, Namespace::Types, &e.name, def, e.visibility, e.ast_id);
+                out.define_item(Namespace::Types, &e.name, def, e.visibility, e.ast_id);
             }
             ModItem::Class(idx) => {
                 let c = &tree.classes[idx.index()];
                 let class = ClassId::new(db, file, idx);
-                define(&mut out, Namespace::Types, &c.name, ModuleDefId::Class(class), c.visibility, c.ast_id);
+                out.define_item(Namespace::Types, &c.name, ModuleDefId::Class(class), c.visibility, c.ast_id);
                 // Class methods are called like functions, as in Haskell, and
                 // class constants are used like constants, so they're in the
-                // file's scope, with the class's visibility.
-                let container = ItemContainerId::Class(class);
-                for item in &c.items {
-                    match *item {
-                        AssocItem::Function(idx) => {
-                            let f = &tree.functions[idx.index()];
-                            let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
-                            define(&mut out, Namespace::Values, &function_name(&f.name), def, c.visibility, f.ast_id);
-                        }
-                        AssocItem::Const(idx) => {
-                            let k = &tree.consts[idx.index()];
-                            let def = ModuleDefId::Const(ConstId::new(db, container, idx));
-                            define(&mut out, Namespace::Values, &k.name, def, c.visibility, k.ast_id);
-                        }
-                        AssocItem::TypeAlias(_) | AssocItem::MacroCall(_) => {}
+                // file's scope, with the class's visibility. Associated types
+                // aren't.
+                for &item in &c.items {
+                    if !matches!(item, AssocItem::TypeAlias(_)) {
+                        out.define_assoc(db, tree, ItemContainerId::Class(class), item, Some(c.visibility));
                     }
                 }
-            }
-            ModItem::Const(idx) => {
-                let c = &tree.consts[idx.index()];
-                let def = ModuleDefId::Const(ConstId::new(db, container, idx));
-                define(&mut out, Namespace::Values, &c.name, def, c.visibility, c.ast_id);
-            }
-            ModItem::TypeAlias(idx) => {
-                let t = &tree.type_aliases[idx.index()];
-                let def = ModuleDefId::TypeAlias(TypeAliasId::new(db, container, idx));
-                define(&mut out, Namespace::Types, &t.name, def, t.visibility, t.ast_id);
             }
             ModItem::MacroRules(idx) => {
                 let m = &tree.macro_rules[idx.index()];
                 let def = ModuleDefId::MacroRules(MacroRulesId::new(db, file, idx));
                 // Macros don't have a visibility; treat them as public.
-                define(&mut out, Namespace::Macros, &m.name, def, RawVisibility::Public, m.ast_id);
+                out.define_item(Namespace::Macros, &m.name, def, RawVisibility::Public, m.ast_id);
             }
             ModItem::Impl(idx) => out.scope.impls.push(ImplId::new(db, file, idx)),
             // The items of an extern block are part of the file.
             ModItem::ExternBlock(idx) => {
-                let block = ExternBlockId::new(db, file, idx);
-                let container = ItemContainerId::ExternBlock(block);
-                for item in &tree.extern_blocks[idx.index()].items {
-                    match *item {
-                        AssocItem::Function(idx) => {
-                            let f = &tree.functions[idx.index()];
-                            let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
-                            define(&mut out, Namespace::Values, &function_name(&f.name), def, f.visibility, f.ast_id);
-                        }
-                        AssocItem::Const(idx) => {
-                            let c = &tree.consts[idx.index()];
-                            let def = ModuleDefId::Const(ConstId::new(db, container, idx));
-                            define(&mut out, Namespace::Values, &c.name, def, c.visibility, c.ast_id);
-                        }
-                        AssocItem::TypeAlias(idx) => {
-                            let t = &tree.type_aliases[idx.index()];
-                            let def = ModuleDefId::TypeAlias(TypeAliasId::new(db, container, idx));
-                            define(&mut out, Namespace::Types, &t.name, def, t.visibility, t.ast_id);
-                        }
-                        AssocItem::MacroCall(_) => {}
-                    }
+                let block = ItemContainerId::ExternBlock(ExternBlockId::new(db, file, idx));
+                for &item in &tree.extern_blocks[idx.index()].items {
+                    out.define_assoc(db, tree, block, item, None);
                 }
             }
             ModItem::Import(_) => {}
         }
     }
     out
-}
-
-/// The name a function is defined under: its name, or for an operator like
-/// `fn a + b`, the operator.
-fn function_name(name: &Option<FunctionName>) -> Option<Name> {
-    match name {
-        Some(FunctionName::Name(name) | FunctionName::Operator(name)) => Some(name.clone()),
-        None => None,
-    }
 }
 
 /// The names in `file`: its own items and what its imports bring in.
@@ -265,41 +269,28 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             }
         };
         let exports = &file_scope(db, target).scope;
-        let imported = |entry: &ScopeEntry<'db>| ScopeEntry {
-            def: entry.def,
-            visibility: narrower(import.visibility, entry.visibility),
-            import: Some(import.ast_id),
-            prelude: false,
+        let imported = |entry: &ScopeEntry<'db>| {
+            ScopeEntry::imported(entry.def, narrower(import.visibility, entry.visibility), import.ast_id)
         };
         match &import.kind {
             ImportKind::Plain => {}
             ImportKind::Alias(alias) => {
-                let entry = ScopeEntry {
-                    def: ModuleDefId::File(target),
-                    visibility: import.visibility,
-                    import: Some(import.ast_id),
-                    prelude: false,
-                };
-                if !out.scope.insert(Namespace::Types, alias.clone(), entry) {
-                    out.diagnostics.push(NameResDiagnostic::Duplicate { name: alias.clone(), ast_id: import.ast_id });
-                }
+                let entry = ScopeEntry::imported(ModuleDefId::File(target), import.visibility, import.ast_id);
+                out.define(Namespace::Types, alias, entry, import.ast_id);
             }
             ImportKind::List(names) => {
                 for (name, alias) in names {
                     let local_name = alias.as_ref().unwrap_or(name);
                     let mut found = false;
                     let mut hidden = None;
-                    for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
+                    for ns in Namespace::ALL {
                         let Some(entry) = exports.get(ns, name) else { continue };
                         if !is_visible_from(db, entry.visibility, target, file) {
                             hidden = Some(entry.visibility);
                             continue;
                         }
                         found = true;
-                        if !out.scope.insert(ns, local_name.clone(), imported(entry)) {
-                            out.diagnostics
-                                .push(NameResDiagnostic::Duplicate { name: local_name.clone(), ast_id: import.ast_id });
-                        }
+                        out.define(ns, local_name, imported(entry), import.ast_id);
                     }
                     if !found {
                         out.diagnostics.push(match hidden {
@@ -316,7 +307,7 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             // A glob import brings in all the names visible here, but doesn't
             // replace names that are already in scope.
             ImportKind::Glob => {
-                for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
+                for ns in Namespace::ALL {
                     for (name, entry) in exports.entries(ns) {
                         if is_visible_from(db, entry.visibility, target, file) {
                             out.scope.insert(ns, name.clone(), imported(entry));
@@ -333,7 +324,7 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let mut prelude = ItemScope::default();
     match prelude_file(db, file).clone() {
         Ok(Some(source)) => {
-            for ns in [Namespace::Types, Namespace::Values, Namespace::Macros] {
+            for ns in Namespace::ALL {
                 for (name, entry) in file_scope(db, source).scope.entries(ns) {
                     if is_visible_from(db, entry.visibility, source, file) {
                         let entry = ScopeEntry { visibility: RawVisibility::Private, import: None, prelude: true, ..*entry };
@@ -366,8 +357,7 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         };
         for (index, name) in id.item(db).variants.iter().enumerate() {
             let variant = EnumVariantId { parent: id, index: index as u32 };
-            let entry =
-                ScopeEntry { def: ModuleDefId::Variant(variant), visibility, import: Some(import.ast_id), prelude: false };
+            let entry = ScopeEntry::imported(ModuleDefId::Variant(variant), visibility, import.ast_id);
             // Like a glob import, it doesn't replace names already in scope.
             // A variant is a value, like `None`, and can be the type of a
             // record literal, like `Circle { r: 1 }`.

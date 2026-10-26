@@ -23,6 +23,18 @@ pub enum DefWithBody<'db> {
     File(File),
 }
 
+impl DefWithBody<'_> {
+    /// The file the body is in.
+    pub fn file(self, db: &dyn Db) -> File {
+        match self {
+            DefWithBody::Function(id) => id.file(db),
+            DefWithBody::Const(id) => id.file(db),
+            DefWithBody::Variant(id) => id.parent.file(db),
+            DefWithBody::File(file) => file,
+        }
+    }
+}
+
 /// An interned [`DefWithBody`], so that it can be the key of a query.
 #[salsa::interned(debug)]
 pub struct DefWithBodyId<'db> {
@@ -51,12 +63,7 @@ impl std::ops::Deref for Body {
 #[salsa::tracked(returns(ref))]
 pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (Body, ExpressionStoreSourceMap) {
     let def = def.def(db);
-    let file = match def {
-        DefWithBody::Function(id) => id.file(db),
-        DefWithBody::Const(id) => id.file(db),
-        DefWithBody::Variant(id) => id.parent.file(db),
-        DefWithBody::File(file) => file,
-    };
+    let file = def.file(db);
     let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
     let mut collector = ExprCollector::new();
     let mut params = Vec::new();
