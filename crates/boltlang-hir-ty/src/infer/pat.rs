@@ -91,7 +91,8 @@ impl<'db> InferenceContext<'_, 'db> {
             // Lengths aren't checked yet, so `..` doesn't matter.
             Pat::Slice { args, .. } => {
                 let elem = self.solver.new_var(VarKind::General);
-                self.expect_shape(pat, expected, &Ty::Array(Box::new(elem.clone())), std::slice::from_ref(&elem));
+                let array = Ty::array(self.solver.new_var(VarKind::Mutability), elem.clone());
+                self.expect_shape(pat, expected, &array, std::slice::from_ref(&elem));
                 for &arg in args.iter() {
                     self.check_pat(arg, &elem);
                 }

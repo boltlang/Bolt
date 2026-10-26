@@ -410,8 +410,8 @@ impl<'db> Evaluator<'db> {
                 Ok(Value::Range { start, end, inclusive: *inclusive })
             }
             Expr::Tuple { exprs } => Ok(Value::Tuple(self.eval_all(f, exprs)?)),
-            Expr::Array { exprs } => Ok(Value::Array(self.eval_all(f, exprs)?)),
-            Expr::ArrayRepeat { value, count } => {
+            Expr::Array { exprs, .. } => Ok(Value::Array(self.eval_all(f, exprs)?)),
+            Expr::ArrayRepeat { value, count, .. } => {
                 let value = self.eval(f, *value)?;
                 let Value::Int(count) = self.eval(f, *count)? else {
                     return mismatch("the length of an array must be an integer");

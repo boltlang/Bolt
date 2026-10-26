@@ -257,8 +257,8 @@ fn children(expr: &Expr) -> Vec<ExprId> {
         Expr::Index { base, index } => out.extend([*base, *index]),
         Expr::Binary { lhs, rhs, .. } => out.extend([*lhs, *rhs]),
         Expr::Range { lhs, rhs, .. } => out.extend(lhs.iter().chain(rhs.iter()).copied()),
-        Expr::Tuple { exprs } | Expr::Array { exprs } => out.extend(exprs.iter().copied()),
-        Expr::ArrayRepeat { value, count } => out.extend([*value, *count]),
+        Expr::Tuple { exprs } | Expr::Array { exprs, .. } => out.extend(exprs.iter().copied()),
+        Expr::ArrayRepeat { value, count, .. } => out.extend([*value, *count]),
         Expr::Record { fields, spread, .. } => {
             out.extend(fields.iter().map(|f| f.expr));
             out.extend(*spread);

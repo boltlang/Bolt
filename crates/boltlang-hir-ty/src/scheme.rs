@@ -13,7 +13,7 @@ use boltlang_hir_def::{
 use crate::{
     lower::{ClassConstraint, fn_sig, generic_predicates, identity_args, impl_header, subst_params},
     solve::{Constraint, FieldConstraint, Origin, Solver},
-    ty::{GenericParamId, Ty, VarKind, bound_name},
+    ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -57,23 +57,34 @@ impl<'db> Scheme<'db> {
     }
 
     /// Show the scheme like `forall a. Show[a] => fn(a) -> a`, with fields
-    /// like `a.x: i32 => `.
+    /// like `a.x: i32 => `. Mutabilities aren't shown: an array whose
+    /// mutability is generic is `[a]`.
     pub fn display(&self, db: &'db dyn Db) -> String {
+        let mut tys = vec![&self.ty];
+        for pred in self.predicates.iter() {
+            tys.extend(pred.args.iter());
+        }
+        for field in self.fields.iter() {
+            tys.extend([&field.ty, &field.field]);
+        }
+        let names = TyNames::new(db, &tys);
+        let show = |t: &Ty<'db>| t.display_with(db, &names).to_string();
+        let mut forall: Vec<String> =
+            self.params.iter().filter(|p| !is_hidden_param(db, **p)).map(|p| show(&Ty::Param(*p))).collect();
+        forall.extend(names.bound_names().map(str::to_string));
         let mut out = String::new();
-        let mut names: Vec<String> = self.params.iter().map(|p| Ty::Param(*p).display(db).to_string()).collect();
-        names.extend((0..self.bound).map(bound_name));
-        if !names.is_empty() {
-            out.push_str(&format!("forall {}. ", names.join(" ")));
+        if !forall.is_empty() {
+            out.push_str(&format!("forall {}. ", forall.join(" ")));
         }
         for pred in self.predicates.iter() {
-            let args: Vec<_> = pred.args.iter().map(|t| t.display(db).to_string()).collect();
+            let args: Vec<_> = pred.args.iter().map(show).collect();
             let name = pred.class.item(db).name.as_ref().map_or("?", |n| n.as_str());
             out.push_str(&format!("{name}[{}] => ", args.join(", ")));
         }
         for field in self.fields.iter() {
-            out.push_str(&format!("{}.{}: {} => ", field.ty.display(db), field.name, field.field.display(db)));
+            out.push_str(&format!("{}.{}: {} => ", show(&field.ty), field.name, show(&field.field)));
         }
-        out.push_str(&self.ty.display(db).to_string());
+        out.push_str(&show(&self.ty));
         out
     }
 }
@@ -91,14 +102,20 @@ pub fn generic_chain<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<GenericDef
     chain
 }
 
-/// The type parameters of `defs`, in order.
+/// The type parameters of `defs`, in order, each followed by its hidden
+/// mutability parameters: see [`FnSig::hidden`](crate::lower::FnSig::hidden).
 pub fn generic_param_ids<'db>(
     db: &'db dyn Db,
     defs: impl IntoIterator<Item = GenericDefId<'db>>,
 ) -> Box<[GenericParamId<'db>]> {
     defs.into_iter()
         .flat_map(|def| {
-            let count = def.generic_params(db).type_params.len() as u32;
+            let hidden = match def {
+                GenericDefId::Function(f) => fn_sig(db, f).hidden,
+                GenericDefId::Impl(i) => impl_header(db, i).hidden,
+                _ => 0,
+            };
+            let count = def.generic_params(db).type_params.len() as u32 + hidden;
             (0..count).map(move |index| GenericParamId { def, index })
         })
         .collect()

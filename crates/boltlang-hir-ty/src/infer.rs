@@ -30,7 +30,7 @@ use crate::{
     check::function_scheme,
     scheme::{Scheme, generic_param_ids},
     solve::{Constraint, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
-    ty::{AdtId, Ty, VarKind},
+    ty::{AdtId, Mutability, Ty, VarKind},
 };
 
 /// The types found in a body, and what went wrong.
@@ -80,9 +80,12 @@ pub enum InferenceDiagnostic<'db> {
     MissingFields { expr: ExprId, names: Vec<Name> },
     /// A label or loop to break out of that doesn't exist.
     BreakOutside { expr: ExprId },
-    /// An assignment to a variable, or to a field or element of one, that
-    /// isn't `mut`. `expr` is the left side.
+    /// An assignment to a variable, or to a field of one, that isn't `mut`.
+    /// `expr` is the left side.
     AssignToImmutable { expr: ExprId, binding: BindingId },
+    /// An assignment to an element of an array that isn't `mut`, like
+    /// `xs[0] = 1` with `xs` of type `imm [i32]`. `expr` is the array.
+    ImmutableArray { expr: ExprId, ty: Ty<'db> },
     /// An assignment whose left side isn't a variable, a field or an
     /// element, like `1 = 2` or `f() = 3`. `expr` is the left side.
     NotAPlace { expr: ExprId },
@@ -97,7 +100,7 @@ impl<'db> InferenceDiagnostic<'db> {
     pub(crate) fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
         match self {
             InferenceDiagnostic::Type(error) => error.map_types(f),
-            InferenceDiagnostic::NotAFunction { ty, .. } => *ty = f(ty),
+            InferenceDiagnostic::NotAFunction { ty, .. } | InferenceDiagnostic::ImmutableArray { ty, .. } => *ty = f(ty),
             _ => {}
         }
     }
@@ -118,6 +121,12 @@ pub(crate) struct FnEnv<'db> {
 struct Expectation<'a, 'db> {
     ty: &'a Ty<'db>,
     reason: Reason<'db>,
+}
+
+/// The mutability of an array literal: `Mut` for `mut [a, b]`, and `Imm`
+/// for `[a, b]`.
+fn literal_mutability<'db>(is_mut: bool) -> Ty<'db> {
+    Ty::Mutability(if is_mut { Mutability::Mut } else { Mutability::Imm })
 }
 
 /// The reason for the `index`th of several expressions that must have the
@@ -181,6 +190,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.solver.new_var(VarKind::General)
     }
 
+    /// A variable for the mutability of an array.
+    fn new_mutability(&mut self) -> Ty<'db> {
+        self.solver.new_var(VarKind::Mutability)
+    }
+
     /// The expected type, or a new variable when nothing is expected.
     fn expected_or_var(&mut self, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
         expected.map(|e| e.ty.clone()).unwrap_or_else(|| self.new_var())
@@ -208,7 +222,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let mut ctx = TyLoweringContext::new(self.db, &resolver, &self.body.store);
         let ty = ctx.lower_ty(type_ref);
         self.result.diagnostics.extend(ctx.diagnostics.into_iter().map(InferenceDiagnostic::Lower));
-        ty
+        // An array without `mut` or `imm` in a body can be either, which
+        // the value decides.
+        ty.fill_unwritten(&mut || self.solver.new_var(VarKind::Mutability))
     }
 
     /// Infer a function body with the given parameter and return types.
@@ -299,7 +315,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let index_ty = self.solver.new_var(VarKind::Int);
                 self.check_expr(*index, &index_ty);
                 let elem = self.new_var();
-                self.solver.equal(&Ty::Array(Box::new(elem.clone())), &base_ty, self.origin(*base));
+                let array = Ty::array(self.new_mutability(), elem.clone());
+                self.solver.equal(&array, &base_ty, self.origin(*base));
                 elem
             }
             Expr::Prefix { op, expr: inner } => {
@@ -330,20 +347,20 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     .collect();
                 Ty::Tuple(tys)
             }
-            Expr::Array { exprs } => {
+            Expr::Array { exprs, is_mut } => {
                 let elem = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                    Some(Ty::Array(elem)) => *elem,
+                    Some(Ty::Array(_, elem)) => *elem,
                     _ => self.new_var(),
                 };
                 for (i, e) in exprs.iter().enumerate() {
                     self.check_expr_because(*e, &elem, reason_for_nth(reason, exprs[0], i));
                 }
-                Ty::Array(Box::new(elem))
+                Ty::array(literal_mutability(*is_mut), elem)
             }
-            Expr::ArrayRepeat { value, count } => {
+            Expr::ArrayRepeat { value, count, is_mut } => {
                 let elem = self.infer_expr(*value);
                 self.check_expr(*count, &Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)));
-                Ty::Array(Box::new(elem))
+                Ty::array(literal_mutability(*is_mut), elem)
             }
             Expr::Record { path, fields, spread } => self.infer_record(expr, path.as_ref(), fields, *spread),
             Expr::If { condition, then_branch, else_branch } => {
@@ -397,7 +414,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let iterable_ty = self.infer_expr(*iterable);
                 // Without an iterator class yet, only arrays can be looped over.
                 let elem = self.new_var();
-                self.solver.equal(&Ty::Array(Box::new(elem.clone())), &iterable_ty, self.origin(*iterable));
+                let array = Ty::array(self.new_mutability(), elem.clone());
+                self.solver.equal(&array, &iterable_ty, self.origin(*iterable));
                 self.check_pat(*pat, &elem);
                 self.breakables.push(Breakable { label: *label, is_loop: true, ty: None, broken: false });
                 self.check_expr(*loop_body, &Ty::unit());
@@ -540,7 +558,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Literal::Char(_) => Ty::Builtin(BuiltinType::Char),
             Literal::Byte(_) => Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
             Literal::String(_) | Literal::CString(_) => Ty::Builtin(BuiltinType::String),
-            Literal::ByteString(_) => Ty::Array(Box::new(Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)))),
+            Literal::ByteString(_) => Ty::array(literal_mutability(false), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8))),
         }
     }
 
@@ -832,16 +850,23 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    /// Report an assignment to `place` if it isn't a variable, or a field
-    /// or element of one, or if that variable isn't `mut`. Like in Rust,
-    /// `p.x = 1` and `xs[0] = 1` change the variable too, since values are
-    /// copied rather than shared. `plain` is whether it's `=` rather than a
-    /// compound assignment like `+=`.
+    /// Report an assignment to `place` if it can't be assigned to. `plain`
+    /// is whether it's `=` rather than a compound assignment like `+=`.
+    ///
+    /// Arrays are shared, so assigning to an element, or to a field of an
+    /// element, changes the array: the array must be `mut`, and the
+    /// variable it's in doesn't matter. Otherwise the place must be a
+    /// variable that's `mut`, or a field of one: structs are values, so
+    /// `p.x = 1` changes the variable `p`.
     fn check_place(&mut self, place: ExprId, plain: bool) {
         let body = self.body;
         let mut root = place;
-        while let Expr::Field { expr, .. } | Expr::Index { base: expr, .. } = &body[root] {
-            root = *expr;
+        loop {
+            match &body[root] {
+                Expr::Field { expr, .. } => root = *expr,
+                Expr::Index { base, .. } => return self.check_mut_array(*base),
+                _ => break,
+            }
         }
         let path = match &body[root] {
             Expr::Path(path) => path,
@@ -869,6 +894,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 return;
             }
             self.result.diagnostics.push(InferenceDiagnostic::AssignToImmutable { expr: place, binding });
+        }
+    }
+
+    /// Report that the array `expr`, an element of which is assigned to,
+    /// isn't `mut`. An array whose mutability isn't known yet becomes `mut`.
+    fn check_mut_array(&mut self, expr: ExprId) {
+        let ty = self.solver.unifier.resolve(self.result.expr_ty(expr));
+        let Ty::Array(mutability, _) = &ty else { return };
+        match &**mutability {
+            Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never => {}
+            Ty::Var(_) => self.solver.equal(&Ty::Mutability(Mutability::Mut), mutability, self.origin(expr)),
+            _ => self.result.diagnostics.push(InferenceDiagnostic::ImmutableArray { expr, ty }),
         }
     }
 

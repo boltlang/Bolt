@@ -16,8 +16,34 @@ use boltlang_hir_def::{
 
 use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
-    ty::{AdtId, GenericParamId, Ty},
+    ty::{AdtId, GenericParamId, Mutability, Ty},
 };
+
+fn imm<'db>() -> Ty<'db> {
+    Ty::Mutability(Mutability::Imm)
+}
+
+/// A function that gives the hidden mutability parameters of `def`, for the
+/// array types without `mut` or `imm` in its signature, numbered after its
+/// declared type parameters. `count` is how many it gave.
+struct HiddenParams<'db> {
+    def: GenericDefId<'db>,
+    first: u32,
+    count: u32,
+}
+
+impl<'db> HiddenParams<'db> {
+    fn new(db: &'db dyn Db, def: GenericDefId<'db>) -> Self {
+        HiddenParams { def, first: def.generic_params(db).type_params.len() as u32, count: 0 }
+    }
+
+    fn fill(&mut self, ty: &Ty<'db>) -> Ty<'db> {
+        ty.fill_unwritten(&mut || {
+            self.count += 1;
+            Ty::Param(GenericParamId { def: self.def, index: self.first + self.count - 1 })
+        })
+    }
+}
 
 /// A class applied to types, like `Show[T]` or `Convert[A, B]`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -121,7 +147,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             TypeRef::Error => return (Ty::Error, None),
             TypeRef::Path(path) => return self.lower_path_ty(id, path),
             TypeRef::Tuple(tys) => Ty::Tuple(tys.iter().map(|t| self.lower_ty(*t)).collect()),
-            TypeRef::Array { element, .. } => Ty::Array(Box::new(self.lower_ty(*element))),
+            TypeRef::Array { element, mutability, .. } => {
+                let mutability = mutability.map_or(Ty::Unwritten, Ty::Mutability);
+                Ty::array(mutability, self.lower_ty(*element))
+            }
             TypeRef::Never => Ty::Never,
             TypeRef::Fn { params, ret_type, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
@@ -403,7 +432,11 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         }
     };
     let mut ctx = TyLoweringContext::new(db, &resolver, store);
-    let predicates = ctx.lower_predicates(def, params).into();
+    // An array without `mut` or `imm` in a predicate, like the `[T]` of
+    // `where Show[[T]]`, is `imm`: it can't be the same hidden parameter as
+    // one in the signature.
+    let predicates =
+        ctx.lower_predicates(def, params).into_iter().map(|p| p.map(|t| t.fill_unwritten(&mut imm))).collect();
     Predicates { predicates, diagnostics: ctx.diagnostics }
 }
 
@@ -415,6 +448,11 @@ pub struct FnSig<'db> {
     /// The return type, if written. A function without a body and without
     /// a return type, like a class method, returns `()`.
     pub ret: Option<Ty<'db>>,
+    /// How many hidden mutability parameters the function has: one for each
+    /// array type without `mut` or `imm` in its parameters, so that it takes
+    /// arrays of either mutability. In the return type, such an array is
+    /// `imm`.
+    pub hidden: u32,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -431,13 +469,14 @@ pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let sig = function_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Function(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
-    let params = sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref)).collect();
+    let mut hidden = HiddenParams::new(db, GenericDefId::Function(id));
+    let params = sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref).map(|t| hidden.fill(&t))).collect();
     let ret = match sig.ret_type {
-        Some(ret) => Some(ctx.lower_ty(ret)),
+        Some(ret) => Some(ctx.lower_ty(ret).fill_unwritten(&mut imm)),
         None if !id.item(db).has_body => Some(Ty::unit()),
         None => None,
     };
-    FnSig { params, ret, diagnostics: ctx.diagnostics }
+    FnSig { params, ret, hidden: hidden.count, diagnostics: ctx.diagnostics }
 }
 
 /// A struct or a variant: something with fields.
@@ -508,7 +547,8 @@ fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList) -
         FieldList::Tuple(fields) => (FieldsKind::Tuple, fields),
         FieldList::Unit => (FieldsKind::Unit, &[]),
     };
-    let fields = list.iter().map(|f| (f.name.clone(), ctx.lower_ty(f.type_ref))).collect();
+    // A field holds one array, so one without `mut` or `imm` is `imm`.
+    let fields = list.iter().map(|f| (f.name.clone(), ctx.lower_ty(f.type_ref).fill_unwritten(&mut imm))).collect();
     FieldTypes { kind, fields, diagnostics: std::mem::take(&mut ctx.diagnostics) }
 }
 
@@ -516,6 +556,10 @@ fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList) -
 pub struct ImplHeader<'db> {
     /// The instance, like `Show[Dog]`. `None` if it's not a class.
     pub class: Option<ClassConstraint<'db>>,
+    /// How many hidden mutability parameters the impl has, one for each
+    /// array type without `mut` or `imm` in its instance, so that
+    /// `impl Show[[i32]]` is for arrays of either mutability.
+    pub hidden: u32,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -525,8 +569,9 @@ pub fn impl_header<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplHeader<'db> {
     let sig = impl_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Impl(id));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
-    let class = ctx.lower_class_constraint(sig.class, None);
-    ImplHeader { class, diagnostics: ctx.diagnostics }
+    let mut hidden = HiddenParams::new(db, GenericDefId::Impl(id));
+    let class = ctx.lower_class_constraint(sig.class, None).map(|c| c.map(|t| hidden.fill(t)));
+    ImplHeader { class, hidden: hidden.count, diagnostics: ctx.diagnostics }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -540,7 +585,8 @@ pub fn const_ty<'db>(db: &'db dyn Db, id: ConstId<'db>) -> ConstTy<'db> {
     let sig = const_signature(db, id);
     let resolver = Resolver::for_container(db, id.container(db));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
-    let ty = ctx.lower_ty(sig.type_ref);
+    // A const has one value, so an array without `mut` or `imm` is `imm`.
+    let ty = ctx.lower_ty(sig.type_ref).fill_unwritten(&mut imm);
     ConstTy { ty, diagnostics: ctx.diagnostics }
 }
 

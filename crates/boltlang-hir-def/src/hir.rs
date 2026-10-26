@@ -125,10 +125,10 @@ pub enum Expr {
     /// `a..b`, `a..=b`, `a..`, `..b` or `..`
     Range { lhs: Option<ExprId>, rhs: Option<ExprId>, inclusive: bool },
     Tuple { exprs: Box<[ExprId]> },
-    /// `[a, b]`
-    Array { exprs: Box<[ExprId]> },
-    /// `[value; count]`
-    ArrayRepeat { value: ExprId, count: ExprId },
+    /// `[a, b]`, or `mut [a, b]` with `is_mut`
+    Array { exprs: Box<[ExprId]>, is_mut: bool },
+    /// `[value; count]`, or `mut [value; count]` with `is_mut`
+    ArrayRepeat { value: ExprId, count: ExprId, is_mut: bool },
     /// `Point { x, y: 1, ..base }`
     Record { path: Option<Path>, fields: Box<[RecordField]>, spread: Option<ExprId> },
     If { condition: ExprId, then_branch: ExprId, else_branch: Option<ExprId> },
@@ -289,6 +289,13 @@ pub enum GenericArg {
     Const(ExprId),
 }
 
+/// Whether an array can be changed, as written in `mut [T]` or `imm [T]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Mutability {
+    Mut,
+    Imm,
+}
+
 /// A type as written, before it's resolved.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum TypeRef {
@@ -297,8 +304,8 @@ pub enum TypeRef {
     Path(Path),
     /// `(A, B)`, or `()` for the unit type.
     Tuple(Box<[TypeRefId]>),
-    /// `[T]` or `[T; N]`
-    Array { element: TypeRefId, len: Option<ExprId> },
+    /// `[T]` or `[T; N]`, with the `mut` or `imm` written before it
+    Array { element: TypeRefId, len: Option<ExprId>, mutability: Option<Mutability> },
     /// `!`
     Never,
     /// `fn(A, B) -> C`

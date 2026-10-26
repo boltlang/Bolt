@@ -10,17 +10,21 @@ use boltlang_hir_def::{
     resolver::GenericDefId,
 };
 
+pub use boltlang_hir_def::hir::Mutability;
+
 /// An inference variable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, salsa::SalsaValue)]
 pub struct TyVar(pub u32);
 
 /// What an inference variable can become. An integer literal without a
-/// suffix has an `Int` variable, which defaults to `i32`.
+/// suffix has an `Int` variable, which defaults to `i32`. A `Mutability`
+/// variable stands for the mutability of an array, and defaults to `Imm`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum VarKind {
     General,
     Int,
     Float,
+    Mutability,
 }
 
 /// Whether a number literal is an integer or a float.
@@ -58,8 +62,20 @@ pub enum Ty<'db> {
     Builtin(BuiltinType),
     /// `(A, B)`; the unit type is the empty tuple.
     Tuple(Box<[Ty<'db>]>),
-    /// `[T]` or `[T; N]`. Lengths aren't checked yet.
-    Array(Box<Ty<'db>>),
+    /// An array: its mutability, then the type of its elements. The
+    /// mutability is [`Ty::Mutability`], a variable, a parameter, or the
+    /// error type. Lengths aren't checked yet.
+    Array(Box<Ty<'db>>, Box<Ty<'db>>),
+    /// `Mut` or `Imm`, the mutability of an array, which is a type of its
+    /// own kind: see `site/docs/internals/type-checking/mutability.mdx`.
+    Mutability(Mutability),
+    /// The mutability of an array type written without `mut` or `imm`, as
+    /// lowered on its own. What it means depends on where the type is
+    /// written, so the item that has the type replaces it with
+    /// [`Ty::fill_unwritten`]: a parameter of a function, a variable in a
+    /// body, or `Imm`. Only type aliases keep it, for the types they're
+    /// used in to replace.
+    Unwritten,
     /// `fn(A, B) -> C`
     Fn(Box<[Ty<'db>]>, Box<Ty<'db>>),
     /// A type parameter as seen inside the item that declares it, where it
@@ -86,6 +102,22 @@ impl<'db> Ty<'db> {
 
     pub fn bool() -> Self {
         Ty::Builtin(BuiltinType::Bool)
+    }
+
+    /// An array of `element` with the mutability `mutability`.
+    pub fn array(mutability: Ty<'db>, element: Ty<'db>) -> Self {
+        Ty::Array(Box::new(mutability), Box::new(element))
+    }
+
+    /// Replace each [`Ty::Unwritten`] with what `fill` gives, in the order
+    /// they're written.
+    pub fn fill_unwritten(&self, fill: &mut impl FnMut() -> Ty<'db>) -> Ty<'db> {
+        self.fold(&mut |t| matches!(t, Ty::Unwritten).then(&mut *fill))
+    }
+
+    /// Whether [`Ty::Unwritten`] is in this type.
+    pub fn has_unwritten(&self) -> bool {
+        self.any(&mut |t| matches!(t, Ty::Unwritten))
     }
 
     /// `head` applied to `args`, in its normal form: `Option` applied to
@@ -116,12 +148,23 @@ impl<'db> Ty<'db> {
                 f(head);
                 args.iter().for_each(f);
             }
-            Ty::Array(elem) => f(elem),
+            Ty::Array(mutability, elem) => {
+                f(mutability);
+                f(elem);
+            }
             Ty::Fn(params, ret) => {
                 params.iter().for_each(&mut f);
                 f(ret);
             }
-            Ty::Var(_) | Ty::Builtin(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Number(_) | Ty::Never | Ty::Error => {}
+            Ty::Var(_)
+            | Ty::Builtin(_)
+            | Ty::Mutability(_)
+            | Ty::Unwritten
+            | Ty::Param(_)
+            | Ty::Bound(_)
+            | Ty::Number(_)
+            | Ty::Never
+            | Ty::Error => {}
         }
     }
 
@@ -138,11 +181,17 @@ impl<'db> Ty<'db> {
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
             Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
-            Ty::Array(elem) => Ty::Array(Box::new(elem.fold(f))),
+            Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret) => Ty::Fn(fold_all(params, f), Box::new(ret.fold(f))),
-            Ty::Var(_) | Ty::Builtin(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Number(_) | Ty::Never | Ty::Error => {
-                self.clone()
-            }
+            Ty::Var(_)
+            | Ty::Builtin(_)
+            | Ty::Mutability(_)
+            | Ty::Unwritten
+            | Ty::Param(_)
+            | Ty::Bound(_)
+            | Ty::Number(_)
+            | Ty::Never
+            | Ty::Error => self.clone(),
         }
     }
 
@@ -179,7 +228,9 @@ enum Unknown {
 
 /// Names for the unknown types of a message, so that they read like type
 /// parameters: `a`, `b`, ... in the order they first appear. Names that the
-/// type parameters in the message already have are skipped.
+/// type parameters in the message already have are skipped. Mutabilities
+/// don't get names: an array whose mutability isn't `Mut` or `Imm` is
+/// shown as `[T]`.
 #[derive(Debug, Default)]
 pub struct TyNames {
     names: Vec<(Unknown, String)>,
@@ -188,18 +239,19 @@ pub struct TyNames {
 impl TyNames {
     /// Names for the unknown types in `tys`, which are shown in this order.
     pub fn new<'db>(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Self {
+        fn collect<'db>(db: &'db dyn Db, ty: &Ty<'db>, taken: &mut Vec<String>, unknowns: &mut Vec<Unknown>) {
+            match ty {
+                Ty::Param(p) => taken.push(param_name(db, *p)),
+                Ty::Var(v) => unknowns.push(Unknown::Var(*v)),
+                Ty::Bound(i) => unknowns.push(Unknown::Bound(*i)),
+                Ty::Array(_, elem) => collect(db, elem, taken, unknowns),
+                _ => ty.walk_children(|t| collect(db, t, taken, unknowns)),
+            }
+        }
         let mut taken = Vec::new();
         let mut unknowns = Vec::new();
         for ty in tys {
-            ty.any(&mut |t| {
-                match t {
-                    Ty::Param(p) => taken.push(param_name(db, *p).to_string()),
-                    Ty::Var(v) => unknowns.push(Unknown::Var(*v)),
-                    Ty::Bound(i) => unknowns.push(Unknown::Bound(*i)),
-                    _ => {}
-                }
-                false
-            });
+            collect(db, ty, &mut taken, &mut unknowns);
         }
         let mut out = TyNames::default();
         let mut candidates = (0..).map(bound_name).filter(|n| !taken.contains(n));
@@ -214,10 +266,27 @@ impl TyNames {
     fn get(&self, unknown: Unknown) -> Option<&str> {
         self.names.iter().find(|(u, _)| *u == unknown).map(|(_, n)| n.as_str())
     }
+
+    /// The names of the type variables of a scheme, in order.
+    pub fn bound_names(&self) -> impl Iterator<Item = &str> {
+        self.names.iter().filter(|(u, _)| matches!(u, Unknown::Bound(_))).map(|(_, n)| n.as_str())
+    }
 }
 
-fn param_name<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> &'db boltlang_hir_def::Name {
-    &param.def.generic_params(db).type_params[param.index as usize].name
+/// Whether `param` is a mutability that an array type without `mut` or
+/// `imm` gave its item, rather than a declared type parameter.
+pub fn is_hidden_param<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> bool {
+    param.index as usize >= param.def.generic_params(db).type_params.len()
+}
+
+/// The name of a type parameter. A hidden mutability parameter is never
+/// shown in a type, but has a name for completeness.
+fn param_name<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> String {
+    let params = &param.def.generic_params(db).type_params;
+    match params.get(param.index as usize) {
+        Some(p) => p.name.to_string(),
+        None => format!("m{}", param.index as usize - params.len()),
+    }
 }
 
 pub struct DisplayTy<'a, 'db> {
@@ -272,7 +341,18 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 }
                 f.write_str(")")
             }
-            Ty::Array(elem) => write!(f, "[{}]", show(elem)),
+            Ty::Array(mutability, elem) => {
+                match **mutability {
+                    Ty::Mutability(Mutability::Mut) => f.write_str("mut ")?,
+                    Ty::Mutability(Mutability::Imm) => f.write_str("imm ")?,
+                    _ => {}
+                }
+                write!(f, "[{}]", show(elem))
+            }
+            // Only inside an array, where it's shown by the array.
+            Ty::Mutability(Mutability::Mut) => f.write_str("Mut"),
+            Ty::Mutability(Mutability::Imm) => f.write_str("Imm"),
+            Ty::Unwritten => f.write_str("_"),
             Ty::Fn(params, ret) => {
                 f.write_str("fn(")?;
                 list(f, params)?;

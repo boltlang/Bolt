@@ -78,7 +78,7 @@ let a: Bool
 let b: Char
 let c: u8
 let d: String
-let e: [u8]
+let e: imm [u8]
 
 ================================================================================
 Literals that don't fit their type

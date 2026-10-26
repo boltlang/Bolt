@@ -48,7 +48,7 @@ fn f() {
   let mut p = Point { x: 1, y: 2 };
   p.x = 3;
   p.y = True;
-  let mut a = [1, 2];
+  let a = mut [1, 2];
   a[0] = 3;
   a[1] = "b";
 }

@@ -30,9 +30,9 @@ let a: [i32] = empty();
 let b: [Bool] = empty();
 
 --------------------------------------------------------------------------------
-empty: forall a. fn() -> [a]
-let a: [i32]
-let b: [Bool]
+empty: forall a. fn() -> imm [a]
+let a: imm [i32]
+let b: imm [Bool]
 
 ================================================================================
 A None from a function is generic
