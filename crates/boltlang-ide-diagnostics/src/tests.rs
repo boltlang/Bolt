@@ -736,3 +736,16 @@ fn f() {
 "#,
     );
 }
+
+#[test]
+fn assign_to_non_place() {
+    check(
+        r#"
+fn g() -> i32 = 1;
+fn f() {
+  g() = 3;
+//^^^ error: cannot assign to this; only a variable, a field or an element can be assigned to
+}
+"#,
+    );
+}

@@ -83,6 +83,9 @@ pub enum InferenceDiagnostic<'db> {
     /// An assignment to a variable, or to a field or element of one, that
     /// isn't `mut`. `expr` is the left side.
     AssignToImmutable { expr: ExprId, binding: BindingId },
+    /// An assignment whose left side isn't a variable, a field or an
+    /// element, like `1 = 2` or `f() = 3`. `expr` is the left side.
+    NotAPlace { expr: ExprId },
     /// Something the checker doesn't support yet, like `?` or ranges.
     Unsupported { expr: ExprId },
     /// Functions without complete signatures in files that import each
@@ -804,7 +807,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             BinaryOp::Assign(op) => {
                 let ty = self.infer_expr(lhs);
                 self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
-                self.check_mutable(lhs, op.is_none());
+                self.check_place(lhs, op.is_none());
                 Ty::unit()
             }
             // `a <$> b` calls the function `(<$>)`.
@@ -829,22 +832,37 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    /// Report an assignment to `place` if the variable it changes isn't
-    /// `mut`. Like in Rust, `p.x = 1` and `xs[0] = 1` change the variable
-    /// too, since values are copied rather than shared. `plain` is whether
-    /// it's `=` rather than a compound assignment like `+=`.
-    fn check_mutable(&mut self, place: ExprId, plain: bool) {
+    /// Report an assignment to `place` if it isn't a variable, or a field
+    /// or element of one, or if that variable isn't `mut`. Like in Rust,
+    /// `p.x = 1` and `xs[0] = 1` change the variable too, since values are
+    /// copied rather than shared. `plain` is whether it's `=` rather than a
+    /// compound assignment like `+=`.
+    fn check_place(&mut self, place: ExprId, plain: bool) {
         let body = self.body;
         let mut root = place;
         while let Expr::Field { expr, .. } | Expr::Index { base: expr, .. } = &body[root] {
             root = *expr;
         }
-        let Expr::Path(path) = &body[root] else { return };
-        let resolver = self.resolver(root);
-        if let Some(ValueResolution::Value(ValueNs::Local(binding))) =
-            resolver.resolve_path_in_value_ns(self.db, path)
-            && !body[binding].mutable
-        {
+        let path = match &body[root] {
+            Expr::Path(path) => path,
+            // Already reported, or unknown until macros are expanded.
+            Expr::Missing | Expr::MacroCall { .. } => return,
+            _ => {
+                self.result.diagnostics.push(InferenceDiagnostic::NotAPlace { expr: place });
+                return;
+            }
+        };
+        let binding = match self.resolver(root).resolve_path_in_value_ns(self.db, path) {
+            Some(ValueResolution::Value(ValueNs::Local(binding))) => binding,
+            // An unresolved name is already reported.
+            None => return,
+            // A function, constant, variant or type.
+            Some(_) => {
+                self.result.diagnostics.push(InferenceDiagnostic::NotAPlace { expr: place });
+                return;
+            }
+        };
+        if !body[binding].mutable {
             // The first `x = ...` after `let x;` initializes `x`.
             if plain && root == place && let Some(i) = self.uninitialized.iter().position(|&b| b == binding) {
                 self.uninitialized.swap_remove(i);
