@@ -1,6 +1,7 @@
 # Git & Workflow Rules
 
 - Open a GitHub issue for every issue you might encounter in the code
+- Try to add examples to GitHub issues where applicable
 - Never commit directly to `main`. Always create a descriptive
   feature/fix branch before making changes.
 - Always test the code before comitting.
