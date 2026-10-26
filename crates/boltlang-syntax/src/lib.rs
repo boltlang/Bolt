@@ -153,7 +153,7 @@ pub enum SyntaxKind {
     NEVER_TYPE,
     /// `A + B`
     BOUNDED_TYPE,
-    /// `fn(A) -> B`, `extern "C" fn()` or `FnOnce(A) -> B`
+    /// `fn(A) -> B` or `extern "C" fn()`
     FN_TYPE,
     /// `-> T`
     RET_TYPE,

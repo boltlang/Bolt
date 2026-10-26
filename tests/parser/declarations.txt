@@ -23,7 +23,7 @@ fn foo() {
     return
 }
 
-fn foo(x: impl FnOnce() -> result.Result[T, E]) {}
+fn foo(x: fn() -> result.Result[T, E]) {}
 
 fn foo(#[attr] x: i32, #[attr] x: i64) {}
 
@@ -214,7 +214,7 @@ Type aliases
 ================================================================================
 type Inch = u64;
 type Name[T] = Vec[T];
-type LazyResolve = impl (FnOnce() -> Capture) + Send + Sync + UnwindSafe;
+type LazyResolve = impl (fn() -> Capture) + Send + Sync + UnwindSafe;
 
 ================================================================================
 Type alias where clauses
@@ -408,7 +408,7 @@ fn bar(Bool: Bool) {}
 Where clauses
 ================================================================================
 fn walk[F](pat: Pat, it: F) -> Bool
-    where F: FnMut(Pat) -> Bool
+    where F: Visit[Pat]
 {
   return False
 }
@@ -621,8 +621,8 @@ Generic parameters
 fn id[T](x: T) -> T = x;
 fn sort[T: Ord + Hash, U = Vec[T],](xs: U) = xs;
 fn arr[const N: usize, const M: usize = 3, const K: i32 = -1, const L: usize = N, const B: Bool = { True }]() = 0;
-let f: impl Fn(i32) -> i32 = g;
-let h: impl for[T] Fn(T) -> T = g;
+let f: impl Show[i32] = g;
+let h: impl for[T] Show[T] = g;
 let i: impl A + B = g;
 
 ================================================================================

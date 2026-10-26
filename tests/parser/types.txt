@@ -39,7 +39,7 @@ fn high_order2(value: i32, f: fn(i32) -> i32) -> i32 {
     f(value)
 }
 
-fn high_order3(value: i32, f: Box[FnOnce(i32) -> i32]) -> i32 {
+fn high_order3(value: i32, f: Box[fn(i32) -> i32]) -> i32 {
     f(value)
 }
 
@@ -52,11 +52,17 @@ type a = extern "C" fn(c_void);
 type b = extern "C" fn() -> c_void;
 
 ================================================================================
+Function types can't be written with a trait
+:error
+================================================================================
+let c: Box[FnOnce(i32) -> i32] = f;
+
+================================================================================
 Trait objects
 ================================================================================
 type a = Box[Something + Send];
 type b = Rc[Something];
-type c = A[Box[Fn(B) -> C]];
+type c = A[Box[fn(B) -> C]];
 
 ================================================================================
 Type cast expressions with generics
@@ -78,7 +84,7 @@ Function types in annotations
 ================================================================================
 let a: fn(i32) = f;
 let b: fn(i32) -> i32 = f;
-let c: Box[FnOnce(i32) -> i32] = f;
+let c: Box[fn(i32) -> i32] = f;
 let d: fn(x: Ref[A], y: RefMut[B[I, T]],) -> C = f;
 let e: extern "C" fn(c_void) = f;
 let g: extern "C" fn() -> c_void = f;

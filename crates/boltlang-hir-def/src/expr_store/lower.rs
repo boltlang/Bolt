@@ -135,7 +135,6 @@ impl ExprCollector {
     }
 
     fn lower_fn_type(&mut self, ty: &ast::FnType) -> TypeRef {
-        let trait_path = ty.path().and_then(|p| self.lower_path(p));
         let mut params = Vec::new();
         let mut is_variadic = false;
         if let Some(list) = ty.param_list() {
@@ -168,7 +167,6 @@ impl ExprCollector {
         let has_token = |kind| ty.syntax().children_with_tokens().any(|t| t.kind() == kind);
         let abi = ty.abi().map(|abi| abi.string().map(|s| unquote(s.text())));
         TypeRef::Fn {
-            trait_path,
             params: params.into(),
             is_variadic,
             ret_type,
