@@ -2,26 +2,28 @@
 //! agree on what a program gives.
 
 use boltlang_base_db::{File, TestDb};
-use boltlang_eval::{Ctor, Evaluator, Recorder, Value};
-use wasmi::{Caller, Engine, Extern, Linker, Module, Store, Val};
+use boltlang_eval::{ErrorKind, Evaluator, Host, Recorder};
+use wasmi::{Caller, Linker, Module, Store, Val};
 
-use crate::{link, reachable_instances};
+use crate::{
+    RunError, link, reachable_instances, run,
+    run::{State, engine, linker},
+};
 
-/// What the host saw: the values passed to the imports `log` and `log64`,
-/// and what was printed.
+/// A host that keeps what was printed, and the values passed to the
+/// imports `env.log` and `env.log64`.
 #[derive(Default)]
-struct Host {
+struct TestHost {
     logged: Vec<i64>,
     printed: String,
 }
 
-/// The string at `address` in the memory of the module.
-fn read_str(caller: &Caller<'_, Host>, address: i32) -> String {
-    let memory = caller.get_export("memory").and_then(Extern::into_memory).expect("the module exports its memory");
-    let data = memory.data(caller);
-    let start = address as usize;
-    let len = u32::from_le_bytes(data[start..start + 4].try_into().unwrap()) as usize;
-    String::from_utf8(data[start + 4..start + 4 + len].to_vec()).unwrap()
+impl Host for TestHost {
+    fn print(&mut self, text: &str) -> Result<(), ErrorKind> {
+        self.printed.push_str(text);
+        self.printed.push('\n');
+        Ok(())
+    }
 }
 
 fn compile(db: &TestDb, file: File) -> Vec<u8> {
@@ -31,29 +33,21 @@ fn compile(db: &TestDb, file: File) -> Vec<u8> {
     })
 }
 
-/// Instantiate a module, with the imports `env.log` and `env.log64`.
-fn instantiate(bytes: &[u8]) -> (Store<Host>, wasmi::Instance) {
-    let engine = Engine::default();
+/// Instantiate a module, with the builtins and the imports `env.log` and
+/// `env.log64`.
+fn instantiate(bytes: &[u8]) -> (Store<State<TestHost>>, wasmi::Instance) {
+    let engine = engine(None);
     let module = Module::new(&engine, bytes).unwrap();
-    let mut store = Store::new(&engine, Host::default());
-    let mut linker = Linker::<Host>::new(&engine);
+    let mut store = Store::new(&engine, State::new(TestHost::default()));
+    let mut linker: Linker<State<TestHost>> = linker(&engine);
     linker
-        .func_wrap("env", "log", |mut caller: Caller<'_, Host>, x: i32| caller.data_mut().logged.push(x as i64))
-        .unwrap();
-    linker
-        .func_wrap("env", "log64", |mut caller: Caller<'_, Host>, x: i64| caller.data_mut().logged.push(x))
-        .unwrap();
-    linker
-        .func_wrap("bolt", "print", |mut caller: Caller<'_, Host>, text: i32| {
-            let text = read_str(&caller, text);
-            let printed = &mut caller.data_mut().printed;
-            printed.push_str(&text);
-            printed.push('\n');
+        .func_wrap("env", "log", |mut caller: Caller<'_, State<TestHost>>, x: i32| {
+            caller.data_mut().host.logged.push(x as i64)
         })
         .unwrap();
     linker
-        .func_wrap("bolt", "panic", |caller: Caller<'_, Host>, message: i32| -> Result<(), wasmi::Error> {
-            Err(wasmi::Error::new(format!("panicked: {}", read_str(&caller, message))))
+        .func_wrap("env", "log64", |mut caller: Caller<'_, State<TestHost>>, x: i64| {
+            caller.data_mut().host.logged.push(x)
         })
         .unwrap();
     let instance = linker.instantiate_and_start(&mut store, &module).unwrap();
@@ -61,7 +55,7 @@ fn instantiate(bytes: &[u8]) -> (Store<Host>, wasmi::Instance) {
 }
 
 /// Call an exported function, and give its result.
-fn call(store: &mut Store<Host>, instance: &wasmi::Instance, name: &str, args: &[Val]) -> Option<Val> {
+fn call(store: &mut Store<State<TestHost>>, instance: &wasmi::Instance, name: &str, args: &[Val]) -> Option<Val> {
     let func = instance.get_func(&*store, name).unwrap_or_else(|| panic!("no export `{name}`"));
     let mut results = vec![Val::I32(0); func.ty(&*store).results().len()];
     func.call(&mut *store, args, &mut results).unwrap();
@@ -69,31 +63,12 @@ fn call(store: &mut Store<Host>, instance: &wasmi::Instance, name: &str, args: &
 }
 
 /// Run `main`, and give its result and what was logged.
-fn run(code: &str) -> (Option<Val>, Vec<i64>) {
+fn run_main(code: &str) -> (Option<Val>, Vec<i64>) {
     let db = TestDb::new();
     let file = db.file("/main.bolt", code);
     let (mut store, instance) = instantiate(&compile(&db, file));
     let result = call(&mut store, &instance, "main", &[]);
-    (result, std::mem::take(&mut store.data_mut().logged))
-}
-
-/// A result as a number, to compare the evaluator's with Wasm's.
-#[derive(Debug, PartialEq)]
-enum Num {
-    Int(i128),
-    Float(f64),
-    Unit,
-}
-
-fn from_wasm(val: Option<Val>) -> Num {
-    match val {
-        None => Num::Unit,
-        Some(Val::I32(n)) => Num::Int(n as i128),
-        Some(Val::I64(n)) => Num::Int(n as i128),
-        Some(Val::F32(x)) => Num::Float(f32::from(x) as f64),
-        Some(Val::F64(x)) => Num::Float(f64::from(x)),
-        Some(other) => panic!("unexpected result {other:?}"),
-    }
+    (result, std::mem::take(&mut store.data_mut().host.logged))
 }
 
 /// The evaluator and the compiled code give the same result.
@@ -101,17 +76,9 @@ fn from_wasm(val: Option<Val>) -> Num {
 fn same(code: &str) {
     let db = TestDb::new();
     let file = db.file("/main.bolt", code);
-    let expected = match Evaluator::new(&db).eval_file(file).unwrap() {
-        Value::Int(n) => Num::Int(n),
-        Value::Bool(b) => Num::Int(b as i128),
-        Value::Char(c) => Num::Int(c as i128),
-        Value::Float(x) => Num::Float(x),
-        Value::Tuple(items) if items.is_empty() => Num::Unit,
-        // A variant without fields is the index of the variant.
-        Value::Adt { ctor: Ctor::Variant(v), fields } if fields.is_empty() => Num::Int(v.index as i128),
-        other => panic!("the evaluator gave {}", other.display(&db)),
-    };
-    assert_eq!(from_wasm(run(code).0), expected, "{code}");
+    let expected = Evaluator::new(&db).eval_file(file).unwrap();
+    let found = run(&db, file, &compile(&db, file), TestHost::default(), None).unwrap();
+    assert_eq!(found.display(&db).to_string(), expected.display(&db).to_string(), "{code}");
 }
 
 #[test]
@@ -199,14 +166,14 @@ fn method_calls_and_operators() {
 #[test]
 fn narrow_integers_wrap_around() {
     // The evaluator has no fixed sizes, so this is Wasm's own behavior.
-    assert_eq!(run("let x: u8 = 255;\nx + 1;").0.map(|v| v.i32()), Some(Some(0)));
-    assert_eq!(run("let x: i8 = 127;\nx + 1;").0.map(|v| v.i32()), Some(Some(-128)));
-    assert_eq!(run("let x: u16 = 0;\nx - 1;").0.map(|v| v.i32()), Some(Some(65535)));
+    assert_eq!(run_main("let x: u8 = 255;\nx + 1;").0.map(|v| v.i32()), Some(Some(0)));
+    assert_eq!(run_main("let x: i8 = 127;\nx + 1;").0.map(|v| v.i32()), Some(Some(-128)));
+    assert_eq!(run_main("let x: u16 = 0;\nx - 1;").0.map(|v| v.i32()), Some(Some(65535)));
 }
 
 #[test]
 fn extern_functions_are_imports() {
-    let (result, logged) = run("extern { fn log(x: i32); fn log64(x: i64); }\nfn f(n: i32) { log(n); log(n * 2); }\nf(3);\nlog64(7);");
+    let (result, logged) = run_main("extern { fn log(x: i32); fn log64(x: i64); }\nfn f(n: i32) { log(n); log(n * 2); }\nf(3);\nlog64(7);");
     assert!(result.is_none());
     assert_eq!(logged, [3, 6, 7]);
 }
@@ -307,7 +274,7 @@ fn prints_the_same(code: &str, expected: &str) {
     assert_eq!(recorder.output(), expected, "the evaluator");
     let (mut store, instance) = instantiate(&compile(&db, file));
     call(&mut store, &instance, "main", &[]);
-    assert_eq!(store.data().printed, expected, "the compiled code");
+    assert_eq!(store.data().host.printed, expected, "the compiled code");
 }
 
 #[test]
@@ -343,4 +310,39 @@ fn panic_traps_with_its_message() {
     let mut results = [Val::I32(0)];
     let error = func.call(&mut store, &[], &mut results).unwrap_err();
     assert!(error.to_string().contains("panicked: negative"), "{error}");
+}
+
+/// Run `code` as `bolt run --wasm` does, with `fuel` when it's given.
+fn run_wasm(code: &str, fuel: Option<u64>) -> Result<String, RunError> {
+    let (db, file) = db_with_builtins(code);
+    run(&db, file, &compile(&db, file), TestHost::default(), fuel).map(|value| value.display(&db).to_string())
+}
+
+#[test]
+fn results_are_shown_like_the_evaluators() {
+    assert_eq!(run_wasm("1 < 2;", None).unwrap(), "True");
+    assert_eq!(run_wasm("'x';", None).unwrap(), "'x'");
+    assert_eq!(run_wasm("let s = \"hi\";\ns;", None).unwrap(), "\"hi\"");
+    assert_eq!(run_wasm(&format!("{COLOR}Color.Green;"), None).unwrap(), "Green");
+    // Unsigned integers aren't negative.
+    assert_eq!(run_wasm("let x: u32 = 4000000000;\nx;", None).unwrap(), "4000000000");
+    assert_eq!(run_wasm("let x: u8 = 255;\nx + 1;", None).unwrap(), "0");
+    assert_eq!(run_wasm("let x = 1;", None).unwrap(), "()");
+}
+
+#[test]
+fn running_reports_errors_like_the_evaluator() {
+    let panic = "fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);";
+    assert_eq!(run_wasm(panic, None), Err(RunError::Eval(ErrorKind::Panic("negative".into()))));
+    assert_eq!(run_wasm("fn div(a: i32, b: i32) -> i32 = a / b;\ndiv(1, 0);", None), Err(RunError::Eval(ErrorKind::DivisionByZero)));
+    assert_eq!(run_wasm("loop {}", Some(10_000)), Err(RunError::Eval(ErrorKind::OutOfFuel)));
+    assert_eq!(run_wasm("let mut i = 0;\nwhile i < 10 { i += 1; }\ni;", Some(10_000)).unwrap(), "10");
+}
+
+#[test]
+fn extern_functions_cant_be_run() {
+    assert_eq!(
+        run_wasm("extern { fn log(x: i32); }\nlog(1);", None),
+        Err(RunError::MissingImport { module: "env".into(), name: "log".into() })
+    );
 }

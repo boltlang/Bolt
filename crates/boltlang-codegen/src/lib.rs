@@ -18,7 +18,8 @@
 //!   as addresses: see [`Builtin`](boltlang_hir_ty::builtin::Builtin);
 //! - the functions of `extern` blocks, in the module `env`.
 //!
-//! `runtime/bolt.mjs` provides the module `bolt` for browsers and Node.
+//! `runtime/bolt.mjs` provides the module `bolt` for browsers and Node, and
+//! [`run`] provides it with wasmi, for `bolt run --wasm`.
 //!
 //! The code generator works on the bodies of hir-def and the types that
 //! hir-ty infers for them, through Salsa queries:
@@ -43,6 +44,7 @@
 mod emit;
 mod ir;
 mod lower;
+mod run;
 
 #[cfg(test)]
 mod tests;
@@ -58,6 +60,7 @@ use boltlang_hir_ty::Ty;
 
 pub use emit::link;
 pub use ir::{BlockTy, Callee, CompiledFn, Inst, Op, ValTy};
+pub use run::{RunError, run};
 
 /// A body compiled for concrete type arguments: a function, or the
 /// top-level statements of the entry file.
