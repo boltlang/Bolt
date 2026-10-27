@@ -129,7 +129,7 @@ a[0]: i32
 a[True]: i32
 --------------------------------------------------------------------------------
 error at `"a"`: expected {integer}, found String
-error at `True`: expected {integer}, found Bool
+error at `True`: expected i32, found Bool
 
 ================================================================================
 An empty array without a use

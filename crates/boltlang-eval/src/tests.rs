@@ -7,9 +7,18 @@ fn run(code: &str) -> String {
     run_with(code, Limits::default())
 }
 
-fn run_with(code: &str, limits: Limits) -> String {
-    let db = TestDb::new();
+/// A database with the repository's `std` as the prelude, and `code` as
+/// `/main.bolt`.
+fn db_with_std(code: &str) -> (TestDb, boltlang_base_db::File) {
+    let mut db = TestDb::new();
+    db.add_std();
+    db.set_prelude(Some("std"), true);
     let file = db.file("/main.bolt", code);
+    (db, file)
+}
+
+fn run_with(code: &str, limits: Limits) -> String {
+    let (db, file) = db_with_std(code);
     let mut evaluator = Evaluator::with_limits(&db, limits);
     match evaluator.eval_file(file) {
         Ok(value) => value.display(&db).to_string(),
@@ -18,8 +27,7 @@ fn run_with(code: &str, limits: Limits) -> String {
 }
 
 fn error_kind(code: &str, limits: Limits) -> ErrorKind {
-    let db = TestDb::new();
-    let file = db.file("/main.bolt", code);
+    let (db, file) = db_with_std(code);
     Evaluator::with_limits(&db, limits).eval_file(file).unwrap_err().kind
 }
 
@@ -233,20 +241,12 @@ fn a_file_has_the_value_of_its_last_expression_statement() {
     assert_eq!(run("1; let x = 2;"), "()");
 }
 
-/// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n  pub fn array_len[T](xs: [T]) -> i32;\n  pub fn array_alloc[T](len: i32) -> mut [T];\n}\n";
-
-fn db_with_builtins(code: &str) -> (TestDb, boltlang_base_db::File) {
-    let mut db = TestDb::new();
-    db.file("/.bolt/packages/std/__prelude__/lib.bolt", BUILTINS);
-    db.set_prelude(Some("std"), true);
-    let file = db.file("/main.bolt", code);
-    (db, file)
-}
+/// `std` keeps `array_alloc` to itself, so tests of it declare it.
+const ARRAY_ALLOC: &str = "extern \"bolt\" { fn array_alloc[T](len: i32) -> mut [T]; }\n";
 
 #[test]
 fn print_goes_to_the_host() {
-    let (db, file) = db_with_builtins("fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
+    let (db, file) = db_with_std("fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
     let recorder = crate::Recorder::default();
     let mut evaluator = Evaluator::new(&db).with_host(recorder.clone());
     evaluator.eval_file(file).unwrap();
@@ -255,11 +255,11 @@ fn print_goes_to_the_host() {
 
 #[test]
 fn effects_are_refused_without_a_host_and_in_consts() {
-    let (db, file) = db_with_builtins("print(\"hi\");");
+    let (db, file) = db_with_std("print(\"hi\");");
     assert_eq!(Evaluator::new(&db).eval_file(file).unwrap_err().kind, ErrorKind::Effect("print"));
 
     // Even with a host, a const can't print.
-    let (db, file) = db_with_builtins("fn noisy() -> i32 { print(\"evaluating\"); 1 }\nconst N: i32 = noisy();\nN;");
+    let (db, file) = db_with_std("fn noisy() -> i32 { print(\"evaluating\"); 1 }\nconst N: i32 = noisy();\nN;");
     let recorder = crate::Recorder::default();
     let error = Evaluator::new(&db).with_host(recorder.clone()).eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Effect("print"));
@@ -268,34 +268,44 @@ fn effects_are_refused_without_a_host_and_in_consts() {
 
 #[test]
 fn array_len_counts_the_elements() {
-    let (db, file) = db_with_builtins("let xs = mut [1, 2];\nlet n = array_len(xs);\nxs[0] = 3;\n(n, array_len([True]), array_len([]));");
+    let (db, file) = db_with_std("let xs = mut [1, 2];\nlet n = array_len(xs);\nxs[0] = 3;\n(n, array_len([True]), array_len([]));");
     let value = Evaluator::new(&db).eval_file(file).unwrap();
     assert_eq!(value.display(&db).to_string(), "(2, 1, 0)");
 }
 
 #[test]
 fn array_alloc_makes_elements_to_set() {
-    let (db, file) = db_with_builtins("let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);");
+    let (db, file) =
+        db_with_std(&format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);"));
     let value = Evaluator::new(&db).eval_file(file).unwrap();
     assert_eq!(value.display(&db).to_string(), "(3, [1, _, 3])");
 }
 
 #[test]
 fn reading_an_unset_element_is_an_error() {
-    let prefix = "let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\n";
+    let prefix = format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\n");
     for read in ["xs[1];", "xs[1] += 1;", "for x in xs { x; }", "match xs { [a, b, c] => a, _ => 0 };"] {
-        let (db, file) = db_with_builtins(&format!("{prefix}{read}"));
+        let (db, file) = db_with_std(&format!("{prefix}{read}"));
         let error = Evaluator::new(&db).eval_file(file).unwrap_err();
         assert_eq!(error.kind, ErrorKind::UnsetElement { index: 1 }, "{read}");
     }
-    let (db, file) = db_with_builtins("struct P { x: i32 }\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;");
+    let (db, file) = db_with_std(&format!("{ARRAY_ALLOC}struct P {{ x: i32 }}\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;"));
     let error = Evaluator::new(&db).eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnsetElement { index: 0 });
 }
 
 #[test]
+fn an_error_in_std_is_reported_at_the_program() {
+    // `xs[5]` fails in `std`'s `impl Index[[T]]`.
+    let (db, file) = db_with_std("let xs = [1];\nxs[5];");
+    let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::IndexOutOfBounds { index: 5, len: 1 });
+    assert_eq!(error.source_range(&db), Some((file, 14..19)));
+}
+
+#[test]
 fn panic_stops_with_its_message() {
-    let (db, file) = db_with_builtins("fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);");
+    let (db, file) = db_with_std("fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);");
     let error = Evaluator::new(&db).eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Panic("negative".into()));
     assert_eq!(error.to_string(), "panicked: negative");

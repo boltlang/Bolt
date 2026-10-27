@@ -1,7 +1,9 @@
 //! The classes of the prelude that syntax uses: `v[i]` calls `index` of
 //! `Index`, `v[i] = x` calls `set_index` of `IndexMut`, and `for x in c`
-//! calls `iter` of `Iterable` and then `next` of `Iterator`. Arrays don't
-//! use them: indexing and looping over an array are built in.
+//! calls `iter` of `Iterable` and then `next` of `Iterator`, for arrays too:
+//! the prelude's impls for arrays use the builtins `array_get` and
+//! `array_set`. Without a prelude that defines the classes, the syntax is an
+//! error.
 
 use boltlang_base_db::{Db, File, Settings};
 use boltlang_hir_def::{

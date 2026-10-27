@@ -40,10 +40,23 @@ pub enum Builtin {
     /// at run time, so it's meant for types in `std` that keep track of
     /// which elements are set, like a growable array.
     ArrayAlloc,
+    /// `fn array_get[T](xs: [T], i: i32) -> T`: the element at `i`, which
+    /// `xs[i]` gives through the prelude's `impl Index[[T]]`.
+    ArrayGet,
+    /// `fn array_set[T](xs: mut [T], i: i32, x: T)`: replace the element at
+    /// `i`, for `xs[i] = x` through the prelude's `impl IndexMut[mut [T]]`.
+    ArraySet,
 }
 
 impl Builtin {
-    pub const ALL: &[Builtin] = &[Builtin::Print, Builtin::Panic, Builtin::ArrayLen, Builtin::ArrayAlloc];
+    pub const ALL: &[Builtin] = &[
+        Builtin::Print,
+        Builtin::Panic,
+        Builtin::ArrayLen,
+        Builtin::ArrayAlloc,
+        Builtin::ArrayGet,
+        Builtin::ArraySet,
+    ];
 
     /// The builtins that compiled code imports from the host. The others
     /// work on arrays, which the code generator doesn't compile yet.
@@ -55,6 +68,8 @@ impl Builtin {
             Builtin::Panic => "panic",
             Builtin::ArrayLen => "array_len",
             Builtin::ArrayAlloc => "array_alloc",
+            Builtin::ArrayGet => "array_get",
+            Builtin::ArraySet => "array_set",
         }
     }
 
@@ -68,7 +83,7 @@ impl Builtin {
         match self {
             Builtin::Print => true,
             // Stopping with an error is fine anywhere.
-            Builtin::Panic | Builtin::ArrayLen | Builtin::ArrayAlloc => false,
+            Builtin::Panic | Builtin::ArrayLen | Builtin::ArrayAlloc | Builtin::ArrayGet | Builtin::ArraySet => false,
         }
     }
 
@@ -83,6 +98,13 @@ impl Builtin {
             Builtin::ArrayLen => Ty::Fn(Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1))]), Box::new(i32_ty)),
             Builtin::ArrayAlloc => {
                 Ty::Fn(Box::new([i32_ty]), Box::new(Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0))))
+            }
+            Builtin::ArrayGet => {
+                Ty::Fn(Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1)), i32_ty]), Box::new(Ty::Bound(1)))
+            }
+            Builtin::ArraySet => {
+                let xs = Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0));
+                Ty::Fn(Box::new([xs, i32_ty, Ty::Bound(0)]), Box::new(Ty::unit()))
             }
         }
     }

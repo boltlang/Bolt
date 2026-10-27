@@ -132,7 +132,13 @@ fn check(input: &str) -> Result<(String, String), String> {
         let names = TyNames::new(&db, tys);
         tys.iter().map(|ty| ty.display_with(&db, &names).to_string()).collect()
     };
-    let files: Vec<_> = split_files(input)?.into_iter().map(|(path, text)| (db.file(&path, &text), path)).collect();
+    let files = split_files(input)?;
+    // A case without a `std` of its own gets the repository's, whose types
+    // aren't shown.
+    if !files.iter().any(|(path, _)| path.starts_with("/.bolt/packages/std/")) {
+        db.add_std();
+    }
+    let files: Vec<_> = files.into_iter().map(|(path, text)| (db.file(&path, &text), path)).collect();
     let mut types = Vec::new();
     let mut diagnostics = Vec::new();
     for &(file, ref path) in &files {
@@ -314,6 +320,9 @@ fn check(input: &str) -> Result<(String, String), String> {
                     }
                     InferenceDiagnostic::NotAPlace { expr } => {
                         format!("error at `{}`: not a place", at(ExprOrPat::Expr(*expr)))
+                    }
+                    InferenceDiagnostic::NoLangClass { expr, class } => {
+                        format!("error at `{}`: needs {class} from the prelude", at(ExprOrPat::Expr(*expr)))
                     }
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))

@@ -25,7 +25,21 @@ fn check(fixture: &str) {
 /// of their diagnostic.
 #[track_caller]
 fn check_files(files: &[(&str, &str)]) {
-    let db = TestDb::new();
+    check_db(TestDb::new(), files);
+}
+
+/// Like [`check`], with the repository's `std` as the prelude, for code
+/// that indexes arrays or loops over them.
+#[track_caller]
+fn check_with_std(fixture: &str) {
+    let mut db = TestDb::new();
+    db.add_std();
+    db.set_prelude(Some("std"), true);
+    check_db(db, &[("/main.bolt", fixture)]);
+}
+
+#[track_caller]
+fn check_db(db: TestDb, files: &[(&str, &str)]) {
     let files: Vec<_> = files.iter().map(|(path, text)| (*path, db.file(path, text))).collect();
     let all: Vec<_> = files.iter().flat_map(|&(_, file)| diagnostics(&db, file)).collect();
     for &(path, file) in &files {
@@ -578,7 +592,7 @@ let s = show([]);
 
 #[test]
 fn changing_arrays_that_are_not_mut() {
-    check(
+    check_with_std(
         r#"
 let xs = [1, 2];
   xs[0] = 3;
@@ -766,7 +780,7 @@ fn builtin_declarations() {
 extern "bolt" {
   fn print(text: String);
   fn prnt(text: String);
-   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`
+   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`, `array_get`, `array_set`
   fn panic(message: String) -> i32;
    //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
 }

@@ -15,7 +15,7 @@ use crate::{
         ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty, impl_header, named_mutabilities,
         subst_params,
     },
-    solve::{Constraint, FieldConstraint, Origin, Solver, normalize_assoc},
+    solve::{AssocConstraint, Constraint, FieldConstraint, Origin, Solver, normalize_assoc},
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
 
@@ -30,12 +30,22 @@ pub struct Scheme<'db> {
     /// The fields the types must have, for a function that uses fields of
     /// values whose types it doesn't decide.
     pub fields: Box<[FieldConstraint<'db>]>,
+    /// What associated types of its types must be, like `a.Item = Bool` for
+    /// `fn set(xs) { xs[0] = True; }`.
+    pub assoc: Box<[AssocConstraint<'db>]>,
     pub ty: Ty<'db>,
 }
 
 impl<'db> Scheme<'db> {
     pub fn mono(ty: Ty<'db>) -> Self {
-        Scheme { params: Box::new([]), bound: 0, predicates: Box::new([]), fields: Box::new([]), ty }
+        Scheme {
+            params: Box::new([]),
+            bound: 0,
+            predicates: Box::new([]),
+            fields: Box::new([]),
+            assoc: Box::new([]),
+            ty,
+        }
     }
 
     /// The type with fresh variables for the parameters, adding the
@@ -64,6 +74,11 @@ impl<'db> Scheme<'db> {
             });
             solver.add(Constraint::Field { constraint, origin });
         }
+        for assoc in self.assoc.iter() {
+            let args = assoc.args.iter().map(|t| solver.flatten_assoc(&subst(t), origin)).collect();
+            let ty = solver.flatten_assoc(&subst(&assoc.ty), origin);
+            solver.add(Constraint::Assoc { constraint: AssocConstraint { alias: assoc.alias, args, ty }, origin });
+        }
         let ty = subst(&self.ty);
         solver.flatten_assoc(&ty, origin)
     }
@@ -78,6 +93,10 @@ impl<'db> Scheme<'db> {
         }
         for field in self.fields.iter() {
             tys.extend([&field.ty, &field.field]);
+        }
+        let projections: Vec<Ty<'db>> = self.assoc.iter().map(|a| Ty::Assoc(a.alias, a.args.clone())).collect();
+        for (projection, assoc) in projections.iter().zip(self.assoc.iter()) {
+            tys.extend([projection, &assoc.ty]);
         }
         let names = TyNames::new(db, &tys);
         let show = |t: &Ty<'db>| t.display_with(db, &names).to_string();
@@ -96,6 +115,9 @@ impl<'db> Scheme<'db> {
         for field in self.fields.iter() {
             let prefix = if field.assign { "mut " } else { "" };
             out.push_str(&format!("{prefix}{}.{}: {} => ", show(&field.ty), field.name, show(&field.field)));
+        }
+        for (projection, assoc) in projections.iter().zip(self.assoc.iter()) {
+            out.push_str(&format!("{} = {} => ", show(projection), show(&assoc.ty)));
         }
         out.push_str(&show(&self.ty));
         out
@@ -261,6 +283,7 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         bound: 0,
         predicates: assumptions(db, f).into(),
         fields: Box::new([]),
+        assoc: Box::new([]),
         ty: Ty::Fn(params, Box::new(ret)),
     }
 }

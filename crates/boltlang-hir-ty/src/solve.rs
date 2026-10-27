@@ -18,7 +18,7 @@ use boltlang_hir_def::{
 use crate::{
     lower::{
         ClassConstraint, VariantDef, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
-        subst_params,
+        subst_params, with_superclasses,
     },
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
@@ -325,15 +325,32 @@ impl<'db> Solver<'db> {
         true
     }
 
-    /// Give the associated types that couldn't be decided the type they
-    /// stand for, like `?0.Item`, so that a function whose argument's type
-    /// isn't known keeps them in its type: `forall a. Index[a] => fn(a) ->
-    /// a.Item`.
+    /// Give the associated types that couldn't be decided, and whose
+    /// variable nothing decided either, the type they stand for, like
+    /// `?0.Item`, so that a function whose argument's type isn't known keeps
+    /// them in its type: `forall a. Index[a] => fn(a) -> a.Item`. Those whose
+    /// variable something decided, like the `Bool` of `xs[0] = True`, stay,
+    /// to become part of the function's type: `a.Item = Bool`.
     pub fn keep_pending_assoc(&mut self) {
-        for (constraint, _) in std::mem::take(&mut self.pending_assoc) {
+        for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {
             let args = constraint.args.iter().map(|t| self.unifier.resolve(t)).collect();
-            let _ = self.unifier.unify(&Ty::Assoc(constraint.alias, args), &constraint.ty);
+            if let Ty::Var(_) = self.unifier.shallow_resolve(&constraint.ty) {
+                let _ = self.unifier.unify(&Ty::Assoc(constraint.alias, args), &constraint.ty);
+            } else {
+                self.pending_assoc.push((constraint, origin));
+            }
         }
+    }
+
+    /// The associated type constraints that couldn't be solved, resolved.
+    pub fn take_pending_assoc(&mut self) -> Vec<(AssocConstraint<'db>, Origin<'db>)> {
+        std::mem::take(&mut self.pending_assoc)
+            .into_iter()
+            .map(|(c, origin)| {
+                let args = c.args.iter().map(|t| self.unifier.resolve(t)).collect();
+                (AssocConstraint { alias: c.alias, args, ty: self.unifier.resolve(&c.ty) }, origin)
+            })
+            .collect()
     }
 
     /// Solve a field constraint if the type is known well enough. Returns
@@ -477,13 +494,17 @@ impl<'db> Solver<'db> {
         self.solve_with_defaults();
         self.keep_pending_assoc();
         for (constraint, origin) in self.take_pending() {
-            self.errors.push(TypeError::Ambiguous { origin, constraint });
+            // Unknown because of an error, which is reported already.
+            if !constraint.args.iter().any(|t| self.unifier.has_error_var(t)) {
+                self.errors.push(TypeError::Ambiguous { origin, constraint });
+            }
         }
         for (_, origin) in self.take_pending_fields() {
             self.errors.push(TypeError::TypeNeeded { origin });
         }
         let errors = std::mem::take(&mut self.errors);
         self.errors = errors.into_iter().map(|e| resolve_error(&self.unifier, e)).collect();
+        prune_implied_errors(self.db, &mut self.errors);
         // After resolving the errors, so that an array whose mutability
         // nothing decided is shown as `[T]` in them, not as `imm [T]`.
         self.unifier.default_mutability_vars();
@@ -705,6 +726,27 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
             _ => None,
         }))
     })
+}
+
+/// Leave out the missing instances that another one at the same place
+/// implies, like `Index[i32]` next to `IndexMut[i32]` for `n[0] = 1`.
+pub fn prune_implied_errors<'db>(db: &'db dyn Db, errors: &mut Vec<TypeError<'db>>) {
+    let missing: Vec<(Origin<'db>, ClassConstraint<'db>)> = errors
+        .iter()
+        .filter_map(|e| match e {
+            TypeError::NoInstance { origin, constraint } => Some((*origin, constraint.clone())),
+            _ => None,
+        })
+        .collect();
+    errors.retain(|e| {
+        let TypeError::NoInstance { origin, constraint } = e else { return true };
+        !missing.iter().any(|(o, other)| {
+            o.body == origin.body
+                && o.node == origin.node
+                && other != constraint
+                && with_superclasses(db, vec![other.clone()]).contains(constraint)
+        })
+    });
 }
 
 /// Whether a type has an inference variable in it.

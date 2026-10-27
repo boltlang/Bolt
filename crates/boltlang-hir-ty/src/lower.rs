@@ -518,7 +518,7 @@ pub fn constraints_on<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Vec<Class
 }
 
 /// `constraints` and the superclasses they imply.
-fn with_superclasses<'db>(db: &'db dyn Db, constraints: Vec<ClassConstraint<'db>>) -> Vec<ClassConstraint<'db>> {
+pub fn with_superclasses<'db>(db: &'db dyn Db, constraints: Vec<ClassConstraint<'db>>) -> Vec<ClassConstraint<'db>> {
     let mut stack = constraints;
     let mut out = Vec::new();
     while let Some(c) = stack.pop() {

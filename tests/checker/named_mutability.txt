@@ -214,13 +214,13 @@ error at `same`: no instance Same[mut [i32], imm [Bool]]
 ================================================================================
 Shared mutabilities of an inferred function are named
 ================================================================================
-fn pick(c, a, b) = if c { a[0]; a } else { b };
-fn first(xs) = xs[0];
+fn pick(c, a, b) = if c { array_len(a); a } else { b };
+fn size(xs) = array_len(xs);
 fn same(xs: [i32]) -> [i32] = xs;
 
 --------------------------------------------------------------------------------
 pick: forall a. fn(Bool, 'm [a], 'm [a]) -> 'm [a]
-first: forall a. fn([a]) -> a
+size: forall a. fn([a]) -> i32
 same: fn('m [i32]) -> 'm [i32]
 
 ================================================================================

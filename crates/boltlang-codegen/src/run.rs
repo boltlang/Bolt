@@ -90,7 +90,9 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
                     Err(fail(&mut caller, error))
                 },
             ),
-            Builtin::ArrayLen | Builtin::ArrayAlloc => unreachable!("not in `Builtin::HOST`"),
+            Builtin::ArrayLen | Builtin::ArrayAlloc | Builtin::ArrayGet | Builtin::ArraySet => {
+                unreachable!("not in `Builtin::HOST`")
+            }
         };
         result.expect("each builtin is defined once");
     }

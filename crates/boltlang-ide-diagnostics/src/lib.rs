@@ -80,6 +80,7 @@ impl DiagnosticCode {
     pub const UNKNOWN_MUTABILITY: Self = Self("E0225");
     pub const NO_ASSOC_TYPE: Self = Self("E0226");
     pub const AMBIGUOUS_ASSOC_TYPE: Self = Self("E0227");
+    pub const NO_LANG_CLASS: Self = Self("E0228");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -356,6 +357,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::AmbiguousAssocType => (
             C::AMBIGUOUS_ASSOC_TYPE,
             format!("`{source}` is ambiguous: several classes of its type parameter declare it"),
+        ),
+        K::NoLangClass { class } => (
+            C::NO_LANG_CLASS,
+            format!("this needs the class `{class}`, but there's no prelude that defines it"),
         ),
         K::UnknownMutability => (
             C::UNKNOWN_MUTABILITY,

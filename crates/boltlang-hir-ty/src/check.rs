@@ -17,11 +17,14 @@ use boltlang_hir_def::{
 
 use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
-    lower::{ClassConstraint, const_ty, fn_sig},
+    lower::{ClassConstraint, const_ty, fn_sig, with_superclasses},
     scheme::{
         Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, generic_param_ids, is_declared,
     },
-    solve::{ExprOrPat, FieldConstraint, Origin, Solver, TypeError, resolve_error, vars_in},
+    solve::{
+        AssocConstraint, ExprOrPat, FieldConstraint, Origin, Solver, TypeError, prune_implied_errors, resolve_error,
+        vars_in,
+    },
     unify::Unifier,
     ty::{Ty, TyVar, VarKind},
 };
@@ -162,11 +165,14 @@ fn infer_group<'db>(
     solver.keep_pending_assoc();
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
-    let errors = std::mem::take(&mut solver.errors).into_iter().map(|e| resolve_error(&solver.unifier, e)).collect();
+    let mut errors: Vec<_> =
+        std::mem::take(&mut solver.errors).into_iter().map(|e| resolve_error(&solver.unifier, e)).collect();
+    prune_implied_errors(db, &mut errors);
     solver.unifier.error_unknowns();
     let pending = solver.take_pending();
     let pending_fields = solver.take_pending_fields();
-    let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields };
+    let pending_assoc = solver.take_pending_assoc();
+    let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields, pending_assoc };
     for (&f, (def, mut result)) in group.iter().zip(results) {
         result.add_instances(def, &solver);
         let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
@@ -186,6 +192,7 @@ struct Solved<'a, 'db> {
     /// The class and field constraints that couldn't be solved, resolved.
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
+    pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
 }
 
 impl<'db> Solved<'_, 'db> {
@@ -203,12 +210,14 @@ impl<'db> Solved<'_, 'db> {
         let mut vars = Generalization::default();
         vars.add(ty);
         let (fields, untyped) = self.function_fields(def, &mut vars);
+        let assoc = self.function_assoc(def, &mut vars);
         let (predicates, ambiguous) = self.function_predicates(db, f, def, &vars);
         let scheme = Scheme {
             params: generic_param_ids(db, generic_chain(db, f)),
             bound: vars.vars.len() as u32,
             predicates,
             fields,
+            assoc,
             ty: vars.generalize(ty),
         };
         result.map_types(&mut |t| vars.generalize(&self.unifier.resolve(t)));
@@ -261,6 +270,29 @@ impl<'db> Solved<'_, 'db> {
         (fields.into(), rest.into_iter().map(|(_, origin)| *origin).collect())
     }
 
+    /// The associated type constraints that become part of the type of the
+    /// function with the body `def`: those about its types, like
+    /// `a.Item = Bool`. The variables of the types they must be join `vars`.
+    /// Those about other types are already reported through their class.
+    fn function_assoc(&self, def: DefWithBodyId<'db>, vars: &mut Generalization) -> Box<[AssocConstraint<'db>]> {
+        let mut out = Vec::new();
+        for (constraint, _) in self.pending_assoc.iter().filter(|(_, origin)| origin.body == def) {
+            if !vars.covers(constraint.args.iter()) {
+                continue;
+            }
+            vars.add(&constraint.ty);
+            let generalized = AssocConstraint {
+                alias: constraint.alias,
+                args: constraint.args.iter().map(|t| vars.generalize(t)).collect(),
+                ty: vars.generalize(&constraint.ty),
+            };
+            if !out.contains(&generalized) {
+                out.push(generalized);
+            }
+        }
+        out.into()
+    }
+
     /// The class constraints that become part of the type of `f`: those it
     /// assumes, and those of its body `def` about the types in `vars`. Also
     /// gives the errors for those of its body about other types, which can't
@@ -273,6 +305,7 @@ impl<'db> Solved<'_, 'db> {
         vars: &Generalization,
     ) -> (Box<[ClassConstraint<'db>]>, Vec<TypeError<'db>>) {
         let mut predicates = assumptions(db, f);
+        let declared = predicates.len();
         let mut ambiguous = Vec::new();
         for (constraint, origin) in self.pending.iter().filter(|(_, origin)| origin.body == def) {
             if vars.covers(constraint.args.iter()) {
@@ -280,10 +313,23 @@ impl<'db> Solved<'_, 'db> {
                 if !predicates.contains(&predicate) {
                     predicates.push(predicate);
                 }
-            } else {
+            } else if !constraint.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+                // Not about a type that's unknown because of an error, which
+                // is reported already.
                 ambiguous.push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
             }
         }
+        // Leave out those of the body that another one implies, like
+        // `Index[a]` next to `IndexMut[a]`.
+        let implied: Vec<ClassConstraint<'db>> = predicates
+            .iter()
+            .flat_map(|p| with_superclasses(db, vec![p.clone()]).into_iter().filter(move |s| s != p))
+            .collect();
+        let mut index = 0;
+        predicates.retain(|p| {
+            index += 1;
+            index <= declared || !implied.contains(p)
+        });
         (predicates.into(), ambiguous)
     }
 }

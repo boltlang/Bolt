@@ -10,7 +10,7 @@ use boltlang_hir_def::{
         PathSegment, PrefixOp, Statement, TypeRef,
     },
     ids::{ConstId, FunctionId, ItemContainerId, ModuleDefId},
-    nameres::{Namespace, file_scope},
+    nameres::{Namespace, file_scope, package_of},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     signatures::{FieldList, enum_signature, struct_signature},
 };
@@ -80,20 +80,19 @@ struct Frame<'db> {
     locals: Locals<'db>,
 }
 
-/// What an assignment writes to: a variable, an element of an array, or a
-/// field of a struct.
+/// What an assignment writes to: a variable, a field of a struct, or an
+/// element.
 enum Place<'db> {
     Variable(Slot<'db>),
-    Element(Shared<Vec<Value<'db>>>, usize),
     Field(Shared<Fields<'db>>, Name),
-    /// An element of a type other than an array, like a `Vec`, which is
-    /// read and written through its impls of `Index` and `IndexMut`. `at`
-    /// is the expression `c[i]`.
+    /// An element of an array, a `Vec` or another type, which is read and
+    /// written through its impls of `Index` and `IndexMut`. `at` is the
+    /// expression `c[i]`.
     Indexed { container: Value<'db>, index: Value<'db>, at: ExprId },
 }
 
-/// What a `for` loop goes over: the items of an array, a string or a
-/// range, or an iterator of a class.
+/// What a `for` loop goes over: the items of a string or a range, or an
+/// iterator of a class.
 enum Items<'db> {
     Builtin(Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>),
     Class(Value<'db>),
@@ -118,7 +117,6 @@ impl<'db> Place<'db> {
     fn update<T>(&self, f: impl FnOnce(Option<&mut Value<'db>>) -> Res<'db, T>) -> Res<'db, T> {
         match self {
             Place::Variable(slot) => f(slot.borrow_mut().as_mut()),
-            Place::Element(items, i) => f(items.borrow_mut().get_mut(*i)),
             Place::Field(fields, name) => f(fields.borrow_mut().iter_mut().find(|(n, _)| n == name).map(|(_, v)| v)),
             // Assignments handle it before.
             Place::Indexed { .. } => fail(ErrorKind::NotAssignable),
@@ -347,6 +345,16 @@ impl<'db> Evaluator<'db> {
                 let len = usize::try_from(*len).map_err(|_| ErrorKind::Overflow)?;
                 Ok(Value::array(vec![Value::Unset; len]))
             }
+            (Builtin::ArrayGet, [Value::Array(items), Value::Int(i)]) => {
+                let items = items.borrow();
+                element(&items, in_bounds(*i, items.len())?)
+            }
+            (Builtin::ArraySet, [Value::Array(items), Value::Int(i), x]) => {
+                let mut items = items.borrow_mut();
+                let i = in_bounds(*i, items.len())?;
+                items[i] = x.clone();
+                Ok(Value::unit())
+            }
             _ => mismatch(format!("bad arguments to `{}`", builtin.name())),
         }
     }
@@ -393,7 +401,15 @@ impl<'db> Evaluator<'db> {
         // by `Limits::max_depth` and not by the size of the thread's stack.
         stacker::maybe_grow(RED_ZONE, STACK_GROWTH, || self.eval_inner(f, expr)).map_err(|unwind| match unwind {
             Unwind::Error(mut e) => {
-                e.location.get_or_insert((f.def, expr));
+                // An error in the code of a package, like `std`'s array
+                // impls, is reported at the program's code that led to it,
+                // like `xs[5]`.
+                let db = self.db;
+                let in_package = |def: DefWithBodyId<'db>| package_of(db, def.def(db).file(db)).is_some();
+                match e.location {
+                    Some((def, _)) if !in_package(def) || in_package(f.def) => {}
+                    _ => e.location = Some((f.def, expr)),
+                }
                 Unwind::Error(e)
             }
             other => other,
@@ -450,20 +466,10 @@ impl<'db> Evaluator<'db> {
                 cast(value, &body[*type_ref])
             }
             Expr::Index { base, index } => {
+                // Through the impl of `Index` for the type, arrays too.
                 let base = self.eval(f, *base)?;
                 let index = self.eval(f, *index)?;
-                match (&base, &index) {
-                    (Value::Array(items), Value::Int(i)) => {
-                        let items = items.borrow();
-                        let len = items.len();
-                        let index = usize::try_from(*i).ok().filter(|&i| i < len);
-                        let index = index.ok_or(ErrorKind::IndexOutOfBounds { index: *i, len })?;
-                        element(&items, index)
-                    }
-                    (Value::Array(_), _) => mismatch("an index must be an integer"),
-                    // Another type, like a `Vec`, through its impl of `Index`.
-                    _ => self.call_lang(f, expr, LangClass::Index, vec![base, index]),
-                }
+                self.call_lang(f, expr, LangClass::Index, vec![base, index])
             }
             Expr::Prefix { op, expr: inner } => {
                 let value = self.eval(f, *inner)?;
@@ -567,9 +573,11 @@ impl<'db> Evaluator<'db> {
             Expr::For { pat, iterable: iterable_expr, body: loop_body, label } => {
                 let iterable = self.eval(f, *iterable_expr)?;
                 let mut items = match iterable {
-                    Value::Array(_) | Value::Str(_) | Value::Range { .. } => Items::Builtin(iterate(iterable)?),
-                    // Another type, like a `Vec`, through its impl of
-                    // `Iterable`, whose iterator gives the items.
+                    // Ranges and strings aren't type-checked yet, and have no
+                    // impls.
+                    Value::Str(_) | Value::Range { .. } => Items::Builtin(iterate(iterable)?),
+                    // Through the impl of `Iterable` for the type, arrays too,
+                    // whose iterator gives the items.
                     _ => Items::Class(self.call_lang(f, *iterable_expr, LangClass::Iterable, vec![iterable])?),
                 };
                 loop {
@@ -907,8 +915,9 @@ impl<'db> Evaluator<'db> {
             *slot.borrow_mut() = Some(value);
             return Ok(());
         }
-        // `c[i] = x` through `IndexMut`. For `c[i] += x` or `c[i].0 = x`, the
-        // element is read through `Index` first, changed, and set back.
+        // `c[i] = x` through `IndexMut`, arrays too. For `c[i] += x` or
+        // `c[i].0 = x`, the element is read through `Index` first, changed,
+        // and set back.
         if let Place::Indexed { container, index, at } = place {
             let value = if op.is_none() && fields.is_empty() {
                 value
@@ -925,12 +934,6 @@ impl<'db> Evaluator<'db> {
             return Ok(());
         }
         place.update(|current| {
-            // An unset element can be set, but not changed.
-            if (op.is_some() || !fields.is_empty())
-                && let (Some(Value::Unset), Place::Element(_, index)) = (&current, &place)
-            {
-                return fail(ErrorKind::UnsetElement { index: *index });
-            }
             let current = tuple_field(current, &fields)?;
             *current = match op {
                 Some(op) => arith(op, current.clone(), value)?,
@@ -957,19 +960,9 @@ impl<'db> Evaluator<'db> {
                 _ => fail(ErrorKind::NotAssignable),
             },
             Expr::Index { base, index } => {
-                let base = self.eval(f, *base)?;
+                let container = self.eval(f, *base)?;
                 let index = self.eval(f, *index)?;
-                let Value::Array(items) = base else {
-                    return Ok((Place::Indexed { container: base, index, at: expr }, Vec::new()));
-                };
-                let Value::Int(i) = index else {
-                    return mismatch("an index must be an integer");
-                };
-                let len = items.borrow().len();
-                match usize::try_from(i).ok().filter(|&i| i < len) {
-                    Some(i) => Ok((Place::Element(items, i), Vec::new())),
-                    None => fail(ErrorKind::IndexOutOfBounds { index: i, len }),
-                }
+                Ok((Place::Indexed { container, index, at: expr }, Vec::new()))
             }
             Expr::Field { expr: base, name } => {
                 let (place, mut fields) = self.place(f, *base)?;
@@ -978,19 +971,14 @@ impl<'db> Evaluator<'db> {
                     _ => None,
                 };
                 let shared = match &place {
-                    // An element through `Index`: a struct is shared, so a
+                    // An element, through `Index`: a struct is shared, so a
                     // field of it can be changed in place.
                     Place::Indexed { container, index, at } => {
                         let args = vec![container.clone(), index.clone()];
                         let mut element = self.call_lang(f, *at, LangClass::Index, args)?;
                         shared_fields(tuple_field(Some(&mut element), &fields)?)
                     }
-                    _ => place.update(|current| {
-                        if let (Some(Value::Unset), Place::Element(_, index)) = (&current, &place) {
-                            return fail(ErrorKind::UnsetElement { index: *index });
-                        }
-                        Ok(shared_fields(tuple_field(current, &fields)?))
-                    })?,
+                    _ => place.update(|current| Ok(shared_fields(tuple_field(current, &fields)?)))?,
                 };
                 match shared {
                     Some(adt) => {
@@ -1287,6 +1275,11 @@ fn cast<'db>(value: Value<'db>, type_ref: &TypeRef) -> Res<'db, Value<'db>> {
     })
 }
 
+/// `index` as a position in an array of `len` elements, if it's in bounds.
+fn in_bounds<'db>(index: i128, len: usize) -> Res<'db, usize> {
+    usize::try_from(index).ok().filter(|&i| i < len).ok_or(ErrorKind::IndexOutOfBounds { index, len }.into())
+}
+
 /// The element of `items` at `index`, which is in bounds, unless it isn't
 /// set yet.
 fn element<'db>(items: &[Value<'db>], index: usize) -> Res<'db, Value<'db>> {
@@ -1308,22 +1301,9 @@ fn option_value<'db>(db: &'db dyn Db, value: Value<'db>) -> Res<'db, Option<Valu
     }
 }
 
-/// The items a `for` loop goes over.
+/// The items of a string or range that a `for` loop goes over.
 fn iterate<'db>(value: Value<'db>) -> Res<'db, Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>> {
     match value {
-        // By index rather than over a copy, so that the loop sees the
-        // changes its body makes to the rest of the array.
-        Value::Array(items) => {
-            let mut i = 0;
-            Ok(Box::new(std::iter::from_fn(move || {
-                let items = items.borrow();
-                if i >= items.len() {
-                    return None;
-                }
-                i += 1;
-                Some(element(&items, i - 1))
-            })))
-        }
         Value::Str(s) => Ok(Box::new(s.chars().collect::<Vec<_>>().into_iter().map(|c| Ok(Value::Char(c))))),
         Value::Range { start: Some(start), end, inclusive } => {
             let Value::Int(start) = *start else { return mismatch("only ranges of integers can be iterated") };

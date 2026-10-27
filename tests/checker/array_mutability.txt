@@ -409,8 +409,8 @@ first(mut [True]);
 copy_first(mut [1]);
 
 --------------------------------------------------------------------------------
-first: forall a. fn([a]) -> a
-copy_first: forall a. fn([a]) -> imm [a]
+first: forall a. Index[a] => fn(a) -> a.Item
+copy_first: forall a. Index[a] => fn(a) -> imm [a.Item]
 first([1]): i32
 first(mut [True]): Bool
 copy_first(mut [1]): imm [i32]
@@ -424,11 +424,11 @@ set(mut [1], 2);
 set([1], 2);
 
 --------------------------------------------------------------------------------
-set: forall a. fn(mut [a], a) -> ()
+set: forall a. IndexMut[a] => fn(a, a.Item) -> ()
 set(mut [1], 2): ()
 set([1], 2): ()
 --------------------------------------------------------------------------------
-error at `[1]`: expected mut [{integer}], found imm [{integer}]
+error at `set`: no instance IndexMut[imm [i32]]
 
 ================================================================================
 An inferred function that makes a mut array
@@ -464,8 +464,8 @@ fn odd(xs, n) = if n == 0 { xs[0] = False; } else { even(xs, n - 1) };
 even(mut [False], 3);
 
 --------------------------------------------------------------------------------
-even: fn(mut [Bool], i32) -> ()
-odd: fn(mut [Bool], i32) -> ()
+even: forall a. IndexMut[a] => a.Item = Bool => fn(a, i32) -> ()
+odd: forall a. IndexMut[a] => a.Item = Bool => fn(a, i32) -> ()
 even(mut [False], 3): ()
 
 ================================================================================
@@ -822,7 +822,7 @@ let ys = [nope];
 ys[0] = 1;
 
 --------------------------------------------------------------------------------
-let xs: mut [i32]
+let xs: {error}
 xs[0] = 1: ()
 let ys: imm [i32]
 ys[0] = 1: ()
@@ -842,7 +842,7 @@ n[0] = 2;
 let n: i32
 n[0] = 2: ()
 --------------------------------------------------------------------------------
-error at `n`: expected [{integer}], found {integer}
+error at `n[0]`: no instance IndexMut[i32]
 
 ================================================================================
 Mismatches show the mutability

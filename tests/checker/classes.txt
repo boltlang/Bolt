@@ -307,7 +307,7 @@ class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn le(a, b) = lt(a, b) || eq(a, b);
 
 --------------------------------------------------------------------------------
-le: forall a. Ord[a] => Eq[a] => fn(a, a) -> Bool
+le: forall a. Ord[a] => fn(a, a) -> Bool
 
 ================================================================================
 A class method whose type doesn't mention the class parameter

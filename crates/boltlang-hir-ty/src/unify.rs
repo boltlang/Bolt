@@ -157,6 +157,12 @@ impl<'db> Unifier<'db> {
         }
     }
 
+    /// Whether a variable in `ty` met the error type, so that what's unknown
+    /// about it is only unknown because of an error already reported.
+    pub fn has_error_var(&self, ty: &Ty<'db>) -> bool {
+        self.resolve(ty).any(&mut |t| matches!(t, Ty::Var(v) if self.vars[v.0 as usize].met_error))
+    }
+
     /// Make `ty` the error type if it's a variable, after reporting an error
     /// about it, so that it doesn't cause more. [`Unifier::unify`] doesn't,
     /// since the error type fits anywhere.

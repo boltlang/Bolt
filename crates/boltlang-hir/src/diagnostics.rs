@@ -130,6 +130,9 @@ pub enum DiagnosticKind<'db> {
     NoAssocType,
     /// A path like `C.Item` where several classes of `C` declare it.
     AmbiguousAssocType,
+    /// Syntax that needs a class of the prelude, like `xs[i]` needs
+    /// `Index`, without a prelude that defines it.
+    NoLangClass { class: &'static str },
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -652,6 +655,9 @@ impl<'db> Collector<'db> {
                 }
                 InferenceDiagnostic::NotAPlace { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace),
                 InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),
+                InferenceDiagnostic::NoLangClass { expr, class } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoLangClass { class })
+                }
                 // Reported at the function, which is the fallback.
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),
             };

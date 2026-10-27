@@ -122,7 +122,7 @@ fn f() {
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `1`: expected Bool, found {integer}
-error at `"text"`: expected [a], found String
+error at `"text"`: no instance Iterable[String]
 
 ================================================================================
 Break gives the value of a loop

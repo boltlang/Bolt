@@ -134,6 +134,9 @@ pub enum InferenceDiagnostic<'db> {
     NotAPlace { expr: ExprId },
     /// Something the checker doesn't support yet, like `?` or ranges.
     Unsupported { expr: ExprId },
+    /// Syntax that needs a class of the prelude, like `xs[i]` needs
+    /// `Index`, without a prelude that defines it.
+    NoLangClass { expr: ExprId, class: &'static str },
     /// Functions without complete signatures in files that import each
     /// other call each other; one of them needs a signature.
     CyclicInference,
@@ -413,28 +416,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.lower_ty(expr, *type_ref)
             }
             Expr::Index { base, index } => {
+                // Through the impl of `Index` for the type, arrays too.
                 let base_ty = self.infer_expr(*base);
-                let index_ty = self.solver.new_var(VarKind::Int);
-                self.check_expr(*index, &index_ty);
-                // A type other than an array, like a `Vec`, is indexed through
-                // its impl of `Index`. One that isn't known yet is an array.
-                let class_elem = match self.solver.unifier.shallow_resolve(&base_ty) {
-                    Ty::Array(..) | Ty::Var(_) | Ty::Error | Ty::Never => None,
-                    _ => self.lang_assoc(LangClass::Index, &base_ty, expr),
-                };
-                match class_elem {
-                    Some(elem) => {
-                        let i32_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
-                        self.solver.equal(&i32_ty, &index_ty, self.origin(*index));
-                        elem
-                    }
-                    None => {
-                        let elem = self.new_var();
-                        let array = Ty::array(self.new_mutability(), elem.clone());
-                        self.solver.equal(&array, &base_ty, self.origin(*base));
-                        elem
-                    }
-                }
+                self.check_expr(*index, &Ty::Builtin(BuiltinType::Int(BuiltinInt::I32)));
+                self.lang_assoc(LangClass::Index, &base_ty, expr).unwrap_or(Ty::Error)
             }
             Expr::Prefix { op, expr: inner } => {
                 let ty = self.infer_expr(*inner);
@@ -530,25 +515,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 if breakable.broken { ty } else { Ty::Never }
             }
             Expr::For { pat, iterable, body: loop_body, label } => {
+                // Through the impl of `Iterable` for the type, arrays too,
+                // whose iterator gives the items with `Iterator`.
                 let iterable_ty = self.infer_expr(*iterable);
-                // A type other than an array goes through its impl of
-                // `Iterable`, whose iterator gives the items with `Iterator`.
-                // One that isn't known yet is an array.
-                let class_item = match self.solver.unifier.shallow_resolve(&iterable_ty) {
-                    Ty::Array(..) | Ty::Var(_) | Ty::Error | Ty::Never => None,
-                    _ => self
-                        .lang_assoc(LangClass::Iterable, &iterable_ty, *iterable)
-                        .and_then(|iter| self.lang_assoc(LangClass::Iterator, &iter, expr)),
-                };
-                let elem = match class_item {
-                    Some(item) => item,
-                    None => {
-                        let elem = self.new_var();
-                        let array = Ty::array(self.new_mutability(), elem.clone());
-                        self.solver.equal(&array, &iterable_ty, self.origin(*iterable));
-                        elem
-                    }
-                };
+                let elem = self
+                    .lang_assoc(LangClass::Iterable, &iterable_ty, *iterable)
+                    .and_then(|iter| self.lang_assoc(LangClass::Iterator, &iter, expr))
+                    .unwrap_or(Ty::Error);
                 self.check_pat(*pat, &elem);
                 self.breakables.push(Breakable { label: *label, is_loop: true, ty: None, broken: false });
                 self.check_expr(*loop_body, &Ty::unit());
@@ -749,6 +722,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             bound: 0,
             predicates: Box::new([ClassConstraint { class, args: identity_args(self.db, def) }]),
             fields: Box::new([]),
+            assoc: Box::new([]),
             ty,
         };
         scheme.instantiate(self.solver, self.origin(expr))
@@ -1062,32 +1036,43 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    /// Report that the array `expr`, an element of which is assigned to,
-    /// isn't `mut`. An array whose mutability isn't known yet becomes `mut`.
-    /// A type other than an array, like a `Vec`, needs an impl of
-    /// `IndexMut`, at `place`, the element assigned to.
+    /// `expr`, an element of which is assigned to at `place`, needs an impl
+    /// of `IndexMut`. An array or struct that isn't `mut` is reported as such
+    /// instead, and one whose mutability isn't known yet becomes `mut`.
     fn check_mut_index(&mut self, place: ExprId, expr: ExprId) {
         let ty = self.solver.unifier.resolve(self.result.expr_ty(expr));
-        match &ty {
-            Ty::Array(mutability, _) => self.solver.require_mut(&ty, mutability, self.origin(expr)),
-            Ty::Var(_) | Ty::Error | Ty::Never => {}
-            _ => {
-                let file = self.def.def(self.db).file(self.db);
-                if let Some(class) = LangClass::IndexMut.class(self.db, file) {
-                    let constraint = ClassConstraint { class, args: Box::new([ty]) };
-                    self.solver.add(Constraint::Class { constraint, origin: self.origin(place) });
-                }
+        if matches!(ty, Ty::Error | Ty::Never) {
+            return;
+        }
+        // An array or struct that isn't `mut` can't be changed, which says
+        // more than that there's no impl for it; and one whose mutability
+        // isn't known yet becomes `mut`.
+        if let Some(mutability) = ty.mutability() {
+            let changeable = matches!(
+                self.solver.unifier.shallow_resolve(mutability),
+                Ty::Mutability(Mutability::Mut) | Ty::Var(_) | Ty::Error | Ty::Never
+            );
+            self.solver.require_mut(&ty, mutability, self.origin(expr));
+            if !changeable {
+                return;
             }
         }
+        let file = self.def.def(self.db).file(self.db);
+        // Without `Index`, reading the element already reported it.
+        let Some(class) = LangClass::IndexMut.class(self.db, file) else { return };
+        let constraint = ClassConstraint { class, args: Box::new([ty]) };
+        self.solver.add(Constraint::Class { constraint, origin: self.origin(place) });
     }
 
     /// The associated type of `lang`, a class of the prelude that syntax
-    /// uses, for `arg`, which must have an instance of it at `at`. `None`
-    /// if the prelude doesn't define the class.
+    /// uses, for `arg`, which must have an instance of it at `at`. Without a
+    /// prelude that defines the class, that's reported, and it's `None`.
     fn lang_assoc(&mut self, lang: LangClass, arg: &Ty<'db>, at: ExprId) -> Option<Ty<'db>> {
         let file = self.def.def(self.db).file(self.db);
-        let class = lang.class(self.db, file)?;
-        let alias = lang.assoc(self.db, class)?;
+        let Some((class, alias)) = lang.class(self.db, file).and_then(|c| Some((c, lang.assoc(self.db, c)?))) else {
+            self.result.diagnostics.push(InferenceDiagnostic::NoLangClass { expr: at, class: lang.name() });
+            return None;
+        };
         let origin = self.origin(at);
         let constraint = ClassConstraint { class, args: Box::new([arg.clone()]) };
         self.solver.add(Constraint::Class { constraint, origin });

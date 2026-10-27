@@ -1,6 +1,5 @@
 // Classes that syntax uses: `v[i]`, `v[i] = x` and `for x in c` work on any
-// type with an impl of them. Arrays don't need one: indexing and looping
-// over an array are built in.
+// type with an impl of them. Arrays have theirs in `array.bolt`.
 
 import "./option" (Option);
 
