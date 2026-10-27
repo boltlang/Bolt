@@ -145,8 +145,7 @@ impl Attributes {
 /// program's file.
 fn database(case: &Case) -> Result<(TestDb, File), String> {
     let mut db = TestDb::new();
-    let std = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
-    add_dir(&db, &std, "/.bolt/packages/std");
+    db.add_std();
     db.set_prelude(Some("std"), true);
     let files: Vec<_> =
         split_files(&case.input)?.into_iter().map(|(path, text)| (path.clone(), db.file(&path, &text))).collect();
@@ -165,19 +164,6 @@ fn database(case: &Case) -> Result<(TestDb, File), String> {
         return Err(format!("the program has errors:\n{}", errors.join("\n")));
     }
     Ok((db, main))
-}
-
-/// Add the files in `dir` to `db`, under `at`.
-fn add_dir(db: &TestDb, dir: &Path, at: &str) {
-    for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display())) {
-        let path = entry.unwrap().path();
-        let name = format!("{at}/{}", path.file_name().unwrap().to_str().unwrap());
-        if path.is_dir() {
-            add_dir(db, &path, &name);
-        } else if path.extension().is_some_and(|ext| ext == "bolt") {
-            db.file(&name, &std::fs::read_to_string(&path).unwrap());
-        }
-    }
 }
 
 /// What running a case with `backend` prints, as in the corpus.

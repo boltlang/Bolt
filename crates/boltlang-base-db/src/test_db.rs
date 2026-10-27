@@ -45,6 +45,26 @@ impl TestDb {
         self.files.resolve(self, path)
     }
 
+    /// Add the `.bolt` files in the directory `dir` on disk, and in the
+    /// directories in it, under `at`.
+    pub fn add_dir(&self, dir: &std::path::Path, at: &str) {
+        for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display())) {
+            let path = entry.unwrap().path();
+            let name = format!("{at}/{}", path.file_name().unwrap().to_str().unwrap());
+            if path.is_dir() {
+                self.add_dir(&path, &name);
+            } else if path.extension().is_some_and(|ext| ext == "bolt") {
+                self.file(&name, &std::fs::read_to_string(&path).unwrap());
+            }
+        }
+    }
+
+    /// Add the repository's `std` as a package, at `/.bolt/packages/std`.
+    pub fn add_std(&self) {
+        let std = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
+        self.add_dir(&std, "/.bolt/packages/std");
+    }
+
     /// Change the contents of a file.
     pub fn edit(&mut self, file: File, text: &str) {
         let path = file.path(self).as_system_path_buf().unwrap().clone();
