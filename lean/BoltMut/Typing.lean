@@ -5,7 +5,8 @@ import BoltMut.Syntax
 
 The rules that matter for mutability:
 
-* `new false e`, an `imm` object, can only hold a type that's `imm` all the
+* An object holds only what's at most its mutability (`AtMost`). So
+  `new false e`, an `imm` object, can only hold a type that's `imm` all the
   way down (`DeepImm`): what an `imm` value holds can't be changed either.
 * `set e₁ e₂` needs `e₁` to be exactly `cell mutable t`. A mutability
   parameter isn't enough: a generic function can read what it's given, but
@@ -59,7 +60,7 @@ inductive HasType (fns : List Fn) (σ : HeapTy) : Bool → Ctx → Expr → Ty �
       σ[l]? = some (m, t) → (io = true → m = .immutable) →
       HasType fns σ io Γ (.loc l) (.cell m t)
   | new {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {b : Bool} :
-      HasType fns σ io Γ e t → (b = false → DeepImm t) →
+      HasType fns σ io Γ e t → AtMost (muOf b) t →
       HasType fns σ io Γ (.new b e) (.cell (muOf b) t)
   | get {io : Bool} {Γ : Ctx} {e : Expr} {m : Mu} {t : Ty} :
       HasType fns σ io Γ e (.cell m t) → HasType fns σ io Γ (.get e) t
@@ -79,6 +80,13 @@ inductive HasType (fns : List Fn) (σ : HeapTy) : Bool → Ctx → Expr → Ty �
   | app {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {m : Mu} {a r : Ty} :
       HasType fns σ io Γ e₁ (.fn m a r) → HasType fns σ io Γ e₂ a →
       HasType fns σ io Γ (.app e₁ e₂) r
+  | pair {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {a b : Ty} :
+      HasType fns σ io Γ e₁ a → HasType fns σ io Γ e₂ b →
+      HasType fns σ io Γ (.pair e₁ e₂) (.prod a b)
+  | fst {io : Bool} {Γ : Ctx} {e : Expr} {a b : Ty} :
+      HasType fns σ io Γ e (.prod a b) → HasType fns σ io Γ (.fst e) a
+  | snd {io : Bool} {Γ : Ctx} {e : Expr} {a b : Ty} :
+      HasType fns σ io Γ e (.prod a b) → HasType fns σ io Γ (.snd e) b
 
 /-- Each function's body has its declared type, with its mutability
 parameters unknown, and no locations. -/

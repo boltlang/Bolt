@@ -42,6 +42,9 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {io : Bool} {Γ : 
   | call hf hl _ ih => exact .call hf hl ih
   | lam _ ih => exact .lam ih
   | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+  | fst _ ih => exact .fst ih
+  | snd _ ih => exact .snd ih
 
 /-- `Γ'` has every variable of `Γ`, with the same type. -/
 def Ctx.Sub (Γ Γ' : Ctx) : Prop := ∀ (x : Nat) (s : Ty), Γ x = some s → Γ' x = some s
@@ -97,6 +100,9 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ Γ' : C
   | call hf hl _ ih => exact .call hf hl (ih hΓ)
   | lam _ ih => exact .lam (ih ((hΓ.capture _).update _ _))
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ) (ih₂ hΓ)
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
+  | fst _ ih => exact .fst (ih hΓ)
+  | snd _ ih => exact .snd (ih hΓ)
 
 /-- Outside an `imm` closure, anything typed inside one has its type too. -/
 theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -118,6 +124,9 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} 
     simp only [Bool.or_eq_true] at h ⊢
     exact h.imp_left hio
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hio) (ih₂ hio)
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hio) (ih₂ hio)
+  | fst _ ih => exact .fst (ih hio)
+  | snd _ ih => exact .snd (ih hio)
 
 theorem muOf_cases (b : Bool) : muOf b = .mutable ∨ muOf b = .immutable := by
   cases b
@@ -133,7 +142,9 @@ theorem muOf_immutable {b : Bool} (h : muOf b = .immutable) : b = false := by
 closure. -/
 theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {t : Ty}
     (hv : v.IsValue) (ht : HasType fns σ io Γ v t) (hd : DeepImm t) : HasType fns σ true Γ v t := by
-  cases hv with
+  induction hv generalizing t with
+  | pair _ _ ih₁ ih₂ => cases ht with
+    | pair h₁ h₂ => exact .pair (ih₁ h₁ hd.1) (ih₂ h₂ hd.2)
   | unit => cases ht; exact .unit
   | int => cases ht; exact .int
   | loc => cases ht with
@@ -153,6 +164,7 @@ theorem canonical_cell {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v :
   | loc => cases ht with
     | loc h _ => exact ⟨_, rfl, h⟩
   | lam => cases ht
+  | pair => cases ht
 
 /-- A value of a function type is a closure. -/
 theorem canonical_fn {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu} {a r : Ty}
@@ -162,6 +174,18 @@ theorem canonical_fn {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : E
   | int => cases ht
   | loc => cases ht
   | lam => exact ⟨_, _, _, rfl⟩
+  | pair => cases ht
+
+/-- A value of a tuple type is a pair of values. -/
+theorem canonical_prod {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {a b : Ty}
+    (hv : v.IsValue) (ht : HasType fns σ io Γ v (.prod a b)) :
+    ∃ v₁ v₂, v = .pair v₁ v₂ ∧ v₁.IsValue ∧ v₂.IsValue := by
+  cases hv with
+  | unit => cases ht
+  | int => cases ht
+  | loc => cases ht
+  | lam => cases ht
+  | pair h₁ h₂ => exact ⟨_, _, rfl, h₁, h₂⟩
 
 /-- Substituting a value for `x`, where `x` has the value's type or isn't in
 scope (in the body of an `imm` closure that couldn't capture it). -/
@@ -237,6 +261,9 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
         · simp only [ite_true] at hs'
           simpa using hx s' hs'
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ hx) (ih₂ hΓ hx)
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ hx) (ih₂ hΓ hx)
+  | fst _ ih => exact .fst (ih hΓ hx)
+  | snd _ ih => exact .snd (ih hΓ hx)
 
 /-- Substituting a closed value for a variable just put in scope. -/
 theorem HasType.subst_update {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {x : Nat} {t₁ t : Ty}
@@ -290,7 +317,9 @@ theorem HasType.msubst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e :
   | loc _ _ => exact hn.elim
   | @new _ _ _ s b _ hd ih =>
     simp only [Expr.msubst, Ty.subst, Mu.subst_muOf]
-    exact .new (ih hn) (fun hb => (hd hb).subst ms)
+    have h := hd.subst ms
+    rw [Mu.subst_muOf] at h
+    exact .new (ih hn) h
   | get _ ih =>
     have := ih hn
     simp only [Ty.subst] at this
@@ -317,6 +346,15 @@ theorem HasType.msubst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e :
     have h₁ := ih₁ hn.1
     simp only [Ty.subst] at h₁
     exact .app h₁ (ih₂ hn.2)
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hn.1) (ih₂ hn.2)
+  | fst _ ih =>
+    have h := ih hn
+    simp only [Ty.subst] at h
+    exact .fst h
+  | snd _ ih =>
+    have h := ih hn
+    simp only [Ty.subst] at h
+    exact .snd h
 
 /-- Inside an `imm` closure, every location is `imm`. -/
 theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -327,8 +365,8 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} 
   | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | get _ ih | call _ _ _ ih => exact ih hio hl
-  | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ =>
+  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
+  | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
   | lam _ ih => exact ih (by simp [hio]) hl
 

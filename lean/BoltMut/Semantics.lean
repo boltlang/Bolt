@@ -43,6 +43,18 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
       e₁.IsValue → Step fns h e₂ h' e₂' → Step fns h (.app e₁ e₂) h' (.app e₁ e₂')
   | appVal {h : Heap} {b : Bool} {x : Nat} {body v : Expr} :
       v.IsValue → Step fns h (.app (.lam b x body) v) h (body.subst x v)
+  | pairCong₁ {h h' : Heap} {e₁ e₁' e₂ : Expr} :
+      Step fns h e₁ h' e₁' → Step fns h (.pair e₁ e₂) h' (.pair e₁' e₂)
+  | pairCong₂ {h h' : Heap} {e₁ e₂ e₂' : Expr} :
+      e₁.IsValue → Step fns h e₂ h' e₂' → Step fns h (.pair e₁ e₂) h' (.pair e₁ e₂')
+  | fstCong {h h' : Heap} {e e' : Expr} :
+      Step fns h e h' e' → Step fns h (.fst e) h' (.fst e')
+  | fstVal {h : Heap} {v₁ v₂ : Expr} :
+      v₁.IsValue → v₂.IsValue → Step fns h (.fst (.pair v₁ v₂)) h v₁
+  | sndCong {h h' : Heap} {e e' : Expr} :
+      Step fns h e h' e' → Step fns h (.snd e) h' (.snd e')
+  | sndVal {h : Heap} {v₁ v₂ : Expr} :
+      v₁.IsValue → v₂.IsValue → Step fns h (.snd (.pair v₁ v₂)) h v₂
 
 /-- Any number of steps. -/
 inductive Steps (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where

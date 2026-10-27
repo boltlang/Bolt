@@ -76,6 +76,23 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     cases ht with
     | app _ he₂ => exact ih hh he₂ hl
   | appVal _ => intros; rfl
+  | pairCong₁ _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | pair he₁ _ => exact ih hh he₁ hl
+  | pairCong₂ _ _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | pair _ he₂ => exact ih hh he₂ hl
+  | fstCong _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | fst he => exact ih hh he hl
+  | sndCong _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | snd he => exact ih hh he hl
+  | fstVal _ _ | sndVal _ _ => intros; rfl
 
 /-- However many steps a well-typed program takes, an `imm` location holds
 the same value. -/
@@ -112,7 +129,7 @@ theorem reaches_only_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk f
     -- What an `imm` location holds has a type that's `imm` all the way down,
     -- so it can be typed as if inside an `imm` closure, where every location
     -- is `imm`: the location itself, or what an `imm` closure captured.
-    obtain ⟨ty', hσ⟩ := (hvt.value_imm hval (hdeep rfl)).hasLoc_imm rfl hl₁
+    obtain ⟨ty', hσ⟩ := (hvt.value_imm hval (atMost_immutable.mp hdeep)).hasLoc_imm rfl hl₁
     exact ih hσ
 
 /-- The promise of `imm`: nothing reachable from an `imm` location ever

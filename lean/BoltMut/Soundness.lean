@@ -11,12 +11,13 @@ holds a value whose type is `imm` all the way down.
 namespace BoltMut
 
 /-- The heap matches its typing: each location holds a value of its type,
-has `mut` or `imm` as its mutability (never a parameter), and if it's
-`imm`, holds a type that's `imm` all the way down. -/
+has `mut` or `imm` as its mutability (never a parameter), and holds a type
+that's at most its mutability: if it's `imm`, one that's `imm` all the way
+down. -/
 def HeapOk (fns : List Fn) (σ : HeapTy) (h : Heap) : Prop :=
   h.length = σ.length ∧
     ∀ (l : Nat) (m : Mu) (t : Ty), σ[l]? = some (m, t) →
-      (m = .mutable ∨ m = .immutable) ∧ (m = .immutable → DeepImm t) ∧
+      (m = .mutable ∨ m = .immutable) ∧ AtMost m t ∧
         ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ false Ctx.empty v t
 
 theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {l : Nat} {p : Mu × Ty}
@@ -44,6 +45,22 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
         exact .inr ⟨_, _, .appVal hv₂⟩
       · exact .inr ⟨_, _, .appCong₂ hv₁ hs⟩
     · exact .inr ⟨_, _, .appCong₁ hs⟩
+  | pair _ _ ih₁ ih₂ =>
+    rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
+    · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
+      · exact .inl (.pair hv₁ hv₂)
+      · exact .inr ⟨_, _, .pairCong₂ hv₁ hs⟩
+    · exact .inr ⟨_, _, .pairCong₁ hs⟩
+  | fst he ih =>
+    rcases ih hΓ with hv | ⟨h', e', hs⟩
+    · obtain ⟨v₁, v₂, rfl, h₁, h₂⟩ := canonical_prod hv he
+      exact .inr ⟨_, _, .fstVal h₁ h₂⟩
+    · exact .inr ⟨_, _, .fstCong hs⟩
+  | snd he ih =>
+    rcases ih hΓ with hv | ⟨h', e', hs⟩
+    · obtain ⟨v₁, v₂, rfl, h₁, h₂⟩ := canonical_prod hv he
+      exact .inr ⟨_, _, .sndVal h₁ h₂⟩
+    · exact .inr ⟨_, _, .sndCong hs⟩
   | new _ _ ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .newVal hv⟩
@@ -103,7 +120,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
           subst hlen
           rw [List.getElem?_concat_length] at hl
           cases hl
-          refine ⟨muOf_cases b, fun hm => hd (muOf_immutable hm), e, ?_, hv,
+          refine ⟨muOf_cases b, hd, e, ?_, hv,
             he.weaken_heap (Extends.append σ _)⟩
           rw [← hh.1, List.getElem?_concat_length]
       · rw [hh.1, List.getElem?_concat_length]
@@ -148,8 +165,8 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
         · subst heq
           rw [hσ] at hl'
           cases hl'
-          refine ⟨.inl rfl, (fun hm => nomatch hm), v, List.getElem?_set_self hl, hv, ?_⟩
-          exact he₂
+          obtain ⟨_, hd, _⟩ := hh.2 _ _ _ hσ
+          exact ⟨.inl rfl, hd, v, List.getElem?_set_self hl, hv, he₂⟩
         · obtain ⟨hm, hd, w, hw, hwv, hwt⟩ := hh.2 l' m t' hl'
           exact ⟨hm, hd, w, by rw [List.getElem?_set_ne heq]; exact hw, hwv, hwt⟩
   | letCong _ ih =>
@@ -201,5 +218,39 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
         -- has the same type.
         rw [Ctx.capture_empty] at hbody
         exact ⟨σ, Extends.refl σ, hh, (hbody.weaken_imm (io' := false) (fun h => nomatch h)).subst_update hv he₂⟩
+  | pairCong₁ _ ih =>
+    intro σ t hh ht
+    cases ht with
+    | pair he₁ he₂ =>
+      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+      exact ⟨σ', hx, hh', .pair he₁' (he₂.weaken_heap hx)⟩
+  | pairCong₂ _ _ ih =>
+    intro σ t hh ht
+    cases ht with
+    | pair he₁ he₂ =>
+      obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
+      exact ⟨σ', hx, hh', .pair (he₁.weaken_heap hx) he₂'⟩
+  | fstCong _ ih =>
+    intro σ t hh ht
+    cases ht with
+    | fst he =>
+      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+      exact ⟨σ', hx, hh', .fst he'⟩
+  | sndCong _ ih =>
+    intro σ t hh ht
+    cases ht with
+    | snd he =>
+      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+      exact ⟨σ', hx, hh', .snd he'⟩
+  | fstVal _ _ =>
+    intro σ t hh ht
+    cases ht with
+    | fst he => cases he with
+      | pair h₁ _ => exact ⟨σ, Extends.refl σ, hh, h₁⟩
+  | sndVal _ _ =>
+    intro σ t hh ht
+    cases ht with
+    | snd he => cases he with
+      | pair _ h₂ => exact ⟨σ, Extends.refl σ, hh, h₂⟩
 
 end BoltMut
