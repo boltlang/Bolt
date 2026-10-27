@@ -170,3 +170,24 @@ get(1, 0);
 get(1, 0): {error}
 --------------------------------------------------------------------------------
 error at `get`: no instance Index[i32]
+
+================================================================================
+An associated type given by other associated types
+================================================================================
+class Iterator[I] { type Item; fn next(it: I) -> Item; }
+struct Ints { n: i32 }
+struct Pair[A, B] { first: A, second: B }
+impl Iterator[Ints] { type Item = i32; fn next(it) = it.n; }
+impl[A: Iterator, B: Iterator] Iterator[Pair[A, B]] {
+  type Item = (A.Item, B.Item);
+  fn next(it) = (next(it.first), next(it.second));
+}
+let p = Pair { first: Ints { n: 1 }, second: Ints { n: 2 } };
+let (a, b) = next(p);
+a + 1;
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> i32
+Iterator[Pair[A, B]].next: forall A B. Iterator[A] => Iterator[B] => fn(Pair[A, B]) -> (A.Item, B.Item)
+let p: imm Pair[imm Ints, imm Ints]
+let (a, b): (i32, i32)
+a + 1: i32

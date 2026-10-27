@@ -322,12 +322,17 @@ impl<'db> Solver<'db> {
         }
         let ty = match found {
             Some((imp, subst)) => match impl_assoc_ty(self.db, imp, constraint.alias) {
-                Some(ty) => ty.fold(&mut |t| match t {
-                    Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
-                        Some(subst.get(p).cloned().unwrap_or(Ty::Error))
-                    }
-                    _ => None,
-                }),
+                Some(ty) => {
+                    let ty = ty.fold(&mut |t| match t {
+                        Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
+                            Some(subst.get(p).cloned().unwrap_or(Ty::Error))
+                        }
+                        _ => None,
+                    });
+                    // What the impl gives can have associated types of its
+                    // own, like the `A.Item` of `type Item = (A.Item, B.Item)`.
+                    self.flatten_assoc(&ty, origin)
+                }
                 // The impl doesn't define it, which is reported with the impl.
                 None => Ty::Error,
             },
@@ -748,10 +753,12 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
         }
         let Some((imp, subst)) = found else { return Some(Ty::Assoc(*alias, args)) };
         let ty = impl_assoc_ty(db, imp, *alias)?;
-        Some(ty.fold(&mut |t| match t {
+        let ty = ty.fold(&mut |t| match t {
             Ty::Param(p) if p.def == GenericDefId::Impl(imp) => Some(subst.get(p).cloned().unwrap_or(Ty::Error)),
             _ => None,
-        }))
+        });
+        // It can have associated types of its own.
+        Some(normalize_assoc(db, file, &ty))
     })
 }
 
