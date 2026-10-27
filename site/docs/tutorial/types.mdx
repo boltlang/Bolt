@@ -74,6 +74,31 @@ fn broken[T](x: T) -> T = 1;
 [E0201] Error: expected `T`, found an integer
 ```
 
+That includes types that can change, like `mut [i32]`. So a generic
+function can't put a `T` in something that never changes, like an `imm`
+array, unless it says that `T` never changes either, with the bound
+`T: imm`:
+
+```bolt
+fn twice[T: imm](x: T) -> imm [T] = [x, x];
+
+twice([1, 2]);
+```
+
+```text
+[[1, 2], [1, 2]]
+```
+
+Then calling it with something that can change is an error:
+
+```bolt
+twice(mut [1, 2]);
+```
+
+```text
+[E0230] Error: expected a type that's at most `imm`, found `mut [i32]`
+```
+
 ## Fields of any type
 
 A function that uses a field works on any struct that has a field with that

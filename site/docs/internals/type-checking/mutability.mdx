@@ -215,15 +215,28 @@ becomes part of an inferred function's type, and its callers must meet it,
 like class constraints:
 
 ```bolt
-fn wrap(x) = Box { item: x };     // forall a. a ⊑ imm => fn(a) -> imm Box[a]
+fn wrap(x) = Box { item: x };     // forall a. a: imm => fn(a) -> imm Box[a]
 wrap(1);                          // fine
 wrap(mut [1]);                    // error (E0230): expected a type that's at most `imm`, found `mut [i32]`
 ```
 
-A function with a complete signature can't say that yet, so there it's an
-error: in `fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }`, `T`
-may be `mut`. A `mut` struct can hold anything, so `mut Box { item: x }`
-needs nothing. A `mut` array or struct inside an `imm` one is still also
+A signature says it with a bound, `T: imm`, read as "nothing in `T` is
+more `mut` than `imm`", like Rust's `T: 'a` for lifetimes. It can be
+written next to the parameter or in a `where` clause, and a mutability
+can be bounded too, as in `'v: 'm`:
+
+```bolt
+fn wrap[T: imm](x: T) -> imm Box[T] = Box { item: x };
+fn reader(xs: 'v [i32]) -> 'f fn() -> i32 where 'v: 'f = || xs[0];
+impl[T: imm] ToImm[[T]] { ... }          // checked where the impl is chosen
+struct Frozen[T: imm] { item: T }        // checked where a value is made
+```
+
+Without the bound, a complete signature is an error where it needs one:
+in `fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }`, `T` may be
+`mut`. A `mut` struct can hold anything, so `mut Box { item: x }` needs
+nothing. A mutability on its own isn't a type: `let x: imm = 1` is an error
+(E0231). A `mut` array or struct inside an `imm` one is still also
 caught once the types are known (E0223), which shows the whole type.
 
 **A closure that can change what it captured is `mut`.** A closure shares
@@ -264,9 +277,9 @@ that makes a closure says how the closure's mutability depends on what it
 captured:
 
 ```bolt
-fn reader(xs: [i32]) = || xs[0];            // 'm ⊑ 'n => fn('m [i32]) -> 'n fn() -> i32
-fn always[T](x: T) -> fn() -> T = || x;     // forall T. T ⊑ 'm => fn(T) -> 'm fn() -> T
-fn compose(f, g) = |x| f(g(x));             // forall a b c. 'm ⊑ 'o => 'n ⊑ 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
+fn reader(xs: [i32]) = || xs[0];            // 'm: 'n => fn('m [i32]) -> 'n fn() -> i32
+fn always[T](x: T) -> fn() -> T = || x;     // forall T. T: 'm => fn(T) -> 'm fn() -> T
+fn compose(f, g) = |x| f(g(x));             // forall a b c. 'm: 'o => 'n: 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
 ```
 
 `reader([1])` and `always(1)` are `imm` closures, and `reader(mut [1])` is a
@@ -550,7 +563,13 @@ unification will have to remember the origin of `Imm` and `Mut`.
     about their types, and becomes their schemes' `bounds`; other
     unknowns are chosen to meet it, `imm` below first
     (`Solver::settle_at_most`). In a body with a complete signature, what's
-    left about its parameters is an error (`TypeError::NotAtMost`).
+    left about its parameters is an error (`TypeError::NotAtMost`), unless
+    the function or its impl assumes it: a bound like `T: imm` or
+    `'v: 'm` lowers to `Predicates::at_most` (`TypeRef::Mutability` for the
+    mutability on its own), the solver follows assumptions through
+    `'v: 'm` and `'m: imm` (`Solver::mutability_le`), and a scheme carries
+    them for its callers. A chosen impl's bounds are checked like its class
+    predicates, and a struct's where a value is made.
   - A closure gets a new mutability, the types of the variables it uses
     from outside (`ClosureFrame`) are at most it, and a `let mut` one makes
     it `Mut`.
@@ -576,7 +595,7 @@ unification will have to remember the origin of `Imm` and `Mut`.
   parameters, that nothing reachable from an `imm` value ever changes, that
   a well-typed program never gets stuck, and that calling an `imm` function
   with `imm` arguments changes nothing that existed before. It includes the
-  "at most" assumptions that #243 proposes, like `T ⊑ imm`.
+  "at most" assumptions that #243 proposes, like `T: imm`.
 - **Checked when running**: every array and struct in the evaluator knows
   whether it was made `mut` or `imm` (`Object::mutability`). With
   `Evaluator::with_mutability_checks`, which the evaluator's tests and
@@ -598,8 +617,7 @@ taking the place of a separate `StringBuilder`.
 - **Names in structs**, like `struct Pair['a, 'b] { x: 'a Point, y: 'b Point }`,
   so that one field can be `mut` while another is `imm` (#243). The rule
   for how `'a` relates to the struct's own mutability is the "at most"
-  constraint: `'a ⊑` the struct's. Saying an assumption like `T ⊑ imm` in
-  a signature is the other part of #243 that's left.
+  constraint: `'a` is at most the struct's mutability.
 - **A name used once** says nothing that leaving it out doesn't, and could
   be a warning.
 - **Impls for struct type constructors.** `impl Functor[Box]` is for boxes
