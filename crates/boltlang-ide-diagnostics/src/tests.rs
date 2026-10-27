@@ -766,9 +766,31 @@ fn builtin_declarations() {
 extern "bolt" {
   fn print(text: String);
   fn prnt(text: String);
-   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`
+   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`
   fn panic(message: String) -> i32;
    //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
+}
+"#,
+    );
+}
+
+#[test]
+fn generic_builtin_declarations() {
+    // The type parameters can have any name.
+    check(r#"extern "bolt" { fn array_len[Elem](items: [Elem]) -> i32; }"#);
+    check(
+        r#"
+extern "bolt" {
+  fn array_len[T](xs: mut [T]) -> i32;
+   //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
+}
+"#,
+    );
+    check(
+        r#"
+extern "bolt" {
+  fn array_len[T](xs: [T]) -> T;
+   //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
 }
 "#,
     );

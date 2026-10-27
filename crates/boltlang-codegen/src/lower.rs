@@ -831,6 +831,9 @@ impl<'db> Compiler<'db> {
         let db = self.db;
         let builtin = builtin(db, f);
         let target = if let Some(builtin) = builtin {
+            if !Builtin::HOST.contains(&builtin) {
+                return Err(self.unsupported(expr, format!("the builtin `{}`", builtin.name())));
+            }
             Callee::Builtin(builtin)
         } else if f.item(db).has_body {
             Callee::Instance(self.instance(expr, f, callee, args)?)

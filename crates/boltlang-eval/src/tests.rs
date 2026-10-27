@@ -234,7 +234,7 @@ fn a_file_has_the_value_of_its_last_expression_statement() {
 }
 
 /// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n}\n";
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n  pub fn array_len[T](xs: [T]) -> i32;\n}\n";
 
 fn db_with_builtins(code: &str) -> (TestDb, boltlang_base_db::File) {
     let mut db = TestDb::new();
@@ -264,6 +264,13 @@ fn effects_are_refused_without_a_host_and_in_consts() {
     let error = Evaluator::new(&db).with_host(recorder.clone()).eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Effect("print"));
     assert_eq!(recorder.output(), "");
+}
+
+#[test]
+fn array_len_counts_the_elements() {
+    let (db, file) = db_with_builtins("let xs = mut [1, 2];\nlet n = array_len(xs);\nxs[0] = 3;\n(n, array_len([True]), array_len([]));");
+    let value = Evaluator::new(&db).eval_file(file).unwrap();
+    assert_eq!(value.display(&db).to_string(), "(2, 1, 0)");
 }
 
 #[test]
