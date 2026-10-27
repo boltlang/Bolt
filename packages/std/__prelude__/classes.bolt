@@ -29,9 +29,8 @@ pub class Iterator[I] {
 
 /// Types that can be looped over with `for x in c`.
 pub class Iterable[C] {
-  /// The iterator that goes over a value of `C`. It must have an impl of
-  /// `Iterator`.
-  type Iter;
+  /// The iterator that goes over a value of `C`.
+  type Iter: Iterator;
 
   /// A new iterator over `c`.
   fn iter(c: C) -> Iter;

@@ -22,7 +22,7 @@ pub enum LangClass {
     Index,
     /// `class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }`
     IndexMut,
-    /// `class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }`
+    /// `class Iterable[C] { type Iter: Iterator; fn iter(c: C) -> Iter; }`
     Iterable,
     /// `class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }`
     Iterator,

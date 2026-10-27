@@ -148,7 +148,7 @@ first([True]);
 
 --------------------------------------------------------------------------------
 first: forall a. Index[a] => fn(a) -> a.Item
-total: forall a. Iterable[a] => Iterator[a.Iter] => a.Iter.Item = i32 => fn(a) -> i32
+total: forall a. Iterable[a] => a.Iter.Item = i32 => fn(a) -> i32
 first([True]): Bool
 
 ================================================================================
