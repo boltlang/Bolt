@@ -3,9 +3,8 @@ use std::{collections::{HashMap, VecDeque}, str::Chars};
 
 use boltlang_common::Span;
 use boltlang_syntax::SyntaxKind::{self, *};
-use crate::{diagnostic::{Diagnostics, UnexpectedCharDiagnostic}, parser::Input};
+use crate::{diagnostic::{Diagnostics, UnexpectedCharDiagnostic}, parser::{Input, Split}};
 
-use itertools::izip;
 use lazy_static::lazy_static;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
@@ -572,7 +571,6 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
 pub struct LexResult {
     kinds: Vec<SyntaxKind>,
     lens: Vec<u32>,
-    values: Vec<Option<String>>,
 }
 
 impl LexResult {
@@ -589,39 +587,54 @@ impl LexResult {
         self.kinds.len() as u32
     }
 
-    /// Split the `index`th non-trivia token in two, the first part being
-    /// `len` bytes long. See [`Parser::split_bump`](crate::Parser::split_bump).
-    pub(crate) fn split(&mut self, index: usize, len: u32, rest_kind: SyntaxKind) {
-        let raw = self
-            .kinds
-            .iter()
-            .enumerate()
-            .filter(|(_, kind)| !kind.is_trivia())
-            .nth(index)
-            .map(|(raw, _)| raw)
-            .expect("split index out of range");
-        let text = self.values[raw].take().unwrap();
-        let (first, rest) = text.split_at(len as usize);
-        self.kinds.insert(raw + 1, rest_kind);
-        self.lens[raw] = len;
-        self.lens.insert(raw + 1, rest.len() as u32);
-        self.values[raw] = Some(first.to_string());
-        self.values.insert(raw + 1, Some(rest.to_string()));
-    }
-
-    pub fn to_input(&self) -> Input {
-        let mut kinds = Vec::new();
-        let mut lens = Vec::new();
-        let mut values = Vec::new();
-        for (kind, len, value) in izip!(self.kinds.iter().copied(), self.lens.iter(), self.values.iter().cloned()) {
+    /// Split the tokens that the parser split, in one pass. The index of a
+    /// split counts non-trivia tokens, including the parts of earlier
+    /// splits, and the splits are in order. See
+    /// [`Parser::split_bump`](crate::Parser::split_bump).
+    pub(crate) fn apply_splits(&mut self, splits: &[Split]) {
+        if splits.is_empty() {
+            return;
+        }
+        let mut kinds = Vec::with_capacity(self.kinds.len() + splits.len());
+        let mut lens = Vec::with_capacity(self.lens.len() + splits.len());
+        let mut splits = splits.iter().peekable();
+        let mut index = 0;
+        for (kind, len) in self.kinds.iter().copied().zip(self.lens.iter().copied()) {
             if kind.is_trivia() {
+                kinds.push(kind);
+                lens.push(len);
                 continue;
+            }
+            let (mut kind, mut len) = (kind, len);
+            while let Some(split) = splits.next_if(|split| split.index == index) {
+                kinds.push(kind);
+                lens.push(split.len);
+                kind = split.rest_kind;
+                len -= split.len;
+                index += 1;
             }
             kinds.push(kind);
             lens.push(len);
-            values.push(value);
+            index += 1;
         }
-        Input::new(kinds, values)
+        assert!(splits.next().is_none(), "split index out of range");
+        self.kinds = kinds;
+        self.lens = lens;
+    }
+
+    /// The tokens without trivia, for the parser.
+    pub fn to_input<'t>(&self, text: &'t str) -> Input<'t> {
+        let mut kinds = Vec::new();
+        let mut ranges = Vec::new();
+        let mut offset = 0;
+        for (kind, len) in self.kinds.iter().copied().zip(self.lens.iter().copied()) {
+            if !kind.is_trivia() {
+                kinds.push(kind);
+                ranges.push((offset, offset + len));
+            }
+            offset += len;
+        }
+        Input::new(text, kinds, ranges)
     }
 
 }
@@ -655,15 +668,11 @@ impl From<&Pos> for LineColumn {
     }
 }
 
-pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
-
-    // Input
-    let text = text.into();
+pub fn tokenize(text: &str, diags: &mut Diagnostics) -> LexResult {
 
     // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
-    let mut values = Vec::new();
 
     // State
     let mut lexer = Lexer::new(text.chars(), diags);
@@ -679,7 +688,6 @@ pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
         // Transfer the token from the input to the output vectors
         kinds.push(kind);
         lens.push((end.offset - start.offset) as u32);
-        values.push(Some(text[start.offset..end.offset].to_string()));
     }
 
     // For debugging only
@@ -689,7 +697,6 @@ pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
 
     LexResult {
         kinds,
-        values,
         lens,
     }
 }
