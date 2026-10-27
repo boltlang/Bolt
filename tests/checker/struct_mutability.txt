@@ -641,3 +641,66 @@ let a: (mut Point, Bool)
 --------------------------------------------------------------------------------
 error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
 error at `(Point { x: 1, y: 2 }, True)`: expected (mut Point, Bool), found (imm Point, Bool)
+
+================================================================================
+A struct update can't give an imm struct the mut struct of its base (#246)
+:error
+================================================================================
+struct Point { x: i32 }
+struct Line { a: Point }
+let l = mut Line { a: mut Point { x: 1 } };
+let k = Line { ..l };
+--------------------------------------------------------------------------------
+let l: mut Line
+let k: imm Line
+--------------------------------------------------------------------------------
+error at `l`: expected imm Line, found mut Line
+
+================================================================================
+A struct update can't give a mut struct the imm struct of its base (#246)
+:error
+================================================================================
+struct Point { x: i32 }
+struct Line { a: Point }
+let k = Line { a: Point { x: 1 } };
+let l = mut Line { ..k };
+--------------------------------------------------------------------------------
+let k: imm Line
+let l: mut Line
+--------------------------------------------------------------------------------
+error at `k`: expected mut Line, found imm Line
+
+================================================================================
+A struct update copies plain fields into a struct of another mutability
+================================================================================
+struct Point { x: i32, y: i32 }
+let p = Point { x: 1, y: 2 };
+let q = mut Point { x: 3, ..p };
+q.y = 4;
+--------------------------------------------------------------------------------
+let p: imm Point
+let q: mut Point
+q.y = 4: ()
+
+================================================================================
+A struct update that gives the shared field anew can change the mutability
+================================================================================
+struct Point { x: i32 }
+struct Line { a: Point, n: i32 }
+let l = mut Line { a: mut Point { x: 1 }, n: 2 };
+let k = Line { a: Point { x: 0 }, ..l };
+--------------------------------------------------------------------------------
+let l: mut Line
+let k: imm Line
+
+================================================================================
+A struct update shares a field of a type parameter with its own type
+================================================================================
+struct Box[T] { item: T, n: i32 }
+let b = Box { item: [1], n: 0 };
+let c = mut Box { n: 1, ..b };
+c.n = 2;
+--------------------------------------------------------------------------------
+let b: imm Box[imm [i32]]
+let c: mut Box[imm [i32]]
+c.n = 2: ()

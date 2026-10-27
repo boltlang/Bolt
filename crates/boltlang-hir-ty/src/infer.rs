@@ -25,7 +25,7 @@ use boltlang_hir_def::{
 use crate::{
     lang::LangClass,
     lower::{
-        ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types,
+        ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, struct_mutability,
         generic_predicates, identity_args, struct_args, subst_params,
     },
     check::{InferenceCycle, function_scheme},
@@ -1198,12 +1198,23 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         }
         match spread {
-            // The fields are copied from `base`, so it can have any
-            // mutability.
+            // The fields not given are copied from `base`. The copy is
+            // shallow: an array, struct or function in a field is shared,
+            // not copied. So `base` can have another mutability only if no
+            // such field has the struct's own, or `Line { ..l }` with a
+            // `mut` `l` would be an `imm Line` holding `l`'s `mut Point`.
             Some(spread) => {
-                let base = match &ty {
-                    Ty::Adt(id @ AdtId::Struct(_), args, _) => Ty::adt(*id, args.clone(), self.new_mutability()),
-                    ty => ty.clone(),
+                let base = match (&ty, def) {
+                    (Ty::Adt(id @ AdtId::Struct(_), args, _), VariantDef::Struct(s)) => {
+                        let own = struct_mutability(self.db, s);
+                        let shares = field_tys
+                            .fields
+                            .iter()
+                            .enumerate()
+                            .any(|(i, (_, t))| !seen.contains(&i) && t.any(&mut |t| *t == own));
+                        if shares { ty.clone() } else { Ty::adt(*id, args.clone(), self.new_mutability()) }
+                    }
+                    (ty, _) => ty.clone(),
                 };
                 self.check_expr(spread, &base)
             }
