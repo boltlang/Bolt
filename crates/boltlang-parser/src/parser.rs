@@ -49,13 +49,13 @@ impl Marker {
         }
     }
 
-    /// Abandon this node and apppend all children of this node directly to the parent node.
     /// Whether a node was started since this marker, so that it has a
     /// node to complete or to stand in for.
     pub(crate) fn has_node_since(&self, p: &Parser) -> bool {
         p.events[self.pos as usize + 1..].iter().any(|e| matches!(e, Event::Start { kind, .. } if *kind != TOMBSTONE))
     }
 
+    /// Abandon this node and append all children of this node directly to the parent node.
     pub(crate) fn abandon(mut self, p: &mut Parser) {
         self.bomb.defuse();
         let idx = self.pos as usize;
