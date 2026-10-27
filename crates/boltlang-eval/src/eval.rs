@@ -18,6 +18,7 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::{
     builtin::{Builtin, builtin},
     infer_body,
+    lang::LangClass,
 };
 
 use crate::{
@@ -85,6 +86,17 @@ enum Place<'db> {
     Variable(Slot<'db>),
     Element(Shared<Vec<Value<'db>>>, usize),
     Field(Shared<Fields<'db>>, Name),
+    /// An element of a type other than an array, like a `Vec`, which is
+    /// read and written through its impls of `Index` and `IndexMut`. `at`
+    /// is the expression `c[i]`.
+    Indexed { container: Value<'db>, index: Value<'db>, at: ExprId },
+}
+
+/// What a `for` loop goes over: the items of an array, a string or a
+/// range, or an iterator of a class.
+enum Items<'db> {
+    Builtin(Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>),
+    Class(Value<'db>),
 }
 
 /// The part of `value` that the fields of tuples in `fields` lead to.
@@ -108,6 +120,8 @@ impl<'db> Place<'db> {
             Place::Variable(slot) => f(slot.borrow_mut().as_mut()),
             Place::Element(items, i) => f(items.borrow_mut().get_mut(*i)),
             Place::Field(fields, name) => f(fields.borrow_mut().iter_mut().find(|(n, _)| n == name).map(|(_, v)| v)),
+            // Assignments handle it before.
+            Place::Indexed { .. } => fail(ErrorKind::NotAssignable),
         }
     }
 }
@@ -446,7 +460,9 @@ impl<'db> Evaluator<'db> {
                         let index = index.ok_or(ErrorKind::IndexOutOfBounds { index: *i, len })?;
                         element(&items, index)
                     }
-                    _ => mismatch("only arrays can be indexed, with integers"),
+                    (Value::Array(_), _) => mismatch("an index must be an integer"),
+                    // Another type, like a `Vec`, through its impl of `Index`.
+                    _ => self.call_lang(f, expr, LangClass::Index, vec![base, index]),
                 }
             }
             Expr::Prefix { op, expr: inner } => {
@@ -548,11 +564,29 @@ impl<'db> Evaluator<'db> {
                     Err(e) => return Err(e),
                 }
             },
-            Expr::For { pat, iterable, body: loop_body, label } => {
-                let iterable = self.eval(f, *iterable)?;
-                let items = iterate(iterable)?;
-                for item in items {
-                    if !self.match_pat(f, *pat, &item?)? {
+            Expr::For { pat, iterable: iterable_expr, body: loop_body, label } => {
+                let iterable = self.eval(f, *iterable_expr)?;
+                let mut items = match iterable {
+                    Value::Array(_) | Value::Str(_) | Value::Range { .. } => Items::Builtin(iterate(iterable)?),
+                    // Another type, like a `Vec`, through its impl of
+                    // `Iterable`, whose iterator gives the items.
+                    _ => Items::Class(self.call_lang(f, *iterable_expr, LangClass::Iterable, vec![iterable])?),
+                };
+                loop {
+                    let item = match &mut items {
+                        Items::Builtin(items) => match items.next() {
+                            Some(item) => item?,
+                            None => break,
+                        },
+                        Items::Class(iterator) => {
+                            let next = self.call_lang(f, expr, LangClass::Iterator, vec![iterator.clone()])?;
+                            match option_value(self.db, next)? {
+                                Some(item) => item,
+                                None => break,
+                            }
+                        }
+                    };
+                    if !self.match_pat(f, *pat, &item)? {
                         return fail(ErrorKind::NoMatch);
                     }
                     match self.eval(f, *loop_body) {
@@ -769,6 +803,29 @@ impl<'db> Evaluator<'db> {
         }
     }
 
+    /// Call the method of `lang`, a class of the prelude that syntax uses,
+    /// for the syntax at `at`: that of the impl the type checker chose
+    /// there, or else the one the arguments decide.
+    fn call_lang(
+        &mut self,
+        f: &Frame<'db>,
+        at: ExprId,
+        lang: LangClass,
+        args: Vec<Value<'db>>,
+    ) -> Res<'db, Value<'db>> {
+        let db = self.db;
+        let file = f.def.def(db).file(db);
+        let Some(method) = lang.class(db, file).and_then(|class| Some((class, lang.method(db, class)?))) else {
+            return fail(ErrorKind::NoLangClass(lang.name()));
+        };
+        let (class, method) = method;
+        let target = match infer_body(db, f.def).instance(at, class) {
+            Some(imp) => impl_method(db, imp, method),
+            None => method,
+        };
+        self.call_function_inner(target, args)
+    }
+
     /// The value of what the name used by `expr` refers to. A class method
     /// or constant is the impl's, when the types decide which impl it is.
     fn value_at(&mut self, f: &mut Frame<'db>, expr: ExprId, value: ValueNs<'db>) -> Res<'db, Value<'db>> {
@@ -850,6 +907,23 @@ impl<'db> Evaluator<'db> {
             *slot.borrow_mut() = Some(value);
             return Ok(());
         }
+        // `c[i] = x` through `IndexMut`. For `c[i] += x` or `c[i].0 = x`, the
+        // element is read through `Index` first, changed, and set back.
+        if let Place::Indexed { container, index, at } = place {
+            let value = if op.is_none() && fields.is_empty() {
+                value
+            } else {
+                let mut element = self.call_lang(f, at, LangClass::Index, vec![container.clone(), index.clone()])?;
+                let current = tuple_field(Some(&mut element), &fields)?;
+                *current = match op {
+                    Some(op) => arith(op, current.clone(), value)?,
+                    None => value,
+                };
+                element
+            };
+            self.call_lang(f, at, LangClass::IndexMut, vec![container, index, value])?;
+            return Ok(());
+        }
         place.update(|current| {
             // An unset element can be set, but not changed.
             if (op.is_some() || !fields.is_empty())
@@ -884,11 +958,12 @@ impl<'db> Evaluator<'db> {
             },
             Expr::Index { base, index } => {
                 let base = self.eval(f, *base)?;
-                let Value::Int(i) = self.eval(f, *index)? else {
-                    return mismatch("an index must be an integer");
-                };
+                let index = self.eval(f, *index)?;
                 let Value::Array(items) = base else {
-                    return mismatch("only arrays can be indexed");
+                    return Ok((Place::Indexed { container: base, index, at: expr }, Vec::new()));
+                };
+                let Value::Int(i) = index else {
+                    return mismatch("an index must be an integer");
                 };
                 let len = items.borrow().len();
                 match usize::try_from(i).ok().filter(|&i| i < len) {
@@ -898,15 +973,25 @@ impl<'db> Evaluator<'db> {
             }
             Expr::Field { expr: base, name } => {
                 let (place, mut fields) = self.place(f, *base)?;
-                let shared = place.update(|current| {
-                    if let (Some(Value::Unset), Place::Element(_, index)) = (&current, &place) {
-                        return fail(ErrorKind::UnsetElement { index: *index });
+                let shared_fields = |value: &mut Value<'db>| match value {
+                    Value::Adt { fields, .. } => Some(fields.clone()),
+                    _ => None,
+                };
+                let shared = match &place {
+                    // An element through `Index`: a struct is shared, so a
+                    // field of it can be changed in place.
+                    Place::Indexed { container, index, at } => {
+                        let args = vec![container.clone(), index.clone()];
+                        let mut element = self.call_lang(f, *at, LangClass::Index, args)?;
+                        shared_fields(tuple_field(Some(&mut element), &fields)?)
                     }
-                    Ok(match tuple_field(current, &fields)? {
-                        Value::Adt { fields, .. } => Some(fields.clone()),
-                        _ => None,
-                    })
-                })?;
+                    _ => place.update(|current| {
+                        if let (Some(Value::Unset), Place::Element(_, index)) = (&current, &place) {
+                            return fail(ErrorKind::UnsetElement { index: *index });
+                        }
+                        Ok(shared_fields(tuple_field(current, &fields)?))
+                    })?,
+                };
                 match shared {
                     Some(adt) => {
                         if !adt.borrow().iter().any(|(n, _)| n == name) {
@@ -1208,6 +1293,18 @@ fn element<'db>(items: &[Value<'db>], index: usize) -> Res<'db, Value<'db>> {
     match &items[index] {
         Value::Unset => fail(ErrorKind::UnsetElement { index }),
         item => Ok(item.clone()),
+    }
+}
+
+/// The item in `Some(item)`, or `None` for `None`.
+fn option_value<'db>(db: &'db dyn Db, value: Value<'db>) -> Res<'db, Option<Value<'db>>> {
+    let Value::Adt { ctor: Ctor::Variant(variant), fields } = &value else {
+        return mismatch("`next` must give an Option");
+    };
+    match variant.name(db).as_str() {
+        "Some" => Ok(fields.borrow().first().map(|(_, v)| v.clone())),
+        "None" => Ok(None),
+        _ => mismatch("`next` must give an Option"),
     }
 }
 

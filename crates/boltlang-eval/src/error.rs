@@ -52,6 +52,9 @@ pub enum ErrorKind {
     Effect(&'static str),
     /// A call of the builtin `panic`, with its message.
     Panic(String),
+    /// Syntax that needs a class of the prelude, like `v[i]` on a `Vec`,
+    /// without a prelude that defines it.
+    NoLangClass(&'static str),
 }
 
 impl<'db> EvalError<'db> {
@@ -103,6 +106,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::Unsupported(what) => write!(f, "{what} is not supported by the evaluator yet"),
             ErrorKind::Effect(builtin) => write!(f, "`{builtin}` can't be used here, since it has an effect"),
             ErrorKind::Panic(message) => write!(f, "panicked: {message}"),
+            ErrorKind::NoLangClass(class) => write!(f, "this needs the class `{class}` of the prelude"),
         }
     }
 }
