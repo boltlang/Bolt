@@ -12,6 +12,8 @@ pub trait System : Send + Sync {
     fn virtual_path_metadata(&self, path: &SystemVirtualPath) -> Result<Metadata>;
     fn current_directory(&self) -> Result<SystemPathBuf>;
     fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf>;
+    /// The paths of what's in the directory at `path`, under `path`.
+    fn read_directory(&self, path: &SystemPath) -> Result<Vec<SystemPathBuf>>;
 }
 
 pub trait WritableSystem : System {

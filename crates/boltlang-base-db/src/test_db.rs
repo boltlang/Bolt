@@ -65,6 +65,12 @@ impl TestDb {
         self.add_dir(&std, "/.bolt/packages/std");
     }
 
+    /// Make `link` a symbolic link to `target`, which is relative to the
+    /// directory of `link` if it isn't absolute.
+    pub fn symlink(&self, link: &str, target: &str) {
+        self.system.create_symlink(SystemPath::new(link), SystemPath::new(target)).unwrap();
+    }
+
     /// Change the contents of a file.
     pub fn edit(&mut self, file: File, text: &str) {
         let path = file.path(self).as_system_path_buf().unwrap().clone();

@@ -37,6 +37,10 @@ impl System for TestSystem {
         self.inner.canonicalize_path(path)
     }
 
+    fn read_directory(&self, path: &SystemPath) -> Result<Vec<SystemPathBuf>> {
+        self.inner.read_directory(path)
+    }
+
     fn current_directory(&self) -> Result<SystemPathBuf> {
         self.inner.current_directory()
     }

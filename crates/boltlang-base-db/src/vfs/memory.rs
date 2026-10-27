@@ -84,17 +84,78 @@ impl MemoryFs {
         match entry {
             Entry::Directory(_) => Err(is_a_dir()),
             Entry::File(entry) => String::from_utf8(entry.content.to_vec()).map_err(other_error),
+            Entry::Symlink(_) => unreachable!("a resolved path isn't a link"),
         }
     }
 
+    /// The path with the symbolic links in it resolved, if something is
+    /// there.
     pub fn canonicalize(&self, path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
-        let path = path.as_ref();
-
-        // Emulate returning ENOENT
+        let path = self.normalize_path(path.as_ref());
         let lock = self.inner.by_path.read().map_err(other_error)?;
-        let _ = lock.get(path).ok_or_else(file_not_found)?;
+        let real = Self::resolve_links(&lock, &path)?;
+        // Emulate returning ENOENT
+        let _ = lock.get(&real).ok_or_else(file_not_found)?;
+        Ok(real)
+    }
 
-        Ok(self.normalize_path(path))
+    /// `path`, an absolute and normalized path, with each symbolic link on
+    /// the way replaced by its target, one component at a time.
+    fn resolve_links(entries: &FxHashMap<PathBuf, Entry>, path: &Path) -> std::io::Result<PathBuf> {
+        // Like `ELOOP` on Linux.
+        const MAX_LINKS: usize = 40;
+        let mut links = 0;
+        let mut real = std::path::PathBuf::new();
+        for component in path.as_std_path().components() {
+            real.push(component);
+            while let Some(Entry::Symlink(target)) = entries.get(Path::new(&real)) {
+                links += 1;
+                if links > MAX_LINKS {
+                    return Err(other_error("too many levels of symbolic links"));
+                }
+                real = target.as_std_path().to_path_buf();
+            }
+        }
+        Ok(PathBuf::from_std_path_buf(real))
+    }
+
+    /// Make `link` a symbolic link to `target`, which is relative to the
+    /// directory of `link` if it isn't absolute, like on disk.
+    pub fn create_symlink(&self, link: &Path, target: &Path) -> std::io::Result<()> {
+        let link = self.normalize_path(link);
+        let dir = match link.as_std_path().parent() {
+            Some(dir) => PathBuf::from_std_path_buf(dir.to_path_buf()),
+            None => self.inner.cwd.clone(),
+        };
+        let target = Path::absolute(target, &dir);
+        let mut lock = self.inner.by_path.write().map_err(other_error)?;
+        for dir in link.as_std_path().ancestors().skip(1) {
+            lock.entry(PathBuf::from_std_path_buf(dir.to_path_buf()))
+                .or_insert_with(|| Entry::Directory(Directory { last_modified: file_time_now() }));
+        }
+        lock.insert(link, Entry::Symlink(target));
+        Ok(())
+    }
+
+    /// The paths of what's in the directory at `path`, under `path`, in
+    /// order.
+    pub fn read_directory(&self, path: &Path) -> std::io::Result<Vec<PathBuf>> {
+        let given = self.normalize_path(path);
+        let lock = self.inner.by_path.read().map_err(other_error)?;
+        let real = Self::resolve_links(&lock, &given)?;
+        match lock.get(&real) {
+            Some(Entry::Directory(_)) => {}
+            Some(_) => return Err(other_error("not a directory")),
+            None => return Err(file_not_found()),
+        }
+        let mut entries: Vec<PathBuf> = lock
+            .keys()
+            .filter(|p| p.as_std_path().parent() == Some(real.as_std_path()))
+            .filter_map(|p| p.as_std_path().file_name())
+            .map(|name| PathBuf::from_std_path_buf(given.as_std_path().join(name)))
+            .collect();
+        entries.sort();
+        Ok(entries)
     }
 
     /// # Panics
@@ -125,6 +186,8 @@ impl MemoryFs {
                 Some(Self::PERMISSION),
                 FileType::File,
             ),
+            // `canonicalize` resolved the links.
+            Entry::Symlink(_) => unreachable!("a resolved path isn't a link"),
         })
     }
 
@@ -133,6 +196,8 @@ impl MemoryFs {
         // Not `canonicalize`, which fails if the file doesn't exist yet.
         let path = self.normalize_path(path);
         let mut lock = self.inner.by_path.write().map_err(other_error)?;
+        // Writing through a link writes its target.
+        let path = Self::resolve_links(&lock, &path)?;
         // Like on disk, the directories of a file exist.
         for dir in path.as_std_path().ancestors().skip(1) {
             lock.entry(PathBuf::from_std_path_buf(dir.to_path_buf()))
@@ -145,6 +210,7 @@ impl MemoryFs {
                     file.last_modified = later_than(file.last_modified);
                 },
                 Entry::Directory(_) => return Err(is_a_dir()),
+                Entry::Symlink(_) => unreachable!("a resolved path isn't a link"),
             }
             HashMapEntry::Vacant(entry) => {
                 entry.insert(Entry::File(File {
@@ -161,7 +227,8 @@ impl MemoryFs {
         let path = self.normalize_path(path);
         let mut lock = self.inner.by_path.write().map_err(other_error)?;
         match lock.get(&path) {
-            Some(Entry::File(_)) => {
+            // Removing a link removes the link, like `unlink`.
+            Some(Entry::File(_) | Entry::Symlink(_)) => {
                 lock.remove(&path);
                 Ok(())
             }
@@ -182,6 +249,8 @@ impl MemoryFs {
                     file.last_modified = later_than(file.last_modified);
                 },
                 Entry::Directory(_) => return Err(is_a_dir()),
+                // Virtual paths have no links.
+                Entry::Symlink(_) => unreachable!("a virtual path isn't a link"),
             }
             HashMapEntry::Vacant(entry) => {
                 entry.insert(Entry::File(File {
@@ -198,6 +267,8 @@ impl MemoryFs {
 enum Entry {
     File(File),
     Directory(Directory),
+    /// A symbolic link, with the absolute path of its target.
+    Symlink(PathBuf),
 }
 
 struct File {
@@ -224,6 +295,36 @@ mod tests {
         fs.write_file_bytes(path, b"two").unwrap();
         assert_eq!(fs.read_to_string(path).unwrap(), "two");
         assert_ne!(fs.metadata(path).unwrap().revision(), before);
+    }
+
+    #[test]
+    fn symbolic_links_are_followed() {
+        let fs = MemoryFs::new();
+        fs.write_file_bytes(SystemPath::new("/proj/packages/std/lib.bolt"), b"lib").unwrap();
+        fs.create_symlink(SystemPath::new("/proj/.bolt/packages/std"), SystemPath::new("../../packages/std")).unwrap();
+        let through = SystemPath::new("/proj/.bolt/packages/std/lib.bolt");
+        assert_eq!(fs.read_to_string(through).unwrap(), "lib");
+        let real = fs.canonicalize(through).unwrap();
+        assert_eq!(real.as_std_path(), std::path::Path::new("/proj/packages/std/lib.bolt"));
+        assert!(fs.metadata(SystemPath::new("/proj/.bolt/packages/std")).unwrap().file_type().is_directory());
+        // Listed under the path given, not the target.
+        let list = |dir: &str| -> Vec<String> {
+            let entries = fs.read_directory(SystemPath::new(dir)).unwrap();
+            entries.iter().map(|p| p.as_std_path().to_string_lossy().into_owned()).collect()
+        };
+        assert_eq!(list("/proj/.bolt/packages"), ["/proj/.bolt/packages/std"]);
+        assert_eq!(list("/proj/.bolt/packages/std"), ["/proj/.bolt/packages/std/lib.bolt"]);
+        // Writing through a link writes the target.
+        fs.write_file_bytes(through, b"new").unwrap();
+        assert_eq!(fs.read_to_string(SystemPath::new("/proj/packages/std/lib.bolt")).unwrap(), "new");
+    }
+
+    #[test]
+    fn a_cycle_of_links_is_an_error() {
+        let fs = MemoryFs::new();
+        fs.create_symlink(SystemPath::new("/a"), SystemPath::new("/b")).unwrap();
+        fs.create_symlink(SystemPath::new("/b"), SystemPath::new("/a")).unwrap();
+        assert!(fs.canonicalize(SystemPath::new("/a/x.bolt")).is_err());
     }
 
     #[test]

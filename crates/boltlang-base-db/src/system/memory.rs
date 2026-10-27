@@ -42,10 +42,22 @@ impl Default for InMemorySystem {
 }
 
 
+impl InMemorySystem {
+    /// Make `link` a symbolic link to `target`, which is relative to the
+    /// directory of `link` if it isn't absolute.
+    pub fn create_symlink(&self, link: &SystemPath, target: &SystemPath) -> Result<()> {
+        self.fs.create_symlink(link, target)
+    }
+}
+
 impl System for InMemorySystem {
 
     fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf> {
         self.fs.canonicalize(path)
+    }
+
+    fn read_directory(&self, path: &SystemPath) -> Result<Vec<SystemPathBuf>> {
+        self.fs.read_directory(path)
     }
 
     fn current_directory(&self) -> Result<SystemPathBuf> {

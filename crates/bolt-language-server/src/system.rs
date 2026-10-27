@@ -78,4 +78,8 @@ impl System for LspSystem {
     fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf> {
         self.disk.canonicalize_path(path)
     }
+
+    fn read_directory(&self, path: &SystemPath) -> Result<Vec<SystemPathBuf>> {
+        self.disk.read_directory(path)
+    }
 }

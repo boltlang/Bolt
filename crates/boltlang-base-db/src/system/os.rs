@@ -58,6 +58,15 @@ impl System for OsSystem {
         std::fs::canonicalize(path.as_std_path()).map(SystemPathBuf::from_std_path_buf)
     }
 
+    fn read_directory(&self, path: &SystemPath) -> Result<Vec<SystemPathBuf>> {
+        let mut entries = Vec::new();
+        for entry in std::fs::read_dir(path.as_std_path())? {
+            entries.push(SystemPathBuf::from_std_path_buf(entry?.path()));
+        }
+        entries.sort();
+        Ok(entries)
+    }
+
     fn path_metadata(&self, path: &SystemPath) -> Result<Metadata> {
 
         let metadata = std::fs::metadata(path.as_std_path())?;
