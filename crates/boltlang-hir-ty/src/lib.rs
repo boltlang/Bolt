@@ -26,7 +26,7 @@ pub mod solve;
 pub mod ty;
 pub mod unify;
 
-pub use check::{function_scheme, infer_body};
+pub use check::{InferenceCycle, function_scheme, infer_body};
 pub use infer::{InferenceDiagnostic, InferenceResult};
 pub use scheme::Scheme;
 pub use ty::{AdtId, GenericParamId, NumberKind, Ty, TyNames, TyVar, VarKind};

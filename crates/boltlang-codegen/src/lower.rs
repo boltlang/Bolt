@@ -116,7 +116,7 @@ pub(crate) fn compile<'db>(db: &'db dyn Db, instance: Instance<'db>) -> Result<'
     let scheme = match def.def(db) {
         DefWithBody::Function(f) => Some(
             function_scheme(db, f)
-                .map_err(|()| CodegenError { kind: ErrorKind::UnknownType, location: Some((def, body.body_expr)) })?,
+                .map_err(|_| CodegenError { kind: ErrorKind::UnknownType, location: Some((def, body.body_expr)) })?,
         ),
         DefWithBody::File(_) => None,
         DefWithBody::Const(_) | DefWithBody::Variant(_) => {
@@ -865,7 +865,7 @@ impl<'db> Compiler<'db> {
         args: &[ExprId],
     ) -> Result<'db, Instance<'db>> {
         let db = self.db;
-        let scheme = function_scheme(db, f).map_err(|()| self.error(expr, ErrorKind::UnknownType))?;
+        let scheme = function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
         let at_call = callee.map(|c| self.ty(c)).filter(|t| matches!(t, Ty::Fn(..))).unwrap_or_else(|| {
             Ty::Fn(args.iter().map(|&a| self.ty(a)).collect(), Box::new(self.ty(expr)))
         });

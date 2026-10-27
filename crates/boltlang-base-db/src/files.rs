@@ -34,7 +34,7 @@ impl Files {
 
     pub fn try_resolve(&self, db: &dyn Db, path: &SystemPath) -> Option<File> {
         let absolute: crate::PathBuf = SystemPath::absolute(path, db.system().current_directory().unwrap());
-        self.inner.system_by_path.get(&absolute).map(|x| x.clone())
+        self.inner.system_by_path.get(&absolute).map(|file| *file)
     }
 
     /// Looks up a file by its `path`.

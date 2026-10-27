@@ -2129,10 +2129,10 @@ pub trait HasDocs: Node {
             if !token.kind().is_trivia() {
                 break;
             }
-            if let Some(comment) = Comment::cast(token.clone()) {
-                if comment.kind() == CommentKind::OuterDoc {
-                    comments.push(comment);
-                }
+            if let Some(comment) = Comment::cast(token.clone())
+                && comment.kind() == CommentKind::OuterDoc
+            {
+                comments.push(comment);
             }
             current = token.prev_sibling_or_token();
         }

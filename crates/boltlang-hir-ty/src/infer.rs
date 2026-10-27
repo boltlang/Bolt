@@ -27,7 +27,7 @@ use crate::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types,
         identity_args, struct_args, subst_params,
     },
-    check::function_scheme,
+    check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
     solve::{Constraint, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
@@ -648,7 +648,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
         match function_scheme(self.db, f) {
             Ok(scheme) => scheme.instantiate(self.solver, origin),
-            Err(()) => {
+            Err(InferenceCycle) => {
                 self.result.diagnostics.push(InferenceDiagnostic::CyclicInference);
                 Ty::Error
             }

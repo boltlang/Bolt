@@ -6,7 +6,7 @@ use crate::{
     test_db::TestDb,
 };
 
-fn top<'db>(db: &'db TestDb, file: File, index: usize) -> ModItem {
+fn top(db: &TestDb, file: File, index: usize) -> ModItem {
     item_tree(db, file).top_level[index]
 }
 

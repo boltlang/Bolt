@@ -153,7 +153,7 @@ impl Input {
     }
 
     pub fn kind(&self, idx: usize) -> SyntaxKind {
-        self.kinds.iter().nth(idx).copied().unwrap_or(EOF)
+        self.kinds.get(idx).copied().unwrap_or(EOF)
     }
 
 }

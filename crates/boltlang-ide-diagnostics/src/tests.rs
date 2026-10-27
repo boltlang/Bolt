@@ -31,14 +31,14 @@ fn check_files(files: &[(&str, &str)]) {
     for &(path, file) in &files {
         let text = source_text(&db, file);
         let mut expected: Vec<String> =
-            annotations(&text).into_iter().map(|(range, message)| show(path, &text, range, &message)).collect();
+            annotations(text).into_iter().map(|(range, message)| show(path, text, range, &message)).collect();
         let mut actual = Vec::new();
         for d in &all {
             if d.file == file {
-                actual.push(show(path, &text, d.range, &format!("{}: {}", d.severity, d.message)));
+                actual.push(show(path, text, d.range, &format!("{}: {}", d.severity, d.message)));
             }
             for label in d.labels.iter().filter(|l| l.file == file) {
-                actual.push(show(path, &text, label.range, &format!("label: {}", label.message)));
+                actual.push(show(path, text, label.range, &format!("label: {}", label.message)));
             }
         }
         expected.sort();

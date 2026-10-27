@@ -15,10 +15,6 @@ pub struct Path(std::path::Path);
 
 impl Path {
 
-    pub fn from_str(value: &str) -> &Path {
-        Path::new(std::path::Path::new(value))
-    }
-
     pub fn display(&self) -> std::path::Display<'_> {
         self.0.display()
     }

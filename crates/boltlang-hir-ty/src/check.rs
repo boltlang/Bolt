@@ -26,15 +26,19 @@ use crate::{
     ty::{Ty, TyVar, VarKind},
 };
 
-/// The type of a function, for its callers. `Err` if it can't be inferred
-/// because files that import each other have functions without complete
-/// signatures that call each other.
-pub fn function_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db Scheme<'db>, ()> {
+/// Why a function's type can't be inferred: files that import each other
+/// have functions without complete signatures that call each other, so
+/// neither file can be inferred first. One of them needs a signature.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct InferenceCycle;
+
+/// The type of a function, for its callers.
+pub fn function_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db Scheme<'db>, InferenceCycle> {
     if is_declared(db, f) {
         return Ok(declared_scheme(db, f));
     }
     let inference = file_inference(db, f.file(db));
-    inference.schemes.iter().find(|(g, _)| *g == f).map(|(_, s)| s).ok_or(())
+    inference.schemes.iter().find(|(g, _)| *g == f).map(|(_, s)| s).ok_or(InferenceCycle)
 }
 
 /// The types in the body of `def`.

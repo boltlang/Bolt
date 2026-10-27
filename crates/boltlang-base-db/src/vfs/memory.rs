@@ -39,6 +39,12 @@ impl MemoryFs {
 
 }
 
+impl Default for MemoryFs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// The time of a write to a file last written at `previous`: now, or just
 /// after `previous` if the clock didn't move, as it may not in the browser
 /// within a millisecond. The time is the revision of the file, so it must
@@ -63,7 +69,7 @@ fn is_a_dir() -> std::io::Error {
 }
 
 fn other_error<E: std::fmt::Display>(error: E) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, format!("{}", error))
+    std::io::Error::other(format!("{}", error))
 }
 
 impl MemoryFs {
@@ -76,7 +82,7 @@ impl MemoryFs {
         let lock = self.inner.by_path.read().map_err(other_error)?;
         let entry = lock.get(&path).ok_or_else(file_not_found)?;
         match entry {
-            Entry::Directory(_) => return Err(is_a_dir()),
+            Entry::Directory(_) => Err(is_a_dir()),
             Entry::File(entry) => String::from_utf8(entry.content.to_vec()).map_err(other_error),
         }
     }

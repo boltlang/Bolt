@@ -19,6 +19,6 @@ pub struct Parse<'db> {
 #[salsa::tracked]
 pub fn parse_file(db: &dyn Db, file: File) -> Parse<'_> {
     let text = source_text(db, file);
-    let (tree, errors) = boltlang_parser::parse_file(&text);
+    let (tree, errors) = boltlang_parser::parse_file(text);
     Parse::new(db, tree, errors)
 }

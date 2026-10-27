@@ -23,7 +23,7 @@ struct OsSystemInner {
 }
 
 fn other_error<E: std::fmt::Display>(error: E) -> std::io::Error {
-    std::io::Error::new(std::io::ErrorKind::Other, format!("{}", error))
+    std::io::Error::other(format!("{}", error))
 }
 
 impl OsSystem {
