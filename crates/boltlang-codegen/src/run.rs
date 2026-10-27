@@ -196,7 +196,7 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, memory: &[u8]) -> Resu
         (Scalar::Enum, Val::I32(index)) => {
             let Ty::Adt(AdtId::Enum(parent), ..) = ty else { return Err(unexpected()) };
             let variant = EnumVariantId { parent: *parent, index: *index as u32 };
-            Value::Adt { ctor: Ctor::Variant(variant), fields: Vec::new() }
+            Value::adt(Ctor::Variant(variant), Vec::new())
         }
         (Scalar::Int { signed: true, .. }, Val::I32(n)) => Value::Int(*n as i128),
         (Scalar::Int { signed: false, .. }, Val::I32(n)) => Value::Int(*n as u32 as i128),

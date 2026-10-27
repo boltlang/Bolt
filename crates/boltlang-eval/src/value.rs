@@ -17,6 +17,13 @@ pub(crate) type Slot<'db> = Rc<RefCell<Option<Value<'db>>>>;
 /// one flat map per call is enough.
 pub(crate) type Locals<'db> = HashMap<BindingId, Slot<'db>>;
 
+/// Something that every name for it sees the changes of, like an array or
+/// a struct.
+pub type Shared<T> = Rc<RefCell<T>>;
+
+/// The fields of a struct or variant, in order.
+pub type Fields<'db> = Vec<(Name, Value<'db>)>;
+
 /// A struct, or a variant of an enum.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Ctor<'db> {
@@ -59,11 +66,13 @@ pub enum Value<'db> {
     Str(Rc<str>),
     /// `(a, b)`, or `()`, which is what statements evaluate to.
     Tuple(Vec<Value<'db>>),
-    Array(Vec<Value<'db>>),
+    /// Shared: `let ys = xs` makes another name for the same array.
+    Array(Shared<Vec<Value<'db>>>),
     Range { start: Option<Box<Value<'db>>>, end: Option<Box<Value<'db>>>, inclusive: bool },
     /// A struct or variant with its fields, in order. The fields of tuple
-    /// structs and variants are named `0`, `1`, ...
-    Adt { ctor: Ctor<'db>, fields: Vec<(Name, Value<'db>)> },
+    /// structs and variants are named `0`, `1`, ... Shared, like an array.
+    /// A variant can't be changed, so it being shared makes no difference.
+    Adt { ctor: Ctor<'db>, fields: Shared<Fields<'db>> },
     Function(FunctionId<'db>),
     /// A tuple struct or variant used as a function, like `Some`.
     Constructor(Ctor<'db>),
@@ -83,19 +92,19 @@ impl<'db> Value<'db> {
         Value::Str(s.into())
     }
 
-    /// The field called `name`, of a struct or variant or tuple.
-    pub fn field(&self, name: &Name) -> Option<&Value<'db>> {
-        match self {
-            Value::Adt { fields, .. } => fields.iter().find(|(n, _)| n == name).map(|(_, v)| v),
-            Value::Tuple(items) => items.get(name.as_str().parse::<usize>().ok()?),
-            _ => None,
-        }
+    pub fn array(items: Vec<Value<'db>>) -> Self {
+        Value::Array(Rc::new(RefCell::new(items)))
     }
 
-    pub(crate) fn field_mut(&mut self, name: &Name) -> Option<&mut Value<'db>> {
+    pub fn adt(ctor: Ctor<'db>, fields: Fields<'db>) -> Self {
+        Value::Adt { ctor, fields: Rc::new(RefCell::new(fields)) }
+    }
+
+    /// The field called `name`, of a struct or variant or tuple.
+    pub fn field(&self, name: &Name) -> Option<Value<'db>> {
         match self {
-            Value::Adt { fields, .. } => fields.iter_mut().find(|(n, _)| n == name).map(|(_, v)| v),
-            Value::Tuple(items) => items.get_mut(name.as_str().parse::<usize>().ok()?),
+            Value::Adt { fields, .. } => fields.borrow().iter().find(|(n, _)| n == name).map(|(_, v)| v.clone()),
+            Value::Tuple(items) => items.get(name.as_str().parse::<usize>().ok()?).cloned(),
             _ => None,
         }
     }
@@ -104,16 +113,18 @@ impl<'db> Value<'db> {
     /// themselves.
     pub fn equals(&self, other: &Value<'db>) -> bool {
         match (self, other) {
+            (Value::Array(a), Value::Array(b)) if Rc::ptr_eq(a, b) => true,
+            (Value::Adt { fields: a, .. }, Value::Adt { fields: b, .. }) if Rc::ptr_eq(a, b) => true,
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
             (Value::Char(a), Value::Char(b)) => a == b,
             (Value::Str(a), Value::Str(b)) => a == b,
-            (Value::Tuple(a), Value::Tuple(b)) | (Value::Array(a), Value::Array(b)) => {
-                a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.equals(b))
-            }
+            (Value::Tuple(a), Value::Tuple(b)) => equal_items(a, b),
+            (Value::Array(a), Value::Array(b)) => equal_items(&a.borrow(), &b.borrow()),
             (Value::Adt { ctor: c1, fields: f1 }, Value::Adt { ctor: c2, fields: f2 }) => {
-                c1 == c2 && f1.len() == f2.len() && f1.iter().zip(f2).all(|((_, a), (_, b))| a.equals(b))
+                let (f1, f2) = (f1.borrow(), f2.borrow());
+                c1 == c2 && f1.len() == f2.len() && f1.iter().zip(f2.iter()).all(|((_, a), (_, b))| a.equals(b))
             }
             (
                 Value::Range { start: s1, end: e1, inclusive: i1 },
@@ -142,15 +153,8 @@ impl<'db> Value<'db> {
             (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
             (Value::Char(a), Value::Char(b)) => Some(a.cmp(b)),
             (Value::Str(a), Value::Str(b)) => Some(a.cmp(b)),
-            (Value::Tuple(a), Value::Tuple(b)) | (Value::Array(a), Value::Array(b)) => {
-                for (a, b) in a.iter().zip(b) {
-                    match a.compare(b)? {
-                        Ordering::Equal => {}
-                        ord => return Some(ord),
-                    }
-                }
-                Some(a.len().cmp(&b.len()))
-            }
+            (Value::Tuple(a), Value::Tuple(b)) => compare_items(a, b),
+            (Value::Array(a), Value::Array(b)) => compare_items(&a.borrow(), &b.borrow()),
             _ => None,
         }
     }
@@ -158,24 +162,73 @@ impl<'db> Value<'db> {
     /// Show the value like Bolt code, with the names of structs and
     /// variants from `db`.
     pub fn display(&self, db: &'db dyn Db) -> impl fmt::Display + '_ {
-        DisplayValue { value: self, db }
+        DisplayValue { value: self, db, outer: Rc::new(RefCell::new(Vec::new())) }
     }
+
+    /// The address of the shared array or struct, if it's one.
+    fn shared_ptr(&self) -> Option<*const ()> {
+        match self {
+            Value::Array(items) => Some(Rc::as_ptr(items) as *const ()),
+            Value::Adt { fields, .. } => Some(Rc::as_ptr(fields) as *const ()),
+            _ => None,
+        }
+    }
+}
+
+fn equal_items<'db>(a: &[Value<'db>], b: &[Value<'db>]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).all(|(a, b)| a.equals(b))
+}
+
+fn compare_items<'db>(a: &[Value<'db>], b: &[Value<'db>]) -> Option<Ordering> {
+    for (a, b) in a.iter().zip(b) {
+        match a.compare(b)? {
+            Ordering::Equal => {}
+            ord => return Some(ord),
+        }
+    }
+    Some(a.len().cmp(&b.len()))
 }
 
 struct DisplayValue<'a, 'db> {
     value: &'a Value<'db>,
     db: &'db dyn Db,
+    /// The arrays and structs being shown, outermost first. A value can
+    /// contain itself, like `xs[0] = S { xs }`, and is shown as `...` there.
+    outer: Shared<Vec<*const ()>>,
+}
+
+impl<'a, 'db> DisplayValue<'a, 'db> {
+    fn inner<'b>(&self, value: &'b Value<'db>) -> DisplayValue<'b, 'db> {
+        DisplayValue { value, db: self.db, outer: self.outer.clone() }
+    }
 }
 
 impl<'db> fmt::Display for DisplayValue<'_, 'db> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let ptr = self.value.shared_ptr();
+        if let Some(ptr) = ptr {
+            if self.outer.borrow().contains(&ptr) {
+                return f.write_str("...");
+            }
+            self.outer.borrow_mut().push(ptr);
+        }
+        let result = self.fmt_value(f);
+        if ptr.is_some() {
+            self.outer.borrow_mut().pop();
+        }
+        result
+    }
+}
+
+impl<'db> DisplayValue<'_, 'db> {
+    fn fmt_value(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let db = self.db;
         let list = |f: &mut fmt::Formatter<'_>, items: &[Value<'db>]| -> fmt::Result {
             for (i, item) in items.iter().enumerate() {
                 if i > 0 {
                     f.write_str(", ")?;
                 }
-                write!(f, "{}", item.display(db))?;
+                write!(f, "{}", self.inner(item))?;
             }
             Ok(())
         };
@@ -195,20 +248,21 @@ impl<'db> fmt::Display for DisplayValue<'_, 'db> {
             }
             Value::Array(items) => {
                 f.write_str("[")?;
-                list(f, items)?;
+                list(f, &items.borrow())?;
                 f.write_str("]")
             }
             Value::Range { start, end, inclusive } => {
                 if let Some(start) = start {
-                    write!(f, "{}", start.display(db))?;
+                    write!(f, "{}", self.inner(start))?;
                 }
                 f.write_str(if *inclusive { "..=" } else { ".." })?;
                 if let Some(end) = end {
-                    write!(f, "{}", end.display(db))?;
+                    write!(f, "{}", self.inner(end))?;
                 }
                 Ok(())
             }
             Value::Adt { ctor, fields } => {
+                let fields = fields.borrow();
                 f.write_str(&ctor.name(db))?;
                 if fields.is_empty() {
                     return Ok(());
@@ -225,7 +279,7 @@ impl<'db> fmt::Display for DisplayValue<'_, 'db> {
                         if i > 0 {
                             f.write_str(", ")?;
                         }
-                        write!(f, "{name}: {}", value.display(db))?;
+                        write!(f, "{name}: {}", self.inner(value))?;
                     }
                     f.write_str(" }")
                 }
