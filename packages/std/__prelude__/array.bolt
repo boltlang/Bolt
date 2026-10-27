@@ -3,6 +3,7 @@
 
 import "./classes" (Index, IndexMut, Iterable, FnIter);
 import "./option" (Option, Some, None);
+import "./mutability" (ToMut, ToImm);
 
 extern "bolt" {
 
@@ -24,6 +25,9 @@ extern "bolt" {
   /// `dst_start`. `src` and `dst` can be the same array, and the ranges can
   /// overlap.
   pub fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32);
+
+  /// A copy of `xs` that can't be changed. Use `to_imm(xs)` instead.
+  pub(package) fn array_freeze[T](xs: [T]) -> imm [T];
 
 }
 
@@ -53,4 +57,21 @@ impl[T] Iterable[[T]] {
       },
     }
   }
+}
+
+/// A copy of an array that can be changed.
+impl[T] ToMut[[T]] {
+  type Mut = mut [T];
+  fn to_mut(xs) {
+    let n = array_len(xs);
+    let ys = array_alloc(n);
+    array_copy(ys, 0, xs, 0, n);
+    ys
+  }
+}
+
+/// A copy of an array that can't be changed.
+impl[T] ToImm[[T]] {
+  type Imm = imm [T];
+  fn to_imm(xs) = array_freeze(xs);
 }

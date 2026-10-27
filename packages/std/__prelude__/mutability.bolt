@@ -1,0 +1,27 @@
+// Copies of values with another mutability: one that can be changed, or
+// one that can't.
+//
+// An `imm` value never changes, so it can be shared as it is. A copy is
+// only needed to get a `mut` value, or an `imm` one from a value that
+// someone may still change.
+
+/// Types that have a copy that can be changed without changing the
+/// original.
+pub class ToMut[T] {
+  /// The `mut` version of `T`, like `mut [i32]` for `[i32]`.
+  type Mut;
+
+  /// A copy of `x` that can be changed. The copy is shallow: what `x` holds
+  /// is shared with it, not copied.
+  fn to_mut(x: T) -> Mut;
+}
+
+/// Types that have a copy that never changes, even if the original does.
+pub class ToImm[T] {
+  /// The `imm` version of `T`, like `imm [i32]` for `[i32]`.
+  type Imm;
+
+  /// A copy of `x` that can't be changed. The copy is shallow, so `T` can't
+  /// hold anything `mut`: an `imm` value can't, since `imm` is deep.
+  fn to_imm(x: T) -> Imm;
+}

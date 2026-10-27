@@ -4,6 +4,7 @@ pub import "./functor" *;
 pub import "./semigroup" *;
 pub import "./monoid" *;
 pub import "./classes" *;
+pub import "./mutability" *;
 
 // Types
 pub import "./option" *;

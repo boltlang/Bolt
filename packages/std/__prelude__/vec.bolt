@@ -1,6 +1,7 @@
 // A growable array.
 
-import "./array" (array_alloc, array_copy, array_len);
+import "./array" (array_alloc, array_copy, array_freeze, array_len);
+import "./mutability" (ToMut, ToImm);
 import "./option" (Option, None, Some);
 import "./io" (panic);
 import "./classes" (Index, IndexMut, Iterable, FnIter);
@@ -173,4 +174,21 @@ impl[T] Iterable[Vec[T]] {
       },
     }
   }
+}
+
+/// A copy of a `Vec` that can be changed, with as much room as the
+/// original.
+impl[T] ToMut[Vec[T]] {
+  type Mut = mut Vec[T];
+  fn to_mut(v) {
+    let items = array_alloc(capacity(v));
+    array_copy(items, 0, v.items, 0, v.len);
+    mut Vec { items, len: v.len }
+  }
+}
+
+/// A copy of a `Vec` that can't be changed, without room to grow.
+impl[T] ToImm[Vec[T]] {
+  type Imm = imm Vec[T];
+  fn to_imm(v) = Vec { items: array_freeze(to_array(v)), len: v.len };
 }
