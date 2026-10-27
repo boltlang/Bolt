@@ -134,7 +134,7 @@ pub(crate) fn stmt(p: &mut Parser, semicolon: Semicolon) {
 /// `else` block optional.
 pub(crate) fn let_stmt(p: &mut Parser, m: Marker, semicolon: Semicolon) {
     p.bump(T![let]);
-    p.eat(T![mut]);
+    // `let mut x` has a `MUT_PATT`, like a parameter.
     parse_pattern(p);
     if p.eat(T![:]) {
         type_(p);

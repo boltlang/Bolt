@@ -189,6 +189,16 @@ fn record_expr_field_list(p: &mut Parser) {
             IDENT | INT_NUMBER | T![#] => {
                 let field = p.start();
                 outer_attrs(p);
+                // `#[a]` with no field after it, like in `Point { #[a] }`.
+                if !p.at(IDENT) && !p.at(INT_NUMBER) {
+                    p.error("expected a field");
+                    field.complete(p, RECORD_EXPR_FIELD);
+                    if !p.at(T![,]) {
+                        break;
+                    }
+                    p.bump(T![,]);
+                    continue;
+                }
                 let name = p.start();
                 p.bump_any();
                 name.complete(p, NAME_REF);
@@ -560,4 +570,20 @@ fn closure_param(p: &mut Parser) {
         type_(p);
     }
     m.complete(p, PARAM);
+}
+
+#[cfg(test)]
+mod tests {
+    use boltlang_syntax::{SyntaxKind::*, SyntaxNode};
+
+    use crate::parse_file;
+
+    #[test]
+    fn attributes_without_a_field_stop_at_the_brace() {
+        let (green, diags) = parse_file("let p = Point { #[a] };\nlet y = 1;\n");
+        let messages: Vec<_> = diags.iter().map(ToString::to_string).collect();
+        assert_eq!(messages, ["expected a field"]);
+        let lets = SyntaxNode::new_root(green).descendants().filter(|n| n.kind() == LET_STMT).count();
+        assert_eq!(lets, 2);
+    }
 }

@@ -29,15 +29,14 @@ pub fn parse_file(text: &str) -> (GreenNode, Vec<Diagnostic>) {
 pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec<Diagnostic>) {
     let mut diags = Diagnostics::new();
     let mut lexed = tokenize(text, &mut diags);
-    let inp = lexed.to_input();
-    let mut p = Parser::new(&inp);
+    let mut p = Parser::new(lexed.to_input(text));
     // The tree needs one root. A rule like `parse_expr` that stops before
-    // the end, or that finds nothing to parse, is wrapped in an `ERROR`
-    // node with the rest of the input. Otherwise the marker is abandoned
-    // and the rule's node is the root.
+    // the end, that finds nothing to parse, or that leaves more than one
+    // node or an error outside of its node, is wrapped in an `ERROR` node.
+    // Otherwise the marker is abandoned and the rule's node is the root.
     let m = p.start();
     rule(&mut p);
-    if p.at(EOF) && m.has_node_since(&p) {
+    if p.at(EOF) && m.has_one_node_since(&p) {
         m.abandon(&mut p);
     } else {
         if !p.at(EOF) {
@@ -49,9 +48,7 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
         m.complete(&mut p, ERROR);
     }
     let (events, splits) = p.finish();
-    for split in splits {
-        lexed.split(split.index, split.len, split.rest_kind);
-    }
+    lexed.apply_splits(&splits);
     let interspersed = intersperse_trivia(events, &lexed);
     let node = process_events(
         interspersed.into_iter(),
@@ -96,6 +93,39 @@ mod tests {
         assert_eq!(kinds, [MACRO_RULES_KEYWORD, OPERATOR, IDENT]);
     }
 
+    /// The kind of the root, and how many diagnostics there are.
+    fn root(text: &str, rule: impl Fn(&mut crate::Parser)) -> (boltlang_syntax::SyntaxKind, usize) {
+        let (green, diags) = parse(text, rule);
+        (SyntaxNode::new_root(green).kind(), diags.len())
+    }
+
+    #[test]
+    fn an_error_after_the_rules_node_is_inside_the_root() {
+        // `#[a]` is an `ATTR` node, then `parse_item` reports a missing item.
+        let (kind, errors) = root("#[a]", crate::grammar::parse_item);
+        assert_eq!(kind, ERROR);
+        assert!(errors > 0);
+    }
+
+    #[test]
+    fn two_nodes_from_a_rule_are_wrapped_in_one_root() {
+        // `parse_expr` gives an `ATTR` node, and an `ERROR` node after it.
+        let (kind, errors) = root("#[a]", |p| {
+            crate::grammar::parse_expr(p);
+        });
+        assert_eq!(kind, ERROR);
+        assert!(errors > 0);
+    }
+
+    #[test]
+    fn one_node_from_a_rule_is_the_root() {
+        let (kind, errors) = root("a + b", |p| {
+            crate::grammar::parse_expr(p);
+        });
+        assert_eq!(kind, BIN_EXPR);
+        assert_eq!(errors, 0);
+    }
+
     #[test]
     #[should_panic(expected = "the parser seems stuck")]
     fn a_stuck_parser_panics() {
@@ -105,11 +135,23 @@ mod tests {
     }
 
     #[test]
+    fn splits_keep_the_text() {
+        // `0.1` is split twice: into `0` and `.1`, then `.1` into `.` and `1`.
+        let text = "let a = t.0.1;\nlet f = || x;\nlet b = (t.0.1, || y);\n";
+        let (green, diags) = crate::parse_file(text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let root = SyntaxNode::new_root(green);
+        assert_eq!(root.text().to_string(), text);
+        let ints = root.descendants_with_tokens().filter(|e| e.kind() == INT_NUMBER).count();
+        assert_eq!(ints, 4);
+    }
+
+    #[test]
     fn split_bump_splits_a_token_in_two() {
         let tokens = tokens(" >> ", |p| {
             let m = p.start();
             p.split_bump(GT, 1);
-            assert_eq!(p.value().map(String::as_str), Some(">"));
+            assert_eq!(p.value(), Some(">"));
             p.bump_any();
             m.complete(p, SOURCE_FILE);
         });

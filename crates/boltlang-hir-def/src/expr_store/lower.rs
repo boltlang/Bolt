@@ -150,6 +150,10 @@ impl ExprCollector {
                         let param = ast::Param::cast(child).unwrap();
                         let name = match param.pattern() {
                             Some(ast::Pattern::Named(p)) => name(p.name()),
+                            Some(ast::Pattern::Mut(p)) => match p.pattern() {
+                                Some(ast::Pattern::Named(p)) => name(p.name()),
+                                _ => None,
+                            },
                             _ => None,
                         };
                         // In a function type, a parameter without a name is
@@ -431,10 +435,6 @@ impl ExprCollector {
                     let type_ref = decl.type_expr().map(|t| self.lower_type(t));
                     let initializer = decl.expr().map(|e| self.lower_expr(e));
                     let else_branch = decl.else_block().map(|b| self.lower_block(&b));
-                    // `let mut x` makes the binding mutable.
-                    if decl.mut_token().is_some() {
-                        self.mark_mutable(pat);
-                    }
                     Statement::Let { pat, type_ref, initializer, else_branch }
                 }
                 ast::SourceElement::ExprStmt(stmt) => {

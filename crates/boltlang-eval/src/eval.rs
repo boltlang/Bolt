@@ -295,15 +295,14 @@ impl<'db> Evaluator<'db> {
         if builtin.is_effect() && self.in_consts > 0 {
             return fail(ErrorKind::Effect(builtin.name()));
         }
-        let [Value::Str(text)] = &args[..] else {
-            return mismatch(format!("`{}` takes a string", builtin.name()));
-        };
-        match builtin {
-            Builtin::Print => {
+        match (builtin, &args[..]) {
+            (Builtin::Print, [Value::Str(text)]) => {
                 self.host.print(text)?;
                 Ok(Value::unit())
             }
-            Builtin::Panic => fail(ErrorKind::Panic(text.to_string())),
+            (Builtin::Panic, [Value::Str(text)]) => fail(ErrorKind::Panic(text.to_string())),
+            (Builtin::ArrayLen, [Value::Array(items)]) => Ok(Value::Int(items.borrow().len() as i128)),
+            _ => mismatch(format!("bad arguments to `{}`", builtin.name())),
         }
     }
 

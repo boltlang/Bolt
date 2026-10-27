@@ -49,10 +49,10 @@ impl Marker {
         }
     }
 
-    /// Whether a node was started since this marker, so that it has a
-    /// node to complete or to stand in for.
-    pub(crate) fn has_node_since(&self, p: &Parser) -> bool {
-        p.events[self.pos as usize + 1..].iter().any(|e| matches!(e, Event::Start { kind, .. } if *kind != TOMBSTONE))
+    /// Whether everything since this marker is one node, with no tokens or
+    /// errors outside of it, so that the node can stand in for this one.
+    pub(crate) fn has_one_node_since(&self, p: &Parser) -> bool {
+        is_one_node(&p.events[self.pos as usize + 1..])
     }
 
     /// Abandon this node and append all children of this node directly to the parent node.
@@ -80,6 +80,41 @@ impl Marker {
         CompletedMarker::new(self.pos, kind)
     }
 
+}
+
+/// Whether `events` make one node, and nothing outside of it.
+///
+/// A node that [`CompletedMarker::precede`] wraps around another starts
+/// after the other's `Finish`, so it's counted where the chain of
+/// `forward_parent` links to it starts.
+fn is_one_node(events: &[Event]) -> bool {
+    let mut linked = vec![false; events.len()];
+    let mut depth = 0usize;
+    let mut nodes = 0;
+    for (i, event) in events.iter().enumerate() {
+        match event {
+            Event::Start { .. } if linked[i] => {}
+            Event::Start { kind, forward_parent } => {
+                let mut started = usize::from(*kind != TOMBSTONE);
+                let (mut idx, mut next) = (i, *forward_parent);
+                while let Some(offset) = next {
+                    idx += offset.get() as usize;
+                    linked[idx] = true;
+                    let Event::Start { kind, forward_parent } = &events[idx] else { return false };
+                    started += usize::from(*kind != TOMBSTONE);
+                    next = *forward_parent;
+                }
+                if started > 0 && depth == 0 {
+                    nodes += 1;
+                }
+                depth += started;
+            }
+            Event::Finish => depth -= 1,
+            Event::Token { .. } | Event::Error { .. } if depth == 0 => return false,
+            Event::Token { .. } | Event::Error { .. } => {}
+        }
+    }
+    nodes == 1
 }
 
 pub struct CompletedMarker {
@@ -140,26 +175,33 @@ impl CompletedMarker {
 
 }
 
-#[derive(Clone)]
-pub struct Input {
+/// The tokens the parser reads, without trivia, as kinds and the ranges of
+/// their text in the source.
+pub struct Input<'t> {
+    text: &'t str,
     kinds: Vec<SyntaxKind>,
-    values: Vec<Option<String>>,
+    ranges: Vec<(u32, u32)>,
 }
 
-impl Input {
+impl<'t> Input<'t> {
 
-    pub fn new(kinds: Vec<SyntaxKind>, values: Vec<Option<String>>) -> Self {
-        Self { kinds, values }
-    }
-
-    pub fn kind(&self, idx: usize) -> SyntaxKind {
-        self.kinds.get(idx).copied().unwrap_or(EOF)
+    pub fn new(text: &'t str, kinds: Vec<SyntaxKind>, ranges: Vec<(u32, u32)>) -> Self {
+        Self { text, kinds, ranges }
     }
 
 }
+
+/// A token: its kind and the range of its text.
+type Token = (SyntaxKind, u32, u32);
 
 pub struct Parser<'t> {
-    inp: Input,
+    inp: Input<'t>,
+    /// The index in `inp` of the next token, after `rest`.
+    raw: usize,
+    /// The second part of a token that [`Parser::split_bump`] split. It
+    /// comes before `inp[raw]`, so the token list never has to shift.
+    rest: Option<Token>,
+    /// How many tokens were consumed, counting both parts of split tokens.
     pos: usize,
     events: Vec<Event>,
     /// Tokens that were split in two by [`Parser::split_bump`].
@@ -167,7 +209,6 @@ pub struct Parser<'t> {
     /// How often the parser looked at a token since it last consumed one.
     /// See [`PARSER_STEP_LIMIT`].
     steps: Cell<u32>,
-    _input: std::marker::PhantomData<&'t Input>,
 }
 
 /// If the parser looks at this many tokens without consuming any, it's
@@ -176,15 +217,31 @@ const PARSER_STEP_LIMIT: u32 = if cfg!(debug_assertions) { 150_000 } else { 15_0
 
 impl <'t> Parser<'t> {
 
-    pub fn new(inp: &'t Input) -> Self {
+    pub fn new(inp: Input<'t>) -> Self {
         Self {
-            inp: inp.clone(),
-            pos: 0,
             events: Vec::with_capacity(2 * inp.kinds.len()),
+            inp,
+            raw: 0,
+            rest: None,
+            pos: 0,
             splits: Vec::new(),
             steps: Cell::new(0),
-            _input: std::marker::PhantomData,
         }
+    }
+
+    /// The token `n` tokens ahead, or `None` past the end.
+    fn token(&self, n: usize) -> Option<Token> {
+        let idx = match (self.rest, n) {
+            (Some(rest), 0) => return Some(rest),
+            (Some(_), n) => self.raw + n - 1,
+            (None, n) => self.raw + n,
+        };
+        let (start, end) = *self.inp.ranges.get(idx)?;
+        Some((self.inp.kinds[idx], start, end))
+    }
+
+    fn token_text(&self, (_, start, end): Token) -> &'t str {
+        &self.inp.text[start as usize..end as usize]
     }
 
     pub(crate) fn current(&self) -> SyntaxKind {
@@ -200,12 +257,12 @@ impl <'t> Parser<'t> {
         let steps = self.steps.get();
         assert!(steps < PARSER_STEP_LIMIT, "the parser seems stuck");
         self.steps.set(steps + 1);
-        self.inp.kind(self.pos + n)
+        self.token(n).map_or(EOF, |(kind, ..)| kind)
     }
 
     /// The text of the token `n` tokens ahead, or `""` past the end.
-    pub(crate) fn nth_text(&self, n: usize) -> &str {
-        self.inp.values.get(self.pos + n).and_then(Option::as_deref).unwrap_or("")
+    pub(crate) fn nth_text(&self, n: usize) -> &'t str {
+        self.token(n).map_or("", |token| self.token_text(token))
     }
 
     /// Whether the current token is the contextual keyword `kw`, like
@@ -316,8 +373,9 @@ impl <'t> Parser<'t> {
     }
 
 
-    pub(crate) fn value(&self) -> Option<&String> {
-        self.inp.values[self.pos].as_ref()
+    /// The text of the current token, or `None` at the end.
+    pub(crate) fn value(&self) -> Option<&'t str> {
+        self.token(0).map(|token| self.token_text(token))
     }
 
     /// The text of the current token if it's an operator, including operators
@@ -325,7 +383,7 @@ impl <'t> Parser<'t> {
     /// compound assignments like `+=`.
     pub(crate) fn op_text(&self) -> Option<&str> {
         if is_operator_kind(self.current()) {
-            Some(self.value().unwrap().as_str())
+            self.value()
         } else {
             None
         }
@@ -367,7 +425,7 @@ impl <'t> Parser<'t> {
     /// parser uses this where the grammar needs part of one, e.g. the first
     /// `|` of the `||` in the closure `|| x`.
     pub(crate) fn split_bump(&mut self, kind: SyntaxKind, len: usize) {
-        let text = self.inp.values[self.pos].clone().expect("token has no text");
+        let text = self.value().expect("no token to split");
         let rest_kind = crate::lexer::operator_kind(&text[len..]);
         self.split_bump_as(kind, len, rest_kind);
     }
@@ -375,18 +433,21 @@ impl <'t> Parser<'t> {
     /// Like [`Parser::split_bump`], but the rest becomes a token of kind
     /// `rest_kind`. Used to split the float `0.1` in `t.0.1`.
     pub(crate) fn split_bump_as(&mut self, kind: SyntaxKind, len: usize, rest_kind: SyntaxKind) {
-        let text = self.inp.values[self.pos].clone().expect("token has no text");
+        let token = self.token(0).expect("no token to split");
+        let (_, start, end) = token;
+        let text = self.token_text(token);
         assert!(0 < len && len < text.len(), "can't split {text:?} at {len}");
-        let (first, rest) = text.split_at(len);
-        self.inp.kinds.insert(self.pos + 1, rest_kind);
-        self.inp.values.insert(self.pos + 1, Some(rest.to_string()));
-        self.inp.values[self.pos] = Some(first.to_string());
         self.splits.push(Split { index: self.pos, len: len as u32, rest_kind });
         self.do_bump(kind);
+        // `do_bump` consumed the whole token; the rest is the next one.
+        self.rest = Some((rest_kind, start + len as u32, end));
     }
 
     /// Perform the actual recording of a token.
     fn do_bump(&mut self, kind: SyntaxKind) {
+        if self.rest.take().is_none() {
+            self.raw += 1;
+        }
         self.pos += 1;
         self.steps.set(0);
         self.push_event(Event::Token { kind });

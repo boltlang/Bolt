@@ -8,4 +8,5 @@ pub import "./monoid" *;
 pub import "./option" *;
 pub import "./list" *;
 
+pub import "./array" *;
 pub import "./io" *;

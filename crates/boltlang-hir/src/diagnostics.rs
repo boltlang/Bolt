@@ -476,7 +476,7 @@ impl<'db> Collector<'db> {
                 sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect(),
                 Box::new(sig.ret.clone().unwrap_or(Ty::Error)),
             );
-            if declared != builtin.signature() && !has_error(&declared) {
+            if !builtin.has_signature(&declared) && !has_error(&declared) {
                 self.push(range, DiagnosticKind::BuiltinSignature { name, expected: builtin.signature() });
             }
         }
