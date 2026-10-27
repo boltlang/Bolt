@@ -89,6 +89,7 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             ctx.solver.finish();
             let errors = std::mem::take(&mut ctx.solver.errors);
             let mut result = ctx.finish();
+            result.add_instances(def, &solver);
             result.diagnostics.extend(errors.into_iter().map(InferenceDiagnostic::Type));
             result
         }
@@ -166,7 +167,8 @@ fn infer_group<'db>(
     let pending = solver.take_pending();
     let pending_fields = solver.take_pending_fields();
     let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields };
-    for (&f, (def, result)) in group.iter().zip(results) {
+    for (&f, (def, mut result)) in group.iter().zip(results) {
+        result.add_instances(def, &solver);
         let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
         let (scheme, mut result) = solved.generalize(db, f, def, &ty, result);
         result.check_deep_immutability();

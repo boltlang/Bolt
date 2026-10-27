@@ -16,7 +16,7 @@ use boltlang_hir_def::{
         ArithOp, BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
         PrefixOp, RecordField, Statement, TypeRefId,
     },
-    ids::{ConstId, FunctionId, ItemContainerId},
+    ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
     signatures::function_signature,
     resolver::{GenericDefId, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     scope::expr_scopes,
@@ -41,6 +41,10 @@ pub struct InferenceResult<'db> {
     pub binding_types: ArenaMap<Binding, Ty<'db>>,
     /// The function a call like `x.f(y)` calls, when it's `f(x, y)`.
     pub method_calls: ArenaMap<Expr, FunctionId<'db>>,
+    /// The impl that a use of a class method or constant uses, by the
+    /// expression that names it and the class, when the types decide it.
+    /// In a generic function, like `fn f(x) = show(x)`, they don't.
+    pub instances: Vec<(ExprId, ClassId<'db>, ImplId<'db>)>,
     pub diagnostics: Vec<InferenceDiagnostic<'db>>,
 }
 
@@ -55,6 +59,23 @@ impl<'db> InferenceResult<'db> {
 
     pub fn binding_ty(&self, binding: BindingId) -> &Ty<'db> {
         self.binding_types.get(binding).unwrap_or(&Ty::Error)
+    }
+
+    /// The impl of `class` that the expression `expr` uses, if the types
+    /// decide it.
+    pub fn instance(&self, expr: ExprId, class: ClassId<'db>) -> Option<ImplId<'db>> {
+        self.instances.iter().find(|(e, c, _)| *e == expr && *c == class).map(|(_, _, imp)| *imp)
+    }
+
+    /// Keep the impls that `solver` chose for uses in the body `def`.
+    pub(crate) fn add_instances(&mut self, def: DefWithBodyId<'db>, solver: &Solver<'db>) {
+        for (origin, class, imp) in &solver.chosen {
+            if origin.body == def
+                && let ExprOrPat::Expr(expr) = origin.node
+            {
+                self.instances.push((expr, *class, *imp));
+            }
+        }
     }
 
     /// Report the expressions and patterns whose type has a `mut` array or

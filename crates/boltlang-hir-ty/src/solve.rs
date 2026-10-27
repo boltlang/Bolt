@@ -9,7 +9,7 @@ use boltlang_hir_def::{
     Name,
     body::DefWithBodyId,
     hir::{ExprId, PatId, TypeRefId},
-    ids::{FunctionId, ImplId, ItemContainerId, TypeAliasId},
+    ids::{ClassId, FunctionId, ImplId, ItemContainerId, TypeAliasId},
     item_tree::{ModItem, item_tree},
     nameres::{file_scope, prelude_file, resolve_import_path},
     resolver::GenericDefId,
@@ -178,6 +178,11 @@ pub struct Solver<'db> {
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
+    /// The impl chosen for each class constraint of a use of a class method
+    /// or constant, like the `Show[i32]` of `show(1)`, at the use. Only the
+    /// first per use and class: the constraints that it leads to, like the
+    /// `Show[i32]` of an impl `Show[Option[T]] where Show[T]`, come after.
+    pub chosen: Vec<(Origin<'db>, ClassId<'db>, ImplId<'db>)>,
     pub errors: Vec<TypeError<'db>>,
 }
 
@@ -192,6 +197,7 @@ impl<'db> Solver<'db> {
             pending: Vec::new(),
             pending_fields: Vec::new(),
             pending_assoc: Vec::new(),
+            chosen: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -411,8 +417,16 @@ impl<'db> Solver<'db> {
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
-                    Step::Solved(subgoals) => {
+                    Step::Solved(subgoals, imp) => {
                         progress = true;
+                        let same_use = |(o, c, _): &(Origin<'db>, ClassId<'db>, ImplId<'db>)| {
+                            o.body == origin.body && o.node == origin.node && *c == constraint.class
+                        };
+                        if let Some(imp) = imp
+                            && !self.chosen.iter().any(same_use)
+                        {
+                            self.chosen.push((origin, constraint.class, imp));
+                        }
                         self.pending.extend(subgoals.into_iter().map(|c| (c, origin)));
                     }
                     Step::NoInstance => {
@@ -481,10 +495,10 @@ impl<'db> Solver<'db> {
     fn try_solve(&self, goal: &ClassConstraint<'db>) -> Step<'db> {
         // An error type somewhere means an error was already reported.
         if goal.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
-            return Step::Solved(Vec::new());
+            return Step::Solved(Vec::new(), None);
         }
         if self.assumptions.contains(goal) {
-            return Step::Solved(Vec::new());
+            return Step::Solved(Vec::new(), None);
         }
         let has_vars = goal.args.iter().any(has_vars);
         let mut found = None;
@@ -523,7 +537,7 @@ impl<'db> Solver<'db> {
                         })
                     })
                     .collect();
-                Step::Solved(subgoals)
+                Step::Solved(subgoals, Some(imp))
             }
             None if maybe || has_vars => Step::Wait,
             None => Step::NoInstance,
@@ -532,8 +546,8 @@ impl<'db> Solver<'db> {
 }
 
 enum Step<'db> {
-    /// Solved, if these hold too.
-    Solved(Vec<ClassConstraint<'db>>),
+    /// Solved, if these hold too, with the impl that was used, if any.
+    Solved(Vec<ClassConstraint<'db>>, Option<ImplId<'db>>),
     NoInstance,
     /// The types aren't known well enough yet.
     Wait,
