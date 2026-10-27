@@ -735,6 +735,23 @@ shout(1);
 }
 
 #[test]
+fn bounds_of_structs_and_enums_point_at_the_bound() {
+    check(
+        r#"
+class Show[T] { fn show(x: T) -> String; }
+struct Labeled[A: Show] { value: A }
+                //^^^^ label: needed by this bound of `Labeled`
+enum Maybe[A] where Show[A] { Nothing, Has(A) }
+                  //^^^^^^^ label: needed by this bound of `Maybe`
+let a = Labeled { value: True };
+      //^^^^^^^^^^^^^^^^^^^^^^^ error: there is no instance `Show[Bool]`
+let b = Maybe.Has(1);
+      //^^^^^^^^^ error: there is no instance `Show[i32]`
+"#,
+    );
+}
+
+#[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
         (

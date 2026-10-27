@@ -1,0 +1,74 @@
+================================================================================
+Bounds of a struct are checked where a value is made
+:error
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x) = "int"; }
+struct Labeled[A: Show] { value: A }
+struct Wrap[A: Show](A);
+let a = Labeled { value: 1 };
+let b = Wrap(2);
+let c = Labeled { value: True };
+let d = Wrap("s");
+
+--------------------------------------------------------------------------------
+Show[i32].show: fn(i32) -> String
+let a: imm Labeled[i32]
+let b: imm Wrap[i32]
+let c: imm Labeled[Bool]
+let d: imm Wrap[String]
+--------------------------------------------------------------------------------
+error at `Labeled { value: True }`: no instance Show[Bool]
+error at `Wrap`: no instance Show[String]
+
+================================================================================
+Bounds of an enum are checked where a value is made
+:error
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x) = "int"; }
+enum Maybe[A: Show] { Nothing, Has(A) }
+let a = Maybe.Has(1);
+let b: Maybe[i32] = Maybe.Nothing;
+let c = Maybe.Has(True);
+let d = Maybe.Nothing;
+
+--------------------------------------------------------------------------------
+Show[i32].show: fn(i32) -> String
+let a: Maybe[i32]
+let b: Maybe[i32]
+let c: Maybe[Bool]
+let d: Maybe[a]
+--------------------------------------------------------------------------------
+error at `Maybe.Has`: no instance Show[Bool]
+error at `Maybe.Nothing`: ambiguous
+
+================================================================================
+A function that makes a value of a struct with bounds needs them too
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x) = "int"; }
+struct Labeled[A: Show] { value: A }
+fn label(x) = Labeled { value: x };
+label(1);
+
+--------------------------------------------------------------------------------
+Show[i32].show: fn(i32) -> String
+label: forall a. Show[a] => fn(a) -> imm Labeled[a]
+label(1): imm Labeled[i32]
+
+================================================================================
+A where clause on a struct
+:error
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x) = "int"; }
+struct Pair[A, B] where Show[A], Show[B] { first: A, second: B }
+let a = Pair { first: 1, second: 2 };
+let b = Pair { first: 1, second: True };
+--------------------------------------------------------------------------------
+Show[i32].show: fn(i32) -> String
+let a: imm Pair[i32, i32]
+let b: imm Pair[i32, Bool]
+--------------------------------------------------------------------------------
+error at `Pair { first: 1, second: True }`: no instance Show[Bool]

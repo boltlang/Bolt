@@ -419,8 +419,8 @@ fn because_label(db: &dyn Db, names: &TyNames, because: &Because<'_>) -> Label {
         }
         BecauseKind::UseIn { function: Some(name) } => format!("needed by this use in `{name}`"),
         BecauseKind::UseIn { function: None } => "needed by this use".to_string(),
-        BecauseKind::Bound { function: Some(name) } => format!("needed by this bound of `{name}`"),
-        BecauseKind::Bound { function: None } => "needed by this bound".to_string(),
+        BecauseKind::Bound { item: Some(name) } => format!("needed by this bound of `{name}`"),
+        BecauseKind::Bound { item: None } => "needed by this bound".to_string(),
     };
     Label { file: because.file, range: because.range, message }
 }

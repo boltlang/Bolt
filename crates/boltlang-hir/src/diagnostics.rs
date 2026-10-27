@@ -185,9 +185,9 @@ pub enum BecauseKind<'db> {
     /// The use in the body of a function that needs what its type asks for,
     /// like the `p.x` of `fn get_x(p) = p.x`.
     UseIn { function: Option<Name> },
-    /// A bound or `where` clause that asks for it, of a function if it's
-    /// one's.
-    Bound { function: Option<Name> },
+    /// A bound or `where` clause that asks for it, and the function, struct
+    /// or enum it's of, if any.
+    Bound { item: Option<Name> },
 }
 
 /// What an item of a class or impl is.
@@ -737,16 +737,22 @@ impl<'db> Collector<'db> {
                 (body.def(db).file(db), ptr, BecauseKind::UseIn { function })
             }
             Reason::RequiredBy(ConstraintSource::Declared { def, type_ref }) => {
-                let (file, map, function) = match def {
+                let (file, map, item) = match def {
                     GenericDefId::Function(f) => {
                         let name = f.item(db).name.as_ref().map(|n| n.name().clone());
                         (f.file(db), &function_signature_with_source_map(db, f).1, name)
                     }
+                    GenericDefId::Struct(s) => {
+                        (s.file(db), &struct_signature_with_source_map(db, s).1, s.item(db).name.clone())
+                    }
+                    GenericDefId::Enum(e) => {
+                        (e.file(db), &enum_signature_with_source_map(db, e).1, e.item(db).name.clone())
+                    }
                     GenericDefId::Impl(i) => (i.file(db), &impl_signature_with_source_map(db, i).1, None),
                     GenericDefId::Class(c) => (c.file(db), &class_signature_with_source_map(db, c).1, None),
-                    _ => return None,
+                    GenericDefId::TypeAlias(_) => return None,
                 };
-                (file, map.type_syntax(type_ref)?, BecauseKind::Bound { function })
+                (file, map.type_syntax(type_ref)?, BecauseKind::Bound { item })
             }
         };
         Some(Because { file, range: ptr_range(ptr), kind })

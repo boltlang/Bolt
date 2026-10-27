@@ -113,6 +113,28 @@ fn both[A, B](a: A, b: B) -> String where Describe[A], Describe[B] =
   describe(a) + " and " + describe(b);
 ```
 
+A struct or enum can have constraints on its type parameters too. They're
+checked wherever a value is made:
+
+```bolt
+class Describe[T] {
+  fn describe(x: T) -> String;
+}
+
+impl Describe[i32] {
+  fn describe(n) = "a number";
+}
+
+struct Labeled[T: Describe] { value: T }
+
+let a = Labeled { value: 1 };      // fine
+let b = Labeled { value: True };   // error: there is no instance `Describe[Bool]`
+```
+
+The error points at the `Describe` of `Labeled` too, since that's what
+asks for it. A function or impl that uses a `Labeled[T]` still has to say
+`T: Describe` itself if it needs it.
+
 ## Generic impls
 
 An impl can have type parameters too, and constraints on them. This one

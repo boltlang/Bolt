@@ -26,11 +26,11 @@ use crate::{
     lang::LangClass,
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types,
-        identity_args, struct_args, subst_params,
+        generic_predicates, identity_args, struct_args, subst_params,
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{Constraint, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
+    solve::{Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -305,6 +305,21 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             _ => args,
         };
         (ty, subst.into())
+    }
+
+    /// A value of the struct or enum of `def`, with the type arguments
+    /// `args`, is made at `at`, so the arguments must meet the bounds of its
+    /// type parameters, like the `Iterator` of `struct Zip[A: Iterator]`. An
+    /// error points at the bound.
+    fn require_bounds(&mut self, def: VariantDef<'db>, args: &[Ty<'db>], at: ExprId) {
+        let (_, generic_def) = def.adt();
+        let predicates = generic_predicates(self.db, generic_def);
+        for (predicate, &type_ref) in predicates.predicates.iter().zip(predicates.sources.iter()) {
+            let source = ConstraintSource::Declared { def: generic_def, type_ref };
+            let origin = Origin { reason: Reason::RequiredBy(source), ..self.origin(at) };
+            let constraint = predicate.map(|t| subst_params(t, generic_def, args));
+            self.solver.add(Constraint::Class { constraint, origin });
+        }
     }
 
     fn resolver(&self, expr: ExprId) -> Resolver<'db> {
@@ -705,7 +720,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             ValueNs::Const(c) => self.const_value_ty(expr, c),
             // Const generics aren't supported yet.
             ValueNs::ConstParam { .. } => Ty::Error,
-            ValueNs::Variant(v) => self.constructor_ty(VariantDef::Variant(v), false),
+            ValueNs::Variant(v) => self.constructor_ty(expr, VariantDef::Variant(v), false),
             ValueNs::Builtin(v) => Ty::Builtin(v.ty()),
         }
     }
@@ -731,10 +746,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     /// The type of a struct or variant used as a value: a function for a
     /// tuple struct, the type itself for a unit one. A struct is `imm`, or
-    /// `mut` when it's made by `mut Wrapper(x)`.
-    fn constructor_ty(&mut self, def: VariantDef<'db>, is_mut: bool) -> Ty<'db> {
+    /// `mut` when it's made by `mut Wrapper(x)`. `expr` is where it's used,
+    /// which must meet the bounds of the struct or enum.
+    fn constructor_ty(&mut self, expr: ExprId, def: VariantDef<'db>, is_mut: bool) -> Ty<'db> {
         let (_, generic_def) = def.adt();
         let (adt_ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
+        self.require_bounds(def, &args, expr);
         let fields = field_types(self.db, def);
         match fields.kind {
             FieldsKind::Unit => adt_ty,
@@ -752,9 +769,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match (resolution.ty, resolution.unresolved) {
             (TypeNs::Struct(s), None) => {
                 let is_mut = std::mem::take(&mut self.mut_constructor);
-                self.constructor_ty(VariantDef::Struct(s), is_mut)
+                self.constructor_ty(expr, VariantDef::Struct(s), is_mut)
             }
-            (TypeNs::Variant(v), None) => self.constructor_ty(VariantDef::Variant(v), false),
+            (TypeNs::Variant(v), None) => self.constructor_ty(expr, VariantDef::Variant(v), false),
             _ => {
                 self.unresolved(ExprOrPat::Expr(expr));
                 Ty::Error
@@ -1118,6 +1135,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
         let (ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
+        self.require_bounds(def, &args, expr);
         let field_tys = field_types(self.db, def);
         let mut seen = Vec::new();
         for field in fields {
