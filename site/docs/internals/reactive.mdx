@@ -112,6 +112,8 @@ Inference has limits:
   the compiler can't follow every path to them. To start with, only assigning
   a whole new value counts, as in `items = items.push(x)`. Collections that
   track their own changes can come later; Svelte 5 uses proxies for this.
+  The types also tell which calls change their argument: see
+  [Mutability and effects](#mutability-and-effects).
 - **Predictability.** Small changes change the meaning: removing the last
   event handler that writes `count` makes it a plain variable. The language
   server shows what the compiler inferred, with an inlay hint or a highlight
@@ -136,7 +138,9 @@ Inference has limits:
 4. **Rerunning by resuming.** Resuming a saved continuation more than once to
    redraw clashes with mutation and with the DOM, and many runtimes resume a
    continuation only once (OCaml 5 does). Rerunning means calling the
-   function again.
+   function again. The types can tell which continuations are safe to
+   resume more than once: see
+   [Mutability and effects](#mutability-and-effects).
 5. **The cost of compiling effects.** General effects need stack switching or
    a CPS transform, which is slow when compiled to JavaScript. But `state` and
    `read` resume right away, and such operations compile to a hidden
@@ -146,6 +150,70 @@ Inference has limits:
    checks if `map` passes on the effects of its callback. Effect rows are the
    same idea as the rows of extensible records (`{ name: str, .. }`), so
    the type checker may be able to reuse that.
+
+## Mutability and effects
+
+Bolt's [mutability](./type-checking/mutability.mdx) types and effects cover
+different things. `imm` and `mut` are about data: which values can change.
+Effects are about computations: what a call does besides giving a value,
+through a handler. Together they leave a component no hidden way to change
+or depend on anything.
+
+**Drawing changes only what the effects reach.** A named function captures
+nothing, so it's an `imm fn`, and an `imm` value never changes, nor does
+anything it holds. So a component whose props are `imm` changes nothing that
+existed before it ran, except through its effects: an operation like
+`state` is a call of the handler, and only the handler's state changes. A
+component can still make `mut` values of its own and change them, but no
+one else can see them. The [Lean proof](https://github.com/boltlang/Bolt/tree/main/lean)
+has this as `imm_fn_changes_only_through_handler`: calling an `imm` function
+with `imm` arguments and a handler changes only what the handler can reach.
+
+Props that are callbacks, like `on_login` in the example below, change the
+parent's state, so they're `mut fn`s, and what they reach can change too.
+Calling one while drawing is the first problem on this page; event
+handlers call them after drawing is done. The compiler could warn about a
+call of a `mut fn` prop while drawing.
+
+**Tracking is complete.** The tracking handler sees only the reads that go
+through `read`. A `mut` value that a component reaches some other way could
+change without the handler knowing, and the page would show a stale value,
+which is the bug of Svelte 3 and 4. With `imm` props, anything that changes
+while drawing can only be reached through a `Signal`, so every read that
+matters is tracked. That leaves `Signal[T]` where `T` is `mut`: a `push` on
+the value inside isn't a write to the signal. Either `T` must be `imm`, so
+that a change replaces the whole value, as in
+`items.set(items.get().push(x))`, which can share most of the old one; or a
+call that changes it counts as a write, as below.
+
+**The types tell which calls change their argument**
+([#200](https://github.com/boltlang/Bolt/issues/200)). A function can only
+change a parameter whose type is `mut`; a parameter written `[T]` or `Vec[T]`
+can be either, so the function can't change it. So
+`fn push[T](v: mut Vec[T], x: T)` changes `v`, and `fn len[T](v: Vec[T])`
+doesn't, and the compiler can read that from the signature: passing state
+to a `mut` parameter counts as a write, without a list of methods or a
+`Mut` effect. A `mut` parameter that's never changed causes an update that
+wasn't needed, never a missed one.
+
+**Changing data isn't an effect.** Koka tracks writes to the heap as an
+effect. In Bolt, `imm` is a property of a value, which can be stored,
+shared, and sent to another thread; an effect is a property of a call that
+runs. Changing a `mut` array a function made itself can't be seen from
+outside, so making it an effect would only add noise to signatures.
+
+**Continuations have a mutability too.** A handler that captures the rest
+of a computation captures its local variables, like a closure. So a
+continuation is `mut` when the code it resumes holds a `let mut` variable or
+a `mut` value, by the same rule as a closure, and `imm` otherwise. An `imm`
+continuation can be resumed any number of times, which is problem 4 above;
+a `mut` one should be resumed at most once.
+
+**Polymorphism works the same way.** A function that passes on the effects
+of its callback, like `map`, is like one that's generic over its callback's
+mutability: both are hidden parameters of its type, inferred from the body.
+Effect rows, the rows of extensible records, and the "at most" constraints
+of [#243](https://github.com/boltlang/Bolt/issues/243) may share one solver.
 
 ## Compared with Svelte
 
