@@ -202,8 +202,10 @@ impl[T] ToMut[Vec[T]] {
   }
 }
 
-/// A copy of a `Vec` that can't be changed, without room to grow.
+/// A copy of a `Vec` that can't be changed. The elements of an `imm` one
+/// aren't copied: its buffer is `imm` too, and `array_freeze` gives it back
+/// as it is.
 impl[T] ToImm[Vec[T]] {
   type Imm = imm Vec[T];
-  fn to_imm(v) = Vec { items: array_freeze(to_array(v)), len: v.len };
+  fn to_imm(v) = Vec { items: array_freeze(v.items), len: v.len };
 }
