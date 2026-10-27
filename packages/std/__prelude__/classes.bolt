@@ -72,12 +72,7 @@ impl[T] Iterator[FnIter[T]] {
 }
 
 /// An iterator can be looped over itself.
-impl[T] Iterable[mut FnIter[T]] {
-  type Iter = mut FnIter[T];
-  fn iter(it) = it;
-}
-
-impl[T] Iterable[imm FnIter[T]] {
-  type Iter = imm FnIter[T];
+impl[T] Iterable['m FnIter[T]] {
+  type Iter = 'm FnIter[T];
   fn iter(it) = it;
 }
