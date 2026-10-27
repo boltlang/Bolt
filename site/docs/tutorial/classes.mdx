@@ -235,6 +235,74 @@ impl Convert[i32, String] {
 let s: String = convert(42);
 ```
 
+## Classes that syntax uses
+
+The prelude defines four classes that Bolt's own syntax uses, so that a type
+of your own can be indexed and looped over like an array:
+
+| Syntax | Class | Method |
+|---|---|---|
+| `c[i]` | `Index[C]`, with `type Item` | `fn index(c: C, i: i32) -> Item` |
+| `c[i] = x` | `IndexMut[C]` | `fn set_index(c: C, i: i32, x: C.Item)` |
+| `for x in c` | `Iterable[C]`, with `type Iter` | `fn iter(c: C) -> Iter` |
+| | `Iterator[I]`, with `type Item` | `fn next(it: I) -> Option[Item]` |
+
+`for x in c` calls `iter(c)` once, then `next` on the iterator until it gives
+`None`. `c[i] += x` calls `index` and then `set_index`. Arrays don't need
+impls: indexing and looping over them are built in. A `Vec` has impls of all
+of them:
+
+```bolt
+struct Ring { items: [i32] }
+
+impl Index[Ring] {
+  type Item = i32;
+  fn index(r, i) = r.items[i % array_len(r.items)];
+}
+
+let r = Ring { items: [1, 2, 3] };
+r[4];
+```
+
+```text
+2
+```
+
+`FnIter` is an iterator made from a function that gives the next item each
+time it's called, which is the quickest way to make a type `Iterable`:
+
+```bolt
+struct Countdown { from: i32 }
+
+impl Iterable[Countdown] {
+  type Iter = FnIter[i32];
+  fn iter(c) {
+    let mut n = c.from;
+    FnIter { next: || if n > 0 { n -= 1; Some(n + 1) } else { None } }
+  }
+}
+
+let mut total = 0;
+let countdown = Countdown { from: 3 };
+for n in countdown {
+  total += n;
+}
+total;
+```
+
+```text
+6
+```
+
+:::note
+
+Bolt decides which class to use from the type of `c`. When the type isn't
+known yet, like the parameter of `fn first(c) = c[0]`, it's taken to be an
+array. Write the type, or a `where` clause, to use a function on other types:
+`fn first[C](c: C) -> C.Item where Index[C] = c[0];`.
+
+:::
+
 ## Classes of type constructors
 
 A class can also be for *type constructors* like `Option` or `List`: types

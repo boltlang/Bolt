@@ -78,10 +78,29 @@ total;
 20
 ```
 
+It loops over any collection with an impl of the class `Iterable`, like a
+`Vec` from the standard library:
+
+```bolt
+let names = vec_from_array(["Ada", "Grace"]);
+names.push("Barbara");
+let mut count = 0;
+for name in names {
+  count += 1;
+}
+count;
+```
+
+```text
+3
+```
+
+[Classes that syntax uses](./classes.mdx#classes-that-syntax-uses) shows how
+to make a type of your own work with `for`.
+
 :::note
 
-`for` only loops over arrays for now. Loops over ranges like `0..10` and over
-other collections need classes that the standard library doesn't have yet.
+Loops over ranges like `0..10` aren't supported yet.
 
 :::
 
