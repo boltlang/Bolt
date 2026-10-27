@@ -22,3 +22,23 @@
   align-items: center;
   justify-content: center;
 }
+
+.features {
+  padding: 4rem 0;
+}
+
+.feature {
+  margin-bottom: 2rem;
+}
+
+.lead {
+  font-size: 1.1rem;
+}
+
+.feature ul {
+  padding-left: 1.2rem;
+}
+
+.feature li {
+  margin-bottom: 0.6rem;
+}
