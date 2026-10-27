@@ -183,6 +183,42 @@ let b: f64 = ZERO;
 
 Which `ZERO` is meant depends on the type that's expected.
 
+## Associated types
+
+A class can also declare a type that each impl chooses. A class of
+containers that can be indexed doesn't know what they contain, so it names
+the type of their elements `Item`, and each impl says what it is:
+
+```bolt
+class Index[C] {
+  type Item;
+  fn get(c: C, i: i32) -> Item;
+}
+
+struct Stack[T] { items: [T] }
+
+impl[T] Index[Stack[T]] {
+  type Item = T;
+  fn get(s, i) = s.items[i];
+}
+
+let s = Stack { items: [True, False] };
+let top: Bool = get(s, 0);
+```
+
+Inside the class, `Item` stands for the type of the impl that's used. Here
+it's `Bool`, since `s` is a `Stack[Bool]`.
+
+A function with a type parameter can name it as `C.Item`, if a bound or a
+`where` clause says which class it comes from:
+
+```bolt
+fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
+```
+
+Without written types, Bolt finds it by itself: `fn first(c) = get(c, 0);`
+has the type `forall a. Index[a] => fn(a) -> a.Item`.
+
 ## Classes with several parameters
 
 A class can relate several types:
