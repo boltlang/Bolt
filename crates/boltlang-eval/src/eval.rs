@@ -302,6 +302,10 @@ impl<'db> Evaluator<'db> {
             }
             (Builtin::Panic, [Value::Str(text)]) => fail(ErrorKind::Panic(text.to_string())),
             (Builtin::ArrayLen, [Value::Array(items)]) => Ok(Value::Int(items.borrow().len() as i128)),
+            (Builtin::ArrayAlloc, [Value::Int(len)]) => {
+                let len = usize::try_from(*len).map_err(|_| ErrorKind::Overflow)?;
+                Ok(Value::array(vec![Value::Unset; len]))
+            }
             _ => mismatch(format!("bad arguments to `{}`", builtin.name())),
         }
     }
@@ -411,11 +415,9 @@ impl<'db> Evaluator<'db> {
                     (Value::Array(items), Value::Int(i)) => {
                         let items = items.borrow();
                         let len = items.len();
-                        usize::try_from(*i)
-                            .ok()
-                            .and_then(|i| items.get(i))
-                            .cloned()
-                            .ok_or(ErrorKind::IndexOutOfBounds { index: *i, len }.into())
+                        let index = usize::try_from(*i).ok().filter(|&i| i < len);
+                        let index = index.ok_or(ErrorKind::IndexOutOfBounds { index: *i, len })?;
+                        element(&items, index)
                     }
                     _ => mismatch("only arrays can be indexed, with integers"),
                 }
@@ -798,6 +800,12 @@ impl<'db> Evaluator<'db> {
             return Ok(());
         }
         place.update(|current| {
+            // An unset element can be set, but not changed.
+            if (op.is_some() || !fields.is_empty())
+                && let (Some(Value::Unset), Place::Element(_, index)) = (&current, &place)
+            {
+                return fail(ErrorKind::UnsetElement { index: *index });
+            }
             let current = tuple_field(current, &fields)?;
             *current = match op {
                 Some(op) => arith(op, current.clone(), value)?,
@@ -840,6 +848,9 @@ impl<'db> Evaluator<'db> {
             Expr::Field { expr: base, name } => {
                 let (place, mut fields) = self.place(f, *base)?;
                 let shared = place.update(|current| {
+                    if let (Some(Value::Unset), Place::Element(_, index)) = (&current, &place) {
+                        return fail(ErrorKind::UnsetElement { index: *index });
+                    }
                     Ok(match tuple_field(current, &fields)? {
                         Value::Adt { fields, .. } => Some(fields.clone()),
                         _ => None,
@@ -893,7 +904,8 @@ impl<'db> Evaluator<'db> {
             },
             Pat::Slice { args, rest } => match value {
                 Value::Array(items) => {
-                    let items = items.borrow().clone();
+                    let items = items.borrow();
+                    let items = (0..items.len()).map(|i| element(&items, i)).collect::<Res<'db, Vec<_>>>()?;
                     self.match_seq(f, args, *rest, &items)
                 }
                 _ => Ok(false),
@@ -1139,6 +1151,15 @@ fn cast<'db>(value: Value<'db>, type_ref: &TypeRef) -> Res<'db, Value<'db>> {
     })
 }
 
+/// The element of `items` at `index`, which is in bounds, unless it isn't
+/// set yet.
+fn element<'db>(items: &[Value<'db>], index: usize) -> Res<'db, Value<'db>> {
+    match &items[index] {
+        Value::Unset => fail(ErrorKind::UnsetElement { index }),
+        item => Ok(item.clone()),
+    }
+}
+
 /// The items a `for` loop goes over.
 fn iterate<'db>(value: Value<'db>) -> Res<'db, Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>> {
     match value {
@@ -1147,9 +1168,12 @@ fn iterate<'db>(value: Value<'db>) -> Res<'db, Box<dyn Iterator<Item = Res<'db, 
         Value::Array(items) => {
             let mut i = 0;
             Ok(Box::new(std::iter::from_fn(move || {
-                let item = items.borrow().get(i).cloned()?;
+                let items = items.borrow();
+                if i >= items.len() {
+                    return None;
+                }
                 i += 1;
-                Some(Ok(item))
+                Some(element(&items, i - 1))
             })))
         }
         Value::Str(s) => Ok(Box::new(s.chars().collect::<Vec<_>>().into_iter().map(|c| Ok(Value::Char(c))))),

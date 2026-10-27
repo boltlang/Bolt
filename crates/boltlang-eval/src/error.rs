@@ -33,6 +33,9 @@ pub enum ErrorKind {
     Overflow,
     DivisionByZero,
     IndexOutOfBounds { index: i128, len: usize },
+    /// An element of an array from `array_alloc` that was read before it
+    /// was set.
+    UnsetElement { index: usize },
     /// No arm of a `match`, or the pattern of a `let`, matched.
     NoMatch,
     /// `break` or `continue` outside of a loop.
@@ -91,6 +94,7 @@ impl fmt::Display for ErrorKind {
             ErrorKind::IndexOutOfBounds { index, len } => {
                 write!(f, "index {index} is out of bounds for length {len}")
             }
+            ErrorKind::UnsetElement { index } => write!(f, "element {index} of the array is read before it is set"),
             ErrorKind::NoMatch => write!(f, "no pattern matched the value"),
             ErrorKind::BreakOutsideLoop => write!(f, "`break` or `continue` outside of a loop"),
             ErrorKind::ConstCycle(name) => write!(f, "the value of `{name}` depends on itself"),

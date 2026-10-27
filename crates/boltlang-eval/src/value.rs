@@ -77,6 +77,9 @@ pub enum Value<'db> {
     /// A tuple struct or variant used as a function, like `Some`.
     Constructor(Ctor<'db>),
     Closure(Rc<Closure<'db>>),
+    /// An element of an array from `array_alloc` that isn't set yet. Only
+    /// arrays hold it, and reading it is an error.
+    Unset,
 }
 
 impl<'db> Value<'db> {
@@ -291,6 +294,7 @@ impl<'db> DisplayValue<'_, 'db> {
             },
             Value::Constructor(ctor) => write!(f, "<constructor {}>", ctor.name(db)),
             Value::Closure(_) => write!(f, "<closure>"),
+            Value::Unset => write!(f, "_"),
         }
     }
 }

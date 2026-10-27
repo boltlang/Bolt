@@ -4,4 +4,9 @@ extern "bolt" {
   /// The number of elements of `xs`.
   pub fn array_len[T](xs: [T]) -> i32;
 
+  /// A new array of `len` elements that aren't set yet. Reading one before
+  /// it's set stops the program, so it isn't public: it's for types in
+  /// `std` that keep track of which elements are set, like `Vec` (#205).
+  fn array_alloc[T](len: i32) -> mut [T];
+
 }

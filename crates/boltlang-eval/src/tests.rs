@@ -234,7 +234,7 @@ fn a_file_has_the_value_of_its_last_expression_statement() {
 }
 
 /// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n  pub fn array_len[T](xs: [T]) -> i32;\n}\n";
+const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n  pub fn array_len[T](xs: [T]) -> i32;\n  pub fn array_alloc[T](len: i32) -> mut [T];\n}\n";
 
 fn db_with_builtins(code: &str) -> (TestDb, boltlang_base_db::File) {
     let mut db = TestDb::new();
@@ -271,6 +271,26 @@ fn array_len_counts_the_elements() {
     let (db, file) = db_with_builtins("let xs = mut [1, 2];\nlet n = array_len(xs);\nxs[0] = 3;\n(n, array_len([True]), array_len([]));");
     let value = Evaluator::new(&db).eval_file(file).unwrap();
     assert_eq!(value.display(&db).to_string(), "(2, 1, 0)");
+}
+
+#[test]
+fn array_alloc_makes_elements_to_set() {
+    let (db, file) = db_with_builtins("let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);");
+    let value = Evaluator::new(&db).eval_file(file).unwrap();
+    assert_eq!(value.display(&db).to_string(), "(3, [1, _, 3])");
+}
+
+#[test]
+fn reading_an_unset_element_is_an_error() {
+    let prefix = "let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\n";
+    for read in ["xs[1];", "xs[1] += 1;", "for x in xs { x; }", "match xs { [a, b, c] => a, _ => 0 };"] {
+        let (db, file) = db_with_builtins(&format!("{prefix}{read}"));
+        let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+        assert_eq!(error.kind, ErrorKind::UnsetElement { index: 1 }, "{read}");
+    }
+    let (db, file) = db_with_builtins("struct P { x: i32 }\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;");
+    let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::UnsetElement { index: 0 });
 }
 
 #[test]
