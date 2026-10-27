@@ -11,11 +11,9 @@ pub type ParseError = String;
 /// They are converted to a tree-structure in
 /// a separate pass, via `TreeBuilder`.
 ///
-/// Kept to 8 bytes: error messages live in a side table on the `Parser`
-/// (the `errors` vec) and `Event::Error` only stores an index into it.
-/// `forward_parent` uses `NonZeroU32` so `Option` is niche-optimised away
-/// (the offset is always ≥ 1 because the forward parent sits later in the
-/// event stream).
+/// `Event::Error` holds its message. `forward_parent` uses `NonZeroU32`, so
+/// that its `Option` takes no extra space: the offset is always ≥ 1 because
+/// the forward parent sits later in the event stream.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Event {
 
@@ -41,7 +39,6 @@ pub(crate) enum Event {
 
     /// Produce an error at the given syntax level.
     Error {
-        // TODO actually store the errors in a separate vec
         msg: ParseError,
     }
 }

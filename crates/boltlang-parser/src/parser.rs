@@ -49,13 +49,13 @@ impl Marker {
         }
     }
 
-    /// Abandon this node and apppend all children of this node directly to the parent node.
     /// Whether everything since this marker is one node, with no tokens or
     /// errors outside of it, so that the node can stand in for this one.
     pub(crate) fn has_one_node_since(&self, p: &Parser) -> bool {
         is_one_node(&p.events[self.pos as usize + 1..])
     }
 
+    /// Abandon this node and append all children of this node directly to the parent node.
     pub(crate) fn abandon(mut self, p: &mut Parser) {
         self.bomb.defuse();
         let idx = self.pos as usize;
