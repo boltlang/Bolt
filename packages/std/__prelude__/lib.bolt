@@ -7,6 +7,7 @@ pub import "./monoid" *;
 // Types
 pub import "./option" *;
 pub import "./list" *;
+pub import "./vec" *;
 
 pub import "./array" *;
 pub import "./io" *;

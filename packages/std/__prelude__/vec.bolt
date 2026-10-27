@@ -1,0 +1,163 @@
+// A growable array.
+
+import "./array" (array_alloc, array_len);
+import "./option" (Option, None, Some);
+import "./io" (panic);
+
+/// An array that grows: `push` adds an element at the end, and makes room
+/// when there's none left.
+///
+/// The elements are the first `len` of `items`. The rest of `items` is room
+/// to grow into, and isn't set.
+pub struct Vec[T] {
+  items: [T],
+  len: i32,
+}
+
+/// A new, empty `Vec`.
+pub fn vec_new[T]() -> mut Vec[T] = vec_with_capacity(0);
+
+/// A new, empty `Vec` with room for `capacity` elements.
+pub fn vec_with_capacity[T](capacity: i32) -> mut Vec[T] {
+  if capacity < 0 {
+    panic("a capacity can't be negative");
+  }
+  mut Vec { items: array_alloc(capacity), len: 0 }
+}
+
+/// A new `Vec` with the elements of `xs`.
+pub fn vec_from_array[T](xs: [T]) -> mut Vec[T] {
+  let v = vec_with_capacity(array_len(xs));
+  for x in xs {
+    push(v, x);
+  }
+  v
+}
+
+/// The number of elements.
+pub fn len[T](v: Vec[T]) -> i32 = v.len;
+
+/// Whether there are no elements.
+pub fn is_empty[T](v: Vec[T]) -> Bool = v.len == 0;
+
+/// How many elements fit before `v` needs more room.
+pub fn capacity[T](v: Vec[T]) -> i32 = array_len(v.items);
+
+/// The element at `index`.
+pub fn get[T](v: Vec[T], index: i32) -> T {
+  check_index(v, index);
+  v.items[index]
+}
+
+/// The element at `index`, or `None` if there's none.
+pub fn try_get[T](v: Vec[T], index: i32) -> Option[T] {
+  if index < 0 || index >= v.len {
+    return None;
+  }
+  Some(v.items[index])
+}
+
+/// Replace the element at `index` with `x`.
+pub fn set[T](v: mut Vec[T], index: i32, x: T) {
+  check_index(v, index);
+  v.items[index] = x;
+}
+
+/// Add `x` at the end.
+pub fn push[T](v: mut Vec[T], x: T) {
+  if v.len == capacity(v) {
+    grow(v, v.len + 1);
+  }
+  v.items[v.len] = x;
+  v.len += 1;
+}
+
+/// Remove the last element and give it, or `None` if there's none.
+pub fn pop[T](v: mut Vec[T]) -> Option[T] {
+  if v.len == 0 {
+    return None;
+  }
+  v.len -= 1;
+  Some(v.items[v.len])
+}
+
+/// Put `x` at `index`, moving the elements from there one place up.
+/// `index` can be `len(v)`, to add `x` at the end.
+pub fn insert[T](v: mut Vec[T], index: i32, x: T) {
+  if index < 0 || index > v.len {
+    panic("index out of bounds");
+  }
+  if v.len == capacity(v) {
+    grow(v, v.len + 1);
+  }
+  let mut i = v.len;
+  while i > index {
+    v.items[i] = v.items[i - 1];
+    i -= 1;
+  }
+  v.items[index] = x;
+  v.len += 1;
+}
+
+/// Remove the element at `index` and give it, moving the elements after it
+/// one place down.
+pub fn remove[T](v: mut Vec[T], index: i32) -> T {
+  check_index(v, index);
+  let x = v.items[index];
+  let mut i = index;
+  while i < v.len - 1 {
+    v.items[i] = v.items[i + 1];
+    i += 1;
+  }
+  v.len -= 1;
+  x
+}
+
+/// Remove all elements, keeping the room they took.
+pub fn clear[T](v: mut Vec[T]) {
+  v.len = 0;
+}
+
+/// Make room for at least `additional` more elements.
+pub fn reserve[T](v: mut Vec[T], additional: i32) {
+  if v.len + additional > capacity(v) {
+    grow(v, v.len + additional);
+  }
+}
+
+/// A new array with the elements of `v`.
+pub fn to_array[T](v: Vec[T]) -> mut [T] {
+  let xs = array_alloc(v.len);
+  let mut i = 0;
+  while i < v.len {
+    xs[i] = v.items[i];
+    i += 1;
+  }
+  xs
+}
+
+fn check_index[T](v: Vec[T], index: i32) {
+  if index < 0 || index >= v.len {
+    panic("index out of bounds");
+  }
+}
+
+/// Move the elements to a new array with room for at least `needed`, at
+/// least twice the old room, so that adding `n` elements one at a time
+/// copies O(n) elements in all.
+fn grow[T](v: mut Vec[T], needed: i32) {
+  let mut new_capacity = capacity(v) * 2;
+  if new_capacity < 4 {
+    new_capacity = 4;
+  }
+  if new_capacity < needed {
+    new_capacity = needed;
+  }
+  let items = array_alloc(new_capacity);
+  let mut i = 0;
+  while i < v.len {
+    items[i] = v.items[i];
+    i += 1;
+  }
+  v.items = items;
+}
