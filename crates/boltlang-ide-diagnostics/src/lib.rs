@@ -78,6 +78,8 @@ impl DiagnosticCode {
     pub const MUT_INSIDE_IMM: Self = Self("E0223");
     pub const MUT_FIELD: Self = Self("E0224");
     pub const UNKNOWN_MUTABILITY: Self = Self("E0225");
+    pub const NO_ASSOC_TYPE: Self = Self("E0226");
+    pub const AMBIGUOUS_ASSOC_TYPE: Self = Self("E0227");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -344,6 +346,17 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             );
             (C::MUT_INSIDE_IMM, message)
         }
+        K::NoAssocType => (
+            C::NO_ASSOC_TYPE,
+            format!(
+                "cannot find the associated type `{source}`: none of the classes that its type parameter has an \
+                 instance of declares it; add a bound or a `where` clause"
+            ),
+        ),
+        K::AmbiguousAssocType => (
+            C::AMBIGUOUS_ASSOC_TYPE,
+            format!("`{source}` is ambiguous: several classes of its type parameter declare it"),
+        ),
         K::UnknownMutability => (
             C::UNKNOWN_MUTABILITY,
             format!(

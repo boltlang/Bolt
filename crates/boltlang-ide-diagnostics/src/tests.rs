@@ -808,6 +808,21 @@ extern "bolt" {
 }
 
 #[test]
+fn associated_types() {
+    check(
+        r#"
+class Index[C] { type Item; }
+class Other[C] { type Item; }
+fn none[C](c: C) -> C.Item = none(c);
+                  //^^^^^^ error: cannot find the associated type `C.Item`: none of the classes that its type parameter has an instance of declares it; add a bound or a `where` clause
+fn both[C](c: C) -> C.Item where Index[C], Other[C] = both(c);
+                  //^^^^^^ error: `C.Item` is ambiguous: several classes of its type parameter declare it
+fn one[C](c: C) -> C.Item where Index[C] = one(c);
+"#,
+    );
+}
+
+#[test]
 fn assign_to_immutable() {
     check(
         r#"

@@ -297,14 +297,21 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.result.diagnostics.extend(ctx.diagnostics.into_iter().map(InferenceDiagnostic::Lower));
         // An array without `mut` or `imm` in a body can be either, which
         // the value decides.
-        ty.fill_unwritten(&mut || self.solver.new_var(VarKind::Mutability))
+        let ty = ty.fill_unwritten(&mut || self.solver.new_var(VarKind::Mutability));
+        let origin = self.origin(expr);
+        self.solver.flatten_assoc(&ty, origin)
     }
 
     /// Infer a function body with the given parameter and return types.
     pub fn infer_fn_body(&mut self, params: &[Ty<'db>], ret: &Ty<'db>) {
+        // The associated types in the signature, like `C.Item`, are decided
+        // by the solver, which knows the `where` clauses and impls.
+        let origin = self.origin(self.body.body_expr);
+        let ret = &self.solver.flatten_assoc(ret, origin);
         let mut params = params.iter();
         for &pat in self.body.params.iter() {
             let ty = params.next().cloned().unwrap_or(Ty::Error);
+            let ty = self.solver.flatten_assoc(&ty, origin);
             self.check_pat(pat, &ty);
         }
         self.return_ty = ret.clone();

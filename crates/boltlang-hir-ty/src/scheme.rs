@@ -12,9 +12,10 @@ use boltlang_hir_def::{
 
 use crate::{
     lower::{
-        ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_header, named_mutabilities, subst_params,
+        ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty, impl_header, named_mutabilities,
+        subst_params,
     },
-    solve::{Constraint, FieldConstraint, Origin, Solver},
+    solve::{Constraint, FieldConstraint, Origin, Solver, normalize_assoc},
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
 
@@ -42,7 +43,7 @@ impl<'db> Scheme<'db> {
     pub fn instantiate(&self, solver: &mut Solver<'db>, origin: Origin<'db>) -> Ty<'db> {
         let params: HashMap<_, _> = self.params.iter().map(|p| (*p, solver.new_var(VarKind::General))).collect();
         let bound: Vec<_> = (0..self.bound).map(|_| solver.new_var(VarKind::General)).collect();
-        let mut subst = |t: &Ty<'db>| {
+        let subst = |t: &Ty<'db>| {
             t.fold(&mut |t| match t {
                 Ty::Param(p) => params.get(p).cloned(),
                 Ty::Bound(i) => Some(bound[*i as usize].clone()),
@@ -50,12 +51,21 @@ impl<'db> Scheme<'db> {
             })
         };
         for pred in self.predicates.iter() {
-            solver.add(Constraint::Class { constraint: pred.map(&mut subst), origin });
+            let constraint = pred.map(|t| {
+                let t = subst(t);
+                solver.flatten_assoc(&t, origin)
+            });
+            solver.add(Constraint::Class { constraint, origin });
         }
         for field in self.fields.iter() {
-            solver.add(Constraint::Field { constraint: field.map(&mut subst), origin });
+            let constraint = field.map(|t| {
+                let t = subst(t);
+                solver.flatten_assoc(&t, origin)
+            });
+            solver.add(Constraint::Field { constraint, origin });
         }
-        subst(&self.ty)
+        let ty = subst(&self.ty);
+        solver.flatten_assoc(&ty, origin)
     }
 
     /// Show the scheme like `forall a. Show[a] => fn(a) -> a`, with fields
@@ -164,8 +174,24 @@ pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option
             None => t,
         }
     };
-    let params = sig.params.iter().map(|t| t.as_ref().map_or(Ty::Error, subst)).collect();
-    let ret = sig.ret.as_ref().map_or(Ty::Error, |t| subst(&t.fill_unwritten(&mut imm)));
+    // The class's own associated types are the impl's: `Item` of `class
+    // Index[C]` is `T` in `impl[T] Index[Vec[T]] { type Item = T; }`.
+    let own_assoc = |t: Ty<'db>| {
+        t.fold(&mut |t| match t {
+            Ty::Assoc(alias, args)
+                if alias.container(db) == ItemContainerId::Class(target.class) && *args == target.args =>
+            {
+                Some(impl_assoc_ty(db, imp, *alias).unwrap_or(Ty::Error))
+            }
+            _ => None,
+        })
+    };
+    // Others, like those of a superclass, come from the impls visible from
+    // the impl.
+    let file = imp.file(db);
+    let normalize = |t: Ty<'db>| normalize_assoc(db, file, &own_assoc(t));
+    let params = sig.params.iter().map(|t| normalize(t.as_ref().map_or(Ty::Error, subst))).collect();
+    let ret = normalize(sig.ret.as_ref().map_or(Ty::Error, |t| subst(&t.fill_unwritten(&mut imm))));
     Some((params, ret))
 }
 

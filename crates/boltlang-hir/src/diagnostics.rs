@@ -125,6 +125,11 @@ pub enum DiagnosticKind<'db> {
     MutField,
     /// A named mutability that isn't one of the function's or impl's.
     UnknownMutability,
+    /// A path like `C.Item` where no class of `C` declares the associated
+    /// type.
+    NoAssocType,
+    /// A path like `C.Item` where several classes of `C` declare it.
+    AmbiguousAssocType,
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -552,6 +557,8 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::NoMutability(id) => (*id, DiagnosticKind::NoMutability),
                 LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
                 LowerDiagnostic::UnknownMutability(id) => (*id, DiagnosticKind::UnknownMutability),
+                LowerDiagnostic::NoAssocType { type_ref } => (*type_ref, DiagnosticKind::NoAssocType),
+                LowerDiagnostic::AmbiguousAssocType { type_ref } => (*type_ref, DiagnosticKind::AmbiguousAssocType),
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {

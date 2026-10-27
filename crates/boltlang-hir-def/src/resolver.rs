@@ -203,11 +203,38 @@ impl<'db> Resolver<'db> {
         None
     }
 
+    /// An associated type of the class or impl the name is in, like `Item`
+    /// in `class Index[C] { type Item; fn get(c: C, i: i32) -> Item; }`.
+    fn resolve_assoc_type(&self, db: &'db dyn Db, name: &Name) -> Option<TypeAliasId<'db>> {
+        self.scopes.iter().rev().find_map(|scope| {
+            let container = match scope {
+                Scope::Generics(GenericDefId::Class(id), _) => ItemContainerId::Class(*id),
+                Scope::Generics(GenericDefId::Impl(id), _) => ItemContainerId::Impl(*id),
+                _ => return None,
+            };
+            let items = match container {
+                ItemContainerId::Class(id) => &id.item(db).items,
+                ItemContainerId::Impl(id) => &id.item(db).items,
+                _ => return None,
+            };
+            items.iter().find_map(|item| match *item {
+                AssocItem::TypeAlias(idx) => {
+                    let alias = TypeAliasId::new(db, container, idx);
+                    (alias.item(db).name.as_ref() == Some(name)).then_some(alias)
+                }
+                _ => None,
+            })
+        })
+    }
+
     pub fn resolve_path_in_type_ns(&self, db: &'db dyn Db, path: &Path) -> Option<TypeResolution<'db>> {
         let segments = &path.segments;
         let first = segments.first()?;
         if let Some(Local::Type(ty)) = self.resolve_local(Namespace::Types, &first.name) {
             return Some(TypeResolution { ty, unresolved: rest(segments, 1) });
+        }
+        if let Some(alias) = self.resolve_assoc_type(db, &first.name) {
+            return Some(TypeResolution { ty: TypeNs::TypeAlias(alias), unresolved: rest(segments, 1) });
         }
         let (file, i) = self.walk_files(db, segments);
         let Some(def) = lookup(db, file, self.file, Namespace::Types, &segments.get(i)?.name) else {

@@ -9,14 +9,17 @@ use boltlang_hir_def::{
     Name,
     body::DefWithBodyId,
     hir::{ExprId, PatId, TypeRefId},
-    ids::{FunctionId, ImplId},
+    ids::{FunctionId, ImplId, ItemContainerId, TypeAliasId},
     item_tree::{ModItem, item_tree},
     nameres::{file_scope, prelude_file, resolve_import_path},
     resolver::GenericDefId,
 };
 
 use crate::{
-    lower::{ClassConstraint, VariantDef, field_types, generic_predicates, impl_header, struct_args, subst_params},
+    lower::{
+        ClassConstraint, VariantDef, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
+        subst_params,
+    },
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
 };
@@ -83,6 +86,27 @@ impl<'db> FieldConstraint<'db> {
     }
 }
 
+/// That `ty` is the associated type `alias` of its class for `args`, like
+/// `?0 = Vec[i32].Item`. It's solved once an impl for `args` is found, which
+/// gives the type, or once `args` are type parameters that a `where` clause
+/// gives an instance for, which makes `ty` the associated type itself.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct AssocConstraint<'db> {
+    pub alias: TypeAliasId<'db>,
+    pub args: Box<[Ty<'db>]>,
+    pub ty: Ty<'db>,
+}
+
+impl<'db> AssocConstraint<'db> {
+    /// The class that declares the associated type.
+    pub fn class(&self, db: &'db dyn Db) -> ClassConstraint<'db> {
+        let ItemContainerId::Class(class) = self.alias.container(db) else {
+            unreachable!("an associated type without a definition is in a class")
+        };
+        ClassConstraint { class, args: self.args.clone() }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Constraint<'db> {
     /// The type found must be the type expected.
@@ -91,6 +115,8 @@ pub enum Constraint<'db> {
     Class { constraint: ClassConstraint<'db>, origin: Origin<'db> },
     /// The type must have the field.
     Field { constraint: FieldConstraint<'db>, origin: Origin<'db> },
+    /// The type is an associated type of a class.
+    Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -151,6 +177,7 @@ pub struct Solver<'db> {
     impls: &'db [ImplId<'db>],
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
+    pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pub errors: Vec<TypeError<'db>>,
 }
 
@@ -164,6 +191,7 @@ impl<'db> Solver<'db> {
             impls: visible_impls(db, file),
             pending: Vec::new(),
             pending_fields: Vec::new(),
+            pending_assoc: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -211,6 +239,94 @@ impl<'db> Solver<'db> {
                     self.pending_fields.push((constraint, origin));
                 }
             }
+            // Solved right away when possible too.
+            Constraint::Assoc { constraint, origin } => {
+                if !self.solve_assoc(&constraint, origin) {
+                    self.pending_assoc.push((constraint, origin));
+                }
+            }
+        }
+    }
+
+    /// `ty` with each associated type in it, like `Vec[?0].Item`, replaced
+    /// by a new variable that a [`Constraint::Assoc`] decides.
+    pub fn flatten_assoc(&mut self, ty: &Ty<'db>, origin: Origin<'db>) -> Ty<'db> {
+        if !ty.any(&mut |t| matches!(t, Ty::Assoc(..))) {
+            return ty.clone();
+        }
+        ty.fold(&mut |t| {
+            let Ty::Assoc(alias, args) = t else { return None };
+            let args = args.iter().map(|a| self.flatten_assoc(a, origin)).collect();
+            let var = self.new_var(VarKind::General);
+            let constraint = AssocConstraint { alias: *alias, args, ty: var.clone() };
+            self.add(Constraint::Assoc { constraint, origin });
+            Some(var)
+        })
+    }
+
+    /// Solve an associated type constraint if its arguments are known well
+    /// enough. Returns `false` if it has to wait.
+    fn solve_assoc(&mut self, constraint: &AssocConstraint<'db>, origin: Origin<'db>) -> bool {
+        let goal = constraint.class(self.db).map(|t| self.unifier.resolve(t));
+        if goal.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+            self.unifier.set_error(&constraint.ty);
+            return true;
+        }
+        let mut found = None;
+        for &imp in self.impls {
+            let Some(target) = &impl_header(self.db, imp).class else { continue };
+            if target.class != goal.class {
+                continue;
+            }
+            let mut subst = HashMap::new();
+            match match_all(&target.args, &goal.args, &mut subst) {
+                Match::Yes if found.is_none() => found = Some((imp, subst)),
+                // Overlapping impls, or one that may match: wait until the
+                // types decide.
+                Match::Yes | Match::Maybe => return false,
+                Match::No => {}
+            }
+        }
+        let ty = match found {
+            Some((imp, subst)) => match impl_assoc_ty(self.db, imp, constraint.alias) {
+                Some(ty) => ty.fold(&mut |t| match t {
+                    Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
+                        Some(subst.get(p).cloned().unwrap_or(Ty::Error))
+                    }
+                    _ => None,
+                }),
+                // The impl doesn't define it, which is reported with the impl.
+                None => Ty::Error,
+            },
+            None if goal.args.iter().any(has_vars) => return false,
+            // `C.Item` for a parameter `C` with `where Index[C]`.
+            None if self.assumptions.contains(&goal) => Ty::Assoc(constraint.alias, goal.args.clone()),
+            None => {
+                let error = TypeError::NoInstance { origin, constraint: goal };
+                if !self.errors.contains(&error) {
+                    self.errors.push(error);
+                }
+                Ty::Error
+            }
+        };
+        if ty == Ty::Error {
+            self.unifier.set_error(&constraint.ty);
+        } else {
+            // The variable stands for the use, whose context decides what
+            // it should be: `let n: i32 = get(...)` expects an `i32`.
+            self.equal(&constraint.ty, &ty, origin);
+        }
+        true
+    }
+
+    /// Give the associated types that couldn't be decided the type they
+    /// stand for, like `?0.Item`, so that a function whose argument's type
+    /// isn't known keeps them in its type: `forall a. Index[a] => fn(a) ->
+    /// a.Item`.
+    pub fn keep_pending_assoc(&mut self) {
+        for (constraint, _) in std::mem::take(&mut self.pending_assoc) {
+            let args = constraint.args.iter().map(|t| self.unifier.resolve(t)).collect();
+            let _ = self.unifier.unify(&Ty::Assoc(constraint.alias, args), &constraint.ty);
         }
     }
 
@@ -285,6 +401,13 @@ impl<'db> Solver<'db> {
                     self.pending_fields.push((constraint, origin));
                 }
             }
+            for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {
+                if self.solve_assoc(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_assoc.push((constraint, origin));
+                }
+            }
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
@@ -292,7 +415,14 @@ impl<'db> Solver<'db> {
                         progress = true;
                         self.pending.extend(subgoals.into_iter().map(|c| (c, origin)));
                     }
-                    Step::NoInstance => self.errors.push(TypeError::NoInstance { origin, constraint }),
+                    Step::NoInstance => {
+                        // An associated type of the same class may have
+                        // reported it already.
+                        let error = TypeError::NoInstance { origin, constraint };
+                        if !self.errors.contains(&error) {
+                            self.errors.push(error);
+                        }
+                    }
                     Step::Wait => self.pending.push((constraint, origin)),
                 }
             }
@@ -331,6 +461,7 @@ impl<'db> Solver<'db> {
     /// what can be, and report the rest as ambiguous.
     pub fn finish(&mut self) {
         self.solve_with_defaults();
+        self.keep_pending_assoc();
         for (constraint, origin) in self.take_pending() {
             self.errors.push(TypeError::Ambiguous { origin, constraint });
         }
@@ -527,6 +658,39 @@ pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<ImplId<'db>> {
         }
     }
     impls
+}
+
+/// `ty` with the associated types in it that an impl visible in `file`
+/// decides replaced by what the impl gives, like `Vec[i32].Item` by `i32`.
+/// Those whose arguments aren't known well enough stay.
+pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db> {
+    if !ty.any(&mut |t| matches!(t, Ty::Assoc(..))) {
+        return ty.clone();
+    }
+    ty.fold(&mut |t| {
+        let Ty::Assoc(alias, args) = t else { return None };
+        let args: Box<[Ty<'db>]> = args.iter().map(|a| normalize_assoc(db, file, a)).collect();
+        let ItemContainerId::Class(class) = alias.container(db) else { return None };
+        let mut found = None;
+        for &imp in visible_impls(db, file) {
+            let Some(target) = &impl_header(db, imp).class else { continue };
+            if target.class != class {
+                continue;
+            }
+            let mut subst = HashMap::new();
+            match match_all(&target.args, &args, &mut subst) {
+                Match::Yes if found.is_none() => found = Some((imp, subst)),
+                Match::Yes | Match::Maybe => return Some(Ty::Assoc(*alias, args)),
+                Match::No => {}
+            }
+        }
+        let Some((imp, subst)) = found else { return Some(Ty::Assoc(*alias, args)) };
+        let ty = impl_assoc_ty(db, imp, *alias)?;
+        Some(ty.fold(&mut |t| match t {
+            Ty::Param(p) if p.def == GenericDefId::Impl(imp) => Some(subst.get(p).cloned().unwrap_or(Ty::Error)),
+            _ => None,
+        }))
+    })
 }
 
 /// Whether a type has an inference variable in it.

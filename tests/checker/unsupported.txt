@@ -21,14 +21,11 @@ warning at `yield 1`: unsupported
 Unsupported types have the error type
 ================================================================================
 fn f(x: impl Show) = x;
-fn g[T](x: T.Item) = x;
 
 --------------------------------------------------------------------------------
 f: fn({error}) -> {error}
-g: forall T. fn({error}) -> {error}
 --------------------------------------------------------------------------------
 warning at `impl Show`: unsupported
-warning at `T.Item`: unsupported
 
 ================================================================================
 Arithmetic on any type is accepted until there are numeric classes

@@ -230,6 +230,8 @@ impl<'db> Unifier<'db> {
             (Ty::Builtin(x), Ty::Builtin(y)) if x == y => Ok(()),
             (Ty::Param(x), Ty::Param(y)) if x == y => Ok(()),
             (Ty::Bound(x), Ty::Bound(y)) if x == y => Ok(()),
+            // `C.Item` only equals itself.
+            (Ty::Assoc(x, xs), Ty::Assoc(y, ys)) if x == y && xs.len() == ys.len() => self.unify_all(xs, ys),
             _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),
         }
     }

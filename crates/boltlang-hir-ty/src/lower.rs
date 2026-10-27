@@ -6,7 +6,8 @@ use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
     hir::{GenericArg, MutabilityRef, Path, TypeRef, TypeRefId},
-    ids::{ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, StructId, TypeAliasId},
+    ids::{ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
+    item_tree::AssocItem,
     resolver::{GenericDefId, Resolver, TypeNs, TypeResolution},
     signatures::{
         self, FieldList, GenericParams, class_signature, const_signature, enum_signature, function_signature,
@@ -73,9 +74,12 @@ pub enum LowerDiagnostic {
     KindMismatch { type_ref: TypeRefId, expected: Kind, found: Kind },
     /// A type alias that refers to itself.
     RecursiveAlias(TypeRefId),
-    /// Something the checker doesn't support yet, like `impl Trait` or
-    /// associated types.
+    /// Something the checker doesn't support yet, like `impl Trait`.
     Unsupported(TypeRefId),
+    /// A path like `C.Item` where no class of `C` has the associated type.
+    NoAssocType { type_ref: TypeRefId },
+    /// A path like `C.Item` where several classes of `C` have it.
+    AmbiguousAssocType { type_ref: TypeRefId },
     /// `mut` or `imm` before a type that isn't an array or a struct, like
     /// `mut i32`, or before one that already has the other.
     NoMutability(TypeRefId),
@@ -94,12 +98,15 @@ pub struct TyLoweringContext<'a, 'db> {
     store: &'a ExpressionStore,
     /// The function or impl whose named mutabilities can be used.
     mutabilities: Option<GenericDefId<'db>>,
+    /// The item whose predicates are being lowered, if any. Its parameters'
+    /// associated types, like `C.Item`, can't be found through them.
+    predicates_of: Option<GenericDefId<'db>>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
 impl<'a, 'db> TyLoweringContext<'a, 'db> {
     pub fn new(db: &'db dyn Db, resolver: &'a Resolver<'db>, store: &'a ExpressionStore) -> Self {
-        TyLoweringContext { db, resolver, store, mutabilities: None, diagnostics: Vec::new() }
+        TyLoweringContext { db, resolver, store, mutabilities: None, predicates_of: None, diagnostics: Vec::new() }
     }
 
     /// Let the types use the named mutabilities of `def`, a function or an
@@ -232,10 +239,8 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             self.lower_args_unchecked(id, args);
             return (Ty::Error, None);
         };
-        if resolution.unresolved.is_some() {
-            // `T.Item` and other associated types.
-            self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-            return (Ty::Error, None);
+        if let Some(unresolved) = resolution.unresolved {
+            return (self.lower_assoc_path(id, path, resolution.ty, unresolved), Some(Kind::Type));
         }
         let (head, kind) = match resolution.ty {
             // Like an array, a struct written without `mut` or `imm` has its
@@ -286,13 +291,57 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 Ty::Error
             }
             Some(ty) => subst_params(ty, GenericDefId::TypeAlias(alias), &args),
-            // An associated type without a definition.
-            None => {
-                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                Ty::Error
-            }
+            // An associated type of a class, named from inside the class:
+            // `Item` in `class Index[C]` is `C.Item`.
+            None => match alias.container(self.db) {
+                ItemContainerId::Class(class) => Ty::Assoc(alias, identity_args(self.db, GenericDefId::Class(class))),
+                _ => {
+                    self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                    Ty::Error
+                }
+            },
         };
         (ty, Some(Kind::Type))
+    }
+
+    /// A path like `C.Item`: an associated type of a type parameter, from a
+    /// class that the parameter has an instance of, through a bound or a
+    /// `where` clause of the item that declares it, or a superclass of one.
+    /// Inside a class, its own parameter has an instance of the class.
+    /// Other types and longer paths aren't supported yet.
+    fn lower_assoc_path(&mut self, id: TypeRefId, path: &Path, head: TypeNs<'db>, unresolved: usize) -> Ty<'db> {
+        let db = self.db;
+        let (TypeNs::GenericParam { def, index }, [segment]) = (head, &path.segments[unresolved..]) else {
+            self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+            return Ty::Error;
+        };
+        if segment.generic_args.is_some() || self.predicates_of == Some(def) {
+            self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+            return Ty::Error;
+        }
+        let target = Ty::Param(GenericParamId { def, index });
+        let mut found: Vec<(TypeAliasId<'db>, Box<[Ty<'db>]>)> = Vec::new();
+        for constraint in constraints_on(db, def) {
+            if constraint.args.first() != Some(&target) {
+                continue;
+            }
+            if let Some(alias) = assoc_type(db, constraint.class, &segment.name)
+                && !found.iter().any(|(a, args)| *a == alias && *args == constraint.args)
+            {
+                found.push((alias, constraint.args));
+            }
+        }
+        match &found[..] {
+            [(alias, args)] => Ty::Assoc(*alias, args.clone()),
+            [] => {
+                self.diagnostics.push(LowerDiagnostic::NoAssocType { type_ref: id });
+                Ty::Error
+            }
+            _ => {
+                self.diagnostics.push(LowerDiagnostic::AmbiguousAssocType { type_ref: id });
+                Ty::Error
+            }
+        }
     }
 
     /// The arguments of something that must be given exactly one for each
@@ -440,6 +489,54 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
     names.into()
 }
 
+/// The class constraints that hold for the parameters of `def`: its bounds
+/// and `where` clauses, a class's own instance, and their superclasses.
+pub fn constraints_on<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Vec<ClassConstraint<'db>> {
+    let mut stack: Vec<ClassConstraint<'db>> = generic_predicates(db, def).predicates.to_vec();
+    if let GenericDefId::Class(class) = def {
+        stack.push(ClassConstraint { class, args: identity_args(db, def) });
+    }
+    let mut out = Vec::new();
+    while let Some(c) = stack.pop() {
+        if out.contains(&c) {
+            continue;
+        }
+        let class_def = GenericDefId::Class(c.class);
+        for sup in generic_predicates(db, class_def).predicates.iter() {
+            stack.push(sup.map(|t| subst_params(t, class_def, &c.args)));
+        }
+        out.push(c);
+    }
+    out
+}
+
+/// The associated type called `name` that `class` declares, if any.
+pub fn assoc_type<'db>(db: &'db dyn Db, class: ClassId<'db>, name: &Name) -> Option<TypeAliasId<'db>> {
+    class.item(db).items.iter().find_map(|item| match *item {
+        AssocItem::TypeAlias(idx) => {
+            let alias = TypeAliasId::new(db, ItemContainerId::Class(class), idx);
+            (alias.item(db).name.as_ref() == Some(name)).then_some(alias)
+        }
+        _ => None,
+    })
+}
+
+/// The type that `imp` gives the associated type `alias` of its class, in
+/// terms of the impl's parameters, if it defines it.
+pub fn impl_assoc_ty<'db>(db: &'db dyn Db, imp: ImplId<'db>, alias: TypeAliasId<'db>) -> Option<Ty<'db>> {
+    let name = alias.item(db).name.as_ref()?;
+    imp.item(db).items.iter().find_map(|item| match *item {
+        AssocItem::TypeAlias(idx) => {
+            let own = TypeAliasId::new(db, ItemContainerId::Impl(imp), idx);
+            if own.item(db).name.as_ref() != Some(name) {
+                return None;
+            }
+            type_alias_ty(db, own).ty.clone()
+        }
+        _ => None,
+    })
+}
+
 /// Replace the type parameters of `def` with `args`.
 pub fn subst_params<'db>(ty: &Ty<'db>, def: GenericDefId<'db>, args: &[Ty<'db>]) -> Ty<'db> {
     ty.fold(&mut |t| match t {
@@ -516,6 +613,7 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         }
     };
     let mut ctx = TyLoweringContext::new(db, &resolver, store).with_mutabilities(def);
+    ctx.predicates_of = Some(def);
     // An array without `mut` or `imm` in a predicate, like the `[T]` of
     // `where Show[[T]]`, is `imm`: it can't be the same hidden parameter as
     // one in the signature.

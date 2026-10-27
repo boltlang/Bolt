@@ -158,6 +158,7 @@ fn infer_group<'db>(
 
     // Integer variables don't become type parameters; they default first.
     solver.solve_with_defaults();
+    solver.keep_pending_assoc();
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
     let errors = std::mem::take(&mut solver.errors).into_iter().map(|e| resolve_error(&solver.unifier, e)).collect();

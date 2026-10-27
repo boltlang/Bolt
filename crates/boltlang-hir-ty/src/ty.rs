@@ -6,7 +6,7 @@ use std::fmt;
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
     builtin_type::BuiltinType,
-    ids::{EnumId, StructId},
+    ids::{EnumId, ItemContainerId, StructId, TypeAliasId},
     resolver::GenericDefId,
 };
 
@@ -81,6 +81,16 @@ pub enum Ty<'db> {
     Unwritten,
     /// `fn(A, B) -> C`
     Fn(Box<[Ty<'db>]>, Box<Ty<'db>>),
+    /// An associated type of a class applied to types, like `C.Item` for
+    /// `type Item;` of `class Index[C]`: the type alias declared in the
+    /// class, and the class's arguments. Which type it is depends on the
+    /// impl for the arguments. In a body, the checker replaces it with a
+    /// variable and a constraint that the solver decides once an impl is
+    /// found (see [`Constraint::Assoc`](crate::solve::Constraint::Assoc)).
+    /// When the arguments are type parameters with a `where` clause, like
+    /// `C` in `fn first[C](c: C) -> C.Item where Index[C]`, it stays as it
+    /// is, and only equals itself.
+    Assoc(TypeAliasId<'db>, Box<[Ty<'db>]>),
     /// A type parameter as seen inside the item that declares it, where it
     /// stands for any type and only equals itself.
     Param(GenericParamId<'db>),
@@ -181,6 +191,7 @@ impl<'db> Ty<'db> {
                 params.iter().for_each(&mut f);
                 f(ret);
             }
+            Ty::Assoc(_, args) => args.iter().for_each(f),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Mutability(_)
@@ -208,6 +219,7 @@ impl<'db> Ty<'db> {
             Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
             Ty::Fn(params, ret) => Ty::Fn(fold_all(params, f), Box::new(ret.fold(f))),
+            Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
             Ty::Var(_)
             | Ty::Builtin(_)
             | Ty::Mutability(_)
@@ -436,6 +448,23 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 write!(f, ") -> {}", show(ret))
             }
             Ty::Param(param) => write!(f, "{}", param_name(db, *param)),
+            // `C.Item`, or `Convert[A, B].Item` for a class with several
+            // parameters.
+            Ty::Assoc(alias, args) => {
+                let name = alias.item(db).name.as_ref().map_or("?", |n| n.as_str());
+                match &args[..] {
+                    [arg] if !matches!(arg, Ty::Fn(..) | Ty::Assoc(..)) => write!(f, "{}.{name}", show(arg)),
+                    _ => {
+                        let class = match alias.container(db) {
+                            ItemContainerId::Class(c) => c.item(db).name.as_ref().map_or("?", |n| n.as_str()),
+                            _ => "?",
+                        };
+                        write!(f, "{class}[")?;
+                        list(f, args)?;
+                        write!(f, "].{name}")
+                    }
+                }
+            }
             Ty::Bound(index) => match named(Unknown::Bound(*index)) {
                 Some(name) => f.write_str(name),
                 None => write!(f, "{}", bound_name(*index)),
