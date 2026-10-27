@@ -1,0 +1,16 @@
+# Local settings (contains private machine permissions & preferences)
+settings.local.json
+
+# Local environment & secret overrides
+*.env
+*.env.local
+
+# Session history & execution logs (if generated locally)
+*.log
+history/
+p<rojects/
+
+# Temporary planning and workspace files
+plans/
+file-history/
+worktrees/
