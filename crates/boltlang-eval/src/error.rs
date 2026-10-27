@@ -33,6 +33,9 @@ pub enum ErrorKind {
     Overflow,
     DivisionByZero,
     IndexOutOfBounds { index: i128, len: usize },
+    /// A range of `start..end` that isn't in an array of `len` elements, or
+    /// whose end is before its start.
+    RangeOutOfBounds { start: i128, end: i128, len: usize },
     /// An element of an array from `array_alloc` that was read before it
     /// was set.
     UnsetElement { index: usize },
@@ -96,6 +99,9 @@ impl fmt::Display for ErrorKind {
             ErrorKind::DivisionByZero => write!(f, "division by zero"),
             ErrorKind::IndexOutOfBounds { index, len } => {
                 write!(f, "index {index} is out of bounds for length {len}")
+            }
+            ErrorKind::RangeOutOfBounds { start, end, len } => {
+                write!(f, "the range {start}..{end} is out of bounds for length {len}")
             }
             ErrorKind::UnsetElement { index } => write!(f, "element {index} of the array is read before it is set"),
             ErrorKind::NoMatch => write!(f, "no pattern matched the value"),

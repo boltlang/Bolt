@@ -90,7 +90,11 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
                     Err(fail(&mut caller, error))
                 },
             ),
-            Builtin::ArrayLen | Builtin::ArrayAlloc | Builtin::ArrayGet | Builtin::ArraySet => {
+            Builtin::ArrayLen
+            | Builtin::ArrayAlloc
+            | Builtin::ArrayGet
+            | Builtin::ArraySet
+            | Builtin::ArrayCopy => {
                 unreachable!("not in `Builtin::HOST`")
             }
         };

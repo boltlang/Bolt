@@ -295,6 +295,37 @@ fn reading_an_unset_element_is_an_error() {
 }
 
 #[test]
+fn array_copy_copies_ranges() {
+    // Between arrays, and within one, to the right and to the left.
+    let code = "let a = mut [1, 2, 3, 4, 5];\n\
+                let b = mut [0, 0, 0];\n\
+                array_copy(b, 1, a, 3, 2);\n\
+                let c = mut [1, 2, 3, 4, 5];\n\
+                array_copy(c, 1, c, 0, 3);\n\
+                let d = mut [1, 2, 3, 4, 5];\n\
+                array_copy(d, 0, d, 2, 3);\n\
+                array_copy(d, 5, d, 0, 0);\n\
+                (b, c, d);";
+    assert_eq!(run(code), "([0, 4, 5], [1, 1, 2, 3, 5], [3, 4, 5, 4, 5])");
+}
+
+#[test]
+fn array_copy_copies_unset_elements_as_they_are() {
+    let code = format!("{ARRAY_ALLOC}let a: mut [i32] = array_alloc(3);\na[0] = 1;\nlet b = mut [7, 8, 9];\narray_copy(b, 0, a, 0, 3);\nb;");
+    assert_eq!(run(&code), "[1, _, _]");
+}
+
+#[test]
+fn array_copy_checks_its_ranges() {
+    let limits = Limits::default();
+    let range = |start, end, len| ErrorKind::RangeOutOfBounds { start, end, len };
+    assert_eq!(error_kind("array_copy(mut [0, 0], 0, [1, 2, 3], 2, 2);", limits), range(2, 4, 3));
+    assert_eq!(error_kind("array_copy(mut [0, 0], 1, [1, 2, 3], 0, 2);", limits), range(1, 3, 2));
+    assert_eq!(error_kind("array_copy(mut [0, 0], 0, [1, 2], -1, 1);", limits), range(-1, 0, 2));
+    assert_eq!(error_kind("array_copy(mut [0, 0], 0, [1, 2], 1, -1);", limits), range(1, 0, 2));
+}
+
+#[test]
 fn an_error_in_std_is_reported_at_the_program() {
     // `xs[5]` fails in `std`'s `impl Index[[T]]`.
     let (db, file) = db_with_std("let xs = [1];\nxs[5];");

@@ -20,6 +20,11 @@ extern "bolt" {
   /// Replace the element at `i` with `x`. Use `xs[i] = x` instead.
   pub(package) fn array_set[T](xs: mut [T], i: i32, x: T);
 
+  /// Copy `count` elements of `src` from `src_start` to `dst` from
+  /// `dst_start`. `src` and `dst` can be the same array, and the ranges can
+  /// overlap.
+  pub fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32);
+
 }
 
 /// `xs[i]`: the element at `i`.

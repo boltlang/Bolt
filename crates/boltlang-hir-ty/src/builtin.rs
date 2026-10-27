@@ -46,6 +46,11 @@ pub enum Builtin {
     /// `fn array_set[T](xs: mut [T], i: i32, x: T)`: replace the element at
     /// `i`, for `xs[i] = x` through the prelude's `impl IndexMut[mut [T]]`.
     ArraySet,
+    /// `fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start:
+    /// i32, count: i32)`: copy `count` elements of `src` from `src_start` to
+    /// `dst` from `dst_start`. The two can be the same array, and the ranges
+    /// can overlap. Unset elements are copied as they are.
+    ArrayCopy,
 }
 
 impl Builtin {
@@ -56,6 +61,7 @@ impl Builtin {
         Builtin::ArrayAlloc,
         Builtin::ArrayGet,
         Builtin::ArraySet,
+        Builtin::ArrayCopy,
     ];
 
     /// The builtins that compiled code imports from the host. The others
@@ -70,6 +76,7 @@ impl Builtin {
             Builtin::ArrayAlloc => "array_alloc",
             Builtin::ArrayGet => "array_get",
             Builtin::ArraySet => "array_set",
+            Builtin::ArrayCopy => "array_copy",
         }
     }
 
@@ -83,7 +90,12 @@ impl Builtin {
         match self {
             Builtin::Print => true,
             // Stopping with an error is fine anywhere.
-            Builtin::Panic | Builtin::ArrayLen | Builtin::ArrayAlloc | Builtin::ArrayGet | Builtin::ArraySet => false,
+            Builtin::Panic
+            | Builtin::ArrayLen
+            | Builtin::ArrayAlloc
+            | Builtin::ArrayGet
+            | Builtin::ArraySet
+            | Builtin::ArrayCopy => false,
         }
     }
 
@@ -105,6 +117,11 @@ impl Builtin {
             Builtin::ArraySet => {
                 let xs = Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0));
                 Ty::Fn(Box::new([xs, i32_ty, Ty::Bound(0)]), Box::new(Ty::unit()))
+            }
+            Builtin::ArrayCopy => {
+                let dst = Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0));
+                let src = Ty::array(Ty::Bound(1), Ty::Bound(0));
+                Ty::Fn(Box::new([dst, i32_ty.clone(), src, i32_ty.clone(), i32_ty]), Box::new(Ty::unit()))
             }
         }
     }

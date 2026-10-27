@@ -330,7 +330,11 @@ fn op_instruction<'a>(op: Op) -> Instruction<'a> {
 fn builtin_signature(builtin: Builtin) -> Signature {
     match builtin {
         Builtin::Print | Builtin::Panic => (vec![ValTy::I32], None),
-        Builtin::ArrayLen | Builtin::ArrayAlloc | Builtin::ArrayGet | Builtin::ArraySet => {
+        Builtin::ArrayLen
+        | Builtin::ArrayAlloc
+        | Builtin::ArrayGet
+        | Builtin::ArraySet
+        | Builtin::ArrayCopy => {
             unreachable!("only the builtins of `Builtin::HOST` are called")
         }
     }

@@ -355,6 +355,18 @@ impl<'db> Evaluator<'db> {
                 items[i] = x.clone();
                 Ok(Value::unit())
             }
+            (
+                Builtin::ArrayCopy,
+                [Value::Array(dst), Value::Int(dst_start), Value::Array(src), Value::Int(src_start), Value::Int(count)],
+            ) => {
+                let src_range = range(*src_start, *count, src.borrow().len())?;
+                let dst_range = range(*dst_start, *count, dst.borrow().len())?;
+                // Taken out first, since `src` and `dst` can be the same
+                // array. Unset elements are copied as they are, not read.
+                let items: Vec<Value<'db>> = src.borrow()[src_range].to_vec();
+                dst.borrow_mut()[dst_range].clone_from_slice(&items);
+                Ok(Value::unit())
+            }
             _ => mismatch(format!("bad arguments to `{}`", builtin.name())),
         }
     }
@@ -1273,6 +1285,17 @@ fn cast<'db>(value: Value<'db>, type_ref: &TypeRef) -> Res<'db, Value<'db>> {
         },
         (value, _) => value,
     })
+}
+
+/// The `count` elements from `start` in an array of `len` elements, if
+/// they're in it.
+fn range<'db>(start: i128, count: i128, len: usize) -> Res<'db, std::ops::Range<usize>> {
+    let end = start.saturating_add(count);
+    let fits = |n: i128| usize::try_from(n).ok().filter(|&n| n <= len);
+    match (fits(start), fits(end)) {
+        (Some(s), Some(e)) if s <= e => Ok(s..e),
+        _ => fail(ErrorKind::RangeOutOfBounds { start, end, len }),
+    }
 }
 
 /// `index` as a position in an array of `len` elements, if it's in bounds.
