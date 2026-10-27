@@ -1,0 +1,33 @@
+name: Lean
+
+on:
+  push:
+    branches: [ "main" ]
+    paths: [ "lean/**", ".github/workflows/lean.yaml" ]
+  pull_request:
+    branches: [ "main" ]
+    paths: [ "lean/**", ".github/workflows/lean.yaml" ]
+
+jobs:
+
+  proof:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: lean
+    steps:
+    - uses: actions/checkout@v4
+    # The toolchain is the one `lean/lean-toolchain` names, which elan
+    # installs on the first `lake` command.
+    - name: Install elan
+      run: |
+        curl -sSfL https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+        echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+    - uses: actions/cache@v4
+      with:
+        path: ~/.elan/toolchains
+        key: elan-${{ hashFiles('lean/lean-toolchain') }}
+    # `--wfail` makes warnings errors, so a `sorry`, which is only a warning,
+    # fails the build.
+    - name: Check the proof
+      run: lake build --wfail
