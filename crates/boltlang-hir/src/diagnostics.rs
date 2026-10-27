@@ -127,6 +127,8 @@ pub enum DiagnosticKind<'db> {
     NotAtMost { held: Ty<'db>, is_mutability: bool, bound: Ty<'db>, because: Option<Because<'db>> },
     /// `mut` in the type of a field.
     MutField,
+    /// A mutability on its own where a type is expected.
+    MutabilityAlone,
     /// A named mutability that isn't one of the function's or impl's.
     UnknownMutability,
     /// A path like `C.Item` where no class of `C` declares the associated
@@ -583,6 +585,7 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
                 LowerDiagnostic::NoMutability(id) => (*id, DiagnosticKind::NoMutability),
                 LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
+                LowerDiagnostic::MutabilityAlone(id) => (*id, DiagnosticKind::MutabilityAlone),
                 LowerDiagnostic::UnknownMutability(id) => (*id, DiagnosticKind::UnknownMutability),
                 LowerDiagnostic::NoAssocType { type_ref } => (*type_ref, DiagnosticKind::NoAssocType),
                 LowerDiagnostic::AmbiguousAssocType { type_ref } => (*type_ref, DiagnosticKind::AmbiguousAssocType),

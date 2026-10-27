@@ -27,7 +27,7 @@ A list that contains itself has an infinite type
 fn f(x) = [x, [x]];
 
 --------------------------------------------------------------------------------
-f: forall a. a ⊑ imm => fn(a) -> imm [a]
+f: forall a. a: imm => fn(a) -> imm [a]
 --------------------------------------------------------------------------------
 error at `[x]`: infinite type imm [a]
 

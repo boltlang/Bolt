@@ -223,6 +223,15 @@ type Foo[T] where T: Copy = Box[T];
 type Assoc3 where = () where;
 
 ================================================================================
+Mutability bounds
+================================================================================
+fn wrap[T: imm](x: T) -> imm Box[T] = Box { item: x };
+fn read[T: Show + imm, U: mut](x: T, y: U) -> String = show(x);
+fn reader(xs: 'v [i32]) -> 'f fn() -> i32 where 'v: 'f, T: 'v + Eq = || xs[0];
+impl[T: imm] ToImm[Vec[T]] { }
+struct Frozen[T: imm] { item: T }
+
+================================================================================
 Empty statements
 ================================================================================
 fn main() {

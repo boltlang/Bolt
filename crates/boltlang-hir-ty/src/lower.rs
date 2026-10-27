@@ -17,6 +17,7 @@ use boltlang_hir_def::{
 
 use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
+    solve::{AtMostConstraint, Held},
     ty::{AdtId, GenericParamId, Mutability, Ty},
 };
 
@@ -86,6 +87,9 @@ pub enum LowerDiagnostic {
     /// `mut` in the type of a field. A field has the mutability of its
     /// struct, so that what an `imm` struct holds can't be changed either.
     MutField(TypeRefId),
+    /// A mutability on its own where a type is expected, like `let x: imm`:
+    /// it can only be a bound, like the `imm` of `T: imm`.
+    MutabilityAlone(TypeRefId),
     /// A named mutability, like the `'m` of `'m Point`, that isn't one of
     /// the function's or impl's: a name can only be used in the signature
     /// and the body of the function it's written in.
@@ -104,6 +108,9 @@ pub struct TyLoweringContext<'a, 'db> {
     /// before it.
     predicates_of: Option<GenericDefId<'db>>,
     lowered: Vec<ClassConstraint<'db>>,
+    /// The "at most" bounds lowered by [`TyLoweringContext::lower_predicates`],
+    /// like `T: imm`, with where each is written.
+    at_most: Vec<(AtMostConstraint<'db>, TypeRefId)>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -116,6 +123,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             mutabilities: None,
             predicates_of: None,
             lowered: Vec::new(),
+            at_most: Vec::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -133,6 +141,44 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         let index = named_mutabilities(self.db, def).iter().position(|n| n == name)?;
         let index = def.generic_params(self.db).type_params.len() + index;
         Some(Ty::Param(GenericParamId { def, index: index as u32 }))
+    }
+
+    /// A mutability on its own, like the `imm` of `T: imm`, or `None` if
+    /// `id` isn't one. A name that isn't the item's is reported.
+    fn lower_mutability(&mut self, id: TypeRefId) -> Option<Option<Ty<'db>>> {
+        let TypeRef::Mutability(mutability) = &self.store[id] else { return None };
+        Some(match mutability {
+            MutabilityRef::Written(m) => Some(Ty::Mutability(*m)),
+            MutabilityRef::Named(name) => {
+                let found = self.named_mutability(name);
+                if found.is_none() {
+                    self.diagnostics.push(LowerDiagnostic::UnknownMutability(id));
+                }
+                found
+            }
+        })
+    }
+
+    /// A bound `bound` of `target`: an "at most" bound if `bound` is a
+    /// mutability, and a class otherwise.
+    fn lower_bound(&mut self, held: Held<'db>, bound: TypeRefId) -> Option<ClassConstraint<'db>> {
+        if let Some(mutability) = self.lower_mutability(bound) {
+            if let Some(mutability) = mutability {
+                self.at_most.push((AtMostConstraint { held, bound: mutability }, bound));
+            }
+            return None;
+        }
+        match held {
+            Held::Type(ty) => {
+                let kind = None;
+                self.lower_class_constraint(bound, Some((ty, kind)))
+            }
+            // A mutability has no classes.
+            Held::Mutability(_) => {
+                self.diagnostics.push(LowerDiagnostic::NotAClass(bound));
+                None
+            }
+        }
     }
 
     /// Lower a type that values have, of kind `Type`.
@@ -213,6 +259,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 return (self.with_mutability(id, ty, written), kind);
             }
             TypeRef::Never => Ty::Never,
+            TypeRef::Mutability(_) => {
+                self.diagnostics.push(LowerDiagnostic::MutabilityAlone(id));
+                return (Ty::Error, None);
+            }
             TypeRef::Fn { params, ret_type, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
                 let ret = ret_type.map_or_else(Ty::unit, |t| self.lower_ty(t));
@@ -479,7 +529,15 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             let target = Ty::Param(GenericParamId { def, index: index as u32 });
             let kind = kinds.get(index).cloned();
             for &bound in param.bounds.iter() {
-                let constraint = self.lower_class_constraint(bound, Some((target.clone(), kind.clone())));
+                let constraint = match self.lower_mutability(bound) {
+                    Some(Some(mutability)) => {
+                        let constraint = AtMostConstraint { held: Held::Type(target.clone()), bound: mutability };
+                        self.at_most.push((constraint, bound));
+                        None
+                    }
+                    Some(None) => None,
+                    None => self.lower_class_constraint(bound, Some((target.clone(), kind.clone()))),
+                };
                 out.extend(constraint.map(|c| (c, bound)));
                 self.lowered = out.iter().map(|(c, _)| c.clone()).collect();
             }
@@ -488,10 +546,20 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             if pred.bounds.is_empty() {
                 // A bare constraint like `Convert[A, B]`.
                 out.extend(self.lower_class_constraint(pred.target, None).map(|c| (c, pred.target)));
+            } else if let Some(target) = self.lower_mutability(pred.target) {
+                // `'v: 'm`: a mutability is at most another.
+                let Some(target) = target else { continue };
+                for &bound in pred.bounds.iter() {
+                    out.extend(self.lower_bound(Held::Mutability(target.clone()), bound).map(|c| (c, bound)));
+                }
             } else {
                 let target = self.lower_ty_kinded(pred.target);
                 for &bound in pred.bounds.iter() {
-                    out.extend(self.lower_class_constraint(bound, Some(target.clone())).map(|c| (c, bound)));
+                    let constraint = match self.lower_mutability(bound) {
+                        Some(_) => self.lower_bound(Held::Type(target.0.clone()), bound),
+                        None => self.lower_class_constraint(bound, Some(target.clone())),
+                    };
+                    out.extend(constraint.map(|c| (c, bound)));
                 }
             }
             self.lowered = out.iter().map(|(c, _)| c.clone()).collect();
@@ -513,7 +581,8 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
     };
     let mut names = Vec::new();
     for (_, type_ref) in store.types.iter() {
-        if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. } = type_ref
+        if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. }
+        | TypeRef::Mutability(MutabilityRef::Named(name)) = type_ref
             && !names.contains(name)
         {
             names.push(name.clone());
@@ -583,7 +652,12 @@ pub fn class_assoc_types<'db>(db: &'db dyn Db, class: ClassId<'db>) -> Vec<TypeA
 #[salsa::tracked(returns(ref))]
 pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predicates<'db> {
     let ItemContainerId::Class(class) = alias.container(db) else {
-        return Predicates { predicates: Box::new([]), sources: Box::new([]), diagnostics: Vec::new() };
+        return Predicates {
+            predicates: Box::new([]),
+            at_most: Box::new([]),
+            sources: Box::new([]),
+            diagnostics: Vec::new(),
+        };
     };
     let sig = type_alias_signature(db, alias);
     let resolver = Resolver::for_generic_def(db, GenericDefId::TypeAlias(alias));
@@ -597,7 +671,12 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
             sources.push(bound);
         }
     }
-    Predicates { predicates: predicates.into(), sources: sources.into(), diagnostics: ctx.diagnostics }
+    Predicates {
+        predicates: predicates.into(),
+        at_most: Box::new([]),
+        sources: sources.into(),
+        diagnostics: ctx.diagnostics,
+    }
 }
 
 /// The associated type called `name` that `class` declares, if any.
@@ -670,6 +749,9 @@ fn type_alias_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _alias: TypeAliasId<'
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Predicates<'db> {
     pub predicates: Box<[ClassConstraint<'db>]>,
+    /// What the item assumes is at most a mutability (#243), like `T: imm`,
+    /// with where each is written.
+    pub at_most: Box<[(AtMostConstraint<'db>, TypeRefId)]>,
     /// Where each predicate is written: the class of a bound or a `where`
     /// clause, in the store of the item's signature.
     pub sources: Box<[TypeRefId]>,
@@ -717,7 +799,13 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         .into_iter()
         .map(|(p, at)| (p.map(|t| t.fill_unwritten(&mut imm)), at))
         .unzip();
-    Predicates { predicates: predicates.into(), sources: sources.into(), diagnostics: ctx.diagnostics }
+    let at_most = std::mem::take(&mut ctx.at_most).into_iter().map(|(c, at)| (c.map(|t| t.fill_unwritten(&mut imm)), at));
+    Predicates {
+        predicates: predicates.into(),
+        at_most: at_most.collect(),
+        sources: sources.into(),
+        diagnostics: ctx.diagnostics,
+    }
 }
 
 /// The declared types of a function.

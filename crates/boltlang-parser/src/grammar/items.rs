@@ -7,7 +7,7 @@ use boltlang_syntax::{SyntaxKind::{self, *}, T};
 use crate::{
     grammar::{
         abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param, param_list, parse_block_expr,
-        trait_bounds, type_no_bounds, is_path_start, dotted_path, TYPE_FIRST,
+        trait_bounds, type_no_bounds, is_path_start, dotted_path, TYPE_FIRST, at_mutability, mutability,
     },
     parser::{Marker, Parser},
     token_set::TokenSet,
@@ -272,8 +272,13 @@ pub(crate) fn opt_where_clause(p: &mut Parser) {
     p.bump(T![where]);
     while p.at_ts(TYPE_FIRST) {
         // `T: Show + Eq`, or a class constraint on its own: `Convert[A, B]`.
+        // What's bounded can be a mutability, as in `'v: 'm`.
         let pred = p.start();
-        type_no_bounds(p);
+        if at_mutability(p) {
+            mutability(p);
+        } else {
+            type_no_bounds(p);
+        }
         if p.at(T![:]) {
             trait_bounds(p);
         }

@@ -92,7 +92,10 @@ impl ExprCollector {
                 } else {
                     MutabilityRef::Written(Mutability::Imm)
                 };
-                TypeRef::Mut { mutability, inner: self.lower_opt_type(ty.inner()) }
+                match ty.inner() {
+                    Some(inner) => TypeRef::Mut { mutability, inner: self.lower_type(inner) },
+                    None => TypeRef::Mutability(mutability),
+                }
             }
             ast::Type::Never(_) => TypeRef::Never,
             ast::Type::Bounded(_) => {

@@ -245,10 +245,10 @@ fn mut_type(p: &mut Parser) -> CompletedMarker {
     if p.at(T![mut]) || p.at(T![imm]) || p.at(LABEL_IDENT) {
         p.error("a type can have only one `mut` or `imm`");
     }
+    // Without a type, it's a mutability on its own, which can only be a
+    // bound; the type checker reports it anywhere else.
     if p.at_ts(TYPE_FIRST) {
         type_no_bounds(p);
-    } else {
-        p.error("expected a type after the mutability, like `mut Point`");
     }
     m.complete(p, MUT_TYPE)
 }
@@ -260,13 +260,37 @@ fn never_type(p: &mut Parser) -> CompletedMarker {
     m.complete(p, NEVER_TYPE)
 }
 
-/// `: A + B`, as in the grammar's `trait_bounds`.
+/// `: A + B`, as in the grammar's `trait_bounds`. A bound can be a
+/// mutability, like the `imm` of `T: imm`: nothing in `T` is more `mut` than
+/// `imm` (#243).
 pub(crate) fn trait_bounds(p: &mut Parser) {
     let m = p.start();
     p.bump(T![:]);
-    type_no_bounds(p);
+    bound(p);
     while p.eat(T![+]) {
-        type_no_bounds(p);
+        bound(p);
     }
     m.complete(p, TRAIT_BOUNDS);
+}
+
+fn bound(p: &mut Parser) {
+    if at_mutability(p) {
+        mutability(p);
+    } else {
+        type_no_bounds(p);
+    }
+}
+
+/// Whether a mutability on its own is next, like `imm` or `'m`, rather than
+/// a type that starts with one, like `imm Point`.
+pub(crate) fn at_mutability(p: &Parser) -> bool {
+    (p.at(T![mut]) || p.at(T![imm]) || p.at(LABEL_IDENT)) && !p.nth_at_ts(1, TYPE_FIRST)
+}
+
+/// A mutability on its own, as a bound or what's bounded: `imm`, `mut` or
+/// `'m`. It's a `MUT_TYPE` without a type.
+pub(crate) fn mutability(p: &mut Parser) {
+    let m = p.start();
+    p.bump_any();
+    m.complete(p, MUT_TYPE);
 }

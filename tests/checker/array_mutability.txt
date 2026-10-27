@@ -410,7 +410,7 @@ copy_first(mut [1]);
 
 --------------------------------------------------------------------------------
 first: forall a. Index[a] => fn(a) -> a.Item
-copy_first: forall a. Index[a] => a.Item ⊑ imm => fn(a) -> imm [a.Item]
+copy_first: forall a. Index[a] => a.Item: imm => fn(a) -> imm [a.Item]
 first([1]): i32
 first(mut [True]): Bool
 copy_first(mut [1]): imm [i32]

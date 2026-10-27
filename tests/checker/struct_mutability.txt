@@ -315,7 +315,7 @@ wrap(mut [1]);
 wrap_mut(mut [1]);
 
 --------------------------------------------------------------------------------
-wrap: forall T. T ⊑ imm => fn(T) -> imm Box[T]
+wrap: forall T. T: imm => fn(T) -> imm Box[T]
 wrap_mut: forall T. fn(T) -> mut Box[T]
 wrap(1): imm Box[i32]
 wrap(mut [1]): imm Box[mut [i32]]
@@ -745,7 +745,7 @@ fn hide(x) {
 hide(1);
 hide(mut [1]);
 --------------------------------------------------------------------------------
-hide: forall a. a ⊑ imm => fn(a) -> i32
+hide: forall a. a: imm => fn(a) -> i32
 hide(1): i32
 hide(mut [1]): i32
 --------------------------------------------------------------------------------

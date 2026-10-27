@@ -320,6 +320,9 @@ pub enum TypeRef {
     /// `mut T` or `imm T` for a type other than an array, like `mut Point`,
     /// or a named mutability before any type, like `'m Point`.
     Mut { mutability: MutabilityRef, inner: TypeRefId },
+    /// A mutability on its own, as a bound like the `imm` of `T: imm`, or
+    /// what's bounded, like the `'v` of `'v: 'm` (#243). It's not a type.
+    Mutability(MutabilityRef),
     /// `!`
     Never,
     /// `fn(A, B) -> C`

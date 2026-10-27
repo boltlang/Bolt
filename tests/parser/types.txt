@@ -243,8 +243,7 @@ Mut and imm together
 imm mut Point
 
 ================================================================================
-Mut without a type
-:error
+Mut without a type, which the type checker reports
 ================================================================================
 fn f(x: mut) {}
 
@@ -265,7 +264,6 @@ A named mutability and a keyword
 'm mut [i32]
 
 ================================================================================
-A named mutability without a type
-:error
+A named mutability without a type, which the type checker reports
 ================================================================================
 fn f(x: 'm) {}

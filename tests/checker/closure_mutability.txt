@@ -123,7 +123,7 @@ fn reader(xs: [i32]) = || xs[0];
 let a = reader([1]);
 let b = reader(mut [1]);
 --------------------------------------------------------------------------------
-reader: 'm ⊑ 'n => fn('m [i32]) -> 'n fn() -> i32
+reader: 'm: 'n => fn('m [i32]) -> 'n fn() -> i32
 let a: fn() -> i32
 let b: mut fn() -> i32
 
@@ -135,8 +135,8 @@ fn always[T](x: T) -> fn() -> T = || x;
 let r = reader(mut [1]);
 let a = always(1);
 --------------------------------------------------------------------------------
-reader: forall a. Index[a] => a ⊑ 'm => fn(a) -> 'm fn() -> a.Item
-always: forall T. T ⊑ 'm => fn(T) -> 'm fn() -> T
+reader: forall a. Index[a] => a: 'm => fn(a) -> 'm fn() -> a.Item
+always: forall T. T: 'm => fn(T) -> 'm fn() -> T
 let r: mut fn() -> i32
 let a: fn() -> i32
 

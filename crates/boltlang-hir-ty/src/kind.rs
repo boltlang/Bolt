@@ -361,6 +361,8 @@ impl<'db> KindInference<'db> {
 
     fn kind_of(&mut self, resolver: &Resolver<'db>, store: &ExpressionStore, id: TypeRefId) -> K {
         match &store[id] {
+            // Not a type; reported where it's lowered.
+            TypeRef::Mutability(_) => self.new_var(),
             TypeRef::Path(path) => {
                 let head = match resolver.resolve_path_in_type_ns(self.db, path) {
                     Some(r) if r.unresolved.is_none() => match r.ty {

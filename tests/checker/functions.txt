@@ -69,7 +69,7 @@ compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 });
 twice(fn (s: String) = s, "a");
 
 --------------------------------------------------------------------------------
-compose: forall a b c. 'm ⊑ 'o => 'n ⊑ 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
+compose: forall a b c. 'm: 'o => 'n: 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
 twice: forall a. fn(fn(a) -> a, a) -> a
 compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 }): fn(Bool) -> i32
 twice(fn (s: String) = s, "a"): String

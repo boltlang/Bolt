@@ -667,6 +667,18 @@ fn keep(x) { let b = Box { item: x }; 0 }
 }
 
 #[test]
+fn mutability_bounds() {
+    check(
+        r#"
+fn reader(xs: 'v [i32]) -> 'f fn() -> 'v [i32] = || xs;
+                                               //^^^^^ error: expected a mutability that's at most `'f`, found `'v`
+let x: imm = 1;
+     //^^^ error: `imm` is a mutability, not a type: on its own, it can only be a bound, like `T: imm`
+"#,
+    );
+}
+
+#[test]
 fn unknown_mutabilities() {
     check(
         r#"

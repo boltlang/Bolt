@@ -370,6 +370,7 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
         LowerDiagnostic::NoMutability(id) => format!("error at `{}`: can't be mut or imm", at(*id)),
         LowerDiagnostic::MutField(id) => format!("error at `{}`: mut field", at(*id)),
+        LowerDiagnostic::MutabilityAlone(id) => format!("error at `{}`: a mutability isn't a type", at(*id)),
         LowerDiagnostic::UnknownMutability(id) => format!("error at `{}`: unknown mutability", at(*id)),
         LowerDiagnostic::NoAssocType { type_ref } => format!("error at `{}`: no such associated type", at(*type_ref)),
         LowerDiagnostic::AmbiguousAssocType { type_ref } => {

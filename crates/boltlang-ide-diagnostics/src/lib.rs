@@ -83,6 +83,7 @@ impl DiagnosticCode {
     pub const NO_LANG_CLASS: Self = Self("E0228");
     pub const UNMET_ASSOC_BOUND: Self = Self("E0229");
     pub const NOT_AT_MOST: Self = Self("E0230");
+    pub const MUTABILITY_ALONE: Self = Self("E0231");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -416,6 +417,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                 "the mutability of `{source}` isn't one of this function's: a name like `'m` can only be used in the \
                  signature and the body of the function or impl that it's written in"
             ),
+        ),
+        K::MutabilityAlone => (
+            C::MUTABILITY_ALONE,
+            format!("`{source}` is a mutability, not a type: on its own, it can only be a bound, like `T: {source}`"),
         ),
         K::MutField => (
             C::MUT_FIELD,

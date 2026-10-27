@@ -256,6 +256,11 @@ impl Printer<'_> {
                     None => format!("{prefix}[{}]", self.ty(*element)),
                 }
             }
+            TypeRef::Mutability(mutability) => match mutability {
+                MutabilityRef::Written(Mutability::Mut) => "mut".to_string(),
+                MutabilityRef::Written(Mutability::Imm) => "imm".to_string(),
+                MutabilityRef::Named(name) => format!("'{name}"),
+            },
             TypeRef::Mut { mutability, inner } => {
                 let prefix = match mutability {
                     MutabilityRef::Written(Mutability::Mut) => "mut".to_string(),

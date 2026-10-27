@@ -378,6 +378,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             let constraint = predicate.map(|t| subst_params(t, generic_def, args));
             self.solver.add(Constraint::Class { constraint, origin });
         }
+        // Bounds like the `T: imm` of `struct Frozen[T: imm]`.
+        for (bound, &type_ref) in predicates.at_most.iter().map(|(c, at)| (c, at)) {
+            let source = ConstraintSource::Declared { def: generic_def, type_ref };
+            let origin = Origin { reason: Reason::RequiredBy(source), ..self.origin(at) };
+            let constraint = bound.map(|t| subst_params(t, generic_def, args));
+            let source = AtMostSource::Needed(constraint.clone());
+            self.solver.add(Constraint::AtMost { constraint, source, origin });
+        }
     }
 
     fn resolver(&self, expr: ExprId) -> Resolver<'db> {

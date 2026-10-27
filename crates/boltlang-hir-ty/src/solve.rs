@@ -256,6 +256,8 @@ pub struct Solver<'db> {
     /// The class constraints known to hold, like those of `where` clauses,
     /// with their superclasses.
     assumptions: Vec<ClassConstraint<'db>>,
+    /// The "at most" constraints known to hold, like `T: imm`.
+    at_most_assumptions: Vec<AtMostConstraint<'db>>,
     impls: &'db [ImplId<'db>],
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
@@ -276,6 +278,7 @@ impl<'db> Solver<'db> {
             db,
             unifier: Unifier::new(),
             assumptions: Vec::new(),
+            at_most_assumptions: Vec::new(),
             impls: visible_impls(db, file),
             pending: Vec::new(),
             pending_fields: Vec::new(),
@@ -303,6 +306,38 @@ impl<'db> Solver<'db> {
             stack.extend(implied_by(self.db, &c));
             self.assumptions.push(c);
         }
+    }
+
+    /// Assume that `constraint` holds, as a function's `T: imm` does in its
+    /// body.
+    pub fn assume_at_most(&mut self, constraint: AtMostConstraint<'db>) {
+        self.at_most_assumptions.push(constraint);
+    }
+
+    /// Whether the mutability `m` is at most `bound` by the order and the
+    /// assumptions, following them through at most `depth` steps, like
+    /// `'v: 'm` and then `'m: imm`.
+    fn mutability_le(&self, m: &Ty<'db>, bound: &Ty<'db>, depth: u32) -> bool {
+        let (m, bound) = (self.unifier.shallow_resolve(m), self.unifier.shallow_resolve(bound));
+        if m == bound
+            || matches!(m, Ty::Mutability(Mutability::Imm))
+            || matches!(bound, Ty::Mutability(Mutability::Mut))
+        {
+            return true;
+        }
+        depth > 0
+            && self.at_most_assumptions.iter().any(|a| {
+                matches!(&a.held, Held::Mutability(h) if self.unifier.shallow_resolve(h) == m)
+                    && self.mutability_le(&a.bound, &bound, depth - 1)
+            })
+    }
+
+    /// Whether the type parameter or associated type `t` is at most `bound`
+    /// by an assumption.
+    fn type_assumed(&self, t: &Ty<'db>, bound: &Ty<'db>) -> bool {
+        self.at_most_assumptions
+            .iter()
+            .any(|a| matches!(&a.held, Held::Type(h) if h == t) && self.mutability_le(&a.bound, bound, 8))
     }
 
     pub fn add(&mut self, constraint: Constraint<'db>) {
@@ -384,7 +419,8 @@ impl<'db> Solver<'db> {
                 }
                 // Decided once the type is known, or by an assumption about
                 // a type parameter.
-                Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Assoc(..) => false,
+                Ty::Var(_) => false,
+                t @ (Ty::Param(_) | Ty::Bound(_) | Ty::Assoc(..)) => self.type_assumed(&t, &bound),
                 _ => true,
             },
             Held::Mutability(m) => match (self.unifier.shallow_resolve(m), &bound) {
@@ -402,7 +438,7 @@ impl<'db> Solver<'db> {
                     self.at_most_broken(source, origin);
                     true
                 }
-                _ => false,
+                (m, bound) => self.mutability_le(&m, bound, 8),
             },
         }
     }
@@ -696,7 +732,7 @@ impl<'db> Solver<'db> {
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
-                    Step::Solved(subgoals, imp) => {
+                    Step::Solved(subgoals, at_most, imp) => {
                         progress = true;
                         let same_use = |(o, c, _): &(Origin<'db>, ClassId<'db>, ImplId<'db>)| {
                             o.body == origin.body && o.node == origin.node && *c == constraint.class
@@ -707,6 +743,12 @@ impl<'db> Solver<'db> {
                             self.chosen.push((origin, constraint.class, imp));
                         }
                         self.pending.extend(subgoals.into_iter().map(|c| (c, origin)));
+                        // What the impl assumes of its arguments, like the
+                        // `T: imm` of `impl[T: imm] ToImm[Vec[T]]`.
+                        for constraint in at_most {
+                            let source = AtMostSource::Needed(constraint.clone());
+                            self.add(Constraint::AtMost { constraint, source, origin });
+                        }
                     }
                     Step::NoInstance => {
                         // An associated type of the same class may have
@@ -780,10 +822,10 @@ impl<'db> Solver<'db> {
     fn try_solve(&self, goal: &ClassConstraint<'db>) -> Step<'db> {
         // An error type somewhere means an error was already reported.
         if goal.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
-            return Step::Solved(Vec::new(), None);
+            return Step::Solved(Vec::new(), Vec::new(), None);
         }
         if self.assumptions.contains(goal) {
-            return Step::Solved(Vec::new(), None);
+            return Step::Solved(Vec::new(), Vec::new(), None);
         }
         let has_vars = goal.args.iter().any(has_vars);
         let mut found = None;
@@ -810,19 +852,16 @@ impl<'db> Solver<'db> {
             Some(_) if maybe => Step::Wait,
             Some((imp, subst)) => {
                 let def = GenericDefId::Impl(imp);
-                let subgoals = generic_predicates(self.db, def)
-                    .predicates
-                    .iter()
-                    .map(|p| {
-                        p.map(|t| {
-                            t.fold(&mut |t| match t {
-                                Ty::Param(p) if p.def == def => Some(subst.get(p).cloned().unwrap_or(Ty::Error)),
-                                _ => None,
-                            })
-                        })
+                let instantiate = |t: &Ty<'db>| {
+                    t.fold(&mut |t| match t {
+                        Ty::Param(p) if p.def == def => Some(subst.get(p).cloned().unwrap_or(Ty::Error)),
+                        _ => None,
                     })
-                    .collect();
-                Step::Solved(subgoals, Some(imp))
+                };
+                let predicates = generic_predicates(self.db, def);
+                let subgoals = predicates.predicates.iter().map(|p| p.map(instantiate)).collect();
+                let at_most = predicates.at_most.iter().map(|(c, _)| c.map(instantiate)).collect();
+                Step::Solved(subgoals, at_most, Some(imp))
             }
             None if maybe || has_vars => Step::Wait,
             None => Step::NoInstance,
@@ -832,7 +871,7 @@ impl<'db> Solver<'db> {
 
 enum Step<'db> {
     /// Solved, if these hold too, with the impl that was used, if any.
-    Solved(Vec<ClassConstraint<'db>>, Option<ImplId<'db>>),
+    Solved(Vec<ClassConstraint<'db>>, Vec<AtMostConstraint<'db>>, Option<ImplId<'db>>),
     NoInstance,
     /// The types aren't known well enough yet.
     Wait,

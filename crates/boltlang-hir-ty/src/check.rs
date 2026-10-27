@@ -22,7 +22,7 @@ use crate::{
         impl_header, subst_params, with_superclasses,
     },
     scheme::{
-        Scheme, SchemeSources, assumptions, assumptions_with_sources, class_impl_method_sig, declared_scheme,
+        Scheme, SchemeSources, assumptions, assumptions_with_sources, at_most_assumptions, class_impl_method_sig, declared_scheme,
         generic_chain, generic_param_ids, is_declared,
     },
     solve::{
@@ -69,6 +69,9 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                 DefWithBody::Function(f) => {
                     for assumption in assumptions(db, f) {
                         ctx.solver.assume(assumption);
+                    }
+                    for (assumption, _) in at_most_assumptions(db, f) {
+                        ctx.solver.assume_at_most(assumption);
                     }
                     let Ty::Fn(params, ret, _) = &declared_scheme(db, f).ty else { unreachable!() };
                     // A method of a class impl must have the class's types.
@@ -186,6 +189,9 @@ fn infer_group<'db>(
         for assumption in assumptions(db, f) {
             solver.assume(assumption);
         }
+        for (assumption, _) in at_most_assumptions(db, f) {
+            solver.assume_at_most(assumption);
+        }
         let sig = fn_sig(db, f);
         let params: Box<[Ty<'db>]> =
             sig.params.iter().map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General))).collect();
@@ -267,7 +273,7 @@ impl<'db> Solved<'_, 'db> {
         let (fields, field_sources, untyped) = self.function_fields(def, &mut vars);
         let (assoc, assoc_sources) = self.function_assoc(def, &mut vars);
         let (predicates, predicate_sources, ambiguous) = self.function_predicates(db, f, def, &vars);
-        let (bounds, bound_sources) = self.function_bounds(def, &vars);
+        let (bounds, bound_sources) = self.function_bounds(db, f, def, &vars);
         let scheme = Scheme {
             params: generic_param_ids(db, generic_chain(db, f)),
             bound: vars.vars.len() as u32,
@@ -369,11 +375,13 @@ impl<'db> Solved<'_, 'db> {
     /// its parameters, which its callers must meet.
     fn function_bounds(
         &self,
+        db: &'db dyn Db,
+        f: FunctionId<'db>,
         def: DefWithBodyId<'db>,
         vars: &Generalization,
     ) -> (Box<[AtMostConstraint<'db>]>, Sources<'db>) {
-        let mut out = Vec::new();
-        let mut sources = Vec::new();
+        // Those it assumes first, as for class constraints.
+        let (mut out, mut sources): (Vec<_>, Vec<_>) = at_most_assumptions(db, f).into_iter().unzip();
         for (constraint, origin) in self.pending_at_most.iter().filter(|(_, origin)| origin.body == def) {
             let mut found = Vec::new();
             vars_in(constraint.held.ty(), &mut found);

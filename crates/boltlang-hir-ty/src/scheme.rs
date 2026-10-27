@@ -178,7 +178,7 @@ impl<'db> Scheme<'db> {
                 Held::Mutability(m) => names.mutability_name(db, m),
                 Held::Type(t) => show(t),
             };
-            out.push_str(&format!("{held} ⊑ {} => ", names.mutability_name(db, &bound.bound)));
+            out.push_str(&format!("{held}: {} => ", names.mutability_name(db, &bound.bound)));
         }
         out.push_str(&show(&self.ty));
         out
@@ -241,6 +241,27 @@ pub fn assumptions_with_sources<'db>(
             out.extend(predicates.predicates.iter().zip(predicates.sources.iter()).map(|(c, &type_ref)| {
                 (c.clone(), Some(ConstraintSource::Declared { def, type_ref }))
             }));
+        }
+    }
+    out
+}
+
+/// What `f` assumes is at most a mutability: its bounds and `where`
+/// clauses like `T: imm`, and those of its impl, with where each is written.
+pub fn at_most_assumptions<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> Vec<(AtMostConstraint<'db>, Option<ConstraintSource<'db>>)> {
+    let mut out = Vec::new();
+    for def in generic_chain(db, f) {
+        if !matches!(def, GenericDefId::Class(_)) {
+            let predicates = generic_predicates(db, def);
+            out.extend(
+                predicates
+                    .at_most
+                    .iter()
+                    .map(|(c, type_ref)| (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))),
+            );
         }
     }
     out
@@ -352,14 +373,15 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         defs.push(GenericDefId::Function(method));
     }
     let (predicates, sources): (Vec<_>, Vec<_>) = assumptions_with_sources(db, f).into_iter().unzip();
+    let (bounds, bound_sources): (Vec<_>, Vec<_>) = at_most_assumptions(db, f).into_iter().unzip();
     Scheme {
         params: generic_param_ids(db, defs),
         bound: 0,
         predicates: predicates.into(),
         fields: Box::new([]),
         assoc: Box::new([]),
-        bounds: Box::new([]),
+        bounds: bounds.into(),
         ty: Ty::func(params, ret),
-        sources: SchemeSources { predicates: sources.into(), ..SchemeSources::default() },
+        sources: SchemeSources { predicates: sources.into(), bounds: bound_sources.into(), ..SchemeSources::default() },
     }
 }
