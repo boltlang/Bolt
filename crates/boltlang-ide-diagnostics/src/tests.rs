@@ -766,7 +766,7 @@ fn builtin_declarations() {
 extern "bolt" {
   fn print(text: String);
   fn prnt(text: String);
-   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`
+   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`
   fn panic(message: String) -> i32;
    //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
 }
@@ -791,6 +791,17 @@ extern "bolt" {
 extern "bolt" {
   fn array_len[T](xs: [T]) -> T;
    //^^^^^^^^^ error: the builtin `array_len` must have the type `fn([a]) -> i32`
+}
+"#,
+    );
+    check(r#"extern "bolt" { fn array_alloc[T](len: i32) -> mut [T]; }"#);
+    // Without `mut`, the result would be `imm`, and the elements could never
+    // be set.
+    check(
+        r#"
+extern "bolt" {
+  fn array_alloc[T](len: i32) -> [T];
+   //^^^^^^^^^^^ error: the builtin `array_alloc` must have the type `fn(i32) -> mut [a]`
 }
 "#,
     );

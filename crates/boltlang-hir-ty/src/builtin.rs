@@ -16,6 +16,7 @@
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType},
+    hir::Mutability,
     ids::{ExternBlockId, FunctionId, ItemContainerId},
     item_tree::FunctionName,
 };
@@ -34,10 +35,15 @@ pub enum Builtin {
     /// `fn array_len[T](xs: [T]) -> i32`: the number of elements of an array
     /// of either mutability.
     ArrayLen,
+    /// `fn array_alloc[T](len: i32) -> mut [T]`: a new array of `len`
+    /// elements that aren't set yet. Reading one before it's set is an error
+    /// at run time, so it's meant for types in `std` that keep track of
+    /// which elements are set, like a growable array.
+    ArrayAlloc,
 }
 
 impl Builtin {
-    pub const ALL: &[Builtin] = &[Builtin::Print, Builtin::Panic, Builtin::ArrayLen];
+    pub const ALL: &[Builtin] = &[Builtin::Print, Builtin::Panic, Builtin::ArrayLen, Builtin::ArrayAlloc];
 
     /// The builtins that compiled code imports from the host. The others
     /// work on arrays, which the code generator doesn't compile yet.
@@ -48,6 +54,7 @@ impl Builtin {
             Builtin::Print => "print",
             Builtin::Panic => "panic",
             Builtin::ArrayLen => "array_len",
+            Builtin::ArrayAlloc => "array_alloc",
         }
     }
 
@@ -61,7 +68,7 @@ impl Builtin {
         match self {
             Builtin::Print => true,
             // Stopping with an error is fine anywhere.
-            Builtin::Panic | Builtin::ArrayLen => false,
+            Builtin::Panic | Builtin::ArrayLen | Builtin::ArrayAlloc => false,
         }
     }
 
@@ -74,6 +81,9 @@ impl Builtin {
             Builtin::Print => Ty::Fn(Box::new([str_ty]), Box::new(Ty::unit())),
             Builtin::Panic => Ty::Fn(Box::new([str_ty]), Box::new(Ty::Never)),
             Builtin::ArrayLen => Ty::Fn(Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1))]), Box::new(i32_ty)),
+            Builtin::ArrayAlloc => {
+                Ty::Fn(Box::new([i32_ty]), Box::new(Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0))))
+            }
         }
     }
 
