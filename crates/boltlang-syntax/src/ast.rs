@@ -1385,10 +1385,6 @@ impl Node for VarDecl {
 
 impl VarDecl {
 
-    pub fn mut_token(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
-    }
-
     pub fn pattern(&self) -> Option<Pattern> {
         self.find_node()
     }
@@ -1455,10 +1451,6 @@ impl Node for Param {
 }
 
 impl Param {
-
-    pub fn mut_token(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
-    }
 
     pub fn pattern(&self) -> Option<Pattern> {
         self.find_node()

@@ -44,7 +44,7 @@ pub(crate) fn param(p: &mut Parser) -> CompletedMarker {
         p.bump(T![...]);
         return m.complete(p, VARIADIC_PARAM);
     }
-    p.eat(T![mut]);
+    // `mut x` is a `MUT_PATT`, like in any other pattern.
     pattern_single(p);
     if p.eat(T![:]) {
         if p.eat(T![...]) {
