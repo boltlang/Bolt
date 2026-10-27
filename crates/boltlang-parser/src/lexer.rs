@@ -3,9 +3,8 @@ use std::{collections::{HashMap, VecDeque}, str::Chars};
 
 use boltlang_common::Span;
 use boltlang_syntax::SyntaxKind::{self, *};
-use crate::{diagnostic::{Diagnostics, UnexpectedCharDiagnostic}, parser::Input};
+use crate::{diagnostic::{Diagnostics, UnexpectedCharDiagnostic}, parser::{Input, Split}};
 
-use itertools::izip;
 use lazy_static::lazy_static;
 use unicode_ident::{is_xid_continue, is_xid_start};
 
@@ -224,24 +223,43 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             }
             'u' if self.peek(0) == '{' => {
                 self.get();
-                self.eat_while(is_hex_num);
-                if self.peek(0) == '}' {
-                    self.get();
-                } else {
-                    self.error("expected `}` to end the unicode escape", start..self.pos.offset);
+                let mut digits = String::new();
+                while is_hex_num(self.peek(0)) {
+                    digits.push(self.get());
                 }
+                if self.peek(0) != '}' {
+                    self.error("expected `}` to end the unicode escape", start..self.pos.offset);
+                    return;
+                }
+                self.get();
+                if digits.is_empty() || digits.len() > 6 {
+                    self.error("expected one to six hex digits in a unicode escape", start..self.pos.offset);
+                    return;
+                }
+                self.check_code_point(&digits, start);
             }
             'u' => {
+                let mut digits = String::new();
                 for _ in 0..4 {
                     if !is_hex_num(self.peek(0)) {
                         self.error("expected `{` or four hex digits after `\\u`", start..self.pos.offset);
                         return;
                     }
-                    self.get();
+                    digits.push(self.get());
                 }
+                self.check_code_point(&digits, start);
             }
             CHAR_EOF => {}
             _ => {}
+        }
+    }
+
+    /// Report the hex digits of a unicode escape that started at `start` if
+    /// they aren't a character: above `10FFFF`, or a surrogate.
+    fn check_code_point(&mut self, digits: &str, start: usize) {
+        let value = u32::from_str_radix(digits, 16).expect("hex digits");
+        if char::from_u32(value).is_none() {
+            self.error(format!("`{digits}` is not a unicode character"), start..self.pos.offset);
         }
     }
 
@@ -539,7 +557,11 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 operator_kind(&text)
             }
-            _ => ERROR,
+            ch => {
+                let start = self.pos.offset - ch.len_utf8();
+                self.error(format!("unexpected character `{}`", ch.escape_debug()), start..self.pos.offset);
+                ERROR
+            }
         }
     }
 
@@ -549,7 +571,6 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
 pub struct LexResult {
     kinds: Vec<SyntaxKind>,
     lens: Vec<u32>,
-    values: Vec<Option<String>>,
 }
 
 impl LexResult {
@@ -566,39 +587,54 @@ impl LexResult {
         self.kinds.len() as u32
     }
 
-    /// Split the `index`th non-trivia token in two, the first part being
-    /// `len` bytes long. See [`Parser::split_bump`](crate::Parser::split_bump).
-    pub(crate) fn split(&mut self, index: usize, len: u32, rest_kind: SyntaxKind) {
-        let raw = self
-            .kinds
-            .iter()
-            .enumerate()
-            .filter(|(_, kind)| !kind.is_trivia())
-            .nth(index)
-            .map(|(raw, _)| raw)
-            .expect("split index out of range");
-        let text = self.values[raw].take().unwrap();
-        let (first, rest) = text.split_at(len as usize);
-        self.kinds.insert(raw + 1, rest_kind);
-        self.lens[raw] = len;
-        self.lens.insert(raw + 1, rest.len() as u32);
-        self.values[raw] = Some(first.to_string());
-        self.values.insert(raw + 1, Some(rest.to_string()));
-    }
-
-    pub fn to_input(&self) -> Input {
-        let mut kinds = Vec::new();
-        let mut lens = Vec::new();
-        let mut values = Vec::new();
-        for (kind, len, value) in izip!(self.kinds.iter().copied(), self.lens.iter(), self.values.iter().cloned()) {
+    /// Split the tokens that the parser split, in one pass. The index of a
+    /// split counts non-trivia tokens, including the parts of earlier
+    /// splits, and the splits are in order. See
+    /// [`Parser::split_bump`](crate::Parser::split_bump).
+    pub(crate) fn apply_splits(&mut self, splits: &[Split]) {
+        if splits.is_empty() {
+            return;
+        }
+        let mut kinds = Vec::with_capacity(self.kinds.len() + splits.len());
+        let mut lens = Vec::with_capacity(self.lens.len() + splits.len());
+        let mut splits = splits.iter().peekable();
+        let mut index = 0;
+        for (kind, len) in self.kinds.iter().copied().zip(self.lens.iter().copied()) {
             if kind.is_trivia() {
+                kinds.push(kind);
+                lens.push(len);
                 continue;
+            }
+            let (mut kind, mut len) = (kind, len);
+            while let Some(split) = splits.next_if(|split| split.index == index) {
+                kinds.push(kind);
+                lens.push(split.len);
+                kind = split.rest_kind;
+                len -= split.len;
+                index += 1;
             }
             kinds.push(kind);
             lens.push(len);
-            values.push(value);
+            index += 1;
         }
-        Input::new(kinds, values)
+        assert!(splits.next().is_none(), "split index out of range");
+        self.kinds = kinds;
+        self.lens = lens;
+    }
+
+    /// The tokens without trivia, for the parser.
+    pub fn to_input<'t>(&self, text: &'t str) -> Input<'t> {
+        let mut kinds = Vec::new();
+        let mut ranges = Vec::new();
+        let mut offset = 0;
+        for (kind, len) in self.kinds.iter().copied().zip(self.lens.iter().copied()) {
+            if !kind.is_trivia() {
+                kinds.push(kind);
+                ranges.push((offset, offset + len));
+            }
+            offset += len;
+        }
+        Input::new(text, kinds, ranges)
     }
 
 }
@@ -632,15 +668,11 @@ impl From<&Pos> for LineColumn {
     }
 }
 
-pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
-
-    // Input
-    let text = text.into();
+pub fn tokenize(text: &str, diags: &mut Diagnostics) -> LexResult {
 
     // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
-    let mut values = Vec::new();
 
     // State
     let mut lexer = Lexer::new(text.chars(), diags);
@@ -656,7 +688,6 @@ pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
         // Transfer the token from the input to the output vectors
         kinds.push(kind);
         lens.push((end.offset - start.offset) as u32);
-        values.push(Some(text[start.offset..end.offset].to_string()));
     }
 
     // For debugging only
@@ -666,7 +697,6 @@ pub fn tokenize(text: impl Into<String>, diags: &mut Diagnostics) -> LexResult {
 
     LexResult {
         kinds,
-        values,
         lens,
     }
 }
@@ -769,8 +799,21 @@ mod tests {
     fn invalid_literals() {
         assert_eq!(lex_errors(r#""\x7""#).len(), 1);
         assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
+        assert_eq!(lex_errors(r#""\u{}""#), ["expected one to six hex digits in a unicode escape"]);
+        assert_eq!(lex_errors(r#""\u{0000041}""#), ["expected one to six hex digits in a unicode escape"]);
+        assert_eq!(lex_errors(r#""\u{FFFFFF}""#), ["`FFFFFF` is not a unicode character"]);
+        assert_eq!(lex_errors(r#""\u{D800}""#), ["`D800` is not a unicode character"]);
+        assert_eq!(lex_errors(r#""\uDFFF""#), ["`DFFF` is not a unicode character"]);
+        assert_eq!(lex_errors(r#"'\u{110000}'"#), ["`110000` is not a unicode character"]);
+        assert!(lex_errors(r#""\u{10FFFF}\u{41}\u0041""#).is_empty());
         assert!(!lex_errors("b'ab'").is_empty());
         assert_eq!(lex_errors(r##"r#"no end""##).len(), 1);
+    }
+
+    #[test]
+    fn unexpected_characters() {
+        assert_eq!(lex_errors("a ~ b"), ["unexpected character `~`"]);
+        assert_eq!(lex_errors("\u{200b}"), ["unexpected character `\\u{200b}`"]);
     }
 
     #[test]

@@ -44,6 +44,9 @@ pub(crate) fn pattern_single(p: &mut Parser) -> Option<CompletedMarker> {
     if p.at(T![mut]) {
         let m = p.start();
         p.bump(T![mut]);
+        if p.at(T![mut]) {
+            p.error_and_bump("expected a pattern after `mut`, found another `mut`");
+        }
         pattern_single(p);
         return Some(m.complete(p, MUT_PATT));
     }
@@ -226,4 +229,35 @@ fn field_pattern(p: &mut Parser) {
         name(p);
     }
     m.complete(p, FIELD_PATT);
+}
+
+#[cfg(test)]
+mod tests {
+    use boltlang_syntax::{SyntaxKind::*, SyntaxNode};
+
+    use crate::parse_file;
+
+    /// The kinds of the children of the first `kind` node in `text`.
+    fn children(text: &str, kind: boltlang_syntax::SyntaxKind) -> Vec<boltlang_syntax::SyntaxKind> {
+        let (green, diags) = parse_file(text);
+        assert!(diags.is_empty(), "{diags:?}");
+        let node = SyntaxNode::new_root(green).descendants().find(|n| n.kind() == kind).unwrap();
+        node.children().map(|n| n.kind()).collect()
+    }
+
+    #[test]
+    fn mut_is_a_pattern_everywhere() {
+        assert_eq!(children("fn f(mut x) {}", PARAM), [MUT_PATT]);
+        assert_eq!(children("fn f(mut x: i32) {}", PARAM)[0], MUT_PATT);
+        assert_eq!(children("let g = |mut x| x;", PARAM), [MUT_PATT]);
+        assert_eq!(children("let mut x = 1;", LET_STMT)[0], MUT_PATT);
+        assert_eq!(children("let f: fn(mut x: i32) = g;", PARAM)[0], MUT_PATT);
+    }
+
+    #[test]
+    fn mut_twice_is_an_error() {
+        for text in ["fn f(mut mut x) {}", "let mut mut x = 1;", "let g = |mut mut x| x;"] {
+            assert!(!parse_file(text).1.is_empty(), "{text}");
+        }
+    }
 }
