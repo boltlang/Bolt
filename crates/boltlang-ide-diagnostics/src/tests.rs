@@ -684,7 +684,7 @@ fn unknown_mutabilities() {
         r#"
 fn same(xs: 'm [i32]) -> 'm [i32] = xs;
 fn f() { let ys: 'q [i32] = [1]; }
-               //^^^^^^^^ error: the mutability of `'q [i32]` isn't one of this function's: a name like `'m` can only be used in the signature and the body of the function or impl that it's written in
+               //^^^^^^^^ error: the mutability of `'q [i32]` isn't one of this function's or impl's: a name like `'m` can only be used in the function or impl whose signature names it, and an impl's associated types
 "#,
     );
 }

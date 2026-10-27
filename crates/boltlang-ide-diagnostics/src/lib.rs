@@ -414,8 +414,8 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::UnknownMutability => (
             C::UNKNOWN_MUTABILITY,
             format!(
-                "the mutability of `{source}` isn't one of this function's: a name like `'m` can only be used in the \
-                 signature and the body of the function or impl that it's written in"
+                "the mutability of `{source}` isn't one of this function's or impl's: a name like `'m` can only be used \
+                 in the function or impl whose signature names it, and an impl's associated types"
             ),
         ),
         K::MutabilityAlone => (

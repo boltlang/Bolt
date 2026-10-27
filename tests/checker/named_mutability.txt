@@ -231,3 +231,36 @@ fn copy(xs: [i32]) -> [i32] = [xs[0]];
 --------------------------------------------------------------------------------
 same: fn('m [i32]) -> 'm [i32]
 copy: fn([i32]) -> imm [i32]
+
+================================================================================
+An impl's associated type can use the impl's named mutability (#245)
+================================================================================
+struct Counter { n: i32 }
+class Wrap[C] { type Inner; fn inner(c: C) -> Inner; }
+impl Wrap['m Counter] {
+  type Inner = 'm Counter;
+  fn inner(c) = c;
+}
+let a = inner(Counter { n: 1 });
+let b = inner(mut Counter { n: 1 });
+b.n = 2;
+--------------------------------------------------------------------------------
+Wrap['m Counter].inner: fn('m Counter) -> 'm Counter
+let a: imm Counter
+let b: mut Counter
+b.n = 2: ()
+
+================================================================================
+An associated type can't use a name the impl doesn't have
+:error
+================================================================================
+struct Counter { n: i32 }
+class Wrap[C] { type Inner; fn inner(c: C) -> Inner; }
+impl Wrap[Counter] {
+  type Inner = 'q Counter;
+  fn inner(c) = c;
+}
+--------------------------------------------------------------------------------
+Wrap[Counter].inner: fn(Counter) -> imm Counter
+--------------------------------------------------------------------------------
+error at `c`: expected imm Counter, found Counter

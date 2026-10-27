@@ -738,6 +738,12 @@ pub fn type_alias_ty<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> TypeAlias
     let sig = type_alias_signature(db, alias);
     let resolver = Resolver::for_generic_def(db, GenericDefId::TypeAlias(alias));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
+    // An associated type in an impl can use the impl's named mutabilities,
+    // like the `'m` of `impl[T] Iterable['m FnIter[T]] { type Iter = 'm
+    // FnIter[T]; }`: it's the mutability the impl is chosen for.
+    if let ItemContainerId::Impl(imp) = alias.container(db) {
+        ctx = ctx.with_mutabilities(GenericDefId::Impl(imp));
+    }
     let ty = ctx.lower_opt_ty(sig.type_ref);
     TypeAliasTy { ty, recursive: false, diagnostics: ctx.diagnostics }
 }

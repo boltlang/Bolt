@@ -452,8 +452,11 @@ Rust's lifetimes: without it, `m [i32]` would be the type `m` applied to
   the function can't change what has it, and
   `fn make() -> 'm [i32] = [1]` is an error: `[1]` is `imm`, not whatever
   the caller chooses.
-- **Only functions and impls have names.** A name elsewhere, like in a
-  field, a const, a type alias or a body that isn't its function's, is an
+- **Only functions and impls have names.** An impl's associated types can
+  use its names too: `impl[T] Iterable['m FnIter[T]] { type Iter =
+  'm FnIter[T]; ... }` is for an `FnIter` of either mutability, and its
+  `Iter` has the same one. A name elsewhere, like in a field, a const, a
+  type alias outside an impl or a body that isn't its function's, is an
   error (E0225). A name before a type that can't have a mutability, like
   `'m i32`, is E0222.
 - **Types show names**, and a name for a mutability that's shared but not
