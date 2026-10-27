@@ -539,7 +539,11 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 operator_kind(&text)
             }
-            _ => ERROR,
+            ch => {
+                let start = self.pos.offset - ch.len_utf8();
+                self.error(format!("unexpected character `{}`", ch.escape_debug()), start..self.pos.offset);
+                ERROR
+            }
         }
     }
 
@@ -771,6 +775,12 @@ mod tests {
         assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
         assert!(!lex_errors("b'ab'").is_empty());
         assert_eq!(lex_errors(r##"r#"no end""##).len(), 1);
+    }
+
+    #[test]
+    fn unexpected_characters() {
+        assert_eq!(lex_errors("a ~ b"), ["unexpected character `~`"]);
+        assert_eq!(lex_errors("\u{200b}"), ["unexpected character `\\u{200b}`"]);
     }
 
     #[test]
