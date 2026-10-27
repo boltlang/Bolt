@@ -21,7 +21,7 @@ namespace BoltMut
 /-- One step doesn't change what an `imm` location holds: the only step that
 writes, `set`, needs the location to be `mut`. -/
 theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty} {l : Nat} {ty : Ty}, HeapOk fns σ h → HasType fns σ Ctx.empty e t →
+    ∀ {σ : HeapTy} {t : Ty} {l : Nat} {ty : Ty}, HeapOk fns σ h → HasType fns σ false Ctx.empty e t →
       σ[l]? = some (.immutable, ty) → h'[l]? = h[l]? := by
   induction hs with
   | newCong _ ih =>
@@ -49,7 +49,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     cases ht with
     | set he₁ _ =>
       cases he₁ with
-      | loc hσ =>
+      | loc hσ _ =>
         -- The location written is `mut`, so it isn't `l`.
         have hne : l₀ ≠ l := by
           intro heq
@@ -67,12 +67,21 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     cases ht with
     | call _ _ he => exact ih hh he hl
   | callVal _ _ => intros; rfl
+  | appCong₁ _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | app he₁ _ => exact ih hh he₁ hl
+  | appCong₂ _ _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | app _ he₂ => exact ih hh he₂ hl
+  | appVal _ => intros; rfl
 
 /-- However many steps a well-typed program takes, an `imm` location holds
 the same value. -/
 theorem imm_never_changes {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Steps fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty} {l : Nat} {ty : Ty}, HeapOk fns σ h → HasType fns σ Ctx.empty e t →
+    ∀ {σ : HeapTy} {t : Ty} {l : Nat} {ty : Ty}, HeapOk fns σ h → HasType fns σ false Ctx.empty e t →
       σ[l]? = some (.immutable, ty) → h'[l]? = h[l]? := by
   induction hs with
   | refl => intros; rfl
@@ -82,11 +91,12 @@ theorem imm_never_changes {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' :
     obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
     rw [ih hh' ht' (hx _ _ hl), h₁]
 
-/-- `l'` can be reached from `l` through the heap: it's `l`, or what a
-location reachable from `l` holds. -/
+/-- `l'` can be reached from `l` through the heap: it's `l`, or reachable
+from a location in what `l` holds, which is the location itself or what a
+closure captured. -/
 inductive Reaches (h : Heap) : Nat → Nat → Prop where
   | refl {l : Nat} : Reaches h l l
-  | step {l l₁ l₂ : Nat} : h[l]? = some (.loc l₁) → Reaches h l₁ l₂ → Reaches h l l₂
+  | step {l l₁ l₂ : Nat} {v : Expr} : h[l]? = some v → v.HasLoc l₁ → Reaches h l₁ l₂ → Reaches h l l₂
 
 /-- `imm` is deep: everything reachable from an `imm` location is `imm`. -/
 theorem reaches_only_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h)
@@ -94,23 +104,22 @@ theorem reaches_only_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk f
     ∀ {ty : Ty}, σ[l]? = some (.immutable, ty) → ∃ ty', σ[l']? = some (.immutable, ty') := by
   induction hr with
   | refl => intro ty hl; exact ⟨ty, hl⟩
-  | step hl₁ _ ih =>
+  | step hv₁ hl₁ _ ih =>
     intro ty hl
-    obtain ⟨_, hdeep, v, hv, _, hvt⟩ := hh.2 _ _ _ hl
-    rw [hl₁] at hv
+    obtain ⟨_, hdeep, v, hv, hval, hvt⟩ := hh.2 _ _ _ hl
+    rw [hv₁] at hv
     cases hv
     -- What an `imm` location holds has a type that's `imm` all the way down,
-    -- so the location it points to is `imm` too.
-    cases hvt with
-    | loc hσ =>
-      obtain ⟨rfl, _⟩ := hdeep rfl
-      exact ih hσ
+    -- so it can be typed as if inside an `imm` closure, where every location
+    -- is `imm`: the location itself, or what an `imm` closure captured.
+    obtain ⟨ty', hσ⟩ := (hvt.value_imm hval (hdeep rfl)).hasLoc_imm rfl hl₁
+    exact ih hσ
 
 /-- The promise of `imm`: nothing reachable from an `imm` location ever
 changes, however many steps a well-typed program takes. -/
 theorem reachable_from_imm_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy}
     {h h' : Heap} {e e' : Expr} {t ty : Ty} {l l' : Nat}
-    (hh : HeapOk fns σ h) (ht : HasType fns σ Ctx.empty e t) (hs : Steps fns h e h' e')
+    (hh : HeapOk fns σ h) (ht : HasType fns σ false Ctx.empty e t) (hs : Steps fns h e h' e')
     (hl : σ[l]? = some (.immutable, ty)) (hr : Reaches h l l') : h'[l']? = h[l']? := by
   obtain ⟨ty', hl'⟩ := reaches_only_imm hh hr hl
   exact imm_never_changes hf hs hh ht hl'
@@ -119,7 +128,7 @@ theorem reachable_from_imm_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : 
 value or can take another step. -/
 theorem safety {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Steps fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ Ctx.empty e t →
+    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ false Ctx.empty e t →
       e'.IsValue ∨ ∃ h'' e'', Step fns h' e' h'' e'' := by
   induction hs with
   | refl => intro σ t hh ht; exact progress hh ht
@@ -139,8 +148,8 @@ theorem HeapOk.empty (fns : List Fn) : HeapOk fns [] [] :=
 /-- Preservation over any number of steps. -/
 theorem steps_preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Steps fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ Ctx.empty e t →
-      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' Ctx.empty e' t := by
+    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ false Ctx.empty e t →
+      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' false Ctx.empty e' t := by
   induction hs with
   | refl => intro σ t hh ht; exact ⟨σ, Extends.refl σ, hh, ht⟩
   | step s _ ih =>
@@ -153,7 +162,7 @@ theorem steps_preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
 heap typing for the heap it has reached, such that nothing reachable from
 a location that's `imm` in it ever changes afterwards. -/
 theorem program_imm_never_changes {fns : List Fn} (hf : FnsOk fns) {e e₁ : Expr} {t : Ty}
-    {h₁ : Heap} (ht : HasType fns [] Ctx.empty e t) (hs₁ : Steps fns [] e h₁ e₁) :
+    {h₁ : Heap} (ht : HasType fns [] false Ctx.empty e t) (hs₁ : Steps fns [] e h₁ e₁) :
     ∃ σ, HeapOk fns σ h₁ ∧
       ∀ {l l' : Nat} {ty : Ty} {h₂ : Heap} {e₂ : Expr}, σ[l]? = some (.immutable, ty) →
         Reaches h₁ l l' → Steps fns h₁ e₁ h₂ e₂ → h₂[l']? = h₁[l']? := by

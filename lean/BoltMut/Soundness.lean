@@ -17,26 +17,16 @@ def HeapOk (fns : List Fn) (σ : HeapTy) (h : Heap) : Prop :=
   h.length = σ.length ∧
     ∀ (l : Nat) (m : Mu) (t : Ty), σ[l]? = some (m, t) →
       (m = .mutable ∨ m = .immutable) ∧ (m = .immutable → DeepImm t) ∧
-        ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ Ctx.empty v t
+        ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ false Ctx.empty v t
 
 theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {l : Nat} {p : Mu × Ty}
     (hl : σ[l]? = some p) : l < h.length := by
   rw [hh.1]
   exact (List.getElem?_eq_some_iff.mp hl).1
 
-theorem muOf_cases (b : Bool) : muOf b = .mutable ∨ muOf b = .immutable := by
-  cases b
-  · exact .inr rfl
-  · exact .inl rfl
-
-theorem muOf_immutable {b : Bool} (h : muOf b = .immutable) : b = false := by
-  cases b
-  · rfl
-  · cases h
-
 /-- A well-typed program that isn't a value can take a step. -/
-theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {e : Expr} {t : Ty}
-    (hh : HeapOk fns σ h) (ht : HasType fns σ Ctx.empty e t) :
+theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr} {t : Ty}
+    (hh : HeapOk fns σ h) (ht : HasType fns σ io Ctx.empty e t) :
     e.IsValue ∨ ∃ h' e', Step fns h e h' e' := by
   generalize hΓ : Ctx.empty = Γ at ht
   induction ht with
@@ -45,7 +35,15 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {e : Expr} {t : Ty}
     cases hx
   | unit => exact .inl .unit
   | int => exact .inl .int
-  | loc _ => exact .inl .loc
+  | loc _ _ => exact .inl .loc
+  | lam _ => exact .inl .lam
+  | app he₁ _ ih₁ ih₂ =>
+    rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
+    · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
+      · obtain ⟨b, x, body, rfl⟩ := canonical_fn hv₁ he₁
+        exact .inr ⟨_, _, .appVal hv₂⟩
+      · exact .inr ⟨_, _, .appCong₂ hv₁ hs⟩
+    · exact .inr ⟨_, _, .appCong₁ hs⟩
   | new _ _ ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .newVal hv⟩
@@ -76,8 +74,8 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {e : Expr} {t : Ty}
 only grows. -/
 theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ Ctx.empty e t →
-      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' Ctx.empty e' t := by
+    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ false Ctx.empty e t →
+      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' false Ctx.empty e' t := by
   induction hs with
   | newCong _ ih =>
     intro σ t hh ht
@@ -88,8 +86,8 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   | @newVal e b hv =>
     intro σ t hh ht
     cases ht with
-    | @new _ _ s _ he hd =>
-      refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, ⟨?_, ?_⟩, .loc ?_⟩
+    | @new _ _ _ s _ he hd =>
+      refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, ⟨?_, ?_⟩, .loc ?_ ?_⟩
       · simp [hh.1]
       · intro l m t hl
         by_cases hlt : l < σ.length
@@ -109,6 +107,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
             he.weaken_heap (Extends.append σ _)⟩
           rw [← hh.1, List.getElem?_concat_length]
       · rw [hh.1, List.getElem?_concat_length]
+      · exact fun h => nomatch h
   | getCong _ ih =>
     intro σ t hh ht
     cases ht with
@@ -120,7 +119,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     cases ht with
     | get he =>
       cases he with
-      | loc hσ =>
+      | loc hσ _ =>
         obtain ⟨_, _, v, hv, _, hvt⟩ := hh.2 _ _ _ hσ
         rw [hl] at hv
         cases hv
@@ -142,7 +141,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     cases ht with
     | set he₁ he₂ =>
       cases he₁ with
-      | loc hσ =>
+      | loc hσ _ =>
         refine ⟨σ, Extends.refl σ, ⟨by simp [hh.1], ?_⟩, .unit⟩
         intro l' m t' hl'
         by_cases heq : l = l'
@@ -150,7 +149,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
           rw [hσ] at hl'
           cases hl'
           refine ⟨.inl rfl, (fun hm => nomatch hm), v, List.getElem?_set_self hl, hv, ?_⟩
-          exact he₂.value_any_ctx hv
+          exact he₂
         · obtain ⟨hm, hd, w, hw, hwv, hwt⟩ := hh.2 l' m t' hl'
           exact ⟨hm, hd, w, by rw [List.getElem?_set_ne heq]; exact hw, hwv, hwt⟩
   | letCong _ ih =>
@@ -163,7 +162,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     intro σ t hh ht
     cases ht with
     | letE he₁ he₂ =>
-      exact ⟨σ, Extends.refl σ, hh, he₂.subst rfl hv he₁⟩
+      exact ⟨σ, Extends.refl σ, hh, he₂.subst_update hv he₁⟩
   | callCong _ ih =>
     intro σ t hh ht
     cases ht with
@@ -179,6 +178,28 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
       obtain ⟨hn, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
       have hb := (hbody.weaken_heap (Extends.nil σ)).msubst hn ms
       rw [Ctx.msubst_update, Ctx.msubst_empty] at hb
-      exact ⟨σ, Extends.refl σ, hh, hb.subst rfl hv he⟩
+      exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he⟩
+  | appCong₁ _ ih =>
+    intro σ t hh ht
+    cases ht with
+    | app he₁ he₂ =>
+      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+      exact ⟨σ', hx, hh', .app he₁' (he₂.weaken_heap hx)⟩
+  | appCong₂ _ _ ih =>
+    intro σ t hh ht
+    cases ht with
+    | app he₁ he₂ =>
+      obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
+      exact ⟨σ', hx, hh', .app (he₁.weaken_heap hx) he₂'⟩
+  | appVal hv =>
+    intro σ t hh ht
+    cases ht with
+    | app he₁ he₂ =>
+      cases he₁ with
+      | lam hbody =>
+        -- The body of an `imm` closure is typed inside one; outside, it
+        -- has the same type.
+        rw [Ctx.capture_empty] at hbody
+        exact ⟨σ, Extends.refl σ, hh, (hbody.weaken_imm (io' := false) (fun h => nomatch h)).subst_update hv he₂⟩
 
 end BoltMut

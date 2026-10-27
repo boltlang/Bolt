@@ -25,6 +25,8 @@ A small language with what matters for mutability:
 | `xs[i]`, `xs[i] = y` | `get e`, `set e y` |
 | `'m [T]`, or `[T]` in a signature: either mutability | a mutability parameter, `Mu.param i` |
 | a generic function, called with the mutabilities the checker finds | a top-level `Fn` with `arity` parameters, called as `call f ms e` |
+| a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
+| a `let mut` variable a closure captures, which it shares | a `mut` cell |
 
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 
@@ -35,6 +37,11 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   it's given but not change it.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
+- **Closures have a mutability** (#244): an `imm` closure only sees the
+  variables whose types are `imm` all the way down, and only `imm`
+  locations. Its type, `fn imm a r`, is `DeepImm`, so an `imm` object can
+  hold it; a `mut` closure captures anything, and an `imm` object can't
+  hold it. Calling either is allowed.
 
 ## What's proven
 
@@ -43,25 +50,28 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `progress`, `preservation` | `Soundness.lean` | the usual type safety, with a heap that matches its typing (`HeapOk`) |
 | `safety` | `Immutability.lean` | a well-typed program never gets stuck |
 | `imm_never_changes` | `Immutability.lean` | however many steps a program takes, an `imm` location holds the same value |
-| `reaches_only_imm` | `Immutability.lean` | everything reachable from an `imm` location is `imm` |
+| `reaches_only_imm` | `Immutability.lean` | everything reachable from an `imm` location is `imm`, through what closures captured too |
 | `reachable_from_imm_never_changes` | `Immutability.lean` | the two together: nothing reachable from an `imm` location ever changes |
 | `program_imm_never_changes` | `Immutability.lean` | the same for a whole program, run from an empty heap |
 
 The key lemma for generic functions is `HasType.msubst` in `Lemmas.lean`: a
 body typed with its mutability parameters unknown keeps its type when they
-become `mut` or `imm`. `BoltMut/Examples.lean` shows what's accepted and
-rejected: changing a `mut` object but not an `imm` one, an `imm` object
-holding a `mut` one, and a generic function that reads but can't write.
+become `mut` or `imm`. For closures, it's `HasType.hasLoc_imm`: inside an
+`imm` closure, every location is `imm`. `BoltMut/Examples.lean` shows
+what's accepted and rejected: changing a `mut` object but not an `imm` one,
+an `imm` object holding a `mut` one, a generic function that reads but
+can't write, and the hole from #244, an `imm` object holding a closure that
+changes what it captured.
 
 The theorems depend only on the axioms `propext` and `Quot.sound` (check with
 `#print axioms`); there's no `sorry`.
 
 ## What's left out
 
-- **Closures.** With today's rules, an `imm` value can change through a
-  closure it holds, so the theorem would be false for them. #244 proposes
-  giving function types a mutability; this proof is where that fix should
-  be checked next.
+- **Today's closures.** The proof is about closures with a mutability, as
+  #244 proposes; with today's rules, an `imm` value can change through a
+  closure it holds. An `imm` closure here doesn't capture a value of a
+  generic type, which needs the constraint #243 adds.
 - **Inference.** The proof is about the typing rules, with the mutability
   arguments of each call given. That the checker finds them, and the most
   general ones, isn't proven.

@@ -37,6 +37,12 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
   | callVal {h : Heap} {f : Nat} {fn : Fn} {ms : List Mu} {v : Expr} :
       fns[f]? = some fn → v.IsValue →
       Step fns h (.call f ms v) h ((fn.body.msubst ms).subst fn.param v)
+  | appCong₁ {h h' : Heap} {e₁ e₁' e₂ : Expr} :
+      Step fns h e₁ h' e₁' → Step fns h (.app e₁ e₂) h' (.app e₁' e₂)
+  | appCong₂ {h h' : Heap} {e₁ e₂ e₂' : Expr} :
+      e₁.IsValue → Step fns h e₂ h' e₂' → Step fns h (.app e₁ e₂) h' (.app e₁ e₂')
+  | appVal {h : Heap} {b : Bool} {x : Nat} {body v : Expr} :
+      v.IsValue → Step fns h (.app (.lam b x body) v) h (body.subst x v)
 
 /-- Any number of steps. -/
 inductive Steps (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
