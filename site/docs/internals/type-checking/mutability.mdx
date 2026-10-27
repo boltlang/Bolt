@@ -222,15 +222,23 @@ A function without annotations gets the mutability it needs, and is
 generalized over the rest, like over any type:
 
 ```bolt
-fn first(xs) = xs[0];             // fn([a]) -> a
-fn fill(xs, x) { xs[0] = x; }     // fn(mut [a], a) -> ()
+fn size(xs) = array_len(xs);               // fn([a]) -> i32
+fn fill(xs: [i32], x) { xs[0] = x; }        // error: `xs` isn't `mut`
+fn fill(xs: mut [i32], x) { xs[0] = x; }    // fn(mut [i32], i32) -> ()
 ```
 
-`first` is generalized over the mutability of its argument,
-$\forall \mu\, \alpha.\ \mathsf{Array}[\mu, \alpha] \to \alpha$, and that's
-shown as `[a]`. It takes arrays of either mutability. `fill` only takes
-`mut` ones, since it changes its argument. Instantiating a scheme gives a
+`size` is generalized over the mutability of its argument,
+$\forall \mu\, \alpha.\ \mathsf{Array}[\mu, \alpha] \to \mathsf{i32}$, and
+that's shown as `[a]`. It takes arrays of either mutability. `fill` needs a
+`mut` array, since it changes its argument. Instantiating a scheme gives a
 fresh mutability, so each call can pass a different kind of array.
+
+Indexing goes through the prelude's classes, so a function that indexes an
+argument whose type it doesn't know is generic over the class instead:
+`fn first(xs) = xs[0]` is `forall a. Index[a] => fn(a) -> a.Item`, and
+`fn set(xs, x) { xs[0] = x; }` is `forall a. IndexMut[a] => fn(a, a.Item)`.
+The impl `IndexMut[mut [T]]` only covers `mut` arrays, so `set([1], 2)` is
+an error.
 
 A field of a value whose type isn't known is a
 [field constraint](./constraints.mdx). One that's assigned to says so, and
@@ -356,9 +364,9 @@ Rust's lifetimes: without it, `m [i32]` would be the type `m` applied to
   `a`, `b`, ...:
 
   ```bolt
-  fn pick(c, a, b) = if c { a[0]; a } else { b };  // forall a. fn(Bool, 'm [a], 'm [a]) -> 'm [a]
-  fn same(xs: [i32]) -> [i32] = xs;                 // fn('m [i32]) -> 'm [i32]
-  fn first(xs) = xs[0];                             // forall a. fn([a]) -> a
+  fn pick(c, a, b) = if c { array_len(a); a } else { b };  // forall a. fn(Bool, 'm [a], 'm [a]) -> 'm [a]
+  fn same(xs: [i32]) -> [i32] = xs;                         // fn('m [i32]) -> 'm [i32]
+  fn size(xs) = array_len(xs);                              // forall a. fn([a]) -> i32
   ```
 
   A mutability that appears once isn't named: it's either, and it isn't

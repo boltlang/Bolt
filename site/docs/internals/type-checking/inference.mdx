@@ -179,8 +179,15 @@ infers the scrutinee's type $\tau_s$, checks every arm's pattern against
 $\tau_s$ and every arm's body against $\beta$. A `match` without arms has
 type `!`.
 
-`while` and `for` have type `()`. `for` only loops over arrays for now: the
-iterable must be $[\beta]$ and the pattern is checked against $\beta$.
+`while` and `for` have type `()`. `for x in c` goes through the prelude's
+classes, arrays too: with $\tau_c$ the type of `c`, it adds the constraints
+`Iterable[`$\tau_c$`]` and `Iterator[`$\tau_c$`.Iter]`, and checks the
+pattern against $\tau_c$`.Iter.Item`. Likewise, `c[i]` checks `i` against
+`i32`, adds `Index[`$\tau_c$`]` and has the type $\tau_c$`.Item`, and
+`c[i] = x` adds `IndexMut[`$\tau_c$`]`. Each associated type, like
+$\tau_c$`.Item`, becomes a variable that the solver decides once it finds
+the impl. Without a prelude that defines the classes, these are errors
+(E0228).
 
 `loop`, and blocks with a label, push a *breakable* with a result variable.
 `break v` checks `v` against the result of the loop or block it leaves, and

@@ -248,9 +248,8 @@ of your own can be indexed and looped over like an array:
 | | `Iterator[I]`, with `type Item` | `fn next(it: I) -> Option[Item]` |
 
 `for x in c` calls `iter(c)` once, then `next` on the iterator until it gives
-`None`. `c[i] += x` calls `index` and then `set_index`. Arrays don't need
-impls: indexing and looping over them are built in. A `Vec` has impls of all
-of them:
+`None`. `c[i] += x` calls `index` and then `set_index`. Arrays use them
+too: the prelude has impls for arrays, and so does `Vec`:
 
 ```bolt
 struct Ring { items: [i32] }
@@ -294,14 +293,9 @@ total;
 6
 ```
 
-:::note
-
-Bolt decides which class to use from the type of `c`. When the type isn't
-known yet, like the parameter of `fn first(c) = c[0]`, it's taken to be an
-array. Write the type, or a `where` clause, to use a function on other types:
-`fn first[C](c: C) -> C.Item where Index[C] = c[0];`.
-
-:::
+A function that indexes or loops over something whose type it doesn't know
+works for any type with the impls: `fn first(c) = c[0];` has the type
+`forall a. Index[a] => fn(a) -> a.Item`, and takes arrays and `Vec`s alike.
 
 ## Classes of type constructors
 
