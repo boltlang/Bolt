@@ -21,7 +21,8 @@ pub class ToImm[T] {
   /// The `imm` version of `T`, like `imm [i32]` for `[i32]`.
   type Imm;
 
-  /// A copy of `x` that can't be changed. The copy is shallow, so `T` can't
-  /// hold anything `mut`: an `imm` value can't, since `imm` is deep.
+  /// A copy of `x` that can't be changed. The copy is shallow, so what `x`
+  /// holds can't be `mut`, since an `imm` value can't hold it: impls say
+  /// so with a bound, like `impl[T: imm] ToImm[[T]]`.
   fn to_imm(x: T) -> Imm;
 }

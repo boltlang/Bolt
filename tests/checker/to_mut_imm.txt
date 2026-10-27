@@ -40,7 +40,7 @@ let points = to_imm(mut [mut Point { x: 1 }]);
 --------------------------------------------------------------------------------
 let points: imm [mut Point]
 --------------------------------------------------------------------------------
-error at `to_imm(mut [mut Point { x: 1 }])`: imm [mut Point] holds mut Point
+error at `to_imm`: mut Point isn't at most imm
 
 ================================================================================
 Types without the impls

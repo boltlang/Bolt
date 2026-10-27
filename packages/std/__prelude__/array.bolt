@@ -71,7 +71,7 @@ impl[T] ToMut[[T]] {
 }
 
 /// A copy of an array that can't be changed.
-impl[T] ToImm[[T]] {
+impl[T: imm] ToImm[[T]] {
   type Imm = imm [T];
   fn to_imm(xs) = array_freeze(xs);
 }
