@@ -135,7 +135,14 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
     boltlang_hir::file_diagnostics(db, file)
         .into_iter()
         .map(|d| {
-            let names = TyNames::new(db, &types_in(&d.kind));
+            let mut names = TyNames::new(db, &types_in(&d.kind));
+            // Types that differ only in mutabilities that aren't shown, like
+            // an `imm fn()` and a generic `fn()`, are shown with them.
+            if let DiagnosticKind::TypeMismatch { expected, actual, .. } = &d.kind
+                && expected.display_with(db, &names).to_string() == actual.display_with(db, &names).to_string()
+            {
+                names = TyNames::explicit(db, &types_in(&d.kind));
+            }
             let labels = match &d.kind {
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }

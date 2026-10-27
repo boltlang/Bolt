@@ -300,11 +300,26 @@ enum Unknown<'db> {
 pub struct TyNames<'db> {
     names: Vec<(Unknown<'db>, String)>,
     mutabilities: Vec<(Unknown<'db>, String)>,
+    /// Whether every mutability is shown, even an unknown one used once and
+    /// the `imm` of a function.
+    explicit: bool,
 }
 
 impl<'db> TyNames<'db> {
+    /// Like [`TyNames::new`], but showing every mutability: for types that
+    /// differ only there, like an `imm fn()` and a generic `fn()`.
+    pub fn explicit(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Self {
+        let mut names = Self::with_mode(db, tys, true);
+        names.explicit = true;
+        names
+    }
+
     /// Names for the unknown types in `tys`, which are shown in this order.
     pub fn new(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Self {
+        Self::with_mode(db, tys, false)
+    }
+
+    fn with_mode(db: &'db dyn Db, tys: &[&Ty<'db>], explicit: bool) -> Self {
         #[derive(Default)]
         struct Found<'db> {
             taken: Vec<String>,
@@ -360,7 +375,7 @@ impl<'db> TyNames<'db> {
         let mut candidates =
             (12..).map(|i| format!("'{}", bound_name(i))).filter(|n| !found.taken_mutabilities.contains(n));
         for &unknown in &found.mutabilities {
-            let shared = found.mutabilities.iter().filter(|u| **u == unknown).count() > 1;
+            let shared = explicit || found.mutabilities.iter().filter(|u| **u == unknown).count() > 1;
             if shared && !out.mutabilities.iter().any(|(u, _)| *u == unknown) {
                 out.mutabilities.push((unknown, candidates.next().unwrap()));
             }
@@ -472,7 +487,8 @@ impl fmt::Display for DisplayTy<'_, '_> {
             Ty::Fn(params, ret, mutability) => {
                 // An `imm` function is shown as just `fn(...)`, since most
                 // are.
-                if *mutability.as_ref() != Ty::Mutability(Mutability::Imm) {
+                let explicit = self.names.is_some_and(|n| n.explicit);
+                if explicit || *mutability.as_ref() != Ty::Mutability(Mutability::Imm) {
                     self.write_mutability(f, mutability)?;
                 }
                 f.write_str("fn(")?;

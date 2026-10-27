@@ -643,6 +643,10 @@ let h = Holder { poke: || { p.x = 1; } };
                      //^^^^^^^^^^^^^^^ error: expected `fn() -> ()`, found `mut fn() -> ()`
 let fs = [|| { p.x = 1; }];
        //^^^^^^^^^^^^^^^^^ error: an `imm [mut fn() -> ()]` can't hold a `mut fn() -> ()`: what an `imm` value holds can't be changed either
+struct Getter[T] { get: fn() -> T }
+                      //^^^^^^^^^ label: expected because of the type of field `get`
+fn copy[T](g: Getter[T]) = Getter { get: g.get };
+                                       //^^^^^ error: expected `imm fn() -> T`, found `'m fn() -> T`
 "#,
     );
 }
