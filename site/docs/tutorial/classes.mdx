@@ -241,6 +241,37 @@ fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
 Without written types, Bolt finds it by itself: `fn first(c) = get(c, 0);`
 has the type `forall a. Index[a] => fn(a) -> a.Item`.
 
+An associated type can have a bound, which every impl's type for it must
+meet. In return, code that knows a type has an instance of the class can
+count on it. The prelude's `Iterable` says that what `iter` gives is an
+`Iterator`:
+
+```bolt
+class Iterable[C] {
+  type Iter: Iterator;
+  fn iter(c: C) -> Iter;
+}
+```
+
+So a function that only asks for `Iterable` can loop, and use what the
+iterator gives, like `C.Iter.Item`:
+
+```bolt
+fn count[C: Iterable](c: C) -> i32 {
+  let mut n = 0;
+  for x in c {
+    n += 1;
+  }
+  n
+}
+
+count(vec_from_array([1, 2, 3]));
+```
+
+```text
+3
+```
+
 ## Classes with several parameters
 
 A class can relate several types:
