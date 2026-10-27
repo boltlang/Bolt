@@ -151,8 +151,8 @@ fn grow[T](v: mut Vec[T], needed: i32) {
   if new_capacity < 4 {
     new_capacity = 4;
   }
-  if new_capacity < needed {
-    new_capacity = needed;
+  while new_capacity < needed {
+    new_capacity *= 2;
   }
   let items = array_alloc(new_capacity);
   let mut i = 0;
