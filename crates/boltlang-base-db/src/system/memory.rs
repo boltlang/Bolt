@@ -35,6 +35,12 @@ impl InMemorySystem {
 
 }
 
+impl Default for InMemorySystem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 
 impl System for InMemorySystem {
 

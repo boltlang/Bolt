@@ -56,7 +56,7 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
     let node = process_events(
         interspersed.into_iter(),
         &lexed,
-        &text,
+        text,
         &mut diags
     );
     (node, diags.take_diagnostics())

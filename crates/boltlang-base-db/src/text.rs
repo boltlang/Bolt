@@ -19,7 +19,7 @@ pub struct LineIndex {
 
 impl LineIndex {
 
-    pub fn from_str(text: &str) -> Self {
+    pub fn new(text: &str) -> Self {
 
         let mut lines = Vec::new();
         let mut char_offset = 0;
@@ -41,14 +41,14 @@ impl LineIndex {
                 b0 if (b0 & 0xe0) == 0xc0 => {
                     let b1 = unwrap_byte!();
                       (((b0 & 0x1f) as u32) <<  6)
-                    | (((b1 & 0x3f) as u32) <<  0)
+                    | ((b1 & 0x3f) as u32)
                 },
                 b0 if (b0 & 0xf0) == 0xe0 => {
                     let b1 = unwrap_byte!();
                     let b2 = unwrap_byte!();
                       (((b0 & 0x0f) as u32) << 12)
                     | (((b1 & 0x3f) as u32) <<  6)
-                    | (((b2 & 0x3f) as u32) <<  0)
+                    | ((b2 & 0x3f) as u32)
                 },
                 b0 if (b0 & 0xf8) == 0xf0 && (b0 <= 0xf4) => {
                     let b1 = unwrap_byte!();
@@ -57,7 +57,7 @@ impl LineIndex {
                       (((b0 & 0x07) as u32) << 18)
                     | (((b1 & 0x3f) as u32) << 12)
                     | (((b2 & 0x3f) as u32) <<  6)
-                    | (((b3 & 0x3f) as u32) <<  0)
+                    | ((b3 & 0x3f) as u32)
                 },
                 _ => {
                     // Invalid UTF-8 byte sequence
@@ -91,7 +91,7 @@ impl LineIndex {
         let line = self.lines.partition_point(|&it| it <= offset);
         let start = self.start_offset_of_line(line);
         let col = offset - start;
-        LineColumn::new(line, col.into())
+        LineColumn::new(line, col)
     }
 
     pub fn end_offset_of_line(index: LineIndex, line: usize) -> usize {
@@ -112,7 +112,7 @@ impl LineIndex {
 #[salsa::tracked]
 pub fn index_lines(db: &dyn Db, file: File) -> DbLineIndex<'_> {
     let text = source_text(db, file);
-    DbLineIndex::new(db, LineIndex::from_str(text.as_str()))
+    DbLineIndex::new(db, LineIndex::new(text.as_str()))
 }
 
 #[salsa::tracked]
@@ -155,7 +155,7 @@ mod test {
 
     #[test]
     fn test_get_offset_from_line_column() {
-        let index = LineIndex::from_str("one\ntwo\nthree\n");
+        let index = LineIndex::new("one\ntwo\nthree\n");
         assert_eq!(index.offset_from_line_column(&LineColumn::new(0, 0)), 0);
         assert_eq!(index.offset_from_line_column(&LineColumn::new(0, 1)), 1);
         assert_eq!(index.offset_from_line_column(&LineColumn::new(0, 2)), 2);

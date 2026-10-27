@@ -73,7 +73,7 @@ mod test {
 
     #[test]
     fn test_skip_last_two() {
-        let v = vec![1,2,3,4,5];
+        let v = [1,2,3,4,5];
         let w: Vec<_> = v.iter().skip_last(2).collect();
         assert_eq!(w.len(), 3);
         assert_eq!(*w[0], 1);
@@ -83,7 +83,7 @@ mod test {
 
     #[test]
     fn test_skip_nothing() {
-        let v = vec![1,2,3,4,5];
+        let v = [1,2,3,4,5];
         let w: Vec<_> = v.iter().skip_last(0).collect();
         assert_eq!(w.len(), 5);
         assert_eq!(*w[0], 1);

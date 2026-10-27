@@ -22,10 +22,10 @@ impl TestDb {
         let executed: Arc<Mutex<Option<Vec<String>>>> = Default::default();
         let log = executed.clone();
         let storage = salsa::Storage::new(Some(Box::new(move |event: salsa::Event| {
-            if let salsa::EventKind::WillExecute { database_key } = event.kind {
-                if let Some(log) = &mut *log.lock().unwrap() {
-                    log.push(format!("{database_key:?}"));
-                }
+            if let salsa::EventKind::WillExecute { database_key } = event.kind
+                && let Some(log) = &mut *log.lock().unwrap()
+            {
+                log.push(format!("{database_key:?}"));
             }
         })));
         let db = Self { storage, files: Files::default(), system: InMemorySystem::new(), executed };

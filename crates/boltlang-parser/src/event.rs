@@ -97,7 +97,7 @@ impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
     /// turn the identifier `default` into a keyword.
     fn push_token(&mut self, kind: SyntaxKind) {
         let len = self.lexed.token_len(self.pos) as usize;
-        let start = self.text_pos as usize;
+        let start = self.text_pos;
         let end = start + len;
         self.builder.token(kind.into(), &self.text[start..end]);
         self.text_pos += len;

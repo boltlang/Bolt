@@ -64,11 +64,11 @@ fn is_bin_num(ch: char) -> bool {
 }
 
 fn is_oct_num(ch: char) -> bool {
-    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7')
+    matches!(ch, '0'..='7')
 }
 
 fn is_dec_num(ch: char) -> bool {
-    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9')
+    ch.is_ascii_digit()
 }
 
 fn is_hex_num(ch: char) -> bool {
