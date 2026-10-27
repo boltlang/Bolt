@@ -224,24 +224,43 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             }
             'u' if self.peek(0) == '{' => {
                 self.get();
-                self.eat_while(is_hex_num);
-                if self.peek(0) == '}' {
-                    self.get();
-                } else {
-                    self.error("expected `}` to end the unicode escape", start..self.pos.offset);
+                let mut digits = String::new();
+                while is_hex_num(self.peek(0)) {
+                    digits.push(self.get());
                 }
+                if self.peek(0) != '}' {
+                    self.error("expected `}` to end the unicode escape", start..self.pos.offset);
+                    return;
+                }
+                self.get();
+                if digits.is_empty() || digits.len() > 6 {
+                    self.error("expected one to six hex digits in a unicode escape", start..self.pos.offset);
+                    return;
+                }
+                self.check_code_point(&digits, start);
             }
             'u' => {
+                let mut digits = String::new();
                 for _ in 0..4 {
                     if !is_hex_num(self.peek(0)) {
                         self.error("expected `{` or four hex digits after `\\u`", start..self.pos.offset);
                         return;
                     }
-                    self.get();
+                    digits.push(self.get());
                 }
+                self.check_code_point(&digits, start);
             }
             CHAR_EOF => {}
             _ => {}
+        }
+    }
+
+    /// Report the hex digits of a unicode escape that started at `start` if
+    /// they aren't a character: above `10FFFF`, or a surrogate.
+    fn check_code_point(&mut self, digits: &str, start: usize) {
+        let value = u32::from_str_radix(digits, 16).expect("hex digits");
+        if char::from_u32(value).is_none() {
+            self.error(format!("`{digits}` is not a unicode character"), start..self.pos.offset);
         }
     }
 
@@ -769,6 +788,13 @@ mod tests {
     fn invalid_literals() {
         assert_eq!(lex_errors(r#""\x7""#).len(), 1);
         assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
+        assert_eq!(lex_errors(r#""\u{}""#), ["expected one to six hex digits in a unicode escape"]);
+        assert_eq!(lex_errors(r#""\u{0000041}""#), ["expected one to six hex digits in a unicode escape"]);
+        assert_eq!(lex_errors(r#""\u{FFFFFF}""#), ["`FFFFFF` is not a unicode character"]);
+        assert_eq!(lex_errors(r#""\u{D800}""#), ["`D800` is not a unicode character"]);
+        assert_eq!(lex_errors(r#""\uDFFF""#), ["`DFFF` is not a unicode character"]);
+        assert_eq!(lex_errors(r#"'\u{110000}'"#), ["`110000` is not a unicode character"]);
+        assert!(lex_errors(r#""\u{10FFFF}\u{41}\u0041""#).is_empty());
         assert!(!lex_errors("b'ab'").is_empty());
         assert_eq!(lex_errors(r##"r#"no end""##).len(), 1);
     }
