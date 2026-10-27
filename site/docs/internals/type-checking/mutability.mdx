@@ -200,14 +200,31 @@ let c = [mut [1]];                                    // error (E0223): an `imm 
 ```
 
 Unification can't express this, since it's about a type and what's
-inside it, so it's checked once a body's types are known: a type with a
-`mut` array or struct anywhere inside an `imm` one is an error, reported
-once, where it first appears. That catches a generic function too:
-`fn wrap[T](x: T) -> Box[T] = Box { item: x }` is fine, but `wrap(mut [1])`
-is an `imm Box[mut [i32]]`. What a function takes and gives isn't looked
-into, since its type says that, not what it holds: an
-`imm [fn(mut [i32]) -> ()]` is fine. What it holds is what a closure
-captured, which its own mutability covers.
+inside it. It's an "at most" constraint instead, with `imm ⊑ mut`
+([#243](https://github.com/boltlang/Bolt/issues/243)): an array or struct
+holds only what's at most its own mutability. So `[x]` needs nothing in
+the type of `x` to be more `mut` than `imm`. What an array or struct holds
+must in turn be at most *its* mutability, and a function's mutability
+covers what it captured; what it takes and gives isn't looked into, so an
+`imm [fn(mut [i32]) -> ()]` is fine.
+
+The constraint decides what's unknown when only one choice works: a
+mutability that must be at most `imm` is `imm`, and one that something
+`mut` must be below is `mut`. What's left about a function's parameters
+becomes part of an inferred function's type, and its callers must meet it,
+like class constraints:
+
+```bolt
+fn wrap(x) = Box { item: x };     // forall a. a ⊑ imm => fn(a) -> imm Box[a]
+wrap(1);                          // fine
+wrap(mut [1]);                    // error (E0230): expected a type that's at most `imm`, found `mut [i32]`
+```
+
+A function with a complete signature can't say that yet, so there it's an
+error: in `fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }`, `T`
+may be `mut`. A `mut` struct can hold anything, so `mut Box { item: x }`
+needs nothing. A `mut` array or struct inside an `imm` one is still also
+caught once the types are known (E0223), which shows the whole type.
 
 **A closure that can change what it captured is `mut`.** A closure shares
 the variables it captures with the code around it, so it can hold state:
@@ -241,13 +258,19 @@ function. `mut fn() -> T` and `imm fn() -> T` say which one. An `imm fn`
 is shown as just `fn`, since most are, unless that would make two types in
 a message look the same.
 
-A closure that captures a value whose mutability is a parameter, like
-`xs` in `fn reader(xs: [i32]) = || xs[0]`, has the same mutability:
-`fn('m [i32]) -> 'm fn() -> i32`. With several such values, it's `mut`.
-A captured value of a type parameter could hold anything, so it makes
-the closure `mut` too: `fn always[T](x: T) -> fn() -> T = || x` gives a
-`mut fn() -> T`. Saying that a type parameter or mutability is at most
-the closure's needs a new kind of constraint, which #243 needs too.
+What a closure captures is at most its mutability, by the same "at most"
+constraint, and a `let mut` variable makes it `mut`. So a generic function
+that makes a closure says how the closure's mutability depends on what it
+captured:
+
+```bolt
+fn reader(xs: [i32]) = || xs[0];            // 'm ⊑ 'n => fn('m [i32]) -> 'n fn() -> i32
+fn always[T](x: T) -> fn() -> T = || x;     // forall T. T ⊑ 'm => fn(T) -> 'm fn() -> T
+fn compose(f, g) = |x| f(g(x));             // forall a b c. 'm ⊑ 'o => 'n ⊑ 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
+```
+
+`reader([1])` and `always(1)` are `imm` closures, and `reader(mut [1])` is a
+`mut` one.
 
 In `std`, an `FnIter` whose function counts is `mut`, like the one that
 `for x in xs` uses for an array or a `Vec`.
@@ -519,14 +542,21 @@ unification will have to remember the origin of `Imm` and `Mut`.
     constraint as assigned (`FieldConstraint::assign`), and solving it
     requires `Mut`. Without an index or a field of a struct, the variable
     must be `mut`, as before.
+  - Making an array or struct adds an `AtMostConstraint`: the element
+    type, or the struct's type arguments, are at most its mutability. The
+    solver splits a type into the mutabilities it holds
+    (`Solver::solve_at_most`), decides what only one choice meets, and
+    keeps the rest. What's left when a group of functions is solved is
+    about their types, and becomes their schemes' `bounds`; other
+    unknowns are chosen to meet it, `imm` below first
+    (`Solver::settle_at_most`). In a body with a complete signature, what's
+    left about its parameters is an error (`TypeError::NotAtMost`).
+  - A closure gets a new mutability, the types of the variables it uses
+    from outside (`ClosureFrame`) are at most it, and a `let mut` one makes
+    it `Mut`.
   - Once a body's types are resolved, `check_deep_immutability` reports
-    each type with a `mut` array, struct or function inside an `imm` one.
-  - A closure gets a new mutability, and a `CaptureConstraint` with the
-    types of the variables it uses from outside (`ClosureFrame`), and
-    whether one is `let mut`. The solver makes it `mut` once a captured
-    type holds something `mut` (`Solver::solve_capture`); at the end, a
-    mutability still unknown becomes the closure's, and a type still
-    unknown makes it `mut`.
+    each type with a `mut` array, struct or function inside an `imm` one,
+    unless an "at most" error already did.
 - **Defaulting** (`solve.rs`): a mutability left over when a body is
   checked, and not generalized, becomes `Imm`. That happens after the
   errors are resolved, so that an undecided mutability is shown as `[T]` in
@@ -566,8 +596,10 @@ taking the place of a separate `StringBuilder`.
 ## Open questions
 
 - **Names in structs**, like `struct Pair['a, 'b] { x: 'a Point, y: 'b Point }`,
-  so that one field can be `mut` while another is `imm`. `imm` being deep
-  then needs a rule for how `'a` relates to the struct's own mutability.
+  so that one field can be `mut` while another is `imm` (#243). The rule
+  for how `'a` relates to the struct's own mutability is the "at most"
+  constraint: `'a ⊑` the struct's. Saying an assumption like `T ⊑ imm` in
+  a signature is the other part of #243 that's left.
 - **A name used once** says nothing that leaving it out doesn't, and could
   be a warning.
 - **Impls for struct type constructors.** `impl Functor[Box]` is for boxes
