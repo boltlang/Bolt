@@ -1,0 +1,223 @@
+================================================================================
+Indexing a type with an impl of Index
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Bag[T] { items: [T] }
+impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
+let b = Bag { items: [True] };
+b[0];
+
+--------------------------------------------------------------------------------
+/main.bolt: Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
+/main.bolt: let b: imm Bag[Bool]
+/main.bolt: b[0]: Bool
+
+================================================================================
+Indexing a type without an impl of Index
+:error
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Bag[T] { items: [T] }
+let b = Bag { items: [True] };
+b[0];
+
+--------------------------------------------------------------------------------
+/main.bolt: let b: imm Bag[Bool]
+/main.bolt: b[0]: {error}
+--------------------------------------------------------------------------------
+/main.bolt: error at `b[0]`: no instance Index[imm Bag[Bool]]
+
+================================================================================
+The index of a type with an impl of Index is an i32
+:error
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Bag[T] { items: [T] }
+impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
+let b = Bag { items: [True] };
+b[True];
+
+--------------------------------------------------------------------------------
+/main.bolt: Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
+/main.bolt: let b: imm Bag[Bool]
+/main.bolt: b[True]: Bool
+--------------------------------------------------------------------------------
+/main.bolt: error at `True`: expected i32, found Bool
+
+================================================================================
+Assigning to an element needs IndexMut
+:error
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Bag[T] { items: [T] }
+impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
+impl[T] IndexMut[mut Bag[T]] { fn set_index(b, i, x) { b.items[i] = x; } }
+let b = mut Bag { items: mut [1] };
+b[0] = 2;
+b[0] += 1;
+let c = Bag { items: [1] };
+c[0] = 2;
+
+--------------------------------------------------------------------------------
+/main.bolt: Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
+/main.bolt: IndexMut[mut Bag[T]].set_index: forall T. fn(mut Bag[T], i32, T) -> ()
+/main.bolt: let b: mut Bag[i32]
+/main.bolt: b[0] = 2: ()
+/main.bolt: b[0] += 1: ()
+/main.bolt: let c: imm Bag[i32]
+/main.bolt: c[0] = 2: ()
+--------------------------------------------------------------------------------
+/main.bolt: error at `c[0]`: no instance IndexMut[imm Bag[i32]]
+
+================================================================================
+Assigning the wrong type to an element
+:error
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Bag[T] { items: [T] }
+impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
+impl[T] IndexMut[mut Bag[T]] { fn set_index(b, i, x) { b.items[i] = x; } }
+let b = mut Bag { items: mut [1] };
+b[0] = "two";
+
+--------------------------------------------------------------------------------
+/main.bolt: Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
+/main.bolt: IndexMut[mut Bag[T]].set_index: forall T. fn(mut Bag[T], i32, T) -> ()
+/main.bolt: let b: mut Bag[i32]
+/main.bolt: b[0] = "two": ()
+--------------------------------------------------------------------------------
+/main.bolt: error at `"two"`: expected {integer}, found String
+
+================================================================================
+Looping over a type with an impl of Iterable
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Count { n: i32 }
+struct CountIter { left: [i32] }
+impl Iterator[mut CountIter] {
+  type Item = i32;
+  fn next(it) = if it.left[0] > 0 { it.left[0] -= 1; Some(it.left[0]) } else { None };
+}
+impl Iterable[Count] {
+  type Iter = mut CountIter;
+  fn iter(c) = mut CountIter { left: mut [c.n] };
+}
+fn f(c: Count) {
+  for x in c {
+    let y: i32 = x;
+  }
+}
+
+--------------------------------------------------------------------------------
+/main.bolt: Iterator[mut CountIter].next: fn(mut CountIter) -> Option[i32]
+/main.bolt: Iterable[Count].iter: fn(Count) -> mut CountIter
+/main.bolt: f: fn(Count) -> ()
+
+================================================================================
+Looping over a type without an impl of Iterable
+:error
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+struct Count { n: i32 }
+fn f(c: Count) {
+  for x in c {}
+}
+
+--------------------------------------------------------------------------------
+/main.bolt: f: fn(Count) -> ()
+--------------------------------------------------------------------------------
+/main.bolt: error at `c`: no instance Iterable[Count]
+
+================================================================================
+Generic functions over the classes
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+fn first[C](c: C) -> C.Item where Index[C] = c[0];
+fn count[C](c: C) -> i32 where Iterable[C], Iterator[C.Iter] {
+  let mut n = 0;
+  for x in c { n += 1; }
+  n
+}
+
+--------------------------------------------------------------------------------
+/main.bolt: first: forall C. Index[C] => fn(C) -> C.Item
+/main.bolt: count: forall C. Iterable[C] => Iterator[C.Iter] => fn(C) -> i32
+
+================================================================================
+Arrays, and types that aren't known yet, are indexed and looped over as arrays
+================================================================================
+//- /.bolt/packages/std/__prelude__/lib.bolt
+pub enum Option[T] { Some(T), None }
+pub import Option.*;
+pub class Index[C] { type Item; fn index(c: C, i: i32) -> Item; }
+pub class IndexMut[C] where Index[C] { fn set_index(c: C, i: i32, x: C.Item); }
+pub class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+pub class Iterable[C] { type Iter; fn iter(c: C) -> Iter; }
+//- /main.bolt
+fn first(xs) = xs[0];
+fn total(xs) {
+  let mut n = 0;
+  for x in xs { n += x; }
+  n
+}
+first([True]);
+--------------------------------------------------------------------------------
+/main.bolt: first: forall a. fn([a]) -> a
+/main.bolt: total: fn([i32]) -> i32
+/main.bolt: first([True]): Bool

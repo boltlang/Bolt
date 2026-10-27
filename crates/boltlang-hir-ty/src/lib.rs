@@ -20,6 +20,7 @@ pub mod check;
 pub mod infer;
 pub mod inhabited;
 pub mod kind;
+pub mod lang;
 pub mod lower;
 pub mod scheme;
 pub mod solve;

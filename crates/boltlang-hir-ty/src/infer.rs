@@ -11,7 +11,7 @@ use boltlang_hir_def::{
     Name,
     arena::ArenaMap,
     body::{Body, DefWithBody, DefWithBodyId},
-    builtin_type::{BuiltinType, BuiltinUint},
+    builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::{
         ArithOp, BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
         PrefixOp, RecordField, Statement, TypeRefId,
@@ -23,6 +23,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
+    lang::LangClass,
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types,
         identity_args, struct_args, subst_params,
@@ -415,10 +416,25 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let base_ty = self.infer_expr(*base);
                 let index_ty = self.solver.new_var(VarKind::Int);
                 self.check_expr(*index, &index_ty);
-                let elem = self.new_var();
-                let array = Ty::array(self.new_mutability(), elem.clone());
-                self.solver.equal(&array, &base_ty, self.origin(*base));
-                elem
+                // A type other than an array, like a `Vec`, is indexed through
+                // its impl of `Index`. One that isn't known yet is an array.
+                let class_elem = match self.solver.unifier.shallow_resolve(&base_ty) {
+                    Ty::Array(..) | Ty::Var(_) | Ty::Error | Ty::Never => None,
+                    _ => self.lang_assoc(LangClass::Index, &base_ty, expr),
+                };
+                match class_elem {
+                    Some(elem) => {
+                        let i32_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
+                        self.solver.equal(&i32_ty, &index_ty, self.origin(*index));
+                        elem
+                    }
+                    None => {
+                        let elem = self.new_var();
+                        let array = Ty::array(self.new_mutability(), elem.clone());
+                        self.solver.equal(&array, &base_ty, self.origin(*base));
+                        elem
+                    }
+                }
             }
             Expr::Prefix { op, expr: inner } => {
                 let ty = self.infer_expr(*inner);
@@ -515,10 +531,24 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::For { pat, iterable, body: loop_body, label } => {
                 let iterable_ty = self.infer_expr(*iterable);
-                // Without an iterator class yet, only arrays can be looped over.
-                let elem = self.new_var();
-                let array = Ty::array(self.new_mutability(), elem.clone());
-                self.solver.equal(&array, &iterable_ty, self.origin(*iterable));
+                // A type other than an array goes through its impl of
+                // `Iterable`, whose iterator gives the items with `Iterator`.
+                // One that isn't known yet is an array.
+                let class_item = match self.solver.unifier.shallow_resolve(&iterable_ty) {
+                    Ty::Array(..) | Ty::Var(_) | Ty::Error | Ty::Never => None,
+                    _ => self
+                        .lang_assoc(LangClass::Iterable, &iterable_ty, *iterable)
+                        .and_then(|iter| self.lang_assoc(LangClass::Iterator, &iter, expr)),
+                };
+                let elem = match class_item {
+                    Some(item) => item,
+                    None => {
+                        let elem = self.new_var();
+                        let array = Ty::array(self.new_mutability(), elem.clone());
+                        self.solver.equal(&array, &iterable_ty, self.origin(*iterable));
+                        elem
+                    }
+                };
                 self.check_pat(*pat, &elem);
                 self.breakables.push(Breakable { label: *label, is_loop: true, ty: None, broken: false });
                 self.check_expr(*loop_body, &Ty::unit());
@@ -999,7 +1029,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         _ => root = base,
                     }
                 }
-                Expr::Index { base, .. } => return self.check_mut_array(*base),
+                Expr::Index { base, .. } => return self.check_mut_index(root, *base),
                 _ => break,
             }
         }
@@ -1034,11 +1064,34 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     /// Report that the array `expr`, an element of which is assigned to,
     /// isn't `mut`. An array whose mutability isn't known yet becomes `mut`.
-    fn check_mut_array(&mut self, expr: ExprId) {
+    /// A type other than an array, like a `Vec`, needs an impl of
+    /// `IndexMut`, at `place`, the element assigned to.
+    fn check_mut_index(&mut self, place: ExprId, expr: ExprId) {
         let ty = self.solver.unifier.resolve(self.result.expr_ty(expr));
-        if let Ty::Array(mutability, _) = &ty {
-            self.solver.require_mut(&ty, mutability, self.origin(expr));
+        match &ty {
+            Ty::Array(mutability, _) => self.solver.require_mut(&ty, mutability, self.origin(expr)),
+            Ty::Var(_) | Ty::Error | Ty::Never => {}
+            _ => {
+                let file = self.def.def(self.db).file(self.db);
+                if let Some(class) = LangClass::IndexMut.class(self.db, file) {
+                    let constraint = ClassConstraint { class, args: Box::new([ty]) };
+                    self.solver.add(Constraint::Class { constraint, origin: self.origin(place) });
+                }
+            }
         }
+    }
+
+    /// The associated type of `lang`, a class of the prelude that syntax
+    /// uses, for `arg`, which must have an instance of it at `at`. `None`
+    /// if the prelude doesn't define the class.
+    fn lang_assoc(&mut self, lang: LangClass, arg: &Ty<'db>, at: ExprId) -> Option<Ty<'db>> {
+        let file = self.def.def(self.db).file(self.db);
+        let class = lang.class(self.db, file)?;
+        let alias = lang.assoc(self.db, class)?;
+        let origin = self.origin(at);
+        let constraint = ClassConstraint { class, args: Box::new([arg.clone()]) };
+        self.solver.add(Constraint::Class { constraint, origin });
+        Some(self.solver.flatten_assoc(&Ty::Assoc(alias, Box::new([arg.clone()])), origin))
     }
 
     fn infer_record(
