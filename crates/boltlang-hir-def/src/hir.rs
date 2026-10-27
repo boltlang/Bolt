@@ -299,6 +299,14 @@ pub enum Mutability {
     Imm,
 }
 
+/// A mutability written before a type: `mut`, `imm`, or a name like the
+/// `'m` of `'m Point`, without its `'`.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum MutabilityRef {
+    Written(Mutability),
+    Named(Name),
+}
+
 /// A type as written, before it's resolved.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum TypeRef {
@@ -309,8 +317,9 @@ pub enum TypeRef {
     Tuple(Box<[TypeRefId]>),
     /// `[T]` or `[T; N]`, with the `mut` or `imm` written before it
     Array { element: TypeRefId, len: Option<ExprId>, mutability: Option<Mutability> },
-    /// `mut T` or `imm T` for a type other than an array, like `mut Point`.
-    Mut { mutability: Mutability, inner: TypeRefId },
+    /// `mut T` or `imm T` for a type other than an array, like `mut Point`,
+    /// or a named mutability before any type, like `'m Point`.
+    Mut { mutability: MutabilityRef, inner: TypeRefId },
     /// `!`
     Never,
     /// `fn(A, B) -> C`

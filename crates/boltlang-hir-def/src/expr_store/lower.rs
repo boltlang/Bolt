@@ -15,7 +15,7 @@ use crate::{
     arena::{Arena, ArenaMap, Idx},
     hir::{
         ArithOp, BinaryOp, Binding, BlockKind, CmpOp, Expr, ExprId, GenericArg, Label, LambdaKind, Literal, LogicOp,
-        MatchArm, Mutability, Pat, PatId, Path, PathSegment, PrefixOp, RecordField, RecordFieldPat, Statement, TypeRef,
+        MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment, PrefixOp, RecordField, RecordFieldPat, Statement, TypeRef,
         TypeRefId,
     },
 };
@@ -85,7 +85,13 @@ impl ExprCollector {
                 TypeRef::Array { element, len, mutability }
             }
             ast::Type::Mut(ty) => {
-                let mutability = if ty.mut_token().is_some() { Mutability::Mut } else { Mutability::Imm };
+                let mutability = if let Some(name) = ty.name_token() {
+                    MutabilityRef::Named(Name::new(name.text().trim_start_matches('\'')))
+                } else if ty.mut_token().is_some() {
+                    MutabilityRef::Written(Mutability::Mut)
+                } else {
+                    MutabilityRef::Written(Mutability::Imm)
+                };
                 TypeRef::Mut { mutability, inner: self.lower_opt_type(ty.inner()) }
             }
             ast::Type::Never(_) => TypeRef::Never,

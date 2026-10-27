@@ -5,7 +5,7 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
-    hir::{GenericArg, Path, TypeRef, TypeRefId},
+    hir::{GenericArg, MutabilityRef, Path, TypeRef, TypeRefId},
     ids::{ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, StructId, TypeAliasId},
     resolver::{GenericDefId, Resolver, TypeNs, TypeResolution},
     signatures::{
@@ -34,7 +34,8 @@ struct HiddenParams<'db> {
 
 impl<'db> HiddenParams<'db> {
     fn new(db: &'db dyn Db, def: GenericDefId<'db>) -> Self {
-        HiddenParams { def, first: def.generic_params(db).type_params.len() as u32, count: 0 }
+        let first = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();
+        HiddenParams { def, first: first as u32, count: 0 }
     }
 
     fn fill(&mut self, ty: &Ty<'db>) -> Ty<'db> {
@@ -81,18 +82,39 @@ pub enum LowerDiagnostic {
     /// `mut` in the type of a field. A field has the mutability of its
     /// struct, so that what an `imm` struct holds can't be changed either.
     MutField(TypeRefId),
+    /// A named mutability, like the `'m` of `'m Point`, that isn't one of
+    /// the function's or impl's: a name can only be used in the signature
+    /// and the body of the function it's written in.
+    UnknownMutability(TypeRefId),
 }
 
 pub struct TyLoweringContext<'a, 'db> {
     db: &'db dyn Db,
     resolver: &'a Resolver<'db>,
     store: &'a ExpressionStore,
+    /// The function or impl whose named mutabilities can be used.
+    mutabilities: Option<GenericDefId<'db>>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
 impl<'a, 'db> TyLoweringContext<'a, 'db> {
     pub fn new(db: &'db dyn Db, resolver: &'a Resolver<'db>, store: &'a ExpressionStore) -> Self {
-        TyLoweringContext { db, resolver, store, diagnostics: Vec::new() }
+        TyLoweringContext { db, resolver, store, mutabilities: None, diagnostics: Vec::new() }
+    }
+
+    /// Let the types use the named mutabilities of `def`, a function or an
+    /// impl, like the `'m` of `fn next(n: 'm Node) -> 'm Node`.
+    pub fn with_mutabilities(mut self, def: GenericDefId<'db>) -> Self {
+        self.mutabilities = Some(def);
+        self
+    }
+
+    /// The parameter that a named mutability like `'m` stands for.
+    fn named_mutability(&self, name: &Name) -> Option<Ty<'db>> {
+        let def = self.mutabilities?;
+        let index = named_mutabilities(self.db, def).iter().position(|n| n == name)?;
+        let index = def.generic_params(self.db).type_params.len() + index;
+        Some(Ty::Param(GenericParamId { def, index: index as u32 }))
     }
 
     /// Lower a type that values have, of kind `Type`.
@@ -160,7 +182,17 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
             TypeRef::Mut { mutability, inner } => {
                 let (ty, kind) = self.lower_ty_kinded(*inner);
-                return (self.with_mutability(id, ty, *mutability), kind);
+                let written = match mutability {
+                    MutabilityRef::Written(mutability) => Ty::Mutability(*mutability),
+                    MutabilityRef::Named(name) => match self.named_mutability(name) {
+                        Some(param) => param,
+                        None => {
+                            self.diagnostics.push(LowerDiagnostic::UnknownMutability(id));
+                            return (ty, kind);
+                        }
+                    },
+                };
+                return (self.with_mutability(id, ty, written), kind);
             }
             TypeRef::Never => Ty::Never,
             TypeRef::Fn { params, ret_type, .. } => {
@@ -178,8 +210,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
 
     /// `ty` with the mutability written before it, as in `mut Point`: only
     /// arrays and structs have one.
-    fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, mutability: Mutability) -> Ty<'db> {
-        let written = Ty::Mutability(mutability);
+    fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, written: Ty<'db>) -> Ty<'db> {
         let fits = |old: &Ty<'db>| matches!(old, Ty::Unwritten) || *old == written;
         match ty {
             Ty::Adt(adt @ AdtId::Struct(_), args, old) if fits(&old) => Ty::Adt(adt, args, Box::new(written)),
@@ -387,6 +418,28 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 }
 
+/// The mutabilities that a function or an impl names, like the `'m` of
+/// `fn next(n: 'm Node) -> 'm Node`, in the order of the signature. They're
+/// parameters of the function or impl, numbered after its type parameters
+/// and before its hidden ones. Other items can't name any.
+#[salsa::tracked(returns(ref))]
+pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[Name]> {
+    let store = match def {
+        GenericDefId::Function(id) => &function_signature(db, id).store,
+        GenericDefId::Impl(id) => &impl_signature(db, id).store,
+        _ => return Box::new([]),
+    };
+    let mut names = Vec::new();
+    for (_, type_ref) in store.types.iter() {
+        if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. } = type_ref
+            && !names.contains(name)
+        {
+            names.push(name.clone());
+        }
+    }
+    names.into()
+}
+
 /// Replace the type parameters of `def` with `args`.
 pub fn subst_params<'db>(ty: &Ty<'db>, def: GenericDefId<'db>, args: &[Ty<'db>]) -> Ty<'db> {
     ty.fold(&mut |t| match t {
@@ -462,7 +515,7 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
             (&sig.store, &sig.generic_params)
         }
     };
-    let mut ctx = TyLoweringContext::new(db, &resolver, store);
+    let mut ctx = TyLoweringContext::new(db, &resolver, store).with_mutabilities(def);
     // An array without `mut` or `imm` in a predicate, like the `[T]` of
     // `where Show[[T]]`, is `imm`: it can't be the same hidden parameter as
     // one in the signature.
@@ -502,7 +555,7 @@ impl FnSig<'_> {
 pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let sig = function_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Function(id));
-    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
+    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Function(id));
     let mut hidden = HiddenParams::new(db, GenericDefId::Function(id));
     let params = sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref).map(|t| hidden.fill(&t))).collect();
     let ret = match sig.ret_type {
@@ -634,7 +687,7 @@ pub struct ImplHeader<'db> {
 pub fn impl_header<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplHeader<'db> {
     let sig = impl_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Impl(id));
-    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
+    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Impl(id));
     let mut hidden = HiddenParams::new(db, GenericDefId::Impl(id));
     let class = ctx.lower_class_constraint(sig.class, None).map(|c| c.map(|t| hidden.fill(t)));
     ImplHeader { class, hidden: hidden.count, diagnostics: ctx.diagnostics }

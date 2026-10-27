@@ -150,7 +150,8 @@ pub enum SyntaxKind {
     TUPLE_TYPE,
     /// `[T]` or `[T; N]`
     ARRAY_TYPE,
-    /// `mut T` or `imm T` for a type other than an array, like `mut Point`
+    /// `mut T` or `imm T` for a type other than an array, like `mut Point`,
+    /// or a named mutability like `'m Point`
     MUT_TYPE,
     /// `!`
     NEVER_TYPE,

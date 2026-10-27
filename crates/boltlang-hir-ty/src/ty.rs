@@ -238,7 +238,7 @@ impl<'db> Ty<'db> {
     }
 
     /// Like [`Ty::display`], with the names `names` gives unknown types.
-    pub fn display_with<'a>(&'a self, db: &'db dyn Db, names: &'a TyNames) -> DisplayTy<'a, 'db> {
+    pub fn display_with<'a>(&'a self, db: &'db dyn Db, names: &'a TyNames<'db>) -> DisplayTy<'a, 'db> {
         DisplayTy { ty: self, db, names: Some(names) }
     }
 }
@@ -246,50 +246,95 @@ impl<'db> Ty<'db> {
 /// A type the user can't see the name of: one still being inferred, or a
 /// type variable of an inferred function.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Unknown {
+enum Unknown<'db> {
     Var(TyVar),
     Bound(u32),
+    /// A hidden mutability parameter, which only gets a name when it's
+    /// shared.
+    Param(GenericParamId<'db>),
 }
 
 /// Names for the unknown types of a message, so that they read like type
 /// parameters: `a`, `b`, ... in the order they first appear. Names that the
-/// type parameters in the message already have are skipped. Mutabilities
-/// don't get names: an array whose mutability isn't `Mut` or `Imm` is
-/// shown as `[T]`.
+/// type parameters in the message already have are skipped.
+///
+/// An unknown mutability is shown only when it's shared: one that appears
+/// more than once gets a name like `'m`, so that `fn(Bool, 'm [a], 'm [a])
+/// -> 'm [a]` says that the arrays have the same mutability. One that
+/// appears once is shown as nothing, like `[a]`.
 #[derive(Debug, Default)]
-pub struct TyNames {
-    names: Vec<(Unknown, String)>,
+pub struct TyNames<'db> {
+    names: Vec<(Unknown<'db>, String)>,
+    mutabilities: Vec<(Unknown<'db>, String)>,
 }
 
-impl TyNames {
+impl<'db> TyNames<'db> {
     /// Names for the unknown types in `tys`, which are shown in this order.
-    pub fn new<'db>(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Self {
-        fn collect<'db>(db: &'db dyn Db, ty: &Ty<'db>, taken: &mut Vec<String>, unknowns: &mut Vec<Unknown>) {
-            match ty {
-                Ty::Param(p) => taken.push(param_name(db, *p)),
-                Ty::Var(v) => unknowns.push(Unknown::Var(*v)),
-                Ty::Bound(i) => unknowns.push(Unknown::Bound(*i)),
-                Ty::Array(_, elem) => collect(db, elem, taken, unknowns),
-                Ty::Adt(_, args, _) => args.iter().for_each(|t| collect(db, t, taken, unknowns)),
-                _ => ty.walk_children(|t| collect(db, t, taken, unknowns)),
+    pub fn new(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Self {
+        #[derive(Default)]
+        struct Found<'db> {
+            taken: Vec<String>,
+            unknowns: Vec<Unknown<'db>>,
+            taken_mutabilities: Vec<String>,
+            mutabilities: Vec<Unknown<'db>>,
+        }
+        fn mutability<'db>(db: &'db dyn Db, m: &Ty<'db>, found: &mut Found<'db>) {
+            match m {
+                Ty::Var(v) => found.mutabilities.push(Unknown::Var(*v)),
+                Ty::Bound(i) => found.mutabilities.push(Unknown::Bound(*i)),
+                Ty::Param(p) => match mutability_name(db, *p) {
+                    Some(name) => found.taken_mutabilities.push(format!("'{name}")),
+                    None => found.mutabilities.push(Unknown::Param(*p)),
+                },
+                _ => {}
             }
         }
-        let mut taken = Vec::new();
-        let mut unknowns = Vec::new();
+        fn collect<'db>(db: &'db dyn Db, ty: &Ty<'db>, found: &mut Found<'db>) {
+            match ty {
+                Ty::Param(p) => found.taken.push(param_name(db, *p)),
+                Ty::Var(v) => found.unknowns.push(Unknown::Var(*v)),
+                Ty::Bound(i) => found.unknowns.push(Unknown::Bound(*i)),
+                Ty::Array(m, elem) => {
+                    mutability(db, m, found);
+                    collect(db, elem, found);
+                }
+                Ty::Adt(_, args, m) => {
+                    mutability(db, m, found);
+                    args.iter().for_each(|t| collect(db, t, found));
+                }
+                _ => ty.walk_children(|t| collect(db, t, found)),
+            }
+        }
+        let mut found = Found::default();
         for ty in tys {
-            collect(db, ty, &mut taken, &mut unknowns);
+            collect(db, ty, &mut found);
         }
         let mut out = TyNames::default();
-        let mut candidates = (0..).map(bound_name).filter(|n| !taken.contains(n));
-        for unknown in unknowns {
+        let mut candidates = (0..).map(bound_name).filter(|n| !found.taken.contains(n));
+        for unknown in found.unknowns {
             if !out.names.iter().any(|(u, _)| *u == unknown) {
                 out.names.push((unknown, candidates.next().unwrap()));
+            }
+        }
+        // From `'m`, like a name written in a signature, so that they don't
+        // read like the type variables `a`, `b`, ...
+        let mut candidates =
+            (12..).map(|i| format!("'{}", bound_name(i))).filter(|n| !found.taken_mutabilities.contains(n));
+        for &unknown in &found.mutabilities {
+            let shared = found.mutabilities.iter().filter(|u| **u == unknown).count() > 1;
+            if shared && !out.mutabilities.iter().any(|(u, _)| *u == unknown) {
+                out.mutabilities.push((unknown, candidates.next().unwrap()));
             }
         }
         out
     }
 
-    fn get(&self, unknown: Unknown) -> Option<&str> {
+    /// The name of an unknown mutability, if it's shared.
+    fn mutability(&self, unknown: Unknown<'db>) -> Option<&str> {
+        self.mutabilities.iter().find(|(u, _)| *u == unknown).map(|(_, n)| n.as_str())
+    }
+
+    fn get(&self, unknown: Unknown<'db>) -> Option<&str> {
         self.names.iter().find(|(u, _)| *u == unknown).map(|(_, n)| n.as_str())
     }
 
@@ -299,10 +344,17 @@ impl TyNames {
     }
 }
 
-/// Whether `param` is a mutability that an array type without `mut` or
-/// `imm` gave its item, rather than a declared type parameter.
+/// Whether `param` is a mutability, named like the `'m` of `'m Point` or
+/// hidden, rather than a declared type parameter.
 pub fn is_hidden_param<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> bool {
     param.index as usize >= param.def.generic_params(db).type_params.len()
+}
+
+/// The name of a mutability parameter that the function or impl names,
+/// like the `m` of `'m Point`, without its `'`.
+fn mutability_name<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> Option<boltlang_hir_def::Name> {
+    let index = (param.index as usize).checked_sub(param.def.generic_params(db).type_params.len())?;
+    crate::lower::named_mutabilities(db, param.def).get(index).cloned()
 }
 
 /// The name of a type parameter. A hidden mutability parameter is never
@@ -318,7 +370,7 @@ fn param_name<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> String {
 pub struct DisplayTy<'a, 'db> {
     ty: &'a Ty<'db>,
     db: &'db dyn Db,
-    names: Option<&'a TyNames>,
+    names: Option<&'a TyNames<'db>>,
 }
 
 impl fmt::Display for DisplayTy<'_, '_> {
@@ -342,7 +394,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
             },
             Ty::Adt(id, args, mutability) => {
                 if let AdtId::Struct(_) = id {
-                    write_mutability(f, mutability)?;
+                    self.write_mutability(f, mutability)?;
                 }
                 let name = match id {
                     AdtId::Struct(id) => id.item(db).name.as_ref(),
@@ -371,7 +423,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 f.write_str(")")
             }
             Ty::Array(mutability, elem) => {
-                write_mutability(f, mutability)?;
+                self.write_mutability(f, mutability)?;
                 write!(f, "[{}]", show(elem))
             }
             // Only inside an array, where it's shown by the array.
@@ -396,13 +448,22 @@ impl fmt::Display for DisplayTy<'_, '_> {
     }
 }
 
-/// `mut ` or `imm ` before an array or struct, or nothing when its
-/// mutability isn't known or is generic.
-fn write_mutability(f: &mut fmt::Formatter<'_>, mutability: &Ty<'_>) -> fmt::Result {
-    match mutability {
-        Ty::Mutability(Mutability::Mut) => f.write_str("mut "),
-        Ty::Mutability(Mutability::Imm) => f.write_str("imm "),
-        _ => Ok(()),
+impl DisplayTy<'_, '_> {
+    /// `mut ` or `imm ` before an array or struct, a name like `'m ` for one
+    /// that's named or shared, or nothing for one that's unknown or generic.
+    fn write_mutability(&self, f: &mut fmt::Formatter<'_>, mutability: &Ty<'_>) -> fmt::Result {
+        let shared = |unknown| self.names.and_then(|n| n.mutability(unknown));
+        match mutability {
+            Ty::Mutability(Mutability::Mut) => f.write_str("mut "),
+            Ty::Mutability(Mutability::Imm) => f.write_str("imm "),
+            Ty::Param(p) => match mutability_name(self.db, *p) {
+                Some(name) => write!(f, "'{name} "),
+                None => shared(Unknown::Param(*p)).map_or(Ok(()), |n| write!(f, "{n} ")),
+            },
+            Ty::Var(v) => shared(Unknown::Var(*v)).map_or(Ok(()), |n| write!(f, "{n} ")),
+            Ty::Bound(i) => shared(Unknown::Bound(*i)).map_or(Ok(()), |n| write!(f, "{n} ")),
+            _ => Ok(()),
+        }
     }
 }
 

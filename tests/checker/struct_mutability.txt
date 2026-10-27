@@ -204,7 +204,7 @@ fn f() {
 origin: fn() -> imm Point
 fresh: fn() -> mut Point
 fixed: fn() -> imm Point
-same: fn(Point) -> Point
+same: fn('m Point) -> 'm Point
 f: fn() -> ()
 --------------------------------------------------------------------------------
 error at `origin()`: can't change imm Point
@@ -581,7 +581,7 @@ let b = Node { value: 1, next: Maybe.Just(mut Node { value: 2, next: Maybe.Nothi
 second(a);
 
 --------------------------------------------------------------------------------
-second: fn(Node) -> Maybe[Node]
+second: fn('m Node) -> Maybe['m Node]
 let a: mut Node
 let b: imm Node
 second(a): Maybe[mut Node]
@@ -598,7 +598,7 @@ fmap(|n| n + 1, Box { item: 1 });
 fmap(|n| n + 1, mut Box { item: 1 });
 
 --------------------------------------------------------------------------------
-Functor[Box].fmap: forall A B. fn(fn(A) -> B, Box[A]) -> Box[B]
+Functor[Box].fmap: forall A B. fn(fn(A) -> B, 'm Box[A]) -> 'm Box[B]
 fmap(|n| n + 1, Box { item: 1 }): imm Box[i32]
 fmap(|n| n + 1, mut Box { item: 1 }): mut Box[i32]
 --------------------------------------------------------------------------------

@@ -289,6 +289,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     fn lower_ty(&mut self, expr: ExprId, type_ref: TypeRefId) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let mut ctx = TyLoweringContext::new(self.db, &resolver, &self.body.store);
+        // A body can use the named mutabilities of its function.
+        if let DefWithBody::Function(f) = self.def.def(self.db) {
+            ctx = ctx.with_mutabilities(GenericDefId::Function(f));
+        }
         let ty = ctx.lower_ty(type_ref);
         self.result.diagnostics.extend(ctx.diagnostics.into_iter().map(InferenceDiagnostic::Lower));
         // An array without `mut` or `imm` in a body can be either, which

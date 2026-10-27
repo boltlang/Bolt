@@ -257,7 +257,12 @@ impl Printer<'_> {
                 }
             }
             TypeRef::Mut { mutability, inner } => {
-                format!("{} {}", if *mutability == Mutability::Mut { "mut" } else { "imm" }, self.ty(*inner))
+                let prefix = match mutability {
+                    MutabilityRef::Written(Mutability::Mut) => "mut".to_string(),
+                    MutabilityRef::Written(Mutability::Imm) => "imm".to_string(),
+                    MutabilityRef::Named(name) => format!("'{name}"),
+                };
+                format!("{prefix} {}", self.ty(*inner))
             }
             TypeRef::Never => "!".into(),
             TypeRef::Fn { params, is_variadic, ret_type, abi, .. } => format!(
@@ -431,10 +436,14 @@ fn mutability_of_arrays() {
 #[test]
 fn mutability_of_structs() {
     assert_eq!(
-        render("let a: mut Point = mut Point { x: 1 };\nlet b: imm Pair[A, B] = mut Pair(1, 2);\nlet c: Option[mut Point] = f(1);"),
+        render(
+            "let a: mut Point = mut Point { x: 1 };\nlet b: imm Pair[A, B] = mut Pair(1, 2);\n\
+             let c: Option[mut Point] = f(1);\nlet d: fn('m Point) -> 'm [i32];"
+        ),
         "(let a : mut Point = (mut record Point x: 1))\n\
          (let b : imm Pair[A, B] = (mut call Pair 1 2))\n\
-         (let c : Option[mut Point] = (call f 1))"
+         (let c : Option[mut Point] = (call f 1))\n\
+         (let d : fn('m Point) -> 'm [i32])"
     );
 }
 
