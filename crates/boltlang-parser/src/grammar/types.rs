@@ -188,7 +188,6 @@ fn fn_type_param(p: &mut Parser) {
     let after_mut = if p.at(T![mut]) { 1 } else { 0 };
     let named = matches!(p.nth(after_mut), IDENT | T![_]) && p.nth_at(after_mut + 1, T![:]);
     if named {
-        p.eat(T![mut]);
         pattern_single(p);
         p.bump(T![:]);
         if p.eat(T![...]) {
