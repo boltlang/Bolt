@@ -752,6 +752,35 @@ let b = Maybe.Has(1);
 }
 
 #[test]
+fn a_file_of_a_linked_prelude_package_by_its_real_path_sees_one_copy() {
+    // Like this repository: `.bolt/packages/std` links to `packages/std`. A
+    // file of `std` checked by its real path is in `std`, so it doesn't get
+    // the prelude, and `Some` needs an import, instead of coming from a
+    // second copy of `std` with another `Option`.
+    let mut db = TestDb::new();
+    db.file("/packages/std/__prelude__/lib.bolt", "pub import \"./option\" *;\n");
+    db.file("/packages/std/__prelude__/option.bolt", "pub enum Option[T] { Some(T), None }\npub import Option.*;\n");
+    db.symlink("/.bolt/packages/std", "../../packages/std");
+    db.set_prelude(Some("std"), true);
+    check_db(
+        db,
+        &[(
+            "/packages/std/__prelude__/uses.bolt",
+            r#"
+import "./option" (Option);
+fn f(x: Option[i32]) -> Option[i32] = match x {
+  Some(a) => Some(a),
+//^^^^^^^ error: cannot find `Some(a)`
+           //^^^^ error: cannot find `Some`
+  _ => None,
+     //^^^^ error: cannot find `None`
+};
+"#,
+        )],
+    );
+}
+
+#[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
         (

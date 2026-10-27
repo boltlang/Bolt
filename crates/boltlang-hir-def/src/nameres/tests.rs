@@ -378,6 +378,49 @@ fn the_prelude_comes_last() {
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
 }
 
+/// A project whose `std` is a link to a directory in the project, like this
+/// repository's `.bolt/packages/std -> ../../packages/std`.
+fn linked_std() -> TestDb {
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
+    db.file("/proj/packages/std/__prelude__/lib.bolt", "pub import \"../helpers\" (shared);\n");
+    db.file("/proj/packages/std/helpers.bolt", "pub(package) fn shared() {}\n");
+    db.symlink("/proj/.bolt/packages/std", "../../packages/std");
+    db
+}
+
+#[test]
+fn a_package_reached_through_a_link_is_the_same_by_its_real_path() {
+    let db = linked_std();
+    let through_link = db.file("/proj/.bolt/packages/std/helpers.bolt", "pub(package) fn shared() {}\n");
+    let by_real_path = db.files().resolve(&db, SystemPath::new("/proj/packages/std/helpers.bolt"));
+    let package = Some(SystemPathBuf::from("/proj/.bolt/packages/std"));
+    assert_eq!(package_of(&db, through_link), package);
+    assert_eq!(package_of(&db, by_real_path), package);
+    let project = db.file("/proj/main.bolt", "");
+    assert_eq!(package_of(&db, project), None);
+}
+
+#[test]
+fn a_file_of_the_prelude_package_by_its_real_path_has_no_prelude() {
+    let db = linked_std();
+    let real = db.file("/proj/packages/std/user.bolt", "import \"./helpers\" (shared);\n");
+    assert_eq!(prelude_file(&db, real), &Ok(None));
+    // `pub(package)` items stay visible, since it's in the package.
+    assert!(diagnostics(file_scope(&db, real)).is_empty(), "{:?}", diagnostics(file_scope(&db, real)));
+    // Its own copy of the prelude, next to it, not the one through the link.
+    let lib = prelude_lib(&db, real).unwrap();
+    let path = lib.path(&db).as_system_path_buf().unwrap();
+    assert_eq!(path, &SystemPathBuf::from("/proj/packages/std/__prelude__/lib.bolt"));
+    // A file of the project still gets the prelude through the link.
+    let main = db.file("/proj/main.bolt", "");
+    let prelude = prelude_file(&db, main).clone().unwrap().unwrap();
+    assert_eq!(
+        prelude.path(&db).as_system_path_buf().unwrap(),
+        &SystemPathBuf::from("/proj/.bolt/packages/std/__prelude__/lib.bolt")
+    );
+}
+
 #[test]
 fn the_prelude_package_has_no_prelude() {
     let mut db = TestDb::new();

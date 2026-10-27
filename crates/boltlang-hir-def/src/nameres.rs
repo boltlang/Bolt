@@ -382,6 +382,23 @@ pub fn prelude_file(db: &dyn Db, file: File) -> Result<Option<File>, ImportPathE
     Ok((own.is_none() || package_of(db, file) != own).then_some(prelude))
 }
 
+/// The entry file of the prelude's package, as seen from `file`, even when
+/// `file` is in that package, unlike [`prelude_file`]. For a file of the
+/// package reached by its real path rather than through `.bolt/packages`,
+/// it's the copy next to the file, so that the two see the same items.
+pub fn prelude_lib(db: &dyn Db, file: File) -> Option<File> {
+    let package = Settings::get(db).prelude(db).as_ref()?;
+    let lib = resolve_import_path(db, file, &format!("{package}/__prelude__/lib")).ok()?;
+    let own = package_of(db, lib)?;
+    let path = file.path(db).as_system_path_buf()?;
+    if package_dir(path.as_std_path()).is_some() || package_of(db, file).as_ref() != Some(&own) {
+        return Some(lib);
+    }
+    let root = db.system().canonicalize_path(&own).ok()?;
+    let lib = root.as_std_path().join("__prelude__").join("lib.bolt");
+    Some(db.files().resolve(db, SystemPath::new(&lib)))
+}
+
 /// Where the fixed-point iteration of [`file_scope`] starts, for files that
 /// import each other.
 fn file_scope_initial<'db>(db: &'db dyn Db, _id: salsa::Id, file: File) -> FileScope<'db> {
@@ -527,12 +544,43 @@ fn canonical(db: &dyn Db, file: File) -> File {
 #[cfg(test)]
 mod tests;
 
-/// The package `file` is in: the directory `.bolt/packages/<name>` in its
-/// path, the innermost one if there are several. `None` for the files of
-/// the project itself.
+/// The package `file` is in, as the directory `.bolt/packages/<name>`:
+/// the one in its path, the innermost one if there are several, or else the
+/// one that links to a directory the file is really in. `None` for the files
+/// of the project itself.
 pub fn package_of(db: &dyn Db, file: File) -> Option<SystemPathBuf> {
     let path = file.path(db).as_system_path_buf()?;
-    package_dir(path.as_std_path()).map(|dir| SystemPathBuf::from(dir.to_path_buf()))
+    match package_dir(path.as_std_path()) {
+        Some(dir) => Some(SystemPathBuf::from(dir.to_path_buf())),
+        None => linked_package(db, path),
+    }
+}
+
+/// The package of a file reached by another path than through
+/// `.bolt/packages`, like `packages/std/lib.bolt` when `.bolt/packages/std`
+/// is a link to `packages/std`: the entry of a `.bolt/packages` in the file's
+/// directory or one above it whose target has the file in it. Without this,
+/// the same file would be in a package by one path and not by the other.
+fn linked_package(db: &dyn Db, path: &SystemPathBuf) -> Option<SystemPathBuf> {
+    let system = db.system();
+    let real = system.canonicalize_path(path).ok()?;
+    for dir in path.as_std_path().ancestors().skip(1) {
+        let packages = SystemPathBuf::from(dir.join(".bolt").join("packages"));
+        let Ok(entries) = system.read_directory(&packages) else { continue };
+        // The innermost package, if one is inside another.
+        let mut found: Option<(usize, SystemPathBuf)> = None;
+        for entry in entries {
+            let Ok(root) = system.canonicalize_path(&entry) else { continue };
+            let depth = root.as_std_path().components().count();
+            if real.as_std_path().starts_with(root.as_std_path()) && found.as_ref().is_none_or(|(d, _)| depth > *d) {
+                found = Some((depth, entry));
+            }
+        }
+        if let Some((_, entry)) = found {
+            return Some(entry);
+        }
+    }
+    None
 }
 
 fn package_dir(path: &std::path::Path) -> Option<&std::path::Path> {

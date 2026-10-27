@@ -5,12 +5,12 @@
 //! `array_set`. Without a prelude that defines the classes, the syntax is an
 //! error.
 
-use boltlang_base_db::{Db, File, Settings};
+use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
     ids::{ClassId, FunctionId, ItemContainerId, ModuleDefId, TypeAliasId},
     item_tree::AssocItem,
-    nameres::{Namespace, file_scope, resolve_import_path},
+    nameres::{Namespace, file_scope, prelude_lib},
 };
 
 use crate::lower::assoc_type;
@@ -59,10 +59,10 @@ impl LangClass {
     }
 
     /// The class, as the prelude of `file` defines it. Files of the
-    /// prelude's own package, which don't get the prelude, find it too.
+    /// prelude's own package, which don't get the prelude, find it too, in
+    /// their own copy of the package.
     pub fn class(self, db: &dyn Db, file: File) -> Option<ClassId<'_>> {
-        let package = Settings::get(db).prelude(db).as_ref()?;
-        let lib = resolve_import_path(db, file, &format!("{package}/__prelude__/lib")).ok()?;
+        let lib = prelude_lib(db, file)?;
         match file_scope(db, lib).scope.get(Namespace::Types, &Name::new(self.name()))?.def {
             ModuleDefId::Class(class) => Some(class),
             _ => None,
