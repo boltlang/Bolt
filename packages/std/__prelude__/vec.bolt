@@ -3,6 +3,7 @@
 import "./array" (array_alloc, array_len);
 import "./option" (Option, None, Some);
 import "./io" (panic);
+import "./classes" (Index, IndexMut, Iterable, FnIter);
 
 /// An array that grows: `push` adds an element at the end, and makes room
 /// when there's none left.
@@ -160,4 +161,32 @@ fn grow[T](v: mut Vec[T], needed: i32) {
     i += 1;
   }
   v.items = items;
+}
+
+/// `v[i]`: the element at `i`.
+impl[T] Index[Vec[T]] {
+  type Item = T;
+  fn index(v, i) = get(v, i);
+}
+
+/// `v[i] = x`: replace the element at `i`.
+impl[T] IndexMut[mut Vec[T]] {
+  fn set_index(v, i, x) = set(v, i, x);
+}
+
+/// `for x in v`: the elements, in order. Elements pushed while the loop
+/// runs are included.
+impl[T] Iterable[Vec[T]] {
+  type Iter = FnIter[T];
+  fn iter(v) {
+    let mut next = 0;
+    FnIter {
+      next: || if next < v.len {
+        next += 1;
+        Some(v.items[next - 1])
+      } else {
+        None
+      },
+    }
+  }
 }

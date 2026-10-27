@@ -1,0 +1,56 @@
+// Classes that syntax uses: `v[i]`, `v[i] = x` and `for x in c` work on any
+// type with an impl of them. Arrays don't need one: indexing and looping
+// over an array are built in.
+
+import "./option" (Option);
+
+/// Types whose elements can be read by position, with `c[i]`.
+pub class Index[C] {
+  /// The type of the elements.
+  type Item;
+
+  /// The element at `i`, for `c[i]`.
+  fn index(c: C, i: i32) -> Item;
+}
+
+/// Types whose elements can be replaced by position, with `c[i] = x`.
+pub class IndexMut[C] where Index[C] {
+  /// Replace the element at `i` with `x`, for `c[i] = x`.
+  fn set_index(c: C, i: i32, x: C.Item);
+}
+
+/// Types that give their items one at a time, until there are none left.
+pub class Iterator[I] {
+  /// The type of the items.
+  type Item;
+
+  /// The next item, or `None` when there are no more.
+  fn next(it: I) -> Option[Item];
+}
+
+/// Types that can be looped over with `for x in c`.
+pub class Iterable[C] {
+  /// The iterator that goes over a value of `C`. It must have an impl of
+  /// `Iterator`.
+  type Iter;
+
+  /// A new iterator over `c`.
+  fn iter(c: C) -> Iter;
+}
+
+/// An iterator made from a function that gives the next item each time
+/// it's called.
+pub struct FnIter[T] {
+  next: fn() -> Option[T],
+}
+
+impl[T] Iterator[FnIter[T]] {
+  type Item = T;
+  fn next(it) = (it.next)();
+}
+
+/// An iterator can be looped over itself.
+impl[T] Iterable[FnIter[T]] {
+  type Iter = FnIter[T];
+  fn iter(it) = FnIter { next: it.next };
+}

@@ -3,6 +3,7 @@
 pub import "./functor" *;
 pub import "./semigroup" *;
 pub import "./monoid" *;
+pub import "./classes" *;
 
 // Types
 pub import "./option" *;

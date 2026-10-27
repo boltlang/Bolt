@@ -108,3 +108,54 @@ let s = Stack { items: [True, False] };
 (get(s, 1), first(s));
 --------------------------------------------------------------------------------
 (False, True)
+
+================================================================================
+Looping over a type with its own iterator
+:todo wasm
+================================================================================
+struct Countdown { from: i32 }
+struct CountdownIter { left: [i32] }
+impl Iterator[mut CountdownIter] {
+  type Item = i32;
+  fn next(it) = if it.left[0] > 0 {
+    it.left[0] -= 1;
+    Some(it.left[0] + 1)
+  } else {
+    None
+  };
+}
+impl Iterable[Countdown] {
+  type Iter = mut CountdownIter;
+  fn iter(c) = mut CountdownIter { left: mut [c.from] };
+}
+let mut seen = mut [0, 0, 0];
+let mut i = 0;
+let countdown = Countdown { from: 3 };
+for n in countdown {
+  seen[i] = n;
+  i += 1;
+}
+seen;
+--------------------------------------------------------------------------------
+[3, 2, 1]
+
+================================================================================
+Looping over an iterator made from a function
+:todo wasm
+================================================================================
+let mut n = 0;
+let it = FnIter {
+  next: || if n < 3 {
+    n += 1;
+    Some(n)
+  } else {
+    None
+  },
+};
+let mut total = 0;
+for x in it {
+  total += x;
+}
+total;
+--------------------------------------------------------------------------------
+6
