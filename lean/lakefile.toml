@@ -1,0 +1,5 @@
+name = "BoltMut"
+defaultTargets = ["BoltMut"]
+
+[[lean_lib]]
+name = "BoltMut"
