@@ -15,7 +15,10 @@ use crate::{
         ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty, impl_header, named_mutabilities,
         subst_params,
     },
-    solve::{AssocConstraint, Constraint, ConstraintSource, FieldConstraint, Origin, Reason, Solver, normalize_assoc},
+    solve::{
+        AssocConstraint, AtMostConstraint, AtMostSource, Constraint, ConstraintSource, FieldConstraint, Held, Origin,
+        Reason, Solver, normalize_assoc,
+    },
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
 
@@ -33,6 +36,9 @@ pub struct Scheme<'db> {
     /// What associated types of its types must be, like `a.Item = Bool` for
     /// `fn set(xs) { xs[0] = True; }`.
     pub assoc: Box<[AssocConstraint<'db>]>,
+    /// What must be at most a mutability (#243), like `a ⊑ imm` for
+    /// `fn wrap(x) = [x]`, which makes an `imm` array holding `x`.
+    pub bounds: Box<[AtMostConstraint<'db>]>,
     pub ty: Ty<'db>,
     /// Where its constraints come from, so that an error about one can point
     /// there.
@@ -46,6 +52,7 @@ pub struct SchemeSources<'db> {
     pub predicates: Box<[Option<ConstraintSource<'db>>]>,
     pub fields: Box<[Option<ConstraintSource<'db>>]>,
     pub assoc: Box<[Option<ConstraintSource<'db>>]>,
+    pub bounds: Box<[Option<ConstraintSource<'db>>]>,
 }
 
 /// The origin of a constraint of a scheme instantiated at `origin`: the
@@ -65,6 +72,7 @@ impl<'db> Scheme<'db> {
             predicates: Box::new([]),
             fields: Box::new([]),
             assoc: Box::new([]),
+            bounds: Box::new([]),
             ty,
             sources: SchemeSources::default(),
         }
@@ -104,6 +112,12 @@ impl<'db> Scheme<'db> {
             let ty = solver.flatten_assoc(&subst(&assoc.ty), origin);
             solver.add(Constraint::Assoc { constraint: AssocConstraint { alias: assoc.alias, args, ty }, origin });
         }
+        for (i, bound) in self.bounds.iter().enumerate() {
+            let origin = required_by(origin, self.sources.bounds.get(i));
+            let constraint = bound.map(|t| solver.flatten_assoc(&subst(t), origin));
+            let source = AtMostSource::Needed(constraint.clone());
+            solver.add(Constraint::AtMost { constraint, source, origin });
+        }
         let ty = subst(&self.ty);
         solver.flatten_assoc(&ty, origin)
     }
@@ -123,6 +137,21 @@ impl<'db> Scheme<'db> {
         for (projection, assoc) in projections.iter().zip(self.assoc.iter()) {
             tys.extend([projection, &assoc.ty]);
         }
+        // A mutability in a bound counts as a use of it, so that it gets a
+        // name like `'m`.
+        let as_mutability = |m: &Ty<'db>| Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()));
+        let bound_tys: Vec<Ty<'db>> = self
+            .bounds
+            .iter()
+            .flat_map(|b| {
+                let held = match &b.held {
+                    Held::Mutability(m) => as_mutability(m),
+                    Held::Type(t) => t.clone(),
+                };
+                [held, as_mutability(&b.bound)]
+            })
+            .collect();
+        tys.extend(bound_tys.iter());
         let names = TyNames::new(db, &tys);
         let show = |t: &Ty<'db>| t.display_with(db, &names).to_string();
         let mut forall: Vec<String> =
@@ -143,6 +172,13 @@ impl<'db> Scheme<'db> {
         }
         for (projection, assoc) in projections.iter().zip(self.assoc.iter()) {
             out.push_str(&format!("{} = {} => ", show(projection), show(&assoc.ty)));
+        }
+        for bound in self.bounds.iter() {
+            let held = match &bound.held {
+                Held::Mutability(m) => names.mutability_name(db, m),
+                Held::Type(t) => show(t),
+            };
+            out.push_str(&format!("{held} ⊑ {} => ", names.mutability_name(db, &bound.bound)));
         }
         out.push_str(&show(&self.ty));
         out
@@ -322,6 +358,7 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         predicates: predicates.into(),
         fields: Box::new([]),
         assoc: Box::new([]),
+        bounds: Box::new([]),
         ty: Ty::func(params, ret),
         sources: SchemeSources { predicates: sources.into(), ..SchemeSources::default() },
     }

@@ -392,6 +392,23 @@ impl<'db> TyNames<'db> {
         self.names.iter().find(|(u, _)| *u == unknown).map(|(_, n)| n.as_str())
     }
 
+    /// A mutability on its own, as in a bound like `a ⊑ imm`: `mut`, `imm`,
+    /// or its name, like `'m`.
+    pub fn mutability_name(&self, db: &'db dyn Db, m: &Ty<'db>) -> String {
+        let named = |unknown| self.mutability(unknown).map(str::to_string);
+        match m {
+            Ty::Mutability(Mutability::Mut) => "mut".into(),
+            Ty::Mutability(Mutability::Imm) => "imm".into(),
+            Ty::Param(p) => match mutability_name(db, *p) {
+                Some(name) => format!("'{name}"),
+                None => named(Unknown::Param(*p)).unwrap_or_else(|| "'_".into()),
+            },
+            Ty::Var(v) => named(Unknown::Var(*v)).unwrap_or_else(|| "'_".into()),
+            Ty::Bound(i) => named(Unknown::Bound(*i)).unwrap_or_else(|| "'_".into()),
+            _ => "{error}".into(),
+        }
+    }
+
     /// The names of the type variables of a scheme, in order.
     pub fn bound_names(&self) -> impl Iterator<Item = &str> {
         self.names.iter().filter(|(u, _)| matches!(u, Unknown::Bound(_))).map(|(_, n)| n.as_str())

@@ -119,17 +119,65 @@ impl<'db> AssocConstraint<'db> {
     }
 }
 
-/// That the closure of type `closure`, a [`Ty::Fn`], captured values of the
-/// types `captured`, and a `let mut` variable if `captures_var`. It's `mut`
-/// if anything it captured can change: a `let mut` variable, or a `mut`
-/// array, struct or function, which an `imm` closure couldn't hold, since
-/// `imm` is deep. A value of a type parameter could be any of these, so it
-/// makes the closure `mut` too, until a type can say that it isn't (#243).
+/// What an "at most" constraint bounds: a mutability, or everything that a
+/// value of a type holds.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Held<'db> {
+    Mutability(Ty<'db>),
+    Type(Ty<'db>),
+}
+
+impl<'db> Held<'db> {
+    pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
+        match self {
+            Held::Mutability(m) => Held::Mutability(f(m)),
+            Held::Type(t) => Held::Type(f(t)),
+        }
+    }
+
+    pub fn ty(&self) -> &Ty<'db> {
+        match self {
+            Held::Mutability(t) | Held::Type(t) => t,
+        }
+    }
+}
+
+/// That `held` is at most `bound`, with `imm ⊑ mut` (#243): a mutability
+/// below another, or nothing in a type more `mut` than the bound. An object
+/// holds only what's at most its mutability, so this is how `imm` is deep:
+/// `[x]` needs `x`'s type to be at most `imm`. Inside it, what an array or
+/// struct holds is at most its own mutability.
+///
+/// Unknowns are decided where only one choice works: a mutability below
+/// `imm` is `imm`, and one above `mut` is `mut`. What's left about an
+/// inferred function's parameters becomes part of its type, like
+/// `forall a. a ⊑ imm => fn(a) -> imm [a]`, and its callers must meet it.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct AtMostConstraint<'db> {
+    pub held: Held<'db>,
+    pub bound: Ty<'db>,
+}
+
+impl<'db> AtMostConstraint<'db> {
+    pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
+        AtMostConstraint { held: self.held.map(&mut f), bound: f(&self.bound) }
+    }
+}
+
+/// Where an "at most" constraint comes from, which decides how breaking it
+/// is reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CaptureConstraint<'db> {
-    pub closure: Ty<'db>,
-    pub captured: Vec<Ty<'db>>,
-    pub captures_var: bool,
+pub enum AtMostSource<'db> {
+    /// Making an array or struct that must hold what this says: reported
+    /// by `check_deep_immutability` for something `mut`, which shows the
+    /// whole type, and here for a parameter.
+    Object(AtMostConstraint<'db>),
+    /// What a closure of this type captured: reported as the closure
+    /// having to be `mut`.
+    Closure(Ty<'db>),
+    /// What a function's type needs of what it's called with, or a
+    /// constraint about a parameter that a complete signature can't state.
+    Needed(AtMostConstraint<'db>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -142,8 +190,8 @@ pub enum Constraint<'db> {
     Field { constraint: FieldConstraint<'db>, origin: Origin<'db> },
     /// The type is an associated type of a class.
     Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
-    /// A closure is `mut` if what it captured can change.
-    Capture { constraint: CaptureConstraint<'db>, origin: Origin<'db> },
+    /// Something is at most a mutability.
+    AtMost { constraint: AtMostConstraint<'db>, source: AtMostSource<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -155,6 +203,11 @@ pub enum TypeError<'db> {
     NoInstance { origin: Origin<'db>, constraint: ClassConstraint<'db> },
     /// The types weren't known well enough to choose an instance.
     Ambiguous { origin: Origin<'db>, constraint: ClassConstraint<'db> },
+    /// Something isn't at most a mutability that it must be, like a `mut`
+    /// array given to a function that needs `a ⊑ imm`, or a value of a
+    /// type parameter put in an `imm` array, which an assumption could
+    /// allow but a complete signature can't state yet.
+    NotAtMost { origin: Origin<'db>, constraint: AtMostConstraint<'db> },
     /// The type has no field with this name.
     NoSuchField { origin: Origin<'db>, ty: Ty<'db>, name: Name },
     /// The type of a value whose field is used was never found.
@@ -173,6 +226,7 @@ impl<'db> TypeError<'db> {
             | TypeError::Ambiguous { origin, .. }
             | TypeError::NoSuchField { origin, .. }
             | TypeError::CannotChange { origin, .. }
+            | TypeError::NotAtMost { origin, .. }
             | TypeError::TypeNeeded { origin } => origin,
         }
     }
@@ -190,6 +244,7 @@ impl<'db> TypeError<'db> {
             TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. } => {
                 *constraint = constraint.map(f)
             }
+            TypeError::NotAtMost { constraint, .. } => *constraint = constraint.map(f),
             TypeError::TypeNeeded { .. } => {}
         }
     }
@@ -205,7 +260,7 @@ pub struct Solver<'db> {
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
-    pending_captures: Vec<(CaptureConstraint<'db>, Origin<'db>)>,
+    pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     /// The impl chosen for each class constraint of a use of a class method
     /// or constant, like the `Show[i32]` of `show(1)`, at the use. Only the
     /// first per use and class: the constraints that it leads to, like the
@@ -225,7 +280,7 @@ impl<'db> Solver<'db> {
             pending: Vec::new(),
             pending_fields: Vec::new(),
             pending_assoc: Vec::new(),
-            pending_captures: Vec::new(),
+            pending_at_most: Vec::new(),
             chosen: Vec::new(),
             errors: Vec::new(),
         }
@@ -279,107 +334,159 @@ impl<'db> Solver<'db> {
                     self.pending_assoc.push((constraint, origin));
                 }
             }
-            // Solved right away when possible, so that a closure that's
-            // `mut` is known to be before it's used.
-            Constraint::Capture { constraint, origin } => {
-                if !self.solve_capture(&constraint, origin, false) {
-                    self.pending_captures.push((constraint, origin));
+            // Solved right away when possible, so that what it decides is
+            // known for what follows.
+            Constraint::AtMost { constraint, source, origin } => {
+                if !self.solve_at_most(&constraint, &source, origin) {
+                    self.pending_at_most.push((constraint, source, origin));
                 }
             }
         }
     }
 
-    /// Decide whether a closure is `mut` from what it captured, once that's
-    /// known. With `last`, nothing more will be known: the mutabilities
-    /// still unknown are made the closure's, so that it's `mut` exactly
-    /// when they are. Returns whether the constraint is solved.
-    fn solve_capture(&mut self, constraint: &CaptureConstraint<'db>, origin: Origin<'db>, last: bool) -> bool {
-        let Ty::Fn(params, ret, own) = &constraint.closure else { unreachable!("a closure has a function type") };
-        let with = |m: Ty<'db>| Ty::Fn(params.clone(), ret.clone(), Box::new(m));
-        let mut held = Vec::new();
-        let mut open = false;
-        for ty in &constraint.captured {
-            self.held_mutabilities(&self.unifier.resolve(ty), &mut held, &mut open);
-        }
-        // At the end, a type still unknown can only become a type
-        // parameter.
-        if open && last {
-            held.push(Ty::Mutability(Mutability::Mut));
-        }
-        let mut_ = Ty::Mutability(Mutability::Mut);
-        if constraint.captures_var || held.contains(&mut_) {
-            self.equal(&constraint.closure, &with(mut_), origin);
+    /// `held ⊑ bound`, as far as it can be decided now. A type is split into
+    /// the mutabilities it holds: an array or struct is at most the bound,
+    /// and what it holds at most its own mutability. Returns whether the
+    /// constraint is solved, possibly by adding simpler ones.
+    fn solve_at_most(&mut self, c: &AtMostConstraint<'db>, source: &AtMostSource<'db>, origin: Origin<'db>) -> bool {
+        let bound = self.unifier.shallow_resolve(&c.bound);
+        if matches!(bound, Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never) {
             return true;
         }
-        let own = self.unifier.shallow_resolve(own);
-        let is_var = |t: &Ty<'db>| matches!(t, Ty::Var(_));
-        let unknown: Vec<Ty<'db>> = held.iter().filter(|t| is_var(t)).cloned().collect();
-        // A type still unknown could turn out to hold something `mut`.
-        // Mutabilities still unknown can wait too, unless the closure is
-        // `imm`, which decides them.
-        if !last && (open || (!unknown.is_empty() && !matches!(own, Ty::Mutability(Mutability::Imm)))) {
-            return false;
+        let sub = |solver: &mut Self, held: Held<'db>, bound: &Ty<'db>| {
+            let constraint = AtMostConstraint { held, bound: bound.clone() };
+            solver.add(Constraint::AtMost { constraint, source: source.clone(), origin });
+        };
+        match &c.held {
+            Held::Type(t) => match self.unifier.shallow_resolve(t) {
+                Ty::Array(m, elem) => {
+                    sub(self, Held::Mutability(*m.clone()), &bound);
+                    sub(self, Held::Type(*elem), &m);
+                    true
+                }
+                Ty::Adt(AdtId::Struct(_), args, m) => {
+                    sub(self, Held::Mutability(*m.clone()), &bound);
+                    for arg in args {
+                        sub(self, Held::Type(arg), &m);
+                    }
+                    true
+                }
+                // An enum or a tuple is a value, which holds its parts.
+                Ty::Adt(AdtId::Enum(_), args, _) | Ty::Tuple(args) | Ty::App(_, args) => {
+                    for arg in args {
+                        sub(self, Held::Type(arg), &bound);
+                    }
+                    true
+                }
+                Ty::Fn(_, _, m) => {
+                    sub(self, Held::Mutability(*m), &bound);
+                    true
+                }
+                // Decided once the type is known, or by an assumption about
+                // a type parameter.
+                Ty::Var(_) | Ty::Param(_) | Ty::Bound(_) | Ty::Assoc(..) => false,
+                _ => true,
+            },
+            Held::Mutability(m) => match (self.unifier.shallow_resolve(m), &bound) {
+                (Ty::Mutability(Mutability::Imm) | Ty::Error | Ty::Never, _) => true,
+                (m, bound) if m == *bound => true,
+                (Ty::Mutability(Mutability::Mut), Ty::Var(_)) => {
+                    self.equal(&bound, &Ty::Mutability(Mutability::Mut), origin);
+                    true
+                }
+                (m @ Ty::Var(_), Ty::Mutability(Mutability::Imm)) => {
+                    self.equal(&m, &Ty::Mutability(Mutability::Imm), origin);
+                    true
+                }
+                (Ty::Mutability(Mutability::Mut), _) => {
+                    self.at_most_broken(source, origin);
+                    true
+                }
+                _ => false,
+            },
         }
-        // What could still be `mut`: mutabilities not known yet, and
-        // parameters, like the hidden mutability of `xs` in `fn f(xs: [T])`.
-        let mut maybe_mut: Vec<Ty<'db>> = Vec::new();
-        for m in held.iter().filter(|t| matches!(t, Ty::Var(_) | Ty::Param(_) | Ty::Bound(_))) {
-            if !maybe_mut.contains(m) {
-                maybe_mut.push(m.clone());
+    }
+
+    /// Report that something `mut` is below a bound that isn't.
+    fn at_most_broken(&mut self, source: &AtMostSource<'db>, origin: Origin<'db>) {
+        match source {
+            AtMostSource::Object(_) => {}
+            AtMostSource::Closure(closure) => {
+                let Ty::Fn(params, ret, _) = closure else { unreachable!("a closure has a function type") };
+                let mutable = Ty::Fn(params.clone(), ret.clone(), Box::new(Ty::Mutability(Mutability::Mut)));
+                let error = TypeError::Mismatch {
+                    origin,
+                    expected: self.unifier.resolve(closure),
+                    actual: self.unifier.resolve(&mutable),
+                };
+                if !self.errors.contains(&error) {
+                    self.errors.push(error);
+                }
             }
-        }
-        match (&own, &maybe_mut[..]) {
-            // Anything fits in a `mut` closure.
-            (_, []) | (Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never, _) => {}
-            // The closure has the mutability of the one thing that could be
-            // `mut`. Several can't be said yet, since a type can't say that
-            // one mutability is at most another (#243), so the closure is
-            // `mut` then, which leaves them free.
-            (Ty::Var(_), [m]) => self.equal(&constraint.closure, &with(m.clone()), origin),
-            (Ty::Var(_), _) => self.equal(&constraint.closure, &with(mut_), origin),
-            // The closure's mutability is decided: what it captured can't be
-            // more `mut`, so an `imm` closure makes the unknowns `imm`.
-            _ => {
-                for m in maybe_mut {
-                    self.equal(&constraint.closure, &with(m), origin);
+            AtMostSource::Needed(needed) => {
+                let error = TypeError::NotAtMost { origin, constraint: needed.map(|t| self.unifier.resolve(t)) };
+                if !self.errors.contains(&error) {
+                    self.errors.push(error);
                 }
             }
         }
-        true
     }
 
-    /// The mutabilities of the arrays, structs and functions that a value
-    /// of type `ty` holds, not counting what the functions take or give.
-    /// A type parameter, which could be anything, counts as `Mut`. `open`
-    /// is set when a type that isn't known yet could hold more.
-    fn held_mutabilities(&self, ty: &Ty<'db>, out: &mut Vec<Ty<'db>>, open: &mut bool) {
-        match ty {
-            Ty::Var(v) if self.unifier.var_kind(*v) == Some(VarKind::General) => *open = true,
-            Ty::Param(_) | Ty::Assoc(..) => out.push(Ty::Mutability(Mutability::Mut)),
-            Ty::Fn(_, _, m) => out.push((**m).clone()),
-            Ty::Array(m, elem) => {
-                out.push((**m).clone());
-                self.held_mutabilities(elem, out, open);
+    /// Settle the "at most" constraints that are left, keeping those whose
+    /// unknowns are all in `keep`: they'll become part of a function's
+    /// type. Another unknown can be chosen freely, since nothing else
+    /// depends on it, so it's chosen to meet them: `mut` above, and `imm`
+    /// below. What's left with no unknowns is about parameters, which only
+    /// an assumption could meet; it's reported unless `keep_params`.
+    pub fn settle_at_most(&mut self, keep: &[TyVar], keep_params: bool) {
+        for (constraint, source, origin) in std::mem::take(&mut self.pending_at_most) {
+            let resolved = constraint.map(|t| self.unifier.resolve(t));
+            let free = |t: &Ty<'db>| {
+                let mut vars = Vec::new();
+                vars_in(t, &mut vars);
+                vars.into_iter().filter(|v| !keep.contains(v)).count()
+            };
+            let held_free = free(resolved.held.ty());
+            let bound_free = free(&resolved.bound);
+            if held_free == 0 && bound_free == 0 {
+                let has_vars = has_vars(resolved.held.ty()) || has_vars(&resolved.bound);
+                if has_vars || keep_params {
+                    self.pending_at_most.push((constraint, source, origin));
+                } else {
+                    let needed = match &source {
+                        AtMostSource::Needed(needed) | AtMostSource::Object(needed) => needed.clone(),
+                        AtMostSource::Closure(_) => resolved.clone(),
+                    };
+                    self.at_most_broken(&AtMostSource::Needed(needed), origin);
+                }
+                continue;
             }
-            Ty::Adt(_, args, m) => {
-                out.push((**m).clone());
-                args.iter().for_each(|t| self.held_mutabilities(t, out, open));
+            // The least choice first: what's below is `imm`. Only if that's
+            // not free is what's above `mut`.
+            match &resolved.held {
+                Held::Mutability(m @ Ty::Var(v)) if !keep.contains(v) => {
+                    self.equal(m, &Ty::Mutability(Mutability::Imm), origin);
+                }
+                // A type still unknown becomes the error type, which fits.
+                Held::Type(_) if held_free > 0 => {}
+                _ => {
+                    if let Ty::Var(v) = &resolved.bound
+                        && !keep.contains(v)
+                    {
+                        self.equal(&resolved.bound, &Ty::Mutability(Mutability::Mut), origin);
+                    }
+                }
             }
-            Ty::Tuple(tys) => tys.iter().for_each(|t| self.held_mutabilities(t, out, open)),
-            Ty::App(head, args) => {
-                self.held_mutabilities(head, out, open);
-                args.iter().for_each(|t| self.held_mutabilities(t, out, open));
-            }
-            _ => {}
         }
+        self.solve();
     }
 
-    /// Decide the closures whose captures are still unknown, as if nothing
-    /// more will be known about them.
-    fn solve_last_captures(&mut self) {
-        for (constraint, origin) in std::mem::take(&mut self.pending_captures) {
-            self.solve_capture(&constraint, origin, true);
-        }
+    /// The "at most" constraints left, resolved.
+    pub fn take_pending_at_most(&mut self) -> Vec<(AtMostConstraint<'db>, Origin<'db>)> {
+        std::mem::take(&mut self.pending_at_most)
+            .into_iter()
+            .map(|(c, _, origin)| (c.map(|t| self.unifier.resolve(t)), origin))
+            .collect()
     }
 
     /// Solve the associated type constraints that can be solved now.
@@ -579,11 +686,11 @@ impl<'db> Solver<'db> {
                     self.pending_assoc.push((constraint, origin));
                 }
             }
-            for (constraint, origin) in std::mem::take(&mut self.pending_captures) {
-                if self.solve_capture(&constraint, origin, false) {
+            for (constraint, source, origin) in std::mem::take(&mut self.pending_at_most) {
+                if self.solve_at_most(&constraint, &source, origin) {
                     progress = true;
                 } else {
-                    self.pending_captures.push((constraint, origin));
+                    self.pending_at_most.push((constraint, source, origin));
                 }
             }
             for (constraint, origin) in std::mem::take(&mut self.pending) {
@@ -641,14 +748,14 @@ impl<'db> Solver<'db> {
         self.solve();
         self.unifier.default_numeric_vars();
         self.solve();
-        self.solve_last_captures();
-        self.solve();
     }
 
     /// Finish solving: default numeric variables and mutabilities, solve
     /// what can be, and report the rest as ambiguous.
     pub fn finish(&mut self) {
         self.solve_with_defaults();
+        // A body checked on its own can't add to its function's type.
+        self.settle_at_most(&[], false);
         self.keep_pending_assoc();
         for (constraint, origin) in self.take_pending() {
             // Unknown because of an error, which is reported already.

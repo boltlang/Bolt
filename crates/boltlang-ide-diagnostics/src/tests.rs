@@ -652,6 +652,21 @@ fn copy[T](g: Getter[T]) = Getter { get: g.get };
 }
 
 #[test]
+fn not_at_most() {
+    check(
+        r#"
+struct Box[T] { item: T }
+fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }
+                                //^^^^^^^^^^^^^^^ error: expected a type that's at most `imm`, found `T`
+fn keep(x) { let b = Box { item: x }; 0 }
+                   //^^^^^^^^^^^^^^^ label: needed by this use in `keep`
+  keep(mut [1]);
+//^^^^ error: expected a type that's at most `imm`, found `mut [i32]`
+"#,
+    );
+}
+
+#[test]
 fn unknown_mutabilities() {
     check(
         r#"

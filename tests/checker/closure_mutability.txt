@@ -123,22 +123,22 @@ fn reader(xs: [i32]) = || xs[0];
 let a = reader([1]);
 let b = reader(mut [1]);
 --------------------------------------------------------------------------------
-reader: fn('m [i32]) -> 'm fn() -> i32
+reader: 'm ⊑ 'n => fn('m [i32]) -> 'n fn() -> i32
 let a: fn() -> i32
 let b: mut fn() -> i32
 
 ================================================================================
-A closure that captures a value of a type parameter is mut, until #243
+A closure is at most what it captures, even a value of a type parameter (#243)
 ================================================================================
 fn reader(xs) = || xs[0];
 fn always[T](x: T) -> fn() -> T = || x;
 let r = reader(mut [1]);
 let a = always(1);
 --------------------------------------------------------------------------------
-reader: forall a. Index[a] => fn(a) -> mut fn() -> a.Item
-always: forall T. fn(T) -> mut fn() -> T
+reader: forall a. Index[a] => a ⊑ 'm => fn(a) -> 'm fn() -> a.Item
+always: forall T. T ⊑ 'm => fn(T) -> 'm fn() -> T
 let r: mut fn() -> i32
-let a: mut fn() -> i32
+let a: fn() -> i32
 
 ================================================================================
 A field can't be a mut fn
@@ -146,5 +146,6 @@ A field can't be a mut fn
 ================================================================================
 struct Holder { poke: mut fn() }
 --------------------------------------------------------------------------------
+
 --------------------------------------------------------------------------------
 error at `mut fn()`: mut field

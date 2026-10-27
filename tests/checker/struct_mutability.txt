@@ -300,8 +300,8 @@ let c: mut Box[imm Point]
 b.item.x = 1: ()
 c.item.x = 1: ()
 --------------------------------------------------------------------------------
-error at `Box { item: mut Point { x: 0, y: 0 } }`: imm Box[mut Point] holds mut Point
 error at `c.item`: can't change imm Point
+error at `Box { item: mut Point { x: 0, y: 0 } }`: imm Box[mut Point] holds mut Point
 
 ================================================================================
 A generic function that wraps a mut value
@@ -315,13 +315,13 @@ wrap(mut [1]);
 wrap_mut(mut [1]);
 
 --------------------------------------------------------------------------------
-wrap: forall T. fn(T) -> imm Box[T]
+wrap: forall T. T ⊑ imm => fn(T) -> imm Box[T]
 wrap_mut: forall T. fn(T) -> mut Box[T]
 wrap(1): imm Box[i32]
 wrap(mut [1]): imm Box[mut [i32]]
 wrap_mut(mut [1]): mut Box[mut [i32]]
 --------------------------------------------------------------------------------
-error at `wrap(mut [1])`: imm Box[mut [i32]] holds mut [i32]
+error at `wrap`: mut [i32] isn't at most imm
 
 ================================================================================
 An imm array can't hold a mut struct
@@ -341,8 +341,8 @@ b[0].x = 1: ()
 let c: mut [imm Point]
 c[0].x = 1: ()
 --------------------------------------------------------------------------------
-error at `[mut Point { x: 0, y: 0 }]`: imm [mut Point] holds mut Point
 error at `c[0]`: can't change imm Point
+error at `[mut Point { x: 0, y: 0 }]`: imm [mut Point] holds mut Point
 
 ================================================================================
 An imm array can't hold a tuple with a mut array
@@ -603,6 +603,7 @@ fmap(|n| n + 1, Box { item: 1 }): imm Box[i32]
 fmap(|n| n + 1, mut Box { item: 1 }): mut Box[i32]
 --------------------------------------------------------------------------------
 error at `Box { item: f(b.item) }`: expected Box[B], found imm Box[B]
+error at `Box { item: f(b.item) }`: B isn't at most imm
 
 ================================================================================
 A type alias of a struct
@@ -704,3 +705,56 @@ c.n = 2;
 let b: imm Box[imm [i32]]
 let c: mut Box[imm [i32]]
 c.n = 2: ()
+
+================================================================================
+A complete signature can't put an array of a generic mutability in an imm one (#247)
+:error
+================================================================================
+fn hide(xs: [i32]) -> i32 {
+  let w = [xs];
+  0
+}
+--------------------------------------------------------------------------------
+hide: fn([i32]) -> i32
+--------------------------------------------------------------------------------
+error at `[xs]`: 'm [i32] isn't at most imm
+
+================================================================================
+A complete signature can't put a value of a type parameter in an imm struct (#247)
+:error
+================================================================================
+struct Box[T] { item: T }
+fn hide[T](x: T) -> i32 {
+  let b = Box { item: x };
+  0
+}
+--------------------------------------------------------------------------------
+hide: forall T. fn(T) -> i32
+--------------------------------------------------------------------------------
+error at `Box { item: x }`: T isn't at most imm
+
+================================================================================
+An inferred function says what it needs, and its callers must meet it (#247)
+:error
+================================================================================
+struct Box[T] { item: T }
+fn hide(x) {
+  let b = Box { item: x };
+  0
+}
+hide(1);
+hide(mut [1]);
+--------------------------------------------------------------------------------
+hide: forall a. a ⊑ imm => fn(a) -> i32
+hide(1): i32
+hide(mut [1]): i32
+--------------------------------------------------------------------------------
+error at `hide`: mut [i32] isn't at most imm
+
+================================================================================
+A mut struct can hold a value of a type parameter without an assumption
+================================================================================
+struct Box[T] { item: T }
+fn keep[T](x: T) -> mut Box[T] = mut Box { item: x };
+--------------------------------------------------------------------------------
+keep: forall T. fn(T) -> mut Box[T]

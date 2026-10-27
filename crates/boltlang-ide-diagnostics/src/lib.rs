@@ -82,6 +82,7 @@ impl DiagnosticCode {
     pub const AMBIGUOUS_ASSOC_TYPE: Self = Self("E0227");
     pub const NO_LANG_CLASS: Self = Self("E0228");
     pub const UNMET_ASSOC_BOUND: Self = Self("E0229");
+    pub const NOT_AT_MOST: Self = Self("E0230");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -136,6 +137,13 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
         .into_iter()
         .map(|d| {
             let mut names = TyNames::new(db, &types_in(&d.kind));
+            // A bound like `T ⊑ imm` is about mutabilities, so they're all
+            // shown, with names like `'m`.
+            if let DiagnosticKind::NotAtMost { held, is_mutability, bound, .. } = &d.kind {
+                let held = if *is_mutability { as_mutability(held.clone()) } else { held.clone() };
+                let tys = [held, as_mutability(bound.clone())];
+                names = TyNames::explicit(db, &tys.iter().collect::<Vec<_>>());
+            }
             // Types that differ only in mutabilities that aren't shown, like
             // an `imm fn()` and a generic `fn()`, are shown with them.
             if let DiagnosticKind::TypeMismatch { expected, actual, .. } = &d.kind
@@ -147,7 +155,8 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }
                 | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
-                | DiagnosticKind::NoSuchField { because: Some(because), .. } => {
+                | DiagnosticKind::NoSuchField { because: Some(because), .. }
+                | DiagnosticKind::NotAtMost { because: Some(because), .. } => {
                     vec![because_label(db, &names, because)]
                 }
                 _ => Vec::new(),
@@ -177,6 +186,12 @@ pub fn syntax_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
         .collect()
 }
 
+/// A function type with the mutability `m`, so that naming the unknowns of
+/// types names `m` as a mutability.
+fn as_mutability<'db>(m: Ty<'db>) -> Ty<'db> {
+    Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m))
+}
+
 /// The types in a diagnostic, in the order they're shown: in the message,
 /// then in the labels.
 fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
@@ -195,6 +210,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
+        DiagnosticKind::NotAtMost { held, .. } => vec![held],
         DiagnosticKind::NoInstance { constraint, .. }
         | DiagnosticKind::AmbiguousConstraint { constraint, .. }
         | DiagnosticKind::UnmetAssocBound { constraint, .. } => {
@@ -361,6 +377,15 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                 article(&inner)
             );
             (C::MUT_INSIDE_IMM, message)
+        }
+        K::NotAtMost { held, is_mutability, bound, .. } => {
+            let bound = names.mutability_name(db, &bound);
+            let message = if is_mutability {
+                format!("expected a mutability that's at most `{bound}`, found `{}`", names.mutability_name(db, &held))
+            } else {
+                format!("expected a type that's at most `{bound}`, found `{}`", held.display_with(db, names))
+            };
+            (C::NOT_AT_MOST, message)
         }
         K::NoAssocType => (
             C::NO_ASSOC_TYPE,

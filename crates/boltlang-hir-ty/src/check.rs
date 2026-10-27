@@ -26,7 +26,7 @@ use crate::{
         generic_chain, generic_param_ids, is_declared,
     },
     solve::{
-        AssocConstraint, Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Solver, TypeError,
+        AssocConstraint, AtMostConstraint, Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Solver, TypeError,
         normalize_assoc, prune_implied_errors, resolve_error, vars_in,
     },
     unify::Unifier,
@@ -98,6 +98,8 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             let mut result = ctx.finish();
             result.add_instances(def, &solver);
             result.diagnostics.extend(errors.into_iter().map(InferenceDiagnostic::Type));
+            // After the type errors, which can report the same thing.
+            result.check_deep_immutability();
             result
         }
     }
@@ -207,6 +209,13 @@ fn infer_group<'db>(
     // Integer variables don't become type parameters; they default first.
     solver.solve_with_defaults();
     solver.keep_pending_assoc();
+    // What's left about the functions' types becomes part of them; the
+    // other unknowns in "at most" constraints can be chosen to meet them.
+    let mut keep = Vec::new();
+    for f in group {
+        vars_in(&solver.unifier.resolve(&env.mono[f]), &mut keep);
+    }
+    solver.settle_at_most(&keep, true);
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
     let mut errors: Vec<_> =
@@ -216,7 +225,8 @@ fn infer_group<'db>(
     let pending = solver.take_pending();
     let pending_fields = solver.take_pending_fields();
     let pending_assoc = solver.take_pending_assoc();
-    let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields, pending_assoc };
+    let pending_at_most = solver.take_pending_at_most();
+    let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields, pending_assoc, pending_at_most };
     for (&f, (def, mut result)) in group.iter().zip(results) {
         result.add_instances(def, &solver);
         let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
@@ -237,6 +247,7 @@ struct Solved<'a, 'db> {
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
+    pending_at_most: Vec<(AtMostConstraint<'db>, Origin<'db>)>,
 }
 
 impl<'db> Solved<'_, 'db> {
@@ -256,14 +267,21 @@ impl<'db> Solved<'_, 'db> {
         let (fields, field_sources, untyped) = self.function_fields(def, &mut vars);
         let (assoc, assoc_sources) = self.function_assoc(def, &mut vars);
         let (predicates, predicate_sources, ambiguous) = self.function_predicates(db, f, def, &vars);
+        let (bounds, bound_sources) = self.function_bounds(def, &vars);
         let scheme = Scheme {
             params: generic_param_ids(db, generic_chain(db, f)),
             bound: vars.vars.len() as u32,
             predicates,
             fields,
             assoc,
+            bounds,
             ty: vars.generalize(ty),
-            sources: SchemeSources { predicates: predicate_sources, fields: field_sources, assoc: assoc_sources },
+            sources: SchemeSources {
+                predicates: predicate_sources,
+                fields: field_sources,
+                assoc: assoc_sources,
+                bounds: bound_sources,
+            },
         };
         result.map_types(&mut |t| vars.generalize(&self.unifier.resolve(t)));
         let errors = self.errors.iter().filter(|e| e.origin().body == def).cloned();
@@ -338,6 +356,32 @@ impl<'db> Solved<'_, 'db> {
                 args: constraint.args.iter().map(|t| vars.generalize(t)).collect(),
                 ty: vars.generalize(&constraint.ty),
             };
+            if !out.contains(&generalized) {
+                out.push(generalized);
+                sources.push(Some(source_in_body(origin)));
+            }
+        }
+        (out.into(), sources.into())
+    }
+
+    /// The "at most" constraints that become part of the type of the
+    /// function with the body `def`: those about its type's variables and
+    /// its parameters, which its callers must meet.
+    fn function_bounds(
+        &self,
+        def: DefWithBodyId<'db>,
+        vars: &Generalization,
+    ) -> (Box<[AtMostConstraint<'db>]>, Sources<'db>) {
+        let mut out = Vec::new();
+        let mut sources = Vec::new();
+        for (constraint, origin) in self.pending_at_most.iter().filter(|(_, origin)| origin.body == def) {
+            let mut found = Vec::new();
+            vars_in(constraint.held.ty(), &mut found);
+            vars_in(&constraint.bound, &mut found);
+            if !found.iter().all(|v| vars.vars.contains(v)) {
+                continue;
+            }
+            let generalized = constraint.map(|t| vars.generalize(t));
             if !out.contains(&generalized) {
                 out.push(generalized);
                 sources.push(Some(source_in_body(origin)));

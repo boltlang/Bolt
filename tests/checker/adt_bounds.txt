@@ -54,7 +54,7 @@ label(1);
 
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
-label: forall a. Show[a] => fn(a) -> imm Labeled[a]
+label: forall a. Show[a] => a ⊑ imm => fn(a) -> imm Labeled[a]
 label(1): imm Labeled[i32]
 
 ================================================================================

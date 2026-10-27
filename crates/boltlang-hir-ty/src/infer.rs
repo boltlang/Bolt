@@ -30,7 +30,7 @@ use crate::{
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{CaptureConstraint, Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
+    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -85,11 +85,22 @@ impl<'db> InferenceResult<'db> {
     /// reported once, where it first appears, once the types are resolved.
     pub(crate) fn check_deep_immutability(&mut self) {
         let mut seen = Vec::new();
+        // What an "at most" error already reports, like the `mut [i32]` of
+        // `wrap(mut [1])` for `wrap: forall a. a ⊑ imm => ...`.
+        let reported: Vec<Ty<'db>> = self
+            .diagnostics
+            .iter()
+            .filter_map(|d| match d {
+                InferenceDiagnostic::Type(TypeError::NotAtMost { constraint, .. }) => Some(constraint.held.ty().clone()),
+                _ => None,
+            })
+            .collect();
         let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(e), t));
         let pats = self.pat_types.iter().map(|(p, t)| (ExprOrPat::Pat(p), t));
         for (at, ty) in exprs.chain(pats) {
             if let Some((outer, inner)) = mut_inside_imm(ty)
                 && !seen.contains(&outer)
+                && !reported.contains(&inner)
             {
                 seen.push(outer.clone());
                 self.diagnostics.push(InferenceDiagnostic::MutInsideImm { at, ty: outer, inner });
@@ -335,6 +346,25 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         (ty, subst.into())
     }
 
+    /// An array or struct of mutability `mutability` that holds values of
+    /// type `ty` is made at `at`: they must be at most its mutability.
+    fn holds(&mut self, ty: &Ty<'db>, mutability: &Ty<'db>, at: ExprId) {
+        let constraint = AtMostConstraint { held: Held::Type(ty.clone()), bound: mutability.clone() };
+        let source = AtMostSource::Object(constraint.clone());
+        self.solver.add(Constraint::AtMost { constraint, source, origin: self.origin(at) });
+    }
+
+    /// A struct of type `ty` is made at `at`: its type arguments, which its
+    /// fields can hold, must be at most its mutability. Its other fields
+    /// have its mutability or are `imm`.
+    fn struct_holds(&mut self, ty: &Ty<'db>, at: ExprId) {
+        if let Ty::Adt(AdtId::Struct(_), args, mutability) = ty {
+            for arg in args.iter() {
+                self.holds(arg, mutability, at);
+            }
+        }
+    }
+
     /// A value of the struct or enum of `def`, with the type arguments
     /// `args`, is made at `at`, so the arguments must meet the bounds of its
     /// type parameters, like the `Iterator` of `struct Zip[A: Iterator]`. An
@@ -500,11 +530,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 for (i, e) in exprs.iter().enumerate() {
                     self.check_expr_because(*e, &elem, reason_for_nth(reason, exprs[0], i));
                 }
+                self.holds(&elem, &literal_mutability(*is_mut), expr);
                 Ty::array(literal_mutability(*is_mut), elem)
             }
             Expr::ArrayRepeat { value, count, is_mut } => {
                 let elem = self.infer_expr(*value);
                 self.check_expr(*count, &Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)));
+                self.holds(&elem, &literal_mutability(*is_mut), expr);
                 Ty::array(literal_mutability(*is_mut), elem)
             }
             Expr::Record { path, fields, spread, is_mut } => {
@@ -646,10 +678,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let frame = self.closures.pop().unwrap();
                 let body = self.body;
                 let closure = Ty::Fn(param_tys.into(), Box::new(ret), Box::new(self.new_mutability()));
-                let captures_var = frame.captured.iter().any(|&b| body[b].mutable);
-                let captured = frame.captured.iter().map(|&b| self.result.binding_ty(b).clone()).collect();
-                let constraint = CaptureConstraint { closure: closure.clone(), captured, captures_var };
-                self.solver.add(Constraint::Capture { constraint, origin: self.origin(expr) });
+                // What the closure captured is at most its mutability, and a
+                // `let mut` variable it shares makes it `mut`.
+                let Ty::Fn(_, _, own) = &closure else { unreachable!() };
+                let origin = self.origin(expr);
+                if frame.captured.iter().any(|&b| body[b].mutable) {
+                    self.solver.equal(own, &Ty::Mutability(Mutability::Mut), origin);
+                }
+                for &b in &frame.captured {
+                    let constraint =
+                        AtMostConstraint { held: Held::Type(self.result.binding_ty(b).clone()), bound: (**own).clone() };
+                    self.solver.add(Constraint::AtMost { constraint, source: AtMostSource::Closure(closure.clone()), origin });
+                }
                 closure
             }
             Expr::MacroCall { .. } => Ty::Error,
@@ -777,6 +817,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             predicates: Box::new([ClassConstraint { class, args: identity_args(self.db, def) }]),
             fields: Box::new([]),
             assoc: Box::new([]),
+            bounds: Box::new([]),
             ty,
             sources: Default::default(),
         };
@@ -790,6 +831,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     fn constructor_ty(&mut self, expr: ExprId, def: VariantDef<'db>, is_mut: bool) -> Ty<'db> {
         let (_, generic_def) = def.adt();
         let (adt_ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
+        self.struct_holds(&adt_ty, expr);
         self.require_bounds(def, &args, expr);
         let fields = field_types(self.db, def);
         match fields.kind {
@@ -1177,6 +1219,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
         let (ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
+        self.struct_holds(&ty, expr);
         self.require_bounds(def, &args, expr);
         let field_tys = field_types(self.db, def);
         let mut seen = Vec::new();
@@ -1238,7 +1281,6 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     pub fn finish(mut self) -> InferenceResult<'db> {
         let unifier = &self.solver.unifier;
         self.result.map_types(&mut |t| unifier.resolve(t));
-        self.result.check_deep_immutability();
         self.result
     }
 

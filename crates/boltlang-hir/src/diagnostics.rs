@@ -36,7 +36,7 @@ use boltlang_hir_ty::{
         ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, enum_field_types, fn_sig,
         generic_predicates, impl_header, struct_field_types, subst_params, type_alias_ty,
     },
-    solve::{ConstraintSource, ExprOrPat, Origin, Reason, TypeError},
+    solve::{ConstraintSource, ExprOrPat, Held, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
     SyntaxKind::{
@@ -122,6 +122,9 @@ pub enum DiagnosticKind<'db> {
     NoMutability,
     /// An `imm` array or struct of type `ty` that holds a `mut` one, `inner`.
     MutInsideImm { ty: Ty<'db>, inner: Ty<'db> },
+    /// `held`, a type or a mutability, isn't at most the mutability `bound`
+    /// (#243), like a value of a type parameter in an `imm` array.
+    NotAtMost { held: Ty<'db>, is_mutability: bool, bound: Ty<'db>, because: Option<Because<'db>> },
     /// `mut` in the type of a field.
     MutField,
     /// A named mutability that isn't one of the function's or impl's.
@@ -639,6 +642,15 @@ impl<'db> Collector<'db> {
                         }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
                         TypeError::CannotChange { origin, ty } => (origin, DiagnosticKind::CannotChange { ty }),
+                        TypeError::NotAtMost { origin, constraint } => {
+                            if has_error(constraint.held.ty()) || has_error(&constraint.bound) {
+                                continue;
+                            }
+                            let because = self.because(origin, result);
+                            let is_mutability = matches!(constraint.held, Held::Mutability(_));
+                            let held = constraint.held.ty().clone();
+                            (origin, DiagnosticKind::NotAtMost { held, is_mutability, bound: constraint.bound, because })
+                        }
                     };
                     debug_assert_eq!(origin.body, id);
                     (at(origin.node), kind)

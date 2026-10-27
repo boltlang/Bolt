@@ -77,7 +77,7 @@ use boltlang_hir_ty::{
         LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, struct_field_types,
         type_alias_ty,
     },
-    solve::{ExprOrPat, TypeError},
+    solve::{ExprOrPat, Held, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
 
@@ -317,6 +317,23 @@ fn check(input: &str) -> Result<(String, String), String> {
                     InferenceDiagnostic::MutInsideImm { at: node, ty, inner } => {
                         let tys = show(&[ty, inner]);
                         format!("error at `{}`: {} holds {}", at(*node), tys[0], tys[1])
+                    }
+                    InferenceDiagnostic::Type(TypeError::NotAtMost { origin, constraint }) => {
+                        fn as_mutability<'db>(m: &Ty<'db>) -> Ty<'db> {
+                            Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()))
+                        }
+                        let held = match &constraint.held {
+                            Held::Mutability(m) => as_mutability(m),
+                            Held::Type(t) => t.clone(),
+                        };
+                        let bound = as_mutability(&constraint.bound);
+                        let names = TyNames::explicit(&db, &[&held, &bound]);
+                        let held = match &constraint.held {
+                            Held::Mutability(m) => names.mutability_name(&db, m),
+                            Held::Type(t) => t.display_with(&db, &names).to_string(),
+                        };
+                        let bound = names.mutability_name(&db, &constraint.bound);
+                        format!("error at `{}`: {held} isn't at most {bound}", at(origin.node))
                     }
                     InferenceDiagnostic::NotAPlace { expr } => {
                         format!("error at `{}`: not a place", at(ExprOrPat::Expr(*expr)))

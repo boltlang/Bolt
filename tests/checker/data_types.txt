@@ -65,7 +65,7 @@ p.first;
 let q: Pair[Bool, i32] = Pair { first: 1, second: True };
 
 --------------------------------------------------------------------------------
-swap: forall a b c. a.second: b => a.first: c => fn(a) -> imm Pair[b, c]
+swap: forall a b c. a.second: b => a.first: c => b ⊑ imm => c ⊑ imm => fn(a) -> imm Pair[b, c]
 let p: imm Pair[i32, String]
 p.first: i32
 let q: imm Pair[Bool, i32]

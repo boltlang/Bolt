@@ -30,7 +30,7 @@ let a: [i32] = empty();
 let b: [Bool] = empty();
 
 --------------------------------------------------------------------------------
-empty: forall a. fn() -> imm [a]
+empty: forall a. a ⊑ imm => fn() -> imm [a]
 let a: imm [i32]
 let b: imm [Bool]
 
