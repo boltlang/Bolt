@@ -50,10 +50,10 @@ impl Marker {
     }
 
     /// Abandon this node and apppend all children of this node directly to the parent node.
-    /// Whether a node was started since this marker, so that it has a
-    /// node to complete or to stand in for.
-    pub(crate) fn has_node_since(&self, p: &Parser) -> bool {
-        p.events[self.pos as usize + 1..].iter().any(|e| matches!(e, Event::Start { kind, .. } if *kind != TOMBSTONE))
+    /// Whether everything since this marker is one node, with no tokens or
+    /// errors outside of it, so that the node can stand in for this one.
+    pub(crate) fn has_one_node_since(&self, p: &Parser) -> bool {
+        is_one_node(&p.events[self.pos as usize + 1..])
     }
 
     pub(crate) fn abandon(mut self, p: &mut Parser) {
@@ -80,6 +80,41 @@ impl Marker {
         CompletedMarker::new(self.pos, kind)
     }
 
+}
+
+/// Whether `events` make one node, and nothing outside of it.
+///
+/// A node that [`CompletedMarker::precede`] wraps around another starts
+/// after the other's `Finish`, so it's counted where the chain of
+/// `forward_parent` links to it starts.
+fn is_one_node(events: &[Event]) -> bool {
+    let mut linked = vec![false; events.len()];
+    let mut depth = 0usize;
+    let mut nodes = 0;
+    for (i, event) in events.iter().enumerate() {
+        match event {
+            Event::Start { .. } if linked[i] => {}
+            Event::Start { kind, forward_parent } => {
+                let mut started = usize::from(*kind != TOMBSTONE);
+                let (mut idx, mut next) = (i, *forward_parent);
+                while let Some(offset) = next {
+                    idx += offset.get() as usize;
+                    linked[idx] = true;
+                    let Event::Start { kind, forward_parent } = &events[idx] else { return false };
+                    started += usize::from(*kind != TOMBSTONE);
+                    next = *forward_parent;
+                }
+                if started > 0 && depth == 0 {
+                    nodes += 1;
+                }
+                depth += started;
+            }
+            Event::Finish => depth -= 1,
+            Event::Token { .. } | Event::Error { .. } if depth == 0 => return false,
+            Event::Token { .. } | Event::Error { .. } => {}
+        }
+    }
+    nodes == 1
 }
 
 pub struct CompletedMarker {
