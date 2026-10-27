@@ -15,7 +15,7 @@ use crate::{
         ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty, impl_header, named_mutabilities,
         subst_params,
     },
-    solve::{AssocConstraint, Constraint, FieldConstraint, Origin, Solver, normalize_assoc},
+    solve::{AssocConstraint, Constraint, ConstraintSource, FieldConstraint, Origin, Reason, Solver, normalize_assoc},
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
 
@@ -34,6 +34,27 @@ pub struct Scheme<'db> {
     /// `fn set(xs) { xs[0] = True; }`.
     pub assoc: Box<[AssocConstraint<'db>]>,
     pub ty: Ty<'db>,
+    /// Where its constraints come from, so that an error about one can point
+    /// there.
+    pub sources: SchemeSources<'db>,
+}
+
+/// Where each of the predicates, fields and associated types of a scheme
+/// comes from, in their order, when it's known.
+#[derive(Debug, Clone, Default, PartialEq, Eq, salsa::SalsaValue)]
+pub struct SchemeSources<'db> {
+    pub predicates: Box<[Option<ConstraintSource<'db>>]>,
+    pub fields: Box<[Option<ConstraintSource<'db>>]>,
+    pub assoc: Box<[Option<ConstraintSource<'db>>]>,
+}
+
+/// The origin of a constraint of a scheme instantiated at `origin`: the
+/// same place, with a reason that points at where the scheme needs it.
+fn required_by<'db>(origin: Origin<'db>, source: Option<&Option<ConstraintSource<'db>>>) -> Origin<'db> {
+    match source.copied().flatten() {
+        Some(source) => Origin { reason: Reason::RequiredBy(source), ..origin },
+        None => origin,
+    }
 }
 
 impl<'db> Scheme<'db> {
@@ -45,6 +66,7 @@ impl<'db> Scheme<'db> {
             fields: Box::new([]),
             assoc: Box::new([]),
             ty,
+            sources: SchemeSources::default(),
         }
     }
 
@@ -60,21 +82,24 @@ impl<'db> Scheme<'db> {
                 _ => None,
             })
         };
-        for pred in self.predicates.iter() {
+        for (i, pred) in self.predicates.iter().enumerate() {
+            let origin = required_by(origin, self.sources.predicates.get(i));
             let constraint = pred.map(|t| {
                 let t = subst(t);
                 solver.flatten_assoc(&t, origin)
             });
             solver.add(Constraint::Class { constraint, origin });
         }
-        for field in self.fields.iter() {
+        for (i, field) in self.fields.iter().enumerate() {
+            let origin = required_by(origin, self.sources.fields.get(i));
             let constraint = field.map(|t| {
                 let t = subst(t);
                 solver.flatten_assoc(&t, origin)
             });
             solver.add(Constraint::Field { constraint, origin });
         }
-        for assoc in self.assoc.iter() {
+        for (i, assoc) in self.assoc.iter().enumerate() {
+            let origin = required_by(origin, self.sources.assoc.get(i));
             let args = assoc.args.iter().map(|t| solver.flatten_assoc(&subst(t), origin)).collect();
             let ty = solver.flatten_assoc(&subst(&assoc.ty), origin);
             solver.add(Constraint::Assoc { constraint: AssocConstraint { alias: assoc.alias, args, ty }, origin });
@@ -161,13 +186,25 @@ pub fn generic_param_ids<'db>(
 /// The class constraints that hold inside a function: its own, those of
 /// its impl, and for a class method, the class itself.
 pub fn assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<ClassConstraint<'db>> {
+    assumptions_with_sources(db, f).into_iter().map(|(c, _)| c).collect()
+}
+
+/// [`assumptions`], with the bound or `where` clause each one is written
+/// as. A class method's own class isn't written anywhere.
+pub fn assumptions_with_sources<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> Vec<(ClassConstraint<'db>, Option<ConstraintSource<'db>>)> {
     let mut out = Vec::new();
     if let ItemContainerId::Class(c) = f.container(db) {
-        out.push(ClassConstraint { class: c, args: identity_args(db, GenericDefId::Class(c)) });
+        out.push((ClassConstraint { class: c, args: identity_args(db, GenericDefId::Class(c)) }, None));
     }
     for def in generic_chain(db, f) {
         if !matches!(def, GenericDefId::Class(_)) {
-            out.extend(generic_predicates(db, def).predicates.iter().cloned());
+            let predicates = generic_predicates(db, def);
+            out.extend(predicates.predicates.iter().zip(predicates.sources.iter()).map(|(c, &type_ref)| {
+                (c.clone(), Some(ConstraintSource::Declared { def, type_ref }))
+            }));
         }
     }
     out
@@ -278,12 +315,14 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
     {
         defs.push(GenericDefId::Function(method));
     }
+    let (predicates, sources): (Vec<_>, Vec<_>) = assumptions_with_sources(db, f).into_iter().unzip();
     Scheme {
         params: generic_param_ids(db, defs),
         bound: 0,
-        predicates: assumptions(db, f).into(),
+        predicates: predicates.into(),
         fields: Box::new([]),
         assoc: Box::new([]),
         ty: Ty::Fn(params, Box::new(ret)),
+        sources: SchemeSources { predicates: sources.into(), ..SchemeSources::default() },
     }
 }

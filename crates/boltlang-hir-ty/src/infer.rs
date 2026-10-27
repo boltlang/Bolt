@@ -724,6 +724,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             fields: Box::new([]),
             assoc: Box::new([]),
             ty,
+            sources: Default::default(),
         };
         scheme.instantiate(self.solver, self.origin(expr))
     }

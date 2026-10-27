@@ -35,7 +35,7 @@ use boltlang_hir_ty::{
         ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
         impl_header, struct_field_types, subst_params, type_alias_ty,
     },
-    solve::{ExprOrPat, Origin, Reason, TypeError},
+    solve::{ConstraintSource, ExprOrPat, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
     SyntaxKind::{
@@ -88,10 +88,10 @@ pub enum DiagnosticKind<'db> {
     /// `because` is what made the expected type expected, if it's known.
     TypeMismatch { expected: Ty<'db>, actual: Ty<'db>, because: Option<Because<'db>> },
     InfiniteType { ty: Ty<'db> },
-    NoInstance { constraint: ClassConstraint<'db> },
+    NoInstance { constraint: ClassConstraint<'db>, because: Option<Because<'db>> },
     /// A class constraint whose types are never found, so it's not known
     /// which instance to use.
-    AmbiguousConstraint { constraint: ClassConstraint<'db> },
+    AmbiguousConstraint { constraint: ClassConstraint<'db>, because: Option<Because<'db>> },
     NotAFunction { ty: Ty<'db> },
     WrongArgCount { expected: usize, found: usize },
     WrongTypeArgCount { expected: usize, found: usize },
@@ -100,7 +100,7 @@ pub enum DiagnosticKind<'db> {
     KindMismatch { expected: Kind, found: Kind },
     /// A field that the type doesn't have. `ty` is `None` for a field in a
     /// struct literal or pattern, where the struct is named.
-    NoSuchField { ty: Option<Ty<'db>>, name: Name },
+    NoSuchField { ty: Option<Ty<'db>>, name: Name, because: Option<Because<'db>> },
     MissingFields { names: Vec<Name> },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
@@ -182,6 +182,12 @@ pub enum BecauseKind<'db> {
     SameAs { ty: Ty<'db> },
     /// The declaration of the item in the class an impl is for.
     ClassItem { class: ClassId<'db> },
+    /// The use in the body of a function that needs what its type asks for,
+    /// like the `p.x` of `fn get_x(p) = p.x`.
+    UseIn { function: Option<Name> },
+    /// A bound or `where` clause that asks for it, of a function if it's
+    /// one's.
+    Bound { function: Option<Name> },
 }
 
 /// What an item of a class or impl is.
@@ -595,13 +601,15 @@ impl<'db> Collector<'db> {
                             if constraint.args.iter().any(has_error) {
                                 continue;
                             }
-                            (origin, DiagnosticKind::NoInstance { constraint })
+                            let because = self.because(origin, result);
+                            (origin, DiagnosticKind::NoInstance { constraint, because })
                         }
                         TypeError::Ambiguous { origin, constraint } => {
                             if constraint.args.iter().any(has_error) {
                                 continue;
                             }
-                            (origin, DiagnosticKind::AmbiguousConstraint { constraint })
+                            let because = self.because(origin, result);
+                            (origin, DiagnosticKind::AmbiguousConstraint { constraint, because })
                         }
                         TypeError::NoSuchField { origin, ty, name } => {
                             if has_error(&ty) {
@@ -610,7 +618,8 @@ impl<'db> Collector<'db> {
                             debug_assert_eq!(origin.body, id);
                             // At the name of the field, for `p.z`.
                             let range = self.unresolved_range(map, origin.node);
-                            self.push(range, DiagnosticKind::NoSuchField { ty: Some(ty), name });
+                            let because = self.because(origin, result);
+                            self.push(range, DiagnosticKind::NoSuchField { ty: Some(ty), name, because });
                             continue;
                         }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
@@ -637,7 +646,7 @@ impl<'db> Collector<'db> {
                 }
                 InferenceDiagnostic::NoSuchField { expr, name } => {
                     let range = self.field_name_range(map, expr, &name).or_else(|| at(expr));
-                    (range, DiagnosticKind::NoSuchField { ty: None, name })
+                    (range, DiagnosticKind::NoSuchField { ty: None, name, because: None })
                 }
                 InferenceDiagnostic::MissingFields { expr, names } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::MissingFields { names })
@@ -714,6 +723,30 @@ impl<'db> Collector<'db> {
             Reason::SameAs(expr) => {
                 let ty = result.expr_ty(expr).clone();
                 (self.file, body_map.expr_syntax(expr)?, BecauseKind::SameAs { ty })
+            }
+            Reason::RequiredBy(ConstraintSource::Body { body, node }) => {
+                let (_, map) = body_with_source_map(db, body);
+                let ptr = match node {
+                    ExprOrPat::Expr(e) => map.expr_syntax(e)?,
+                    ExprOrPat::Pat(p) => map.pat_syntax(p)?,
+                };
+                let function = match body.def(db) {
+                    DefWithBody::Function(f) => f.item(db).name.as_ref().map(|n| n.name().clone()),
+                    _ => None,
+                };
+                (body.def(db).file(db), ptr, BecauseKind::UseIn { function })
+            }
+            Reason::RequiredBy(ConstraintSource::Declared { def, type_ref }) => {
+                let (file, map, function) = match def {
+                    GenericDefId::Function(f) => {
+                        let name = f.item(db).name.as_ref().map(|n| n.name().clone());
+                        (f.file(db), &function_signature_with_source_map(db, f).1, name)
+                    }
+                    GenericDefId::Impl(i) => (i.file(db), &impl_signature_with_source_map(db, i).1, None),
+                    GenericDefId::Class(c) => (c.file(db), &class_signature_with_source_map(db, c).1, None),
+                    _ => return None,
+                };
+                (file, map.type_syntax(type_ref)?, BecauseKind::Bound { function })
             }
         };
         Some(Because { file, range: ptr_range(ptr), kind })

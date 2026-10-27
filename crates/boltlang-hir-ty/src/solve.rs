@@ -40,6 +40,15 @@ impl<'db> Origin<'db> {
     }
 }
 
+/// Where a constraint in the type of a function comes from: the use in its
+/// body that needs it, like the `p.x` of `fn get_x(p) = p.x`, or the bound or
+/// `where` clause that declares it, like the `Show` of `[T: Show]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum ConstraintSource<'db> {
+    Body { body: DefWithBodyId<'db>, node: ExprOrPat },
+    Declared { def: GenericDefId<'db>, type_ref: TypeRefId },
+}
+
 /// Why a type is expected of an expression.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum Reason<'db> {
@@ -58,6 +67,9 @@ pub enum Reason<'db> {
     Field { variant: VariantDef<'db>, index: u32 },
     /// The type of another expression, like the other branch of an `if`.
     SameAs(ExprId),
+    /// A constraint of the type of the function used, where the function
+    /// needs it.
+    RequiredBy(ConstraintSource<'db>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -753,14 +765,24 @@ pub fn prune_implied_errors<'db>(db: &'db dyn Db, errors: &mut Vec<TypeError<'db
             _ => None,
         })
         .collect();
+    let mut kept: Vec<(Origin<'db>, ClassConstraint<'db>)> = Vec::new();
     errors.retain(|e| {
         let TypeError::NoInstance { origin, constraint } = e else { return true };
-        !missing.iter().any(|(o, other)| {
-            o.body == origin.body
-                && o.node == origin.node
-                && other != constraint
-                && with_superclasses(db, vec![other.clone()]).contains(constraint)
-        })
+        let same_place = |o: &Origin<'db>| o.body == origin.body && o.node == origin.node;
+        let implied = missing.iter().any(|(o, other)| {
+            same_place(o) && other != constraint && with_superclasses(db, vec![other.clone()]).contains(constraint)
+        });
+        // The same one twice, like from a class constraint and from an
+        // associated type of the class: the one that says why is kept.
+        let better = missing.iter().any(|(o, other)| {
+            same_place(o) && other == constraint && o.reason != Reason::None && origin.reason == Reason::None
+        });
+        let again = kept.iter().any(|(o, other)| same_place(o) && other == constraint);
+        if implied || better || again {
+            return false;
+        }
+        kept.push((*origin, constraint.clone()));
+        true
     });
 }
 

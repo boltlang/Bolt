@@ -136,7 +136,12 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
         .map(|d| {
             let names = TyNames::new(db, &types_in(&d.kind));
             let labels = match &d.kind {
-                DiagnosticKind::TypeMismatch { because: Some(because), .. } => vec![because_label(db, &names, because)],
+                DiagnosticKind::TypeMismatch { because: Some(because), .. }
+                | DiagnosticKind::NoInstance { because: Some(because), .. }
+                | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
+                | DiagnosticKind::NoSuchField { because: Some(because), .. } => {
+                    vec![because_label(db, &names, because)]
+                }
                 _ => Vec::new(),
             };
             let (code, message) = describe(db, &names, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
@@ -182,7 +187,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
-        DiagnosticKind::NoInstance { constraint } | DiagnosticKind::AmbiguousConstraint { constraint } => {
+        DiagnosticKind::NoInstance { constraint, .. } | DiagnosticKind::AmbiguousConstraint { constraint, .. } => {
             constraint.args.iter().collect()
         }
         _ => Vec::new(),
@@ -257,10 +262,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::InfiniteType { ty } => {
             (C::INFINITE_TYPE, format!("this would need the infinite type `{}`", ty.display_with(db, names)))
         }
-        K::NoInstance { constraint } => {
+        K::NoInstance { constraint, .. } => {
             (C::NO_INSTANCE, format!("there is no instance `{}`", constraint_display(db, names, &constraint)))
         }
-        K::AmbiguousConstraint { constraint } => (
+        K::AmbiguousConstraint { constraint, .. } => (
             C::AMBIGUOUS_CONSTRAINT,
             format!(
                 "cannot tell which instance of `{}` to use; add a type annotation",
@@ -303,10 +308,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             C::KIND_MISMATCH,
             format!("expected a type of kind `{expected}`, found `{source}` of kind `{found}`"),
         ),
-        K::NoSuchField { ty: Some(ty), name } => {
+        K::NoSuchField { ty: Some(ty), name, .. } => {
             (C::NO_SUCH_FIELD, format!("`{}` has no field `{name}`", ty.display_with(db, names)))
         }
-        K::NoSuchField { ty: None, name } => (C::NO_SUCH_FIELD, format!("there is no field `{name}`")),
+        K::NoSuchField { ty: None, name, .. } => (C::NO_SUCH_FIELD, format!("there is no field `{name}`")),
         K::MissingFields { names } => {
             let list = names.iter().map(|n| format!("`{n}`")).collect::<Vec<_>>().join(", ");
             let noun = if names.len() == 1 { "field" } else { "fields" };
@@ -412,6 +417,10 @@ fn because_label(db: &dyn Db, names: &TyNames, because: &Because<'_>) -> Label {
             let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
             format!("expected because of the declaration in class `{class}`")
         }
+        BecauseKind::UseIn { function: Some(name) } => format!("needed by this use in `{name}`"),
+        BecauseKind::UseIn { function: None } => "needed by this use".to_string(),
+        BecauseKind::Bound { function: Some(name) } => format!("needed by this bound of `{name}`"),
+        BecauseKind::Bound { function: None } => "needed by this bound".to_string(),
     };
     Label { file: because.file, range: because.range, message }
 }

@@ -704,12 +704,56 @@ fn fields_of_values_of_unknown_types() {
 struct Point { x: i32 }
 struct Size { x: u8 }
 fn get_x(p) = p.x;
+            //^^^ label: needed by this use in `get_x`
 let a: i32 = get_x(Point { x: 1 });
 let b: u8 = get_x(Size { x: 2u8 });
 let c = get_x(True);
       //^^^^^ error: `Bool` has no field `x`
 "#,
     );
+}
+
+#[test]
+fn missing_instances_point_at_what_needs_them() {
+    check(
+        r#"
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x) = "int"; }
+fn shout(x) = show(x);
+            //^^^^ label: needed by this use in `shout`
+fn loud[T: Show](x: T) -> String = show(x);
+         //^^^^ label: needed by this bound of `loud`
+shout(1);
+  shout(True);
+//^^^^^ error: there is no instance `Show[Bool]`
+  loud(False);
+//^^^^ error: there is no instance `Show[Bool]`
+  show(True);
+//^^^^ error: there is no instance `Show[Bool]`
+"#,
+    );
+}
+
+#[test]
+fn what_needs_an_instance_can_be_in_another_file() {
+    check_files(&[
+        (
+            "/lib.bolt",
+            r#"
+pub class Show[T] { fn show(x: T) -> String; }
+pub fn shout(x) = show(x);
+                //^^^^ label: needed by this use in `shout`
+"#,
+        ),
+        (
+            "/main.bolt",
+            r#"
+import "./lib" (shout);
+  shout(1);
+//^^^^^ error: there is no instance `Show[i32]`
+"#,
+        ),
+    ]);
 }
 
 #[test]

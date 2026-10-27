@@ -457,29 +457,35 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     /// The class constraints of generic parameters: the bounds in
-    /// `[T: Show]` and the `where` predicates.
-    pub fn lower_predicates(&mut self, def: GenericDefId<'db>, params: &GenericParams) -> Vec<ClassConstraint<'db>> {
+    /// `[T: Show]` and the `where` predicates, each with the type reference
+    /// of the class it's written with.
+    pub fn lower_predicates(
+        &mut self,
+        def: GenericDefId<'db>,
+        params: &GenericParams,
+    ) -> Vec<(ClassConstraint<'db>, TypeRefId)> {
         let mut out = Vec::new();
         let kinds = generic_param_kinds(self.db, def);
         for (index, param) in params.type_params.iter().enumerate() {
             let target = Ty::Param(GenericParamId { def, index: index as u32 });
             let kind = kinds.get(index).cloned();
             for &bound in param.bounds.iter() {
-                out.extend(self.lower_class_constraint(bound, Some((target.clone(), kind.clone()))));
-                self.lowered.clone_from(&out);
+                let constraint = self.lower_class_constraint(bound, Some((target.clone(), kind.clone())));
+                out.extend(constraint.map(|c| (c, bound)));
+                self.lowered = out.iter().map(|(c, _)| c.clone()).collect();
             }
         }
         for pred in params.where_predicates.iter() {
             if pred.bounds.is_empty() {
                 // A bare constraint like `Convert[A, B]`.
-                out.extend(self.lower_class_constraint(pred.target, None));
+                out.extend(self.lower_class_constraint(pred.target, None).map(|c| (c, pred.target)));
             } else {
                 let target = self.lower_ty_kinded(pred.target);
                 for &bound in pred.bounds.iter() {
-                    out.extend(self.lower_class_constraint(bound, Some(target.clone())));
+                    out.extend(self.lower_class_constraint(bound, Some(target.clone())).map(|c| (c, bound)));
                 }
             }
-            self.lowered.clone_from(&out);
+            self.lowered = out.iter().map(|(c, _)| c.clone()).collect();
         }
         out
     }
@@ -604,6 +610,9 @@ fn type_alias_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _alias: TypeAliasId<'
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Predicates<'db> {
     pub predicates: Box<[ClassConstraint<'db>]>,
+    /// Where each predicate is written: the class of a bound or a `where`
+    /// clause, in the store of the item's signature.
+    pub sources: Box<[TypeRefId]>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -643,9 +652,12 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
     // An array without `mut` or `imm` in a predicate, like the `[T]` of
     // `where Show[[T]]`, is `imm`: it can't be the same hidden parameter as
     // one in the signature.
-    let predicates =
-        ctx.lower_predicates(def, params).into_iter().map(|p| p.map(|t| t.fill_unwritten(&mut imm))).collect();
-    Predicates { predicates, diagnostics: ctx.diagnostics }
+    let (predicates, sources): (Vec<_>, Vec<_>) = ctx
+        .lower_predicates(def, params)
+        .into_iter()
+        .map(|(p, at)| (p.map(|t| t.fill_unwritten(&mut imm)), at))
+        .unzip();
+    Predicates { predicates: predicates.into(), sources: sources.into(), diagnostics: ctx.diagnostics }
 }
 
 /// The declared types of a function.

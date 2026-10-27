@@ -19,11 +19,12 @@ use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
     lower::{ClassConstraint, const_ty, fn_sig, with_superclasses},
     scheme::{
-        Scheme, assumptions, class_impl_method_sig, declared_scheme, generic_chain, generic_param_ids, is_declared,
+        Scheme, SchemeSources, assumptions, assumptions_with_sources, class_impl_method_sig, declared_scheme,
+        generic_chain, generic_param_ids, is_declared,
     },
     solve::{
-        AssocConstraint, ExprOrPat, FieldConstraint, Origin, Solver, TypeError, prune_implied_errors, resolve_error,
-        vars_in,
+        AssocConstraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Solver, TypeError,
+        prune_implied_errors, resolve_error, vars_in,
     },
     unify::Unifier,
     ty::{Ty, TyVar, VarKind},
@@ -209,9 +210,9 @@ impl<'db> Solved<'_, 'db> {
     ) -> (Scheme<'db>, InferenceResult<'db>) {
         let mut vars = Generalization::default();
         vars.add(ty);
-        let (fields, untyped) = self.function_fields(def, &mut vars);
-        let assoc = self.function_assoc(def, &mut vars);
-        let (predicates, ambiguous) = self.function_predicates(db, f, def, &vars);
+        let (fields, field_sources, untyped) = self.function_fields(def, &mut vars);
+        let (assoc, assoc_sources) = self.function_assoc(def, &mut vars);
+        let (predicates, predicate_sources, ambiguous) = self.function_predicates(db, f, def, &vars);
         let scheme = Scheme {
             params: generic_param_ids(db, generic_chain(db, f)),
             bound: vars.vars.len() as u32,
@@ -219,6 +220,7 @@ impl<'db> Solved<'_, 'db> {
             fields,
             assoc,
             ty: vars.generalize(ty),
+            sources: SchemeSources { predicates: predicate_sources, fields: field_sources, assoc: assoc_sources },
         };
         result.map_types(&mut |t| vars.generalize(&self.unifier.resolve(t)));
         let errors = self.errors.iter().filter(|e| e.origin().body == def).cloned();
@@ -234,26 +236,26 @@ impl<'db> Solved<'_, 'db> {
     /// The field constraints that become part of the type of the function
     /// with the body `def`: those about values of its types, and then those
     /// about the types of their fields, like `b.y: c` after `a.x: b` for
-    /// `p.x.y`. The types of the fields join `vars`. Also gives the origins
-    /// of the function's other field constraints, whose types are never
-    /// found.
+    /// `p.x.y`. The types of the fields join `vars`. Also gives where each
+    /// comes from, and the origins of the function's other field
+    /// constraints, whose types are never found.
     fn function_fields(
         &self,
         def: DefWithBodyId<'db>,
         vars: &mut Generalization,
-    ) -> (Box<[FieldConstraint<'db>]>, Vec<Origin<'db>>) {
+    ) -> (Box<[FieldConstraint<'db>]>, Sources<'db>, Vec<Origin<'db>>) {
         let mut rest: Vec<_> = self.pending_fields.iter().filter(|(_, origin)| origin.body == def).collect();
         let mut accepted = Vec::new();
         // Accepting a constraint can make others about the function's types,
         // so this goes on until nothing changes.
         loop {
             let before = accepted.len();
-            rest.retain(|(constraint, _)| {
+            rest.retain(|(constraint, origin)| {
                 if !vars.covers([&constraint.ty]) {
                     return true;
                 }
                 vars.add(&constraint.field);
-                accepted.push(constraint);
+                accepted.push((constraint, origin));
                 false
             });
             if accepted.len() == before {
@@ -261,22 +263,29 @@ impl<'db> Solved<'_, 'db> {
             }
         }
         let mut fields = Vec::new();
-        for constraint in accepted {
+        let mut sources = Vec::new();
+        for (constraint, origin) in accepted {
             let field = constraint.map(|t| vars.generalize(t));
             if !fields.contains(&field) {
                 fields.push(field);
+                sources.push(Some(source_in_body(origin)));
             }
         }
-        (fields.into(), rest.into_iter().map(|(_, origin)| *origin).collect())
+        (fields.into(), sources.into(), rest.into_iter().map(|(_, origin)| *origin).collect())
     }
 
     /// The associated type constraints that become part of the type of the
     /// function with the body `def`: those about its types, like
     /// `a.Item = Bool`. The variables of the types they must be join `vars`.
     /// Those about other types are already reported through their class.
-    fn function_assoc(&self, def: DefWithBodyId<'db>, vars: &mut Generalization) -> Box<[AssocConstraint<'db>]> {
+    fn function_assoc(
+        &self,
+        def: DefWithBodyId<'db>,
+        vars: &mut Generalization,
+    ) -> (Box<[AssocConstraint<'db>]>, Sources<'db>) {
         let mut out = Vec::new();
-        for (constraint, _) in self.pending_assoc.iter().filter(|(_, origin)| origin.body == def) {
+        let mut sources = Vec::new();
+        for (constraint, origin) in self.pending_assoc.iter().filter(|(_, origin)| origin.body == def) {
             if !vars.covers(constraint.args.iter()) {
                 continue;
             }
@@ -288,30 +297,31 @@ impl<'db> Solved<'_, 'db> {
             };
             if !out.contains(&generalized) {
                 out.push(generalized);
+                sources.push(Some(source_in_body(origin)));
             }
         }
-        out.into()
+        (out.into(), sources.into())
     }
 
     /// The class constraints that become part of the type of `f`: those it
-    /// assumes, and those of its body `def` about the types in `vars`. Also
-    /// gives the errors for those of its body about other types, which can't
-    /// be decided.
+    /// assumes, and those of its body `def` about the types in `vars`, with
+    /// where each comes from. Also gives the errors for those of its body
+    /// about other types, which can't be decided.
     fn function_predicates(
         &self,
         db: &'db dyn Db,
         f: FunctionId<'db>,
         def: DefWithBodyId<'db>,
         vars: &Generalization,
-    ) -> (Box<[ClassConstraint<'db>]>, Vec<TypeError<'db>>) {
-        let mut predicates = assumptions(db, f);
+    ) -> (Box<[ClassConstraint<'db>]>, Sources<'db>, Vec<TypeError<'db>>) {
+        let mut predicates = assumptions_with_sources(db, f);
         let declared = predicates.len();
         let mut ambiguous = Vec::new();
         for (constraint, origin) in self.pending.iter().filter(|(_, origin)| origin.body == def) {
             if vars.covers(constraint.args.iter()) {
                 let predicate = constraint.map(|t| vars.generalize(t));
-                if !predicates.contains(&predicate) {
-                    predicates.push(predicate);
+                if !predicates.iter().any(|(p, _)| *p == predicate) {
+                    predicates.push((predicate, Some(source_in_body(origin))));
                 }
             } else if !constraint.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
                 // Not about a type that's unknown because of an error, which
@@ -323,15 +333,25 @@ impl<'db> Solved<'_, 'db> {
         // `Index[a]` next to `IndexMut[a]`.
         let implied: Vec<ClassConstraint<'db>> = predicates
             .iter()
-            .flat_map(|p| with_superclasses(db, vec![p.clone()]).into_iter().filter(move |s| s != p))
+            .flat_map(|(p, _)| with_superclasses(db, vec![p.clone()]).into_iter().filter(move |s| s != p))
             .collect();
         let mut index = 0;
-        predicates.retain(|p| {
+        predicates.retain(|(p, _)| {
             index += 1;
             index <= declared || !implied.contains(p)
         });
-        (predicates.into(), ambiguous)
+        let (predicates, sources): (Vec<_>, Vec<_>) = predicates.into_iter().unzip();
+        (predicates.into(), sources.into(), ambiguous)
     }
+}
+
+/// Where each of some constraints of a function's type comes from.
+type Sources<'db> = Box<[Option<ConstraintSource<'db>>]>;
+
+/// The source of a constraint of a function's type that its body has at
+/// `origin`: the use that needs it.
+fn source_in_body<'db>(origin: &Origin<'db>) -> ConstraintSource<'db> {
+    ConstraintSource::Body { body: origin.body, node: origin.node }
 }
 
 /// The inference variables a scheme is generic over: the `i`th becomes
