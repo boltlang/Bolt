@@ -1,7 +1,7 @@
 // Classes that syntax uses: `v[i]`, `v[i] = x` and `for x in c` work on any
 // type with an impl of them. Arrays have theirs in `array.bolt`.
 
-import "./option" (Option);
+import "./option" (Option, None, Some);
 
 /// Types whose elements can be read by position, with `c[i]`.
 pub class Index[C] {
@@ -34,6 +34,29 @@ pub class Iterable[C] {
 
   /// A new iterator over `c`.
   fn iter(c: C) -> Iter;
+}
+
+/// An iterator that iterates over two other iterators in parallel.
+pub struct ZipIter[A: Iterator, B: Iterator] {
+  first: A,
+  second: B,
+}
+
+impl[A: Iterator, B: Iterator] Iterator[ZipIter[A, B]] {
+
+  type Item = (A.Item, B.Item);
+
+  fn next(it) {
+    match (it.first.next(), it.second.next()) {
+      (Some(a), Some(b)) => Some((a, b)),
+      _ => None,
+    }
+  }
+
+}
+
+pub fn zip[A: Iterable, B: Iterable](a: A, b: B) -> ZipIter[A.Iter, B.Iter] {
+  ZipIter { first: iter(a), second: iter(b) }
 }
 
 /// An iterator made from a function that gives the next item each time
