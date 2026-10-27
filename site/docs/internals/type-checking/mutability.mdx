@@ -470,6 +470,13 @@ unification will have to remember the origin of `Imm` and `Mut`.
   `tests/checker/struct_mutability.txt` and
   `tests/checker/named_mutability.txt` have a case for each rule on this
   page.
+- **Checked when running**: every array and struct in the evaluator knows
+  whether it was made `mut` or `imm` (`Object::mutability`). With
+  `Evaluator::with_mutability_checks`, which the evaluator's tests and
+  `tests/run` use, changing an `imm` one, or making an `imm` one that holds
+  a `mut` one, stops with `ErrorKind::MutabilityViolation`. A program the
+  type checker accepts never does, so a failure there is a bug in the
+  checker. Closures aren't checked yet (#244).
 
 `Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197)) is
 a struct, so it gets a mutability like any other, and `[T]` is shorthand for
