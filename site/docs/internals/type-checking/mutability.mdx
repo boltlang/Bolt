@@ -475,9 +475,9 @@ unification will have to remember the origin of `Imm` and `Mut`.
   `tests/checker/named_mutability.txt` have a case for each rule on this
   page.
 - **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a
-  Lean proof, for a core of these rules without closures, that nothing
-  reachable from an `imm` value ever changes, and that a well-typed program
-  never gets stuck.
+  Lean proof, for a core of these rules, that nothing reachable from an
+  `imm` value ever changes, and that a well-typed program never gets stuck.
+  For closures, it uses the rules #244 proposes, not today's.
 - **Checked when running**: every array and struct in the evaluator knows
   whether it was made `mut` or `imm` (`Object::mutability`). With
   `Evaluator::with_mutability_checks`, which the evaluator's tests and
