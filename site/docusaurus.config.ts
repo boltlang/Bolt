@@ -8,7 +8,7 @@ import rehypeKatex from 'rehype-katex';
 
 const config: Config = {
   title: 'The Bolt Programming Language',
-  tagline: 'A highly experimental programming language for rapid application development',
+  tagline: 'A highly experimental programming language for safe and rapid application development',
   favicon: 'img/favicon.ico',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
