@@ -11,11 +11,11 @@ a number into text isn't the same as turning a list into text. Bolt does
 this with *classes*, which work like Haskell's type classes and Rust's
 traits.
 
-:::note[Classes can be checked, but not run yet]
+:::note[Classes aren't compiled yet]
 
-The interpreter doesn't know which impl a call should use yet, so calling a
-class method stops with "has no body" when you run the program. Everything
-on this page type-checks, so try the examples with `bolt check`.
+`bolt run` runs everything on this page, but `bolt run --wasm` and `bolt
+build` can't compile calls of class methods yet
+([#182](https://github.com/boltlang/Bolt/issues/182)).
 
 :::
 

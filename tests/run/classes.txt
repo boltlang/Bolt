@@ -1,6 +1,6 @@
 ================================================================================
 Calling a class method
-:todo
+:todo wasm
 ================================================================================
 class Twice[T] {
   fn twice(x: T) -> T;
@@ -11,3 +11,100 @@ impl Twice[i32] {
 twice(21);
 --------------------------------------------------------------------------------
 42
+
+================================================================================
+The impl is chosen by the type of the argument
+:todo wasm
+================================================================================
+class Describe[T] { fn describe(x: T) -> String; }
+impl Describe[i32] { fn describe(x) = "a number"; }
+impl Describe[Bool] { fn describe(x) = "a boolean"; }
+(describe(1), describe(True));
+--------------------------------------------------------------------------------
+("a number", "a boolean")
+
+================================================================================
+A generic function chooses the impl when it runs
+:todo wasm
+================================================================================
+class Describe[T] { fn describe(x: T) -> String; }
+impl Describe[i32] { fn describe(x) = "a number"; }
+impl Describe[Bool] { fn describe(x) = "a boolean"; }
+fn shout(x) = describe(x);
+fn twice[T](x: T) -> (String, String) where Describe[T] = (describe(x), describe(x));
+(shout(1), shout(True), twice(False));
+--------------------------------------------------------------------------------
+("a number", "a boolean", ("a boolean", "a boolean"))
+
+================================================================================
+A generic impl calls the impl of its parameter
+:todo wasm
+================================================================================
+class Describe[T] { fn describe(x: T) -> String; }
+impl Describe[i32] { fn describe(x) = "a number"; }
+impl[T] Describe[Option[T]] where Describe[T] {
+  fn describe(x) = match x { Some(y) => describe(y), None => "nothing" };
+}
+let nothing: Option[i32] = None;
+(describe(Some(1)), describe(nothing));
+--------------------------------------------------------------------------------
+("a number", "nothing")
+
+================================================================================
+A class method with a default
+:todo wasm
+================================================================================
+class Describe[T] {
+  fn describe(x: T) -> String;
+  fn describe_twice(x: T) -> (String, String) = (describe(x), describe(x));
+}
+impl Describe[i32] { fn describe(x) = "a number"; }
+impl Describe[Bool] {
+  fn describe(x) = "a boolean";
+  fn describe_twice(x) = ("yes", "no");
+}
+(describe_twice(1), describe_twice(True));
+--------------------------------------------------------------------------------
+(("a number", "a number"), ("yes", "no"))
+
+================================================================================
+Method call syntax with a class method
+:todo wasm
+================================================================================
+class Twice[T] { fn twice(x: T) -> T; }
+impl Twice[i32] { fn twice(x) = x * 2; }
+21.twice();
+--------------------------------------------------------------------------------
+42
+
+================================================================================
+Class constants
+:todo wasm
+================================================================================
+class Zero[T] { const ZERO: T; }
+impl Zero[i32] { const ZERO: i32 = 0; }
+impl Zero[String] { const ZERO: String = ""; }
+let a: i32 = ZERO;
+let b: String = ZERO;
+(a, b);
+--------------------------------------------------------------------------------
+(0, "")
+
+================================================================================
+An associated type
+:todo wasm
+================================================================================
+class Index[C] {
+  type Item;
+  fn get(c: C, i: i32) -> Item;
+}
+struct Stack[T] { items: [T] }
+impl[T] Index[Stack[T]] {
+  type Item = T;
+  fn get(s, i) = s.items[i];
+}
+fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
+let s = Stack { items: [True, False] };
+(get(s, 1), first(s));
+--------------------------------------------------------------------------------
+(False, True)

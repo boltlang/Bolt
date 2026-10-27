@@ -23,6 +23,7 @@
 //!
 //! [`Resolver`]: boltlang_hir_def::resolver::Resolver
 
+mod dispatch;
 mod error;
 mod eval;
 mod host;

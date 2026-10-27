@@ -15,9 +15,13 @@ use boltlang_hir_def::{
     signatures::{FieldList, enum_signature, struct_signature},
 };
 
-use boltlang_hir_ty::builtin::{Builtin, builtin};
+use boltlang_hir_ty::{
+    builtin::{Builtin, builtin},
+    infer_body,
+};
 
 use crate::{
+    dispatch::{impl_const, impl_for_args, impl_method, method_class},
     error::{ErrorKind, EvalError},
     host::{Host, NoEffects},
     value::{Closure, Ctor, Fields, Locals, Shared, Slot, Value},
@@ -121,6 +125,9 @@ pub struct Evaluator<'db> {
     /// How many consts are being evaluated, which can't have effects.
     in_consts: usize,
     resolutions: HashMap<(DefWithBodyId<'db>, ExprId), Option<ValueResolution<'db>>>,
+    /// The files being run, whose impls a class method can use when the
+    /// impl is chosen at run time.
+    files: Vec<File>,
 }
 
 impl<'db> Evaluator<'db> {
@@ -136,6 +143,7 @@ impl<'db> Evaluator<'db> {
             depth: 0,
             consts: HashMap::new(),
             resolutions: HashMap::new(),
+            files: Vec::new(),
             host: Box::new(NoEffects),
             in_consts: 0,
         }
@@ -155,6 +163,9 @@ impl<'db> Evaluator<'db> {
     /// Run the statements at the top level of a file. The value is that of
     /// the last statement if it's an expression, like `f(x);`, or `()`.
     pub fn eval_file(&mut self, file: File) -> Result<Value<'db>, EvalError<'db>> {
+        if !self.files.contains(&file) {
+            self.files.push(file);
+        }
         let def = DefWithBodyId::new(self.db, DefWithBody::File(file));
         let body = body(self.db, def);
         let mut frame = Frame { def, body, locals: Locals::new() };
@@ -260,6 +271,22 @@ impl<'db> Evaluator<'db> {
         let db = self.db;
         if let Some(builtin) = builtin(db, function) {
             return self.call_builtin(builtin, args);
+        }
+        // A class method whose impl the types didn't decide, like `show` in
+        // `fn f(x) = show(x)`: the arguments decide it.
+        if method_class(db, function).is_some() {
+            match impl_for_args(db, &self.files, function, &args) {
+                Some(imp) => {
+                    let target = impl_method(db, imp, function);
+                    if target != function {
+                        return self.call_function_inner(target, args);
+                    }
+                }
+                None if !function.item(db).has_body => {
+                    return fail(ErrorKind::Unsupported("calling a class method whose impl isn't known"));
+                }
+                None => {}
+            }
         }
         let item = function.item(db);
         if !item.has_body {
@@ -693,7 +720,7 @@ impl<'db> Evaluator<'db> {
                     } else {
                         let path = Path::from_name(name.clone());
                         let method = match self.resolve_value(f.def, expr, &path) {
-                            Some(ValueResolution::Value(value)) => self.value_of(f, value)?,
+                            Some(ValueResolution::Value(value)) => self.value_at(f, callee, value)?,
                             _ => return fail(ErrorKind::UnresolvedName(name.to_string())),
                         };
                         let mut values = vec![receiver];
@@ -734,12 +761,36 @@ impl<'db> Evaluator<'db> {
 
     fn eval_path(&mut self, f: &mut Frame<'db>, expr: ExprId, path: &Path) -> Res<'db, Value<'db>> {
         match self.resolve_value(f.def, expr, path) {
-            Some(ValueResolution::Value(value)) => self.value_of(f, value),
+            Some(ValueResolution::Value(value)) => self.value_at(f, expr, value),
             Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(id), unresolved: None })) => {
                 Ok(self.ctor_value(Ctor::Struct(id)))
             }
             _ => fail(ErrorKind::UnresolvedName(path_to_string(path))),
         }
+    }
+
+    /// The value of what the name used by `expr` refers to. A class method
+    /// or constant is the impl's, when the types decide which impl it is.
+    fn value_at(&mut self, f: &mut Frame<'db>, expr: ExprId, value: ValueNs<'db>) -> Res<'db, Value<'db>> {
+        let db = self.db;
+        match value {
+            ValueNs::Function(id) => {
+                if let Some(class) = method_class(db, id)
+                    && let Some(imp) = infer_body(db, f.def).instance(expr, class)
+                {
+                    return Ok(Value::Function(impl_method(db, imp, id)));
+                }
+            }
+            ValueNs::Const(id) => {
+                if let ItemContainerId::Class(class) = id.container(db)
+                    && let Some(imp) = infer_body(db, f.def).instance(expr, class)
+                {
+                    return self.eval_const_inner(impl_const(db, imp, id));
+                }
+            }
+            _ => {}
+        }
+        self.value_of(f, value)
     }
 
     fn value_of(&mut self, f: &mut Frame<'db>, value: ValueNs<'db>) -> Res<'db, Value<'db>> {
