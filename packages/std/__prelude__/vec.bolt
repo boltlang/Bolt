@@ -4,6 +4,7 @@ import "./array" (array_alloc, array_copy, array_freeze, array_len);
 import "./mutability" (ToMut, ToImm);
 import "./option" (Option, None, Some);
 import "./io" (panic);
+import "./eq" (Eq);
 import "./classes" (Index, IndexMut, Iterable, FnIter);
 
 /// An array that grows: `push` adds an element at the end, and makes room
@@ -146,6 +147,20 @@ fn grow[T](v: mut Vec[T], needed: i32) {
   let items = array_alloc(new_capacity);
   array_copy(items, 0, v.items, 0, v.len);
   v.items = items;
+}
+
+impl[T] Eq[Vec[T]] where Eq[T] {
+  fn eq(a, b) {
+    if a.len() != b.len() {
+      return False;
+    }
+    for (x, y) in zip(a, b) {
+      if !eq(x, y) {
+        return False;
+      }
+    }
+    return True;
+  }
 }
 
 /// `v[i]`: the element at `i`.
