@@ -177,7 +177,9 @@ let zeros = [0; 3];
 (5, [0, 0, 0])
 ```
 
-`[value; count]` makes an array of `count` copies of `value`. Indexing past
+`[value; count]` makes an array that holds `value` `count` times.
+`value` is evaluated once, so `mut [mut [0, 0]; 2]` holds the same row
+twice. Indexing past
 the end is an error at run time:
 
 ```bolt
@@ -205,6 +207,29 @@ Changing an element of `primes` from above is an error:
 ```text
 [E0221] Error: cannot change an element of `primes`, which is `imm [i32]`; only a `mut` array can be changed
 ```
+
+Arrays are *shared*: `let b = a` makes another name for the same array,
+not a copy, so a change through one name shows through the other. A
+function that's given an array can change it the same way:
+
+```bolt
+fn fill(xs: mut [i32], x: i32) {
+  xs[0] = x;
+  xs[1] = x;
+}
+
+let a = mut [0, 0, 0];
+let b = a;
+fill(b, 7);
+a;
+```
+
+```text
+[7, 7, 0]
+```
+
+`let mut` has nothing to do with this: it only means the variable can be
+given another value later.
 
 The type of an array says which kind it is: `primes` is `imm [i32]`, and
 `scores` is `mut [i32]`. A function that takes `[i32]` takes both, and
