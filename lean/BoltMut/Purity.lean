@@ -50,14 +50,14 @@ theorem HeapClean.extend {σ σ' : HeapTy} {n : Nat} {A : Nat → Prop} {h : Hea
 /-- A value whose type is `imm` all the way down holds only `imm`
 locations. -/
 theorem clean_of_deepImm {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Prop} {io : Bool} {Γ : Ctx}
-    {v : Expr} {t : Ty} (hv : v.IsValue) (ht : HasType fns σ io Γ v t) (hd : DeepImm t) : Clean σ n A v :=
+    {v : Expr} {t : Ty} (hv : v.IsValue) (ht : HasType fns σ .none io Γ v t) (hd : AtMost .none .immutable t) : Clean σ n A v :=
   fun _ hl => .inr (.inr ((ht.value_imm hv hd).hasLoc_imm rfl hl))
 
 /-- A step keeps the program and the heap clean, and changes no location
 that's old and not allowed. -/
 theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} (hs : Step fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty} {n : Nat} {A : Nat → Prop},
-      HeapOk fns σ h → HasType fns σ false Ctx.empty e t → n ≤ h.length →
+      HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t → n ≤ h.length →
       Clean σ n A e → HeapClean σ n A h →
       (∀ l, l < n → ¬ A l → h'[l]? = h[l]?) ∧ n ≤ h'.length ∧ Clean σ n A e' ∧ HeapClean σ n A h' := by
   induction hs with
@@ -95,7 +95,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
       obtain ⟨_, hd, w, hw, hwv, hwt⟩ := hh.2 _ _ _ ht₀
       rw [hl] at hw
       cases hw
-      exact clean_of_deepImm hwv hwt (atMost_immutable.mp hd)
+      exact clean_of_deepImm hwv hwt hd
   | setCong₁ _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
@@ -151,10 +151,10 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     intro σ t n A hh ht hn hc hhc
     cases ht with
     | call _ _ he => exact ih hh he hn hc hhc
-  | @callVal f fn ms v hfn _ =>
+  | @callVal f fn ms τs v hfn _ =>
     intro σ t n A _ _ hn hc hhc
     -- A function's body has no locations: only its argument does.
-    have hb := ((hf fn (List.mem_of_getElem? hfn)).1).msubst ms
+    have hb := ((hf fn (List.mem_of_getElem? hfn)).1).inst ms τs
     exact ⟨fun _ _ _ => rfl, hn,
       fun l hl => (Expr.hasLoc_subst hl).elim (fun h => (hb.not_hasLoc l h).elim) (hc l), hhc⟩
   | appCong₁ _ ih =>
@@ -204,7 +204,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
 and not allowed keep their values. -/
 theorem steps_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} (hs : Steps fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty} {n : Nat} {A : Nat → Prop},
-      HeapOk fns σ h → HasType fns σ false Ctx.empty e t → n ≤ h.length →
+      HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t → n ≤ h.length →
       Clean σ n A e → HeapClean σ n A h → ∀ l, l < n → ¬ A l → h'[l]? = h[l]? := by
   induction hs with
   | refl => intros; rfl
@@ -219,14 +219,14 @@ down changes nothing that existed before the call, however many steps it
 takes. -/
 theorem imm_fn_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
     {f v e' : Expr} {a r : Ty} (hh : HeapOk fns σ h)
-    (hfv : f.IsValue) (hft : HasType fns σ false Ctx.empty f (.fn .immutable a r))
-    (hvv : v.IsValue) (hvt : HasType fns σ false Ctx.empty v a) (hd : DeepImm a)
+    (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable a r))
+    (hvv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v a) (hd : AtMost .none .immutable a)
     (hs : Steps fns h (.app f v) h' e') : ∀ l, l < h.length → h'[l]? = h[l]? := by
   intro l hl
   refine steps_clean hf hs (A := fun _ => False) hh (.app hft hvt) (Nat.le_refl _) ?_ ?_ l hl id
   · intro l' hl'
     rcases hl' with hl' | hl'
-    · exact clean_of_deepImm (n := h.length) (A := fun _ => False) (t := .fn .immutable a r) hfv hft rfl l' hl'
+    · exact clean_of_deepImm (n := h.length) (A := fun _ => False) (t := .fn .immutable a r) hfv hft (.refl _) l' hl'
     · exact clean_of_deepImm (n := h.length) (A := fun _ => False) hvv hvt hd l' hl'
   · intro l' w hA hw
     rcases hA with hA | hA
@@ -248,9 +248,9 @@ whose operations resume right away, changes only what the handler can
 reach. -/
 theorem imm_fn_changes_only_through_handler {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
     {f v k e' : Expr} {a kt r : Ty} (hh : HeapOk fns σ h)
-    (hfv : f.IsValue) (hft : HasType fns σ false Ctx.empty f (.fn .immutable (.prod a kt) r))
-    (hvv : v.IsValue) (hvt : HasType fns σ false Ctx.empty v a) (hd : DeepImm a)
-    (hkt : HasType fns σ false Ctx.empty k kt)
+    (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable (.prod a kt) r))
+    (hvv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v a) (hd : AtMost .none .immutable a)
+    (hkt : HasType fns σ .none false Ctx.empty k kt)
     (hs : Steps fns h (.app f (.pair v k)) h' e') :
     ∀ l, l < h.length → (¬ ∃ l₀, k.HasLoc l₀ ∧ Reaches h l₀ l) → h'[l]? = h[l]? := by
   intro l hl hA
@@ -258,7 +258,7 @@ theorem imm_fn_changes_only_through_handler {fns : List Fn} (hf : FnsOk fns) {σ
   refine steps_clean hf hs (A := A) hh (.app hft (.pair hvt hkt)) (Nat.le_refl _) ?_ ?_ l hl hA
   · intro l' hl'
     rcases hl' with hl' | hl' | hl'
-    · exact clean_of_deepImm (n := h.length) (A := A) (t := .fn .immutable (.prod a kt) r) hfv hft rfl l' hl'
+    · exact clean_of_deepImm (n := h.length) (A := A) (t := .fn .immutable (.prod a kt) r) hfv hft (.refl _) l' hl'
     · exact clean_of_deepImm (n := h.length) (A := A) hvv hvt hd l' hl'
     · exact .inr (.inl ⟨l', hl', .refl⟩)
   · intro l' w hA' hw

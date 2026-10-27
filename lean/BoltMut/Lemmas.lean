@@ -4,8 +4,8 @@ import BoltMut.Semantics
 # Lemmas about typing
 
 Weakening, canonical forms, and the two substitutions a call makes: the
-mutability arguments for the function's parameters, and the argument for
-its variable.
+mutability and type arguments for the function's parameters, and the
+argument for its variable.
 -/
 
 namespace BoltMut
@@ -28,8 +28,8 @@ theorem Extends.nil (σ : HeapTy) : Extends [] σ := by
   intro l p h
   simp at h
 
-theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
-    (ht : HasType fns σ io Γ e t) (hx : Extends σ σ') : HasType fns σ' io Γ e t := by
+theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr}
+    {t : Ty} (ht : HasType fns σ Δ io Γ e t) (hx : Extends σ σ') : HasType fns σ' Δ io Γ e t := by
   induction ht with
   | var h => exact .var h
   | unit => exact .unit
@@ -39,15 +39,12 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {io : Bool} {Γ : 
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
-  | call hf hl _ ih => exact .call hf hl ih
-  | lam _ ih => exact .lam ih
+  | call hf hs _ ih => exact .call hf hs ih
+  | lam hc himm _ ih => exact .lam hc himm ih
   | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-
-/-- `Γ'` has every variable of `Γ`, with the same type. -/
-def Ctx.Sub (Γ Γ' : Ctx) : Prop := ∀ (x : Nat) (s : Ty), Γ x = some s → Γ' x = some s
 
 theorem Ctx.Sub.update {Γ Γ' : Ctx} (h : Γ.Sub Γ') (x : Nat) (t : Ty) :
     (Γ.update x t).Sub (Γ'.update x t) := by
@@ -58,36 +55,15 @@ theorem Ctx.Sub.update {Γ Γ' : Ctx} (h : Γ.Sub Γ') (x : Nat) (t : Ty) :
   · simp only [hyx] at hy ⊢
     exact h _ _ hy
 
-theorem Ctx.capture_apply (b : Bool) (Γ : Ctx) (y : Nat) :
-    Γ.capture b y = if b then Γ y else (Γ y).filter (fun t => decide (DeepImm t)) := by
-  cases b <;> rfl
-
-theorem Ctx.Sub.capture {Γ Γ' : Ctx} (h : Γ.Sub Γ') (b : Bool) : (Γ.capture b).Sub (Γ'.capture b) := by
-  intro y s hy
-  rw [Ctx.capture_apply] at hy ⊢
-  cases b
-  · simp only [Bool.false_eq_true, ite_false] at hy ⊢
-    rcases hΓ : Γ y with _ | t
-    · simp [hΓ] at hy
-    · rw [hΓ] at hy
-      rw [h _ _ hΓ]
-      exact hy
-  · exact h _ _ hy
-
-theorem Ctx.capture_congr {Γ Γ' : Ctx} (b : Bool) {y : Nat} (h : Γ y = Γ' y) :
-    Γ.capture b y = Γ'.capture b y := by
-  rw [Ctx.capture_apply, Ctx.capture_apply, h]
-
-theorem Ctx.capture_empty (b : Bool) : Ctx.empty.capture b = Ctx.empty := by
-  funext y
-  rw [Ctx.capture_apply]
-  cases b <;> rfl
+theorem Ctx.Sub.trans {Γ₁ Γ₂ Γ₃ : Ctx} (h₁ : Γ₁.Sub Γ₂) (h₂ : Γ₂.Sub Γ₃) : Γ₁.Sub Γ₃ :=
+  fun x s h => h₂ x s (h₁ x s h)
 
 theorem Ctx.Sub.empty (Γ : Ctx) : Ctx.empty.Sub Γ := fun _ _ h => nomatch h
 
-/-- Typing only depends on the variables that are in scope. -/
-theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ Γ' : Ctx} {e : Expr} {t : Ty}
-    (ht : HasType fns σ io Γ e t) (hΓ : Γ.Sub Γ') : HasType fns σ io Γ' e t := by
+/-- Typing only depends on the variables that are in scope. A closure keeps
+the variables it sees. -/
+theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ Γ' : Ctx} {e : Expr}
+    {t : Ty} (ht : HasType fns σ Δ io Γ e t) (hΓ : Γ.Sub Γ') : HasType fns σ Δ io Γ' e t := by
   induction ht generalizing Γ' with
   | var h => exact .var (hΓ _ _ h)
   | unit => exact .unit
@@ -97,17 +73,17 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ Γ' : C
   | get _ ih => exact .get (ih hΓ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ) (ih₂ hΓ)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hΓ) (ih₂ (hΓ.update _ _))
-  | call hf hl _ ih => exact .call hf hl (ih hΓ)
-  | lam _ ih => exact .lam (ih ((hΓ.capture _).update _ _))
+  | call hf hs _ ih => exact .call hf hs (ih hΓ)
+  | lam hc himm hb _ => exact .lam (hc.trans hΓ) himm hb
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ) (ih₂ hΓ)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
   | fst _ ih => exact .fst (ih hΓ)
   | snd _ ih => exact .snd (ih hΓ)
 
 /-- Outside an `imm` closure, anything typed inside one has its type too. -/
-theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
-    (ht : HasType fns σ io Γ e t) {io' : Bool} (hio : io' = true → io = true) :
-    HasType fns σ io' Γ e t := by
+theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
+    (ht : HasType fns σ Δ io Γ e t) {io' : Bool} (hio : io' = true → io = true) :
+    HasType fns σ Δ io' Γ e t := by
   induction ht generalizing io' with
   | var h => exact .var h
   | unit => exact .unit
@@ -117,9 +93,9 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} 
   | get _ ih => exact .get (ih hio)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hio) (ih₂ hio)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hio) (ih₂ hio)
-  | call hf hl _ ih => exact .call hf hl (ih hio)
-  | lam _ ih =>
-    refine .lam (ih ?_)
+  | call hf hs _ ih => exact .call hf hs (ih hio)
+  | lam hc himm _ ih =>
+    refine .lam hc himm (ih ?_)
     intro h
     simp only [Bool.or_eq_true] at h ⊢
     exact h.imp_left hio
@@ -139,25 +115,27 @@ theorem muOf_immutable {b : Bool} (h : muOf b = .immutable) : b = false := by
   · cases h
 
 /-- A value whose type is `imm` all the way down can be captured by an `imm`
-closure. -/
+closure. Values only run in the program, which assumes nothing. -/
 theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {t : Ty}
-    (hv : v.IsValue) (ht : HasType fns σ io Γ v t) (hd : DeepImm t) : HasType fns σ true Γ v t := by
+    (hv : v.IsValue) (ht : HasType fns σ .none io Γ v t) (hd : AtMost .none .immutable t) :
+    HasType fns σ .none true Γ v t := by
   induction hv generalizing t with
   | pair _ _ ih₁ ih₂ => cases ht with
     | pair h₁ h₂ => exact .pair (ih₁ h₁ hd.1) (ih₂ h₂ hd.2)
   | unit => cases ht; exact .unit
   | int => cases ht; exact .int
   | loc => cases ht with
-    | loc h _ => exact .loc h (fun _ => hd.1)
+    | loc h _ => exact .loc h (fun _ => Le.none_immutable hd.1)
   | @lam b x body => cases ht with
-    | lam hb =>
-      have hb' : b = false := muOf_immutable hd
+    | lam hc himm hb =>
+      have hb' : b = false := muOf_immutable (Le.none_immutable hd)
       subst hb'
-      exact .lam (hb.weaken_imm (fun _ => by simp))
+      exact .lam hc himm (hb.weaken_imm (fun _ => by simp))
 
 /-- A value of a cell type is a location of that type. -/
-theorem canonical_cell {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu} {t : Ty}
-    (hv : v.IsValue) (ht : HasType fns σ io Γ v (.cell m t)) : ∃ l, v = .loc l ∧ σ[l]? = some (m, t) := by
+theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
+    {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) :
+    ∃ l, v = .loc l ∧ σ[l]? = some (m, t) := by
   cases hv with
   | unit => cases ht
   | int => cases ht
@@ -167,8 +145,8 @@ theorem canonical_cell {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v :
   | pair => cases ht
 
 /-- A value of a function type is a closure. -/
-theorem canonical_fn {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu} {a r : Ty}
-    (hv : v.IsValue) (ht : HasType fns σ io Γ v (.fn m a r)) : ∃ b x body, v = .lam b x body := by
+theorem canonical_fn {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
+    {a r : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.fn m a r)) : ∃ b x body, v = .lam b x body := by
   cases hv with
   | unit => cases ht
   | int => cases ht
@@ -177,8 +155,8 @@ theorem canonical_fn {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : E
   | pair => cases ht
 
 /-- A value of a tuple type is a pair of values. -/
-theorem canonical_prod {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr} {a b : Ty}
-    (hv : v.IsValue) (ht : HasType fns σ io Γ v (.prod a b)) :
+theorem canonical_prod {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {a b : Ty}
+    (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.prod a b)) :
     ∃ v₁ v₂, v = .pair v₁ v₂ ∧ v₁.IsValue ∧ v₂.IsValue := by
   cases hv with
   | unit => cases ht
@@ -187,12 +165,31 @@ theorem canonical_prod {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v :
   | lam => cases ht
   | pair h₁ h₂ => exact ⟨_, _, rfl, h₁, h₂⟩
 
+/-- `Γ` without `x`. -/
+def Ctx.drop (Γ : Ctx) (x : Nat) : Ctx := fun z => if z = x then none else Γ z
+
+theorem Ctx.drop_sub {Γc Γ' Γ : Ctx} {x : Nat} (hc : Γc.Sub Γ') (hΓ : ∀ y, y ≠ x → Γ' y = Γ y) :
+    (Γc.drop x).Sub Γ := by
+  intro z s hz
+  simp only [Ctx.drop] at hz
+  split at hz
+  · cases hz
+  · rename_i hzx
+    rw [← hΓ z hzx]
+    exact hc _ _ hz
+
+theorem Ctx.drop_some {Γ : Ctx} {x z : Nat} {s : Ty} (h : Γ.drop x z = some s) : Γ z = some s := by
+  simp only [Ctx.drop] at h
+  split at h
+  · cases h
+  · exact h
+
 /-- Substituting a value for `x`, where `x` has the value's type or isn't in
-scope (in the body of an `imm` closure that couldn't capture it). -/
+scope (in the body of an `imm` closure that didn't capture it). -/
 theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e : Expr} {t : Ty}
-    (ht : HasType fns σ io Γ' e t) {Γ : Ctx} {x : Nat} {v : Expr} (hΓ : ∀ y, y ≠ x → Γ' y = Γ y)
-    (hx : ∀ s, Γ' x = some s → HasType fns σ io Ctx.empty v s) (hv : v.IsValue) :
-    HasType fns σ io Γ (e.subst x v) t := by
+    (ht : HasType fns σ .none io Γ' e t) {Γ : Ctx} {x : Nat} {v : Expr} (hΓ : ∀ y, y ≠ x → Γ' y = Γ y)
+    (hx : ∀ s, Γ' x = some s → HasType fns σ .none io Ctx.empty v s) (hv : v.IsValue) :
+    HasType fns σ .none io Γ (e.subst x v) t := by
   induction ht generalizing Γ with
   | @var _ _ y s h =>
     simp only [Expr.subst]
@@ -230,36 +227,36 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
       · intro s' hs'
         simp only [Ctx.update, Ne.symm hyx, ite_false] at hs'
         exact hx s' hs'
-  | call hf hl _ ih => exact .call hf hl (ih hΓ hx)
-  | @lam io₀ Γ₀ b y body a r hbody ih =>
+  | call hf hs _ ih => exact .call hf hs (ih hΓ hx)
+  | @lam io₀ Γ₀ Γc b y body a r hc himm hbody ih =>
+    -- The closure sees what it saw, without `x`.
+    have hsub := Ctx.drop_sub (x := x) hc hΓ
+    have himm' : b = false → ∀ z s, (Γc.drop x) z = some s → AtMost .none .immutable s :=
+      fun hb z s hz => himm hb z s (Ctx.drop_some hz)
     simp only [Expr.subst]
     by_cases hyx : y = x
     · subst hyx
       simp only [ite_true]
-      refine .lam (hbody.weaken_ctx ?_)
+      refine .lam hsub himm' (hbody.weaken_ctx ?_)
       intro z s' hz
-      simp only [Ctx.update] at hz ⊢
+      simp only [Ctx.update, Ctx.drop] at hz ⊢
       by_cases hzy : z = y
       · simpa [hzy] using hz
-      · simp only [hzy, ite_false] at hz ⊢
-        rw [← Ctx.capture_congr b (hΓ z hzy)]
-        exact hz
+      · simpa [hzy] using hz
     · simp only [hyx, ite_false]
-      refine .lam (ih ?_ ?_)
+      refine .lam hsub himm' (ih ?_ ?_)
       · intro z hzx
-        simp only [Ctx.update]
+        simp only [Ctx.update, Ctx.drop]
         split
         · rfl
-        · exact Ctx.capture_congr b (hΓ z hzx)
+        · simp
       · intro s' hs'
-        simp only [Ctx.update, Ne.symm hyx, ite_false, Ctx.capture_apply] at hs'
+        simp only [Ctx.update, Ne.symm hyx, ite_false] at hs'
+        have hv' := hx s' (hc _ _ hs')
         cases b
-        · simp only [Bool.false_eq_true, ite_false, Option.filter_eq_some_iff,
-            decide_eq_true_eq] at hs'
-          obtain ⟨hs, hd⟩ := hs'
-          exact (hx s' hs).value_imm hv hd |>.weaken_imm (fun _ => rfl)
-        · simp only [ite_true] at hs'
-          simpa using hx s' hs'
+        · -- An `imm` closure only saw `x` if it's `imm` all the way down.
+          exact (hv'.value_imm hv (himm rfl x s' hs')).weaken_imm (fun _ => rfl)
+        · simpa using hv'
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ hx) (ih₂ hΓ hx)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ hx) (ih₂ hΓ hx)
   | fst _ ih => exact .fst (ih hΓ hx)
@@ -267,98 +264,95 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
 
 /-- Substituting a closed value for a variable just put in scope. -/
 theorem HasType.subst_update {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {x : Nat} {t₁ t : Ty}
-    {e v : Expr} (ht : HasType fns σ io (Γ.update x t₁) e t) (hv : v.IsValue)
-    (hvt : HasType fns σ io Ctx.empty v t₁) : HasType fns σ io Γ (e.subst x v) t := by
+    {e v : Expr} (ht : HasType fns σ .none io (Γ.update x t₁) e t) (hv : v.IsValue)
+    (hvt : HasType fns σ .none io Ctx.empty v t₁) : HasType fns σ .none io Γ (e.subst x v) t := by
   refine ht.subst (fun y hyx => by simp [Ctx.update, hyx]) (fun s hs => ?_) hv
   simp only [Ctx.update, ite_true, Option.some.injEq] at hs
   exact hs ▸ hvt
 
-/-- The types of the variables, with mutability arguments for the
-parameters. -/
-def Ctx.msubst (ms : List Mu) (Γ : Ctx) : Ctx := fun y => (Γ y).map (Ty.subst ms)
+/-- The types of the variables, with the arguments for the parameters. -/
+def Ctx.inst (ms : List Mu) (τs : List Ty) (Γ : Ctx) : Ctx := fun y => (Γ y).map (Ty.inst ms τs)
 
-theorem Ctx.msubst_update (ms : List Mu) (Γ : Ctx) (x : Nat) (t : Ty) :
-    (Γ.update x t).msubst ms = (Γ.msubst ms).update x (t.subst ms) := by
+theorem Ctx.inst_update (ms : List Mu) (τs : List Ty) (Γ : Ctx) (x : Nat) (t : Ty) :
+    (Γ.update x t).inst ms τs = (Γ.inst ms τs).update x (t.inst ms τs) := by
   funext y
-  simp only [Ctx.msubst, Ctx.update]
+  simp only [Ctx.inst, Ctx.update]
   split <;> rfl
 
-theorem Ctx.msubst_empty (ms : List Mu) : Ctx.empty.msubst ms = Ctx.empty := rfl
+theorem Ctx.inst_empty (ms : List Mu) (τs : List Ty) : Ctx.empty.inst ms τs = Ctx.empty := rfl
 
-/-- An `imm` closure captures at least as much once the mutability
-parameters are known. -/
-theorem Ctx.msubst_capture (ms : List Mu) (b : Bool) (Γ : Ctx) :
-    ((Γ.capture b).msubst ms).Sub ((Γ.msubst ms).capture b) := by
+theorem Ctx.Sub.inst {Γ Γ' : Ctx} (h : Γ.Sub Γ') (ms : List Mu) (τs : List Ty) :
+    (Γ.inst ms τs).Sub (Γ'.inst ms τs) := by
   intro y s hy
-  simp only [Ctx.msubst, Ctx.capture_apply] at hy ⊢
-  cases b
-  · simp only [Bool.false_eq_true, ite_false] at hy ⊢
-    rcases hΓ : Γ y with _ | t
-    · simp [hΓ] at hy
-    · simp only [hΓ, Option.filter, Option.map] at hy ⊢
-      by_cases hd : DeepImm t
-      · simp only [hd, decide_true] at hy
-        cases hy
-        simp [DeepImm.subst ms hd]
-      · simp [hd] at hy
-  · simpa using hy
+  simp only [Ctx.inst] at hy ⊢
+  rcases hΓ : Γ y with _ | t
+  · simp [hΓ] at hy
+  · rw [hΓ] at hy
+    rw [h _ _ hΓ]
+    exact hy
 
-/-- A body typed with its mutability parameters unknown has the type with
-any mutabilities for them. This is where a generic function can't change
-what it's given: `set` needs `mutable` itself, not a parameter that may
-become `immutable`. -/
-theorem HasType.msubst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
-    (ht : HasType fns σ io Γ e t) (hn : e.NoLocs) (ms : List Mu) :
-    HasType fns σ io (Γ.msubst ms) (e.msubst ms) (t.subst ms) := by
+/-- The key to #243: a body typed under its assumptions, with its
+parameters unknown, has the type with any arguments that meet them. This
+is where a generic function can't change what it's given (`set` needs
+`mutable` itself, not a parameter that may become `immutable`), and can
+only put a value of a type parameter in an `imm` object if it assumes that
+the parameter is `imm`. -/
+theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
+    (ht : HasType fns σ Δ io Γ e t) (hn : e.NoLocs) {Δ' : Assume} {ms : List Mu} {τs : List Ty}
+    (hs : Sat Δ' Δ ms τs) : HasType fns σ Δ' io (Γ.inst ms τs) (e.inst ms τs) (t.inst ms τs) := by
   induction ht with
-  | var h => exact .var (by simp [Ctx.msubst, h])
+  | var h => exact .var (by simp [Ctx.inst, h])
   | unit => exact .unit
   | int => exact .int
   | loc _ _ => exact hn.elim
   | @new _ _ _ s b _ hd ih =>
-    simp only [Expr.msubst, Ty.subst, Mu.subst_muOf]
-    have h := hd.subst ms
+    simp only [Expr.inst, Ty.inst, Mu.subst_muOf]
+    have h := AtMost.inst hs hd
     rw [Mu.subst_muOf] at h
     exact .new (ih hn) h
   | get _ ih =>
     have := ih hn
-    simp only [Ty.subst] at this
+    simp only [Ty.inst] at this
     exact .get this
   | set _ _ ih₁ ih₂ =>
     have h₁ := ih₁ hn.1
-    simp only [Ty.subst] at h₁
+    simp only [Ty.inst, Mu.subst] at h₁
     exact .set h₁ (ih₂ hn.2)
   | letE _ _ ih₁ ih₂ =>
     have h₂ := ih₂ hn.2
-    rw [Ctx.msubst_update] at h₂
+    rw [Ctx.inst_update] at h₂
     exact .letE (ih₁ hn.1) h₂
-  | @call _ _ f fn ms' _ hf hl _ ih =>
-    simp only [Expr.msubst, Ty.subst_subst]
+  | @call _ _ f fn ms' τs' _ hf hsat _ ih =>
+    simp only [Expr.inst]
+    rw [Ty.inst_inst]
     have h := ih hn
-    rw [Ty.subst_subst] at h
-    exact .call hf (by simp [hl]) h
-  | @lam _ Γ₀ b x _ _ _ _ ih =>
-    simp only [Expr.msubst, Ty.subst, Mu.subst_muOf]
+    rw [Ty.inst_inst] at h
+    exact .call hf (hsat.comp hs) h
+  | @lam _ Γ₀ Γc b x _ a r hc himm _ ih =>
+    simp only [Expr.inst, Ty.inst, Mu.subst_muOf]
     have h := ih hn
-    rw [Ctx.msubst_update] at h
-    exact .lam (h.weaken_ctx ((Ctx.msubst_capture ms b Γ₀).update _ _))
+    rw [Ctx.inst_update] at h
+    refine .lam (hc.inst ms τs) (fun hb y s hy => ?_) h
+    simp only [Ctx.inst, Option.map_eq_some_iff] at hy
+    obtain ⟨s₀, h₀, rfl⟩ := hy
+    exact AtMost.inst hs (himm hb y s₀ h₀)
   | app _ _ ih₁ ih₂ =>
     have h₁ := ih₁ hn.1
-    simp only [Ty.subst] at h₁
+    simp only [Ty.inst] at h₁
     exact .app h₁ (ih₂ hn.2)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hn.1) (ih₂ hn.2)
   | fst _ ih =>
     have h := ih hn
-    simp only [Ty.subst] at h
+    simp only [Ty.inst] at h
     exact .fst h
   | snd _ ih =>
     have h := ih hn
-    simp only [Ty.subst] at h
+    simp only [Ty.inst] at h
     exact .snd h
 
 /-- Inside an `imm` closure, every location is `imm`. -/
-theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
-    (ht : HasType fns σ io Γ e t) (hio : io = true) {l : Nat} (hl : e.HasLoc l) :
+theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
+    (ht : HasType fns σ Δ io Γ e t) (hio : io = true) {l : Nat} (hl : e.HasLoc l) :
     ∃ t', σ[l]? = some (.immutable, t') := by
   induction ht with
   | var | unit | int => exact hl.elim
@@ -368,6 +362,6 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} 
   | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
-  | lam _ ih => exact ih (by simp [hio]) hl
+  | lam _ _ _ ih => exact ih (by simp [hio]) hl
 
 end BoltMut

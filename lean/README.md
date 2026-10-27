@@ -31,7 +31,11 @@ A small language with what matters for mutability:
 | `mut [x]`, `[x]` | `new true x`, `new false x` |
 | `xs[i]`, `xs[i] = y` | `get e`, `set e y` |
 | `'m [T]`, or `[T]` in a signature: either mutability | a mutability parameter, `Mu.param i` |
-| a generic function, called with the mutabilities the checker finds | a top-level `Fn` with `arity` parameters, called as `call f ms e` |
+| a type parameter `T` | `Ty.tparam i` |
+| `struct Box[T] { item: T }` | `cell m (tparam i)` |
+| a field with a mutability of its own, `'v Vec[T]` (#243) | a cell with a mutability parameter |
+| what a function assumes, like `T ⊑ imm` or `'v ⊑ 'm` (#243) | `Fn.assume`: an `Assume` |
+| a generic function, called with the arguments the checker finds | a top-level `Fn`, called as `call f ms τs e` with mutability and type arguments |
 | a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
 
@@ -39,8 +43,15 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 
 - **Deep `imm`, as "at most"**: an object holds only what's at most its
   mutability (`AtMost`), with `imm ⊑ mut`. For `new false e`, an `imm`
-  object, that's a type that's `imm` all the way down (`DeepImm`,
-  `atMost_immutable`); a `mut` one can hold `imm` and `mut` things.
+  object, that's a type that's `imm` all the way down; a `mut` one can hold
+  `imm` and `mut` things.
+- **Assumptions** (#243): a parameter is below something only by what the
+  function assumes (`Le`, `AtMost`). A type parameter is at most `mut`,
+  since every type is, and at most `imm` only if the function assumes
+  `T ⊑ imm`. So `fn wrap[T](x: T) = Box { item: x }`, an `imm` box holding
+  a `T`, is rejected where it's made (#247), and is fine with that
+  assumption. A call must meet the callee's assumptions with its arguments
+  (`Sat`).
 - **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`. A
   mutability parameter isn't enough, so a generic function can read what
   it's given but not change it.
@@ -48,9 +59,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
   variables whose types are `imm` all the way down, and only `imm`
-  locations. Its type, `fn imm a r`, is `DeepImm`, so an `imm` object can
-  hold it; a `mut` closure captures anything, and an `imm` object can't
-  hold it. Calling either is allowed.
+  locations. Its type, `fn imm a r`, is at most `imm`, so an `imm` object
+  can hold it; a `mut` closure captures anything, and an `imm` object
+  can't hold it. Calling either is allowed.
 
 ## What's proven
 
@@ -65,16 +76,23 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `imm_fn_changes_nothing` | `Purity.lean` | calling an `imm` function with an argument that's `imm` all the way down changes no location that existed before the call |
 | `imm_fn_changes_only_through_handler` | `Purity.lean` | the same with a handler as an extra argument, as an effect whose operations resume right away compiles: only what the handler can reach changes |
 
-The key lemma for generic functions is `HasType.msubst` in `Lemmas.lean`: a
-body typed with its mutability parameters unknown keeps its type when they
-become `mut` or `imm`. For closures, it's `HasType.hasLoc_imm`: inside an
+The key lemma for generic functions, and for #243, is `HasType.inst` in
+`Lemmas.lean`: a body typed under its assumptions, with its parameters
+unknown, keeps its type for any arguments that meet them. It rests on
+`AtMost.inst` and `Sat.comp` in `Syntax.lean`: "at most" survives
+instantiating, and a call inside a generic function still meets its
+callee's assumptions once the outer function is called. For closures, it's `HasType.hasLoc_imm`: inside an
 `imm` closure, every location is `imm`. `BoltMut/Examples.lean` shows
 what's accepted and rejected: changing a `mut` object but not an `imm` one,
 an `imm` object holding a `mut` one, a generic function that reads but
 can't write, and the hole from #244, an `imm` object holding a closure that
 changes what it captured. For structs, it shows #246: `Line { n: 5, ..l }`
 with a `mut` `l` is rejected, since it shares `l.a`, a `mut Point`, with an
-`imm Line`; giving `a` anew makes it fine.
+`imm Line`; giving `a` anew makes it fine. For #243, it shows an `imm Box`
+holding a `T` rejected without `T ⊑ imm` and accepted with it, `wrap` called
+with an `imm` array but not a `mut` one, and an iterator whose array has a
+mutability `'v` of its own: `mut` with any `'v`, `imm` only with
+`'v ⊑ imm`.
 
 The theorems depend only on Lean's standard axioms, `propext`,
 `Quot.sound` and, in `Purity.lean`, `Classical.choice` (check with
@@ -82,17 +100,15 @@ The theorems depend only on Lean's standard axioms, `propext`,
 
 ## What's left out
 
-- **Today's closures.** The proof is about closures with a mutability, as
-  #244 proposes; with today's rules, an `imm` value can change through a
-  closure it holds. An `imm` closure here doesn't capture a value of a
-  generic type, which needs the constraint #243 adds.
-- **Inference.** The proof is about the typing rules, with the mutability
-  arguments of each call given. That the checker finds them, and the most
-  general ones, isn't proven.
-- **Type parameters**, so generic structs like `Box[T]`, and fields with
-  their own mutability (`'v`, #243). `AtMost` is the rule #243 states as
-  `T ⊑ μ`; with type parameters, a function's type would carry such
-  constraints. That's the next step, and it's where #247 is decided.
+- **Inference.** The proof is about the typing rules, with the arguments
+  of each call and the assumptions of each function given. That the
+  checker finds them, and the most general ones, isn't proven. In
+  particular, a closure's mutability is written here; in Bolt, it's a
+  parameter `'f` that the checker infers, with assumptions like `T ⊑ 'f`.
+- **Generic closures and structs.** Closures and struct types here are
+  monomorphic within a function: a closure can't take a type argument,
+  and a struct is the types of its fields, not a declaration with
+  parameters.
 - **Struct declarations.** A struct is the tuple of its fields here, with
   the types they have, so a struct update can only share a field at the
   type it has in the base. Bolt's checker gets the same rule from the

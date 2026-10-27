@@ -17,8 +17,8 @@ down. -/
 def HeapOk (fns : List Fn) (σ : HeapTy) (h : Heap) : Prop :=
   h.length = σ.length ∧
     ∀ (l : Nat) (m : Mu) (t : Ty), σ[l]? = some (m, t) →
-      (m = .mutable ∨ m = .immutable) ∧ AtMost m t ∧
-        ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ false Ctx.empty v t
+      (m = .mutable ∨ m = .immutable) ∧ AtMost .none m t ∧
+        ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ .none false Ctx.empty v t
 
 theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {l : Nat} {p : Mu × Ty}
     (hl : σ[l]? = some p) : l < h.length := by
@@ -27,7 +27,7 @@ theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h
 
 /-- A well-typed program that isn't a value can take a step. -/
 theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr} {t : Ty}
-    (hh : HeapOk fns σ h) (ht : HasType fns σ io Ctx.empty e t) :
+    (hh : HeapOk fns σ h) (ht : HasType fns σ .none io Ctx.empty e t) :
     e.IsValue ∨ ∃ h' e', Step fns h e h' e' := by
   generalize hΓ : Ctx.empty = Γ at ht
   induction ht with
@@ -91,8 +91,8 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
 only grows. -/
 theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ false Ctx.empty e t →
-      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' false Ctx.empty e' t := by
+    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
+      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' .none false Ctx.empty e' t := by
   induction hs with
   | newCong _ ih =>
     intro σ t hh ht
@@ -186,15 +186,17 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     | call hf' hl he =>
       obtain ⟨σ', hx, hh', he'⟩ := ih hh he
       exact ⟨σ', hx, hh', .call hf' hl he'⟩
-  | @callVal f fn ms v hfn hv =>
+  | @callVal f fn ms τs v hfn hv =>
     intro σ t hh ht
     cases ht with
-    | call hf' hl he =>
+    | call hf' hs he =>
       rw [hfn] at hf'
       cases hf'
       obtain ⟨hn, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
-      have hb := (hbody.weaken_heap (Extends.nil σ)).msubst hn ms
-      rw [Ctx.msubst_update, Ctx.msubst_empty] at hb
+      -- The arguments meet what the function assumes, so its body has the
+      -- type with them.
+      have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hs
+      rw [Ctx.inst_update, Ctx.inst_empty] at hb
       exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he⟩
   | appCong₁ _ ih =>
     intro σ t hh ht
@@ -213,11 +215,12 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     cases ht with
     | app he₁ he₂ =>
       cases he₁ with
-      | lam hbody =>
+      | lam hc _ hbody =>
         -- The body of an `imm` closure is typed inside one; outside, it
-        -- has the same type.
-        rw [Ctx.capture_empty] at hbody
-        exact ⟨σ, Extends.refl σ, hh, (hbody.weaken_imm (io' := false) (fun h => nomatch h)).subst_update hv he₂⟩
+        -- has the same type. A closed closure saw nothing but its
+        -- parameter.
+        have hb := (hbody.weaken_ctx (hc.update _ _)).weaken_imm (io' := false) (fun h => nomatch h)
+        exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he₂⟩
   | pairCong₁ _ ih =>
     intro σ t hh ht
     cases ht with
