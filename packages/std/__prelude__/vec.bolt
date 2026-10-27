@@ -1,6 +1,6 @@
 // A growable array.
 
-import "./array" (array_alloc, array_len);
+import "./array" (array_alloc, array_copy, array_len);
 import "./option" (Option, None, Some);
 import "./io" (panic);
 import "./classes" (Index, IndexMut, Iterable, FnIter);
@@ -28,10 +28,10 @@ pub fn vec_with_capacity[T](capacity: i32) -> mut Vec[T] {
 
 /// A new `Vec` with the elements of `xs`.
 pub fn vec_from_array[T](xs: [T]) -> mut Vec[T] {
-  let v = vec_with_capacity(array_len(xs));
-  for x in xs {
-    push(v, x);
-  }
+  let n = array_len(xs);
+  let v = vec_with_capacity(n);
+  array_copy(v.items, 0, xs, 0, n);
+  v.len = n;
   v
 }
 
@@ -91,11 +91,7 @@ pub fn insert[T](v: mut Vec[T], index: i32, x: T) {
   if v.len == capacity(v) {
     grow(v, v.len + 1);
   }
-  let mut i = v.len;
-  while i > index {
-    v.items[i] = v.items[i - 1];
-    i -= 1;
-  }
+  array_copy(v.items, index + 1, v.items, index, v.len - index);
   v.items[index] = x;
   v.len += 1;
 }
@@ -105,11 +101,7 @@ pub fn insert[T](v: mut Vec[T], index: i32, x: T) {
 pub fn remove[T](v: mut Vec[T], index: i32) -> T {
   check_index(v, index);
   let x = v.items[index];
-  let mut i = index;
-  while i < v.len - 1 {
-    v.items[i] = v.items[i + 1];
-    i += 1;
-  }
+  array_copy(v.items, index, v.items, index + 1, v.len - index - 1);
   v.len -= 1;
   x
 }
@@ -129,11 +121,7 @@ pub fn reserve[T](v: mut Vec[T], additional: i32) {
 /// A new array with the elements of `v`.
 pub fn to_array[T](v: Vec[T]) -> mut [T] {
   let xs = array_alloc(v.len);
-  let mut i = 0;
-  while i < v.len {
-    xs[i] = v.items[i];
-    i += 1;
-  }
+  array_copy(xs, 0, v.items, 0, v.len);
   xs
 }
 
@@ -155,11 +143,7 @@ fn grow[T](v: mut Vec[T], needed: i32) {
     new_capacity *= 2;
   }
   let items = array_alloc(new_capacity);
-  let mut i = 0;
-  while i < v.len {
-    items[i] = v.items[i];
-    i += 1;
-  }
+  array_copy(items, 0, v.items, 0, v.len);
   v.items = items;
 }
 
