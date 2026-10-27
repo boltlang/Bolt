@@ -336,7 +336,7 @@ fn builtin_signature(builtin: Builtin) -> Signature {
 /// The signature of a function of an `extern` block.
 fn import_signature<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<Signature, Vec<CodegenError<'db>>> {
     let unsupported = |what: String| vec![CodegenError { kind: ErrorKind::Unsupported(what), location: None }];
-    let scheme = function_scheme(db, f).map_err(|()| unsupported("this extern function".into()))?;
+    let scheme = function_scheme(db, f).map_err(|_| unsupported("this extern function".into()))?;
     let Ty::Fn(params, ret) = &scheme.ty else { unreachable!("a function has a function type") };
     let val_ty = |ty: &Ty<'db>| -> Result<Option<ValTy>, Vec<CodegenError<'db>>> {
         use boltlang_hir_def::builtin_type::{BuiltinInt::*, BuiltinType::*, BuiltinUint::*, BuiltinFloat};

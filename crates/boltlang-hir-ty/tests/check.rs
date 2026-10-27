@@ -72,7 +72,7 @@ use boltlang_hir_def::{
     },
 };
 use boltlang_hir_ty::{
-    InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
+    InferenceCycle, InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
     lower::{
         LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, struct_field_types,
     },
@@ -197,7 +197,7 @@ fn check(input: &str) -> Result<(String, String), String> {
             };
             let ty = match function_scheme(&db, f) {
                 Ok(scheme) => scheme.display(&db),
-                Err(()) => "<cycle>".into(),
+                Err(InferenceCycle) => "<cycle>".into(),
             };
             types.push(format!("{prefix}{name}: {ty}"));
             // The problems with the types in its signature.
