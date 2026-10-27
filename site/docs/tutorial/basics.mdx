@@ -237,6 +237,29 @@ can't change them; one that changes its argument takes `mut [i32]`. The
 [internals](../internals/type-checking/mutability.mdx) explain how this
 works.
 
+A function that can't change an array doesn't make it unchanging, though.
+If the array is `mut`, something else can still change it while the
+function runs, through another name for it:
+
+```bolt
+fn total(xs: [i32], f: fn()) -> i32 {
+  let before = xs[0];
+  f();
+  before + xs[0]
+}
+
+let xs = mut [1];
+total(xs, || { xs[0] = 100; });
+```
+
+```text
+101
+```
+
+`total` can't change `xs`, but the function it's given can. Only an `imm`
+array is sure never to change: a function that counts on that takes
+`imm [i32]`.
+
 To get a copy instead, use `to_mut`, for one you can change, or `to_imm`,
 for one that never changes, even when the original does:
 

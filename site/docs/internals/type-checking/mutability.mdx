@@ -229,7 +229,11 @@ fn fill(xs: mut [i32], x) { xs[0] = x; }    // fn(mut [i32], i32) -> ()
 
 `size` is generalized over the mutability of its argument,
 $\forall \mu\, \alpha.\ \mathsf{Array}[\mu, \alpha] \to \mathsf{i32}$, and
-that's shown as `[a]`. It takes arrays of either mutability. `fill` needs a
+that's shown as `[a]`. It takes arrays of either mutability, which makes
+its argument read-only in its body, not unchanging: a `mut` array can still
+be changed during the call through another name for it, like by a closure
+that the caller passed too. Only `imm` promises that nothing changes it.
+`fill` needs a
 `mut` array, since it changes its argument. Instantiating a scheme gives a
 fresh mutability, so each call can pass a different kind of array.
 
