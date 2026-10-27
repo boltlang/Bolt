@@ -367,6 +367,7 @@ impl<'db> Evaluator<'db> {
                 dst.borrow_mut()[dst_range].clone_from_slice(&items);
                 Ok(Value::unit())
             }
+            (Builtin::ArrayFreeze, [Value::Array(items)]) => Ok(Value::array(items.borrow().clone())),
             _ => mismatch(format!("bad arguments to `{}`", builtin.name())),
         }
     }

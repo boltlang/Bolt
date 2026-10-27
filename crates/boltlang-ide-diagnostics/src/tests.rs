@@ -780,7 +780,7 @@ fn builtin_declarations() {
 extern "bolt" {
   fn print(text: String);
   fn prnt(text: String);
-   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`
+   //^^^^ error: there is no builtin `prnt`; the builtins are `print`, `panic`, `array_len`, `array_alloc`, `array_get`, `array_set`, `array_copy`, `array_freeze`
   fn panic(message: String) -> i32;
    //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
 }

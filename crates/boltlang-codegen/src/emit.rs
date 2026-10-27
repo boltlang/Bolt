@@ -334,7 +334,8 @@ fn builtin_signature(builtin: Builtin) -> Signature {
         | Builtin::ArrayAlloc
         | Builtin::ArrayGet
         | Builtin::ArraySet
-        | Builtin::ArrayCopy => {
+        | Builtin::ArrayCopy
+        | Builtin::ArrayFreeze => {
             unreachable!("only the builtins of `Builtin::HOST` are called")
         }
     }

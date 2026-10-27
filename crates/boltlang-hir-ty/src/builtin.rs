@@ -51,6 +51,10 @@ pub enum Builtin {
     /// `dst` from `dst_start`. The two can be the same array, and the ranges
     /// can overlap. Unset elements are copied as they are.
     ArrayCopy,
+    /// `fn array_freeze[T](xs: [T]) -> imm [T]`: a copy of `xs` that can't
+    /// be changed. Code can't make an `imm` array with computed elements
+    /// otherwise, since one that's built is `mut`.
+    ArrayFreeze,
 }
 
 impl Builtin {
@@ -62,6 +66,7 @@ impl Builtin {
         Builtin::ArrayGet,
         Builtin::ArraySet,
         Builtin::ArrayCopy,
+        Builtin::ArrayFreeze,
     ];
 
     /// The builtins that compiled code imports from the host. The others
@@ -77,6 +82,7 @@ impl Builtin {
             Builtin::ArrayGet => "array_get",
             Builtin::ArraySet => "array_set",
             Builtin::ArrayCopy => "array_copy",
+            Builtin::ArrayFreeze => "array_freeze",
         }
     }
 
@@ -95,7 +101,8 @@ impl Builtin {
             | Builtin::ArrayAlloc
             | Builtin::ArrayGet
             | Builtin::ArraySet
-            | Builtin::ArrayCopy => false,
+            | Builtin::ArrayCopy
+            | Builtin::ArrayFreeze => false,
         }
     }
 
@@ -123,6 +130,10 @@ impl Builtin {
                 let src = Ty::array(Ty::Bound(1), Ty::Bound(0));
                 Ty::Fn(Box::new([dst, i32_ty.clone(), src, i32_ty.clone(), i32_ty]), Box::new(Ty::unit()))
             }
+            Builtin::ArrayFreeze => Ty::Fn(
+                Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1))]),
+                Box::new(Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1))),
+            ),
         }
     }
 

@@ -94,7 +94,8 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
             | Builtin::ArrayAlloc
             | Builtin::ArrayGet
             | Builtin::ArraySet
-            | Builtin::ArrayCopy => {
+            | Builtin::ArrayCopy
+            | Builtin::ArrayFreeze => {
                 unreachable!("not in `Builtin::HOST`")
             }
         };
