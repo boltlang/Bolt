@@ -81,6 +81,7 @@ impl DiagnosticCode {
     pub const NO_ASSOC_TYPE: Self = Self("E0226");
     pub const AMBIGUOUS_ASSOC_TYPE: Self = Self("E0227");
     pub const NO_LANG_CLASS: Self = Self("E0228");
+    pub const UNMET_ASSOC_BOUND: Self = Self("E0229");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -187,7 +188,9 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
-        DiagnosticKind::NoInstance { constraint, .. } | DiagnosticKind::AmbiguousConstraint { constraint, .. } => {
+        DiagnosticKind::NoInstance { constraint, .. }
+        | DiagnosticKind::AmbiguousConstraint { constraint, .. }
+        | DiagnosticKind::UnmetAssocBound { constraint, .. } => {
             constraint.args.iter().collect()
         }
         _ => Vec::new(),
@@ -363,6 +366,14 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             C::AMBIGUOUS_ASSOC_TYPE,
             format!("`{source}` is ambiguous: several classes of its type parameter declare it"),
         ),
+        K::UnmetAssocBound { name, class, constraint } => {
+            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            let instance = constraint_display(db, names, &constraint);
+            (
+                C::UNMET_ASSOC_BOUND,
+                format!("there is no instance `{instance}`, which class `{class}` asks of its type `{name}`"),
+            )
+        }
         K::NoLangClass { class } => (
             C::NO_LANG_CLASS,
             format!("this needs the class `{class}`, but there's no prelude that defines it"),

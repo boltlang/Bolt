@@ -18,7 +18,7 @@ use boltlang_hir_def::{
 use crate::{
     lower::{
         ClassConstraint, VariantDef, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
-        subst_params, with_superclasses,
+        implied_by, subst_params, with_superclasses,
     },
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
@@ -225,11 +225,10 @@ impl<'db> Solver<'db> {
             if self.assumptions.contains(&c) {
                 continue;
             }
-            // `class Ord[T] where Eq[T]`: `Ord[X]` gives `Eq[X]`.
-            let class_def = GenericDefId::Class(c.class);
-            for sup in generic_predicates(self.db, class_def).predicates.iter() {
-                stack.push(sup.map(|t| subst_params(t, class_def, &c.args)));
-            }
+            // `class Ord[T] where Eq[T]`: `Ord[X]` gives `Eq[X]`; and
+            // `type Iter: Iterator;` in `class Iterable[C]`: `Iterable[X]`
+            // gives `Iterator[X.Iter]`.
+            stack.extend(implied_by(self.db, &c));
             self.assumptions.push(c);
         }
     }

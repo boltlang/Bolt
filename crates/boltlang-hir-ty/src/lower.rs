@@ -322,11 +322,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// Other types and longer paths aren't supported yet.
     fn lower_assoc_path(&mut self, id: TypeRefId, path: &Path, head: TypeNs<'db>, unresolved: usize) -> Ty<'db> {
         let db = self.db;
-        let (TypeNs::GenericParam { def, index }, [segment]) = (head, &path.segments[unresolved..]) else {
+        let segments = &path.segments[unresolved..];
+        let TypeNs::GenericParam { def, index } = head else {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return Ty::Error;
         };
-        if segment.generic_args.is_some() {
+        if segments.iter().any(|s| s.generic_args.is_some()) {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return Ty::Error;
         }
@@ -335,29 +336,36 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         } else {
             constraints_on(db, def)
         };
-        let target = Ty::Param(GenericParamId { def, index });
-        let mut found: Vec<(TypeAliasId<'db>, Box<[Ty<'db>]>)> = Vec::new();
-        for constraint in constraints {
-            if constraint.args.first() != Some(&target) {
-                continue;
+        // Each name is an associated type of the type before it, like the
+        // `Item` of `C.Iter` in `C.Iter.Item`, from a class that type has an
+        // instance of: those of `C`, or the bounds of the associated types of
+        // their classes, like `Iterator[C.Iter]` for `type Iter: Iterator;`.
+        let mut target = Ty::Param(GenericParamId { def, index });
+        for segment in segments {
+            let mut found: Vec<(TypeAliasId<'db>, Box<[Ty<'db>]>)> = Vec::new();
+            for constraint in &constraints {
+                if constraint.args.first() != Some(&target) {
+                    continue;
+                }
+                if let Some(alias) = assoc_type(db, constraint.class, &segment.name)
+                    && !found.iter().any(|(a, args)| *a == alias && *args == constraint.args)
+                {
+                    found.push((alias, constraint.args.clone()));
+                }
             }
-            if let Some(alias) = assoc_type(db, constraint.class, &segment.name)
-                && !found.iter().any(|(a, args)| *a == alias && *args == constraint.args)
-            {
-                found.push((alias, constraint.args));
-            }
+            target = match &found[..] {
+                [(alias, args)] => Ty::Assoc(*alias, args.clone()),
+                [] => {
+                    self.diagnostics.push(LowerDiagnostic::NoAssocType { type_ref: id });
+                    return Ty::Error;
+                }
+                _ => {
+                    self.diagnostics.push(LowerDiagnostic::AmbiguousAssocType { type_ref: id });
+                    return Ty::Error;
+                }
+            };
         }
-        match &found[..] {
-            [(alias, args)] => Ty::Assoc(*alias, args.clone()),
-            [] => {
-                self.diagnostics.push(LowerDiagnostic::NoAssocType { type_ref: id });
-                Ty::Error
-            }
-            _ => {
-                self.diagnostics.push(LowerDiagnostic::AmbiguousAssocType { type_ref: id });
-                Ty::Error
-            }
-        }
+        target
     }
 
     /// The arguments of something that must be given exactly one for each
@@ -531,13 +539,64 @@ pub fn with_superclasses<'db>(db: &'db dyn Db, constraints: Vec<ClassConstraint<
         if out.contains(&c) {
             continue;
         }
-        let class_def = GenericDefId::Class(c.class);
-        for sup in generic_predicates(db, class_def).predicates.iter() {
-            stack.push(sup.map(|t| subst_params(t, class_def, &c.args)));
-        }
+        stack.extend(implied_by(db, &c));
         out.push(c);
     }
     out
+}
+
+/// What a class constraint implies directly: its superclasses, like the
+/// `Eq[X]` of `Ord[X]` for `class Ord[T] where Eq[T]`, and the bounds of the
+/// class's associated types, like the `Iterator[X.Iter]` of `Iterable[X]`
+/// for `type Iter: Iterator;`.
+pub fn implied_by<'db>(db: &'db dyn Db, c: &ClassConstraint<'db>) -> Vec<ClassConstraint<'db>> {
+    let class_def = GenericDefId::Class(c.class);
+    let superclasses = generic_predicates(db, class_def).predicates.iter();
+    let mut out: Vec<ClassConstraint<'db>> =
+        superclasses.map(|sup| sup.map(|t| subst_params(t, class_def, &c.args))).collect();
+    for alias in class_assoc_types(db, c.class) {
+        for bound in assoc_type_bounds(db, alias).predicates.iter() {
+            out.push(bound.map(|t| subst_params(t, class_def, &c.args)));
+        }
+    }
+    out
+}
+
+/// The associated types that `class` declares.
+pub fn class_assoc_types<'db>(db: &'db dyn Db, class: ClassId<'db>) -> Vec<TypeAliasId<'db>> {
+    class
+        .item(db)
+        .items
+        .iter()
+        .filter_map(|item| match *item {
+            AssocItem::TypeAlias(idx) => Some(TypeAliasId::new(db, ItemContainerId::Class(class), idx)),
+            _ => None,
+        })
+        .collect()
+}
+
+/// The bounds of an associated type of a class, like the `Iterator` of
+/// `type Iter: Iterator;` in `class Iterable[C]`, as constraints on it in
+/// terms of the class's parameters: `Iterator[C.Iter]`. Empty for an alias
+/// that isn't in a class.
+#[salsa::tracked(returns(ref))]
+pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predicates<'db> {
+    let ItemContainerId::Class(class) = alias.container(db) else {
+        return Predicates { predicates: Box::new([]), sources: Box::new([]), diagnostics: Vec::new() };
+    };
+    let sig = type_alias_signature(db, alias);
+    let resolver = Resolver::for_generic_def(db, GenericDefId::TypeAlias(alias));
+    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
+    let target = Ty::Assoc(alias, identity_args(db, GenericDefId::Class(class)));
+    let mut predicates = Vec::new();
+    let mut sources = Vec::new();
+    for &bound in sig.bounds.iter() {
+        if let Some(constraint) = ctx.lower_class_constraint(bound, Some((target.clone(), Some(Kind::Type)))) {
+            predicates.push(constraint);
+            sources.push(bound);
+        }
+    }
+    Predicates { predicates: predicates.into(), sources: sources.into(), diagnostics: ctx.diagnostics }
 }
 
 /// The associated type called `name` that `class` declares, if any.

@@ -10,21 +10,24 @@ use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body},
     hir::{BinaryOp, Expr, Path},
-    ids::{FunctionId, ItemContainerId},
+    ids::{FunctionId, ImplId, ItemContainerId, TypeAliasId},
     item_tree::{ModItem, item_tree},
-    resolver::{Resolver, ValueNs, ValueResolution},
+    resolver::{GenericDefId, Resolver, ValueNs, ValueResolution},
 };
 
 use crate::{
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
-    lower::{ClassConstraint, const_ty, fn_sig, with_superclasses},
+    lower::{
+        ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig, generic_predicates, impl_assoc_ty,
+        impl_header, subst_params, with_superclasses,
+    },
     scheme::{
         Scheme, SchemeSources, assumptions, assumptions_with_sources, class_impl_method_sig, declared_scheme,
         generic_chain, generic_param_ids, is_declared,
     },
     solve::{
-        AssocConstraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Solver, TypeError,
-        prune_implied_errors, resolve_error, vars_in,
+        AssocConstraint, Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Solver, TypeError,
+        normalize_assoc, prune_implied_errors, resolve_error, vars_in,
     },
     unify::Unifier,
     ty::{Ty, TyVar, VarKind},
@@ -98,6 +101,46 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             result
         }
     }
+}
+
+/// The bounds of the associated types of an impl's class that the impl's
+/// types for them don't meet, like `Iterator[Pair]` for `type Iter = Pair;`
+/// in an impl of `class Iterable[C] { type Iter: Iterator; }` when `Pair`
+/// has no impl of `Iterator`. The impl's own bounds and `where` clauses are
+/// assumed. Each is given with the associated type of the class.
+#[salsa::tracked(returns(ref))]
+pub fn unmet_assoc_bounds<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<(TypeAliasId<'db>, ClassConstraint<'db>)> {
+    let Some(target) = impl_header(db, imp).class.clone() else { return Vec::new() };
+    let file = imp.file(db);
+    // The solver reports at a place in a body; the errors are only counted.
+    let def = DefWithBodyId::new(db, DefWithBody::File(file));
+    let origin = Origin::new(def, ExprOrPat::Expr(body(db, def).body_expr));
+    let class_def = GenericDefId::Class(target.class);
+    let mut unmet = Vec::new();
+    for alias in class_assoc_types(db, target.class) {
+        // A missing one is reported with the impl's other missing items.
+        let Some(own) = impl_assoc_ty(db, imp, alias) else { continue };
+        for bound in assoc_type_bounds(db, alias).predicates.iter() {
+            let constraint = bound.map(|t| {
+                let t = subst_params(t, class_def, &target.args);
+                let t = t.fold(&mut |t| match t {
+                    Ty::Assoc(a, args) if *a == alias && *args == target.args => Some(own.clone()),
+                    _ => None,
+                });
+                normalize_assoc(db, file, &t)
+            });
+            let mut solver = Solver::new(db, file);
+            for predicate in generic_predicates(db, GenericDefId::Impl(imp)).predicates.iter() {
+                solver.assume(predicate.clone());
+            }
+            solver.add(Constraint::Class { constraint: constraint.clone(), origin });
+            solver.solve();
+            if solver.errors.iter().any(|e| matches!(e, TypeError::NoInstance { .. })) {
+                unmet.push((alias, constraint));
+            }
+        }
+    }
+    unmet
 }
 
 /// The functions of a file without complete signatures, inferred together.

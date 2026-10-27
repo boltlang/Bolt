@@ -30,10 +30,11 @@ use boltlang_hir_ty::{
     builtin::{Builtin, is_builtin_block},
     kind::Kind,
     inhabited::{field_without_values, has_values},
+    check::unmet_assoc_bounds,
     infer_body,
     lower::{
-        ClassConstraint, LowerDiagnostic, VariantDef, const_ty, enum_field_types, fn_sig, generic_predicates,
-        impl_header, struct_field_types, subst_params, type_alias_ty,
+        ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, enum_field_types, fn_sig,
+        generic_predicates, impl_header, struct_field_types, subst_params, type_alias_ty,
     },
     solve::{ConstraintSource, ExprOrPat, Origin, Reason, TypeError},
 };
@@ -133,6 +134,9 @@ pub enum DiagnosticKind<'db> {
     /// Syntax that needs a class of the prelude, like `xs[i]` needs
     /// `Index`, without a prelude that defines it.
     NoLangClass { class: &'static str },
+    /// The type an impl gives an associated type doesn't meet a bound the
+    /// class puts on it, like `type Iter: Iterator;`.
+    UnmetAssocBound { name: Name, class: ClassId<'db>, constraint: ClassConstraint<'db> },
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -402,6 +406,16 @@ impl<'db> Collector<'db> {
             }
             defined.push((kind, name));
         }
+        // The types the impl gives the class's associated types must meet
+        // their bounds.
+        for (alias, constraint) in unmet_assoc_bounds(db, imp) {
+            let Some(name) = alias.item(db).name.clone() else { continue };
+            let own = AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
+                .into_iter()
+                .find(|item| matches!(item, AssocItemDef::TypeAlias(_)) && item.name(db).as_ref() == Some(&name));
+            let range = own.map(|item| self.item_range(item.ast_id(db)));
+            self.push(range, DiagnosticKind::UnmetAssocBound { name, class, constraint: constraint.clone() });
+        }
         let missing: Vec<(ClassItemKind, Name)> = declared
             .iter()
             .filter(|d| !d.has_default(db))
@@ -542,6 +556,7 @@ impl<'db> Collector<'db> {
         }
         self.lower(map, &ty.diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::TypeAlias(id)).diagnostics);
+        self.lower(map, &assoc_type_bounds(db, id).diagnostics);
     }
 
     /// Report problems with type references, from the store `map` is for.

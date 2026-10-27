@@ -781,6 +781,27 @@ fn f(x: Option[i32]) -> Option[i32] = match x {
 }
 
 #[test]
+fn impls_must_meet_the_bounds_of_associated_types() {
+    check(
+        r#"
+class Iter2[I] { type Item; }
+class Coll[C] { type It: Iter2; }
+class Other[C] { type It: Nope; }
+                        //^^^^ error: cannot find type `Nope`
+struct Good;
+struct Bad;
+impl Iter2[Good] { type Item = i32; }
+impl Coll[i32] { type It = Good; }
+impl Coll[Bool] { type It = Bad; }
+                     //^^ error: there is no instance `Iter2[imm Bad]`, which class `Coll` asks of its type `It`
+impl[T] Coll[(T,)] where Iter2[T] { type It = T; }
+impl[T] Coll[(T, T)] { type It = T; }
+                          //^^ error: there is no instance `Iter2[T]`, which class `Coll` asks of its type `It`
+"#,
+    );
+}
+
+#[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
         (
