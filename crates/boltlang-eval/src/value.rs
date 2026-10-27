@@ -1,10 +1,10 @@
-use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, rc::Rc};
+use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, ops::Deref, rc::Rc};
 
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
     Name,
     body::DefWithBodyId,
-    hir::{BindingId, ExprId},
+    hir::{BindingId, ExprId, Mutability},
     ids::{EnumVariantId, FunctionId, StructId},
     item_tree::FunctionName,
 };
@@ -19,7 +19,31 @@ pub(crate) type Locals<'db> = HashMap<BindingId, Slot<'db>>;
 
 /// Something that every name for it sees the changes of, like an array or
 /// a struct.
-pub type Shared<T> = Rc<RefCell<T>>;
+pub type Shared<T> = Rc<Object<T>>;
+
+/// An array or struct: what it holds, and whether it was made `mut` or
+/// `imm`. The type checker makes sure an `imm` one never changes; with
+/// [`Evaluator::with_mutability_checks`](crate::Evaluator::with_mutability_checks),
+/// the evaluator checks it too. It derefs to its contents.
+#[derive(Debug)]
+pub struct Object<T> {
+    pub mutability: Mutability,
+    contents: RefCell<T>,
+}
+
+impl<T> Object<T> {
+    pub fn new(mutability: Mutability, contents: T) -> Rc<Self> {
+        Rc::new(Object { mutability, contents: RefCell::new(contents) })
+    }
+}
+
+impl<T> Deref for Object<T> {
+    type Target = RefCell<T>;
+
+    fn deref(&self) -> &RefCell<T> {
+        &self.contents
+    }
+}
 
 /// The fields of a struct or variant, in order.
 pub type Fields<'db> = Vec<(Name, Value<'db>)>;
@@ -95,12 +119,36 @@ impl<'db> Value<'db> {
         Value::Str(s.into())
     }
 
-    pub fn array(items: Vec<Value<'db>>) -> Self {
-        Value::Array(Rc::new(RefCell::new(items)))
+    /// A new array, made `mut` or `imm`.
+    pub fn array(mutability: Mutability, items: Vec<Value<'db>>) -> Self {
+        Value::Array(Object::new(mutability, items))
     }
 
-    pub fn adt(ctor: Ctor<'db>, fields: Fields<'db>) -> Self {
-        Value::Adt { ctor, fields: Rc::new(RefCell::new(fields)) }
+    /// A new struct, made `mut` or `imm`, or a variant, which can't be
+    /// changed: it's `imm`.
+    pub fn adt(ctor: Ctor<'db>, mutability: Mutability, fields: Fields<'db>) -> Self {
+        let mutability = match ctor {
+            Ctor::Struct(_) => mutability,
+            Ctor::Variant(_) => Mutability::Imm,
+        };
+        Value::Adt { ctor, fields: Object::new(mutability, fields) }
+    }
+
+    /// Whether nothing that can be changed is reachable from this value
+    /// without going through an `imm` array or struct, which only hold such
+    /// values themselves. A variant or tuple is looked through, since they
+    /// can hold `mut` things. Closures can't be checked yet (#244).
+    pub(crate) fn holds_only_imm(&self) -> bool {
+        match self {
+            Value::Array(items) => items.mutability == Mutability::Imm,
+            Value::Adt { ctor: Ctor::Struct(_), fields } => fields.mutability == Mutability::Imm,
+            Value::Adt { ctor: Ctor::Variant(_), fields } => fields.borrow().iter().all(|(_, v)| v.holds_only_imm()),
+            Value::Tuple(items) => items.iter().all(Value::holds_only_imm),
+            Value::Range { start, end, .. } => {
+                start.iter().chain(end.iter()).all(|v| v.holds_only_imm())
+            }
+            _ => true,
+        }
     }
 
     /// The field called `name`, of a struct or variant or tuple.
@@ -197,7 +245,7 @@ struct DisplayValue<'a, 'db> {
     db: &'db dyn Db,
     /// The arrays and structs being shown, outermost first. A value can
     /// contain itself, like `xs[0] = S { xs }`, and is shown as `...` there.
-    outer: Shared<Vec<*const ()>>,
+    outer: Rc<RefCell<Vec<*const ()>>>,
 }
 
 impl<'a, 'db> DisplayValue<'a, 'db> {

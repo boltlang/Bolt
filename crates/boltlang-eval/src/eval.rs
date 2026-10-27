@@ -6,8 +6,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId, body},
     builtin_type::BuiltinType,
     hir::{
-        ArithOp, BinaryOp, BindingId, BlockKind, CmpOp, Expr, ExprId, LabelId, Literal, LogicOp, Pat, PatId, Path,
-        PathSegment, PrefixOp, Statement, TypeRef,
+        ArithOp, BinaryOp, BindingId, BlockKind, CmpOp, Expr, ExprId, LabelId, Literal, LogicOp, Mutability, Pat, PatId,
+        Path, PathSegment, PrefixOp, Statement, TypeRef,
     },
     ids::{ConstId, FunctionId, ItemContainerId, ModuleDefId},
     nameres::{Namespace, file_scope, package_of},
@@ -137,6 +137,9 @@ pub struct Evaluator<'db> {
     /// How many consts are being evaluated, which can't have effects.
     in_consts: usize,
     resolutions: HashMap<(DefWithBodyId<'db>, ExprId), Option<ValueResolution<'db>>>,
+    /// Whether to check what the type checker should make sure of: that an
+    /// `imm` array or struct is never changed, and only holds `imm` ones.
+    mutability_checks: bool,
     /// The files being run, whose impls a class method can use when the
     /// impl is chosen at run time.
     files: Vec<File>,
@@ -158,7 +161,48 @@ impl<'db> Evaluator<'db> {
             files: Vec::new(),
             host: Box::new(NoEffects),
             in_consts: 0,
+            mutability_checks: false,
         }
+    }
+
+    /// Check what the type checker should make sure of, and stop with
+    /// [`ErrorKind::MutabilityViolation`] if it didn't: that an `imm` array
+    /// or struct is never changed, and only holds `imm` ones. For tests: a
+    /// program the type checker accepts never fails these checks. Each array
+    /// and struct knows how it was made either way; this only adds a check
+    /// to each change and to each `imm` one that's made.
+    pub fn with_mutability_checks(mut self) -> Self {
+        self.mutability_checks = true;
+        self
+    }
+
+    /// Check that `value`, just made, holds only `imm` things if it's an
+    /// `imm` array or struct.
+    fn made(&self, value: Value<'db>) -> Res<'db, Value<'db>> {
+        if !self.mutability_checks {
+            return Ok(value);
+        }
+        let deep = match &value {
+            Value::Array(items) if items.mutability == Mutability::Imm => {
+                items.borrow().iter().all(Value::holds_only_imm)
+            }
+            Value::Adt { ctor: Ctor::Struct(_), fields } if fields.mutability == Mutability::Imm => {
+                fields.borrow().iter().all(|(_, v)| v.holds_only_imm())
+            }
+            _ => true,
+        };
+        if !deep {
+            return fail(ErrorKind::MutabilityViolation("an `imm` value was made holding a `mut` one"));
+        }
+        Ok(value)
+    }
+
+    /// Check that an array or struct made with `mutability` can be changed.
+    fn changing(&self, mutability: Mutability) -> Res<'db, ()> {
+        if self.mutability_checks && mutability == Mutability::Imm {
+            return fail(ErrorKind::MutabilityViolation("an `imm` value was changed"));
+        }
+        Ok(())
     }
 
     /// Use `host` for effects, like printing, instead of refusing them.
@@ -343,13 +387,14 @@ impl<'db> Evaluator<'db> {
             (Builtin::ArrayLen, [Value::Array(items)]) => Ok(Value::Int(items.borrow().len() as i128)),
             (Builtin::ArrayAlloc, [Value::Int(len)]) => {
                 let len = usize::try_from(*len).map_err(|_| ErrorKind::Overflow)?;
-                Ok(Value::array(vec![Value::Unset; len]))
+                Ok(Value::array(Mutability::Mut, vec![Value::Unset; len]))
             }
             (Builtin::ArrayGet, [Value::Array(items), Value::Int(i)]) => {
                 let items = items.borrow();
                 element(&items, in_bounds(*i, items.len())?)
             }
             (Builtin::ArraySet, [Value::Array(items), Value::Int(i), x]) => {
+                self.changing(items.mutability)?;
                 let mut items = items.borrow_mut();
                 let i = in_bounds(*i, items.len())?;
                 items[i] = x.clone();
@@ -359,6 +404,7 @@ impl<'db> Evaluator<'db> {
                 Builtin::ArrayCopy,
                 [Value::Array(dst), Value::Int(dst_start), Value::Array(src), Value::Int(src_start), Value::Int(count)],
             ) => {
+                self.changing(dst.mutability)?;
                 let src_range = range(*src_start, *count, src.borrow().len())?;
                 let dst_range = range(*dst_start, *count, dst.borrow().len())?;
                 // Taken out first, since `src` and `dst` can be the same
@@ -367,7 +413,13 @@ impl<'db> Evaluator<'db> {
                 dst.borrow_mut()[dst_range].clone_from_slice(&items);
                 Ok(Value::unit())
             }
-            (Builtin::ArrayFreeze, [Value::Array(items)]) => Ok(Value::array(items.borrow().clone())),
+            // An `imm` array never changes, so it's its own copy.
+            (Builtin::ArrayFreeze, [Value::Array(items)]) if items.mutability == Mutability::Imm => {
+                Ok(Value::Array(items.clone()))
+            }
+            (Builtin::ArrayFreeze, [Value::Array(items)]) => {
+                self.made(Value::array(Mutability::Imm, items.borrow().clone()))
+            }
             _ => mismatch(format!("bad arguments to `{}`", builtin.name())),
         }
     }
@@ -378,7 +430,7 @@ impl<'db> Evaluator<'db> {
             Value::Closure(closure) => self.call_closure(&closure, args),
             Value::Constructor(ctor) => {
                 let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
-                Ok(Value::adt(ctor, fields))
+                self.made(Value::adt(ctor, Mutability::Imm, fields))
             }
             _ => fail(ErrorKind::NotCallable),
         }
@@ -446,6 +498,15 @@ impl<'db> Evaluator<'db> {
                     (result, _) => result,
                 }
             }
+            // `mut Wrap(x)` makes a `mut` struct; other calls ignore `mut`.
+            Expr::Call { callee, args, is_mut: true } => match self.eval(f, *callee)? {
+                Value::Constructor(ctor @ Ctor::Struct(_)) => {
+                    let args = self.eval_all(f, args)?;
+                    let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
+                    Ok(Value::adt(ctor, Mutability::Mut, fields))
+                }
+                _ => self.eval_call(f, expr, *callee, args),
+            },
             Expr::Call { callee, args, .. } => self.eval_call(f, expr, *callee, args),
             Expr::Field { expr: base, name } => {
                 if let Some(value) = self.eval_extended_path(f, expr)? {
@@ -501,8 +562,11 @@ impl<'db> Evaluator<'db> {
                 Ok(Value::Range { start, end, inclusive: *inclusive })
             }
             Expr::Tuple { exprs } => Ok(Value::Tuple(self.eval_all(f, exprs)?)),
-            Expr::Array { exprs, .. } => Ok(Value::array(self.eval_all(f, exprs)?)),
-            Expr::ArrayRepeat { value, count, .. } => {
+            Expr::Array { exprs, is_mut } => {
+                let items = self.eval_all(f, exprs)?;
+                self.made(Value::array(mutability(*is_mut), items))
+            }
+            Expr::ArrayRepeat { value, count, is_mut } => {
                 let value = self.eval(f, *value)?;
                 let Value::Int(count) = self.eval(f, *count)? else {
                     return mismatch("the length of an array must be an integer");
@@ -510,9 +574,9 @@ impl<'db> Evaluator<'db> {
                 let count = usize::try_from(count).map_err(|_| ErrorKind::Overflow)?;
                 // The value is evaluated once, so `mut [mut []; 2]` holds the
                 // same array twice.
-                Ok(Value::array(vec![value; count]))
+                self.made(Value::array(mutability(*is_mut), vec![value; count]))
             }
-            Expr::Record { path, fields, spread, .. } => {
+            Expr::Record { path, fields, spread, is_mut } => {
                 let Some(path) = path else {
                     return fail(ErrorKind::Unsupported("a record without a name"));
                 };
@@ -534,7 +598,7 @@ impl<'db> Evaluator<'db> {
                         None => values.push((field.name.clone(), value)),
                     }
                 }
-                Ok(Value::adt(ctor, values))
+                self.made(Value::adt(ctor, mutability(*is_mut), values))
             }
             Expr::If { condition, then_branch, else_branch } => {
                 if self.eval_bool(f, *condition)? {
@@ -894,7 +958,7 @@ impl<'db> Evaluator<'db> {
                 matches!(enum_signature(db, id.parent).variants[id.index as usize].fields, FieldList::Unit)
             }
         };
-        if is_unit { Value::adt(ctor, Vec::new()) } else { Value::Constructor(ctor) }
+        if is_unit { Value::adt(ctor, Mutability::Imm, Vec::new()) } else { Value::Constructor(ctor) }
     }
 
     /// `Color.Red` and `m.f` are parsed as field accesses. When `expr` is
@@ -945,6 +1009,10 @@ impl<'db> Evaluator<'db> {
             };
             self.call_lang(f, at, LangClass::IndexMut, vec![container, index, value])?;
             return Ok(());
+        }
+        // A field of a struct, or of a tuple in one: the struct changes.
+        if let Place::Field(fields, _) = &place {
+            self.changing(fields.mutability)?;
         }
         place.update(|current| {
             let current = tuple_field(current, &fields)?;
@@ -1227,7 +1295,9 @@ fn literal_value<'db>(literal: &Literal) -> Res<'db, Value<'db>> {
         Literal::Char(c) => Value::Char(*c),
         Literal::Byte(b) => Value::Int(*b as i128),
         Literal::String(s) | Literal::CString(s) => Value::str(s),
-        Literal::ByteString(bytes) => Value::array(bytes.iter().map(|b| Value::Int(*b as i128)).collect()),
+        Literal::ByteString(bytes) => {
+            Value::array(Mutability::Imm, bytes.iter().map(|b| Value::Int(*b as i128)).collect())
+        }
     })
 }
 
@@ -1311,6 +1381,11 @@ fn element<'db>(items: &[Value<'db>], index: usize) -> Res<'db, Value<'db>> {
         Value::Unset => fail(ErrorKind::UnsetElement { index }),
         item => Ok(item.clone()),
     }
+}
+
+/// The mutability of a literal, written `mut [..]` or `[..]`.
+fn mutability(is_mut: bool) -> Mutability {
+    if is_mut { Mutability::Mut } else { Mutability::Imm }
 }
 
 /// The item in `Some(item)`, or `None` for `None`.

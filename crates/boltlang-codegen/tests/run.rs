@@ -173,7 +173,7 @@ fn output(case: &Case, attributes: &Attributes, backend: Backend) -> Result<Stri
     let result = match backend {
         Backend::Eval => {
             let limits = Limits { fuel: Some(attributes.fuel), ..Limits::default() };
-            let mut evaluator = Evaluator::with_limits(&db, limits).with_host(printed.clone());
+            let mut evaluator = Evaluator::with_limits(&db, limits).with_mutability_checks().with_host(printed.clone());
             catch("the evaluator", || Ok(evaluator.eval_file(file).map_err(|e| vec![e.kind.to_string()])))?
         }
         Backend::Wasm => catch("the code generator", || {

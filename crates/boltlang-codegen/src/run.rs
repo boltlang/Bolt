@@ -11,7 +11,7 @@ use boltlang_base_db::{Db, File};
 use boltlang_eval::{Ctor, ErrorKind, Host, Value};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body},
-    hir::{Expr, Statement},
+    hir::{Expr, Mutability, Statement},
     ids::EnumVariantId,
 };
 use boltlang_hir_ty::{AdtId, Ty, builtin::Builtin, infer_body};
@@ -204,7 +204,7 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, memory: &[u8]) -> Resu
         (Scalar::Enum, Val::I32(index)) => {
             let Ty::Adt(AdtId::Enum(parent), ..) = ty else { return Err(unexpected()) };
             let variant = EnumVariantId { parent: *parent, index: *index as u32 };
-            Value::adt(Ctor::Variant(variant), Vec::new())
+            Value::adt(Ctor::Variant(variant), Mutability::Imm, Vec::new())
         }
         (Scalar::Int { signed: true, .. }, Val::I32(n)) => Value::Int(*n as i128),
         (Scalar::Int { signed: false, .. }, Val::I32(n)) => Value::Int(*n as u32 as i128),

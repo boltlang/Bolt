@@ -19,7 +19,7 @@ fn db_with_std(code: &str) -> (TestDb, boltlang_base_db::File) {
 
 fn run_with(code: &str, limits: Limits) -> String {
     let (db, file) = db_with_std(code);
-    let mut evaluator = Evaluator::with_limits(&db, limits);
+    let mut evaluator = Evaluator::with_limits(&db, limits).with_mutability_checks();
     match evaluator.eval_file(file) {
         Ok(value) => value.display(&db).to_string(),
         Err(e) => format!("error: {e}"),
@@ -28,7 +28,7 @@ fn run_with(code: &str, limits: Limits) -> String {
 
 fn error_kind(code: &str, limits: Limits) -> ErrorKind {
     let (db, file) = db_with_std(code);
-    Evaluator::with_limits(&db, limits).eval_file(file).unwrap_err().kind
+    Evaluator::with_limits(&db, limits).with_mutability_checks().eval_file(file).unwrap_err().kind
 }
 
 #[test]
@@ -133,12 +133,51 @@ fn closures_capture_variables() {
 fn structs() {
     let code = "
         struct Point { x: i32, y: i32 }
-        let mut p = Point { x: 1, y: 2 };
+        let p = mut Point { x: 1, y: 2 };
         p.x = 10;
         let q = Point { y: 5, ..p };
         (p.x + p.y, q)
     ";
     assert_eq!(run(code), "(12, Point { x: 10, y: 5 })");
+}
+
+#[test]
+fn mutability_checks_find_what_the_type_checker_should_rule_out() {
+    // These programs aren't type-checked here; the checker rejects them.
+    let changed = ErrorKind::MutabilityViolation("an `imm` value was changed");
+    let holds_mut = ErrorKind::MutabilityViolation("an `imm` value was made holding a `mut` one");
+    let checked = |code: &str| {
+        let (db, file) = db_with_std(code);
+        Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err().kind
+    };
+    assert_eq!(checked("let xs = [1, 2];\nxs[0] = 3;"), changed);
+    assert_eq!(checked("let xs = [1, 2];\narray_copy(xs, 0, [9], 0, 1);"), changed);
+    assert_eq!(checked("struct P { x: i32 }\nlet p = P { x: 1 };\np.x = 2;"), changed);
+    assert_eq!(checked("struct P { t: (i32, i32) }\nlet p = P { t: (1, 2) };\np.t.0 = 2;"), changed);
+    assert_eq!(checked("let xs = [mut [1]];"), holds_mut);
+    assert_eq!(checked("struct P { xs: [i32] }\nlet p = P { xs: mut [1] };"), holds_mut);
+    // Through a variant or a tuple too.
+    assert_eq!(checked("let xs = [Some(mut [1])];"), holds_mut);
+    assert_eq!(checked("let xs = [(1, mut [1])];"), holds_mut);
+    // A variant or tuple on its own can hold something `mut`.
+    let (db, file) = db_with_std("let a = Some(mut [1]);\nlet b = (mut [1], 2);\n(a, b);");
+    assert!(Evaluator::new(&db).with_mutability_checks().eval_file(file).is_ok());
+}
+
+#[test]
+fn without_mutability_checks_nothing_is_checked() {
+    let (db, file) = db_with_std("let xs = [1, 2];\nxs[0] = 3;\nxs;");
+    let value = Evaluator::new(&db).eval_file(file).unwrap();
+    assert_eq!(value.display(&db).to_string(), "[3, 2]");
+}
+
+#[test]
+fn to_imm_of_an_imm_array_is_the_array_itself() {
+    let (db, file) = db_with_std("let xs = [1, 2];\nlet ys = to_imm(xs);\n(xs, ys);");
+    let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();
+    let crate::Value::Tuple(items) = value else { panic!("{value:?}") };
+    let (crate::Value::Array(xs), crate::Value::Array(ys)) = (&items[0], &items[1]) else { panic!() };
+    assert!(std::rc::Rc::ptr_eq(xs, ys));
 }
 
 #[test]
@@ -204,7 +243,7 @@ fn consts() {
 fn calling_from_outside() {
     let db = TestDb::new();
     let file = db.file("/main.bolt", "fn square(x) = x * x;");
-    let mut evaluator = Evaluator::new(&db);
+    let mut evaluator = Evaluator::new(&db).with_mutability_checks();
     let square = evaluator.function(file, "square").unwrap();
     let result = evaluator.call_function(square, vec![Value::Int(12)]).unwrap();
     assert!(result.equals(&Value::Int(144)));
@@ -248,7 +287,7 @@ const ARRAY_ALLOC: &str = "extern \"bolt\" { fn array_alloc[T](len: i32) -> mut 
 fn print_goes_to_the_host() {
     let (db, file) = db_with_std("fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
     let recorder = crate::Recorder::default();
-    let mut evaluator = Evaluator::new(&db).with_host(recorder.clone());
+    let mut evaluator = Evaluator::new(&db).with_mutability_checks().with_host(recorder.clone());
     evaluator.eval_file(file).unwrap();
     assert_eq!(recorder.output(), "hello\nBolt\nbye\n");
 }
@@ -256,12 +295,13 @@ fn print_goes_to_the_host() {
 #[test]
 fn effects_are_refused_without_a_host_and_in_consts() {
     let (db, file) = db_with_std("print(\"hi\");");
-    assert_eq!(Evaluator::new(&db).eval_file(file).unwrap_err().kind, ErrorKind::Effect("print"));
+    let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
+    assert_eq!(error.kind, ErrorKind::Effect("print"));
 
     // Even with a host, a const can't print.
     let (db, file) = db_with_std("fn noisy() -> i32 { print(\"evaluating\"); 1 }\nconst N: i32 = noisy();\nN;");
     let recorder = crate::Recorder::default();
-    let error = Evaluator::new(&db).with_host(recorder.clone()).eval_file(file).unwrap_err();
+    let error = Evaluator::new(&db).with_mutability_checks().with_host(recorder.clone()).eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Effect("print"));
     assert_eq!(recorder.output(), "");
 }
@@ -269,7 +309,7 @@ fn effects_are_refused_without_a_host_and_in_consts() {
 #[test]
 fn array_len_counts_the_elements() {
     let (db, file) = db_with_std("let xs = mut [1, 2];\nlet n = array_len(xs);\nxs[0] = 3;\n(n, array_len([True]), array_len([]));");
-    let value = Evaluator::new(&db).eval_file(file).unwrap();
+    let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();
     assert_eq!(value.display(&db).to_string(), "(2, 1, 0)");
 }
 
@@ -277,7 +317,7 @@ fn array_len_counts_the_elements() {
 fn array_alloc_makes_elements_to_set() {
     let (db, file) =
         db_with_std(&format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);"));
-    let value = Evaluator::new(&db).eval_file(file).unwrap();
+    let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();
     assert_eq!(value.display(&db).to_string(), "(3, [1, _, 3])");
 }
 
@@ -286,11 +326,11 @@ fn reading_an_unset_element_is_an_error() {
     let prefix = format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\n");
     for read in ["xs[1];", "xs[1] += 1;", "for x in xs { x; }", "match xs { [a, b, c] => a, _ => 0 };"] {
         let (db, file) = db_with_std(&format!("{prefix}{read}"));
-        let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+        let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
         assert_eq!(error.kind, ErrorKind::UnsetElement { index: 1 }, "{read}");
     }
     let (db, file) = db_with_std(&format!("{ARRAY_ALLOC}struct P {{ x: i32 }}\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;"));
-    let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+    let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnsetElement { index: 0 });
 }
 
@@ -329,7 +369,7 @@ fn array_copy_checks_its_ranges() {
 fn an_error_in_std_is_reported_at_the_program() {
     // `xs[5]` fails in `std`'s `impl Index[[T]]`.
     let (db, file) = db_with_std("let xs = [1];\nxs[5];");
-    let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+    let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::IndexOutOfBounds { index: 5, len: 1 });
     assert_eq!(error.source_range(&db), Some((file, 14..19)));
 }
@@ -337,7 +377,7 @@ fn an_error_in_std_is_reported_at_the_program() {
 #[test]
 fn panic_stops_with_its_message() {
     let (db, file) = db_with_std("fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);");
-    let error = Evaluator::new(&db).eval_file(file).unwrap_err();
+    let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Panic("negative".into()));
     assert_eq!(error.to_string(), "panicked: negative");
 }

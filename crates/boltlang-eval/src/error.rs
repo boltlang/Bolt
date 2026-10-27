@@ -55,6 +55,10 @@ pub enum ErrorKind {
     Effect(&'static str),
     /// A call of the builtin `panic`, with its message.
     Panic(String),
+    /// What the type checker should have ruled out, found by
+    /// [`Evaluator::with_mutability_checks`](crate::Evaluator::with_mutability_checks):
+    /// an `imm` array or struct that's changed, or that holds a `mut` one.
+    MutabilityViolation(&'static str),
     /// Syntax that needs a class of the prelude, like `v[i]` on a `Vec`,
     /// without a prelude that defines it.
     NoLangClass(&'static str),
@@ -113,6 +117,9 @@ impl fmt::Display for ErrorKind {
             ErrorKind::Effect(builtin) => write!(f, "`{builtin}` can't be used here, since it has an effect"),
             ErrorKind::Panic(message) => write!(f, "panicked: {message}"),
             ErrorKind::NoLangClass(class) => write!(f, "this needs the class `{class}` of the prelude"),
+            ErrorKind::MutabilityViolation(what) => {
+                write!(f, "{what}, which the type checker should have ruled out")
+            }
         }
     }
 }
