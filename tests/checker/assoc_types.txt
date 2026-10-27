@@ -73,7 +73,7 @@ fn wrong[C](c: C) -> i32 where Index[C] = get(c, 0);
 first: forall C. Index[C] => fn(C) -> C.Item
 wrong: forall C. Index[C] => fn(C) -> i32
 --------------------------------------------------------------------------------
-error at `get`: expected i32, found C.Item
+error at `get(c, 0)`: expected i32, found C.Item
 
 ================================================================================
 A superclass's associated type
@@ -123,7 +123,7 @@ let n: i32 = get(Box { items: ["a"] }, 0);
 Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
 let n: i32
 --------------------------------------------------------------------------------
-error at `get`: expected i32, found String
+error at `get(Box { items: ["a"] }, 0)`: expected i32, found String
 
 ================================================================================
 C.Item needs a class that declares it

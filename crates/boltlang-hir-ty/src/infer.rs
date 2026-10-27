@@ -915,6 +915,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
         }
+        // The arguments may decide associated types in the result, like the
+        // `imm [i32]` of `to_imm(mut [1])`, which what follows should know.
+        self.solver.solve_pending_assoc();
         ret
     }
 
@@ -1040,6 +1043,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// of `IndexMut`. An array or struct that isn't `mut` is reported as such
     /// instead, and one whose mutability isn't known yet becomes `mut`.
     fn check_mut_index(&mut self, place: ExprId, expr: ExprId) {
+        // A type that an associated type decides, like that of
+        // `let ys = to_imm(xs)`, may be known once what's pending is solved.
+        if let Ty::Var(_) = self.solver.unifier.shallow_resolve(self.result.expr_ty(expr)) {
+            self.solver.solve();
+        }
         let ty = self.solver.unifier.resolve(self.result.expr_ty(expr));
         if matches!(ty, Ty::Error | Ty::Never) {
             return;

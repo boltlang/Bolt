@@ -254,6 +254,21 @@ impl<'db> Solver<'db> {
         }
     }
 
+    /// Solve the associated type constraints that can be solved now.
+    pub fn solve_pending_assoc(&mut self) {
+        loop {
+            let before = self.pending_assoc.len();
+            for (constraint, origin) in std::mem::take(&mut self.pending_assoc) {
+                if !self.solve_assoc(&constraint, origin) {
+                    self.pending_assoc.push((constraint, origin));
+                }
+            }
+            if self.pending_assoc.len() == before {
+                return;
+            }
+        }
+    }
+
     /// `ty` with each associated type in it, like `Vec[?0].Item`, replaced
     /// by a new variable that a [`Constraint::Assoc`] decides.
     pub fn flatten_assoc(&mut self, ty: &Ty<'db>, origin: Origin<'db>) -> Ty<'db> {
