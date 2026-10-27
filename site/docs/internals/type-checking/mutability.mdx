@@ -6,15 +6,16 @@ description: Arrays and structs that are shared, with whether they can be change
 
 # Mutability
 
-:::warning[Only in the type checker]
-The type checker implements this page. The evaluator still copies arrays
-and structs when they're assigned, so programs don't share them yet, and
-the code generator doesn't compile them at all: see
-[#195](https://github.com/boltlang/Bolt/issues/195). The design was decided
+:::warning[Not compiled yet]
+The type checker and the evaluator implement this page
+([#195](https://github.com/boltlang/Bolt/issues/195)). The code generator
+doesn't compile arrays or structs yet: see
+[#177](https://github.com/boltlang/Bolt/issues/177) and
+[#179](https://github.com/boltlang/Bolt/issues/179). The design was decided
 in [#196](https://github.com/boltlang/Bolt/issues/196).
 :::
 
-Arrays and structs are going to be *shared*: `let ys = xs` makes `ys`
+Arrays and structs are *shared*: `let ys = xs` makes `ys`
 another name for the same array, and `let q = p` another name for the same
 struct, as in JavaScript, Java and OCaml. Passing one to a function passes
 a pointer, and a function can fill in what it's given.

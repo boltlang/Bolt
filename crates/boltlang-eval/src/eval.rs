@@ -20,7 +20,7 @@ use boltlang_hir_ty::builtin::{Builtin, builtin};
 use crate::{
     error::{ErrorKind, EvalError},
     host::{Host, NoEffects},
-    value::{Closure, Ctor, Locals, Slot, Value},
+    value::{Closure, Ctor, Fields, Locals, Shared, Slot, Value},
 };
 
 /// Bounds on an evaluation.
@@ -75,10 +75,37 @@ struct Frame<'db> {
     locals: Locals<'db>,
 }
 
-/// A step from a variable to the part of it being assigned.
-enum Projection {
-    Field(Name),
-    Index(usize),
+/// What an assignment writes to: a variable, an element of an array, or a
+/// field of a struct.
+enum Place<'db> {
+    Variable(Slot<'db>),
+    Element(Shared<Vec<Value<'db>>>, usize),
+    Field(Shared<Fields<'db>>, Name),
+}
+
+/// The part of `value` that the fields of tuples in `fields` lead to.
+fn tuple_field<'a, 'db>(value: Option<&'a mut Value<'db>>, fields: &[Name]) -> Result<&'a mut Value<'db>, ErrorKind> {
+    let mut current = value.ok_or_else(|| ErrorKind::Uninitialized(Name::new("variable")))?;
+    for name in fields {
+        current = match current {
+            Value::Tuple(items) => name.as_str().parse::<usize>().ok().and_then(|i| items.get_mut(i)),
+            _ => None,
+        }
+        .ok_or_else(|| ErrorKind::NoSuchField(name.clone()))?;
+    }
+    Ok(current)
+}
+
+impl<'db> Place<'db> {
+    /// Run `f` on the value at the place, which is `None` for a variable
+    /// that isn't assigned yet. Only this place is borrowed while `f` runs.
+    fn update<T>(&self, f: impl FnOnce(Option<&mut Value<'db>>) -> Res<'db, T>) -> Res<'db, T> {
+        match self {
+            Place::Variable(slot) => f(slot.borrow_mut().as_mut()),
+            Place::Element(items, i) => f(items.borrow_mut().get_mut(*i)),
+            Place::Field(fields, name) => f(fields.borrow_mut().iter_mut().find(|(n, _)| n == name).map(|(_, v)| v)),
+        }
+    }
 }
 
 /// Evaluates Bolt code. It caches the values of consts, so reuse it for
@@ -286,7 +313,7 @@ impl<'db> Evaluator<'db> {
             Value::Closure(closure) => self.call_closure(&closure, args),
             Value::Constructor(ctor) => {
                 let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
-                Ok(Value::Adt { ctor, fields })
+                Ok(Value::adt(ctor, fields))
             }
             _ => fail(ErrorKind::NotCallable),
         }
@@ -353,7 +380,7 @@ impl<'db> Evaluator<'db> {
                 }
                 let base = self.eval(f, *base)?;
                 match base.field(name) {
-                    Some(value) => Ok(value.clone()),
+                    Some(value) => Ok(value),
                     None => fail(ErrorKind::NoSuchField(name.clone())),
                 }
             }
@@ -366,7 +393,7 @@ impl<'db> Evaluator<'db> {
                     return mismatch("`?` needs an Option or a Result");
                 };
                 match variant.name(self.db).as_str() {
-                    "Some" | "Ok" => match fields.first() {
+                    "Some" | "Ok" => match fields.borrow().first() {
                         Some((_, inner)) => Ok(inner.clone()),
                         None => mismatch("`?` needs an Option or a Result"),
                     },
@@ -383,6 +410,7 @@ impl<'db> Evaluator<'db> {
                 let index = self.eval(f, *index)?;
                 match (&base, &index) {
                     (Value::Array(items), Value::Int(i)) => {
+                        let items = items.borrow();
                         let len = items.len();
                         usize::try_from(*i)
                             .ok()
@@ -410,14 +438,16 @@ impl<'db> Evaluator<'db> {
                 Ok(Value::Range { start, end, inclusive: *inclusive })
             }
             Expr::Tuple { exprs } => Ok(Value::Tuple(self.eval_all(f, exprs)?)),
-            Expr::Array { exprs, .. } => Ok(Value::Array(self.eval_all(f, exprs)?)),
+            Expr::Array { exprs, .. } => Ok(Value::array(self.eval_all(f, exprs)?)),
             Expr::ArrayRepeat { value, count, .. } => {
                 let value = self.eval(f, *value)?;
                 let Value::Int(count) = self.eval(f, *count)? else {
                     return mismatch("the length of an array must be an integer");
                 };
                 let count = usize::try_from(count).map_err(|_| ErrorKind::Overflow)?;
-                Ok(Value::Array(vec![value; count]))
+                // The value is evaluated once, so `mut [mut []; 2]` holds the
+                // same array twice.
+                Ok(Value::array(vec![value; count]))
             }
             Expr::Record { path, fields, spread, .. } => {
                 let Some(path) = path else {
@@ -428,7 +458,8 @@ impl<'db> Evaluator<'db> {
                 };
                 let mut values = match spread {
                     Some(base) => match self.eval(f, *base)? {
-                        Value::Adt { ctor: base_ctor, fields } if base_ctor == ctor => fields,
+                        // A new struct, with copies of the fields.
+                        Value::Adt { ctor: base_ctor, fields } if base_ctor == ctor => fields.borrow().clone(),
                         _ => return mismatch("the base of `..` must be of the same struct"),
                     },
                     None => Vec::new(),
@@ -440,7 +471,7 @@ impl<'db> Evaluator<'db> {
                         None => values.push((field.name.clone(), value)),
                     }
                 }
-                Ok(Value::Adt { ctor, fields: values })
+                Ok(Value::adt(ctor, values))
             }
             Expr::If { condition, then_branch, else_branch } => {
                 if self.eval_bool(f, *condition)? {
@@ -657,7 +688,7 @@ impl<'db> Evaluator<'db> {
                     if let Value::Adt { .. } = &receiver
                         && let Some(field) = receiver.field(name)
                     {
-                        field.clone()
+                        field
                     } else {
                         let path = Path::from_name(name.clone());
                         let method = match self.resolve_value(f.def, expr, &path) {
@@ -733,7 +764,7 @@ impl<'db> Evaluator<'db> {
                 matches!(enum_signature(db, id.parent).variants[id.index as usize].fields, FieldList::Unit)
             }
         };
-        if is_unit { Value::Adt { ctor, fields: Vec::new() } } else { Value::Constructor(ctor) }
+        if is_unit { Value::adt(ctor, Vec::new()) } else { Value::Constructor(ctor) }
     }
 
     /// `Color.Red` and `m.f` are parsed as field accesses. When `expr` is
@@ -759,59 +790,74 @@ impl<'db> Evaluator<'db> {
     // Assignment
 
     fn assign(&mut self, f: &mut Frame<'db>, target: ExprId, op: Option<ArithOp>, value: Value<'db>) -> Res<'db, ()> {
-        let (slot, projections) = self.place(f, target)?;
-        let mut slot = slot.borrow_mut();
-        if projections.is_empty() && op.is_none() {
-            *slot = Some(value);
+        let (place, fields) = self.place(f, target)?;
+        if let Place::Variable(slot) = &place
+            && fields.is_empty()
+            && op.is_none()
+        {
+            *slot.borrow_mut() = Some(value);
             return Ok(());
         }
-        let Some(mut current) = slot.as_mut() else {
-            return fail(ErrorKind::Uninitialized(Name::new("variable")));
-        };
-        for projection in &projections {
-            current = match projection {
-                Projection::Field(name) => {
-                    current.field_mut(name).ok_or_else(|| ErrorKind::NoSuchField(name.clone()))?
-                }
-                Projection::Index(i) => match current {
-                    Value::Array(items) => {
-                        let len = items.len();
-                        items.get_mut(*i).ok_or(ErrorKind::IndexOutOfBounds { index: *i as i128, len })?
-                    }
-                    _ => return mismatch("only arrays can be indexed"),
-                },
+        place.update(|current| {
+            let current = tuple_field(current, &fields)?;
+            *current = match op {
+                Some(op) => arith(op, current.clone(), value)?,
+                None => value,
             };
-        }
-        *current = match op {
-            Some(op) => arith(op, current.clone(), value)?,
-            None => value,
-        };
-        Ok(())
+            Ok(())
+        })
     }
 
-    /// The variable an assignment changes, and the part of it.
-    fn place(&mut self, f: &mut Frame<'db>, expr: ExprId) -> Res<'db, (Slot<'db>, Vec<Projection>)> {
+    /// Where an assignment writes, and the fields of the tuples on the way
+    /// to the part it changes.
+    ///
+    /// Arrays and structs are shared, so `xs[i] = e` and `p.x = e` change
+    /// the array or struct that `xs` or `p` evaluates to, and every name for
+    /// it sees the change. A tuple is a value, kept where it is: `t.0 = e`
+    /// changes the variable, element or field that holds `t`.
+    fn place(&mut self, f: &mut Frame<'db>, expr: ExprId) -> Res<'db, (Place<'db>, Vec<Name>)> {
         match &f.body[expr] {
             Expr::Path(path) => match self.resolve_value(f.def, expr, path) {
                 Some(ValueResolution::Value(ValueNs::Local(binding))) => {
                     let slot = f.locals.entry(binding).or_insert_with(|| Rc::new(RefCell::new(None))).clone();
-                    Ok((slot, Vec::new()))
+                    Ok((Place::Variable(slot), Vec::new()))
                 }
                 _ => fail(ErrorKind::NotAssignable),
             },
-            Expr::Field { expr: base, name } => {
-                let (slot, mut projections) = self.place(f, *base)?;
-                projections.push(Projection::Field(name.clone()));
-                Ok((slot, projections))
-            }
             Expr::Index { base, index } => {
+                let base = self.eval(f, *base)?;
                 let Value::Int(i) = self.eval(f, *index)? else {
                     return mismatch("an index must be an integer");
                 };
-                let (slot, mut projections) = self.place(f, *base)?;
-                let i = usize::try_from(i).map_err(|_| ErrorKind::IndexOutOfBounds { index: i, len: 0 })?;
-                projections.push(Projection::Index(i));
-                Ok((slot, projections))
+                let Value::Array(items) = base else {
+                    return mismatch("only arrays can be indexed");
+                };
+                let len = items.borrow().len();
+                match usize::try_from(i).ok().filter(|&i| i < len) {
+                    Some(i) => Ok((Place::Element(items, i), Vec::new())),
+                    None => fail(ErrorKind::IndexOutOfBounds { index: i, len }),
+                }
+            }
+            Expr::Field { expr: base, name } => {
+                let (place, mut fields) = self.place(f, *base)?;
+                let shared = place.update(|current| {
+                    Ok(match tuple_field(current, &fields)? {
+                        Value::Adt { fields, .. } => Some(fields.clone()),
+                        _ => None,
+                    })
+                })?;
+                match shared {
+                    Some(adt) => {
+                        if !adt.borrow().iter().any(|(n, _)| n == name) {
+                            return fail(ErrorKind::NoSuchField(name.clone()));
+                        }
+                        Ok((Place::Field(adt, name.clone()), Vec::new()))
+                    }
+                    None => {
+                        fields.push(name.clone());
+                        Ok((place, fields))
+                    }
+                }
             }
             _ => fail(ErrorKind::NotAssignable),
         }
@@ -847,7 +893,10 @@ impl<'db> Evaluator<'db> {
                 _ => Ok(false),
             },
             Pat::Slice { args, rest } => match value {
-                Value::Array(items) => self.match_seq(f, args, *rest, items),
+                Value::Array(items) => {
+                    let items = items.borrow().clone();
+                    self.match_seq(f, args, *rest, &items)
+                }
                 _ => Ok(false),
             },
             Pat::TupleStruct { path, args, rest } => {
@@ -856,7 +905,7 @@ impl<'db> Evaluator<'db> {
                 };
                 match value {
                     Value::Adt { ctor: c, fields } if *c == ctor => {
-                        let items: Vec<_> = fields.iter().map(|(_, v)| v.clone()).collect();
+                        let items: Vec<_> = fields.borrow().iter().map(|(_, v)| v.clone()).collect();
                         self.match_seq(f, args, *rest, &items)
                     }
                     _ => Ok(false),
@@ -874,7 +923,7 @@ impl<'db> Evaluator<'db> {
                     let Some(field_value) = value.field(&field.name) else {
                         return fail(ErrorKind::NoSuchField(field.name.clone()));
                     };
-                    if !self.match_pat(f, field.pat, field_value)? {
+                    if !self.match_pat(f, field.pat, &field_value)? {
                         return Ok(false);
                     }
                 }
@@ -1030,7 +1079,7 @@ fn literal_value<'db>(literal: &Literal) -> Res<'db, Value<'db>> {
         Literal::Char(c) => Value::Char(*c),
         Literal::Byte(b) => Value::Int(*b as i128),
         Literal::String(s) | Literal::CString(s) => Value::str(s),
-        Literal::ByteString(bytes) => Value::Array(bytes.iter().map(|b| Value::Int(*b as i128)).collect()),
+        Literal::ByteString(bytes) => Value::array(bytes.iter().map(|b| Value::Int(*b as i128)).collect()),
     })
 }
 
@@ -1094,7 +1143,16 @@ fn cast<'db>(value: Value<'db>, type_ref: &TypeRef) -> Res<'db, Value<'db>> {
 /// The items a `for` loop goes over.
 fn iterate<'db>(value: Value<'db>) -> Res<'db, Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>> {
     match value {
-        Value::Array(items) => Ok(Box::new(items.into_iter().map(Ok))),
+        // By index rather than over a copy, so that the loop sees the
+        // changes its body makes to the rest of the array.
+        Value::Array(items) => {
+            let mut i = 0;
+            Ok(Box::new(std::iter::from_fn(move || {
+                let item = items.borrow().get(i).cloned()?;
+                i += 1;
+                Some(Ok(item))
+            })))
+        }
         Value::Str(s) => Ok(Box::new(s.chars().collect::<Vec<_>>().into_iter().map(|c| Ok(Value::Char(c))))),
         Value::Range { start: Some(start), end, inclusive } => {
             let Value::Int(start) = *start else { return mismatch("only ranges of integers can be iterated") };
