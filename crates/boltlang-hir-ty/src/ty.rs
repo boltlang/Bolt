@@ -453,7 +453,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
             Ty::Assoc(alias, args) => {
                 let name = alias.item(db).name.as_ref().map_or("?", |n| n.as_str());
                 match &args[..] {
-                    [arg] if !matches!(arg, Ty::Fn(..) | Ty::Assoc(..)) => write!(f, "{}.{name}", show(arg)),
+                    [arg] if !matches!(arg, Ty::Fn(..)) => write!(f, "{}.{name}", show(arg)),
                     _ => {
                         let class = match alias.container(db) {
                             ItemContainerId::Class(c) => c.item(db).name.as_ref().map_or("?", |n| n.as_str()),

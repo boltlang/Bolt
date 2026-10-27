@@ -98,15 +98,26 @@ pub struct TyLoweringContext<'a, 'db> {
     store: &'a ExpressionStore,
     /// The function or impl whose named mutabilities can be used.
     mutabilities: Option<GenericDefId<'db>>,
-    /// The item whose predicates are being lowered, if any. Its parameters'
-    /// associated types, like `C.Item`, can't be found through them.
+    /// The item whose predicates are being lowered, if any, and those
+    /// lowered so far. An associated type of its parameters, like `C.Iter`
+    /// in `where Iterable[C], Iterator[C.Iter]`, is found through the ones
+    /// before it.
     predicates_of: Option<GenericDefId<'db>>,
+    lowered: Vec<ClassConstraint<'db>>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
 impl<'a, 'db> TyLoweringContext<'a, 'db> {
     pub fn new(db: &'db dyn Db, resolver: &'a Resolver<'db>, store: &'a ExpressionStore) -> Self {
-        TyLoweringContext { db, resolver, store, mutabilities: None, predicates_of: None, diagnostics: Vec::new() }
+        TyLoweringContext {
+            db,
+            resolver,
+            store,
+            mutabilities: None,
+            predicates_of: None,
+            lowered: Vec::new(),
+            diagnostics: Vec::new(),
+        }
     }
 
     /// Let the types use the named mutabilities of `def`, a function or an
@@ -315,13 +326,18 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return Ty::Error;
         };
-        if segment.generic_args.is_some() || self.predicates_of == Some(def) {
+        if segment.generic_args.is_some() {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return Ty::Error;
         }
+        let constraints = if self.predicates_of == Some(def) {
+            with_superclasses(db, self.lowered.clone())
+        } else {
+            constraints_on(db, def)
+        };
         let target = Ty::Param(GenericParamId { def, index });
         let mut found: Vec<(TypeAliasId<'db>, Box<[Ty<'db>]>)> = Vec::new();
-        for constraint in constraints_on(db, def) {
+        for constraint in constraints {
             if constraint.args.first() != Some(&target) {
                 continue;
             }
@@ -450,6 +466,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             let kind = kinds.get(index).cloned();
             for &bound in param.bounds.iter() {
                 out.extend(self.lower_class_constraint(bound, Some((target.clone(), kind.clone()))));
+                self.lowered.clone_from(&out);
             }
         }
         for pred in params.where_predicates.iter() {
@@ -462,6 +479,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                     out.extend(self.lower_class_constraint(bound, Some(target.clone())));
                 }
             }
+            self.lowered.clone_from(&out);
         }
         out
     }
@@ -492,10 +510,16 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
 /// The class constraints that hold for the parameters of `def`: its bounds
 /// and `where` clauses, a class's own instance, and their superclasses.
 pub fn constraints_on<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Vec<ClassConstraint<'db>> {
-    let mut stack: Vec<ClassConstraint<'db>> = generic_predicates(db, def).predicates.to_vec();
+    let mut constraints: Vec<ClassConstraint<'db>> = generic_predicates(db, def).predicates.to_vec();
     if let GenericDefId::Class(class) = def {
-        stack.push(ClassConstraint { class, args: identity_args(db, def) });
+        constraints.push(ClassConstraint { class, args: identity_args(db, def) });
     }
+    with_superclasses(db, constraints)
+}
+
+/// `constraints` and the superclasses they imply.
+fn with_superclasses<'db>(db: &'db dyn Db, constraints: Vec<ClassConstraint<'db>>) -> Vec<ClassConstraint<'db>> {
+    let mut stack = constraints;
     let mut out = Vec::new();
     while let Some(c) = stack.pop() {
         if out.contains(&c) {
@@ -522,7 +546,9 @@ pub fn assoc_type<'db>(db: &'db dyn Db, class: ClassId<'db>, name: &Name) -> Opt
 }
 
 /// The type that `imp` gives the associated type `alias` of its class, in
-/// terms of the impl's parameters, if it defines it.
+/// terms of the impl's parameters, if it defines it. An array or struct in
+/// it without `mut` or `imm` is `imm`, as in the return type of a function
+/// without a body.
 pub fn impl_assoc_ty<'db>(db: &'db dyn Db, imp: ImplId<'db>, alias: TypeAliasId<'db>) -> Option<Ty<'db>> {
     let name = alias.item(db).name.as_ref()?;
     imp.item(db).items.iter().find_map(|item| match *item {
@@ -531,7 +557,7 @@ pub fn impl_assoc_ty<'db>(db: &'db dyn Db, imp: ImplId<'db>, alias: TypeAliasId<
             if own.item(db).name.as_ref() != Some(name) {
                 return None;
             }
-            type_alias_ty(db, own).ty.clone()
+            type_alias_ty(db, own).ty.as_ref().map(|t| t.fill_unwritten(&mut imm))
         }
         _ => None,
     })
