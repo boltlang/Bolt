@@ -38,7 +38,8 @@ A function fills in a mut array it's given
 :todo wasm
 ================================================================================
 fn fill(xs: mut [i32], x: i32) {
-  for i in 0..2 { xs[i] = x; }
+  xs[0] = x;
+  xs[1] = x;
 }
 let ys = mut [0, 0, 0];
 fill(ys, 7);
