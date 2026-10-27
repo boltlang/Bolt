@@ -26,6 +26,7 @@ impl<'db> InferenceContext<'_, 'db> {
             Pat::Missing | Pat::Wild | Pat::MacroCall { .. } => {}
             Pat::Bind { id, subpat } => {
                 self.result.binding_types.insert(*id, expected.clone());
+                self.declare(*id);
                 if let Some(subpat) = subpat {
                     self.check_pat(*subpat, expected);
                 }

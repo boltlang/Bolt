@@ -229,9 +229,10 @@ impl<'db> Unifier<'db> {
                 self.unify(m, n)
             }
             (Ty::Mutability(x), Ty::Mutability(y)) if x == y => Ok(()),
-            (Ty::Fn(xs, x), Ty::Fn(ys, y)) if xs.len() == ys.len() => {
+            (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) if xs.len() == ys.len() => {
                 self.unify_all(xs, ys)?;
-                self.unify(x, y)
+                self.unify(x, y)?;
+                self.unify(m, n)
             }
             (Ty::Builtin(x), Ty::Builtin(y)) if x == y => Ok(()),
             (Ty::Param(x), Ty::Param(y)) if x == y => Ok(()),
@@ -277,7 +278,7 @@ mod tests {
     }
 
     fn fun(params: Vec<Ty<'static>>, ret: Ty<'static>) -> Ty<'static> {
-        Ty::Fn(params.into(), Box::new(ret))
+        Ty::func(params, ret)
     }
 
     #[test]

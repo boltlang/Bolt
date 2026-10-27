@@ -119,6 +119,19 @@ impl<'db> AssocConstraint<'db> {
     }
 }
 
+/// That the closure of type `closure`, a [`Ty::Fn`], captured values of the
+/// types `captured`, and a `let mut` variable if `captures_var`. It's `mut`
+/// if anything it captured can change: a `let mut` variable, or a `mut`
+/// array, struct or function, which an `imm` closure couldn't hold, since
+/// `imm` is deep. A value of a type parameter could be any of these, so it
+/// makes the closure `mut` too, until a type can say that it isn't (#243).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CaptureConstraint<'db> {
+    pub closure: Ty<'db>,
+    pub captured: Vec<Ty<'db>>,
+    pub captures_var: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Constraint<'db> {
     /// The type found must be the type expected.
@@ -129,6 +142,8 @@ pub enum Constraint<'db> {
     Field { constraint: FieldConstraint<'db>, origin: Origin<'db> },
     /// The type is an associated type of a class.
     Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
+    /// A closure is `mut` if what it captured can change.
+    Capture { constraint: CaptureConstraint<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -190,6 +205,7 @@ pub struct Solver<'db> {
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
+    pending_captures: Vec<(CaptureConstraint<'db>, Origin<'db>)>,
     /// The impl chosen for each class constraint of a use of a class method
     /// or constant, like the `Show[i32]` of `show(1)`, at the use. Only the
     /// first per use and class: the constraints that it leads to, like the
@@ -209,6 +225,7 @@ impl<'db> Solver<'db> {
             pending: Vec::new(),
             pending_fields: Vec::new(),
             pending_assoc: Vec::new(),
+            pending_captures: Vec::new(),
             chosen: Vec::new(),
             errors: Vec::new(),
         }
@@ -262,6 +279,106 @@ impl<'db> Solver<'db> {
                     self.pending_assoc.push((constraint, origin));
                 }
             }
+            // Solved right away when possible, so that a closure that's
+            // `mut` is known to be before it's used.
+            Constraint::Capture { constraint, origin } => {
+                if !self.solve_capture(&constraint, origin, false) {
+                    self.pending_captures.push((constraint, origin));
+                }
+            }
+        }
+    }
+
+    /// Decide whether a closure is `mut` from what it captured, once that's
+    /// known. With `last`, nothing more will be known: the mutabilities
+    /// still unknown are made the closure's, so that it's `mut` exactly
+    /// when they are. Returns whether the constraint is solved.
+    fn solve_capture(&mut self, constraint: &CaptureConstraint<'db>, origin: Origin<'db>, last: bool) -> bool {
+        let Ty::Fn(params, ret, own) = &constraint.closure else { unreachable!("a closure has a function type") };
+        let with = |m: Ty<'db>| Ty::Fn(params.clone(), ret.clone(), Box::new(m));
+        let mut held = Vec::new();
+        let mut open = false;
+        for ty in &constraint.captured {
+            self.held_mutabilities(&self.unifier.resolve(ty), &mut held, &mut open);
+        }
+        // At the end, a type still unknown can only become a type
+        // parameter.
+        if open && last {
+            held.push(Ty::Mutability(Mutability::Mut));
+        }
+        let mut_ = Ty::Mutability(Mutability::Mut);
+        if constraint.captures_var || held.contains(&mut_) {
+            self.equal(&constraint.closure, &with(mut_), origin);
+            return true;
+        }
+        let own = self.unifier.shallow_resolve(own);
+        let is_var = |t: &Ty<'db>| matches!(t, Ty::Var(_));
+        let unknown: Vec<Ty<'db>> = held.iter().filter(|t| is_var(t)).cloned().collect();
+        // A type still unknown could turn out to hold something `mut`.
+        // Mutabilities still unknown can wait too, unless the closure is
+        // `imm`, which decides them.
+        if !last && (open || (!unknown.is_empty() && !matches!(own, Ty::Mutability(Mutability::Imm)))) {
+            return false;
+        }
+        // What could still be `mut`: mutabilities not known yet, and
+        // parameters, like the hidden mutability of `xs` in `fn f(xs: [T])`.
+        let mut maybe_mut: Vec<Ty<'db>> = Vec::new();
+        for m in held.iter().filter(|t| matches!(t, Ty::Var(_) | Ty::Param(_) | Ty::Bound(_))) {
+            if !maybe_mut.contains(m) {
+                maybe_mut.push(m.clone());
+            }
+        }
+        match (&own, &maybe_mut[..]) {
+            // Anything fits in a `mut` closure.
+            (_, []) | (Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never, _) => {}
+            // The closure has the mutability of the one thing that could be
+            // `mut`. Several can't be said yet, since a type can't say that
+            // one mutability is at most another (#243), so the closure is
+            // `mut` then, which leaves them free.
+            (Ty::Var(_), [m]) => self.equal(&constraint.closure, &with(m.clone()), origin),
+            (Ty::Var(_), _) => self.equal(&constraint.closure, &with(mut_), origin),
+            // The closure's mutability is decided: what it captured can't be
+            // more `mut`, so an `imm` closure makes the unknowns `imm`.
+            _ => {
+                for m in maybe_mut {
+                    self.equal(&constraint.closure, &with(m), origin);
+                }
+            }
+        }
+        true
+    }
+
+    /// The mutabilities of the arrays, structs and functions that a value
+    /// of type `ty` holds, not counting what the functions take or give.
+    /// A type parameter, which could be anything, counts as `Mut`. `open`
+    /// is set when a type that isn't known yet could hold more.
+    fn held_mutabilities(&self, ty: &Ty<'db>, out: &mut Vec<Ty<'db>>, open: &mut bool) {
+        match ty {
+            Ty::Var(v) if self.unifier.var_kind(*v) == Some(VarKind::General) => *open = true,
+            Ty::Param(_) | Ty::Assoc(..) => out.push(Ty::Mutability(Mutability::Mut)),
+            Ty::Fn(_, _, m) => out.push((**m).clone()),
+            Ty::Array(m, elem) => {
+                out.push((**m).clone());
+                self.held_mutabilities(elem, out, open);
+            }
+            Ty::Adt(_, args, m) => {
+                out.push((**m).clone());
+                args.iter().for_each(|t| self.held_mutabilities(t, out, open));
+            }
+            Ty::Tuple(tys) => tys.iter().for_each(|t| self.held_mutabilities(t, out, open)),
+            Ty::App(head, args) => {
+                self.held_mutabilities(head, out, open);
+                args.iter().for_each(|t| self.held_mutabilities(t, out, open));
+            }
+            _ => {}
+        }
+    }
+
+    /// Decide the closures whose captures are still unknown, as if nothing
+    /// more will be known about them.
+    fn solve_last_captures(&mut self) {
+        for (constraint, origin) in std::mem::take(&mut self.pending_captures) {
+            self.solve_capture(&constraint, origin, true);
         }
     }
 
@@ -462,6 +579,13 @@ impl<'db> Solver<'db> {
                     self.pending_assoc.push((constraint, origin));
                 }
             }
+            for (constraint, origin) in std::mem::take(&mut self.pending_captures) {
+                if self.solve_capture(&constraint, origin, false) {
+                    progress = true;
+                } else {
+                    self.pending_captures.push((constraint, origin));
+                }
+            }
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
@@ -516,6 +640,8 @@ impl<'db> Solver<'db> {
     pub fn solve_with_defaults(&mut self) {
         self.solve();
         self.unifier.default_numeric_vars();
+        self.solve();
+        self.solve_last_captures();
         self.solve();
     }
 
@@ -673,7 +799,9 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
         (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
-        (Ty::Fn(xs, x), Ty::Fn(ys, y)) => match_all(xs, ys, subst).and(|| match_ty(x, y, subst)),
+        (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
+            match_all(xs, ys, subst).and(|| match_ty(x, y, subst)).and(|| match_ty(m, n, subst))
+        }
         (x, y) if x == y => Match::Yes,
         _ => Match::No,
     }

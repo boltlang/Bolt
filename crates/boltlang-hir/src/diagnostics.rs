@@ -500,9 +500,9 @@ impl<'db> Collector<'db> {
                 continue;
             };
             let sig = fn_sig(db, f);
-            let declared = Ty::Fn(
-                sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect(),
-                Box::new(sig.ret.clone().unwrap_or(Ty::Error)),
+            let declared = Ty::func(
+                sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect::<Box<[_]>>(),
+                sig.ret.clone().unwrap_or(Ty::Error),
             );
             if !builtin.has_signature(&declared) && !has_error(&declared) {
                 self.push(range, DiagnosticKind::BuiltinSignature { name, expected: builtin.signature() });

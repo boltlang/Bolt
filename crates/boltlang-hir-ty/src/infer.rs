@@ -30,7 +30,7 @@ use crate::{
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
+    solve::{CaptureConstraint, Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -173,12 +173,13 @@ struct Expectation<'a, 'db> {
     reason: Reason<'db>,
 }
 
-/// The first `mut` array or struct in `ty` that an `imm` one holds, with
-/// the `imm` one. Functions aren't looked into: a function's type says what
-/// it takes, not what it holds.
+/// The first `mut` array, struct or function in `ty` that an `imm` array
+/// or struct holds, with the `imm` one. What a function takes and gives
+/// isn't looked into: its type says that, not what it holds, which its
+/// mutability covers.
 pub fn mut_inside_imm<'db>(ty: &Ty<'db>) -> Option<(Ty<'db>, Ty<'db>)> {
     fn has(ty: &Ty<'_>, mutability: Mutability) -> bool {
-        ty.mutability() == Some(&Ty::Mutability(mutability))
+        ty.held_mutability() == Some(&Ty::Mutability(mutability))
     }
     fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
         if has(ty, Mutability::Mut) {
@@ -249,6 +250,15 @@ pub(crate) struct InferenceContext<'a, 'db> {
     /// that the tuple struct it makes is `mut`. Taken by the struct's
     /// constructor; if nothing takes it, `mut` was before something else.
     mut_constructor: bool,
+    /// The closures being inferred, innermost last.
+    closures: Vec<ClosureFrame>,
+}
+
+/// What a closure being inferred declares and uses from outside it.
+#[derive(Default)]
+struct ClosureFrame {
+    declared: Vec<BindingId>,
+    captured: Vec<BindingId>,
 }
 
 impl<'a, 'db> InferenceContext<'a, 'db> {
@@ -266,6 +276,24 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             breakables: Vec::new(),
             uninitialized: Vec::new(),
             mut_constructor: false,
+            closures: Vec::new(),
+        }
+    }
+
+    /// Note that `binding` is declared, in the closures being inferred.
+    pub(crate) fn declare(&mut self, binding: BindingId) {
+        for frame in &mut self.closures {
+            frame.declared.push(binding);
+        }
+    }
+
+    /// Note that `binding` is used: the closures being inferred that it's
+    /// declared outside of capture it.
+    fn use_binding(&mut self, binding: BindingId) {
+        for frame in &mut self.closures {
+            if !frame.declared.contains(&binding) && !frame.captured.contains(&binding) {
+                frame.captured.push(binding);
+            }
         }
     }
 
@@ -588,9 +616,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Lambda { params, param_types, ret_type, body: lambda_body, .. } => {
                 let (hint_params, hint_ret) = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                    Some(Ty::Fn(ps, r)) if ps.len() == params.len() => (Some(ps), Some(*r)),
+                    Some(Ty::Fn(ps, r, _)) if ps.len() == params.len() => (Some(ps), Some(*r)),
                     _ => (None, None),
                 };
+                self.closures.push(ClosureFrame::default());
                 let mut param_tys = Vec::new();
                 for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
                     let ty = match (type_ref, &hint_params) {
@@ -614,7 +643,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.breakables = outer_breakables;
                 self.return_reason = outer_reason;
                 self.return_ty = outer_return;
-                Ty::Fn(param_tys.into(), Box::new(ret))
+                let frame = self.closures.pop().unwrap();
+                let body = self.body;
+                let closure = Ty::Fn(param_tys.into(), Box::new(ret), Box::new(self.new_mutability()));
+                let captures_var = frame.captured.iter().any(|&b| body[b].mutable);
+                let captured = frame.captured.iter().map(|&b| self.result.binding_ty(b).clone()).collect();
+                let constraint = CaptureConstraint { closure: closure.clone(), captured, captures_var };
+                self.solver.add(Constraint::Capture { constraint, origin: self.origin(expr) });
+                closure
             }
             Expr::MacroCall { .. } => Ty::Error,
         }
@@ -715,7 +751,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     fn value_ty(&mut self, expr: ExprId, value: ValueNs<'db>) -> Ty<'db> {
         match value {
-            ValueNs::Local(binding) => self.result.binding_types.get(binding).cloned().unwrap_or(Ty::Error),
+            ValueNs::Local(binding) => {
+                self.use_binding(binding);
+                self.result.binding_types.get(binding).cloned().unwrap_or(Ty::Error)
+            }
             ValueNs::Function(f) => self.function_ty(expr, f),
             ValueNs::Const(c) => self.const_value_ty(expr, c),
             // Const generics aren't supported yet.
@@ -756,8 +795,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match fields.kind {
             FieldsKind::Unit => adt_ty,
             FieldsKind::Tuple => {
-                let params = fields.fields.iter().map(|(_, t)| subst_params(t, generic_def, &args)).collect();
-                Ty::Fn(params, Box::new(adt_ty))
+                let params: Box<[Ty<'db>]> =
+                    fields.fields.iter().map(|(_, t)| subst_params(t, generic_def, &args)).collect();
+                Ty::func(params, adt_ty)
             }
             // A record struct can't be used as a value.
             FieldsKind::Record => Ty::Error,
@@ -884,12 +924,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     ) -> Ty<'db> {
         let count = args.len() + receiver.is_some() as usize;
         let (params, ret) = match self.solver.unifier.shallow_resolve(callee_ty) {
-            Ty::Fn(params, ret) => (params, *ret),
+            Ty::Fn(params, ret, _) => (params, *ret),
             // A number literal's type isn't known yet, but it's no function.
             Ty::Var(v) if self.solver.unifier.var_kind(v) == Some(VarKind::General) => {
                 let params: Box<[Ty<'db>]> = (0..count).map(|_| self.new_var()).collect();
                 let ret = self.new_var();
-                let fn_ty = Ty::Fn(params.clone(), Box::new(ret.clone()));
+                // Calling a function doesn't need it to be `mut` or `imm`.
+                let mutability = self.new_mutability();
+                let fn_ty = Ty::Fn(params.clone(), Box::new(ret.clone()), Box::new(mutability));
                 self.solver.equal(&fn_ty, callee_ty, self.origin(callee));
                 (params, ret)
             }

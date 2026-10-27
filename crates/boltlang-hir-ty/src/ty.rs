@@ -79,8 +79,12 @@ pub enum Ty<'db> {
     /// body, or `Imm`. Only type aliases keep it, for the types they're
     /// used in to replace.
     Unwritten,
-    /// `fn(A, B) -> C`
-    Fn(Box<[Ty<'db>]>, Box<Ty<'db>>),
+    /// `fn(A, B) -> C`: the parameters, the result, and the mutability.
+    /// A closure is `mut` if it can change what it captured, or capture
+    /// something that can change, and `imm` otherwise; named functions
+    /// capture nothing and are `imm`. As for arrays, an `imm` value can't
+    /// hold a `mut fn`. The mutability doesn't restrict calling it.
+    Fn(Box<[Ty<'db>]>, Box<Ty<'db>>, Box<Ty<'db>>),
     /// An associated type of a class applied to types, like `C.Item` for
     /// `type Item;` of `class Index[C]`: the type alias declared in the
     /// class, and the class's arguments. Which type it is depends on the
@@ -117,6 +121,11 @@ impl<'db> Ty<'db> {
         Ty::Builtin(BuiltinType::Bool)
     }
 
+    /// An `imm` function from `params` to `ret`, like a named function.
+    pub fn func(params: impl Into<Box<[Ty<'db>]>>, ret: Ty<'db>) -> Self {
+        Ty::Fn(params.into(), Box::new(ret), Box::new(Ty::Mutability(Mutability::Imm)))
+    }
+
     /// An array of `element` with the mutability `mutability`.
     pub fn array(mutability: Ty<'db>, element: Ty<'db>) -> Self {
         Ty::Array(Box::new(mutability), Box::new(element))
@@ -137,6 +146,16 @@ impl<'db> Ty<'db> {
         match self {
             Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, mutability) => Some(mutability),
             _ => None,
+        }
+    }
+
+    /// The mutability of what a value of this type holds directly: that of
+    /// an array, a struct, or a function, whose own is that of what it
+    /// captured.
+    pub fn held_mutability(&self) -> Option<&Ty<'db>> {
+        match self {
+            Ty::Fn(_, _, mutability) => Some(mutability),
+            ty => ty.mutability(),
         }
     }
 
@@ -187,9 +206,10 @@ impl<'db> Ty<'db> {
                 f(mutability);
                 f(elem);
             }
-            Ty::Fn(params, ret) => {
+            Ty::Fn(params, ret, mutability) => {
                 params.iter().for_each(&mut f);
                 f(ret);
+                f(mutability);
             }
             Ty::Assoc(_, args) => args.iter().for_each(f),
             Ty::Var(_)
@@ -218,7 +238,9 @@ impl<'db> Ty<'db> {
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
             Ty::Tuple(tys) => Ty::Tuple(fold_all(tys, f)),
             Ty::Array(mutability, elem) => Ty::array(mutability.fold(f), elem.fold(f)),
-            Ty::Fn(params, ret) => Ty::Fn(fold_all(params, f), Box::new(ret.fold(f))),
+            Ty::Fn(params, ret, mutability) => {
+                Ty::Fn(fold_all(params, f), Box::new(ret.fold(f)), Box::new(mutability.fold(f)))
+            }
             Ty::Assoc(alias, args) => Ty::Assoc(*alias, fold_all(args, f)),
             Ty::Var(_)
             | Ty::Builtin(_)
@@ -313,6 +335,11 @@ impl<'db> TyNames<'db> {
                 Ty::Adt(_, args, m) => {
                     mutability(db, m, found);
                     args.iter().for_each(|t| collect(db, t, found));
+                }
+                Ty::Fn(params, ret, m) => {
+                    mutability(db, m, found);
+                    params.iter().for_each(|t| collect(db, t, found));
+                    collect(db, ret, found);
                 }
                 _ => ty.walk_children(|t| collect(db, t, found)),
             }
@@ -442,7 +469,12 @@ impl fmt::Display for DisplayTy<'_, '_> {
             Ty::Mutability(Mutability::Mut) => f.write_str("Mut"),
             Ty::Mutability(Mutability::Imm) => f.write_str("Imm"),
             Ty::Unwritten => f.write_str("_"),
-            Ty::Fn(params, ret) => {
+            Ty::Fn(params, ret, mutability) => {
+                // An `imm` function is shown as just `fn(...)`, since most
+                // are.
+                if *mutability.as_ref() != Ty::Mutability(Mutability::Imm) {
+                    self.write_mutability(f, mutability)?;
+                }
                 f.write_str("fn(")?;
                 list(f, params)?;
                 write!(f, ") -> {}", show(ret))

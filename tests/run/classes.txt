@@ -144,7 +144,7 @@ Looping over an iterator made from a function
 :todo wasm
 ================================================================================
 let mut n = 0;
-let it = FnIter {
+let it = mut FnIter {
   next: || if n < 3 {
     n += 1;
     Some(n)

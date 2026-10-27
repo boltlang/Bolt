@@ -216,7 +216,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             TypeRef::Fn { params, ret_type, .. } => {
                 let params = params.iter().map(|(_, t)| self.lower_ty(*t)).collect();
                 let ret = ret_type.map_or_else(Ty::unit, |t| self.lower_ty(t));
-                Ty::Fn(params, Box::new(ret))
+                Ty::Fn(params, Box::new(ret), Box::new(Ty::Unwritten))
             }
             TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
                 self.diagnostics.push(LowerDiagnostic::Unsupported(id));
@@ -227,12 +227,13 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     /// `ty` with the mutability written before it, as in `mut Point`: only
-    /// arrays and structs have one.
+    /// arrays, structs and functions have one.
     fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, written: Ty<'db>) -> Ty<'db> {
         let fits = |old: &Ty<'db>| matches!(old, Ty::Unwritten) || *old == written;
         match ty {
             Ty::Adt(adt @ AdtId::Struct(_), args, old) if fits(&old) => Ty::Adt(adt, args, Box::new(written)),
             Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
+            Ty::Fn(params, ret, old) if fits(&old) => Ty::Fn(params, ret, Box::new(written)),
             Ty::Error => Ty::Error,
             ty => {
                 self.diagnostics.push(LowerDiagnostic::NoMutability(id));

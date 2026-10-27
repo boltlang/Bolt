@@ -626,7 +626,23 @@ struct Bag { items: mut [i32] }
 let a = [mut [1]];
       //^^^^^^^^^ error: an `imm [mut [i32]]` can't hold a `mut [i32]`: what an `imm` value holds can't be changed either
 fn f(x: mut i32) {}
-      //^^^^^^^ error: only an array or a struct can be `mut` or `imm`
+      //^^^^^^^ error: only an array, a struct or a function can be `mut` or `imm`
+"#,
+    );
+}
+
+#[test]
+fn closure_mutability() {
+    check(
+        r#"
+struct Holder { poke: fn() }
+                    //^^^^ label: expected because of the type of field `poke`
+struct Point { x: i32 }
+let p = mut Point { x: 0 };
+let h = Holder { poke: || { p.x = 1; } };
+                     //^^^^^^^^^^^^^^^ error: expected `fn() -> ()`, found `mut fn() -> ()`
+let fs = [|| { p.x = 1; }];
+       //^^^^^^^^^^^^^^^^^ error: an `imm [mut fn() -> ()]` can't hold a `mut fn() -> ()`: what an `imm` value holds can't be changed either
 "#,
     );
 }

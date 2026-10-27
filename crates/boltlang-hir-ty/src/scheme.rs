@@ -290,7 +290,7 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
     let sig = fn_sig(db, f);
     let (params, ret) = match class_impl_method_sig(db, f) {
         Some((class_params, class_ret)) => {
-            let params = sig
+            let params: Box<[Ty<'db>]> = sig
                 .params
                 .iter()
                 .zip(class_params.iter().chain(std::iter::repeat(&Ty::Error)))
@@ -322,7 +322,7 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
         predicates: predicates.into(),
         fields: Box::new([]),
         assoc: Box::new([]),
-        ty: Ty::Fn(params, Box::new(ret)),
+        ty: Ty::func(params, ret),
         sources: SchemeSources { predicates: sources.into(), ..SchemeSources::default() },
     }
 }

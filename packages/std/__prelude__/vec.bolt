@@ -177,10 +177,10 @@ impl[T] IndexMut[mut Vec[T]] {
 /// `for x in v`: the elements, in order. Elements pushed while the loop
 /// runs are included.
 impl[T] Iterable[Vec[T]] {
-  type Iter = FnIter[T];
+  type Iter = mut FnIter[T];
   fn iter(v) {
     let mut next = 0;
-    FnIter {
+    mut FnIter {
       next: || if next < v.len {
         next += 1;
         Some(v.items[next - 1])

@@ -345,7 +345,7 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             };
             (C::CANNOT_CHANGE, message)
         }
-        K::NoMutability => (C::NO_MUTABILITY, "only an array or a struct can be `mut` or `imm`".into()),
+        K::NoMutability => (C::NO_MUTABILITY, "only an array, a struct or a function can be `mut` or `imm`".into()),
         K::MutInsideImm { ty, inner } => {
             let (ty, inner) = (ty.display_with(db, names).to_string(), inner.display_with(db, names).to_string());
             let message = format!(

@@ -112,28 +112,27 @@ impl Builtin {
         let str_ty = Ty::Builtin(BuiltinType::String);
         let i32_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
         match self {
-            Builtin::Print => Ty::Fn(Box::new([str_ty]), Box::new(Ty::unit())),
-            Builtin::Panic => Ty::Fn(Box::new([str_ty]), Box::new(Ty::Never)),
-            Builtin::ArrayLen => Ty::Fn(Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1))]), Box::new(i32_ty)),
+            Builtin::Print => Ty::func([str_ty], Ty::unit()),
+            Builtin::Panic => Ty::func([str_ty], Ty::Never),
+            Builtin::ArrayLen => Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1))], i32_ty),
             Builtin::ArrayAlloc => {
-                Ty::Fn(Box::new([i32_ty]), Box::new(Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0))))
+                Ty::func([i32_ty], Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0)))
             }
             Builtin::ArrayGet => {
-                Ty::Fn(Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1)), i32_ty]), Box::new(Ty::Bound(1)))
+                Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1)), i32_ty], Ty::Bound(1))
             }
             Builtin::ArraySet => {
                 let xs = Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0));
-                Ty::Fn(Box::new([xs, i32_ty, Ty::Bound(0)]), Box::new(Ty::unit()))
+                Ty::func([xs, i32_ty, Ty::Bound(0)], Ty::unit())
             }
             Builtin::ArrayCopy => {
                 let dst = Ty::array(Ty::Mutability(Mutability::Mut), Ty::Bound(0));
                 let src = Ty::array(Ty::Bound(1), Ty::Bound(0));
-                Ty::Fn(Box::new([dst, i32_ty.clone(), src, i32_ty.clone(), i32_ty]), Box::new(Ty::unit()))
+                Ty::func([dst, i32_ty.clone(), src, i32_ty.clone(), i32_ty], Ty::unit())
             }
-            Builtin::ArrayFreeze => Ty::Fn(
-                Box::new([Ty::array(Ty::Bound(0), Ty::Bound(1))]),
-                Box::new(Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1))),
-            ),
+            Builtin::ArrayFreeze => {
+                Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1))], Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1)))
+            }
         }
     }
 

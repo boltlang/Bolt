@@ -266,7 +266,7 @@ impl<'db> Compiler<'db> {
 
     fn function(&mut self, scheme: &'db Scheme<'db>) -> Result<'db, ()> {
         let body = self.body;
-        let Ty::Fn(params, ret) = self.subst(&scheme.ty) else { unreachable!("a function has a function type") };
+        let Ty::Fn(params, ret, _) = self.subst(&scheme.ty) else { unreachable!("a function has a function type") };
         for (&pat, ty) in body.params.iter().zip(params.iter()) {
             let index = self.val_ty(ty, body.body_expr)?.map(|ty| {
                 self.params.push(ty);
@@ -870,7 +870,7 @@ impl<'db> Compiler<'db> {
         let db = self.db;
         let scheme = function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
         let at_call = callee.map(|c| self.ty(c)).filter(|t| matches!(t, Ty::Fn(..))).unwrap_or_else(|| {
-            Ty::Fn(args.iter().map(|&a| self.ty(a)).collect(), Box::new(self.ty(expr)))
+            Ty::func(args.iter().map(|&a| self.ty(a)).collect::<Box<[_]>>(), self.ty(expr))
         });
         let mut found = vec![None; scheme.params.len() + scheme.bound as usize];
         bind_type_args(&scheme.ty, &at_call, scheme, &mut found);
@@ -1060,9 +1060,10 @@ fn bind_type_args<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, fo
             bind_type_args(m, n, scheme, found);
             bind_type_args(x, y, scheme, found);
         }
-        (Ty::Fn(xs, x), Ty::Fn(ys, y)) => {
+        (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
             all(found, xs, ys);
             bind_type_args(x, y, scheme, found);
+            bind_type_args(m, n, scheme, found);
         }
         _ => {}
     }

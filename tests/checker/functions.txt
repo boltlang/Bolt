@@ -69,9 +69,9 @@ compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 });
 twice(fn (s: String) = s, "a");
 
 --------------------------------------------------------------------------------
-compose: forall a b c. fn(fn(a) -> b, fn(c) -> a) -> fn(c) -> b
+compose: forall a b c. fn(fn(a) -> b, fn(c) -> a) -> mut fn(c) -> b
 twice: forall a. fn(fn(a) -> a, a) -> a
-compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 }): fn(Bool) -> i32
+compose(fn (x: i32) = x + 1, fn (b: Bool) = if b { 1 } else { 0 }): mut fn(Bool) -> i32
 twice(fn (s: String) = s, "a"): String
 
 ================================================================================

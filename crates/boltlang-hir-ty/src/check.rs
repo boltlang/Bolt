@@ -70,7 +70,7 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     for assumption in assumptions(db, f) {
                         ctx.solver.assume(assumption);
                     }
-                    let Ty::Fn(params, ret) = &declared_scheme(db, f).ty else { unreachable!() };
+                    let Ty::Fn(params, ret, _) = &declared_scheme(db, f).ty else { unreachable!() };
                     // A method of a class impl must have the class's types.
                     if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
                         let origin = Origin::new(def, ExprOrPat::Expr(ctx.body.body_expr));
@@ -193,7 +193,7 @@ fn infer_group<'db>(
             Some(ret) => ret.fill_unwritten(&mut || solver.new_var(VarKind::Mutability)),
             None => solver.new_var(VarKind::General),
         };
-        env.mono.insert(f, Ty::Fn(params.clone(), Box::new(ret.clone())));
+        env.mono.insert(f, Ty::func(params.clone(), ret.clone()));
         signatures.push((params, ret));
     }
     let mut results = Vec::new();
