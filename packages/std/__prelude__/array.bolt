@@ -1,0 +1,7 @@
+// Functions on arrays that the compiler provides.
+extern "bolt" {
+
+  /// The number of elements of `xs`.
+  pub fn array_len[T](xs: [T]) -> i32;
+
+}

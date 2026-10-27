@@ -70,7 +70,7 @@ pub(crate) fn engine(fuel: Option<u64>) -> Engine {
 /// A linker that provides the builtins of the module `bolt`.
 pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
     let mut linker = Linker::new(engine);
-    for builtin in Builtin::ALL {
+    for builtin in Builtin::HOST {
         let result = match builtin {
             Builtin::Print => linker.func_wrap("bolt", "print", |mut caller: Caller<'_, State<H>>, text: i32| {
                 let result = match read_str(memory_of(&caller), text) {
@@ -90,6 +90,7 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
                     Err(fail(&mut caller, error))
                 },
             ),
+            Builtin::ArrayLen => unreachable!("not in `Builtin::HOST`"),
         };
         result.expect("each builtin is defined once");
     }
@@ -149,7 +150,7 @@ pub fn run<'db, H: Host + 'static>(
     let engine = engine(fuel);
     let module = Module::new(&engine, bytes).map_err(|e| RunError::Invalid(e.to_string()))?;
     for import in module.imports() {
-        if import.module() != "bolt" || Builtin::by_name(import.name()).is_none() {
+        if import.module() != "bolt" || !Builtin::HOST.iter().any(|b| b.name() == import.name()) {
             return Err(RunError::MissingImport { module: import.module().into(), name: import.name().into() });
         }
     }
