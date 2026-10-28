@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 title: imm is deep
 description: What an imm value holds can't be changed either, by fields, type parameters and closures.
 ---
@@ -159,7 +159,7 @@ as `imm`, which is what makes `imm` worth having:
   be constants: a data segment in Wasm, made once;
 - an `imm` struct can't be told apart from a copy, so the code generator
   can store small ones by value;
-- the [reactive design](../../reactive.mdx) knows what can change, and which
+- the [reactive design](../../internals/reactive.mdx) knows what can change, and which
   calls change it, from the types
   ([#200](https://github.com/boltlang/Bolt/issues/200)).
 
