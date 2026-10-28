@@ -684,7 +684,25 @@ fn unknown_mutabilities() {
         r#"
 fn same(xs: 'm [i32]) -> 'm [i32] = xs;
 fn f() { let ys: 'q [i32] = [1]; }
-               //^^^^^^^^ error: the mutability of `'q [i32]` isn't one of this function's or impl's: a name like `'m` can only be used in the function or impl whose signature names it, and an impl's associated types
+               //^^^^^^^^ error: the mutability of `'q [i32]` isn't one of this function's or impl's, or one that this struct declares: a name like `'m` can only be used in the function or impl whose signature names it, an impl's associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`
+"#,
+    );
+}
+
+#[test]
+fn mutability_params() {
+    check(
+        r#"
+struct Iter['v] { data: 'v [i32], index: i32 }
+struct Point { x: i32 }
+fn f(a: Iter[imm, imm], b: Point[imm]) {}
+      //^^^^^^^^^^^^^^ error: expected at most 1 mutability argument, found 2
+                         //^^^^^^^^^^ error: expected at most 0 mutability arguments, found 1
+enum Either['v] { Left('v [i32]), Right }
+          //^^ error: only a struct, a function or an impl can have a mutability parameter like `'v`
+                     //^^^^^^^^ error: the mutability of `'v [i32]` isn't one of this function's or impl's, or one that this struct declares: a name like `'m` can only be used in the function or impl whose signature names it, an impl's associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`
+let a = Iter { data: mut [1], index: 0 };
+      //^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: an `imm Iter[mut]` can't have a `mut` mutability argument: what an `imm` value holds can't be changed either
 "#,
     );
 }

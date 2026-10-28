@@ -1051,8 +1051,9 @@ fn bind_type_args<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, fo
                 slot.get_or_insert_with(|| ty.clone());
             }
         }
-        (Ty::Adt(a, xs, m), Ty::Adt(b, ys, n)) if a == b => {
+        (Ty::Adt(a, xs, ms, m), Ty::Adt(b, ys, ns, n)) if a == b => {
             all(found, xs, ys);
+            all(found, ms, ns);
             bind_type_args(m, n, scheme, found);
         }
         (Ty::Tuple(xs), Ty::Tuple(ys)) => all(found, xs, ys),

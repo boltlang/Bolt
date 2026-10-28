@@ -198,8 +198,9 @@ impl<'db> Unifier<'db> {
                 Ok(())
             }
             (Ty::Var(var), ty) | (ty, Ty::Var(var)) => self.bind(*var, ty),
-            (Ty::Adt(x, xs, m), Ty::Adt(y, ys, n)) if x == y && xs.len() == ys.len() => {
+            (Ty::Adt(x, xs, ms, m), Ty::Adt(y, ys, ns, n)) if x == y && xs.len() == ys.len() => {
                 self.unify_all(xs, ys)?;
+                self.unify_all(ms, ns)?;
                 self.unify(m, n)
             }
             // `F[y1..ym] = G[x1..xn]`: type constructors are injective, so
@@ -207,9 +208,9 @@ impl<'db> Unifier<'db> {
             // side. With more arguments on one side, its head takes the
             // first ones: `?m[a] = Either[String, i32]` makes `?m` the
             // constructor `Either[String]` and `a` the type `i32`.
-            (Ty::App(f, ys), Ty::Adt(id, xs, m)) | (Ty::Adt(id, xs, m), Ty::App(f, ys)) if xs.len() >= ys.len() => {
+            (Ty::App(f, ys), Ty::Adt(id, xs, ms, m)) | (Ty::Adt(id, xs, ms, m), Ty::App(f, ys)) if xs.len() >= ys.len() => {
                 let split = xs.len() - ys.len();
-                self.unify(f, &Ty::Adt(*id, xs[..split].into(), m.clone()))?;
+                self.unify(f, &Ty::Adt(*id, xs[..split].into(), ms.clone(), m.clone()))?;
                 self.unify_all(&xs[split..], ys)
             }
             (Ty::App(f, xs), Ty::App(g, ys)) => {
@@ -345,7 +346,7 @@ mod tests {
             .top_level
             .iter()
             .filter_map(|item| match *item {
-                ModItem::Enum(idx) => Some(Ty::adt(crate::ty::AdtId::Enum(EnumId::new(&db, file, idx)), [], Ty::Error)),
+                ModItem::Enum(idx) => Some(Ty::adt(crate::ty::AdtId::Enum(EnumId::new(&db, file, idx)), [], [], Ty::Error)),
                 _ => None,
             })
             .collect();

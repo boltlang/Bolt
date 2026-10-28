@@ -26,7 +26,7 @@ use crate::{
     lang::LangClass,
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, struct_mutability,
-        generic_predicates, identity_args, struct_args, subst_params,
+        generic_predicates, identity_args, named_mutabilities, struct_args, subst_params,
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
@@ -193,7 +193,9 @@ pub fn mut_inside_imm<'db>(ty: &Ty<'db>) -> Option<(Ty<'db>, Ty<'db>)> {
         ty.held_mutability() == Some(&Ty::Mutability(mutability))
     }
     fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
-        if has(ty, Mutability::Mut) {
+        // A `mut` on its own is a mutability argument, like that of
+        // `VecIter[i32, mut]`, whose fields can have it.
+        if has(ty, Mutability::Mut) || *ty == Ty::Mutability(Mutability::Mut) {
             return Some(ty.clone());
         }
         let mut found = None;
@@ -331,16 +333,19 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// The type of `def`'s struct or enum, with new variables for its type
-    /// arguments and, for a struct, the mutability `mutability`. Also gives
-    /// what to substitute in its field types: the arguments, then for a
-    /// struct its mutability (see [`struct_args`]).
+    /// arguments and, for a struct, its mutability arguments, and the
+    /// mutability `mutability`. Also gives what to substitute in its field
+    /// types: the arguments, then for a struct its mutability arguments and
+    /// its mutability (see [`struct_args`]).
     pub(crate) fn fresh_adt(&mut self, def: VariantDef<'db>, mutability: Ty<'db>) -> (Ty<'db>, Box<[Ty<'db>]>) {
         let (adt, generic_def) = def.adt();
         let count = generic_def.generic_params(self.db).type_params.len();
         let args: Vec<Ty<'db>> = (0..count).map(|_| self.new_var()).collect();
-        let ty = Ty::adt(adt, args.clone(), mutability);
+        let named = named_mutabilities(self.db, generic_def).len();
+        let mutabilities: Vec<Ty<'db>> = (0..named).map(|_| self.new_mutability()).collect();
+        let ty = Ty::adt(adt, args.clone(), mutabilities, mutability);
         let subst = match &ty {
-            Ty::Adt(AdtId::Struct(_), args, mutability) => struct_args(args, mutability),
+            Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) => struct_args(args, mutabilities, mutability),
             _ => args,
         };
         (ty, subst.into())
@@ -354,13 +359,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.solver.add(Constraint::AtMost { constraint, source, origin: self.origin(at) });
     }
 
-    /// A struct of type `ty` is made at `at`: its type arguments, which its
-    /// fields can hold, must be at most its mutability. Its other fields
-    /// have its mutability or are `imm`.
+    /// A struct of type `ty` is made at `at`: its type arguments and its
+    /// mutability arguments, which its fields can hold, must be at most its
+    /// mutability. Its other fields have its mutability or are `imm`.
     fn struct_holds(&mut self, ty: &Ty<'db>, at: ExprId) {
-        if let Ty::Adt(AdtId::Struct(_), args, mutability) = ty {
+        if let Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) = ty {
             for arg in args.iter() {
                 self.holds(arg, mutability, at);
+            }
+            for m in mutabilities.iter() {
+                let constraint = AtMostConstraint { held: Held::Mutability(m.clone()), bound: (**mutability).clone() };
+                let source = AtMostSource::Object(constraint.clone());
+                self.solver.add(Constraint::AtMost { constraint, source, origin: self.origin(at) });
             }
         }
     }
@@ -1227,8 +1237,6 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
         let (ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
-        self.struct_holds(&ty, expr);
-        self.require_bounds(def, &args, expr);
         let field_tys = field_types(self.db, def);
         let mut seen = Vec::new();
         for field in fields {
@@ -1256,14 +1264,20 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // `mut` `l` would be an `imm Line` holding `l`'s `mut Point`.
             Some(spread) => {
                 let base = match (&ty, def) {
-                    (Ty::Adt(id @ AdtId::Struct(_), args, _), VariantDef::Struct(s)) => {
+                    // The fields not given that have a mutability the struct
+                    // declares are shared too, so `base` has the same ones.
+                    (Ty::Adt(id @ AdtId::Struct(_), args, mutabilities, _), VariantDef::Struct(s)) => {
                         let own = struct_mutability(self.db, s);
                         let shares = field_tys
                             .fields
                             .iter()
                             .enumerate()
                             .any(|(i, (_, t))| !seen.contains(&i) && t.any(&mut |t| *t == own));
-                        if shares { ty.clone() } else { Ty::adt(*id, args.clone(), self.new_mutability()) }
+                        if shares {
+                            ty.clone()
+                        } else {
+                            Ty::adt(*id, args.clone(), mutabilities.clone(), self.new_mutability())
+                        }
                     }
                     (ty, _) => ty.clone(),
                 };
@@ -1282,6 +1296,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 }
             }
         }
+        // Once the fields are known, so that a mutability argument is that
+        // of what's given, like the `'v` of `Iter { data: xs }` for `xs: 'v
+        // [i32]`, and isn't decided by them first.
+        self.struct_holds(&ty, expr);
+        self.require_bounds(def, &args, expr);
         ty
     }
 

@@ -182,3 +182,24 @@ copy[0].x = 5;
 points[0];
 --------------------------------------------------------------------------------
 Point { x: 5 }
+
+================================================================================
+A mut struct can hold an imm array through a mutability parameter
+:todo wasm
+================================================================================
+struct Cursor['v] { data: 'v [i32], index: i32 }
+fn sum(c: mut Cursor['v]) -> i32 {
+  let mut total = 0;
+  while c.index < 3 {
+    total += c.data[c.index];
+    c.index += 1;
+  }
+  total
+}
+let a = sum(mut Cursor { data: [1, 2, 3], index: 0 });
+let xs = mut [4, 5, 6];
+let c = mut Cursor { data: xs, index: 0 };
+c.data[0] = 10;
+a + sum(c) + xs[0];
+--------------------------------------------------------------------------------
+37

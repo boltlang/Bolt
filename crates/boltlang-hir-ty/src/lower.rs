@@ -91,9 +91,16 @@ pub enum LowerDiagnostic {
     /// it can only be a bound, like the `imm` of `T: imm`.
     MutabilityAlone(TypeRefId),
     /// A named mutability, like the `'m` of `'m Point`, that isn't one of
-    /// the function's or impl's: a name can only be used in the signature
-    /// and the body of the function it's written in.
+    /// the function's or impl's, or one that its struct declares: a name can
+    /// only be used in the signature and the body of the function it's
+    /// written in, or in the fields of a struct that declares it.
     UnknownMutability(TypeRefId),
+    /// More mutability arguments than the struct declares, like the `imm`
+    /// of `Point[imm]` for a `Point` that declares none.
+    WrongMutabilityCount { type_ref: TypeRefId, expected: usize, found: usize },
+    /// A mutability parameter, like the `'v` of `enum E['v]`, of an item
+    /// that isn't a struct, function or impl.
+    MutabilityParamNotAllowed(TypeRefId),
 }
 
 pub struct TyLoweringContext<'a, 'db> {
@@ -200,10 +207,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 // still that type, with errors for what's missing, so that
                 // the rest of it is known.
                 match ty {
-                    Ty::Adt(adt, args, m) if *expected == Kind::Type && kind.is_first_order() => {
+                    Ty::Adt(adt, args, ms, m) if *expected == Kind::Type && kind.is_first_order() => {
                         let missing = kind.split().0.len();
                         let args = args.into_vec().into_iter().chain(std::iter::repeat_n(Ty::Error, missing));
-                        Ty::Adt(adt, args.collect(), m)
+                        Ty::Adt(adt, args.collect(), ms, m)
                     }
                     _ => Ty::Error,
                 }
@@ -281,7 +288,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, written: Ty<'db>) -> Ty<'db> {
         let fits = |old: &Ty<'db>| matches!(old, Ty::Unwritten) || *old == written;
         match ty {
-            Ty::Adt(adt @ AdtId::Struct(_), args, old) if fits(&old) => Ty::Adt(adt, args, Box::new(written)),
+            Ty::Adt(adt @ AdtId::Struct(_), args, ms, old) if fits(&old) => Ty::Adt(adt, args, ms, Box::new(written)),
             Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
             Ty::Fn(params, ret, old) if fits(&old) => Ty::Fn(params, ret, Box::new(written)),
             Ty::Error => Ty::Error,
@@ -308,9 +315,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             // Like an array, a struct written without `mut` or `imm` has its
             // mutability decided by where it's written.
             TypeNs::Struct(s) => {
-                (Ty::adt(AdtId::Struct(s), [], Ty::Unwritten), def_kind(self.db, GenericDefId::Struct(s)))
+                let mutabilities = self.mutability_args(id, s, args);
+                let head = Ty::adt(AdtId::Struct(s), [], mutabilities, Ty::Unwritten);
+                (head, def_kind(self.db, GenericDefId::Struct(s)))
             }
-            TypeNs::Enum(e) => (Ty::adt(AdtId::Enum(e), [], imm()), def_kind(self.db, GenericDefId::Enum(e))),
+            TypeNs::Enum(e) => (Ty::adt(AdtId::Enum(e), [], [], imm()), def_kind(self.db, GenericDefId::Enum(e))),
             TypeNs::Builtin(ty) => (Ty::Builtin(ty), Kind::Type),
             TypeNs::GenericParam { def, index } => {
                 let kind = generic_param_kinds(self.db, def).get(index as usize).cloned().unwrap_or(Kind::Type);
@@ -325,7 +334,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         // A constructor can be given fewer arguments than it takes, like
         // `Either[String]`, which is then a constructor itself.
         let (param_kinds, _) = kind.split();
-        let type_args = self.type_args(id, args);
+        let mut type_args = self.type_args(id, args);
+        // The mutability arguments of a struct, like the `imm` of
+        // `VecIter[i32, imm]`, are already part of its head.
+        if let TypeNs::Struct(_) = resolution.ty {
+            type_args.retain(|&t| !matches!(self.store[t], TypeRef::Mutability(_)));
+        }
         if type_args.len() > param_kinds.len() {
             self.diagnostics.push(LowerDiagnostic::WrongArgCount {
                 type_ref: id,
@@ -341,6 +355,29 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         let tys: Vec<Ty<'db>> = type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
         let result = kind.apply(tys.len()).cloned();
         (Ty::app(head, tys), result)
+    }
+
+    /// The mutability arguments of the struct `s`, like the `imm` of
+    /// `VecIter[i32, imm]`: the arguments that are a mutability on their own,
+    /// one for each that it declares. Those not given are
+    /// [`Ty::Unwritten`], decided by where the type is written.
+    fn mutability_args(&mut self, id: TypeRefId, s: StructId<'db>, args: &[GenericArg]) -> Vec<Ty<'db>> {
+        let expected = named_mutabilities(self.db, GenericDefId::Struct(s)).len();
+        let written: Vec<TypeRefId> = self
+            .type_args(id, args)
+            .into_iter()
+            .filter(|&t| matches!(self.store[t], TypeRef::Mutability(_)))
+            .collect();
+        if written.len() > expected {
+            self.diagnostics.push(LowerDiagnostic::WrongMutabilityCount { type_ref: id, expected, found: written.len() });
+        }
+        let mut out: Vec<Ty<'db>> = written
+            .iter()
+            .take(expected)
+            .map(|&t| self.lower_mutability(t).flatten().unwrap_or(Ty::Error))
+            .collect();
+        out.resize(expected, Ty::Unwritten);
+        out
     }
 
     /// A type alias, which must be given all its arguments.
@@ -542,6 +579,19 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 self.lowered = out.iter().map(|(c, _)| c.clone()).collect();
             }
         }
+        // `'v: imm` in `struct VecIter[T, 'v: imm]`.
+        let named = named_mutabilities(self.db, def);
+        for param in params.mutability_params.iter() {
+            let Some(index) = named.iter().position(|n| *n == param.name) else {
+                self.diagnostics.push(LowerDiagnostic::MutabilityParamNotAllowed(param.type_ref));
+                continue;
+            };
+            let index = (params.type_params.len() + index) as u32;
+            let target = Ty::Param(GenericParamId { def, index });
+            for &bound in param.bounds.iter() {
+                out.extend(self.lower_bound(Held::Mutability(target.clone()), bound).map(|c| (c, bound)));
+            }
+        }
         for pred in params.where_predicates.iter() {
             if pred.bounds.is_empty() {
                 // A bare constraint like `Convert[A, B]`.
@@ -568,18 +618,38 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 }
 
-/// The mutabilities that a function or an impl names, like the `'m` of
-/// `fn next(n: 'm Node) -> 'm Node`, in the order of the signature. They're
-/// parameters of the function or impl, numbered after its type parameters
-/// and before its hidden ones. Other items can't name any.
+/// The mutabilities that a function, an impl or a struct names, like the
+/// `'m` of `fn next(n: 'm Node) -> 'm Node`, or the `'v` of `struct
+/// VecIter[T, 'v]`. They're parameters of the item, numbered after its type
+/// parameters and before its hidden ones, or a struct's own mutability.
+///
+/// A struct has those it declares, in order, since a type gives them in
+/// that order, like `VecIter[i32, imm]`. A function or an impl has those it
+/// declares, then those its signature uses, in the order they're written.
+/// Other items can't name any.
 #[salsa::tracked(returns(ref))]
 pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[Name]> {
+    let declared = || def.generic_params(db).mutability_params.iter().map(|p| p.name.clone());
     let store = match def {
         GenericDefId::Function(id) => &function_signature(db, id).store,
         GenericDefId::Impl(id) => &impl_signature(db, id).store,
+        GenericDefId::Struct(_) => {
+            let mut names: Vec<Name> = Vec::new();
+            for name in declared() {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+            return names.into();
+        }
         _ => return Box::new([]),
     };
-    let mut names = Vec::new();
+    let mut names: Vec<Name> = Vec::new();
+    for name in declared() {
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
     for (_, type_ref) in store.types.iter() {
         if let TypeRef::Mut { mutability: MutabilityRef::Named(name), .. }
         | TypeRef::Mutability(MutabilityRef::Named(name)) = type_ref
@@ -911,20 +981,26 @@ pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes
     let sig = struct_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Struct(id));
     let own = struct_mutability(db, id);
-    lower_fields(&mut TyLoweringContext::new(db, &resolver, &sig.store), &sig.fields, &own)
+    // A field can have a mutability the struct declares, like the `'v` of
+    // `data: 'v Vec[T]` in `struct VecIter[T, 'v]`.
+    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Struct(id));
+    lower_fields(&mut ctx, &sig.fields, &own)
 }
 
 /// The mutability of a struct as seen from its fields: its hidden
-/// parameter, which [`struct_args`] gives the value of.
+/// parameter, after its type parameters and the mutabilities it declares,
+/// which [`struct_args`] gives the value of.
 pub fn struct_mutability<'db>(db: &'db dyn Db, id: StructId<'db>) -> Ty<'db> {
     let def = GenericDefId::Struct(id);
-    Ty::Param(GenericParamId { def, index: def.generic_params(db).type_params.len() as u32 })
+    let index = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();
+    Ty::Param(GenericParamId { def, index: index as u32 })
 }
 
 /// The arguments to substitute in the field types of a struct of type
-/// `Adt(id, args, mutability)`: its type arguments, then its mutability.
-pub fn struct_args<'db>(args: &[Ty<'db>], mutability: &Ty<'db>) -> Vec<Ty<'db>> {
-    args.iter().chain(std::iter::once(mutability)).cloned().collect()
+/// `Adt(id, args, mutabilities, mutability)`: its type arguments, its
+/// mutability arguments, then its mutability.
+pub fn struct_args<'db>(args: &[Ty<'db>], mutabilities: &[Ty<'db>], mutability: &Ty<'db>) -> Vec<Ty<'db>> {
+    args.iter().chain(mutabilities).chain(std::iter::once(mutability)).cloned().collect()
 }
 
 /// The field types of each variant of an enum. An enum has no mutability,

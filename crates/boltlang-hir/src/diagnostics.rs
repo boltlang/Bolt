@@ -129,8 +129,13 @@ pub enum DiagnosticKind<'db> {
     MutField,
     /// A mutability on its own where a type is expected.
     MutabilityAlone,
-    /// A named mutability that isn't one of the function's or impl's.
+    /// A named mutability that isn't one of the function's or impl's, or one
+    /// that the struct declares.
     UnknownMutability,
+    /// More mutability arguments than the struct declares.
+    WrongMutabilityArgCount { expected: usize, found: usize },
+    /// A mutability parameter of an item that can't have one, like an enum.
+    MutabilityParamNotAllowed,
     /// A path like `C.Item` where no class of `C` declares the associated
     /// type.
     NoAssocType,
@@ -587,6 +592,10 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
                 LowerDiagnostic::MutabilityAlone(id) => (*id, DiagnosticKind::MutabilityAlone),
                 LowerDiagnostic::UnknownMutability(id) => (*id, DiagnosticKind::UnknownMutability),
+                LowerDiagnostic::WrongMutabilityCount { type_ref, expected, found } => {
+                    (*type_ref, DiagnosticKind::WrongMutabilityArgCount { expected: *expected, found: *found })
+                }
+                LowerDiagnostic::MutabilityParamNotAllowed(id) => (*id, DiagnosticKind::MutabilityParamNotAllowed),
                 LowerDiagnostic::NoAssocType { type_ref } => (*type_ref, DiagnosticKind::NoAssocType),
                 LowerDiagnostic::AmbiguousAssocType { type_ref } => (*type_ref, DiagnosticKind::AmbiguousAssocType),
             };

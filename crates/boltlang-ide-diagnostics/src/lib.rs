@@ -84,6 +84,8 @@ impl DiagnosticCode {
     pub const UNMET_ASSOC_BOUND: Self = Self("E0229");
     pub const NOT_AT_MOST: Self = Self("E0230");
     pub const MUTABILITY_ALONE: Self = Self("E0231");
+    pub const WRONG_MUTABILITY_ARG_COUNT: Self = Self("E0232");
+    pub const MUTABILITY_PARAM_NOT_ALLOWED: Self = Self("E0233");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -370,6 +372,15 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             (C::CANNOT_CHANGE, message)
         }
         K::NoMutability => (C::NO_MUTABILITY, "only an array, a struct or a function can be `mut` or `imm`".into()),
+        // A `mut` mutability argument, like that of `imm VecIter[i32, mut]`.
+        K::MutInsideImm { ty, inner: Ty::Mutability(_) } => {
+            let ty = ty.display_with(db, names).to_string();
+            let message = format!(
+                "{} `{ty}` can't have a `mut` mutability argument: what an `imm` value holds can't be changed either",
+                article(&ty)
+            );
+            (C::MUT_INSIDE_IMM, message)
+        }
         K::MutInsideImm { ty, inner } => {
             let (ty, inner) = (ty.display_with(db, names).to_string(), inner.display_with(db, names).to_string());
             let message = format!(
@@ -414,9 +425,18 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::UnknownMutability => (
             C::UNKNOWN_MUTABILITY,
             format!(
-                "the mutability of `{source}` isn't one of this function's or impl's: a name like `'m` can only be used \
-                 in the function or impl whose signature names it, and an impl's associated types"
+                "the mutability of `{source}` isn't one of this function's or impl's, or one that this struct declares: \
+                 a name like `'m` can only be used in the function or impl whose signature names it, an impl's \
+                 associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`"
             ),
+        ),
+        K::WrongMutabilityArgCount { expected, found } => (
+            C::WRONG_MUTABILITY_ARG_COUNT,
+            format!("expected at most {}, found {found}", count(expected, "mutability argument", "mutability arguments")),
+        ),
+        K::MutabilityParamNotAllowed => (
+            C::MUTABILITY_PARAM_NOT_ALLOWED,
+            format!("only a struct, a function or an impl can have a mutability parameter like `{source}`"),
         ),
         K::MutabilityAlone => (
             C::MUTABILITY_ALONE,

@@ -51,13 +51,18 @@ pub struct GenericParamId<'db> {
 pub enum Ty<'db> {
     /// A type still being inferred.
     Var(TyVar),
-    /// A struct or enum with its type arguments, and its mutability. It can
-    /// have fewer arguments than parameters: `Adt(Option, [], Imm)` is the
-    /// type constructor `Option`, which is of kind `Type -> Type`. The
-    /// mutability isn't an argument, so it doesn't change the kind. Only a
-    /// struct has one, like an array: an enum's is always `Imm`, since its
-    /// values can't be changed in place.
-    Adt(AdtId<'db>, Box<[Ty<'db>]>, Box<Ty<'db>>),
+    /// A struct or enum with its type arguments, its mutability arguments,
+    /// and its mutability. It can have fewer type arguments than parameters:
+    /// `Adt(Option, [], [], Imm)` is the type constructor `Option`, which is
+    /// of kind `Type -> Type`. The mutabilities aren't type arguments, so
+    /// they don't change the kind.
+    ///
+    /// Only a struct has a mutability, like an array: an enum's is always
+    /// `Imm`, since its values can't be changed in place. Only a struct has
+    /// mutability arguments too, one for each it declares, like the `'v` of
+    /// `struct VecIter[T, 'v] { data: 'v Vec[T] }` (#243): `VecIter[i32,
+    /// imm]` has `[imm]`.
+    Adt(AdtId<'db>, Box<[Ty<'db>]>, Box<[Ty<'db>]>, Box<Ty<'db>>),
     /// A type parameter or variable applied to arguments, like `F[A]`. The
     /// head is never a struct or enum, nor another `App`: [`Ty::app`] makes
     /// those an `Adt` or one `App`, so that each type has one form.
@@ -131,20 +136,25 @@ impl<'db> Ty<'db> {
         Ty::Array(Box::new(mutability), Box::new(element))
     }
 
-    /// A struct or enum applied to `args`. `mutability` is a struct's; an
-    /// enum's is always `Imm`.
-    pub fn adt(id: AdtId<'db>, args: impl Into<Box<[Ty<'db>]>>, mutability: Ty<'db>) -> Self {
-        let mutability = match id {
-            AdtId::Struct(_) => mutability,
-            AdtId::Enum(_) => Ty::Mutability(Mutability::Imm),
+    /// A struct or enum applied to `args`. `mutabilities` and `mutability`
+    /// are a struct's; an enum has none, and its mutability is `Imm`.
+    pub fn adt(
+        id: AdtId<'db>,
+        args: impl Into<Box<[Ty<'db>]>>,
+        mutabilities: impl Into<Box<[Ty<'db>]>>,
+        mutability: Ty<'db>,
+    ) -> Self {
+        let (mutabilities, mutability) = match id {
+            AdtId::Struct(_) => (mutabilities.into(), mutability),
+            AdtId::Enum(_) => (Box::default(), Ty::Mutability(Mutability::Imm)),
         };
-        Ty::Adt(id, args.into(), Box::new(mutability))
+        Ty::Adt(id, args.into(), mutabilities, Box::new(mutability))
     }
 
     /// The mutability of an array or a struct.
     pub fn mutability(&self) -> Option<&Ty<'db>> {
         match self {
-            Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, mutability) => Some(mutability),
+            Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, _, mutability) => Some(mutability),
             _ => None,
         }
     }
@@ -178,7 +188,7 @@ impl<'db> Ty<'db> {
             return head;
         }
         match head {
-            Ty::Adt(id, xs, m) => Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect(), m),
+            Ty::Adt(id, xs, ms, m) => Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect(), ms, m),
             Ty::App(head, xs) => Ty::App(head, xs.into_vec().into_iter().chain(args).collect()),
             // An error applied to anything is still an error.
             Ty::Error => Ty::Error,
@@ -193,8 +203,9 @@ impl<'db> Ty<'db> {
     /// Call `f` on every type directly inside this one.
     pub fn walk_children(&self, mut f: impl FnMut(&Ty<'db>)) {
         match self {
-            Ty::Adt(_, args, mutability) => {
+            Ty::Adt(_, args, mutabilities, mutability) => {
                 args.iter().for_each(&mut f);
+                mutabilities.iter().for_each(&mut f);
                 f(mutability);
             }
             Ty::Tuple(args) => args.iter().for_each(f),
@@ -232,7 +243,9 @@ impl<'db> Ty<'db> {
         }
         let fold_all = |tys: &[Ty<'db>], f: &mut _| tys.iter().map(|t| t.fold(f)).collect();
         match self {
-            Ty::Adt(id, args, mutability) => Ty::Adt(*id, fold_all(args, f), Box::new(mutability.fold(f))),
+            Ty::Adt(id, args, mutabilities, mutability) => {
+                Ty::Adt(*id, fold_all(args, f), fold_all(mutabilities, f), Box::new(mutability.fold(f)))
+            }
             // The head can become a struct or enum, like `F` in `F[A]` when
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
@@ -347,9 +360,10 @@ impl<'db> TyNames<'db> {
                     mutability(db, m, found);
                     collect(db, elem, found);
                 }
-                Ty::Adt(_, args, m) => {
+                Ty::Adt(_, args, ms, m) => {
                     mutability(db, m, found);
                     args.iter().for_each(|t| collect(db, t, found));
+                    ms.iter().for_each(|m| mutability(db, m, found));
                 }
                 Ty::Fn(params, ret, m) => {
                     mutability(db, m, found);
@@ -463,7 +477,7 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 Some(name) => f.write_str(name),
                 None => write!(f, "?{}", var.0),
             },
-            Ty::Adt(id, args, mutability) => {
+            Ty::Adt(id, args, mutabilities, mutability) => {
                 if let AdtId::Struct(_) = id {
                     self.write_mutability(f, mutability)?;
                 }
@@ -472,9 +486,20 @@ impl fmt::Display for DisplayTy<'_, '_> {
                     AdtId::Enum(id) => id.item(db).name.as_ref(),
                 };
                 write!(f, "{}", name.map_or("?", |n| n.as_str()))?;
-                if !args.is_empty() {
+                // Like before a type, a mutability argument that's unknown or
+                // generic and used once isn't shown, unless one after it is,
+                // where it's `'_`.
+                let mutabilities: Vec<Option<String>> = mutabilities.iter().map(|m| self.shown_mutability(m)).collect();
+                let shown = mutabilities.iter().rposition(Option::is_some).map_or(0, |i| i + 1);
+                if !args.is_empty() || shown > 0 {
                     f.write_str("[")?;
                     list(f, args)?;
+                    for (i, m) in mutabilities[..shown].iter().enumerate() {
+                        if i > 0 || !args.is_empty() {
+                            f.write_str(", ")?;
+                        }
+                        f.write_str(m.as_deref().unwrap_or("'_"))?;
+                    }
                     f.write_str("]")?;
                 }
                 Ok(())
@@ -546,17 +571,27 @@ impl DisplayTy<'_, '_> {
     /// `mut ` or `imm ` before an array or struct, a name like `'m ` for one
     /// that's named or shared, or nothing for one that's unknown or generic.
     fn write_mutability(&self, f: &mut fmt::Formatter<'_>, mutability: &Ty<'_>) -> fmt::Result {
-        let shared = |unknown| self.names.and_then(|n| n.mutability(unknown));
+        match self.shown_mutability(mutability) {
+            Some(m) => write!(f, "{m} "),
+            None => Ok(()),
+        }
+    }
+
+    /// How a mutability is shown: `mut`, `imm`, or a name like `'m` for one
+    /// that's named or shared. `None` for one that's unknown or generic and
+    /// used once, which isn't shown.
+    fn shown_mutability(&self, mutability: &Ty<'_>) -> Option<String> {
+        let shared = |unknown| self.names.and_then(|n| n.mutability(unknown)).map(str::to_string);
         match mutability {
-            Ty::Mutability(Mutability::Mut) => f.write_str("mut "),
-            Ty::Mutability(Mutability::Imm) => f.write_str("imm "),
+            Ty::Mutability(Mutability::Mut) => Some("mut".into()),
+            Ty::Mutability(Mutability::Imm) => Some("imm".into()),
             Ty::Param(p) => match mutability_name(self.db, *p) {
-                Some(name) => write!(f, "'{name} "),
-                None => shared(Unknown::Param(*p)).map_or(Ok(()), |n| write!(f, "{n} ")),
+                Some(name) => Some(format!("'{name}")),
+                None => shared(Unknown::Param(*p)),
             },
-            Ty::Var(v) => shared(Unknown::Var(*v)).map_or(Ok(()), |n| write!(f, "{n} ")),
-            Ty::Bound(i) => shared(Unknown::Bound(*i)).map_or(Ok(()), |n| write!(f, "{n} ")),
-            _ => Ok(()),
+            Ty::Var(v) => shared(Unknown::Var(*v)),
+            Ty::Bound(i) => shared(Unknown::Bound(*i)),
+            _ => None,
         }
     }
 }

@@ -1,0 +1,236 @@
+================================================================================
+A struct can take a mutability for a field (#243)
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+fn start(xs: 'v [i32]) -> mut Iter['v] = mut Iter { data: xs, index: 0 };
+let a = start([1, 2]);
+let b = start(mut [1, 2]);
+a.index = 1;
+b.data[0] = 5;
+
+--------------------------------------------------------------------------------
+start: fn('v [i32]) -> mut Iter['v]
+let a: mut Iter[imm]
+let b: mut Iter[mut]
+a.index = 1: ()
+b.data[0] = 5: ()
+
+================================================================================
+A field with the struct's mutability can't be changed in a mut struct that has an imm one
+:error
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+let a = mut Iter { data: [1, 2], index: 0 };
+a.data[0] = 5;
+
+--------------------------------------------------------------------------------
+let a: mut Iter[imm]
+a.data[0] = 5: ()
+--------------------------------------------------------------------------------
+error at `a.data`: can't change imm [i32]
+
+================================================================================
+Reading a field gives its own mutability
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+fn get(it: Iter['v]) -> 'v [i32] = it.data;
+fn index(it: Iter) -> i32 = it.index;
+
+--------------------------------------------------------------------------------
+get: fn(Iter['v]) -> 'v [i32]
+index: fn(Iter) -> i32
+
+================================================================================
+Type and mutability arguments
+================================================================================
+struct Iter[T, 'v] { data: 'v [T], index: i32 }
+fn first(it: Iter[i32, imm]) -> i32 = it.data[0];
+fn poke(it: Iter[i32, mut]) { it.data[0] = 1; }
+let a = first(Iter { data: [1], index: 0 });
+poke(mut Iter { data: mut [1], index: 0 });
+
+--------------------------------------------------------------------------------
+first: fn(Iter[i32, imm]) -> i32
+poke: fn(Iter[i32, mut]) -> ()
+let a: i32
+poke(mut Iter { data: mut [1], index: 0 }): ()
+
+================================================================================
+An inferred function
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+fn start(xs) = mut Iter { data: xs, index: 0 };
+fn frozen(xs) = Iter { data: xs, index: 0 };
+
+--------------------------------------------------------------------------------
+start: fn('m [i32]) -> mut Iter['m]
+frozen: fn(imm [i32]) -> imm Iter[imm]
+
+================================================================================
+An imm struct can't hold a mutability that may be mut
+:error
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+fn start(xs: 'v [i32]) -> imm Iter['v] = Iter { data: xs, index: 0 };
+
+--------------------------------------------------------------------------------
+start: fn('v [i32]) -> imm Iter['v]
+--------------------------------------------------------------------------------
+error at `Iter { data: xs, index: 0 }`: 'v isn't at most imm
+
+================================================================================
+Unless the function assumes it's imm
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+fn start(xs: 'v [i32]) -> imm Iter['v] where 'v: imm = Iter { data: xs, index: 0 };
+start([1]);
+
+--------------------------------------------------------------------------------
+start: 'v: imm => fn('v [i32]) -> imm Iter['v]
+start([1]): imm Iter[imm]
+
+================================================================================
+An imm struct can't hold a mut one through a mutability argument
+:error
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+let a = Iter { data: mut [1], index: 0 };
+
+--------------------------------------------------------------------------------
+let a: imm Iter[mut]
+--------------------------------------------------------------------------------
+error at `Iter { data: mut [1], index: 0 }`: imm Iter[mut] holds Mut
+
+================================================================================
+A struct can bound what it takes
+:error
+================================================================================
+struct Frozen['v: imm] { data: 'v [i32] }
+let a = mut Frozen { data: [1] };
+let b = mut Frozen { data: mut [1] };
+
+--------------------------------------------------------------------------------
+let a: mut Frozen[imm]
+let b: mut Frozen[mut]
+--------------------------------------------------------------------------------
+error at `mut Frozen { data: mut [1] }`: mut isn't at most imm
+
+================================================================================
+Without a mutability argument, a field's struct has its outer struct's
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+struct Outer { it: Iter }
+fn data(o: Outer) -> [i32] = o.it.data;
+let o = mut Outer { it: mut Iter { data: mut [1], index: 0 } };
+o.it.data[0] = 2;
+
+--------------------------------------------------------------------------------
+data: fn('m Outer) -> 'm [i32]
+let o: mut Outer
+o.it.data[0] = 2: ()
+
+================================================================================
+A struct can pass its mutability on
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+struct Outer['w] { it: Iter['w] }
+fn data(o: Outer['w]) -> 'w [i32] = o.it.data;
+
+--------------------------------------------------------------------------------
+data: fn(Outer['w]) -> 'w [i32]
+
+================================================================================
+A field can't be given mut
+:error
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+struct Outer { it: Iter[mut] }
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+error at `Iter[mut]`: mut field
+
+================================================================================
+A field can only use the names its struct declares
+:error
+================================================================================
+struct Iter { data: 'v [i32] }
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+error at `'v [i32]`: unknown mutability
+
+================================================================================
+Too many mutability arguments
+:error
+================================================================================
+struct Iter['v] { data: 'v [i32] }
+struct Point { x: i32 }
+fn f(a: Iter[imm, imm], b: Point[imm]) {}
+
+--------------------------------------------------------------------------------
+f: fn(Iter[imm], Point) -> ()
+--------------------------------------------------------------------------------
+error at `Iter[imm, imm]`: expected at most 1 mutability arguments, found 2
+error at `Point[imm]`: expected at most 0 mutability arguments, found 1
+
+================================================================================
+Only structs, functions and impls take mutability parameters
+:error
+================================================================================
+enum Either['v] { Left('v [i32]), Right }
+
+--------------------------------------------------------------------------------
+
+--------------------------------------------------------------------------------
+error at `'v [i32]`: unknown mutability
+
+================================================================================
+Updating a struct keeps its mutability arguments
+================================================================================
+struct Iter['v] { data: 'v [i32], index: i32 }
+fn advance(it: mut Iter['v]) -> mut Iter['v] = mut Iter { index: it.index + 1, ..it };
+--------------------------------------------------------------------------------
+advance: fn(mut Iter['v]) -> mut Iter['v]
+
+================================================================================
+A tuple struct's mutability argument is decided by what it's given
+================================================================================
+struct Wrap['v]('v [i32]);
+fn wrap(xs: 'v [i32]) -> imm Wrap['v] where 'v: imm = Wrap(xs);
+let a = Wrap([1]);
+--------------------------------------------------------------------------------
+wrap: 'v: imm => fn('v [i32]) -> imm Wrap['v]
+let a: imm Wrap[imm]
+
+================================================================================
+A mut iterator over an array of either mutability
+================================================================================
+enum Option[T] { Some(T), None }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+class Iterable[C] { type Iter: Iterator; fn iter(c: C) -> Iter; }
+struct ArrayIter[T, 'v] { data: 'v [T], index: i32 }
+impl[T] Iterator[mut ArrayIter[T]] {
+  type Item = T;
+  fn next(it) {
+    it.index += 1;
+    Option.Some(it.data[it.index - 1])
+  }
+}
+impl[T] Iterable['m [T]] {
+  type Iter = mut ArrayIter[T, 'm];
+  fn iter(data) = mut ArrayIter { data, index: 0 };
+}
+let a = iter([1, 2]);
+let b = iter(mut [1, 2]);
+next(a);
+b.data[0] = 3;
+--------------------------------------------------------------------------------
+Iterator[mut ArrayIter[T]].next: forall T. fn(mut ArrayIter[T]) -> Option[T]
+Iterable['m [T]].iter: forall T. fn('m [T]) -> mut ArrayIter[T, 'm]
+let a: mut ArrayIter[i32, imm]
+let b: mut ArrayIter[i32, mut]
+next(a): Option[i32]
+b.data[0] = 3: ()

@@ -399,15 +399,20 @@ impl<'db> Solver<'db> {
                     sub(self, Held::Type(*elem), &m);
                     true
                 }
-                Ty::Adt(AdtId::Struct(_), args, m) => {
+                Ty::Adt(AdtId::Struct(_), args, ms, m) => {
                     sub(self, Held::Mutability(*m.clone()), &bound);
                     for arg in args {
                         sub(self, Held::Type(arg), &m);
                     }
+                    // Like the `'v` of `VecIter[T, 'v]`, which its fields can
+                    // have.
+                    for n in ms {
+                        sub(self, Held::Mutability(n), &m);
+                    }
                     true
                 }
                 // An enum or a tuple is a value, which holds its parts.
-                Ty::Adt(AdtId::Enum(_), args, _) | Ty::Tuple(args) | Ty::App(_, args) => {
+                Ty::Adt(AdtId::Enum(_), args, _, _) | Ty::Tuple(args) | Ty::App(_, args) => {
                     for arg in args {
                         sub(self, Held::Type(arg), &bound);
                     }
@@ -430,7 +435,13 @@ impl<'db> Solver<'db> {
                     self.equal(&bound, &Ty::Mutability(Mutability::Mut), origin);
                     true
                 }
+                // Only `imm` is at most `imm`, unless the function assumes a
+                // mutability is, like the `'v` of `where 'v: imm`: then `m`
+                // could be that one, and is decided later.
                 (m @ Ty::Var(_), Ty::Mutability(Mutability::Imm)) => {
+                    if self.at_most_assumptions.iter().any(|a| matches!(a.held, Held::Mutability(_))) {
+                        return false;
+                    }
                     self.equal(&m, &Ty::Mutability(Mutability::Imm), origin);
                     true
                 }
@@ -657,12 +668,12 @@ impl<'db> Solver<'db> {
                 self.unifier.set_error(&constraint.field);
                 return true;
             }
-            Ty::Adt(AdtId::Struct(s), args, mutability) => {
+            Ty::Adt(AdtId::Struct(s), args, mutabilities, mutability) => {
                 if constraint.assign {
                     self.require_mut(&ty, mutability, origin);
                 }
                 let fields = field_types(self.db, VariantDef::Struct(*s));
-                let args = struct_args(args, mutability);
+                let args = struct_args(args, mutabilities, mutability);
                 fields.field(&constraint.name).map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))
             }
             Ty::Tuple(tys) => constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned()),
@@ -939,8 +950,8 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
             Ty::App(..) | Ty::Adt(..) => match_app(pattern, ty, subst).at_most_maybe(),
             _ => Match::No,
         },
-        (Ty::Adt(a, xs, m), Ty::Adt(b, ys, n)) if a == b && xs.len() == ys.len() => {
-            match_all(xs, ys, subst).and(|| match_ty(m, n, subst))
+        (Ty::Adt(a, xs, ms, m), Ty::Adt(b, ys, ns, n)) if a == b && xs.len() == ys.len() => {
+            match_all(xs, ys, subst).and(|| match_all(ms, ns, subst)).and(|| match_ty(m, n, subst))
         }
         (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
@@ -959,7 +970,7 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
 fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
     let split = |t: &Ty<'db>| -> (Ty<'db>, Vec<Ty<'db>>) {
         match t {
-            Ty::Adt(id, args, m) => (Ty::Adt(*id, Box::new([]), m.clone()), args.to_vec()),
+            Ty::Adt(id, args, ms, m) => (Ty::Adt(*id, Box::new([]), ms.clone(), m.clone()), args.to_vec()),
             Ty::App(head, args) => ((**head).clone(), args.to_vec()),
             t => (t.clone(), Vec::new()),
         }
