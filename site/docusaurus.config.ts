@@ -89,7 +89,7 @@ const config: Config = {
       title: 'Bolt',
       logo: {
         alt: 'The Bolt Programming Language Logo',
-        src: 'img/logo.svg',
+        src: 'img/logo.png',
       },
       items: [
         {
