@@ -151,7 +151,8 @@
   position: relative;
   flex: 1;
   min-width: 0;
-  min-height: 0;
+  /* Room for a few lines, whatever the problems below take. */
+  min-height: 8em;
 }
 
 .bolt-playground .bp-editor pre,
@@ -231,7 +232,10 @@
 
 /* The list of diagnostics, under the editor. */
 .bolt-playground .bp-problems {
-  max-height: 30%;
+  /* A fixed cap, since a percentage only works when the playground has a
+     height, and a page may only give it a minimum one, like the site. */
+  max-height: 10em;
+  flex-shrink: 0;
   overflow: auto;
   border-top: 1px solid var(--border);
   background: var(--header);
