@@ -42,7 +42,7 @@ Assigning to a variable that isn't `mut` is an error:
 
 `mut` on a variable only means it can be assigned again. Whether an
 [array](#arrays) or a [struct](./data-types.mdx) can be changed is up to
-the array or struct itself.
+the array or struct itself: see [Mutability](./mutability.mdx).
 
 You can declare a new variable with the same name as an old one. The new one
 *shadows* the old one from then on:
@@ -178,9 +178,7 @@ let zeros = [0; 3];
 ```
 
 `[value; count]` makes an array that holds `value` `count` times.
-`value` is evaluated once, so `mut [mut [0, 0]; 2]` holds the same row
-twice. Indexing past
-the end is an error at run time:
+Indexing past the end is an error at run time:
 
 ```bolt
 [1, 2, 3][5];
@@ -190,91 +188,8 @@ the end is an error at run time:
 [E0301] Error: index 5 is out of bounds for length 3
 ```
 
-An array can't be changed, unless it's made with `mut`:
-
-```bolt
-let scores = mut [0, 0, 0];
-scores[1] = 10;
-scores;
-```
-
-```text
-[0, 10, 0]
-```
-
-Changing an element of `primes` from above is an error:
-
-```text
-[E0221] Error: cannot change an element of `primes`, which is `imm [i32]`; only a `mut` array can be changed
-```
-
-Arrays are *shared*: `let b = a` makes another name for the same array,
-not a copy, so a change through one name shows through the other. A
-function that's given an array can change it the same way:
-
-```bolt
-fn fill(xs: mut [i32], x: i32) {
-  xs[0] = x;
-  xs[1] = x;
-}
-
-let a = mut [0, 0, 0];
-let b = a;
-fill(b, 7);
-a;
-```
-
-```text
-[7, 7, 0]
-```
-
-`let mut` has nothing to do with this: it only means the variable can be
-given another value later.
-
-The type of an array says which kind it is: `primes` is `imm [i32]`, and
-`scores` is `mut [i32]`. A function that takes `[i32]` takes both, and
-can't change them; one that changes its argument takes `mut [i32]`. The
-[internals](../internals/type-checking/mutability.mdx) explain how this
-works.
-
-A function that can't change an array doesn't make it unchanging, though.
-If the array is `mut`, something else can still change it while the
-function runs, through another name for it:
-
-```bolt
-fn total(xs: [i32], f: fn()) -> i32 {
-  let before = xs[0];
-  f();
-  before + xs[0]
-}
-
-let xs = mut [1];
-total(xs, || { xs[0] = 100; });
-```
-
-```text
-101
-```
-
-`total` can't change `xs`, but the function it's given can. Only an `imm`
-array is sure never to change: a function that counts on that takes
-`imm [i32]`.
-
-To get a copy instead, use `to_mut`, for one you can change, or `to_imm`,
-for one that never changes, even when the original does:
-
-```bolt
-let primes = [2, 3, 5];
-let mine = to_mut(primes);
-mine[0] = 1;
-let snapshot = to_imm(mine);
-mine[1] = 4;
-(primes, mine, snapshot);
-```
-
-```text
-([2, 3, 5], [1, 4, 5], [1, 3, 5])
-```
+An array can't be changed, unless it's made with `mut`, like
+`mut [0, 0, 0]`. [Mutability](./mutability.mdx) shows how that works.
 
 ## Comments
 

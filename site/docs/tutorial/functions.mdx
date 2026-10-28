@@ -237,23 +237,8 @@ count;
 3
 ```
 
-A closure that can change what it uses, like `tick`, is a `mut fn`. Like a
-`mut` array, it can only be held by something that's `mut` too, since what
-an `imm` value holds never changes:
-
-```bolt
-struct Counter { tick: fn() }
-
-let mut count = 0;
-let c = mut Counter { tick: || { count += 1; } };   // without `mut`, an error
-(c.tick)();
-(c.tick)();
-count;
-```
-
-```text
-2
-```
+A closure that can change what it uses, like `tick`, is a `mut fn`: see
+[Mutability](./mutability.mdx#closures).
 
 Closures make functions that build functions easy:
 

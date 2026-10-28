@@ -1,0 +1,205 @@
+---
+sidebar_position: 9
+title: Mutability
+description: Arrays, structs and closures that can be changed, and values that never change.
+---
+
+# Mutability
+
+`mut` on a variable only means it can be assigned again, as in
+[Values and variables](./basics.mdx#variables). Whether an array, a
+struct or a closure can be changed is something else: it's up to the
+value itself, and it's part of its type. This page shows how.
+
+## Arrays
+
+An array can't be changed, unless it's made with `mut`:
+
+```bolt
+let scores = mut [0, 0, 0];
+scores[1] = 10;
+scores;
+```
+
+```text
+[0, 10, 0]
+```
+
+Changing an element of an array made without `mut` is an error:
+
+```bolt
+let primes = [2, 3, 5, 7];
+primes[0] = 1;
+```
+
+```text
+[E0221] Error: cannot change an element of `primes`, which is `imm [i32]`; only a `mut` array can be changed
+```
+
+The type of an array says which kind it is: `primes` is `imm [i32]`, and
+`scores` is `mut [i32]`. A function that takes `[i32]` takes both, and
+can't change them; one that changes its argument takes `mut [i32]`.
+
+## Arrays are shared
+
+Arrays are *shared*: `let b = a` makes another name for the same array,
+not a copy, so a change through one name shows through the other. A
+function that's given an array can change it the same way:
+
+```bolt
+fn fill(xs: mut [i32], x: i32) {
+  xs[0] = x;
+  xs[1] = x;
+}
+
+let a = mut [0, 0, 0];
+let b = a;
+fill(b, 7);
+a;
+```
+
+```text
+[7, 7, 0]
+```
+
+`let mut` has nothing to do with this: it only means the variable can be
+given another value later.
+
+`[value; count]` evaluates `value` once, so `mut [mut [0, 0]; 2]` holds
+the same row twice.
+
+A function that can't change an array doesn't make it unchanging, though.
+If the array is `mut`, something else can still change it while the
+function runs, through another name for it:
+
+```bolt
+fn total(xs: [i32], f: fn()) -> i32 {
+  let before = xs[0];
+  f();
+  before + xs[0]
+}
+
+let xs = mut [1];
+total(xs, || { xs[0] = 100; });
+```
+
+```text
+101
+```
+
+`total` can't change `xs`, but the function it's given can. Only an `imm`
+array is sure never to change: a function that counts on that takes
+`imm [i32]`.
+
+## Structs
+
+A [struct](./data-types.mdx#structs) can't be changed either, unless it's
+made with `mut`. Then change a field by assigning to it:
+
+```bolt
+struct Point { x: i32, y: i32 }
+
+let p = mut Point { x: 0, y: 0 };
+p.x = 5;
+p;
+```
+
+```text
+Point { x: 5, y: 0 }
+```
+
+Like for arrays, the type says which kind a struct is: `p` is `mut Point`,
+and `Point { x: 0, y: 0 }` alone is `imm Point`. A function that takes
+`Point` takes both, and can't change them. What an `imm` struct holds
+can't be changed either: its fields are `imm` too.
+
+Structs are shared like arrays: `let q = p` makes another name for the
+same struct, and a function that takes `mut Point` can change the one it's
+given:
+
+```bolt
+struct Point { x: i32, y: i32 }
+
+fn shift(p: mut Point) { p.x += 1; }
+
+let p = mut Point { x: 0, y: 0 };
+let q = p;
+shift(q);
+p;
+```
+
+```text
+Point { x: 1, y: 0 }
+```
+
+## Closures
+
+A [closure](./functions.mdx#closures) that can change what it uses is a
+`mut fn`. Like a `mut` array, it can only be held by something that's
+`mut` too, since what an `imm` value holds never changes:
+
+```bolt
+struct Counter { tick: fn() }
+
+let mut count = 0;
+let c = mut Counter { tick: || { count += 1; } };   // without `mut`, an error
+(c.tick)();
+(c.tick)();
+count;
+```
+
+```text
+2
+```
+
+## Generic functions
+
+A [generic function](./types.mdx#generic-functions) must work for every
+type, and that includes types that can change, like `mut [i32]`. So a
+generic function can't put a `T` in something that never changes, like an
+`imm` array, unless it says that `T` never changes either, with the bound
+`T: imm`:
+
+```bolt
+fn twice[T: imm](x: T) -> imm [T] = [x, x];
+
+twice([1, 2]);
+```
+
+```text
+[[1, 2], [1, 2]]
+```
+
+Then calling it with something that can change is an error:
+
+```bolt
+fn twice[T: imm](x: T) -> imm [T] = [x, x];
+
+twice(mut [1, 2]);
+```
+
+```text
+[E0230] Error: expected a type that's at most `imm`, found `mut [i32]`
+```
+
+## Copies
+
+To get a copy instead of another name for the same value, use `to_mut`,
+for one you can change, or `to_imm`, for one that never changes, even when
+the original does:
+
+```bolt
+let primes = [2, 3, 5];
+let mine = to_mut(primes);
+mine[0] = 1;
+let snapshot = to_imm(mine);
+mine[1] = 4;
+(primes, mine, snapshot);
+```
+
+```text
+([2, 3, 5], [1, 4, 5], [1, 3, 5])
+```
+
+The [internals](../internals/type-checking/mutability.mdx) explain how
+this works.

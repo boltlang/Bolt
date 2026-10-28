@@ -39,44 +39,9 @@ Point { x, y };
 Point { x: 3, y: 4 }
 ```
 
-A struct can't be changed, unless it's made with `mut`. Then change a
-field by assigning to it:
-
-```bolt
-struct Point { x: i32, y: i32 }
-
-let p = mut Point { x: 0, y: 0 };
-p.x = 5;
-p;
-```
-
-```text
-Point { x: 5, y: 0 }
-```
-
-Like [arrays](./basics.mdx#arrays), the type says which kind a struct is:
-`p` is `mut Point`, and `Point { x: 0, y: 0 }` alone is `imm Point`. A
-function that takes `Point` takes both, and can't change them. What an
-`imm` struct holds can't be changed either: its fields are `imm` too.
-
-Structs are shared like arrays: `let q = p` makes another name for the
-same struct, and a function that takes `mut Point` can change the one it's
-given:
-
-```bolt
-struct Point { x: i32, y: i32 }
-
-fn shift(p: mut Point) { p.x += 1; }
-
-let p = mut Point { x: 0, y: 0 };
-let q = p;
-shift(q);
-p;
-```
-
-```text
-Point { x: 1, y: 0 }
-```
+A struct can't be changed, unless it's made with `mut`, like
+`mut Point { x: 0, y: 0 }`. [Mutability](./mutability.mdx#structs) shows
+how that works.
 
 `..` makes a new struct from another one, with some fields changed:
 
