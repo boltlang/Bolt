@@ -659,7 +659,10 @@ unification will have to remember the origin of `Imm` and `Mut`.
     it `Mut`.
   - Once a body's types are resolved, `check_deep_immutability` reports
     each type with a `mut` array, struct or function inside an `imm` one,
-    unless an "at most" error already did.
+    unless an "at most" error already did. The types that no body looks
+    at are reported where they're written, the same way: those of a
+    function without a body, like a class method, of a type alias, and of
+    an impl's instance (`written_type` in `boltlang-hir`).
 - **Defaulting** (`solve.rs`): a mutability left over when a body is
   checked, and not generalized, becomes `Imm`. That happens after the
   errors are resolved, so that an undecided mutability is shown as `[T]` in

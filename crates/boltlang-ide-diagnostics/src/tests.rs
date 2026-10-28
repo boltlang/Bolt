@@ -703,6 +703,20 @@ let h = Handler { f: |xs: mut [i32]| {} };
 }
 
 #[test]
+fn written_types_that_can_have_no_values() {
+    check(
+        r#"
+struct VecIter[T, 'v] { data: 'v [T], index: i32 }
+class C[X] { fn method(it: mut VecIter[mut [i32], imm]) -> i32; }
+                         //^^^^^^^^^^^^^^^^^^^^^^^^^^^ error: a `mut VecIter[mut [i32], imm]` can't hold a `mut [i32]` in a field that's `imm`: what an `imm` value holds can't be changed either
+type Alias = VecIter[mut [i32], imm];
+           //^^^^^^^^^^^^^^^^^^^^^^^ error: a `VecIter[mut [i32], imm]` can't hold a `mut [i32]` in a field that's `imm`: what an `imm` value holds can't be changed either
+type Fine = VecIter[mut [i32], mut];
+"#,
+    );
+}
+
+#[test]
 fn unused_impl_params() {
     check(
         r#"

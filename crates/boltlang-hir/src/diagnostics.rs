@@ -27,6 +27,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     InferenceDiagnostic, InferenceResult, Ty,
+    infer::mut_inside_imm,
     builtin::{Builtin, is_builtin_block},
     kind::Kind,
     inhabited::{field_without_values, has_values},
@@ -376,9 +377,14 @@ impl<'db> Collector<'db> {
                 ModItem::Impl(idx) => {
                     let id = ImplId::new(db, file, idx);
                     self.fallback = self.item_range(id.item(db).ast_id);
-                    let (_, map) = impl_signature_with_source_map(db, id);
+                    let (sig, map) = impl_signature_with_source_map(db, id);
                     self.lower(map, &impl_header(db, id).diagnostics);
                     self.lower(map, &generic_predicates(db, GenericDefId::Impl(id)).diagnostics);
+                    if let Some(instance) = &impl_header(db, id).class {
+                        for arg in instance.args.iter() {
+                            self.written_type(map, Some(sig.class), arg);
+                        }
+                    }
                     self.unused_impl_params(id, map);
                     self.impl_items(id, map);
                     self.assoc_items(ItemContainerId::Impl(id), &id.item(db).items);
@@ -534,11 +540,23 @@ impl<'db> Collector<'db> {
     fn function(&mut self, id: FunctionId<'db>) {
         let db = self.db;
         self.fallback = self.item_range(id.item(db).ast_id);
-        let (_, map) = function_signature_with_source_map(db, id);
+        let (sig, map) = function_signature_with_source_map(db, id);
         self.lower(map, &fn_sig(db, id).diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::Function(id)).diagnostics);
         if id.item(db).has_body {
             self.body(DefWithBody::Function(id));
+        } else {
+            // Without a body, like a class method, nothing else looks at
+            // the types it's given.
+            let lowered = fn_sig(db, id);
+            for (param, ty) in sig.params.iter().zip(lowered.params.iter()) {
+                if let Some(ty) = ty {
+                    self.written_type(map, param.type_ref, ty);
+                }
+            }
+            if let Some(ret) = &lowered.ret {
+                self.written_type(map, sig.ret_type, ret);
+            }
         }
     }
 
@@ -615,8 +633,11 @@ impl<'db> Collector<'db> {
     fn type_alias(&mut self, id: TypeAliasId<'db>) {
         let db = self.db;
         self.fallback = self.item_range(id.item(db).ast_id);
-        let (_, map) = type_alias_signature_with_source_map(db, id);
+        let (sig, map) = type_alias_signature_with_source_map(db, id);
         let ty = type_alias_ty(db, id);
+        if let Some(aliased) = &ty.ty {
+            self.written_type(map, sig.type_ref, aliased);
+        }
         // The alias is where its cycle is found, so it has no diagnostics of
         // its own about it; its uses do.
         if ty.recursive {
@@ -625,6 +646,17 @@ impl<'db> Collector<'db> {
         self.lower(map, &ty.diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::TypeAlias(id)).diagnostics);
         self.lower(map, &assoc_type_bounds(db, id).diagnostics);
+    }
+
+    /// Report a type written at `type_ref` that can't have values, like
+    /// `mut VecIter[mut [i32], imm]`, whose `data` would be an `imm` array
+    /// of `mut` ones. A body's types are checked with the body; this is for
+    /// the types no body looks at, like those of a class method.
+    fn written_type(&mut self, map: &ExpressionStoreSourceMap, type_ref: Option<TypeRefId>, ty: &Ty<'db>) {
+        if let Some((ty, inner)) = mut_inside_imm(self.db, ty) {
+            let range = type_ref.and_then(|t| map.type_syntax(t)).map(ptr_range);
+            self.push(range, DiagnosticKind::MutInsideImm { ty, inner });
+        }
     }
 
     /// Report problems with type references, from the store `map` is for.
