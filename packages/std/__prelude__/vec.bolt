@@ -5,7 +5,7 @@ import "./mutability" (ToMut, ToImm);
 import "./option" (Option, None, Some);
 import "./io" (panic);
 import "./eq" (Eq);
-import "./classes" (Index, IndexMut, Iterable, FnIter);
+import "./classes" (Index, IndexMut, Iterable, Iterator);
 
 /// An array that grows: `push` adds an element at the end, and makes room
 /// when there's none left.
@@ -174,21 +174,34 @@ impl[T] IndexMut[mut Vec[T]] {
   fn set_index(v, i, x) = set(v, i, x);
 }
 
-/// `for x in v`: the elements, in order. Elements pushed while the loop
-/// runs are included.
-impl[T] Iterable[Vec[T]] {
-  type Iter = mut FnIter[T];
-  fn iter(v) {
-    let mut next = 0;
-    mut FnIter {
-      next: || if next < v.len {
-        next += 1;
-        Some(v.items[next - 1])
-      } else {
-        None
-      },
+pub struct VecIter[T, 'v] {
+  data: 'v Vec[T],
+  index: i32,
+}
+
+impl[T] Iterator[mut VecIter[T]] {
+
+  type Item = T;
+
+  fn next(self) {
+    if self.index < self.data.len {
+      self.index += 1;
+      Some(self.data.items[self.index - 1])
+    } else {
+      None
     }
   }
+
+}
+
+/// `for x in v`: the elements, in order. Elements pushed while the loop
+/// runs are included.
+impl[T, 'v] Iterable['v Vec[T]] {
+
+  type Iter = mut VecIter[T, 'v];
+
+  fn iter(data) = mut VecIter { data, index: 0 };
+
 }
 
 /// A copy of a `Vec` that can be changed, with as much room as the
