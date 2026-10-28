@@ -109,7 +109,7 @@ mutability: `next(a)` is a `mut Node` for a `mut Node` `a`, and an
 That makes the signature incomplete: such a function is
 [inferred](../generalization.mdx), not checked on its own, so editing its
 body checks its callers again. Writing `mut`, `imm` or a
-[name](./names.mdx) in the return type makes it complete:
+[name](./index.mdx#named-mutabilities) in the return type makes it complete:
 `fn next(n: 'm Node) -> 'm Node` says what the body of `next` would
 decide, and is checked on its own. A function without a body, like a class
 method, has no body to decide, so its return type is `imm` where it

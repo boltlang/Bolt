@@ -1,7 +1,7 @@
 ---
 sidebar_position: 1
 title: Mutability
-description: Values inside other values, generic code and closures, and what imm promises.
+description: Values inside other values, generic code, closures and named mutabilities, and what imm promises.
 ---
 
 # Mutability
@@ -274,6 +274,125 @@ fn reader(xs: [i32]) = || xs[0];
 
 ```text
 [E0230] Error: expected a mutability that's at most `imm`, found `mut`
+```
+
+## Naming a mutability
+
+A function that takes `[i32]` takes both kinds of array. But sometimes
+the kinds of two arrays have to match, or a function gives back the kind
+it was given. Then name the mutability, with a name that starts with `'`,
+written where `mut` or `imm` would go:
+
+```bolt
+fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32] =
+  if array_len(a) >= array_len(b) { a } else { b };
+
+let xs = mut [1, 2, 3];
+let ys = mut [4];
+let l = longer(xs, ys);
+l[0] = 9;
+xs;
+```
+
+```text
+[9, 2, 3]
+```
+
+`'m` is the same everywhere in the signature, so `longer` takes two arrays
+of the same kind and gives back one of that kind. Given two `mut` arrays,
+it gives a `mut` one, which you can change. Arrays of different kinds are
+an error:
+
+```bolt
+fn longer(a: 'm [i32], b: 'm [i32]) -> 'm [i32] =
+  if array_len(a) >= array_len(b) { a } else { b };
+
+longer(mut [1, 2], [3]);
+```
+
+```text
+[E0201] Error: expected `mut [i32]`, found `imm [i32]`
+```
+
+Different names are independent of each other:
+
+```bolt
+fn pair(a: 'm [i32], b: 'n [i32]) -> ('m [i32], 'n [i32]) = (a, b);
+
+let (a, b) = pair(mut [1], [2]);
+a[0] = 5;
+(a, b);
+```
+
+```text
+([5], [2])
+```
+
+The caller decides what a name stands for, so it may be `imm`. That's why
+a function can't change what has a name:
+
+```bolt
+fn reset(xs: 'm [i32]) { xs[0] = 0; }
+```
+
+```text
+[E0221] Error: cannot change an element of `xs`, which is `'m [i32]`; only a `mut` array can be changed
+```
+
+For the same reason, a function can't give back something of its own
+making with a name: `fn make() -> 'm [i32] = [1]` is an error, since `[1]`
+is `imm`, not whatever the caller asks for.
+
+Bolt uses names too when it shows a type. Writing `[i32]` twice in
+`fn same(xs: [i32]) -> [i32] = xs` doesn't link the two, but the body
+does, so Bolt shows `same` as `fn('m [i32]) -> 'm [i32]`. A mutability
+that appears only once isn't named.
+
+### Names in structs
+
+A struct's fields follow its own mutability. But a struct can also name a
+mutability for a field, after its type parameters, so that the field
+doesn't follow the struct. Take a cursor that moves over an array: the
+cursor changes, but the array doesn't have to be one that can:
+
+```bolt
+struct Cursor['v] { data: 'v [i32], index: i32 }
+
+fn start(xs: 'v [i32]) -> mut Cursor['v] = mut Cursor { data: xs, index: 0 };
+
+let c = start([10, 20, 30]);
+c.index = 2;
+c.data[c.index];
+```
+
+```text
+30
+```
+
+`c` is a `mut Cursor[imm]`: its `index` can change, and its `data` can't.
+
+```bolt
+struct Cursor['v] { data: 'v [i32], index: i32 }
+
+let c = mut Cursor { data: [10, 20, 30], index: 0 };
+c.data[0] = 1;
+```
+
+```text
+[E0221] Error: cannot change an element of `c.data`, which is `imm [i32]`; only a `mut` array can be changed
+```
+
+The rule from the start of this page still holds: an `imm` cursor can't
+hold an array that changes.
+
+```bolt
+struct Cursor['v] { data: 'v [i32], index: i32 }
+
+Cursor { data: mut [1], index: 0 };
+```
+
+```text
+[E0223] Error: an `imm Cursor[mut]` can't have a `mut` mutability argument: what an `imm` value holds can't be changed either
 ```
 
 ## What this gives you
