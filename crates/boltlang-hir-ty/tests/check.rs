@@ -63,11 +63,11 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
     hir::{Expr, Statement, TypeRefId},
-    ids::{ConstId, EnumId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
+    ids::{ClassId, ConstId, EnumId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     item_tree::{AssocItem, FunctionName, ModItem, item_tree},
     resolver::GenericDefId,
     signatures::{
-        const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
+        class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
         impl_signature_with_source_map, struct_signature_with_source_map, type_alias_signature_with_source_map,
     },
 };
@@ -156,28 +156,38 @@ fn check(input: &str) -> Result<(String, String), String> {
         for item in &tree.top_level {
             match *item {
                 ModItem::Function(idx) => functions.push((String::new(), FunctionId::new(&db, ItemContainerId::File(file), idx))),
-                // The problems with the types of fields and consts.
+                // The problems with the types of fields and consts, and with
+                // the bounds and `where` predicates of each item.
                 ModItem::Struct(idx) => {
                     let id = StructId::new(&db, file, idx);
                     let (_, map) = struct_signature_with_source_map(&db, id);
-                    for lower in &struct_field_types(&db, id).diagnostics {
+                    let predicates = generic_predicates(&db, GenericDefId::Struct(id));
+                    for lower in struct_field_types(&db, id).diagnostics.iter().chain(&predicates.diagnostics) {
                         diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
                     }
                 }
                 ModItem::Enum(idx) => {
                     let id = EnumId::new(&db, file, idx);
                     let (_, map) = enum_signature_with_source_map(&db, id);
-                    for variant in enum_field_types(&db, id) {
-                        for lower in &variant.diagnostics {
-                            diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
-                        }
+                    let predicates = generic_predicates(&db, GenericDefId::Enum(id));
+                    let fields = enum_field_types(&db, id).iter().flat_map(|v| &v.diagnostics);
+                    for lower in fields.chain(&predicates.diagnostics) {
+                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    }
+                }
+                ModItem::Class(idx) => {
+                    let id = ClassId::new(&db, file, idx);
+                    let (_, map) = class_signature_with_source_map(&db, id);
+                    for lower in &generic_predicates(&db, GenericDefId::Class(id)).diagnostics {
+                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
                     }
                 }
                 ModItem::Const(idx) => consts.push(ConstId::new(&db, ItemContainerId::File(file), idx)),
                 ModItem::TypeAlias(idx) => {
                     let id = TypeAliasId::new(&db, ItemContainerId::File(file), idx);
                     let (_, map) = type_alias_signature_with_source_map(&db, id);
-                    for lower in &type_alias_ty(&db, id).diagnostics {
+                    let predicates = generic_predicates(&db, GenericDefId::TypeAlias(id));
+                    for lower in type_alias_ty(&db, id).diagnostics.iter().chain(&predicates.diagnostics) {
                         diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
                     }
                 }
@@ -193,7 +203,8 @@ fn check(input: &str) -> Result<(String, String), String> {
                         None => "impl.".to_string(),
                     };
                     let (_, map) = impl_signature_with_source_map(&db, id);
-                    for lower in &header.diagnostics {
+                    let predicates = generic_predicates(&db, GenericDefId::Impl(id));
+                    for lower in header.diagnostics.iter().chain(&predicates.diagnostics) {
                         diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
                     }
                     for item in &id.item(&db).items {

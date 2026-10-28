@@ -72,3 +72,20 @@ let a: imm Pair[i32, i32]
 let b: imm Pair[i32, Bool]
 --------------------------------------------------------------------------------
 error at `Pair { first: 1, second: True }`: no instance Show[Bool]
+
+================================================================================
+Problems in the bounds of structs, enums, classes and impls are reported (#250)
+:error
+================================================================================
+struct Point { x: i32 }
+struct S[T: Point] { item: T }
+enum E[T: Missing] { A(T) }
+class C[T] where Point[T] { fn c(x: T) -> i32; }
+impl[T: Point] C[S[T]] { fn c(x) = 1; }
+--------------------------------------------------------------------------------
+C[S[T]].c: forall T. fn(S[T]) -> i32
+--------------------------------------------------------------------------------
+error at `Point`: not a class
+error at `Missing`: unresolved type
+error at `Point[T]`: not a class
+error at `Point`: not a class

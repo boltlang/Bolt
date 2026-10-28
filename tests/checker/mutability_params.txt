@@ -186,6 +186,7 @@ enum Either['v] { Left('v [i32]), Right }
 
 --------------------------------------------------------------------------------
 error at `'v [i32]`: unknown mutability
+error at `'v`: can't have a mutability parameter
 
 ================================================================================
 Updating a struct keeps its mutability arguments
