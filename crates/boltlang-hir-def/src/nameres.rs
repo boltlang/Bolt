@@ -525,6 +525,14 @@ pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<
         return Err(ImportPathError::Invalid);
     }
     let path = with_extension(std::path::PathBuf::from(path));
+    // The `std` that comes with the compiler, whatever's in `.bolt/packages`.
+    if package == STD
+        && let Some(root) = Settings::get(db).std_dir(db)
+    {
+        let file = db.files().resolve(db, SystemPath::new(&root.as_std_path().join(&path)));
+        let path = path.to_string_lossy().into_owned();
+        return if file.exists(db) { Ok(file) } else { Err(ImportPathError::NotInPackage { package: STD.to_string(), path }) };
+    }
     for dir in dir.ancestors() {
         let root = dir.join(".bolt").join("packages").join(package);
         if !db.files().resolve(db, SystemPath::new(&root)).is_directory(db) {
@@ -570,12 +578,25 @@ fn canonical(db: &dyn Db, file: File) -> File {
 #[cfg(test)]
 mod tests;
 
+/// The name of the package that comes with the compiler.
+pub const STD: &str = "std";
+
 /// The package `file` is in, as the directory `.bolt/packages/<name>`:
 /// the one in its path, the innermost one if there are several, or else the
 /// one that links to a directory the file is really in. `None` for the files
 /// of the project itself.
 pub fn package_of(db: &dyn Db, file: File) -> Option<SystemPathBuf> {
     let path = file.path(db).as_system_path_buf()?;
+    // The files of the `std` that comes with the compiler, by their path or
+    // their real one.
+    if let Some(root) = Settings::get(db).std_dir(db) {
+        let real = || db.system().canonicalize_path(path).ok();
+        if path.as_std_path().starts_with(root.as_std_path())
+            || real().is_some_and(|real| real.as_std_path().starts_with(root.as_std_path()))
+        {
+            return Some(root.clone());
+        }
+    }
     match package_dir(path.as_std_path()) {
         Some(dir) => Some(SystemPathBuf::from(dir.to_path_buf())),
         None => linked_package(db, path),

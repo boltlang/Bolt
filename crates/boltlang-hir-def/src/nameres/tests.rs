@@ -241,6 +241,31 @@ fn packages_are_in_the_nearest_bolt_packages() {
 }
 
 #[test]
+fn std_comes_with_the_compiler_when_it_does() {
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
+    let io = db.file("/toolchain/std/io.bolt", "pub fn print() {}\n");
+    let prelude = db.file("/toolchain/std/__prelude__/lib.bolt", "");
+    // A project's own `std` isn't used, but its other packages are.
+    db.file("/proj/.bolt/packages/std/io.bolt", "");
+    let json = db.file("/proj/.bolt/packages/json/lib.bolt", "");
+    let main = db.file("/proj/main.bolt", "");
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
+    let resolve = |importer, source| resolve_import_path(&db, importer, source);
+    assert_eq!(resolve(main, "std/io"), Ok(io));
+    assert_eq!(resolve(main, "json"), Ok(json));
+    assert_eq!(
+        resolve(main, "std/missing"),
+        Err(ImportPathError::NotInPackage { package: "std".into(), path: "missing.bolt".into() })
+    );
+    // Its files are the package `std`, which doesn't get its own prelude.
+    assert_eq!(package_of(&db, io), Some(SystemPathBuf::from("/toolchain/std")));
+    assert_eq!(package_of(&db, main), None);
+    assert_eq!(prelude_file(&db, main), &Ok(Some(prelude)));
+    assert_eq!(prelude_file(&db, io), &Ok(None));
+}
+
+#[test]
 fn import_paths_must_be_relative_or_in_a_package() {
     let db = TestDb::new();
     db.file("/proj/.bolt/packages/std/io.bolt", "");
