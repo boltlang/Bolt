@@ -55,8 +55,21 @@ impl[A: Iterator, B: Iterator] Iterator[ZipIter[A, B]] {
 
 }
 
-pub fn zip[A: Iterable, B: Iterable](a: A, b: B) -> ZipIter[A.Iter, B.Iter] {
-  ZipIter { first: iter(a), second: iter(b) }
+pub struct Zipper[A: Iterable, B: Iterable] {
+  first: A,
+  second: B,
+}
+
+impl[A: Iterable, B: Iterable] Iterable[Zipper[A, B]] {
+
+  type Iter = mut ZipIter[A.Iter, B.Iter];
+
+  fn iter(self) = mut ZipIter { first: iter(self.first), second: iter(self.second) };
+
+}
+
+pub fn zip[A: Iterable, B: Iterable](first: A, second: B) -> mut Zipper[A, B] {
+  mut Zipper { first, second }
 }
 
 /// An iterator made from a function that gives the next item each time

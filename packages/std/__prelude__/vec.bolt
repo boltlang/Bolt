@@ -5,7 +5,7 @@ import "./mutability" (ToMut, ToImm);
 import "./option" (Option, None, Some);
 import "./io" (panic);
 import "./eq" (Eq);
-import "./classes" (Index, IndexMut, Iterable, Iterator);
+import "./classes" (Index, IndexMut, Iterable, Iterator, zip);
 
 /// An array that grows: `push` adds an element at the end, and makes room
 /// when there's none left.
@@ -151,11 +151,11 @@ fn grow[T](v: mut Vec[T], needed: i32) {
 
 impl[T] Eq[Vec[T]] where Eq[T] {
   fn eq(a, b) {
-    if a.len() != b.len() {
+    if a.len != b.len {
       return False;
     }
     for (x, y) in zip(a, b) {
-      if !eq(x, y) {
+      if x != y {
         return False;
       }
     }
