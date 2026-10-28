@@ -15,9 +15,18 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
+use boltlang_hir_def::{
+    item_tree::{ModItem, item_tree},
+    nameres::{package_of, prelude_file, resolve_import_path},
+};
+/// The files a file uses, through its prelude and its imports.
+pub use boltlang_hir_def::nameres::files_used_by;
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
 use boltlang_hir_ty::{NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
-use boltlang_syntax::rowan::{TextRange, TextSize};
+use boltlang_syntax::{
+    SyntaxKind, SyntaxNode,
+    rowan::{TextRange, TextSize},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Severity {
@@ -52,6 +61,7 @@ impl DiagnosticCode {
     pub const UNRESOLVED_IMPORT_ENUM: Self = Self("E0109");
     pub const NOT_AN_ENUM: Self = Self("E0110");
     pub const UNRESOLVED_PRELUDE: Self = Self("E0111");
+    pub const BROKEN_DEPENDENCY: Self = Self("E0112");
 
     pub const TYPE_MISMATCH: Self = Self("E0201");
     pub const INFINITE_TYPE: Self = Self("E0202");
@@ -132,6 +142,70 @@ pub struct Label {
     pub file: File,
     pub range: TextRange,
     pub message: String,
+}
+
+/// One error for each file that `file` uses, through its prelude or its
+/// imports, that has errors of its own (#249): what's in it can't be relied
+/// on, so neither can `file`, and running it could fail in ways the checker
+/// should rule out. It's at the import that brings the file in, or at the
+/// start of `file` for one the prelude does, with a label at the file's
+/// first error. The CLI reports these with the diagnostics of `file`; the
+/// language server shows the errors in the files themselves instead.
+pub fn dependency_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
+    let prelude = prelude_file(db, file).as_ref().ok().copied().flatten();
+    let in_prelude = |f: File| prelude.is_some_and(|p| p == f || files_used_by(db, p).contains(&f));
+    let tree = item_tree(db, file);
+    let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
+    // The files `file` imports itself, with where the import is.
+    let imports: Vec<(File, TextRange)> = tree
+        .top_level
+        .iter()
+        .filter_map(|item| match *item {
+            ModItem::Import(idx) => Some(&tree.imports[idx.index()]),
+            _ => None,
+        })
+        .filter_map(|import| {
+            let imported = resolve_import_path(db, file, import.source.as_ref()?).ok()?;
+            let node = import.ast_id.to_node(db, file, &root)?;
+            let source = node.children_with_tokens().find(|t| t.kind() == SyntaxKind::STRING);
+            Some((imported, source.map_or(node.text_range(), |t| t.text_range())))
+        })
+        .collect();
+    let mut out = Vec::new();
+    for &used in files_used_by(db, file) {
+        let errors: Vec<Diagnostic> = diagnostics(db, used).into_iter().filter(|d| d.severity == Severity::Error).collect();
+        let Some(first) = errors.first() else { continue };
+        let name = short_path(db, file, used);
+        let count = count(errors.len(), "error", "errors");
+        let (range, through) = if in_prelude(used) {
+            (TextRange::default(), "through the prelude")
+        } else {
+            let import = imports.iter().find(|(f, _)| *f == used || files_used_by(db, *f).contains(&used));
+            (import.map_or(TextRange::default(), |(_, range)| *range), "through this import")
+        };
+        out.push(Diagnostic {
+            code: DiagnosticCode::BROKEN_DEPENDENCY,
+            severity: Severity::Error,
+            file,
+            range,
+            message: format!("`{name}`, which this file uses {through}, has {count}; fix them first"),
+            labels: vec![Label { file: used, range: first.range, message: format!("the first: {}", first.message) }],
+        });
+    }
+    out
+}
+
+/// The path of `used` as it reads from `file`: from its package, like
+/// `std/__prelude__/vec.bolt`, from the directory of `file`, or in full.
+pub fn short_path(db: &dyn Db, file: File, used: File) -> String {
+    let Some(path) = used.path(db).as_system_path_buf() else { return "?".into() };
+    let path = path.as_std_path();
+    let base = match package_of(db, used) {
+        Some(package) => package.as_std_path().parent().map(|p| p.to_path_buf()),
+        None => file.path(db).as_system_path_buf().and_then(|f| f.as_std_path().parent().map(|p| p.to_path_buf())),
+    };
+    let short = base.as_deref().and_then(|base| path.strip_prefix(base).ok()).unwrap_or(path);
+    short.to_string_lossy().into_owned()
 }
 
 /// The diagnostics of `file`, sorted by where they are.

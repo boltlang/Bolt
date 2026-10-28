@@ -225,6 +225,7 @@ version = "0.1.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-hir",
+ "boltlang-hir-def",
  "boltlang-hir-ty",
  "boltlang-syntax",
 ]

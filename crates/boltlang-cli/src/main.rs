@@ -12,7 +12,9 @@ use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
 use boltlang_codegen::{CodegenError, link, run};
 use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
-use boltlang_ide_diagnostics::{Diagnostic, DiagnosticCode, Severity, diagnostics, syntax_diagnostics};
+use boltlang_ide_diagnostics::{
+    Diagnostic, DiagnosticCode, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
+};
 use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
 use clap::Parser;
 
@@ -120,12 +122,15 @@ impl Exec for CheckCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database()?;
         let mut ok = true;
+        let mut files = Vec::new();
         for path in &self.files {
-            let Some(file) = open(&db, path) else {
-                ok = false;
-                continue;
-            };
-            let found = diagnostics(&db, file);
+            match open(&db, path) {
+                Some(file) => files.push(file),
+                None => ok = false,
+            }
+        }
+        for &file in &files {
+            let found = checked(&db, file, &files);
             report(&db, &found)?;
             ok &= found.iter().all(|d| d.severity != Severity::Error);
         }
@@ -156,7 +161,7 @@ impl Exec for RunCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database()?;
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
-        let found = diagnostics(&db, file);
+        let found = if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
         report(&db, &found)?;
         if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
             return Ok(false);
@@ -208,7 +213,7 @@ impl Exec for BuildCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database()?;
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
-        let found = diagnostics(&db, file);
+        let found = checked(&db, file, &[file]);
         report(&db, &found)?;
         if found.iter().any(|d| d.severity == Severity::Error) {
             return Ok(false);
@@ -225,6 +230,15 @@ impl Exec for BuildCommand {
             }
         }
     }
+}
+
+/// The diagnostics of `file`, and one for each file it uses that has errors
+/// (#249), unless it's one of `reported`, whose errors are shown anyway.
+fn checked(db: &dyn Db, file: File, reported: &[File]) -> Vec<Diagnostic> {
+    let mut found = diagnostics(db, file);
+    let broken = dependency_diagnostics(db, file);
+    found.extend(broken.into_iter().filter(|d| !d.labels.iter().any(|l| reported.contains(&l.file))));
+    found
 }
 
 /// Why `file` couldn't be compiled, as diagnostics.

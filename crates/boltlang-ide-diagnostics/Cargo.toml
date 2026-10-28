@@ -7,5 +7,6 @@ publish.workspace = true
 [dependencies]
 boltlang-base-db.workspace = true
 boltlang-hir.workspace = true
+boltlang-hir-def.workspace = true
 boltlang-hir-ty.workspace = true
 boltlang-syntax.workspace = true

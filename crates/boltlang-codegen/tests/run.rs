@@ -23,7 +23,7 @@
 //! yet.
 //!
 //! The programs get the prelude of `packages/std`, and must have no type
-//! errors. A case can have several files, each starting with a line like
+//! errors, nor must the prelude. A case can have several files, each starting with a line like
 //! `//- /lib.bolt`; the program is `/main.bolt`.
 //!
 //! Each case is two tests, like `functions::factorial::eval` and
@@ -54,7 +54,7 @@ use boltlang_base_db::{File, TestDb};
 use boltlang_codegen::{link, run};
 use boltlang_corpus::{Case, catch, data_files, parse_cases, slug, split_files, update, updating};
 use boltlang_eval::{Evaluator, Limits, Recorder};
-use boltlang_ide_diagnostics::{Severity, diagnostics};
+use boltlang_ide_diagnostics::{Severity, dependency_diagnostics, diagnostics};
 use libtest_mimic::{Arguments, Failed, Trial};
 
 /// The two ways of running a program.
@@ -160,6 +160,14 @@ fn database(case: &Case) -> Result<(TestDb, File), String> {
                 .map(move |d| format!("{path}: {} at {:?}", d.message, d.range))
         })
         .collect();
+    // Errors in the prelude, which a case doesn't check itself, with the
+    // first of each file (#249).
+    let case_files: Vec<File> = files.iter().map(|&(_, file)| file).collect();
+    let broken = dependency_diagnostics(&db, main).into_iter().filter_map(|d| {
+        let label = d.labels.first()?;
+        (!case_files.contains(&label.file)).then(|| format!("{}: {}", d.message, label.message))
+    });
+    let errors: Vec<String> = errors.into_iter().chain(broken).collect();
     if !errors.is_empty() {
         return Err(format!("the program has errors:\n{}", errors.join("\n")));
     }
