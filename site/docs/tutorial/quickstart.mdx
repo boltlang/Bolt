@@ -23,28 +23,6 @@ This installs the `bolt` command. Check that it works:
 bolt --version
 ```
 
-## The standard library
-
-Bolt has a small standard library, `std`, which gives every file some names
-without importing them, like `print`, `Option`, `Some` and `None`. This set
-of names is called the *prelude*.
-
-`std` comes with the compiler, so there's nothing to set up. The first time
-`bolt` runs, it puts the files of `std` where you can read them, in a
-directory for its version, which `bolt --version` shows:
-
-```bash
-bolt --version
-```
-
-```text
-bolt 0.2.0
-std: /home/you/.local/share/bolt/0.2.0-18bd2315615a79c2/std (comes with the compiler)
-```
-
-The files are read-only: editing them would change `std` for every program.
-To work on `std` itself, see [Packages](../internals/packages.mdx).
-
 ## Your first program
 
 Create a file called `hello.bolt`:
