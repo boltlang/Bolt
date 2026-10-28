@@ -75,6 +75,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `program_imm_never_changes` | `Immutability.lean` | the same for a whole program, run from an empty heap |
 | `imm_fn_changes_nothing` | `Purity.lean` | calling an `imm` function with an argument that's `imm` all the way down changes no location that existed before the call |
 | `imm_fn_changes_only_through_handler` | `Purity.lean` | the same with a handler as an extra argument, as an effect whose operations resume right away compiles: only what the handler can reach changes |
+| `changes_only_frame` | `Frame.lean` | a program changes only what's reachable from the locations in it that aren't `imm`, its frame (#255) |
+| `call_changes_only_what_args_reach` | `Frame.lean` | for a call, that's what the function and its argument reach; what's `imm` all the way down, like an `imm` closure or array, adds nothing |
+| `changed_is_in_frame_and_mut` | `Frame.lean` | what a program changes is in its frame and isn't `imm` |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -99,7 +102,7 @@ mutability `'v` of its own: `mut` with any `'v`, `imm` only with
 `'v ⊑ imm`.
 
 The theorems depend only on Lean's standard axioms, `propext`,
-`Quot.sound` and, in `Purity.lean` and for `le_iff_leSearch`, `Classical.choice` (check with
+`Quot.sound` and, in `Purity.lean`, `Frame.lean` and for `le_iff_leSearch`, `Classical.choice` (check with
 `#print axioms`); there's no `sorry`.
 
 ## What's left out

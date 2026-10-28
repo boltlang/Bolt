@@ -682,7 +682,10 @@ unification will have to remember the origin of `Imm` and `Mut`.
   Lean proof, for a core of these rules with closures, structs and type
   parameters, that nothing reachable from an `imm` value ever changes, that
   a well-typed program never gets stuck, and that calling an `imm` function
-  with `imm` arguments changes nothing that existed before. It includes the
+  with `imm` arguments changes nothing that existed before. More
+  generally, a call changes only what its arguments that aren't `imm` all
+  the way down can reach (`Frame.lean`), which the reactive design needs.
+  It includes the
   "at most" assumptions that #243 proposes, like `T: imm`, and proves the
   solver's shortcuts for them (`Solver.lean`): how it splits a type, when
   it can decide an unknown mutability right away, and that
