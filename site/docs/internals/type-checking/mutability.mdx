@@ -452,13 +452,14 @@ Rust's lifetimes: without it, `m [i32]` would be the type `m` applied to
   the function can't change what has it, and
   `fn make() -> 'm [i32] = [1]` is an error: `[1]` is `imm`, not whatever
   the caller chooses.
-- **Only functions and impls have names.** An impl's associated types can
-  use its names too: `impl[T] Iterable['m FnIter[T]] { type Iter =
+- **Only functions, impls and structs have names.** An impl's associated
+  types can use its names too: `impl[T] Iterable['m FnIter[T]] { type Iter =
   'm FnIter[T]; ... }` is for an `FnIter` of either mutability, and its
-  `Iter` has the same one. A name elsewhere, like in a field, a const, a
-  type alias outside an impl or a body that isn't its function's, is an
-  error (E0225). A name before a type that can't have a mutability, like
-  `'m i32`, is E0222.
+  `Iter` has the same one. A struct declares its names, for its fields:
+  see [below](#names-in-structs). A name elsewhere, like in a const, a type
+  alias outside an impl, a body that isn't its function's or a field whose
+  struct doesn't declare it, is an error (E0225). A name before a type that
+  can't have a mutability, like `'m i32`, is E0222.
 - **Types show names**, and a name for a mutability that's shared but not
   written: one that a body decides, or a variable of an inferred function.
   Such names start at `'m`, so that they don't read like the type variables
@@ -472,6 +473,51 @@ Rust's lifetimes: without it, `m [i32]` would be the type `m` applied to
 
   A mutability that appears once isn't named: it's either, and it isn't
   linked to anything.
+
+### Names in structs
+
+A field without `mut` or `imm` has its struct's mutability, so a `mut`
+iterator can't hold an `imm` array. A struct can declare a name for a field
+instead, after its type parameters
+([#243](https://github.com/boltlang/Bolt/issues/243)):
+
+```bolt
+struct VecIter[T, 'v] { data: 'v Vec[T], index: i32 }
+
+fn start[T](v: 'v Vec[T]) -> mut VecIter[T, 'v] = mut VecIter { data: v, index: 0 };
+```
+
+`start` takes a `Vec` of either mutability, and gives a `mut` iterator over
+it: the iterator's `index` can change, and its `data` has the mutability of
+`v`. A type gives the names after its type arguments, like
+`VecIter[i32, imm]`. One that isn't given is decided like the mutability
+before a type: a parameter in a function's signature, an unknown in a
+body, and the struct's own in a field. More than the struct declares is an
+error (E0232), and so is a name declared by an item that isn't a struct, a
+function or an impl (E0233). A function or an impl can declare its names
+too, but doesn't have to.
+
+**A name is at most its struct's mutability.** An `imm VecIter[i32, mut]`
+would hold a `mut Vec`, which `imm` being deep rules out. So making a
+struct adds `'v ⊑ m` for each of its names, where `m` is its mutability, as
+for what its type arguments hold:
+
+```bolt
+mut VecIter { data: mut_vec, index: 0 }   // fine: mut VecIter[i32, mut]
+VecIter { data: mut_vec, index: 0 }       // error (E0223): an `imm VecIter[i32, mut]` can't have a `mut` mutability argument
+fn frozen[T: imm](v: 'v Vec[T]) -> imm VecIter[T, 'v] where 'v: imm = VecIter { data: v, index: 0 };
+```
+
+The last one needs `'v: imm`, or `'v` could be `mut`, and `T: imm`, as
+for any `T` in an `imm` struct. A struct can bound its
+names, like its type parameters, which is checked where a value is made:
+`struct Frozen['v: imm] { data: 'v [i32] }`.
+
+A struct update, `VecIter { index: 1, ..it }`, keeps the names of `it`,
+since the fields it doesn't give are shared. Types show a name that's
+known, like `VecIter[i32, imm]`, and leave one out that's generic and
+appears once, like the mutability before a type: `VecIter[T]`. One that's
+left out before one that's shown is `'_`.
 
 ## Making a value that can't be changed from one that can
 
@@ -496,7 +542,9 @@ value: that it's *unique*. Jane Street's OCaml has a mode for that
 | E0222 | `mut` or `imm` before something that isn't an array or a struct |
 | E0223 | an `imm` value that holds a `mut` one |
 | E0224 | a `mut` field |
-| E0225 | a named mutability that isn't the function's or impl's |
+| E0225 | a named mutability that isn't the function's or impl's, or one its struct declares |
+| E0232 | more mutability arguments than a struct declares |
+| E0233 | a mutability parameter of an item that isn't a struct, a function or an impl |
 
 ```text
 [E0221] Error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed
@@ -545,6 +593,14 @@ unification will have to remember the origin of `Imm` and `Mut`.
   (`named_mutabilities`), numbered after the declared type parameters and
   before the hidden ones. A body can use its function's names. A signature
   whose return type only has written or named mutabilities is complete.
+
+  A struct's names, like the `'v` of `struct VecIter[T, 'v]`
+  (`GenericParams::mutability_params`), are parameters after its type
+  parameters and before its own mutability. `Ty::Adt` holds the arguments
+  for them apart from its type arguments, so that they don't change its
+  kind, and `struct_args` gives them to its field types. In a type like
+  `VecIter[i32, imm]`, a mutability on its own is one of them; those not
+  given are `Ty::Unwritten`.
 - **Unification** (`unify.rs`): mutabilities are equal or they aren't;
   there's no subtyping. `Ty::Fn` holds its mutability last, and `fn(...)`
   lowers with `Ty::Unwritten` like an array, so it's a hidden parameter in
@@ -559,7 +615,8 @@ unification will have to remember the origin of `Imm` and `Mut`.
     requires `Mut`. Without an index or a field of a struct, the variable
     must be `mut`, as before.
   - Making an array or struct adds an `AtMostConstraint`: the element
-    type, or the struct's type arguments, are at most its mutability. The
+    type, or the struct's type and mutability arguments, are at most its
+    mutability, once its fields are checked. The
     solver splits a type into the mutabilities it holds
     (`Solver::solve_at_most`), decides what only one choice meets, and
     keeps the rest. What's left when a group of functions is solved is
@@ -567,7 +624,9 @@ unification will have to remember the origin of `Imm` and `Mut`.
     unknowns are chosen to meet it, `imm` below first
     (`Solver::settle_at_most`). In a body with a complete signature, what's
     left about its parameters is an error (`TypeError::NotAtMost`), unless
-    the function or its impl assumes it: a bound like `T: imm` or
+    the function or its impl assumes it. A mutability that must be at most
+    `imm` is decided right away, unless the function assumes a mutability
+    is, which it could be too. A bound like `T: imm` or
     `'v: 'm` lowers to `Predicates::at_most` (`TypeRef::Mutability` for the
     mutability on its own), the solver follows assumptions through
     `'v: 'm` and `'m: imm` (`Solver::mutability_le`), and a scheme carries
@@ -590,7 +649,8 @@ unification will have to remember the origin of `Imm` and `Mut`.
   constraint that's assigned to as `mut a.x: b`.
 - **Tests**: `tests/checker/array_mutability.txt`,
   `tests/checker/struct_mutability.txt`,
-  `tests/checker/named_mutability.txt` and
+  `tests/checker/named_mutability.txt`,
+  `tests/checker/mutability_params.txt` and
   `tests/checker/closure_mutability.txt` have a case for each rule on this
   page.
 - **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a
@@ -617,10 +677,6 @@ taking the place of a separate `StringBuilder`.
 
 ## Open questions
 
-- **Names in structs**, like `struct Pair['a, 'b] { x: 'a Point, y: 'b Point }`,
-  so that one field can be `mut` while another is `imm` (#243). The rule
-  for how `'a` relates to the struct's own mutability is the "at most"
-  constraint: `'a` is at most the struct's mutability.
 - **A name used once** says nothing that leaving it out doesn't, and could
   be a warning.
 - **Impls for struct type constructors.** `impl Functor[Box]` is for boxes
