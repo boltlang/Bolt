@@ -1,167 +1,292 @@
 ---
 sidebar_position: 1
-title: imm is deep
-description: What an imm value holds can't be changed either, by fields, type parameters and closures.
+title: Mutability
+description: Values inside other values, generic code and closures, and what imm promises.
 ---
 
-# `imm` is deep
+# Mutability
 
-**What an `imm` value holds can't be changed either.** Otherwise an
-`imm Line` could hold a `mut Point`, and the line would change after all.
-Three rules make it so.
+[Mutability](../basic/mutability.mdx) in the basics showed arrays and
+structs made with `mut`, which can be changed, and the others, which
+can't. This page is about what happens when values hold other values,
+like a struct with a struct in a field, and about closures.
 
-**A field has the mutability of its struct.** An array or struct in a
-field without `mut` or `imm` has the struct's own mutability, which is a
-hidden parameter of the struct:
+It all comes from one rule: **an `imm` value never changes, and neither
+does anything inside it.** Otherwise an `imm` value could hold a `mut`
+one, and change after all.
+
+## Fields follow their struct
+
+The structs and arrays in a struct's fields can be changed exactly when
+the struct can:
 
 ```bolt
 struct Point { x: i32, y: i32 }
-struct Line { a: Point, b: Point }      // `Line^m` has `a: Point^m`
+struct Line { a: Point, b: Point }
 
 let l = mut Line { a: mut Point { x: 0, y: 0 }, b: mut Point { x: 1, y: 1 } };
-l.a.x = 5;                              // fine
-
-let k = Line { a: Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
-k.a.x = 5;                              // error: `k.a` is `imm Point`
-
-Line { a: mut Point { x: 0, y: 0 }, ... }   // error: expected `imm Point`, found `mut Point`
+l.a.x = 5;
+l;
 ```
 
-A field can be `imm`, which stays `imm` in a `mut` struct, but it can't be
-`mut` (E0224): a `mut` field in an `imm` struct would break the rule. To
-change what a field holds, make the struct `mut`.
+```text
+Line { a: Point { x: 5, y: 0 }, b: Point { x: 1, y: 1 } }
+```
 
-The fields of an enum, which has no mutability, are `imm`. An enum holds
-something that can be changed only through a type parameter, like
+A `Line` made without `mut` holds points that can't be changed either:
+
+```bolt
+struct Point { x: i32, y: i32 }
+struct Line { a: Point, b: Point }
+
+let k = Line { a: Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
+k.a.x = 5;
+```
+
+```text
+[E0221] Error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed
+```
+
+So an `imm Line` can't hold a `mut Point`:
+
+```bolt
+struct Point { x: i32, y: i32 }
+struct Line { a: Point, b: Point }
+
+Line { a: mut Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
+```
+
+```text
+[E0201] Error: expected `imm Point`, found `mut Point`
+```
+
+A field can say `imm`. Then what it holds never changes, even in a `mut`
+struct, though the field can still be given another value:
+
+```bolt
+struct Player { score: i32, history: imm [i32] }
+
+let p = mut Player { score: 0, history: [] };
+p.score = 10;
+p.history = [3, 7];
+p;
+```
+
+```text
+Player { score: 10, history: [3, 7] }
+```
+
+```bolt
+struct Player { score: i32, history: imm [i32] }
+
+let p = mut Player { score: 0, history: [3, 7] };
+p.history[0] = 5;
+```
+
+```text
+[E0221] Error: cannot change an element of `p.history`, which is `imm [i32]`; only a `mut` array can be changed
+```
+
+A field can't say `mut`, since an `imm` struct would then hold something
+that changes. To change what a field holds, make the struct `mut`.
+
+Going the other way is fine: a `mut` value can hold `imm` ones. In a
+`mut [[i32]]`, you can replace a row, but not change one:
+
+```bolt
+let rows = mut [[1, 2], [3, 4]];
+rows[0] = [5, 6];
+rows;
+```
+
+```text
+[[5, 6], [3, 4]]
+```
+
+```bolt
+let rows = mut [[1, 2], [3, 4]];
+rows[1][0] = 9;
+```
+
+```text
+[E0221] Error: cannot change an element of `rows[1]`, which is `imm [i32]`; only a `mut` array can be changed
+```
+
+## Type parameters
+
+A generic struct like `Box[T]` holds whatever type it's given, so the same
+rule applies to what it holds. A `mut` box can hold something that
+changes:
+
+```bolt
+struct Point { x: i32, y: i32 }
+struct Box[T] { item: T }
+
+let a = mut Box { item: mut Point { x: 0, y: 0 } };
+a.item.x = 3;
+a;
+```
+
+```text
+Box { item: Point { x: 3, y: 0 } }
+```
+
+An `imm` box can't:
+
+```bolt
+struct Point { x: i32, y: i32 }
+struct Box[T] { item: T }
+
+Box { item: mut Point { x: 0, y: 0 } };
+```
+
+```text
+[E0223] Error: an `imm Box[mut Point]` can't hold a `mut Point`: what an `imm` value holds can't be changed either
+```
+
+Arrays are the same: `[mut [1]]` is an `imm` array holding a `mut` one,
+and that's an error too.
+
+Enums can't be changed in place, so their fields are `imm`. An enum can
+only hold something that changes through a type parameter, like an
 `Option[mut Point]`.
 
-**An `imm` value can't hold a `mut` one through a type parameter.** A
-generic struct's fields have the types it's given:
+## Generic functions
+
+A function that puts its argument in an `imm` value only works for
+arguments that never change. Bolt works this out for you:
 
 ```bolt
 struct Box[T] { item: T }
 
-let a = mut Box { item: mut Point { x: 0, y: 0 } };   // fine
-let b = Box { item: mut Point { x: 0, y: 0 } };       // error (E0223): an `imm Box[mut Point]` can't hold a `mut Point`
-let c = [mut [1]];                                    // error (E0223): an `imm [mut [i32]]` can't hold a `mut [i32]`
+fn wrap(x) = Box { item: x };
+
+wrap(1);
 ```
 
-What a struct holds is what its fields hold, not its type arguments
-([#256](https://github.com/boltlang/Bolt/issues/256)): with
-`struct Handler[T] { f: fn(T) -> () }`, an `imm Handler[mut [i32]]` is
-fine, since a closure doesn't hold what it takes, and with
-`struct Frozen[T] { items: imm [T] }`, only an `imm` `T` can be held, in
-a `Frozen` of either mutability. That's the same as Rust inferring
-`T: 'a` from a struct's fields, and it's what makes a struct type
-well-formed (`StructDecl.atMost_ty_iff` in `lean/BoltMut/Structs.lean`).
-
-Unification can't express this, since it's about a type and what's
-inside it. It's an "at most" constraint instead, with `imm ⊑ mut`
-([#243](https://github.com/boltlang/Bolt/issues/243)): an array or struct
-holds only what's at most its own mutability. So `[x]` needs nothing in
-the type of `x` to be more `mut` than `imm`. What an array or struct holds
-must in turn be at most *its* mutability, and a function's mutability
-covers what it captured; what it takes and gives isn't looked into, so an
-`imm [fn(mut [i32]) -> ()]` is fine.
-
-The constraint decides what's unknown when only one choice works: a
-mutability that must be at most `imm` is `imm`, and one that something
-`mut` must be below is `mut`. What's left about a function's parameters
-becomes part of an inferred function's type, and its callers must meet it,
-like class constraints:
+```text
+Box { item: 1 }
+```
 
 ```bolt
-fn wrap(x) = Box { item: x };     // forall a. a: imm => fn(a) -> imm Box[a]
-wrap(1);                          // fine
-wrap(mut [1]);                    // error (E0230): expected a type that's at most `imm`, found `mut [i32]`
+struct Box[T] { item: T }
+
+fn wrap(x) = Box { item: x };
+
+wrap(mut [1]);
 ```
 
-A signature says it with a bound, `T: imm`, read as "nothing in `T` is
-more `mut` than `imm`", like Rust's `T: 'a` for lifetimes. It can be
-written next to the parameter or in a `where` clause, and a mutability
-can be bounded too, as in `'v: 'm`:
-
-```bolt
-fn wrap[T: imm](x: T) -> imm Box[T] = Box { item: x };
-fn reader(xs: 'v [i32]) -> 'f fn() -> i32 where 'v: 'f = || xs[0];
-impl[T: imm] ToImm[[T]] { ... }          // checked where the impl is chosen
-struct Frozen[T: imm] { item: T }        // checked where a value is made
+```text
+[E0230] Error: expected a type that's at most `imm`, found `mut [i32]`
 ```
 
-Without the bound, a complete signature is an error where it needs one:
-in `fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }`, `T` may be
-`mut`. A `mut` struct can hold anything, so `mut Box { item: x }` needs
-nothing. A mutability on its own isn't a type: `let x: imm = 1` is an error
-(E0231). A `mut` array or struct inside an `imm` one is still also
-caught once the types are known (E0223), which shows the whole type.
+When you write a function's types yourself, say it with `T: imm`, as in
+[the basics](../basic/mutability.mdx#generic-functions):
+`fn wrap[T: imm](x: T) -> imm Box[T]`. The same bound works in a
+`where` clause, on an `impl` and on a struct.
 
-**A closure that can change what it captured is `mut`.** A closure shares
-the variables it captures with the code around it, so it can hold state:
+## Closures
+
+A closure can change the variables it uses, so it can hold state:
 
 ```bolt
 let mut n = 0;
-let next = || { n += 1; n };   // `mut fn() -> i32`
+let next = || { n += 1; n };
+next();
+next();
 ```
 
-A function type has a mutability like an array's. A closure is `mut` if
-it captures a `let mut` variable, even only to read it, or a value that
-holds something `mut`: a `mut` array, struct or function. Otherwise it's
-`imm`, and so is a named function, which captures nothing. An `imm` value
-can't hold a `mut fn`, by the rules above:
+```text
+2
+```
+
+A closure like `next`, which can change something, is a `mut fn`. A
+closure is `mut` when it uses a `let mut` variable, even only to read it,
+or something that's `mut`: a `mut` array, struct or closure. Other
+closures are `imm`, and so are named functions.
+
+Like a `mut` array, a `mut fn` can only be held by something that's `mut`
+too:
 
 ```bolt
-struct Holder { poke: fn() }       // `poke` has the struct's mutability
+struct Holder { poke: fn() }
+
 let xs = mut [0];
-
-Holder { poke: || { xs[0] += 1; } }       // error: expected `fn() -> ()`, found `mut fn() -> ()`
-mut Holder { poke: || { xs[0] += 1; } }   // fine
-[|| { xs[0] += 1; }]                      // error (E0223): an `imm [mut fn() -> ()]` can't hold a `mut fn() -> ()`
+Holder { poke: || { xs[0] += 1; } };
 ```
 
-Calling a function doesn't need it to be `mut`, unlike Rust's `FnMut`: a
-`mut fn` can't be reached from an `imm` value anyway. So a function type
-written without `mut` or `imm` in a signature takes either, like `[T]`,
-and higher-order functions need no annotations:
-`fn twice(f, x) = f(f(x))` takes a counting closure as well as a named
-function. `mut fn() -> T` and `imm fn() -> T` say which one. An `imm fn`
-is shown as just `fn`, since most are, unless that would make two types in
-a message look the same.
-
-What a closure captures is at most its mutability, by the same "at most"
-constraint, and a `let mut` variable makes it `mut`. So a generic function
-that makes a closure says how the closure's mutability depends on what it
-captured:
+```text
+[E0201] Error: expected `fn() -> ()`, found `mut fn() -> ()`
+```
 
 ```bolt
-fn reader(xs: [i32]) = || xs[0];            // 'm: 'n => fn('m [i32]) -> 'n fn() -> i32
-fn always[T](x: T) -> fn() -> T = || x;     // forall T. T: 'm => fn(T) -> 'm fn() -> T
-fn compose(f, g) = |x| f(g(x));             // forall a b c. 'm: 'o => 'n: 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b
+struct Holder { poke: fn() }
+
+let xs = mut [0];
+let h = mut Holder { poke: || { xs[0] += 1; } };
+(h.poke)();
+(h.poke)();
+xs;
 ```
 
-`reader([1])` and `always(1)` are `imm` closures, and `reader(mut [1])` is a
-`mut` one.
+```text
+[2]
+```
 
-In `std`, an `FnIter` whose function counts is `mut`, like the one that
-`for x in xs` uses for an array or a `Vec`.
+Calling a closure doesn't need it to be `mut`, so functions that take a
+function work with both kinds, without saying anything:
 
-**A `mut` value can hold `imm` ones.** `mut [[i32]]` is an array that can
-be changed, of arrays that can't.
+```bolt
+fn twice(f, x) = f(f(x));
 
-## What this guarantees
+let mut calls = 0;
+let result = twice(|x| { calls += 1; x * 2 }, 5);
+(result, calls);
+```
 
-**An `imm` value, and everything it holds, never changes.** All the names
-for a value have the same type, so if one of them can't change it, none
-can, and an `imm` value only holds `imm` ones. A `mut` value can't be seen
-as `imm`, which is what makes `imm` worth having:
+```text
+(20, 2)
+```
 
-- code can rely on an `imm` value it's given staying the same;
-- values that can't be changed can be shared freely, and their literals can
-  be constants: a data segment in Wasm, made once;
-- an `imm` struct can't be told apart from a copy, so the code generator
-  can store small ones by value;
-- the [reactive design](../../internals/reactive.mdx) knows what can change, and which
-  calls change it, from the types
-  ([#200](https://github.com/boltlang/Bolt/issues/200)).
+To ask for one kind, write `mut fn() -> T` or `imm fn() -> T`. An
+`imm fn` is usually shown as just `fn`.
 
-It doesn't guarantee what Rust does, that nothing else changes a `mut`
-value while you have it. `mut` values are shared on purpose.
+A function that makes a closure gives it the mutability of what it
+captures. A closure that reads an `imm` array is `imm`, and one that reads
+a `mut` array is `mut`:
+
+```bolt
+fn reader(xs: [i32]) = || xs[0];
+
+let fs = [reader([1]), reader([2])];
+(fs[0])() + (fs[1])();
+```
+
+```text
+3
+```
+
+```bolt
+fn reader(xs: [i32]) = || xs[0];
+
+[reader(mut [1])];
+```
+
+```text
+[E0230] Error: expected a mutability that's at most `imm`, found `mut`
+```
+
+## What this gives you
+
+**An `imm` value, and everything in it, never changes**, however many
+names it has and whatever you pass it to. So code that's given an `imm`
+value can count on it staying the same, and `imm` values can be shared
+freely, without copies.
+
+A `mut` value is different: it can be shared, and any name for it can
+change it. Unlike Rust, Bolt doesn't stop something else from changing a
+`mut` value while you use it. That's on purpose: sharing `mut` values is
+how one part of a program changes what another part sees.
+
+The [internals](../../internals/type-checking/mutability/index.mdx#deep-imm)
+explain how the checker makes sure of all this.

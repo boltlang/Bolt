@@ -147,9 +147,8 @@ fn counter() -> (fn(), imm [i32]) {
 ```
 
 If `xs` became `imm`, calling the closure would still change it. Calling a
-function doesn't need it to be `mut`
-([deep `imm`](../../../tutorial/advanced/mutability.mdx)), so this can't
-be left to the caller.
+function doesn't need it to be `mut` ([deep `imm`](./index.mdx#deep-imm)),
+so this can't be left to the caller.
 
 **6. The block's value gets a fresh mutability for each of its regions.**
 The constraints that rule 4 kept go with it, and "changeable" doesn't.
@@ -229,9 +228,8 @@ mutability, with a constraint that it's changeable. `@r` is how this page
 writes one that rule 2 found.
 
 - **Solving**: "changeable" is a constraint next to the
-  [at most](../../../tutorial/advanced/mutability.mdx) ones.
-  `Solver::require_mut`, for E0221, would add it instead of unifying with
-  `Mut`. It's met by `Mut` and by a region, it
+  [at most](./index.mdx#deep-imm) ones. `Solver::require_mut`, for E0221,
+  would add it instead of unifying with `Mut`. It's met by `Mut` and by a region, it
   fails on `Imm` and on a mutability parameter, and it defaults to `Mut`.
   A function's scheme carries it for an unknown that isn't in the result,
   like a `'m` that must be changeable.
