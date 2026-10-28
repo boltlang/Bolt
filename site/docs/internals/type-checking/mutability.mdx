@@ -662,7 +662,10 @@ unification will have to remember the origin of `Imm` and `Mut`.
   parameters, that nothing reachable from an `imm` value ever changes, that
   a well-typed program never gets stuck, and that calling an `imm` function
   with `imm` arguments changes nothing that existed before. It includes the
-  "at most" assumptions that #243 proposes, like `T: imm`.
+  "at most" assumptions that #243 proposes, like `T: imm`, and proves the
+  solver's shortcuts for them (`Solver.lean`): how it splits a type, when
+  it can decide an unknown mutability right away, and that
+  `Solver::mutability_le` finds every chain of assumptions.
 - **Checked when running**: every array and struct in the evaluator knows
   whether it was made `mut` or `imm` (`Object::mutability`). With
   `Evaluator::with_mutability_checks`, which the evaluator's tests and

@@ -314,21 +314,47 @@ impl<'db> Solver<'db> {
     }
 
     /// Whether the mutability `m` is at most `bound` by the order and the
-    /// assumptions, following them through at most `depth` steps, like
-    /// `'v: 'm` and then `'m: imm`.
-    fn mutability_le(&self, m: &Ty<'db>, bound: &Ty<'db>, depth: u32) -> bool {
-        let (m, bound) = (self.unifier.shallow_resolve(m), self.unifier.shallow_resolve(bound));
-        if m == bound
-            || matches!(m, Ty::Mutability(Mutability::Imm))
-            || matches!(bound, Ty::Mutability(Mutability::Mut))
-        {
-            return true;
+    /// assumptions, following them through chains like `'v: 'm` and then
+    /// `'m: imm`. An assumption that starts at `mut`, like `mut: 'v`, can be
+    /// followed from anywhere, since everything is at most `mut`. Each
+    /// mutability is visited once, so a chain can be as long as there are
+    /// assumptions, and cycles like `'a: 'b, 'b: 'a` end. `le_iff_leSearch`
+    /// in `lean/BoltMut/Solver.lean` proves that this finds every `m ⊑ bound`.
+    fn mutability_le(&self, m: &Ty<'db>, bound: &Ty<'db>) -> bool {
+        let resolve = |t: &Ty<'db>| self.unifier.shallow_resolve(t);
+        let bound = resolve(bound);
+        let below = |x: &Ty<'db>| {
+            *x == bound || matches!(x, Ty::Mutability(Mutability::Imm)) || matches!(bound, Ty::Mutability(Mutability::Mut))
+        };
+        // What `m` is at most, through the assumptions so far.
+        let mut seen = vec![resolve(m), Ty::Mutability(Mutability::Mut)];
+        let mut next = 0;
+        while let Some(x) = seen.get(next).cloned() {
+            next += 1;
+            if below(&x) {
+                return true;
+            }
+            for a in &self.at_most_assumptions {
+                if let Held::Mutability(h) = &a.held
+                    && resolve(h) == x
+                {
+                    let up = resolve(&a.bound);
+                    if !seen.contains(&up) {
+                        seen.push(up);
+                    }
+                }
+            }
         }
-        depth > 0
-            && self.at_most_assumptions.iter().any(|a| {
-                matches!(&a.held, Held::Mutability(h) if self.unifier.shallow_resolve(h) == m)
-                    && self.mutability_le(&a.bound, &bound, depth - 1)
-            })
+        false
+    }
+
+    /// Whether the function assumes an "at most" about a mutability, like
+    /// `'v: imm`, that `pred` holds for.
+    fn assumes_mutability(&self, mut pred: impl FnMut(&Ty<'db>, &Ty<'db>) -> bool) -> bool {
+        self.at_most_assumptions.iter().any(|a| match &a.held {
+            Held::Mutability(h) => pred(&self.unifier.shallow_resolve(h), &self.unifier.shallow_resolve(&a.bound)),
+            Held::Type(_) => false,
+        })
     }
 
     /// Whether the type parameter or associated type `t` is at most `bound`
@@ -336,7 +362,7 @@ impl<'db> Solver<'db> {
     fn type_assumed(&self, t: &Ty<'db>, bound: &Ty<'db>) -> bool {
         self.at_most_assumptions
             .iter()
-            .any(|a| matches!(&a.held, Held::Type(h) if h == t) && self.mutability_le(&a.bound, bound, 8))
+            .any(|a| matches!(&a.held, Held::Type(h) if h == t) && self.mutability_le(&a.bound, bound))
     }
 
     pub fn add(&mut self, constraint: Constraint<'db>) {
@@ -430,25 +456,34 @@ impl<'db> Solver<'db> {
             Held::Mutability(m) => match (self.unifier.shallow_resolve(m), &bound) {
                 (Ty::Mutability(Mutability::Imm) | Ty::Error | Ty::Never, _) => true,
                 (m, bound) if m == *bound => true,
+                // Only `mut` is above `mut`, unless the function assumes a
+                // mutability is, like the `'v` of `where mut: 'v`: then the
+                // bound could be that one, and is decided later
+                // (`Le.eq_mutable` in `lean/BoltMut/Solver.lean`).
                 (Ty::Mutability(Mutability::Mut), Ty::Var(_)) => {
+                    if self.assumes_mutability(|h, _| matches!(h, Ty::Mutability(Mutability::Mut) | Ty::Var(_))) {
+                        return false;
+                    }
                     self.equal(&bound, &Ty::Mutability(Mutability::Mut), origin);
                     true
                 }
                 // Only `imm` is at most `imm`, unless the function assumes a
                 // mutability is, like the `'v` of `where 'v: imm`: then `m`
-                // could be that one, and is decided later.
+                // could be that one, and is decided later (`Le.eq_immutable`).
                 (m @ Ty::Var(_), Ty::Mutability(Mutability::Imm)) => {
-                    if self.at_most_assumptions.iter().any(|a| matches!(a.held, Held::Mutability(_))) {
+                    if self.assumes_mutability(|_, b| matches!(b, Ty::Mutability(Mutability::Imm) | Ty::Var(_))) {
                         return false;
                     }
                     self.equal(&m, &Ty::Mutability(Mutability::Imm), origin);
                     true
                 }
-                (Ty::Mutability(Mutability::Mut), _) => {
+                // Something `mut` below a bound that isn't, unless an
+                // assumption like `mut: 'v` says it is.
+                (Ty::Mutability(Mutability::Mut), bound) if !self.mutability_le(&Ty::Mutability(Mutability::Mut), bound) => {
                     self.at_most_broken(source, origin);
                     true
                 }
-                (m, bound) => self.mutability_le(&m, bound, 8),
+                (m, bound) => self.mutability_le(&m, bound),
             },
         }
     }
