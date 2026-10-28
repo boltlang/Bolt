@@ -1,0 +1,125 @@
+---
+sidebar_position: 3
+title: Functions and annotations
+description: The mutabilities of inferred functions, what [T] means in a signature, and return types.
+---
+
+# Functions and annotations
+
+## Inferred functions
+
+A function without annotations gets the mutability it needs, and is
+generalized over the rest, like over any type:
+
+```bolt
+fn size(xs) = array_len(xs);               // fn([a]) -> i32
+fn fill(xs: [i32], x) { xs[0] = x; }        // error: `xs` isn't `mut`
+fn fill(xs: mut [i32], x) { xs[0] = x; }    // fn(mut [i32], i32) -> ()
+```
+
+`size` is generalized over the mutability of its argument,
+$\forall \mu\, \alpha.\ \mathsf{Array}[\mu, \alpha] \to \mathsf{i32}$, and
+that's shown as `[a]`. It takes arrays of either mutability, which makes
+its argument read-only in its body, not unchanging: a `mut` array can still
+be changed during the call through another name for it, like by a closure
+that the caller passed too. Only `imm` promises that nothing changes it.
+`fill` needs a
+`mut` array, since it changes its argument. Instantiating a scheme gives a
+fresh mutability, so each call can pass a different kind of array.
+
+Indexing goes through the prelude's classes, so a function that indexes an
+argument whose type it doesn't know is generic over the class instead:
+`fn first(xs) = xs[0]` is `forall a. Index[a] => fn(a) -> a.Item`, and
+`fn set(xs, x) { xs[0] = x; }` is `forall a. IndexMut[a] => fn(a, a.Item)`.
+The impl `IndexMut[mut [T]]` only covers `mut` arrays, so `set([1], 2)` is
+an error.
+
+A field of a value whose type isn't known is a
+[field constraint](../constraints.mdx). One that's assigned to says so, and
+needs a `mut` struct once the type is known:
+
+```bolt
+fn move_x(p) { p.x = 5; }          // forall a. mut a.x: i32 => fn(a) -> ()
+
+move_x(mut Point { x: 1, y: 2 });  // fine
+move_x(Point { x: 1, y: 2 });      // error: a field of an `imm Point` is changed here
+```
+
+## Annotations
+
+**`[T]` and `Point` in the parameters of a function and in a body mean
+either mutability**: a fresh mutability, like `_` stands for a fresh type.
+`mut` and `imm` ask for one.
+
+In a function's signature, a fresh mutability is a hidden parameter of the
+function, like the generalized $\mu$ of `first` above:
+
+```bolt
+fn sum(xs: [i32]) -> i32 { ... }   // forall m. fn(Array[m, i32]) -> i32
+
+let xs = mut [];
+xs.push(1);
+sum(xs);           // fine
+sum([1, 2]);       // fine
+```
+
+`sum` takes both kinds of array. Inside its body, the mutability of `xs` is
+a parameter, not `Mut`, so `sum` can't change `xs`: `xs.push(1)` there is
+an error. That's the same rule as for any type parameter: a function that
+takes a `T` can't assume that `T` is `i32`. So a signature promises to
+leave an array or struct alone unless it says `mut`, and callers don't have
+to care which kind they pass.
+
+It doesn't promise that the value stays the same while `sum` runs: the
+caller may have a `mut` name for it. `imm` is for code that relies on a
+value never changing, like a cache keyed by it, or the reactive design
+deciding that something can't change. Few functions need it, which is why
+it isn't what `[T]` means.
+
+In a `let` annotation, `[T]` is an inference variable, which the value
+decides:
+
+```bolt
+let a: [i32] = mut [1];     // `mut [i32]`
+let b: [i32] = [1];         // `imm [i32]`
+```
+
+## Return types
+
+A hidden parameter is chosen by the caller, so it can't be the mutability
+of something the function makes: `fn make() -> [i32] = [1, 2]` would be
+wrong for a caller that asks for `mut`. Instead, **the body decides the
+mutabilities that a return type doesn't say**:
+
+```bolt
+fn primes() -> [i32] = [2, 3, 5];           // `fn() -> imm [i32]`
+fn buffer() -> [u8] = mut [0; 1024];         // `fn() -> mut [u8]`
+fn next(n: Node) -> Node = n.next;           // the mutability of `n`
+fn fixed() -> imm [i32] = mut [];            // error: expected `imm [a]`, found `mut [a]`
+```
+
+`next` returns what it's given, so its result has its argument's
+mutability: `next(a)` is a `mut Node` for a `mut Node` `a`, and an
+`imm Node` for an `imm` one.
+
+That makes the signature incomplete: such a function is
+[inferred](../generalization.mdx), not checked on its own, so editing its
+body checks its callers again. Writing `mut`, `imm` or a
+[name](./names.mdx) in the return type makes it complete:
+`fn next(n: 'm Node) -> 'm Node` says what the body of `next` would
+decide, and is checked on its own. A function without a body, like a class
+method, has no body to decide, so its return type is `imm` where it
+doesn't say.
+
+The type of a const and an array or struct in a `where` predicate, like the
+`[T]` of `where Show[[T]]`, are `imm` too.
+
+An impl gets hidden parameters like a function: `impl Size[Point]` is for
+points of either mutability, and `impl Size[mut Point]` only for those that
+can be changed.
+
+## Type aliases
+
+A type alias doesn't decide what `[T]` or `Point` means in it: the type it's
+used in does. With `type Ints = [i32]`, `fn sum(xs: Ints)` takes either
+kind of array, and `mut Ints` is `mut [i32]`.

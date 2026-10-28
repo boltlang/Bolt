@@ -13,7 +13,7 @@ lake build
 ```
 
 The rules are described in
-[`site/docs/internals/type-checking/mutability.mdx`](../site/docs/internals/type-checking/mutability.mdx).
+[`site/docs/internals/type-checking/mutability/`](../site/docs/internals/type-checking/mutability/).
 
 ## The language
 

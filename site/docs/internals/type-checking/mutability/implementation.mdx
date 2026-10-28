@@ -1,0 +1,133 @@
+---
+sidebar_position: 7
+title: Implementation
+description: Where the rules of mutability are in the checker, the tests and the Lean proof.
+---
+
+# Implementation
+
+- **Types** (`ty.rs`): `Ty::Array` holds the mutability and the element
+  type, and `Ty::Adt` holds a struct's mutability after its arguments. An
+  enum's is always `Imm`, and isn't shown. A mutability is
+  `Ty::Mutability(Mut | Imm)`, an inference variable of kind
+  `VarKind::Mutability`, a type parameter, or the error type.
+- **Lowering** (`lower.rs`): `mut [T]`, `imm [T]`, `mut Point` and
+  `imm Point` lower to their mutability, and the rest to `Ty::Unwritten`,
+  which each item then replaces with `Ty::fill_unwritten`:
+  - in a function's parameters and an impl's instance, hidden parameters,
+    numbered after the declared type parameters (`FnSig::hidden`,
+    `ImplHeader::hidden`), so that instantiating a scheme and matching an
+    impl handle them like any other parameter;
+  - in a body, and in the return type of a function with a body,
+    inference variables, which the body decides (`infer.rs`, `check.rs`);
+  - in a struct's field, the struct's own hidden parameter
+    (`struct_mutability`), which a struct's type substitutes with its
+    mutability (`struct_args`);
+  - in an enum's field, the return type of a function without a body, a
+    const and a `where` predicate, `Imm`;
+  - in a type alias, nothing: the type it's used in decides.
+
+  A name like `'m` lowers to a parameter of its function or impl
+  (`named_mutabilities`), numbered after the declared type parameters and
+  before the hidden ones. A body can use its function's names. A signature
+  whose return type only has written or named mutabilities is complete.
+
+  A struct's names, like the `'v` of `struct VecIter[T, 'v]`
+  (`GenericParams::mutability_params`), are parameters after its type
+  parameters and before its own mutability. `Ty::Adt` holds the arguments
+  for them apart from its type arguments, so that they don't change its
+  kind, and `struct_args` gives them to its field types. In a type like
+  `VecIter[i32, imm]`, a mutability on its own is one of them; those not
+  given are `Ty::Unwritten`.
+- **Unification** (`unify.rs`): mutabilities are equal or they aren't;
+  there's no subtyping. `Ty::Fn` holds its mutability last, and `fn(...)`
+  lowers with `Ty::Unwritten` like an array, so it's a hidden parameter in
+  a signature and the struct's own in a field.
+- **Inference** (`infer.rs`): an array or struct literal is `Imm`, or `Mut`
+  with `mut`. Indexing, field access, `for` and patterns take either.
+  - `check_place` looks for the innermost index, or field of a struct, in
+    the place that's assigned to. Its array or struct must be `mut`, and a
+    mutability that isn't known yet becomes `Mut` (`Solver::require_mut`).
+    A field of a value whose type isn't known yet marks its field
+    constraint as assigned (`FieldConstraint::assign`), and solving it
+    requires `Mut`. Without an index or a field of a struct, the variable
+    must be `mut`, as before.
+  - Making an array or struct adds an `AtMostConstraint`: the element
+    type is at most the array's mutability, and what a struct's fields
+    hold at most theirs, once its fields are checked. What a struct's
+    fields hold is `holds::struct_atoms`: the atoms of "the fields are at
+    most the struct's own mutability", like `'v ⊑ m` and `T ⊑ 'v`, with a
+    field that's a struct using that one's, as a fixed point for structs
+    that refer to each other. A body assumes what makes its parameter
+    types and its impl's instance well-formed, like `T ⊑ 'm` for
+    `xs: 'm [T]`, as Rust's implied bounds do
+    (`check::implied_assumptions`). The
+    solver splits a type into the mutabilities it holds
+    (`Solver::solve_at_most`), decides what only one choice meets, and
+    keeps the rest. What's left when a group of functions is solved is
+    about their types, and becomes their schemes' `bounds`; other
+    unknowns are chosen to meet it, `imm` below first
+    (`Solver::settle_at_most`). In a body with a complete signature, what's
+    left about its parameters is an error (`TypeError::NotAtMost`), unless
+    the function or its impl assumes it. A mutability that must be at most
+    `imm` is decided right away, unless the function assumes a mutability
+    is, which it could be too. A bound like `T: imm` or
+    `'v: 'm` lowers to `Predicates::at_most` (`TypeRef::Mutability` for the
+    mutability on its own), the solver follows assumptions through
+    `'v: 'm` and `'m: imm` (`Solver::mutability_le`), and a scheme carries
+    them for its callers. A chosen impl's bounds are checked like its class
+    predicates, and a struct's where a value is made.
+  - A closure gets a new mutability, the types of the variables it uses
+    from outside (`ClosureFrame`) are at most it, and a `let mut` one makes
+    it `Mut`.
+  - Once a body's types are resolved, `check_deep_immutability` reports
+    each type with a `mut` array, struct or function inside an `imm` one,
+    unless an "at most" error already did. The types that no body looks
+    at are reported where they're written, the same way: those of a
+    function without a body, like a class method, of a type alias, and of
+    an impl's instance (`written_type` in `boltlang-hir`).
+- **Defaulting** (`solve.rs`): a mutability left over when a body is
+  checked, and not generalized, becomes `Imm`. That happens after the
+  errors are resolved, so that an undecided mutability is shown as `[T]` in
+  them.
+- **Showing types**: `mut T`, `imm T`, `'m T` for a named mutability, and
+  `T` for a generalized or unknown one. `TyNames` gives a name to each
+  generalized, unknown or hidden mutability that appears more than once.
+  Schemes leave mutabilities out of their `forall`, and show a field
+  constraint that's assigned to as `mut a.x: b`.
+- **Tests**: `tests/checker/mutability/arrays.txt`,
+  `tests/checker/mutability/structs.txt`,
+  `tests/checker/mutability/named.txt`,
+  `tests/checker/mutability/params.txt` and
+  `tests/checker/mutability/closures.txt` have a case for each rule in this
+  chapter.
+- **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a
+  Lean proof, for a core of these rules with closures, structs and type
+  parameters, that nothing reachable from an `imm` value ever changes, that
+  a well-typed program never gets stuck, and that calling an `imm` function
+  with `imm` arguments changes nothing that existed before. More
+  generally, a call changes only what its arguments that aren't `imm` all
+  the way down can reach (`Frame.lean`), which the reactive design needs.
+  And an `imm` value can be copied, or two equal ones shared, without
+  changing what a program computes (`Sharing.lean`), so the code
+  generator may store them however it likes.
+  It includes the
+  "at most" assumptions that #243 proposes, like `T: imm`, and proves the
+  solver's shortcuts for them (`Solver.lean`): how it splits a type, when
+  it can decide an unknown mutability right away, and that
+  `Solver::mutability_le` finds every chain of assumptions.
+- **Checked when running**: every array and struct in the evaluator knows
+  whether it was made `mut` or `imm` (`Object::mutability`). With
+  `Evaluator::with_mutability_checks`, which the evaluator's tests and
+  `tests/run` use, changing an `imm` one, or making an `imm` one that holds
+  a `mut` one, stops with `ErrorKind::MutabilityViolation`. A program the
+  type checker accepts never does, so a failure there is a bug in the
+  checker. A closure isn't tagged, so an `imm` value holding a `mut` closure
+  isn't caught there, but changing an `imm` array or struct through a
+  closure is.
+
+`Vec[T]` in `std` ([#197](https://github.com/boltlang/Bolt/issues/197)) is
+a struct, so it gets a mutability like any other, and `[T]` is shorthand for
+it. So is a `String` in `std`
+([#199](https://github.com/boltlang/Bolt/issues/199)), with `mut String`
+taking the place of a separate `StringBuilder`.

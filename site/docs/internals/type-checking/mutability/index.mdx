@@ -1,0 +1,202 @@
+---
+sidebar_position: 1
+title: Mutability
+description: Arrays and structs that are shared, with whether they can be changed as part of their type, and imm that's deep.
+---
+
+# Mutability
+
+:::warning[Not compiled yet]
+The type checker and the evaluator implement this page
+([#195](https://github.com/boltlang/Bolt/issues/195)). The code generator
+doesn't compile arrays or structs yet: see
+[#177](https://github.com/boltlang/Bolt/issues/177) and
+[#179](https://github.com/boltlang/Bolt/issues/179). The design was decided
+in [#196](https://github.com/boltlang/Bolt/issues/196).
+:::
+
+Arrays and structs are *shared*: `let ys = xs` makes `ys`
+another name for the same array, and `let q = p` another name for the same
+struct, as in JavaScript, Java and OCaml. Passing one to a function passes
+a pointer, and a function can fill in what it's given.
+
+Sharing breaks what `mut` on a variable promises:
+
+```bolt
+let mut xs = [1, 2];
+let ys = xs;     // not `mut`
+xs[0] = 9;
+ys[0];           // 9: `ys` changed anyway
+```
+
+This chapter describes how the type checker keeps a promise that sharing
+can't break. **Whether an array or a struct can be changed is part of its
+type**, and every name for it has the same type, so they all agree.
+
+## Arrays and structs have a mutability
+
+The type of an array or a struct has a *mutability*, which is `Mut` or
+`Imm`:
+
+$$
+[\tau] \;=\; \mathsf{Array}[\mu, \tau] \qquad
+S[\tau_1, \ldots, \tau_n]^\mu \qquad
+\mu ::= \mathsf{Mut} \mid \mathsf{Imm} \mid \alpha
+$$
+
+`Mut` and `Imm` are types of their own [kind](../kinds.mdx). A mutability
+can be an inference variable, like any type, and it's unified and
+generalized like one. That's all the type checker needs: no subtyping, and
+no new kind of constraint. A struct's mutability isn't one of its type
+arguments, so it doesn't change its kind: `Box` is still of kind
+$\mathsf{Type} \to \mathsf{Type}$.
+
+In source code, and when types are shown:
+
+| Written | Means |
+|---|---|
+| `mut [i32]`, `mut Point` | can be changed |
+| `imm [i32]`, `imm Point` | can never be changed, by anyone |
+| `[i32]`, `Point` | either: see [annotations](./functions.mdx#annotations) |
+
+Only arrays and structs have a mutability. An enum can't be changed in
+place: `match` gives the values of its fields, and there's no way to
+assign to one. A tuple is still a value, copied when it's assigned, so
+`t.0 = 1` needs `let mut t` as before. `mut` before anything else, like
+`mut i32` or `mut Option[i32]`, is an error (E0222).
+
+Something can be changed only if its type is `mut`:
+
+```bolt
+fn push[T](xs: mut [T], x: T);    // in `std`
+
+let xs = mut [1, 2];
+xs.push(3);      // fine
+xs[0] = 9;       // fine
+
+let p = mut Point { x: 0, y: 0 };
+p.x = 5;         // fine
+
+let ys = [1, 2];
+ys[0] = 9;       // error: `ys` is `imm [i32]`, which can't be changed
+```
+
+Assigning to an element, `xs[i] = e`, needs `xs` to be a `mut` array, and
+assigning to a field, `p.x = e`, needs `p` to be a `mut` struct. So does
+calling a function whose parameter is `mut`, like `push`. What decides is
+the innermost array or struct of the place that's assigned to: in
+`l.a.x = 1`, it's `l.a`, and in `xs[0].x = 1`, it's `xs[0]`.
+
+## Where the mutability comes from
+
+**The expression that makes an array or a struct decides** whether it can
+be changed. Variables only pass it on:
+
+- `[1, 2]` and `Point { x: 0, y: 0 }` can't be changed: `imm [i32]` and
+  `imm Point`.
+- `mut [1, 2]`, `mut []`, `mut Point { x: 0, y: 0 }` and, for a tuple
+  struct, `mut Meters(1.0)` can be changed.
+- A function's result has the mutability of its type: `Vec.new()` could
+  return `mut [T]`, and `xs.copy()` a new `mut [T]`.
+- `mut` before a variant, like `mut Shape.Circle { radius: 1.0 }`, or before
+  the call of a function, is an error (E0222).
+
+`let mut` no longer has anything to do with the contents of an array or a
+struct. It only means the variable can be assigned again:
+
+```bolt
+let xs = mut [1];
+xs.push(2);         // fine: the array is `mut`
+xs = mut [3];       // error: `xs` isn't `mut`
+
+let mut ys = [1];
+ys = [2, 3];        // fine: the variable is `mut`
+ys.push(4);         // error: the array isn't
+```
+
+## Aliases share the mutability
+
+`let ys = xs` unifies the types of `ys` and `xs`, mutability included. So an
+alias of a `mut` array or struct is `mut` too, without saying so:
+
+```bolt
+let xs = mut [1, 2];
+let ys = xs;        // `mut [i32]`, like `xs`
+ys.push(3);         // fine, and `xs` sees it
+```
+
+Since this is unification, it works however the alias is made: through a
+function, a branch, a struct or a closure.
+
+```bolt
+fn id(x) = x;
+
+let a = id(xs);                         // `mut [i32]`
+let b = if c { xs } else { mut [] };    // `mut [i32]`
+let get = || xs;                        // `mut fn() -> mut [i32]`
+```
+
+An alias can't change the mutability. Unifying `Mut` with `Imm` is an error:
+
+```bolt
+let xs = mut [1, 2];
+let ys: imm [i32] = xs;   // error: expected `imm [i32]`, found `mut [i32]`
+```
+
+`S { ..base }` copies the fields it doesn't give from `base`, so it can
+make a struct of another mutability from it, like a `mut Point` from an
+`imm` one. But the copy is shallow: an array, struct or function in a field
+is shared with `base`, which would make it an alias with another
+mutability. So when a field that's copied holds one with the struct's own
+mutability, `base` must have the same mutability as the struct:
+
+```bolt
+let q = mut Point { ..p };   // fine, whatever `p` is: the fields are numbers
+let l = mut Line { a: mut Point { x: 1, y: 2 }, b: mut Point { x: 3, y: 4 } };
+Line { ..l }                 // error: expected `imm Line`, found `mut Line`
+Line { a: Point { x: 0, y: 0 }, b: Point { x: 0, y: 0 }, ..l }   // fine: nothing is copied
+```
+
+## Making a value that can't be changed from one that can
+
+A `mut` value can't become `imm`, since a `mut` name for it may still
+exist. Turning one into the other copies it:
+
+```bolt
+fn freeze[T](xs: [T]) -> imm [T];    // a copy that can't be changed
+fn thaw[T](xs: [T]) -> mut [T];      // a copy that can
+```
+
+Since `imm` is deep, freezing copies everything a value holds that's `mut`.
+Freezing without a copy needs to know that no other name refers to the
+value: that it's *unique*. Jane Street's OCaml has a mode for that
+[[Lorenzen et al. 2024](./prior-art.mdx#references)], and it could come later.
+
+## The pages of this chapter
+
+1. [`imm` is deep](./deep.mdx): what an `imm` value holds can't be
+   changed either, and closures.
+2. [Functions and annotations](./functions.mdx): inferred functions, what
+   `[T]` means in a signature, and return types.
+3. [Naming a mutability](./names.mdx): `'m` in functions, impls and
+   structs.
+4. [Errors](./errors.mdx).
+5. [Implementation](./implementation.mdx): where each rule is in the
+   checker, the tests and the Lean proof.
+6. [Prior art](./prior-art.mdx).
+
+## Open questions
+
+- **A name used once** says nothing that leaving it out doesn't, and could
+  be a warning.
+- **Impls for struct type constructors.** `impl Functor[Box]` is for boxes
+  of either mutability, so `fmap` must return a `Box` with the mutability
+  of the one it's given, which it can't make: `Box { item: f(b.item) }` is
+  `imm`. Higher-kinded types tie the mutability of the result to that of
+  the argument, and what that should mean isn't decided.
+- **Enums with a mutability**, so that a variant can hold something that
+  can be changed without a type parameter, and so that an enum can be
+  changed in place.
+- **Assigning to a field of a tuple through a field constraint**, like
+  `fn f(t) { t.0 = 1; }`, isn't checked: once the type is a tuple, it's a
+  value, and the variable should be `mut`.

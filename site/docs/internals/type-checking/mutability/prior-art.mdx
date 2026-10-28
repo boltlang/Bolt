@@ -1,0 +1,39 @@
+---
+sidebar_position: 8
+title: Prior art
+description: Other languages and papers that track whether a value can change.
+---
+
+# Prior art
+
+- **OCaml** has no `mut` on variables. Whether a value can change is in its
+  type: an `array` always can, a `list` never, and a record field only if
+  it's declared `mutable`. Nothing is inferred, and nothing is deep.
+- **Reference immutability**, in Javari [Tschantz & Ernst 2005] and
+  ReIm [Huang et al. 2012], puts a read-only qualifier on references in
+  Java, and ReIm infers it. Javari's is deep, like `imm`, but a read-only
+  reference can point at an object that others change. Here, `Imm` means
+  that no one can.
+- **Pony's reference capabilities** [Clebsch et al. 2015] decide what each
+  reference allows: `iso` (unique), `val` (can't be changed by anyone,
+  deeply), `ref` (can be changed, and shared), and `box` (read-only, and
+  either of the last two). `imm` is like `val`, `mut` like `ref`, and a
+  parameter without either like `box`, which Pony gets by subtyping and
+  Bolt by polymorphism. Pony makes `val` deep with viewpoint adaptation,
+  where Bolt gives fields their struct's mutability and checks type
+  parameters.
+- **Modes in Jane Street's OCaml** [Lorenzen et al. 2024] are qualifiers
+  like `unique` and `local`, inferred alongside types. `unique` is what
+  freezing without a copy would need.
+
+## References
+
+- M. S. Tschantz and M. D. Ernst. *Javari: Adding Reference Immutability
+  to Java.* OOPSLA 2005.
+- W. Huang, A. Milanova, W. Dietl and M. D. Ernst. *ReIm & ReImInfer:
+  Checking and Inference of Reference Immutability and Method Purity.*
+  OOPSLA 2012.
+- S. Clebsch, S. Drossopoulou, S. Blessing and A. McNeil. *Deny
+  Capabilities for Safe, Fast Actors.* AGERE 2015.
+- A. Lorenzen, L. White, S. Dolan, R. A. Eisenberg and S. Lindley.
+  *Oxidizing OCaml with Modal Memory Management.* ICFP 2024.

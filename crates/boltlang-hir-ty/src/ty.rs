@@ -75,7 +75,7 @@ pub enum Ty<'db> {
     /// error type. Lengths aren't checked yet.
     Array(Box<Ty<'db>>, Box<Ty<'db>>),
     /// `Mut` or `Imm`, the mutability of an array, which is a type of its
-    /// own kind: see `site/docs/internals/type-checking/mutability.mdx`.
+    /// own kind: see `site/docs/internals/type-checking/mutability/`.
     Mutability(Mutability),
     /// The mutability of an array type written without `mut` or `imm`, as
     /// lowered on its own. What it means depends on where the type is

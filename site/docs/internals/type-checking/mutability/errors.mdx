@@ -1,0 +1,38 @@
+---
+sidebar_position: 6
+title: Errors
+description: The errors about mutability, and where they should point.
+---
+
+# Errors
+
+| Code | Error |
+|---|---|
+| E0221 | changing an element of an array, or a field of a struct, that isn't `mut` |
+| E0222 | `mut` or `imm` before something that isn't an array or a struct |
+| E0223 | an `imm` value that holds a `mut` one |
+| E0224 | a `mut` field |
+| E0225 | a named mutability that isn't the function's or impl's, or one its struct declares |
+| E0232 | more mutability arguments than a struct declares |
+| E0233 | a mutability parameter of an item that isn't a struct, a function or an impl |
+| E0234 | a parameter of an impl, a type or a mutability, that isn't in its instance |
+
+```text
+[E0221] Error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed
+[E0221] Error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed
+[E0223] Error: an `imm Box[mut Point]` can't hold a `mut Point`: what an `imm` value holds can't be changed either
+```
+
+Passing or assigning a value of the wrong mutability is an ordinary type
+mismatch, which shows both:
+
+```text
+[E0201] Error: expected `mut Point`, found `imm Point`
+```
+
+These can show up far from their cause: the `push` fails because of where
+the array was made, maybe much earlier. The error should point at where the
+`Imm` came from: the literal, the annotation, or the function whose result
+it is. That's what the labels for the causes of constraints in
+[#127](https://github.com/boltlang/Bolt/issues/127) are for, and why
+unification will have to remember the origin of `Imm` and `Mut`.
