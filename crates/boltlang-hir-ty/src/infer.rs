@@ -23,6 +23,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
+    holds::struct_atoms_of,
     lang::LangClass,
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, struct_mutability,
@@ -83,7 +84,7 @@ impl<'db> InferenceResult<'db> {
     /// struct inside an `imm` one, like `[mut [1]]`: `imm` is deep, so what
     /// an `imm` value holds can't be changed either. Each such type is
     /// reported once, where it first appears, once the types are resolved.
-    pub(crate) fn check_deep_immutability(&mut self) {
+    pub(crate) fn check_deep_immutability(&mut self, db: &'db dyn Db) {
         let mut seen = Vec::new();
         // What an "at most" error already reports, like the `mut [i32]` of
         // `wrap(mut [1])` for `wrap: forall a. a ⊑ imm => ...`.
@@ -98,7 +99,7 @@ impl<'db> InferenceResult<'db> {
         let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(e), t));
         let pats = self.pat_types.iter().map(|(p, t)| (ExprOrPat::Pat(p), t));
         for (at, ty) in exprs.chain(pats) {
-            if let Some((outer, inner)) = mut_inside_imm(ty)
+            if let Some((outer, inner)) = mut_inside_imm(db, ty)
                 && !seen.contains(&outer)
                 && !reported.contains(&inner)
             {
@@ -185,37 +186,53 @@ struct Expectation<'a, 'db> {
 }
 
 /// The first `mut` array, struct or function in `ty` that an `imm` array
-/// or struct holds, with the `imm` one. What a function takes and gives
-/// isn't looked into: its type says that, not what it holds, which its
-/// mutability covers.
-pub fn mut_inside_imm<'db>(ty: &Ty<'db>) -> Option<(Ty<'db>, Ty<'db>)> {
+/// or struct holds, with the type that holds it. What a function takes and
+/// gives isn't looked into: its type says that, not what it holds, which
+/// its mutability covers. What a struct holds is what its fields do
+/// (`crate::holds`), not its type arguments: an `imm Handler[mut [i32]]`
+/// for `struct Handler[T] { f: fn(T) }` holds nothing `mut`, and a
+/// `mut VecIter[mut [i32], imm]` holds an `imm` array of `mut` ones.
+pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty<'db>)> {
     fn has(ty: &Ty<'_>, mutability: Mutability) -> bool {
         ty.held_mutability() == Some(&Ty::Mutability(mutability))
     }
+    /// Something `mut` that a value of type `ty` is, or holds as a value
+    /// does, in an enum or tuple. A struct or array that isn't `mut` is
+    /// looked into on its own.
     fn find_mut<'db>(ty: &Ty<'db>) -> Option<Ty<'db>> {
         // A `mut` on its own is a mutability argument, like that of
         // `VecIter[i32, mut]`, whose fields can have it.
         if has(ty, Mutability::Mut) || *ty == Ty::Mutability(Mutability::Mut) {
             return Some(ty.clone());
         }
-        let mut found = None;
-        if !matches!(ty, Ty::Fn(..)) {
-            ty.walk_children(|t| found = found.take().or_else(|| find_mut(t)));
+        match ty {
+            Ty::Adt(AdtId::Enum(_), args, ..) | Ty::Tuple(args) => args.iter().find_map(find_mut),
+            _ => None,
         }
-        found
+    }
+    /// Something `mut` that `ty` holds where it must be at most `imm`.
+    fn breaks<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Ty<'db>> {
+        let imm = Ty::Mutability(Mutability::Imm);
+        match ty {
+            Ty::Array(m, elem) if **m == imm => find_mut(elem),
+            Ty::Adt(AdtId::Struct(s), args, ms, m) => struct_atoms_of(db, *s, args, ms, m)
+                .into_iter()
+                .filter(|a| a.bound == imm)
+                .find_map(|a| match a.held {
+                    Held::Type(t) => find_mut(&t),
+                    Held::Mutability(m) => (m == Ty::Mutability(Mutability::Mut)).then_some(m),
+                }),
+            _ => None,
+        }
     }
     if matches!(ty, Ty::Fn(..)) {
         return None;
     }
-    if has(ty, Mutability::Imm) {
-        let mut found = None;
-        ty.walk_children(|t| found = found.take().or_else(|| find_mut(t)));
-        if let Some(inner) = found {
-            return Some((ty.clone(), inner));
-        }
+    if let Some(inner) = breaks(db, ty) {
+        return Some((ty.clone(), inner));
     }
     let mut found = None;
-    ty.walk_children(|t| found = found.take().or_else(|| mut_inside_imm(t)));
+    ty.walk_children(|t| found = found.take().or_else(|| mut_inside_imm(db, t)));
     found
 }
 
@@ -359,16 +376,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         self.solver.add(Constraint::AtMost { constraint, source, origin: self.origin(at) });
     }
 
-    /// A struct of type `ty` is made at `at`: its type arguments and its
-    /// mutability arguments, which its fields can hold, must be at most its
-    /// mutability. Its other fields have its mutability or are `imm`.
+    /// A struct of type `ty` is made at `at`: what its fields hold must be
+    /// at most their mutability, like `'v ⊑ m` and `T ⊑ 'v` for
+    /// `VecIter[T, 'v]` (`crate::holds`).
     fn struct_holds(&mut self, ty: &Ty<'db>, at: ExprId) {
-        if let Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) = ty {
-            for arg in args.iter() {
-                self.holds(arg, mutability, at);
-            }
-            for m in mutabilities.iter() {
-                let constraint = AtMostConstraint { held: Held::Mutability(m.clone()), bound: (**mutability).clone() };
+        if let Ty::Adt(AdtId::Struct(s), args, mutabilities, mutability) = ty {
+            for constraint in struct_atoms_of(self.db, *s, args, mutabilities, mutability) {
                 let source = AtMostSource::Object(constraint.clone());
                 self.solver.add(Constraint::AtMost { constraint, source, origin: self.origin(at) });
             }

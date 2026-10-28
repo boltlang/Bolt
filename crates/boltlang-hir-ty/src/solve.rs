@@ -15,6 +15,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
+    holds::struct_atoms_of,
     lower::{
         ClassConstraint, VariantDef, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
         implied_by, subst_params, with_superclasses,
@@ -258,6 +259,9 @@ pub struct Solver<'db> {
     /// The "at most" constraints known to hold, like `T: imm`.
     at_most_assumptions: Vec<AtMostConstraint<'db>>,
     impls: &'db [ImplId<'db>],
+    /// The file of the code being solved, whose impls decide associated
+    /// types.
+    file: File,
     pending: Vec<(ClassConstraint<'db>, Origin<'db>)>,
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
@@ -279,6 +283,7 @@ impl<'db> Solver<'db> {
             assumptions: Vec::new(),
             at_most_assumptions: Vec::new(),
             impls: visible_impls(db, file),
+            file,
             pending: Vec::new(),
             pending_fields: Vec::new(),
             pending_assoc: Vec::new(),
@@ -424,17 +429,25 @@ impl<'db> Solver<'db> {
                     sub(self, Held::Type(*elem), &m);
                     true
                 }
-                Ty::Adt(AdtId::Struct(_), args, ms, m) => {
+                // What its fields hold, like `'v ⊑ m` and `T ⊑ 'v` for
+                // `VecIter[T, 'v]` (`crate::holds`).
+                Ty::Adt(AdtId::Struct(s), args, ms, m) => {
                     sub(self, Held::Mutability(*m.clone()), &bound);
-                    for arg in args {
-                        sub(self, Held::Type(arg), &m);
-                    }
-                    // Like the `'v` of `VecIter[T, 'v]`, which its fields can
-                    // have.
-                    for n in ms {
-                        sub(self, Held::Mutability(n), &m);
+                    for atom in struct_atoms_of(self.db, s, &args, &ms, &m) {
+                        sub(self, atom.held, &atom.bound);
                     }
                     true
+                }
+                // An associated type is split once an impl decides it, like
+                // `A.Iter` in a struct's field for an `A` that's known.
+                t @ Ty::Assoc(..) => {
+                    let t = self.unifier.resolve(&t);
+                    let decided = normalize_assoc(self.db, self.file, &t);
+                    if decided != t {
+                        sub(self, Held::Type(decided), &bound);
+                        return true;
+                    }
+                    !has_vars(&t) && self.type_assumed(&t, &bound)
                 }
                 // An enum or a tuple is a value, which holds its parts.
                 Ty::Adt(AdtId::Enum(_), args, _, _) | Ty::Tuple(args) | Ty::App(_, args) => {
@@ -450,7 +463,7 @@ impl<'db> Solver<'db> {
                 // Decided once the type is known, or by an assumption about
                 // a type parameter.
                 Ty::Var(_) => false,
-                t @ (Ty::Param(_) | Ty::Bound(_) | Ty::Assoc(..)) => self.type_assumed(&t, &bound),
+                t @ (Ty::Param(_) | Ty::Bound(_)) => self.type_assumed(&t, &bound),
                 _ => true,
             },
             Held::Mutability(m) => match (self.unifier.shallow_resolve(m), &bound) {

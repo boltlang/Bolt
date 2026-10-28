@@ -16,6 +16,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
+    holds::split,
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
     lower::{
         ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig, generic_predicates, impl_assoc_ty,
@@ -30,7 +31,7 @@ use crate::{
         normalize_assoc, prune_implied_errors, resolve_error, vars_in,
     },
     unify::Unifier,
-    ty::{Ty, TyVar, VarKind},
+    ty::{Mutability, Ty, TyVar, VarKind},
 };
 
 /// Why a function's type can't be inferred: files that import each other
@@ -74,6 +75,9 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                         ctx.solver.assume_at_most(assumption);
                     }
                     let Ty::Fn(params, ret, _) = &declared_scheme(db, f).ty else { unreachable!() };
+                    for assumption in implied_assumptions(db, f, params) {
+                        ctx.solver.assume_at_most(assumption);
+                    }
                     // A method of a class impl must have the class's types.
                     if let Some((class_params, class_ret)) = class_impl_method_sig(db, f) {
                         let origin = Origin::new(def, ExprOrPat::Expr(ctx.body.body_expr));
@@ -102,7 +106,7 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             result.add_instances(def, &solver);
             result.diagnostics.extend(errors.into_iter().map(InferenceDiagnostic::Type));
             // After the type errors, which can report the same thing.
-            result.check_deep_immutability();
+            result.check_deep_immutability(db);
             result
         }
     }
@@ -175,6 +179,29 @@ fn file_inference_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _file: File) -> F
     FileInference::default()
 }
 
+/// What the body of `f` can assume because the values it's given exist
+/// (#256): that its parameter types, and its impl's instance, are
+/// well-formed, like `T ⊑ 'm` for `xs: 'm [T]`, as Rust's implied bounds
+/// do. They aren't part of `f`'s type for its callers: arguments meet them
+/// already, being values. What's about a type still being inferred isn't
+/// assumed.
+fn implied_assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>, params: &[Ty<'db>]) -> Vec<AtMostConstraint<'db>> {
+    let mutable = Ty::Mutability(Mutability::Mut);
+    let mut out = Vec::new();
+    for param in params {
+        split(db, param, &mutable, &mut out);
+    }
+    if let ItemContainerId::Impl(imp) = f.container(db)
+        && let Some(instance) = &impl_header(db, imp).class
+    {
+        for arg in instance.args.iter() {
+            split(db, arg, &mutable, &mut out);
+        }
+    }
+    out.retain(|a| !a.held.ty().any(&mut |t| matches!(t, Ty::Var(_))) && !a.bound.any(&mut |t| matches!(t, Ty::Var(_))));
+    out
+}
+
 /// Infer a group of functions that call each other, and generalize them.
 fn infer_group<'db>(
     db: &'db dyn Db,
@@ -195,6 +222,9 @@ fn infer_group<'db>(
         let sig = fn_sig(db, f);
         let params: Box<[Ty<'db>]> =
             sig.params.iter().map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General))).collect();
+        for assumption in implied_assumptions(db, f, &params) {
+            solver.assume_at_most(assumption);
+        }
         // The body decides the mutabilities of the return type that aren't
         // written.
         let ret = match &sig.ret {
@@ -237,7 +267,7 @@ fn infer_group<'db>(
         result.add_instances(def, &solver);
         let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
         let (scheme, mut result) = solved.generalize(db, f, def, &ty, result);
-        result.check_deep_immutability();
+        result.check_deep_immutability(db);
         env.done.insert(f, scheme.clone());
         out.schemes.push((f, scheme));
         out.results.push((f, result));

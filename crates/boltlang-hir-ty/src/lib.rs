@@ -17,6 +17,7 @@
 
 pub mod builtin;
 pub mod check;
+pub mod holds;
 pub mod infer;
 pub mod inhabited;
 pub mod kind;
