@@ -235,3 +235,45 @@ let a: mut ArrayIter[i32, imm]
 let b: mut ArrayIter[i32, mut]
 next(a): Option[i32]
 b.data[0] = 3: ()
+
+================================================================================
+The examples of #243
+:error
+================================================================================
+struct VecIter[T, 'v] { vec: 'v Vec[T], next: i32 }
+let frozen = to_imm(vec_from_array([1, 2]));
+let growing = vec_from_array([3, 4]).to_mut();
+let a = mut VecIter { vec: frozen, next: 0 };
+let b = mut VecIter { vec: growing, next: 0 };
+a.next += 1;
+b.vec.push(5);
+a.vec.push(5);
+let c = VecIter { vec: frozen, next: 0 };
+let d = VecIter { vec: growing, next: 0 };
+fn remaining[T](it: VecIter[T]) -> i32 = it.vec.len - it.next;
+fn reset[T](it: VecIter[T]) { it.vec.push(it.vec.items[0]); }
+fn drain[T](it: VecIter[T, mut]) { it.vec.push(it.vec.items[0]); }
+drain(b);
+drain(a);
+fn bump(it) { it.next += 1; it.vec.len }
+--------------------------------------------------------------------------------
+remaining: forall T. fn(VecIter[T]) -> i32
+reset: forall T. fn(VecIter[T]) -> ()
+drain: forall T. fn(VecIter[T, mut]) -> ()
+bump: forall a b c. mut a.next: i32 => a.vec: c => c.len: b => fn(a) -> b
+let frozen: imm Vec[i32]
+let growing: mut Vec[i32]
+let a: mut VecIter[i32, imm]
+let b: mut VecIter[i32, mut]
+a.next += 1: ()
+b.vec.push(5): ()
+a.vec.push(5): ()
+let c: imm VecIter[i32, imm]
+let d: imm VecIter[i32, mut]
+drain(b): ()
+drain(a): ()
+--------------------------------------------------------------------------------
+error at `it.vec`: expected mut Vec[T], found Vec[T]
+error at `a.vec`: expected mut Vec[{integer}], found imm Vec[{integer}]
+error at `a`: expected VecIter[{integer}, mut], found mut VecIter[{integer}, imm]
+error at `VecIter { vec: growing, next: 0 }`: imm VecIter[i32, mut] holds Mut
