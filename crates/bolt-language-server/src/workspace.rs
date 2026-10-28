@@ -1,7 +1,7 @@
 //! What the server knows about the files it works on, without the protocol
 //! around it: the documents open in the editor, and their diagnostics.
 
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use boltlang_base_db::{Db, File, FilePath, Settings, System, SystemPath, SystemPathBuf, source_text};
 use boltlang_ide_diagnostics::{
@@ -23,12 +23,23 @@ pub struct Workspace {
     /// The files that open documents use with errors that a notice was
     /// already given for, so that it's given once, until they're fixed.
     noticed: Vec<File>,
+    /// The paths that documents were opened with, by their real path, for
+    /// those opened through a symbolic link. A file is one [`File`] at its
+    /// real path (#238), but the editor knows the document by the path it
+    /// opened.
+    opened: HashMap<SystemPathBuf, SystemPathBuf>,
 }
 
 impl Workspace {
     /// A workspace whose files that aren't open come from `disk`.
     pub fn new(disk: Arc<dyn System>) -> Self {
-        Workspace { db: LspDatabase::new(disk), encoding: Encoding::Utf16, reported: Vec::new(), noticed: Vec::new() }
+        Workspace {
+            db: LspDatabase::new(disk),
+            encoding: Encoding::Utf16,
+            reported: Vec::new(),
+            noticed: Vec::new(),
+            opened: HashMap::new(),
+        }
     }
 
     /// Use the prelude of `prelude`, or none. A prelude asked for by name
@@ -46,14 +57,36 @@ impl Workspace {
 
     /// Use `text` for the document at `path`, when it's opened or edited.
     pub fn set_text(&mut self, path: &SystemPath, text: String) {
-        self.db.system.set_text(path, text);
-        self.sync(path);
+        let real = self.real_path(path);
+        if real.as_path() != path {
+            self.opened.insert(real.clone(), path.to_system_path_buf());
+        }
+        self.db.system.set_text(&real, text);
+        self.sync(&real);
     }
 
     /// Go back to what's on disk when the document at `path` is closed.
     pub fn close(&mut self, path: &SystemPath) {
-        self.db.system.remove_text(path);
-        self.sync(path);
+        let real = self.real_path(path);
+        self.opened.remove(&real);
+        self.db.system.remove_text(&real);
+        self.sync(&real);
+    }
+
+    /// The path of the file at `path`, with symbolic links resolved: where
+    /// the text of a document is kept. A document that isn't on disk yet
+    /// keeps its path.
+    fn real_path(&self, path: &SystemPath) -> SystemPathBuf {
+        self.db.system.canonicalize_path(path).unwrap_or_else(|_| path.to_system_path_buf())
+    }
+
+    /// The URI of `file`: the one its document was opened with, if it's
+    /// open through a symbolic link.
+    fn uri_of(&self, file: File) -> Option<Uri> {
+        match file.path(&self.db) {
+            FilePath::System(path) => file_uri(self.opened.get(path).map_or(path, |opened| opened)),
+            FilePath::SystemVirtual(_) => None,
+        }
     }
 
     /// Let Salsa know that the file at `path` changed, like a file that
@@ -118,10 +151,10 @@ impl Workspace {
         let used = self.used_files();
         let mut out = Vec::new();
         for &file in &used {
-            out.extend(uri_of(&self.db, file).map(|uri| (uri, self.file_diagnostics(file))));
+            out.extend(self.uri_of(file).map(|uri| (uri, self.file_diagnostics(file))));
         }
         for &file in self.reported.iter().filter(|f| !used.contains(f)) {
-            out.extend(uri_of(&self.db, file).map(|uri| (uri, Vec::new())));
+            out.extend(self.uri_of(file).map(|uri| (uri, Vec::new())));
         }
         self.reported = used;
         out
@@ -182,7 +215,7 @@ impl Workspace {
                     .labels
                     .iter()
                     .filter_map(|label| {
-                        let uri = uri_of(db, label.file)?;
+                        let uri = self.uri_of(label.file)?;
                         let text = source_text(db, label.file);
                         let range = LineIndex::new(text).range(label.range, self.encoding);
                         Some(DiagnosticRelatedInformation { location: Location { uri, range }, message: label.message.clone() })
@@ -210,13 +243,6 @@ impl Workspace {
 /// Whether `file` is a `bolt.toml`.
 fn is_manifest(db: &dyn Db, file: File) -> bool {
     file.path(db).as_system_path_buf().and_then(|p| p.as_std_path().file_name()).is_some_and(|n| n == MANIFEST)
-}
-
-fn uri_of(db: &dyn Db, file: File) -> Option<Uri> {
-    match file.path(db) {
-        FilePath::System(path) => file_uri(path),
-        FilePath::SystemVirtual(_) => None,
-    }
 }
 
 /// The `file:` URI of an absolute path. `Uri::from_file_path` asks the file
@@ -299,6 +325,25 @@ mod tests {
         assert!(related[0].location.uri.as_str().ends_with("lib.bolt"));
         assert_eq!(related[0].message, "expected because of this parameter of `negate`");
         assert_eq!(related[0].location.range.start, ls_types::Position { line: 0, character: 14 });
+    }
+
+    #[test]
+    fn a_document_opened_through_a_link_is_the_file_imports_use() {
+        let (mut workspace, disk) = workspace();
+        disk.write_file_bytes(SystemPath::new("/project/real/lib.bolt"), b"pub fn f() -> i32 = 1;\n").unwrap();
+        disk.create_symlink(SystemPath::new("/project/link.bolt"), SystemPath::new("real/lib.bolt")).unwrap();
+        let link = "/project/link.bolt";
+        // The editor opens the link, and adds `negate` without saving (#238).
+        workspace.set_text(SystemPath::new(link), "pub fn f() -> i32 = 1;\npub fn negate(x) = !x;\n".into());
+        workspace.set_text(SystemPath::new(MAIN), "import \"./link\" (f, negate);\nnegate(1);\n".into());
+        let found = workspace.diagnostics(SystemPath::new(MAIN));
+        assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `Bool`, found an integer"]);
+        // The label is in the document, by the path the editor knows it by.
+        let related = found[0].related_information.as_ref().unwrap();
+        assert!(related[0].location.uri.as_str().ends_with("/project/link.bolt"), "{:?}", related[0].location.uri);
+        // Closing it goes back to what's on disk.
+        workspace.close(SystemPath::new(link));
+        assert_eq!(messages(&workspace, MAIN), ["the imported file has nothing named `negate`", "cannot find `negate`"]);
     }
 
     /// The messages of a workspace report, by the file name of each URI.

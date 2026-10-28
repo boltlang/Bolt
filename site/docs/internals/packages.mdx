@@ -32,11 +32,13 @@ which must have a `bolt.toml` of its own, with its own dependencies. So a
 package uses only what it lists, and a dependency's dependencies are its
 own business.
 
-Every file is reached by its real path, with symbolic links resolved, and
-a package is its real directory (`package_of`), so a file is one file,
-and in one package, however it's reached
-([#238](https://github.com/boltlang/Bolt/issues/238)). `pub(package)`
-items are visible in the files of the same package.
+Every file is reached by its real path, with symbolic links resolved
+(`Files::resolve`), and a package is its real directory (`package_of`), so
+a file is one file, and in one package, however it's reached: by an
+import, as an argument of `bolt check`, or as a document the editor opens
+through a link ([#238](https://github.com/boltlang/Bolt/issues/238)). The
+language server reports a document's errors under the path it was opened
+with. `pub(package)` items are visible in the files of the same package.
 
 `std` is the exception: it's not a dependency, and every file can use it,
 from the compiler (`Settings::std_dir` in `boltlang-base-db`). Its files
@@ -112,6 +114,4 @@ the files of `std`, and says where they are with the initialization option
 
 Versions of dependencies, a lock file, and a cache of packages in the home
 directory that the lock file points into, for packages that aren't next
-to the project ([#99](https://github.com/boltlang/Bolt/issues/99)). The
-language server could then also keep the path each document was opened
-under, for files opened through a link (#238).
+to the project ([#99](https://github.com/boltlang/Bolt/issues/99)).
