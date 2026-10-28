@@ -9,9 +9,9 @@ use crate::{
     token_set::TokenSet,
 };
 
-const GENERIC_PARAM_FIRST: TokenSet = TokenSet::new(&[IDENT, METAVARIABLE, T![const], T![#]]);
+const GENERIC_PARAM_FIRST: TokenSet = TokenSet::new(&[IDENT, METAVARIABLE, LABEL_IDENT, T![const], T![#]]);
 
-/// `[T, U: Bound = Default, const N: usize = 3]`
+/// `[T, U: Bound = Default, const N: usize = 3, 'v: imm]`
 pub(crate) fn generic_param_list(p: &mut Parser) {
     let m = p.start();
     delimited(
@@ -37,6 +37,7 @@ fn generic_param(p: &mut Parser) -> bool {
             m.complete(p, TYPE_PARAM);
         }
         IDENT => type_param(p),
+        LABEL_IDENT => mutability_param(p),
         T![const] => const_param(p),
         _ => return false,
     }
@@ -54,6 +55,17 @@ fn type_param(p: &mut Parser) {
         type_(p);
     }
     m.complete(p, TYPE_PARAM);
+}
+
+/// `'v` or `'v: imm`: a named mutability that a struct takes, like the `'v`
+/// of `struct VecIter[T, 'v] { data: 'v Vec[T] }` (#243).
+fn mutability_param(p: &mut Parser) {
+    let m = p.start();
+    p.bump(LABEL_IDENT);
+    if p.at(T![:]) {
+        trait_bounds(p);
+    }
+    m.complete(p, MUTABILITY_PARAM);
 }
 
 /// `const N: usize` or `const N: usize = 3`. Like in the grammar, the

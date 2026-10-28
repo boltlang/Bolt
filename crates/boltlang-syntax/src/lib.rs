@@ -173,6 +173,9 @@ pub enum SyntaxKind {
     TYPE_PARAM,
     /// `const N: usize` or `const N: usize = 3`
     CONST_PARAM,
+    /// A named mutability like the `'v` of `struct VecIter[T, 'v]`, or
+    /// `'v: imm`
+    MUTABILITY_PARAM,
 
     // Generic arguments
     /// `[A, B]` after a type
@@ -471,6 +474,7 @@ impl SyntaxKind {
             GENERIC_PARAM_LIST => "a list of generic parameters",
             TYPE_PARAM => "a type parameter",
             CONST_PARAM => "a const parameter",
+            MUTABILITY_PARAM => "a mutability parameter",
             FN_TYPE => "a function type",
             RET_TYPE => "a return type",
             ABI => "an ABI (like extern \"C\")",

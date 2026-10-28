@@ -64,6 +64,15 @@ impl ExprCollector {
         }
     }
 
+    /// A mutability parameter like the `'v` of `struct VecIter[T, 'v]`, as
+    /// the mutability on its own that it names, and its bounds.
+    pub fn lower_mutability_param(&mut self, param: &ast::MutabilityParam) -> Option<(Name, TypeRefId, Box<[TypeRefId]>)> {
+        let name = Name::new(param.name_token()?.text().trim_start_matches('\''));
+        let type_ref = self.alloc_type(TypeRef::Mutability(MutabilityRef::Named(name.clone())), Some(param.syntax()));
+        let bounds = param.bounds().map(|b| b.bounds().map(|t| self.lower_type(t)).collect()).unwrap_or_default();
+        Some((name, type_ref, bounds))
+    }
+
     pub fn lower_type(&mut self, ty: ast::Type) -> TypeRefId {
         let node = ty.syntax().clone();
         let type_ref = match ty {
@@ -113,6 +122,7 @@ impl ExprCollector {
                             .filter_map(|param| match param {
                                 ast::GenericParam::Type(p) => name(p.name()),
                                 ast::GenericParam::Const(p) => name(p.name()),
+                                ast::GenericParam::Mutability(_) => None,
                             })
                             .collect()
                     })

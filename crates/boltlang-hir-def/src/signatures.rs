@@ -22,6 +22,8 @@ use crate::{
 pub struct GenericParams {
     pub type_params: Box<[TypeParamData]>,
     pub const_params: Box<[ConstParamData]>,
+    /// Named mutabilities like the `'v` of `struct VecIter[T, 'v]` (#243).
+    pub mutability_params: Box<[MutabilityParamData]>,
     pub where_predicates: Box<[WherePredicate]>,
 }
 
@@ -39,6 +41,16 @@ pub struct ConstParamData {
     pub name: Name,
     pub type_ref: TypeRefId,
     pub default: Option<ExprId>,
+}
+
+/// `'v` or `'v: imm`
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct MutabilityParamData {
+    /// Without its `'`.
+    pub name: Name,
+    /// The parameter as a mutability on its own, for what's said about it.
+    pub type_ref: TypeRefId,
+    pub bounds: Box<[TypeRefId]>,
 }
 
 /// `T: Show + Eq`, or a class constraint on its own like `Convert[A, B]`,
@@ -372,6 +384,7 @@ fn lower_generic_params(
 ) -> GenericParams {
     let mut type_params = Vec::new();
     let mut const_params = Vec::new();
+    let mut mutability_params = Vec::new();
     for param in list.iter().flat_map(|l| l.params()) {
         match param {
             ast::GenericParam::Type(p) => {
@@ -393,6 +406,11 @@ fn lower_generic_params(
                 let default = p.default_value().map(|e| c.lower_expr(e));
                 const_params.push(ConstParamData { name: Name::from_ident(&name.text()), type_ref, default });
             }
+            ast::GenericParam::Mutability(p) => {
+                if let Some((name, type_ref, bounds)) = c.lower_mutability_param(&p) {
+                    mutability_params.push(MutabilityParamData { name, type_ref, bounds });
+                }
+            }
         }
     }
     let mut where_predicates = Vec::new();
@@ -406,6 +424,7 @@ fn lower_generic_params(
     GenericParams {
         type_params: type_params.into(),
         const_params: const_params.into(),
+        mutability_params: mutability_params.into(),
         where_predicates: where_predicates.into(),
     }
 }

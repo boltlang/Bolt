@@ -266,6 +266,7 @@ impl GenericParamList {
 ast_enum!(GenericParam {
     Type(TypeParam) = TYPE_PARAM,
     Const(ConstParam) = CONST_PARAM,
+    Mutability(MutabilityParam) = MUTABILITY_PARAM,
 });
 
 /// `T`, `T: Bound` or `T = Default`. Can also be a metavariable in a macro.
@@ -298,6 +299,22 @@ impl ConstParam {
         self.find_node()
     }
     pub fn default_value(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// A named mutability like the `'v` of `struct VecIter[T, 'v]`, with
+/// bounds like `'v: imm`.
+pub struct MutabilityParam(SyntaxNode);
+
+simple_node!(MutabilityParam, MUTABILITY_PARAM);
+
+impl MutabilityParam {
+    /// The `'v`.
+    pub fn name_token(&self) -> Option<SyntaxToken> {
+        self.find_token(LABEL_IDENT)
+    }
+    pub fn bounds(&self) -> Option<TraitBounds> {
         self.find_node()
     }
 }
