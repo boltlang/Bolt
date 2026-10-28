@@ -4,7 +4,9 @@
 use std::sync::Arc;
 
 use boltlang_base_db::{Db, File, FilePath, Settings, System, SystemPath, SystemPathBuf, source_text};
-use boltlang_ide_diagnostics::{Severity, diagnostics, files_used_by, short_path};
+use boltlang_ide_diagnostics::{
+    DiagnosticCode, MANIFEST, Severity, diagnostics, files_used_by, manifest_diagnostics, package_manifest, short_path,
+};
 use ls_types::{DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Uri};
 
 use crate::{
@@ -66,21 +68,46 @@ impl Workspace {
     }
 
     /// The files that the open documents use, through their prelude or
-    /// their imports, that aren't open themselves (#249). Their errors are
-    /// the open documents' business too, but the editor doesn't ask for
-    /// them document by document.
+    /// their imports, and the `bolt.toml` of each of their packages, that
+    /// aren't open themselves (#249). Their errors are the open documents'
+    /// business too, but the editor doesn't ask for them document by
+    /// document.
     fn used_files(&self) -> Vec<File> {
         let db = &self.db;
         let open: Vec<File> = self.db.system.open_paths().iter().map(|p| db.files().resolve(db, p)).collect();
         let mut used = Vec::new();
-        for &document in &open {
+        let add = |file: File, used: &mut Vec<File>| {
+            if !open.contains(&file) && !used.contains(&file) {
+                used.push(file);
+            }
+        };
+        for &document in open.iter().filter(|&&f| !is_manifest(db, f)) {
             for &file in files_used_by(db, document) {
-                if !open.contains(&file) && !used.contains(&file) {
-                    used.push(file);
-                }
+                add(file, &mut used);
+            }
+        }
+        let bolt_files: Vec<File> = open.iter().copied().filter(|&f| !is_manifest(db, f)).chain(used.iter().copied()).collect();
+        for file in bolt_files {
+            if let Some(manifest) = package_manifest(db, file) {
+                add(manifest, &mut used);
             }
         }
         used
+    }
+
+    /// The diagnostics of `file`: of a `bolt.toml`, its own, and of a Bolt
+    /// file, without that its package's `bolt.toml` has an error (E0113),
+    /// which the editor shows in the `bolt.toml`.
+    fn ide_diagnostics(&self, file: File) -> Vec<boltlang_ide_diagnostics::Diagnostic> {
+        let db = &self.db;
+        if is_manifest(db, file) {
+            return manifest_diagnostics(db, file);
+        }
+        // Another kind of file, like a `Cargo.toml` an editor sends too.
+        if !file.path(db).as_system_path_buf().is_some_and(|p| p.as_std_path().extension().is_some_and(|e| e == "bolt")) {
+            return Vec::new();
+        }
+        diagnostics(db, file).into_iter().filter(|d| d.code != DiagnosticCode::BAD_MANIFEST).collect()
     }
 
     /// The diagnostics of the files that the open documents use, for a
@@ -115,7 +142,7 @@ impl Workspace {
         let mut broken = Vec::new();
         let mut out = Vec::new();
         for file in self.used_files() {
-            let errors: Vec<_> = diagnostics(db, file).into_iter().filter(|d| d.severity == Severity::Error).collect();
+            let errors: Vec<_> = self.ide_diagnostics(file).into_iter().filter(|d| d.severity == Severity::Error).collect();
             let Some(first) = errors.first() else { continue };
             broken.push(file);
             if self.noticed.contains(&file) {
@@ -148,7 +175,7 @@ impl Workspace {
         }
         let text = source_text(db, file);
         let index = LineIndex::new(text);
-        diagnostics(db, file)
+        self.ide_diagnostics(file)
             .into_iter()
             .map(|d| {
                 let related: Vec<_> = d
@@ -178,6 +205,11 @@ impl Workspace {
             })
             .collect()
     }
+}
+
+/// Whether `file` is a `bolt.toml`.
+fn is_manifest(db: &dyn Db, file: File) -> bool {
+    file.path(db).as_system_path_buf().and_then(|p| p.as_std_path().file_name()).is_some_and(|n| n == MANIFEST)
 }
 
 fn uri_of(db: &dyn Db, file: File) -> Option<Uri> {
@@ -308,6 +340,53 @@ mod tests {
         assert_eq!(workspace_messages(&mut workspace), [("lib.bolt".to_string(), vec![])]);
         assert!(workspace_messages(&mut workspace).is_empty());
         assert!(workspace.notices().is_empty());
+    }
+
+    const MANIFEST_PATH: &str = "/project/bolt.toml";
+
+    #[test]
+    fn a_manifest_s_errors_are_in_it() {
+        let (mut workspace, _) = workspace();
+        workspace.set_text(SystemPath::new(MANIFEST_PATH), "[package]\nname = 1\n".into());
+        workspace.set_text(SystemPath::new(MAIN), "let x: i32 = 1;\n".into());
+        // In the `bolt.toml`, where the error is...
+        let found = workspace.diagnostics(SystemPath::new(MANIFEST_PATH));
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].code, Some(NumberOrString::String("E0113".into())));
+        assert_eq!(found[0].range.start, ls_types::Position { line: 1, character: 7 });
+        // ...and not in each file of its package.
+        assert!(messages(&workspace, MAIN).is_empty());
+        // Editing it clears it, and a dependency that isn't a package is
+        // reported at its path.
+        workspace.set_text(
+            SystemPath::new(MANIFEST_PATH),
+            "[package]\nname = \"p\"\n[dependencies]\nshapes = { path = \"../shapes\" }\n".into(),
+        );
+        let found = workspace.diagnostics(SystemPath::new(MANIFEST_PATH));
+        assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["there's no package at `../shapes`: it has no `bolt.toml`"]);
+        assert_eq!(found[0].range.start, ls_types::Position { line: 3, character: 18 });
+    }
+
+    #[test]
+    fn other_files_have_no_diagnostics() {
+        let (mut workspace, _) = workspace();
+        workspace.set_text(SystemPath::new("/project/Cargo.toml"), "[package]\nname = \"x\"\n".into());
+        assert!(messages(&workspace, "/project/Cargo.toml").is_empty());
+    }
+
+    #[test]
+    fn a_manifest_that_isn_t_open_is_in_the_workspace_report() {
+        let (mut workspace, disk) = workspace();
+        disk.write_file_bytes(SystemPath::new(MANIFEST_PATH), b"[package]\nname = \"a b\"\n").unwrap();
+        workspace.set_text(SystemPath::new(MAIN), "let x: i32 = 1;\n".into());
+        assert!(messages(&workspace, MAIN).is_empty());
+        assert_eq!(workspace_messages(&mut workspace), [(
+            "bolt.toml".to_string(),
+            vec!["`a b` can't be the name of a package: use letters, digits, `_` and `-`".to_string()]
+        )]);
+        assert_eq!(workspace.notices(), [
+            "`project/bolt.toml`, which the open files use, has 1 error, the first on line 2: `a b` can't be the name of a package: use letters, digits, `_` and `-`"
+        ]);
     }
 
     #[test]

@@ -47,10 +47,14 @@ A package's prelude is `std`'s, or what its `bolt.toml` says
 (`prelude_package`), unless `bolt check --no-prelude` turns it off.
 
 A `bolt.toml` that can't be read, or says something wrong, like a
-dependency called `std`, is reported (E0113) at the start of each file of
-its package, with a label where the error is in the `bolt.toml`. A
-dependency whose directory has no `bolt.toml` is reported where it's
-imported.
+dependency called `std`, is reported (E0113) where the error is in it
+(`manifest_problems`), and so is a dependency whose directory has no
+`bolt.toml`, at its path. The language server shows these in the
+`bolt.toml`: when it's open, and otherwise in the report of the files that
+open documents use, with one warning. `bolt check`, which only checks Bolt
+files, reports a `bolt.toml` that can't be read at the start of each file
+of its package, with a label where the error is, and a dependency that
+isn't a package where it's imported.
 
 ## The `std` that comes with the compiler
 
