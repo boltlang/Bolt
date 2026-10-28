@@ -22,7 +22,7 @@ use boltlang_hir_def::{
 /// The files a file uses, through its prelude and its imports.
 pub use boltlang_hir_def::nameres::files_used_by;
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
-use boltlang_hir_ty::{NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
+use boltlang_hir_ty::{AdtId, NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
 use boltlang_syntax::{
     SyntaxKind, SyntaxNode,
     rowan::{TextRange, TextSize},
@@ -222,14 +222,19 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 let tys = [held, as_mutability(bound.clone())];
                 names = TyNames::explicit(db, &tys.iter().collect::<Vec<_>>());
             }
+            // Different structs or enums with the same name would read as the
+            // same type (#239): the message says so, and labels show where
+            // each is defined.
+            let same_named = same_named(db, &types_in(&d.kind));
             // Types that differ only in mutabilities that aren't shown, like
             // an `imm fn()` and a generic `fn()`, are shown with them.
             if let DiagnosticKind::TypeMismatch { expected, actual, .. } = &d.kind
+                && same_named.is_empty()
                 && expected.display_with(db, &names).to_string() == actual.display_with(db, &names).to_string()
             {
                 names = TyNames::explicit(db, &types_in(&d.kind));
             }
-            let labels = match &d.kind {
+            let mut labels = match &d.kind {
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }
                 | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
@@ -239,10 +244,65 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 }
                 _ => Vec::new(),
             };
-            let (code, message) = describe(db, &names, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
+            let (code, mut message) =
+                describe(db, &names, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
+            for (name, ids) in &same_named {
+                let all = if ids.len() == 2 { "both" } else { "all" };
+                message.push_str(&format!(" (these are different types, {all} called `{name}`)"));
+                for (i, &id) in ids.iter().enumerate() {
+                    let which = if i == 0 { "one" } else { "another" };
+                    labels.extend(definition_label(db, id, format!("{which} `{name}` is defined here")));
+                }
+            }
             Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message, labels }
         })
         .collect()
+}
+
+/// The structs and enums in `tys` that have the same name as another one
+/// in them, grouped by the name, in the order they appear.
+fn same_named<'db>(db: &'db dyn Db, tys: &[&Ty<'db>]) -> Vec<(String, Vec<AdtId<'db>>)> {
+    let mut adts: Vec<AdtId<'db>> = Vec::new();
+    for ty in tys {
+        ty.any(&mut |t| {
+            if let Ty::Adt(id, ..) = t
+                && !adts.contains(id)
+            {
+                adts.push(*id);
+            }
+            false
+        });
+    }
+    let mut groups: Vec<(String, Vec<AdtId<'db>>)> = Vec::new();
+    for id in adts {
+        let name = adt_name(db, id);
+        match groups.iter_mut().find(|(n, _)| *n == name) {
+            Some((_, ids)) => ids.push(id),
+            None => groups.push((name, vec![id])),
+        }
+    }
+    groups.retain(|(_, ids)| ids.len() > 1);
+    groups
+}
+
+fn adt_name(db: &dyn Db, id: AdtId<'_>) -> String {
+    let name = match id {
+        AdtId::Struct(s) => s.item(db).name.clone(),
+        AdtId::Enum(e) => e.item(db).name.clone(),
+    };
+    name.map_or_else(|| "?".to_string(), |n| n.to_string())
+}
+
+/// A label at the name of the struct or enum `id`, where it's defined.
+fn definition_label(db: &dyn Db, id: AdtId<'_>, message: String) -> Option<Label> {
+    let (file, ast_id) = match id {
+        AdtId::Struct(s) => (s.file(db), s.item(db).ast_id),
+        AdtId::Enum(e) => (e.file(db), e.item(db).ast_id),
+    };
+    let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
+    let node = ast_id.to_node(db, file, &root)?;
+    let range = node.children().find(|n| n.kind() == SyntaxKind::NAME).unwrap_or(node).text_range();
+    Some(Label { file, range, message })
 }
 
 /// The syntax errors of `file`, without checking anything else.

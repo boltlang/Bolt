@@ -762,6 +762,32 @@ fn g[a](x: a) = x + (|y| y);
 }
 
 #[test]
+fn different_types_with_the_same_name() {
+    check_files(&[
+        (
+            "/proj/a.bolt",
+            r#"
+pub struct Point { x: i32 }
+         //^^^^^ label: another `Point` is defined here
+pub fn origin() -> imm Point = Point { x: 0 };
+"#,
+        ),
+        (
+            "/proj/main.bolt",
+            r#"
+import "./a" (origin);
+struct Point { x: i32 }
+     //^^^^^ label: one `Point` is defined here
+fn f(p: imm Point) -> i32 = p.x;
+      //^^^^^^^^^ label: expected because of this parameter of `f`
+f(origin());
+//^^^^^^^^ error: expected `imm Point`, found `imm Point` (these are different types, both called `Point`)
+"#,
+        ),
+    ]);
+}
+
+#[test]
 fn package_imports() {
     check_files(&[
         (
