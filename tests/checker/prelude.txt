@@ -1,10 +1,10 @@
 ================================================================================
 The prelude can be used without importing it
 ================================================================================
-//- /.bolt/packages/std/__prelude__/option.bolt
+//- /toolchain/std/__prelude__/option.bolt
 pub enum Option[T] { Some(T), None }
 pub import Option.*;
-//- /.bolt/packages/std/__prelude__/lib.bolt
+//- /toolchain/std/__prelude__/lib.bolt
 pub import "./option" *;
 pub fn id[T](x: T) -> T = x;
 //- /main.bolt
@@ -13,7 +13,7 @@ get(Some(id(1)), 2);
 let o: Option[Bool] = None;
 
 --------------------------------------------------------------------------------
-/.bolt/packages/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /main.bolt: get: forall a. fn(Option[a], a) -> a
 /main.bolt: get(Some(id(1)), 2): i32
 /main.bolt: let o: Option[Bool]
@@ -21,7 +21,7 @@ let o: Option[Bool] = None;
 ================================================================================
 Names in the file and its imports replace the ones of the prelude
 ================================================================================
-//- /.bolt/packages/std/__prelude__/lib.bolt
+//- /toolchain/std/__prelude__/lib.bolt
 pub fn id[T](x: T) -> T = x;
 pub fn first(x: i32, y: i32) -> i32 = x;
 //- /lib.bolt
@@ -33,8 +33,8 @@ id(1);
 first(True, False);
 
 --------------------------------------------------------------------------------
-/.bolt/packages/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
-/.bolt/packages/std/__prelude__/lib.bolt: first: fn(i32, i32) -> i32
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
+/toolchain/std/__prelude__/lib.bolt: first: fn(i32, i32) -> i32
 /lib.bolt: first: fn(Bool, Bool) -> Bool
 /main.bolt: id: fn(i32) -> String
 /main.bolt: id(1): String
@@ -43,20 +43,20 @@ first(True, False);
 ================================================================================
 Instances in the prelude are found
 ================================================================================
-//- /.bolt/packages/std/__prelude__/lib.bolt
+//- /toolchain/std/__prelude__/lib.bolt
 pub class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 show(1);
 
 --------------------------------------------------------------------------------
-/.bolt/packages/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> String
+/toolchain/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> String
 /main.bolt: show(1): String
 
 ================================================================================
 The names of the prelude aren't re-exported
 ================================================================================
-//- /.bolt/packages/std/__prelude__/lib.bolt
+//- /toolchain/std/__prelude__/lib.bolt
 pub fn id[T](x: T) -> T = x;
 //- /lib.bolt
 pub fn twice[T](x: T) -> (T, T) = (id(x), id(x));
@@ -65,7 +65,7 @@ import "./lib" as lib;
 lib.twice(1);
 lib.id(1);
 --------------------------------------------------------------------------------
-/.bolt/packages/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /lib.bolt: twice: forall T. fn(T) -> (T, T)
 /main.bolt: lib.twice(1): (i32, i32)
 /main.bolt: lib.id(1): {error}

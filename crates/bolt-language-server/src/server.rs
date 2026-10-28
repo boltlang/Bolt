@@ -59,6 +59,11 @@ impl Server {
         if let Some(prelude) = params.initialization_options.as_ref().and_then(|o| o.get("prelude")) {
             self.workspace.set_prelude(prelude.as_str().map(str::to_string));
         }
+        // `{ "std": "/path" }` says where `std` is, for a server without one,
+        // like in the browser, where the page gives it the files.
+        if let Some(std) = params.initialization_options.as_ref().and_then(|o| o.get("std")).and_then(|s| s.as_str()) {
+            self.workspace.set_std_dir(Some(SystemPathBuf::from(std)));
+        }
         self.refresh_support = capabilities
             .workspace
             .as_ref()

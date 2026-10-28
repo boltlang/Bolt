@@ -155,7 +155,7 @@ first([True]): Bool
 Without a prelude, indexing and loops need the classes
 :error
 ================================================================================
-//- /.bolt/packages/std/__prelude__/lib.bolt
+//- /toolchain/std/__prelude__/lib.bolt
 pub fn id[T](x: T) -> T = x;
 //- /main.bolt
 let xs = [1];
@@ -163,7 +163,7 @@ xs[0];
 xs[0] = 2;
 for x in xs {}
 --------------------------------------------------------------------------------
-/.bolt/packages/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
+/toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /main.bolt: let xs: imm [i32]
 /main.bolt: xs[0]: {error}
 /main.bolt: xs[0] = 2: ()

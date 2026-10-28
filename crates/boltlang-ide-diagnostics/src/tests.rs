@@ -1,4 +1,4 @@
-use boltlang_base_db::{File, TestDb, source_text};
+use boltlang_base_db::{File, Settings, SystemPathBuf, TestDb, source_text};
 use boltlang_syntax::rowan::{TextRange, TextSize};
 
 use crate::diagnostics;
@@ -41,7 +41,9 @@ fn check_with_std(fixture: &str) {
 #[track_caller]
 fn check_db(db: TestDb, files: &[(&str, &str)]) {
     let files: Vec<_> = files.iter().map(|(path, text)| (*path, db.file(path, text))).collect();
-    let all: Vec<_> = files.iter().flat_map(|&(_, file)| diagnostics(&db, file)).collect();
+    // Only Bolt files have diagnostics: a `bolt.toml` is read by the others.
+    let all: Vec<_> =
+        files.iter().filter(|(path, _)| path.ends_with(".bolt")).flat_map(|&(_, file)| diagnostics(&db, file)).collect();
     for &(path, file) in &files {
         let text = source_text(&db, file);
         let mut expected: Vec<String> =
@@ -267,7 +269,7 @@ fn import_errors() {
 import "./missing" (x);
      //^^^^^^^^^^^ error: cannot find the file `./missing`
 import "std/io" (print);
-     //^^^^^^^^ error: cannot find the package `std` in `.bolt/packages`
+     //^^^^^^^^ error: cannot find `std`, which comes with the compiler
 import "./lib" (nope, hidden, a);
               //^^^^ error: the imported file has nothing named `nope`
                     //^^^^^^ error: `hidden` is private
@@ -787,11 +789,19 @@ f(origin());
     ]);
 }
 
+/// A database whose `std`, the one that comes with the compiler, is in
+/// [`TestDb::STD_DIR`], for files there that a test gives.
+fn with_std_dir() -> TestDb {
+    let mut db = TestDb::new();
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
+    db
+}
+
 #[test]
 fn package_imports() {
-    check_files(&[
+    check_db(with_std_dir(), &[
         (
-            "/proj/.bolt/packages/std/io.bolt",
+            "/toolchain/std/io.bolt",
             r#"
 pub fn print(s: String) -> () = ();
               //^^^^^^ label: expected because of this parameter of `print`
@@ -816,7 +826,9 @@ print(1);
 #[test]
 fn package_items_through_an_alias() {
     check_files(&[
-        ("/proj/.bolt/packages/geo/lib.bolt", "pub(package) fn helper() -> i32 = 1;\npub fn area() -> i32 = helper();\n"),
+        ("/geo/bolt.toml", "[package]\nname = \"geo\"\n"),
+        ("/geo/lib.bolt", "pub(package) fn helper() -> i32 = 1;\npub fn area() -> i32 = helper();\n"),
+        ("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n"),
         (
             "/proj/main.bolt",
             r#"
@@ -886,20 +898,17 @@ let b = Maybe.Has(1);
 }
 
 #[test]
-fn a_file_of_a_linked_prelude_package_by_its_real_path_sees_one_copy() {
-    // Like this repository: `.bolt/packages/std` links to `packages/std`. A
-    // file of `std` checked by its real path is in `std`, so it doesn't get
-    // the prelude, and `Some` needs an import, instead of coming from a
-    // second copy of `std` with another `Option`.
-    let mut db = TestDb::new();
-    db.file("/packages/std/__prelude__/lib.bolt", "pub import \"./option\" *;\n");
-    db.file("/packages/std/__prelude__/option.bolt", "pub enum Option[T] { Some(T), None }\npub import Option.*;\n");
-    db.symlink("/.bolt/packages/std", "../../packages/std");
+fn a_file_of_std_has_no_prelude() {
+    // It's in `std`, so `Some` needs an import, rather than coming from the
+    // prelude that it's part of.
+    let mut db = with_std_dir();
+    db.file("/toolchain/std/__prelude__/lib.bolt", "pub import \"./option\" *;\n");
+    db.file("/toolchain/std/__prelude__/option.bolt", "pub enum Option[T] { Some(T), None }\npub import Option.*;\n");
     db.set_prelude(Some("std"), true);
     check_db(
         db,
         &[(
-            "/packages/std/__prelude__/uses.bolt",
+            "/toolchain/std/__prelude__/uses.bolt",
             r#"
 import "./option" (Option);
 fn f(x: Option[i32]) -> Option[i32] = match x {
@@ -1130,10 +1139,10 @@ fn broken(db: &TestDb, main: File) -> Vec<String> {
 
 #[test]
 fn errors_in_files_a_file_uses() {
-    let mut db = TestDb::new();
+    let mut db = with_std_dir();
     db.set_prelude(Some("std"), true);
-    db.file("/proj/.bolt/packages/std/__prelude__/lib.bolt", "import \"./more\";\npub fn id(x: i32) -> i32 = x;\n");
-    let more = db.file("/proj/.bolt/packages/std/__prelude__/more.bolt", "let a: i32 = True;\nlet b: Bool = 1;\n");
+    db.file("/toolchain/std/__prelude__/lib.bolt", "import \"./more\";\npub fn id(x: i32) -> i32 = x;\n");
+    let more = db.file("/toolchain/std/__prelude__/more.bolt", "let a: i32 = True;\nlet b: Bool = 1;\n");
     db.file("/proj/deep.bolt", "pub fn f() -> i32 = True;\n");
     db.file("/proj/lib.bolt", "import \"./deep\" (f);\npub fn g() -> i32 = f();\n");
     let main = db.file("/proj/main.bolt", "let x = 1;\nimport \"./lib\" (g);\ng();\n");

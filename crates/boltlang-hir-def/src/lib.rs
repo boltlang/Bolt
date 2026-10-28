@@ -21,6 +21,7 @@ pub mod expr_store;
 pub mod hir;
 pub mod ids;
 pub mod item_tree;
+pub mod manifest;
 mod name;
 pub mod nameres;
 pub mod resolver;

@@ -28,6 +28,8 @@ export interface ClientOptions {
    * `undefined` for the server's default, `std`.
    */
   prelude?: string | null;
+  /** The directory of `std` among `files`, if they have it. */
+  std?: string;
   /** New diagnostics for `text`, the text they're about. */
   onDiagnostics(diagnostics: Diagnostic[], text: string): void;
   onStatus(status: string, isError: boolean): void;
@@ -128,7 +130,10 @@ export class Client {
       rootUri: null,
       // JavaScript strings count UTF-16 units, like the protocol by default.
       capabilities: { general: { positionEncodings: ["utf-16"] }, textDocument: { diagnostic: {} } },
-      ...(this.options.prelude === undefined ? {} : { initializationOptions: { prelude: this.options.prelude } }),
+      initializationOptions: {
+        ...(this.options.prelude === undefined ? {} : { prelude: this.options.prelude }),
+        ...(this.options.std === undefined ? {} : { std: this.options.std }),
+      },
     });
     this.notify("initialized", {});
     for (const file of this.options.files) this.post({ type: "file", path: file.path, text: file.text });

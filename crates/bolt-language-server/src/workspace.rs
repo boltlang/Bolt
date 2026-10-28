@@ -229,15 +229,15 @@ mod tests {
     #[test]
     fn diagnostics_follow_the_prelude() {
         let (mut workspace, disk) = workspace();
-        disk.write_file_bytes(SystemPath::new("/project/.bolt/packages/std/__prelude__/lib.bolt"), b"pub fn id(x: i32) -> i32 = x;\n")
-            .unwrap();
+        disk.write_file_bytes(SystemPath::new("/toolchain/std/__prelude__/lib.bolt"), b"pub fn id(x: i32) -> i32 = x;\n").unwrap();
+        workspace.set_std_dir(Some(SystemPathBuf::from("/toolchain/std")));
         workspace.set_text(SystemPath::new(MAIN), "id(1);\n".into());
         assert!(messages(&workspace, MAIN).is_empty());
         workspace.set_prelude(None);
         assert_eq!(messages(&workspace, MAIN), ["cannot find `id`"]);
         workspace.set_prelude(Some("mine".into()));
         assert_eq!(messages(&workspace, MAIN), [
-            "cannot find the package `mine` of the prelude in `.bolt/packages`",
+            "cannot find the package `mine` of the prelude: it isn't a dependency",
             "cannot find `id`"
         ]);
     }
@@ -279,7 +279,8 @@ mod tests {
     #[test]
     fn errors_of_the_prelude_are_reported_where_they_are() {
         let (mut workspace, disk) = workspace();
-        let prelude = SystemPath::new("/project/.bolt/packages/std/__prelude__/lib.bolt");
+        workspace.set_std_dir(Some(SystemPathBuf::from("/toolchain/std")));
+        let prelude = SystemPath::new("/toolchain/std/__prelude__/lib.bolt");
         disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = True;
 ").unwrap();
         workspace.set_text(SystemPath::new(MAIN), "id(1);

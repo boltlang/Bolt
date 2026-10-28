@@ -25,8 +25,8 @@ import { stdFiles } from "./vendor/std.js";
 /** Where the code and the files next to it are for the language server. */
 const ROOT = "/playground";
 const URI = `file://${ROOT}/main.bolt`;
-/** Where the server finds the package `std`. */
-const STD = `${ROOT}/.bolt/packages/std`;
+/** Where the server finds `std`, which the component brings. */
+const STD = "/std";
 
 export interface PlaygroundProps {
   /** The code to start with, and to go back to with the Reset button. */
@@ -161,6 +161,7 @@ export function Playground({
       uri: URI,
       files: all,
       prelude,
+      std: withStd ? STD : undefined,
       onDiagnostics: (diagnostics, text) => setChecked({ diagnostics, text }),
       onStatus: (text, isError) => setCheckStatus({ text, isError }),
     });

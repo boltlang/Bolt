@@ -10,6 +10,7 @@
 //! another diagnostic already explains where the error came from.
 
 use boltlang_base_db::{Db, File, parse_file};
+use boltlang_hir_def::manifest::{manifest, package_manifest};
 use boltlang_hir_def::{
     Name,
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
@@ -64,6 +65,9 @@ pub struct Diagnostic<'db> {
 pub enum DiagnosticKind<'db> {
     /// A syntax error, with the parser's message.
     Syntax(String),
+    /// The `bolt.toml` of the file's package, `manifest`, has an error, at
+    /// `range` in it if that's known.
+    BadManifest { manifest: File, message: String, range: Option<TextRange> },
 
     // Names
     /// Two definitions or imports of the same name in the same namespace.
@@ -281,6 +285,7 @@ pub fn file_diagnostics<'db>(db: &'db dyn Db, file: File) -> Vec<Diagnostic<'db>
     let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
     let mut collector = Collector { db, file, root, fallback: TextRange::empty(TextSize::from(0)), out: Vec::new() };
     collector.syntax_errors();
+    collector.manifest();
     collector.name_resolution();
     collector.items();
     collector.body(DefWithBody::File(file));
@@ -304,6 +309,17 @@ impl<'db> Collector<'db> {
     fn push(&mut self, range: Option<TextRange>, kind: DiagnosticKind<'db>) {
         let range = range.unwrap_or(self.fallback);
         self.out.push(Diagnostic { file: self.file, range, kind });
+    }
+
+    /// An error in the `bolt.toml` of the file's package, reported at the
+    /// start of each file of it, which can't use its dependencies.
+    fn manifest(&mut self) {
+        let Some(manifest_file) = package_manifest(self.db, self.file) else { return };
+        if let Err(error) = manifest(self.db, manifest_file) {
+            let range = error.range.map(|(start, end)| TextRange::new(start.into(), end.into()));
+            let kind = DiagnosticKind::BadManifest { manifest: manifest_file, message: error.message.clone(), range };
+            self.push(Some(TextRange::empty(TextSize::from(0))), kind);
+        }
     }
 
     fn syntax_errors(&mut self) {

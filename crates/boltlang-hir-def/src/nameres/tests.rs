@@ -190,7 +190,7 @@ fn a() {}
         diagnostics(scope),
         [
             "unresolved path ./missing: FileNotFound",
-            "unresolved path std/io: PackageNotFound { package: \"std\" }",
+            "unresolved path std/io: NoStd",
             "unresolved name nope",
             "private hidden",
             "duplicate a"
@@ -218,42 +218,59 @@ fn import_paths_are_relative_to_the_importing_file() {
 }
 
 #[test]
-fn packages_are_in_the_nearest_bolt_packages() {
+fn packages_are_the_dependencies_in_bolt_toml() {
     let db = TestDb::new();
-    let io = db.file("/proj/.bolt/packages/std/io.bolt", "");
-    let lib = db.file("/proj/.bolt/packages/std/lib.bolt", "");
-    let nested = db.file("/proj/.bolt/packages/std/fs/path.bolt", "");
-    let inner_io = db.file("/proj/sub/.bolt/packages/std/io.bolt", "");
-    let main = db.file("/proj/src/main.bolt", "");
-    let inner = db.file("/proj/sub/deep/main.bolt", "");
-    let resolve = |importer, source| resolve_import_path(&db, importer, source);
-    assert_eq!(resolve(main, "std/io"), Ok(io));
-    assert_eq!(resolve(main, "std/io.bolt"), Ok(io));
-    assert_eq!(resolve(main, "std"), Ok(lib));
-    assert_eq!(resolve(main, "std/fs/path"), Ok(nested));
-    // The nearest package wins, even when it doesn't have the file.
-    assert_eq!(resolve(inner, "std/io"), Ok(inner_io));
-    assert_eq!(
-        resolve(inner, "std"),
-        Err(ImportPathError::NotInPackage { package: "std".into(), path: "lib.bolt".into() })
+    db.file(
+        "/proj/bolt.toml",
+        "[package]\nname = \"demo\"\n[dependencies]\nshapes = { path = \"../shapes\" }\nlost = { path = \"../nowhere\" }\n",
     );
-    assert_eq!(resolve(main, "json"), Err(ImportPathError::PackageNotFound { package: "json".into() }));
+    db.file("/shapes/bolt.toml", "[package]\nname = \"shapes\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
+    db.file("/geo/bolt.toml", "[package]\nname = \"geo\"\n");
+    let geo = db.file("/geo/lib.bolt", "");
+    let lib = db.file("/shapes/lib.bolt", "");
+    let circle = db.file("/shapes/circle.bolt", "");
+    let nested = db.file("/shapes/fs/path.bolt", "");
+    let main = db.file("/proj/src/main.bolt", "");
+    let loose = db.file("/elsewhere/loose.bolt", "");
+    let resolve = |importer, source| resolve_import_path(&db, importer, source);
+    assert_eq!(resolve(main, "shapes/circle"), Ok(circle));
+    assert_eq!(resolve(main, "shapes/circle.bolt"), Ok(circle));
+    assert_eq!(resolve(main, "shapes"), Ok(lib));
+    assert_eq!(resolve(main, "shapes/fs/path"), Ok(nested));
+    assert_eq!(
+        resolve(main, "shapes/square"),
+        Err(ImportPathError::NotInPackage { package: "shapes".into(), path: "square.bolt".into() })
+    );
+    // A dependency's own dependencies are its own.
+    assert_eq!(resolve(circle, "geo"), Ok(geo));
+    assert_eq!(resolve(main, "geo"), Err(ImportPathError::NotADependency { package: "geo".into() }));
+    assert_eq!(
+        resolve(main, "lost"),
+        Err(ImportPathError::DependencyNotFound { package: "lost".into(), path: "../nowhere".into() })
+    );
+    // A file in no package can only use `std`, which this database lacks.
+    assert_eq!(resolve(loose, "shapes"), Err(ImportPathError::NoManifest { package: "shapes".into() }));
+    assert_eq!(resolve(loose, "std"), Err(ImportPathError::NoStd));
 }
 
 #[test]
-fn std_comes_with_the_compiler_when_it_does() {
+fn a_broken_manifest_has_no_dependencies() {
+    let db = TestDb::new();
+    db.file("/proj/bolt.toml", "[package]\nname = 1\n");
+    let main = db.file("/proj/main.bolt", "");
+    assert_eq!(resolve_import_path(&db, main, "shapes"), Err(ImportPathError::BadManifest));
+}
+
+#[test]
+fn std_comes_with_the_compiler() {
     let mut db = TestDb::new();
     db.set_prelude(Some("std"), false);
     let io = db.file("/toolchain/std/io.bolt", "pub fn print() {}\n");
     let prelude = db.file("/toolchain/std/__prelude__/lib.bolt", "");
-    // A project's own `std` isn't used, but its other packages are.
-    db.file("/proj/.bolt/packages/std/io.bolt", "");
-    let json = db.file("/proj/.bolt/packages/json/lib.bolt", "");
     let main = db.file("/proj/main.bolt", "");
     Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
     let resolve = |importer, source| resolve_import_path(&db, importer, source);
     assert_eq!(resolve(main, "std/io"), Ok(io));
-    assert_eq!(resolve(main, "json"), Ok(json));
     assert_eq!(
         resolve(main, "std/missing"),
         Err(ImportPathError::NotInPackage { package: "std".into(), path: "missing.bolt".into() })
@@ -268,7 +285,6 @@ fn std_comes_with_the_compiler_when_it_does() {
 #[test]
 fn import_paths_must_be_relative_or_in_a_package() {
     let db = TestDb::new();
-    db.file("/proj/.bolt/packages/std/io.bolt", "");
     let main = db.file("/proj/main.bolt", "");
     for source in ["/proj/main", "1std/io", "std/../io", "std/./io", "std//io", "std/", ""] {
         assert_eq!(resolve_import_path(&db, main, source), Err(ImportPathError::Invalid), "{source}");
@@ -278,9 +294,11 @@ fn import_paths_must_be_relative_or_in_a_package() {
 #[test]
 fn package_items_are_only_visible_in_their_package() {
     let db = TestDb::new();
-    db.file("/proj/.bolt/packages/geo/lib.bolt", "pub(package) fn helper() {}\npub fn area() {}\nfn secret() {}\n");
-    let inside = db.file("/proj/.bolt/packages/geo/shapes.bolt", "import \"./lib\" (helper, area);\n");
-    let glob_inside = db.file("/proj/.bolt/packages/geo/all.bolt", "import \"geo\" *;\n");
+    db.file("/geo/bolt.toml", "[package]\nname = \"geo\"\n");
+    db.file("/geo/lib.bolt", "pub(package) fn helper() {}\npub fn area() {}\nfn secret() {}\n");
+    let inside = db.file("/geo/shapes.bolt", "import \"./lib\" (helper, area);\n");
+    let glob_inside = db.file("/geo/all.bolt", "import \"./lib\" *;\n");
+    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
     let outside = db.file("/proj/main.bolt", "import \"geo\" (helper, area, secret);\n");
     let glob_outside = db.file("/proj/src/all.bolt", "import \"geo\" *;\n");
     assert!(diagnostics(file_scope(&db, inside)).is_empty());
@@ -292,16 +310,18 @@ fn package_items_are_only_visible_in_their_package() {
 #[test]
 fn files_are_in_the_innermost_package() {
     let db = TestDb::new();
-    let geo = db.file("/proj/.bolt/packages/geo/lib.bolt", "");
-    let math = db.file("/proj/.bolt/packages/geo/.bolt/packages/math/lib.bolt", "");
-    let deep = db.file("/proj/.bolt/packages/geo/src/deep.bolt", "");
-    let a = db.file("/proj/a/x.bolt", "");
-    let b = db.file("/proj/b/y.bolt", "");
+    db.file("/geo/bolt.toml", "[package]\nname = \"geo\"\n");
+    db.file("/geo/math/bolt.toml", "[package]\nname = \"math\"\n");
+    let geo = db.file("/geo/lib.bolt", "");
+    let math = db.file("/geo/math/lib.bolt", "");
+    let deep = db.file("/geo/src/deep.bolt", "");
+    let a = db.file("/loose/a/x.bolt", "");
+    let b = db.file("/loose/b/y.bolt", "");
     let dir = |p: &str| Some(SystemPathBuf::from(p));
-    assert_eq!(package_of(&db, geo), dir("/proj/.bolt/packages/geo"));
-    assert_eq!(package_of(&db, deep), dir("/proj/.bolt/packages/geo"));
-    assert_eq!(package_of(&db, math), dir("/proj/.bolt/packages/geo/.bolt/packages/math"));
-    // The files of the project are one package, wherever they are.
+    assert_eq!(package_of(&db, geo), dir("/geo"));
+    assert_eq!(package_of(&db, deep), dir("/geo"));
+    assert_eq!(package_of(&db, math), dir("/geo/math"));
+    // Files in no package are in none, together.
     assert_eq!(package_of(&db, a), None);
     assert!(is_visible_from(&db, RawVisibility::Package, a, b));
     assert!(!is_visible_from(&db, RawVisibility::Package, geo, a));
@@ -363,12 +383,11 @@ fn files_can_re_export_from_each_other() {
 #[test]
 fn re_exports_are_as_visible_as_the_import_and_the_item() {
     let db = TestDb::new();
-    db.file("/proj/.bolt/packages/geo/shapes.bolt", "pub fn area() {}\npub(package) fn helper() {}\n");
-    db.file(
-        "/proj/.bolt/packages/geo/lib.bolt",
-        "pub import \"./shapes\" (area, helper);\npub(package) import \"./shapes\" (area as area2);\n",
-    );
-    let inside = db.file("/proj/.bolt/packages/geo/user.bolt", "import \"./lib\" (area, helper, area2);\n");
+    db.file("/geo/bolt.toml", "[package]\nname = \"geo\"\n");
+    db.file("/geo/shapes.bolt", "pub fn area() {}\npub(package) fn helper() {}\n");
+    db.file("/geo/lib.bolt", "pub import \"./shapes\" (area, helper);\npub(package) import \"./shapes\" (area as area2);\n");
+    let inside = db.file("/geo/user.bolt", "import \"./lib\" (area, helper, area2);\n");
+    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
     let outside = db.file("/proj/main.bolt", "import \"geo\" (area, helper, area2);\n");
     assert!(diagnostics(file_scope(&db, inside)).is_empty(), "{:?}", diagnostics(file_scope(&db, inside)));
     assert_eq!(diagnostics(file_scope(&db, outside)), ["package-only helper", "package-only area2"]);
@@ -378,11 +397,12 @@ fn re_exports_are_as_visible_as_the_import_and_the_item() {
 fn the_prelude_comes_last() {
     let mut db = TestDb::new();
     db.set_prelude(Some("std"), false);
-    db.file("/.bolt/packages/std/__prelude__/option.bolt", "pub enum Option[T] { None, Some(T) }\n");
+    db.file("/toolchain/std/__prelude__/option.bolt", "pub enum Option[T] { None, Some(T) }\n");
     db.file(
-        "/.bolt/packages/std/__prelude__/lib.bolt",
+        "/toolchain/std/__prelude__/lib.bolt",
         "pub import \"./option\" (Option);\npub import Option.*;\npub fn id() {}\nfn hidden() {}\n",
     );
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
     let main = db.file(
         "/main.bolt",
         "enum Maybe { Some, Nothing }\nimport Maybe.*;\nimport Option.*;\nfn id() {}\n",
@@ -403,55 +423,52 @@ fn the_prelude_comes_last() {
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
 }
 
-/// A project whose `std` is a link to a directory in the project, like this
-/// repository's `.bolt/packages/std -> ../../packages/std`.
-fn linked_std() -> TestDb {
+
+#[test]
+fn a_dependency_reached_through_a_link_is_one_package() {
+    let db = TestDb::new();
+    db.file("/shapes/bolt.toml", "[package]\nname = \"shapes\"\n");
+    let real = db.file("/shapes/lib.bolt", "");
+    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\nshapes = { path = \"vendor/shapes\" }\n");
+    db.symlink("/proj/vendor/shapes", "../../shapes");
+    let main = db.file("/proj/main.bolt", "");
+    // Imports reach it by its real path, and a file opened through the link
+    // is in the same package.
+    assert_eq!(resolve_import_path(&db, main, "shapes"), Ok(real));
+    let through_link = db.files().resolve(&db, SystemPath::new("/proj/vendor/shapes/lib.bolt"));
+    assert_eq!(package_of(&db, through_link), Some(SystemPathBuf::from("/shapes")));
+    assert_eq!(package_of(&db, real), Some(SystemPathBuf::from("/shapes")));
+}
+
+#[test]
+fn a_package_chooses_its_prelude() {
     let mut db = TestDb::new();
     db.set_prelude(Some("std"), false);
-    db.file("/proj/packages/std/__prelude__/lib.bolt", "pub import \"../helpers\" (shared);\n");
-    db.file("/proj/packages/std/helpers.bolt", "pub(package) fn shared() {}\n");
-    db.symlink("/proj/.bolt/packages/std", "../../packages/std");
-    db
-}
-
-#[test]
-fn a_package_reached_through_a_link_is_the_same_by_its_real_path() {
-    let db = linked_std();
-    let through_link = db.file("/proj/.bolt/packages/std/helpers.bolt", "pub(package) fn shared() {}\n");
-    let by_real_path = db.files().resolve(&db, SystemPath::new("/proj/packages/std/helpers.bolt"));
-    let package = Some(SystemPathBuf::from("/proj/.bolt/packages/std"));
-    assert_eq!(package_of(&db, through_link), package);
-    assert_eq!(package_of(&db, by_real_path), package);
-    let project = db.file("/proj/main.bolt", "");
-    assert_eq!(package_of(&db, project), None);
-}
-
-#[test]
-fn a_file_of_the_prelude_package_by_its_real_path_has_no_prelude() {
-    let db = linked_std();
-    let real = db.file("/proj/packages/std/user.bolt", "import \"./helpers\" (shared);\n");
-    assert_eq!(prelude_file(&db, real), &Ok(None));
-    // `pub(package)` items stay visible, since it's in the package.
-    assert!(diagnostics(file_scope(&db, real)).is_empty(), "{:?}", diagnostics(file_scope(&db, real)));
-    // Its own copy of the prelude, next to it, not the one through the link.
-    let lib = prelude_lib(&db, real).unwrap();
-    let path = lib.path(&db).as_system_path_buf().unwrap();
-    assert_eq!(path, &SystemPathBuf::from("/proj/packages/std/__prelude__/lib.bolt"));
-    // A file of the project still gets the prelude through the link.
-    let main = db.file("/proj/main.bolt", "");
-    let prelude = prelude_file(&db, main).clone().unwrap().unwrap();
-    assert_eq!(
-        prelude.path(&db).as_system_path_buf().unwrap(),
-        &SystemPathBuf::from("/proj/.bolt/packages/std/__prelude__/lib.bolt")
-    );
+    let std_prelude = db.file("/toolchain/std/__prelude__/lib.bolt", "");
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
+    db.file("/geo/bolt.toml", "[package]\nname = \"geo\"\n");
+    let geo_prelude = db.file("/geo/__prelude__/lib.bolt", "");
+    db.file("/plain/bolt.toml", "[package]\nname = \"plain\"\n");
+    db.file("/bare/bolt.toml", "[package]\nname = \"bare\"\nprelude = false\n");
+    db.file("/own/bolt.toml", "[package]\nname = \"own\"\nprelude = \"geo\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
+    let prelude = |path: &str| prelude_file(&db, db.file(path, "")).clone();
+    assert_eq!(prelude("/plain/main.bolt"), Ok(Some(std_prelude)));
+    assert_eq!(prelude("/loose/main.bolt"), Ok(Some(std_prelude)));
+    assert_eq!(prelude("/bare/main.bolt"), Ok(None));
+    assert_eq!(prelude("/own/main.bolt"), Ok(Some(geo_prelude)));
+    // The files of `std` have none, but the classes of `std`'s.
+    let io = db.file("/toolchain/std/io.bolt", "");
+    assert_eq!(prelude_file(&db, io), &Ok(None));
+    assert_eq!(prelude_lib(&db, io), Some(std_prelude));
 }
 
 #[test]
 fn the_prelude_package_has_no_prelude() {
     let mut db = TestDb::new();
     db.set_prelude(Some("std"), false);
-    let lib = db.file("/.bolt/packages/std/__prelude__/lib.bolt", "pub fn id() {}\n");
-    let io = db.file("/.bolt/packages/std/io.bolt", "pub fn print() {}\n");
+    let lib = db.file("/toolchain/std/__prelude__/lib.bolt", "pub fn id() {}\n");
+    let io = db.file("/toolchain/std/io.bolt", "pub fn print() {}\n");
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
     assert_eq!(prelude_file(&db, lib), &Ok(None));
     assert_eq!(prelude_file(&db, io), &Ok(None));
     assert!(names(&file_scope(&db, io).scope, Namespace::Values) == ["print"]);
@@ -460,16 +477,19 @@ fn the_prelude_package_has_no_prelude() {
 #[test]
 fn a_missing_prelude_is_an_error_only_when_asked_for() {
     let mut db = TestDb::new();
-    db.file("/.bolt/packages/empty/lib.bolt", "");
     let main = db.file("/main.bolt", "fn f() {}\n");
     db.set_prelude(Some("std"), false);
     assert!(diagnostics(file_scope(&db, main)).is_empty());
     db.set_prelude(Some("std"), true);
-    assert_eq!(diagnostics(file_scope(&db, main)), ["unresolved prelude std: PackageNotFound { package: \"std\" }"]);
-    db.set_prelude(Some("empty"), true);
-    assert_eq!(diagnostics(file_scope(&db, main)), [
-        "unresolved prelude empty: NotInPackage { package: \"empty\", path: \"__prelude__/lib.bolt\" }"
-    ]);
+    assert_eq!(diagnostics(file_scope(&db, main)), ["unresolved prelude std: NoStd"]);
     db.set_prelude(None, true);
     assert!(diagnostics(file_scope(&db, main)).is_empty());
+    // A prelude that a `bolt.toml` names is asked for.
+    db.set_prelude(Some("std"), false);
+    db.file("/empty/bolt.toml", "[package]\nname = \"empty\"\n");
+    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\nprelude = \"empty\"\n[dependencies]\nempty = { path = \"../empty\" }\n");
+    let own = db.file("/proj/main.bolt", "fn f() {}\n");
+    assert_eq!(diagnostics(file_scope(&db, own)), [
+        "unresolved prelude empty: NotInPackage { package: \"empty\", path: \"__prelude__/lib.bolt\" }"
+    ]);
 }

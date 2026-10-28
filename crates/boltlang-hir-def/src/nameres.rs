@@ -17,6 +17,8 @@ use std::collections::BTreeMap;
 
 use boltlang_base_db::{Db, File, Settings, SystemPath, SystemPathBuf};
 
+use crate::manifest::{MANIFEST, Manifest, PreludeChoice, is_package_name, manifest, package_manifest, package_root};
+
 use crate::{
     Name,
     ids::{
@@ -138,8 +140,8 @@ pub enum NameResDiagnostic {
     UnresolvedImportEnum { import: AstId, path: String },
     /// The path of `import Point.*;` names something other than an enum.
     NotAnEnum { import: AstId, path: String },
-    /// The prelude of [`Settings::prelude`] can't be found, and it was
-    /// asked for.
+    /// The prelude of [`prelude_package`] can't be found, and it was asked
+    /// for.
     UnresolvedPrelude { package: String, error: ImportPathError },
 }
 
@@ -335,8 +337,7 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         }
         Ok(None) => {}
         Err(error) => {
-            if *Settings::get(db).prelude_required(db) {
-                let package = Settings::get(db).prelude(db).clone().unwrap_or_default();
+            if let Some((package, true)) = prelude_package(db, file) {
                 out.diagnostics.push(NameResDiagnostic::UnresolvedPrelude { package, error });
             }
         }
@@ -370,13 +371,28 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     out
 }
 
+/// The package whose prelude `file` gets, and whether that's asked for: by
+/// its package's `bolt.toml`, or else [`Settings::prelude`]. `None` for no
+/// prelude, with `prelude = false` or no prelude in the settings, as with
+/// `bolt check --no-prelude`. The files of `std` get none.
+pub fn prelude_package(db: &dyn Db, file: File) -> Option<(String, bool)> {
+    let default = Settings::get(db).prelude(db).clone()?;
+    let required = *Settings::get(db).prelude_required(db);
+    let Some(m) = package_manifest(db, file) else { return Some((default, required)) };
+    match manifest(db, m) {
+        Ok(Manifest { prelude: PreludeChoice::Package(name), .. }) => Some((name.clone(), true)),
+        Ok(Manifest { prelude: PreludeChoice::None, .. }) => None,
+        Ok(Manifest { prelude: PreludeChoice::Default, .. }) | Err(_) => Some((default, required)),
+    }
+}
+
 /// The entry file of the prelude that `file` gets: `__prelude__/lib.bolt`
-/// in the package of [`Settings::prelude`], looked up like an import of
-/// it. `Ok(None)` when there's no prelude, and for the files of the
-/// prelude's own package, which would otherwise import themselves.
+/// of [`prelude_package`], looked up like an import of it. `Ok(None)` when
+/// there's no prelude, and for the files of the prelude's own package,
+/// which would otherwise import themselves.
 #[salsa::tracked]
 pub fn prelude_file(db: &dyn Db, file: File) -> Result<Option<File>, ImportPathError> {
-    let Some(package) = Settings::get(db).prelude(db) else { return Ok(None) };
+    let Some((package, _)) = prelude_package(db, file) else { return Ok(None) };
     let prelude = resolve_import_path(db, file, &format!("{package}/__prelude__/lib"))?;
     let own = package_of(db, prelude);
     Ok((own.is_none() || package_of(db, file) != own).then_some(prelude))
@@ -409,20 +425,15 @@ pub fn files_used_by(db: &dyn Db, file: File) -> Vec<File> {
 }
 
 /// The entry file of the prelude's package, as seen from `file`, even when
-/// `file` is in that package, unlike [`prelude_file`]. For a file of the
-/// package reached by its real path rather than through `.bolt/packages`,
-/// it's the copy next to the file, so that the two see the same items.
+/// `file` is in that package, unlike [`prelude_file`]: where the classes
+/// that syntax uses are, like `Index`.
 pub fn prelude_lib(db: &dyn Db, file: File) -> Option<File> {
-    let package = Settings::get(db).prelude(db).as_ref()?;
-    let lib = resolve_import_path(db, file, &format!("{package}/__prelude__/lib")).ok()?;
-    let own = package_of(db, lib)?;
-    let path = file.path(db).as_system_path_buf()?;
-    if package_dir(path.as_std_path()).is_some() || package_of(db, file).as_ref() != Some(&own) {
-        return Some(lib);
-    }
-    let root = db.system().canonicalize_path(&own).ok()?;
-    let lib = root.as_std_path().join("__prelude__").join("lib.bolt");
-    Some(db.files().resolve(db, SystemPath::new(&lib)))
+    let (package, _) = prelude_package(db, file).or_else(|| {
+        // The files of `std` have no prelude, but still `std`'s classes.
+        let std = Settings::get(db).std_dir(db).as_ref()?;
+        (package_of(db, file).as_ref() == Some(std)).then(|| (STD.to_string(), false))
+    })?;
+    resolve_import_path(db, file, &format!("{package}/__prelude__/lib")).ok()
 }
 
 /// Where the fixed-point iteration of [`file_scope`] starts, for files that
@@ -483,9 +494,18 @@ fn import_enum<'db>(
 pub enum ImportPathError {
     /// A relative path to a file that doesn't exist.
     FileNotFound,
-    /// No `.bolt/packages/<package>` in the directory of the importer or in
-    /// one of its parents.
-    PackageNotFound { package: String },
+    /// A package, but the importer is in no package: there's no `bolt.toml`
+    /// in its directory or one of its parents, so it can only use `std`.
+    NoManifest { package: String },
+    /// A package that isn't a dependency in the importer's `bolt.toml`.
+    NotADependency { package: String },
+    /// The importer's `bolt.toml` has an error, which is reported on its own.
+    BadManifest,
+    /// The directory of a dependency, `path` as written in `bolt.toml`, has
+    /// no `bolt.toml`, or doesn't exist.
+    DependencyNotFound { package: String, path: String },
+    /// `std`, which the compiler doesn't have.
+    NoStd,
     /// The package exists, but the file in it doesn't. `path` is relative to
     /// the package, like `io.bolt`.
     NotInPackage { package: String, path: String },
@@ -498,16 +518,14 @@ pub enum ImportPathError {
 /// means `.bolt`.
 ///
 /// - `./a` and `../b` are relative to the directory of `importer`.
-/// - `std/io` is the file `io.bolt` of the package `std`, and `std` alone
-///   is the package's `lib.bolt`. Packages are the directories in
-///   `.bolt/packages`, and the nearest one wins: the one in the directory of
-///   `importer`, or else in its parent, and so on.
+/// - `shapes/circle` is the file `circle.bolt` of the package `shapes`, and
+///   `shapes` alone is the package's `lib.bolt`. The package is a dependency
+///   in the `bolt.toml` of the importer's package ([`crate::manifest`]), or
+///   `std`, which comes with the compiler ([`Settings::std_dir`]).
 ///
-/// Symbolic links are resolved for the files of the project, so that a file
-/// has one [`File`] however it's reached. Paths through `.bolt/packages` are
-/// kept, since they say which package a file is in (see [`package_of`]):
-/// a linked package stays a package. Salsa doesn't track symbolic links, so
-/// changing one takes effect when the file is synced.
+/// Every file is reached by its real path, with symbolic links resolved, so
+/// that it has one [`File`] however it's reached. Salsa doesn't track
+/// symbolic links, so changing one takes effect when the file is synced.
 pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<File, ImportPathError> {
     let dir = importer
         .path(db)
@@ -524,28 +542,37 @@ pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<
     if !is_package_name(package) || !segments_ok {
         return Err(ImportPathError::Invalid);
     }
+    let root = package_dir(db, importer, package)?;
     let path = with_extension(std::path::PathBuf::from(path));
-    // The `std` that comes with the compiler, whatever's in `.bolt/packages`.
-    if package == STD
-        && let Some(root) = Settings::get(db).std_dir(db)
-    {
-        let file = db.files().resolve(db, SystemPath::new(&root.as_std_path().join(&path)));
-        let path = path.to_string_lossy().into_owned();
-        return if file.exists(db) { Ok(file) } else { Err(ImportPathError::NotInPackage { package: STD.to_string(), path }) };
+    let file = db.files().resolve(db, SystemPath::new(&root.as_std_path().join(&path)));
+    if file.exists(db) {
+        Ok(canonical(db, file))
+    } else {
+        Err(ImportPathError::NotInPackage { package: package.to_string(), path: path.to_string_lossy().into_owned() })
     }
-    for dir in dir.ancestors() {
-        let root = dir.join(".bolt").join("packages").join(package);
-        if !db.files().resolve(db, SystemPath::new(&root)).is_directory(db) {
-            continue;
-        }
-        let file = db.files().resolve(db, SystemPath::new(&root.join(&path)));
-        if file.exists(db) {
-            return Ok(canonical(db, file));
-        }
-        let path = path.to_string_lossy().into_owned();
-        return Err(ImportPathError::NotInPackage { package: package.to_string(), path });
+}
+
+/// The directory of the package that `importer` calls `package`: `std`, or a
+/// dependency of its package.
+fn package_dir(db: &dyn Db, importer: File, package: &str) -> Result<SystemPathBuf, ImportPathError> {
+    if package == STD {
+        return Settings::get(db).std_dir(db).clone().ok_or(ImportPathError::NoStd);
     }
-    Err(ImportPathError::PackageNotFound { package: package.to_string() })
+    let Some(manifest_file) = package_manifest(db, importer) else {
+        return Err(ImportPathError::NoManifest { package: package.to_string() });
+    };
+    let Ok(manifest) = manifest(db, manifest_file) else { return Err(ImportPathError::BadManifest) };
+    let Some(written) = manifest.dependency(package) else {
+        return Err(ImportPathError::NotADependency { package: package.to_string() });
+    };
+    let not_found = || ImportPathError::DependencyNotFound { package: package.to_string(), path: written.to_string() };
+    let base = package_root(db, manifest_file).ok_or_else(not_found)?;
+    let dir = SystemPath::absolute(SystemPath::new(&base.as_std_path().join(written)), SystemPath::new("/"));
+    let dir = db.system().canonicalize_path(&dir).unwrap_or(dir);
+    if !db.files().resolve(db, SystemPath::new(&dir.as_std_path().join(MANIFEST))).exists(db) {
+        return Err(not_found());
+    }
+    Ok(dir)
 }
 
 fn with_extension(mut path: std::path::PathBuf) -> std::path::PathBuf {
@@ -555,20 +582,9 @@ fn with_extension(mut path: std::path::PathBuf) -> std::path::PathBuf {
     path
 }
 
-/// Like an identifier, with `-` allowed after the first character.
-fn is_package_name(name: &str) -> bool {
-    let mut chars = name.chars();
-    chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
-        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
-}
-
-/// The file with the symbolic links in its path resolved, unless it's in a
-/// package.
+/// The file by its real path, with the symbolic links in it resolved.
 fn canonical(db: &dyn Db, file: File) -> File {
     let Some(path) = file.path(db).as_system_path_buf() else { return file };
-    if package_dir(path.as_std_path()).is_some() {
-        return file;
-    }
     match db.system().canonicalize_path(path) {
         Ok(real) if real != *path => db.files().resolve(db, &real),
         _ => file,
@@ -581,14 +597,12 @@ mod tests;
 /// The name of the package that comes with the compiler.
 pub const STD: &str = "std";
 
-/// The package `file` is in, as the directory `.bolt/packages/<name>`:
-/// the one in its path, the innermost one if there are several, or else the
-/// one that links to a directory the file is really in. `None` for the files
-/// of the project itself.
+/// The package `file` is in, as its directory: `std`'s, for the files of
+/// the `std` that comes with the compiler, by their path or their real one,
+/// or else that of the nearest `bolt.toml` ([`package_manifest`]). `None`
+/// for a file in no package.
 pub fn package_of(db: &dyn Db, file: File) -> Option<SystemPathBuf> {
     let path = file.path(db).as_system_path_buf()?;
-    // The files of the `std` that comes with the compiler, by their path or
-    // their real one.
     if let Some(root) = Settings::get(db).std_dir(db) {
         let real = || db.system().canonicalize_path(path).ok();
         if path.as_std_path().starts_with(root.as_std_path())
@@ -597,45 +611,9 @@ pub fn package_of(db: &dyn Db, file: File) -> Option<SystemPathBuf> {
             return Some(root.clone());
         }
     }
-    match package_dir(path.as_std_path()) {
-        Some(dir) => Some(SystemPathBuf::from(dir.to_path_buf())),
-        None => linked_package(db, path),
-    }
-}
-
-/// The package of a file reached by another path than through
-/// `.bolt/packages`, like `packages/std/lib.bolt` when `.bolt/packages/std`
-/// is a link to `packages/std`: the entry of a `.bolt/packages` in the file's
-/// directory or one above it whose target has the file in it. Without this,
-/// the same file would be in a package by one path and not by the other.
-fn linked_package(db: &dyn Db, path: &SystemPathBuf) -> Option<SystemPathBuf> {
-    let system = db.system();
-    let real = system.canonicalize_path(path).ok()?;
-    for dir in path.as_std_path().ancestors().skip(1) {
-        let packages = SystemPathBuf::from(dir.join(".bolt").join("packages"));
-        let Ok(entries) = system.read_directory(&packages) else { continue };
-        // The innermost package, if one is inside another.
-        let mut found: Option<(usize, SystemPathBuf)> = None;
-        for entry in entries {
-            let Ok(root) = system.canonicalize_path(&entry) else { continue };
-            let depth = root.as_std_path().components().count();
-            if real.as_std_path().starts_with(root.as_std_path()) && found.as_ref().is_none_or(|(d, _)| depth > *d) {
-                found = Some((depth, entry));
-            }
-        }
-        if let Some((_, entry)) = found {
-            return Some(entry);
-        }
-    }
-    None
-}
-
-fn package_dir(path: &std::path::Path) -> Option<&std::path::Path> {
-    path.ancestors().skip(1).find(|dir| {
-        let Some(packages) = dir.parent() else { return false };
-        packages.file_name() == Some("packages".as_ref())
-            && packages.parent().and_then(|bolt| bolt.file_name()) == Some(".bolt".as_ref())
-    })
+    // By its real path, so that it's the same package through a link.
+    let root = package_manifest(db, file).and_then(|m| package_root(db, m))?;
+    Some(db.system().canonicalize_path(&root).unwrap_or(root))
 }
 
 /// Whether an item defined in `owner` with `visibility` can be used in

@@ -11,7 +11,7 @@
 //! await init();
 //! const server = new LanguageServer();
 //! // Files that documents import but that aren't open, like packages.
-//! server.writeFile("/project/.bolt/packages/std/lib.bolt", "pub fn id(x) = x;\n");
+//! server.writeFile("/std/lib.bolt", "pub fn id(x) = x;\n");
 //! self.onmessage = (event) => {
 //!   for (const message of server.handle(JSON.stringify(event.data))) {
 //!     self.postMessage(JSON.parse(message));

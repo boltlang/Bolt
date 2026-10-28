@@ -11,12 +11,13 @@ const diagnostics = () =>
     .result.items.map((d) => `${d.range.start.line}:${d.range.start.character} ${d.message}`);
 
 const capabilities = { workspace: { diagnostics: { refreshSupport: true } } };
-const [init] = send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { capabilities } });
+// Where the page puts `std`, which the server in the browser has none of.
+const [init] = send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { capabilities, initializationOptions: { std: "/std" } } });
 assert.equal(init.result.serverInfo.name, "bolt-language-server");
 send({ jsonrpc: "2.0", method: "initialized", params: {} });
 
-// A package that the document imports, given by the page.
-server.writeFile("/project/.bolt/packages/std/lib.bolt", "pub fn id(x) = x;\npub fn not(b: Bool) -> Bool = !b;\n");
+// `std`, which the document imports, given by the page.
+server.writeFile("/std/lib.bolt", "pub fn id(x) = x;\npub fn not(b: Bool) -> Bool = !b;\n");
 const text = 'import "std" (id, not);\nlet a: String = id(1);\nnot(2);\n';
 const opened = send({ jsonrpc: "2.0", method: "textDocument/didOpen",
   params: { textDocument: { uri, languageId: "bolt", version: 1, text } } });
@@ -34,7 +35,7 @@ send({ jsonrpc: "2.0", method: "textDocument/didChange",
 assert.deepEqual(diagnostics(), []);
 
 // The prelude of `std`, which the code gets without importing it.
-server.writeFile("/project/.bolt/packages/std/__prelude__/lib.bolt", "pub fn twice(x: i32) -> i32 = x * 2;\n");
+server.writeFile("/std/__prelude__/lib.bolt", "pub fn twice(x: i32) -> i32 = x * 2;\n");
 send({ jsonrpc: "2.0", method: "textDocument/didChange",
   params: { textDocument: { uri, version: 3 }, contentChanges: [{ text: 'let a: String = twice(1);\n' }] } });
 assert.deepEqual(diagnostics(), ["0:16 expected `String`, found `i32`"]);

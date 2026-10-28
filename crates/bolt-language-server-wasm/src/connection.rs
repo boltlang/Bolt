@@ -24,7 +24,7 @@ const SERVER_NOT_INITIALIZED: i64 = -32002;
 pub struct Connection {
     server: Server,
     /// The files that aren't open, which the page gives the server, like
-    /// those of `.bolt/packages`.
+    /// those of `std`.
     files: InMemorySystem,
     initialized: bool,
     shut_down: bool,

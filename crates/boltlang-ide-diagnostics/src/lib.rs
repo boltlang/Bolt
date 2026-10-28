@@ -62,6 +62,7 @@ impl DiagnosticCode {
     pub const NOT_AN_ENUM: Self = Self("E0110");
     pub const UNRESOLVED_PRELUDE: Self = Self("E0111");
     pub const BROKEN_DEPENDENCY: Self = Self("E0112");
+    pub const BAD_MANIFEST: Self = Self("E0113");
 
     pub const TYPE_MISMATCH: Self = Self("E0201");
     pub const INFINITE_TYPE: Self = Self("E0202");
@@ -235,6 +236,12 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 names = TyNames::explicit(db, &types_in(&d.kind));
             }
             let mut labels = match &d.kind {
+                // Where in `bolt.toml` the error is.
+                DiagnosticKind::BadManifest { manifest, message, range } => vec![Label {
+                    file: *manifest,
+                    range: range.unwrap_or_default(),
+                    message: message.clone(),
+                }],
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }
                 | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
@@ -374,14 +381,28 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
     use DiagnosticKind as K;
     match kind {
         K::Syntax(message) => (C::SYNTAX, message),
+        K::BadManifest { message, .. } => {
+            (C::BAD_MANIFEST, format!("the `bolt.toml` of this package has an error: {message}"))
+        }
 
         K::DuplicateDefinition { name } => (C::DUPLICATE_DEFINITION, format!("`{name}` is defined more than once")),
         K::UnresolvedImportPath { path, error } => {
             let message = match error {
                 ImportPathError::FileNotFound => format!("cannot find the file `{path}`"),
-                ImportPathError::PackageNotFound { package } => {
-                    format!("cannot find the package `{package}` in `.bolt/packages`")
+                ImportPathError::NoManifest { package } => format!(
+                    "cannot find the package `{package}`: this file is in no package, so it can only use `std`; \
+                     add a `bolt.toml` with `{package}` as a dependency"
+                ),
+                ImportPathError::NotADependency { package } => {
+                    format!("`{package}` isn't a dependency of this package: add it to `[dependencies]` in `bolt.toml`")
                 }
+                ImportPathError::BadManifest => {
+                    format!("cannot import `{path}`: the `bolt.toml` of this package has an error")
+                }
+                ImportPathError::DependencyNotFound { package, path } => {
+                    format!("the dependency `{package}` is at `{path}`, which has no `bolt.toml`")
+                }
+                ImportPathError::NoStd => "cannot find `std`, which comes with the compiler".to_string(),
                 ImportPathError::NotInPackage { package, path } => {
                     format!("the package `{package}` has no file `{path}`")
                 }
@@ -405,9 +426,16 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         }
         K::UnresolvedPrelude { package, error } => {
             let message = match error {
-                ImportPathError::PackageNotFound { .. } => {
-                    format!("cannot find the package `{package}` of the prelude in `.bolt/packages`")
+                ImportPathError::NoManifest { .. } | ImportPathError::NotADependency { .. } => {
+                    format!("cannot find the package `{package}` of the prelude: it isn't a dependency")
                 }
+                ImportPathError::BadManifest => {
+                    format!("cannot find the prelude of `{package}`: the `bolt.toml` of this package has an error")
+                }
+                ImportPathError::DependencyNotFound { path, .. } => {
+                    format!("the package `{package}` of the prelude is at `{path}`, which has no `bolt.toml`")
+                }
+                ImportPathError::NoStd => "there's no `std`, which the prelude comes from".to_string(),
                 ImportPathError::NotInPackage { path, .. } => {
                     format!("the package `{package}` has no prelude: it needs a file `{path}`")
                 }

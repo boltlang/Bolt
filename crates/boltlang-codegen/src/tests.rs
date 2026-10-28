@@ -2,7 +2,7 @@
 //! the same output as the evaluator is tested by the programs in
 //! `tests/run`: see `tests/run.rs`.
 
-use boltlang_base_db::{File, TestDb};
+use boltlang_base_db::{File, Settings, SystemPathBuf, TestDb};
 use boltlang_eval::{ErrorKind, Host};
 use wasmi::{Caller, Linker, Module, Store, Val};
 
@@ -154,7 +154,8 @@ const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub 
 
 fn db_with_builtins(code: &str) -> (TestDb, File) {
     let mut db = TestDb::new();
-    db.file("/.bolt/packages/std/__prelude__/lib.bolt", BUILTINS);
+    db.file(&format!("{}/__prelude__/lib.bolt", TestDb::STD_DIR), BUILTINS);
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
     db.set_prelude(Some("std"), true);
     let file = db.file("/main.bolt", code);
     (db, file)

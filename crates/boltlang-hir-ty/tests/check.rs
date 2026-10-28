@@ -28,7 +28,7 @@
 //! the code is `/main.bolt`. With several files, each line of the output
 //! starts with the path of its file, like `/lib.bolt: id: fn(a) -> a`.
 //! As in the compiler, files get the prelude of `std` when there's one, so a
-//! case can have one in `/.bolt/packages/std/__prelude__/lib.bolt`.
+//! case can have one in `/toolchain/std/__prelude__/lib.bolt`.
 //!
 //! Run a single case with `cargo test --test check mutual_recursion`. To
 //! write what the checker finds into the files instead of comparing it, run
@@ -57,7 +57,7 @@
 
 use std::path::Path;
 
-use boltlang_base_db::{TestDb, source_text};
+use boltlang_base_db::{Settings, SystemPathBuf, TestDb, source_text};
 use boltlang_corpus::{Case, catch, data_files, parse_cases, slug, split_files, update, updating};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
@@ -126,18 +126,20 @@ fn check(input: &str) -> Result<(String, String), String> {
     let mut db = TestDb::new();
     // As in the compiler, the prelude is the one of `std`, if there is one.
     db.set_prelude(Some("std"), false);
+    let files = split_files(input)?;
+    // A case without a `std` of its own, in `/toolchain/std`, gets the
+    // repository's there, whose types aren't shown.
+    if files.iter().any(|(path, _)| path.starts_with(&format!("{}/", TestDb::STD_DIR))) {
+        Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
+    } else {
+        db.add_std();
+    }
     // The types of a line, with names like `a` for the unknown ones, as in
     // the diagnostics of the compiler.
     let show = |tys: &[&Ty]| -> Vec<String> {
         let names = TyNames::new(&db, tys);
         tys.iter().map(|ty| ty.display_with(&db, &names).to_string()).collect()
     };
-    let files = split_files(input)?;
-    // A case without a `std` of its own gets the repository's, whose types
-    // aren't shown.
-    if !files.iter().any(|(path, _)| path.starts_with("/.bolt/packages/std/")) {
-        db.add_std();
-    }
     let files: Vec<_> = files.into_iter().map(|(path, text)| (db.file(&path, &text), path)).collect();
     let mut types = Vec::new();
     let mut diagnostics = Vec::new();

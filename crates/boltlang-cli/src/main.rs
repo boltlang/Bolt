@@ -34,26 +34,20 @@ struct Cli {
 }
 
 /// Which prelude files get: the names of a package's `__prelude__/lib.bolt`
-/// that can be used without importing them.
+/// that can be used without importing them. It's `std`'s, unless a file's
+/// `bolt.toml` says otherwise.
 #[derive(clap::Args, Clone, Debug, Default)]
 struct PreludeArgs {
-    /// The package whose prelude to use [default: std]
-    #[arg(long, value_name = "PACKAGE", conflicts_with = "no_prelude")]
-    prelude: Option<String>,
-    /// Don't use a prelude.
+    /// Don't use a prelude, whatever `bolt.toml` says.
     #[arg(long)]
     no_prelude: bool,
 }
 
 impl PreludeArgs {
     fn database(&self) -> anyhow::Result<CliDatabase> {
-        // Only the default prelude may be missing, so that `std` isn't needed.
-        let (prelude, required) = match (&self.prelude, self.no_prelude) {
-            (_, true) => (None, false),
-            (Some(package), false) => (Some(package.clone()), true),
-            (None, false) => (Some(DEFAULT_PRELUDE.to_string()), false),
-        };
-        Ok(CliDatabase::new(&current_dir()?, prelude, required, std_dir()))
+        // `std`'s prelude may be missing, as without `std`.
+        let prelude = (!self.no_prelude).then(|| DEFAULT_PRELUDE.to_string());
+        Ok(CliDatabase::new(&current_dir()?, prelude, false, std_dir()))
     }
 }
 

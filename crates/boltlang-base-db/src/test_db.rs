@@ -59,10 +59,15 @@ impl TestDb {
         }
     }
 
-    /// Add the repository's `std` as a package, at `/.bolt/packages/std`.
-    pub fn add_std(&self) {
+    /// Where [`TestDb::add_std`] puts `std`.
+    pub const STD_DIR: &'static str = "/toolchain/std";
+
+    /// Add the repository's `std` as the one that comes with the compiler,
+    /// at [`TestDb::STD_DIR`].
+    pub fn add_std(&mut self) {
         let std = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
-        self.add_dir(&std, "/.bolt/packages/std");
+        self.add_dir(&std, Self::STD_DIR);
+        Settings::change_std_dir(self, Some(crate::SystemPathBuf::from(Self::STD_DIR)));
     }
 
     /// Make `link` a symbolic link to `target`, which is relative to the
