@@ -52,7 +52,7 @@ use std::path::Path;
 
 use boltlang_base_db::{File, TestDb};
 use boltlang_codegen::{link, run};
-use boltlang_corpus::{Case, catch, data_files, parse_cases, slug, split_files, update, updating};
+use boltlang_corpus::{Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating};
 use boltlang_eval::{Evaluator, Limits, Recorder};
 use boltlang_ide_diagnostics::{Severity, dependency_diagnostics, diagnostics};
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -230,7 +230,7 @@ fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/run");
     let mut trials = Vec::new();
     for path in data_files(&root) {
-        let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let stem = data_name(&root, &path);
         let mut text = std::fs::read_to_string(&path).unwrap();
         if updating()
             && let Ok(cases) = parse_cases(&text, 1)

@@ -58,7 +58,7 @@
 use std::path::Path;
 
 use boltlang_base_db::{Settings, SystemPathBuf, TestDb, source_text};
-use boltlang_corpus::{Case, catch, data_files, parse_cases, slug, split_files, update, updating};
+use boltlang_corpus::{Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
@@ -465,7 +465,7 @@ fn main() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/checker");
     let mut trials = Vec::new();
     for path in data_files(&root) {
-        let stem = path.file_stem().unwrap().to_str().unwrap().to_string();
+        let stem = data_name(&root, &path);
         let mut text = std::fs::read_to_string(&path).unwrap();
         if updating()
             && let Ok(cases) = parse_cases(&text, 2)

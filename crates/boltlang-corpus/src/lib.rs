@@ -203,15 +203,27 @@ pub fn updating() -> bool {
     std::env::var_os("UPDATE_EXPECT").is_some_and(|v| !v.is_empty() && v != "0")
 }
 
-/// The data files of `dir`, in alphabetical order.
+/// The data files of `dir` and its subdirectories, in alphabetical order
+/// of their paths.
 pub fn data_files(dir: &Path) -> Vec<PathBuf> {
-    let mut files: Vec<_> = std::fs::read_dir(dir)
-        .unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display()))
-        .map(|entry| entry.unwrap().path())
-        .filter(|path| path.extension().is_some_and(|ext| ext == "txt"))
-        .collect();
+    let mut files = Vec::new();
+    for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display())) {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            files.extend(data_files(&path));
+        } else if path.extension().is_some_and(|ext| ext == "txt") {
+            files.push(path);
+        }
+    }
     files.sort();
     files
+}
+
+/// The name of the data file `path` of `root` in test names: its path
+/// without `.txt`, with `::` between directories, like `mutability::arrays`.
+pub fn data_name(root: &Path, path: &Path) -> String {
+    let relative = path.strip_prefix(root).unwrap_or(path).with_extension("");
+    relative.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("::")
 }
 
 /// What `f` gives, or the message it panicked with, after `what`.
