@@ -74,8 +74,8 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::{
     InferenceCycle, InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
     lower::{
-        LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, struct_field_types,
-        type_alias_ty,
+        LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, named_mutabilities,
+        struct_field_types, type_alias_ty, unused_impl_params,
     },
     solve::{ExprOrPat, Held, TypeError},
 };
@@ -206,6 +206,16 @@ fn check(input: &str) -> Result<(String, String), String> {
                     let predicates = generic_predicates(&db, GenericDefId::Impl(id));
                     for lower in header.diagnostics.iter().chain(&predicates.diagnostics) {
                         diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    }
+                    // The parameters that its instance doesn't use (#251).
+                    let def = GenericDefId::Impl(id);
+                    let params = &def.generic_params(&db).type_params;
+                    for index in unused_impl_params(&db, id) {
+                        let name = match params.get(index as usize) {
+                            Some(p) => p.name.to_string(),
+                            None => format!("'{}", named_mutabilities(&db, def)[index as usize - params.len()]),
+                        };
+                        diagnostics.push(format!("{prefix}error at `{name}`: not in the instance"));
                     }
                     for item in &id.item(&db).items {
                         if let AssocItem::Function(f) = *item {

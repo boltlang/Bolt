@@ -455,7 +455,10 @@ Rust's lifetimes: without it, `m [i32]` would be the type `m` applied to
 - **Only functions, impls and structs have names.** An impl's associated
   types can use its names too: `impl[T] Iterable['m FnIter[T]] { type Iter =
   'm FnIter[T]; ... }` is for an `FnIter` of either mutability, and its
-  `Iter` has the same one. A struct declares its names, for its fields:
+  `Iter` has the same one. An impl's names, like its type parameters, must
+  be in its instance, since that's all choosing the impl decides:
+  `impl[T, 'v] Iterable[Vec[T]]` is an error (E0234), and
+  `impl[T] Iterable['v Vec[T]]` is what's meant. A struct declares its names, for its fields:
   see [below](#names-in-structs). A name elsewhere, like in a const, a type
   alias outside an impl, a body that isn't its function's or a field whose
   struct doesn't declare it, is an error (E0225). A name before a type that
@@ -545,6 +548,7 @@ value: that it's *unique*. Jane Street's OCaml has a mode for that
 | E0225 | a named mutability that isn't the function's or impl's, or one its struct declares |
 | E0232 | more mutability arguments than a struct declares |
 | E0233 | a mutability parameter of an item that isn't a struct, a function or an impl |
+| E0234 | a parameter of an impl, a type or a mutability, that isn't in its instance |
 
 ```text
 [E0221] Error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed

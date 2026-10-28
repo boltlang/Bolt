@@ -86,6 +86,7 @@ impl DiagnosticCode {
     pub const MUTABILITY_ALONE: Self = Self("E0231");
     pub const WRONG_MUTABILITY_ARG_COUNT: Self = Self("E0232");
     pub const MUTABILITY_PARAM_NOT_ALLOWED: Self = Self("E0233");
+    pub const UNUSED_IMPL_PARAM: Self = Self("E0234");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -218,6 +219,9 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::AmbiguousConstraint { constraint, .. }
         | DiagnosticKind::UnmetAssocBound { constraint, .. } => {
             constraint.args.iter().collect()
+        }
+        DiagnosticKind::UnusedImplParam { instance, suggestion, .. } => {
+            instance.args.iter().chain(suggestion).collect()
         }
         _ => Vec::new(),
     }
@@ -430,6 +434,18 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                  associated types, and the fields of a struct that declares it, like `struct VecIter[T, 'v]`"
             ),
         ),
+        K::UnusedImplParam { name, instance, suggestion } => {
+            let instance = constraint_display(db, names, &instance);
+            let fix = match suggestion {
+                Some(ty) => format!("write it in the instance, like `{}`, or remove it", ty.display_with(db, names)),
+                None if name.starts_with('\'') => "write it before an array or struct in the instance, or remove it".into(),
+                None => "use it in the instance, or remove it".into(),
+            };
+            (
+                C::UNUSED_IMPL_PARAM,
+                format!("`{name}` isn't in the instance `{instance}`, so choosing the impl can't decide it; {fix}"),
+            )
+        }
         K::WrongMutabilityArgCount { expected, found } => (
             C::WRONG_MUTABILITY_ARG_COUNT,
             format!("expected at most {}, found {found}", count(expected, "mutability argument", "mutability arguments")),

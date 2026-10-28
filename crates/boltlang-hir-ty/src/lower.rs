@@ -1059,6 +1059,35 @@ pub fn impl_header<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplHeader<'db> {
     ImplHeader { class, hidden: hidden.count, diagnostics: ctx.diagnostics }
 }
 
+/// The parameters of an impl that its instance doesn't use, like the `U` of
+/// `impl[T, U] Show[Box[T]]` or the `'v` of `impl[T, 'v] Iterable[Vec[T]]`,
+/// by their index: the type parameters, then the named mutabilities.
+/// Choosing the impl for a type decides only what's in its instance, so
+/// these can never be decided (#251). Hidden mutabilities are always in it.
+/// An instance with an error says nothing, since what's missing may be in
+/// the part that couldn't be lowered.
+pub fn unused_impl_params<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<u32> {
+    let def = GenericDefId::Impl(imp);
+    let Some(class) = &impl_header(db, imp).class else { return Vec::new() };
+    if class.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+        return Vec::new();
+    }
+    let count = def.generic_params(db).type_params.len() + named_mutabilities(db, def).len();
+    let mut used = vec![false; count];
+    for arg in class.args.iter() {
+        arg.any(&mut |t| {
+            if let Ty::Param(p) = t
+                && p.def == def
+                && let Some(slot) = used.get_mut(p.index as usize)
+            {
+                *slot = true;
+            }
+            false
+        });
+    }
+    (0..count as u32).filter(|&i| !used[i as usize]).collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct ConstTy<'db> {
     pub ty: Ty<'db>,

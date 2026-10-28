@@ -690,6 +690,22 @@ fn f() { let ys: 'q [i32] = [1]; }
 }
 
 #[test]
+fn unused_impl_params() {
+    check(
+        r#"
+class Show[T] { fn show(x: T) -> i32; }
+struct Box[T] { item: T }
+impl[T, U] Show[Box[T]] { fn show(x) = 1; }
+      //^ error: `U` isn't in the instance `Show[Box[T]]`, so choosing the impl can't decide it; use it in the instance, or remove it
+impl[T, 'v] Show[[T]] { fn show(x) = 2; }
+      //^^ error: `'v` isn't in the instance `Show[[T]]`, so choosing the impl can't decide it; write it in the instance, like `'v [T]`, or remove it
+impl Show[i32] where 'q: imm { fn show(x) = 3; }
+                   //^^ error: `'q` isn't in the instance `Show[i32]`, so choosing the impl can't decide it; write it before an array or struct in the instance, or remove it
+"#,
+    );
+}
+
+#[test]
 fn mutability_params() {
     check(
         r#"

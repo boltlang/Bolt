@@ -14,14 +14,14 @@ use boltlang_hir_def::{
     Name,
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
-    hir::TypeRefId,
+    hir::{MutabilityRef, TypeRef, TypeRefId},
     ids::{ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     item_tree::{AssocItem, AstId, ModItem, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
         FieldList, class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map,
-        function_signature_with_source_map, impl_signature_with_source_map, struct_signature_with_source_map,
+        function_signature_with_source_map, impl_signature, impl_signature_with_source_map, struct_signature_with_source_map,
         type_alias_signature_with_source_map,
     },
 };
@@ -34,14 +34,16 @@ use boltlang_hir_ty::{
     infer_body,
     lower::{
         ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, enum_field_types, fn_sig,
-        generic_predicates, impl_header, struct_field_types, subst_params, type_alias_ty,
+        generic_predicates, impl_header, named_mutabilities, struct_field_types, subst_params, type_alias_ty,
+        unused_impl_params,
     },
+    ty::GenericParamId,
     solve::{ConstraintSource, ExprOrPat, Held, Origin, Reason, TypeError},
 };
 use boltlang_syntax::{
     SyntaxKind::{
-        self, FIELD_EXPR, FIELD_PATT, NAME, NAME_REF, PATH, PATH_SEGMENT, PATH_TYPE, RECORD_EXPR_FIELD, STRING,
-        STRUCT_PATT,
+        self, FIELD_EXPR, FIELD_PATT, GENERIC_PARAM_LIST, NAME, NAME_REF, PATH, PATH_SEGMENT, PATH_TYPE,
+        RECORD_EXPR_FIELD, STRING, STRUCT_PATT, TYPE_PARAM,
     },
     SyntaxNode,
     rowan::{TextRange, TextSize},
@@ -132,6 +134,11 @@ pub enum DiagnosticKind<'db> {
     /// A named mutability that isn't one of the function's or impl's, or one
     /// that the struct declares.
     UnknownMutability,
+    /// A parameter of an impl, `name` (with its `'` for a mutability), that
+    /// its instance doesn't use, so that choosing the impl can't decide it
+    /// (#251). For a mutability, `suggestion` is the first type in the
+    /// instance without a written one, with it instead, like `'v Vec[T]`.
+    UnusedImplParam { name: String, instance: ClassConstraint<'db>, suggestion: Option<Ty<'db>> },
     /// More mutability arguments than the struct declares.
     WrongMutabilityArgCount { expected: usize, found: usize },
     /// A mutability parameter of an item that can't have one, like an enum.
@@ -372,6 +379,7 @@ impl<'db> Collector<'db> {
                     let (_, map) = impl_signature_with_source_map(db, id);
                     self.lower(map, &impl_header(db, id).diagnostics);
                     self.lower(map, &generic_predicates(db, GenericDefId::Impl(id)).diagnostics);
+                    self.unused_impl_params(id, map);
                     self.impl_items(id, map);
                     self.assoc_items(ItemContainerId::Impl(id), &id.item(db).items);
                 }
@@ -387,6 +395,56 @@ impl<'db> Collector<'db> {
                 // Imports are checked by name resolution.
                 ModItem::Import(_) | ModItem::MacroRules(_) => {}
             }
+        }
+    }
+
+    /// Report the parameters of `imp` that its instance doesn't use, at
+    /// their declaration, or for a mutability that isn't declared, where
+    /// it's first written. `map` is the source map of the impl's signature.
+    fn unused_impl_params(&mut self, imp: ImplId<'db>, map: &ExpressionStoreSourceMap) {
+        let db = self.db;
+        let unused = unused_impl_params(db, imp);
+        let Some(instance) = impl_header(db, imp).class.as_ref() else { return };
+        if unused.is_empty() {
+            return;
+        }
+        let def = GenericDefId::Impl(imp);
+        let params = def.generic_params(db);
+        let named = named_mutabilities(db, def);
+        let list = imp
+            .item(db)
+            .ast_id
+            .to_node(db, self.file, &self.root)
+            .and_then(|n| n.children().find(|c| c.kind() == GENERIC_PARAM_LIST));
+        for index in unused {
+            let index = index as usize;
+            let (name, range, suggestion) = match params.type_params.get(index) {
+                Some(param) => {
+                    let node = list.as_ref().and_then(|l| l.children().filter(|c| c.kind() == TYPE_PARAM).nth(index));
+                    let range = node.map(|n| n.children().find(|c| c.kind() == NAME).unwrap_or(n).text_range());
+                    (param.name.to_string(), range, None)
+                }
+                None => {
+                    let name = &named[index - params.type_params.len()];
+                    let declared = params.mutability_params.iter().find(|p| &p.name == name).map(|p| p.type_ref);
+                    let written = || {
+                        impl_signature(db, imp).store.types.iter().find_map(|(id, t)| match t {
+                            TypeRef::Mut { mutability: MutabilityRef::Named(n), .. }
+                            | TypeRef::Mutability(MutabilityRef::Named(n))
+                                if n == name =>
+                            {
+                                Some(id)
+                            }
+                            _ => None,
+                        })
+                    };
+                    let range = declared.or_else(written).and_then(|id| map.type_syntax(id)).map(ptr_range);
+                    let param = Ty::Param(GenericParamId { def, index: index as u32 });
+                    let first_hidden = GenericParamId { def, index: (params.type_params.len() + named.len()) as u32 };
+                    (format!("'{name}"), range, with_hidden_mutability(instance, first_hidden, param))
+                }
+            };
+            self.push(range, DiagnosticKind::UnusedImplParam { name, instance: instance.clone(), suggestion });
         }
     }
 
@@ -870,6 +928,32 @@ impl<'db> Collector<'db> {
             .last();
         Some(found.unwrap_or(node).text_range())
     }
+}
+
+/// The first array, struct or function in `instance` whose mutability is
+/// hidden, that is, not written, with `mutability` instead. The hidden
+/// parameters are numbered from `first_hidden`.
+fn with_hidden_mutability<'db>(
+    instance: &ClassConstraint<'db>,
+    first_hidden: GenericParamId<'db>,
+    mutability: Ty<'db>,
+) -> Option<Ty<'db>> {
+    let mut found = None;
+    for arg in instance.args.iter() {
+        arg.any(&mut |t| {
+            let hidden = matches!(t.held_mutability(), Some(Ty::Param(p)) if p.def == first_hidden.def && p.index >= first_hidden.index);
+            if hidden && found.is_none() {
+                found = Some(match t.clone() {
+                    Ty::Array(_, elem) => Ty::Array(Box::new(mutability.clone()), elem),
+                    Ty::Adt(id, args, ms, _) => Ty::Adt(id, args, ms, Box::new(mutability.clone())),
+                    Ty::Fn(params, ret, _) => Ty::Fn(params, ret, Box::new(mutability.clone())),
+                    t => t,
+                });
+            }
+            hidden
+        });
+    }
+    found
 }
 
 fn ptr_range(ptr: SyntaxPtr) -> TextRange {

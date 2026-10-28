@@ -492,3 +492,45 @@ f: fn() -> String
 g: fn() -> String
 --------------------------------------------------------------------------------
 error at `show`: ambiguous
+
+================================================================================
+An impl's parameters must be in its instance (#251)
+:error
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+struct Box[T] { item: T }
+impl[T, U] Show[Box[T]] { fn show(x) = 1; }
+impl[T, 'v] Show[[T]] { fn show(x) = 2; }
+impl Show[i32] where 'q: imm { fn show(x) = 3; }
+
+--------------------------------------------------------------------------------
+Show[Box[T]].show: forall T U. fn(Box[T]) -> i32
+Show[[T]].show: forall T. fn([T]) -> i32
+Show[i32].show: 'q: imm => fn(i32) -> i32
+--------------------------------------------------------------------------------
+error at `U`: not in the instance
+error at `'v`: not in the instance
+error at `'q`: not in the instance
+
+================================================================================
+A parameter in the instance is used, as a mutability too
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+struct It[T, 'v] { data: 'v [T] }
+impl[T, 'v] Show['v [T]] { fn show(x) = 1; }
+impl[T, 'w] Show[It[T, 'w]] { fn show(x) = 2; }
+
+--------------------------------------------------------------------------------
+Show['v [T]].show: forall T. fn('v [T]) -> i32
+Show[It[T, 'w]].show: forall T. fn(It[T, 'w]) -> i32
+
+================================================================================
+An instance with an error doesn't say what's missing
+:error
+================================================================================
+class Show[T] { fn show(x: T) -> i32; }
+impl[T] Show[Missing[T]] { fn show(x) = 1; }
+--------------------------------------------------------------------------------
+Show[{error}].show: forall T. fn({error}) -> i32
+--------------------------------------------------------------------------------
+error at `Missing[T]`: unresolved type
