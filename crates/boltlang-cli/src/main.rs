@@ -27,7 +27,7 @@ trait Exec {
 
 /// The Bolt compiler.
 #[derive(clap::Parser)]
-#[command(name = "bolt", version)]
+#[command(name = "bolt", version, long_version = long_version())]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -53,8 +53,30 @@ impl PreludeArgs {
             (Some(package), false) => (Some(package.clone()), true),
             (None, false) => (Some(DEFAULT_PRELUDE.to_string()), false),
         };
-        Ok(CliDatabase::new(&current_dir()?, prelude, required))
+        Ok(CliDatabase::new(&current_dir()?, prelude, required, std_dir()))
     }
+}
+
+/// The directory of the `std` that comes with the compiler, written out the
+/// first time. Without one, `std` is looked up in `.bolt/packages`.
+fn std_dir() -> Option<SystemPathBuf> {
+    match boltlang_std::locate() {
+        Ok((dir, _)) => Some(SystemPathBuf::from(dir)),
+        Err(error) => {
+            eprintln!("warning: {error}");
+            None
+        }
+    }
+}
+
+/// `bolt --version`: the version, and where `std` is, so that it can be
+/// read.
+fn long_version() -> &'static str {
+    let std = match boltlang_std::find() {
+        Ok((dir, source)) => format!("{} ({source})", dir.display()),
+        Err(error) => format!("not found: {error}"),
+    };
+    Box::leak(format!("{}\nstd: {std}", env!("CARGO_PKG_VERSION")).into_boxed_str())
 }
 
 #[derive(clap::Subcommand)]

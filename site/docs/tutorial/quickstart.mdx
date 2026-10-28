@@ -29,14 +29,24 @@ Bolt has a small standard library, `std`, which gives every file some names
 without importing them, like `print`, `Option`, `Some` and `None`. This set
 of names is called the *prelude*.
 
-For now, a project needs its own copy of `std` in a `.bolt/packages`
-directory. From the root of your project, link the one in the Bolt
-repository:
+`std` comes with the compiler, so there's nothing to set up. The first time
+`bolt` runs, it puts the files of `std` where you can read them, in a
+directory for its version, which `bolt --version` shows:
 
 ```bash
-mkdir -p .bolt/packages
-ln -s /path/to/Bolt/packages/std .bolt/packages/std
+bolt --version
 ```
+
+```text
+bolt 0.2.0
+std: /home/you/.local/share/bolt/0.2.0-18bd2315615a79c2/std (comes with the compiler)
+```
+
+The files are read-only: editing them would change `std` for every program.
+To work on `std` itself, set `BOLT_PRELUDE_PATH` to the directory of your
+copy, like the `packages/std` of the Bolt repository. A build of `bolt` made
+from the repository with `cargo build`, without `--release`, uses that one
+without it.
 
 ## Your first program
 

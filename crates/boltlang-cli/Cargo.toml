@@ -15,6 +15,7 @@ boltlang-base-db.workspace = true
 boltlang-codegen.workspace = true
 boltlang-eval.workspace = true
 boltlang-ide-diagnostics.workspace = true
+boltlang-std.workspace = true
 boltlang-syntax.workspace = true
 clap = { version = "4.5.56", features = ["cargo", "derive"] }
 serde_json = "1.0.149"

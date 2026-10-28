@@ -13,5 +13,6 @@ ls-types = "0.0.2"
 
 # The binary runs the server over stdio, which the browser doesn't have.
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+boltlang-std.workspace = true
 tokio = { version = "1.49.0", features = ["full"] }
 tower-lsp-server = "0.23.0"

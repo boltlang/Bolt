@@ -110,8 +110,9 @@ my-project/
 ## The prelude
 
 Every file gets the names of the prelude of the `std` package without
-importing them. They're defined in
-`.bolt/packages/std/__prelude__/lib.bolt`, and include:
+importing them. `std` comes with the compiler, rather than from
+`.bolt/packages`, and the prelude is its `__prelude__/lib.bolt`, which
+`bolt --version` shows where to find. It includes:
 
 - `print` and `panic`;
 - `Option`, with `Some` and `None`;

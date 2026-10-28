@@ -101,6 +101,7 @@ version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-ide-diagnostics",
+ "boltlang-std",
  "boltlang-syntax",
  "ls-types",
  "tokio",
@@ -145,6 +146,7 @@ dependencies = [
  "boltlang-codegen",
  "boltlang-eval",
  "boltlang-ide-diagnostics",
+ "boltlang-std",
  "boltlang-syntax",
  "clap",
  "serde_json",
@@ -242,6 +244,10 @@ dependencies = [
  "serde",
  "unicode-ident",
 ]
+
+[[package]]
+name = "boltlang-std"
+version = "0.2.0"
 
 [[package]]
 name = "boltlang-syntax"

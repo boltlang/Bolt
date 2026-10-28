@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use boltlang_base_db::{Db, File, FilePath, Settings, System, SystemPath, source_text};
+use boltlang_base_db::{Db, File, FilePath, Settings, System, SystemPath, SystemPathBuf, source_text};
 use boltlang_ide_diagnostics::{Severity, diagnostics, files_used_by, short_path};
 use ls_types::{DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Uri};
 
@@ -34,6 +34,12 @@ impl Workspace {
     pub fn set_prelude(&mut self, prelude: Option<String>) {
         let required = prelude.is_some();
         Settings::change_prelude(&mut self.db, prelude, required);
+    }
+
+    /// Use the `std` in `dir`, the one that comes with the compiler, or
+    /// look it up in `.bolt/packages` without one.
+    pub fn set_std_dir(&mut self, dir: Option<SystemPathBuf>) {
+        Settings::change_std_dir(&mut self.db, dir);
     }
 
     /// Use `text` for the document at `path`, when it's opened or edited.

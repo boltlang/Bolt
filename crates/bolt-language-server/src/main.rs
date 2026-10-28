@@ -11,7 +11,7 @@ mod native {
     };
 
     use bolt_language_server::{NotAFile, Server};
-    use boltlang_base_db::{OsSystem, SystemPath};
+    use boltlang_base_db::{OsSystem, SystemPath, SystemPathBuf};
     use tower_lsp_server::{
         Client, LanguageServer, LspService, jsonrpc,
         ls_types::{
@@ -131,7 +131,14 @@ mod native {
     #[tokio::main]
     pub async fn main() {
         let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("/"));
-        let server = Mutex::new(Server::new(Arc::new(OsSystem::new(SystemPath::new(&cwd)))));
+        let mut server = Server::new(Arc::new(OsSystem::new(SystemPath::new(&cwd))));
+        // The `std` that comes with the compiler. Without one, `std` is looked
+        // up in `.bolt/packages`; stderr is where the editor logs it.
+        match boltlang_std::locate() {
+            Ok((dir, _)) => server.set_std_dir(Some(SystemPathBuf::from(dir))),
+            Err(error) => eprintln!("warning: {error}"),
+        }
+        let server = Mutex::new(server);
         let (service, socket) = LspService::new(|client| Backend { client, server });
         tower_lsp_server::Server::new(tokio::io::stdin(), tokio::io::stdout(), socket).serve(service).await;
     }

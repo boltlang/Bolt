@@ -43,6 +43,12 @@ impl Server {
         Server { workspace: Workspace::new(disk), refresh_support: false }
     }
 
+    /// Use the `std` in `dir`, the one that comes with the compiler. The
+    /// browser's server has none, and gets `std` from the page instead.
+    pub fn set_std_dir(&mut self, dir: Option<SystemPathBuf>) {
+        self.workspace.set_std_dir(dir);
+    }
+
     pub fn initialize(&mut self, params: &InitializeParams) -> InitializeResult {
         let capabilities = &params.capabilities;
         let encodings = capabilities.general.as_ref().and_then(|g| g.position_encodings.as_deref());
