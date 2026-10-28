@@ -34,10 +34,19 @@ impl Files {
 
     pub fn try_resolve(&self, db: &dyn Db, path: &SystemPath) -> Option<File> {
         let absolute: crate::PathBuf = SystemPath::absolute(path, db.system().current_directory().unwrap());
-        self.inner.system_by_path.get(&absolute).map(|file| *file)
+        if let Some(file) = self.inner.system_by_path.get(&absolute) {
+            return Some(*file);
+        }
+        let real = db.system().canonicalize_path(&absolute).ok()?;
+        self.inner.system_by_path.get(&real).map(|file| *file)
     }
 
     /// Looks up a file by its `path`.
+    ///
+    /// A file is one [`File`] however it's reached: a path through a
+    /// symbolic link gives the file at its real path, and that's the path
+    /// of the [`File`] (#238). A path that doesn't lead to anything stays
+    /// as it is.
     ///
     /// For a non-existing file, creates a new salsa [`File`] ingredient and stores it for future lookups.
     ///
@@ -49,14 +58,21 @@ impl Files {
     /// Panics if the current working directory could not be retreived, which should never happen in practical scenarios.
     pub fn resolve(&self, db: &dyn Db, path: &SystemPath) -> File {
         let absolute = SystemPath::absolute(path, db.system().current_directory().unwrap());
-        *self
+        if let Some(file) = self.inner.system_by_path.get(&absolute) {
+            return *file;
+        }
+        let real = match db.system().canonicalize_path(&absolute) {
+            Ok(real) => real,
+            Err(_) => absolute.clone(),
+        };
+        let file = *self
             .inner
             .system_by_path
-            .entry(absolute.clone())
+            .entry(real.clone())
             .or_insert_with(|| {
-                let metadata = db.system().path_metadata(path);
+                let metadata = db.system().path_metadata(&real);
                 let durability = Durability::default();
-                let builder = File::builder(FilePath::System(absolute))
+                let builder = File::builder(FilePath::System(real.clone()))
                     .path_durability(Durability::HIGH);
                 let builder  = match metadata {
                     Ok(metadata) if metadata.file_type().is_file() => builder
@@ -68,7 +84,11 @@ impl Files {
                         .status_durability(Durability::MEDIUM.max(durability))
                 };
                 builder.new(db)
-            })
+            });
+        if real != absolute {
+            self.inner.system_by_path.insert(absolute, file);
+        }
+        file
     }
 
     /// Looks up a file by its virtual `path`.

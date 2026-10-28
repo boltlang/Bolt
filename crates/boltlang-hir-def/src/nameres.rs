@@ -524,8 +524,10 @@ pub enum ImportPathError {
 ///   `std`, which comes with the compiler ([`Settings::std_dir`]).
 ///
 /// Every file is reached by its real path, with symbolic links resolved, so
-/// that it has one [`File`] however it's reached. Salsa doesn't track
-/// symbolic links, so changing one takes effect when the file is synced.
+/// that it has one [`File`] however it's reached
+/// ([`Files::resolve`](boltlang_base_db::Files::resolve)).
+/// Salsa doesn't track symbolic links, so changing where one points takes
+/// effect when the server starts again.
 pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<File, ImportPathError> {
     let dir = importer
         .path(db)
@@ -535,7 +537,7 @@ pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<
     if source.starts_with("./") || source.starts_with("../") {
         let path = SystemPath::absolute(SystemPath::new(&with_extension(dir.join(source))), SystemPath::new("/"));
         let file = db.files().resolve(db, &path);
-        return if file.exists(db) { Ok(canonical(db, file)) } else { Err(ImportPathError::FileNotFound) };
+        return if file.exists(db) { Ok(file) } else { Err(ImportPathError::FileNotFound) };
     }
     let (package, path) = source.split_once('/').unwrap_or((source, "lib"));
     let segments_ok = path.split('/').all(|s| !s.is_empty() && s != "." && s != "..");
@@ -546,7 +548,7 @@ pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<
     let path = with_extension(std::path::PathBuf::from(path));
     let file = db.files().resolve(db, SystemPath::new(&root.as_std_path().join(&path)));
     if file.exists(db) {
-        Ok(canonical(db, file))
+        Ok(file)
     } else {
         Err(ImportPathError::NotInPackage { package: package.to_string(), path: path.to_string_lossy().into_owned() })
     }
@@ -576,14 +578,6 @@ fn with_extension(mut path: std::path::PathBuf) -> std::path::PathBuf {
     path
 }
 
-/// The file by its real path, with the symbolic links in it resolved.
-fn canonical(db: &dyn Db, file: File) -> File {
-    let Some(path) = file.path(db).as_system_path_buf() else { return file };
-    match db.system().canonicalize_path(path) {
-        Ok(real) if real != *path => db.files().resolve(db, &real),
-        _ => file,
-    }
-}
 
 #[cfg(test)]
 mod tests;

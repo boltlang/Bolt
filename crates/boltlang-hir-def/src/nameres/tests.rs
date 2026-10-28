@@ -436,8 +436,23 @@ fn a_dependency_reached_through_a_link_is_one_package() {
     // is in the same package.
     assert_eq!(resolve_import_path(&db, main, "shapes"), Ok(real));
     let through_link = db.files().resolve(&db, SystemPath::new("/proj/vendor/shapes/lib.bolt"));
+    assert_eq!(through_link, real);
     assert_eq!(package_of(&db, through_link), Some(SystemPathBuf::from("/shapes")));
     assert_eq!(package_of(&db, real), Some(SystemPathBuf::from("/shapes")));
+}
+
+#[test]
+fn a_file_reached_through_a_link_is_one_file() {
+    let db = TestDb::new();
+    let real = db.file("/proj/real/lib.bolt", "import \"./helper\" (h);\n");
+    let helper = db.file("/proj/real/helper.bolt", "pub fn h() -> i32 = 1;\n");
+    db.symlink("/proj/link.bolt", "real/lib.bolt");
+    // By the link, it's the same file, at its real path, so its imports are
+    // next to it, not next to the link (#238).
+    let through_link = db.files().resolve(&db, SystemPath::new("/proj/link.bolt"));
+    assert_eq!(through_link, real);
+    assert_eq!(through_link.path(&db).as_system_path_buf(), Some(&SystemPathBuf::from("/proj/real/lib.bolt")));
+    assert_eq!(resolve_import_path(&db, through_link, "./helper"), Ok(helper));
 }
 
 #[test]
