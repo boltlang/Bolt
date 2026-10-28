@@ -90,28 +90,42 @@ imports, and those of the prelude.
 
 ## Packages
 
-A path that doesn't start with `./` or `../` names a *package*. Packages are
-the directories in `.bolt/packages`, in the directory of the importing file
-or in one of its parents:
+A path that doesn't start with `./` or `../` names a *package*. A package is
+a directory with a `bolt.toml`, which gives its name and the packages it
+uses:
+
+```toml title="my-project/bolt.toml"
+[package]
+name = "my-project"
+
+[dependencies]
+shapes = { path = "../shapes" }
+```
 
 ```text
 my-project/
-├── .bolt/
-│   └── packages/
-│       └── shapes/
-│           ├── lib.bolt
-│           └── circle.bolt
+├── bolt.toml
 └── main.bolt
+shapes/
+├── bolt.toml
+├── lib.bolt
+└── circle.bolt
 ```
 
-`import "shapes";` imports `lib.bolt` of the package `shapes`, and
-`import "shapes/circle";` imports `circle.bolt`.
+A file is in the package of the nearest `bolt.toml`, in its directory or one
+of its parents. In `main.bolt`, `import "shapes";` imports `lib.bolt` of
+the dependency `shapes`, and `import "shapes/circle";` imports
+`circle.bolt`. A package can only use its own dependencies: `shapes` has a
+`bolt.toml` of its own, which lists what it uses.
+
+`std` isn't a dependency: it comes with the compiler, and every file can
+use it. A file without a `bolt.toml` above it can only use `std`, and other
+files by their path.
 
 ## The prelude
 
 Every file gets the names of the prelude of the `std` package without
-importing them. `std` comes with the compiler, rather than from
-`.bolt/packages`, and the prelude is its `__prelude__/lib.bolt`, which
+importing them. The prelude is `std`'s `__prelude__/lib.bolt`, which
 `bolt --version` shows where to find. It includes:
 
 - `print` and `panic`;
@@ -122,8 +136,9 @@ importing them. `std` comes with the compiler, rather than from
 The names of the prelude can be shadowed: a file that defines its own
 `Option` uses that one.
 
-To check a file without the prelude, use `bolt check --no-prelude`. To use
-another package's prelude, use `--prelude=<package>`.
+A package can choose another prelude in its `bolt.toml`: `prelude = false`
+for none, or the name of a dependency, whose `__prelude__/lib.bolt` is used.
+To check a file without the prelude, use `bolt check --no-prelude`.
 
 ## What's next
 

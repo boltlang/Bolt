@@ -13,17 +13,44 @@ compiler ([#98](https://github.com/boltlang/Bolt/issues/98)).
 
 ## Finding a package
 
-A package is a directory in `.bolt/packages`, in the directory of the
-importing file or one of its parents; the nearest one wins.
-`import "shapes"` is its `lib.bolt`, and `import "shapes/circle"` its
-`circle.bolt` (`resolve_import_path` in `boltlang-hir-def`).
+A package is a directory with a `bolt.toml` (`boltlang_hir_def::manifest`):
 
-`std` is the exception: it's never looked up in `.bolt/packages`. When the
-compiler has a `std` of its own, which `bolt` and the language server
-always do, `import "std/..."` and the prelude are found there, and the
-files under it are the package `std`, by their path or their real one.
-That's `Settings::std_dir` in `boltlang-base-db`. Tests and the playground
-leave it unset, and bring a `std` of their own in `.bolt/packages`.
+```toml
+[package]
+name = "shapes-demo"
+prelude = "std"            # the default; `false` for none, or a dependency
+
+[dependencies]
+shapes = { path = "../shapes" }
+```
+
+A file is in the package of the nearest `bolt.toml` in its directory or one
+of its parents (`package_manifest`); a file without one is in no package.
+`import "shapes/circle"` is `circle.bolt` in the directory of the
+dependency `shapes` of the importer's package (`resolve_import_path`),
+which must have a `bolt.toml` of its own, with its own dependencies. So a
+package uses only what it lists, and a dependency's dependencies are its
+own business.
+
+Every file is reached by its real path, with symbolic links resolved, and
+a package is its real directory (`package_of`), so a file is one file,
+and in one package, however it's reached
+([#238](https://github.com/boltlang/Bolt/issues/238)). `pub(package)`
+items are visible in the files of the same package.
+
+`std` is the exception: it's not a dependency, and every file can use it,
+from the compiler (`Settings::std_dir` in `boltlang-base-db`). Its files
+are the package `std`, by their path or their real one, and get no
+prelude.
+
+A package's prelude is `std`'s, or what its `bolt.toml` says
+(`prelude_package`), unless `bolt check --no-prelude` turns it off.
+
+A `bolt.toml` that can't be read, or says something wrong, like a
+dependency called `std`, is reported (E0113) at the start of each file of
+its package, with a label where the error is in the `bolt.toml`. A
+dependency whose directory has no `bolt.toml` is reported where it's
+imported.
 
 ## The `std` that comes with the compiler
 
@@ -74,15 +101,13 @@ these: `TestDb::add_std` gives them the repository's `std` in memory.
 
 The language server on the desktop finds `std` the same way, when it
 starts. The one in the browser has no files of its own: the page gives it
-`std`, in `.bolt/packages`, as the playground does.
+the files of `std`, and says where they are with the initialization option
+`{ "std": "/std" }`, as the playground does.
 
 ## What's next
 
-A project file, `bolt.toml`, with its dependencies, and a cache of
-packages in the home directory, which the lock file of a project points
-into, instead of `.bolt/packages`
-([#99](https://github.com/boltlang/Bolt/issues/99)). The prelude would
-then be set per project ([#92](https://github.com/boltlang/Bolt/issues/92)),
-and a file be in a package by the package's root rather than by its path,
-so that a file reached through a link is loaded once
-([#238](https://github.com/boltlang/Bolt/issues/238)).
+Versions of dependencies, a lock file, and a cache of packages in the home
+directory that the lock file points into, for packages that aren't next
+to the project ([#99](https://github.com/boltlang/Bolt/issues/99)). The
+language server could then also keep the path each document was opened
+under, for files opened through a link (#238).
