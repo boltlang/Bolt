@@ -222,3 +222,15 @@ let xs = mut [1, 2, 3];
 array_copy(xs, 2, xs, 0, 2);
 --------------------------------------------------------------------------------
 error: the range 2..4 is out of bounds for length 3
+
+================================================================================
+Comparing Vecs compares their elements
+:todo wasm
+================================================================================
+let a = vec_from_array([1, 2, 3]);
+let b = vec_from_array([1, 2, 3]).to_mut();
+let c = vec_from_array([1, 2]);
+let d = vec_from_array([1, 2, 4]);
+(a == b, a == c, a == d, a != d);
+--------------------------------------------------------------------------------
+(True, False, False, True)
