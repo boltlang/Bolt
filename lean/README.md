@@ -75,6 +75,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `program_imm_never_changes` | `Immutability.lean` | the same for a whole program, run from an empty heap |
 | `imm_fn_changes_nothing` | `Purity.lean` | calling an `imm` function with an argument that's `imm` all the way down changes no location that existed before the call |
 | `imm_fn_changes_only_through_handler` | `Purity.lean` | the same with a handler as an extra argument, as an effect whose operations resume right away compiles: only what the handler can reach changes |
+| `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
+| `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
+| `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
 
 The key lemma for generic functions, and for #243, is `HasType.inst` in
 `Lemmas.lean`: a body typed under its assumptions, with its parameters
@@ -95,14 +98,17 @@ mutability `'v` of its own: `mut` with any `'v`, `imm` only with
 `'v ⊑ imm`.
 
 The theorems depend only on Lean's standard axioms, `propext`,
-`Quot.sound` and, in `Purity.lean`, `Classical.choice` (check with
+`Quot.sound` and, in `Purity.lean` and for `le_iff_leSearch`, `Classical.choice` (check with
 `#print axioms`); there's no `sorry`.
 
 ## What's left out
 
 - **Inference.** The proof is about the typing rules, with the arguments
   of each call and the assumptions of each function given. That the
-  checker finds them, and the most general ones, isn't proven. In
+  checker finds them, and the most general ones, isn't proven, beyond the
+  solver's shortcuts for "at most" in `Solver.lean`. `leSearchOld` there is
+  how `Solver::mutability_le` followed assumptions before: from `m` only,
+  at most 8 steps, which missed chains of 9 and those through `mut`. In
   particular, a closure's mutability is written here; in Bolt, it's a
   parameter `'f` that the checker infers, with assumptions like `T ⊑ 'f`.
 - **Generic closures and structs.** Closures and struct types here are
