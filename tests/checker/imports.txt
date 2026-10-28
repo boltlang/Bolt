@@ -162,7 +162,7 @@ lib.double(1);
 /main.bolt: lib.quadruple(1): i32
 /main.bolt: lib.double(1): {error}
 --------------------------------------------------------------------------------
-/main.bolt: error at `lib.double`: unresolved
+/main.bolt: error at `lib.double`: `double` isn't visible
 
 ================================================================================
 Importing a name that isn't there

@@ -18,7 +18,7 @@ use boltlang_hir_def::{
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
     signatures::function_signature,
-    resolver::{GenericDefId, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
+    resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     scope::expr_scopes,
 };
 
@@ -126,6 +126,8 @@ pub enum InferenceDiagnostic<'db> {
     /// A type reference in the body, like that of a `let`.
     Lower(LowerDiagnostic),
     UnresolvedName { expr: ExprOrPat },
+    /// A path whose last name is in another file, but not visible here.
+    NotVisible { expr: ExprOrPat, hidden: Hidden },
     NotAFunction { expr: ExprId, ty: Ty<'db> },
     WrongArgCount { expr: ExprOrPat, expected: usize, found: usize },
     NoSuchField { expr: ExprOrPat, name: Name },
@@ -347,6 +349,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     pub(crate) fn unresolved(&mut self, expr: ExprOrPat) {
         self.result.diagnostics.push(InferenceDiagnostic::UnresolvedName { expr });
+    }
+
+    /// `path` doesn't resolve: say so, or that what it names isn't visible.
+    pub(crate) fn unresolved_path(&mut self, expr: ExprOrPat, resolver: &Resolver<'db>, path: &Path) {
+        match resolver.hidden(self.db, path) {
+            Some(hidden) => self.result.diagnostics.push(InferenceDiagnostic::NotVisible { expr, hidden }),
+            None => self.unresolved(expr),
+        }
     }
 
     /// The type of `def`'s struct or enum, with new variables for its type
@@ -814,7 +824,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Some(ValueResolution::Value(value)) => self.value_ty(expr, value),
             Some(ValueResolution::Type(resolution)) => self.type_as_value(expr, resolution),
             None => {
-                self.unresolved(ExprOrPat::Expr(expr));
+                self.unresolved_path(ExprOrPat::Expr(expr), &resolver, path);
                 Ty::Error
             }
         }
@@ -1235,7 +1245,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             _ => None,
         };
         let Some(def) = def else {
-            self.unresolved(ExprOrPat::Expr(expr));
+            match path {
+                Some(path) => self.unresolved_path(ExprOrPat::Expr(expr), &resolver, path),
+                None => self.unresolved(ExprOrPat::Expr(expr)),
+            }
             for field in fields {
                 self.infer_expr(field.expr);
             }

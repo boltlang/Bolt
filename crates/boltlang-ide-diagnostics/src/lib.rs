@@ -56,7 +56,7 @@ impl DiagnosticCode {
     pub const DUPLICATE_DEFINITION: Self = Self("E0101");
     pub const UNRESOLVED_IMPORT_PATH: Self = Self("E0102");
     pub const UNRESOLVED_IMPORT_NAME: Self = Self("E0103");
-    pub const PRIVATE_IMPORT: Self = Self("E0104");
+    pub const NOT_VISIBLE: Self = Self("E0104");
     pub const UNRESOLVED_NAME: Self = Self("E0105");
     pub const UNRESOLVED_TYPE: Self = Self("E0106");
     pub const NOT_A_TYPE: Self = Self("E0107");
@@ -436,9 +436,9 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::UnresolvedImportName { name } => {
             (C::UNRESOLVED_IMPORT_NAME, format!("the imported file has nothing named `{name}`"))
         }
-        K::PrivateImport { name, package_only: false } => (C::PRIVATE_IMPORT, format!("`{name}` is private")),
-        K::PrivateImport { name, package_only: true } => {
-            (C::PRIVATE_IMPORT, format!("`{name}` is only visible inside its package"))
+        K::NotVisible { name, package_only: false } => (C::NOT_VISIBLE, format!("`{name}` is private")),
+        K::NotVisible { name, package_only: true } => {
+            (C::NOT_VISIBLE, format!("`{name}` is only visible inside its package"))
         }
         K::UnresolvedImportEnum { path } => (C::UNRESOLVED_IMPORT_ENUM, format!("cannot find the enum `{path}`")),
         K::NotAnEnum { path } => {

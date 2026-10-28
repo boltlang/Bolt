@@ -76,9 +76,10 @@ pub enum DiagnosticKind<'db> {
     UnresolvedImportPath { path: String, error: ImportPathError },
     /// The file to import from has no item with this name.
     UnresolvedImportName { name: Name },
-    /// The item to import exists but isn't visible here: it's private, or
-    /// `pub(package)` in another package when `package_only` is set.
-    PrivateImport { name: Name, package_only: bool },
+    /// The item to import, or that a path like `m.f` names, exists but isn't
+    /// visible here: it's private, or `pub(package)` in another package
+    /// when `package_only` is set.
+    NotVisible { name: Name, package_only: bool },
     /// The enum of `import Option.*;` can't be found.
     UnresolvedImportEnum { path: String },
     /// The path of `import Point.*;` isn't an enum.
@@ -348,7 +349,7 @@ impl<'db> Collector<'db> {
                     (self.name_in(*import, name), DiagnosticKind::UnresolvedImportName { name: name.clone() })
                 }
                 NameResDiagnostic::PrivateImport { import, name, package_only } => {
-                    let kind = DiagnosticKind::PrivateImport { name: name.clone(), package_only: *package_only };
+                    let kind = DiagnosticKind::NotVisible { name: name.clone(), package_only: *package_only };
                     (self.name_in(*import, name), kind)
                 }
                 NameResDiagnostic::UnresolvedImportEnum { import, path } => {
@@ -680,10 +681,16 @@ impl<'db> Collector<'db> {
         for diagnostic in diagnostics {
             let names_the_type = matches!(
                 diagnostic,
-                LowerDiagnostic::UnresolvedType(_) | LowerDiagnostic::NotAType(_) | LowerDiagnostic::NotAClass(_)
+                LowerDiagnostic::UnresolvedType(_)
+                    | LowerDiagnostic::NotVisible { .. }
+                    | LowerDiagnostic::NotAType(_)
+                    | LowerDiagnostic::NotAClass(_)
             );
             let (type_ref, kind): (TypeRefId, _) = match diagnostic {
                 LowerDiagnostic::UnresolvedType(id) => (*id, DiagnosticKind::UnresolvedType),
+                LowerDiagnostic::NotVisible { type_ref, hidden } => {
+                    (*type_ref, DiagnosticKind::NotVisible { name: hidden.name.clone(), package_only: hidden.package_only })
+                }
                 LowerDiagnostic::NotAType(id) => (*id, DiagnosticKind::NotAType),
                 LowerDiagnostic::NotAClass(id) => (*id, DiagnosticKind::NotAClass),
                 LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
@@ -780,6 +787,10 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::UnresolvedName { expr } => {
                     (self.unresolved_range(map, expr), DiagnosticKind::UnresolvedName)
                 }
+                InferenceDiagnostic::NotVisible { expr, hidden } => (
+                    self.unresolved_range(map, expr),
+                    DiagnosticKind::NotVisible { name: hidden.name, package_only: hidden.package_only },
+                ),
                 InferenceDiagnostic::NotAFunction { expr, ty } => {
                     if has_error(&ty) {
                         continue;

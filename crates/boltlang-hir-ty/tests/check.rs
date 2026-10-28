@@ -302,6 +302,9 @@ fn check(input: &str) -> Result<(String, String), String> {
                         format!("error at `{}`: ambiguous", at(origin.node))
                     }
                     InferenceDiagnostic::UnresolvedName { expr } => format!("error at `{}`: unresolved", at(*expr)),
+                    InferenceDiagnostic::NotVisible { expr, hidden } => {
+                        format!("error at `{}`: `{}` isn't visible", at(*expr), hidden.name)
+                    }
                     InferenceDiagnostic::WrongArgCount { expr, expected, found } => {
                         format!("error at `{}`: expected {expected} arguments, found {found}", at(*expr))
                     }
@@ -381,6 +384,9 @@ fn check(input: &str) -> Result<(String, String), String> {
 fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> String {
     match lower {
         LowerDiagnostic::UnresolvedType(id) => format!("error at `{}`: unresolved type", at(*id)),
+        LowerDiagnostic::NotVisible { type_ref, hidden } => {
+            format!("error at `{}`: `{}` isn't visible", at(*type_ref), hidden.name)
+        }
         LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at(*id)),
         LowerDiagnostic::NotAClass(id) => format!("error at `{}`: not a class", at(*id)),
         LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {

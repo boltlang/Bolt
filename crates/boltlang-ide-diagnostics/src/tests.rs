@@ -837,7 +837,38 @@ import "geo" (helper);
 import "geo" as G;
 let a: i32 = G.area();
 let h: i32 = G.helper();
-             //^^^^^^ error: cannot find `helper`
+             //^^^^^^ error: `helper` is only visible inside its package
+"#,
+        ),
+    ]);
+}
+
+#[test]
+fn hidden_names_through_an_alias() {
+    check_files(&[
+        ("/geo/bolt.toml", "[package]\nname = \"geo\"\n"),
+        (
+            "/geo/lib.bolt",
+            "pub(package) struct Secret { x: i32 }\npub(package) enum Kind { Round, Square }\nfn mine() -> i32 = 1;\npub fn area() -> i32 = 1;\n",
+        ),
+        ("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n"),
+        (
+            "/proj/main.bolt",
+            r#"
+import "geo" as G;
+let m: i32 = G.mine();
+             //^^^^ error: `mine` is private
+fn f(s: G.Secret) -> i32 = 1;
+      //^^^^^^^^ error: `Secret` is only visible inside its package
+let s = G.Secret { x: 1 };
+      //^^^^^^^^^^^^^^^^^ error: `Secret` is only visible inside its package
+let k = match 1 {
+  G.Kind.Round => 1,
+//^^^^^^^^^^^^ error: `Kind` is only visible inside its package
+  _ => 2,
+};
+let n: i32 = G.nothing();
+             //^^^^^^^ error: cannot find `nothing`
 "#,
         ),
     ]);

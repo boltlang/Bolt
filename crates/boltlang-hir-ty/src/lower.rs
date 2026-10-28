@@ -8,7 +8,7 @@ use boltlang_hir_def::{
     hir::{GenericArg, MutabilityRef, Path, TypeRef, TypeRefId},
     ids::{ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
     item_tree::AssocItem,
-    resolver::{GenericDefId, Resolver, TypeNs, TypeResolution},
+    resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution},
     signatures::{
         self, FieldList, GenericParams, class_signature, const_signature, enum_signature, function_signature,
         impl_signature, struct_signature, type_alias_signature,
@@ -65,6 +65,8 @@ impl<'db> ClassConstraint<'db> {
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum LowerDiagnostic {
     UnresolvedType(TypeRefId),
+    /// A path whose last name is in another file, but not visible here.
+    NotVisible { type_ref: TypeRefId, hidden: Hidden },
     /// A path that names something other than a type, like a class.
     NotAType(TypeRefId),
     /// A bound or `where` predicate that isn't a class.
@@ -299,10 +301,19 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         }
     }
 
+    /// The type `path` doesn't resolve: say so, or that what it names isn't
+    /// visible.
+    fn unresolved_type(&mut self, id: TypeRefId, path: &Path) {
+        self.diagnostics.push(match self.resolver.hidden(self.db, path) {
+            Some(hidden) => LowerDiagnostic::NotVisible { type_ref: id, hidden },
+            None => LowerDiagnostic::UnresolvedType(id),
+        });
+    }
+
     fn lower_path_ty(&mut self, id: TypeRefId, path: &Path) -> (Ty<'db>, Option<Kind>) {
         let args = path.last_generic_args();
         let Some(resolution) = self.resolver.resolve_path_in_type_ns(self.db, path) else {
-            self.diagnostics.push(LowerDiagnostic::UnresolvedType(id));
+            self.unresolved_type(id, path);
             // Still report the problems in the arguments, like the `T` of
             // `List[T]` when `T` isn't declared either.
             self.lower_args_unchecked(id, args);
@@ -528,7 +539,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 return None;
             }
             None => {
-                self.diagnostics.push(LowerDiagnostic::UnresolvedType(id));
+                self.unresolved_type(id, path);
                 return None;
             }
         };

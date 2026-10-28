@@ -168,7 +168,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 match resolver.resolve_path_in_value_ns(self.db, path) {
                     Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
                     _ => {
-                        self.unresolved(ExprOrPat::Pat(pat));
+                        self.unresolved_path(ExprOrPat::Pat(pat), &resolver, path);
                         return None;
                     }
                 }
@@ -193,7 +193,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 VariantDef::Struct(s)
             }
             _ => {
-                self.unresolved(ExprOrPat::Pat(pat));
+                self.unresolved_path(ExprOrPat::Pat(pat), &resolver, path);
                 return Ty::Error;
             }
         };

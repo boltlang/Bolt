@@ -17,7 +17,7 @@ use crate::{
     builtin_type::{BuiltinType, BuiltinValue},
     body::{DefWithBody, DefWithBodyId},
     hir::{BindingId, ExprId, Path, PathSegment, TypeRef},
-    item_tree::{AssocItem, FunctionName, item_tree},
+    item_tree::{AssocItem, FunctionName, RawVisibility, item_tree},
     ids::{
         ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId, StructId,
         TypeAliasId,
@@ -333,6 +333,26 @@ impl<'db> Resolver<'db> {
         }
     }
 
+    /// Why `path`, which doesn't resolve, can't be used: the name it looks
+    /// up in another file, like `helper` in `m.helper`, is there but isn't
+    /// visible here. A name the file only imports without `pub` is private
+    /// there.
+    pub fn hidden(&self, db: &'db dyn Db, path: &Path) -> Option<Hidden> {
+        let segments = &path.segments;
+        let (file, i) = self.walk_files(db, segments);
+        if file == self.file {
+            return None;
+        }
+        let name = &segments.get(i)?.name;
+        let scope = &file_scope(db, file).scope;
+        [Namespace::Values, Namespace::Types].into_iter().find_map(|ns| {
+            // The prelude's names aren't the file's: it has nothing by that name.
+            let entry = scope.get(ns, name).filter(|entry| !entry.prelude)?;
+            (!is_visible_from(db, entry.visibility, file, self.file))
+                .then(|| Hidden { name: name.clone(), package_only: entry.visibility == RawVisibility::Package })
+        })
+    }
+
     /// Follow the leading segments of a path that name imported files, like
     /// `m` in `m.f`. Returns the file the rest of the path is in, and the
     /// index of the first segment after them.
@@ -355,6 +375,15 @@ impl<'db> Resolver<'db> {
         }
         (file, i)
     }
+}
+
+/// A name in another file that's there, but not visible where it's used:
+/// it's private, or `pub(package)` in another package when `package_only`
+/// is set.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct Hidden {
+    pub name: Name,
+    pub package_only: bool,
 }
 
 enum Local<'db> {
