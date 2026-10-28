@@ -165,6 +165,24 @@
   tab-size: 2;
   white-space: pre;
   overflow-wrap: normal;
+  /* Everything else that places glyphs, since a page's styles reach the
+     <pre> layers, which inherit them, but not the textarea, which doesn't.
+     Docusaurus sets `text-rendering: optimizeLegibility`, whose kerning and
+     ligatures move the highlighted text away from the textarea's. */
+  text-rendering: auto;
+  font-kerning: none;
+  font-variant-ligatures: none;
+  font-feature-settings: normal;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-indent: 0;
+  text-transform: none;
+  text-align: left;
+  direction: ltr;
+  /* The layers follow the textarea's scrolling as it happens. A page's
+     `scroll-behavior: smooth`, as Docusaurus has, would make each step an
+     animation, so they'd lag behind or never get there. */
+  scroll-behavior: auto;
 }
 
 /* Pages style `code` too, like with a border and a smaller font, which
