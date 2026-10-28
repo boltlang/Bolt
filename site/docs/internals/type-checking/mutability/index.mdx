@@ -157,21 +157,6 @@ Line { ..l }                 // error: expected `imm Line`, found `mut Line`
 Line { a: Point { x: 0, y: 0 }, b: Point { x: 0, y: 0 }, ..l }   // fine: nothing is copied
 ```
 
-## Making a value that can't be changed from one that can
-
-A `mut` value can't become `imm`, since a `mut` name for it may still
-exist. Turning one into the other copies it:
-
-```bolt
-fn freeze[T](xs: [T]) -> imm [T];    // a copy that can't be changed
-fn thaw[T](xs: [T]) -> mut [T];      // a copy that can
-```
-
-Since `imm` is deep, freezing copies everything a value holds that's `mut`.
-Freezing without a copy needs to know that no other name refers to the
-value: that it's *unique*. Jane Street's OCaml has a mode for that
-[[Lorenzen et al. 2024](./prior-art.mdx#references)], and it could come later.
-
 ## The pages of this chapter
 
 1. [`imm` is deep](./deep.mdx): what an `imm` value holds can't be
@@ -180,10 +165,12 @@ value: that it's *unique*. Jane Street's OCaml has a mode for that
    `[T]` means in a signature, and return types.
 3. [Naming a mutability](./names.mdx): `'m` in functions, impls and
    structs.
-4. [Errors](./errors.mdx).
-5. [Implementation](./implementation.mdx): where each rule is in the
+4. [Regions](./regions.mdx): making an `imm` value from a `mut` one
+   without a copy, a proposal.
+5. [Errors](./errors.mdx).
+6. [Implementation](./implementation.mdx): where each rule is in the
    checker, the tests and the Lean proof.
-6. [Prior art](./prior-art.mdx).
+7. [Prior art](./prior-art.mdx).
 
 ## Open questions
 
@@ -194,6 +181,8 @@ value: that it's *unique*. Jane Street's OCaml has a mode for that
   of the one it's given, which it can't make: `Box { item: f(b.item) }` is
   `imm`. Higher-kinded types tie the mutability of the result to that of
   the argument, and what that should mean isn't decided.
+  [Regions](./regions.mdx) would let `fmap` make a `Box` of any
+  mutability.
 - **Enums with a mutability**, so that a variant can hold something that
   can be changed without a type parameter, and so that an enum can be
   changed in place.

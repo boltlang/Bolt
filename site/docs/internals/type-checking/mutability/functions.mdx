@@ -98,6 +98,10 @@ fn next(n: Node) -> Node = n.next;           // the mutability of `n`
 fn fixed() -> imm [i32] = mut [];            // error: expected `imm [a]`, found `mut [a]`
 ```
 
+[Regions](./regions.mdx), a proposal, would change this for a value that a
+body makes with `mut` and keeps to itself, like the one of `fixed`: the
+caller would choose its mutability.
+
 `next` returns what it's given, so its result has its argument's
 mutability: `next(a)` is a `mut Node` for a `mut Node` `a`, and an
 `imm Node` for an `imm` one.
