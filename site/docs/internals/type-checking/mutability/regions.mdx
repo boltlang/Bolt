@@ -44,10 +44,11 @@ the checker can't tell: a `mut` value may have other names. In `std`,
 ## Regions
 
 A *region* is the mutability of values that a function body makes and
-that nothing outside the body holds. This page writes one as `@r`:
+that nothing outside the body holds. This page writes one as `@r` in
+code, and as $r$ in equations:
 
 $$
-\mu ::= \mathsf{Mut} \mid \mathsf{Imm} \mid \alpha \mid @r
+\mu ::= \mathsf{Mut} \mid \mathsf{Imm} \mid \alpha \mid r
 $$
 
 - **Inside the body, a region can be changed**, like `Mut`.
