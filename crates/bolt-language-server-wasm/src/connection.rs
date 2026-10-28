@@ -89,7 +89,15 @@ impl Connection {
 
     fn file_changed(&mut self, path: &SystemPath) -> Vec<String> {
         self.server.file_changed(path);
-        self.refresh().into_iter().map(|message| message.to_string()).collect()
+        self.after_change().into_iter().map(|message| message.to_string()).collect()
+    }
+
+    /// After a change, a warning for each file that open documents use that
+    /// has newly got errors, then a request for new diagnostics.
+    fn after_change(&mut self) -> Vec<Value> {
+        let mut out: Vec<Value> = self.server.notices().into_iter().map(show_warning).collect();
+        out.extend(self.refresh());
+        out
     }
 
     fn request(&mut self, method: &str, id: Value, params: Value) -> Vec<Value> {
@@ -119,6 +127,7 @@ impl Connection {
                 }
                 Err(error) => vec![error_response(id, INVALID_PARAMS, error)],
             },
+            "workspace/diagnostic" => vec![response(id, json!(self.server.workspace_diagnostic()))],
             "shutdown" => {
                 self.shut_down = true;
                 vec![response(id, Value::Null)]
@@ -141,7 +150,7 @@ impl Connection {
             _ => return Vec::new(),
         };
         match result {
-            Ok(Ok(())) => self.refresh().into_iter().collect(),
+            Ok(Ok(())) => self.after_change(),
             Ok(Err(error)) => vec![warn_not_a_file(error)],
             // A notification has no response to put the error in.
             Err(error) => vec![log(MessageType::ERROR, format!("invalid {method}: {error}"))],
@@ -183,6 +192,10 @@ fn error_response(id: Value, code: i64, message: impl Into<String>) -> Value {
 
 fn log(kind: MessageType, message: String) -> Value {
     json!({ "jsonrpc": "2.0", "method": "window/logMessage", "params": { "type": kind, "message": message } })
+}
+
+fn show_warning(message: String) -> Value {
+    json!({ "jsonrpc": "2.0", "method": "window/showMessage", "params": { "type": MessageType::WARNING, "message": message } })
 }
 
 fn warn_not_a_file(error: NotAFile) -> Value {
@@ -272,6 +285,30 @@ mod tests {
         assert_eq!(messages(&mut connection, MAIN), ["cannot find the file `./lib`", "cannot find `negate`"]);
         assert!(connection.write_file("lib.bolt", "").is_err());
         assert!(connection.remove_file("/project/lib.bolt").is_err());
+    }
+
+    #[test]
+    fn errors_of_files_the_documents_use() {
+        let mut connection = initialized();
+        connection.write_file("/project/lib.bolt", "pub fn negate(x: Bool) -> Bool = 1;\n").unwrap();
+        // Opening a document that uses it warns once, then asks for a refresh.
+        let out = open(&mut connection, MAIN, "import \"./lib\" (negate);\nnegate(True);\n");
+        assert_eq!(out[0]["method"], "window/showMessage");
+        assert_eq!(out[0]["params"]["type"], 2);
+        assert_eq!(
+            out[0]["params"]["message"],
+            "`lib.bolt`, which the open files use, has 1 error, the first on line 1: expected `Bool`, found an integer"
+        );
+        assert_eq!(out[1]["method"], "workspace/diagnostic/refresh");
+        assert!(messages(&mut connection, MAIN).is_empty());
+        let out = send(
+            &mut connection,
+            json!({ "jsonrpc": "2.0", "id": 8, "method": "workspace/diagnostic", "params": { "previousResultIds": [] } }),
+        );
+        let items = &out[0]["result"]["items"];
+        assert_eq!(items[0]["uri"], "file:///project/lib.bolt");
+        assert_eq!(items[0]["kind"], "full");
+        assert_eq!(items[0]["items"][0]["message"], "expected `Bool`, found an integer");
     }
 
     #[test]

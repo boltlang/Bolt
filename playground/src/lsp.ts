@@ -222,7 +222,8 @@ export class Client {
           ? { jsonrpc: "2.0", id: message.id, result: null }
           : { jsonrpc: "2.0", id: message.id, error: { code: METHOD_NOT_FOUND, message: `unsupported: ${message.method}` } },
       );
-    } else if (message.method === "window/logMessage") {
+    } else if (message.method === "window/logMessage" || message.method === "window/showMessage") {
+      // A warning to show, like errors in the prelude, goes to the console too.
       const { type, message: text } = message.params as { type: number; message: string };
       (type === 1 ? console.error : type === 2 ? console.warn : console.info)(`[bolt-language-server] ${text}`);
     }

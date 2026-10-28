@@ -10,6 +10,8 @@ use ls_types::{
     DidOpenTextDocumentParams, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult,
     FullDocumentDiagnosticReport, InitializeParams, InitializeResult, RelatedFullDocumentDiagnosticReport,
     ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, Uri,
+    WorkspaceDiagnosticReport, WorkspaceDiagnosticReportResult, WorkspaceDocumentDiagnosticReport,
+    WorkspaceFullDocumentDiagnosticReport,
 };
 
 use crate::{position::Encoding, workspace::Workspace};
@@ -70,7 +72,9 @@ impl Server {
                     identifier: Some("bolt".to_string()),
                     // Imports and labels make diagnostics depend on other files.
                     inter_file_dependencies: true,
-                    workspace_diagnostics: false,
+                    // For the files that open documents use without being
+                    // open, like the prelude's (#249).
+                    workspace_diagnostics: true,
                     ..Default::default()
                 })),
                 ..ServerCapabilities::default()
@@ -123,6 +127,34 @@ impl Server {
             },
         ));
         (report, error)
+    }
+}
+
+impl Server {
+    /// The diagnostics of the files that open documents use, like those of
+    /// the prelude, which aren't open themselves: they're shown where they
+    /// are, not in each document that uses them (#249).
+    pub fn workspace_diagnostic(&mut self) -> WorkspaceDiagnosticReportResult {
+        let items = self
+            .workspace
+            .workspace_diagnostics()
+            .into_iter()
+            .map(|(uri, items)| {
+                WorkspaceDocumentDiagnosticReport::Full(WorkspaceFullDocumentDiagnosticReport {
+                    uri,
+                    version: None,
+                    full_document_diagnostic_report: FullDocumentDiagnosticReport { result_id: None, items },
+                })
+            })
+            .collect();
+        WorkspaceDiagnosticReportResult::Report(WorkspaceDiagnosticReport { items })
+    }
+
+    /// Warnings to show after a change, once for each file that open
+    /// documents use that has newly got errors, for editors that don't ask
+    /// for [`Server::workspace_diagnostic`].
+    pub fn notices(&mut self) -> Vec<String> {
+        self.workspace.notices()
     }
 }
 

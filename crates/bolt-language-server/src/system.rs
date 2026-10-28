@@ -40,6 +40,13 @@ impl LspSystem {
         self.open.write().unwrap().insert(path.to_system_path_buf(), Document { text, revision });
     }
 
+    /// The paths of the open documents, in order.
+    pub fn open_paths(&self) -> Vec<SystemPathBuf> {
+        let mut paths: Vec<SystemPathBuf> = self.open.read().unwrap().keys().cloned().collect();
+        paths.sort();
+        paths
+    }
+
     /// Go back to what's on disk for the file at `path`.
     pub fn remove_text(&self, path: &SystemPath) {
         self.open.write().unwrap().remove(path);

@@ -117,6 +117,36 @@ others still are `LowerDiagnostic`s from type annotations in the body. The
 `boltlang-ide-diagnostics` crate turns all of them into diagnostics with a
 code, a range and labels, for the CLI and the language server.
 
+### Errors in the files a file uses
+
+A file's diagnostics are about the file itself. The files it uses, through
+its prelude and its imports (`files_used_by`), have their own, and what's
+in a file with errors can't be relied on: a program over a broken prelude
+could fail when it runs in ways the checker rules out
+([#249](https://github.com/boltlang/Bolt/issues/249)). So they're shown
+once, where they are:
+
+- **The CLI** adds one error (E0112) to the diagnostics of the file it
+  checks, runs or builds for each file it uses that has errors
+  (`dependency_diagnostics`). It's at the import that brings the file in,
+  or at the start of the file for the prelude's, and its label is at the
+  first error of the broken file:
+
+  ```text
+  [E0112] Error: `std/__prelude__/vec.bolt`, which this file uses through the prelude, has 2 errors; fix them first
+  ```
+
+  So `bolt run` and `bolt build` stop, and `bolt check` fails. A file that
+  `bolt check` is given too isn't counted twice. `bolt run --no-check`
+  runs anyway. The tests in `tests/run` fail the same way.
+- **The language server** doesn't repeat them in every document. It
+  answers `workspace/diagnostic` with the diagnostics of the files the
+  open documents use that aren't open, so that the editor lists them where
+  they are without opening them, and clears a file once no open document
+  uses it. For an editor that doesn't ask, it shows one warning with
+  `window/showMessage` when such a file gets errors, which is given again
+  only once they're fixed.
+
 ## References
 
 - O. Lee and K. Yi. *Proofs about a Folklore

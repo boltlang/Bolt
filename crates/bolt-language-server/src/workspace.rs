@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use boltlang_base_db::{Db, File, FilePath, Settings, System, SystemPath, source_text};
-use boltlang_ide_diagnostics::{Severity, diagnostics};
+use boltlang_ide_diagnostics::{Severity, diagnostics, files_used_by, short_path};
 use ls_types::{DiagnosticRelatedInformation, DiagnosticSeverity, Location, NumberOrString, Uri};
 
 use crate::{
@@ -15,12 +15,18 @@ use crate::{
 pub struct Workspace {
     db: LspDatabase,
     pub encoding: Encoding,
+    /// The files whose diagnostics the last workspace report gave, so that
+    /// the next one can clear those that aren't used anymore.
+    reported: Vec<File>,
+    /// The files that open documents use with errors that a notice was
+    /// already given for, so that it's given once, until they're fixed.
+    noticed: Vec<File>,
 }
 
 impl Workspace {
     /// A workspace whose files that aren't open come from `disk`.
     pub fn new(disk: Arc<dyn System>) -> Self {
-        Workspace { db: LspDatabase::new(disk), encoding: Encoding::Utf16 }
+        Workspace { db: LspDatabase::new(disk), encoding: Encoding::Utf16, reported: Vec::new(), noticed: Vec::new() }
     }
 
     /// Use the prelude of `prelude`, or none. A prelude asked for by name
@@ -53,10 +59,84 @@ impl Workspace {
         file.sync(&mut self.db);
     }
 
+    /// The files that the open documents use, through their prelude or
+    /// their imports, that aren't open themselves (#249). Their errors are
+    /// the open documents' business too, but the editor doesn't ask for
+    /// them document by document.
+    fn used_files(&self) -> Vec<File> {
+        let db = &self.db;
+        let open: Vec<File> = self.db.system.open_paths().iter().map(|p| db.files().resolve(db, p)).collect();
+        let mut used = Vec::new();
+        for &document in &open {
+            for &file in files_used_by(db, document) {
+                if !open.contains(&file) && !used.contains(&file) {
+                    used.push(file);
+                }
+            }
+        }
+        used
+    }
+
+    /// The diagnostics of the files that the open documents use, for a
+    /// workspace report, each with its URI. A file reported last time that
+    /// isn't used anymore is given without any, so that the editor forgets
+    /// them.
+    pub fn workspace_diagnostics(&mut self) -> Vec<(Uri, Vec<ls_types::Diagnostic>)> {
+        let used = self.used_files();
+        let mut out = Vec::new();
+        for &file in &used {
+            out.extend(uri_of(&self.db, file).map(|uri| (uri, self.file_diagnostics(file))));
+        }
+        for &file in self.reported.iter().filter(|f| !used.contains(f)) {
+            out.extend(uri_of(&self.db, file).map(|uri| (uri, Vec::new())));
+        }
+        self.reported = used;
+        out
+    }
+
+    /// A message for each file that the open documents use that has newly
+    /// got errors, for an editor that doesn't ask for the workspace's
+    /// diagnostics: "`std/__prelude__/vec.bolt`, which the open files use,
+    /// has 2 errors, the first on line 199: ...". It's given once until the
+    /// file's errors are fixed.
+    pub fn notices(&mut self) -> Vec<String> {
+        let db = &self.db;
+        let open = self.db.system.open_paths();
+        let Some(from) = open.first().map(|p| db.files().resolve(db, p)) else {
+            self.noticed.clear();
+            return Vec::new();
+        };
+        let mut broken = Vec::new();
+        let mut out = Vec::new();
+        for file in self.used_files() {
+            let errors: Vec<_> = diagnostics(db, file).into_iter().filter(|d| d.severity == Severity::Error).collect();
+            let Some(first) = errors.first() else { continue };
+            broken.push(file);
+            if self.noticed.contains(&file) {
+                continue;
+            }
+            let text = source_text(db, file);
+            let line = text[..usize::from(first.range.start())].matches('\n').count() + 1;
+            let count = if errors.len() == 1 { "1 error".to_string() } else { format!("{} errors", errors.len()) };
+            out.push(format!(
+                "`{}`, which the open files use, has {count}, the first on line {line}: {}",
+                short_path(db, from, file),
+                first.message
+            ));
+        }
+        self.noticed = broken;
+        out
+    }
+
     /// The diagnostics of the file at `path`, in the protocol's terms.
     pub fn diagnostics(&self, path: &SystemPath) -> Vec<ls_types::Diagnostic> {
         let db = &self.db;
         let file = db.files().resolve(db, path);
+        self.file_diagnostics(file)
+    }
+
+    fn file_diagnostics(&self, file: File) -> Vec<ls_types::Diagnostic> {
+        let db = &self.db;
         if !file.exists(db) {
             return Vec::new();
         }
@@ -181,6 +261,58 @@ mod tests {
         assert!(related[0].location.uri.as_str().ends_with("lib.bolt"));
         assert_eq!(related[0].message, "expected because of this parameter of `negate`");
         assert_eq!(related[0].location.range.start, ls_types::Position { line: 0, character: 14 });
+    }
+
+    /// The messages of a workspace report, by the file name of each URI.
+    fn workspace_messages(workspace: &mut Workspace) -> Vec<(String, Vec<String>)> {
+        let name = |uri: &Uri| uri.as_str().rsplit('/').next().unwrap().to_string();
+        let report = workspace.workspace_diagnostics();
+        report.iter().map(|(uri, items)| (name(uri), items.iter().map(|d| d.message.clone()).collect())).collect()
+    }
+
+    #[test]
+    fn errors_of_the_prelude_are_reported_where_they_are() {
+        let (mut workspace, disk) = workspace();
+        let prelude = SystemPath::new("/project/.bolt/packages/std/__prelude__/lib.bolt");
+        disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = True;
+").unwrap();
+        workspace.set_text(SystemPath::new(MAIN), "id(1);
+".into());
+        // Not in the document that uses it...
+        assert!(messages(&workspace, MAIN).is_empty());
+        // ...but in the prelude's file, and once in a notice.
+        assert_eq!(workspace_messages(&mut workspace), [("lib.bolt".to_string(), vec!["expected `i32`, found `Bool`".to_string()])]);
+        assert_eq!(workspace.notices(), [
+            "`std/__prelude__/lib.bolt`, which the open files use, has 1 error, the first on line 1: expected `i32`, found `Bool`"
+        ]);
+        assert!(workspace.notices().is_empty());
+        // Fixed, the report clears it, and breaking it again gives a new notice.
+        disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = x;
+").unwrap();
+        workspace.file_changed(prelude);
+        assert_eq!(workspace_messages(&mut workspace), [("lib.bolt".to_string(), vec![])]);
+        assert!(workspace.notices().is_empty());
+        disk.write_file_bytes(prelude, b"pub fn id(x: i32) -> i32 = True;
+").unwrap();
+        workspace.file_changed(prelude);
+        assert_eq!(workspace.notices().len(), 1);
+        // Once no open document uses it, it's cleared one last time, then left out.
+        workspace.close(SystemPath::new(MAIN));
+        assert_eq!(workspace_messages(&mut workspace), [("lib.bolt".to_string(), vec![])]);
+        assert!(workspace_messages(&mut workspace).is_empty());
+        assert!(workspace.notices().is_empty());
+    }
+
+    #[test]
+    fn an_open_file_isn_t_in_the_workspace_report() {
+        let (mut workspace, _) = workspace();
+        workspace.set_text(SystemPath::new(LIB), "pub fn negate(x: Bool) -> Bool = 1;
+".into());
+        workspace.set_text(SystemPath::new(MAIN), "import \"./lib\" (negate);\nnegate(True);\n".into());
+        // Its errors are in its own document's diagnostics.
+        assert!(workspace_messages(&mut workspace).is_empty());
+        assert!(workspace.notices().is_empty());
+        assert_eq!(messages(&workspace, LIB), ["expected `Bool`, found an integer"]);
     }
 
     #[test]

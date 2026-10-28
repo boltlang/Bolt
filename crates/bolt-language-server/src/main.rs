@@ -17,7 +17,7 @@ mod native {
         ls_types::{
             DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
             DocumentDiagnosticParams, DocumentDiagnosticReportResult, InitializeParams, InitializeResult,
-            InitializedParams, MessageType,
+            InitializedParams, MessageType, WorkspaceDiagnosticParams, WorkspaceDiagnosticReportResult,
         },
     };
 
@@ -42,11 +42,15 @@ mod native {
             self.client.log_message(MessageType::WARNING, error.to_string()).await;
         }
 
-        /// After a change: log what went wrong, and ask the client for new
-        /// diagnostics of every document.
+        /// After a change: log what went wrong, warn about files that the
+        /// open documents use that have newly got errors, and ask the client
+        /// for new diagnostics of every document.
         async fn changed(&self, result: Result<Result<(), NotAFile>, String>) {
             if let Ok(Err(error)) = result {
                 self.warn_not_a_file(error).await;
+            }
+            for notice in self.with_server(|s| s.notices()).await.unwrap_or_default() {
+                self.client.show_message(MessageType::WARNING, notice).await;
             }
             let refresh = guarded(&self.server, |s| s.should_refresh()).unwrap_or(false);
             if !refresh {
@@ -88,6 +92,13 @@ mod native {
                 self.warn_not_a_file(error).await;
             }
             Ok(report)
+        }
+
+        async fn workspace_diagnostic(
+            &self,
+            _: WorkspaceDiagnosticParams,
+        ) -> jsonrpc::Result<WorkspaceDiagnosticReportResult> {
+            self.with_server(|s| s.workspace_diagnostic()).await.map_err(internal_error)
         }
 
         async fn shutdown(&self) -> jsonrpc::Result<()> {
