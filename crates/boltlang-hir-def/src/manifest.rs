@@ -21,6 +21,7 @@ use std::collections::BTreeMap;
 
 use boltlang_base_db::{Db, File, SystemPath, SystemPathBuf, source_text};
 use serde::Deserialize;
+use toml::Spanned;
 
 /// The name of a package's manifest.
 pub const MANIFEST: &str = "bolt.toml";
@@ -30,9 +31,19 @@ pub const MANIFEST: &str = "bolt.toml";
 pub struct Manifest {
     pub name: String,
     pub prelude: PreludeChoice,
-    /// The packages it depends on, by the name they're imported with, and
-    /// the path of their directory as written, relative to the manifest's.
-    pub dependencies: Vec<(String, String)>,
+    /// The packages it depends on, by the name they're imported with.
+    pub dependencies: Vec<Dependency>,
+}
+
+/// A dependency of a package, `name = { path = "..." }`.
+#[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
+pub struct Dependency {
+    /// The name it's imported with.
+    pub name: String,
+    /// The path of its directory as written, relative to the manifest's.
+    pub path: String,
+    /// Where the path is written in the manifest, as a byte range.
+    pub path_range: (u32, u32),
 }
 
 /// Which prelude the files of a package get.
@@ -49,7 +60,7 @@ pub enum PreludeChoice {
 impl Manifest {
     /// The path of the dependency imported as `name`, as written.
     pub fn dependency(&self, name: &str) -> Option<&str> {
-        self.dependencies.iter().find(|(n, _)| n == name).map(|(_, path)| path.as_str())
+        self.dependencies.iter().find(|d| d.name == name).map(|d| d.path.as_str())
     }
 }
 
@@ -65,15 +76,15 @@ pub struct ManifestError {
 struct RawManifest {
     package: RawPackage,
     #[serde(default)]
-    dependencies: BTreeMap<String, RawDependency>,
+    dependencies: BTreeMap<Spanned<String>, RawDependency>,
 }
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawPackage {
-    name: String,
+    name: Spanned<String>,
     #[serde(default)]
-    prelude: Option<RawPrelude>,
+    prelude: Option<Spanned<RawPrelude>>,
 }
 
 #[derive(Deserialize)]
@@ -86,7 +97,12 @@ enum RawPrelude {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawDependency {
-    path: String,
+    path: Spanned<String>,
+}
+
+fn range<T>(spanned: &Spanned<T>) -> Option<(u32, u32)> {
+    let span = spanned.span();
+    Some((span.start as u32, span.end as u32))
 }
 
 /// The manifest in `file`, a `bolt.toml`.
@@ -101,31 +117,64 @@ pub fn parse(text: &str) -> Result<Manifest, ManifestError> {
         message: e.message().to_string(),
         range: e.span().map(|s| (s.start as u32, s.end as u32)),
     })?;
-    let error = |message: String| Err(ManifestError { message, range: None });
-    if !is_package_name(&raw.package.name) {
-        return error(format!("`{}` can't be the name of a package: use letters, digits, `_` and `-`", raw.package.name));
+    let error = |message: String, range| Err(ManifestError { message, range });
+    let name = raw.package.name.get_ref();
+    if !is_package_name(name) {
+        return error(format!("`{name}` can't be the name of a package: use letters, digits, `_` and `-`"), range(&raw.package.name));
     }
     let mut dependencies = Vec::new();
-    for (name, dependency) in raw.dependencies {
-        if !is_package_name(&name) {
-            return error(format!("`{name}` can't be the name of a dependency: use letters, digits, `_` and `-`"));
+    for (key, dependency) in raw.dependencies {
+        let name = key.get_ref();
+        if !is_package_name(name) {
+            return error(format!("`{name}` can't be the name of a dependency: use letters, digits, `_` and `-`"), range(&key));
         }
         if name == crate::nameres::STD {
-            return error("`std` comes with the compiler, so it can't be a dependency".to_string());
+            return error("`std` comes with the compiler, so it can't be a dependency".to_string(), range(&key));
         }
-        dependencies.push((name, dependency.path));
+        let path_range = range(&dependency.path).unwrap_or_default();
+        dependencies.push(Dependency { name: name.clone(), path: dependency.path.into_inner(), path_range });
     }
     let prelude = match raw.package.prelude {
-        None | Some(RawPrelude::Enabled(true)) => PreludeChoice::Default,
-        Some(RawPrelude::Enabled(false)) => PreludeChoice::None,
-        Some(RawPrelude::Package(name)) => {
-            if name != crate::nameres::STD && !dependencies.iter().any(|(n, _)| *n == name) {
-                return error(format!("the prelude is that of `{name}`, which isn't a dependency"));
+        None => PreludeChoice::Default,
+        Some(prelude) => match prelude.get_ref() {
+            RawPrelude::Enabled(true) => PreludeChoice::Default,
+            RawPrelude::Enabled(false) => PreludeChoice::None,
+            RawPrelude::Package(name) => {
+                if name != crate::nameres::STD && !dependencies.iter().any(|d| d.name == *name) {
+                    return error(format!("the prelude is that of `{name}`, which isn't a dependency"), range(&prelude));
+                }
+                PreludeChoice::Package(name.clone())
             }
-            PreludeChoice::Package(name)
-        }
+        },
     };
-    Ok(Manifest { name: raw.package.name, prelude, dependencies })
+    Ok(Manifest { name: raw.package.name.into_inner(), prelude, dependencies })
+}
+
+/// The directory of a dependency written as `path` in the manifest
+/// `manifest_file`, by its real path, if it's a package: if it has a
+/// `bolt.toml`.
+pub fn dependency_dir(db: &dyn Db, manifest_file: File, path: &str) -> Option<SystemPathBuf> {
+    let base = package_root(db, manifest_file)?;
+    let dir = SystemPath::absolute(SystemPath::new(&base.as_std_path().join(path)), SystemPath::new("/"));
+    let dir = db.system().canonicalize_path(&dir).unwrap_or(dir);
+    db.files().resolve(db, SystemPath::new(&dir.as_std_path().join(MANIFEST))).exists(db).then_some(dir)
+}
+
+/// What's wrong with the manifest in `file`, with where: that it can't be
+/// read, or a dependency that isn't a package.
+pub fn manifest_problems(db: &dyn Db, file: File) -> Vec<ManifestError> {
+    match manifest(db, file) {
+        Err(error) => vec![error.clone()],
+        Ok(manifest) => manifest
+            .dependencies
+            .iter()
+            .filter(|d| dependency_dir(db, file, &d.path).is_none())
+            .map(|d| ManifestError {
+                message: format!("there's no package at `{}`: it has no `{MANIFEST}`", d.path),
+                range: Some(d.path_range),
+            })
+            .collect(),
+    }
 }
 
 /// The manifest of the package `file` is in: the nearest `bolt.toml` in its
@@ -161,10 +210,13 @@ mod tests {
 
     #[test]
     fn manifests() {
-        let m = parse("[package]\nname = \"demo\"\n\n[dependencies]\nshapes = { path = \"../shapes\" }\n").unwrap();
+        let text = "[package]\nname = \"demo\"\n\n[dependencies]\nshapes = { path = \"../shapes\" }\n";
+        let m = parse(text).unwrap();
         assert_eq!(m.name, "demo");
         assert_eq!(m.prelude, PreludeChoice::Default);
         assert_eq!(m.dependency("shapes"), Some("../shapes"));
+        let (start, end) = m.dependencies[0].path_range;
+        assert_eq!(&text[start as usize..end as usize], "\"../shapes\"");
         let m = parse("[package]\nname = \"bare\"\nprelude = false\n").unwrap();
         assert_eq!(m.prelude, PreludeChoice::None);
         let m = parse("[package]\nname = \"p\"\nprelude = \"geo\"\n[dependencies]\ngeo = { path = \"g\" }\n").unwrap();
@@ -175,6 +227,11 @@ mod tests {
     fn manifest_errors() {
         let message = |text: &str| parse(text).unwrap_err().message;
         assert!(parse("[package]\nname = 1\n").unwrap_err().range.is_some());
+        // Every error says where it is.
+        let text = "[package]\nname = \"a b\"\n";
+        let (start, end) = parse(text).unwrap_err().range.unwrap();
+        assert_eq!(&text[start as usize..end as usize], "\"a b\"");
+        assert!(parse("[package]\nname = \"a\"\n[dependencies]\nstd = { path = \"s\" }\n").unwrap_err().range.is_some());
         assert!(message("[package]\n").contains("name"));
         assert!(message("[package]\nname = \"a\"\nversion = \"1\"\n").contains("version"));
         assert_eq!(message("[package]\nname = \"a b\"\n"), "`a b` can't be the name of a package: use letters, digits, `_` and `-`");

@@ -17,7 +17,7 @@ use std::collections::BTreeMap;
 
 use boltlang_base_db::{Db, File, Settings, SystemPath, SystemPathBuf};
 
-use crate::manifest::{MANIFEST, Manifest, PreludeChoice, is_package_name, manifest, package_manifest, package_root};
+use crate::manifest::{Manifest, PreludeChoice, dependency_dir, is_package_name, manifest, package_manifest, package_root};
 
 use crate::{
     Name,
@@ -565,14 +565,8 @@ fn package_dir(db: &dyn Db, importer: File, package: &str) -> Result<SystemPathB
     let Some(written) = manifest.dependency(package) else {
         return Err(ImportPathError::NotADependency { package: package.to_string() });
     };
-    let not_found = || ImportPathError::DependencyNotFound { package: package.to_string(), path: written.to_string() };
-    let base = package_root(db, manifest_file).ok_or_else(not_found)?;
-    let dir = SystemPath::absolute(SystemPath::new(&base.as_std_path().join(written)), SystemPath::new("/"));
-    let dir = db.system().canonicalize_path(&dir).unwrap_or(dir);
-    if !db.files().resolve(db, SystemPath::new(&dir.as_std_path().join(MANIFEST))).exists(db) {
-        return Err(not_found());
-    }
-    Ok(dir)
+    dependency_dir(db, manifest_file, written)
+        .ok_or_else(|| ImportPathError::DependencyNotFound { package: package.to_string(), path: written.to_string() })
 }
 
 fn with_extension(mut path: std::path::PathBuf) -> std::path::PathBuf {

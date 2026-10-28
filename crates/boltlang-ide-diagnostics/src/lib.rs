@@ -17,10 +17,13 @@ use std::fmt;
 use boltlang_base_db::{Db, File, parse_file, source_text};
 use boltlang_hir_def::{
     item_tree::{ModItem, item_tree},
+    manifest::manifest_problems,
     nameres::{package_of, prelude_file, resolve_import_path},
 };
 /// The files a file uses, through its prelude and its imports.
 pub use boltlang_hir_def::nameres::files_used_by;
+/// The manifest of a file's package, and the name of manifests.
+pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
 use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
 use boltlang_hir_ty::{AdtId, NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
 use boltlang_syntax::{
@@ -262,6 +265,23 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 }
             }
             Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message, labels }
+        })
+        .collect()
+}
+
+/// The diagnostics of a `bolt.toml`, in it: that it can't be read, and
+/// dependencies that aren't packages. The files of its package report the
+/// first of these too, for the CLI, which only looks at them.
+pub fn manifest_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
+    manifest_problems(db, file)
+        .into_iter()
+        .map(|problem| Diagnostic {
+            code: DiagnosticCode::BAD_MANIFEST,
+            severity: Severity::Error,
+            file,
+            range: problem.range.map_or_else(TextRange::default, |(start, end)| TextRange::new(start.into(), end.into())),
+            message: problem.message,
+            labels: Vec::new(),
         })
         .collect()
 }
