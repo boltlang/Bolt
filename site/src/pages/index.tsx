@@ -150,7 +150,7 @@ function HomepageFeatures(): ReactNode {
 // The playground, in the colors of the site, which has a toggle of its own.
 function HomepagePlayground(): ReactNode {
   const {colorMode} = useColorMode();
-  return <Playground theme={colorMode} style={{height: '100vh'}} defaultValue={sample} />;
+  return <Playground theme={colorMode} style={{minHeight: '400px'}} defaultValue={sample} />;
 }
 
 export default function Home(): ReactNode {
