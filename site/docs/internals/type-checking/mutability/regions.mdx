@@ -1,7 +1,7 @@
 ---
 sidebar_position: 5
 title: Regions
-description: A proposal for making an imm value from a mut one without a copy, when nothing outside the function that made it has it.
+description: A proposal for making an imm value from a mut one without a copy, when nothing outside the block that made it has it.
 ---
 
 # Regions
@@ -41,28 +41,30 @@ the checker can't tell: a `mut` value may have other names. In `std`,
 `to_array`, `vec_new` and `vec_from_array` have this problem, and so does
 `fmap` for `Vec` or `Box` (see the [open questions](./index.mdx#open-questions)).
 
-## Regions
+## What a region is
 
-A *region* is the mutability of values that a function body makes and
-that nothing outside the body holds. This page writes one as `@r` in
-code, and as $r$ in equations:
+A *region* is the mutability of values that a block makes and that
+nothing outside the block holds. A function's body and a closure's body
+are blocks too. This page writes a region as `@r` in code, and as $r$ in
+equations:
 
 $$
 \mu ::= \mathsf{Mut} \mid \mathsf{Imm} \mid \alpha \mid r
 $$
 
-- **Inside the body, a region can be changed**, like `Mut`.
-- **When the body ends, it's free**: nothing else has its values, so it
-  becomes whatever the caller needs, `Imm`, `Mut` or a caller's `'m`.
+- **Inside the block, a region can be changed**, like `Mut`.
+- **When the block ends, it's free**: nothing else has its values, so it
+  becomes whatever the code around the block needs, `Imm`, `Mut` or a
+  caller's `'m`.
 
 `@` sets a region apart from a [named mutability](./names.mdx) like `'m`,
 which behaves the other way round:
 
 | | `'m` | `@r` |
 |---|---|---|
-| Comes from | a signature: the caller chooses it | a body: the checker finds it |
-| In the body | may be `imm`, so it can't be changed | can be changed |
-| Outside the body | the caller's mutability | nothing has it |
+| Comes from | a signature: the caller chooses it | a block: the checker finds it |
+| In the block | may be `imm`, so it can't be changed | can be changed |
+| Outside the block | the caller's mutability | nothing has it |
 
 A region holds no information of its own: it's equal only to itself, and
 values are in it because unification put it in their types. It isn't a
@@ -70,7 +72,16 @@ list of values, a count of references or an area of memory. When the
 program runs, a region is `Mut`.
 
 So `squares` above type-checks: `xs` is `@r [i32]` in the body, and `@r`
-becomes the `imm` of the return type.
+becomes the `imm` of the return type. Inside a function, a block does the
+same:
+
+```bolt
+let ys: imm [i32] = {
+  let xs = mut [];
+  xs.push(1);
+  xs              // `@r [i32]`, freed at the `}`
+};
+```
 
 ## The rules
 
@@ -83,14 +94,14 @@ changes its argument is generic over this, so that it takes regions too:
 fn fill(xs, x) { xs[0] = x; }    // forall a. changeable 'm => fn('m [a], a) -> ()
 ```
 
-**2. A region is a changeable mutability that stays in the body.** Once a
-body is solved, a mutability is a region when it's still unknown, must be
-changeable, and appears in no type from outside the body: not in a
-parameter, a variable it captures, a top-level variable, or an effect's
-operation. That's the check that
+**2. A region is a changeable mutability that stays in its block.** A
+mutability in the type of a block's value is a region of the block when
+it's still unknown once the enclosing function's body is solved, must be
+changeable, and appears in no type from outside the block: not in a
+variable from outside it, a parameter, a top-level variable, or an
+effect's operation. That's like the check that
 [generalization](../generalization.mdx) makes before it generalizes a
-type variable. Only regions in the result matter: one that isn't in the
-result defaults to `Mut`, as now.
+type variable.
 
 **3. A value leaves its region when its type meets one from outside.**
 Then its mutability is no longer a region, and it stays `Mut`:
@@ -108,12 +119,13 @@ The error should say why: "`xs` can't be `imm`, because it's stored in
 showing it as `mut` would give "expected `mut [i32]`, found `mut [i32]`".
 
 **4. A region can hold values from outside, but an `imm` value can't hold
-a region's.** The "at most" order gets `imm ⊑ @r`. What a region's values
-hold, like the `B` of a `@r Vec[B]`, gives a constraint `B ⊑ @r`, which
-stays with the region and applies to whatever it becomes. `@r ⊑ imm` is
-false, since an `imm` value would hold one that's still being changed.
-`@r ⊑ Mut` can't happen, since a `Mut` value from outside would hold the
-region's, which rule 3 rules out.
+a region's.** The "at most" order gets $\mathsf{Imm} \sqsubseteq r$. What
+a region's values hold, like the `B` of a `@r Vec[B]`, gives a constraint
+$B \sqsubseteq r$, which stays with the region and applies to whatever it
+becomes. $r \sqsubseteq \mathsf{Imm}$ is false, since an `imm` value would
+hold one that's still being changed. $r \sqsubseteq \mathsf{Mut}$ can't
+happen, since a `Mut` value from outside would hold the region's, which
+rule 3 rules out.
 
 **5. A closure that captures a region's value has that region as its
 mutability**, not just one that's at least the region. A closure's type
@@ -121,11 +133,11 @@ doesn't show what it captured, so with "at least", a closure that also
 captures a `mut` value from outside would be a `mut fn` that could be
 stored outside, and still change the region's values. A `let mut` variable
 makes a closure changeable rather than `Mut`, so that a closure that
-counts in a body can be a region's too.
+counts in a block can be a region's too.
 
-A region that a function type in the result has, directly, in a type
-argument or in a field of a struct, isn't freed: it stays changeable, and
-so `Mut`:
+A region that a function type in the block's value has, directly, in a
+type argument or in a field of a struct, isn't freed: it stays
+changeable, and so `Mut`:
 
 ```bolt
 fn counter() -> (fn(), imm [i32]) {
@@ -138,14 +150,24 @@ If `xs` became `imm`, calling the closure would still change it. Calling a
 function doesn't need it to be `mut` ([deep `imm`](./deep.mdx)), so this
 can't be left to the caller.
 
-**6. A declared return type is unified with the body's type only after
-the body's regions are known.** So `-> imm [i32]` in `squares` meets an
-unknown, changeable mutability that turns out to be a region, rather than
-a `Mut`. An inferred function is generalized over its regions:
-`fn squares(n) = ...` is `fn(i32) -> 'm [i32]`, with `'m` chosen by each
-caller. That changes what [return types](./functions.mdx#return-types)
-say for a body that makes a value with `mut`: `fn buffer() = mut [0; 1024]`
-would give whatever the caller asks for, rather than `mut [u8]`.
+**6. The block's value gets a fresh mutability for each of its regions.**
+The constraints that rule 4 kept go with it, and "changeable" doesn't.
+What's around the block decides it, like for any unknown:
+
+- a `let` annotation, or what the value is used for later;
+- for a function's body, its declared return type, which is unified with
+  the body's type only once the regions are known: so `-> imm [i32]` in
+  `squares` meets a region rather than a `Mut`;
+- for an inferred function, the caller: `fn squares(n) = ...` is
+  generalized to `fn(i32) -> 'm [i32]`.
+
+That changes what [return types](./functions.mdx#return-types) say for a
+body that makes a value with `mut`: `fn buffer() = mut [0; 1024]` would
+give whatever the caller asks for, rather than `mut [u8]`.
+
+A closure's type isn't generalized, so every call of a closure gives its
+result the same mutability. That's still sound: each call makes a new
+value, which only that call's result has.
 
 ## Examples
 
@@ -167,20 +189,27 @@ result has to be `mut` too, as deep `imm` requires.
 `Box` is the same: `fn fmap(f, b) = mut Box { item: f(b.item) }` gives a
 `Box` with the mutability of the one it's given.
 
-## Why only function bodies
+## Why every block
 
-A region could start and end anywhere in a body, but finding the best
-places is region inference [Tofte & Talpin 1997], and its answers are hard
-to predict. A function has one boundary that's easy to see, and its
-signature already says what it gives: a result whose mutability the
-caller chooses is a value that's new.
+Pony's `recover` [Clebsch et al. 2015] has to be written, because it
+restricts what its block may *use*: only what can be shared from outside.
+Every block doing that would reject ordinary code.
 
-A body that wants to free a value halfway can move that part into a
-function of its own. If that's often needed, a block like Pony's
-`recover { ... }` could do the same inside a body, with the same rules.
+A region only looks at what *leaves* its block. When a value leaves, the
+region simply isn't one, and the value stays `Mut`, as it would be
+without regions. So freeing at a block only adds choices: a program that
+type-checks without regions still does with them, and blocks inside
+blocks compose, since a value freed in one flows on to the next. There's
+nothing to opt into, so no keyword is needed.
 
-A closure isn't a boundary: its type isn't generalized, so its result
-can't have a mutability that each call chooses.
+Region inference [Tofte & Talpin 1997] has to choose where regions go,
+since that decides when memory is freed, and its choices are hard to
+predict. Here, nothing is chosen: every block is a boundary.
+
+A value can't be freed halfway through a block: in
+`let xs = mut []; xs.push(1); let ys: imm [i32] = xs;`, `xs` hasn't left
+anything. The part that builds it goes in a block of its own, as in the
+example in [What a region is](#what-a-region-is).
 
 ## What regions don't do
 
@@ -206,23 +235,28 @@ writes one that rule 2 found.
   like a `'m` that must be changeable.
 - **Closures**: `ClosureFrame` unifies a closure's mutability with that of
   a changeable value it captures, instead of adding "at most".
-- **Bodies**: `infer_body` checks a body against a fresh return type,
-  finds its regions once it's solved, drops their "changeable", and only
-  then unifies with the declared return type.
+- **Blocks**: whether a block's mutabilities are regions depends on the
+  rest of the function's body, which may give a variable from outside the
+  block a type with one of them later on. So it's a deferred constraint
+  between the type of the block's value and the type outside, decided once
+  the body is solved: a region becomes a fresh mutability, and anything
+  else is unified as now. For a function's body, the type outside is its
+  declared return type. Only a mutability that must be changeable can be a
+  region, so most blocks have nothing to decide.
 - **Code generation**: an instance can choose `Imm` for a region, and the
-  body still changes those values before it returns. So a value made with
+  block still changes those values before it ends. So a value made with
   `mut` must be allocated each time and stored by reference, never made a
   constant or stored by value as an `imm` one can be. That only becomes
-  true once the body returns, which is what `Sharing.lean` would have to
+  true once the block ends, which is what `Sharing.lean` would have to
   say.
 - **The evaluator** tags each array and struct with the mutability it was
   made with (`Object::mutability`). A value that becomes `imm` when its
-  body returns is tagged `Mut`, so `with_mutability_checks` would stop on
-  an `imm` value that holds it. The tag would have to change when the body
-  returns.
+  block ends is tagged `Mut`, so `with_mutability_checks` would stop on an
+  `imm` value that holds it. The tag would have to change when the block
+  ends.
 - **Proof**: the Lean proof doesn't cover regions. It would need rules 2
   to 5, and the guarantee that a region's values can't be reached from
-  outside while the body runs.
+  outside while the block runs.
 
 ## Open questions
 
@@ -230,33 +264,36 @@ writes one that rule 2 found.
   `fn push[T](v: mut Vec[T], x: T)` in `std` only takes `Mut`, so
   `ys.push(…)` on a region's value is an error. `mut` in a parameter
   could mean "changeable". But a function that stores its parameter where
-  only `Mut` fits, would then be an error, and would need another way to
+  only `Mut` fits would then be an error, and would need another way to
   say that it wants exactly `Mut`:
 
   ```bolt
   fn register(log: mut [mut [i32]], xs: mut [i32]) { log.push(xs); }
   ```
 
-  Or a parameter could say
-  "changeable" with a bound. Either changes many signatures in `std`.
-- **Continuations.** A handler that captures the rest of a body captures
-  the region's values, like a closure. Resuming it after the body returned
+  Or a parameter could say "changeable" with a bound. Either changes many
+  signatures in `std`.
+- **What a freed mutability defaults to.** One that nothing decides becomes
+  `Imm`, like any unknown mutability. So `let xs = { mut [] };` shows as
+  `imm [a]`, although it says `mut`. That's harmless, since nothing changes
+  it, but defaulting a freed mutability to `Mut` would show what the code
+  says.
+- **Continuations.** A handler that captures the rest of a block captures
+  the region's values, like a closure. Resuming it after the block ended
   would change a value that may be `imm` by then. A
   [`mut` continuation](../../reactive.mdx) is resumed at most once, and a
   region's could be treated the same way.
-- **A `recover` block**, if moving code into a function turns out to be
-  too often needed.
 
 ## Prior art
 
 - **Haskell's `runST`** [Launchbury & Peyton Jones 1994] uses a type
   variable `s` in `ST s` and `STRef s a` as a region: the type of `runST`
   keeps an `STRef s` from leaving, so the result is pure. Here, the region
-  is found by generalization rather than written in a type.
+  is found when the block's body is solved, rather than written in a type.
 - **Pony's `recover`** [Clebsch et al. 2015] turns what a block makes into
   any capability, like `iso` or `val`, if the block only uses values from
   outside that can be shared. A region instead allows anything from
-  outside, and checks what leaves.
+  outside, and checks what leaves, which is why it needs no keyword.
 - **Region-based memory management** [Tofte & Talpin 1997], in the ML Kit
   and Cyclone, is where the name comes from: there, a region is also an
   area of memory, freed when its block ends.
