@@ -7,3 +7,4 @@ import BoltMut.Immutability
 import BoltMut.Purity
 import BoltMut.Examples
 import BoltMut.Solver
+import BoltMut.Structs

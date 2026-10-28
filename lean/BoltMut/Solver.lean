@@ -33,6 +33,7 @@ parameter at most a mutability. -/
 inductive Atom where
   | le (m μ : Mu)
   | tparam (i : Nat) (μ : Mu)
+  deriving DecidableEq, Repr
 
 /-- What an atom says, as `AtMost` does. -/
 def Atom.Holds (Δ : Assume) : Atom → Prop

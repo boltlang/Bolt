@@ -78,6 +78,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
+| `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v`; the checker's check, that each argument is at most the struct's mutability, is neither enough nor needed |
 
 The key lemma for generic functions, and for #243, is `HasType.inst` in
 `Lemmas.lean`: a body typed under its assumptions, with its parameters
@@ -111,14 +112,14 @@ The theorems depend only on Lean's standard axioms, `propext`,
   at most 8 steps, which missed chains of 9 and those through `mut`. In
   particular, a closure's mutability is written here; in Bolt, it's a
   parameter `'f` that the checker infers, with assumptions like `T ⊑ 'f`.
-- **Generic closures and structs.** Closures and struct types here are
-  monomorphic within a function: a closure can't take a type argument,
-  and a struct is the types of its fields, not a declaration with
-  parameters.
-- **Struct declarations.** A struct is the tuple of its fields here, with
-  the types they have, so a struct update can only share a field at the
-  type it has in the base. Bolt's checker gets the same rule from the
-  declared field types (#246).
+- **Generic closures.** Closures are monomorphic within a function: a
+  closure can't take a type argument.
+- **Struct declarations**, mostly. A struct is the tuple of its fields in
+  the language here, with the types they have, so a struct update can
+  only share a field at the type it has in the base; Bolt's checker gets
+  the same rule from the declared field types (#246). `Structs.lean` adds
+  declarations with type and mutability parameters, but only to say which
+  of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
 - **Effects that suspend**, like `Async`. Only operations that resume right
