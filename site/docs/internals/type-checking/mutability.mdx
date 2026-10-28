@@ -685,6 +685,9 @@ unification will have to remember the origin of `Imm` and `Mut`.
   with `imm` arguments changes nothing that existed before. More
   generally, a call changes only what its arguments that aren't `imm` all
   the way down can reach (`Frame.lean`), which the reactive design needs.
+  And an `imm` value can be copied, or two equal ones shared, without
+  changing what a program computes (`Sharing.lean`), so the code
+  generator may store them however it likes.
   It includes the
   "at most" assumptions that #243 proposes, like `T: imm`, and proves the
   solver's shortcuts for them (`Solver.lean`): how it splits a type, when

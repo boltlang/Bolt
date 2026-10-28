@@ -78,6 +78,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `changes_only_frame` | `Frame.lean` | a program changes only what's reachable from the locations in it that aren't `imm`, its frame (#255) |
 | `call_changes_only_what_args_reach` | `Frame.lean` | for a call, that's what the function and its argument reach; what's `imm` all the way down, like an `imm` closure or array, adds nothing |
 | `changed_is_in_frame_and_mut` | `Frame.lean` | what a program changes is in its frame and isn't `imm` |
+| `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254) |
+| `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
+| `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
