@@ -382,6 +382,32 @@ pub fn prelude_file(db: &dyn Db, file: File) -> Result<Option<File>, ImportPathE
     Ok((own.is_none() || package_of(db, file) != own).then_some(prelude))
 }
 
+/// The files whose items `file` can use: its prelude, the files it imports,
+/// and those they use in turn, each once, without `file` itself. They're in
+/// the order they're found, nearest first, so the prelude comes first.
+#[salsa::tracked(returns(ref))]
+pub fn files_used_by(db: &dyn Db, file: File) -> Vec<File> {
+    let mut seen = vec![file];
+    let mut queue = std::collections::VecDeque::from([file]);
+    while let Some(next) = queue.pop_front() {
+        let tree = item_tree(db, next);
+        let prelude = prelude_file(db, next).as_ref().ok().copied().flatten();
+        let imports = tree.top_level.iter().filter_map(|item| match *item {
+            ModItem::Import(idx) => tree.imports[idx.index()].source.as_ref(),
+            _ => None,
+        });
+        let imported = imports.filter_map(|source| resolve_import_path(db, next, source).ok());
+        for found in prelude.into_iter().chain(imported) {
+            if !seen.contains(&found) {
+                seen.push(found);
+                queue.push_back(found);
+            }
+        }
+    }
+    seen.remove(0);
+    seen
+}
+
 /// The entry file of the prelude's package, as seen from `file`, even when
 /// `file` is in that package, unlike [`prelude_file`]. For a file of the
 /// package reached by its real path rather than through `.bolt/packages`,

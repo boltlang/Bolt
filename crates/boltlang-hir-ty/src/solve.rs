@@ -10,8 +10,7 @@ use boltlang_hir_def::{
     body::DefWithBodyId,
     hir::{ExprId, PatId, TypeRefId},
     ids::{ClassId, FunctionId, ImplId, ItemContainerId, TypeAliasId},
-    item_tree::{ModItem, item_tree},
-    nameres::{file_scope, prelude_file, resolve_import_path},
+    nameres::{file_scope, files_used_by},
     resolver::GenericDefId,
 };
 
@@ -987,28 +986,10 @@ fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPa
 /// and of the files they import, directly or not.
 #[salsa::tracked(returns(ref))]
 pub fn visible_impls<'db>(db: &'db dyn Db, file: File) -> Vec<ImplId<'db>> {
-    let mut seen = vec![file];
-    let mut stack = vec![file];
-    if let Ok(Some(prelude)) = *prelude_file(db, file) {
-        seen.push(prelude);
-        stack.push(prelude);
-    }
-    let mut impls = Vec::new();
-    while let Some(file) = stack.pop() {
-        impls.extend(file_scope(db, file).scope.impls().iter().copied());
-        let tree = item_tree(db, file);
-        for item in &tree.top_level {
-            let ModItem::Import(idx) = *item else { continue };
-            let Some(source) = &tree.imports[idx.index()].source else { continue };
-            if let Ok(imported) = resolve_import_path(db, file, source)
-                && !seen.contains(&imported)
-            {
-                seen.push(imported);
-                stack.push(imported);
-            }
-        }
-    }
-    impls
+    std::iter::once(file)
+        .chain(files_used_by(db, file).iter().copied())
+        .flat_map(|f| file_scope(db, f).scope.impls().iter().copied())
+        .collect()
 }
 
 /// `ty` with the associated types in it that an impl visible in `file`

@@ -4,7 +4,7 @@ use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType},
     hir::ExprId,
     ids::{ClassId, EnumId},
-    item_tree::ModItem,
+    item_tree::{ModItem, item_tree},
 };
 
 use super::*;
