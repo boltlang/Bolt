@@ -199,6 +199,15 @@ let b = Box { item: mut Point { x: 0, y: 0 } };       // error (E0223): an `imm 
 let c = [mut [1]];                                    // error (E0223): an `imm [mut [i32]]` can't hold a `mut [i32]`
 ```
 
+What a struct holds is what its fields hold, not its type arguments
+([#256](https://github.com/boltlang/Bolt/issues/256)): with
+`struct Handler[T] { f: fn(T) -> () }`, an `imm Handler[mut [i32]]` is
+fine, since a closure doesn't hold what it takes, and with
+`struct Frozen[T] { items: imm [T] }`, only an `imm` `T` can be held, in
+a `Frozen` of either mutability. That's the same as Rust inferring
+`T: 'a` from a struct's fields, and it's what makes a struct type
+well-formed (`StructDecl.atMost_ty_iff` in `lean/BoltMut/Structs.lean`).
+
 Unification can't express this, since it's about a type and what's
 inside it. It's an "at most" constraint instead, with `imm ⊑ mut`
 ([#243](https://github.com/boltlang/Bolt/issues/243)): an array or struct
@@ -502,17 +511,19 @@ too, but doesn't have to.
 
 **A name is at most its struct's mutability.** An `imm VecIter[i32, mut]`
 would hold a `mut Vec`, which `imm` being deep rules out. So making a
-struct adds `'v ⊑ m` for each of its names, where `m` is its mutability, as
-for what its type arguments hold:
+struct adds `'v ⊑ m` for each name its fields have, where `m` is its
+mutability, and what a field with a name holds is at most that name: `T ⊑
+'v` for `data: 'v Vec[T]`:
 
 ```bolt
 mut VecIter { data: mut_vec, index: 0 }   // fine: mut VecIter[i32, mut]
 VecIter { data: mut_vec, index: 0 }       // error (E0223): an `imm VecIter[i32, mut]` can't have a `mut` mutability argument
-fn frozen[T: imm](v: 'v Vec[T]) -> imm VecIter[T, 'v] where 'v: imm = VecIter { data: v, index: 0 };
+fn frozen[T](v: 'v Vec[T]) -> imm VecIter[T, 'v] where 'v: imm = VecIter { data: v, index: 0 };
 ```
 
-The last one needs `'v: imm`, or `'v` could be `mut`, and `T: imm`, as
-for any `T` in an `imm` struct. A struct can bound its
+The last one needs `'v: imm`, or `'v` could be `mut`. It doesn't need
+`T: imm`: `v` is a `'v Vec[T]`, so `T ⊑ 'v`, which it can assume, since
+`v` exists. A struct can bound its
 names, like its type parameters, which is checked where a value is made:
 `struct Frozen['v: imm] { data: 'v [i32] }`.
 
@@ -619,8 +630,15 @@ unification will have to remember the origin of `Imm` and `Mut`.
     requires `Mut`. Without an index or a field of a struct, the variable
     must be `mut`, as before.
   - Making an array or struct adds an `AtMostConstraint`: the element
-    type, or the struct's type and mutability arguments, are at most its
-    mutability, once its fields are checked. The
+    type is at most the array's mutability, and what a struct's fields
+    hold at most theirs, once its fields are checked. What a struct's
+    fields hold is `holds::struct_atoms`: the atoms of "the fields are at
+    most the struct's own mutability", like `'v ⊑ m` and `T ⊑ 'v`, with a
+    field that's a struct using that one's, as a fixed point for structs
+    that refer to each other. A body assumes what makes its parameter
+    types and its impl's instance well-formed, like `T ⊑ 'm` for
+    `xs: 'm [T]`, as Rust's implied bounds do
+    (`check::implied_assumptions`). The
     solver splits a type into the mutabilities it holds
     (`Solver::solve_at_most`), decides what only one choice meets, and
     keeps the rest. What's left when a group of functions is solved is

@@ -460,9 +460,16 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             (C::MUT_INSIDE_IMM, message)
         }
         K::MutInsideImm { ty, inner } => {
+            // A struct that isn't `imm` itself holds it in a field that is,
+            // like the `data` of a `mut VecIter[mut [i32], imm]`.
+            let within = if ty.mutability() == Some(&Ty::Mutability(boltlang_hir_ty::ty::Mutability::Imm)) {
+                ""
+            } else {
+                " in a field that's `imm`"
+            };
             let (ty, inner) = (ty.display_with(db, names).to_string(), inner.display_with(db, names).to_string());
             let message = format!(
-                "{} `{ty}` can't hold {} `{inner}`: what an `imm` value holds can't be changed either",
+                "{} `{ty}` can't hold {} `{inner}`{within}: what an `imm` value holds can't be changed either",
                 article(&ty),
                 article(&inner)
             );
