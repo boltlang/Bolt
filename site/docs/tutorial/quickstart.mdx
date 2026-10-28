@@ -43,10 +43,7 @@ std: /home/you/.local/share/bolt/0.2.0-18bd2315615a79c2/std (comes with the comp
 ```
 
 The files are read-only: editing them would change `std` for every program.
-To work on `std` itself, set `BOLT_PRELUDE_PATH` to the directory of your
-copy, like the `packages/std` of the Bolt repository. A build of `bolt` made
-from the repository with `cargo build`, without `--release`, uses that one
-without it.
+To work on `std` itself, see [Packages](../internals/packages.mdx).
 
 ## Your first program
 

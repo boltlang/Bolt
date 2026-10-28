@@ -1,0 +1,88 @@
+---
+sidebar_position: 4
+title: Packages
+description: How the compiler finds packages, and the std that comes with it.
+---
+
+# Packages
+
+An import whose path doesn't start with `./` or `../`, like
+`import "shapes/circle"`, names a *package*. This page is about how the
+compiler finds packages, and in particular `std`, which comes with the
+compiler ([#98](https://github.com/boltlang/Bolt/issues/98)).
+
+## Finding a package
+
+A package is a directory in `.bolt/packages`, in the directory of the
+importing file or one of its parents; the nearest one wins.
+`import "shapes"` is its `lib.bolt`, and `import "shapes/circle"` its
+`circle.bolt` (`resolve_import_path` in `boltlang-hir-def`).
+
+`std` is the exception: it's never looked up in `.bolt/packages`. When the
+compiler has a `std` of its own, which `bolt` and the language server
+always do, `import "std/..."` and the prelude are found there, and the
+files under it are the package `std`, by their path or their real one.
+That's `Settings::std_dir` in `boltlang-base-db`. Tests and the playground
+leave it unset, and bring a `std` of their own in `.bolt/packages`.
+
+## The `std` that comes with the compiler
+
+The files of `packages/std` are part of the compiler's binaries
+(`boltlang-std`, whose build script embeds them). So that users can read
+them, and an editor open them, the compiler writes them out the first time
+it runs, as ordinary files:
+
+```text
+~/.local/share/bolt/0.2.0-18bd2315615a79c2/std
+```
+
+- The directory is for this version of the compiler, and a hash of the
+  files, which says when they changed within a version, as while working
+  on the compiler. So a compiler always uses the `std` it was built with,
+  which matters since `std` uses the newest features of the language.
+- The files are read-only: editing them would change `std` for every
+  program, without anyone knowing.
+- They're written next to the directory first, then moved in place, so
+  that a compiler that stops halfway, or another one at the same time,
+  never leaves part of them.
+- It's `$XDG_DATA_HOME`, or `~/.local/share`, on Linux and other Unix
+  systems, `~/Library/Application Support` on macOS, and `%LOCALAPPDATA%`
+  on Windows.
+
+`bolt --version` shows which `std` is in use, and where it's from.
+
+## Working on `std`
+
+Which `std` the compiler uses (`boltlang_std::locate`):
+
+1. **`BOLT_PRELUDE_PATH`**, the directory of a `std` to use instead: the
+   one with `__prelude__` in it, like the `packages/std` of the
+   repository. It's for working on `std` itself, so that whatever runs, a
+   loose file or another project, uses the copy being changed. If it isn't
+   a directory, the compiler says so and goes on without a `std`.
+2. **In a debug build**, made with `cargo build` without `--release`, the
+   `packages/std` of the repository it was built from. So running `bolt`
+   from the repository, like with `cargo run`, uses what's being changed,
+   without setting anything.
+3. **The copy that comes with the compiler**, written out as above.
+
+A release build carries the `std` it was built from, and Cargo builds it
+again when a file of `packages/std` changes. The tests don't use any of
+these: `TestDb::add_std` gives them the repository's `std` in memory.
+
+## The language servers
+
+The language server on the desktop finds `std` the same way, when it
+starts. The one in the browser has no files of its own: the page gives it
+`std`, in `.bolt/packages`, as the playground does.
+
+## What's next
+
+A project file, `bolt.toml`, with its dependencies, and a cache of
+packages in the home directory, which the lock file of a project points
+into, instead of `.bolt/packages`
+([#99](https://github.com/boltlang/Bolt/issues/99)). The prelude would
+then be set per project ([#92](https://github.com/boltlang/Bolt/issues/92)),
+and a file be in a package by the package's root rather than by its path,
+so that a file reached through a link is loaded once
+([#238](https://github.com/boltlang/Bolt/issues/238)).
