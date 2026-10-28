@@ -672,11 +672,11 @@ unification will have to remember the origin of `Imm` and `Mut`.
   generalized, unknown or hidden mutability that appears more than once.
   Schemes leave mutabilities out of their `forall`, and show a field
   constraint that's assigned to as `mut a.x: b`.
-- **Tests**: `tests/checker/array_mutability.txt`,
-  `tests/checker/struct_mutability.txt`,
-  `tests/checker/named_mutability.txt`,
-  `tests/checker/mutability_params.txt` and
-  `tests/checker/closure_mutability.txt` have a case for each rule on this
+- **Tests**: `tests/checker/mutability/arrays.txt`,
+  `tests/checker/mutability/structs.txt`,
+  `tests/checker/mutability/named.txt`,
+  `tests/checker/mutability/params.txt` and
+  `tests/checker/mutability/closures.txt` have a case for each rule on this
   page.
 - **Proven**: [`lean/`](https://github.com/boltlang/Bolt/tree/main/lean) has a
   Lean proof, for a core of these rules with closures, structs and type
