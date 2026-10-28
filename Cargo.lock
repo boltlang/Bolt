@@ -97,7 +97,7 @@ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
 name = "bolt-language-server"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-ide-diagnostics",
@@ -109,7 +109,7 @@ dependencies = [
 
 [[package]]
 name = "bolt-language-server-wasm"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "bolt-language-server",
  "boltlang-base-db",
@@ -121,7 +121,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-base-db"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-parser",
  "boltlang-syntax",
@@ -137,7 +137,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-cli"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "ariadne",
@@ -152,7 +152,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-codegen"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-corpus",
@@ -169,15 +169,15 @@ dependencies = [
 
 [[package]]
 name = "boltlang-common"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "boltlang-corpus"
-version = "0.1.0"
+version = "0.2.0"
 
 [[package]]
 name = "boltlang-eval"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-hir-def",
@@ -187,7 +187,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-hir"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-hir-def",
@@ -198,7 +198,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-hir-def"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-parser",
@@ -208,7 +208,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-hir-ty"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-corpus",
@@ -221,7 +221,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-ide-diagnostics"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-base-db",
  "boltlang-hir",
@@ -232,7 +232,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-parser"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "boltlang-common",
  "boltlang-syntax",
@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "boltlang-syntax"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "rowan",
  "salsa",
