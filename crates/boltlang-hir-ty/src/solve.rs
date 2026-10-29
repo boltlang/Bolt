@@ -18,7 +18,7 @@ use crate::{
     holds::struct_atoms_of,
     lower::{
         ClassConstraint, VariantDef, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
-        implied_by, subst_params, with_superclasses,
+        implied_by, implied_equalities, subst_params, with_superclasses,
     },
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
@@ -355,8 +355,10 @@ impl<'db> Solver<'db> {
             }
             // `class Ord[T] where Eq[T]`: `Ord[X]` gives `Eq[X]`; and
             // `type Iter: Iterator;` in `class Iterable[C]`: `Iterable[X]`
-            // gives `Iterator[X.Iter]`.
+            // gives `Iterator[X.Iter]`. `type Iter: Iterator[Item = Item]`
+            // also gives `X.Iter.Item = X.Item`.
             stack.extend(implied_by(self.db, &c));
+            self.assoc_assumptions.extend(implied_equalities(self.db, &c));
             self.assumptions.push(c);
         }
     }

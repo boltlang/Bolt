@@ -1021,6 +1021,26 @@ impl[T] Coll[(T, T)] { type It = T; }
 }
 
 #[test]
+fn impls_must_meet_what_bounds_of_associated_types_say_other_ones_are() {
+    check(
+        r#"
+class Iter2[I] { type Item; }
+class Coll[C] { type Item; type It: Iter2[Item = Item]; }
+struct Ints;
+struct Bools;
+impl Iter2[Ints] { type Item = i32; }
+impl Iter2[Bools] { type Item = Bool; }
+impl Coll[i32] { type Item = i32; type It = Ints; }
+impl Coll[Bool] { type Item = i32; type It = Bools; }
+                                      //^^ error: class `Coll` needs the `Item` of its type `It` to be `i32`, but this impl's is `Bool`
+impl[T, I] Coll[(T, I)] where Iter2[I, Item = T] { type Item = T; type It = I; }
+impl[T, I] Coll[(T, I, I)] where Iter2[I] { type Item = T; type It = I; }
+                                                              //^^ error: class `Coll` needs the `Item` of its type `It` to be `T`, but this impl's is `I.Item`
+"#,
+    );
+}
+
+#[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
         (

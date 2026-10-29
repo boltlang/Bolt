@@ -109,6 +109,7 @@ impl DiagnosticCode {
     pub const OVERLAPPING_FUNCTION: Self = Self("E0238");
     pub const NOT_AN_ASSOC_TYPE_OF: Self = Self("E0239");
     pub const EQUALITY_NOT_ALLOWED: Self = Self("E0240");
+    pub const UNMET_ASSOC_EQUALITY: Self = Self("E0241");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -404,6 +405,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         }
         DiagnosticKind::OverlappingImpl { instance, other, .. } => instance.args.iter().chain(other.args.iter()).collect(),
         DiagnosticKind::NoOverload { ty, .. } => vec![ty],
+        DiagnosticKind::UnmetAssocEquality { expected, actual, .. } => vec![expected, actual],
         _ => Vec::new(),
     }
 }
@@ -650,6 +652,17 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             (
                 C::UNMET_ASSOC_BOUND,
                 format!("there is no instance `{instance}`, which class `{class}` asks of its type `{name}`"),
+            )
+        }
+        K::UnmetAssocEquality { name, item, class, expected, actual } => {
+            let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
+            (
+                C::UNMET_ASSOC_EQUALITY,
+                format!(
+                    "class `{class}` needs the `{item}` of its type `{name}` to be `{}`, but this impl's is `{}`",
+                    expected.display_with(db, names),
+                    actual.display_with(db, names)
+                ),
             )
         }
         K::NoLangClass { class } => (

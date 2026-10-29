@@ -32,7 +32,7 @@ use boltlang_hir_ty::{
     builtin::{Builtin, is_builtin_block},
     kind::Kind,
     inhabited::{field_without_values, has_values},
-    check::unmet_assoc_bounds,
+    check::{unmet_assoc_bounds, unmet_assoc_equalities},
     infer_body,
     overlap::{overlapped_functions, overlapped_impls},
     lower::{
@@ -184,6 +184,10 @@ pub enum DiagnosticKind<'db> {
     /// The type an impl gives an associated type doesn't meet a bound the
     /// class puts on it, like `type Iter: Iterator;`.
     UnmetAssocBound { name: Name, class: ClassId<'db>, constraint: ClassConstraint<'db> },
+    /// An impl's type for the associated type `name` gives another `item`
+    /// than its class's bound says, like the `Item = Item` of `type Iter:
+    /// Iterator[Item = Item];`.
+    UnmetAssocEquality { name: Name, item: Name, class: ClassId<'db>, expected: Ty<'db>, actual: Ty<'db> },
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
@@ -578,6 +582,15 @@ impl<'db> Collector<'db> {
                 .find(|item| matches!(item, AssocItemDef::TypeAlias(_)) && item.name(db).as_ref() == Some(&name));
             let range = own.map(|item| self.item_range(item.ast_id(db)));
             self.push(range, DiagnosticKind::UnmetAssocBound { name, class, constraint: constraint.clone() });
+        }
+        for (alias, of, expected, actual) in unmet_assoc_equalities(db, imp) {
+            let (Some(name), Some(item)) = (alias.item(db).name.clone(), of.item(db).name.clone()) else { continue };
+            let own = AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
+                .into_iter()
+                .find(|item| matches!(item, AssocItemDef::TypeAlias(_)) && item.name(db).as_ref() == Some(&name));
+            let range = own.map(|item| self.item_range(item.ast_id(db)));
+            let (expected, actual) = (expected.clone(), actual.clone());
+            self.push(range, DiagnosticKind::UnmetAssocEquality { name, item, class, expected, actual });
         }
         let missing: Vec<(ClassItemKind, Name)> = declared
             .iter()

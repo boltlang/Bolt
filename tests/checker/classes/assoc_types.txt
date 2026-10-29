@@ -329,3 +329,25 @@ Iterator[Ints].next: fn(Ints) -> Option[i32]
 --------------------------------------------------------------------------------
 error at `Iterator[Ints, Item = i32]`: an associated type can't be given here
 error at `Iterator[Item = i32]`: an associated type can't be given here
+
+================================================================================
+A bound of an associated type can say what another one is
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+class Iterable[C] { type Item; type Iter: Iterator[Item = Item]; fn iter(c: C) -> Iter; }
+struct Ints { n: i32 }
+impl Iterator[Ints] { type Item = i32; fn next(it) = Option.Some(it.n); }
+struct Bag { n: i32 }
+impl Iterable[Bag] { type Item = i32; type Iter = Ints; fn iter(b) = Ints { n: b.n }; }
+fn first[C: Iterable](c: C) -> Option[C.Item] = next(iter(c));
+fn first_inferred(c) = next(iter(c));
+first(Bag { n: 1 });
+first_inferred(Bag { n: 1 });
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> Option[i32]
+Iterable[Bag].iter: fn(Bag) -> imm Ints
+first: forall C. Iterable[C] => fn(C) -> Option[C.Item]
+first_inferred: forall a. Iterable[a] => fn(a) -> Option[a.Iter.Item]
+first(Bag { n: 1 }): Option[i32]
+first_inferred(Bag { n: 1 }): Option[i32]

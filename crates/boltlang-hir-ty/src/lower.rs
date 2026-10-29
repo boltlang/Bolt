@@ -130,6 +130,10 @@ pub struct TyLoweringContext<'a, 'db> {
     /// What associated types are, like the `Item = T` of `I: Iterator[Item
     /// = T]`, with where the class is written, lowered with predicates.
     equalities: Vec<(AssocConstraint<'db>, TypeRefId)>,
+    /// Whether what an associated type is can be said, like the `Item =
+    /// Item` of `type Iter: Iterator[Item = Item];`, besides in the
+    /// predicates of functions and impls.
+    allow_equalities: bool,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -144,6 +148,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             lowered: Vec::new(),
             at_most: Vec::new(),
             equalities: Vec::new(),
+            allow_equalities: false,
             diagnostics: Vec::new(),
         }
     }
@@ -590,7 +595,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return;
         }
-        if !matches!(self.predicates_of, Some(GenericDefId::Function(_) | GenericDefId::Impl(_))) {
+        if !self.allow_equalities && !matches!(self.predicates_of, Some(GenericDefId::Function(_) | GenericDefId::Impl(_))) {
             self.diagnostics.push(LowerDiagnostic::EqualityNotAllowed(id));
             return;
         }
@@ -756,6 +761,19 @@ pub fn implied_by<'db>(db: &'db dyn Db, c: &ClassConstraint<'db>) -> Vec<ClassCo
     out
 }
 
+/// What associated types are wherever `c` holds, from the bounds of its
+/// class's associated types: with `type Iter: Iterator[Item = Item];` in
+/// `class Iterable[C]`, `Iterable[X]` gives `X.Iter.Item = X.Item`.
+pub fn implied_equalities<'db>(db: &'db dyn Db, c: &ClassConstraint<'db>) -> Vec<AssocConstraint<'db>> {
+    let class_def = GenericDefId::Class(c.class);
+    let subst = |t: &Ty<'db>| subst_params(t, class_def, &c.args);
+    class_assoc_types(db, c.class)
+        .into_iter()
+        .flat_map(|alias| assoc_type_bounds(db, alias).equalities.iter())
+        .map(|(e, _)| AssocConstraint { alias: e.alias, args: e.args.iter().map(subst).collect(), ty: subst(&e.ty) })
+        .collect()
+}
+
 /// The associated types that `class` declares.
 pub fn class_assoc_types<'db>(db: &'db dyn Db, class: ClassId<'db>) -> Vec<TypeAliasId<'db>> {
     class
@@ -787,6 +805,9 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
     let sig = type_alias_signature(db, alias);
     let resolver = Resolver::for_generic_def(db, GenericDefId::TypeAlias(alias));
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store);
+    // `type Iter: Iterator[Item = Item];`: what `C.Iter.Item` is, for every
+    // impl of the class.
+    ctx.allow_equalities = true;
     let target = Ty::Assoc(alias, identity_args(db, GenericDefId::Class(class)));
     let mut predicates = Vec::new();
     let mut sources = Vec::new();
@@ -796,9 +817,10 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
             sources.push(bound);
         }
     }
+    let equalities = std::mem::take(&mut ctx.equalities);
     Predicates {
         predicates: predicates.into(),
-        equalities: Box::new([]),
+        equalities: equalities.into(),
         at_most: Box::new([]),
         sources: sources.into(),
         diagnostics: ctx.diagnostics,

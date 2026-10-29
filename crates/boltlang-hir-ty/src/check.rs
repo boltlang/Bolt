@@ -124,6 +124,69 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
 /// in an impl of `class Iterable[C] { type Iter: Iterator; }` when `Pair`
 /// has no impl of `Iterator`. The impl's own bounds and `where` clauses are
 /// assumed. Each is given with the associated type of the class.
+/// What the bounds of the class's associated types say other associated
+/// types are, like the `Item = Item` of `type Iter: Iterator[Item = Item];`
+/// in `class Iterable[C]`, that the impl's types don't meet: the impl's
+/// `Iter` must give its `Item`. Each is given with the associated type of
+/// the class whose bound it is, the associated type it's about, like the
+/// `Item` of `Iterator`, what it must be and what it is.
+#[salsa::tracked(returns(ref))]
+pub fn unmet_assoc_equalities<'db>(
+    db: &'db dyn Db,
+    imp: ImplId<'db>,
+) -> Vec<(TypeAliasId<'db>, TypeAliasId<'db>, Ty<'db>, Ty<'db>)> {
+    let Some(target) = impl_header(db, imp).class.clone() else { return Vec::new() };
+    let file = imp.file(db);
+    let def = DefWithBodyId::new(db, DefWithBody::File(file));
+    let origin = Origin::new(def, ExprOrPat::Expr(body(db, def).body_expr));
+    let class_def = GenericDefId::Class(target.class);
+    let aliases = class_assoc_types(db, target.class);
+    // The class's associated types for the impl's instance are the impl's.
+    let own = |t: &Ty<'db>| {
+        let t = subst_params(t, class_def, &target.args);
+        let t = t.fold(&mut |t| match t {
+            Ty::Assoc(a, args) if aliases.contains(a) && *args == target.args => impl_assoc_ty(db, imp, *a),
+            _ => None,
+        });
+        normalize_assoc(db, file, &t)
+    };
+    let mut unmet = Vec::new();
+    for &alias in &aliases {
+        // A missing one is reported with the impl's other missing items.
+        if impl_assoc_ty(db, imp, alias).is_none() {
+            continue;
+        }
+        for (equality, _) in assoc_type_bounds(db, alias).equalities.iter() {
+            let expected = own(&equality.ty);
+            let args: Box<[Ty<'db>]> = equality.args.iter().map(&own).collect();
+            if expected.any(&mut |t| *t == Ty::Error) || args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+                continue;
+            }
+            let mut solver = Solver::new(db, file);
+            for predicate in generic_predicates(db, GenericDefId::Impl(imp)).predicates.iter() {
+                solver.assume(predicate.clone());
+            }
+            for (assumption, _) in generic_predicates(db, GenericDefId::Impl(imp)).equalities.iter() {
+                solver.assume_assoc(assumption.clone());
+            }
+            let actual = solver.new_var(VarKind::General);
+            let constraint = AssocConstraint { alias: equality.alias, args, ty: actual.clone() };
+            solver.add(Constraint::Assoc { constraint, origin });
+            solver.solve();
+            let actual = solver.unifier.resolve(&actual);
+            // Not decided, because the bound that gives it isn't met, which
+            // is reported on its own.
+            if matches!(actual, Ty::Var(_) | Ty::Error) || !solver.errors.is_empty() {
+                continue;
+            }
+            if solver.unifier.unify(&expected, &actual).is_err() {
+                unmet.push((alias, equality.alias, expected, actual));
+            }
+        }
+    }
+    unmet
+}
+
 #[salsa::tracked(returns(ref))]
 pub fn unmet_assoc_bounds<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<(TypeAliasId<'db>, ClassConstraint<'db>)> {
     let Some(target) = impl_header(db, imp).class.clone() else { return Vec::new() };
