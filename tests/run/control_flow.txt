@@ -73,7 +73,7 @@ error: evaluation took too many steps
 ================================================================================
 For loops over arrays
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let xs = [1, 2, 3];
 let mut s = 0;

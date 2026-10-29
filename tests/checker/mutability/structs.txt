@@ -248,7 +248,7 @@ error at `l.a`: can't change Point
 ================================================================================
 A struct holding arrays
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Bag { items: [i32], tags: imm [String] }
 let a = mut Bag { items: mut [1], tags: ["t"] };
@@ -269,7 +269,7 @@ error at `b.items`: can't change imm [i32]
 ================================================================================
 What an imm field holds is imm, in a mut struct too
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 struct Shape { id: i32, corners: imm [Point] }
@@ -354,7 +354,7 @@ error at `wrap`: mut [i32] isn't at most imm
 ================================================================================
 An imm array can't hold a mut struct
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 let a = [mut Point { x: 0, y: 0 }];
@@ -375,7 +375,7 @@ error at `[mut Point { x: 0, y: 0 }]`: imm [mut Point] holds mut Point
 ================================================================================
 An imm array can't hold a tuple with a mut array
 :error
-:prelude
+:test-prelude
 ================================================================================
 let a = [(mut [1], True)];
 let b = [|xs: mut [i32]| xs[0] = 1];

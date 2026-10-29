@@ -1,7 +1,7 @@
 ================================================================================
 An imm struct can't hold a closure that changes what it captures (#244)
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Holder { poke: fn() }
 let xs = mut [0];
@@ -27,7 +27,7 @@ error at `|| { n += 1; n }`: expected fn() -> i32, found mut fn() -> i32
 
 ================================================================================
 A mut struct can hold a mut closure
-:prelude
+:test-prelude
 ================================================================================
 struct Holder { poke: fn() }
 let xs = mut [0];
@@ -40,7 +40,7 @@ h.poke(): ()
 
 ================================================================================
 A closure that captures nothing that can change is imm
-:prelude
+:test-prelude
 ================================================================================
 struct Holder { get: fn() -> i32 }
 let k = 1;
@@ -67,7 +67,7 @@ apply_twice(|x| x + 1, 1): i32
 ================================================================================
 An imm array can't hold a mut closure
 :error
-:prelude
+:test-prelude
 ================================================================================
 let xs = mut [0];
 let fs = [|| { xs[0] += 1; }];
@@ -120,7 +120,7 @@ let f: mut fn() -> i32
 
 ================================================================================
 A closure has the mutability of the array it captures
-:prelude
+:test-prelude
 ================================================================================
 fn reader(xs: [i32]) = || xs[0];
 let a = reader([1]);
@@ -132,7 +132,7 @@ let b: mut fn() -> i32
 
 ================================================================================
 A closure is at most what it captures, even a value of a type parameter (#243)
-:prelude
+:test-prelude
 ================================================================================
 fn reader(xs) = || xs[0];
 fn always[T](x: T) -> fn() -> T = || x;

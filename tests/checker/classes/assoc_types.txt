@@ -1,6 +1,6 @@
 ================================================================================
 An associated type is given by the impl
-:prelude
+:test-prelude
 ================================================================================
 class Index[C] {
   type Item;
@@ -20,7 +20,7 @@ get(b, 0): Bool
 
 ================================================================================
 An inferred function keeps the associated type in its type
-:prelude
+:test-prelude
 ================================================================================
 class Index[C] {
   type Item;
@@ -40,7 +40,7 @@ second(Box { items: [1, 2] }): i32
 
 ================================================================================
 C.Item names the associated type of a parameter's class
-:prelude
+:test-prelude
 ================================================================================
 class Index[C] {
   type Item;
@@ -76,7 +76,7 @@ error at `get(c, 0)`: expected i32, found C.Item
 
 ================================================================================
 A superclass's associated type
-:prelude
+:test-prelude
 ================================================================================
 class Index[C] {
   type Item;
@@ -106,7 +106,7 @@ put(b, 2): ()
 ================================================================================
 The wrong type for an associated type
 :error
-:prelude
+:test-prelude
 ================================================================================
 class Index[C] {
   type Item;

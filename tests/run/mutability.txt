@@ -1,7 +1,7 @@
 ================================================================================
 Changing an element of a mut array
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let scores = mut [0, 0, 0];
 scores[1] = 10;
@@ -25,7 +25,7 @@ Point { x: 5, y: 2 }
 ================================================================================
 Aliases of an array see each other's changes
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let a = mut [1, 2, 3];
 let b = a;
@@ -38,7 +38,7 @@ b[1] += 10;
 ================================================================================
 A function fills in a mut array it's given
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 fn fill(xs: mut [i32], x: i32) {
   xs[0] = x;
@@ -67,7 +67,7 @@ Point { x: 1, y: 5 }
 ================================================================================
 An array in an array is shared
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let row = mut [0, 0];
 let grid = mut [row, mut [0, 0]];
@@ -79,7 +79,7 @@ row;
 ================================================================================
 Tuples are values, but the arrays in them are shared
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let mut t = (mut [0], 1);
 let u = t;
@@ -116,7 +116,7 @@ q.x = 9;
 ================================================================================
 A for loop sees changes to the array
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let xs = mut [1, 2, 3];
 let mut total = 0;
@@ -131,7 +131,7 @@ total;
 ================================================================================
 A struct that contains itself
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 struct Node { next: [Node], n: i32 }
 let nodes = mut [mut Node { next: mut [], n: 0 }];
@@ -143,7 +143,7 @@ nodes;
 ================================================================================
 The length of an array
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 fn last(xs: [i32]) -> i32 = xs[array_len(xs) - 1];
 let xs = mut [1, 2, 3];
@@ -197,7 +197,7 @@ Point { x: 5 }
 ================================================================================
 A mut struct can hold an imm array through a mutability parameter
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 struct Cursor['v] { data: 'v [i32], index: i32 }
 fn sum(c: mut Cursor['v]) -> i32 {

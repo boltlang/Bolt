@@ -1,6 +1,6 @@
 ================================================================================
 A struct can take a mutability for a field (#243)
-:prelude
+:test-prelude
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs: 'v [i32]) -> mut Iter['v] = mut Iter { data: xs, index: 0 };
@@ -18,7 +18,7 @@ b.data[0] = 5: ()
 ================================================================================
 A field with the struct's mutability can't be changed in a mut struct that has an imm one
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 let a = mut Iter { data: [1, 2], index: 0 };
@@ -41,7 +41,7 @@ index: fn(Iter) -> i32
 
 ================================================================================
 Type and mutability arguments
-:prelude
+:test-prelude
 ================================================================================
 struct Iter[T, 'v] { data: 'v [T], index: i32 }
 fn first(it: Iter[i32, imm]) -> i32 = it.data[0];
@@ -111,7 +111,7 @@ error at `mut Frozen { data: mut [1] }`: mut isn't at most imm
 
 ================================================================================
 Without a mutability argument, a field's struct has its outer struct's
-:prelude
+:test-prelude
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 struct Outer { it: Iter }
@@ -197,7 +197,7 @@ let a: imm Wrap[imm]
 
 ================================================================================
 A mut iterator over an array of either mutability
-:prelude
+:test-prelude
 ================================================================================
 enum Option[T] { Some(T), None }
 class Iterator[I] { type Item; fn advance(it: I) -> Option[Item]; }

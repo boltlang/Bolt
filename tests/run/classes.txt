@@ -95,7 +95,7 @@ let b: String = ZERO;
 ================================================================================
 An associated type
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 class Index[C] {
   type Item;
@@ -115,7 +115,7 @@ let s = Stack { items: [True, False] };
 ================================================================================
 Looping over a type with its own iterator
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 struct Countdown { from: i32 }
 struct CountdownIter { left: [i32] }
@@ -146,7 +146,7 @@ seen;
 ================================================================================
 Looping over an iterator made from a function
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 let mut n = 0;
 let it = mut FnIter {
@@ -168,12 +168,12 @@ total;
 ================================================================================
 A bound that says what an associated type is
 :todo wasm
-:prelude
+:test-prelude
 ================================================================================
 fn total[I: Iterator[Item = i32]](it: I) -> i32 = match next(it) {
   Some(x) => x + total(it),
   None => 0,
 };
-total(iter(Vec.from_array([1, 2, 3])));
+total(iter([1, 2, 3]));
 --------------------------------------------------------------------------------
 6

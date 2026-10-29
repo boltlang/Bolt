@@ -101,7 +101,7 @@ error at `True`: expected {integer}, found Bool
 
 ================================================================================
 Assigning to a variable that isn't mut is an error
-:prelude
+:test-prelude
 ================================================================================
 struct Point { x: i32 }
 fn f(p: Point, xs: [i32; 2]) {

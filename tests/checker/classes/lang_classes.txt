@@ -1,6 +1,6 @@
 ================================================================================
 Indexing a type with an impl of Index
-:prelude
+:test-prelude
 ================================================================================
 struct Bag[T] { items: [T] }
 impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
@@ -14,7 +14,7 @@ b[0]: Bool
 ================================================================================
 Indexing a type without an impl of Index
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Bag[T] { items: [T] }
 let b = Bag { items: [True] };
@@ -28,7 +28,7 @@ error at `b[0]`: no instance Index[imm Bag[Bool]]
 ================================================================================
 The index of a type with an impl of Index is an i32
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Bag[T] { items: [T] }
 impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
@@ -44,7 +44,7 @@ error at `True`: expected i32, found Bool
 ================================================================================
 Assigning to an element needs IndexMut
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Bag[T] { items: [T] }
 impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
@@ -68,7 +68,7 @@ error at `c`: can't change imm Bag[i32]
 ================================================================================
 Assigning the wrong type to an element
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Bag[T] { items: [T] }
 impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
@@ -85,7 +85,7 @@ error at `"two"`: expected {integer}, found String
 
 ================================================================================
 Looping over a type with an impl of Iterable
-:prelude
+:test-prelude
 ================================================================================
 struct Count { n: i32 }
 struct CountIter { left: [i32] }
@@ -110,7 +110,7 @@ f: fn(Count) -> ()
 ================================================================================
 Looping over a type without an impl of Iterable
 :error
-:prelude
+:test-prelude
 ================================================================================
 struct Count { n: i32 }
 fn f(c: Count) {
@@ -123,7 +123,7 @@ error at `c`: no instance Iterable[Count]
 
 ================================================================================
 Generic functions over the classes
-:prelude
+:test-prelude
 ================================================================================
 fn first[C](c: C) -> C.Item where Index[C] = c[0];
 fn count[C](c: C) -> i32 where Iterable[C], Iterator[C.Iter] {
@@ -137,7 +137,7 @@ count: forall C. Iterable[C] => Iterator[C.Iter] => fn(C) -> i32
 
 ================================================================================
 Arrays, and types that aren't known yet, are indexed and looped over through the classes
-:prelude
+:test-prelude
 ================================================================================
 fn first(xs) = xs[0];
 fn total(xs) {
