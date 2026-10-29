@@ -104,6 +104,17 @@ other instance *unifies* with it [GHC User's Guide].
 `visible_impls` decides which impls a file can use: those of the file
 itself, of its prelude, and of every file they import, directly or not.
 
+Two impls of a class *overlap* when some types fit both instances, like
+`impl[T] Size[[T]]` and `impl Size[[i32]]`. A constraint on those types
+would wait forever at step 5, so the later impl is an error where it's
+defined (E0235, `overlap.rs`): each impl is compared with those before it
+in its file and those of the files it uses. The two instances overlap if
+they unify once each impl's parameters, hidden mutabilities included, are
+fresh variables. As in GHC, `where` clauses aren't looked at, so that an
+impl added somewhere else can't make two impls overlap. Two impls in files
+that don't use each other aren't compared, even when a third file uses
+both; there, a use that both fit says that more than one impl fits.
+
 ### What's left
 
 When a body is done, `Solver::finish` solves what it can, defaults the
