@@ -186,7 +186,15 @@ pub fn update(text: &str, cases: &[Case], mut found: impl FnMut(&Case) -> Option
             }
             continue;
         };
-        for line in &lines[case.head.clone()] {
+        // Without the blank lines at the end of the input, so that the line
+        // of `-` comes right after it.
+        let mut head = &lines[case.head.clone()];
+        while let [rest @ .., last] = head
+            && last.trim().is_empty()
+        {
+            head = rest;
+        }
+        for line in head {
             out.push_str(line);
             out.push('\n');
         }
@@ -236,4 +244,21 @@ pub fn catch<T>(what: &str, f: impl FnOnce() -> Result<T, String>) -> Result<T, 
             .unwrap_or_default();
         Err(format!("{what} panicked: {message}"))
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn update_puts_the_output_right_after_the_input() {
+        let sep = "=".repeat(80);
+        let text = format!("{sep}\nA case\n{sep}\nlet x = 1;\n\n\n{SECTION}\nold\n\n{sep}\nNo output yet\n{sep}\nx;\n\n");
+        let cases = parse_cases(&text, 2).unwrap();
+        let updated = update(&text, &cases, |case| Some(vec![format!("new {}", case.title)]));
+        let expected = format!(
+            "{sep}\nA case\n{sep}\nlet x = 1;\n{SECTION}\nnew A case\n\n{sep}\nNo output yet\n{sep}\nx;\n{SECTION}\nnew No output yet\n"
+        );
+        assert_eq!(updated, expected);
+    }
 }
