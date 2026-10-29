@@ -37,11 +37,15 @@ that's only known from what the function assumes, like `T ⊑ imm` or
 namespace BoltMut
 
 /-- A mutability: `mut` (`mutable`, since `mut` is a keyword of Lean),
-`imm`, or the `i`th mutability parameter of the function being checked. -/
+`imm`, the `i`th mutability parameter of the function being checked, or
+the region `r`: the mutability of the values a block makes and that nothing
+outside the block has, which can be changed while the block runs (#209;
+see `Regions.lean`). -/
 inductive Mu where
   | mutable
   | immutable
   | param (i : Nat)
+  | region (r : Nat)
   deriving DecidableEq, Repr
 
 /-- Types. `cell m t` is a shared object with mutability `m` holding a `t`,
@@ -281,6 +285,7 @@ theorem Mu.subst_subst (ms ms' : List Mu) (m : Mu) :
   | param i =>
     simp only [Mu.subst, List.getElem?_map]
     cases ms'[i]? <;> rfl
+  | region _ => rfl
 
 theorem Ty.getD_inst (ms : List Mu) (τs τs' : List Ty) (i : Nat) :
     (τs'[i]?.getD .unit).inst ms τs = (τs'.map (Ty.inst ms τs))[i]?.getD .unit := by

@@ -112,6 +112,71 @@ theorem freed_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h'
     · rw [List.getElem?_eq_none hge] at hl; cases hl
   exact imm_never_changes hf hs (hh.free hl himm hfree) ht (List.getElem?_set_self hlt)
 
+/-! ## Freeing a region in types
+
+When a block ends, its region `r` becomes `imm` everywhere at once: in the
+heap typing and in the types of what the block gives. `Mu.free` and
+`Ty.free` replace the region with a mutability. What a region's values
+hold is at most the region (rule 4 of the regions page), so freeing it to
+`imm` makes that `imm` all the way down (`AtMost.region_free`), as an `imm`
+location needs. -/
+
+/-- `m` with the region `r` replaced with `μ`. -/
+def Mu.free : Mu → Nat → Mu → Mu
+  | .region r', r, μ => if r' = r then μ else .region r'
+  | m, _, _ => m
+
+/-- `t` with the region `r` replaced with `μ`. -/
+def Ty.free : Ty → Nat → Mu → Ty
+  | .unit, _, _ => .unit
+  | .int, _, _ => .int
+  | .cell m t, r, μ => .cell (m.free r μ) (t.free r μ)
+  | .fn m a b, r, μ => .fn (m.free r μ) (a.free r μ) (b.free r μ)
+  | .prod a b, r, μ => .prod (a.free r μ) (b.free r μ)
+  | .tparam i, _, _ => .tparam i
+
+@[simp] theorem Mu.free_mutable (r : Nat) (μ : Mu) : Mu.mutable.free r μ = .mutable := rfl
+@[simp] theorem Mu.free_immutable (r : Nat) (μ : Mu) : Mu.immutable.free r μ = .immutable := rfl
+@[simp] theorem Mu.free_self (r : Nat) (μ : Mu) : (Mu.region r).free r μ = μ := by simp [Mu.free]
+
+/-- Freeing a region keeps what's below what, with nothing assumed. -/
+theorem Le.free {m μ : Mu} (h : Le .none m μ) (r : Nat) (ν : Mu) : Le .none (m.free r ν) (μ.free r ν) := by
+  induction h with
+  | bot => exact .bot _
+  | top => exact .top _
+  | refl => exact .refl _
+  | assume h => simp [Assume.none] at h
+  | trans _ _ ih₁ ih₂ => exact .trans ih₁ ih₂
+
+/-- Freeing a region keeps "at most", with nothing assumed. -/
+theorem AtMost.free {μ : Mu} {t : Ty} (h : AtMost .none μ t) (r : Nat) (ν : Mu) :
+    AtMost .none (μ.free r ν) (t.free r ν) := by
+  induction t generalizing μ with
+  | unit => trivial
+  | int => trivial
+  | cell m t ih => exact ⟨h.1.free r ν, ih h.2⟩
+  | fn m a b => exact Le.free h r ν
+  | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
+  | tparam i =>
+    obtain ⟨μ', hμ', hle⟩ := h
+    rcases hμ' with rfl | hmem
+    · exact ⟨.mutable, .inl rfl, Le.free hle r ν⟩
+    · simp [Assume.none] at hmem
+
+/-- What a region holds becomes `imm` all the way down when the region is
+freed to `imm`: what an `imm` location of the freed region needs. -/
+theorem AtMost.region_free {r : Nat} {t : Ty} (h : AtMost .none (.region r) t) :
+    AtMost .none .immutable (t.free r .immutable) := by
+  simpa using h.free r .immutable
+
+/-- With nothing assumed, only `imm` and the region itself are below a
+region: neither `mut` nor another region. -/
+theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .immutable ∨ m = .region r := by
+  rcases h.none_inv with h | h | h
+  · exact .inl h
+  · cases h
+  · exact .inr h
+
 /-- Freeing needs that nothing in the heap refers to the location. Here
 location 1, a `mut` cell, holds location 0, as `log.push(xs)` makes `log`
 hold `xs` in the regions page's `leak`. The heap is well-typed with 0 being

@@ -86,6 +86,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
 | `HeapOk.free` | `Regions.lean` | a `mut` location that nothing in the heap refers to, and that holds what's `imm` all the way down, can be made `imm` without a copy: the heap is still well-typed with it `imm`. That's when a region is freed (#209) |
 | `freed_never_changes` | `Regions.lean` | after that, a program that's well-typed with the location `imm` never changes it |
+| `AtMost.free`, `AtMost.region_free` | `Regions.lean` | freeing a region, giving it a mutability everywhere, keeps "at most"; and what a region holds is `imm` all the way down once the region is freed to `imm` |
 | `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v`; the checker's check, that each argument is at most the struct's mutability, is neither enough nor needed |
 
 The key lemma for generic functions, and for #243, is `HasType.inst` in
