@@ -291,3 +291,34 @@ fn f(s) = match s { _ => lib.Shape.Dot };
 /main.bolt: f: forall a. fn(a) -> Shape
 /main.bolt: lib.Shape.Dot: Shape
 /main.bolt: lib.Shape.Circle(1): Shape
+
+================================================================================
+The first part of a path that refers to nothing is the one reported
+:error
+================================================================================
+//- /lib.bolt
+pub enum Shape { Dot }
+pub fn f() -> i32 = 1;
+
+//- /main.bolt
+import "./lib" as m;
+fn push(x: i32, y: i32) = ();
+fn g(b: i32) { nope.push(1); }
+fn h(b: i32) { self.chunks.push(1); }
+m.nope();
+m.Shape.nope;
+mm.f();
+--------------------------------------------------------------------------------
+/lib.bolt: f: fn() -> i32
+/main.bolt: push: fn(i32, i32) -> ()
+/main.bolt: g: fn(i32) -> ()
+/main.bolt: h: fn(i32) -> ()
+/main.bolt: m.nope(): {error}
+/main.bolt: m.Shape.nope: {error}
+/main.bolt: mm.f(): {error}
+--------------------------------------------------------------------------------
+/main.bolt: error at `nope`: unresolved
+/main.bolt: error at `self`: unresolved
+/main.bolt: error at `m.nope`: unresolved
+/main.bolt: error at `m.Shape.nope`: unresolved
+/main.bolt: error at `mm`: unresolved

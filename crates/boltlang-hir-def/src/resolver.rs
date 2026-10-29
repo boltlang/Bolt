@@ -345,6 +345,18 @@ impl<'db> Resolver<'db> {
         })
     }
 
+    /// Whether `path` refers to anything: a value, a type, or a file
+    /// imported with `as`, like the `m` of `m.f`.
+    pub fn resolves(&self, db: &'db dyn Db, path: &Path) -> bool {
+        if self.resolve_path_in_value_ns(db, path).is_some() || self.resolve_path_in_type_ns(db, path).is_some() {
+            return true;
+        }
+        let segments = &path.segments;
+        let (file, i) = self.walk_files(db, segments);
+        i + 1 == segments.len()
+            && matches!(lookup(db, file, self.file, Namespace::Types, &segments[i].name), Some(ModuleDefId::File(_)))
+    }
+
     /// The local variable a name refers to at this position.
     pub fn resolve_local_binding(&self, name: &Name) -> Option<BindingId> {
         match self.resolve_local(Namespace::Values, name)? {

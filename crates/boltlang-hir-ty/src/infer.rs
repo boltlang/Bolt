@@ -375,8 +375,33 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     pub(crate) fn unresolved_path(&mut self, expr: ExprOrPat, resolver: &Resolver<'db>, path: &Path) {
         match resolver.hidden(self.db, path) {
             Some(hidden) => self.result.diagnostics.push(InferenceDiagnostic::NotVisible { expr, hidden }),
-            None => self.unresolved(expr),
+            None => {
+                let expr = match expr {
+                    ExprOrPat::Expr(e) => ExprOrPat::Expr(self.unresolved_part(e, resolver, path)),
+                    pat => pat,
+                };
+                self.unresolved(expr)
+            }
         }
+    }
+
+    /// The part of a path like `nope.push`, written as fields, that doesn't
+    /// resolve: the first that refers to nothing, like `nope`, rather than
+    /// the whole, whose name is `push`.
+    fn unresolved_part(&self, expr: ExprId, resolver: &Resolver<'db>, path: &Path) -> ExprId {
+        let (mut expr, mut len) = (expr, path.segments.len());
+        while let Expr::Field { expr: base, .. } = &self.body[expr] {
+            len -= 1;
+            if len == 0 {
+                break;
+            }
+            let prefix = Path { segments: path.segments[..len].into() };
+            if resolver.resolves(self.db, &prefix) {
+                break;
+            }
+            expr = *base;
+        }
+        expr
     }
 
     /// The type of `def`'s struct or enum, with new variables for its type

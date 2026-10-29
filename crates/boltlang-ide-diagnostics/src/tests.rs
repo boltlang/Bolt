@@ -1070,6 +1070,17 @@ impl[A: Iterable, B: Iterable] Iterable[Zipper[A, B]] {
 }
 
 #[test]
+fn the_unknown_part_of_a_path_is_reported() {
+    check(
+        r#"
+fn push(x: i32, y: i32) = ();
+fn f(b: i32) { self.chunks.push(1); }
+             //^^^^ error: cannot find `self`
+"#,
+    );
+}
+
+#[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
         (
