@@ -77,6 +77,39 @@ let x: Bool = 1;
 
 Bolt points at the mistake, and at the code that made it a mistake.
 
+## Testing
+
+A test is a function with `#[test]` before it. It fails if it stops with an
+error, like a `panic`:
+
+```bolt title="math.bolt"
+fn double(x: i32) -> i32 = x * 2;
+
+#[test]
+fn doubling() {
+  if double(2) != 4 {
+    panic("double(2) isn't 4");
+  }
+}
+```
+
+`bolt test` checks the `.bolt` files in the current directory and the ones
+in it, and runs their tests:
+
+```bash
+bolt test
+```
+
+```text
+test math.bolt::doubling ... ok
+test result: ok. 1 passed; 0 failed
+```
+
+A test can't take parameters, and a file with errors isn't run. To run
+only some tests, give `bolt test` files or directories, or a part of the
+tests' names with `--filter`. A test that runs too long can be stopped
+with `--fuel`, like `bolt run`.
+
 ## Editor support
 
 The repository has a language server, `bolt-language-server`, which shows
