@@ -68,7 +68,7 @@ use boltlang_hir_def::{
     resolver::GenericDefId,
     signatures::{
         class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
-        impl_signature_with_source_map, struct_signature_with_source_map, type_alias_signature_with_source_map,
+        impl_signature, impl_signature_with_source_map, struct_signature_with_source_map, type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
@@ -77,6 +77,7 @@ use boltlang_hir_ty::{
         LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, named_mutabilities,
         struct_field_types, type_alias_ty, unused_impl_params,
     },
+    overlap::overlapped_impls,
     solve::{ExprOrPat, Held, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -218,6 +219,19 @@ fn check(input: &str) -> Result<(String, String), String> {
                             None => format!("'{}", named_mutabilities(&db, def)[index as usize - params.len()]),
                         };
                         diagnostics.push(format!("{prefix}error at `{name}`: not in the instance"));
+                    }
+                    // The impls before it that it overlaps (#276).
+                    for &other in overlapped_impls(&db, id) {
+                        let at = type_snippet(map, impl_signature(&db, id).class);
+                        let other = match &impl_header(&db, other).class {
+                            Some(c) => format!(
+                                "{}[{}]",
+                                c.class.item(&db).name.as_ref().unwrap(),
+                                show(&c.args.iter().collect::<Vec<_>>()).join(", ")
+                            ),
+                            None => "?".to_string(),
+                        };
+                        diagnostics.push(format!("{prefix}error at `{at}`: overlaps the impl for {other}"));
                     }
                     for item in &id.item(&db).items {
                         if let AssocItem::Function(f) = *item {

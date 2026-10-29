@@ -193,6 +193,7 @@ Show[i32].show: fn(i32) -> String
 Show[i32].show: fn(i32) -> String
 show(1): String
 --------------------------------------------------------------------------------
+error at `Show[i32]`: overlaps the impl for Show[i32]
 error at `show`: ambiguous
 
 ================================================================================
@@ -221,8 +222,57 @@ Show[T].show: forall T. fn(T) -> String
 Show[i32].show: fn(i32) -> String
 show(1): String
 --------------------------------------------------------------------------------
+error at `Show[i32]`: overlaps the impl for Show[T]
 error at `show`: ambiguous
 
+
+================================================================================
+Impls whose instances no types fit both don't overlap
+================================================================================
+class Size[T] { fn size(x: T) -> i32; }
+impl Size[(i32, Bool)] { fn size(x) = 1; }
+impl[A] Size[(A, A)] { fn size(x) = 2; }
+impl[U] Size[(U, [U])] { fn size(x) = 3; }
+impl Size[mut [i32]] { fn size(x) = 4; }
+impl Size[imm [i32]] { fn size(x) = 5; }
+size((1, True));
+size((1, 2));
+--------------------------------------------------------------------------------
+Size[(i32, Bool)].size: fn((i32, Bool)) -> i32
+Size[(A, A)].size: forall A. fn((A, A)) -> i32
+Size[(U, [U])].size: forall U. fn((U, [U])) -> i32
+Size[mut [i32]].size: fn(mut [i32]) -> i32
+Size[imm [i32]].size: fn(imm [i32]) -> i32
+size((1, True)): i32
+size((1, 2)): i32
+
+================================================================================
+An impl without mut or imm overlaps one for mut
+================================================================================
+class Size[T] { fn size(x: T) -> i32; }
+impl Size[[i32]] { fn size(x) = 1; }
+impl Size[mut [i32]] { fn size(x) = 2; }
+--------------------------------------------------------------------------------
+Size[[i32]].size: fn([i32]) -> i32
+Size[mut [i32]].size: fn(mut [i32]) -> i32
+--------------------------------------------------------------------------------
+error at `Size[mut [i32]]`: overlaps the impl for Size[[i32]]
+
+================================================================================
+Impls in different files overlap where the second is defined
+================================================================================
+//- /lib.bolt
+pub class Size[T] { fn size(x: T) -> i32; }
+impl[T] Size[[T]] { fn size(x) = 1; }
+
+//- /main.bolt
+import "./lib" (Size);
+impl Size[[Bool]] { fn size(x) = 2; }
+--------------------------------------------------------------------------------
+/lib.bolt: Size[[T]].size: forall T. fn([T]) -> i32
+/main.bolt: Size[[Bool]].size: fn([Bool]) -> i32
+--------------------------------------------------------------------------------
+/main.bolt: error at `Size[[Bool]]`: overlaps the impl for Size[[T]]
 ================================================================================
 An impl method with the wrong number of parameters
 :todo

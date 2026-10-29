@@ -719,6 +719,21 @@ type Fine = VecIter[mut [i32], mut];
 }
 
 #[test]
+fn overlapping_impls() {
+    check(
+        r#"
+class Size[T] { fn size(x: T) -> i32; }
+impl[T] Size[[T]] { fn size(x) = 1; }
+      //^^^^^^^^^ label: the impl it overlaps
+impl Size[[i32]] { fn size(x) = 2; }
+   //^^^^^^^^^^^ error: the impl for `Size[[i32]]` overlaps the one for `Size[[T]]`: some types fit both, so a constraint can't choose one; remove one of them, or make their instances differ
+  size([1]);
+//^^^^ error: more than one impl fits `Size[imm [i32]]`, so it's not known which to use; their instances overlap
+"#,
+    );
+}
+
+#[test]
 fn unused_impl_params() {
     check(
         r#"

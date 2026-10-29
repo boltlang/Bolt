@@ -34,6 +34,7 @@ use boltlang_hir_ty::{
     inhabited::{field_without_values, has_values},
     check::unmet_assoc_bounds,
     infer_body,
+    overlap::overlapped_impls,
     lower::{
         ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, enum_field_types, fn_sig,
         generic_predicates, impl_header, named_mutabilities, struct_field_types, subst_params, type_alias_ty,
@@ -149,6 +150,10 @@ pub enum DiagnosticKind<'db> {
     /// (#251). For a mutability, `suggestion` is the first type in the
     /// instance without a written one, with it instead, like `'v Vec[T]`.
     UnusedImplParam { name: String, instance: ClassConstraint<'db>, suggestion: Option<Ty<'db>> },
+    /// Some types fit both this impl's instance and that of an impl before
+    /// it, `other`, whose instance is at `other_range` in `other_file`
+    /// (#276).
+    OverlappingImpl { instance: ClassConstraint<'db>, other: ClassConstraint<'db>, other_file: File, other_range: TextRange },
     /// More mutability arguments than the struct declares.
     WrongMutabilityArgCount { expected: usize, found: usize },
     /// A mutability parameter of an item that can't have one, like an enum.
@@ -413,6 +418,7 @@ impl<'db> Collector<'db> {
                         }
                     }
                     self.unused_impl_params(id, map);
+                    self.overlapping_impls(id, map);
                     self.impl_items(id, map);
                     self.assoc_items(ItemContainerId::Impl(id), &id.item(db).items);
                 }
@@ -428,6 +434,26 @@ impl<'db> Collector<'db> {
                 // Imports are checked by name resolution.
                 ModItem::Import(_) | ModItem::MacroRules(_) => {}
             }
+        }
+    }
+
+    /// Report the impls before `imp` that it overlaps, at its instance.
+    /// `map` is the source map of the impl's signature.
+    fn overlapping_impls(&mut self, imp: ImplId<'db>, map: &ExpressionStoreSourceMap) {
+        let db = self.db;
+        let Some(instance) = &impl_header(db, imp).class else { return };
+        let range = map.type_syntax(impl_signature(db, imp).class).map(ptr_range);
+        for &other in overlapped_impls(db, imp) {
+            let Some(other_instance) = &impl_header(db, other).class else { continue };
+            let (sig, other_map) = impl_signature_with_source_map(db, other);
+            let Some(other_range) = other_map.type_syntax(sig.class).map(ptr_range) else { continue };
+            let kind = DiagnosticKind::OverlappingImpl {
+                instance: instance.clone(),
+                other: other_instance.clone(),
+                other_file: other.file(db),
+                other_range,
+            };
+            self.push(range, kind);
         }
     }
 

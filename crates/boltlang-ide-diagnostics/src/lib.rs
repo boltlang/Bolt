@@ -103,6 +103,7 @@ impl DiagnosticCode {
     pub const WRONG_MUTABILITY_ARG_COUNT: Self = Self("E0232");
     pub const MUTABILITY_PARAM_NOT_ALLOWED: Self = Self("E0233");
     pub const UNUSED_IMPL_PARAM: Self = Self("E0234");
+    pub const OVERLAPPING_IMPL: Self = Self("E0235");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -247,6 +248,11 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                     range: range.unwrap_or_default(),
                     message: message.clone(),
                 }],
+                DiagnosticKind::OverlappingImpl { other_file, other_range, .. } => vec![Label {
+                    file: *other_file,
+                    range: *other_range,
+                    message: "the impl it overlaps".to_string(),
+                }],
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }
                 | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
@@ -386,6 +392,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         DiagnosticKind::UnusedImplParam { instance, suggestion, .. } => {
             instance.args.iter().chain(suggestion).collect()
         }
+        DiagnosticKind::OverlappingImpl { instance, other, .. } => instance.args.iter().chain(other.args.iter()).collect(),
         _ => Vec::new(),
     }
 }
@@ -489,6 +496,19 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         }
         K::NoInstance { constraint, .. } => {
             (C::NO_INSTANCE, format!("there is no instance `{}`", constraint_display(db, names, &constraint)))
+        }
+        // With all its types known, only impls that overlap can make it
+        // ambiguous (#276), and an annotation doesn't help.
+        K::AmbiguousConstraint { constraint, .. }
+            if !constraint.args.iter().any(|t| t.any(&mut |t| matches!(t, Ty::Var(_) | Ty::Number(_)))) =>
+        {
+            (
+                C::AMBIGUOUS_CONSTRAINT,
+                format!(
+                    "more than one impl fits `{}`, so it's not known which to use; their instances overlap",
+                    constraint_display(db, names, &constraint)
+                ),
+            )
         }
         K::AmbiguousConstraint { constraint, .. } => (
             C::AMBIGUOUS_CONSTRAINT,
@@ -643,6 +663,17 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             (
                 C::UNUSED_IMPL_PARAM,
                 format!("`{name}` isn't in the instance `{instance}`, so choosing the impl can't decide it; {fix}"),
+            )
+        }
+        K::OverlappingImpl { instance, other, .. } => {
+            let instance = constraint_display(db, names, &instance);
+            let other = constraint_display(db, names, &other);
+            (
+                C::OVERLAPPING_IMPL,
+                format!(
+                    "the impl for `{instance}` overlaps the one for `{other}`: some types fit both, so a constraint \
+                     can't choose one; remove one of them, or make their instances differ"
+                ),
             )
         }
         K::WrongMutabilityArgCount { expected, found } => (

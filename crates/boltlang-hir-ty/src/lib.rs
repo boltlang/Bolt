@@ -23,6 +23,7 @@ pub mod inhabited;
 pub mod kind;
 pub mod lang;
 pub mod lower;
+pub mod overlap;
 pub mod scheme;
 pub mod solve;
 pub mod ty;
