@@ -222,3 +222,110 @@ first: forall C. Coll[C] => fn(C) -> {error}
 --------------------------------------------------------------------------------
 error at `C.It.Item`: no such associated type
 error at `next2`: no instance Iter2[C.It]
+
+================================================================================
+A bound can say what an associated type is
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+struct Ints { n: i32 }
+impl Iterator[Ints] { type Item = i32; fn next(it) = Option.Some(it.n); }
+fn sum[I: Iterator[Item = i32]](it: I, x: I.Item) -> i32 = match next(it) {
+  Option.Some(y) => x + y,
+  Option.None => x,
+};
+fn first[T, I: Iterator[Item = T]](it: I) -> Option[T] = next(it);
+sum(Ints { n: 1 }, 2);
+first(Ints { n: 1 });
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> Option[i32]
+sum: forall I. Iterator[I] => I.Item = i32 => fn(I, I.Item) -> i32
+first: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+sum(Ints { n: 1 }, 2): i32
+first(Ints { n: 1 }): Option[i32]
+
+================================================================================
+A where clause can say what an associated type is
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+fn first[T, I](it: I) -> Option[T] where Iterator[I, Item = T] = next(it);
+fn second[T, I](it: I) -> Option[T] where I: Iterator[Item = T] = next(it);
+--------------------------------------------------------------------------------
+first: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+second: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+
+================================================================================
+A call needs the associated type that the bound says
+:error
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+struct Ints { n: i32 }
+impl Iterator[Ints] { type Item = i32; fn next(it) = Option.Some(it.n); }
+fn any[I: Iterator[Item = Bool]](it: I) -> Bool = True;
+fn first[T, I: Iterator[Item = T]](it: I) -> Option[T] = next(it);
+any(Ints { n: 1 });
+let b: Option[Bool] = first(Ints { n: 1 });
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> Option[i32]
+any: forall I. Iterator[I] => I.Item = Bool => fn(I) -> Bool
+first: forall T I. Iterator[I] => I.Item = T => fn(I) -> Option[T]
+any(Ints { n: 1 }): Bool
+let b: Option[Bool]
+--------------------------------------------------------------------------------
+error at `any`: expected Bool, found i32
+error at `first(Ints { n: 1 })`: expected Option[Bool], found Option[i32]
+
+================================================================================
+An impl's where clause can say what an associated type is
+:error
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+class Sum[S] { fn total(s: S) -> i32; }
+struct Ints { n: i32 }
+impl Iterator[Ints] { type Item = i32; fn next(it) = Option.Some(it.n); }
+struct Bools { b: Bool }
+impl Iterator[Bools] { type Item = Bool; fn next(it) = Option.Some(it.b); }
+struct Wrap[I] { it: I }
+impl[I] Sum[Wrap[I]] where Iterator[I, Item = i32] {
+  fn total(w) = match next(w.it) { Option.Some(x) => x, Option.None => 0 };
+}
+total(Wrap { it: Ints { n: 1 } });
+total(Wrap { it: Bools { b: True } });
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> Option[i32]
+Iterator[Bools].next: fn(Bools) -> Option[Bool]
+Sum[Wrap[I]].total: forall I. Iterator[I] => I.Item = i32 => fn(Wrap[I]) -> i32
+total(Wrap { it: Ints { n: 1 } }): i32
+total(Wrap { it: Bools { b: True } }): i32
+--------------------------------------------------------------------------------
+error at `total`: expected i32, found Bool
+
+================================================================================
+An associated type that the class doesn't have can't be given
+:error
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+fn f[I: Iterator[Itme = i32]](it: I) = ();
+--------------------------------------------------------------------------------
+f: forall I. Iterator[I] => fn(I) -> ()
+--------------------------------------------------------------------------------
+error at `Iterator[Itme = i32]`: Iterator has no associated type Itme
+
+================================================================================
+An associated type can only be given where it can be assumed
+:error
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+struct Ints { n: i32 }
+impl Iterator[Ints, Item = i32] { type Item = i32; fn next(it) = Option.Some(it.n); }
+struct W[I: Iterator[Item = i32]] { it: I }
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> Option[i32]
+--------------------------------------------------------------------------------
+error at `Iterator[Ints, Item = i32]`: an associated type can't be given here
+error at `Iterator[Item = i32]`: an associated type can't be given here

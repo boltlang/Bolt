@@ -118,6 +118,11 @@ pub enum DiagnosticKind<'db> {
     MissingFields { names: Vec<Name> },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
+    /// `Iterator[Itme = T]`, where the class has no associated type `name`.
+    NotAnAssocTypeOf { class: Name, name: Name },
+    /// An associated type given, like `Iterator[Item = T]`, where that
+    /// can't be assumed, like in an impl's instance.
+    EqualityNotAllowed,
     /// None of the functions called `name` fits its use, of type `ty`.
     /// `candidates` are their types, as text (#275).
     NoOverload { name: Name, ty: Ty<'db>, candidates: Vec<String> },
@@ -779,6 +784,10 @@ impl<'db> Collector<'db> {
                 LowerDiagnostic::MutabilityParamNotAllowed(id) => (*id, DiagnosticKind::MutabilityParamNotAllowed),
                 LowerDiagnostic::NoAssocType { type_ref } => (*type_ref, DiagnosticKind::NoAssocType),
                 LowerDiagnostic::AmbiguousAssocType { type_ref } => (*type_ref, DiagnosticKind::AmbiguousAssocType),
+                LowerDiagnostic::NotAnAssocTypeOf { type_ref, class, name } => {
+                    (*type_ref, DiagnosticKind::NotAnAssocTypeOf { class: class.clone(), name: name.clone() })
+                }
+                LowerDiagnostic::EqualityNotAllowed(id) => (*id, DiagnosticKind::EqualityNotAllowed),
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {

@@ -107,6 +107,8 @@ impl DiagnosticCode {
     pub const NO_OVERLOAD: Self = Self("E0236");
     pub const AMBIGUOUS_OVERLOAD: Self = Self("E0237");
     pub const OVERLAPPING_FUNCTION: Self = Self("E0238");
+    pub const NOT_AN_ASSOC_TYPE_OF: Self = Self("E0239");
+    pub const EQUALITY_NOT_ALLOWED: Self = Self("E0240");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -685,6 +687,16 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                 ),
             )
         }
+        K::NotAnAssocTypeOf { class, name } => (
+            C::NOT_AN_ASSOC_TYPE_OF,
+            format!("the class `{class}` has no associated type `{name}`"),
+        ),
+        K::EqualityNotAllowed => (
+            C::EQUALITY_NOT_ALLOWED,
+            "what an associated type is, like `Item = T`, can only be written in a bound or `where` clause of a \
+             function or an impl"
+                .to_string(),
+        ),
         K::NoOverload { name, ty, candidates } => (
             C::NO_OVERLOAD,
             format!(

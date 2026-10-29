@@ -17,7 +17,7 @@ use boltlang_hir_def::{
 
 use crate::{
     kind::{Kind, def_kind, generic_param_kinds},
-    solve::{AtMostConstraint, Held},
+    solve::{AssocConstraint, AtMostConstraint, Held},
     ty::{AdtId, GenericParamId, Mutability, Ty},
 };
 
@@ -83,6 +83,13 @@ pub enum LowerDiagnostic {
     NoAssocType { type_ref: TypeRefId },
     /// A path like `C.Item` where several classes of `C` have it.
     AmbiguousAssocType { type_ref: TypeRefId },
+    /// `Iterator[Itme = T]`, where the class has no associated type called
+    /// `name`. `type_ref` is the class constraint.
+    NotAnAssocTypeOf { type_ref: TypeRefId, class: Name, name: Name },
+    /// What an associated type is, like the `Item = T` of `Iterator[Item =
+    /// T]`, somewhere other than a bound or `where` clause of a function or
+    /// an impl, like an impl's instance. `type_ref` is the class constraint.
+    EqualityNotAllowed(TypeRefId),
     /// `mut` or `imm` before a type that isn't an array or a struct, like
     /// `mut i32`, or before one that already has the other.
     NoMutability(TypeRefId),
@@ -120,6 +127,9 @@ pub struct TyLoweringContext<'a, 'db> {
     /// The "at most" bounds lowered by [`TyLoweringContext::lower_predicates`],
     /// like `T: imm`, with where each is written.
     at_most: Vec<(AtMostConstraint<'db>, TypeRefId)>,
+    /// What associated types are, like the `Item = T` of `I: Iterator[Item
+    /// = T]`, with where the class is written, lowered with predicates.
+    equalities: Vec<(AssocConstraint<'db>, TypeRefId)>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -133,6 +143,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             predicates_of: None,
             lowered: Vec::new(),
             at_most: Vec::new(),
+            equalities: Vec::new(),
             diagnostics: Vec::new(),
         }
     }
@@ -559,8 +570,40 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             }
         }
         let explicit = &kinds[args.len().min(kinds.len())..];
-        args.extend(self.lower_exact_args(id, path.last_generic_args(), explicit));
-        Some(ClassConstraint { class, args: args.into() })
+        // `Iterator[Item = T]` says what an associated type is.
+        let (bindings, plain): (Vec<GenericArg>, Vec<GenericArg>) =
+            path.last_generic_args().iter().cloned().partition(|a| matches!(a, GenericArg::AssocType { .. }));
+        args.extend(self.lower_exact_args(id, &plain, explicit));
+        let constraint = ClassConstraint { class, args: args.into() };
+        for binding in &bindings {
+            self.lower_equality(id, &constraint, binding);
+        }
+        Some(constraint)
+    }
+
+    /// Lower `Item = T` in the class constraint `constraint`, written at
+    /// `id`, into what the associated type `Item` is for its arguments.
+    fn lower_equality(&mut self, id: TypeRefId, constraint: &ClassConstraint<'db>, binding: &GenericArg) {
+        let GenericArg::AssocType { name, generic_args, type_ref } = binding else { return };
+        let ty = self.lower_ty(*type_ref);
+        if generic_args.is_some() {
+            self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+            return;
+        }
+        if !matches!(self.predicates_of, Some(GenericDefId::Function(_) | GenericDefId::Impl(_))) {
+            self.diagnostics.push(LowerDiagnostic::EqualityNotAllowed(id));
+            return;
+        }
+        let alias = class_assoc_types(self.db, constraint.class)
+            .into_iter()
+            .find(|alias| alias.item(self.db).name.as_ref() == Some(name));
+        let Some(alias) = alias else {
+            let class = constraint.class.item(self.db).name.clone().unwrap_or_else(|| Name::new("?"));
+            let name = name.clone();
+            self.diagnostics.push(LowerDiagnostic::NotAnAssocTypeOf { type_ref: id, class, name });
+            return;
+        };
+        self.equalities.push((AssocConstraint { alias, args: constraint.args.clone(), ty }, id));
     }
 
     /// The class constraints of generic parameters: the bounds in
@@ -735,6 +778,7 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
     let ItemContainerId::Class(class) = alias.container(db) else {
         return Predicates {
             predicates: Box::new([]),
+            equalities: Box::new([]),
             at_most: Box::new([]),
             sources: Box::new([]),
             diagnostics: Vec::new(),
@@ -754,6 +798,7 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
     }
     Predicates {
         predicates: predicates.into(),
+        equalities: Box::new([]),
         at_most: Box::new([]),
         sources: sources.into(),
         diagnostics: ctx.diagnostics,
@@ -836,6 +881,9 @@ fn type_alias_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _alias: TypeAliasId<'
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Predicates<'db> {
     pub predicates: Box<[ClassConstraint<'db>]>,
+    /// What the item assumes its associated types are, like the `Item = T`
+    /// of `I: Iterator[Item = T]`, with where the class is written.
+    pub equalities: Box<[(AssocConstraint<'db>, TypeRefId)]>,
     /// What the item assumes is at most a mutability (#243), like `T: imm`,
     /// with where each is written.
     pub at_most: Box<[(AtMostConstraint<'db>, TypeRefId)]>,
@@ -887,8 +935,15 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         .map(|(p, at)| (p.map(|t| t.fill_unwritten(&mut imm)), at))
         .unzip();
     let at_most = std::mem::take(&mut ctx.at_most).into_iter().map(|(c, at)| (c.map(|t| t.fill_unwritten(&mut imm)), at));
+    let equalities = std::mem::take(&mut ctx.equalities)
+        .into_iter()
+        .map(|(c, at)| {
+            let args = c.args.iter().map(|t| t.fill_unwritten(&mut imm)).collect();
+            (AssocConstraint { alias: c.alias, args, ty: c.ty.fill_unwritten(&mut imm) }, at)
+        });
     Predicates {
         predicates: predicates.into(),
+        equalities: equalities.collect(),
         at_most: at_most.collect(),
         sources: sources.into(),
         diagnostics: ctx.diagnostics,

@@ -440,6 +440,12 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
             format!("error at `{}`: can't have a mutability parameter", at(*id))
         }
         LowerDiagnostic::NoAssocType { type_ref } => format!("error at `{}`: no such associated type", at(*type_ref)),
+        LowerDiagnostic::NotAnAssocTypeOf { type_ref, class, name } => {
+            format!("error at `{}`: {class} has no associated type {name}", at(*type_ref))
+        }
+        LowerDiagnostic::EqualityNotAllowed(type_ref) => {
+            format!("error at `{}`: an associated type can't be given here", at(*type_ref))
+        }
         LowerDiagnostic::AmbiguousAssocType { type_ref } => {
             format!("error at `{}`: ambiguous associated type", at(*type_ref))
         }

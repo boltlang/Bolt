@@ -719,6 +719,19 @@ type Fine = VecIter[mut [i32], mut];
 }
 
 #[test]
+fn associated_type_equalities() {
+    check(
+        r#"
+class Iterator[I] { type Item; }
+fn f[I: Iterator[Itme = i32]](it: I) = ();
+      //^^^^^^^^^^^^^^^^^^^^ error: the class `Iterator` has no associated type `Itme`
+struct W[I: Iterator[Item = i32]] { it: I }
+          //^^^^^^^^^^^^^^^^^^^^ error: what an associated type is, like `Item = T`, can only be written in a bound or `where` clause of a function or an impl
+"#,
+    );
+}
+
+#[test]
 fn overloads() {
     check(
         r#"

@@ -23,7 +23,7 @@ use crate::{
         impl_header, subst_params, with_superclasses,
     },
     scheme::{
-        Scheme, SchemeSources, assumptions, assumptions_with_sources, at_most_assumptions, class_impl_method_sig, declared_scheme,
+        Scheme, SchemeSources, assumptions, assumptions_with_sources, at_most_assumptions, class_impl_method_sig, equality_assumptions, declared_scheme,
         generic_chain, generic_param_ids, is_declared,
     },
     solve::{
@@ -73,6 +73,9 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     }
                     for (assumption, _) in at_most_assumptions(db, f) {
                         ctx.solver.assume_at_most(assumption);
+                    }
+                    for (assumption, _) in equality_assumptions(db, f) {
+                        ctx.solver.assume_assoc(assumption);
                     }
                     let Ty::Fn(params, ret, _) = &declared_scheme(db, f).ty else { unreachable!() };
                     for assumption in implied_assumptions(db, f, params) {
@@ -222,6 +225,9 @@ fn infer_group<'db>(
         }
         for (assumption, _) in at_most_assumptions(db, f) {
             solver.assume_at_most(assumption);
+        }
+        for (assumption, _) in equality_assumptions(db, f) {
+            solver.assume_assoc(assumption);
         }
         let sig = fn_sig(db, f);
         let params: Box<[Ty<'db>]> =

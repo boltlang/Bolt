@@ -287,6 +287,28 @@ pub fn at_most_assumptions<'db>(
     out
 }
 
+/// What `f` assumes its associated types are: the `Item = T` of
+/// `I: Iterator[Item = T]` in its bounds and `where` clauses, and those of
+/// its impl, with where each is written.
+pub fn equality_assumptions<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> Vec<(AssocConstraint<'db>, Option<ConstraintSource<'db>>)> {
+    let mut out = Vec::new();
+    for def in generic_chain(db, f) {
+        if !matches!(def, GenericDefId::Class(_)) {
+            let predicates = generic_predicates(db, def);
+            out.extend(
+                predicates
+                    .equalities
+                    .iter()
+                    .map(|(c, type_ref)| (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))),
+            );
+        }
+    }
+    out
+}
+
 /// The parameter and return types a method in a class impl must have,
 /// from the class's declaration of the method: for `fn show(x: T) -> String`
 /// in `impl Show[i32]`, `fn(i32) -> String`.
@@ -394,14 +416,20 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
     }
     let (predicates, sources): (Vec<_>, Vec<_>) = assumptions_with_sources(db, f).into_iter().unzip();
     let (bounds, bound_sources): (Vec<_>, Vec<_>) = at_most_assumptions(db, f).into_iter().unzip();
+    let (assoc, assoc_sources): (Vec<_>, Vec<_>) = equality_assumptions(db, f).into_iter().unzip();
     Scheme {
         params: generic_param_ids(db, defs),
         bound: 0,
         predicates: predicates.into(),
         fields: Box::new([]),
-        assoc: Box::new([]),
+        assoc: assoc.into(),
         bounds: bounds.into(),
         ty: Ty::func(params, ret),
-        sources: SchemeSources { predicates: sources.into(), bounds: bound_sources.into(), ..SchemeSources::default() },
+        sources: SchemeSources {
+            predicates: sources.into(),
+            assoc: assoc_sources.into(),
+            bounds: bound_sources.into(),
+            ..SchemeSources::default()
+        },
     }
 }

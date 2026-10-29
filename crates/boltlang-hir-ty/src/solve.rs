@@ -291,6 +291,9 @@ pub struct Solver<'db> {
     assumptions: Vec<ClassConstraint<'db>>,
     /// The "at most" constraints known to hold, like `T: imm`.
     at_most_assumptions: Vec<AtMostConstraint<'db>>,
+    /// What associated types are known to be, like the `Item = T` of
+    /// `I: Iterator[Item = T]`.
+    assoc_assumptions: Vec<AssocConstraint<'db>>,
     impls: &'db [ImplId<'db>],
     /// The file of the code being solved, whose impls decide associated
     /// types.
@@ -319,6 +322,7 @@ impl<'db> Solver<'db> {
             unifier: Unifier::new(),
             assumptions: Vec::new(),
             at_most_assumptions: Vec::new(),
+            assoc_assumptions: Vec::new(),
             impls: visible_impls(db, file),
             file,
             pending: Vec::new(),
@@ -337,6 +341,12 @@ impl<'db> Solver<'db> {
     }
 
     /// Assume a class constraint holds, and with it its superclasses.
+    /// Assume what an associated type is, like the `Item = T` of
+    /// `I: Iterator[Item = T]`: `I.Item` is `T` from now on.
+    pub fn assume_assoc(&mut self, constraint: AssocConstraint<'db>) {
+        self.assoc_assumptions.push(constraint);
+    }
+
     pub fn assume(&mut self, constraint: ClassConstraint<'db>) {
         let mut stack = vec![constraint];
         while let Some(c) = stack.pop() {
@@ -661,6 +671,14 @@ impl<'db> Solver<'db> {
             self.unifier.set_error(&constraint.ty);
             return true;
         }
+        // `I.Item` with `I: Iterator[Item = T]` is `T`.
+        if let Some(assumed) =
+            self.assoc_assumptions.iter().find(|a| a.alias == constraint.alias && *a.args == *goal.args).cloned()
+        {
+            let ty = self.flatten_assoc(&assumed.ty, origin);
+            self.equal(&constraint.ty, &ty, origin);
+            return true;
+        }
         let mut found = None;
         for &imp in self.impls {
             let Some(target) = &impl_header(self.db, imp).class else { continue };
@@ -930,7 +948,7 @@ impl<'db> Solver<'db> {
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
-                    Step::Solved(subgoals, at_most, imp) => {
+                    Step::Solved(subgoals, at_most, equalities, imp) => {
                         progress = true;
                         let same_use = |(o, c, _): &(Origin<'db>, ClassId<'db>, ImplId<'db>)| {
                             o.body == origin.body && o.node == origin.node && *c == constraint.class
@@ -946,6 +964,12 @@ impl<'db> Solver<'db> {
                         for constraint in at_most {
                             let source = AtMostSource::Needed(constraint.clone());
                             self.add(Constraint::AtMost { constraint, source, origin });
+                        }
+                        // What the impl says its associated types are.
+                        for c in equalities {
+                            let args = c.args.iter().map(|t| self.flatten_assoc(t, origin)).collect();
+                            let ty = self.flatten_assoc(&c.ty, origin);
+                            self.add(Constraint::Assoc { constraint: AssocConstraint { alias: c.alias, args, ty }, origin });
                         }
                     }
                     Step::NoInstance => {
@@ -1021,10 +1045,10 @@ impl<'db> Solver<'db> {
     fn try_solve(&self, goal: &ClassConstraint<'db>) -> Step<'db> {
         // An error type somewhere means an error was already reported.
         if goal.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
-            return Step::Solved(Vec::new(), Vec::new(), None);
+            return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
         if self.assumptions.contains(goal) {
-            return Step::Solved(Vec::new(), Vec::new(), None);
+            return Step::Solved(Vec::new(), Vec::new(), Vec::new(), None);
         }
         let has_vars = goal.args.iter().any(has_vars);
         let mut found = None;
@@ -1060,7 +1084,16 @@ impl<'db> Solver<'db> {
                 let predicates = generic_predicates(self.db, def);
                 let subgoals = predicates.predicates.iter().map(|p| p.map(instantiate)).collect();
                 let at_most = predicates.at_most.iter().map(|(c, _)| c.map(instantiate)).collect();
-                Step::Solved(subgoals, at_most, Some(imp))
+                let equalities = predicates
+                    .equalities
+                    .iter()
+                    .map(|(c, _)| AssocConstraint {
+                        alias: c.alias,
+                        args: c.args.iter().map(instantiate).collect(),
+                        ty: instantiate(&c.ty),
+                    })
+                    .collect();
+                Step::Solved(subgoals, at_most, equalities, Some(imp))
             }
             None if maybe || has_vars => Step::Wait,
             None => Step::NoInstance,
@@ -1070,7 +1103,9 @@ impl<'db> Solver<'db> {
 
 enum Step<'db> {
     /// Solved, if these hold too, with the impl that was used, if any.
-    Solved(Vec<ClassConstraint<'db>>, Vec<AtMostConstraint<'db>>, Option<ImplId<'db>>),
+    /// What the impl's `where` clauses say its associated types are, like
+    /// the `Item = T` of `where Iterator[I, Item = T]`, must hold too.
+    Solved(Vec<ClassConstraint<'db>>, Vec<AtMostConstraint<'db>>, Vec<AssocConstraint<'db>>, Option<ImplId<'db>>),
     NoInstance,
     /// The types aren't known well enough yet.
     Wait,
