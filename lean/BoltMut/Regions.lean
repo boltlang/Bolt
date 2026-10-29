@@ -25,10 +25,26 @@ without a copy isn't a step of the program: it's giving the location
 
 A region's objects are made by `new true e` (rule `HasType.newR`) and
 changed by `set` (`HasType.setR`), like `mut` ones; what they hold is at
-most the region. What's left for regions is the other half: that their
-typing makes sure nothing outside a block refers to its values when it
-ends, so that `HeapOk.free` applies. The two proofs after this one are #283, for
-borrowed parameters, and #284, for unique values at their last use.
+most the region. Then, for a whole block:
+
+- `HeapOk.free_all`: freeing a region everywhere at once, in the heap
+  typing, always keeps the heap well-typed: what refers to the region's
+  objects gets the freed type too.
+- `block_frees`: when a block whose region the heap typing didn't mention
+  before ends, its region can be frozen without a copy. Its value has the
+  freed type, and what comes after it, typed before it, is well-typed.
+  What's from before can't hold the region's objects, since its types
+  were fixed without the region: so the `leak` of the regions page is
+  rejected.
+- `block_never_changes`: after the block, the region's objects never
+  change.
+
+The blocks aren't in the language: a block is any part of the program
+whose region is new, run to its value. For now, a closure captures
+nothing of a region, and a call's arguments mention none (`HasType.lam`,
+`HasType.call`), so that the program can't change the region afterwards
+through a closure. The proofs after this one are #283, for borrowed
+parameters, and #284, for unique values at their last use.
 -/
 
 namespace BoltMut
@@ -136,12 +152,15 @@ def Mu.free : Mu → Nat → Mu → Mu
   | .region r', r, μ => if r' = r then μ else .region r'
   | m, _, _ => m
 
-/-- `t` with the region `r` replaced with `μ`. -/
+/-- `t` with the region `r` replaced with `μ`. A function type keeps its
+parameter and result: a closure captures nothing of a region, so its body
+has the same type after, and a value of a type with the region in it
+can't be given to it. -/
 def Ty.free : Ty → Nat → Mu → Ty
   | .unit, _, _ => .unit
   | .int, _, _ => .int
   | .cell m t, r, μ => .cell (m.free r μ) (t.free r μ)
-  | .fn m a b, r, μ => .fn (m.free r μ) (a.free r μ) (b.free r μ)
+  | .fn m a b, r, μ => .fn (m.free r μ) a b
   | .prod a b, r, μ => .prod (a.free r μ) (b.free r μ)
   | .tparam i, _, _ => .tparam i
 
@@ -200,6 +219,183 @@ example : ¬ HasType [] [] .none false Ctx.empty
   intro h
   cases h with
   | newR _ hd => exact nomatch Le.below_region hd.1
+
+/-! ## Freeing a region when its block ends
+
+A block is a part of the program whose region nothing before it has: the
+heap typing before it doesn't mention the region. When it ends, the region
+becomes `imm` everywhere at once (`HeapTy.free`), and so does the type of
+what the block gives. That's always fine for the heap (`HeapOk.free_all`):
+a location that holds a region's object gets the freed type too. What
+could break is a program that still changes the region; but the program
+after the block was typed before it, so it can't (`block_frees`). -/
+
+theorem Mu.free_noRegion {m : Mu} (hm : m.NoRegion) (r : Nat) (μ : Mu) : m.free r μ = m := by
+  cases m with
+  | region => exact hm.elim
+  | _ => rfl
+
+theorem Ty.free_noRegion {t : Ty} (ht : t.NoRegion) (r : Nat) (μ : Mu) : t.free r μ = t := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih => simp only [Ty.free, Mu.free_noRegion ht.1, ih ht.2]
+  | fn m a b => simp only [Ty.free, Mu.free_noRegion ht.1]
+  | prod a b iha ihb => simp only [Ty.free, iha ht.1, ihb ht.2]
+
+/-- The heap typing with the region `r` freed to `imm`. -/
+def HeapTy.free (r : Nat) (σ : HeapTy) : HeapTy :=
+  σ.map fun p => (p.1.free r .immutable, p.2.free r .immutable)
+
+theorem HeapTy.free_getElem? (r : Nat) (σ : HeapTy) (l : Nat) :
+    (σ.free r)[l]? = σ[l]?.map fun p => (p.1.free r .immutable, p.2.free r .immutable) := by
+  simp [HeapTy.free]
+
+/-- Typing depends on the heap typing only for the locations in the
+expression. -/
+theorem HasType.congr_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
+    (ht : HasType fns σ Δ io Γ e t) (hag : ∀ l, e.HasLoc l → σ'[l]? = σ[l]?) : HasType fns σ' Δ io Γ e t := by
+  induction ht with
+  | var h => exact .var h
+  | unit => exact .unit
+  | int => exact .int
+  | loc h hio => exact .loc (by rw [hag _ rfl]; exact h) hio
+  | new _ hd ih => exact .new (ih hag) hd
+  | newR _ hd ih => exact .newR (ih hag) hd
+  | get _ ih => exact .get (ih hag)
+  | set _ _ ih₁ ih₂ => exact .set (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
+  | setR _ _ ih₁ ih₂ => exact .setR (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
+  | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
+  | call hf hs hr _ ih => exact .call hf hs hr (ih hag)
+  | lam hc himm hrc hrl _ ih =>
+    refine .lam hc himm hrc (fun l hl => ?_) (ih hag)
+    rw [hag l hl]
+    exact hrl l hl
+  | app _ _ ih₁ ih₂ => exact .app (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
+  | fst _ ih => exact .fst (ih hag)
+  | snd _ ih => exact .snd (ih hag)
+
+/-- A value has the freed type when the region is freed: a location's type
+is freed with it, and a closure, which captures nothing of a region, keeps
+its type. -/
+theorem HasType.free_value {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {t : Ty}
+    (ht : HasType fns σ Δ io Γ v t) (hv : v.IsValue) (r : Nat) :
+    HasType fns (σ.free r) Δ io Γ v (t.free r .immutable) := by
+  induction hv generalizing t with
+  | unit => cases ht; exact .unit
+  | int => cases ht; exact .int
+  | loc => cases ht with
+    | loc h hio =>
+      exact .loc (by rw [HeapTy.free_getElem?, h]; rfl) (fun h' => by rw [hio h']; rfl)
+  | @lam b x body => cases ht with
+    | lam hc himm hrc hrl hb =>
+      have hag : ∀ l, body.HasLoc l → (σ.free r)[l]? = σ[l]? := by
+        intro l hl
+        obtain ⟨m, t, h, hm, ht⟩ := hrl l hl
+        rw [HeapTy.free_getElem?, h]
+        simp [Mu.free_noRegion hm, Ty.free_noRegion ht]
+      have hmu : (muOf b).free r .immutable = muOf b := by cases b <;> rfl
+      simp only [Ty.free, hmu]
+      exact .lam hc himm hrc (fun l hl => by rw [hag l hl]; exact hrl l hl) (hb.congr_heap hag)
+  | pair _ _ ih₁ ih₂ => cases ht with
+    | pair h₁ h₂ => exact .pair (ih₁ h₁) (ih₂ h₂)
+
+/-- **Freeing a region keeps the heap well-typed**, whatever refers to it:
+what refers to it gets the freed type too. What a region holds is at most
+the region, so its locations are `imm` all the way down once freed. -/
+theorem HeapOk.free_all {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) (r : Nat) :
+    HeapOk fns (σ.free r) h := by
+  refine ⟨by simp [HeapTy.free, hh.1], ?_⟩
+  intro l m t hl
+  rw [HeapTy.free_getElem?, Option.map_eq_some_iff] at hl
+  obtain ⟨⟨m₀, t₀⟩, h₀, he⟩ := hl
+  simp only [Prod.mk.injEq] at he
+  obtain ⟨rfl, rfl⟩ := he
+  obtain ⟨hm, hd, v, hv, hval, hvt⟩ := hh.2 l m₀ t₀ h₀
+  refine ⟨?_, hd.free r .immutable, v, hv, hval, hvt.free_value hval r⟩
+  rcases hm with rfl | rfl | ⟨r', rfl⟩
+  · exact .inl rfl
+  · exact .inr (.inl rfl)
+  · simp only [Mu.free]
+    split
+    · exact .inr (.inl rfl)
+    · exact .inr (.inr ⟨r', rfl⟩)
+
+/-- Preservation for any number of steps. -/
+theorem preservation_steps {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
+    (hs : Steps fns h e h' e') :
+    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
+      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' .none false Ctx.empty e' t := by
+  induction hs with
+  | refl => intro σ t hh ht; exact ⟨σ, Extends.refl σ, hh, ht⟩
+  | step s _ ih =>
+    intro σ t hh ht
+    obtain ⟨σ₁, hx₁, hh₁, ht₁⟩ := preservation hf s hh ht
+    obtain ⟨σ₂, hx₂, hh₂, ht₂⟩ := ih hh₁ ht₁
+    exact ⟨σ₂, hx₁.trans hx₂, hh₂, ht₂⟩
+
+/-- **A block's region can be frozen when it ends.** The heap typing `σ`
+before the block doesn't mention its region `r`, and the block `e` gives
+the value `v`. Then, with `r` freed to `imm`: the heap is well-typed, `v`
+has the freed type, the region's locations are `imm`, and the heap typing
+still has `σ`, so what comes after the block, `k` with `x` for `v`, typed
+before it, is well-typed. No copy is made: the heap is the same. -/
+theorem block_frees {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {e v : Expr} {t : Ty} {r : Nat}
+    (hh : HeapOk fns σ h) (hfresh : σ.free r = σ) (ht : HasType fns σ .none false Ctx.empty e t)
+    (hs : Steps fns h e h' v) (hv : v.IsValue) :
+    ∃ σ' : HeapTy, Extends σ σ' ∧ Extends σ (σ'.free r) ∧ HeapOk fns (σ'.free r) h' ∧
+      HasType fns (σ'.free r) .none false Ctx.empty v (t.free r .immutable) ∧
+      (∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r, s) → ∃ s' : Ty, (σ'.free r)[l]? = some (.immutable, s')) ∧
+      ∀ (x : Nat) (k : Expr) (T : Ty), HasType fns σ .none false (Ctx.empty.update x (t.free r .immutable)) k T →
+        HasType fns (σ'.free r) .none false Ctx.empty (k.subst x v) T := by
+  obtain ⟨σ', hx, hh', hv'⟩ := preservation_steps hf hs hh ht
+  have hx' : Extends σ (σ'.free r) := by
+    intro l p hl
+    have hfix : σ[l]?.map (fun p => (p.1.free r .immutable, p.2.free r .immutable)) = σ[l]? := by
+      rw [← HeapTy.free_getElem?, hfresh]
+    rw [hl] at hfix
+    rw [HeapTy.free_getElem?, hx l p hl]
+    exact hfix
+  have hvf := hv'.free_value hv r
+  refine ⟨σ', hx, hx', hh'.free_all r, hvf, ?_, ?_⟩
+  · intro l s hl
+    exact ⟨s.free r .immutable, by rw [HeapTy.free_getElem?, hl]; simp [Mu.free]⟩
+  · intro x k T hk
+    exact (hk.weaken_heap hx').subst_update hv hvf
+
+/-- **After its block, a region never changes.** Whatever runs after the
+block, as long as it was typed before it, leaves every location of the
+region as the block left it. -/
+theorem block_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' h'' : Heap}
+    {e v k e'' : Expr} {t T : Ty} {r x : Nat}
+    (hh : HeapOk fns σ h) (hfresh : σ.free r = σ) (ht : HasType fns σ .none false Ctx.empty e t)
+    (hs : Steps fns h e h' v) (hv : v.IsValue)
+    (hk : HasType fns σ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
+    (hs' : Steps fns h' (k.subst x v) h'' e'') :
+    ∃ σ' : HeapTy, Extends σ σ' ∧ ∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r, s) → h''[l]? = h'[l]? := by
+  obtain ⟨σ₁, hx, _, hh₁, _, himm, hcont⟩ := block_frees hf hh hfresh ht hs hv
+  refine ⟨σ₁, hx, fun l s hl => ?_⟩
+  obtain ⟨s', hl'⟩ := himm l s hl
+  exact imm_never_changes hf hs' hh₁ (hcont x k T hk) hl'
+
+/-- The `leak` of the regions page: `log.push(xs)`, with `log` from before
+the block and `xs` of its region, is rejected. `log`'s type was fixed before
+the block, so it can't hold an object of the region: here `log` is location
+0, a `mut` cell holding a `mut` cell, and `xs` a cell of region 0. -/
+example (t : Ty) : ¬ HasType [] [(.mutable, .cell .mutable .int)] .none false
+    (Ctx.empty.update 0 (.cell (.region 0) .int)) (.set (.loc 0) (.var 0)) t := by
+  intro h
+  cases h with
+  | set h₁ h₂ =>
+    cases h₁ with
+    | loc hσ _ =>
+      simp only [List.getElem?_cons_zero, Option.some.injEq, Prod.mk.injEq, true_and] at hσ
+      subst hσ
+      cases h₂ with
+      | var hx => simp [Ctx.update] at hx
+  | setR h₁ _ =>
+    cases h₁ with
+    | loc hσ _ => simp at hσ
 
 /-- Freeing needs that nothing in the heap refers to the location. Here
 location 1, a `mut` cell, holds location 0, as `log.push(xs)` makes `log`

@@ -58,8 +58,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   function can read what it's given but not change it.
 - **Regions** (#209): `new true e` can make a cell of a region `r` instead
   of a `mut` one. What it holds is at most `r`: `imm`, or of the same
-  region, so that it's `imm` all the way down once `r` is freed. Nothing
-  frees a region yet.
+  region, so that it's `imm` all the way down once `r` is freed. A closure
+  captures nothing whose type mentions a region, and a call's arguments
+  mention none.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -91,6 +92,9 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
 | `HeapOk.free` | `Regions.lean` | a `mut` location that nothing in the heap refers to, and that holds what's `imm` all the way down, can be made `imm` without a copy: the heap is still well-typed with it `imm`. That's when a region is freed (#209) |
 | `freed_never_changes` | `Regions.lean` | after that, a program that's well-typed with the location `imm` never changes it |
+| `HeapOk.free_all` | `Regions.lean` | freeing a region everywhere at once keeps the heap well-typed: what refers to its objects gets the freed type too |
+| `block_frees` | `Regions.lean` | a block whose region the heap typing didn't mention before can freeze its region when it ends, without a copy: its value has the type with the region `imm`, and what comes after it, typed before it, is well-typed. What's from before can't hold the region's objects, so the regions page's `leak` is rejected |
+| `block_never_changes` | `Regions.lean` | after the block, the region's objects never change |
 | `AtMost.free`, `AtMost.region_free` | `Regions.lean` | freeing a region, giving it a mutability everywhere, keeps "at most"; and what a region holds is `imm` all the way down once the region is freed to `imm` |
 | `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v`; the checker's check, that each argument is at most the struct's mutability, is neither enough nor needed |
 
@@ -136,8 +140,11 @@ The theorems depend only on Lean's standard axioms, `propext`,
   of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
-- **The typing of regions** (#209): that a block's values are referred to
-  by nothing outside it when it ends, so that `HeapOk.free` applies. Also
-  borrowed parameters (#283) and unique values at their last use (#284).
+- **The rest of regions** (#209): blocks as a part of the language, with
+  nested blocks freed in turn and recursion; closures that capture a
+  region's objects (rule 5 of the regions page); regions that hold `mut`
+  objects and can only become `mut`; and generic functions called with a
+  region's objects. Also borrowed parameters (#283) and unique values at
+  their last use (#284).
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
