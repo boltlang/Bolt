@@ -220,7 +220,9 @@ example in [What a region is](#what-a-region-is).
   mode of Jane Street's OCaml [Lorenzen et al. 2024].
 - **Values that did leave their region** still need `freeze`, which
   copies. With reference counting, `freeze` could skip the copy when the
-  count is 1, as Koka and Lean do [Reinking et al. 2021].
+  count is 1, as Koka and Lean do [Reinking et al. 2021]. [Fewer
+  copies](./copies.mdx) proposes finding such values when checking, by
+  inferring which parameters only borrow their arguments.
 
 ## Implementation
 

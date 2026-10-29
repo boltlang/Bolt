@@ -1,0 +1,203 @@
+---
+sidebar_position: 6
+title: Fewer copies
+description: A proposal for leaving out the copies that make imm values, when nobody could notice, by inferring which parameters are borrowed and which values have one name.
+---
+
+# Fewer copies
+
+:::info[Proposal]
+Nothing on this page is implemented. It's a design for
+[#282](https://github.com/boltlang/Bolt/issues/282), which isn't decided
+yet, and it builds on [regions](./regions.mdx) (#209). Nothing on it is
+written in a program: what it finds only exists inside the compiler.
+:::
+
+## The copies
+
+A `mut` value may have other names, so making an `imm` value from it copies
+it:
+
+```bolt
+pub fn build(b: StringBuilder) -> String = String.from_bytes(to_imm(b.bytes));
+```
+
+Most of the time, nothing else has `b`, and it isn't used again:
+
+```bolt
+let b = StringBuilder.new();
+b.push('h');
+let s = build(b);
+```
+
+Nobody could tell if `build` used the bytes as they are. Regions leave out
+such a copy for a value that never leaves the block that made it, but `b`
+leaves its block: it goes to `push` and to `build`.
+
+## What stays the same
+
+**A program means what it means now:** making an `imm` value from a `mut`
+one copies it, and a function never takes a value away from its caller.
+The compiler leaves a copy out only when nothing could tell the
+difference, so no program is rejected because of this, and nothing new is
+written. It's an optimization, which the type checker's results make
+possible.
+
+Rust's moves do something like it, but they're part of the meaning: using
+a value after it's moved is an error. Here, using it again only means that
+the copy stays.
+
+## Borrowed parameters
+
+A parameter is *borrowed* when its value can't outlive the call. It
+*escapes* when the function:
+
+- returns it, or something that holds it: `fn id(xs) = xs`;
+- stores it in something from outside the call, like another parameter,
+  as in `log.push(xs)`, or a top-level variable;
+- lets a closure capture it that's returned or stored;
+- passes it to a parameter of another function that escapes.
+
+`push` and `count` borrow `b`, and `build` doesn't:
+
+```bolt
+fn push(b: mut StringBuilder, c: Char) { b.bytes.extend(to_utf8(c)); }
+fn count(b: StringBuilder) -> i32 = b.bytes.len;
+fn build(b: StringBuilder) -> String = String.from_bytes(to_imm(b.bytes));
+```
+
+A borrowed parameter can be changed, like the `b` of `push`, and two
+parameters can borrow the same value, as in `both(xs, xs)`. Rust doesn't
+allow that for `&mut`. Here it's fine, since `mut` values can be shared
+anyway: what matters is only that no name for the value is left once the
+call returns.
+
+### How it's found
+
+Each parameter has its own mutability variable. A hidden one, for a
+parameter without `mut` or `imm`, already does. A written `mut` would be a
+changeable variable too, like a `mut` value in [rule 1 of
+regions](./regions.mdx#the-rules), rather than `Mut`: otherwise a `mut`
+parameter stored in another looks like one that isn't.
+
+Storing a value unifies its mutability with that of where it's stored:
+`log.push(xs)` makes the mutability of `xs` that of the elements of `log`.
+Returning it puts its mutability in the return type. So once the body is
+solved, **a parameter is borrowed when its mutability appears in no other
+type of the function**: not in the return type, the other parameters, or a
+closure that's returned or stored. That's the check of [rule 2 of
+regions](./regions.mdx#the-rules), for a call rather than a block.
+
+Functions that call each other are solved together, as now. Each of their
+parameters starts as borrowed, and those that escape stop being so, until
+nothing changes.
+
+### What can't be found
+
+- **A function without a body**, like a class method or an `extern`
+  function, has nothing to find it from, so its parameters escape. A class
+  could say that a method borrows a parameter, and its impls would be
+  checked against that, as their types are.
+- **A call to a function value**, like `f(xs)` with `f: fn([T]) -> ()`,
+  passes `xs` to a parameter that escapes, since the function isn't known.
+  A function type could say which parameters it borrows later.
+
+## Values with one name
+
+A value is *unique* at a point of a function when only one name for it
+can exist there:
+
+- it was just made, by a literal or a function whose result is fresh, like
+  `StringBuilder.new()`;
+- since then, it has only gone to borrowed parameters.
+
+Making an `imm` value from a unique value at its **last use**, where the
+name isn't used again, takes the value as it is:
+
+```bolt
+let s = build(b);      // the last use of `b`: no copy
+```
+
+```bolt
+let s = build(b);
+b.push('!');           // `b` is used again: `build` copies, as now
+```
+
+That needs the function that makes the `imm` value, like `to_imm` in
+`build`, to know that its argument is unique and isn't used again. So
+whether `build` copies depends on its caller, and `build` must say so in
+its summary: it gives up `b`'s bytes. The code generator then makes two
+versions of a function like `build`, or passes it whether its argument is
+unique, as Perceus does at run time with reference counts.
+
+## A summary for each function
+
+Each function gets a summary, found like its type:
+
+- which parameters it borrows;
+- which parameters it gives up, like `build`, so that a caller can leave
+  out the copy when its argument is unique there;
+- whether what it gives is fresh, like `StringBuilder.new()`.
+
+Callers only use summaries. So, as now, checking stays per function and
+incremental, an explanation is about one function, and a library is
+checked without the code that uses it. Looking at the whole program at
+once would find a few more copies to leave out, but gives up all three.
+
+## What this doesn't do
+
+Two things need a value to be given up for good, so that using it again
+must be an error rather than a copy:
+
+- **Resources used once**, like closing a file: `f` can't be copied after
+  `close(f)`.
+- **Changing a value's type in place**, like an `fmap_mut` that turns a
+  `Vec[A]` into a `Vec[B]`: the old name would have nothing to refer to.
+
+Those need the signature of the function that gives the value up, like
+`close`, to say so, and an error where it's used afterwards. Programs
+still wouldn't write anything about uniqueness: only those signatures,
+mostly in `std`, would.
+
+## Open questions
+
+- **Seeing the copies.** A copy that comes back because of one more use of
+  a value is easy to miss. The language server could show where a copy is
+  made and why ("copies the bytes, since `b` is used on line 7"), and an
+  attribute like `#[no_copy]` could make a copy a warning, for code where
+  that matters.
+- **Complete signatures.** A function whose types are all written is
+  checked on its own, and its callers don't depend on its body. If its
+  summary comes from its body, editing the body checks its callers again,
+  like a function whose types are inferred. Or a complete signature could
+  say which parameters it borrows.
+- **Saying that a class method borrows.** Something like `fn len(c: & C)`
+  in a class, which also decides what a function type that borrows looks
+  like.
+- **How a summary is shown**, in the language server and in errors,
+  without talking about regions.
+
+## Prior art
+
+- **Clean's uniqueness types** [de Vries et al. 2007] are the closest:
+  they can be inferred without annotations. In Clean they're part of the
+  meaning, so using a unique value twice is an error.
+- **Perceus** [Reinking et al. 2021], in Koka and Lean, finds unique
+  values at run time, from a reference count of 1, and changes them in
+  place. This page finds them when checking, so it needs no counts, but
+  finds fewer.
+- **Rust's moves and borrows** give the same guarantees as part of the
+  meaning, with lifetimes for references, and don't allow two `&mut`
+  names at once.
+- **OCaml's modes** [Lorenzen et al. 2024], like `unique` and `once`, are
+  checked with annotations, which are needed for what [this doesn't
+  do](#what-this-doesnt-do).
+
+## References
+
+- E. de Vries, R. Plasmeijer and D. M. Abrahamson. *Uniqueness Typing
+  Simplified.* IFL 2007.
+- A. Reinking, N. Xie, L. de Moura and D. Leijen. *Perceus: Garbage Free
+  Reference Counting with Reuse.* PLDI 2021.
+- A. Lorenzen, L. White, S. Dolan, R. A. Eisenberg and S. Lindley.
+  *Oxidizing OCaml with Modal Memory Management.* ICFP 2024.
