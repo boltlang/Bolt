@@ -195,7 +195,17 @@ there. In its scheme, they're among `Scheme::assoc`, which a use
 instantiates as `Assoc` constraints, so that the impl chosen for the
 arguments must give `T`. An impl's `where` clause works the same way: when
 the impl is chosen, its equalities are added like its class predicates.
-They're only allowed on functions and impls, where they can be assumed.
+They're only allowed on functions and impls, where they can be assumed,
+and in the bounds of associated types.
+
+A bound of an associated type can say what another associated type is,
+like the `Item = Item` of `type Iter: Iterator[Item = Item];` in
+`class Iterable[C]`: for every `C`, `C.Iter.Item` is `C.Item`. Wherever
+`Iterable[X]` is assumed, `X.Iter.Item = X.Item` is assumed too
+(`implied_equalities`), as `Iterator[X.Iter]` is from the bound itself. So
+a function with `C: Iterable` gets `C.Item` from `next(iter(c))`. Each impl
+of the class must meet it (`unmet_assoc_equalities`): its `Iter`'s `Item`,
+found through the impls of `Iterator`, must be its `Item` (E0241).
 
 ## Overloads
 
