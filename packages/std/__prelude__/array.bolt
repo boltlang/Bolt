@@ -1,8 +1,9 @@
 // Arrays: the functions on them that the compiler provides, and the impls
 // that make `xs[i]`, `xs[i] = x` and `for x in xs` work on them.
 
-import "./classes" (Index, IndexMut, Iterable, FnIter);
+import "./ops" (Index, IndexMut);
 import "./option" (Option, Some, None);
+import "./iter" (Iterable, Iterator);
 import "./mutability" (ToMut, ToImm);
 
 extern "bolt" {
@@ -42,21 +43,31 @@ impl[T] IndexMut[mut [T]] {
   fn set_index(xs, i, x) = array_set(xs, i, x);
 }
 
-/// `for x in xs`: the elements, in order. A change the loop makes to an
-/// element it hasn't reached yet is seen when it gets there.
-impl[T] Iterable[[T]] {
-  type Iter = mut FnIter[T];
-  fn iter(xs) {
-    let mut next = 0;
-    mut FnIter {
-      next: || if next < array_len(xs) {
-        next += 1;
-        Some(array_get(xs, next - 1))
-      } else {
-        None
-      },
+pub struct ArrayIter[T, 'v] {
+  array: 'v [T],
+  index: i32,
+}
+
+impl[T] Iterator[mut ArrayIter[T]] {
+
+  type Item = T;
+
+  fn next(self) -> Option[T] {
+    if self.index < array_len(self.array) {
+      self.index += 1;
+      Some(array_get(self.array, self.index - 1))
+    } else {
+      None
     }
   }
+
+}
+
+/// `for x in xs`: the elements, in order. A change the loop makes to an
+/// element it hasn't reached yet is seen when it gets there.
+impl[T, 'v] Iterable['v [T]] {
+  type Iter = mut ArrayIter[T, 'v];
+  fn iter(array) = mut ArrayIter { array, index: 0 };
 }
 
 /// A copy of an array that can be changed.

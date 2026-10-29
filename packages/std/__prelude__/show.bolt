@@ -1,0 +1,4 @@
+
+class Show[T] {
+  fn show(self: T) -> String;
+}

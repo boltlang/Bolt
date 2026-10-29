@@ -240,8 +240,8 @@ A function that overlaps one of the prelude
 :prelude
 :error
 ================================================================================
-fn print(message: String) = ();
+fn is_empty[T](v: Vec[T]) -> Bool = True;
 --------------------------------------------------------------------------------
-print: fn(String) -> ()
+is_empty: forall T. fn(Vec[T]) -> Bool
 --------------------------------------------------------------------------------
-error at `print`: overlaps the print of type fn(String) -> ()
+error at `is_empty`: overlaps the is_empty of type forall T. fn(Vec[T]) -> Bool

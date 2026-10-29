@@ -1,11 +1,13 @@
 // A growable array.
 
-import "./array" (array_alloc, array_copy, array_freeze, array_len);
 import "./mutability" (ToMut, ToImm);
 import "./option" (Option, None, Some);
-import "./io" (panic);
 import "./eq" (Eq);
-import "./classes" (Index, IndexMut, Iterable, Iterator, zip);
+import "./ops" (Index, IndexMut);
+import "./array" (array_alloc, array_copy, array_freeze, array_len);
+import "./iter" (Iterable, Iterator, zip);
+import "./io" (panic);
+
 
 /// An array that grows: `push` adds an element at the end, and makes room
 /// when there's none left.
@@ -73,6 +75,28 @@ pub fn push[T](v: mut Vec[T], x: T) {
   }
   v.items[v.len] = x;
   v.len += 1;
+}
+
+pub fn first[T](v: Vec[T]) -> Option[T] {
+  if v.len == 0 {
+    None
+  } else {
+    Some(v.items[0])
+  }
+}
+
+pub fn last[T](v: Vec[T]) -> Option[T] {
+  if v.len == 0 {
+    None
+  } else {
+    Some(v.items[v.len-1])
+  }
+}
+
+pub fn extend[T, I: Iterable[Item = T]](v: mut Vec[T], it: I) {
+  for item in it {
+    v.push(item);
+  }
 }
 
 /// Remove the last element and give it, or `None` if there's none.

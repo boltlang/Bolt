@@ -120,10 +120,10 @@ A function fills in a Vec it's given
 :todo wasm
 :prelude
 ================================================================================
-fn fill(v: mut Vec[String], n: i32) {
+fn fill(v: mut Vec[i32], n: i32) {
   let mut i = 0;
   while i < n {
-    v.push("x");
+    v.push(i);
     i += 1;
   }
 }
@@ -131,7 +131,7 @@ let v = Vec.new();
 fill(v, 3);
 to_array(v);
 --------------------------------------------------------------------------------
-["x", "x", "x"]
+[0, 1, 2]
 
 ================================================================================
 Indexing a Vec
@@ -205,7 +205,7 @@ Generic functions over indexing and loops
 :todo wasm
 :prelude
 ================================================================================
-fn first[C](c: C) -> C.Item where Index[C] = c[0];
+fn first_of[C](c: C) -> C.Item where Index[C] = c[0];
 fn count[C](c: C) -> i32 where Iterable[C], Iterator[C.Iter] {
   let mut n = 0;
   for x in c {
@@ -214,7 +214,7 @@ fn count[C](c: C) -> i32 where Iterable[C], Iterator[C.Iter] {
   n
 }
 let v = Vec.from_array(["a", "b"]);
-(first(v), count(v));
+(first_of(v), count(v));
 --------------------------------------------------------------------------------
 ("a", 2)
 

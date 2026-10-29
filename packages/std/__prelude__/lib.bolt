@@ -3,13 +3,16 @@
 pub import "./functor" *;
 pub import "./semigroup" *;
 pub import "./monoid" *;
-pub import "./classes" *;
+pub import "./ops" *;
+pub import "./iter" *;
 pub import "./mutability" *;
 
 // Types
-pub import "./option" *;
-pub import "./list" *;
-pub import "./vec" *;
-
 pub import "./array" *;
+pub import "./option" *;
+pub import "./vec" *;
+pub import "./string" *;
+pub import "./list" *;
+
+// Interfacing with the system
 pub import "./io" *;

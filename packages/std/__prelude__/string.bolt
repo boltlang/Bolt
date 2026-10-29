@@ -1,0 +1,70 @@
+
+import "./mutability" (to_mut, to_imm);
+import "./option" (unwrap);
+import "./vec" (Vec, last, push, extend);
+
+/// The bytes of `ch` in UTF-8: one for ASCII, and up to four for others.
+pub fn to_utf8(ch: Char) -> mut Vec[u8] {
+  let c = ch as u32;
+  let bytes = Vec.with_capacity(4);
+  if c < 0x80 {
+    bytes.push(c as u8);
+  } else if c < 0x800 {
+    bytes.push((0xC0 | (c >> 6)) as u8);
+    bytes.push((0x80 | (c & 0x3F)) as u8);
+  } else if c < 0x10000 {
+    bytes.push((0xE0 | (c >> 12)) as u8);
+    bytes.push((0x80 | ((c >> 6) & 0x3F)) as u8);
+    bytes.push((0x80 | (c & 0x3F)) as u8);
+  } else {
+    bytes.push((0xF0 | (c >> 18)) as u8);
+    bytes.push((0x80 | ((c >> 12) & 0x3F)) as u8);
+    bytes.push((0x80 | ((c >> 6) & 0x3F)) as u8);
+    bytes.push((0x80 | (c & 0x3F)) as u8);
+  }
+  bytes
+}
+
+/// Text, as its bytes in UTF-8.
+pub struct String(Vec[u8]);
+
+pub fn String.from_bytes(bytes: imm Vec[u8]) -> String {
+  String(bytes)
+}
+
+/// Builds a `String` a piece at a time, without copying what it has so far
+/// for each piece.
+///
+/// ```bolt
+/// let b = StringBuilder.new();
+/// b.push('h');
+/// b.push_str(greeting);
+/// let s = b.build();
+/// ```
+pub struct StringBuilder {
+  bytes: Vec[u8],
+}
+
+/// A new, empty builder.
+pub fn StringBuilder.new() -> mut StringBuilder {
+  mut StringBuilder { bytes: Vec.new() }
+}
+
+/// Add the character `c` at the end.
+pub fn push(b: mut StringBuilder, c: Char) {
+  b.bytes.extend(to_utf8(c));
+}
+
+/// Add the text of `s` at the end.
+pub fn push_str(b: mut StringBuilder, s: String) {
+  b.bytes.extend(s.0);
+}
+
+/// The number of bytes added so far.
+pub fn len(b: StringBuilder) -> i32 = b.bytes.len;
+
+/// The text added so far, as a `String`. It's a copy, so the builder can
+/// still be added to without changing it.
+pub fn build(b: StringBuilder) -> String {
+  String.from_bytes(to_imm(b.bytes))
+}

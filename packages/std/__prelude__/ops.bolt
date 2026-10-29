@@ -1,0 +1,20 @@
+// Classes that syntax uses: `v[i]`, `v[i] = x` and `for x in c` work on any
+// type with an impl of them. Arrays have theirs in `array.bolt`.
+
+import "./option" (Option, None, Some);
+
+/// Types whose elements can be read by position, with `c[i]`.
+pub class Index[C] {
+  /// The type of the elements.
+  type Item;
+
+  /// The element at `i`, for `c[i]`.
+  fn index(c: C, i: i32) -> Item;
+}
+
+/// Types whose elements can be replaced by position, with `c[i] = x`.
+pub class IndexMut[C] where Index[C] {
+  /// Replace the element at `i` with `x`, for `c[i] = x`.
+  fn set_index(c: C, i: i32, x: C.Item);
+}
+
