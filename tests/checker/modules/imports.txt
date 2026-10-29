@@ -287,3 +287,19 @@ Thing { x: 1 };
 /a.bolt: thing: fn() -> i32
 /main.bolt: thing(): i32
 /main.bolt: Thing { x: 1 }: imm Thing
+
+================================================================================
+Variants through a file imported with `as`
+================================================================================
+//- /lib.bolt
+pub enum Shape { Circle(i32), Dot }
+
+//- /main.bolt
+import "./lib" as lib;
+lib.Shape.Dot;
+lib.Shape.Circle(1);
+fn f(s) = match s { _ => lib.Shape.Dot };
+--------------------------------------------------------------------------------
+/main.bolt: f: forall a. fn(a) -> Shape
+/main.bolt: lib.Shape.Dot: Shape
+/main.bolt: lib.Shape.Circle(1): Shape

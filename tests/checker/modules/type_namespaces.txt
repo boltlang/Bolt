@@ -72,13 +72,16 @@ fn Box.secret() -> i32 = 1;
 
 //- /main.bolt
 import "./lib" (Box);
+import "./lib" as lib;
 Box.of(1);
+lib.Box.of("a");
 Box.secret();
 Box.nope();
 --------------------------------------------------------------------------------
 /lib.bolt: Box.of: forall T. T: imm => fn(T) -> imm Box[T]
 /lib.bolt: Box.secret: fn() -> i32
 /main.bolt: Box.of(1): imm Box[i32]
+/main.bolt: lib.Box.of("a"): imm Box[String]
 /main.bolt: Box.secret(): {error}
 /main.bolt: Box.nope(): {error}
 --------------------------------------------------------------------------------

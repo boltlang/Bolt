@@ -8,8 +8,8 @@
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
-    body::{DefWithBody, DefWithBodyId, body},
-    hir::{BinaryOp, Expr, Path, PathSegment},
+    body::{Body, DefWithBody, DefWithBodyId, body},
+    hir::{BinaryOp, Expr, ExprId, Path, PathSegment},
     ids::{FunctionId, ImplId, ItemContainerId, TypeAliasId},
     item_tree::{ModItem, item_tree},
     resolver::{GenericDefId, Resolver, ValueNs, ValueResolution},
@@ -526,6 +526,20 @@ pub fn inferred_functions<'db>(db: &'db dyn Db, file: File) -> Vec<FunctionId<'d
         .collect()
 }
 
+/// `expr` as a path, if it's a chain of fields that starts with a name,
+/// like `m.Vec.new`.
+fn field_path(body: &Body, expr: ExprId) -> Option<Path> {
+    match &body[expr] {
+        Expr::Path(path) => Some(path.clone()),
+        Expr::Field { expr: base, name } => {
+            let mut segments = field_path(body, *base)?.segments.to_vec();
+            segments.push(PathSegment { name: name.clone(), generic_args: None });
+            Some(Path { segments: segments.into() })
+        }
+        _ => None,
+    }
+}
+
 /// The functions a function's body refers to by name.
 fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<'db>> {
     let def = DefWithBodyId::new(db, DefWithBody::Function(f));
@@ -534,14 +548,10 @@ fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<
     for (id, expr) in body.exprs.iter() {
         let paths = match expr {
             Expr::Path(path) => vec![path.clone()],
-            // `x.f()` may call `f`, and `Vec.new` is a path.
-            Expr::Field { expr: base, name } => {
+            // `x.f()` may call `f`, and `Vec.new` or `m.Vec.new` is a path.
+            Expr::Field { name, .. } => {
                 let mut paths = vec![Path::from_name(name.clone())];
-                if let Expr::Path(base) = &body[*base] {
-                    let mut segments = base.segments.to_vec();
-                    segments.push(PathSegment { name: name.clone(), generic_args: None });
-                    paths.push(Path { segments: segments.into() });
-                }
+                paths.extend(field_path(body, id));
                 paths
             }
             Expr::Binary { op: BinaryOp::Custom(name), .. } => vec![Path::from_name(name.clone())],

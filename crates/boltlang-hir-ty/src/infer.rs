@@ -910,11 +910,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// Whether `expr` is a path that doesn't name a value, like `Color` or
-    /// a module, so that `expr.name` is a longer path.
+    /// a module, so that `expr.name` is a longer path. `expr` can be such a
+    /// longer path itself, like the `m.Color` of `m.Color.Red`.
     fn path_extended(&self, expr: ExprId, name: &Name) -> Option<Path> {
-        let Expr::Path(path) = &self.body[expr] else { return None };
+        let path = match &self.body[expr] {
+            Expr::Path(path) => path.clone(),
+            Expr::Field { expr: base, name: inner } => self.path_extended(*base, inner)?,
+            _ => return None,
+        };
         let resolver = self.resolver(expr);
-        if let Some(ValueResolution::Value(_)) = resolver.resolve_path_in_value_ns(self.db, path) {
+        if let Some(ValueResolution::Value(_)) = resolver.resolve_path_in_value_ns(self.db, &path) {
             return None;
         }
         let mut segments = path.segments.to_vec();
