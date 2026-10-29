@@ -71,3 +71,15 @@ lib.id(1);
 /main.bolt: lib.id(1): {error}
 --------------------------------------------------------------------------------
 /main.bolt: error at `lib.id`: unresolved
+
+================================================================================
+A prelude of one file is the package's __prelude__.bolt
+:prelude
+================================================================================
+//- /toolchain/std/__prelude__.bolt
+pub fn id[T](x: T) -> T = x;
+//- /main.bolt
+id(1);
+--------------------------------------------------------------------------------
+/toolchain/std/__prelude__.bolt: id: forall T. fn(T) -> T
+/main.bolt: id(1): i32

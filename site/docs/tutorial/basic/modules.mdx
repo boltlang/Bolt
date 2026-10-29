@@ -140,8 +140,10 @@ other arguments (see
 [Functions with the same name](./functions.mdx#functions-with-the-same-name)).
 
 A package can choose another prelude in its `bolt.toml`: `prelude = false`
-for none, or the name of a dependency, whose `__prelude__/lib.bolt` is used.
-To check a file without the prelude, use `bolt check --no-prelude`.
+for none, or the name of a dependency, whose prelude is used. A package's
+prelude is its `__prelude__.bolt`, or its `__prelude__/lib.bolt` for one of
+several files, which can import each other. To check a file without the
+prelude, use `bolt check --no-prelude`.
 
 ## What's next
 

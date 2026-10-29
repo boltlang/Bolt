@@ -505,14 +505,14 @@ pub fn prelude_package(db: &dyn Db, file: File) -> Option<(String, bool)> {
     }
 }
 
-/// The entry file of the prelude that `file` gets: `__prelude__/lib.bolt`
-/// of [`prelude_package`], looked up like an import of it. `Ok(None)` when
-/// there's no prelude, and for the files of the prelude's own package,
-/// which would otherwise import themselves.
+/// The entry file of the prelude that `file` gets, that of
+/// [`prelude_package`]: see [`prelude_entry`]. `Ok(None)` when there's no
+/// prelude, and for the files of the prelude's own package, which would
+/// otherwise import themselves.
 #[salsa::tracked]
 pub fn prelude_file(db: &dyn Db, file: File) -> Result<Option<File>, ImportPathError> {
     let Some((package, _)) = prelude_package(db, file) else { return Ok(None) };
-    let prelude = resolve_import_path(db, file, &format!("{package}/__prelude__/lib"))?;
+    let prelude = prelude_entry(db, file, &package)?;
     let own = package_of(db, prelude);
     Ok((own.is_none() || package_of(db, file) != own).then_some(prelude))
 }
@@ -552,7 +552,21 @@ pub fn prelude_lib(db: &dyn Db, file: File) -> Option<File> {
         let std = Settings::get(db).std_dir(db).as_ref()?;
         (package_of(db, file).as_ref() == Some(std)).then(|| (STD.to_string(), false))
     })?;
-    resolve_import_path(db, file, &format!("{package}/__prelude__/lib")).ok()
+    prelude_entry(db, file, &package).ok()
+}
+
+/// The entry file of the prelude of `package`, as seen from `file`: its
+/// `__prelude__.bolt`, for a prelude of one file, or its
+/// `__prelude__/lib.bolt`, for one of several, looked up like an import.
+/// Having both is an error, rather than a choice between them.
+fn prelude_entry(db: &dyn Db, file: File, package: &str) -> Result<File, ImportPathError> {
+    let single = resolve_import_path(db, file, &format!("{package}/__prelude__"));
+    let several = resolve_import_path(db, file, &format!("{package}/__prelude__/lib"));
+    match (single, several) {
+        (Ok(_), Ok(_)) => Err(ImportPathError::TwoPreludes { package: package.to_string() }),
+        (Ok(prelude), Err(_)) | (Err(_), Ok(prelude)) => Ok(prelude),
+        (Err(_), Err(error)) => Err(error),
+    }
 }
 
 /// Where the fixed-point iteration of [`file_scope`] starts, for files that
@@ -631,6 +645,9 @@ pub enum ImportPathError {
     /// Neither a relative path nor one in a package: an absolute path, a
     /// package name that isn't one, or a path that leaves its package.
     Invalid,
+    /// The package has both a `__prelude__.bolt` and a
+    /// `__prelude__/lib.bolt`, so it isn't clear which is its prelude.
+    TwoPreludes { package: String },
 }
 
 /// The file that the path in `import "path"` refers to. A missing extension

@@ -453,6 +453,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                     "cannot import `{path}`: import a file with a path like `./file`, \
                      or a package with its name, like `std/io`"
                 ),
+                // Only the prelude is looked for in two files.
+                ImportPathError::TwoPreludes { package } => {
+                    format!("the package `{package}` has two preludes")
+                }
             };
             (C::UNRESOLVED_IMPORT_PATH, message)
         }
@@ -487,12 +491,17 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                     format!("the package `{package}` of the prelude is at `{path}`, which has no `bolt.toml`")
                 }
                 ImportPathError::NoStd => "there's no `std`, which the prelude comes from".to_string(),
-                ImportPathError::NotInPackage { path, .. } => {
-                    format!("the package `{package}` has no prelude: it needs a file `{path}`")
-                }
+                ImportPathError::NotInPackage { .. } => format!(
+                    "the package `{package}` has no prelude: it needs a file `__prelude__.bolt`, or \
+                     `__prelude__/lib.bolt` for a prelude of several files"
+                ),
                 ImportPathError::FileNotFound | ImportPathError::Invalid => {
                     format!("cannot use `{package}` as the prelude: it's not the name of a package")
                 }
+                ImportPathError::TwoPreludes { .. } => format!(
+                    "the package `{package}` has both a `__prelude__.bolt` and a `__prelude__/lib.bolt`, so \
+                     it isn't clear which is its prelude; remove one of them"
+                ),
             };
             (C::UNRESOLVED_PRELUDE, message)
         }

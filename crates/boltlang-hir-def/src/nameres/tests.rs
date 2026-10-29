@@ -597,3 +597,28 @@ fn other() {}
     assert_eq!(names, ["push", "second"]);
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
 }
+
+#[test]
+fn a_prelude_of_one_file_is_its_package_s_prelude_bolt() {
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), true);
+    db.file("/toolchain/std/__prelude__.bolt", "pub fn id() {}\n");
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
+    let main = db.file("/main.bolt", "fn f() {}\n");
+    let scope = file_scope(&db, main);
+    assert_eq!(names(&scope.scope, Namespace::Values), ["f", "id (prelude)"]);
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+}
+
+#[test]
+fn a_package_with_two_preludes_has_none() {
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), true);
+    db.file("/toolchain/std/__prelude__.bolt", "pub fn id() {}\n");
+    db.file("/toolchain/std/__prelude__/lib.bolt", "pub fn other() {}\n");
+    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from("/toolchain/std")));
+    let main = db.file("/main.bolt", "fn f() {}\n");
+    let scope = file_scope(&db, main);
+    assert_eq!(names(&scope.scope, Namespace::Values), ["f"]);
+    assert_eq!(diagnostics(scope), ["unresolved prelude std: TwoPreludes { package: \"std\" }"]);
+}

@@ -34,8 +34,8 @@ struct Cli {
     command: Command,
 }
 
-/// Which prelude files get: the names of a package's `__prelude__/lib.bolt`
-/// that can be used without importing them. It's `std`'s, unless a file's
+/// Which prelude files get: the names of a package's `__prelude__.bolt`, or
+/// `__prelude__/lib.bolt`, that can be used without importing them. It's `std`'s, unless a file's
 /// `bolt.toml` says otherwise.
 #[derive(clap::Args, Clone, Debug, Default)]
 struct PreludeArgs {

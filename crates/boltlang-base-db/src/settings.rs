@@ -12,8 +12,9 @@ pub const DEFAULT_PRELUDE: &str = "std";
 /// gets a new configuration. There's one per database: see [`Settings::get`].
 #[salsa::input(singleton, debug)]
 pub struct Settings {
-    /// The package whose `__prelude__/lib.bolt` every file can use without
-    /// importing it, or `None` for no prelude.
+    /// The package whose prelude, its `__prelude__.bolt` or
+    /// `__prelude__/lib.bolt`, every file can use without importing it, or
+    /// `None` for no prelude.
     #[returns(ref)]
     pub prelude: Option<String>,
     /// Whether a prelude that can't be found is an error. It's not for the
