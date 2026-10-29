@@ -14,6 +14,7 @@ ariadne = "0.6.0"
 boltlang-base-db.workspace = true
 boltlang-codegen.workspace = true
 boltlang-eval.workspace = true
+boltlang-hir-def.workspace = true
 boltlang-ide-diagnostics.workspace = true
 boltlang-std.workspace = true
 boltlang-syntax.workspace = true

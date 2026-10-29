@@ -12,6 +12,7 @@ use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
 use boltlang_codegen::{CodegenError, link, run};
 use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
+use boltlang_hir_def::nameres::test_functions;
 use boltlang_ide_diagnostics::{
     Diagnostic, DiagnosticCode, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
 };
@@ -78,6 +79,7 @@ enum Command {
     DumpAst(DumpAstCommand),
     Check(CheckCommand),
     Run(RunCommand),
+    Test(TestCommand),
     Build(BuildCommand),
 }
 
@@ -87,6 +89,7 @@ impl Exec for Command {
             Self::Check(cmd) => cmd.exec(),
             Self::DumpAst(cmd) => cmd.exec(),
             Self::Run(cmd) => cmd.exec(),
+            Self::Test(cmd) => cmd.exec(),
             Self::Build(cmd) => cmd.exec(),
         }
     }
@@ -211,6 +214,110 @@ impl Exec for RunCommand {
             }
         }
     }
+}
+
+/// Check files, then run their tests: the functions with `#[test]` before
+/// them. A test fails when it stops with an error, like a panic.
+#[derive(clap::Parser)]
+struct TestCommand {
+    /// Files, or directories whose `.bolt` files to test, recursively
+    /// [default: the current directory]
+    paths: Vec<PathBuf>,
+    #[command(flatten)]
+    prelude: PreludeArgs,
+    /// Only run the tests whose name contains this.
+    #[arg(long, value_name = "NAME")]
+    filter: Option<String>,
+    /// Stop a test after evaluating this many expressions.
+    #[arg(long, value_name = "STEPS")]
+    fuel: Option<u64>,
+}
+
+impl Exec for TestCommand {
+    fn exec(&self) -> anyhow::Result<bool> {
+        let db = self.prelude.database()?;
+        let mut paths = Vec::new();
+        let roots = if self.paths.is_empty() { vec![PathBuf::from(".")] } else { self.paths.clone() };
+        for root in &roots {
+            bolt_files(root, &mut paths)?;
+        }
+        let mut files = Vec::new();
+        let mut ok = true;
+        for path in &paths {
+            match open(&db, path) {
+                Some(file) => files.push(file),
+                None => ok = false,
+            }
+        }
+        let (mut passed, mut failed, mut skipped) = (0, 0, 0);
+        for &file in &files {
+            let tests: Vec<_> = test_functions(&db, file)
+                .iter()
+                .copied()
+                .filter(|f| {
+                    let name = f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
+                    self.filter.as_ref().is_none_or(|filter| name.contains(filter.as_str()))
+                })
+                .collect();
+            if tests.is_empty() {
+                continue;
+            }
+            // A file with errors isn't run.
+            let found = checked(&db, file, &files);
+            report(&db, &found)?;
+            if found.iter().any(|d| d.severity == Severity::Error) {
+                println!("{}: not run, since it has errors", display_path(&db, file));
+                skipped += tests.len();
+                ok = false;
+                continue;
+            }
+            for f in tests {
+                let name = f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
+                print!("test {}::{name} ... ", display_path(&db, file));
+                io::stdout().flush()?;
+                // Each test gets a new evaluator, so that tests don't see
+                // each other's values.
+                let limits = Limits { fuel: self.fuel, ..Limits::default() };
+                let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
+                match evaluator.call_function(f, Vec::new()) {
+                    Ok(_) => {
+                        println!("ok");
+                        passed += 1;
+                    }
+                    Err(error) => {
+                        println!("FAILED");
+                        report(&db, &[runtime_diagnostic(&db, file, &error)])?;
+                        failed += 1;
+                    }
+                }
+            }
+        }
+        let result = if failed == 0 && ok { "ok" } else { "FAILED" };
+        let skipped = if skipped > 0 { format!("; {skipped} not run") } else { String::new() };
+        println!("test result: {result}. {passed} passed; {failed} failed{skipped}");
+        Ok(ok && failed == 0)
+    }
+}
+
+/// The `.bolt` files of `path`: the file itself, or those of a directory
+/// and the directories in it, but not hidden ones, like `.bolt`. In order of
+/// their paths, so that tests run in the same order each time.
+fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
+    if !path.is_dir() {
+        out.push(path.to_path_buf());
+        return Ok(());
+    }
+    let mut entries: Vec<PathBuf> = std::fs::read_dir(path)?.map(|e| e.map(|e| e.path())).collect::<Result<_, _>>()?;
+    entries.sort();
+    for entry in entries {
+        let hidden = entry.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
+        if entry.is_dir() && !hidden {
+            bolt_files(&entry, out)?;
+        } else if entry.extension().is_some_and(|e| e == "bolt") {
+            out.push(entry);
+        }
+    }
+    Ok(())
 }
 
 /// Check a file, then compile it to a WebAssembly module. The top-level
