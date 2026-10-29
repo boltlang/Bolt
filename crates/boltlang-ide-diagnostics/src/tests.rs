@@ -1099,6 +1099,8 @@ fn P.t() {}
    //^ error: a test must be a function at the top level of a file, not in a class, an impl, an `extern` block or the namespace of a type
 #[test]
 fn fine() { let x = 1; }
+#[test]
+fn never_returns() { loop {} }
 "#,
     );
 }

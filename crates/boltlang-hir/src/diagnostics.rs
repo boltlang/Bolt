@@ -493,6 +493,9 @@ impl<'db> Collector<'db> {
         if let Ok(scheme) = function_scheme(db, f)
             && let Ty::Fn(_, ret, _) = &scheme.ty
             && !ret.is_unit()
+            // One that never returns, like one that always panics, is fine:
+            // its result is `!`, or, when inferred, any type.
+            && !matches!(**ret, Ty::Never | Ty::Bound(_))
             && !ret.any(&mut |t| *t == Ty::Error)
         {
             self.push(range, DiagnosticKind::BadTest { reason: BadTest::Result });
