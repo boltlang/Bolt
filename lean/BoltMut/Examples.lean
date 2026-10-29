@@ -47,14 +47,28 @@ theorem sat_none (Δ : Assume) (ms : List Mu) : Sat Δ {} ms [] := by
   · intro p h; simp at h
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
 
+theorem noRegion_args (ms : List Mu) (τs : List Ty) (hm : ∀ m ∈ ms, m.NoRegion := by simp [Mu.NoRegion])
+    (hτ : ∀ τ ∈ τs, τ.NoRegion := by simp [Ty.NoRegion, Mu.NoRegion]) : ArgsNoRegion ms τs := ⟨hm, hτ⟩
+
+/-- A context whose types mention no region. -/
+theorem noRegion_ctx {Γ : Ctx} (x : Nat) (t : Ty) (ht : t.NoRegion) (hΓ : ∀ y s, Γ y = some s → s.NoRegion) :
+    ∀ y s, Γ.update x t y = some s → s.NoRegion := by
+  intro y s hy
+  simp only [Ctx.update] at hy
+  split at hy
+  · cases hy; exact ht
+  · exact hΓ y s hy
+
+theorem noRegion_empty : ∀ y s, Ctx.empty y = some s → s.NoRegion := fun _ _ h => nomatch h
+
 /-- It can be called with a `mut` object and with an `imm` one. -/
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new true (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.mutable] [])
-  exact .call rfl (sat_none _ _) (.new .int trivial)
+  exact .call rfl (sat_none _ _) (noRegion_args _ _) (.new .int trivial)
 
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.immutable] [] (.new false (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.immutable] [])
-  exact .call rfl (sat_none _ _) (.new .int trivial)
+  exact .call rfl (sat_none _ _) (noRegion_args _ _) (.new .int trivial)
 
 /-- But a generic function can't change what it's given:
 `fn poke(xs: 'm [i32]) { xs[0] = 1; }` is rejected, since `'m` may be `imm`. -/
@@ -72,7 +86,9 @@ example (t : Ty) :
 is `mut`. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1)))) (.fn .mutable .unit .unit) :=
-  .letE (.new .int trivial) (.lam (fun _ _ h => h) (fun h => nomatch h) (.set (.var rfl) .int))
+  .letE (.new .int trivial) (.lam (fun _ _ h => h) (fun h => nomatch h)
+    (noRegion_ctx 0 _ ⟨trivial, trivial⟩ noRegion_empty) (fun _ h => by simp [Expr.HasLoc] at h)
+    (.set (.var rfl) .int))
 
 /-- It can't be `imm`: an `imm` closure only sees what's `imm` all the way
 down, and `c` is `mut`. -/
@@ -84,7 +100,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     cases h₁ with
     | new _ _ | newR _ _ =>
       cases h₂ with
-      | lam _ himm hb =>
+      | lam _ himm _ _ hb =>
         cases hb with
         | set hx _ | setR hx _ =>
           cases hx with
@@ -103,14 +119,16 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     cases h₂ with
     | new hl hd =>
       cases hl with
-      | lam _ _ _ => exact nomatch Le.none_immutable hd
+      | lam _ _ _ _ _ => exact nomatch Le.none_immutable hd
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new false (.int 1)) (.new false (.lam false 1 (.get (.var 0)))))
     (.cell .immutable (.fn .immutable .unit .int)) := by
-  refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_ (.get (.var rfl))) (.refl _))
+  refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_
+    (noRegion_ctx 0 _ ⟨trivial, trivial⟩ noRegion_empty) (fun _ h => by simp [Expr.HasLoc] at h)
+    (.get (.var rfl))) (.refl _))
   intro _ y s hy
   simp only [Ctx.update] at hy
   split at hy
@@ -216,7 +234,7 @@ theorem wrap_ok : FnsOk [wrap] := by
 example : HasType [wrap] [] .none false Ctx.empty
     (.call 0 [] [.cell .immutable .int] (.new false (.int 1))) (.cell .immutable (.cell .immutable .int)) := by
   show HasType _ _ _ _ _ _ (wrap.retTy.inst [] [.cell .immutable .int])
-  refine .call rfl ⟨?_, ?_, ?_⟩ (.new .int trivial)
+  refine .call rfl ⟨?_, ?_, ?_⟩ (noRegion_args _ _) (.new .int trivial)
   · intro p h; simp [wrap, wrapAssume] at h
   · intro p hp
     simp [wrap, wrapAssume] at hp
@@ -232,7 +250,7 @@ example (e : Expr) (t : Ty) :
     ¬ HasType [wrap] [] .none false Ctx.empty (.call 0 [] [.cell .mutable .int] e) t := by
   intro h
   cases h with
-  | call hf hs _ =>
+  | call hf hs _ _ =>
     simp at hf
     subst hf
     have := hs.2.1 (0, .immutable) (by simp [wrap, wrapAssume])

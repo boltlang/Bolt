@@ -78,7 +78,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
   | callCong _ ih =>
     intro σ t l ty hh ht hl
     cases ht with
-    | call _ _ he => exact ih hh he hl
+    | call _ _ _ he => exact ih hh he hl
   | callVal _ _ => intros; rfl
   | appCong₁ _ ih =>
     intro σ t l ty hh ht hl

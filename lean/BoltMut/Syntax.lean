@@ -125,6 +125,21 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .fst e, l => e.HasLoc l
   | .snd e, l => e.HasLoc l
 
+/-- A mutability that isn't a region. -/
+def Mu.NoRegion : Mu → Prop
+  | .region _ => False
+  | _ => True
+
+/-- A type that mentions no region. -/
+def Ty.NoRegion : Ty → Prop
+  | .unit | .int | .tparam _ => True
+  | .cell m t => m.NoRegion ∧ t.NoRegion
+  | .fn m a b => m.NoRegion ∧ a.NoRegion ∧ b.NoRegion
+  | .prod a b => a.NoRegion ∧ b.NoRegion
+
+/-- Arguments for a function's parameters that mention no region. -/
+def ArgsNoRegion (ms : List Mu) (τs : List Ty) : Prop := (∀ m ∈ ms, m.NoRegion) ∧ ∀ τ ∈ τs, τ.NoRegion
+
 /-- Replace the mutability parameters with `ms`; one without an argument
 becomes `imm`. -/
 def Mu.subst (ms : List Mu) : Mu → Mu

@@ -57,8 +57,12 @@ theorem HasType.retype {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
   | letE _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .letE (ih₁ hn.1) (ih₂ hn.2)
-  | call hf hs _ ih => exact .call hf hs (ih hn)
-  | lam hc himm _ ih => exact .lam hc himm (ih hn)
+  | call hf hs hr _ ih => exact .call hf hs hr (ih hn)
+  | lam hc himm hrc hrl _ ih =>
+    refine .lam hc himm hrc (fun k hk => ?_) (ih hn)
+    have hlk : l ≠ k := fun he => hn (he ▸ hk)
+    rw [List.getElem?_set_ne hlk]
+    exact hrl k hk
   | app _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .app (ih₁ hn.1) (ih₂ hn.2)
