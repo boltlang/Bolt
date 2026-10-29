@@ -1042,10 +1042,41 @@ fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList, o
                 ctx.diagnostics.push(LowerDiagnostic::MutField(f.type_ref));
             }
             let ty = ty.fold(&mut |t| (*t == Ty::Mutability(Mutability::Mut)).then(|| own.clone()));
-            (f.name.clone(), ty.fill_unwritten(&mut || own.clone()))
+            (f.name.clone(), fill_field(&ty, own, own))
         })
         .collect();
     FieldTypes { kind, fields, diagnostics: std::mem::take(&mut ctx.diagnostics) }
+}
+
+/// Replace the unwritten mutabilities of a field's type with `fill`: the
+/// struct's own, `own`, except inside an `imm` array or struct, where
+/// everything is `imm` anyway, so that `imm [Point]` is `imm [imm Point]`
+/// (#271). The parameters and result of a function type aren't held by it,
+/// so they get `own`.
+fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
+    let inner = |m: &Ty<'db>| if *m == Ty::Mutability(Mutability::Imm) { m.clone() } else { fill.clone() };
+    ty.fold(&mut |t| match t {
+        Ty::Unwritten => Some(fill.clone()),
+        Ty::Array(m, elem) => {
+            let m = fill_field(m, fill, own);
+            let elem = fill_field(elem, &inner(&m), own);
+            Some(Ty::array(m, elem))
+        }
+        Ty::Adt(id, args, ms, m) => {
+            let m = fill_field(m, fill, own);
+            // An enum is always `imm`, without saying so, and can hold an
+            // `Option[mut Point]`.
+            let held = if matches!(id, AdtId::Struct(_)) { inner(&m) } else { fill.clone() };
+            let args = args.iter().map(|a| fill_field(a, &held, own)).collect();
+            let ms = ms.iter().map(|a| fill_field(a, &held, own)).collect();
+            Some(Ty::Adt(*id, args, ms, Box::new(m)))
+        }
+        Ty::Fn(params, ret, m) => {
+            let params = params.iter().map(|p| fill_field(p, own, own)).collect();
+            Some(Ty::Fn(params, Box::new(fill_field(ret, own, own)), Box::new(fill_field(m, fill, own))))
+        }
+        _ => None,
+    })
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]

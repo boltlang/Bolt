@@ -282,6 +282,52 @@ error at `a.tags`: can't change imm [String]
 error at `b.items`: can't change imm [i32]
 
 ================================================================================
+What an imm field holds is imm, in a mut struct too
+:error
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Shape { id: i32, corners: imm [Point] }
+let s = mut Shape { id: 1, corners: [Point { x: 0, y: 0 }] };
+s.id = 2;
+s.corners = [Point { x: 1, y: 1 }];
+s.corners[0].x = 1;
+
+--------------------------------------------------------------------------------
+let s: mut Shape
+s.id = 2: ()
+s.corners = [Point { x: 1, y: 1 }]: ()
+s.corners[0].x = 1: ()
+--------------------------------------------------------------------------------
+error at `s.corners[0]`: can't change imm Point
+
+================================================================================
+A struct in an imm generic field is imm, and one in an enum follows the struct
+================================================================================
+struct Point { x: i32, y: i32 }
+struct Box[T] { item: T }
+enum Maybe[T] { Just(T), Nothing }
+struct Holder { a: Box[Point], b: imm Box[Point], c: Maybe[Point], f: imm fn(Point) -> i32 }
+fn get(p: Point) -> i32 = p.x;
+let h = mut Holder {
+  a: mut Box { item: mut Point { x: 0, y: 0 } },
+  b: Box { item: Point { x: 0, y: 0 } },
+  c: Maybe.Just(mut Point { x: 0, y: 0 }),
+  f: get,
+};
+h.a.item.x = 1;
+h.b;
+h.c;
+h.f;
+
+--------------------------------------------------------------------------------
+get: fn(Point) -> i32
+let h: mut Holder
+h.a.item.x = 1: ()
+h.b: imm Box[imm Point]
+h.c: Maybe[mut Point]
+h.f: fn(mut Point) -> i32
+
+================================================================================
 An imm generic struct can't hold a mut value
 :error
 ================================================================================
