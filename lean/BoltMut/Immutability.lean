@@ -28,6 +28,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     intro σ t l ty hh ht hl
     cases ht with
     | new he _ => exact ih hh he hl
+    | newR he _ => exact ih hh he hl
   | newVal _ =>
     intro σ t l ty hh _ hl
     exact List.getElem?_append_left (hh.lt hl)
@@ -40,10 +41,12 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     intro σ t l ty hh ht hl
     cases ht with
     | set he₁ _ => exact ih hh he₁ hl
+    | setR he₁ _ => exact ih hh he₁ hl
   | setCong₂ _ _ ih =>
     intro σ t l ty hh ht hl
     cases ht with
     | set _ he₂ => exact ih hh he₂ hl
+    | setR _ he₂ => exact ih hh he₂ hl
   | @setLoc l₀ v _ _ =>
     intro σ t l ty hh ht hl
     cases ht with
@@ -51,6 +54,16 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
       cases he₁ with
       | loc hσ _ =>
         -- The location written is `mut`, so it isn't `l`.
+        have hne : l₀ ≠ l := by
+          intro heq
+          subst heq
+          rw [hσ] at hl
+          cases hl
+        exact List.getElem?_set_ne hne
+    | setR he₁ _ =>
+      cases he₁ with
+      | loc hσ _ =>
+        -- Or it's in a region, so it isn't `l` either.
         have hne : l₀ ≠ l := by
           intro heq
           subst heq

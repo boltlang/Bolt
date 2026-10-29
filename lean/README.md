@@ -38,6 +38,7 @@ A small language with what matters for mutability:
 | a generic function, called with the arguments the checker finds | a top-level `Fn`, called as `call f ms τs e` with mutability and type arguments |
 | a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
+| a value a block makes, that nothing outside it has (#209) | a cell of the region `r`: `new true x` of type `cell (region r) t` |
 
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 
@@ -52,9 +53,13 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   a `T`, is rejected where it's made (#247), and is fine with that
   assumption. A call must meet the callee's assumptions with its arguments
   (`Sat`).
-- **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`. A
-  mutability parameter isn't enough, so a generic function can read what
-  it's given but not change it.
+- **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`, or a
+  cell of a region. A mutability parameter isn't enough, so a generic
+  function can read what it's given but not change it.
+- **Regions** (#209): `new true e` can make a cell of a region `r` instead
+  of a `mut` one. What it holds is at most `r`: `imm`, or of the same
+  region, so that it's `imm` all the way down once `r` is freed. Nothing
+  frees a region yet.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the

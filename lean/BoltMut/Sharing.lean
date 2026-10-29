@@ -11,8 +11,9 @@ Two runs are compared: one on a heap, and one on a heap where `imm`
 locations are laid out differently, like with a copy of one, or two equal
 ones merged. A *correspondence* `ρ` says which location of the first is
 which of the second (`Rel`, `Corr`). An `imm` location can correspond to
-several, but a `mut` one corresponds to exactly one, both ways: writing to
-it must be seen through every name for it, on both sides.
+several, but a `mut` one, or one of a region, corresponds to exactly one,
+both ways: writing to it must be seen through every name for it, on both
+sides.
 
 `steps_sim`: whatever the first run does, the second does too, step for
 step, with results that correspond. An integer is the same in both
@@ -137,8 +138,8 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih => exact ih hl
-  | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
+  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih => exact ih hl
+  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
 
 /-! ## Heaps that correspond -/
 
@@ -173,14 +174,14 @@ correspond. -/
 theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁' : Expr} (hs : Step fns h₁ e₁ h₁' e₁') :
     ∀ {σ : HeapTy} {t : Ty} {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {e₂ : Expr},
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
-      (∀ a t', σ[a]? = some (.mutable, t') → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁ e₂ →
+      (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁ e₂ →
       ∃ ρ' h₂' e₂', Step fns h₂ e₂ h₂' e₂' ∧ (∀ a c, ρ a c → ρ' a c) ∧
         Corr (fun a => M a ∨ h₁.length ≤ a) ρ' h₁' h₂' ∧ Rel ρ' e₁' e₂' := by
   induction hs with
   | newCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | new he _ =>
+    | new he _ | newR he _ =>
       cases hr with
       | new hr =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
@@ -235,7 +236,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | setCong₁ _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | set he₁ _ =>
+    | set he₁ _ | setR he₁ _ =>
       cases hr with
       | set hr₁ hr₂ =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
@@ -243,7 +244,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | setCong₂ hv _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | set _ he₂ =>
+    | set _ he₂ | setR _ he₂ =>
       cases hr with
       | set hr₁ hr₂ =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
@@ -251,10 +252,10 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | @setLoc l₀ v hl hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | set he₁ _ =>
+    | set he₁ _ | setR he₁ _ =>
       cases he₁ with
       | loc hσ _ =>
-        have hMl : M l₀ := hM _ _ hσ
+        have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
         cases hr with
         | @set _ _ _ v' hr₁ hr₂ =>
           cases hr₁ with
@@ -384,7 +385,7 @@ they still correspond. -/
 theorem steps_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁' : Expr} (hs : Steps fns h₁ e₁ h₁' e₁') :
     ∀ {σ : HeapTy} {t : Ty} {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {e₂ : Expr},
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
-      (∀ a t', σ[a]? = some (.mutable, t') → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁ e₂ →
+      (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁ e₂ →
       ∃ (M' : Nat → Prop) (ρ' : Nat → Nat → Prop) (h₂' : Heap) (e₂' : Expr),
         Steps fns h₂ e₂ h₂' e₂' ∧ Corr M' ρ' h₁' h₂' ∧ Rel ρ' e₁' e₂' := by
   induction hs with
@@ -395,14 +396,14 @@ theorem steps_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr'⟩ := step_sim hf s hh ht hM hc hr
     obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
-    -- What's `mut` after the step was `mut` before, or is new.
-    have hM' : ∀ a t', σ'[a]? = some (.mutable, t') → M a ∨ h₀.length ≤ a := by
-      intro a t' ha
+    -- What isn't `imm` after the step wasn't before, or is new.
+    have hM' : ∀ a m t', σ'[a]? = some (m, t') → m ≠ .immutable → M a ∨ h₀.length ≤ a := by
+      intro a m t' ha hm
       by_cases hlt : a < h₀.length
       · have hσ : a < σ.length := hh.1 ▸ hlt
         have hp : σ[a]? = some σ[a] := List.getElem?_eq_getElem hσ
         rw [hx a _ hp] at ha
-        exact .inl (hM a t' (hp.trans ha))
+        exact .inl (hM a m t' (hp.trans ha) hm)
       · exact .inr (by omega)
     obtain ⟨M'', ρ'', h₂'', e₂'', ss, hc'', hr''⟩ := ih hh' ht' hM' hc' hr'
     exact ⟨M'', ρ'', h₂'', e₂'', .step s₂ ss, hc'', hr''⟩
@@ -439,8 +440,8 @@ theorem imm_copy_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} 
     (hs : Steps fns h e₁ h' v₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (v₂ : Expr),
       Steps fns (h ++ [v]) e₂ h₂ v₂ ∧ Rel ρ v₁ v₂ ∧ ∀ n, v₁ = .int n → v₂ = .int n := by
-  let M : Nat → Prop := fun a => ∃ t', σ[a]? = some (.mutable, t')
-  have notM : ¬ M l := fun ⟨_, h'⟩ => by rw [hl] at h'; cases h'
+  let M : Nat → Prop := fun a => ∃ m t', σ[a]? = some (m, t') ∧ m ≠ .immutable
+  have notM : ¬ M l := fun ⟨_, _, h', hm⟩ => by rw [hl] at h'; cases h'; exact hm rfl
   have self : ∀ {a w}, h[a]? = some w → Rel (copyCorr h.length l) w w :=
     fun hw => hh.rel_self (fun _ ha => .inl ⟨rfl, ha⟩) hw
   have hc : Corr M (copyCorr h.length l) h (h ++ [v]) := by
@@ -462,7 +463,7 @@ theorem imm_copy_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} 
         · omega
         · exact (notM hMa).elim
       · exact (notM hMa).elim
-  obtain ⟨_, ρ, h₂, v₂, ss, _, hr'⟩ := steps_sim hf hs hh ht (fun _ t' h => ⟨t', h⟩) hc hr
+  obtain ⟨_, ρ, h₂, v₂, ss, _, hr'⟩ := steps_sim hf hs hh ht (fun _ m t' h hm => ⟨m, t', h, hm⟩) hc hr
   exact ⟨ρ, h₂, v₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
 
 /-- The correspondence of merging `l'` into `l`, in a heap of `n`
@@ -480,8 +481,9 @@ theorem imm_merge_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy}
     (hs : Steps fns h e₁ h' v₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (v₂ : Expr),
       Steps fns h e₂ h₂ v₂ ∧ Rel ρ v₁ v₂ ∧ ∀ n, v₁ = .int n → v₂ = .int n := by
-  let M : Nat → Prop := fun a => ∃ t', σ[a]? = some (.mutable, t')
-  have notM : ∀ {a m}, σ[a]? = some (.immutable, m) → ¬ M a := fun ha ⟨_, h'⟩ => by rw [ha] at h'; cases h'
+  let M : Nat → Prop := fun a => ∃ m t', σ[a]? = some (m, t') ∧ m ≠ .immutable
+  have notM : ∀ {a t}, σ[a]? = some (.immutable, t) → ¬ M a :=
+    fun ha ⟨_, _, h', hm⟩ => by rw [ha] at h'; cases h'; exact hm rfl
   have self : ∀ {a w}, h[a]? = some w → Rel (mergeCorr h.length l l') w w :=
     fun hw => hh.rel_self (fun _ ha => .inl ⟨rfl, ha⟩) hw
   have hc : Corr M (mergeCorr h.length l l') h h := by
@@ -505,7 +507,7 @@ theorem imm_merge_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy}
         · omega
         · exact (notM hl' hMa).elim
       · exact (notM hl' hMa).elim
-  obtain ⟨_, ρ, h₂, v₂, ss, _, hr'⟩ := steps_sim hf hs hh ht (fun _ t' h => ⟨t', h⟩) hc hr
+  obtain ⟨_, ρ, h₂, v₂, ss, _, hr'⟩ := steps_sim hf hs hh ht (fun _ m t' h hm => ⟨m, t', h, hm⟩) hc hr
   exact ⟨ρ, h₂, v₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
 
 end BoltMut

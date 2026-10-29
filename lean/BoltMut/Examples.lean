@@ -21,7 +21,7 @@ example (t : Ty) :
     cases h₁ with
     | new _ _ =>
       cases h₂ with
-      | set hx _ =>
+      | set hx _ | setR hx _ =>
         cases hx with
         | var hx => simp [Ctx.update, muOf] at hx
 
@@ -32,7 +32,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.new false (.new true
   cases h with
   | new hin hd =>
     cases hin with
-    | new _ _ => exact nomatch Le.none_immutable hd.1
+    | new _ _ | newR _ _ => exact nomatch Le.none_immutable hd.1
 
 /-- A generic function that reads what it's given:
 `fn first(xs: 'm [i32]) -> i32 = xs[0]`, with the mutability `'m` as its
@@ -62,7 +62,7 @@ example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int)) (.set (.var 0) (.int 1)) t := by
   intro h
   cases h with
-  | set hx _ =>
+  | set hx _ | setR hx _ =>
     cases hx with
     | var hx => simp [Ctx.update] at hx
 
@@ -82,11 +82,11 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   cases h with
   | letE h₁ h₂ =>
     cases h₁ with
-    | new _ _ =>
+    | new _ _ | newR _ _ =>
       cases h₂ with
       | lam _ himm hb =>
         cases hb with
-        | set hx _ =>
+        | set hx _ | setR hx _ =>
           cases hx with
           | var hx =>
             simp only [Ctx.update] at hx
@@ -142,11 +142,11 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   cases h with
   | letE h₁ h₂ =>
     cases h₁ with
-    | new hl _ =>
+    | new hl _ | newR hl _ =>
       cases hl with
       | pair hp₁ _ =>
         cases hp₁ with
-        | new _ _ =>
+        | new _ _ | newR _ _ =>
           cases h₂ with
           | new hp hd =>
             cases hp with

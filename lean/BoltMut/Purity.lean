@@ -64,7 +64,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | newCong _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | new he _ => exact ih hh he hn hc hhc
+    | new he _ | newR he _ => exact ih hh he hn hc hhc
   | @newVal e b _ =>
     intro σ t n A hh _ hn hc hhc
     refine ⟨fun l hl _ => List.getElem?_append_left (by omega), by simp; omega,
@@ -99,22 +99,23 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | setCong₁ _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | set he₁ _ =>
+    | set he₁ _ | setR he₁ _ =>
       obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
       exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
   | setCong₂ _ _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | set _ he₂ =>
+    | set _ he₂ | setR _ he₂ =>
       obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
       exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
   | @setLoc l₀ v hl _ =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | set he₁ _ =>
+    | set he₁ _ | setR he₁ _ =>
       cases he₁ with
       | loc hσ _ =>
-        -- The location written is `mut`, so it's new or allowed.
+        -- The location written is `mut` or in a region, so it's new or
+        -- allowed.
         have hw : n ≤ l₀ ∨ A l₀ := by
           rcases hc l₀ (.inl rfl) with h₁ | h₁ | ⟨t₀, ht₀⟩
           · exact .inl h₁

@@ -23,9 +23,11 @@ without a copy isn't a step of the program: it's giving the location
   `imm_never_changes`, for a program that's well-typed with the location
   `imm`.
 
-What's left for regions is the other half: that their typing makes sure
-nothing outside a block refers to its values when it ends, so that
-`HeapOk.free` applies. The two proofs after this one are #283, for
+A region's objects are made by `new true e` (rule `HasType.newR`) and
+changed by `set` (`HasType.setR`), like `mut` ones; what they hold is at
+most the region. What's left for regions is the other half: that their
+typing makes sure nothing outside a block refers to its values when it
+ends, so that `HeapOk.free` applies. The two proofs after this one are #283, for
 borrowed parameters, and #284, for unique values at their last use.
 -/
 
@@ -44,10 +46,14 @@ theorem HasType.retype {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
     have hk : l ≠ k := fun he => hn (by simp [Expr.HasLoc, he])
     exact .loc (by rw [List.getElem?_set_ne hk]; exact h) hio
   | new _ hd ih => exact .new (ih hn) hd
+  | newR _ hd ih => exact .newR (ih hn) hd
   | get _ ih => exact .get (ih hn)
   | set _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .set (ih₁ hn.1) (ih₂ hn.2)
+  | setR _ _ ih₁ ih₂ =>
+    simp only [Expr.HasLoc, not_or] at hn
+    exact .setR (ih₁ hn.1) (ih₂ hn.2)
   | letE _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .letE (ih₁ hn.1) (ih₂ hn.2)
@@ -92,7 +98,7 @@ theorem HeapOk.free {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ
     rw [List.getElem?_set_self hlt] at hk
     cases hk
     obtain ⟨_, _, v, hv, hval, htv⟩ := hok l .mutable t hl
-    exact ⟨.inr rfl, himm, v, hv, hval, htv.retype (hval.no_mut_loc htv himm hl) _⟩
+    exact ⟨.inr (.inl rfl), himm, v, hv, hval, htv.retype (hval.no_mut_loc htv himm hl) _⟩
   · rw [List.getElem?_set_ne hkl] at hk
     obtain ⟨hm, hat, v, hv, hval, htv⟩ := hok k m t'' hk
     exact ⟨hm, hat, v, hv, hval, htv.retype (hfree k v (Ne.symm hkl) hv) _⟩
@@ -176,6 +182,20 @@ theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .i
   · exact .inl h
   · cases h
   · exact .inr h
+
+/-- `let xs = [1] in r; xs[0] = 2`: an object of a region can be changed,
+like a `mut` one. -/
+example : HasType [] [] .none false Ctx.empty
+    (.letE 0 (.new true (.int 1)) (.set (.var 0) (.int 2))) .unit :=
+  .letE (.newR (r := 0) .int trivial) (.setR (.var rfl) .int)
+
+/-- But it can't hold a `mut` object, since it becomes `imm` when its region
+is freed: `[mut [1]] in r` is rejected. -/
+example : ¬ HasType [] [] .none false Ctx.empty
+    (.new true (.new true (.int 1))) (.cell (.region 0) (.cell .mutable .int)) := by
+  intro h
+  cases h with
+  | newR _ hd => exact nomatch Le.below_region hd.1
 
 /-- Freeing needs that nothing in the heap refers to the location. Here
 location 1, a `mut` cell, holds location 0, as `log.push(xs)` makes `log`

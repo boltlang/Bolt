@@ -11,19 +11,59 @@ holds a value whose type is `imm` all the way down.
 namespace BoltMut
 
 /-- The heap matches its typing: each location holds a value of its type,
-has `mut` or `imm` as its mutability (never a parameter), and holds a type
+has `mut`, `imm` or a region as its mutability (never a parameter), and holds a type
 that's at most its mutability: if it's `imm`, one that's `imm` all the way
 down. -/
 def HeapOk (fns : List Fn) (σ : HeapTy) (h : Heap) : Prop :=
   h.length = σ.length ∧
     ∀ (l : Nat) (m : Mu) (t : Ty), σ[l]? = some (m, t) →
-      (m = .mutable ∨ m = .immutable) ∧ AtMost .none m t ∧
+      (m = .mutable ∨ m = .immutable ∨ ∃ r, m = .region r) ∧ AtMost .none m t ∧
         ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ .none false Ctx.empty v t
 
 theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {l : Nat} {p : Mu × Ty}
     (hl : σ[l]? = some p) : l < h.length := by
   rw [hh.1]
   exact (List.getElem?_eq_some_iff.mp hl).1
+
+/-- Adding a location that holds a value of its type keeps the heap
+matching its typing. -/
+theorem HeapOk.alloc {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {m : Mu} {s : Ty} {v : Expr}
+    (hm : m = .mutable ∨ m = .immutable ∨ ∃ r, m = .region r) (hd : AtMost .none m s)
+    (hv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v s) :
+    HeapOk fns (σ ++ [(m, s)]) (h ++ [v]) := by
+  refine ⟨by simp [hh.1], ?_⟩
+  intro l m' t hl
+  by_cases hlt : l < σ.length
+  · rw [List.getElem?_append_left hlt] at hl
+    obtain ⟨hm', hd', w, hw, hval, hwt⟩ := hh.2 l m' t hl
+    refine ⟨hm', hd', w, ?_, hval, hwt.weaken_heap (Extends.append σ _)⟩
+    rw [List.getElem?_append_left (hh.1 ▸ hlt)]
+    exact hw
+  · have hlen : l = σ.length := by
+      have := (List.getElem?_eq_some_iff.mp hl).1
+      simp at this
+      omega
+    subst hlen
+    rw [List.getElem?_concat_length] at hl
+    cases hl
+    refine ⟨hm, hd, v, ?_, hv, hvt.weaken_heap (Extends.append σ _)⟩
+    rw [← hh.1, List.getElem?_concat_length]
+
+/-- Writing a value of its type to a location keeps the heap matching its
+typing. -/
+theorem HeapOk.write {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {l : Nat} {m : Mu} {t : Ty}
+    {v : Expr} (hσ : σ[l]? = some (m, t)) (hl : l < h.length) (hv : v.IsValue)
+    (hvt : HasType fns σ .none false Ctx.empty v t) : HeapOk fns σ (h.set l v) := by
+  refine ⟨by simp [hh.1], ?_⟩
+  intro l' m' t' hl'
+  by_cases heq : l = l'
+  · subst heq
+    rw [hσ] at hl'
+    cases hl'
+    obtain ⟨hm, hd, _⟩ := hh.2 _ _ _ hσ
+    exact ⟨hm, hd, v, List.getElem?_set_self hl, hv, hvt⟩
+  · obtain ⟨hm, hd, w, hw, hwv, hwt⟩ := hh.2 l' m' t' hl'
+    exact ⟨hm, hd, w, by rw [List.getElem?_set_ne heq]; exact hw, hwv, hwt⟩
 
 /-- A well-typed program that isn't a value can take a step. -/
 theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr} {t : Ty}
@@ -65,6 +105,17 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .newVal hv⟩
     · exact .inr ⟨_, _, .newCong hs⟩
+  | newR _ _ ih =>
+    rcases ih hΓ with hv | ⟨h', e', hs⟩
+    · exact .inr ⟨_, _, .newVal hv⟩
+    · exact .inr ⟨_, _, .newCong hs⟩
+  | setR he₁ _ ih₁ ih₂ =>
+    rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
+    · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
+      · obtain ⟨l, rfl, hl⟩ := canonical_cell hv₁ he₁
+        exact .inr ⟨_, _, .setLoc (hh.lt hl) hv₂⟩
+      · exact .inr ⟨_, _, .setCong₂ hv₁ hs⟩
+    · exact .inr ⟨_, _, .setCong₁ hs⟩
   | get he ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · obtain ⟨l, rfl, hl⟩ := canonical_cell hv he
@@ -100,31 +151,20 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     | new he hd =>
       obtain ⟨σ', hx, hh', he'⟩ := ih hh he
       exact ⟨σ', hx, hh', .new he' hd⟩
+    | newR he hd =>
+      obtain ⟨σ', hx, hh', he'⟩ := ih hh he
+      exact ⟨σ', hx, hh', .newR he' hd⟩
   | @newVal e b hv =>
     intro σ t hh ht
     cases ht with
     | @new _ _ _ s _ he hd =>
-      refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, ⟨?_, ?_⟩, .loc ?_ ?_⟩
-      · simp [hh.1]
-      · intro l m t hl
-        by_cases hlt : l < σ.length
-        · rw [List.getElem?_append_left hlt] at hl
-          obtain ⟨hm, hd', v, hv', hval, hvt⟩ := hh.2 l m t hl
-          refine ⟨hm, hd', v, ?_, hval, hvt.weaken_heap (Extends.append σ _)⟩
-          rw [List.getElem?_append_left (hh.1 ▸ hlt)]
-          exact hv'
-        · have hlen : l = σ.length := by
-            have := (List.getElem?_eq_some_iff.mp hl).1
-            simp at this
-            omega
-          subst hlen
-          rw [List.getElem?_concat_length] at hl
-          cases hl
-          refine ⟨muOf_cases b, hd, e, ?_, hv,
-            he.weaken_heap (Extends.append σ _)⟩
-          rw [← hh.1, List.getElem?_concat_length]
-      · rw [hh.1, List.getElem?_concat_length]
-      · exact fun h => nomatch h
+      refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, hh.alloc ((muOf_cases b).imp_right .inl) hd hv he,
+        .loc ?_ (fun h => nomatch h)⟩
+      rw [hh.1, List.getElem?_concat_length]
+    | @newR _ _ _ s r he hd =>
+      refine ⟨σ ++ [(.region r, s)], Extends.append σ _, hh.alloc (.inr (.inr ⟨r, rfl⟩)) hd hv he,
+        .loc ?_ (fun h => nomatch h)⟩
+      rw [hh.1, List.getElem?_concat_length]
   | getCong _ ih =>
     intro σ t hh ht
     cases ht with
@@ -147,28 +187,27 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     | set he₁ he₂ =>
       obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
       exact ⟨σ', hx, hh', .set he₁' (he₂.weaken_heap hx)⟩
+    | setR he₁ he₂ =>
+      obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
+      exact ⟨σ', hx, hh', .setR he₁' (he₂.weaken_heap hx)⟩
   | setCong₂ _ _ ih =>
     intro σ t hh ht
     cases ht with
     | set he₁ he₂ =>
       obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
       exact ⟨σ', hx, hh', .set (he₁.weaken_heap hx) he₂'⟩
+    | setR he₁ he₂ =>
+      obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
+      exact ⟨σ', hx, hh', .setR (he₁.weaken_heap hx) he₂'⟩
   | @setLoc l v hl hv =>
     intro σ t hh ht
     cases ht with
     | set he₁ he₂ =>
       cases he₁ with
-      | loc hσ _ =>
-        refine ⟨σ, Extends.refl σ, ⟨by simp [hh.1], ?_⟩, .unit⟩
-        intro l' m t' hl'
-        by_cases heq : l = l'
-        · subst heq
-          rw [hσ] at hl'
-          cases hl'
-          obtain ⟨_, hd, _⟩ := hh.2 _ _ _ hσ
-          exact ⟨.inl rfl, hd, v, List.getElem?_set_self hl, hv, he₂⟩
-        · obtain ⟨hm, hd, w, hw, hwv, hwt⟩ := hh.2 l' m t' hl'
-          exact ⟨hm, hd, w, by rw [List.getElem?_set_ne heq]; exact hw, hwv, hwt⟩
+      | loc hσ _ => exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit⟩
+    | setR he₁ he₂ =>
+      cases he₁ with
+      | loc hσ _ => exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit⟩
   | letCong _ ih =>
     intro σ t hh ht
     cases ht with
