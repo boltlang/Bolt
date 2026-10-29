@@ -176,8 +176,12 @@ pub fn unmet_assoc_equalities<'db>(
             let actual = solver.new_var(VarKind::General);
             let constraint = AssocConstraint { alias: equality.alias, args, ty: actual.clone() };
             solver.add(Constraint::Assoc { constraint, origin });
+            // What it must be, under the same assumptions: with `A: Iterable`,
+            // `A.Iter.Item` is `A.Item` on both sides.
+            let expected = solver.flatten_assoc(&expected, origin);
             solver.solve();
             let actual = solver.unifier.resolve(&actual);
+            let expected = solver.unifier.resolve(&expected);
             // Not decided, because the bound that gives it isn't met, which
             // is reported on its own.
             if matches!(actual, Ty::Var(_) | Ty::Error) || !solver.errors.is_empty() {

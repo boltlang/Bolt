@@ -1042,6 +1042,33 @@ impl[T, I] Coll[(T, I, I)] where Iter2[I] { type Item = T; type It = I; }
     );
 }
 
+/// An impl's own bounds count for what a bound says an associated type
+/// is: with `A: Iterable`, `A.Iter.Item` is `A.Item`, on both sides of
+/// `Item = Item`. Without errors.
+#[test]
+fn what_bounds_of_associated_types_say_holds_with_an_impl_s_own_bounds() {
+    check(
+        r#"
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+class Iterable[C] { type Item = Iter.Item; type Iter: Iterator[Item = Item]; fn iter(c: C) -> Iter; }
+struct ZipIter[A: Iterator, B: Iterator] { first: A, second: B }
+impl[A: Iterator, B: Iterator] Iterator[ZipIter[A, B]] {
+  type Item = (A.Item, B.Item);
+  fn next(it) = match (next(it.first), next(it.second)) {
+    (Option.Some(a), Option.Some(b)) => Option.Some((a, b)),
+    _ => Option.None,
+  };
+}
+struct Zipper[A: Iterable, B: Iterable] { first: A, second: B }
+impl[A: Iterable, B: Iterable] Iterable[Zipper[A, B]] {
+  type Iter = mut ZipIter[A.Iter, B.Iter];
+  fn iter(z) = mut ZipIter { first: iter(z.first), second: iter(z.second) };
+}
+"#,
+    );
+}
+
 #[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
