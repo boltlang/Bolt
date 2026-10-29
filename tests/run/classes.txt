@@ -39,6 +39,7 @@ fn twice[T](x: T) -> (String, String) where Describe[T] = (describe(x), describe
 ================================================================================
 A generic impl calls the impl of its parameter
 :todo wasm
+:prelude
 ================================================================================
 class Describe[T] { fn describe(x: T) -> String; }
 impl Describe[i32] { fn describe(x) = "a number"; }
@@ -93,6 +94,7 @@ let b: String = ZERO;
 ================================================================================
 An associated type
 :todo wasm
+:prelude
 ================================================================================
 class Index[C] {
   type Item;
@@ -112,6 +114,7 @@ let s = Stack { items: [True, False] };
 ================================================================================
 Looping over a type with its own iterator
 :todo wasm
+:prelude
 ================================================================================
 struct Countdown { from: i32 }
 struct CountdownIter { left: [i32] }
@@ -142,6 +145,7 @@ seen;
 ================================================================================
 Looping over an iterator made from a function
 :todo wasm
+:prelude
 ================================================================================
 let mut n = 0;
 let it = mut FnIter {

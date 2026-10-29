@@ -30,6 +30,7 @@ Blue
 
 ================================================================================
 Variants imported into scope
+:prelude
 ================================================================================
 enum Color { Red, Green, Blue }
 import Color.*;
@@ -94,6 +95,7 @@ area(Shape.Square(2.0)) + area(Shape.Circle(1.0));
 ================================================================================
 Option from the prelude
 :todo wasm
+:prelude
 ================================================================================
 fn safe_div(a: i32, b: i32) -> Option[i32] = if b == 0 { None } else { Some(a / b) };
 match safe_div(7, 2) { Some(n) => n, None => -1 };

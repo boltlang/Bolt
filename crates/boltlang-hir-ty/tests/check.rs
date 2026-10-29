@@ -27,8 +27,10 @@
 //! `//- /lib.bolt`, so that they can import each other. Without such lines,
 //! the code is `/main.bolt`. With several files, each line of the output
 //! starts with the path of its file, like `/lib.bolt: id: fn(a) -> a`.
-//! As in the compiler, files get the prelude of `std` when there's one, so a
-//! case can have one in `/toolchain/std/__prelude__/lib.bolt`.
+//! Files get no prelude, unless the case has the attribute `:prelude`: then
+//! they get the prelude of `std`, as in the compiler. That's the
+//! repository's, or the case's own in `/toolchain/std/__prelude__/lib.bolt`.
+//! Without it, a case can define its own copies of the prelude's names.
 //!
 //! Run a single case with `cargo test --test check mutual_recursion`. To
 //! write what the checker finds into the files instead of comparing it, run
@@ -88,6 +90,8 @@ struct Attributes {
     skip: bool,
     todo: bool,
     error: bool,
+    /// Whether the files get the prelude.
+    prelude: bool,
 }
 
 impl Attributes {
@@ -98,9 +102,11 @@ impl Attributes {
                 "skip" => attributes.skip = true,
                 "todo" => attributes.todo = true,
                 "error" => attributes.error = true,
+                "prelude" => attributes.prelude = true,
                 other => {
                     return Err(format!(
-                        "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo` and `:error`",
+                        "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo`, `:error` and \
+                         `:prelude`",
                         case.title
                     ));
                 }
@@ -123,10 +129,10 @@ fn expected(case: &Case) -> (String, String) {
 /// The types of the functions in the files of a case and of their
 /// top-level statements, and the diagnostics, each with the code it's
 /// about. With several files, each line starts with the path of its file.
-fn check(input: &str) -> Result<(String, String), String> {
+fn check(input: &str, prelude: bool) -> Result<(String, String), String> {
     let mut db = TestDb::new();
-    // As in the compiler, the prelude is the one of `std`, if there is one.
-    db.set_prelude(Some("std"), false);
+    // With `:prelude`, as in the compiler, the prelude is the one of `std`.
+    db.set_prelude(prelude.then_some("std"), false);
     let files = split_files(input)?;
     // A case without a `std` of its own, in `/toolchain/std`, gets the
     // repository's there, whose types aren't shown.
@@ -429,7 +435,8 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
 /// What the checker finds for a case, or why it couldn't check it: its
 /// files are wrong, or it panicked.
 fn check_caught(case: &Case) -> Result<(String, String), String> {
-    catch("the checker", || check(&case.input))
+    let prelude = Attributes::parse(case)?.prelude;
+    catch("the checker", || check(&case.input, prelude))
 }
 
 fn run(case: &Case, attributes: &Attributes) -> Result<(), Failed> {

@@ -1,5 +1,6 @@
 ================================================================================
 The prelude can be used without importing it
+:prelude
 ================================================================================
 //- /toolchain/std/__prelude__/option.bolt
 pub enum Option[T] { Some(T), None }
@@ -40,6 +41,7 @@ first(True, False);
 
 ================================================================================
 Instances in the prelude are found
+:prelude
 ================================================================================
 //- /toolchain/std/__prelude__/lib.bolt
 pub class Show[T] { fn show(x: T) -> String; }
@@ -52,6 +54,7 @@ show(1);
 
 ================================================================================
 The names of the prelude aren't re-exported
+:prelude
 ================================================================================
 //- /toolchain/std/__prelude__/lib.bolt
 pub fn id[T](x: T) -> T = x;
