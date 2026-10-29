@@ -65,7 +65,20 @@ impl TestDb {
     /// Add the repository's `std` as the one that comes with the compiler,
     /// at [`TestDb::STD_DIR`].
     pub fn add_std(&mut self) {
-        let std = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
+        self.add_std_from("../../packages/std");
+    }
+
+    /// Add the small `std` of the tests, `tests/std`, whose prelude only has
+    /// the classes that syntax uses and a few built-ins, as the one that
+    /// comes with the compiler.
+    pub fn add_test_std(&mut self) {
+        self.add_std_from("../../tests/std");
+    }
+
+    /// Add the directory `dir` of the repository, relative to this crate, as
+    /// the `std` that comes with the compiler.
+    fn add_std_from(&mut self, dir: &str) {
+        let std = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(dir);
         self.add_dir(&std, Self::STD_DIR);
         Settings::change_std_dir(self, Some(crate::SystemPathBuf::from(Self::STD_DIR)));
     }

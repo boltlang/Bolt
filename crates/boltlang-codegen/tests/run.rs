@@ -43,6 +43,9 @@
 //! - `:skip wasm`, `:skip eval` and `:skip`: never run, for programs that
 //!   crash or hang.
 //! - `:prelude`: the program gets the prelude of `packages/std`.
+//! - `:test-prelude`: the program gets the small prelude of `tests/std`,
+//!   with only the classes that `xs[i]`, `xs[i] = x` and `for` use and a few
+//!   built-ins, so that it doesn't change when `std` does.
 //! - `:fuel N`: stop after about `N` steps, instead of ten million. The
 //!   evaluator counts expressions and compiled code counts instructions,
 //!   so only use it for programs that run out of fuel either way.
@@ -90,13 +93,15 @@ struct Attributes {
     eval: Status,
     wasm: Status,
     fuel: u64,
-    /// Whether the program gets the prelude.
+    /// Whether the program gets a prelude, and the small one of `tests/std`
+    /// rather than that of `packages/std`.
     prelude: bool,
+    test_prelude: bool,
 }
 
 impl Attributes {
     fn parse(case: &Case) -> Result<Self, String> {
-        let mut attributes = Attributes { eval: Status::Run, wasm: Status::Run, fuel: 10_000_000, prelude: false };
+        let mut attributes = Attributes { eval: Status::Run, wasm: Status::Run, fuel: 10_000_000, prelude: false, test_prelude: false };
         for attribute in &case.attributes {
             let mut words = attribute.split_whitespace();
             let status = match words.next() {
@@ -104,6 +109,11 @@ impl Attributes {
                 Some("skip") => Status::Skip,
                 Some("prelude") => {
                     attributes.prelude = true;
+                    continue;
+                }
+                Some("test-prelude") => {
+                    attributes.prelude = true;
+                    attributes.test_prelude = true;
                     continue;
                 }
                 Some("fuel") => {
@@ -115,8 +125,8 @@ impl Attributes {
                 }
                 _ => {
                     return Err(format!(
-                        "`{}`: unknown attribute `:{attribute}`; the attributes are `:todo`, `:skip`, `:fuel` and \
-                         `:prelude`, the first two optionally followed by `eval` or `wasm`",
+                        "`{}`: unknown attribute `:{attribute}`; the attributes are `:todo`, `:skip`, `:fuel`, \
+                         `:prelude` and `:test-prelude`, the first two optionally followed by `eval` or `wasm`",
                         case.title
                     ));
                 }
@@ -151,9 +161,13 @@ impl Attributes {
 
 /// A database with the files of a case and `std`, with its prelude if the
 /// case asks for it, and the program's file.
-fn database(case: &Case, prelude: bool) -> Result<(TestDb, File), String> {
+fn database(case: &Case, prelude: bool, test_prelude: bool) -> Result<(TestDb, File), String> {
     let mut db = TestDb::new();
-    db.add_std();
+    if test_prelude {
+        db.add_test_std();
+    } else {
+        db.add_std();
+    }
     db.set_prelude(prelude.then_some("std"), prelude);
     let files: Vec<_> =
         split_files(&case.input)?.into_iter().map(|(path, text)| (path.clone(), db.file(&path, &text))).collect();
@@ -184,7 +198,7 @@ fn database(case: &Case, prelude: bool) -> Result<(TestDb, File), String> {
 
 /// What running a case with `backend` prints, as in the corpus.
 fn output(case: &Case, attributes: &Attributes, backend: Backend) -> Result<String, String> {
-    let (db, file) = database(case, attributes.prelude)?;
+    let (db, file) = database(case, attributes.prelude, attributes.test_prelude)?;
     let printed = Recorder::default();
     let result = match backend {
         Backend::Eval => {

@@ -30,7 +30,10 @@
 //! Files get no prelude, unless the case has the attribute `:prelude`: then
 //! they get the prelude of `std`, as in the compiler. That's the
 //! repository's, or the case's own in `/toolchain/std/__prelude__/lib.bolt`.
-//! Without it, a case can define its own copies of the prelude's names.
+//! With `:test-prelude`, it's the small one of `tests/std`, with only the
+//! classes that `xs[i]`, `xs[i] = x` and `for` use and a few built-ins, so
+//! that a case doesn't change when `std` does. Without either, a case can
+//! define its own copies of the prelude's names.
 //!
 //! Run a single case with `cargo test --test check mutual_recursion`. To
 //! write what the checker finds into the files instead of comparing it, run
@@ -90,8 +93,19 @@ struct Attributes {
     skip: bool,
     todo: bool,
     error: bool,
-    /// Whether the files get the prelude.
-    prelude: bool,
+    /// The prelude the files get.
+    prelude: Prelude,
+}
+
+/// The prelude of a case.
+#[derive(Default, Clone, Copy, PartialEq, Eq)]
+enum Prelude {
+    #[default]
+    None,
+    /// That of the repository's `std`, with `:prelude`.
+    Std,
+    /// The small one of `tests/std`, with `:test-prelude`.
+    Test,
 }
 
 impl Attributes {
@@ -102,11 +116,12 @@ impl Attributes {
                 "skip" => attributes.skip = true,
                 "todo" => attributes.todo = true,
                 "error" => attributes.error = true,
-                "prelude" => attributes.prelude = true,
+                "prelude" => attributes.prelude = Prelude::Std,
+                "test-prelude" => attributes.prelude = Prelude::Test,
                 other => {
                     return Err(format!(
-                        "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo`, `:error` and \
-                         `:prelude`",
+                        "`{}`: unknown attribute `:{other}`; the attributes are `:skip`, `:todo`, `:error`, \
+                         `:prelude` and `:test-prelude`",
                         case.title
                     ));
                 }
@@ -129,15 +144,17 @@ fn expected(case: &Case) -> (String, String) {
 /// The types of the functions in the files of a case and of their
 /// top-level statements, and the diagnostics, each with the code it's
 /// about. With several files, each line starts with the path of its file.
-fn check(input: &str, prelude: bool) -> Result<(String, String), String> {
+fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
     let mut db = TestDb::new();
     // With `:prelude`, as in the compiler, the prelude is the one of `std`.
-    db.set_prelude(prelude.then_some("std"), false);
+    db.set_prelude((prelude != Prelude::None).then_some("std"), false);
     let files = split_files(input)?;
     // A case without a `std` of its own, in `/toolchain/std`, gets the
     // repository's there, whose types aren't shown.
     if files.iter().any(|(path, _)| path.starts_with(&format!("{}/", TestDb::STD_DIR))) {
         Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
+    } else if prelude == Prelude::Test {
+        db.add_test_std();
     } else {
         db.add_std();
     }

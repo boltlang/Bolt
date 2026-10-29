@@ -1,0 +1,93 @@
+// A small prelude for the tests in `tests/`, which a case gets with the
+// attribute `:test-prelude`: the classes that syntax uses, `xs[i]`,
+// `xs[i] = x` and `for x in xs`, with their impls for arrays, and a few
+// functions the compiler provides. It's a copy of what `packages/std` has
+// of them, so that a case that only needs these doesn't change when `std`
+// does.
+
+extern "bolt" {
+
+  /// Write `text` and a newline.
+  pub fn print(text: String);
+
+  /// Stop the program with an error, with `message`.
+  pub fn panic(message: String) -> !;
+
+  /// The number of elements of `xs`.
+  pub fn array_len[T](xs: [T]) -> i32;
+
+  pub(package) fn array_get[T](xs: [T], i: i32) -> T;
+
+  pub(package) fn array_set[T](xs: mut [T], i: i32, x: T);
+
+}
+
+pub enum Option[T] {
+  None,
+  Some(T),
+}
+
+pub import Option.*;
+
+/// Types whose elements can be read by position, with `c[i]`.
+pub class Index[C] {
+  type Item;
+  fn index(c: C, i: i32) -> Item;
+}
+
+/// Types whose elements can be replaced by position, with `c[i] = x`.
+pub class IndexMut[C] where Index[C] {
+  fn set_index(c: C, i: i32, x: C.Item);
+}
+
+/// Types that give their items one at a time, until there are none left.
+pub class Iterator[I] {
+  type Item;
+  fn next(it: I) -> Option[Item];
+}
+
+/// Types that can be looped over with `for x in c`.
+pub class Iterable[C] {
+  type Iter: Iterator;
+  fn iter(c: C) -> Iter;
+}
+
+/// An iterator made from a function that gives the next item each time
+/// it's called.
+pub struct FnIter[T] {
+  next: fn() -> Option[T],
+}
+
+impl[T] Iterator[FnIter[T]] {
+  type Item = T;
+  fn next(it) = (it.next)();
+}
+
+impl[T] Iterable['m FnIter[T]] {
+  type Iter = 'm FnIter[T];
+  fn iter(it) = it;
+}
+
+impl[T] Index[[T]] {
+  type Item = T;
+  fn index(xs, i) = array_get(xs, i);
+}
+
+impl[T] IndexMut[mut [T]] {
+  fn set_index(xs, i, x) = array_set(xs, i, x);
+}
+
+impl[T] Iterable[[T]] {
+  type Iter = mut FnIter[T];
+  fn iter(xs) {
+    let mut next = 0;
+    mut FnIter {
+      next: || if next < array_len(xs) {
+        next += 1;
+        Some(array_get(xs, next - 1))
+      } else {
+        None
+      },
+    }
+  }
+}
