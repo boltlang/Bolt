@@ -133,6 +133,35 @@ turn_right(West);
 North
 ```
 
+## Functions of a type
+
+A function can be put in the namespace of a struct or enum, by writing the
+type's name and a `.` before the function's name. It's called the same way,
+like a variant:
+
+```bolt
+struct Point { x: i32, y: i32 }
+
+fn Point.origin() -> Point = Point { x: 0, y: 0 };
+fn Point.at(x: i32, y: i32) -> Point = Point { x, y };
+
+let p = Point.at(3, 4);
+(Point.origin().x, p.y);
+```
+
+```text
+(0, 4)
+```
+
+This is useful for functions that make a value of the type, so that
+`Point.origin` and, say, `Line.origin` don't need different names. The name
+is only in the type's namespace: `origin` on its own still means whatever
+else has that name.
+
+Only the file that defines a type can add functions to it. They're
+private like other items, unless you write `pub`, and they come along when
+you import the type.
+
 ## Generic types
 
 Structs and enums can have *type parameters*, between `[` and `]`, so that

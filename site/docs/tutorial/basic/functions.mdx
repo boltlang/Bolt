@@ -272,7 +272,9 @@ fn halve(n: i32) -> i32 = n / 2;
 ```
 
 Unlike in many languages, functions don't belong to a type: any function in
-scope can be called this way.
+scope can be called this way. A function in the namespace of a type, like
+`Point.at` (see [Functions of a type](./data-types.mdx#functions-of-a-type)),
+isn't in scope by its name alone, so it's called by its path.
 
 ## Custom operators
 
