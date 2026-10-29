@@ -351,3 +351,44 @@ first: forall C. Iterable[C] => fn(C) -> Option[C.Item]
 first_inferred: forall a. Iterable[a] => fn(a) -> Option[a.Iter.Item]
 first(Bag { n: 1 }): Option[i32]
 first_inferred(Bag { n: 1 }): Option[i32]
+
+================================================================================
+An impl that doesn't give an associated type gets the class's default
+:error
+================================================================================
+class Coll[C] { type Item = i32; fn first(c: C) -> Item; }
+struct Bag { n: i32 }
+impl Coll[Bag] { fn first(c) = c.n; }
+fn get[C: Coll](c: C) -> C.Item = first(c);
+get(Bag { n: 1 });
+let b: Bool = first(Bag { n: 1 });
+--------------------------------------------------------------------------------
+Coll[Bag].first: fn(Bag) -> i32
+get: forall C. Coll[C] => fn(C) -> C.Item
+get(Bag { n: 1 }): i32
+let b: Bool
+--------------------------------------------------------------------------------
+error at `first(Bag { n: 1 })`: expected Bool, found i32
+
+================================================================================
+A default of an associated type can use the class's other ones
+:error
+================================================================================
+enum Option[T] { None, Some(T) }
+class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
+class Iterable[C] { type Iter: Iterator[Item = Item]; type Item = Iter.Item; fn iter(c: C) -> Iter; }
+struct Ints { n: i32 }
+impl Iterator[Ints] { type Item = i32; fn next(it) = Option.Some(it.n); }
+struct Bag { n: i32 }
+impl Iterable[Bag] { type Iter = Ints; fn iter(b) = Ints { n: b.n }; }
+fn first[C: Iterable](c: C) -> Option[C.Item] = next(iter(c));
+first(Bag { n: 1 });
+let y: Option[Bool] = first(Bag { n: 1 });
+--------------------------------------------------------------------------------
+Iterator[Ints].next: fn(Ints) -> Option[i32]
+Iterable[Bag].iter: fn(Bag) -> imm Ints
+first: forall C. Iterable[C] => fn(C) -> Option[C.Item]
+first(Bag { n: 1 }): Option[i32]
+let y: Option[Bool]
+--------------------------------------------------------------------------------
+error at `first(Bag { n: 1 })`: expected Option[Bool], found Option[i32]

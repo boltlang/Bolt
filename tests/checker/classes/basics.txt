@@ -225,7 +225,6 @@ show(1): String
 error at `Show[i32]`: overlaps the impl for Show[T]
 error at `show`: ambiguous
 
-
 ================================================================================
 Impls whose instances no types fit both don't overlap
 ================================================================================
@@ -273,6 +272,7 @@ impl Size[[Bool]] { fn size(x) = 2; }
 /main.bolt: Size[[Bool]].size: fn([Bool]) -> i32
 --------------------------------------------------------------------------------
 /main.bolt: error at `Size[[Bool]]`: overlaps the impl for Size[[T]]
+
 ================================================================================
 An impl method with the wrong number of parameters
 :todo

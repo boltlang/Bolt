@@ -187,6 +187,13 @@ which `solve_assoc` solves as soon as it can:
 - Otherwise it waits. One left when an inferred function is generalized
   stays in its type, like `a.Item = Bool`.
 
+An impl that doesn't give an associated type gets the class's default, like
+the `i32` of `type Item = i32;`, with the class's parameters and its other
+associated types replaced by the impl's (`impl_assoc_ty`): the default
+`type Item = Iter.Item;` is the `Item` of the impl's `Iter`. Inside the
+class, an associated type is always its projection, like `C.Item`, even
+with a default, since an impl can give another type.
+
 A bound or `where` clause can say what an associated type is, like the
 `Item = T` of `I: Iterator[Item = T]`. Lowering keeps those as
 `Predicates::equalities`, next to the class constraints. Inside the

@@ -134,6 +134,8 @@ pub struct TyLoweringContext<'a, 'db> {
     /// Item` of `type Iter: Iterator[Item = Item];`, besides in the
     /// predicates of functions and impls.
     allow_equalities: bool,
+    /// The associated type whose bounds are being lowered, if any.
+    bounds_of: Option<TypeAliasId<'db>>,
     pub diagnostics: Vec<LowerDiagnostic>,
 }
 
@@ -149,6 +151,7 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             at_most: Vec::new(),
             equalities: Vec::new(),
             allow_equalities: false,
+            bounds_of: None,
             diagnostics: Vec::new(),
         }
     }
@@ -411,21 +414,23 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     fn lower_alias(&mut self, id: TypeRefId, alias: TypeAliasId<'db>, args: &[GenericArg]) -> (Ty<'db>, Option<Kind>) {
         let kinds = generic_param_kinds(self.db, GenericDefId::TypeAlias(alias));
         let args = self.lower_exact_args(id, args, &kinds);
+        // An associated type of a class, named from inside the class: `Item`
+        // in `class Index[C]` is `C.Item`, whichever type the impl gives it,
+        // even with a default like `type Item = i32;`, which is only what an
+        // impl that doesn't say gets.
+        if let ItemContainerId::Class(class) = alias.container(self.db) {
+            return (Ty::Assoc(alias, identity_args(self.db, GenericDefId::Class(class))), Some(Kind::Type));
+        }
         let ty = match &type_alias_ty(self.db, alias).ty {
             Some(ty) if *ty == Ty::Error && type_alias_ty(self.db, alias).recursive => {
                 self.diagnostics.push(LowerDiagnostic::RecursiveAlias(id));
                 Ty::Error
             }
             Some(ty) => subst_params(ty, GenericDefId::TypeAlias(alias), &args),
-            // An associated type of a class, named from inside the class:
-            // `Item` in `class Index[C]` is `C.Item`.
-            None => match alias.container(self.db) {
-                ItemContainerId::Class(class) => Ty::Assoc(alias, identity_args(self.db, GenericDefId::Class(class))),
-                _ => {
-                    self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                    Ty::Error
-                }
-            },
+            None => {
+                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                Ty::Error
+            }
         };
         (ty, Some(Kind::Type))
     }
@@ -438,24 +443,42 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     fn lower_assoc_path(&mut self, id: TypeRefId, path: &Path, head: TypeNs<'db>, unresolved: usize) -> Ty<'db> {
         let db = self.db;
         let segments = &path.segments[unresolved..];
-        let TypeNs::GenericParam { def, index } = head else {
-            self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-            return Ty::Error;
-        };
         if segments.iter().any(|s| s.generic_args.is_some()) {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return Ty::Error;
         }
-        let constraints = if self.predicates_of == Some(def) {
-            with_superclasses(db, self.lowered.clone())
-        } else {
-            constraints_on(db, def)
+        let (mut target, constraints) = match head {
+            TypeNs::GenericParam { def, index } => {
+                let constraints = if self.predicates_of == Some(def) {
+                    with_superclasses(db, self.lowered.clone())
+                } else {
+                    constraints_on(db, def)
+                };
+                (Ty::Param(GenericParamId { def, index }), constraints)
+            }
+            // `Iter.Item` inside `class Iterable[C]`, like in the default
+            // `type Item = Iter.Item;`: `C.Iter.Item`, from the classes that
+            // the bounds of `Iter` give it. Not in those bounds themselves,
+            // which would need themselves.
+            TypeNs::TypeAlias(alias) if self.bounds_of != Some(alias) => match alias.container(db) {
+                ItemContainerId::Class(class) => {
+                    let target = Ty::Assoc(alias, identity_args(db, GenericDefId::Class(class)));
+                    (target, with_superclasses(db, assoc_type_bounds(db, alias).predicates.to_vec()))
+                }
+                _ => {
+                    self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                    return Ty::Error;
+                }
+            },
+            _ => {
+                self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                return Ty::Error;
+            }
         };
         // Each name is an associated type of the type before it, like the
         // `Item` of `C.Iter` in `C.Iter.Item`, from a class that type has an
         // instance of: those of `C`, or the bounds of the associated types of
         // their classes, like `Iterator[C.Iter]` for `type Iter: Iterator;`.
-        let mut target = Ty::Param(GenericParamId { def, index });
         for segment in segments {
             let mut found: Vec<(TypeAliasId<'db>, Box<[Ty<'db>]>)> = Vec::new();
             for constraint in &constraints {
@@ -808,6 +831,7 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
     // `type Iter: Iterator[Item = Item];`: what `C.Iter.Item` is, for every
     // impl of the class.
     ctx.allow_equalities = true;
+    ctx.bounds_of = Some(alias);
     let target = Ty::Assoc(alias, identity_args(db, GenericDefId::Class(class)));
     let mut predicates = Vec::new();
     let mut sources = Vec::new();
@@ -843,17 +867,49 @@ pub fn assoc_type<'db>(db: &'db dyn Db, class: ClassId<'db>, name: &Name) -> Opt
 /// it without `mut` or `imm` is `imm`, as in the return type of a function
 /// without a body.
 pub fn impl_assoc_ty<'db>(db: &'db dyn Db, imp: ImplId<'db>, alias: TypeAliasId<'db>) -> Option<Ty<'db>> {
+    impl_assoc_ty_seen(db, imp, alias, &mut Vec::new())
+}
+
+/// [`impl_assoc_ty`], with the class's default when the impl doesn't give
+/// one, like the `i32` of `type Item = i32;`. A default can use the class's
+/// other associated types, like `type Item = Iter.Item;`, which are the
+/// impl's. `seen` are the defaults being found, so that defaults that refer
+/// to each other are the error type.
+fn impl_assoc_ty_seen<'db>(
+    db: &'db dyn Db,
+    imp: ImplId<'db>,
+    alias: TypeAliasId<'db>,
+    seen: &mut Vec<TypeAliasId<'db>>,
+) -> Option<Ty<'db>> {
     let name = alias.item(db).name.as_ref()?;
-    imp.item(db).items.iter().find_map(|item| match *item {
+    let own = imp.item(db).items.iter().find_map(|item| match *item {
         AssocItem::TypeAlias(idx) => {
             let own = TypeAliasId::new(db, ItemContainerId::Impl(imp), idx);
-            if own.item(db).name.as_ref() != Some(name) {
-                return None;
-            }
-            type_alias_ty(db, own).ty.as_ref().map(|t| t.fill_unwritten(&mut imm))
+            (own.item(db).name.as_ref() == Some(name)).then_some(own)
         }
         _ => None,
-    })
+    });
+    if let Some(own) = own {
+        return type_alias_ty(db, own).ty.as_ref().map(|t| t.fill_unwritten(&mut imm));
+    }
+    let ItemContainerId::Class(class) = alias.container(db) else { return None };
+    let default = type_alias_ty(db, alias).ty.clone()?;
+    let target = impl_header(db, imp).class.clone()?;
+    if target.class != class {
+        return None;
+    }
+    if seen.contains(&alias) {
+        return Some(Ty::Error);
+    }
+    seen.push(alias);
+    let ty = subst_params(&default, GenericDefId::Class(class), &target.args).fold(&mut |t| match t {
+        Ty::Assoc(a, args) if a.container(db) == ItemContainerId::Class(class) && *args == target.args => {
+            Some(impl_assoc_ty_seen(db, imp, *a, seen).unwrap_or(Ty::Error))
+        }
+        _ => None,
+    });
+    seen.pop();
+    Some(ty.fill_unwritten(&mut imm))
 }
 
 /// Replace the type parameters of `def` with `args`.
