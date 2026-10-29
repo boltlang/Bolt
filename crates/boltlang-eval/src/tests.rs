@@ -182,9 +182,9 @@ fn to_imm_of_an_imm_array_is_the_array_itself() {
 
 #[test]
 fn to_imm_of_an_imm_vec_keeps_its_buffer() {
-    let code = "let v = to_imm(vec_from_array([1, 2]));\n\
+    let code = "let v = to_imm(Vec.from_array([1, 2]));\n\
                 let w = to_imm(v);\n\
-                let m = vec_from_array([3]);\n\
+                let m = Vec.from_array([3]);\n\
                 (v, w, m, to_imm(m));";
     let (db, file) = db_with_std(code);
     let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();

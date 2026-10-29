@@ -3,8 +3,8 @@ The types of copies
 ================================================================================
 let a = to_mut([1]);
 let b = to_imm(mut [1]);
-let c = to_mut(vec_from_array([True]));
-let d = to_imm(vec_from_array([True]));
+let c = to_mut(Vec.from_array([True]));
+let d = to_imm(Vec.from_array([True]));
 
 --------------------------------------------------------------------------------
 let a: mut [i32]
@@ -18,7 +18,7 @@ A copy that can't be changed can't be changed
 ================================================================================
 let xs = to_imm(mut [1]);
 xs[0] = 2;
-let v = to_imm(vec_from_array([1]));
+let v = to_imm(Vec.from_array([1]));
 v.push(2);
 
 --------------------------------------------------------------------------------

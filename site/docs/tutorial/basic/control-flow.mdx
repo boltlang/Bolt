@@ -82,7 +82,7 @@ It loops over any collection with an impl of the class `Iterable`, like a
 `Vec` from the standard library:
 
 ```bolt
-let names = vec_from_array(["Ada", "Grace"]);
+let names = Vec.from_array(["Ada", "Grace"]);
 names.push("Barbara");
 let mut count = 0;
 for name in names {

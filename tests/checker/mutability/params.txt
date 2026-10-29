@@ -241,8 +241,8 @@ The examples of #243
 :error
 ================================================================================
 struct VecIter[T, 'v] { vec: 'v Vec[T], next: i32 }
-let frozen = to_imm(vec_from_array([1, 2]));
-let growing = vec_from_array([3, 4]).to_mut();
+let frozen = to_imm(Vec.from_array([1, 2]));
+let growing = Vec.from_array([3, 4]).to_mut();
 let a = mut VecIter { vec: frozen, next: 0 };
 let b = mut VecIter { vec: growing, next: 0 };
 a.next += 1;

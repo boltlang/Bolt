@@ -150,7 +150,7 @@ A copy that can be changed
 let xs = [1, 2, 3];
 let ys = to_mut(xs);
 ys[0] = 10;
-let v = vec_from_array([1, 2]);
+let v = Vec.from_array([1, 2]);
 let w = to_mut(v);
 w.push(3);
 (xs, ys, to_array(v), to_array(w));
@@ -164,7 +164,7 @@ A copy that can't be changed
 let xs = mut [1, 2];
 let frozen = to_imm(xs);
 xs[0] = 10;
-let v = vec_from_array([1, 2]);
+let v = Vec.from_array([1, 2]);
 let f = to_imm(v);
 v.push(3);
 (xs, frozen, to_array(v), len(f), f[0]);

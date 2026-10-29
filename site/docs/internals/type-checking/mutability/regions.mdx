@@ -38,7 +38,7 @@ fn squares(n: i32) -> imm [i32] {
 
 No one but `squares` has `xs`, so no one is left who could change it. But
 the checker can't tell: a `mut` value may have other names. In `std`,
-`to_array`, `vec_new` and `vec_from_array` have this problem, and so does
+`to_array`, `Vec.new` and `Vec.from_array` have this problem, and so does
 `fmap` for `Vec` or `Box` (see the [open questions](./index.mdx#open-questions)).
 
 ## What a region is

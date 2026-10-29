@@ -18,10 +18,10 @@ pub struct Vec[T] {
 }
 
 /// A new, empty `Vec`.
-pub fn vec_new[T]() -> mut Vec[T] = vec_with_capacity(0);
+pub fn Vec.new[T]() -> mut Vec[T] = Vec.with_capacity(0);
 
 /// A new, empty `Vec` with room for `capacity` elements.
-pub fn vec_with_capacity[T](capacity: i32) -> mut Vec[T] {
+pub fn Vec.with_capacity[T](capacity: i32) -> mut Vec[T] {
   if capacity < 0 {
     panic("a capacity can't be negative");
   }
@@ -29,9 +29,9 @@ pub fn vec_with_capacity[T](capacity: i32) -> mut Vec[T] {
 }
 
 /// A new `Vec` with the elements of `xs`.
-pub fn vec_from_array[T](xs: [T]) -> mut Vec[T] {
+pub fn Vec.from_array[T](xs: [T]) -> mut Vec[T] {
   let n = array_len(xs);
-  let v = vec_with_capacity(n);
+  let v = Vec.with_capacity(n);
   array_copy(v.items, 0, xs, 0, n);
   v.len = n;
   v
