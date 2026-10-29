@@ -251,6 +251,13 @@ dependencies = [
 [[package]]
 name = "boltlang-std"
 version = "0.2.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-eval",
+ "boltlang-hir-def",
+ "boltlang-ide-diagnostics",
+ "libtest-mimic",
+]
 
 [[package]]
 name = "boltlang-syntax"

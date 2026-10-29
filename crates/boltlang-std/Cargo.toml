@@ -5,3 +5,14 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
+
+[dev-dependencies]
+boltlang-base-db.workspace = true
+boltlang-eval.workspace = true
+boltlang-hir-def.workspace = true
+boltlang-ide-diagnostics.workspace = true
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "std"
+harness = false
