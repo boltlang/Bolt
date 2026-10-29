@@ -88,6 +88,32 @@ These kinds are a small case of what the type class literature calls
 *defaulting*; Haskell does the same with `Num` and `Fractional`
 [Peyton Jones 2003].
 
+### Mutabilities
+
+A [mutability](./mutability/index.mdx) is a type of its own kind:
+`Ty::Mutability(Mut)` or `Ty::Mutability(Imm)`, a variable of kind
+`VarKind::Mutability`, a parameter, or the error type. Arrays, structs
+and function types unify their mutabilities like any other argument, and
+`Mut` only unifies with `Mut`. A mutability variable can only be bound to
+a mutability, or to a parameter or bound variable that stands for one.
+When a body is done, `default_mutability_vars` makes the mutability
+variables that nothing decided `Imm`.
+
+A mutability that a function's parameter doesn't write is a hidden
+parameter of the function. Inside the body it's a `Ty::Param`, which only
+unifies with itself, but each use of the function instantiates it with a
+new variable, so a caller can pass either kind. This table shows whether
+two parameter types unify once their functions are instantiated, which
+is how [#275](https://github.com/boltlang/Bolt/issues/275) proposes to
+find overloads that a call could fit both of:
+
+| A | B | Unify? |
+|---|---|---|
+| `mut Vec[i32]` | `imm Vec[i32]` | no: `Mut` and `Imm` don't unify |
+| `Vec[i32]`, with a hidden mutability | `mut Vec[i32]` | yes: the hidden mutability's variable becomes `Mut` |
+| `Vec[T]`, with `T` a type parameter | `Vec[i32]` | yes: `T`'s variable becomes `i32` |
+| `(Vec[i32], String)` | `(Vec[i32], i32)` | no: `String` and `i32` don't unify |
+
 ## Never and error
 
 Two types are special:
