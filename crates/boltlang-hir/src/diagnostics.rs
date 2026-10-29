@@ -22,7 +22,7 @@ use boltlang_hir_def::{
     resolver::GenericDefId,
     signatures::{
         FieldList, class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map,
-        function_signature_with_source_map, impl_signature, impl_signature_with_source_map, struct_signature_with_source_map,
+        function_signature, function_signature_with_source_map, impl_signature, impl_signature_with_source_map, struct_signature_with_source_map,
         type_alias_signature_with_source_map,
     },
 };
@@ -129,6 +129,8 @@ pub enum DiagnosticKind<'db> {
     /// More than one of the functions called `name` fits its use when the
     /// body is done.
     AmbiguousOverload { name: Name, candidates: Vec<String> },
+    /// A function with `#[test]` that can't be run as a test.
+    BadTest { reason: BadTest },
     /// A call could fit both this function, of type `ty`, and one with the
     /// same name before it, of type `other`, whose name is at `other_range`
     /// in `other_file` (#275).
@@ -243,6 +245,19 @@ pub enum BecauseKind<'db> {
     /// A bound or `where` clause that asks for it, and the function, struct
     /// or enum it's of, if any.
     Bound { item: Option<Name> },
+}
+
+/// Why a function with `#[test]` can't be run as a test.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BadTest {
+    /// It's in a class, an impl, an extern block or a type's namespace.
+    NotTopLevel,
+    /// It takes parameters, which nothing gives it.
+    Params,
+    /// It has type parameters, which nothing decides.
+    Generic,
+    /// It gives something other than `()`, which nothing looks at.
+    Result,
 }
 
 /// What an item of a class or impl is.
@@ -456,6 +471,34 @@ impl<'db> Collector<'db> {
         }
     }
 
+    /// Report why `f`, with `#[test]`, can't be run as a test, at its name.
+    fn test(&mut self, f: FunctionId<'db>) {
+        let db = self.db;
+        let item = f.item(db);
+        if !item.is_test {
+            return;
+        }
+        let range = Some(self.item_range(item.ast_id));
+        if item.owner.is_some() || !matches!(f.container(db), ItemContainerId::File(_)) {
+            self.push(range, DiagnosticKind::BadTest { reason: BadTest::NotTopLevel });
+            return;
+        }
+        let sig = function_signature(db, f);
+        if !sig.params.is_empty() {
+            self.push(range, DiagnosticKind::BadTest { reason: BadTest::Params });
+        }
+        if !sig.generic_params.type_params.is_empty() {
+            self.push(range, DiagnosticKind::BadTest { reason: BadTest::Generic });
+        }
+        if let Ok(scheme) = function_scheme(db, f)
+            && let Ty::Fn(_, ret, _) = &scheme.ty
+            && !ret.is_unit()
+            && !ret.any(&mut |t| *t == Ty::Error)
+        {
+            self.push(range, DiagnosticKind::BadTest { reason: BadTest::Result });
+        }
+    }
+
     /// Report the functions with the name of `f` before it that it overlaps,
     /// at its name.
     fn overlapping_functions(&mut self, f: FunctionId<'db>) {
@@ -643,6 +686,7 @@ impl<'db> Collector<'db> {
         let db = self.db;
         self.fallback = self.item_range(id.item(db).ast_id);
         self.overlapping_functions(id);
+        self.test(id);
         let (sig, map) = function_signature_with_source_map(db, id);
         self.lower(map, &fn_sig(db, id).diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::Function(id)).diagnostics);

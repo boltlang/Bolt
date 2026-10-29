@@ -243,7 +243,8 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     for item in &tree.top_level {
         match *item {
             // Those of a type are added below, once the types are known.
-            ModItem::Function(idx) if tree.functions[idx.index()].owner.is_some() => {}
+            // Tests aren't called by name: see `test_functions`.
+            ModItem::Function(idx) if tree.functions[idx.index()].owner.is_some() || tree.functions[idx.index()].is_test => {}
             ModItem::Function(idx) => out.define_assoc(db, tree, container, AssocItem::Function(idx), None),
             ModItem::Const(idx) => out.define_assoc(db, tree, container, AssocItem::Const(idx), None),
             ModItem::TypeAlias(idx) => out.define_assoc(db, tree, container, AssocItem::TypeAlias(idx), None),
@@ -300,6 +301,9 @@ fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut F
     for item in &tree.top_level {
         let ModItem::Function(idx) = *item else { continue };
         let f = &tree.functions[idx.index()];
+        if f.is_test {
+            continue;
+        }
         let (Some(owner), Some(name)) = (&f.owner, &f.name) else { continue };
         let variants = match out.scope.get(Namespace::Types, owner).map(|entry| entry.def) {
             Some(ModuleDefId::Struct(_)) => &[][..],
@@ -336,6 +340,23 @@ fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut F
             out.diagnostics.push(NameResDiagnostic::OwnerNotTopLevel { function: f.ast_id });
         }
     }
+}
+
+/// The tests of `file`: its functions with `#[test]` before them, in the
+/// order they're written. They aren't in the file's scope, so a test
+/// called `push` isn't one more `push`.
+#[salsa::tracked(returns(ref))]
+pub fn test_functions<'db>(db: &'db dyn Db, file: File) -> Vec<FunctionId<'db>> {
+    let tree = item_tree(db, file);
+    tree.top_level
+        .iter()
+        .filter_map(|item| match *item {
+            ModItem::Function(idx) if tree.functions[idx.index()].is_test => {
+                Some(FunctionId::new(db, ItemContainerId::File(file), idx))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 /// The function `name` in the namespace of the type `owner`, a struct or

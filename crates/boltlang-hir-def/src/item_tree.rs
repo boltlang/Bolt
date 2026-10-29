@@ -218,6 +218,9 @@ pub struct Function {
     pub is_const: bool,
     /// Whether it has a body, as opposed to a signature like `fn f();`.
     pub has_body: bool,
+    /// Whether it's a test, with `#[test]` before it. A test isn't in the
+    /// file's scope: it's only found by [`crate::nameres::test_functions`].
+    pub is_test: bool,
     pub ast_id: AstId,
 }
 
@@ -442,6 +445,7 @@ impl ItemTree {
             is_async: f.async_token().is_some(),
             is_const: f.const_token().is_some(),
             has_body: f.body().is_some(),
+            is_test: has_attr(f, "test"),
             ast_id,
         };
         push(&mut self.functions, function)
@@ -500,6 +504,17 @@ fn import_kind(i: &ast::Import) -> ImportKind {
     } else {
         ImportKind::Plain
     }
+}
+
+/// Whether `node` has the attribute `#[name]`, without arguments.
+fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
+    node.attrs().any(|attr| {
+        attr.meta().is_some_and(|meta| {
+            meta.token_tree().is_none()
+                && meta.expr().is_none()
+                && meta.path().is_some_and(|path| path.syntax().text().to_string().trim() == name)
+        })
+    })
 }
 
 fn name(name: Option<ast::Name>) -> Option<Name> {

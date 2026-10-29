@@ -573,3 +573,27 @@ fn Shape.c() {}
         ]
     );
 }
+
+#[test]
+fn tests_are_listed_and_not_in_scope() {
+    let db = TestDb::new();
+    let file = db.file(
+        "/main.bolt",
+        r#"
+fn push(x: i32) {}
+#[test]
+fn push() {}
+#[test]
+fn second() {}
+#[derive(Debug)]
+fn other() {}
+"#,
+    );
+    let scope = local_scope(&db, file);
+    // The test called `push` isn't one more `push`.
+    assert_eq!(names(&scope.scope, Namespace::Values), ["other", "push"]);
+    let names: Vec<String> =
+        test_functions(&db, file).iter().map(|f| f.item(&db).name.as_ref().unwrap().name().to_string()).collect();
+    assert_eq!(names, ["push", "second"]);
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+}

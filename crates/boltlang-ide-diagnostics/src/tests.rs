@@ -1081,6 +1081,29 @@ fn f(b: i32) { self.chunks.push(1); }
 }
 
 #[test]
+fn tests_that_cant_be_run() {
+    check(
+        r#"
+#[test]
+fn takes(x: i32) {}
+ //^^^^^ error: a test can't have parameters: nothing gives it any
+#[test]
+fn generic[T]() {}
+ //^^^^^^^ error: a test can't have type parameters: nothing decides them
+#[test]
+fn gives() = 1;
+ //^^^^^ error: a test must give `()`: nothing looks at what it gives
+struct P;
+#[test]
+fn P.t() {}
+   //^ error: a test must be a function at the top level of a file, not in a class, an impl, an `extern` block or the namespace of a type
+#[test]
+fn fine() { let x = 1; }
+"#,
+    );
+}
+
+#[test]
 fn what_needs_an_instance_can_be_in_another_file() {
     check_files(&[
         (

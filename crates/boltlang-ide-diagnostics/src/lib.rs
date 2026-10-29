@@ -24,7 +24,7 @@ use boltlang_hir_def::{
 pub use boltlang_hir_def::nameres::files_used_by;
 /// The manifest of a file's package, and the name of manifests.
 pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
-use boltlang_hir::{Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
+use boltlang_hir::{BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
 use boltlang_hir_ty::{AdtId, NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
 use boltlang_syntax::{
     SyntaxKind, SyntaxNode,
@@ -110,6 +110,7 @@ impl DiagnosticCode {
     pub const NOT_AN_ASSOC_TYPE_OF: Self = Self("E0239");
     pub const EQUALITY_NOT_ALLOWED: Self = Self("E0240");
     pub const UNMET_ASSOC_EQUALITY: Self = Self("E0241");
+    pub const BAD_TEST: Self = Self("E0242");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -654,6 +655,19 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                 format!("there is no instance `{instance}`, which class `{class}` asks of its type `{name}`"),
             )
         }
+        K::BadTest { reason } => (
+            C::BAD_TEST,
+            match reason {
+                BadTest::NotTopLevel => {
+                    "a test must be a function at the top level of a file, not in a class, an impl, an `extern` \
+                     block or the namespace of a type"
+                }
+                BadTest::Params => "a test can't have parameters: nothing gives it any",
+                BadTest::Generic => "a test can't have type parameters: nothing decides them",
+                BadTest::Result => "a test must give `()`: nothing looks at what it gives",
+            }
+            .to_string(),
+        ),
         K::UnmetAssocEquality { name, item, class, expected, actual } => {
             let class = class.item(db).name.as_ref().map_or("?", |n| n.as_str());
             (
