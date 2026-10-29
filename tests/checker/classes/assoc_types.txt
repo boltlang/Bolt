@@ -12,7 +12,6 @@ impl[T] Index[Box[T]] {
 }
 let b = Box { items: [True] };
 get(b, 0);
-
 --------------------------------------------------------------------------------
 Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
 let b: imm Box[Bool]
@@ -32,7 +31,6 @@ impl[T] Index[Box[T]] {
 }
 fn second(c) = get(c, 1);
 second(Box { items: [1, 2] });
-
 --------------------------------------------------------------------------------
 Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
 second: forall a. Index[a] => fn(a) -> a.Item
@@ -52,7 +50,6 @@ impl[T] Index[Box[T]] {
 }
 fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
 let x: Bool = first(Box { items: [True] });
-
 --------------------------------------------------------------------------------
 Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
 first: forall C. Index[C] => fn(C) -> C.Item
@@ -68,7 +65,6 @@ class Index[C] {
 }
 fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
 fn wrong[C](c: C) -> i32 where Index[C] = get(c, 0);
-
 --------------------------------------------------------------------------------
 first: forall C. Index[C] => fn(C) -> C.Item
 wrong: forall C. Index[C] => fn(C) -> i32
@@ -96,7 +92,6 @@ impl[T] IndexMut[mut Box[T]] {
 fn put[C](c: C, x: C.Item) where IndexMut[C] = set(c, 0, x);
 let b = mut Box { items: mut [1] };
 put(b, 2);
-
 --------------------------------------------------------------------------------
 Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
 IndexMut[mut Box[T]].set: forall T. fn(mut Box[T], i32, T) -> ()
@@ -118,7 +113,6 @@ impl[T] Index[Box[T]] {
   fn get(c, i) = c.items[i];
 }
 let n: i32 = get(Box { items: ["a"] }, 0);
-
 --------------------------------------------------------------------------------
 Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
 let n: i32
@@ -135,7 +129,6 @@ class Index[C] {
 }
 fn none[C](c: C) -> C.Item = get(c, 0);
 fn other[C](c: C) -> C.Thing where Index[C] = get(c, 0);
-
 --------------------------------------------------------------------------------
 none: forall C. fn(C) -> {error}
 other: forall C. Index[C] => fn(C) -> {error}
@@ -151,7 +144,6 @@ C.Item can be ambiguous
 class A[C] { type Item; }
 class B[C] { type Item; }
 fn f[C](c: C) -> C.Item where A[C], B[C] = f(c);
-
 --------------------------------------------------------------------------------
 f: forall C. A[C] => B[C] => fn(C) -> {error}
 --------------------------------------------------------------------------------
@@ -205,7 +197,6 @@ fn first[C: Coll](c: C) -> C.It.Item = next2(it(c));
 fn second(c) = next2(it(c));
 let a: i32 = first(Bag { n: 1 });
 let b: i32 = second(Bag { n: 2 });
-
 --------------------------------------------------------------------------------
 Iter2[BagIt].next2: fn(BagIt) -> i32
 Coll[Bag].it: fn(Bag) -> imm BagIt

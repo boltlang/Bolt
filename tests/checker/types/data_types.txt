@@ -63,7 +63,6 @@ fn swap(p) = Pair { first: p.second, second: p.first };
 let p = Pair { first: 1, second: "a" };
 p.first;
 let q: Pair[Bool, i32] = Pair { first: 1, second: True };
-
 --------------------------------------------------------------------------------
 swap: forall a b c. a.second: b => a.first: c => b: imm => c: imm => fn(a) -> imm Pair[b, c]
 let p: imm Pair[i32, String]
@@ -81,7 +80,6 @@ fn double(m: Meters) = Meters(m.0 * 2.0);
 let u = Unit;
 Meters(1.0);
 Meters("a");
-
 --------------------------------------------------------------------------------
 double: fn(Meters) -> imm Meters
 let u: imm Unit
@@ -97,7 +95,6 @@ enum Either[L, R] { Left(L), Right(R) }
 let a = Either.Left(1);
 let b: Either[i32, String] = Either.Right("a");
 let c: Either[i32, String] = Either.Right(1);
-
 --------------------------------------------------------------------------------
 let a: Either[i32, a]
 let b: Either[i32, String]
@@ -112,7 +109,6 @@ enum Shape { Circle { r: f64 }, Rect { w: f64, h: f64 } }
 let c = Shape.Circle { r: 1.0 };
 Shape.Rect { w: 1.0 };
 Shape.Circle { r: 1.0, z: 2.0 };
-
 --------------------------------------------------------------------------------
 let c: Shape
 Shape.Rect { w: 1.0 }: Shape
@@ -128,7 +124,6 @@ struct Point { x: i32, y: i32 }
 Point { x: 1, y: True };
 Point { x: 1, y: 2, z: 3 };
 Nope { x: 1 };
-
 --------------------------------------------------------------------------------
 Point { x: 1, y: True }: imm Point
 Point { x: 1, y: 2, z: 3 }: imm Point
@@ -145,7 +140,6 @@ struct Point { x: i32, y: i32 }
 let p = Point { x: 1, y: 2 };
 Point { x: 3, ..p };
 Point { x: 3, ..(1, 2) };
-
 --------------------------------------------------------------------------------
 let p: imm Point
 Point { x: 3, ..p }: imm Point
@@ -158,7 +152,6 @@ Field shorthand
 ================================================================================
 struct Point { x: i32, y: i32 }
 fn make(x, y) = Point { x, y };
-
 --------------------------------------------------------------------------------
 make: fn(i32, i32) -> imm Point
 
@@ -169,7 +162,6 @@ let t = (1, "a", True);
 t.0;
 t.2;
 t.3;
-
 --------------------------------------------------------------------------------
 let t: (i32, String, Bool)
 t.0: i32
@@ -185,7 +177,6 @@ struct Box[T] { value: T }
 fn get(b: Box[i32]) = b.value;
 fn unbox(b) = b.value;
 unbox(Box { value: "a" });
-
 --------------------------------------------------------------------------------
 get: fn(Box[i32]) -> i32
 unbox: forall a b. a.value: b => fn(a) -> b
@@ -197,7 +188,6 @@ Fields of a value with a field constraint
 fn sum(p) = p.x + p.y;
 struct V { x: i32, y: i32 }
 sum(V { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 sum: forall a b. a.x: b => a.y: b => fn(a) -> b
 sum(V { x: 1, y: 2 }): i32
@@ -219,7 +209,6 @@ A struct that contains itself
 ================================================================================
 struct Loop { next: Loop }
 fn next(l: Loop) -> Loop = l.next;
-
 --------------------------------------------------------------------------------
 next: fn('m Loop) -> 'm Loop
 
@@ -230,7 +219,6 @@ struct Tag[T] { id: i32 }
 let a = Tag { id: 1 };
 let b: Tag[Bool] = Tag { id: 1 };
 let c: Tag[String] = b;
-
 --------------------------------------------------------------------------------
 let a: imm Tag[a]
 let b: imm Tag[Bool]
@@ -244,7 +232,6 @@ A field given twice
 ================================================================================
 struct Point { x: i32, y: i32 }
 Point { x: 1, x: 2, y: 3 };
-
 --------------------------------------------------------------------------------
 Point { x: 1, x: 2, y: 3 }: Point
 --------------------------------------------------------------------------------
@@ -255,7 +242,6 @@ Struct update can't change the type of a generic struct
 ================================================================================
 struct Box[T] { value: T }
 Box { value: True, ..Box { value: 1 } };
-
 --------------------------------------------------------------------------------
 Box { value: True, ..Box { value: 1 } }: imm Box[Bool]
 --------------------------------------------------------------------------------
@@ -268,7 +254,6 @@ struct Point { x: i32, y: i32 }
 fn origin() -> Point = Point { x: 0, y: 0 };
 origin().x;
 origin().z;
-
 --------------------------------------------------------------------------------
 origin: fn() -> imm Point
 origin().x: i32
@@ -281,7 +266,6 @@ Fields of a type parameter
 :error
 ================================================================================
 fn f[T](x: T) = x.y;
-
 --------------------------------------------------------------------------------
 f: forall T. fn(T) -> {error}
 --------------------------------------------------------------------------------
@@ -292,7 +276,6 @@ A field used as two different types
 :todo
 ================================================================================
 fn f(p) = (p.x + 1, !p.x);
-
 --------------------------------------------------------------------------------
 f: forall a. a.x: i32 => fn(a) -> (i32, Bool)
 --------------------------------------------------------------------------------
@@ -305,7 +288,6 @@ A field constraint that no struct has
 struct Point { x: i32 }
 fn get_y(p) = p.y;
 get_y(Point { x: 1 });
-
 --------------------------------------------------------------------------------
 get_y: forall a b. a.y: b => fn(a) -> b
 get_y(Point { x: 1 }): {error}
@@ -320,7 +302,6 @@ struct B { c: C }
 struct C { d: i32 }
 fn f(a) = a.b.c.d;
 f(A { b: B { c: C { d: 1 } } });
-
 --------------------------------------------------------------------------------
 f: forall a b c d. a.b: c => c.c: d => d.d: b => fn(a) -> b
 f(A { b: B { c: C { d: 1 } } }): i32
@@ -333,7 +314,6 @@ fn second(t) = t.1;
 first((1, True));
 second((1, True));
 second((1,));
-
 --------------------------------------------------------------------------------
 first: forall a b. a.0: b => fn(a) -> b
 second: forall a b. a.1: b => fn(a) -> b
@@ -353,7 +333,6 @@ struct P { x: i32 }
 struct Q { x: Bool }
 f(P { x: 1 });
 f(Q { x: True });
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 f: forall a b. Show[b] => a.x: b => fn(a) -> String
@@ -370,7 +349,6 @@ struct Box[T] { value: T }
 fn get(b) = b.value;
 fn twice(b) = (get(b), get(b));
 twice(Box { value: 1 });
-
 --------------------------------------------------------------------------------
 get: forall a b. a.value: b => fn(a) -> b
 twice: forall a b. a.value: b => fn(a) -> (b, b)
@@ -385,7 +363,6 @@ struct Pair(i32, i32);
 Meters(1.0, 2.0);
 Pair(1);
 let Pair(a) = Pair(1, 2);
-
 --------------------------------------------------------------------------------
 Meters(1.0, 2.0): imm Meters
 Pair(1): imm Pair
@@ -401,7 +378,6 @@ A unit struct isn't a function
 ================================================================================
 struct Unit;
 Unit();
-
 --------------------------------------------------------------------------------
 Unit(): {error}
 --------------------------------------------------------------------------------
@@ -413,7 +389,6 @@ A variant without fields isn't a function
 ================================================================================
 enum Option[T] { None, Some(T) }
 Option.None();
-
 --------------------------------------------------------------------------------
 Option.None(): {error}
 --------------------------------------------------------------------------------
@@ -426,7 +401,6 @@ enum Shape { Rect(f64, f64) }
 let f = Shape.Rect;
 f(1.0, 2.0);
 f(1.0);
-
 --------------------------------------------------------------------------------
 let f: fn(f64, f64) -> Shape
 f(1.0, 2.0): Shape
@@ -440,7 +414,6 @@ A generic variant that is never decided
 enum Option[T] { None, Some(T) }
 let n = Option.None;
 fn f() { let n = Option.None; }
-
 --------------------------------------------------------------------------------
 f: fn() -> ()
 let n: Option[a]
@@ -452,7 +425,6 @@ enum Option[T] { None, Some(T) }
 let a = Option.Some(Option.Some(1));
 let b: Option[Option[Bool]] = Option.Some(Option.None);
 let c: Option[Option[Bool]] = Option.Some(1);
-
 --------------------------------------------------------------------------------
 let a: Option[Option[i32]]
 let b: Option[Option[Bool]]
@@ -468,7 +440,6 @@ import List.*;
 fn len(xs) = match xs { Nil => 0, Cons(_, t) => 1 + len(t) };
 fn map(f, xs) = match xs { Nil => Nil, Cons(h, t) => Cons(f(h), map(f, t)) };
 Cons(1, Cons(True, Nil));
-
 --------------------------------------------------------------------------------
 len: forall a. fn(List[a]) -> i32
 map: forall a b. fn(fn(a) -> b, List[a]) -> List[b]
@@ -484,7 +455,6 @@ enum B { X(Bool) }
 A.X(1);
 B.X(True);
 A.X(True);
-
 --------------------------------------------------------------------------------
 A.X(1): A
 B.X(True): B

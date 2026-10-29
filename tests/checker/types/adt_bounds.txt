@@ -10,7 +10,6 @@ let a = Labeled { value: 1 };
 let b = Wrap(2);
 let c = Labeled { value: True };
 let d = Wrap("s");
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 let a: imm Labeled[i32]
@@ -32,7 +31,6 @@ let a = Maybe.Has(1);
 let b: Maybe[i32] = Maybe.Nothing;
 let c = Maybe.Has(True);
 let d = Maybe.Nothing;
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 let a: Maybe[i32]
@@ -51,7 +49,6 @@ impl Show[i32] { fn show(x) = "int"; }
 struct Labeled[A: Show] { value: A }
 fn label(x) = Labeled { value: x };
 label(1);
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 label: forall a. Show[a] => a: imm => fn(a) -> imm Labeled[a]

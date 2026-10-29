@@ -9,7 +9,6 @@ let b = mut Point { x: 1, y: 2 };
 let c = Meters(1.0);
 let d = mut Meters(1.0);
 let e = Unit;
-
 --------------------------------------------------------------------------------
 let a: imm Point
 let b: mut Point
@@ -25,7 +24,6 @@ let p = mut Point { x: 1, y: 2 };
 p.x = 3;
 p.y += 1;
 p;
-
 --------------------------------------------------------------------------------
 let p: mut Point
 p.x = 3: ()
@@ -40,7 +38,6 @@ struct Point { x: i32, y: i32 }
 let p = Point { x: 1, y: 2 };
 p.x = 3;
 p.y += 1;
-
 --------------------------------------------------------------------------------
 let p: imm Point
 p.x = 3: ()
@@ -57,7 +54,6 @@ struct Point { x: i32, y: i32 }
 let mut p = Point { x: 1, y: 2 };
 p.x = 3;
 p = Point { x: 5, y: 6 };
-
 --------------------------------------------------------------------------------
 let p: imm Point
 p.x = 3: ()
@@ -74,7 +70,6 @@ let m = mut Meters(1.0);
 m.0 = 2.0;
 let n = Meters(1.0);
 n.0 = 2.0;
-
 --------------------------------------------------------------------------------
 let m: mut Meters
 m.0 = 2.0: ()
@@ -94,7 +89,6 @@ q.x = 3;
 id(p).y = 4;
 let r = if True { p } else { mut Point { x: 0, y: 0 } };
 r.x = 5;
-
 --------------------------------------------------------------------------------
 id: forall a. fn(a) -> a
 let p: mut Point
@@ -115,7 +109,6 @@ let c: Point = mut Point { x: 1, y: 2 };
 let d: imm Point = mut Point { x: 1, y: 2 };
 let e: mut Point = Point { x: 1, y: 2 };
 c.x = 3;
-
 --------------------------------------------------------------------------------
 let a: mut Point
 let b: imm Point
@@ -134,7 +127,6 @@ struct Point { x: i32, y: i32 }
 fn norm(p: Point) -> i32 = p.x + p.y;
 norm(Point { x: 1, y: 2 });
 norm(mut Point { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 norm: fn(Point) -> i32
 norm(Point { x: 1, y: 2 }): i32
@@ -146,7 +138,6 @@ A parameter without mut or imm can't be changed
 ================================================================================
 struct Point { x: i32, y: i32 }
 fn reset(p: Point) { p.x = 0; }
-
 --------------------------------------------------------------------------------
 reset: fn(Point) -> ()
 --------------------------------------------------------------------------------
@@ -160,7 +151,6 @@ struct Point { x: i32, y: i32 }
 fn reset(p: mut Point) { p.x = 0; }
 reset(mut Point { x: 1, y: 2 });
 reset(Point { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 reset: fn(mut Point) -> ()
 reset(mut Point { x: 1, y: 2 }): ()
@@ -176,7 +166,6 @@ struct Point { x: i32, y: i32 }
 fn keep(p: imm Point) -> i32 = p.x;
 keep(Point { x: 1, y: 2 });
 keep(mut Point { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 keep: fn(imm Point) -> i32
 keep(Point { x: 1, y: 2 }): i32
@@ -199,7 +188,6 @@ fn f() {
   same(mut Point { x: 1, y: 2 }).x = 3;
   same(Point { x: 1, y: 2 }).x = 3;
 }
-
 --------------------------------------------------------------------------------
 origin: fn() -> imm Point
 fresh: fn() -> mut Point
@@ -220,7 +208,6 @@ let l = mut Line { a: mut Point { x: 0, y: 0 }, b: mut Point { x: 1, y: 1 } };
 l.a.x = 5;
 let k = Line { a: Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
 k.a.x = 5;
-
 --------------------------------------------------------------------------------
 let l: mut Line
 l.a.x = 5: ()
@@ -237,7 +224,6 @@ struct Point { x: i32, y: i32 }
 struct Line { a: Point, b: Point }
 let a = Line { a: mut Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };
 let b = mut Line { a: Point { x: 0, y: 0 }, b: mut Point { x: 1, y: 1 } };
-
 --------------------------------------------------------------------------------
 let a: imm Line
 let b: mut Line
@@ -253,7 +239,6 @@ struct Point { x: i32, y: i32 }
 struct Line { a: Point, b: Point }
 fn f(l: Line) { l.a.x = 1; }
 fn g(l: mut Line) { l.a.x = 1; }
-
 --------------------------------------------------------------------------------
 f: fn(Line) -> ()
 g: fn(mut Line) -> ()
@@ -270,7 +255,6 @@ a.items[0] = 2;
 a.tags[0] = "u";
 let b = Bag { items: [1], tags: ["t"] };
 b.items[0] = 2;
-
 --------------------------------------------------------------------------------
 let a: mut Bag
 a.items[0] = 2: ()
@@ -291,7 +275,6 @@ let s = mut Shape { id: 1, corners: [Point { x: 0, y: 0 }] };
 s.id = 2;
 s.corners = [Point { x: 1, y: 1 }];
 s.corners[0].x = 1;
-
 --------------------------------------------------------------------------------
 let s: mut Shape
 s.id = 2: ()
@@ -318,7 +301,6 @@ h.a.item.x = 1;
 h.b;
 h.c;
 h.f;
-
 --------------------------------------------------------------------------------
 get: fn(Point) -> i32
 let h: mut Holder
@@ -338,7 +320,6 @@ let b = mut Box { item: mut Point { x: 0, y: 0 } };
 let c = mut Box { item: Point { x: 0, y: 0 } };
 b.item.x = 1;
 c.item.x = 1;
-
 --------------------------------------------------------------------------------
 let a: imm Box[mut Point]
 let b: mut Box[mut Point]
@@ -359,7 +340,6 @@ fn wrap_mut[T](x: T) -> Box[T] = mut Box { item: x };
 wrap(1);
 wrap(mut [1]);
 wrap_mut(mut [1]);
-
 --------------------------------------------------------------------------------
 wrap: forall T. T: imm => fn(T) -> imm Box[T]
 wrap_mut: forall T. fn(T) -> mut Box[T]
@@ -379,7 +359,6 @@ let b = mut [mut Point { x: 0, y: 0 }];
 b[0].x = 1;
 let c = mut [Point { x: 0, y: 0 }];
 c[0].x = 1;
-
 --------------------------------------------------------------------------------
 let a: imm [mut Point]
 let b: mut [mut Point]
@@ -396,7 +375,6 @@ An imm array can't hold a tuple with a mut array
 ================================================================================
 let a = [(mut [1], True)];
 let b = [|xs: mut [i32]| xs[0] = 1];
-
 --------------------------------------------------------------------------------
 let a: imm [(mut [i32], Bool)]
 let b: imm [fn(mut [i32]) -> ()]
@@ -412,7 +390,6 @@ enum Shape { Dot(Point) }
 let a = Shape.Dot(Point { x: 0, y: 0 });
 let b = Shape.Dot(mut Point { x: 0, y: 0 });
 fn f(s: Shape) = match s { Shape.Dot(p) => p.x = 1 };
-
 --------------------------------------------------------------------------------
 f: fn(Shape) -> ()
 let a: Shape
@@ -428,7 +405,6 @@ struct Point { x: i32, y: i32 }
 enum Maybe[T] { Just(T), Nothing }
 let a = Maybe.Just(mut Point { x: 0, y: 0 });
 match a { Maybe.Just(p) => p.x = 1, Maybe.Nothing => () };
-
 --------------------------------------------------------------------------------
 let a: Maybe[mut Point]
 match a { Maybe.Just(p) => p.x = 1, Maybe.Nothing => () }: ()
@@ -444,7 +420,6 @@ fn f(x: i32) -> i32 = x;
 let a = mut Shape.Circle { radius: 1.0 };
 let b = mut Maybe.Just(1);
 let c = mut f(1);
-
 --------------------------------------------------------------------------------
 f: fn(i32) -> i32
 let a: Shape
@@ -461,7 +436,6 @@ Types that can't be mut or imm
 ================================================================================
 enum Maybe[T] { Just(T), Nothing }
 fn f[T](a: mut i32, b: imm (i32, i32), c: mut Maybe[i32], d: mut T) {}
-
 --------------------------------------------------------------------------------
 f: forall T. fn(i32, (i32, i32), Maybe[i32], T) -> ()
 --------------------------------------------------------------------------------
@@ -480,7 +454,6 @@ fn get_x(p) = p.x;
 move_x(mut Point { x: 1, y: 2 });
 move_x(Point { x: 1, y: 2 });
 get_x(Point { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 move_x: forall a. mut a.x: i32 => fn(a) -> ()
 get_x: forall a b. a.x: b => fn(a) -> b
@@ -499,7 +472,6 @@ fn bump(p) {
   let q: mut Point = p;
   q.x += 1;
 }
-
 --------------------------------------------------------------------------------
 reset: forall a. mut a.x: i32 => fn(Point, a) -> ()
 bump: fn(mut Point) -> ()
@@ -512,7 +484,6 @@ let p = Point { x: 1, y: 2 };
 let q = mut Point { x: 3, ..p };
 let r = Point { y: 4, ..q };
 q.x = 5;
-
 --------------------------------------------------------------------------------
 let p: imm Point
 let q: mut Point
@@ -526,7 +497,6 @@ struct Point { x: i32, y: i32 }
 let Point { x, y } = mut Point { x: 1, y: 2 };
 fn f(p: mut Point) -> i32 = match p { Point { x, .. } => x };
 fn g(p: imm Point) -> i32 = match p { Point { y, .. } => y };
-
 --------------------------------------------------------------------------------
 f: fn(mut Point) -> i32
 g: fn(imm Point) -> i32
@@ -542,7 +512,6 @@ fn f() {
   let mut u = (1, 2);
   u.0 = 3;
 }
-
 --------------------------------------------------------------------------------
 f: fn() -> ()
 --------------------------------------------------------------------------------
@@ -557,7 +526,6 @@ let s = mut S { t: (1, 2) };
 s.t.0 = 3;
 let r = S { t: (1, 2) };
 r.t.0 = 3;
-
 --------------------------------------------------------------------------------
 let s: mut S
 s.t.0 = 3: ()
@@ -574,7 +542,6 @@ class Size[T] { fn size(x: T) -> i32; }
 impl Size[Point] { fn size(p) = 2; }
 size(Point { x: 1, y: 2 });
 size(mut Point { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 Size[Point].size: fn(Point) -> i32
 size(Point { x: 1, y: 2 }): i32
@@ -589,7 +556,6 @@ class Size[T] { fn size(x: T) -> i32; }
 impl Size[mut Point] { fn size(p) = 2; }
 size(mut Point { x: 1, y: 2 });
 size(Point { x: 1, y: 2 });
-
 --------------------------------------------------------------------------------
 Size[mut Point].size: fn(mut Point) -> i32
 size(mut Point { x: 1, y: 2 }): i32
@@ -606,7 +572,6 @@ fn grow(c: mut Circle) { c.r = c.r * 2.0; }
 let a = mut Circle { r: 1.0 };
 a.grow();
 Circle { r: 1.0 }.grow();
-
 --------------------------------------------------------------------------------
 grow: fn(mut Circle) -> ()
 let a: mut Circle
@@ -625,7 +590,6 @@ fn second(n: Node) -> Maybe[Node] = n.next;
 let a = mut Node { value: 1, next: Maybe.Just(mut Node { value: 2, next: Maybe.Nothing }) };
 let b = Node { value: 1, next: Maybe.Just(mut Node { value: 2, next: Maybe.Nothing }) };
 second(a);
-
 --------------------------------------------------------------------------------
 second: fn('m Node) -> Maybe['m Node]
 let a: mut Node
@@ -642,7 +606,6 @@ class Functor[F] { fn fmap[A, B](f: fn(A) -> B, x: F[A]) -> F[B]; }
 impl Functor[Box] { fn fmap(f, b) = Box { item: f(b.item) }; }
 fmap(|n| n + 1, Box { item: 1 });
 fmap(|n| n + 1, mut Box { item: 1 });
-
 --------------------------------------------------------------------------------
 Functor[Box].fmap: forall A B. fn(fn(A) -> B, 'm Box[A]) -> 'm Box[B]
 fmap(|n| n + 1, Box { item: 1 }): imm Box[i32]
@@ -663,7 +626,6 @@ fn g(p: MP) { p.x = 1; }
 f(mut Point { x: 1, y: 2 });
 g(Point { x: 1, y: 2 });
 let a: mut P = mut Point { x: 1, y: 2 };
-
 --------------------------------------------------------------------------------
 f: fn(Point) -> i32
 g: fn(mut Point) -> ()

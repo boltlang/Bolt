@@ -11,7 +11,6 @@ impl Functor[Option] {
 }
 fmap(|n| n + 1, Option.Some(1));
 fmap(|n| n == 0, Option.Some(1));
-
 --------------------------------------------------------------------------------
 Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
 fmap(|n| n + 1, Option.Some(1)): Option[i32]
@@ -28,7 +27,6 @@ impl Functor[Option] {
     Option.Some(a) => Option.Some(f(a)),
   };
 }
-
 --------------------------------------------------------------------------------
 Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
 
@@ -45,7 +43,6 @@ fn inferred(x) = fmap(|n| n * 2, x);
 fn bad[F](x: F[i32]) -> F[i32] = fmap(|n| n * 2, x);
 double(Option.Some(1));
 inferred(Option.Some(1));
-
 --------------------------------------------------------------------------------
 Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
 double: forall F. Functor[F] => fn(F[i32]) -> F[i32]
@@ -69,7 +66,6 @@ impl[E] Functor[Either[E]] {
 }
 let r: Either[String, i32] = Either.Right(1);
 fmap(|n| n > 0, r);
-
 --------------------------------------------------------------------------------
 Functor[Either[E]].fmap: forall E A B. fn(fn(A) -> B, Either[E, A]) -> Either[E, B]
 let r: Either[String, i32]
@@ -86,7 +82,6 @@ impl Functor[Option] {
   fn fmap[A, B](f: fn (A) -> B, x: Option[A]) -> Option[B] = Option.None;
 }
 fmap(|n| n, Box { value: 1 });
-
 --------------------------------------------------------------------------------
 Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
 fmap(|n| n, Box { value: 1 }): imm Box[i32]
@@ -105,7 +100,6 @@ impl Functor[Either] {}
 fn f(x: Option) -> i32 = 1;
 fn g[F](x: F[i32], y: F) -> i32 = 1;
 fn h[T: Functor](x: T) -> T = x;
-
 --------------------------------------------------------------------------------
 f: fn(Option[{error}]) -> i32
 g: forall F. fn(F[i32], {error}) -> i32
@@ -165,7 +159,6 @@ enum Option[T] { None, Some(T) }
 fn both[F](a: F[i32], b: F[Bool]) -> (F[i32], F[Bool]) = (a, b);
 both(Option.Some(1), Option.None);
 both(Option.Some(1), [True]);
-
 --------------------------------------------------------------------------------
 both: forall F. fn(F[i32], F[Bool]) -> (F[i32], F[Bool])
 both(Option.Some(1), Option.None): (Option[i32], Option[Bool])
@@ -180,7 +173,6 @@ enum Either[E, A] { Left(E), Right(A) }
 fn inner[F, A](x: F[A]) -> F[A] = x;
 let r: Either[String, i32] = Either.Right(1);
 inner(r);
-
 --------------------------------------------------------------------------------
 inner: forall F A. fn(F[A]) -> F[A]
 let r: Either[String, i32]
@@ -194,7 +186,6 @@ fn inner[F, A](x: F[A]) -> F[A] = x;
 inner([1]);
 inner((1, True));
 inner(|x: i32| x);
-
 --------------------------------------------------------------------------------
 inner: forall F A. fn(F[A]) -> F[A]
 inner([1]): a[b]
@@ -211,7 +202,6 @@ The kind of a type parameter comes from how it is used
 ================================================================================
 fn f[F](x: F[i32, Bool]) -> i32 = 1;
 fn g[F](x: F[i32], y: F[i32, Bool]) -> i32 = 1;
-
 --------------------------------------------------------------------------------
 f: forall F. fn(F[i32, Bool]) -> i32
 g: forall F. fn(F[i32], {error}) -> i32
@@ -226,7 +216,6 @@ struct Apply[F, A] { value: F[A] }
 struct Compose[F, G, A] { value: F[G[A]] }
 let a = Apply { value: Option.Some(1) };
 let c = Compose { value: Option.Some(Option.Some(True)) };
-
 --------------------------------------------------------------------------------
 let a: imm Apply[Option, i32]
 let c: imm Compose[Option, Option, Bool]

@@ -11,7 +11,6 @@ pub fn id[T](x: T) -> T = x;
 fn get(o, d) = match o { Some(x) => x, None => d };
 get(Some(id(1)), 2);
 let o: Option[Bool] = None;
-
 --------------------------------------------------------------------------------
 /toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /main.bolt: get: forall a. fn(Option[a], a) -> a
@@ -31,7 +30,6 @@ import "./lib" (first);
 fn id(x: i32) -> String = "mine";
 id(1);
 first(True, False);
-
 --------------------------------------------------------------------------------
 /toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /toolchain/std/__prelude__/lib.bolt: first: fn(i32, i32) -> i32
@@ -48,7 +46,6 @@ pub class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 show(1);
-
 --------------------------------------------------------------------------------
 /toolchain/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> String
 /main.bolt: show(1): String

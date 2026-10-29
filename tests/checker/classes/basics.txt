@@ -34,7 +34,6 @@ class Convert[A, B] { fn convert(a: A) -> B; }
 impl Convert[i32, String] { fn convert(a) = "int"; }
 fn to_str(x: i32) -> String = convert(x);
 fn to_bool(x: i32) -> Bool = convert(x);
-
 --------------------------------------------------------------------------------
 Convert[i32, String].convert: fn(i32) -> String
 to_str: fn(i32) -> String
@@ -51,7 +50,6 @@ impl Show[i32] { fn show(x) = "int"; }
 impl[T] Show[Option[T]] where Show[T] { fn show(x) = "option"; }
 show(Option.Some(1));
 show(Option.Some(True));
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 Show[Option[T]].show: forall T. Show[T] => fn(Option[T]) -> String
@@ -66,7 +64,6 @@ Superclasses are assumed
 class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn max[T](a: T, b: T) -> T where Ord[T] = if lt(a, b) || eq(a, b) { b } else { a };
-
 --------------------------------------------------------------------------------
 max: forall T. Ord[T] => fn(T, T) -> T
 
@@ -76,7 +73,6 @@ Constraints are inferred from several methods
 class Show[T] { fn show(x: T) -> String; }
 class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 fn show_if_same(a, b) = if eq(a, b) { show(a) } else { "different" };
-
 --------------------------------------------------------------------------------
 show_if_same: forall a. Eq[a] => Show[a] => fn(a, a) -> String
 
@@ -87,7 +83,6 @@ class Default[T] { fn default() -> T; }
 impl Default[i32] { fn default() = 0; }
 fn f() { default(); }
 fn g() -> i32 = default();
-
 --------------------------------------------------------------------------------
 Default[i32].default: fn() -> i32
 f: fn() -> ()
@@ -100,7 +95,6 @@ Methods of impls are checked against the class
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = 1; }
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
@@ -155,7 +149,6 @@ impl[T] Semigroup[List[T]] {
     Cons(x, y) => Cons(x, concat(y, b)),
   };
 }
-
 --------------------------------------------------------------------------------
 /main.bolt: Semigroup[List[T]].concat: forall T. fn(List[T], List[T]) -> List[T]
 
@@ -195,7 +188,6 @@ class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
 impl Show[i32] { fn show(x) = "two"; }
 show(1);
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 Show[i32].show: fn(i32) -> String
@@ -210,7 +202,6 @@ Overlapping impls are reported where they're defined
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
 impl Show[i32] { fn show(x) = "two"; }
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 Show[i32].show: fn(i32) -> String
@@ -225,7 +216,6 @@ class Show[T] { fn show(x: T) -> String; }
 impl[T] Show[T] { fn show(x) = "any"; }
 impl Show[i32] { fn show(x) = "int"; }
 show(1);
-
 --------------------------------------------------------------------------------
 Show[T].show: forall T. fn(T) -> String
 Show[i32].show: fn(i32) -> String
@@ -239,7 +229,6 @@ An impl method with the wrong number of parameters
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x, y) = "int"; }
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
@@ -251,7 +240,6 @@ An impl method with a signature that doesn't match
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x: Bool) -> String = "int"; }
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 --------------------------------------------------------------------------------
@@ -264,7 +252,6 @@ An impl of something that isn't a class
 struct Point { x: i32 }
 impl Point[i32] {}
 impl Nope[i32] {}
-
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -278,7 +265,6 @@ An impl with the wrong number of arguments
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32, Bool] { fn show(x) = "int"; }
 impl Show { fn show(x) = "int"; }
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 Show[{error}].show: fn({error}) -> String
@@ -293,7 +279,6 @@ An impl of a class whose superclass has no impl
 class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 impl Ord[i32] { fn lt(a, b) = a < b; }
-
 --------------------------------------------------------------------------------
 Ord[i32].lt: fn(i32, i32) -> Bool
 --------------------------------------------------------------------------------
@@ -305,7 +290,6 @@ Superclass methods through a constraint that is inferred
 class Eq[T] { fn eq(a: T, b: T) -> Bool; }
 class Ord[T] where Eq[T] { fn lt(a: T, b: T) -> Bool; }
 fn le(a, b) = lt(a, b) || eq(a, b);
-
 --------------------------------------------------------------------------------
 le: forall a. Ord[a] => fn(a, a) -> Bool
 
@@ -316,7 +300,6 @@ A class method whose type doesn't mention the class parameter
 class Weird[T] { fn weird(x: i32) -> i32; }
 impl Weird[Bool] { fn weird(x) = x; }
 weird(1);
-
 --------------------------------------------------------------------------------
 Weird[Bool].weird: fn(i32) -> i32
 weird(1): i32
@@ -350,7 +333,6 @@ A where clause on a type without an impl
 class Show[T] { fn show(x: T) -> String; }
 fn f() -> String where Show[Bool] = show(True);
 f();
-
 --------------------------------------------------------------------------------
 f: Show[Bool] => fn() -> String
 f(): String
@@ -366,7 +348,6 @@ fn apply(f, x) = f(x);
 let s: fn(i32) -> String = show;
 apply(show, 1);
 apply(show, True);
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 apply: forall a b. fn(fn(a) -> b, a) -> b
@@ -382,7 +363,6 @@ Method call syntax on a constrained parameter
 class Show[T] { fn show(x: T) -> String; }
 fn f[T](x: T) -> String where Show[T] = x.show();
 fn g[T](x: T) -> String = x.show();
-
 --------------------------------------------------------------------------------
 f: forall T. Show[T] => fn(T) -> String
 g: forall T. fn(T) -> String
@@ -396,7 +376,6 @@ A multi-parameter class whose result is never known
 class Convert[A, B] { fn convert(a: A) -> B; }
 impl Convert[i32, String] { fn convert(a) = "int"; }
 fn f() { convert(1); }
-
 --------------------------------------------------------------------------------
 Convert[i32, String].convert: fn(i32) -> String
 f: fn() -> ()
@@ -412,7 +391,6 @@ impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
 show((1, True));
 show(|x: i32| x);
 show((True, 1));
-
 --------------------------------------------------------------------------------
 Show[(i32, Bool)].show: fn((i32, Bool)) -> String
 Show[fn(i32) -> i32].show: fn(fn(i32) -> i32) -> String
@@ -429,7 +407,6 @@ class Show[T] { fn show(x: T) -> String; }
 type Int = i32;
 impl Show[Int] { fn show(x) = "int"; }
 show(1);
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 show(1): String
@@ -443,7 +420,6 @@ class Show[T] {
 }
 impl Show[i32] { fn show(x) = "int"; }
 show_twice(1);
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 show_twice(1): String
@@ -456,7 +432,6 @@ class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
 fn twice[T](x: T) -> (String, String) where Show[T] = (show(x), show(x));
 fn call() = twice("a");
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 twice: forall T. Show[T] => fn(T) -> (String, String)
@@ -502,7 +477,6 @@ struct Box[T] { item: T }
 impl[T, U] Show[Box[T]] { fn show(x) = 1; }
 impl[T, 'v] Show[[T]] { fn show(x) = 2; }
 impl Show[i32] where 'q: imm { fn show(x) = 3; }
-
 --------------------------------------------------------------------------------
 Show[Box[T]].show: forall T U. fn(Box[T]) -> i32
 Show[[T]].show: forall T. fn([T]) -> i32
@@ -519,7 +493,6 @@ class Show[T] { fn show(x: T) -> i32; }
 struct It[T, 'v] { data: 'v [T] }
 impl[T, 'v] Show['v [T]] { fn show(x) = 1; }
 impl[T, 'w] Show[It[T, 'w]] { fn show(x) = 2; }
-
 --------------------------------------------------------------------------------
 Show['v [T]].show: forall T. fn('v [T]) -> i32
 Show[It[T, 'w]].show: forall T. fn(It[T, 'w]) -> i32

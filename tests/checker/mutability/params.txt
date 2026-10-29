@@ -7,7 +7,6 @@ let a = start([1, 2]);
 let b = start(mut [1, 2]);
 a.index = 1;
 b.data[0] = 5;
-
 --------------------------------------------------------------------------------
 start: fn('v [i32]) -> mut Iter['v]
 let a: mut Iter[imm]
@@ -22,7 +21,6 @@ A field with the struct's mutability can't be changed in a mut struct that has a
 struct Iter['v] { data: 'v [i32], index: i32 }
 let a = mut Iter { data: [1, 2], index: 0 };
 a.data[0] = 5;
-
 --------------------------------------------------------------------------------
 let a: mut Iter[imm]
 a.data[0] = 5: ()
@@ -35,7 +33,6 @@ Reading a field gives its own mutability
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn get(it: Iter['v]) -> 'v [i32] = it.data;
 fn index(it: Iter) -> i32 = it.index;
-
 --------------------------------------------------------------------------------
 get: fn(Iter['v]) -> 'v [i32]
 index: fn(Iter) -> i32
@@ -48,7 +45,6 @@ fn first(it: Iter[i32, imm]) -> i32 = it.data[0];
 fn poke(it: Iter[i32, mut]) { it.data[0] = 1; }
 let a = first(Iter { data: [1], index: 0 });
 poke(mut Iter { data: mut [1], index: 0 });
-
 --------------------------------------------------------------------------------
 first: fn(Iter[i32, imm]) -> i32
 poke: fn(Iter[i32, mut]) -> ()
@@ -61,7 +57,6 @@ An inferred function
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs) = mut Iter { data: xs, index: 0 };
 fn frozen(xs) = Iter { data: xs, index: 0 };
-
 --------------------------------------------------------------------------------
 start: fn('m [i32]) -> mut Iter['m]
 frozen: fn(imm [i32]) -> imm Iter[imm]
@@ -72,7 +67,6 @@ An imm struct can't hold a mutability that may be mut
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs: 'v [i32]) -> imm Iter['v] = Iter { data: xs, index: 0 };
-
 --------------------------------------------------------------------------------
 start: fn('v [i32]) -> imm Iter['v]
 --------------------------------------------------------------------------------
@@ -84,7 +78,6 @@ Unless the function assumes it's imm
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn start(xs: 'v [i32]) -> imm Iter['v] where 'v: imm = Iter { data: xs, index: 0 };
 start([1]);
-
 --------------------------------------------------------------------------------
 start: 'v: imm => fn('v [i32]) -> imm Iter['v]
 start([1]): imm Iter[imm]
@@ -95,7 +88,6 @@ An imm struct can't hold a mut one through a mutability argument
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 let a = Iter { data: mut [1], index: 0 };
-
 --------------------------------------------------------------------------------
 let a: imm Iter[mut]
 --------------------------------------------------------------------------------
@@ -108,7 +100,6 @@ A struct can bound what it takes
 struct Frozen['v: imm] { data: 'v [i32] }
 let a = mut Frozen { data: [1] };
 let b = mut Frozen { data: mut [1] };
-
 --------------------------------------------------------------------------------
 let a: mut Frozen[imm]
 let b: mut Frozen[mut]
@@ -123,7 +114,6 @@ struct Outer { it: Iter }
 fn data(o: Outer) -> [i32] = o.it.data;
 let o = mut Outer { it: mut Iter { data: mut [1], index: 0 } };
 o.it.data[0] = 2;
-
 --------------------------------------------------------------------------------
 data: fn('m Outer) -> 'm [i32]
 let o: mut Outer
@@ -135,7 +125,6 @@ A struct can pass its mutability on
 struct Iter['v] { data: 'v [i32], index: i32 }
 struct Outer['w] { it: Iter['w] }
 fn data(o: Outer['w]) -> 'w [i32] = o.it.data;
-
 --------------------------------------------------------------------------------
 data: fn(Outer['w]) -> 'w [i32]
 
@@ -145,7 +134,6 @@ A field can't be given mut
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 struct Outer { it: Iter[mut] }
-
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -156,7 +144,6 @@ A field can only use the names its struct declares
 :error
 ================================================================================
 struct Iter { data: 'v [i32] }
-
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------
@@ -169,7 +156,6 @@ Too many mutability arguments
 struct Iter['v] { data: 'v [i32] }
 struct Point { x: i32 }
 fn f(a: Iter[imm, imm], b: Point[imm]) {}
-
 --------------------------------------------------------------------------------
 f: fn(Iter[imm], Point) -> ()
 --------------------------------------------------------------------------------
@@ -181,7 +167,6 @@ Only structs, functions and impls take mutability parameters
 :error
 ================================================================================
 enum Either['v] { Left('v [i32]), Right }
-
 --------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------

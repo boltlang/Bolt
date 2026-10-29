@@ -31,7 +31,6 @@ struct Holder { poke: fn() }
 let xs = mut [0];
 let h = mut Holder { poke: || { xs[0] += 1; } };
 h.poke();
-
 --------------------------------------------------------------------------------
 let xs: mut [i32]
 let h: mut Holder
@@ -44,7 +43,6 @@ struct Holder { get: fn() -> i32 }
 let k = 1;
 let xs = [1, 2];
 let h = Holder { get: || k + xs[0] };
-
 --------------------------------------------------------------------------------
 let k: i32
 let xs: imm [i32]

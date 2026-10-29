@@ -3,7 +3,6 @@ A variant
 ================================================================================
 enum Color { Red, Green, Blue }
 Color.Blue;
-
 --------------------------------------------------------------------------------
 Blue
 
@@ -13,7 +12,6 @@ A variant in a variable
 enum Color { Red, Green, Blue }
 let c = Color.Green;
 c;
-
 --------------------------------------------------------------------------------
 Green
 
@@ -27,7 +25,6 @@ fn next(c: Color) -> Color = match c {
   Color.Blue => Color.Red,
 };
 next(next(Color.Red));
-
 --------------------------------------------------------------------------------
 Blue
 
@@ -40,7 +37,6 @@ fn code(c) = match c { Red => 1, Green => 2, Blue => 3 };
 fn warm(c: Color) -> Bool = match c { Red | Green => True, _ => False };
 print(if warm(Green) && !warm(Blue) { "warm" } else { "cold" });
 code(Blue) * 10 + code(Red);
-
 --------------------------------------------------------------------------------
 warm
 31
@@ -50,7 +46,6 @@ Equality of variants
 ================================================================================
 enum Color { Red, Green, Blue }
 Color.Red == Color.Red && Color.Red != Color.Blue;
-
 --------------------------------------------------------------------------------
 True
 
@@ -61,7 +56,6 @@ enum Color { Red, Green, Blue }
 let mut c = Color.Red;
 if c == Color.Red { c = Color.Blue; }
 c;
-
 --------------------------------------------------------------------------------
 Blue
 
@@ -71,7 +65,6 @@ Generic enums without fields
 enum Tag[T] { A, B }
 fn tag(x: i32) -> Tag[i32] = if x > 0 { Tag.B } else { Tag.A };
 tag(5);
-
 --------------------------------------------------------------------------------
 B
 
@@ -82,7 +75,6 @@ enum Color { Red, Green, Blue }
 const FAVORITE: Color = Color.Green;
 fn is_favorite(c: Color) -> Bool = match c { FAVORITE => True, _ => False };
 (FAVORITE == Color.Green) && is_favorite(Color.Green);
-
 --------------------------------------------------------------------------------
 True
 
@@ -96,7 +88,6 @@ fn area(s: Shape) -> f64 = match s {
   Shape.Square(w) => w * w,
 };
 area(Shape.Square(2.0)) + area(Shape.Circle(1.0));
-
 --------------------------------------------------------------------------------
 7.0
 

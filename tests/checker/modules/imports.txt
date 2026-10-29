@@ -39,7 +39,6 @@ pub fn id(x) = x;
 import "./lib" (id);
 id(1);
 id("a");
-
 --------------------------------------------------------------------------------
 /lib.bolt: id: forall a. fn(a) -> a
 /main.bolt: id(1): i32
@@ -56,7 +55,6 @@ import "./shapes" (Point, Shape);
 let p = Point { x: 1, y: 2 };
 let s = Shape.Circle(1.0);
 p.x;
-
 --------------------------------------------------------------------------------
 /main.bolt: let p: imm Point
 /main.bolt: let s: Shape
@@ -72,7 +70,6 @@ impl Show[i32] { fn show(x) = "int"; }
 import "./show" (Show, show);
 show(1);
 show(True);
-
 --------------------------------------------------------------------------------
 /show.bolt: Show[i32].show: fn(i32) -> String
 /main.bolt: show(1): String
@@ -90,7 +87,6 @@ pub struct V { x: i32 }
 import "./math" as m;
 m.double(2);
 let v: m.V = m.V { x: 1 };
-
 --------------------------------------------------------------------------------
 /math.bolt: double: fn(i32) -> i32
 /main.bolt: m.double(2): i32
@@ -138,7 +134,6 @@ pub import "./option" as option;
 import "./lib" (Some, unwrap_or, option);
 unwrap_or(Some(1), 2);
 option.unwrap_or(option.None, True);
-
 --------------------------------------------------------------------------------
 /option.bolt: unwrap_or: forall T. fn(Option[T], T) -> T
 /main.bolt: unwrap_or(Some(1), 2): i32
@@ -173,7 +168,6 @@ pub fn id(x) = x;
 //- /main.bolt
 import "./lib" (nope);
 nope(1);
-
 --------------------------------------------------------------------------------
 /lib.bolt: id: forall a. fn(a) -> a
 /main.bolt: nope(1): {error}
@@ -189,7 +183,6 @@ fn secret() -> i32 = 1;
 //- /main.bolt
 import "./lib" (secret);
 secret();
-
 --------------------------------------------------------------------------------
 /lib.bolt: secret: fn() -> i32
 /main.bolt: secret(): {error}
@@ -203,7 +196,6 @@ Importing a file that isn't there
 //- /main.bolt
 import "./nope" (f);
 f(1);
-
 --------------------------------------------------------------------------------
 f(1): {error}
 --------------------------------------------------------------------------------
@@ -218,7 +210,6 @@ pub fn f(x: i32) -> i32 = if x == 0 { 0 } else { g(x - 1) };
 //- /b.bolt
 import "./a" (f);
 pub fn g(x: i32) -> i32 = f(x);
-
 --------------------------------------------------------------------------------
 /a.bolt: f: fn(i32) -> i32
 /b.bolt: g: fn(i32) -> i32
@@ -232,7 +223,6 @@ pub fn f(x: i32) -> i32 = g(x);
 //- /b.bolt
 import "./a" (f);
 pub fn g(x) = f(x);
-
 --------------------------------------------------------------------------------
 /a.bolt: f: fn(i32) -> i32
 /b.bolt: g: fn(i32) -> i32
@@ -247,7 +237,6 @@ import "./lib" (Box);
 let b = Box { value: True };
 b.value;
 fn get(b: Box[i32]) -> i32 = b.value;
-
 --------------------------------------------------------------------------------
 /main.bolt: get: fn(Box[i32]) -> i32
 /main.bolt: let b: imm Box[Bool]
@@ -264,7 +253,6 @@ impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 import "./show" (Show, show);
 show(1);
-
 --------------------------------------------------------------------------------
 /impls.bolt: Show[i32].show: fn(i32) -> String
 /main.bolt: show(1): String

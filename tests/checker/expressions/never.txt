@@ -5,7 +5,6 @@ extern "bolt" { fn panic(message: String) -> !; }
 fn f(x: i32) -> String = if x > 0 { "positive" } else { panic("negative") };
 fn g() -> i32 = panic("never");
 let a: Bool = panic("no");
-
 --------------------------------------------------------------------------------
 f: fn(i32) -> String
 g: fn() -> i32
@@ -18,7 +17,6 @@ Panic needs a message
 extern "bolt" { fn panic(message: String) -> !; }
 panic(1);
 panic();
-
 --------------------------------------------------------------------------------
 panic(1): !
 panic(): !
@@ -32,7 +30,6 @@ A function that never returns
 extern "bolt" { fn panic(message: String) -> !; }
 fn fail(msg: String) -> ! = panic(msg);
 fn f(x: i32) -> i32 = if x > 0 { x } else { fail("negative") };
-
 --------------------------------------------------------------------------------
 fail: fn(String) -> !
 f: fn(i32) -> i32
@@ -43,7 +40,6 @@ A function that never returns can't return a value
 ================================================================================
 fn f() -> ! = 1;
 fn g() -> ! { return; }
-
 --------------------------------------------------------------------------------
 f: fn() -> !
 g: fn() -> !
@@ -55,7 +51,6 @@ error at `return`: expected !, found ()
 A function that never returns can loop forever
 ================================================================================
 fn f() -> ! = loop {};
-
 --------------------------------------------------------------------------------
 f: fn() -> !
 
@@ -64,7 +59,6 @@ A loop that breaks doesn't give never
 :todo
 ================================================================================
 fn g() -> ! = loop { break; };
-
 --------------------------------------------------------------------------------
 g: fn() -> !
 --------------------------------------------------------------------------------
@@ -77,7 +71,6 @@ extern "bolt" { fn panic(message: String) -> !; }
 fn f() = (1, panic("x"));
 fn g() = [panic("x"), 1];
 fn h() = [panic("x")];
-
 --------------------------------------------------------------------------------
 f: fn() -> (i32, !)
 g: fn() -> imm [i32]
@@ -89,7 +82,6 @@ Matching an empty enum
 enum Void {}
 fn absurd(v: Void) -> i32 = match v {};
 fn absurd2[T](v: Void) -> T = match v {};
-
 --------------------------------------------------------------------------------
 absurd: fn(Void) -> i32
 absurd2: forall T. fn(Void) -> T

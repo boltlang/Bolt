@@ -5,7 +5,6 @@ struct Handler[T] { f: fn(T) -> () }
 struct Tag[T] { id: i32 }
 let h = Handler { f: |xs: mut [i32]| { xs[0] = 1; } };
 let t: Tag[mut [i32]] = Tag { id: 1 };
-
 --------------------------------------------------------------------------------
 let h: imm Handler[mut [i32]]
 let t: imm Tag[mut [i32]]
@@ -16,7 +15,6 @@ A type argument held in a field with its own mutability is at most that one
 ================================================================================
 struct VecIter[T, 'v] { data: 'v [T], index: i32 }
 fn f(it: mut VecIter[mut [i32], imm]) {}
-
 --------------------------------------------------------------------------------
 f: fn(mut VecIter[mut [i32], imm]) -> ()
 --------------------------------------------------------------------------------
@@ -29,7 +27,6 @@ A type argument held in an imm field is imm
 struct Frozen[T] { items: imm [T] }
 let a = mut Frozen { items: [1] };
 let b = mut Frozen { items: [mut [1]] };
-
 --------------------------------------------------------------------------------
 let a: mut Frozen[i32]
 let b: mut Frozen[mut [i32]]
@@ -44,7 +41,6 @@ struct VecIter[T, 'v] { data: 'v [T], index: i32 }
 fn start[T](xs: 'm [T]) -> mut VecIter[T, 'm] = mut VecIter { data: xs, index: 0 };
 let a = start([[1]]);
 let b = start(mut [mut [1]]);
-
 --------------------------------------------------------------------------------
 start: forall T. fn('m [T]) -> mut VecIter[T, 'm]
 let a: mut VecIter[imm [i32], imm]
@@ -58,7 +54,6 @@ struct Node[T] { item: T, next: Option[Node[T]] }
 struct Tree[T] { left: Option[Tree[T]], right: Option[Tree[T]], tag: fn(T) -> () }
 let n = mut Node { item: mut [1], next: Option.None };
 let t = Tree { left: Option.None, right: Option.None, tag: |x: mut [i32]| {} };
-
 --------------------------------------------------------------------------------
 let n: mut Node[mut [i32]]
 let t: imm Tree[mut [i32]]
@@ -70,7 +65,6 @@ A struct that refers to itself still can't hold a mut value when it's imm
 enum Option[T] { Some(T), None }
 struct Node[T] { item: T, next: Option[Node[T]] }
 let n = Node { item: mut [1], next: Option.None };
-
 --------------------------------------------------------------------------------
 let n: imm Node[mut [i32]]
 --------------------------------------------------------------------------------

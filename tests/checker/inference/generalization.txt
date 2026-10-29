@@ -3,7 +3,6 @@ A literal in a function without a signature defaults when generalized
 ================================================================================
 fn inc(x) = x + 1;
 inc(1u8);
-
 --------------------------------------------------------------------------------
 inc: fn(i32) -> i32
 inc(1u8): i32
@@ -15,7 +14,6 @@ A function that returns a literal can't be used at another type
 ================================================================================
 fn zero() = 0;
 let a: u8 = zero();
-
 --------------------------------------------------------------------------------
 zero: fn() -> i32
 let a: u8
@@ -28,7 +26,6 @@ An empty array from a function is generic
 fn empty() = [];
 let a: [i32] = empty();
 let b: [Bool] = empty();
-
 --------------------------------------------------------------------------------
 empty: forall a. a: imm => fn() -> imm [a]
 let a: imm [i32]
@@ -41,7 +38,6 @@ enum Option[T] { None, Some(T) }
 fn none() = Option.None;
 let a: Option[i32] = none();
 let b: Option[String] = none();
-
 --------------------------------------------------------------------------------
 none: forall a. fn() -> Option[a]
 let a: Option[i32]
@@ -53,7 +49,6 @@ Top-level lets are not generic
 let id = |x| x;
 id(1);
 id(True);
-
 --------------------------------------------------------------------------------
 let id: fn(i32) -> i32
 id(1): i32
@@ -67,7 +62,6 @@ Functions can't see top-level lets
 let n = 1;
 fn f() = n + 1;
 fn g() -> Bool = n;
-
 --------------------------------------------------------------------------------
 f: fn() -> {error}
 g: fn() -> Bool
@@ -83,7 +77,6 @@ let x = 1;
 let x = "a";
 x;
 fn f(y: i32) = { let y = True; y };
-
 --------------------------------------------------------------------------------
 f: fn(i32) -> Bool
 let x: i32
@@ -98,7 +91,6 @@ fn f() {
   fn id(x) = x;
   (id(1), id(True))
 }
-
 --------------------------------------------------------------------------------
 f: fn() -> (i32, Bool)
 
@@ -108,7 +100,6 @@ Nested lambdas
 let add = |a| |b| a + b;
 add(1)(2);
 (|x| x)(True);
-
 --------------------------------------------------------------------------------
 let add: fn(i32) -> fn(i32) -> i32
 add(1)(2): i32
@@ -120,7 +111,6 @@ Lambdas with patterns as parameters
 let sum = |(a, b)| a + b;
 sum((1, 2));
 sum(1);
-
 --------------------------------------------------------------------------------
 let sum: fn((i32, i32)) -> i32
 sum((1, 2)): i32
@@ -134,7 +124,6 @@ Class constraints in lambdas are inferred for their function
 class Show[T] { fn show(x: T) -> String; }
 fn f(x) = (|y| show(y))(x);
 fn g(x) { let s = |y| show(y); s(x) }
-
 --------------------------------------------------------------------------------
 f: forall a. Show[a] => fn(a) -> String
 g: forall a. Show[a] => fn(a) -> String
@@ -148,7 +137,6 @@ impl Show[Bool] { fn show(x) = "Bool"; }
 fn both() = (show(1), show(True));
 fn twice(x) = (show(x), show(x));
 fn mixed(x) = (twice(x), twice(1));
-
 --------------------------------------------------------------------------------
 Show[i32].show: fn(i32) -> String
 Show[Bool].show: fn(Bool) -> String

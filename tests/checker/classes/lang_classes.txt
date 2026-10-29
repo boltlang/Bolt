@@ -5,7 +5,6 @@ struct Bag[T] { items: [T] }
 impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
 let b = Bag { items: [True] };
 b[0];
-
 --------------------------------------------------------------------------------
 Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
 let b: imm Bag[Bool]
@@ -18,7 +17,6 @@ Indexing a type without an impl of Index
 struct Bag[T] { items: [T] }
 let b = Bag { items: [True] };
 b[0];
-
 --------------------------------------------------------------------------------
 let b: imm Bag[Bool]
 b[0]: {error}
@@ -33,7 +31,6 @@ struct Bag[T] { items: [T] }
 impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
 let b = Bag { items: [True] };
 b[True];
-
 --------------------------------------------------------------------------------
 Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
 let b: imm Bag[Bool]
@@ -53,7 +50,6 @@ b[0] = 2;
 b[0] += 1;
 let c = Bag { items: [1] };
 c[0] = 2;
-
 --------------------------------------------------------------------------------
 Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
 IndexMut[mut Bag[T]].set_index: forall T. fn(mut Bag[T], i32, T) -> ()
@@ -74,7 +70,6 @@ impl[T] Index[Bag[T]] { type Item = T; fn index(b, i) = b.items[i]; }
 impl[T] IndexMut[mut Bag[T]] { fn set_index(b, i, x) { b.items[i] = x; } }
 let b = mut Bag { items: mut [1] };
 b[0] = "two";
-
 --------------------------------------------------------------------------------
 Index[Bag[T]].index: forall T. fn(Bag[T], i32) -> T
 IndexMut[mut Bag[T]].set_index: forall T. fn(mut Bag[T], i32, T) -> ()
@@ -101,7 +96,6 @@ fn f(c: Count) {
     let y: i32 = x;
   }
 }
-
 --------------------------------------------------------------------------------
 Iterator[mut CountIter].next: fn(mut CountIter) -> Option[i32]
 Iterable[Count].iter: fn(Count) -> mut CountIter
@@ -115,7 +109,6 @@ struct Count { n: i32 }
 fn f(c: Count) {
   for x in c {}
 }
-
 --------------------------------------------------------------------------------
 f: fn(Count) -> ()
 --------------------------------------------------------------------------------
@@ -130,7 +123,6 @@ fn count[C](c: C) -> i32 where Iterable[C], Iterator[C.Iter] {
   for x in c { n += 1; }
   n
 }
-
 --------------------------------------------------------------------------------
 first: forall C. Index[C] => fn(C) -> C.Item
 count: forall C. Iterable[C] => Iterator[C.Iter] => fn(C) -> i32
@@ -145,7 +137,6 @@ fn total(xs) {
   n
 }
 first([True]);
-
 --------------------------------------------------------------------------------
 first: forall a. Index[a] => fn(a) -> a.Item
 total: forall a. Iterable[a] => a.Iter.Item = i32 => fn(a) -> i32

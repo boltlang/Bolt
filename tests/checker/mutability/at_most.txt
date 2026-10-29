@@ -120,7 +120,6 @@ A long chain of assumptions
 fn freeze(xs: 'a [i32]) -> imm ['a [i32]]
   where 'a: 'b, 'b: 'c, 'c: 'd, 'd: 'e, 'e: 'f, 'f: 'g, 'g: 'h, 'h: 'i, 'i: 'j, 'j: imm
   = [xs];
-
 --------------------------------------------------------------------------------
 freeze: 'a: 'b => 'b: 'c => 'c: 'd => 'd: 'e => 'e: 'f => 'f: 'g => 'g: 'h => 'h: 'i => 'i: 'j => 'j: imm => fn('a [i32]) -> imm ['a [i32]]
 
