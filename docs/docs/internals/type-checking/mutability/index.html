@@ -1,7 +1,7 @@
-<!doctype html><html lang=en dir=ltr class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-internals/type-checking/mutability" data-has-hydrated=false><head><meta charset=UTF-8><meta name=generator content="Docusaurus v3.10.2"><title data-rh=true>Mutability | The Bolt Programming Language</title><meta data-rh=true name=viewport content="width=device-width, initial-scale=1.0"/><meta data-rh=true name=twitter:card content=summary_large_image /><meta data-rh=true property=og:image content=https://boltlang.net/img/bolt-banner.png /><meta data-rh=true name=twitter:image content=https://boltlang.net/img/bolt-banner.png /><meta data-rh=true property=og:url content=https://boltlang.net/docs/internals/type-checking/mutability /><meta data-rh=true property=og:locale content=en /><meta data-rh=true name=docusaurus_locale content=en /><meta data-rh=true name=docsearch:language content=en /><meta data-rh=true name=docusaurus_version content=current /><meta data-rh=true name=docusaurus_tag content=docs-default-current /><meta data-rh=true name=docsearch:version content=current /><meta data-rh=true name=docsearch:docusaurus_tag content=docs-default-current /><meta data-rh=true property=og:title content="Mutability | The Bolt Programming Language"/><meta data-rh=true name=description content="Arrays and structs that are shared, with whether they can be changed as part of their type, and imm that's deep."/><meta data-rh=true property=og:description content="Arrays and structs that are shared, with whether they can be changed as part of their type, and imm that's deep."/><link data-rh=true rel=icon href=/img/favicon.ico /><link data-rh=true rel=canonical href=https://boltlang.net/docs/internals/type-checking/mutability /><link data-rh=true rel=alternate href=https://boltlang.net/docs/internals/type-checking/mutability hreflang=en /><link data-rh=true rel=alternate href=https://boltlang.net/docs/internals/type-checking/mutability hreflang=x-default /><script data-rh=true type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://boltlang.net/docs/internals/type-checking/","name":"Type checking","position":1},{"@type":"ListItem","item":"https://boltlang.net/docs/internals/type-checking/mutability","name":"Mutability","position":2}]}</script><link rel=alternate type=application/rss+xml href=/blog/rss.xml title="The Bolt Programming Language RSS Feed"><link rel=alternate type=application/atom+xml href=/blog/atom.xml title="The Bolt Programming Language Atom Feed"><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css type=text/css integrity=sha384-nH0MfJ44wi1dd7w6jinlyBgljjS8EJAh2JBoRad8a3VDw2K69vfaaqm4WnR+gXtA crossorigin=anonymous><link rel=stylesheet href=/assets/css/styles.4f6da559.css /><script src=/assets/js/runtime~main.a36f15b1.js defer></script><script src=/assets/js/main.71b03abc.js defer></script></head><body><svg style="display: none;"><defs>
+<!doctype html><html lang=en dir=ltr class="docs-wrapper plugin-docs plugin-id-default docs-version-current docs-doc-page docs-doc-id-internals/type-checking/mutability/index" data-has-hydrated=false><head><meta charset=UTF-8><meta name=generator content="Docusaurus v3.10.2"><title data-rh=true>Mutability | The Bolt Programming Language</title><meta data-rh=true name=viewport content="width=device-width, initial-scale=1.0"/><meta data-rh=true name=twitter:card content=summary_large_image /><meta data-rh=true property=og:image content=https://boltlang.net/img/bolt-banner.png /><meta data-rh=true name=twitter:image content=https://boltlang.net/img/bolt-banner.png /><meta data-rh=true property=og:url content=https://boltlang.net/docs/internals/type-checking/mutability/ /><meta data-rh=true property=og:locale content=en /><meta data-rh=true name=docusaurus_locale content=en /><meta data-rh=true name=docsearch:language content=en /><meta data-rh=true name=docusaurus_version content=current /><meta data-rh=true name=docusaurus_tag content=docs-default-current /><meta data-rh=true name=docsearch:version content=current /><meta data-rh=true name=docsearch:docusaurus_tag content=docs-default-current /><meta data-rh=true property=og:title content="Mutability | The Bolt Programming Language"/><meta data-rh=true name=description content="Arrays and structs that are shared, with whether they can be changed as part of their type, and imm that's deep."/><meta data-rh=true property=og:description content="Arrays and structs that are shared, with whether they can be changed as part of their type, and imm that's deep."/><link data-rh=true rel=icon href=/img/favicon.ico /><link data-rh=true rel=canonical href=https://boltlang.net/docs/internals/type-checking/mutability/ /><link data-rh=true rel=alternate href=https://boltlang.net/docs/internals/type-checking/mutability/ hreflang=en /><link data-rh=true rel=alternate href=https://boltlang.net/docs/internals/type-checking/mutability/ hreflang=x-default /><script data-rh=true type=application/ld+json>{"@context":"https://schema.org","@type":"BreadcrumbList","itemListElement":[{"@type":"ListItem","item":"https://boltlang.net/docs/internals/type-checking/","name":"Type checking","position":1},{"@type":"ListItem","item":"https://boltlang.net/docs/internals/type-checking/mutability/","name":"Mutability","position":2}]}</script><link rel=alternate type=application/rss+xml href=/blog/rss.xml title="The Bolt Programming Language RSS Feed"><link rel=alternate type=application/atom+xml href=/blog/atom.xml title="The Bolt Programming Language Atom Feed"><link rel=stylesheet href=https://cdn.jsdelivr.net/npm/katex@0.16.47/dist/katex.min.css type=text/css integrity=sha384-nH0MfJ44wi1dd7w6jinlyBgljjS8EJAh2JBoRad8a3VDw2K69vfaaqm4WnR+gXtA crossorigin=anonymous><link rel=stylesheet href=/assets/css/styles.4f6da559.css /><script src=/assets/js/runtime~main.4a3bcfbe.js defer></script><script src=/assets/js/main.35772a53.js defer></script></head><body><svg style="display: none;"><defs>
 <symbol id=theme-svg-external-link viewBox="0 0 24 24"><path fill=currentColor d="M21 13v10h-21v-19h12v2h-10v15h17v-8h2zm3-12h-10.988l4.035 4-6.977 7.07 2.828 2.828 6.977-7.07 4.125 4.172v-11z"/></symbol>
 </defs></svg>
-<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme-012")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{for(var[t,e]of new URLSearchParams(window.location.search).entries())if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id=__docusaurus><link rel=preload as=image href=/img/logo.png /><div role=region aria-label="Skip to main content"><a class=skipToContent_oPtH href=#__docusaurus_skipToContent_fallback>Skip to main content</a></div><nav aria-label=Main class="theme-layout-navbar navbar navbar--fixed-top"><div class=navbar__inner><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded=false class="navbar__toggle clean-btn" type=button><svg width=30 height=30 viewBox="0 0 30 30" aria-hidden=true><path stroke=currentColor stroke-linecap=round stroke-miterlimit=10 stroke-width=2 d="M4 7h22M4 15h22M4 23h22"/></svg></button><a class=navbar__brand href=/><div class=navbar__logo><img src=/img/logo.png alt="The Bolt Programming Language Logo" class="themedComponent_siVc themedComponent--light_hHel"/><img src=/img/logo.png alt="The Bolt Programming Language Logo" class="themedComponent_siVc themedComponent--dark_yETr"/></div><b class="navbar__title text--truncate">Bolt</b></a><a class="navbar__item navbar__link" href=/docs/tutorial/>Tutorial</a><a class="navbar__item navbar__link" href=/docs/reference/>Reference</a><a class="navbar__item navbar__link" href=/blog>Blog</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a aria-current=page class="navbar__item navbar__link navbar__link--active" href=/docs/internals/type-checking/>Internals</a><a href=https://github.com/boltlang/bolt target=_blank rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPrP><use href=#theme-svg-external-link /></svg></a><div class="toggle_ki11 colorModeToggle_Hewu"><button class="clean-btn toggleButton_MMFG toggleButtonDisabled_Uw7m" type=button disabled title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width=24 height=24 aria-hidden=true class="toggleIcon_k9hJ lightToggleIcon_lgto"><path fill=currentColor d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"/></svg><svg viewBox="0 0 24 24" width=24 height=24 aria-hidden=true class="toggleIcon_k9hJ darkToggleIcon_U96C"><path fill=currentColor d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"/></svg><svg viewBox="0 0 24 24" width=24 height=24 aria-hidden=true class="toggleIcon_k9hJ systemToggleIcon_E5c0"><path fill=currentColor d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"/></svg></button></div><div class=navbarSearchContainer_bzqh></div></div></div><div role=presentation class=navbar-sidebar__backdrop></div></nav><div id=__docusaurus_skipToContent_fallback class="theme-layout-main main-wrapper mainWrapper_MB5r"><div class=docsWrapper__sE8><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_iEvu" type=button></button><div class=docRoot_DfVB><aside class="theme-doc-sidebar-container docSidebarContainer_c7NB"><div class=sidebarViewport_KYo0><div class=sidebar_CUen><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_jmj1"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class=menu__list-item-collapsible><a class="categoryLink_ROYx menu__link menu__link--sublist menu__link--active" href=/docs/internals/type-checking/><span class=categoryLinkLabel_ufhF>Type checking</span></a><button aria-label="Collapse sidebar category 'Type checking'" aria-expanded=true type=button class="clean-btn menu__caret"></button></div><ul class=menu__list><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/types><span class=linkLabel_fEdy>Types and schemes</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/kinds><span class=linkLabel_fEdy>Kinds</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/inference><span class=linkLabel_fEdy>Constraint generation</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/unification><span class=linkLabel_fEdy>Unification</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/constraints><span class=linkLabel_fEdy>Class and field constraints</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/generalization><span class=linkLabel_fEdy>Generalization</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class="menu__link menu__link--active" aria-current=page tabindex=0 href=/docs/internals/type-checking/mutability><span class=linkLabel_fEdy>Mutability</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/errors><span class=linkLabel_fEdy>Errors</span></a></ul><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/reactive><span class=linkLabel_fEdy>Reactive UI (design)</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/async><span class=linkLabel_fEdy>Async (design)</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/><span class=linkLabel_fEdy>index</span></a></ul></nav></div></div></aside><main class=docMainContainer_a9sJ><div class="container padding-top--md padding-bottom--lg"><div class=row><div class="col docItemCol_Qr34"><div class=docItemContainer_tjFy><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_T5ub" aria-label=Breadcrumbs><ul class=breadcrumbs><li class=breadcrumbs__item><a aria-label="Home page" class=breadcrumbs__link href=/><svg viewBox="0 0 24 24" class=breadcrumbHomeIcon_sfvy><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill=currentColor /></svg></a><li class=breadcrumbs__item><a class=breadcrumbs__link href=/docs/internals/type-checking/><span>Type checking</span></a><li class="breadcrumbs__item breadcrumbs__item--active"><span class=breadcrumbs__link>Mutability</span></ul></nav><div class="tocCollapsible_wXna theme-doc-toc-mobile tocMobile_Ojys"><button type=button class="clean-btn tocCollapsibleButton_iI2p">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Mutability</h1></header>
+<script>!function(){var t=function(){try{return new URLSearchParams(window.location.search).get("docusaurus-theme")}catch(t){}}()||function(){try{return window.localStorage.getItem("theme-012")}catch(t){}}();document.documentElement.setAttribute("data-theme",t||(window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")),document.documentElement.setAttribute("data-theme-choice",t||"system")}(),function(){try{for(var[t,e]of new URLSearchParams(window.location.search).entries())if(t.startsWith("docusaurus-data-")){var a=t.replace("docusaurus-data-","data-");document.documentElement.setAttribute(a,e)}}catch(t){}}()</script><div id=__docusaurus><link rel=preload as=image href=/img/logo.png /><div role=region aria-label="Skip to main content"><a class=skipToContent_oPtH href=#__docusaurus_skipToContent_fallback>Skip to main content</a></div><nav aria-label=Main class="theme-layout-navbar navbar navbar--fixed-top"><div class=navbar__inner><div class="theme-layout-navbar-left navbar__items"><button aria-label="Toggle navigation bar" aria-expanded=false class="navbar__toggle clean-btn" type=button><svg width=30 height=30 viewBox="0 0 30 30" aria-hidden=true><path stroke=currentColor stroke-linecap=round stroke-miterlimit=10 stroke-width=2 d="M4 7h22M4 15h22M4 23h22"/></svg></button><a class=navbar__brand href=/><div class=navbar__logo><img src=/img/logo.png alt="The Bolt Programming Language Logo" class="themedComponent_siVc themedComponent--light_hHel"/><img src=/img/logo.png alt="The Bolt Programming Language Logo" class="themedComponent_siVc themedComponent--dark_yETr"/></div><b class="navbar__title text--truncate">Bolt</b></a><a class="navbar__item navbar__link" href=/docs/tutorial/>Tutorial</a><a class="navbar__item navbar__link" href=/docs/reference/>Reference</a><a class="navbar__item navbar__link" href=/blog>Blog</a></div><div class="theme-layout-navbar-right navbar__items navbar__items--right"><a aria-current=page class="navbar__item navbar__link navbar__link--active" href=/docs/internals/type-checking/>Internals</a><a href=https://github.com/boltlang/bolt target=_blank rel="noopener noreferrer" class="navbar__item navbar__link">GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPrP><use href=#theme-svg-external-link /></svg></a><div class="toggle_ki11 colorModeToggle_Hewu"><button class="clean-btn toggleButton_MMFG toggleButtonDisabled_Uw7m" type=button disabled title="system mode" aria-label="Switch between dark and light mode (currently system mode)"><svg viewBox="0 0 24 24" width=24 height=24 aria-hidden=true class="toggleIcon_k9hJ lightToggleIcon_lgto"><path fill=currentColor d="M12,9c1.65,0,3,1.35,3,3s-1.35,3-3,3s-3-1.35-3-3S10.35,9,12,9 M12,7c-2.76,0-5,2.24-5,5s2.24,5,5,5s5-2.24,5-5 S14.76,7,12,7L12,7z M2,13l2,0c0.55,0,1-0.45,1-1s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S1.45,13,2,13z M20,13l2,0c0.55,0,1-0.45,1-1 s-0.45-1-1-1l-2,0c-0.55,0-1,0.45-1,1S19.45,13,20,13z M11,2v2c0,0.55,0.45,1,1,1s1-0.45,1-1V2c0-0.55-0.45-1-1-1S11,1.45,11,2z M11,20v2c0,0.55,0.45,1,1,1s1-0.45,1-1v-2c0-0.55-0.45-1-1-1C11.45,19,11,19.45,11,20z M5.99,4.58c-0.39-0.39-1.03-0.39-1.41,0 c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0s0.39-1.03,0-1.41L5.99,4.58z M18.36,16.95 c-0.39-0.39-1.03-0.39-1.41,0c-0.39,0.39-0.39,1.03,0,1.41l1.06,1.06c0.39,0.39,1.03,0.39,1.41,0c0.39-0.39,0.39-1.03,0-1.41 L18.36,16.95z M19.42,5.99c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06c-0.39,0.39-0.39,1.03,0,1.41 s1.03,0.39,1.41,0L19.42,5.99z M7.05,18.36c0.39-0.39,0.39-1.03,0-1.41c-0.39-0.39-1.03-0.39-1.41,0l-1.06,1.06 c-0.39,0.39-0.39,1.03,0,1.41s1.03,0.39,1.41,0L7.05,18.36z"/></svg><svg viewBox="0 0 24 24" width=24 height=24 aria-hidden=true class="toggleIcon_k9hJ darkToggleIcon_U96C"><path fill=currentColor d="M9.37,5.51C9.19,6.15,9.1,6.82,9.1,7.5c0,4.08,3.32,7.4,7.4,7.4c0.68,0,1.35-0.09,1.99-0.27C17.45,17.19,14.93,19,12,19 c-3.86,0-7-3.14-7-7C5,9.07,6.81,6.55,9.37,5.51z M12,3c-4.97,0-9,4.03-9,9s4.03,9,9,9s9-4.03,9-9c0-0.46-0.04-0.92-0.1-1.36 c-0.98,1.37-2.58,2.26-4.4,2.26c-2.98,0-5.4-2.42-5.4-5.4c0-1.81,0.89-3.42,2.26-4.4C12.92,3.04,12.46,3,12,3L12,3z"/></svg><svg viewBox="0 0 24 24" width=24 height=24 aria-hidden=true class="toggleIcon_k9hJ systemToggleIcon_E5c0"><path fill=currentColor d="m12 21c4.971 0 9-4.029 9-9s-4.029-9-9-9-9 4.029-9 9 4.029 9 9 9zm4.95-13.95c1.313 1.313 2.05 3.093 2.05 4.95s-0.738 3.637-2.05 4.95c-1.313 1.313-3.093 2.05-4.95 2.05v-14c1.857 0 3.637 0.737 4.95 2.05z"/></svg></button></div><div class=navbarSearchContainer_bzqh></div></div></div><div role=presentation class=navbar-sidebar__backdrop></div></nav><div id=__docusaurus_skipToContent_fallback class="theme-layout-main main-wrapper mainWrapper_MB5r"><div class=docsWrapper__sE8><button aria-label="Scroll back to top" class="clean-btn theme-back-to-top-button backToTopButton_iEvu" type=button></button><div class=docRoot_DfVB><aside class="theme-doc-sidebar-container docSidebarContainer_c7NB"><div class=sidebarViewport_KYo0><div class=sidebar_CUen><nav aria-label="Docs sidebar" class="menu thin-scrollbar menu_jmj1"><ul class="theme-doc-sidebar-menu menu__list"><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-1 menu__list-item"><div class=menu__list-item-collapsible><a class="categoryLink_ROYx menu__link menu__link--sublist menu__link--active" href=/docs/internals/type-checking/><span class=categoryLinkLabel_ufhF>Type checking</span></a><button aria-label="Collapse sidebar category 'Type checking'" aria-expanded=true type=button class="clean-btn menu__caret"></button></div><ul class=menu__list><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/types><span class=linkLabel_fEdy>Types and schemes</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/kinds><span class=linkLabel_fEdy>Kinds</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/inference><span class=linkLabel_fEdy>Constraint generation</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/unification><span class=linkLabel_fEdy>Unification</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/constraints><span class=linkLabel_fEdy>Class and field constraints</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/generalization><span class=linkLabel_fEdy>Generalization</span></a><li class="theme-doc-sidebar-item-category theme-doc-sidebar-item-category-level-2 menu__list-item"><div class="menu__list-item-collapsible menu__list-item-collapsible--active"><a class="categoryLink_ROYx menu__link menu__link--sublist menu__link--active" aria-current=page tabindex=0 href=/docs/internals/type-checking/mutability/><span class=categoryLinkLabel_ufhF>Mutability</span></a><button aria-label="Collapse sidebar category 'Mutability'" aria-expanded=true type=button class="clean-btn menu__caret"></button></div><ul class=menu__list><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/mutability/functions><span class=linkLabel_fEdy>Functions and annotations</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/mutability/regions><span class=linkLabel_fEdy>Regions</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/mutability/errors><span class=linkLabel_fEdy>Errors</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/mutability/implementation><span class=linkLabel_fEdy>Implementation</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-3 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/mutability/prior-art><span class=linkLabel_fEdy>Prior art</span></a></ul><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-2 menu__list-item"><a class=menu__link tabindex=0 href=/docs/internals/type-checking/errors><span class=linkLabel_fEdy>Errors</span></a></ul><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/reactive><span class=linkLabel_fEdy>Reactive UI (design)</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/async><span class=linkLabel_fEdy>Async (design)</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/packages><span class=linkLabel_fEdy>Packages</span></a><li class="theme-doc-sidebar-item-link theme-doc-sidebar-item-link-level-1 menu__list-item"><a class=menu__link href=/docs/internals/><span class=linkLabel_fEdy>index</span></a></ul></nav></div></div></aside><main class=docMainContainer_a9sJ><div class="container padding-top--md padding-bottom--lg"><div class=row><div class="col docItemCol_Qr34"><div class=docItemContainer_tjFy><article><nav class="theme-doc-breadcrumbs breadcrumbsContainer_T5ub" aria-label=Breadcrumbs><ul class=breadcrumbs><li class=breadcrumbs__item><a aria-label="Home page" class=breadcrumbs__link href=/><svg viewBox="0 0 24 24" class=breadcrumbHomeIcon_sfvy><path d="M10 19v-5h4v5c0 .55.45 1 1 1h3c.55 0 1-.45 1-1v-7h1.7c.46 0 .68-.57.33-.87L12.67 3.6c-.38-.34-.96-.34-1.34 0l-8.36 7.53c-.34.3-.13.87.33.87H5v7c0 .55.45 1 1 1h3c.55 0 1-.45 1-1z" fill=currentColor /></svg></a><li class=breadcrumbs__item><a class=breadcrumbs__link href=/docs/internals/type-checking/><span>Type checking</span></a><li class="breadcrumbs__item breadcrumbs__item--active"><span class=breadcrumbs__link>Mutability</span></ul></nav><div class="tocCollapsible_wXna theme-doc-toc-mobile tocMobile_Ojys"><button type=button class="clean-btn tocCollapsibleButton_iI2p">On this page</button></div><div class="theme-doc-markdown markdown"><header><h1>Mutability</h1></header>
 <div class="theme-admonition theme-admonition-warning admonition_WCGJ alert alert--warning"><div class=admonitionHeading_GCBg><span class=admonitionIcon_L39b><svg viewBox="0 0 16 16"><path fill-rule=evenodd d="M8.893 1.5c-.183-.31-.52-.5-.887-.5s-.703.19-.886.5L.138 13.499a.98.98 0 0 0 0 1.001c.193.31.53.501.886.501h13.964c.367 0 .704-.19.877-.5a1.03 1.03 0 0 0 .01-1.002L8.893 1.5zm.133 11.497H6.987v-2.003h2.039v2.003zm0-3.004H6.987V5.987h2.039v4.006z"/></svg></span>Not compiled yet</div><div class=admonitionContent_pbrs><p>The type checker and the evaluator implement this page
 (<a href=https://github.com/boltlang/Bolt/issues/195 target=_blank rel="noopener noreferrer" class="">#195</a>). The code generator
 doesn't compile arrays or structs yet: see
@@ -14,7 +14,7 @@ struct, as in JavaScript, Java and OCaml. Passing one to a function passes
 a pointer, and a function can fill in what it's given.</p>
 <p>Sharing breaks what <code>mut</code> on a variable promises:</p>
 <div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">let mut xs = [1, 2];</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let ys = xs;     // not `mut`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">xs[0] = 9;</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">ys[0];           // 9: `ys` changed anyway</span><br/></div></code></pre></div></div>
-<p>This page describes how the type checker keeps a promise that sharing
+<p>This chapter describes how the type checker keeps a promise that sharing
 can't break. <strong>Whether an array or a struct can be changed is part of its
 type</strong>, and every name for it has the same type, so they all agree.</p>
 <h2 class="anchor anchorTargetStickyNavbar_tleR" id=arrays-and-structs-have-a-mutability>Arrays and structs have a mutability<a href=#arrays-and-structs-have-a-mutability class=hash-link aria-label="Direct link to Arrays and structs have a mutability" title="Direct link to Arrays and structs have a mutability" translate=no>​</a></h2>
@@ -30,7 +30,7 @@ no new kind of constraint. A struct's mutability isn't one of its type
 arguments, so it doesn't change its kind: <code>Box</code> is still of kind
 <span class=katex><span class=katex-mathml><math xmlns=http://www.w3.org/1998/Math/MathML><semantics><mrow><mrow><mi mathvariant=sans-serif>T</mi><mi mathvariant=sans-serif>y</mi><mi mathvariant=sans-serif>p</mi><mi mathvariant=sans-serif>e</mi></mrow><mo>→</mo><mrow><mi mathvariant=sans-serif>T</mi><mi mathvariant=sans-serif>y</mi><mi mathvariant=sans-serif>p</mi><mi mathvariant=sans-serif>e</mi></mrow></mrow><annotation encoding=application/x-tex>\mathsf{Type} \to \mathsf{Type}</annotation></semantics></math></span><span class=katex-html aria-hidden=true><span class=base><span class=strut style=height:0.8889em;vertical-align:-0.1944em></span><span class=mord><span class="mord mathsf">Type</span></span><span class=mspace style=margin-right:0.2778em></span><span class=mrel>→</span><span class=mspace style=margin-right:0.2778em></span></span><span class=base><span class=strut style=height:0.8889em;vertical-align:-0.1944em></span><span class=mord><span class="mord mathsf">Type</span></span></span></span></span>.</p>
 <p>In source code, and when types are shown:</p>
-<table><thead><tr><th>Written<th>Means<tbody><tr><td><code>mut [i32]</code>, <code>mut Point</code><td>can be changed<tr><td><code>imm [i32]</code>, <code>imm Point</code><td>can never be changed, by anyone<tr><td><code>[i32]</code>, <code>Point</code><td>either: see <a href=#annotations class="">annotations</a></table>
+<table><thead><tr><th>Written<th>Means<tbody><tr><td><code>mut [i32]</code>, <code>mut Point</code><td>can be changed<tr><td><code>imm [i32]</code>, <code>imm Point</code><td>can never be changed, by anyone<tr><td><code>[i32]</code>, <code>Point</code><td>either: see <a class="" href=/docs/internals/type-checking/mutability/functions#annotations>annotations</a></table>
 <p>Only arrays and structs have a mutability. An enum can't be changed in
 place: <code>match</code> gives the values of its fields, and there's no way to
 assign to one. A tuple is still a value, copied when it's assigned, so
@@ -75,24 +75,23 @@ is shared with <code>base</code>, which would make it an alias with another
 mutability. So when a field that's copied holds one with the struct's own
 mutability, <code>base</code> must have the same mutability as the struct:</p>
 <div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">let q = mut Point { ..p };   // fine, whatever `p` is: the fields are numbers</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let l = mut Line { a: mut Point { x: 1, y: 2 }, b: mut Point { x: 3, y: 4 } };</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">Line { ..l }                 // error: expected `imm Line`, found `mut Line`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">Line { a: Point { x: 0, y: 0 }, b: Point { x: 0, y: 0 }, ..l }   // fine: nothing is copied</span><br/></div></code></pre></div></div>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=imm-is-deep><code>imm</code> is deep<a href=#imm-is-deep class=hash-link aria-label="Direct link to imm-is-deep" title="Direct link to imm-is-deep" translate=no>​</a></h2>
+<h2 class="anchor anchorTargetStickyNavbar_tleR" id=deep-imm>Deep <code>imm</code><a href=#deep-imm class=hash-link aria-label="Direct link to deep-imm" title="Direct link to deep-imm" translate=no>​</a></h2>
 <p><strong>What an <code>imm</code> value holds can't be changed either.</strong> Otherwise an
 <code>imm Line</code> could hold a <code>mut Point</code>, and the line would change after all.
-Three rules make it so.</p>
+The <a class="" href=/docs/tutorial/advanced/mutability>tutorial</a> shows the rules
+from a user's side; this section is about how the checker applies them.</p>
 <p><strong>A field has the mutability of its struct.</strong> An array or struct in a
 field without <code>mut</code> or <code>imm</code> has the struct's own mutability, which is a
-hidden parameter of the struct:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">struct Point { x: i32, y: i32 }</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">struct Line { a: Point, b: Point }      // `Line^m` has `a: Point^m`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let l = mut Line { a: mut Point { x: 0, y: 0 }, b: mut Point { x: 1, y: 1 } };</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">l.a.x = 5;                              // fine</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let k = Line { a: Point { x: 0, y: 0 }, b: Point { x: 1, y: 1 } };</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">k.a.x = 5;                              // error: `k.a` is `imm Point`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">Line { a: mut Point { x: 0, y: 0 }, ... }   // error: expected `imm Point`, found `mut Point`</span><br/></div></code></pre></div></div>
-<p>A field can be <code>imm</code>, which stays <code>imm</code> in a <code>mut</code> struct, but it can't be
-<code>mut</code> (E0224): a <code>mut</code> field in an <code>imm</code> struct would break the rule. To
-change what a field holds, make the struct <code>mut</code>.</p>
-<p>The fields of an enum, which has no mutability, are <code>imm</code>. An enum holds
-something that can be changed only through a type parameter, like
-<code>Option[mut Point]</code>.</p>
-<p><strong>An <code>imm</code> value can't hold a <code>mut</code> one through a type parameter.</strong> A
-generic struct's fields have the types it's given:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">struct Box[T] { item: T }</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let a = mut Box { item: mut Point { x: 0, y: 0 } };   // fine</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let b = Box { item: mut Point { x: 0, y: 0 } };       // error (E0223): an `imm Box[mut Point]` can't hold a `mut Point`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let c = [mut [1]];                                    // error (E0223): an `imm [mut [i32]]` can't hold a `mut [i32]`</span><br/></div></code></pre></div></div>
-<p>What a struct holds is what its fields hold, not its type arguments
+hidden parameter of the struct: <code>struct Line { a: Point, b: Point }</code> is
+<code>Line^m</code> with <code>a: Point^m</code>. A field can be <code>imm</code>, but not <code>mut</code> (E0224),
+since a <code>mut</code> field in an <code>imm</code> struct would break the rule. The fields of
+an enum, which has no mutability, are <code>imm</code>.
+(<a href=https://github.com/boltlang/Bolt/issues/271 target=_blank rel="noopener noreferrer" class="">#271</a>: in a field like
+<code>imm [Point]</code>, the <code>Point</code> gets the struct's mutability too, so the struct
+can only be <code>imm</code>.)</p>
+<p><strong>An <code>imm</code> value can't hold a <code>mut</code> one through a type parameter</strong>
+(E0223): <code>Box { item: mut Point { .. } }</code> is an <code>imm Box[mut Point]</code>. What
+a struct holds is what its fields hold, not its type arguments
 (<a href=https://github.com/boltlang/Bolt/issues/256 target=_blank rel="noopener noreferrer" class="">#256</a>): with
 <code>struct Handler[T] { f: fn(T) -> () }</code>, an <code>imm Handler[mut [i32]]</code> is
 fine, since a closure doesn't hold what it takes, and with
@@ -113,7 +112,7 @@ mutability that must be at most <code>imm</code> is <code>imm</code>, and one th
 <code>mut</code> must be below is <code>mut</code>. What's left about a function's parameters
 becomes part of an inferred function's type, and its callers must meet it,
 like class constraints:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn wrap(x) = Box { item: x };     // forall a. a: imm => fn(a) -> imm Box[a]</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">wrap(1);                          // fine</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">wrap(mut [1]);                    // error (E0230): expected a type that's at most `imm`, found `mut [i32]`</span><br/></div></code></pre></div></div>
+<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn wrap(x) = Box { item: x };     // forall a. a: imm => fn(a) -> imm Box[a]</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">wrap(mut [1]);                    // error (E0230): expected a type that's at most `imm`, found `mut [i32]`</span><br/></div></code></pre></div></div>
 <p>A signature says it with a bound, <code>T: imm</code>, read as "nothing in <code>T</code> is
 more <code>mut</code> than <code>imm</code>", like Rust's <code>T: 'a</code> for lifetimes. It can be
 written next to the parameter or in a <code>where</code> clause, and a mutability
@@ -125,34 +124,25 @@ in <code>fn hide[T](x: T) -> i32 { let b = Box { item: x }; 0 }</code>, <code>T<
 nothing. A mutability on its own isn't a type: <code>let x: imm = 1</code> is an error
 (E0231). A <code>mut</code> array or struct inside an <code>imm</code> one is still also
 caught once the types are known (E0223), which shows the whole type.</p>
-<p><strong>A closure that can change what it captured is <code>mut</code>.</strong> A closure shares
-the variables it captures with the code around it, so it can hold state:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">let mut n = 0;</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let next = || { n += 1; n };   // `mut fn() -> i32`</span><br/></div></code></pre></div></div>
-<p>A function type has a mutability like an array's. A closure is <code>mut</code> if
-it captures a <code>let mut</code> variable, even only to read it, or a value that
-holds something <code>mut</code>: a <code>mut</code> array, struct or function. Otherwise it's
-<code>imm</code>, and so is a named function, which captures nothing. An <code>imm</code> value
-can't hold a <code>mut fn</code>, by the rules above:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">struct Holder { poke: fn() }       // `poke` has the struct's mutability</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let xs = mut [0];</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">Holder { poke: || { xs[0] += 1; } }       // error: expected `fn() -> ()`, found `mut fn() -> ()`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">mut Holder { poke: || { xs[0] += 1; } }   // fine</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">[|| { xs[0] += 1; }]                      // error (E0223): an `imm [mut fn() -> ()]` can't hold a `mut fn() -> ()`</span><br/></div></code></pre></div></div>
+<p><strong>A closure that can change what it captured is <code>mut</code>.</strong> A function type
+has a mutability like an array's. A closure is <code>mut</code> if it captures a
+<code>let mut</code> variable, even only to read it, or a value that holds something
+<code>mut</code>: a <code>mut</code> array, struct or function. Otherwise it's <code>imm</code>, and so is
+a named function, which captures nothing. By the rules above, an <code>imm</code>
+value can't hold a <code>mut fn</code>.</p>
 <p>Calling a function doesn't need it to be <code>mut</code>, unlike Rust's <code>FnMut</code>: a
 <code>mut fn</code> can't be reached from an <code>imm</code> value anyway. So a function type
 written without <code>mut</code> or <code>imm</code> in a signature takes either, like <code>[T]</code>,
-and higher-order functions need no annotations:
-<code>fn twice(f, x) = f(f(x))</code> takes a counting closure as well as a named
-function. <code>mut fn() -> T</code> and <code>imm fn() -> T</code> say which one. An <code>imm fn</code>
-is shown as just <code>fn</code>, since most are, unless that would make two types in
-a message look the same.</p>
+and higher-order functions need no annotations. An <code>imm fn</code> is shown as
+just <code>fn</code>, since most are, unless that would make two types in a message
+look the same.</p>
 <p>What a closure captures is at most its mutability, by the same "at most"
 constraint, and a <code>let mut</code> variable makes it <code>mut</code>. So a generic function
 that makes a closure says how the closure's mutability depends on what it
 captured:</p>
 <div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn reader(xs: [i32]) = || xs[0];            // 'm: 'n => fn('m [i32]) -> 'n fn() -> i32</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn always[T](x: T) -> fn() -> T = || x;     // forall T. T: 'm => fn(T) -> 'm fn() -> T</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn compose(f, g) = |x| f(g(x));             // forall a b c. 'm: 'o => 'n: 'o => fn('m fn(a) -> b, 'n fn(c) -> a) -> 'o fn(c) -> b</span><br/></div></code></pre></div></div>
-<p><code>reader([1])</code> and <code>always(1)</code> are <code>imm</code> closures, and <code>reader(mut [1])</code> is a
-<code>mut</code> one.</p>
 <p>In <code>std</code>, an <code>FnIter</code> whose function counts is <code>mut</code>, like the one that
 <code>for x in xs</code> uses for an array or a <code>Vec</code>.</p>
-<p><strong>A <code>mut</code> value can hold <code>imm</code> ones.</strong> <code>mut [[i32]]</code> is an array that can
-be changed, of arrays that can't.</p>
 <h3 class="anchor anchorTargetStickyNavbar_tleR" id=what-this-guarantees>What this guarantees<a href=#what-this-guarantees class=hash-link aria-label="Direct link to What this guarantees" title="Direct link to What this guarantees" translate=no>​</a></h3>
 <p><strong>An <code>imm</code> value, and everything it holds, never changes.</strong> All the names
 for a value have the same type, so if one of them can't change it, none
@@ -170,85 +160,13 @@ calls change it, from the types
 </ul>
 <p>It doesn't guarantee what Rust does, that nothing else changes a <code>mut</code>
 value while you have it. <code>mut</code> values are shared on purpose.</p>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=functions>Functions<a href=#functions class=hash-link aria-label="Direct link to Functions" title="Direct link to Functions" translate=no>​</a></h2>
-<p>A function without annotations gets the mutability it needs, and is
-generalized over the rest, like over any type:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn size(xs) = array_len(xs);               // fn([a]) -> i32</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn fill(xs: [i32], x) { xs[0] = x; }        // error: `xs` isn't `mut`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn fill(xs: mut [i32], x) { xs[0] = x; }    // fn(mut [i32], i32) -> ()</span><br/></div></code></pre></div></div>
-<p><code>size</code> is generalized over the mutability of its argument,
-<span class=katex><span class=katex-mathml><math xmlns=http://www.w3.org/1998/Math/MathML><semantics><mrow><mi mathvariant=normal>∀</mi><mi>μ</mi><mtext> </mtext><mi>α</mi><mi mathvariant=normal>.</mi><mtext> </mtext><mrow><mi mathvariant=sans-serif>A</mi><mi mathvariant=sans-serif>r</mi><mi mathvariant=sans-serif>r</mi><mi mathvariant=sans-serif>a</mi><mi mathvariant=sans-serif>y</mi></mrow><mo stretchy=false>[</mo><mi>μ</mi><mo separator=true>,</mo><mi>α</mi><mo stretchy=false>]</mo><mo>→</mo><mrow><mi mathvariant=sans-serif>i</mi><mn mathvariant=sans-serif>32</mn></mrow></mrow><annotation encoding=application/x-tex>\forall \mu\, \alpha.\ \mathsf{Array}[\mu, \alpha] \to \mathsf{i32}</annotation></semantics></math></span><span class=katex-html aria-hidden=true><span class=base><span class=strut style=height:1em;vertical-align:-0.25em></span><span class=mord>∀</span><span class="mord mathnormal">μ</span><span class=mspace style=margin-right:0.1667em></span><span class="mord mathnormal" style=margin-right:0.0037em>α</span><span class=mord>.</span><span class=mspace> </span><span class=mord><span class="mord mathsf" style=margin-right:0.0139em>Array</span></span><span class=mopen>[</span><span class="mord mathnormal">μ</span><span class=mpunct>,</span><span class=mspace style=margin-right:0.1667em></span><span class="mord mathnormal" style=margin-right:0.0037em>α</span><span class=mclose>]</span><span class=mspace style=margin-right:0.2778em></span><span class=mrel>→</span><span class=mspace style=margin-right:0.2778em></span></span><span class=base><span class=strut style=height:0.6794em></span><span class=mord><span class="mord mathsf">i32</span></span></span></span></span>, and
-that's shown as <code>[a]</code>. It takes arrays of either mutability, which makes
-its argument read-only in its body, not unchanging: a <code>mut</code> array can still
-be changed during the call through another name for it, like by a closure
-that the caller passed too. Only <code>imm</code> promises that nothing changes it.
-<code>fill</code> needs a
-<code>mut</code> array, since it changes its argument. Instantiating a scheme gives a
-fresh mutability, so each call can pass a different kind of array.</p>
-<p>Indexing goes through the prelude's classes, so a function that indexes an
-argument whose type it doesn't know is generic over the class instead:
-<code>fn first(xs) = xs[0]</code> is <code>forall a. Index[a] => fn(a) -> a.Item</code>, and
-<code>fn set(xs, x) { xs[0] = x; }</code> is <code>forall a. IndexMut[a] => fn(a, a.Item)</code>.
-The impl <code>IndexMut[mut [T]]</code> only covers <code>mut</code> arrays, so <code>set([1], 2)</code> is
-an error.</p>
-<p>A field of a value whose type isn't known is a
-<a class="" href=/docs/internals/type-checking/constraints>field constraint</a>. One that's assigned to says so, and
-needs a <code>mut</code> struct once the type is known:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn move_x(p) { p.x = 5; }          // forall a. mut a.x: i32 => fn(a) -> ()</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">move_x(mut Point { x: 1, y: 2 });  // fine</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">move_x(Point { x: 1, y: 2 });      // error: a field of an `imm Point` is changed here</span><br/></div></code></pre></div></div>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=annotations>Annotations<a href=#annotations class=hash-link aria-label="Direct link to Annotations" title="Direct link to Annotations" translate=no>​</a></h2>
-<p><strong><code>[T]</code> and <code>Point</code> in the parameters of a function and in a body mean
-either mutability</strong>: a fresh mutability, like <code>_</code> stands for a fresh type.
-<code>mut</code> and <code>imm</code> ask for one.</p>
-<p>In a function's signature, a fresh mutability is a hidden parameter of the
-function, like the generalized <span class=katex><span class=katex-mathml><math xmlns=http://www.w3.org/1998/Math/MathML><semantics><mrow><mi>μ</mi></mrow><annotation encoding=application/x-tex>\mu</annotation></semantics></math></span><span class=katex-html aria-hidden=true><span class=base><span class=strut style=height:0.625em;vertical-align:-0.1944em></span><span class="mord mathnormal">μ</span></span></span></span> of <code>first</code> above:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn sum(xs: [i32]) -> i32 { ... }   // forall m. fn(Array[m, i32]) -> i32</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let xs = mut [];</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">xs.push(1);</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">sum(xs);           // fine</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">sum([1, 2]);       // fine</span><br/></div></code></pre></div></div>
-<p><code>sum</code> takes both kinds of array. Inside its body, the mutability of <code>xs</code> is
-a parameter, not <code>Mut</code>, so <code>sum</code> can't change <code>xs</code>: <code>xs.push(1)</code> there is
-an error. That's the same rule as for any type parameter: a function that
-takes a <code>T</code> can't assume that <code>T</code> is <code>i32</code>. So a signature promises to
-leave an array or struct alone unless it says <code>mut</code>, and callers don't have
-to care which kind they pass.</p>
-<p>It doesn't promise that the value stays the same while <code>sum</code> runs: the
-caller may have a <code>mut</code> name for it. <code>imm</code> is for code that relies on a
-value never changing, like a cache keyed by it, or the reactive design
-deciding that something can't change. Few functions need it, which is why
-it isn't what <code>[T]</code> means.</p>
-<p>In a <code>let</code> annotation, <code>[T]</code> is an inference variable, which the value
-decides:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">let a: [i32] = mut [1];     // `mut [i32]`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">let b: [i32] = [1];         // `imm [i32]`</span><br/></div></code></pre></div></div>
-<h3 class="anchor anchorTargetStickyNavbar_tleR" id=return-types>Return types<a href=#return-types class=hash-link aria-label="Direct link to Return types" title="Direct link to Return types" translate=no>​</a></h3>
-<p>A hidden parameter is chosen by the caller, so it can't be the mutability
-of something the function makes: <code>fn make() -> [i32] = [1, 2]</code> would be
-wrong for a caller that asks for <code>mut</code>. Instead, <strong>the body decides the
-mutabilities that a return type doesn't say</strong>:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn primes() -> [i32] = [2, 3, 5];           // `fn() -> imm [i32]`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn buffer() -> [u8] = mut [0; 1024];         // `fn() -> mut [u8]`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn next(n: Node) -> Node = n.next;           // the mutability of `n`</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn fixed() -> imm [i32] = mut [];            // error: expected `imm [a]`, found `mut [a]`</span><br/></div></code></pre></div></div>
-<p><code>next</code> returns what it's given, so its result has its argument's
-mutability: <code>next(a)</code> is a <code>mut Node</code> for a <code>mut Node</code> <code>a</code>, and an
-<code>imm Node</code> for an <code>imm</code> one.</p>
-<p>That makes the signature incomplete: such a function is
-<a class="" href=/docs/internals/type-checking/generalization>inferred</a>, not checked on its own, so editing its
-body checks its callers again. Writing <code>mut</code>, <code>imm</code> or a
-<a href=#naming-a-mutability class="">name</a> in the return type makes it complete:
-<code>fn next(n: 'm Node) -> 'm Node</code> says what the body of <code>next</code> would
-decide, and is checked on its own. A function without a body, like a class
-method, has no body to decide, so its return type is <code>imm</code> where it
-doesn't say.</p>
-<p>The type of a const and an array or struct in a <code>where</code> predicate, like the
-<code>[T]</code> of <code>where Show[[T]]</code>, are <code>imm</code> too.</p>
-<p>An impl gets hidden parameters like a function: <code>impl Size[Point]</code> is for
-points of either mutability, and <code>impl Size[mut Point]</code> only for those that
-can be changed.</p>
-<h3 class="anchor anchorTargetStickyNavbar_tleR" id=type-aliases>Type aliases<a href=#type-aliases class=hash-link aria-label="Direct link to Type aliases" title="Direct link to Type aliases" translate=no>​</a></h3>
-<p>A type alias doesn't decide what <code>[T]</code> or <code>Point</code> means in it: the type it's
-used in does. With <code>type Ints = [i32]</code>, <code>fn sum(xs: Ints)</code> takes either
-kind of array, and <code>mut Ints</code> is <code>mut [i32]</code>.</p>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=naming-a-mutability>Naming a mutability<a href=#naming-a-mutability class=hash-link aria-label="Direct link to Naming a mutability" title="Direct link to Naming a mutability" translate=no>​</a></h2>
+<h2 class="anchor anchorTargetStickyNavbar_tleR" id=named-mutabilities>Named mutabilities<a href=#named-mutabilities class=hash-link aria-label="Direct link to Named mutabilities" title="Direct link to Named mutabilities" translate=no>​</a></h2>
 <p>A name like <code>'m</code>, written where <code>mut</code> or <code>imm</code> would be, is a mutability
-that's the same wherever the name is:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn next(n: 'm Node) -> 'm Node = n.next;</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn both(a: 'm [i32], b: 'm [i32]) -> i32 = a[0] + b[0];</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn pair(a: 'm [i32], b: 'n [i32]) -> ('m [i32], 'n [i32]) = (a, b);</span><br/></div></code></pre></div></div>
-<p><code>next</code> gives back a node with the mutability of the one it's given, <code>both</code>
-takes two arrays of the same kind, and <code>pair</code> two arrays of any kinds,
-which it gives back as they are. <code>'</code> marks the name, as for labels and
-Rust's lifetimes: without it, <code>m [i32]</code> would be the type <code>m</code> applied to
-<code>i32</code>.</p>
+that's the same wherever the name is. The
+<a class="" href=/docs/tutorial/advanced/mutability#naming-a-mutability>tutorial</a>
+shows how to use them; this section is about how the checker treats them.
+<code>'</code> marks the name, as for labels and Rust's lifetimes: without it,
+<code>m [i32]</code> would be the type <code>m</code> applied to <code>i32</code>.</p>
 <ul>
 <li class="">
 <p><strong>A name is a parameter of the function or impl</strong> whose signature it's
@@ -256,8 +174,7 @@ in, like a hidden one, but shared: every <code>'m</code> in the signature, its
 <code>where</code> predicates and its body is the same. Names don't need declaring:
 using one is enough. Like a hidden parameter, the caller chooses it, so
 the function can't change what has it, and
-<code>fn make() -> 'm [i32] = [1]</code> is an error: <code>[1]</code> is <code>imm</code>, not whatever
-the caller chooses.</p>
+<code>fn make() -> 'm [i32] = [1]</code> is an error.</p>
 </li>
 <li class="">
 <p><strong>Only functions, impls and structs have names.</strong> An impl's associated
@@ -265,11 +182,10 @@ types can use its names too: <code>impl[T] Iterable['m FnIter[T]] { type Iter = 
 <code>Iter</code> has the same one. An impl's names, like its type parameters, must
 be in its instance, since that's all choosing the impl decides:
 <code>impl[T, 'v] Iterable[Vec[T]]</code> is an error (E0234), and
-<code>impl[T] Iterable['v Vec[T]]</code> is what's meant. A struct declares its names, for its fields:
-see <a href=#names-in-structs class="">below</a>. A name elsewhere, like in a const, a type
-alias outside an impl, a body that isn't its function's or a field whose
-struct doesn't declare it, is an error (E0225). A name before a type that
-can't have a mutability, like <code>'m i32</code>, is E0222.</p>
+<code>impl[T] Iterable['v Vec[T]]</code> is what's meant. A name elsewhere, like in
+a const, a type alias outside an impl, a body that isn't its function's
+or a field whose struct doesn't declare it, is an error (E0225). A name
+before a type that can't have a mutability, like <code>'m i32</code>, is E0222.</p>
 </li>
 <li class="">
 <p><strong>Types show names</strong>, and a name for a mutability that's shared but not
@@ -282,199 +198,42 @@ linked to anything.</p>
 </li>
 </ul>
 <h3 class="anchor anchorTargetStickyNavbar_tleR" id=names-in-structs>Names in structs<a href=#names-in-structs class=hash-link aria-label="Direct link to Names in structs" title="Direct link to Names in structs" translate=no>​</a></h3>
-<p>A field without <code>mut</code> or <code>imm</code> has its struct's mutability, so a <code>mut</code>
-iterator can't hold an <code>imm</code> array. A struct can declare a name for a field
-instead, after its type parameters
-(<a href=https://github.com/boltlang/Bolt/issues/243 target=_blank rel="noopener noreferrer" class="">#243</a>):</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">struct VecIter[T, 'v] { data: 'v Vec[T], index: i32 }</span><br/></div><div class=token-line style=color:#393A34><span class="token plain" style=display:inline-block></span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn start[T](v: 'v Vec[T]) -> mut VecIter[T, 'v] = mut VecIter { data: v, index: 0 };</span><br/></div></code></pre></div></div>
-<p><code>start</code> takes a <code>Vec</code> of either mutability, and gives a <code>mut</code> iterator over
-it: the iterator's <code>index</code> can change, and its <code>data</code> has the mutability of
-<code>v</code>. A type gives the names after its type arguments, like
-<code>VecIter[i32, imm]</code>. One that isn't given is decided like the mutability
-before a type: a parameter in a function's signature, an unknown in a
-body, and the struct's own in a field. More than the struct declares is an
-error (E0232), and so is a name declared by an item that isn't a struct, a
-function or an impl (E0233). A function or an impl can declare its names
-too, but doesn't have to.</p>
+<p>A struct declares its names after its type parameters
+(<a href=https://github.com/boltlang/Bolt/issues/243 target=_blank rel="noopener noreferrer" class="">#243</a>), like
+<code>struct VecIter[T, 'v] { data: 'v Vec[T], index: i32 }</code>. A type gives
+them after its type arguments, like <code>VecIter[i32, imm]</code>. One that isn't
+given is decided like the mutability before a type: a parameter in a
+function's signature, an unknown in a body, and the struct's own in a
+field. More than the struct declares is an error (E0232), and so is a
+name declared by an item that isn't a struct, a function or an impl
+(E0233). A function or an impl can declare its names too, but doesn't
+have to.</p>
 <p><strong>A name is at most its struct's mutability.</strong> An <code>imm VecIter[i32, mut]</code>
 would hold a <code>mut Vec</code>, which <code>imm</code> being deep rules out. So making a
 struct adds <code>'v ⊑ m</code> for each name its fields have, where <code>m</code> is its
-mutability, and what a field with a name holds is at most that name: <code>T ⊑ 'v</code> for <code>data: 'v Vec[T]</code>:</p>
+mutability, and what a field with a name holds is at most that name:
+<code>T ⊑ 'v</code> for <code>data: 'v Vec[T]</code>:</p>
 <div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">mut VecIter { data: mut_vec, index: 0 }   // fine: mut VecIter[i32, mut]</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">VecIter { data: mut_vec, index: 0 }       // error (E0223): an `imm VecIter[i32, mut]` can't have a `mut` mutability argument</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn frozen[T](v: 'v Vec[T]) -> imm VecIter[T, 'v] where 'v: imm = VecIter { data: v, index: 0 };</span><br/></div></code></pre></div></div>
 <p>The last one needs <code>'v: imm</code>, or <code>'v</code> could be <code>mut</code>. It doesn't need
 <code>T: imm</code>: <code>v</code> is a <code>'v Vec[T]</code>, so <code>T ⊑ 'v</code>, which it can assume, since
-<code>v</code> exists. A struct can bound its
-names, like its type parameters, which is checked where a value is made:
-<code>struct Frozen['v: imm] { data: 'v [i32] }</code>.</p>
+<code>v</code> exists. A struct can bound its names, like its type parameters, which
+is checked where a value is made: <code>struct Frozen['v: imm] { data: 'v [i32] }</code>.</p>
 <p>A struct update, <code>VecIter { index: 1, ..it }</code>, keeps the names of <code>it</code>,
 since the fields it doesn't give are shared. Types show a name that's
 known, like <code>VecIter[i32, imm]</code>, and leave one out that's generic and
 appears once, like the mutability before a type: <code>VecIter[T]</code>. One that's
 left out before one that's shown is <code>'_</code>.</p>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=making-a-value-that-cant-be-changed-from-one-that-can>Making a value that can't be changed from one that can<a href=#making-a-value-that-cant-be-changed-from-one-that-can class=hash-link aria-label="Direct link to Making a value that can't be changed from one that can" title="Direct link to Making a value that can't be changed from one that can" translate=no>​</a></h2>
-<p>A <code>mut</code> value can't become <code>imm</code>, since a <code>mut</code> name for it may still
-exist. Turning one into the other copies it:</p>
-<div class="language-bolt codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-bolt codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">fn freeze[T](xs: [T]) -> imm [T];    // a copy that can't be changed</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">fn thaw[T](xs: [T]) -> mut [T];      // a copy that can</span><br/></div></code></pre></div></div>
-<p>Since <code>imm</code> is deep, freezing copies everything a value holds that's <code>mut</code>.
-Freezing without a copy needs to know that no other name refers to the
-value: that it's <em>unique</em>. Jane Street's OCaml has a mode for that
-[Lorenzen et al. 2024], and it could come later.</p>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=errors>Errors<a href=#errors class=hash-link aria-label="Direct link to Errors" title="Direct link to Errors" translate=no>​</a></h2>
-<table><thead><tr><th>Code<th>Error<tbody><tr><td>E0221<td>changing an element of an array, or a field of a struct, that isn't <code>mut</code><tr><td>E0222<td><code>mut</code> or <code>imm</code> before something that isn't an array or a struct<tr><td>E0223<td>an <code>imm</code> value that holds a <code>mut</code> one<tr><td>E0224<td>a <code>mut</code> field<tr><td>E0225<td>a named mutability that isn't the function's or impl's, or one its struct declares<tr><td>E0232<td>more mutability arguments than a struct declares<tr><td>E0233<td>a mutability parameter of an item that isn't a struct, a function or an impl<tr><td>E0234<td>a parameter of an impl, a type or a mutability, that isn't in its instance</table>
-<div class="language-text codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-text codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">[E0221] Error: cannot change an element of `xs`, which is `imm [i32]`; only a `mut` array can be changed</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">[E0221] Error: a field of an `imm Point` is changed here, but only a `mut` struct can be changed</span><br/></div><div class=token-line style=color:#393A34><span class="token plain">[E0223] Error: an `imm Box[mut Point]` can't hold a `mut Point`: what an `imm` value holds can't be changed either</span><br/></div></code></pre></div></div>
-<p>Passing or assigning a value of the wrong mutability is an ordinary type
-mismatch, which shows both:</p>
-<div class="language-text codeBlockContainer_mQmQ theme-code-block" style=--prism-color:#393A34;--prism-background-color:#f6f8fa><div class=codeBlockContent_t_Hd><pre tabindex=0 class="prism-code language-text codeBlock_RMoD thin-scrollbar" style=color:#393A34;background-color:#f6f8fa><code class=codeBlockLines_AclH><div class=token-line style=color:#393A34><span class="token plain">[E0201] Error: expected `mut Point`, found `imm Point`</span><br/></div></code></pre></div></div>
-<p>These can show up far from their cause: the <code>push</code> fails because of where
-the array was made, maybe much earlier. The error should point at where the
-<code>Imm</code> came from: the literal, the annotation, or the function whose result
-it is. That's what the labels for the causes of constraints in
-<a href=https://github.com/boltlang/Bolt/issues/127 target=_blank rel="noopener noreferrer" class="">#127</a> are for, and why
-unification will have to remember the origin of <code>Imm</code> and <code>Mut</code>.</p>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=implementation>Implementation<a href=#implementation class=hash-link aria-label="Direct link to Implementation" title="Direct link to Implementation" translate=no>​</a></h2>
-<ul>
-<li class="">
-<p><strong>Types</strong> (<code>ty.rs</code>): <code>Ty::Array</code> holds the mutability and the element
-type, and <code>Ty::Adt</code> holds a struct's mutability after its arguments. An
-enum's is always <code>Imm</code>, and isn't shown. A mutability is
-<code>Ty::Mutability(Mut | Imm)</code>, an inference variable of kind
-<code>VarKind::Mutability</code>, a type parameter, or the error type.</p>
-</li>
-<li class="">
-<p><strong>Lowering</strong> (<code>lower.rs</code>): <code>mut [T]</code>, <code>imm [T]</code>, <code>mut Point</code> and
-<code>imm Point</code> lower to their mutability, and the rest to <code>Ty::Unwritten</code>,
-which each item then replaces with <code>Ty::fill_unwritten</code>:</p>
-<ul>
-<li class="">in a function's parameters and an impl's instance, hidden parameters,
-numbered after the declared type parameters (<code>FnSig::hidden</code>,
-<code>ImplHeader::hidden</code>), so that instantiating a scheme and matching an
-impl handle them like any other parameter;</li>
-<li class="">in a body, and in the return type of a function with a body,
-inference variables, which the body decides (<code>infer.rs</code>, <code>check.rs</code>);</li>
-<li class="">in a struct's field, the struct's own hidden parameter
-(<code>struct_mutability</code>), which a struct's type substitutes with its
-mutability (<code>struct_args</code>);</li>
-<li class="">in an enum's field, the return type of a function without a body, a
-const and a <code>where</code> predicate, <code>Imm</code>;</li>
-<li class="">in a type alias, nothing: the type it's used in decides.</li>
-</ul>
-<p>A name like <code>'m</code> lowers to a parameter of its function or impl
-(<code>named_mutabilities</code>), numbered after the declared type parameters and
-before the hidden ones. A body can use its function's names. A signature
-whose return type only has written or named mutabilities is complete.</p>
-<p>A struct's names, like the <code>'v</code> of <code>struct VecIter[T, 'v]</code>
-(<code>GenericParams::mutability_params</code>), are parameters after its type
-parameters and before its own mutability. <code>Ty::Adt</code> holds the arguments
-for them apart from its type arguments, so that they don't change its
-kind, and <code>struct_args</code> gives them to its field types. In a type like
-<code>VecIter[i32, imm]</code>, a mutability on its own is one of them; those not
-given are <code>Ty::Unwritten</code>.</p>
-</li>
-<li class="">
-<p><strong>Unification</strong> (<code>unify.rs</code>): mutabilities are equal or they aren't;
-there's no subtyping. <code>Ty::Fn</code> holds its mutability last, and <code>fn(...)</code>
-lowers with <code>Ty::Unwritten</code> like an array, so it's a hidden parameter in
-a signature and the struct's own in a field.</p>
-</li>
-<li class="">
-<p><strong>Inference</strong> (<code>infer.rs</code>): an array or struct literal is <code>Imm</code>, or <code>Mut</code>
-with <code>mut</code>. Indexing, field access, <code>for</code> and patterns take either.</p>
-<ul>
-<li class=""><code>check_place</code> looks for the innermost index, or field of a struct, in
-the place that's assigned to. Its array or struct must be <code>mut</code>, and a
-mutability that isn't known yet becomes <code>Mut</code> (<code>Solver::require_mut</code>).
-A field of a value whose type isn't known yet marks its field
-constraint as assigned (<code>FieldConstraint::assign</code>), and solving it
-requires <code>Mut</code>. Without an index or a field of a struct, the variable
-must be <code>mut</code>, as before.</li>
-<li class="">Making an array or struct adds an <code>AtMostConstraint</code>: the element
-type is at most the array's mutability, and what a struct's fields
-hold at most theirs, once its fields are checked. What a struct's
-fields hold is <code>holds::struct_atoms</code>: the atoms of "the fields are at
-most the struct's own mutability", like <code>'v ⊑ m</code> and <code>T ⊑ 'v</code>, with a
-field that's a struct using that one's, as a fixed point for structs
-that refer to each other. A body assumes what makes its parameter
-types and its impl's instance well-formed, like <code>T ⊑ 'm</code> for
-<code>xs: 'm [T]</code>, as Rust's implied bounds do
-(<code>check::implied_assumptions</code>). The
-solver splits a type into the mutabilities it holds
-(<code>Solver::solve_at_most</code>), decides what only one choice meets, and
-keeps the rest. What's left when a group of functions is solved is
-about their types, and becomes their schemes' <code>bounds</code>; other
-unknowns are chosen to meet it, <code>imm</code> below first
-(<code>Solver::settle_at_most</code>). In a body with a complete signature, what's
-left about its parameters is an error (<code>TypeError::NotAtMost</code>), unless
-the function or its impl assumes it. A mutability that must be at most
-<code>imm</code> is decided right away, unless the function assumes a mutability
-is, which it could be too. A bound like <code>T: imm</code> or
-<code>'v: 'm</code> lowers to <code>Predicates::at_most</code> (<code>TypeRef::Mutability</code> for the
-mutability on its own), the solver follows assumptions through
-<code>'v: 'm</code> and <code>'m: imm</code> (<code>Solver::mutability_le</code>), and a scheme carries
-them for its callers. A chosen impl's bounds are checked like its class
-predicates, and a struct's where a value is made.</li>
-<li class="">A closure gets a new mutability, the types of the variables it uses
-from outside (<code>ClosureFrame</code>) are at most it, and a <code>let mut</code> one makes
-it <code>Mut</code>.</li>
-<li class="">Once a body's types are resolved, <code>check_deep_immutability</code> reports
-each type with a <code>mut</code> array, struct or function inside an <code>imm</code> one,
-unless an "at most" error already did. The types that no body looks
-at are reported where they're written, the same way: those of a
-function without a body, like a class method, of a type alias, and of
-an impl's instance (<code>written_type</code> in <code>boltlang-hir</code>).</li>
-</ul>
-</li>
-<li class="">
-<p><strong>Defaulting</strong> (<code>solve.rs</code>): a mutability left over when a body is
-checked, and not generalized, becomes <code>Imm</code>. That happens after the
-errors are resolved, so that an undecided mutability is shown as <code>[T]</code> in
-them.</p>
-</li>
-<li class="">
-<p><strong>Showing types</strong>: <code>mut T</code>, <code>imm T</code>, <code>'m T</code> for a named mutability, and
-<code>T</code> for a generalized or unknown one. <code>TyNames</code> gives a name to each
-generalized, unknown or hidden mutability that appears more than once.
-Schemes leave mutabilities out of their <code>forall</code>, and show a field
-constraint that's assigned to as <code>mut a.x: b</code>.</p>
-</li>
-<li class="">
-<p><strong>Tests</strong>: <code>tests/checker/array_mutability.txt</code>,
-<code>tests/checker/struct_mutability.txt</code>,
-<code>tests/checker/named_mutability.txt</code>,
-<code>tests/checker/mutability_params.txt</code> and
-<code>tests/checker/closure_mutability.txt</code> have a case for each rule on this
-page.</p>
-</li>
-<li class="">
-<p><strong>Proven</strong>: <a href=https://github.com/boltlang/Bolt/tree/main/lean target=_blank rel="noopener noreferrer" class=""><code>lean/</code></a> has a
-Lean proof, for a core of these rules with closures, structs and type
-parameters, that nothing reachable from an <code>imm</code> value ever changes, that
-a well-typed program never gets stuck, and that calling an <code>imm</code> function
-with <code>imm</code> arguments changes nothing that existed before. More
-generally, a call changes only what its arguments that aren't <code>imm</code> all
-the way down can reach (<code>Frame.lean</code>), which the reactive design needs.
-It includes the
-"at most" assumptions that #243 proposes, like <code>T: imm</code>, and proves the
-solver's shortcuts for them (<code>Solver.lean</code>): how it splits a type, when
-it can decide an unknown mutability right away, and that
-<code>Solver::mutability_le</code> finds every chain of assumptions.</p>
-</li>
-<li class="">
-<p><strong>Checked when running</strong>: every array and struct in the evaluator knows
-whether it was made <code>mut</code> or <code>imm</code> (<code>Object::mutability</code>). With
-<code>Evaluator::with_mutability_checks</code>, which the evaluator's tests and
-<code>tests/run</code> use, changing an <code>imm</code> one, or making an <code>imm</code> one that holds
-a <code>mut</code> one, stops with <code>ErrorKind::MutabilityViolation</code>. A program the
-type checker accepts never does, so a failure there is a bug in the
-checker. A closure isn't tagged, so an <code>imm</code> value holding a <code>mut</code> closure
-isn't caught there, but changing an <code>imm</code> array or struct through a
-closure is.</p>
-</li>
-</ul>
-<p><code>Vec[T]</code> in <code>std</code> (<a href=https://github.com/boltlang/Bolt/issues/197 target=_blank rel="noopener noreferrer" class="">#197</a>) is
-a struct, so it gets a mutability like any other, and <code>[T]</code> is shorthand for
-it. So is a <code>String</code> in <code>std</code>
-(<a href=https://github.com/boltlang/Bolt/issues/199 target=_blank rel="noopener noreferrer" class="">#199</a>), with <code>mut String</code>
-taking the place of a separate <code>StringBuilder</code>.</p>
+<h2 class="anchor anchorTargetStickyNavbar_tleR" id=the-pages-of-this-chapter>The pages of this chapter<a href=#the-pages-of-this-chapter class=hash-link aria-label="Direct link to The pages of this chapter" title="Direct link to The pages of this chapter" translate=no>​</a></h2>
+<ol>
+<li class=""><a class="" href=/docs/internals/type-checking/mutability/functions>Functions and annotations</a>: inferred functions, what
+<code>[T]</code> means in a signature, and return types.</li>
+<li class=""><a class="" href=/docs/internals/type-checking/mutability/regions>Regions</a>: making an <code>imm</code> value from a <code>mut</code> one
+without a copy, a proposal.</li>
+<li class=""><a class="" href=/docs/internals/type-checking/mutability/errors>Errors</a>.</li>
+<li class=""><a class="" href=/docs/internals/type-checking/mutability/implementation>Implementation</a>: where each rule is in the
+checker, the tests and the Lean proof.</li>
+<li class=""><a class="" href=/docs/internals/type-checking/mutability/prior-art>Prior art</a>.</li>
+</ol>
 <h2 class="anchor anchorTargetStickyNavbar_tleR" id=open-questions>Open questions<a href=#open-questions class=hash-link aria-label="Direct link to Open questions" title="Direct link to Open questions" translate=no>​</a></h2>
 <ul>
 <li class=""><strong>A name used once</strong> says nothing that leaving it out doesn't, and could
@@ -483,45 +242,13 @@ be a warning.</li>
 of either mutability, so <code>fmap</code> must return a <code>Box</code> with the mutability
 of the one it's given, which it can't make: <code>Box { item: f(b.item) }</code> is
 <code>imm</code>. Higher-kinded types tie the mutability of the result to that of
-the argument, and what that should mean isn't decided.</li>
+the argument, and what that should mean isn't decided.
+<a class="" href=/docs/internals/type-checking/mutability/regions>Regions</a> would let <code>fmap</code> make a <code>Box</code> of any
+mutability.</li>
 <li class=""><strong>Enums with a mutability</strong>, so that a variant can hold something that
 can be changed without a type parameter, and so that an enum can be
 changed in place.</li>
 <li class=""><strong>Assigning to a field of a tuple through a field constraint</strong>, like
 <code>fn f(t) { t.0 = 1; }</code>, isn't checked: once the type is a tuple, it's a
 value, and the variable should be <code>mut</code>.</li>
-</ul>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=prior-art>Prior art<a href=#prior-art class=hash-link aria-label="Direct link to Prior art" title="Direct link to Prior art" translate=no>​</a></h2>
-<ul>
-<li class=""><strong>OCaml</strong> has no <code>mut</code> on variables. Whether a value can change is in its
-type: an <code>array</code> always can, a <code>list</code> never, and a record field only if
-it's declared <code>mutable</code>. Nothing is inferred, and nothing is deep.</li>
-<li class=""><strong>Reference immutability</strong>, in Javari [Tschantz & Ernst 2005] and
-ReIm [Huang et al. 2012], puts a read-only qualifier on references in
-Java, and ReIm infers it. Javari's is deep, like <code>imm</code>, but a read-only
-reference can point at an object that others change. Here, <code>Imm</code> means
-that no one can.</li>
-<li class=""><strong>Pony's reference capabilities</strong> [Clebsch et al. 2015] decide what each
-reference allows: <code>iso</code> (unique), <code>val</code> (can't be changed by anyone,
-deeply), <code>ref</code> (can be changed, and shared), and <code>box</code> (read-only, and
-either of the last two). <code>imm</code> is like <code>val</code>, <code>mut</code> like <code>ref</code>, and a
-parameter without either like <code>box</code>, which Pony gets by subtyping and
-Bolt by polymorphism. Pony makes <code>val</code> deep with viewpoint adaptation,
-where Bolt gives fields their struct's mutability and checks type
-parameters.</li>
-<li class=""><strong>Modes in Jane Street's OCaml</strong> [Lorenzen et al. 2024] are qualifiers
-like <code>unique</code> and <code>local</code>, inferred alongside types. <code>unique</code> is what
-freezing without a copy would need.</li>
-</ul>
-<h2 class="anchor anchorTargetStickyNavbar_tleR" id=references>References<a href=#references class=hash-link aria-label="Direct link to References" title="Direct link to References" translate=no>​</a></h2>
-<ul>
-<li class="">M. S. Tschantz and M. D. Ernst. <em>Javari: Adding Reference Immutability
-to Java.</em> OOPSLA 2005.</li>
-<li class="">W. Huang, A. Milanova, W. Dietl and M. D. Ernst. <em>ReIm & ReImInfer:
-Checking and Inference of Reference Immutability and Method Purity.</em>
-OOPSLA 2012.</li>
-<li class="">S. Clebsch, S. Drossopoulou, S. Blessing and A. McNeil. <em>Deny
-Capabilities for Safe, Fast Actors.</em> AGERE 2015.</li>
-<li class="">A. Lorenzen, L. White, S. Dolan, R. A. Eisenberg and S. Lindley.
-<em>Oxidizing OCaml with Modal Memory Management.</em> ICFP 2024.</li>
-</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_QeZL"><a href=https://github.com/boltlang/Bolt/tree/main/site/docs/internals/type-checking/mutability.mdx target=_blank rel="noopener noreferrer" class=theme-edit-this-page><svg fill=currentColor height=20 width=20 viewBox="0 0 40 40" class=iconEdit_bHB7 aria-hidden=true><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>Edit this page</a></div><div class="col lastUpdated_ydrU"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href=/docs/internals/type-checking/generalization><div class=pagination-nav__sublabel>Previous</div><div class=pagination-nav__label>Generalization</div></a><a class="pagination-nav__link pagination-nav__link--next" href=/docs/internals/type-checking/errors><div class=pagination-nav__sublabel>Next</div><div class=pagination-nav__label>Errors</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_XG6w thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href=#arrays-and-structs-have-a-mutability class="table-of-contents__link toc-highlight">Arrays and structs have a mutability</a><li><a href=#where-the-mutability-comes-from class="table-of-contents__link toc-highlight">Where the mutability comes from</a><li><a href=#aliases-share-the-mutability class="table-of-contents__link toc-highlight">Aliases share the mutability</a><li><a href=#imm-is-deep class="table-of-contents__link toc-highlight"><code>imm</code> is deep</a><ul><li><a href=#what-this-guarantees class="table-of-contents__link toc-highlight">What this guarantees</a></ul><li><a href=#functions class="table-of-contents__link toc-highlight">Functions</a><li><a href=#annotations class="table-of-contents__link toc-highlight">Annotations</a><ul><li><a href=#return-types class="table-of-contents__link toc-highlight">Return types</a><li><a href=#type-aliases class="table-of-contents__link toc-highlight">Type aliases</a></ul><li><a href=#naming-a-mutability class="table-of-contents__link toc-highlight">Naming a mutability</a><ul><li><a href=#names-in-structs class="table-of-contents__link toc-highlight">Names in structs</a></ul><li><a href=#making-a-value-that-cant-be-changed-from-one-that-can class="table-of-contents__link toc-highlight">Making a value that can't be changed from one that can</a><li><a href=#errors class="table-of-contents__link toc-highlight">Errors</a><li><a href=#implementation class="table-of-contents__link toc-highlight">Implementation</a><li><a href=#open-questions class="table-of-contents__link toc-highlight">Open questions</a><li><a href=#prior-art class="table-of-contents__link toc-highlight">Prior art</a><li><a href=#references class="table-of-contents__link toc-highlight">References</a></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Docs</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/docs/tutorial>Tutorial</a><li class=footer__item><a class=footer__link-item href=/docs/reference>Reference</a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Community</div><ul class="footer__items clean-list"><li class=footer__item><a href=https://discord.gg/thbTssDD7 target=_blank rel="noopener noreferrer" class=footer__link-item>Discord<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPrP><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a href=https://github.com/boltlang target=_blank rel="noopener noreferrer" class=footer__link-item>GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPrP><use href=#theme-svg-external-link /></svg></a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>More</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/blog>Blog</a></ul></div></div><div class="footer__bottom text--center"><div class=footer__copyright>Copyright © 2026 The Bolt Programming Language Contributors. Built with Docusaurus.</div></div></div></footer></div></body>
+</ul></div><footer class="theme-doc-footer docusaurus-mt-lg"><div class="row margin-top--sm theme-doc-footer-edit-meta-row"><div class="col noPrint_QeZL"><a href=https://github.com/boltlang/Bolt/tree/main/site/docs/internals/type-checking/mutability/index.mdx target=_blank rel="noopener noreferrer" class=theme-edit-this-page><svg fill=currentColor height=20 width=20 viewBox="0 0 40 40" class=iconEdit_bHB7 aria-hidden=true><g><path d="m34.5 11.7l-3 3.1-6.3-6.3 3.1-3q0.5-0.5 1.2-0.5t1.1 0.5l3.9 3.9q0.5 0.4 0.5 1.1t-0.5 1.2z m-29.5 17.1l18.4-18.5 6.3 6.3-18.4 18.4h-6.3v-6.2z"/></g></svg>Edit this page</a></div><div class="col lastUpdated_ydrU"></div></div></footer></article><nav class="docusaurus-mt-lg pagination-nav" aria-label="Docs pages"><a class="pagination-nav__link pagination-nav__link--prev" href=/docs/internals/type-checking/generalization><div class=pagination-nav__sublabel>Previous</div><div class=pagination-nav__label>Generalization</div></a><a class="pagination-nav__link pagination-nav__link--next" href=/docs/internals/type-checking/mutability/functions><div class=pagination-nav__sublabel>Next</div><div class=pagination-nav__label>Functions and annotations</div></a></nav></div></div><div class="col col--3"><div class="tableOfContents_XG6w thin-scrollbar theme-doc-toc-desktop"><ul class="table-of-contents table-of-contents__left-border"><li><a href=#arrays-and-structs-have-a-mutability class="table-of-contents__link toc-highlight">Arrays and structs have a mutability</a><li><a href=#where-the-mutability-comes-from class="table-of-contents__link toc-highlight">Where the mutability comes from</a><li><a href=#aliases-share-the-mutability class="table-of-contents__link toc-highlight">Aliases share the mutability</a><li><a href=#deep-imm class="table-of-contents__link toc-highlight">Deep <code>imm</code></a><ul><li><a href=#what-this-guarantees class="table-of-contents__link toc-highlight">What this guarantees</a></ul><li><a href=#named-mutabilities class="table-of-contents__link toc-highlight">Named mutabilities</a><ul><li><a href=#names-in-structs class="table-of-contents__link toc-highlight">Names in structs</a></ul><li><a href=#the-pages-of-this-chapter class="table-of-contents__link toc-highlight">The pages of this chapter</a><li><a href=#open-questions class="table-of-contents__link toc-highlight">Open questions</a></ul></div></div></div></div></main></div></div></div><footer class="theme-layout-footer footer footer--dark"><div class="container container-fluid"><div class="row footer__links"><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Docs</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/docs/tutorial>Tutorial</a><li class=footer__item><a class=footer__link-item href=/docs/reference>Reference</a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>Community</div><ul class="footer__items clean-list"><li class=footer__item><a href=https://discord.gg/thbTssDD7 target=_blank rel="noopener noreferrer" class=footer__link-item>Discord<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPrP><use href=#theme-svg-external-link /></svg></a><li class=footer__item><a href=https://github.com/boltlang target=_blank rel="noopener noreferrer" class=footer__link-item>GitHub<svg width=13.5 height=13.5 aria-label="(opens in new tab)" class=iconExternalLink_nPrP><use href=#theme-svg-external-link /></svg></a></ul></div><div class="theme-layout-footer-column col footer__col"><div class=footer__title>More</div><ul class="footer__items clean-list"><li class=footer__item><a class=footer__link-item href=/blog>Blog</a></ul></div></div><div class="footer__bottom text--center"><div class=footer__copyright>Copyright © 2026 The Bolt Programming Language Contributors. Built with Docusaurus.</div></div></div></footer></div></body>
