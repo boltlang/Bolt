@@ -134,7 +134,10 @@ importing them. The prelude is `std`'s `__prelude__/lib.bolt`, which
 - the classes `Semigroup`, `Monoid` and `Functor`.
 
 The names of the prelude can be shadowed: a file that defines its own
-`Option` uses that one.
+`Option` uses that one. Functions are different: a function with the name
+of one of the prelude is one more function with that name, so it must take
+other arguments (see
+[Functions with the same name](./functions.mdx#functions-with-the-same-name)).
 
 A package can choose another prelude in its `bolt.toml`: `prelude = false`
 for none, or the name of a dependency, whose `__prelude__/lib.bolt` is used.

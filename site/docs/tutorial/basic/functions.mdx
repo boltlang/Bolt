@@ -276,6 +276,61 @@ scope can be called this way. A function in the namespace of a type, like
 `Point.at` (see [Functions of a type](./data-types.mdx#functions-of-a-type)),
 isn't in scope by its name alone, so it's called by its path.
 
+## Functions with the same name
+
+Several functions can have the same name, as long as they take different
+numbers or types of arguments. A call uses the one that its arguments fit:
+
+```bolt
+fn describe(n: i32) -> String = "a number";
+fn describe(b: Bool) -> String = "a truth value";
+fn describe(n: i32, unit: String) -> String = "a number of " + unit;
+
+(describe(3), describe(True), describe(3, "apples"));
+```
+
+```text
+("a number", "a truth value", "a number of apples")
+```
+
+All the arguments count, not just the first, and so does whether an array
+or struct is `mut`. The functions can come from different files, like your
+own file and an import, or the prelude: a `len` for your own type works
+next to the prelude's `len` for a `Vec`.
+
+The types of the arguments must leave one function. When they don't, the
+call is an error, rather than a guess:
+
+```bolt
+fn describe(n: i32) -> String = "a number";
+fn describe(b: Bool) -> String = "a truth value";
+
+fn show_it(x) = describe(x);
+```
+
+```text
+[E0237] Error: more than one function `describe` fits this use: `fn(i32) -> String` and `fn(Bool) -> String`; give the arguments types that leave one
+```
+
+Writing `x: i32` fixes it. A function that works for any type that has a
+`describe` is what [classes](./classes.mdx) are for.
+
+For the same reason, two functions with the same name that one call could
+fit both are an error where the second is defined, even if they give
+different types:
+
+```bolt
+fn describe(n: i32) -> String = "a number";
+fn describe(m: i32) -> String = "an integer";
+```
+
+```text
+[E0238] Error: this `describe`, of type `fn(i32) -> String`, overlaps the `describe` of type `fn(i32) -> String`: a call could fit both, so it couldn't choose one; give them different numbers or types of parameters
+```
+
+A method of a class fits any type with an impl, so a function with its name
+must take another number of arguments.
+
 ## Custom operators
 
 You can define your own binary operators, made of symbols like `<>` or

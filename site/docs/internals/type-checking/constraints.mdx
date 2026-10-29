@@ -172,6 +172,54 @@ class.
 A field constraint whose type is never decided in a body that isn't
 generalized, like the top level of a file, is reported as "type needed".
 
+## Overloads
+
+Functions can share a name ([#275](https://github.com/boltlang/Bolt/issues/275)).
+Name resolution keeps all the functions with a name, from the file, its
+imports and the prelude, as one set, and a path that names several is a
+`ValueNs::Overloaded`. Its use gets a new variable $\alpha$ for its type,
+and an `OverloadConstraint` with the candidates, each with a *probe*: its
+type with new variables for its parameters and associated types
+(`Scheme::probe`), without its predicates.
+
+`Solver::narrow_overloads` crosses out a candidate when its probe no longer
+unifies with $\alpha$, which it tries on a copy of the unifier, so that
+nothing is decided. It never guesses and never backtracks:
+
+- **One left:** it's instantiated for real, adding its predicates, and
+  unified with $\alpha$ (`solve_overloads` in `infer.rs`, since that needs
+  the types of the functions being inferred). A call is checked against it
+  argument by argument, so that a mismatch is at the argument.
+- **None left:** the candidate with as many parameters as the call has
+  arguments that fits the most of them, then the most if mutabilities don't
+  count, is checked as if it had been chosen, for precise errors. Without a
+  single such one, the error lists the candidates (E0236).
+- **More left when the body is done:** the use is ambiguous (E0237). It
+  doesn't become part of the function's type: generic code uses classes.
+
+For a call, $\alpha$ is unified with `fn(β₁, …, βₙ) -> β` first, and
+candidates are crossed out before each argument is checked. When the
+arguments before a closure leave one candidate, the closure is checked
+against its parameter types. So the number of arguments and the first
+argument usually decide early, as with methods in other languages, without
+making the first argument special.
+
+A choice is kept by expression in `InferenceResult::overloads`, which the
+evaluator and the code generator use instead of resolving the name again.
+
+Two functions with a name *overlap* when a call could fit both: they take as
+many arguments, and their parameter types unify once their parameters are
+new variables (`functions_overlap` in `overlap.rs`). That's an error at the
+later one (E0238), as for [impls](#instance-resolution), so that adding a
+function can't change what an existing call chooses. A class method's
+parameter is a type parameter, so it overlaps every function with its name
+that takes as many arguments.
+
+This is close to System O [Odersky et al. 1995], where an overloaded name's
+instances are given by their types, except that in Bolt a name's functions
+don't share a declared type, and a use that the types don't decide isn't
+generalized.
+
 ## References
 
 - M. Odersky, M. Sulzmann and M. Wehr. *Type Inference with
@@ -195,3 +243,5 @@ generalized, like the top level of a file, is reported as "type needed".
 - B. R. Gaster and M. P. Jones. *A Polymorphic Type
   System for Extensible Records and Variants.* Technical report NOTTCS-TR-96-3,
   University of Nottingham, 1996.
+- M. Odersky, P. Wadler and M. Wehr. *A Second Look at
+  Overloading.* FPCA 1995.
