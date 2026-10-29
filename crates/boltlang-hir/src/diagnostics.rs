@@ -86,6 +86,10 @@ pub enum DiagnosticKind<'db> {
     NotAnEnum { path: String },
     /// The prelude that was asked for can't be found.
     UnresolvedPrelude { package: String, error: ImportPathError },
+    /// The `Vec` of `fn Vec.new()` isn't a struct or enum of the same file.
+    UnresolvedOwner { name: Name },
+    /// `fn Vec.new()` somewhere other than the top level of a file.
+    OwnerNotTopLevel,
     UnresolvedName,
     UnresolvedType,
     /// A path that names something other than a type, like a class.
@@ -357,6 +361,12 @@ impl<'db> Collector<'db> {
                 }
                 NameResDiagnostic::NotAnEnum { import, path } => {
                     (self.import_path_range(*import), DiagnosticKind::NotAnEnum { path: path.clone() })
+                }
+                NameResDiagnostic::UnresolvedOwner { function, name } => {
+                    (self.owner_range(*function), DiagnosticKind::UnresolvedOwner { name: name.clone() })
+                }
+                NameResDiagnostic::OwnerNotTopLevel { function } => {
+                    (self.owner_range(*function), DiagnosticKind::OwnerNotTopLevel)
                 }
                 // It's about the whole file, so it's at its start.
                 NameResDiagnostic::UnresolvedPrelude { package, error } => (
@@ -850,7 +860,7 @@ impl<'db> Collector<'db> {
             Reason::Argument { function, index } => {
                 let (sig, map) = function_signature_with_source_map(db, function);
                 let index = index as usize;
-                let name = function.item(db).name.as_ref().map(|n| n.name().clone());
+                let name = function.item(db).display_name();
                 let ptr = match sig.params.get(index)?.type_ref {
                     Some(type_ref) => map.type_syntax(type_ref)?,
                     None => {
@@ -887,7 +897,7 @@ impl<'db> Collector<'db> {
                     ExprOrPat::Pat(p) => map.pat_syntax(p)?,
                 };
                 let function = match body.def(db) {
-                    DefWithBody::Function(f) => f.item(db).name.as_ref().map(|n| n.name().clone()),
+                    DefWithBody::Function(f) => f.item(db).display_name(),
                     _ => None,
                 };
                 (body.def(db).file(db), ptr, BecauseKind::UseIn { function })
@@ -895,7 +905,7 @@ impl<'db> Collector<'db> {
             Reason::RequiredBy(ConstraintSource::Declared { def, type_ref }) => {
                 let (file, map, item) = match def {
                     GenericDefId::Function(f) => {
-                        let name = f.item(db).name.as_ref().map(|n| n.name().clone());
+                        let name = f.item(db).display_name();
                         (f.file(db), &function_signature_with_source_map(db, f).1, name)
                     }
                     GenericDefId::Struct(s) => {
@@ -975,6 +985,13 @@ impl<'db> Collector<'db> {
 
     /// Where `name` is in the item or import `ast_id`. For an item, that's
     /// the name it defines; for an import, the name in its list.
+    /// The `Vec` of `fn Vec.new()`, or the whole function if it's gone.
+    fn owner_range(&self, function: AstId) -> Option<TextRange> {
+        let node = function.to_node(self.db, self.file, &self.root)?;
+        let owner = node.children().find(|n| n.kind() == NAME_REF);
+        Some(owner.unwrap_or(node).text_range())
+    }
+
     fn name_in(&self, ast_id: AstId, name: &Name) -> Option<TextRange> {
         let node = ast_id.to_node(self.db, self.file, &self.root)?;
         if ast_id.kind != SyntaxKind::IMPORT {

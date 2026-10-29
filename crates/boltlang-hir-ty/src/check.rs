@@ -9,7 +9,7 @@
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body},
-    hir::{BinaryOp, Expr, Path},
+    hir::{BinaryOp, Expr, Path, PathSegment},
     ids::{FunctionId, ImplId, ItemContainerId, TypeAliasId},
     item_tree::{ModItem, item_tree},
     resolver::{GenericDefId, Resolver, ValueNs, ValueResolution},
@@ -532,18 +532,28 @@ fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<
     let body = body(db, def);
     let mut out = Vec::new();
     for (id, expr) in body.exprs.iter() {
-        let path = match expr {
-            Expr::Path(path) => path.clone(),
-            // `x.f()` may call `f`.
-            Expr::Field { name, .. } => Path::from_name(name.clone()),
-            Expr::Binary { op: BinaryOp::Custom(name), .. } => Path::from_name(name.clone()),
+        let paths = match expr {
+            Expr::Path(path) => vec![path.clone()],
+            // `x.f()` may call `f`, and `Vec.new` is a path.
+            Expr::Field { expr: base, name } => {
+                let mut paths = vec![Path::from_name(name.clone())];
+                if let Expr::Path(base) = &body[*base] {
+                    let mut segments = base.segments.to_vec();
+                    segments.push(PathSegment { name: name.clone(), generic_args: None });
+                    paths.push(Path { segments: segments.into() });
+                }
+                paths
+            }
+            Expr::Binary { op: BinaryOp::Custom(name), .. } => vec![Path::from_name(name.clone())],
             _ => continue,
         };
         let resolver = Resolver::for_expr(db, def, id);
-        if let Some(ValueResolution::Value(ValueNs::Function(g))) = resolver.resolve_path_in_value_ns(db, &path)
-            && !out.contains(&g)
-        {
-            out.push(g);
+        for path in paths {
+            if let Some(ValueResolution::Value(ValueNs::Function(g))) = resolver.resolve_path_in_value_ns(db, &path)
+                && !out.contains(&g)
+            {
+                out.push(g);
+            }
         }
     }
     out

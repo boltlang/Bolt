@@ -66,6 +66,8 @@ impl DiagnosticCode {
     pub const UNRESOLVED_PRELUDE: Self = Self("E0111");
     pub const BROKEN_DEPENDENCY: Self = Self("E0112");
     pub const BAD_MANIFEST: Self = Self("E0113");
+    pub const UNRESOLVED_OWNER: Self = Self("E0114");
+    pub const OWNER_NOT_TOP_LEVEL: Self = Self("E0115");
 
     pub const TYPE_MISMATCH: Self = Self("E0201");
     pub const INFINITE_TYPE: Self = Self("E0202");
@@ -444,6 +446,14 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::NotAnEnum { path } => {
             (C::NOT_AN_ENUM, format!("`{path}` is not an enum, so it has no variants to import"))
         }
+        K::UnresolvedOwner { name } => (
+            C::UNRESOLVED_OWNER,
+            format!("cannot find a struct or enum `{name}` in this file; only the file that defines a type can add functions to it"),
+        ),
+        K::OwnerNotTopLevel => (
+            C::OWNER_NOT_TOP_LEVEL,
+            "a function can only be put in the namespace of a type at the top level of a file".to_string(),
+        ),
         K::UnresolvedPrelude { package, error } => {
             let message = match error {
                 ImportPathError::NoManifest { .. } | ImportPathError::NotADependency { .. } => {

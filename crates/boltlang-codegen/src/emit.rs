@@ -372,7 +372,8 @@ fn import_signature<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<Signatur
 
 fn function_name(db: &dyn Db, f: FunctionId<'_>) -> String {
     match &f.item(db).name {
-        Some(FunctionName::Name(name)) => name.to_string(),
+        // `Vec.new` for one in the namespace of a type.
+        Some(FunctionName::Name(_)) => f.item(db).display_name().map_or("?".to_string(), |n| n.to_string()),
         Some(FunctionName::Operator(op)) => format!("({op})"),
         None => "?".to_string(),
     }

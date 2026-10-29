@@ -194,9 +194,25 @@ impl FunctionName {
     }
 }
 
+impl Function {
+    /// The name to show for the function: `Vec.new` for one in the
+    /// namespace of a type, else its own name.
+    pub fn display_name(&self) -> Option<Name> {
+        let name = self.name.as_ref()?.name();
+        Some(match &self.owner {
+            Some(owner) => Name::new(format!("{}.{}", owner.as_str(), name.as_str())),
+            None => name.clone(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct Function {
     pub name: Option<FunctionName>,
+    /// The type whose namespace the function is in, like `Vec` in
+    /// `fn Vec.new()`. Such a function isn't in the file's scope: it's
+    /// called by its path, `Vec.new()`.
+    pub owner: Option<Name>,
     pub visibility: RawVisibility,
     pub is_async: bool,
     pub is_const: bool,
@@ -421,6 +437,7 @@ impl ItemTree {
         };
         let function = Function {
             name: fn_name,
+            owner: f.owner().map(|owner| Name::from_ident(&owner.text())),
             visibility: RawVisibility::from_ast(f.visibility()),
             is_async: f.async_token().is_some(),
             is_const: f.const_token().is_some(),

@@ -143,12 +143,21 @@ pub enum NameResDiagnostic {
     /// The prelude of [`prelude_package`] can't be found, and it was asked
     /// for.
     UnresolvedPrelude { package: String, error: ImportPathError },
+    /// The `Vec` of `fn Vec.new()` isn't a struct or enum of the same file.
+    UnresolvedOwner { function: AstId, name: Name },
+    /// `fn Vec.new()` somewhere other than the top level of a file, like in
+    /// a class.
+    OwnerNotTopLevel { function: AstId },
 }
 
 /// The names in a file and the problems found resolving them.
 #[derive(Debug, Default, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub struct FileScope<'db> {
     pub scope: ItemScope<'db>,
+    /// The functions in the namespaces of the file's types, like `new` in
+    /// `fn Vec.new()`, by the name of the type. They're only found by a
+    /// path that starts with the type: see [`type_member`].
+    pub members: BTreeMap<Name, BTreeMap<Name, ScopeEntry<'db>>>,
     pub diagnostics: Vec<NameResDiagnostic>,
 }
 
@@ -208,6 +217,8 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let container = ItemContainerId::File(file);
     for item in &tree.top_level {
         match *item {
+            // Those of a type are added below, once the types are known.
+            ModItem::Function(idx) if tree.functions[idx.index()].owner.is_some() => {}
             ModItem::Function(idx) => out.define_assoc(db, tree, container, AssocItem::Function(idx), None),
             ModItem::Const(idx) => out.define_assoc(db, tree, container, AssocItem::Const(idx), None),
             ModItem::TypeAlias(idx) => out.define_assoc(db, tree, container, AssocItem::TypeAlias(idx), None),
@@ -252,7 +263,67 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             ModItem::Import(_) => {}
         }
     }
+    define_members(db, file, tree, &mut out);
     out
+}
+
+/// Add the functions of `file` that are in the namespace of one of its
+/// types, like `fn Vec.new()`. The type must be a struct or enum of the
+/// same file, so that only the file that defines a type adds to it.
+fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut FileScope<'db>) {
+    let container = ItemContainerId::File(file);
+    for item in &tree.top_level {
+        let ModItem::Function(idx) = *item else { continue };
+        let f = &tree.functions[idx.index()];
+        let (Some(owner), Some(name)) = (&f.owner, &f.name) else { continue };
+        let variants = match out.scope.get(Namespace::Types, owner).map(|entry| entry.def) {
+            Some(ModuleDefId::Struct(_)) => &[][..],
+            Some(ModuleDefId::Enum(id)) => &id.item(db).variants[..],
+            _ => {
+                out.diagnostics.push(NameResDiagnostic::UnresolvedOwner { function: f.ast_id, name: owner.clone() });
+                continue;
+            }
+        };
+        let name = name.name();
+        let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
+        let entry = ScopeEntry { def, visibility: f.visibility, import: None, prelude: false };
+        // A variant is in the same namespace: `Option.Some`. The first
+        // definition of a name stays, as in the file's scope.
+        let members = out.members.entry(owner.clone()).or_default();
+        let added = !variants.contains(name) && !members.contains_key(name);
+        if added {
+            members.insert(name.clone(), entry);
+        } else {
+            out.diagnostics.push(NameResDiagnostic::Duplicate { name: name.clone(), ast_id: f.ast_id });
+        }
+    }
+    // Only functions at the top level can be in a type's namespace.
+    let top_level: Vec<AstId> = tree
+        .top_level
+        .iter()
+        .filter_map(|item| match *item {
+            ModItem::Function(idx) => Some(tree.functions[idx.index()].ast_id),
+            _ => None,
+        })
+        .collect();
+    for f in &tree.functions {
+        if f.owner.is_some() && !top_level.contains(&f.ast_id) {
+            out.diagnostics.push(NameResDiagnostic::OwnerNotTopLevel { function: f.ast_id });
+        }
+    }
+}
+
+/// The function `name` in the namespace of the type `owner`, a struct or
+/// enum defined in `file`, as for `Vec.new`, if it's visible from `from`.
+pub fn type_member<'db>(db: &'db dyn Db, file: File, owner: &Name, name: &Name, from: File) -> Option<ModuleDefId<'db>> {
+    let entry = type_member_entry(db, file, owner, name)?;
+    is_visible_from(db, entry.visibility, file, from).then_some(entry.def)
+}
+
+/// The function `name` in the namespace of the type `owner` of `file`,
+/// whether it's visible or not.
+pub fn type_member_entry<'db>(db: &'db dyn Db, file: File, owner: &Name, name: &Name) -> Option<ScopeEntry<'db>> {
+    local_scope(db, file).members.get(owner)?.get(name).copied()
 }
 
 /// The names in `file`: its own items and what its imports bring in.

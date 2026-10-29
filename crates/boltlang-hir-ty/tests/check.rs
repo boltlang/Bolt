@@ -64,7 +64,7 @@ use boltlang_hir_def::{
     expr_store::ExpressionStoreSourceMap,
     hir::{Expr, Statement, TypeRefId},
     ids::{ClassId, ConstId, EnumId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
-    item_tree::{AssocItem, FunctionName, ModItem, item_tree},
+    item_tree::{AssocItem, ModItem, item_tree},
     resolver::GenericDefId,
     signatures::{
         class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
@@ -229,9 +229,7 @@ fn check(input: &str) -> Result<(String, String), String> {
             }
         }
         for (instance, f) in functions {
-            let name = match f.item(&db).name.as_ref().unwrap() {
-                FunctionName::Name(n) | FunctionName::Operator(n) => format!("{instance}{n}"),
-            };
+            let name = format!("{instance}{}", f.item(&db).display_name().unwrap());
             let ty = match function_scheme(&db, f) {
                 Ok(scheme) => scheme.display(&db),
                 Err(InferenceCycle) => "<cycle>".into(),

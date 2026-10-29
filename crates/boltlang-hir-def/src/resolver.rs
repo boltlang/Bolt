@@ -22,7 +22,7 @@ use crate::{
         ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId, StructId,
         TypeAliasId,
     },
-    nameres::{Namespace, file_scope, is_visible_from},
+    nameres::{Namespace, file_scope, is_visible_from, type_member, type_member_entry},
     scope::{ExprScopes, ScopeId, expr_scopes},
     signatures::{
         GenericParams, class_signature, enum_signature, function_signature, impl_signature, struct_signature,
@@ -299,8 +299,24 @@ impl<'db> Resolver<'db> {
         let resolution = self.resolve_path_in_type_ns(db, path)?;
         Some(match resolution {
             TypeResolution { ty: TypeNs::Variant(id), unresolved: None } => ValueResolution::Value(ValueNs::Variant(id)),
+            TypeResolution { ty, unresolved: Some(i) } if i + 1 == segments.len() => {
+                match self.resolve_member(db, ty, &segments[i].name) {
+                    Some(f) => ValueResolution::Value(ValueNs::Function(f)),
+                    None => ValueResolution::Type(resolution),
+                }
+            }
             resolution => ValueResolution::Type(resolution),
         })
+    }
+
+    /// The function `name` in the namespace of the type `ty`, like `new` for
+    /// `Vec.new`.
+    fn resolve_member(&self, db: &'db dyn Db, ty: TypeNs<'db>, name: &Name) -> Option<FunctionId<'db>> {
+        let (file, owner) = owner_of(db, ty)?;
+        match type_member(db, file, owner, name, self.file)? {
+            ModuleDefId::Function(f) => Some(f),
+            _ => None,
+        }
     }
 
     /// The method or constant `name` of the class of the innermost impl
@@ -339,6 +355,17 @@ impl<'db> Resolver<'db> {
     /// there.
     pub fn hidden(&self, db: &'db dyn Db, path: &Path) -> Option<Hidden> {
         let segments = &path.segments;
+        // A private function of a type in another file, like `Vec.grow`.
+        if let Some(TypeResolution { ty, unresolved: Some(i) }) = self.resolve_path_in_type_ns(db, path)
+            && i + 1 == segments.len()
+            && let Some((file, owner)) = owner_of(db, ty)
+            && let Some(entry) = type_member_entry(db, file, owner, &segments[i].name)
+        {
+            return (!is_visible_from(db, entry.visibility, file, self.file)).then(|| Hidden {
+                name: segments[i].name.clone(),
+                package_only: entry.visibility == RawVisibility::Package,
+            });
+        }
         let (file, i) = self.walk_files(db, segments);
         if file == self.file {
             return None;
@@ -406,6 +433,16 @@ pub fn impl_class<'db>(db: &'db dyn Db, id: ImplId<'db>) -> Option<ClassId<'db>>
     let TypeRef::Path(path) = &sig.store[sig.class] else { return None };
     match Resolver::for_generic_def(db, GenericDefId::Impl(id)).resolve_path_in_type_ns(db, path)? {
         TypeResolution { ty: TypeNs::Class(class), unresolved: None } => Some(class),
+        _ => None,
+    }
+}
+
+/// The file and name of a type that can have functions in its namespace,
+/// like `Vec` for `Vec.new`.
+fn owner_of<'db>(db: &'db dyn Db, ty: TypeNs<'db>) -> Option<(File, &'db Name)> {
+    match ty {
+        TypeNs::Struct(id) => Some((id.file(db), id.item(db).name.as_ref()?)),
+        TypeNs::Enum(id) => Some((id.file(db), id.item(db).name.as_ref()?)),
         _ => None,
     }
 }

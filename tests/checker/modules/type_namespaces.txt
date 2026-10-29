@@ -1,0 +1,86 @@
+================================================================================
+Functions in the namespace of a type are called by their path
+================================================================================
+struct Point { x: i32, y: i32 }
+fn Point.origin() -> Point = Point { x: 0, y: 0 };
+fn Point.at(x: i32, y: i32) -> Point = Point { x, y };
+Point.origin();
+Point.at(1, 2);
+--------------------------------------------------------------------------------
+Point.origin: fn() -> imm Point
+Point.at: fn(i32, i32) -> imm Point
+Point.origin(): imm Point
+Point.at(1, 2): imm Point
+
+================================================================================
+Functions in the namespace of a type don't take the name in the file
+================================================================================
+struct Point { x: i32, y: i32 }
+fn Point.zero() -> i32 = 0;
+fn zero() -> Bool = False;
+zero();
+Point.zero();
+--------------------------------------------------------------------------------
+Point.zero: fn() -> i32
+zero: fn() -> Bool
+zero(): Bool
+Point.zero(): i32
+
+================================================================================
+Functions in the namespace of a type can be generic and inferred
+================================================================================
+struct Box[T] { item: T }
+fn Box.of(x) = Box { item: x };
+fn twice(x) = Box.of(Box.of(x));
+twice(1);
+--------------------------------------------------------------------------------
+Box.of: forall a. a: imm => fn(a) -> imm Box[a]
+twice: forall a. a: imm => fn(a) -> imm Box[imm Box[a]]
+twice(1): imm Box[imm Box[i32]]
+
+================================================================================
+Functions in the namespace of an enum
+================================================================================
+enum Sign { Neg, Pos }
+fn Sign.of(x: i32) -> Sign = if x < 0 { Sign.Neg } else { Sign.Pos };
+Sign.of(3);
+--------------------------------------------------------------------------------
+Sign.of: fn(i32) -> Sign
+Sign.of(3): Sign
+
+================================================================================
+Functions in the namespace of a type aren't methods
+================================================================================
+struct Point { x: i32, y: i32 }
+fn Point.norm(p: Point) -> i32 = p.x * p.x + p.y * p.y;
+let p = Point { x: 1, y: 2 };
+p.norm();
+--------------------------------------------------------------------------------
+Point.norm: fn(Point) -> i32
+let p: imm Point
+p.norm(): {error}
+--------------------------------------------------------------------------------
+error at `p.norm`: unresolved
+
+================================================================================
+Functions in the namespace of an imported type
+================================================================================
+//- /lib.bolt
+pub struct Box[T] { item: T }
+pub fn Box.of[T](x: T) -> Box[T] = Box { item: x };
+fn Box.secret() -> i32 = 1;
+
+//- /main.bolt
+import "./lib" (Box);
+Box.of(1);
+Box.secret();
+Box.nope();
+--------------------------------------------------------------------------------
+/lib.bolt: Box.of: forall T. T: imm => fn(T) -> imm Box[T]
+/lib.bolt: Box.secret: fn() -> i32
+/main.bolt: Box.of(1): imm Box[i32]
+/main.bolt: Box.secret(): {error}
+/main.bolt: Box.nope(): {error}
+--------------------------------------------------------------------------------
+/main.bolt: error at `Box.secret`: `secret` isn't visible
+/main.bolt: error at `Box.nope`: unresolved

@@ -31,6 +31,8 @@ fn diagnostics(scope: &FileScope) -> Vec<String> {
             NameResDiagnostic::UnresolvedImportEnum { path, .. } => format!("unresolved enum {path}"),
             NameResDiagnostic::NotAnEnum { path, .. } => format!("not an enum {path}"),
             NameResDiagnostic::UnresolvedPrelude { package, error } => format!("unresolved prelude {package}: {error:?}"),
+            NameResDiagnostic::UnresolvedOwner { name, .. } => format!("unresolved owner {name}"),
+            NameResDiagnostic::OwnerNotTopLevel { .. } => "owner not top level".to_string(),
         })
         .collect()
 }
@@ -507,4 +509,62 @@ fn a_missing_prelude_is_an_error_only_when_asked_for() {
     assert_eq!(diagnostics(file_scope(&db, own)), [
         "unresolved prelude empty: NotInPackage { package: \"empty\", path: \"__prelude__/lib.bolt\" }"
     ]);
+}
+
+#[test]
+fn functions_of_a_type_are_in_its_namespace() {
+    let db = TestDb::new();
+    let file = db.file(
+        "/main.bolt",
+        r#"
+struct Vec[T] { len: i32 }
+enum Shape { Circle }
+fn Vec.new() {}
+fn Vec.len() {}
+fn Shape.unit() {}
+fn new() {}
+"#,
+    );
+    let scope = local_scope(&db, file);
+    // `Vec.new` doesn't take the name `new` in the file.
+    assert_eq!(names(&scope.scope, Namespace::Values), ["new"]);
+    let members = |owner: &str| -> Vec<String> {
+        scope.members.get(&Name::new(owner)).map_or(Vec::new(), |m| m.keys().map(|n| n.to_string()).collect())
+    };
+    assert_eq!(members("Vec"), ["len", "new"]);
+    assert_eq!(members("Shape"), ["unit"]);
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+}
+
+#[test]
+fn functions_of_a_type_need_a_type_of_the_file() {
+    let db = TestDb::new();
+    db.file("/lib.bolt", "pub struct Point;\n");
+    let file = db.file(
+        "/main.bolt",
+        r#"
+import "./lib" (Point);
+enum Shape { Circle }
+fn f() {}
+class C[T] { fn Shape.g(x: T); }
+fn Point.origin() {}
+fn Nope.a() {}
+fn f.b() {}
+fn Shape.Circle() {}
+fn Shape.c() {}
+fn Shape.c() {}
+"#,
+    );
+    // `Point` is imported, not defined here.
+    assert_eq!(
+        diagnostics(local_scope(&db, file)),
+        [
+            "unresolved owner Point",
+            "unresolved owner Nope",
+            "unresolved owner f",
+            "duplicate Circle",
+            "duplicate c",
+            "owner not top level",
+        ]
+    );
 }

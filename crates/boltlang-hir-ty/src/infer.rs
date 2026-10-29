@@ -822,6 +822,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let resolver = self.resolver(expr);
         match resolver.resolve_path_in_value_ns(self.db, path) {
             Some(ValueResolution::Value(value)) => self.value_ty(expr, value),
+            // `Vec.grow`, a function of a type that isn't visible here.
+            Some(ValueResolution::Type(TypeResolution { unresolved: Some(_), .. }))
+                if resolver.hidden(self.db, path).is_some() =>
+            {
+                self.unresolved_path(ExprOrPat::Expr(expr), &resolver, path);
+                Ty::Error
+            }
             Some(ValueResolution::Type(resolution)) => self.type_as_value(expr, resolution),
             None => {
                 self.unresolved_path(ExprOrPat::Expr(expr), &resolver, path);
