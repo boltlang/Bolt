@@ -246,11 +246,18 @@ impl<'db> Evaluator<'db> {
         }
     }
 
+    /// Call `function` with `args`. Its file is one of those being run, so
+    /// that a class method it calls can use the impls the file can, when the
+    /// impl is only known at run time, as in a generic function.
     pub fn call_function(
         &mut self,
         function: FunctionId<'db>,
         args: Vec<Value<'db>>,
     ) -> Result<Value<'db>, EvalError<'db>> {
+        let file = function.file(self.db);
+        if !self.files.contains(&file) {
+            self.files.push(file);
+        }
         finish(self.call_function_inner(function, args))
     }
 
