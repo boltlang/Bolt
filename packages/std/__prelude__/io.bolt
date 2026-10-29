@@ -8,3 +8,11 @@ extern "bolt" {
   pub fn panic(message: String) -> !;
 
 }
+
+/// Stop the program with an error unless `cond` holds. For tests: a test
+/// fails when it stops with an error.
+pub fn assert(cond: Bool) {
+  if !cond {
+    panic("assertion failed");
+  }
+}

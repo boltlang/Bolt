@@ -165,13 +165,10 @@ provides if there's `Describe[i32]`, which there is.
 
 ## Superclasses
 
-A class can require another one. Every type that's `Ord` must also be `Eq`:
+A class can require another one. Every type that's `Ord` must also be `Eq`,
+the prelude's class of types whose values can be compared with `eq`:
 
 ```bolt
-class Eq[T] {
-  fn eq(a: T, b: T) -> Bool;
-}
-
 class Ord[T] where Eq[T] {
   fn lt(a: T, b: T) -> Bool;
 }

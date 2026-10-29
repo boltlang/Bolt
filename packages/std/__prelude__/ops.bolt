@@ -18,3 +18,12 @@ pub class IndexMut[C] where Index[C] {
   fn set_index(c: C, i: i32, x: C.Item);
 }
 
+/// Types whose values can be compared, with `a == b` and `a != b`.
+pub class Eq[T] {
+  fn eq(a: T, b: T) -> Bool;
+  fn ne(a: T, b: T) -> Bool = !eq(a, b);
+}
+
+pub fn a == b = eq(a, b);
+
+pub fn a != b = ne(a, b);

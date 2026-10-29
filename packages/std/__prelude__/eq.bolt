@@ -1,9 +1,0 @@
-
-pub class Eq[T] {
-  fn eq(a: T, b: T) -> Bool;
-  fn ne(a: T, b: T) -> Bool = !eq(a, b);
-}
-
-pub fn a == b = eq(a, b);
-
-pub fn a != b = ne(a, b);
