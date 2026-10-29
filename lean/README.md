@@ -84,6 +84,8 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
+| `HeapOk.free` | `Regions.lean` | a `mut` location that nothing in the heap refers to, and that holds what's `imm` all the way down, can be made `imm` without a copy: the heap is still well-typed with it `imm`. That's when a region is freed (#209) |
+| `freed_never_changes` | `Regions.lean` | after that, a program that's well-typed with the location `imm` never changes it |
 | `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v`; the checker's check, that each argument is at most the struct's mutability, is neither enough nor needed |
 
 The key lemma for generic functions, and for #243, is `HasType.inst` in
@@ -128,5 +130,8 @@ The theorems depend only on Lean's standard axioms, `propext`,
   of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
+- **The typing of regions** (#209): that a block's values are referred to
+  by nothing outside it when it ends, so that `HeapOk.free` applies. Also
+  borrowed parameters (#283) and unique values at their last use (#284).
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
