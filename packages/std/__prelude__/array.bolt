@@ -4,7 +4,8 @@
 import "./ops" (Index, IndexMut);
 import "./option" (Option, Some, None);
 import "./iter" (Iterable, Iterator);
-import "./mutability" (ToMut, ToImm);
+import "./mutability" (ToMut, ToImm, to_mut, to_imm);
+import "./io" (assert);
 
 extern "bolt" {
 
@@ -85,4 +86,34 @@ impl[T] ToMut[[T]] {
 impl[T: imm] ToImm[[T]] {
   type Imm = imm [T];
   fn to_imm(xs) = array_freeze(xs);
+}
+
+// Tests
+
+#[test]
+fn a_copy_of_an_array_that_can_be_changed() {
+  let xs = [1, 2, 3];
+  let ys = to_mut(xs);
+  ys[0] = 10;
+  assert(xs == [1, 2, 3]);
+  assert(ys == mut [10, 2, 3]);
+}
+
+#[test]
+fn a_copy_of_an_array_that_can_t_be_changed() {
+  let xs = mut [1, 2];
+  let frozen = to_imm(xs);
+  xs[0] = 10;
+  assert(xs == mut [10, 2]);
+  assert(frozen == [1, 2]);
+}
+
+struct TestPoint { x: i32 }
+
+#[test]
+fn copies_of_arrays_are_shallow() {
+  let points = mut [mut TestPoint { x: 1 }];
+  let copy = to_mut(points);
+  copy[0].x = 5;
+  assert(points[0].x == 5);
 }

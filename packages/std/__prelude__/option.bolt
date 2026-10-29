@@ -1,4 +1,4 @@
-import "./io" (panic);
+import "./io" (panic, assert);
 
 pub enum Option[T] {
   None,
@@ -12,3 +12,18 @@ pub fn unwrap[T](x: Option[T]) = match x {
   Some(x) => x
 };
 
+// Tests
+
+fn test_safe_div(a: i32, b: i32) -> Option[i32] = if b == 0 { None } else { Some(a / b) };
+
+#[test]
+fn some_and_none() {
+  assert(test_safe_div(7, 2) == Some(3));
+  assert(test_safe_div(7, 0) == None);
+  assert(match test_safe_div(7, 2) { Some(n) => n, None => -1 } == 3);
+}
+
+#[test]
+fn unwrapping_some() {
+  assert(unwrap(Some(1)) == 1);
+}

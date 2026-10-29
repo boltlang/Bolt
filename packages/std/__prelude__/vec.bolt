@@ -1,11 +1,11 @@
 // A growable array.
 
-import "./mutability" (ToMut, ToImm);
+import "./mutability" (ToMut, ToImm, to_mut, to_imm);
 import "./option" (Option, None, Some);
 import "./ops" (Eq, Index, IndexMut);
 import "./array" (array_alloc, array_copy, array_freeze, array_len);
 import "./iter" (Iterable, Iterator, zip);
-import "./io" (panic);
+import "./io" (panic, assert);
 
 
 /// An array that grows: `push` adds an element at the end, and makes room
@@ -244,4 +244,202 @@ impl[T] ToMut[Vec[T]] {
 impl[T: imm] ToImm[Vec[T]] {
   type Imm = imm Vec[T];
   fn to_imm(v) = Vec { items: array_freeze(v.items), len: v.len };
+}
+
+// Tests
+
+#[test]
+fn pushing_and_popping() {
+  let v = Vec.new();
+  v.push(1);
+  v.push(2);
+  v.push(3);
+  assert(v.pop() == Some(3));
+  assert(len(v) == 2);
+  assert(to_array(v) == mut [1, 2]);
+}
+
+#[test]
+fn popping_an_empty_vec() {
+  let v: Vec[i32] = Vec.new();
+  assert(v.pop() == None);
+  assert(v.is_empty());
+}
+
+#[test]
+fn growing_doubles_the_room() {
+  let v = Vec.new();
+  let mut i = 0;
+  while i < 100 {
+    v.push(i);
+    i += 1;
+  }
+  assert(len(v) == 100);
+  assert(capacity(v) == 128);
+  assert(v.get(0) == 0);
+  assert(v.get(99) == 99);
+}
+
+#[test]
+fn getting_and_setting() {
+  let v = Vec.from_array([1, 2, 3]);
+  v.set(1, 20);
+  assert(v.get(1) == 20);
+  assert(v.try_get(3) == None);
+  assert(v.try_get(-1) == None);
+  assert(v.try_get(2) == Some(3));
+}
+
+#[test]
+fn inserting_and_removing() {
+  let v = Vec.from_array([1, 2, 3]);
+  v.insert(0, 0);
+  v.insert(4, 4);
+  v.insert(2, 9);
+  assert(v.remove(2) == 9);
+  assert(to_array(v) == mut [0, 1, 2, 3, 4]);
+}
+
+#[test]
+fn clearing_keeps_the_room() {
+  let v = Vec.from_array([1, 2, 3]);
+  let room = capacity(v);
+  v.clear();
+  assert(len(v) == 0);
+  assert(capacity(v) == room);
+}
+
+#[test]
+fn reserving_room() {
+  let v: Vec[i32] = Vec.new();
+  v.reserve(10);
+  let room = capacity(v);
+  let mut i = 0;
+  while i < 10 {
+    v.push(i);
+    i += 1;
+  }
+  assert(room >= 10);
+  assert(capacity(v) == room);
+}
+
+#[test]
+fn a_vec_is_shared_and_to_array_copies() {
+  let v = Vec.from_array([1, 2]);
+  let w = v;
+  w.push(3);
+  let xs = to_array(v);
+  xs[0] = 9;
+  assert(to_array(v) == mut [1, 2, 3]);
+  assert(xs == mut [9, 2, 3]);
+}
+
+fn test_fill(v: mut Vec[String], n: i32) {
+  let mut i = 0;
+  while i < n {
+    v.push("x");
+    i += 1;
+  }
+}
+
+#[test]
+fn a_function_fills_in_a_vec_it_s_given() {
+  let v = Vec.new();
+  test_fill(v, 3);
+  assert(to_array(v) == mut ["x", "x", "x"]);
+}
+
+#[test]
+fn indexing_a_vec() {
+  let v = Vec.from_array([1, 2, 3]);
+  v[0] = 10;
+  v[1] += 5;
+  assert(v[0] == 10);
+  assert(v[1] == 7);
+  assert(v[2] == 3);
+}
+
+struct TestPoint { x: i32, y: i32 }
+
+#[test]
+fn changing_a_part_of_an_element_of_a_vec() {
+  let points = Vec.from_array(mut [mut TestPoint { x: 0, y: 0 }]);
+  points[0].x = 3;
+  let pairs = Vec.from_array([(1, 2)]);
+  pairs[0].1 = 5;
+  assert(points[0].x == 3);
+  assert(points[0].y == 0);
+  assert(pairs[0] == (1, 5));
+}
+
+#[test]
+fn looping_over_a_vec() {
+  let v = Vec.from_array([1, 2, 3]);
+  let mut total = 0;
+  for x in v {
+    total += x;
+  }
+  assert(total == 6);
+}
+
+#[test]
+fn a_loop_over_a_vec_sees_elements_pushed_while_it_runs() {
+  let v = Vec.from_array([1]);
+  let mut seen = 0;
+  for x in v {
+    seen += 1;
+    if x < 3 {
+      v.push(x + 1);
+    }
+  }
+  assert(seen == 3);
+  assert(to_array(v) == mut [1, 2, 3]);
+}
+
+fn test_first[C](c: C) -> C.Item where Index[C] = c[0];
+
+fn test_count[C](c: C) -> i32 where Iterable[C], Iterator[C.Iter] {
+  let mut n = 0;
+  for x in c {
+    n += 1;
+  }
+  n
+}
+
+#[test]
+fn generic_functions_over_indexing_and_loops() {
+  let v = Vec.from_array(["a", "b"]);
+  assert(test_first(v) == "a");
+  assert(test_count(v) == 2);
+}
+
+#[test]
+fn comparing_vecs_compares_their_elements() {
+  let a = Vec.from_array([1, 2, 3]);
+  let b = Vec.from_array([1, 2, 3]).to_mut();
+  let c = Vec.from_array([1, 2]);
+  let d = Vec.from_array([1, 2, 4]);
+  assert(a == b);
+  assert(!(a == c));
+  assert(!(a == d));
+  assert(a != d);
+}
+
+#[test]
+fn a_copy_of_a_vec_that_can_be_changed() {
+  let v = Vec.from_array([1, 2]);
+  let w = to_mut(v);
+  w.push(3);
+  assert(to_array(v) == mut [1, 2]);
+  assert(to_array(w) == mut [1, 2, 3]);
+}
+
+#[test]
+fn a_copy_of_a_vec_that_can_t_be_changed() {
+  let v = Vec.from_array([1, 2]);
+  let f = to_imm(v);
+  v.push(3);
+  assert(to_array(v) == mut [1, 2, 3]);
+  assert(len(f) == 2);
+  assert(f[0] == 1);
 }

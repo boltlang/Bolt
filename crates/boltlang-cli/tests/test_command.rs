@@ -70,3 +70,13 @@ fn stops_a_test_that_runs_out_of_fuel() {
     assert_eq!(out, "test a.bolt::looping ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n");
     fs::remove_dir_all(dir).unwrap();
 }
+
+/// The tests of `std`, the functions with `#[test]` in `packages/std`, pass.
+#[test]
+fn the_tests_of_std_pass() {
+    let std = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../packages/std");
+    let output = Command::new(env!("CARGO_BIN_EXE_bolt")).arg("test").arg(&std).output().unwrap();
+    let (stdout, stderr) = (String::from_utf8_lossy(&output.stdout), String::from_utf8_lossy(&output.stderr));
+    assert!(output.status.success(), "{stdout}{stderr}");
+    assert!(stdout.contains("::pushing_and_popping ... ok"), "{stdout}");
+}
