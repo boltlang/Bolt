@@ -1034,6 +1034,8 @@ impl Coll[i32] { type Item = i32; type It = Ints; }
 impl Coll[Bool] { type Item = i32; type It = Bools; }
                                       //^^ error: class `Coll` needs the `Item` of its type `It` to be `i32`, but this impl's is `Bool`
 impl[T, I] Coll[(T, I)] where Iter2[I, Item = T] { type Item = T; type It = I; }
+impl Coll[()] { type It = Ints; }
+   //^^^^^^^^ error: missing type `Item` of class `Coll`
 impl[T, I] Coll[(T, I, I)] where Iter2[I] { type Item = T; type It = I; }
                                                               //^^ error: class `Coll` needs the `Item` of its type `It` to be `T`, but this impl's is `I.Item`
 "#,

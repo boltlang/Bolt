@@ -142,10 +142,14 @@ pub fn unmet_assoc_equalities<'db>(
     let class_def = GenericDefId::Class(target.class);
     let aliases = class_assoc_types(db, target.class);
     // The class's associated types for the impl's instance are the impl's.
+    // One the impl doesn't give is the error type, so that it's skipped: it's
+    // reported with the impl's other missing items.
     let own = |t: &Ty<'db>| {
         let t = subst_params(t, class_def, &target.args);
         let t = t.fold(&mut |t| match t {
-            Ty::Assoc(a, args) if aliases.contains(a) && *args == target.args => impl_assoc_ty(db, imp, *a),
+            Ty::Assoc(a, args) if aliases.contains(a) && *args == target.args => {
+                Some(impl_assoc_ty(db, imp, *a).unwrap_or(Ty::Error))
+            }
             _ => None,
         });
         normalize_assoc(db, file, &t)
