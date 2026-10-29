@@ -1519,6 +1519,12 @@ impl FuncDecl {
         self.find_node()
     }
 
+    /// The type whose namespace the function is in, like `Vec` in
+    /// `fn Vec.new()`.
+    pub fn owner(&self) -> Option<NameRef> {
+        self.find_node()
+    }
+
     /// The `+` of an operator definition like `fn a + b`, which is in the
     /// parameter list, between the operands.
     pub fn operator_name(&self) -> Option<OperatorName> {

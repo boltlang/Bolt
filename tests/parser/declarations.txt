@@ -30,6 +30,15 @@ fn foo(#[attr] x: i32, #[attr] x: i64) {}
 fn accumulate(machine) -> Machine[{State.Accumulate}] {}
 
 ================================================================================
+Functions in the namespace of a type
+================================================================================
+fn Vec.new[T]() -> Vec[T] = Vec { items: [], len: 0 };
+
+pub fn Vec.with_capacity[T](n: i32) -> mut Vec[T] {}
+
+fn Point.origin() -> Point;
+
+================================================================================
 Const function declarations
 ================================================================================
 const fn main() {}

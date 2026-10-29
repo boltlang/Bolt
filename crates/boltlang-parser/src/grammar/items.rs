@@ -179,6 +179,7 @@ pub(crate) fn opt_visibility(p: &mut Parser) -> bool {
 /// - `fn f[T](x: T) -> T where T: Ord { ... }`
 /// - `fn f(x: T) -> T;` without a body
 /// - `fn f(x: T) -> T = x;` with an expression body
+/// - `fn Vec.new() -> Vec[T]` in the namespace of a type
 /// - `fn a + b = add(a, b);` or `fn -x = neg(x);` for an operator, see
 ///   [`operator_def`]
 fn fn_item(p: &mut Parser, m: Marker) {
@@ -187,6 +188,13 @@ fn fn_item(p: &mut Parser, m: Marker) {
     if at_operator_def(p) {
         operator_def(p);
     } else {
+        // `fn Vec.new()`: a function in the namespace of the type `Vec`.
+        if p.at(IDENT) && p.nth_at(1, T![.]) && p.nth_at(2, IDENT) {
+            let owner = p.start();
+            p.bump(IDENT);
+            owner.complete(p, NAME_REF);
+            p.bump(T![.]);
+        }
         match p.current() {
             IDENT | METAVARIABLE => {
                 let name = p.start();
