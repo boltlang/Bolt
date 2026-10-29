@@ -202,8 +202,8 @@ error at `same`: no instance Same[mut [i32], imm [Bool]]
 
 ================================================================================
 Shared mutabilities of an inferred function are named
-:prelude
 ================================================================================
+extern "bolt" { fn array_len[T](xs: [T]) -> i32; }
 fn pick(c, a, b) = if c { array_len(a); a } else { b };
 fn size(xs) = array_len(xs);
 fn same(xs: [i32]) -> [i32] = xs;

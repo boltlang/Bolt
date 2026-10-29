@@ -39,8 +39,9 @@ fn twice[T](x: T) -> (String, String) where Describe[T] = (describe(x), describe
 ================================================================================
 A generic impl calls the impl of its parameter
 :todo wasm
-:prelude
 ================================================================================
+enum Option[T] { None, Some(T) }
+import Option.*;
 class Describe[T] { fn describe(x: T) -> String; }
 impl Describe[i32] { fn describe(x) = "a number"; }
 impl[T] Describe[Option[T]] where Describe[T] {

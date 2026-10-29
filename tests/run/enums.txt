@@ -30,8 +30,8 @@ Blue
 
 ================================================================================
 Variants imported into scope
-:prelude
 ================================================================================
+extern "bolt" { fn print(text: String); }
 enum Color { Red, Green, Blue }
 import Color.*;
 fn code(c) = match c { Red => 1, Green => 2, Blue => 3 };
