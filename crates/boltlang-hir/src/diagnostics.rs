@@ -27,14 +27,14 @@ use boltlang_hir_def::{
     },
 };
 use boltlang_hir_ty::{
-    InferenceDiagnostic, InferenceResult, Ty,
+    InferenceDiagnostic, InferenceResult, Ty, function_scheme,
     infer::mut_inside_imm,
     builtin::{Builtin, is_builtin_block},
     kind::Kind,
     inhabited::{field_without_values, has_values},
     check::unmet_assoc_bounds,
     infer_body,
-    overlap::overlapped_impls,
+    overlap::{overlapped_functions, overlapped_impls},
     lower::{
         ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, enum_field_types, fn_sig,
         generic_predicates, impl_header, named_mutabilities, struct_field_types, subst_params, type_alias_ty,
@@ -118,6 +118,16 @@ pub enum DiagnosticKind<'db> {
     MissingFields { names: Vec<Name> },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
+    /// None of the functions called `name` fits its use, of type `ty`.
+    /// `candidates` are their types, as text (#275).
+    NoOverload { name: Name, ty: Ty<'db>, candidates: Vec<String> },
+    /// More than one of the functions called `name` fits its use when the
+    /// body is done.
+    AmbiguousOverload { name: Name, candidates: Vec<String> },
+    /// A call could fit both this function, of type `ty`, and one with the
+    /// same name before it, of type `other`, whose name is at `other_range`
+    /// in `other_file` (#275).
+    OverlappingFunction { name: Name, ty: String, other: String, other_file: File, other_range: TextRange },
     /// A type alias that refers to itself.
     RecursiveAlias,
     /// A function whose type can't be inferred, because functions without
@@ -437,6 +447,27 @@ impl<'db> Collector<'db> {
         }
     }
 
+    /// Report the functions with the name of `f` before it that it overlaps,
+    /// at its name.
+    fn overlapping_functions(&mut self, f: FunctionId<'db>) {
+        let db = self.db;
+        let range = self.item_range(f.item(db).ast_id);
+        for &other in overlapped_functions(db, f) {
+            let other_file = other.file(db);
+            let root = SyntaxNode::new_root(parse_file(db, other_file).tree(db).clone());
+            let Some(node) = other.item(db).ast_id.to_node(db, other_file, &root) else { continue };
+            let other_range = node.children().find(|n| n.kind() == NAME).unwrap_or(node).text_range();
+            let kind = DiagnosticKind::OverlappingFunction {
+                name: overload_name(db, &[f]),
+                ty: overload_types(db, &[f]).remove(0),
+                other: overload_types(db, &[other]).remove(0),
+                other_file,
+                other_range,
+            };
+            self.push(Some(range), kind);
+        }
+    }
+
     /// Report the impls before `imp` that it overlaps, at its instance.
     /// `map` is the source map of the impl's signature.
     fn overlapping_impls(&mut self, imp: ImplId<'db>, map: &ExpressionStoreSourceMap) {
@@ -593,6 +624,7 @@ impl<'db> Collector<'db> {
     fn function(&mut self, id: FunctionId<'db>) {
         let db = self.db;
         self.fallback = self.item_range(id.item(db).ast_id);
+        self.overlapping_functions(id);
         let (sig, map) = function_signature_with_source_map(db, id);
         self.lower(map, &fn_sig(db, id).diagnostics);
         self.lower(map, &generic_predicates(db, GenericDefId::Function(id)).diagnostics);
@@ -776,6 +808,17 @@ impl<'db> Collector<'db> {
                             (origin, DiagnosticKind::TypeMismatch { expected, actual, because })
                         }
                         TypeError::InfiniteType { origin, ty } => (origin, DiagnosticKind::InfiniteType { ty }),
+                        TypeError::NoOverload { origin, ty, candidates } => {
+                            if has_error(&ty) {
+                                continue;
+                            }
+                            let name = overload_name(db, &candidates);
+                            (origin, DiagnosticKind::NoOverload { name, ty, candidates: overload_types(db, &candidates) })
+                        }
+                        TypeError::AmbiguousOverload { origin, candidates, .. } => {
+                            let name = overload_name(db, &candidates);
+                            (origin, DiagnosticKind::AmbiguousOverload { name, candidates: overload_types(db, &candidates) })
+                        }
                         TypeError::NoInstance { origin, constraint } => {
                             if constraint.args.iter().any(has_error) {
                                 continue;
@@ -1075,4 +1118,17 @@ fn node_range(map: &ExpressionStoreSourceMap, node: ExprOrPat) -> Option<TextRan
 
 fn has_error(ty: &Ty<'_>) -> bool {
     ty.any(&mut |t| matches!(t, Ty::Error))
+}
+
+/// The name of the functions that a use could be (#275).
+fn overload_name(db: &dyn Db, candidates: &[FunctionId<'_>]) -> Name {
+    candidates.first().and_then(|f| f.item(db).display_name()).unwrap_or_else(|| Name::new("?"))
+}
+
+/// The types of the functions that a use could be, as text.
+fn overload_types(db: &dyn Db, candidates: &[FunctionId<'_>]) -> Vec<String> {
+    candidates
+        .iter()
+        .map(|&f| function_scheme(db, f).map_or_else(|_| "<cycle>".to_string(), |s| s.display(db)))
+        .collect()
 }

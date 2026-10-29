@@ -24,17 +24,17 @@ An inferred function keeps the associated type in its type
 ================================================================================
 class Index[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn at(c: C, i: i32) -> Item;
 }
 struct Box[T] { items: [T] }
 impl[T] Index[Box[T]] {
   type Item = T;
-  fn get(c, i) = c.items[i];
+  fn at(c, i) = c.items[i];
 }
-fn second(c) = get(c, 1);
+fn second(c) = at(c, 1);
 second(Box { items: [1, 2] });
 --------------------------------------------------------------------------------
-Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
+Index[Box[T]].at: forall T. fn(Box[T], i32) -> T
 second: forall a. Index[a] => fn(a) -> a.Item
 second(Box { items: [1, 2] }): i32
 

@@ -253,8 +253,8 @@ fn duplicate_definitions() {
     check(
         r#"
 fn f() {}
-fn f() {}
- //^ error: `f` is defined more than once
+const f: i32 = 1;
+    //^ error: `f` is defined more than once
 "#,
     );
 }
@@ -714,6 +714,23 @@ class C[X] { fn method(it: mut VecIter[mut [i32], imm]) -> i32; }
 type Alias = VecIter[mut [i32], imm];
            //^^^^^^^^^^^^^^^^^^^^^^^ error: a `VecIter[mut [i32], imm]` can't hold a `mut [i32]` in a field that's `imm`: what an `imm` value holds can't be changed either
 type Fine = VecIter[mut [i32], mut];
+"#,
+    );
+}
+
+#[test]
+fn overloads() {
+    check(
+        r#"
+fn size(x: i32) -> i32 = x;
+ //^^^^ label: the function it overlaps
+fn size(b: Bool) -> i32 = 1;
+fn size(y: i32) -> Bool = True;
+ //^^^^ error: this `size`, of type `fn(i32) -> Bool`, overlaps the `size` of type `fn(i32) -> i32`: a call could fit both, so it couldn't choose one; give them different numbers or types of parameters
+fn f(it) = size(it);
+         //^^^^ error: more than one function `size` fits this use: `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`; give the arguments types that leave one
+let v: i32 = size("no", 1);
+           //^^^^ error: no function `size` fits this use, of type `fn(String, i32) -> i32`; the functions called `size` are `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`
 "#,
     );
 }

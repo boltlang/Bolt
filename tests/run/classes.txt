@@ -98,16 +98,16 @@ An associated type
 ================================================================================
 class Index[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn at(c: C, i: i32) -> Item;
 }
 struct Stack[T] { items: [T] }
 impl[T] Index[Stack[T]] {
   type Item = T;
-  fn get(s, i) = s.items[i];
+  fn at(s, i) = s.items[i];
 }
-fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
+fn first[C](c: C) -> C.Item where Index[C] = at(c, 0);
 let s = Stack { items: [True, False] };
-(get(s, 1), first(s));
+(at(s, 1), first(s));
 --------------------------------------------------------------------------------
 (False, True)
 

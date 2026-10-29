@@ -200,30 +200,30 @@ A mut iterator over an array of either mutability
 :prelude
 ================================================================================
 enum Option[T] { Some(T), None }
-class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }
-class Iterable[C] { type Iter: Iterator; fn iter(c: C) -> Iter; }
+class Iterator[I] { type Item; fn advance(it: I) -> Option[Item]; }
+class Iterable[C] { type Iter: Iterator; fn walk(c: C) -> Iter; }
 struct ArrayIter[T, 'v] { data: 'v [T], index: i32 }
 impl[T] Iterator[mut ArrayIter[T]] {
   type Item = T;
-  fn next(it) {
+  fn advance(it) {
     it.index += 1;
     Option.Some(it.data[it.index - 1])
   }
 }
 impl[T] Iterable['m [T]] {
   type Iter = mut ArrayIter[T, 'm];
-  fn iter(data) = mut ArrayIter { data, index: 0 };
+  fn walk(data) = mut ArrayIter { data, index: 0 };
 }
-let a = iter([1, 2]);
-let b = iter(mut [1, 2]);
-next(a);
+let a = walk([1, 2]);
+let b = walk(mut [1, 2]);
+advance(a);
 b.data[0] = 3;
 --------------------------------------------------------------------------------
-Iterator[mut ArrayIter[T]].next: forall T. fn(mut ArrayIter[T]) -> Option[T]
-Iterable['m [T]].iter: forall T. fn('m [T]) -> mut ArrayIter[T, 'm]
+Iterator[mut ArrayIter[T]].advance: forall T. fn(mut ArrayIter[T]) -> Option[T]
+Iterable['m [T]].walk: forall T. fn('m [T]) -> mut ArrayIter[T, 'm]
 let a: mut ArrayIter[i32, imm]
 let b: mut ArrayIter[i32, mut]
-next(a): Option[i32]
+advance(a): Option[i32]
 b.data[0] = 3: ()
 
 ================================================================================

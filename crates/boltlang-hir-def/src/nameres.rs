@@ -67,17 +67,32 @@ pub struct ItemScope<'db> {
     types: BTreeMap<Name, ScopeEntry<'db>>,
     values: BTreeMap<Name, ScopeEntry<'db>>,
     macros: BTreeMap<Name, ScopeEntry<'db>>,
+    /// The functions after the first with a name in `values`: together, the
+    /// overloads of the name (#275).
+    overloads: BTreeMap<Name, Vec<ScopeEntry<'db>>>,
     impls: Vec<ImplId<'db>>,
 }
 
 impl<'db> ItemScope<'db> {
+    /// What `name` refers to, or the first of its overloads.
     pub fn get(&self, ns: Namespace, name: &Name) -> Option<&ScopeEntry<'db>> {
         self.namespace(ns).get(name)
     }
 
-    /// All names in a namespace, in alphabetical order.
+    /// Everything `name` refers to: one entry, or every overload of a
+    /// function.
+    pub fn get_all(&self, ns: Namespace, name: &Name) -> impl Iterator<Item = &ScopeEntry<'db>> {
+        let more = match ns {
+            Namespace::Values => self.overloads.get(name).map(Vec::as_slice).unwrap_or_default(),
+            _ => &[],
+        };
+        self.namespace(ns).get(name).into_iter().chain(more)
+    }
+
+    /// All names in a namespace, in alphabetical order, with a name once
+    /// for each of its overloads.
     pub fn entries(&self, ns: Namespace) -> impl Iterator<Item = (&Name, &ScopeEntry<'db>)> {
-        self.namespace(ns).iter()
+        self.namespace(ns).keys().flat_map(move |name| self.get_all(ns, name).map(move |entry| (name, entry)))
     }
 
     /// The impls in the file. They don't have a name.
@@ -110,12 +125,22 @@ impl<'db> ItemScope<'db> {
         }
     }
 
-    /// Add a name, unless it's already there. Returns whether it was added.
+    /// Add a name, unless it's already there. A function whose name other
+    /// functions have is added as one more overload of the name, unless
+    /// it's one of them already. Returns whether it was added.
     fn insert(&mut self, ns: Namespace, name: Name, entry: ScopeEntry<'db>) -> bool {
         use std::collections::btree_map::Entry;
-        match self.namespace_mut(ns).entry(name) {
+        let is_function = |e: &ScopeEntry<'db>| matches!(e.def, ModuleDefId::Function(_));
+        let overloads = ns == Namespace::Values
+            && is_function(&entry)
+            && self.get_all(ns, &name).all(|e| is_function(e) && e.def != entry.def);
+        match self.namespace_mut(ns).entry(name.clone()) {
             Entry::Vacant(vacant) => {
                 vacant.insert(entry);
+                true
+            }
+            Entry::Occupied(_) if overloads => {
+                self.overloads.entry(name).or_default().push(entry);
                 true
             }
             Entry::Occupied(_) => false,
@@ -356,14 +381,16 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                     let local_name = alias.as_ref().unwrap_or(name);
                     let mut found = false;
                     let mut hidden = None;
+                    // Every overload of a function, too.
                     for ns in Namespace::ALL {
-                        let Some(entry) = exports.get(ns, name) else { continue };
-                        if !is_visible_from(db, entry.visibility, target, file) {
-                            hidden = Some(entry.visibility);
-                            continue;
+                        for entry in exports.get_all(ns, name) {
+                            if !is_visible_from(db, entry.visibility, target, file) {
+                                hidden = Some(entry.visibility);
+                                continue;
+                            }
+                            found = true;
+                            out.define(ns, local_name, imported(entry), import.ast_id);
                         }
-                        found = true;
-                        out.define(ns, local_name, imported(entry), import.ast_id);
                     }
                     if !found {
                         out.diagnostics.push(match hidden {

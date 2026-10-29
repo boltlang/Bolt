@@ -17,7 +17,7 @@ use boltlang_hir_def::{
 
 use crate::{
     holds::split,
-    infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult},
+    infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult, solve_overloads},
     lower::{
         ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig, generic_predicates, impl_assoc_ty,
         impl_header, subst_params, with_superclasses,
@@ -100,6 +100,10 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
                     ctx.infer_expr_body(None);
                 }
             }
+            // Default numeric types can decide overloads (#275).
+            solve_overloads(db, ctx.solver, &env);
+            ctx.solver.solve_with_defaults();
+            solve_overloads(db, ctx.solver, &env);
             ctx.solver.finish();
             let errors = std::mem::take(&mut ctx.solver.errors);
             let mut result = ctx.finish();
@@ -243,7 +247,12 @@ fn infer_group<'db>(
     }
 
     // Integer variables don't become type parameters; they default first.
+    // Uses of names with several functions that the types don't decide are
+    // errors, not part of the functions' types (#275).
+    solve_overloads(db, &mut solver, env);
     solver.solve_with_defaults();
+    solve_overloads(db, &mut solver, env);
+    solver.report_pending_overloads();
     solver.keep_pending_assoc();
     // What's left about the functions' types becomes part of them; the
     // other unknowns in "at most" constraints can be chosen to meet them.
@@ -559,10 +568,16 @@ fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<
         };
         let resolver = Resolver::for_expr(db, def, id);
         for path in paths {
-            if let Some(ValueResolution::Value(ValueNs::Function(g))) = resolver.resolve_path_in_value_ns(db, &path)
-                && !out.contains(&g)
-            {
-                out.push(g);
+            // Any of a name's functions may be the one called (#275).
+            let called = match resolver.resolve_path_in_value_ns(db, &path) {
+                Some(ValueResolution::Value(ValueNs::Function(g))) => vec![g],
+                Some(ValueResolution::Value(ValueNs::Overloaded(set))) => set.functions(db).clone(),
+                _ => Vec::new(),
+            };
+            for g in called {
+                if !out.contains(&g) {
+                    out.push(g);
+                }
             }
         }
     }

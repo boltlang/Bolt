@@ -814,7 +814,7 @@ impl<'db> Evaluator<'db> {
             BinaryOp::Custom(name) => {
                 let path = Path::from_name(name.clone());
                 let callee = match self.resolve_value(f.def, expr, &path) {
-                    Some(ValueResolution::Value(value)) => self.value_of(f, value)?,
+                    Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
                     _ => return fail(ErrorKind::UnresolvedName(name.to_string())),
                 };
                 let lhs = self.eval(f, lhs)?;
@@ -916,6 +916,13 @@ impl<'db> Evaluator<'db> {
     fn value_at(&mut self, f: &mut Frame<'db>, expr: ExprId, value: ValueNs<'db>) -> Res<'db, Value<'db>> {
         let db = self.db;
         match value {
+            // A name with several functions is the one the types chose (#275).
+            ValueNs::Overloaded(_) => {
+                return match infer_body(db, f.def).overload(expr) {
+                    Some(id) => self.value_at(f, expr, ValueNs::Function(id)),
+                    None => fail(ErrorKind::Unsupported("a name with several functions that the types don't decide")),
+                };
+            }
             ValueNs::Function(id) => {
                 if let Some(class) = method_class(db, id)
                     && let Some(imp) = infer_body(db, f.def).instance(expr, class)
@@ -942,6 +949,7 @@ impl<'db> Evaluator<'db> {
                 slot.ok_or_else(|| ErrorKind::Uninitialized(f.body[binding].name.clone()).into())
             }
             ValueNs::Function(id) => Ok(Value::Function(id)),
+            ValueNs::Overloaded(_) => fail(ErrorKind::Unsupported("a name with several functions that the types don't decide")),
             ValueNs::Const(id) => self.eval_const_inner(id),
             ValueNs::Variant(id) => Ok(self.ctor_value(Ctor::Variant(id))),
             ValueNs::ConstParam { .. } => fail(ErrorKind::Unsupported("a const parameter")),

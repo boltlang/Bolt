@@ -499,8 +499,15 @@ impl<'db> Compiler<'db> {
         Err(self.unsupported(expr, "a `continue` outside of a loop"))
     }
 
+    /// What `path` at `expr` refers to. A name with several functions is
+    /// the one the types chose there (#275).
     fn resolve(&self, expr: ExprId, path: &Path) -> Option<ValueResolution<'db>> {
-        Resolver::for_expr(self.db, self.def, expr).resolve_path_in_value_ns(self.db, path)
+        match Resolver::for_expr(self.db, self.def, expr).resolve_path_in_value_ns(self.db, path)? {
+            ValueResolution::Value(ValueNs::Overloaded(_)) => {
+                self.infer.overload(expr).map(|f| ValueResolution::Value(ValueNs::Function(f)))
+            }
+            resolution => Some(resolution),
+        }
     }
 
     fn path(&mut self, expr: ExprId, path: &Path) -> Result<'db, ()> {

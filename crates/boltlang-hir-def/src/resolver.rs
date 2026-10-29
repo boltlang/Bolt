@@ -68,11 +68,20 @@ pub enum TypeNs<'db> {
     Builtin(BuiltinType),
 }
 
+/// The functions a name refers to when it has several overloads (#275).
+#[salsa::interned(debug)]
+pub struct OverloadSet<'db> {
+    #[returns(ref)]
+    pub functions: Vec<FunctionId<'db>>,
+}
+
 /// What a path in an expression refers to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ValueNs<'db> {
     Local(BindingId),
     Function(FunctionId<'db>),
+    /// A name with several functions, which the type checker chooses from.
+    Overloaded(OverloadSet<'db>),
     Const(ConstId<'db>),
     /// A variant used as a value or constructor, like `None` or `Some`.
     Variant(EnumVariantId<'db>),
@@ -279,12 +288,7 @@ impl<'db> Resolver<'db> {
         // A value directly in this file, or in an imported one: `f`, `m.f`.
         let (file, i) = self.walk_files(db, segments);
         if i + 1 == segments.len() {
-            let value = lookup(db, file, self.file, Namespace::Values, &segments[i].name).and_then(|def| match def {
-                ModuleDefId::Function(id) => Some(ValueNs::Function(id)),
-                ModuleDefId::Const(id) => Some(ValueNs::Const(id)),
-                ModuleDefId::Variant(id) => Some(ValueNs::Variant(id)),
-                _ => None,
-            });
+            let value = lookup_value(db, file, self.file, &segments[i].name);
             if let Some(value) = value {
                 return Some(ValueResolution::Value(value));
             }
@@ -425,6 +429,34 @@ enum Local<'db> {
 fn lookup<'db>(db: &'db dyn Db, file: File, from: File, ns: Namespace, name: &Name) -> Option<ModuleDefId<'db>> {
     let entry = file_scope(db, file).scope.get(ns, name)?;
     is_visible_from(db, entry.visibility, file, from).then_some(entry.def)
+}
+
+/// Look up a value in a file, for a path in `from`, like [`lookup`]. A
+/// name with several visible functions is their [`OverloadSet`].
+fn lookup_value<'db>(db: &'db dyn Db, file: File, from: File, name: &Name) -> Option<ValueNs<'db>> {
+    let scope = &file_scope(db, file).scope;
+    let visible: Vec<_> = scope
+        .get_all(Namespace::Values, name)
+        .filter(|entry| is_visible_from(db, entry.visibility, file, from))
+        .map(|entry| entry.def)
+        .collect();
+    match visible.as_slice() {
+        [] => None,
+        [ModuleDefId::Function(id)] => Some(ValueNs::Function(*id)),
+        [ModuleDefId::Const(id)] => Some(ValueNs::Const(*id)),
+        [ModuleDefId::Variant(id)] => Some(ValueNs::Variant(*id)),
+        [_] => None,
+        many => {
+            let functions: Vec<_> = many
+                .iter()
+                .filter_map(|def| match def {
+                    ModuleDefId::Function(id) => Some(*id),
+                    _ => None,
+                })
+                .collect();
+            Some(ValueNs::Overloaded(OverloadSet::new(db, functions)))
+        }
+    }
 }
 
 /// The class an impl is an instance of, like `Show` for `impl Show[Dog]`.

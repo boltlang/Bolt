@@ -104,6 +104,9 @@ impl DiagnosticCode {
     pub const MUTABILITY_PARAM_NOT_ALLOWED: Self = Self("E0233");
     pub const UNUSED_IMPL_PARAM: Self = Self("E0234");
     pub const OVERLAPPING_IMPL: Self = Self("E0235");
+    pub const NO_OVERLOAD: Self = Self("E0236");
+    pub const AMBIGUOUS_OVERLOAD: Self = Self("E0237");
+    pub const OVERLAPPING_FUNCTION: Self = Self("E0238");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -253,6 +256,11 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                     range: *other_range,
                     message: "the impl it overlaps".to_string(),
                 }],
+                DiagnosticKind::OverlappingFunction { other_file, other_range, .. } => vec![Label {
+                    file: *other_file,
+                    range: *other_range,
+                    message: "the function it overlaps".to_string(),
+                }],
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }
                 | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
@@ -393,6 +401,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
             instance.args.iter().chain(suggestion).collect()
         }
         DiagnosticKind::OverlappingImpl { instance, other, .. } => instance.args.iter().chain(other.args.iter()).collect(),
+        DiagnosticKind::NoOverload { ty, .. } => vec![ty],
         _ => Vec::new(),
     }
 }
@@ -676,6 +685,28 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
                 ),
             )
         }
+        K::NoOverload { name, ty, candidates } => (
+            C::NO_OVERLOAD,
+            format!(
+                "no function `{name}` fits this use, of type `{}`; the functions called `{name}` are {}",
+                ty.display_with(db, names),
+                list_types(&candidates)
+            ),
+        ),
+        K::OverlappingFunction { name, ty, other, .. } => (
+            C::OVERLAPPING_FUNCTION,
+            format!(
+                "this `{name}`, of type `{ty}`, overlaps the `{name}` of type `{other}`: a call could fit both, so it \
+                 couldn't choose one; give them different numbers or types of parameters"
+            ),
+        ),
+        K::AmbiguousOverload { name, candidates } => (
+            C::AMBIGUOUS_OVERLOAD,
+            format!(
+                "more than one function `{name}` fits this use: {}; give the arguments types that leave one",
+                list_types(&candidates)
+            ),
+        ),
         K::WrongMutabilityArgCount { expected, found } => (
             C::WRONG_MUTABILITY_ARG_COUNT,
             format!("expected at most {}, found {found}", count(expected, "mutability argument", "mutability arguments")),
@@ -778,3 +809,14 @@ fn count(n: usize, one: &str, many: &str) -> String {
 
 #[cfg(test)]
 mod tests;
+
+/// Types as text in a sentence: `` `a` ``, `` `a` and `b` `` or
+/// `` `a`, `b` and `c` ``.
+fn list_types(tys: &[String]) -> String {
+    let quoted: Vec<String> = tys.iter().map(|t| format!("`{t}`")).collect();
+    match quoted.split_last() {
+        None => String::new(),
+        Some((last, [])) => last.clone(),
+        Some((last, rest)) => format!("{} and {last}", rest.join(", ")),
+    }
+}

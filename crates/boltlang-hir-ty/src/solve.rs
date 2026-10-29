@@ -180,6 +180,30 @@ pub enum AtMostSource<'db> {
     Needed(AtMostConstraint<'db>),
 }
 
+/// A use of a name that several functions have, like `push` (#275): `ty`
+/// is the type of the use, which must be the type of one of `candidates`.
+/// The solver crosses out the candidates whose type no longer fits as the
+/// types become known, and never guesses: see [`Solver::narrow_overloads`].
+#[derive(Debug, Clone)]
+pub struct OverloadConstraint<'db> {
+    /// The candidates that still fit.
+    pub candidates: Vec<FunctionId<'db>>,
+    /// The type of each candidate, with new variables for its parameters, to
+    /// try against `ty` without deciding anything.
+    pub probes: Vec<Ty<'db>>,
+    pub ty: Ty<'db>,
+    /// All the functions with the name, and their probes, for errors.
+    pub all: Vec<FunctionId<'db>>,
+    pub all_probes: Vec<Ty<'db>>,
+    /// The call, when the use is the method of a method call like `x.f(y)`.
+    pub method_call: Option<ExprId>,
+    /// Where the arguments are, when the use is called: then `ty` is a
+    /// function type with a parameter for each, and the chosen function is
+    /// checked against them one by one, so that a mismatch is reported at
+    /// the argument.
+    pub args: Vec<Origin<'db>>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Constraint<'db> {
     /// The type found must be the type expected.
@@ -215,6 +239,11 @@ pub enum TypeError<'db> {
     /// An element of an array, or a field of a struct, of type `ty` is
     /// assigned to, but `ty` isn't `mut`.
     CannotChange { origin: Origin<'db>, ty: Ty<'db> },
+    /// None of the functions with a name fits its use, of type `ty` (#275).
+    NoOverload { origin: Origin<'db>, ty: Ty<'db>, candidates: Vec<FunctionId<'db>> },
+    /// More than one of the functions with a name still fits its use when
+    /// the body is done.
+    AmbiguousOverload { origin: Origin<'db>, ty: Ty<'db>, candidates: Vec<FunctionId<'db>> },
 }
 
 impl<'db> TypeError<'db> {
@@ -227,6 +256,8 @@ impl<'db> TypeError<'db> {
             | TypeError::NoSuchField { origin, .. }
             | TypeError::CannotChange { origin, .. }
             | TypeError::NotAtMost { origin, .. }
+            | TypeError::NoOverload { origin, .. }
+            | TypeError::AmbiguousOverload { origin, .. }
             | TypeError::TypeNeeded { origin } => origin,
         }
     }
@@ -240,7 +271,9 @@ impl<'db> TypeError<'db> {
             }
             TypeError::InfiniteType { ty, .. }
             | TypeError::NoSuchField { ty, .. }
-            | TypeError::CannotChange { ty, .. } => *ty = f(ty),
+            | TypeError::CannotChange { ty, .. }
+            | TypeError::NoOverload { ty, .. }
+            | TypeError::AmbiguousOverload { ty, .. } => *ty = f(ty),
             TypeError::NoInstance { constraint, .. } | TypeError::Ambiguous { constraint, .. } => {
                 *constraint = constraint.map(f)
             }
@@ -266,6 +299,10 @@ pub struct Solver<'db> {
     pending_fields: Vec<(FieldConstraint<'db>, Origin<'db>)>,
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
+    pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
+    /// The function chosen for each use of a name with several, at the use,
+    /// with the call if it's a method call.
+    pub overload_choices: Vec<(Origin<'db>, Option<ExprId>, FunctionId<'db>)>,
     /// The impl chosen for each class constraint of a use of a class method
     /// or constant, like the `Show[i32]` of `show(1)`, at the use. Only the
     /// first per use and class: the constraints that it leads to, like the
@@ -288,6 +325,8 @@ impl<'db> Solver<'db> {
             pending_fields: Vec::new(),
             pending_assoc: Vec::new(),
             pending_at_most: Vec::new(),
+            pending_overloads: Vec::new(),
+            overload_choices: Vec::new(),
             chosen: Vec::new(),
             errors: Vec::new(),
         }
@@ -760,6 +799,107 @@ impl<'db> Solver<'db> {
         self.add(Constraint::Equal { expected: expected.clone(), actual: actual.clone(), origin });
     }
 
+    /// Wait for the types to decide which function a use of a name with
+    /// several is.
+    pub fn add_overload(&mut self, constraint: OverloadConstraint<'db>, origin: Origin<'db>) {
+        self.pending_overloads.push((constraint, origin));
+    }
+
+    pub fn has_pending_overloads(&self) -> bool {
+        !self.pending_overloads.is_empty()
+    }
+
+    /// Cross out the candidates of the uses of names with several functions
+    /// that no longer fit. A candidate fits while its type can still be
+    /// unified with that of the use, which is tried on a copy of the
+    /// unifier, so that nothing is decided. Returns the uses with one
+    /// candidate left, with it, for the caller to instantiate; those with
+    /// none left are errors, and the others wait.
+    pub fn narrow_overloads(&mut self) -> Vec<(OverloadConstraint<'db>, Origin<'db>, FunctionId<'db>)> {
+        let mut ready = Vec::new();
+        for (mut c, origin) in std::mem::take(&mut self.pending_overloads) {
+            let fits: Vec<bool> = c.probes.iter().map(|probe| self.fits(probe, &c.ty)).collect();
+            let mut keep = fits.iter();
+            c.candidates.retain(|_| *keep.next().unwrap());
+            let mut keep = fits.iter();
+            c.probes.retain(|_| *keep.next().unwrap());
+            match c.candidates.as_slice() {
+                [] => match self.best_overload(&c) {
+                    // Checked as if it had been chosen, for the errors of the
+                    // arguments that don't fit it.
+                    Some(f) => ready.push((c, origin, f)),
+                    None => {
+                        let ty = self.unifier.resolve(&c.ty);
+                        self.errors.push(TypeError::NoOverload { origin, ty, candidates: c.all.clone() });
+                    }
+                },
+                [f] => {
+                    let f = *f;
+                    ready.push((c, origin, f));
+                }
+                _ => self.pending_overloads.push((c, origin)),
+            }
+        }
+        ready
+    }
+
+    /// When no function with a name fits a use, the one that comes closest,
+    /// to report the errors as if it had been chosen: of those with as many
+    /// parameters as the use's function type has, the only one that fits
+    /// the most of them, then that fits the most if mutabilities don't
+    /// count, so that an `imm [i32]` is closer to a `mut [i32]` than to a
+    /// `Vec`. `None` when there's no such one.
+    fn best_overload(&self, c: &OverloadConstraint<'db>) -> Option<FunctionId<'db>> {
+        let Ty::Fn(params, _, _) = self.unifier.shallow_resolve(&c.ty) else { return None };
+        // The error type fits anything.
+        let loose = |t: &Ty<'db>| t.fold(&mut |t| matches!(t, Ty::Mutability(_)).then_some(Ty::Error));
+        let scores: Vec<(FunctionId<'db>, (usize, usize))> = c
+            .all
+            .iter()
+            .zip(&c.all_probes)
+            .filter_map(|(&f, probe)| match probe {
+                Ty::Fn(own, _, _) if own.len() == params.len() => {
+                    let pairs = || own.iter().zip(params.iter());
+                    let strict = pairs().filter(|(a, b)| self.fits(a, b)).count();
+                    let loose = pairs().filter(|(a, b)| self.fits(&loose(a), &loose(&self.unifier.resolve(b)))).count();
+                    Some((f, (strict, loose)))
+                }
+                _ => None,
+            })
+            .collect();
+        let best = scores.iter().map(|(_, score)| *score).max()?;
+        match scores.iter().filter(|(_, score)| *score == best).collect::<Vec<_>>().as_slice() {
+            [(f, _)] => Some(*f),
+            _ => None,
+        }
+    }
+
+    /// Remember where the arguments of a call to a use of a name with
+    /// several functions are; `ty` is the type of the use.
+    pub fn attach_overload_args(&mut self, ty: &Ty<'db>, args: Vec<Origin<'db>>) {
+        if let Some((c, _)) = self.pending_overloads.iter_mut().find(|(c, _)| c.ty == *ty) {
+            c.args = args;
+        }
+    }
+
+    /// Whether `a` can still be unified with `b`, without deciding anything.
+    fn fits(&self, a: &Ty<'db>, b: &Ty<'db>) -> bool {
+        self.unifier.clone().unify(a, b).is_ok()
+    }
+
+    /// Report the uses of names with several functions that the types never
+    /// decided. They aren't generalized: generic code uses classes.
+    pub fn report_pending_overloads(&mut self) {
+        for (c, origin) in std::mem::take(&mut self.pending_overloads) {
+            // Unknown because of an error, which is reported already.
+            if self.unifier.has_error_var(&c.ty) {
+                continue;
+            }
+            let ty = self.unifier.resolve(&c.ty);
+            self.errors.push(TypeError::AmbiguousOverload { origin, ty, candidates: c.candidates });
+        }
+    }
+
     /// Solve the class and field constraints that can be solved now.
     /// Returns whether any were.
     pub fn solve(&mut self) -> bool {
@@ -854,6 +994,7 @@ impl<'db> Solver<'db> {
     /// what can be, and report the rest as ambiguous.
     pub fn finish(&mut self) {
         self.solve_with_defaults();
+        self.report_pending_overloads();
         // A body checked on its own can't add to its function's type.
         self.settle_at_most(&[], false);
         self.keep_pending_assoc();

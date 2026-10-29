@@ -79,7 +79,7 @@ use boltlang_hir_ty::{
         LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, named_mutabilities,
         struct_field_types, type_alias_ty, unused_impl_params,
     },
-    overlap::overlapped_impls,
+    overlap::{overlapped_functions, overlapped_impls},
     solve::{ExprOrPat, Held, TypeError},
 };
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -255,6 +255,14 @@ fn check(input: &str, prelude: bool) -> Result<(String, String), String> {
                 Err(InferenceCycle) => "<cycle>".into(),
             };
             types.push(format!("{prefix}{name}: {ty}"));
+            // The functions with its name before it that it overlaps (#275).
+            for &other in overlapped_functions(&db, f) {
+                let other = match function_scheme(&db, other) {
+                    Ok(scheme) => scheme.display(&db),
+                    Err(InferenceCycle) => "<cycle>".into(),
+                };
+                diagnostics.push(format!("{prefix}error at `{name}`: overlaps the {} of type {other}", f.item(&db).display_name().unwrap()));
+            }
             // The problems with the types in its signature.
             let (_, map) = function_signature_with_source_map(&db, f);
             let sig = fn_sig(&db, f);
@@ -331,6 +339,12 @@ fn check(input: &str, prelude: bool) -> Result<(String, String), String> {
                     }
                     InferenceDiagnostic::Type(TypeError::TypeNeeded { origin }) => {
                         format!("error at `{}`: type needed", at(origin.node))
+                    }
+                    InferenceDiagnostic::Type(TypeError::NoOverload { origin, ty, .. }) => {
+                        format!("error at `{}`: no overload fits {}", at(origin.node), show(&[ty])[0])
+                    }
+                    InferenceDiagnostic::Type(TypeError::AmbiguousOverload { origin, candidates, .. }) => {
+                        format!("error at `{}`: ambiguous, {} overloads fit", at(origin.node), candidates.len())
                     }
                     InferenceDiagnostic::Type(TypeError::NoSuchField { origin, ty, name }) => {
                         format!("error at `{}`: {} has no field {name}", at(origin.node), show(&[ty])[0])

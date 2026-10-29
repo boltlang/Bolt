@@ -18,7 +18,7 @@ use boltlang_hir_def::{
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
     signatures::function_signature,
-    resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
+    resolver::{GenericDefId, Hidden, OverloadSet, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     scope::expr_scopes,
 };
 
@@ -31,7 +31,7 @@ use crate::{
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Reason, Solver, TypeError},
+    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -47,6 +47,9 @@ pub struct InferenceResult<'db> {
     /// expression that names it and the class, when the types decide it.
     /// In a generic function, like `fn f(x) = show(x)`, they don't.
     pub instances: Vec<(ExprId, ClassId<'db>, ImplId<'db>)>,
+    /// The function that a use of a name with several functions is, by the
+    /// expression that names it, when the types decide it (#275).
+    pub overloads: ArenaMap<Expr, FunctionId<'db>>,
     pub diagnostics: Vec<InferenceDiagnostic<'db>>,
 }
 
@@ -69,7 +72,8 @@ impl<'db> InferenceResult<'db> {
         self.instances.iter().find(|(e, c, _)| *e == expr && *c == class).map(|(_, _, imp)| *imp)
     }
 
-    /// Keep the impls that `solver` chose for uses in the body `def`.
+    /// Keep the impls and overloads that `solver` chose for uses in the
+    /// body `def`.
     pub(crate) fn add_instances(&mut self, def: DefWithBodyId<'db>, solver: &Solver<'db>) {
         for (origin, class, imp) in &solver.chosen {
             if origin.body == def
@@ -78,6 +82,22 @@ impl<'db> InferenceResult<'db> {
                 self.instances.push((expr, *class, *imp));
             }
         }
+        for (origin, method_call, f) in &solver.overload_choices {
+            if origin.body == def
+                && let ExprOrPat::Expr(expr) = origin.node
+            {
+                self.overloads.insert(expr, *f);
+                if let Some(call) = method_call {
+                    self.method_calls.insert(*call, *f);
+                }
+            }
+        }
+    }
+
+    /// The function that a use of a name with several is, if the types
+    /// decided it (#275).
+    pub fn overload(&self, expr: ExprId) -> Option<FunctionId<'db>> {
+        self.overloads.get(expr).copied()
     }
 
     /// Report the expressions and patterns whose type has a `mut` array or
@@ -802,19 +822,58 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     /// The type of a function, instantiated for this use.
     fn function_ty(&mut self, expr: ExprId, f: FunctionId<'db>) -> Ty<'db> {
-        if let Some(ty) = self.env.mono.get(&f) {
-            return ty.clone();
-        }
         let origin = self.origin(expr);
-        if let Some(scheme) = self.env.done.get(&f) {
-            return scheme.instantiate(self.solver, origin);
-        }
-        match function_scheme(self.db, f) {
-            Ok(scheme) => scheme.instantiate(self.solver, origin),
+        match instantiate_function(self.db, self.solver, self.env, f, origin) {
+            Ok(ty) => ty,
             Err(InferenceCycle) => {
                 self.result.diagnostics.push(InferenceDiagnostic::CyclicInference);
                 Ty::Error
             }
+        }
+    }
+
+    /// The type of a use of a name that several functions have, like
+    /// `push` (#275): a new variable, which an [`OverloadConstraint`]
+    /// decides once the types leave one of them. `method_call` is the call
+    /// if the use is the method of `x.f(y)`.
+    fn overloaded_ty(&mut self, expr: ExprId, set: OverloadSet<'db>, method_call: Option<ExprId>) -> Ty<'db> {
+        let all = set.functions(self.db).clone();
+        let probes: Vec<_> = all.iter().map(|&f| self.probe_ty(f)).collect();
+        let ty = self.new_var();
+        let constraint = OverloadConstraint {
+            candidates: all.clone(),
+            all_probes: probes.clone(),
+            probes,
+            ty: ty.clone(),
+            all,
+            method_call,
+            args: Vec::new(),
+        };
+        self.solver.add_overload(constraint, self.origin(expr));
+        ty
+    }
+
+    /// The type of `f` with new variables, to try against a use, without
+    /// adding what it needs.
+    fn probe_ty(&mut self, f: FunctionId<'db>) -> Ty<'db> {
+        if let Some(ty) = self.env.mono.get(&f) {
+            return ty.clone();
+        }
+        if let Some(scheme) = self.env.done.get(&f) {
+            return scheme.probe(self.solver);
+        }
+        match function_scheme(self.db, f) {
+            Ok(scheme) => scheme.probe(self.solver),
+            // It fits anything, so a use stays ambiguous rather than wrong.
+            Err(InferenceCycle) => Ty::Error,
+        }
+    }
+
+    /// Choose the overloads that the types decide so far, so that what they
+    /// decide is known for what follows.
+    fn solve_overloads(&mut self) {
+        if self.solver.has_pending_overloads() {
+            solve_overloads(self.db, self.solver, self.env);
         }
     }
 
@@ -844,6 +903,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.result.binding_types.get(binding).cloned().unwrap_or(Ty::Error)
             }
             ValueNs::Function(f) => self.function_ty(expr, f),
+            ValueNs::Overloaded(set) => self.overloaded_ty(expr, set, None),
             ValueNs::Const(c) => self.const_value_ty(expr, c),
             // Const generics aren't supported yet.
             ValueNs::ConstParam { .. } => Ty::Error,
@@ -971,7 +1031,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             },
             _ => None,
         };
-        self.apply(expr, callee, &callee_ty, function, args, None)
+        let ty = self.apply(expr, callee, &callee_ty, function, args, None);
+        self.solve_overloads();
+        ty
     }
 
     /// `x.f(y)` as `f(x, y)`, with the `f` in scope. Functions for a type are
@@ -993,6 +1055,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.result.method_calls.insert(expr, f);
                 self.function_ty(callee, f)
             }
+            Some(ValueResolution::Value(ValueNs::Overloaded(set))) => self.overloaded_ty(callee, set, Some(expr)),
             // A local holding a function works too.
             Some(ValueResolution::Value(value)) => self.value_ty(callee, value),
             _ => {
@@ -1003,7 +1066,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         };
         self.result.expr_types.insert(callee, callee_ty.clone());
-        self.apply(expr, callee, &callee_ty, function, args, Some((receiver, receiver_ty)))
+        let ty = self.apply(expr, callee, &callee_ty, function, args, Some((receiver, receiver_ty)));
+        self.solve_overloads();
+        ty
     }
 
     /// Call a value of type `callee_ty` with `args`, after `receiver` if
@@ -1028,6 +1093,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let mutability = self.new_mutability();
                 let fn_ty = Ty::Fn(params.clone(), Box::new(ret.clone()), Box::new(mutability));
                 self.solver.equal(&fn_ty, callee_ty, self.origin(callee));
+                // A use of a name with several functions is checked against
+                // the arguments where they are, once one is chosen (#275).
+                let at = receiver.map(|(r, _)| r).into_iter().chain(args.iter().copied());
+                let at = at.map(|e| self.origin(e)).collect();
+                self.solver.attach_overload_args(callee_ty, at);
                 (params, ret)
             }
             Ty::Error | Ty::Never => {
@@ -1063,6 +1133,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
         let first = receiver.is_some() as usize;
         for (i, &arg) in args.iter().enumerate() {
+            // The arguments before may leave one of a name's functions, whose
+            // parameter types the rest are then checked against, so that a
+            // closure knows the types of its parameters.
+            self.solve_overloads();
             match params.next() {
                 Some(param) => self.check_expr_because(arg, param, reason(first + i)),
                 None => {
@@ -1122,7 +1196,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     }
                 };
                 let lhs_ty = self.infer_expr(lhs);
-                self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)))
+                let ty = self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)));
+                self.solve_overloads();
+                ty
             }
         }
     }
@@ -1351,5 +1427,55 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     pub fn take_result(&mut self) -> InferenceResult<'db> {
         std::mem::take(&mut self.result)
+    }
+}
+
+/// The type of the function `f`, instantiated for a use at `origin`: its
+/// type while its group is inferred, or its scheme's.
+pub(crate) fn instantiate_function<'db>(
+    db: &'db dyn Db,
+    solver: &mut Solver<'db>,
+    env: &FnEnv<'db>,
+    f: FunctionId<'db>,
+    origin: Origin<'db>,
+) -> Result<Ty<'db>, InferenceCycle> {
+    if let Some(ty) = env.mono.get(&f) {
+        return Ok(ty.clone());
+    }
+    if let Some(scheme) = env.done.get(&f) {
+        return Ok(scheme.instantiate(solver, origin));
+    }
+    Ok(function_scheme(db, f)?.instantiate(solver, origin))
+}
+
+/// Choose the functions of the uses of names with several that the types
+/// decide, adding what each needs, until no more are decided (#275).
+pub(crate) fn solve_overloads<'db>(db: &'db dyn Db, solver: &mut Solver<'db>, env: &FnEnv<'db>) {
+    loop {
+        solver.solve();
+        let ready = solver.narrow_overloads();
+        if ready.is_empty() {
+            return;
+        }
+        for (constraint, origin, f) in ready {
+            let ty = instantiate_function(db, solver, env, f, origin).unwrap_or(Ty::Error);
+            // A call is checked argument by argument, so that a mismatch is
+            // at the argument, as for a function without overloads.
+            let call = solver.unifier.shallow_resolve(&constraint.ty);
+            match (&call, &ty) {
+                (Ty::Fn(args, ret, m), Ty::Fn(params, own_ret, own_m))
+                    if args.len() == params.len() && constraint.args.len() == args.len() =>
+                {
+                    for (index, ((arg, param), at)) in args.iter().zip(params.iter()).zip(&constraint.args).enumerate() {
+                        let reason = Reason::Argument { function: f, index: index as u32 };
+                        solver.equal(param, arg, Origin { reason, ..*at });
+                    }
+                    solver.equal(ret, own_ret, origin);
+                    solver.equal(m, own_m, origin);
+                }
+                _ => solver.equal(&constraint.ty, &ty, origin),
+            }
+            solver.overload_choices.push((origin, constraint.method_call, f));
+        }
     }
 }

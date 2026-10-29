@@ -1,0 +1,247 @@
+================================================================================
+Functions with the same name are chosen by their argument types
+================================================================================
+struct Point { x: i32, y: i32 }
+fn size(x: i32) -> i32 = x;
+fn size(p: Point) -> i32 = p.x + p.y;
+fn size(b: Bool) -> i32 = if b { 1 } else { 0 };
+size(3);
+size(Point { x: 1, y: 2 });
+size(True);
+--------------------------------------------------------------------------------
+size: fn(i32) -> i32
+size: fn(Point) -> i32
+size: fn(Bool) -> i32
+size(3): i32
+size(Point { x: 1, y: 2 }): i32
+size(True): i32
+
+================================================================================
+Functions with the same name are chosen by the number of arguments
+================================================================================
+fn area(x: i32) -> i32 = x * x;
+fn area(x: i32, y: i32) -> i32 = x * y;
+area(3);
+area(2, 4);
+--------------------------------------------------------------------------------
+area: fn(i32) -> i32
+area: fn(i32, i32) -> i32
+area(3): i32
+area(2, 4): i32
+
+================================================================================
+Functions with the same name are chosen by all their arguments, not only the first
+================================================================================
+fn put(x: i32, y: i32) -> i32 = x;
+fn put(x: i32, y: Bool) -> Bool = y;
+put(1, 2);
+put(1, True);
+--------------------------------------------------------------------------------
+put: fn(i32, i32) -> i32
+put: fn(i32, Bool) -> Bool
+put(1, 2): i32
+put(1, True): Bool
+
+================================================================================
+Functions with the same name are chosen by mutability
+================================================================================
+fn kind(xs: mut [i32]) -> i32 = 1;
+fn kind(xs: imm [i32]) -> Bool = True;
+kind(mut [1]);
+kind([1]);
+--------------------------------------------------------------------------------
+kind: fn(mut [i32]) -> i32
+kind: fn(imm [i32]) -> Bool
+kind(mut [1]): i32
+kind([1]): Bool
+
+================================================================================
+Inferred functions can have the same name
+================================================================================
+fn area(x) = x * 2;
+fn area(x, y) = x * y;
+area(3);
+area(2, 4);
+--------------------------------------------------------------------------------
+area: fn(i32) -> i32
+area: forall a. fn(a, a) -> a
+area(3): i32
+area(2, 4): i32
+
+================================================================================
+A function with the same name as a class method and other parameters
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+impl Show[i32] { fn show(x) = "i32"; }
+fn show(x: i32, width: i32) -> String = "padded";
+fn twice[T](x: T) -> String where Show[T] = show(x);
+show(1);
+show(1, 2);
+twice(1);
+--------------------------------------------------------------------------------
+Show[i32].show: fn(i32) -> String
+show: fn(i32, i32) -> String
+twice: forall T. Show[T] => fn(T) -> String
+show(1): String
+show(1, 2): String
+twice(1): String
+
+================================================================================
+Method call syntax chooses by the receiver and the arguments
+================================================================================
+struct Point { x: i32, y: i32 }
+fn scale(p: Point, k: i32) -> Point = Point { x: p.x * k, y: p.y * k };
+fn scale(x: i32, k: i32) -> i32 = x * k;
+Point { x: 1, y: 2 }.scale(3);
+5.scale(2);
+--------------------------------------------------------------------------------
+scale: fn(Point, i32) -> imm Point
+scale: fn(i32, i32) -> i32
+Point { x: 1, y: 2 }.scale(3): imm Point
+5.scale(2): i32
+
+================================================================================
+A closure argument gets its types once the arguments before it leave one function
+================================================================================
+fn apply(f: fn(i32) -> i32, x: i32) -> i32 = f(x);
+fn apply(f: fn(Bool) -> Bool, x: Bool, y: i32) -> Bool = f(x);
+apply(|n| n + 1, 2);
+--------------------------------------------------------------------------------
+apply: fn(fn(i32) -> i32, i32) -> i32
+apply: fn(fn(Bool) -> Bool, Bool, i32) -> Bool
+apply(|n| n + 1, 2): i32
+
+================================================================================
+A function with the same name as others used as a value
+================================================================================
+fn neg(x: i32) -> i32 = 0 - x;
+fn neg(b: Bool) -> Bool = !b;
+let f: fn(i32) -> i32 = neg;
+let g: fn(Bool) -> Bool = neg;
+--------------------------------------------------------------------------------
+neg: fn(i32) -> i32
+neg: fn(Bool) -> Bool
+let f: fn(i32) -> i32
+let g: fn(Bool) -> Bool
+
+================================================================================
+A call that the types don't decide is ambiguous
+:error
+================================================================================
+fn size(x: i32) -> i32 = x;
+fn size(b: Bool) -> i32 = 1;
+fn f(it) = size(it);
+fn g(x) = size(x) + x;
+--------------------------------------------------------------------------------
+size: fn(i32) -> i32
+size: fn(Bool) -> i32
+f: forall a b. fn(a) -> b
+g: fn(i32) -> i32
+--------------------------------------------------------------------------------
+error at `size`: ambiguous, 2 overloads fit
+
+================================================================================
+A call that no function fits is checked against the closest one
+:error
+================================================================================
+fn clear(xs: mut [i32]) = ();
+fn clear(b: Bool, n: i32) = ();
+clear([1]);
+clear(True, "no");
+clear("no");
+--------------------------------------------------------------------------------
+clear: fn(mut [i32]) -> ()
+clear: fn(Bool, i32) -> ()
+clear([1]): ()
+clear(True, "no"): ()
+clear("no"): ()
+--------------------------------------------------------------------------------
+error at `[1]`: expected mut [i32], found imm [i32]
+error at `"no"`: expected i32, found String
+error at `"no"`: expected mut [i32], found String
+
+================================================================================
+Functions with the same name that a call could fit both overlap
+:error
+================================================================================
+class Show[T] { fn show(x: T) -> String; }
+fn show(x: Bool) -> String = "bool";
+fn size(x: i32) -> i32 = x;
+fn size(x: i32) -> Bool = True;
+fn len(xs: [i32]) -> i32 = 0;
+fn len(xs: mut [i32]) -> i32 = 1;
+fn id(x) = x;
+fn id(x) = 1;
+--------------------------------------------------------------------------------
+show: fn(Bool) -> String
+size: fn(i32) -> i32
+size: fn(i32) -> Bool
+len: fn([i32]) -> i32
+len: fn(mut [i32]) -> i32
+id: forall a. fn(a) -> a
+id: forall a. fn(a) -> i32
+--------------------------------------------------------------------------------
+error at `show`: overlaps the show of type forall T. Show[T] => fn(T) -> String
+error at `size`: overlaps the size of type fn(i32) -> i32
+error at `len`: overlaps the len of type fn([i32]) -> i32
+error at `id`: overlaps the id of type forall a. fn(a) -> a
+
+================================================================================
+Functions with the same name in different files form one set
+================================================================================
+//- /lib.bolt
+pub struct Point { x: i32, y: i32 }
+pub fn size(p: Point) -> i32 = p.x + p.y;
+
+//- /main.bolt
+import "./lib" (Point, size);
+fn size(x: i32) -> i32 = x;
+size(Point { x: 1, y: 2 });
+size(3);
+--------------------------------------------------------------------------------
+/lib.bolt: size: fn(Point) -> i32
+/main.bolt: size: fn(i32) -> i32
+/main.bolt: size(Point { x: 1, y: 2 }): i32
+/main.bolt: size(3): i32
+
+================================================================================
+A function that overlaps an imported one
+:error
+================================================================================
+//- /lib.bolt
+pub fn size(x: i32) -> i32 = x;
+
+//- /main.bolt
+import "./lib" (size);
+fn size(y: i32) -> Bool = True;
+--------------------------------------------------------------------------------
+/lib.bolt: size: fn(i32) -> i32
+/main.bolt: size: fn(i32) -> Bool
+--------------------------------------------------------------------------------
+/main.bolt: error at `size`: overlaps the size of type fn(i32) -> i32
+
+================================================================================
+Functions with the same name as one of the prelude add to it
+:prelude
+================================================================================
+struct Stack { items: [i32] }
+fn len(s: Stack) -> i32 = array_len(s.items);
+let v = Vec.from_array([1, 2, 3]);
+len(v);
+Stack { items: [1] }.len();
+--------------------------------------------------------------------------------
+len: fn(Stack) -> i32
+let v: mut Vec[i32]
+len(v): i32
+Stack { items: [1] }.len(): i32
+
+================================================================================
+A function that overlaps one of the prelude
+:prelude
+:error
+================================================================================
+fn print(message: String) = ();
+--------------------------------------------------------------------------------
+print: fn(String) -> ()
+--------------------------------------------------------------------------------
+error at `print`: overlaps the print of type fn(String) -> ()

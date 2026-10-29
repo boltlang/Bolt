@@ -54,10 +54,12 @@ impl S {}
 extern "C" { fn malloc(n: usize); }
 macro_rules! m { () => {} }
 fn f() {}
+const f: i32 = 1;
 "#,
     );
     let scope = local_scope(&db, file);
-    assert_eq!(names(&scope.scope, Namespace::Values), ["+", "K", "f", "malloc", "show"]);
+    // The two `f`s are overloads (#275), but a const can't share a name.
+    assert_eq!(names(&scope.scope, Namespace::Values), ["+", "K", "f", "f", "malloc", "show"]);
     assert_eq!(names(&scope.scope, Namespace::Types), ["C", "E", "S", "T"]);
     assert_eq!(names(&scope.scope, Namespace::Macros), ["m"]);
     assert_eq!(scope.scope.impls().len(), 1);
@@ -84,8 +86,8 @@ fn area() {}
     );
     let scope = file_scope(&db, main);
     assert_eq!(names(&scope.scope, Namespace::Types), ["Circle (imported)", "Shape (imported)", "io (imported)"]);
-    // The local `area` wins over the one from the glob import.
-    assert_eq!(names(&scope.scope, Namespace::Values), ["PI (imported)", "area", "compute_area (imported)"]);
+    // The local `area` and the one from the glob import are overloads.
+    assert_eq!(names(&scope.scope, Namespace::Values), ["PI (imported)", "area", "area (imported)", "compute_area (imported)"]);
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
     assert!(matches!(
         scope.scope.get(Namespace::Types, &Name::new("io")).unwrap().def,
@@ -195,9 +197,10 @@ fn a() {}
             "unresolved path std/io: NoStd",
             "unresolved name nope",
             "private hidden",
-            "duplicate a"
         ]
     );
+    // The imported `a` and the local one are overloads of `a` (#275).
+    assert_eq!(scope.scope.get_all(Namespace::Values, &Name::new("a")).count(), 2);
 }
 
 #[test]
@@ -411,12 +414,14 @@ fn the_prelude_comes_last() {
     );
     let scope = file_scope(&db, main);
     // `Some` is the one of `Maybe`, and `None` the one of `Option`, whose
-    // enum is found in the prelude. The prelude's `id` is replaced.
+    // enum is found in the prelude. The prelude's `id` is one more
+    // overload of `id`.
     assert_eq!(names(&scope.scope, Namespace::Values), [
         "None (imported)",
         "Nothing (imported)",
         "Some (imported)",
-        "id"
+        "id",
+        "id (prelude)"
     ]);
     assert_eq!(names(&scope.scope, Namespace::Types), ["Maybe", "None (imported)", "Nothing (imported)", "Option (prelude)", "Some (imported)"]);
     let some = scope.scope.get(Namespace::Values, &Name::new("Some")).unwrap().def;

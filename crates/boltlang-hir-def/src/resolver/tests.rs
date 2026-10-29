@@ -26,6 +26,7 @@ fn describe_value(db: &dyn Db, value: ValueResolution<'_>) -> String {
         ValueResolution::Value(ValueNs::Function(id)) => match id.item(db).name.as_ref().unwrap() {
             crate::item_tree::FunctionName::Name(n) | crate::item_tree::FunctionName::Operator(n) => format!("fn {n}"),
         },
+        ValueResolution::Value(ValueNs::Overloaded(set)) => format!("{} overloads", set.functions(db).len()),
         ValueResolution::Value(ValueNs::Const(id)) => format!("const {}", id.item(db).name.as_ref().unwrap()),
         ValueResolution::Value(ValueNs::Variant(id)) => format!("variant {}", id.name(db)),
         ValueResolution::Value(ValueNs::Builtin(value)) => format!("builtin {value}"),

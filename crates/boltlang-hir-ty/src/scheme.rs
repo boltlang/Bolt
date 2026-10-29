@@ -78,6 +78,26 @@ impl<'db> Scheme<'db> {
         }
     }
 
+    /// The type with new variables for the parameters, and for the
+    /// associated types in it, without adding the predicates: for trying it
+    /// against a use of a name that several functions have (#275), which
+    /// [`Scheme::instantiate`] does once this one is chosen.
+    pub fn probe(&self, solver: &mut Solver<'db>) -> Ty<'db> {
+        self.probe_with(&mut || solver.new_var(VarKind::General))
+    }
+
+    /// Like [`Scheme::probe`], with the new variables of `new_var`.
+    pub fn probe_with(&self, new_var: &mut impl FnMut() -> Ty<'db>) -> Ty<'db> {
+        let params: HashMap<_, _> = self.params.iter().map(|p| (*p, new_var())).collect();
+        let bound: Vec<_> = (0..self.bound).map(|_| new_var()).collect();
+        self.ty.fold(&mut |t| match t {
+            Ty::Param(p) => params.get(p).cloned(),
+            Ty::Bound(i) => Some(bound[*i as usize].clone()),
+            Ty::Assoc(..) => Some(new_var()),
+            _ => None,
+        })
+    }
+
     /// The type with fresh variables for the parameters, adding the
     /// predicates as constraints.
     pub fn instantiate(&self, solver: &mut Solver<'db>, origin: Origin<'db>) -> Ty<'db> {
