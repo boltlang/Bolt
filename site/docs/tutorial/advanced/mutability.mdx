@@ -147,9 +147,13 @@ Box { item: mut Point { x: 0, y: 0 } };
 Arrays are the same: `[mut [1]]` is an `imm` array holding a `mut` one,
 and that's an error too.
 
-Enums can't be changed in place, so their fields are `imm`. An enum can
-only hold something that changes through a type parameter, like an
-`Option[mut Point]`.
+An enum has no mutability of its own, like a tuple: it can't be changed
+in place, and it's neither `mut` nor `imm`. A struct or array written in
+a variant, like the `Point` of `Dot(Point)`, is `imm`, since there's no
+mutability of the enum for it to follow. A type parameter can be
+anything, so an `Option[mut Point]` holds a point that can change.
+Inside an `imm` value, like `[Option[mut Point]]`, that's an error, as
+for any other `mut` value.
 
 ## Generic functions
 
