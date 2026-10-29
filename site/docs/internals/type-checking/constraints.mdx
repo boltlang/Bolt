@@ -172,6 +172,31 @@ class.
 A field constraint whose type is never decided in a body that isn't
 generalized, like the top level of a file, is reported as "type needed".
 
+## Associated types
+
+An associated type applied to types, like `C.Item`, is a `Ty::Assoc`.
+Before the solver sees a type, `flatten_assoc` replaces each one with a new
+variable $\beta$ and an `Assoc` constraint $\mathsf{Item}[\tau_c] = \beta$,
+which `solve_assoc` solves as soon as it can:
+
+- An **assumption** says what it is: $\beta$ is that type.
+- An **impl** of the class matches $\tau_c$: $\beta$ is the impl's type
+  for it, with the impl's parameters substituted.
+- $\tau_c$ is a **type parameter** with a bound or `where` clause of the
+  class: $\beta$ is the projection itself, which only equals itself.
+- Otherwise it waits. One left when an inferred function is generalized
+  stays in its type, like `a.Item = Bool`.
+
+A bound or `where` clause can say what an associated type is, like the
+`Item = T` of `I: Iterator[Item = T]`. Lowering keeps those as
+`Predicates::equalities`, next to the class constraints. Inside the
+function, they're assumptions (`Solver::assume_assoc`), so `I.Item` is `T`
+there. In its scheme, they're among `Scheme::assoc`, which a use
+instantiates as `Assoc` constraints, so that the impl chosen for the
+arguments must give `T`. An impl's `where` clause works the same way: when
+the impl is chosen, its equalities are added like its class predicates.
+They're only allowed on functions and impls, where they can be assumed.
+
 ## Overloads
 
 Functions can share a name ([#275](https://github.com/boltlang/Bolt/issues/275)).

@@ -241,6 +241,24 @@ fn first[C](c: C) -> C.Item where Index[C] = at(c, 0);
 Without written types, Bolt finds it by itself: `fn first(c) = at(c, 0);`
 has the type `forall a. Index[a] => fn(a) -> a.Item`.
 
+A bound or `where` clause can also say what an associated type is, with
+`Item = ...` after the class's other arguments. Then the function can count
+on it:
+
+```bolt
+fn sum[C: Index[Item = i32]](c: C) -> i32 = at(c, 0) + at(c, 1);
+
+sum(Stack { items: [1, 2] });
+```
+
+```text
+3
+```
+
+A call checks it: `sum(Stack { items: [True, False] })` is an error, since
+there `Item` is `Bool`, not `i32`. The same works in a `where` clause, as
+`where Index[C, Item = i32]` or `where C: Index[Item = i32]`.
+
 An associated type can have a bound, which every impl's type for it must
 meet. In return, code that knows a type has an instance of the class can
 count on it. The prelude's `Iterable` says that what `iter` gives is an
