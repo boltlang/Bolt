@@ -180,7 +180,7 @@ mod tests {
 
     #[test]
     fn the_files_of_std_are_embedded() {
-        assert!(FILES.iter().any(|(path, _)| *path == "__prelude__/lib.bolt"));
+        assert!(FILES.iter().any(|(path, _)| *path == "__prelude__.bolt"));
         assert!(FILES.iter().all(|(path, _)| !path.starts_with('/') && !path.contains('\\')));
     }
 
@@ -189,8 +189,8 @@ mod tests {
         let base = env::temp_dir().join(format!("boltlang-std-test-{}", std::process::id()));
         let dir = base.join("std");
         install(&dir).unwrap();
-        let lib = dir.join("__prelude__/lib.bolt");
-        assert_eq!(fs::read_to_string(&lib).unwrap(), FILES.iter().find(|(p, _)| *p == "__prelude__/lib.bolt").unwrap().1);
+        let lib = dir.join("__prelude__.bolt");
+        assert_eq!(fs::read_to_string(&lib).unwrap(), FILES.iter().find(|(p, _)| *p == "__prelude__.bolt").unwrap().1);
         assert!(fs::metadata(&lib).unwrap().permissions().readonly());
         // A second time, it's there already.
         install(&dir).unwrap();
