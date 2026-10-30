@@ -138,7 +138,7 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ _ _ _ ih | fst _ ih | snd _ ih => exact ih hl
+  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ _ _ _ ih | fst _ ih | snd _ ih => exact ih hl
   | gone _ hgl =>
     obtain ⟨_, _, hσ, _⟩ := hgl l hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
@@ -184,6 +184,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | newCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new he _ | newR he _ =>
       cases hr with
       | new hr =>

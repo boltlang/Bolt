@@ -64,6 +64,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | newCong _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new he _ | newR he _ => exact ih hh he hn hc hhc
   | @newVal e b _ =>
     intro σ t n A hh _ hn hc hhc

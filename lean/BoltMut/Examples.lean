@@ -33,6 +33,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.new false (.new true
   cases h with
   | new hin hd =>
     cases hin with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new _ _ | newR _ _ => exact nomatch Le.none_immutable hd.1
 
 /-- A generic function that reads what it's given:
@@ -133,6 +134,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   cases h with
   | letE h₁ h₂ =>
     cases h₁ with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new _ _ | newR _ _ =>
       cases h₂ with
       | lam hk _ himm _ _ hb =>
@@ -204,10 +206,12 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   cases h with
   | letE h₁ h₂ =>
     cases h₁ with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new hl _ | newR hl _ =>
       cases hl with
       | pair hp₁ _ =>
         cases hp₁ with
+        | newP _ hi _ => simp [Assume.none] at hi
         | new _ _ | newR _ _ =>
           cases h₂ with
           | new hp hd =>

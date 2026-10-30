@@ -87,6 +87,12 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   | newR {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
       HasType fns σ Δ io Γ e t → AtMost Δ (.region r) t →
       HasType fns σ Δ io Γ (.new true e) (.cell (.region r) t)
+  /-- A generic function can make an object with a changeable mutability
+  parameter (#288): a call gives it `mut` or a region, so the object can be
+  changed, and what it holds is at most the parameter. -/
+  | newP {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {i : Nat} :
+      HasType fns σ Δ io Γ e t → i ∈ Δ.changeable → AtMost Δ (.param i) t →
+      HasType fns σ Δ io Γ (.new true e) (.cell (.param i) t)
   /-- A region's objects can be changed, like `mut` ones. -/
   | setR {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {t : Ty} {r : Nat} :
       HasType fns σ Δ io Γ e₁ (.cell (.region r) t) → HasType fns σ Δ io Γ e₂ t →

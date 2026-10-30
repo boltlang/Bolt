@@ -69,6 +69,7 @@ theorem HasType.retype {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
     exact .loc (by rw [List.getElem?_set_ne hk]; exact h) hio
   | new _ hd ih => exact .new (ih hn) hd
   | newR _ hd ih => exact .newR (ih hn) hd
+  | newP _ hi hd ih => exact .newP (ih hn) hi hd
   | get _ ih => exact .get (ih hn)
   | set _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
@@ -482,6 +483,7 @@ theorem HasType.congr_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io :
   | loc h hio => exact .loc (by rw [hag _ rfl]; exact h) hio
   | new _ hd ih => exact .new (ih hag) hd
   | newR _ hd ih => exact .newR (ih hag) hd
+  | newP _ hi hd ih => exact .newP (ih hag) hi hd
   | get _ ih => exact .get (ih hag)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
@@ -511,7 +513,7 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     subst hf
     rw [hy] at h; cases h
   | unit | int | loc => exact id
-  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hy
+  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hy
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hf => hf.elim (ih₁ hy) (ih₂ hy)
   | @letE _ _ x _ _ _ _ _ _ ih₁ ih₂ =>

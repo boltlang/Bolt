@@ -27,6 +27,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
   | newCong _ ih =>
     intro σ t l ty hh ht hl
     cases ht with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new he _ => exact ih hh he hl
     | newR he _ => exact ih hh he hl
   | newVal _ =>

@@ -37,6 +37,7 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | loc h hio => exact .loc (hx _ _ h) hio
   | new _ hd ih => exact .new ih hd
   | newR _ hd ih => exact .newR ih hd
+  | newP _ hi hd ih => exact .newP ih hi hd
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | setR _ _ ih₁ ih₂ => exact .setR ih₁ ih₂
@@ -81,6 +82,7 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hio => exact .loc h hio
   | new _ hd ih => exact .new (ih hΓ) hd
   | newR _ hd ih => exact .newR (ih hΓ) hd
+  | newP _ hi hd ih => exact .newP (ih hΓ) hi hd
   | get _ ih => exact .get (ih hΓ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ) (ih₂ hΓ)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hΓ) (ih₂ hΓ)
@@ -105,6 +107,7 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm => exact .loc h (fun h' => hm (hio h'))
   | new _ hd ih => exact .new (ih hio) hd
   | newR _ hd ih => exact .newR (ih hio) hd
+  | newP _ hi hd ih => exact .newP (ih hio) hi hd
   | get _ ih => exact .get (ih hio)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hio) (ih₂ hio)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hio) (ih₂ hio)
@@ -231,7 +234,7 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih h
+  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih h
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -341,6 +344,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | loc h hio => exact .loc h hio
   | new _ hd ih => exact .new (ih hΓ hx) hd
   | newR _ hd ih => exact .newR (ih hΓ hx) hd
+  | newP _ hi hd ih => exact .newP (ih hΓ hx) hi hd
   | get _ ih => exact .get (ih hΓ hx)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ hx) (ih₂ hΓ hx)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hΓ hx) (ih₂ hΓ hx)
@@ -531,6 +535,18 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := AtMost.inst hs hd
     simp only [Mu.subst] at h
     exact .newR (ih hn) h
+  | @newP _ _ _ _ i _ hi hd ih =>
+    -- The argument is `mut`, a region, or a changeable parameter of the
+    -- caller.
+    have h := AtMost.inst hs hd
+    have hc := hs.2.2.2.2.2 i hi
+    simp only [Expr.inst, Ty.inst, Mu.subst] at h ⊢
+    revert h hc
+    cases ms[i]?.getD .immutable with
+    | mutable => intro h _; exact .new (b := true) (ih hn) h
+    | region r => intro h _; exact .newR (ih hn) h
+    | param j => intro h hc; exact .newP (ih hn) hc h
+    | immutable => intro _ hc; exact hc.elim
   | get _ ih =>
     have := ih hn
     simp only [Ty.inst] at this
@@ -614,7 +630,7 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
+  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
   | lam _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl

@@ -111,6 +111,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     · exact .inr ⟨_, _, .newVal hv⟩
     · exact .inr ⟨_, _, .newCong hs⟩
   | setP _ hi _ _ _ => simp [Assume.none] at hi
+  | newP _ hi _ _ => simp [Assume.none] at hi
   | setR he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
@@ -150,6 +151,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   | newCong _ ih =>
     intro σ t hh ht
     cases ht with
+    | newP _ hi _ => simp [Assume.none] at hi
     | new he hd =>
       obtain ⟨σ', hx, hh', he'⟩ := ih hh he
       exact ⟨σ', hx, hh', .new he' hd⟩
@@ -159,6 +161,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   | @newVal e b hv =>
     intro σ t hh ht
     cases ht with
+    | newP _ hi _ => simp [Assume.none] at hi
     | @new _ _ _ s _ he hd =>
       refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, hh.alloc ((muOf_cases b).imp_right .inl) hd hv he,
         .loc ?_ (fun h => nomatch h)⟩
