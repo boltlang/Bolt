@@ -9,8 +9,10 @@ The rules that matter for mutability:
   `new false e`, an `imm` object, can only hold a type that's `imm` all the
   way down: what an `imm` value holds can't be changed either.
 * `set e₁ e₂` needs `e₁` to be exactly `cell mutable t`, or a cell of a
-  region. A mutability parameter isn't enough: a generic function can read
-  what it's given, but can't change it, since it may be called with `imm`.
+  region. A mutability parameter is only enough if the function assumes
+  it's changeable (`Assume.changeable`), so that a call gives it `mut` or a
+  region: otherwise a generic function can read what it's given, but can't
+  change it, since it may be called with `imm`.
 * `new true e` can make a cell of a region `r` (#209) instead of a `mut`
   one. What it holds is at most `r`, so it's `imm` all the way down once
   the region is freed (`Regions.lean`). A region that holds `mut` objects
@@ -89,6 +91,12 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   /-- A region's objects can be changed, like `mut` ones. -/
   | setR {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {t : Ty} {r : Nat} {b : Bool} :
       HasType fns σ Δ io Γ e₁ (.cell (.region r b) t) → HasType fns σ Δ io Γ e₂ t →
+      HasType fns σ Δ io Γ (.set e₁ e₂) .unit
+  /-- A generic function can change what has a changeable mutability
+  parameter: a call gives it `mut` or a region (rule 1 of the regions
+  page). -/
+  | setP {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {t : Ty} {i : Nat} :
+      HasType fns σ Δ io Γ e₁ (.cell (.param i) t) → i ∈ Δ.changeable → HasType fns σ Δ io Γ e₂ t →
       HasType fns σ Δ io Γ (.set e₁ e₂) .unit
   | letE {io : Bool} {Γ : Ctx} {x : Nat} {e₁ e₂ : Expr} {t₁ t₂ : Ty} :
       HasType fns σ Δ io Γ e₁ t₁ → HasType fns σ Δ io (Γ.update x t₁) e₂ t₂ →

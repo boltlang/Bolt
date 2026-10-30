@@ -40,16 +40,19 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
   | setCong₁ _ ih =>
     intro σ t l ty hh ht hl
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ => exact ih hh he₁ hl
     | setR he₁ _ => exact ih hh he₁ hl
   | setCong₂ _ _ ih =>
     intro σ t l ty hh ht hl
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set _ he₂ => exact ih hh he₂ hl
     | setR _ he₂ => exact ih hh he₂ hl
   | @setLoc l₀ v _ _ =>
     intro σ t l ty hh ht hl
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ =>
       cases he₁ with
       | loc hσ _ =>

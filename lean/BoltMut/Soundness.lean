@@ -110,6 +110,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .newVal hv⟩
     · exact .inr ⟨_, _, .newCong hs⟩
+  | setP _ hi _ _ _ => simp [Assume.none] at hi
   | setR he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
@@ -191,6 +192,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     | setR he₁ he₂ =>
       obtain ⟨σ', hx, hh', he₁'⟩ := ih hh he₁
       exact ⟨σ', hx, hh', .setR he₁' (he₂.weaken_heap hx)⟩
+    | setP _ hi _ => simp [Assume.none] at hi
   | setCong₂ _ _ ih =>
     intro σ t hh ht
     cases ht with
@@ -200,6 +202,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     | setR he₁ he₂ =>
       obtain ⟨σ', hx, hh', he₂'⟩ := ih hh he₂
       exact ⟨σ', hx, hh', .setR (he₁.weaken_heap hx) he₂'⟩
+    | setP _ hi _ => simp [Assume.none] at hi
   | @setLoc l v hl hv =>
     intro σ t hh ht
     cases ht with
@@ -209,6 +212,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     | setR he₁ he₂ =>
       cases he₁ with
       | loc hσ _ => exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit⟩
+    | setP _ hi _ => simp [Assume.none] at hi
   | letCong _ ih =>
     intro σ t hh ht
     cases ht with

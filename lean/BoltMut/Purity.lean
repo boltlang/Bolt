@@ -99,18 +99,21 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | setCong₁ _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
       obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₁ hn (fun l hl => hc l (.inl hl)) hhc
       exact ⟨hu, hn', fun l hl => hl.elim (hc' l) (fun hl => hc l (.inr hl)), hhc'⟩
   | setCong₂ _ _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set _ he₂ | setR _ he₂ =>
       obtain ⟨hu, hn', hc', hhc'⟩ := ih hh he₂ hn (fun l hl => hc l (.inr hl)) hhc
       exact ⟨hu, hn', fun l hl => hl.elim (fun hl => hc l (.inl hl)) (hc' l), hhc'⟩
   | @setLoc l₀ v hl _ =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
       cases he₁ with
       | loc hσ _ =>

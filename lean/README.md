@@ -55,8 +55,10 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   assumption. A call must meet the callee's assumptions with its arguments
   (`Sat`).
 - **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`, or a
-  cell of a region. A mutability parameter isn't enough, so a generic
-  function can read what it's given but not change it.
+  cell of a region. A mutability parameter is only enough if the function
+  assumes it's changeable (`Assume.changeable`, #285): then a call gives it
+  `mut` or a region, as rule 1 of the regions page says. Otherwise a
+  generic function can read what it's given but not change it.
 - **Regions** (#209): `new true e` can make a cell of a region `r` instead
   of a `mut` one. What it holds is at most `r`: `imm`, or of the same
   region, so that it's `imm` all the way down once `r` is freed. A region

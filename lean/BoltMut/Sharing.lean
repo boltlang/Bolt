@@ -142,7 +142,7 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
   | gone _ hgl =>
     obtain ⟨_, _, hσ, _⟩ := hgl l hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
+  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
 
 /-! ## Heaps that correspond -/
 
@@ -239,6 +239,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | setCong₁ _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
       cases hr with
       | set hr₁ hr₂ =>
@@ -247,6 +248,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | setCong₂ hv _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set _ he₂ | setR _ he₂ =>
       cases hr with
       | set hr₁ hr₂ =>
@@ -255,6 +257,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
   | @setLoc l₀ v hl hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
       cases he₁ with
       | loc hσ _ =>

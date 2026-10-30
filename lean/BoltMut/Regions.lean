@@ -77,6 +77,9 @@ theorem HasType.retype {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
   | setR _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .setR (ih₁ hn.1) (ih₂ hn.2)
+  | setP _ hi _ ih₁ ih₂ =>
+    simp only [Expr.HasLoc, not_or] at hn
+    exact .setP (ih₁ hn.1) hi (ih₂ hn.2)
   | letE _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .letE (ih₁ hn.1) (ih₂ hn.2)
@@ -386,6 +389,7 @@ example (b : Bool) (t : Ty) : ¬ HasType [] [] .none false
   cases h with
   | lam _ hc himm _ _ hb =>
     cases hb with
+    | setP _ hi _ => simp [Assume.none] at hi
     | set hx _ =>
       cases hx with
       | var hx =>
@@ -411,6 +415,55 @@ example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.gone .immu
   | app h₁ _ =>
     cases h₁ with
     | var hx => simp [Ctx.update] at hx
+
+/-! ## Generic functions with a region's objects (#285)
+
+`fn fill(xs, x) { xs[0] = x; }` is generic over a changeable `'m` and a
+`T`, as rule 1 of the regions page makes it: its parameter is the pair
+`(xs, x)`, of type `('m [T], T)`. -/
+def fill : Fn :=
+  { assume := { changeable := [0] }, param := 0,
+    argTy := .prod (.cell (.param 0) (.tparam 0)) (.tparam 0), retTy := .unit,
+    body := .set (.fst (.var 0)) (.snd (.var 0)) }
+
+/-- It changes what it's given, since `'m` is changeable. -/
+theorem fill_ok : FnsOk [fill] := by
+  intro fn hfn
+  simp only [List.mem_singleton] at hfn
+  subst hfn
+  exact ⟨⟨trivial, trivial⟩, .setP (.fst (.var rfl)) (by simp [fill]) (.snd (.var rfl))⟩
+
+theorem fill_sat (m : Mu) (hm : m.Changeable .none) : Sat .none fill.assume [m] [.int] := by
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  · intro p h; simp [fill] at h
+  · intro p h; simp [fill] at h
+  · intro i
+    cases i with
+    | zero => trivial
+    | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [fill] at h
+  · intro i h; simp [fill] at h
+  · intro i h
+    simp [fill] at h
+    subst h
+    exact hm
+
+/-- `let xs = [0] in r; fill(xs, 1); xs`: the block gives `fill` an object
+of its region, which `fill` changes. The block's value has the region's
+type, so it can be frozen when the block ends (`block_frees`). -/
+example : HasType [fill] [] .none false Ctx.empty
+    (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [.region 0 false] [.int] (.pair (.var 0) (.int 1))) (.var 0)))
+    (.cell (.region 0 false) .int) :=
+  .letE (.newR .int trivial)
+    (.letE (.call rfl (fill_sat _ trivial) (.pair (.var rfl) .int)) (.var rfl))
+
+/-- Freed, that's `imm [i32]`. -/
+example : (Ty.cell (.region 0 false) .int).free 0 .immutable = .cell .immutable .int := rfl
+
+/-- But `fill` can't be given an `imm` object. -/
+example : ¬ Sat .none fill.assume [.immutable] [.int] := by
+  intro h
+  exact h.2.2.2.2.2 0 (by simp [fill])
 
 /-! ## Freeing a region when its block ends
 
@@ -457,6 +510,7 @@ theorem HasType.congr_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io :
   | get _ ih => exact .get (ih hag)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
+  | setP _ hi _ ih₁ ih₂ => exact .setP (ih₁ fun l h => hag l (.inl h)) hi (ih₂ fun l h => hag l (.inr h))
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | call hf hs _ ih => exact .call hf hs (ih hag)
   | lam hk hc himm hrc hrl _ ih =>
@@ -483,7 +537,7 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     rw [hy] at h; cases h
   | unit | int | loc => exact id
   | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hy
-  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hf => hf.elim (ih₁ hy) (ih₂ hy)
   | @letE _ _ x _ _ _ _ _ _ ih₁ ih₂ =>
     rintro (hf | ⟨hxy, hf⟩)
@@ -661,6 +715,7 @@ example (b : Bool) (t : Ty) : ¬ HasType [] [(.mutable, .cell .mutable .int)] .n
     (Ctx.empty.update 0 (.cell (.region 0 b) .int)) (.set (.loc 0) (.var 0)) t := by
   intro h
   cases h with
+  | setP _ hi _ => simp [Assume.none] at hi
   | set h₁ h₂ =>
     cases h₁ with
     | loc hσ _ =>

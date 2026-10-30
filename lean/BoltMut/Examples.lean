@@ -21,6 +21,7 @@ example (t : Ty) :
     cases h₁ with
     | new _ _ =>
       cases h₂ with
+      | setP _ hi _ => simp [Assume.none] at hi
       | set hx _ | setR hx _ =>
         cases hx with
         | var hx => simp [Ctx.update, muOf] at hx
@@ -42,10 +43,11 @@ def first : Fn :=
 
 /-- Arguments that only need every type argument to be well-formed. -/
 theorem sat_none (Δ : Assume) (ms : List Mu) : Sat Δ {} ms [] := by
-  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro p h; simp at h
   · intro p h; simp at h
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp at h
   · intro i h; simp at h
   · intro i h; simp at h
 
@@ -98,15 +100,17 @@ example : HasType [] [] { noRegionTys := [0] } false (Ctx.empty.update 0 (.tpara
 /-- So a call can't give it one. -/
 example : ¬ Sat .none { noRegionTys := [0] } [] [.cell (.region 0 false) .int] := by
   intro h
-  have := (h.2.2.2.2 0 (by simp)).1
+  have := (h.2.2.2.2.1 0 (by simp)).1
   simp [Ty.NoRegion, Mu.NoRegion] at this
 
 /-- But a generic function can't change what it's given:
-`fn poke(xs: 'm [i32]) { xs[0] = 1; }` is rejected, since `'m` may be `imm`. -/
+`fn poke(xs: 'm [i32]) { xs[0] = 1; }` is rejected, since `'m` may be `imm`.
+It can if it assumes `'m` is changeable (`fill` in `Regions.lean`). -/
 example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int)) (.set (.var 0) (.int 1)) t := by
   intro h
   cases h with
+  | setP _ hi _ => simp [Assume.none] at hi
   | set hx _ | setR hx _ =>
     cases hx with
     | var hx => simp [Ctx.update] at hx
@@ -135,6 +139,7 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
         rcases hk with hk | ⟨hk, _⟩
         · subst hk
           cases hb with
+          | setP _ hi _ => simp [Assume.none] at hi
           | set hx _ | setR hx _ =>
             cases hx with
             | var hx =>
@@ -273,7 +278,7 @@ theorem wrap_ok : FnsOk [wrap] := by
 example : HasType [wrap] [] .none false Ctx.empty
     (.call 0 [] [.cell .immutable .int] (.new false (.int 1))) (.cell .immutable (.cell .immutable .int)) := by
   show HasType _ _ _ _ _ _ (wrap.retTy.inst [] [.cell .immutable .int])
-  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_⟩ (.new .int trivial)
+  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ (.new .int trivial)
   · intro p h; simp [wrap, wrapAssume] at h
   · intro p hp
     simp [wrap, wrapAssume] at hp
@@ -283,6 +288,7 @@ example : HasType [wrap] [] .none false Ctx.empty
     cases i with
     | zero => exact ⟨.bot _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [wrap, wrapAssume] at h
   · intro i h; simp [wrap, wrapAssume] at h
   · intro i h; simp [wrap, wrapAssume] at h
 

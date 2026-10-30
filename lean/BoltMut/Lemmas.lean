@@ -40,6 +40,7 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | setR _ _ ih₁ ih₂ => exact .setR ih₁ ih₂
+  | setP _ hi _ ih₁ ih₂ => exact .setP ih₁ hi ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
   | call hf hs _ ih => exact .call hf hs ih
   | lam hk hc himm hrc hrl _ ih =>
@@ -83,6 +84,7 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | get _ ih => exact .get (ih hΓ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ) (ih₂ hΓ)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hΓ) (ih₂ hΓ)
+  | setP _ hi _ ih₁ ih₂ => exact .setP (ih₁ hΓ) hi (ih₂ hΓ)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hΓ) (ih₂ (hΓ.update _ _))
   | call hf hs _ ih => exact .call hf hs (ih hΓ)
   | lam hk hc himm hrc hrl hb _ => exact .lam hk (hc.trans hΓ) himm hrc hrl hb
@@ -106,6 +108,7 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | get _ ih => exact .get (ih hio)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hio) (ih₂ hio)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hio) (ih₂ hio)
+  | setP _ hi _ ih₁ ih₂ => exact .setP (ih₁ hio) hi (ih₂ hio)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hio) (ih₂ hio)
   | call hf hs _ ih => exact .call hf hs (ih hio)
   | lam hk hc himm hrc hrl _ ih =>
@@ -229,7 +232,7 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
   | unit | int => exact h.elim
   | loc => exact .inl h
   | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih h
-  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
     · exact (ih₂ h).imp .inr id
@@ -341,6 +344,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | get _ ih => exact .get (ih hΓ hx)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ hx) (ih₂ hΓ hx)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hΓ hx) (ih₂ hΓ hx)
+  | setP _ hi _ ih₁ ih₂ => exact .setP (ih₁ hΓ hx) hi (ih₂ hΓ hx)
   | @letE _ Γ₀ y e₁ e₂ s t₂ _ he₂ ih₁ ih₂ =>
     simp only [Expr.subst]
     by_cases hyx : y = x
@@ -473,7 +477,7 @@ theorem Ty.mentions_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : 
     exact h.imp (iha hp.1) (ihb hp.2)
   | tparam i =>
     simp only [Ty.inst] at h
-    rw [(hs.2.2.2.2 i hp).1.mentions r] at h
+    rw [(hs.2.2.2.2.1 i hp).1.mentions r] at h
     cases h
   | gone m => exact Mu.mentions_subst hs hp h
 
@@ -491,7 +495,7 @@ theorem Ty.paramsNoRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} 
   | cell m t ih => exact ⟨Mu.paramsNoRegion_subst hs hp.1, ih hp.2⟩
   | fn m a b iha ihb => exact ⟨Mu.paramsNoRegion_subst hs hp.1, iha hp.2.1, ihb hp.2.2⟩
   | prod a b iha ihb => exact ⟨iha hp.1, ihb hp.2⟩
-  | tparam i => exact (hs.2.2.2.2 i hp).2
+  | tparam i => exact (hs.2.2.2.2.1 i hp).2
   | gone m => exact Mu.paramsNoRegion_subst hs hp
 
 theorem Mu.mentions_subst_of {ms : List Mu} {m : Mu} {r : Nat} (h : m.mentions r = true) :
@@ -503,7 +507,9 @@ theorem Mu.mentions_subst_of {ms : List Mu} {m : Mu} {r : Nat} (h : m.mentions r
 /-- The key to #243: a body typed under its assumptions, with its
 parameters unknown, has the type with any arguments that meet them. This
 is where a generic function can't change what it's given (`set` needs
-`mutable` itself, not a parameter that may become `immutable`), and can
+`mutable` itself, not a parameter that may become `immutable`), unless it
+assumes the parameter is changeable, so that it becomes `mut` or a region,
+and can
 only put a value of a type parameter in an `imm` object if it assumes that
 the parameter is `imm`. -/
 theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -537,6 +543,18 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h₁ := ih₁ hn.1
     simp only [Ty.inst, Mu.subst] at h₁
     exact .setR h₁ (ih₂ hn.2)
+  | @setP _ _ _ _ _ i _ hi _ ih₁ ih₂ =>
+    -- The argument is `mut`, a region, or a changeable parameter of the
+    -- caller.
+    have h₁ := ih₁ hn.1
+    have hc := hs.2.2.2.2.2 i hi
+    simp only [Ty.inst, Mu.subst] at h₁
+    revert h₁ hc
+    cases ms[i]?.getD .immutable with
+    | mutable => intro h₁ _; exact .set h₁ (ih₂ hn.2)
+    | region r b => intro h₁ _; exact .setR h₁ (ih₂ hn.2)
+    | param j => intro h₁ hc; exact .setP h₁ hc (ih₂ hn.2)
+    | immutable => intro _ hc; exact hc.elim
   | letE _ _ ih₁ ih₂ =>
     have h₂ := ih₂ hn.2
     rw [Ctx.inst_update] at h₂
@@ -597,7 +615,7 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
     cases hl
     exact ⟨_, hm hio ▸ h⟩
   | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
-  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
   | lam _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl
   | gone _ hgl =>

@@ -284,6 +284,10 @@ structure Assume where
   doesn't capture a region's value once the function is called. -/
   noRegionMus : List Nat := []
   noRegionTys : List Nat := []
+  /-- The mutability parameters that a call can only give `mut` or a
+  region (rule 1 of the regions page): the function can change what has
+  them. -/
+  changeable : List Nat := []
 
 /-- Nothing assumed, as for the program that's running. -/
 def Assume.none : Assume := {}
@@ -327,17 +331,25 @@ def Ty.ParamsNoRegion (Δ : Assume) : Ty → Prop
   | .prod a b => a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
   | .gone m => m.ParamsNoRegion Δ
 
+/-- A mutability whose objects can be changed: `mut`, a region, or a
+parameter that's assumed to be one of them. -/
+def Mu.Changeable (Δ : Assume) : Mu → Prop
+  | .mutable | .region _ _ => True
+  | .param i => i ∈ Δ.changeable
+  | .immutable => False
+
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
 the objects in it are well-formed. A parameter that can't be given a region
 gets an argument that mentions none, and whose parameters can't be given
-one either. -/
+one either, and a changeable parameter gets a changeable argument. -/
 def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
   (∀ p ∈ Δ.mus, Le Δ' (p.1.subst ms) (p.2.subst ms)) ∧
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
     (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit)) ∧
     (∀ i ∈ Δ.noRegionMus, (ms[i]?.getD .immutable).NoRegion ∧ (ms[i]?.getD .immutable).ParamsNoRegion Δ') ∧
-    (∀ i ∈ Δ.noRegionTys, (τs[i]?.getD .unit).NoRegion ∧ (τs[i]?.getD .unit).ParamsNoRegion Δ')
+    (∀ i ∈ Δ.noRegionTys, (τs[i]?.getD .unit).NoRegion ∧ (τs[i]?.getD .unit).ParamsNoRegion Δ') ∧
+    (∀ i ∈ Δ.changeable, (ms[i]?.getD .immutable).Changeable Δ')
 
 /-- With nothing assumed, `m ⊑ μ` only by the order itself: `μ` is `mut`
 or a region that holds `mut` objects, which everything is below, or `m` is
@@ -473,13 +485,22 @@ theorem Ty.noRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : 
     obtain ⟨h₁, h₂⟩ := iha hn.1 hp.1
     obtain ⟨h₃, h₄⟩ := ihb hn.2 hp.2
     exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
-  | tparam i => exact hs.2.2.2.2 i hp
+  | tparam i => exact hs.2.2.2.2.1 i hp
   | gone m => exact Mu.noRegion_subst hs hn hp
+
+/-- A changeable mutability stays so with arguments that meet the
+assumptions. -/
+theorem Mu.Changeable.subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
+    (h : m.Changeable Δ) : (m.subst ms).Changeable Δ' := by
+  cases m with
+  | param i => exact hs.2.2.2.2.2 i h
+  | immutable => exact h.elim
+  | _ => exact h
 
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (h₁ : Sat Δ₁ Δ₂ ms' τs') (h₀ : Sat Δ₀ Δ₁ ms τs) :
     Sat Δ₀ Δ₂ (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
-  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_, fun i hi => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_, fun i hi => ?_, fun i hi => ?_⟩
   · have := Le.inst h₀ (h₁.1 p hp)
     rwa [Mu.subst_subst, Mu.subst_subst] at this
   · have := AtMost.inst h₀ (h₁.2.1 p hp)
@@ -489,9 +510,11 @@ theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : Lis
   · obtain ⟨hn, hp⟩ := h₁.2.2.2.1 i hi
     rw [← Mu.getD_subst]
     exact Mu.noRegion_subst h₀ hn hp
-  · obtain ⟨hn, hp⟩ := h₁.2.2.2.2 i hi
+  · obtain ⟨hn, hp⟩ := h₁.2.2.2.2.1 i hi
     rw [← Ty.getD_inst]
     exact Ty.noRegion_inst h₀ hn hp
+  · rw [← Mu.getD_subst]
+    exact Mu.Changeable.subst h₀ (h₁.2.2.2.2.2 i hi)
 
 theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs) : (e.inst ms τs).NoLocs := by
   induction e with
