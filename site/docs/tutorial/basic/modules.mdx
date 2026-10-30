@@ -56,7 +56,8 @@ private, so `main.bolt` can't import it:
 ## Kinds of imports
 
 The path of an import is a string. A path starting with `./` or `../` is
-relative to the importing file, and `.bolt` is added to it.
+relative to the importing file, and `.bolt` is added to it, unless it ends
+with `.bolt` already: `./parser.v2` is the file `parser.v2.bolt`.
 
 | Import | Brings into scope |
 |---|---|

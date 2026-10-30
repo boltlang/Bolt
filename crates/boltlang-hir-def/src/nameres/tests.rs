@@ -95,6 +95,22 @@ fn area() {}
     ));
 }
 
+/// An import names a file without its `.bolt`, even when the rest of its
+/// name has a dot, or with it.
+#[test]
+fn imported_files_can_have_dots_in_their_names() {
+    let db = TestDb::new();
+    db.file("/parser.v2.bolt", "pub fn parse() {}\n");
+    db.file("/lib/old.v1.bolt", "pub fn old() {}\n");
+    let main = db.file(
+        "/main.bolt",
+        "import \"./parser.v2\" (parse);\nimport \"./parser.v2.bolt\" as p;\nimport \"./lib/old.v1\" (old);\n",
+    );
+    let scope = file_scope(&db, main);
+    assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
+    assert_eq!(names(&scope.scope, Namespace::Values), ["old (imported)", "parse (imported)"]);
+}
+
 /// A glob import doesn't clash with a name imported by name, before or
 /// after it: the one imported by name wins.
 #[test]

@@ -713,11 +713,15 @@ fn package_dir(db: &dyn Db, importer: File, package: &str) -> Result<SystemPathB
         .ok_or_else(|| ImportPathError::DependencyNotFound { package: package.to_string(), path: written.to_string() })
 }
 
-fn with_extension(mut path: std::path::PathBuf) -> std::path::PathBuf {
-    if path.extension().is_none() {
-        path.set_extension("bolt");
+/// The path of the file an import names: `.bolt` is added, unless it's
+/// there already, so that `./parser.v2` is `./parser.v2.bolt`.
+fn with_extension(path: std::path::PathBuf) -> std::path::PathBuf {
+    if path.extension().is_some_and(|e| e == "bolt") {
+        return path;
     }
-    path
+    let mut path = path.into_os_string();
+    path.push(".bolt");
+    path.into()
 }
 
 
