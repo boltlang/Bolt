@@ -565,8 +565,12 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
             ),
         ),
         K::UnknownBuiltin { name } => {
-            let names: Vec<_> = Builtin::ALL.iter().map(|b| format!("`{}`", b.name())).collect();
-            (C::UNKNOWN_BUILTIN, format!("there is no builtin `{name}`; the builtins are {}", names.join(", ")))
+            let names: Vec<_> = Builtin::BASE.iter().map(|b| format!("`{}`", b.name())).collect();
+            let message = format!(
+                "there is no builtin `{name}`; the builtins are {}, and the operations of the primitive types, like `i32_add`",
+                names.join(", ")
+            );
+            (C::UNKNOWN_BUILTIN, message)
         }
         K::BuiltinSignature { name, expected } => (
             C::BUILTIN_SIGNATURE,

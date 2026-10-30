@@ -16,7 +16,7 @@ use boltlang_hir_def::{
 };
 
 use boltlang_hir_ty::{
-    builtin::{Builtin, builtin},
+    builtin::{Builtin, PrimOp, builtin},
     infer_body,
     lang::LangClass,
 };
@@ -386,6 +386,13 @@ impl<'db> Evaluator<'db> {
             return fail(ErrorKind::Effect(builtin.name()));
         }
         match (builtin, &args[..]) {
+            // What the operator does.
+            (Builtin::Prim(op, _), [lhs, rhs]) if op.arith().is_some() => {
+                arith(op.arith().unwrap(), lhs.clone(), rhs.clone())
+            }
+            (Builtin::Prim(op, _), [lhs, rhs]) if op.cmp().is_some() => compare(op.cmp().unwrap(), lhs, rhs),
+            (Builtin::Prim(PrimOp::Neg, _), [value]) => prefix(PrefixOp::Neg, value.clone()),
+            (Builtin::Prim(PrimOp::Not, _), [value]) => prefix(PrefixOp::Not, value.clone()),
             (Builtin::Print, [Value::Str(text)]) => {
                 self.host.print(text)?;
                 Ok(Value::unit())
@@ -554,13 +561,7 @@ impl<'db> Evaluator<'db> {
             }
             Expr::Prefix { op, expr: inner } => {
                 let value = self.eval(f, *inner)?;
-                match (op, value) {
-                    (PrefixOp::Neg, Value::Int(n)) => n.checked_neg().map(Value::Int).ok_or(ErrorKind::Overflow.into()),
-                    (PrefixOp::Neg, Value::Float(x)) => Ok(Value::Float(-x)),
-                    (PrefixOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
-                    (PrefixOp::Not, Value::Int(n)) => Ok(Value::Int(!n)),
-                    _ => mismatch("bad operand of a prefix operator"),
-                }
+                prefix(*op, value)
             }
             Expr::Binary { op, lhs, rhs } => self.eval_binary(f, expr, op, *lhs, *rhs),
             Expr::Range { lhs, rhs, inclusive } => {
@@ -794,23 +795,7 @@ impl<'db> Evaluator<'db> {
             BinaryOp::Cmp(op) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
-                let result = match op {
-                    CmpOp::Eq => lhs.equals(&rhs),
-                    CmpOp::NotEq => !lhs.equals(&rhs),
-                    _ => {
-                        let Some(ord) = lhs.compare(&rhs) else {
-                            return mismatch("these values can't be compared");
-                        };
-                        match op {
-                            CmpOp::Lt => ord.is_lt(),
-                            CmpOp::LtEq => ord.is_le(),
-                            CmpOp::Gt => ord.is_gt(),
-                            CmpOp::GtEq => ord.is_ge(),
-                            CmpOp::Eq | CmpOp::NotEq => unreachable!(),
-                        }
-                    }
-                };
-                Ok(Value::Bool(result))
+                compare(*op, &lhs, &rhs)
             }
             BinaryOp::Assign(op) => {
                 let rhs = self.eval(f, rhs)?;
@@ -1314,6 +1299,38 @@ fn literal_value<'db>(literal: &Literal) -> Res<'db, Value<'db>> {
             Value::array(Mutability::Imm, bytes.iter().map(|b| Value::Int(*b as i128)).collect())
         }
     })
+}
+
+/// `-x` or `!x`.
+fn prefix<'db>(op: PrefixOp, value: Value<'db>) -> Res<'db, Value<'db>> {
+    match (op, value) {
+        (PrefixOp::Neg, Value::Int(n)) => n.checked_neg().map(Value::Int).ok_or(ErrorKind::Overflow.into()),
+        (PrefixOp::Neg, Value::Float(x)) => Ok(Value::Float(-x)),
+        (PrefixOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
+        (PrefixOp::Not, Value::Int(n)) => Ok(Value::Int(!n)),
+        _ => mismatch("bad operand of a prefix operator"),
+    }
+}
+
+/// A comparison, like `a < b`.
+fn compare<'db>(op: CmpOp, lhs: &Value<'db>, rhs: &Value<'db>) -> Res<'db, Value<'db>> {
+    let result = match op {
+        CmpOp::Eq => lhs.equals(rhs),
+        CmpOp::NotEq => !lhs.equals(rhs),
+        _ => {
+            let Some(ord) = lhs.compare(rhs) else {
+                return mismatch("these values can't be compared");
+            };
+            match op {
+                CmpOp::Lt => ord.is_lt(),
+                CmpOp::LtEq => ord.is_le(),
+                CmpOp::Gt => ord.is_gt(),
+                CmpOp::GtEq => ord.is_ge(),
+                CmpOp::Eq | CmpOp::NotEq => unreachable!(),
+            }
+        }
+    };
+    Ok(Value::Bool(result))
 }
 
 fn arith<'db>(op: ArithOp, lhs: Value<'db>, rhs: Value<'db>) -> Res<'db, Value<'db>> {

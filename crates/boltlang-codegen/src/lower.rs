@@ -21,7 +21,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     AdtId, InferenceResult, Scheme, Ty,
-    builtin::{Builtin, builtin},
+    builtin::{Builtin, PrimOp, builtin},
     function_scheme, infer_body,
 };
 
@@ -837,6 +837,10 @@ impl<'db> Compiler<'db> {
     ) -> Result<'db, ()> {
         let db = self.db;
         let builtin = builtin(db, f);
+        // An operation of a primitive type is what its operator compiles to.
+        if let Some(Builtin::Prim(op, _)) = builtin {
+            return self.prim(expr, op, args);
+        }
         let target = if let Some(builtin) = builtin {
             if !Builtin::HOST.contains(&builtin) {
                 return Err(self.unsupported(expr, format!("the builtin `{}`", builtin.name())));
@@ -863,6 +867,35 @@ impl<'db> Compiler<'db> {
             self.push(Inst::Unreachable);
         }
         Ok(())
+    }
+
+    /// A call of an operation of a primitive type, like `i32_add(a, b)`, as
+    /// the operator: inline.
+    fn prim(&mut self, expr: ExprId, op: PrimOp, args: &[ExprId]) -> Result<'db, ()> {
+        let (lhs, rhs) = (args[0], args.get(1).copied());
+        let scalar = self.scalar(lhs)?;
+        if scalar == Scalar::Str {
+            return Err(self.unsupported(expr, "an operation on strings"));
+        }
+        match (op.arith(), op.cmp(), rhs) {
+            (Some(arith), _, Some(rhs)) => {
+                self.expr(lhs)?;
+                self.expr(rhs)?;
+                self.shift_amount(arith, scalar, rhs)?;
+                self.arith(expr, arith, scalar)
+            }
+            (_, Some(cmp), Some(rhs)) => {
+                self.expr(lhs)?;
+                self.expr(rhs)?;
+                self.op(cmp_op(cmp, scalar));
+                Ok(())
+            }
+            _ => match op {
+                PrimOp::Neg => self.prefix(expr, PrefixOp::Neg, lhs),
+                PrimOp::Not => self.prefix(expr, PrefixOp::Not, lhs),
+                _ => Err(self.unsupported(expr, format!("the builtin `{}`", op.name()))),
+            },
+        }
     }
 
     /// The instance a call calls: the type arguments of `f`'s scheme, found

@@ -12,11 +12,17 @@
 //! from the host. A declaration must have a name and a signature from
 //! [`Builtin`], which the diagnostics check. A generic builtin, like
 //! `array_len`, can name its type parameters as it likes.
+//!
+//! Each operation of a primitive type is a builtin too, named after the
+//! type and the operation, like `i32_add`, `f64_lt` or `bool_not`
+//! ([`PrimOp`]): what the operators do on that type, as a function.
+
+use std::sync::OnceLock;
 
 use boltlang_base_db::Db;
 use boltlang_hir_def::{
-    builtin_type::{BuiltinInt, BuiltinType},
-    hir::Mutability,
+    builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
+    hir::{ArithOp, CmpOp, Mutability},
     ids::{ExternBlockId, FunctionId, ItemContainerId},
     item_tree::FunctionName,
 };
@@ -55,10 +61,150 @@ pub enum Builtin {
     /// be changed. Code can't make an `imm` array with computed elements
     /// otherwise, since one that's built is `mut`.
     ArrayFreeze,
+    /// An operation of a primitive type, like `fn i32_add(a: i32, b: i32) ->
+    /// i32`: what the operator does on that type.
+    Prim(PrimOp, BuiltinType),
+}
+
+/// An operation of a primitive type, as the operators do it: the name of a
+/// builtin is the type's and the operation's, like `i32_add`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum PrimOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    BitAnd,
+    BitOr,
+    BitXor,
+    /// Shift by a `u32`.
+    Shl,
+    Shr,
+    Neg,
+    Not,
+    Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+}
+
+impl PrimOp {
+    pub const ALL: &[PrimOp] = &[
+        PrimOp::Add,
+        PrimOp::Sub,
+        PrimOp::Mul,
+        PrimOp::Div,
+        PrimOp::Rem,
+        PrimOp::BitAnd,
+        PrimOp::BitOr,
+        PrimOp::BitXor,
+        PrimOp::Shl,
+        PrimOp::Shr,
+        PrimOp::Neg,
+        PrimOp::Not,
+        PrimOp::Eq,
+        PrimOp::Ne,
+        PrimOp::Lt,
+        PrimOp::Le,
+        PrimOp::Gt,
+        PrimOp::Ge,
+    ];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            PrimOp::Add => "add",
+            PrimOp::Sub => "sub",
+            PrimOp::Mul => "mul",
+            PrimOp::Div => "div",
+            PrimOp::Rem => "rem",
+            PrimOp::BitAnd => "bitand",
+            PrimOp::BitOr => "bitor",
+            PrimOp::BitXor => "bitxor",
+            PrimOp::Shl => "shl",
+            PrimOp::Shr => "shr",
+            PrimOp::Neg => "neg",
+            PrimOp::Not => "not",
+            PrimOp::Eq => "eq",
+            PrimOp::Ne => "ne",
+            PrimOp::Lt => "lt",
+            PrimOp::Le => "le",
+            PrimOp::Gt => "gt",
+            PrimOp::Ge => "ge",
+        }
+    }
+
+    /// Whether `ty` has the operation, as it has the operator: integers
+    /// all but `!`, and `-` only when they're signed; floats arithmetic,
+    /// `-` and comparisons; `Bool` the bitwise ones, `!` and comparisons;
+    /// `Char` comparisons; and `String` `+` and comparisons.
+    pub fn applies_to(self, ty: BuiltinType) -> bool {
+        use PrimOp::*;
+        let cmp = matches!(self, Eq | Ne | Lt | Le | Gt | Ge);
+        match ty {
+            BuiltinType::Int(_) => self != Not,
+            BuiltinType::Uint(_) => !matches!(self, Neg | Not),
+            BuiltinType::Float(_) => cmp || matches!(self, Add | Sub | Mul | Div | Rem | Neg),
+            BuiltinType::Bool => cmp || matches!(self, BitAnd | BitOr | BitXor | Not),
+            BuiltinType::Char => cmp,
+            BuiltinType::String => cmp || self == Add,
+        }
+    }
+
+    /// The arithmetic or bitwise operator it is, if it's one.
+    pub fn arith(self) -> Option<ArithOp> {
+        Some(match self {
+            PrimOp::Add => ArithOp::Add,
+            PrimOp::Sub => ArithOp::Sub,
+            PrimOp::Mul => ArithOp::Mul,
+            PrimOp::Div => ArithOp::Div,
+            PrimOp::Rem => ArithOp::Rem,
+            PrimOp::BitAnd => ArithOp::BitAnd,
+            PrimOp::BitOr => ArithOp::BitOr,
+            PrimOp::BitXor => ArithOp::BitXor,
+            PrimOp::Shl => ArithOp::Shl,
+            PrimOp::Shr => ArithOp::Shr,
+            _ => return None,
+        })
+    }
+
+    /// The comparison it is, if it's one.
+    pub fn cmp(self) -> Option<CmpOp> {
+        Some(match self {
+            PrimOp::Eq => CmpOp::Eq,
+            PrimOp::Ne => CmpOp::NotEq,
+            PrimOp::Lt => CmpOp::Lt,
+            PrimOp::Le => CmpOp::LtEq,
+            PrimOp::Gt => CmpOp::Gt,
+            PrimOp::Ge => CmpOp::GtEq,
+            _ => return None,
+        })
+    }
+}
+
+/// Every builtin, with its name: those of [`Builtin::BASE`], then the
+/// operations of each primitive type.
+fn all_builtins() -> &'static [(Builtin, &'static str)] {
+    static ALL: OnceLock<Vec<(Builtin, &'static str)>> = OnceLock::new();
+    ALL.get_or_init(|| {
+        let mut all: Vec<(Builtin, &'static str)> = Builtin::BASE.iter().map(|&b| (b, b.base_name())).collect();
+        for &(name, ty) in BuiltinType::ALL {
+            for &op in PrimOp::ALL {
+                if op.applies_to(ty) {
+                    let name: &'static str = format!("{}_{}", name.to_lowercase(), op.name()).leak();
+                    all.push((Builtin::Prim(op, ty), name));
+                }
+            }
+        }
+        all
+    })
 }
 
 impl Builtin {
-    pub const ALL: &[Builtin] = &[
+    /// The builtins other than the operations of primitive types.
+    pub const BASE: &[Builtin] = &[
         Builtin::Print,
         Builtin::Panic,
         Builtin::ArrayLen,
@@ -73,8 +219,22 @@ impl Builtin {
     /// work on arrays, which the code generator doesn't compile yet.
     pub const HOST: &[Builtin] = &[Builtin::Print, Builtin::Panic];
 
+    /// Every builtin: those of [`Builtin::BASE`], then the operations of
+    /// each primitive type.
+    pub fn all() -> impl Iterator<Item = Builtin> {
+        all_builtins().iter().map(|&(b, _)| b)
+    }
+
     pub fn name(self) -> &'static str {
         match self {
+            Builtin::Prim(..) => all_builtins().iter().find(|&&(b, _)| b == self).map_or("?", |&(_, n)| n),
+            _ => self.base_name(),
+        }
+    }
+
+    fn base_name(self) -> &'static str {
+        match self {
+            Builtin::Prim(..) => unreachable!("named in `all_builtins`"),
             Builtin::Print => "print",
             Builtin::Panic => "panic",
             Builtin::ArrayLen => "array_len",
@@ -87,7 +247,7 @@ impl Builtin {
     }
 
     pub fn by_name(name: &str) -> Option<Builtin> {
-        Self::ALL.iter().copied().find(|b| b.name() == name)
+        all_builtins().iter().find(|&&(_, n)| n == name).map(|&(b, _)| b)
     }
 
     /// Whether it has an effect on the world, which evaluation at compile
@@ -102,7 +262,8 @@ impl Builtin {
             | Builtin::ArrayGet
             | Builtin::ArraySet
             | Builtin::ArrayCopy
-            | Builtin::ArrayFreeze => false,
+            | Builtin::ArrayFreeze
+            | Builtin::Prim(..) => false,
         }
     }
 
@@ -132,6 +293,17 @@ impl Builtin {
             }
             Builtin::ArrayFreeze => {
                 Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1))], Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1)))
+            }
+            Builtin::Prim(op, ty) => {
+                let t = Ty::Builtin(ty);
+                match op {
+                    PrimOp::Neg | PrimOp::Not => Ty::func([t.clone()], t),
+                    PrimOp::Shl | PrimOp::Shr => Ty::func([t.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], t),
+                    PrimOp::Eq | PrimOp::Ne | PrimOp::Lt | PrimOp::Le | PrimOp::Gt | PrimOp::Ge => {
+                        Ty::func([t.clone(), t], Ty::bool())
+                    }
+                    _ => Ty::func([t.clone(), t.clone()], t),
+                }
             }
         }
     }
@@ -175,5 +347,38 @@ pub fn builtin(db: &dyn Db, f: FunctionId<'_>) -> Option<Builtin> {
     match &f.item(db).name {
         Some(FunctionName::Name(name)) => Builtin::by_name(name.as_str()),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_builtin_has_its_own_name() {
+        let all: Vec<Builtin> = Builtin::all().collect();
+        for &b in &all {
+            assert_eq!(Builtin::by_name(b.name()), Some(b), "{}", b.name());
+        }
+        let mut names: Vec<&str> = all.iter().map(|b| b.name()).collect();
+        names.sort();
+        names.dedup();
+        assert_eq!(names.len(), all.len());
+    }
+
+    #[test]
+    fn primitive_operations_are_named_after_their_type() {
+        let i32_ty = BuiltinType::Int(BuiltinInt::I32);
+        assert_eq!(Builtin::by_name("i32_add"), Some(Builtin::Prim(PrimOp::Add, i32_ty)));
+        assert_eq!(Builtin::by_name("bool_not"), Some(Builtin::Prim(PrimOp::Not, BuiltinType::Bool)));
+        assert_eq!(Builtin::by_name("string_add"), Some(Builtin::Prim(PrimOp::Add, BuiltinType::String)));
+        // Only what the operators do: unsigned integers have no `-`, and
+        // integers no `!`.
+        assert_eq!(Builtin::by_name("u8_neg"), None);
+        assert_eq!(Builtin::by_name("i32_not"), None);
+        assert_eq!(Builtin::by_name("char_add"), None);
+        let shl = Builtin::by_name("i64_shl").unwrap().signature();
+        let i64_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I64));
+        assert_eq!(shl, Ty::func([i64_ty.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], i64_ty));
     }
 }
