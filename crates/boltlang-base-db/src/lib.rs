@@ -36,7 +36,7 @@ pub use {
     parse::{Parse, parse_file},
     settings::{DEFAULT_PRELUDE, Settings},
     system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf, WritableSystem, InMemorySystem},
-    text::{LineIndex, index_lines, source_text},
+    text::source_text,
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
 };
 
