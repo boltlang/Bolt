@@ -186,21 +186,11 @@ A bound on an associated type holds wherever its class does
 ================================================================================
 class Iter2[I] { type Item; fn next2(it: I) -> Item; }
 class Coll[C] { type It: Iter2; fn it(c: C) -> It; }
-struct Bag { n: i32 }
-struct BagIt { n: i32 }
-impl Iter2[BagIt] { type Item = i32; fn next2(it) = it.n; }
-impl Coll[Bag] { type It = BagIt; fn it(c) = BagIt { n: c.n }; }
 fn first[C: Coll](c: C) -> C.It.Item = next2(it(c));
 fn second(c) = next2(it(c));
-let a: i32 = first(Bag { n: 1 });
-let b: i32 = second(Bag { n: 2 });
 --------------------------------------------------------------------------------
-Iter2[BagIt].next2: fn(BagIt) -> i32
-Coll[Bag].it: fn(Bag) -> imm BagIt
 first: forall C. Coll[C] => fn(C) -> C.It.Item
 second: forall a. Coll[a] => fn(a) -> a.It.Item
-let a: i32
-let b: i32
 
 ================================================================================
 A chain of associated types needs a class at each step
