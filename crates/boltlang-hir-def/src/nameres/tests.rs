@@ -95,6 +95,24 @@ fn area() {}
     ));
 }
 
+/// A glob import doesn't clash with a name imported by name, before or
+/// after it: the one imported by name wins.
+#[test]
+fn glob_imports_give_way_to_names_imported_by_name() {
+    let db = TestDb::new();
+    let a = db.file("/a.bolt", "pub struct Point;\npub struct Line;\n");
+    let b = db.file("/b.bolt", "pub struct Point;\n");
+    for text in ["import \"./a\" *;\nimport \"./b\" (Point);\n", "import \"./b\" (Point);\nimport \"./a\" *;\n"] {
+        let main = db.file("/main.bolt", text);
+        let scope = file_scope(&db, main);
+        assert!(diagnostics(scope).is_empty(), "{text}: {:?}", diagnostics(scope));
+        let point = scope.scope.get(Namespace::Types, &Name::new("Point")).unwrap().def;
+        assert!(matches!(point, ModuleDefId::Struct(s) if s.file(&db) == b), "{text}");
+        let line = scope.scope.get(Namespace::Types, &Name::new("Line")).unwrap().def;
+        assert!(matches!(line, ModuleDefId::Struct(s) if s.file(&db) == a), "{text}");
+    }
+}
+
 #[test]
 fn imports_of_variants() {
     let db = TestDb::new();

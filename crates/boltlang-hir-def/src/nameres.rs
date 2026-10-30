@@ -377,6 +377,9 @@ pub fn type_member_entry<'db>(db: &'db dyn Db, file: File, owner: &Name, name: &
 pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     let tree = item_tree(db, file);
     let mut out = local_scope(db, file).clone();
+    // Glob imports come after the others, so that they never replace or
+    // clash with a name that one of them brings in, wherever it is.
+    let mut globs = Vec::new();
     for import in &tree.imports {
         let Some(source) = &import.source else { continue };
         let target = match resolve_import_path(db, file, source) {
@@ -425,19 +428,22 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                     }
                 }
             }
-            // A glob import brings in all the names visible here, but doesn't
-            // replace names that are already in scope.
-            ImportKind::Glob => {
-                for ns in Namespace::ALL {
-                    for (name, entry) in exports.entries(ns) {
-                        if is_visible_from(db, entry.visibility, target, file) {
-                            out.scope.insert(ns, name.clone(), imported(entry));
-                        }
-                    }
-                }
-            }
+            ImportKind::Glob => globs.push((import, target)),
             // Handled below.
             ImportKind::Variants(_) => {}
+        }
+    }
+    // A glob import brings in all the names visible here, but doesn't
+    // replace names that are already in scope.
+    for (import, target) in globs {
+        for ns in Namespace::ALL {
+            for (name, entry) in file_scope(db, target).scope.entries(ns) {
+                if is_visible_from(db, entry.visibility, target, file) {
+                    let entry =
+                        ScopeEntry::imported(entry.def, narrower(import.visibility, entry.visibility), import.ast_id);
+                    out.scope.insert(ns, name.clone(), entry);
+                }
+            }
         }
     }
     // The prelude's names come last, so that everything else replaces them.
