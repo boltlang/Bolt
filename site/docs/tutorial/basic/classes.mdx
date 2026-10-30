@@ -398,8 +398,9 @@ twice(Money { cents: 150 }).cents;
 300
 ```
 
-The operators on numbers, `Bool` and `String` are built in, so the classes
-have no impls for them.
+The classes have impls for the primitive types, the numbers, `Bool`,
+`Char` and `String`, for the operators each of them has. The operators on
+those types are built in, and don't go through the classes.
 
 ## Classes of type constructors
 

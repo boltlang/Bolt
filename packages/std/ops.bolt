@@ -3,6 +3,7 @@
 
 import "./option" (Option, None, Some);
 import "./io" (assert);
+import "./prim" *;
 
 /// Types whose elements can be read by position, with `c[i]`.
 pub class Index[C] {
@@ -25,13 +26,32 @@ pub class Eq[T] {
   fn ne(a: T, b: T) -> Bool = !eq(a, b);
 }
 
+impl Eq[Bool] { fn eq(a, b) = bool_eq(a, b); fn ne(a, b) = bool_ne(a, b); }
+impl Eq[Char] { fn eq(a, b) = char_eq(a, b); fn ne(a, b) = char_ne(a, b); }
+impl Eq[String] { fn eq(a, b) = string_eq(a, b); fn ne(a, b) = string_ne(a, b); }
+impl Eq[i8] { fn eq(a, b) = i8_eq(a, b); fn ne(a, b) = i8_ne(a, b); }
+impl Eq[i16] { fn eq(a, b) = i16_eq(a, b); fn ne(a, b) = i16_ne(a, b); }
+impl Eq[i32] { fn eq(a, b) = i32_eq(a, b); fn ne(a, b) = i32_ne(a, b); }
+impl Eq[i64] { fn eq(a, b) = i64_eq(a, b); fn ne(a, b) = i64_ne(a, b); }
+impl Eq[i128] { fn eq(a, b) = i128_eq(a, b); fn ne(a, b) = i128_ne(a, b); }
+impl Eq[isize] { fn eq(a, b) = isize_eq(a, b); fn ne(a, b) = isize_ne(a, b); }
+impl Eq[u8] { fn eq(a, b) = u8_eq(a, b); fn ne(a, b) = u8_ne(a, b); }
+impl Eq[u16] { fn eq(a, b) = u16_eq(a, b); fn ne(a, b) = u16_ne(a, b); }
+impl Eq[u32] { fn eq(a, b) = u32_eq(a, b); fn ne(a, b) = u32_ne(a, b); }
+impl Eq[u64] { fn eq(a, b) = u64_eq(a, b); fn ne(a, b) = u64_ne(a, b); }
+impl Eq[u128] { fn eq(a, b) = u128_eq(a, b); fn ne(a, b) = u128_ne(a, b); }
+impl Eq[usize] { fn eq(a, b) = usize_eq(a, b); fn ne(a, b) = usize_ne(a, b); }
+impl Eq[f32] { fn eq(a, b) = f32_eq(a, b); fn ne(a, b) = f32_ne(a, b); }
+impl Eq[f64] { fn eq(a, b) = f64_eq(a, b); fn ne(a, b) = f64_ne(a, b); }
+
 pub fn a == b = eq(a, b);
 
 pub fn a != b = ne(a, b);
 
 // The classes of operators, like Rust's `std::ops`. Each operator is a
 // function of its class's method, so that it works on any type with an
-// impl of the class.
+// impl of the class. The primitive types have theirs, which are the
+// builtins of `prim.bolt`.
 
 /// Addition: `a + b`.
 pub class Add[T] {
@@ -40,6 +60,22 @@ pub class Add[T] {
 
   fn add(a: T, b: T) -> Output;
 }
+
+impl Add[i8] { fn add(a, b) = i8_add(a, b); }
+impl Add[i16] { fn add(a, b) = i16_add(a, b); }
+impl Add[i32] { fn add(a, b) = i32_add(a, b); }
+impl Add[i64] { fn add(a, b) = i64_add(a, b); }
+impl Add[i128] { fn add(a, b) = i128_add(a, b); }
+impl Add[isize] { fn add(a, b) = isize_add(a, b); }
+impl Add[u8] { fn add(a, b) = u8_add(a, b); }
+impl Add[u16] { fn add(a, b) = u16_add(a, b); }
+impl Add[u32] { fn add(a, b) = u32_add(a, b); }
+impl Add[u64] { fn add(a, b) = u64_add(a, b); }
+impl Add[u128] { fn add(a, b) = u128_add(a, b); }
+impl Add[usize] { fn add(a, b) = usize_add(a, b); }
+impl Add[f32] { fn add(a, b) = f32_add(a, b); }
+impl Add[f64] { fn add(a, b) = f64_add(a, b); }
+impl Add[String] { fn add(a, b) = string_add(a, b); }
 
 pub fn a + b = add(a, b);
 
@@ -51,6 +87,21 @@ pub class Sub[T] {
   fn sub(a: T, b: T) -> Output;
 }
 
+impl Sub[i8] { fn sub(a, b) = i8_sub(a, b); }
+impl Sub[i16] { fn sub(a, b) = i16_sub(a, b); }
+impl Sub[i32] { fn sub(a, b) = i32_sub(a, b); }
+impl Sub[i64] { fn sub(a, b) = i64_sub(a, b); }
+impl Sub[i128] { fn sub(a, b) = i128_sub(a, b); }
+impl Sub[isize] { fn sub(a, b) = isize_sub(a, b); }
+impl Sub[u8] { fn sub(a, b) = u8_sub(a, b); }
+impl Sub[u16] { fn sub(a, b) = u16_sub(a, b); }
+impl Sub[u32] { fn sub(a, b) = u32_sub(a, b); }
+impl Sub[u64] { fn sub(a, b) = u64_sub(a, b); }
+impl Sub[u128] { fn sub(a, b) = u128_sub(a, b); }
+impl Sub[usize] { fn sub(a, b) = usize_sub(a, b); }
+impl Sub[f32] { fn sub(a, b) = f32_sub(a, b); }
+impl Sub[f64] { fn sub(a, b) = f64_sub(a, b); }
+
 pub fn a - b = sub(a, b);
 
 /// Multiplication: `a * b`.
@@ -60,6 +111,21 @@ pub class Mul[T] {
 
   fn mul(a: T, b: T) -> Output;
 }
+
+impl Mul[i8] { fn mul(a, b) = i8_mul(a, b); }
+impl Mul[i16] { fn mul(a, b) = i16_mul(a, b); }
+impl Mul[i32] { fn mul(a, b) = i32_mul(a, b); }
+impl Mul[i64] { fn mul(a, b) = i64_mul(a, b); }
+impl Mul[i128] { fn mul(a, b) = i128_mul(a, b); }
+impl Mul[isize] { fn mul(a, b) = isize_mul(a, b); }
+impl Mul[u8] { fn mul(a, b) = u8_mul(a, b); }
+impl Mul[u16] { fn mul(a, b) = u16_mul(a, b); }
+impl Mul[u32] { fn mul(a, b) = u32_mul(a, b); }
+impl Mul[u64] { fn mul(a, b) = u64_mul(a, b); }
+impl Mul[u128] { fn mul(a, b) = u128_mul(a, b); }
+impl Mul[usize] { fn mul(a, b) = usize_mul(a, b); }
+impl Mul[f32] { fn mul(a, b) = f32_mul(a, b); }
+impl Mul[f64] { fn mul(a, b) = f64_mul(a, b); }
 
 pub fn a * b = mul(a, b);
 
@@ -71,6 +137,21 @@ pub class Div[T] {
   fn div(a: T, b: T) -> Output;
 }
 
+impl Div[i8] { fn div(a, b) = i8_div(a, b); }
+impl Div[i16] { fn div(a, b) = i16_div(a, b); }
+impl Div[i32] { fn div(a, b) = i32_div(a, b); }
+impl Div[i64] { fn div(a, b) = i64_div(a, b); }
+impl Div[i128] { fn div(a, b) = i128_div(a, b); }
+impl Div[isize] { fn div(a, b) = isize_div(a, b); }
+impl Div[u8] { fn div(a, b) = u8_div(a, b); }
+impl Div[u16] { fn div(a, b) = u16_div(a, b); }
+impl Div[u32] { fn div(a, b) = u32_div(a, b); }
+impl Div[u64] { fn div(a, b) = u64_div(a, b); }
+impl Div[u128] { fn div(a, b) = u128_div(a, b); }
+impl Div[usize] { fn div(a, b) = usize_div(a, b); }
+impl Div[f32] { fn div(a, b) = f32_div(a, b); }
+impl Div[f64] { fn div(a, b) = f64_div(a, b); }
+
 pub fn a / b = div(a, b);
 
 /// The remainder of a division: `a % b`.
@@ -80,6 +161,21 @@ pub class Rem[T] {
 
   fn rem(a: T, b: T) -> Output;
 }
+
+impl Rem[i8] { fn rem(a, b) = i8_rem(a, b); }
+impl Rem[i16] { fn rem(a, b) = i16_rem(a, b); }
+impl Rem[i32] { fn rem(a, b) = i32_rem(a, b); }
+impl Rem[i64] { fn rem(a, b) = i64_rem(a, b); }
+impl Rem[i128] { fn rem(a, b) = i128_rem(a, b); }
+impl Rem[isize] { fn rem(a, b) = isize_rem(a, b); }
+impl Rem[u8] { fn rem(a, b) = u8_rem(a, b); }
+impl Rem[u16] { fn rem(a, b) = u16_rem(a, b); }
+impl Rem[u32] { fn rem(a, b) = u32_rem(a, b); }
+impl Rem[u64] { fn rem(a, b) = u64_rem(a, b); }
+impl Rem[u128] { fn rem(a, b) = u128_rem(a, b); }
+impl Rem[usize] { fn rem(a, b) = usize_rem(a, b); }
+impl Rem[f32] { fn rem(a, b) = f32_rem(a, b); }
+impl Rem[f64] { fn rem(a, b) = f64_rem(a, b); }
 
 pub fn a % b = rem(a, b);
 
@@ -91,6 +187,20 @@ pub class BitAnd[T] {
   fn bitand(a: T, b: T) -> Output;
 }
 
+impl BitAnd[i8] { fn bitand(a, b) = i8_bitand(a, b); }
+impl BitAnd[i16] { fn bitand(a, b) = i16_bitand(a, b); }
+impl BitAnd[i32] { fn bitand(a, b) = i32_bitand(a, b); }
+impl BitAnd[i64] { fn bitand(a, b) = i64_bitand(a, b); }
+impl BitAnd[i128] { fn bitand(a, b) = i128_bitand(a, b); }
+impl BitAnd[isize] { fn bitand(a, b) = isize_bitand(a, b); }
+impl BitAnd[u8] { fn bitand(a, b) = u8_bitand(a, b); }
+impl BitAnd[u16] { fn bitand(a, b) = u16_bitand(a, b); }
+impl BitAnd[u32] { fn bitand(a, b) = u32_bitand(a, b); }
+impl BitAnd[u64] { fn bitand(a, b) = u64_bitand(a, b); }
+impl BitAnd[u128] { fn bitand(a, b) = u128_bitand(a, b); }
+impl BitAnd[usize] { fn bitand(a, b) = usize_bitand(a, b); }
+impl BitAnd[Bool] { fn bitand(a, b) = bool_bitand(a, b); }
+
 pub fn a & b = bitand(a, b);
 
 /// Bitwise or: `a | b`.
@@ -100,6 +210,20 @@ pub class BitOr[T] {
 
   fn bitor(a: T, b: T) -> Output;
 }
+
+impl BitOr[i8] { fn bitor(a, b) = i8_bitor(a, b); }
+impl BitOr[i16] { fn bitor(a, b) = i16_bitor(a, b); }
+impl BitOr[i32] { fn bitor(a, b) = i32_bitor(a, b); }
+impl BitOr[i64] { fn bitor(a, b) = i64_bitor(a, b); }
+impl BitOr[i128] { fn bitor(a, b) = i128_bitor(a, b); }
+impl BitOr[isize] { fn bitor(a, b) = isize_bitor(a, b); }
+impl BitOr[u8] { fn bitor(a, b) = u8_bitor(a, b); }
+impl BitOr[u16] { fn bitor(a, b) = u16_bitor(a, b); }
+impl BitOr[u32] { fn bitor(a, b) = u32_bitor(a, b); }
+impl BitOr[u64] { fn bitor(a, b) = u64_bitor(a, b); }
+impl BitOr[u128] { fn bitor(a, b) = u128_bitor(a, b); }
+impl BitOr[usize] { fn bitor(a, b) = usize_bitor(a, b); }
+impl BitOr[Bool] { fn bitor(a, b) = bool_bitor(a, b); }
 
 pub fn a | b = bitor(a, b);
 
@@ -111,6 +235,20 @@ pub class BitXor[T] {
   fn bitxor(a: T, b: T) -> Output;
 }
 
+impl BitXor[i8] { fn bitxor(a, b) = i8_bitxor(a, b); }
+impl BitXor[i16] { fn bitxor(a, b) = i16_bitxor(a, b); }
+impl BitXor[i32] { fn bitxor(a, b) = i32_bitxor(a, b); }
+impl BitXor[i64] { fn bitxor(a, b) = i64_bitxor(a, b); }
+impl BitXor[i128] { fn bitxor(a, b) = i128_bitxor(a, b); }
+impl BitXor[isize] { fn bitxor(a, b) = isize_bitxor(a, b); }
+impl BitXor[u8] { fn bitxor(a, b) = u8_bitxor(a, b); }
+impl BitXor[u16] { fn bitxor(a, b) = u16_bitxor(a, b); }
+impl BitXor[u32] { fn bitxor(a, b) = u32_bitxor(a, b); }
+impl BitXor[u64] { fn bitxor(a, b) = u64_bitxor(a, b); }
+impl BitXor[u128] { fn bitxor(a, b) = u128_bitxor(a, b); }
+impl BitXor[usize] { fn bitxor(a, b) = usize_bitxor(a, b); }
+impl BitXor[Bool] { fn bitxor(a, b) = bool_bitxor(a, b); }
+
 pub fn a ^ b = bitxor(a, b);
 
 /// Shifting the bits left: `a << n`.
@@ -120,6 +258,19 @@ pub class Shl[T] {
 
   fn shl(a: T, n: u32) -> Output;
 }
+
+impl Shl[i8] { fn shl(a, n) = i8_shl(a, n); }
+impl Shl[i16] { fn shl(a, n) = i16_shl(a, n); }
+impl Shl[i32] { fn shl(a, n) = i32_shl(a, n); }
+impl Shl[i64] { fn shl(a, n) = i64_shl(a, n); }
+impl Shl[i128] { fn shl(a, n) = i128_shl(a, n); }
+impl Shl[isize] { fn shl(a, n) = isize_shl(a, n); }
+impl Shl[u8] { fn shl(a, n) = u8_shl(a, n); }
+impl Shl[u16] { fn shl(a, n) = u16_shl(a, n); }
+impl Shl[u32] { fn shl(a, n) = u32_shl(a, n); }
+impl Shl[u64] { fn shl(a, n) = u64_shl(a, n); }
+impl Shl[u128] { fn shl(a, n) = u128_shl(a, n); }
+impl Shl[usize] { fn shl(a, n) = usize_shl(a, n); }
 
 pub fn a << n = shl(a, n);
 
@@ -131,6 +282,19 @@ pub class Shr[T] {
   fn shr(a: T, n: u32) -> Output;
 }
 
+impl Shr[i8] { fn shr(a, n) = i8_shr(a, n); }
+impl Shr[i16] { fn shr(a, n) = i16_shr(a, n); }
+impl Shr[i32] { fn shr(a, n) = i32_shr(a, n); }
+impl Shr[i64] { fn shr(a, n) = i64_shr(a, n); }
+impl Shr[i128] { fn shr(a, n) = i128_shr(a, n); }
+impl Shr[isize] { fn shr(a, n) = isize_shr(a, n); }
+impl Shr[u8] { fn shr(a, n) = u8_shr(a, n); }
+impl Shr[u16] { fn shr(a, n) = u16_shr(a, n); }
+impl Shr[u32] { fn shr(a, n) = u32_shr(a, n); }
+impl Shr[u64] { fn shr(a, n) = u64_shr(a, n); }
+impl Shr[u128] { fn shr(a, n) = u128_shr(a, n); }
+impl Shr[usize] { fn shr(a, n) = usize_shr(a, n); }
+
 pub fn a >> n = shr(a, n);
 
 /// Negation: `-a`.
@@ -141,6 +305,15 @@ pub class Neg[T] {
   fn neg(a: T) -> Output;
 }
 
+impl Neg[i8] { fn neg(a) = i8_neg(a); }
+impl Neg[i16] { fn neg(a) = i16_neg(a); }
+impl Neg[i32] { fn neg(a) = i32_neg(a); }
+impl Neg[i64] { fn neg(a) = i64_neg(a); }
+impl Neg[i128] { fn neg(a) = i128_neg(a); }
+impl Neg[isize] { fn neg(a) = isize_neg(a); }
+impl Neg[f32] { fn neg(a) = f32_neg(a); }
+impl Neg[f64] { fn neg(a) = f64_neg(a); }
+
 pub fn -a = neg(a);
 
 /// Logical negation: `!a`.
@@ -150,6 +323,8 @@ pub class Not[T] {
 
   fn not(a: T) -> Output;
 }
+
+impl Not[Bool] { fn not(a) = bool_not(a); }
 
 pub fn !a = not(a);
 
@@ -167,6 +342,23 @@ impl Add[Money] {
 impl Neg[Money] {
   type Output = Money;
   fn neg(a) = Money { cents: 0 - a.cents };
+}
+
+#[test]
+fn the_primitive_types_have_the_operators() {
+  assert(add(2, 3) == 5);
+  assert(sub(2u8, 1u8) == 1u8);
+  assert(mul(2.5, 2.0) == 5.0);
+  assert(div(7i64, 2i64) == 3i64);
+  assert(rem(-7, 2) == -1);
+  assert(neg(4) == -4);
+  assert(not(False));
+  assert(bitand(6, 3) == 2);
+  assert(bitxor(True, True) == False);
+  assert(shl(1u8, 3) == 8u8);
+  assert(shr(-8, 1) == -4);
+  assert(add("ab", "c") == "abc");
+  assert(eq('a', 'a') && ne(1.5, 2.5));
 }
 
 #[test]
