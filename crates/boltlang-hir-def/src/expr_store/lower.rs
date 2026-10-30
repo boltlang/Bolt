@@ -677,10 +677,10 @@ pub(crate) fn lower_literal(token: &SyntaxToken) -> Option<Literal> {
             let (digits, suffix) = split_suffix(text, token.kind());
             Literal::Float(digits.chars().filter(|c| *c != '_').collect(), suffix)
         }
-        CHAR => Literal::Char(unescape(text.trim_matches('\'')).chars().next().unwrap_or('\0')),
-        BYTE => Literal::Byte(unescape(text[1..].trim_matches('\'')).chars().next().map_or(0, |c| c as u8)),
+        CHAR => Literal::Char(unescape(strip_quotes(text, '\'')).chars().next().unwrap_or('\0')),
+        BYTE => Literal::Byte(unescape_bytes(strip_quotes(&text[1..], '\'')).first().copied().unwrap_or(0)),
         STRING => Literal::String(string_contents(text)),
-        BYTE_STRING => Literal::ByteString(string_contents(&text[1..]).into_bytes()),
+        BYTE_STRING => Literal::ByteString(byte_string_contents(&text[1..])),
         C_STRING => Literal::CString(string_contents(&text[1..])),
         _ => return None,
     })
@@ -703,16 +703,48 @@ fn split_suffix(text: &str, kind: SyntaxKind) -> (&str, Option<Name>) {
     (text, None)
 }
 
+/// `text` without the one `quote` it starts with and the one it ends with,
+/// so that an escaped quote, like the one of `'\''`, stays.
+fn strip_quotes(text: &str, quote: char) -> &str {
+    let inner = text.strip_prefix(quote).unwrap_or(text);
+    inner.strip_suffix(quote).unwrap_or(inner)
+}
+
+/// The text between the quotes of a raw string, like `r#"a"b"#`, which
+/// keeps the quotes in it, or `None` if `text` isn't a raw string.
+fn raw_contents(text: &str) -> Option<&str> {
+    let raw = text.strip_prefix('r')?;
+    let hashes = raw.len() - raw.trim_start_matches('#').len();
+    let inner = raw.get(hashes..raw.len().saturating_sub(hashes)).unwrap_or("");
+    Some(strip_quotes(inner, '"'))
+}
+
 /// The contents of a string literal: unescaped, unless it's a raw string.
 fn string_contents(text: &str) -> String {
-    if let Some(raw) = text.strip_prefix('r') {
-        let hashes = raw.len() - raw.trim_start_matches('#').len();
-        let inner = &raw[hashes..raw.len() - hashes];
-        return inner.trim_start_matches('"').trim_end_matches('"').to_string();
+    match raw_contents(text) {
+        Some(raw) => raw.to_string(),
+        None => unescape(strip_quotes(text, '"')),
     }
-    let inner = text.strip_prefix('"').unwrap_or(text);
-    let inner = inner.strip_suffix('"').unwrap_or(inner);
-    unescape(inner)
+}
+
+/// The bytes of a byte string, after its `b`: `\xff` is one byte, not the
+/// UTF-8 of the character U+00FF.
+fn byte_string_contents(text: &str) -> Vec<u8> {
+    match raw_contents(text) {
+        Some(raw) => raw.as_bytes().to_vec(),
+        None => unescape_bytes(strip_quotes(text, '"')),
+    }
+}
+
+/// Like [`unescape`], for a byte string or a byte: `\xNN` is the byte
+/// `NN`, and any other character is its UTF-8 bytes.
+fn unescape_bytes(text: &str) -> Vec<u8> {
+    let mut out = Vec::with_capacity(text.len());
+    unescape_with(text, |piece| match piece {
+        Unescaped::Char(c) => out.extend_from_slice(c.encode_utf8(&mut [0; 4]).as_bytes()),
+        Unescaped::Byte(b) => out.push(b),
+    });
+    out
 }
 
 /// The contents of a string literal without its quotes and prefix, like the
@@ -725,21 +757,37 @@ pub(crate) fn unquote(text: &str) -> String {
 /// for. The lexer already reported invalid ones.
 fn unescape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
+    unescape_with(text, |piece| match piece {
+        Unescaped::Char(c) => out.push(c),
+        Unescaped::Byte(b) => out.push(b as char),
+    });
+    out
+}
+
+/// What an escape sequence of [`unescape_with`] stands for.
+enum Unescaped {
+    Char(char),
+    /// A `\xNN`: a character in a string, a byte in a byte string.
+    Byte(u8),
+}
+
+/// The characters of `text`, with its escape sequences replaced.
+fn unescape_with(text: &str, mut out: impl FnMut(Unescaped)) {
     let mut chars = text.chars().peekable();
     while let Some(c) = chars.next() {
         if c != '\\' {
-            out.push(c);
+            out(Unescaped::Char(c));
             continue;
         }
         match chars.next() {
-            Some('n') => out.push('\n'),
-            Some('r') => out.push('\r'),
-            Some('t') => out.push('\t'),
-            Some('0') => out.push('\0'),
+            Some('n') => out(Unescaped::Char('\n')),
+            Some('r') => out(Unescaped::Char('\r')),
+            Some('t') => out(Unescaped::Char('\t')),
+            Some('0') => out(Unescaped::Char('\0')),
             Some('x') => {
                 let hex: String = chars.by_ref().take(2).collect();
-                if let Ok(byte) = u8::from_str_radix(&hex, 16) {
-                    out.push(byte as char);
+                if let Ok(b) = u8::from_str_radix(&hex, 16) {
+                    out(Unescaped::Byte(b));
                 }
             }
             Some('u') => {
@@ -750,13 +798,13 @@ fn unescape(text: &str) -> String {
                     chars.by_ref().take(4).collect()
                 };
                 if let Some(c) = u32::from_str_radix(&hex, 16).ok().and_then(char::from_u32) {
-                    out.push(c);
+                    out(Unescaped::Char(c));
                 }
             }
             // `\\`, `\'`, `\"`, and any other escaped character.
-            Some(other) => out.push(other),
+            Some(other) => out(Unescaped::Char(other)),
             None => {}
         }
     }
-    out
 }
+

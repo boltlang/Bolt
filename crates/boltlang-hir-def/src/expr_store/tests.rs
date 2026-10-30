@@ -320,6 +320,16 @@ fn literals() {
     );
 }
 
+/// The quotes and escapes that the literals keep.
+#[test]
+fn literals_with_quotes_and_bytes() {
+    assert_eq!(
+        render(r###"'\''; b'\''; b"\xff\x41"; b"\\x41"; r#""hi""#; r##"a"#b"##; br#""x""#;"###),
+        "Char('\\'');\nByte(39);\nByteString([255, 65]);\nByteString([92, 120, 52, 49]);\n\
+         String(\"\\\"hi\\\"\");\nString(\"a\\\"#b\");\nByteString([34, 120, 34]);"
+    );
+}
+
 #[test]
 fn postfix_expressions() {
     assert_eq!(
