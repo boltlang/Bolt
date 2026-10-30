@@ -376,6 +376,22 @@ let y: Option[Bool]
 error at `first(Bag { n: 1 })`: expected Option[Bool], found Option[i32]
 
 ================================================================================
+Defaults of associated types that refer to each other don't loop
+================================================================================
+class Pair[C] { type A = B; type B = A; fn left(c: C) -> A; fn right(c: C) -> B; }
+struct Bag { n: i32 }
+impl Pair[Bag] { fn left(c) = c.n; fn right(c) = c.n; }
+fn get[C: Pair](c: C) -> C.A = left(c);
+get(Bag { n: 1 });
+right(Bag { n: 1 });
+--------------------------------------------------------------------------------
+Pair[Bag].left: fn(Bag) -> {error}
+Pair[Bag].right: fn(Bag) -> {error}
+get: forall C. Pair[C] => fn(C) -> C.A
+get(Bag { n: 1 }): {error}
+right(Bag { n: 1 }): {error}
+
+================================================================================
 A default of an associated type must meet its bound (#294)
 :todo
 :error
