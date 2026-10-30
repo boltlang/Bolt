@@ -1316,3 +1316,113 @@ fn errors_in_files_a_file_uses() {
     // A file's own errors aren't among them.
     assert!(broken(&db, more).is_empty());
 }
+
+#[test]
+fn an_infinite_type() {
+    check(
+        r#"
+fn f(x) = x(x);
+          //^ error: this would need the infinite type `fn(a) -> b`
+"#,
+    );
+}
+
+#[test]
+fn calling_what_isnt_a_function() {
+    check(
+        r#"
+let y = 1(2);
+      //^ error: expected a function, found `i32`
+"#,
+    );
+}
+
+#[test]
+fn a_type_alias_that_refers_to_itself() {
+    check(
+        r#"
+type A = A;
+   //^ error: type alias `A` refers to itself
+"#,
+    );
+}
+
+#[test]
+fn break_outside_a_loop() {
+    check(
+        r#"
+fn f() { break; }
+       //^^^^^ error: there is no loop or label to break out of
+"#,
+    );
+}
+
+#[test]
+fn indexing_without_a_prelude() {
+    check(
+        r#"
+fn f(xs: [i32]) -> i32 = xs[0];
+                       //^^^^^ error: this needs the class `Index`, but there's no prelude that defines it
+"#,
+    );
+}
+
+#[test]
+fn an_ambiguous_instance() {
+    check(
+        r#"
+class C[T] { fn c() -> T; }
+impl C[i32] { fn c() = 1; }
+impl C[Bool] { fn c() = True; }
+fn f() { c(); }
+       //^ error: cannot tell which instance of `C[a]` to use; add a type annotation
+"#,
+    );
+}
+
+#[test]
+fn mismatches_point_at_the_type_of_a_constant() {
+    check(
+        r#"
+const X: i32 = True;
+             //^^^^ error: expected `i32`, found `Bool`
+       //^^^ label: expected because of the type of the constant
+"#,
+    );
+}
+
+#[test]
+fn mismatches_point_at_the_parameter_of_a_named_function() {
+    check(
+        r#"
+fn f(x: i32) = x;
+      //^^^ label: expected because of this parameter of `f`
+f(True);
+//^^^^ error: expected `i32`, found `Bool`
+"#,
+    );
+}
+
+#[test]
+fn missing_items_of_each_kind_are_listed_together() {
+    check(
+        r#"
+class C[T] { fn a(x: T); fn b(x: T); const k: T; const j: T; type U; type V; }
+impl C[i32] { }
+   //^^^^^^ error: missing methods `a`, `b`, constants `k`, `j` and types `U`, `V` of class `C`
+"#,
+    );
+}
+
+#[test]
+fn missing_instances_point_at_the_bound_of_a_function() {
+    check(
+        r#"
+class C[T] { fn a(x: T); }
+fn g[T](x: T) where C[T] = ();
+                  //^^^^ label: needed by this bound of `g`
+let y = g(1);
+      //^ error: there is no instance `C[i32]`
+"#,
+    );
+}
