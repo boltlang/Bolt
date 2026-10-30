@@ -102,7 +102,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `block_frees` | `Regions.lean` | a block whose region the heap typing didn't mention before can freeze its region when it ends, without a copy: its value has the type with the region `imm`, or `mut` if the region holds `mut` objects, and what comes after it, typed before it, is well-typed. What's from before can't hold the region's objects, so the regions page's `leak` is rejected |
 | `block_never_changes` | `Regions.lean` | after the block, the objects of a region that became `imm` never change |
 | `AtMost.free`, `AtMost.region_free` | `Regions.lean` | freeing a region, giving it a mutability everywhere, keeps "at most"; and what a region holds is `imm` all the way down once the region is freed to `imm` |
-| `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v`; what the checker did before #256, asking that each argument is at most the struct's mutability, is neither enough nor needed |
+| `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v` |
 
 The key lemma for generic functions, and for #243, is `HasType.inst` in
 `Lemmas.lean`: a body typed under its assumptions, with its parameters

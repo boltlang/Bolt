@@ -18,13 +18,6 @@ the struct's own mutability" splits into. For `VecIter` that's `'v ⊑ m`
 and `T ⊑ 'v`. It's what Rust does for `T: 'a`, which it infers from a
 struct's fields. The checker does the same (`struct_atoms_of` in
 `holds.rs`), where a value is made and wherever it splits a struct type.
-
-Before #256, it asked something else (`ArgsHold` here): that each type
-argument, and each mutability argument, is at most the struct's
-mutability. That's neither enough nor needed, as the examples at the end
-show: it rejects an `imm Handler[mut [i32]]` whose `T` is only the
-parameter of a closure, and accepts `mut VecIter[mut [i32], imm]`, whose
-`data` would be an `imm` array of `mut` arrays.
 -/
 
 namespace BoltMut
@@ -51,12 +44,6 @@ def ty (d : StructDecl) (τs : List Ty) (vs : List Mu) (m : Mu) : Ty :=
 /-- What the fields imply of the arguments: the atoms of "the fields are at
 most the struct's own mutability". -/
 def implied (d : StructDecl) : List Atom := split d.own d.fields
-
-/-- What the checker asked of the arguments before #256: each type argument
-and each mutability argument is at most `m`. The examples below show why
-it was replaced by `implied`. -/
-def ArgsHold (Δ : Assume) (τs : List Ty) (vs : List Mu) (m : Mu) : Prop :=
-  (∀ τ ∈ τs, AtMost Δ m τ) ∧ (∀ v ∈ vs, Le Δ v m)
 
 end StructDecl
 
@@ -107,11 +94,8 @@ def vecIter : StructDecl := { types := 1, muts := 1, fields := .prod (.cell (.pa
 
 example : vecIter.implied = [.le (.param 0) (.param 1), .tparam 0 (.param 0)] := rfl
 
-/-- `mut VecIter[mut [i32], imm]` met what the checker asked before #256... -/
-example : StructDecl.ArgsHold .none [.cell .mutable .int] [.immutable] .mutable :=
-  ⟨by simp [AtMost]; exact .refl _, by simp; exact .bot _⟩
-
-/-- ...but has no values: its `data` would be an `imm` array of `mut` ones. -/
+/-- `mut VecIter[mut [i32], imm]` has no values: its `data` would be an `imm`
+array of `mut` ones. -/
 example : ¬ AtMost .none .mutable (vecIter.ty [.cell .mutable .int] [.immutable] .mutable) := by
   rw [vecIter.atMost_ty_iff .none _ rfl]
   intro ⟨_, h⟩
@@ -125,7 +109,7 @@ def handler : StructDecl := { types := 1, muts := 0, fields := .fn (.param 0) (.
 
 example : handler.implied = [.le (.param 0) (.param 0)] := rfl
 
-/-- An `imm Handler[mut [i32]]` is fine... -/
+/-- An `imm Handler[mut [i32]]` is fine. -/
 example : AtMost .none .mutable (handler.ty [.cell .mutable .int] [] .immutable) := by
   rw [handler.atMost_ty_iff .none _ rfl]
   refine ⟨.top _, ?_⟩
@@ -133,13 +117,6 @@ example : AtMost .none .mutable (handler.ty [.cell .mutable .int] [] .immutable)
   simp [handler, StructDecl.implied, StructDecl.own, split] at ha
   subst ha
   exact .refl _
-
-/-- ...but the checker rejected it before #256, since `mut [i32]` isn't at
-most `imm`. -/
-example : ¬ StructDecl.ArgsHold .none [.cell .mutable .int] [] .immutable := by
-  intro ⟨h, _⟩
-  have h₁ : Le .none .mutable .immutable := by simpa [AtMost] using h (.cell .mutable .int) (by simp)
-  exact nomatch Le.none_immutable h₁
 
 /-- `struct Tag[T] { id: i32 }` holds no `T` at all. -/
 def tag : StructDecl := { types := 1, muts := 0, fields := .int }
@@ -149,10 +126,5 @@ example : tag.implied = [] := rfl
 example : AtMost .none .mutable (tag.ty [.cell .mutable .int] [] .immutable) := by
   rw [tag.atMost_ty_iff .none _ rfl]
   exact ⟨.top _, by simp [StructDecl.implied, tag, split]⟩
-
-example : ¬ StructDecl.ArgsHold .none [.cell .mutable .int] [] .immutable := by
-  intro ⟨h, _⟩
-  have h₁ : Le .none .mutable .immutable := by simpa [AtMost] using h (.cell .mutable .int) (by simp)
-  exact nomatch Le.none_immutable h₁
 
 end BoltMut
