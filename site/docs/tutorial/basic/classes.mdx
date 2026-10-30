@@ -365,6 +365,42 @@ A function that indexes or loops over something whose type it doesn't know
 works for any type with the impls: `fn first(c) = c[0];` has the type
 `forall a. Index[a] => fn(a) -> a.Item`, and takes arrays and `Vec`s alike.
 
+## Classes of operators
+
+The prelude also has a class for each operator, like Rust's `std::ops`:
+
+| Operator | Class | Method |
+|---|---|---|
+| `a + b`, `a - b`, `a * b`, `a / b`, `a % b` | `Add`, `Sub`, `Mul`, `Div`, `Rem` | `fn add(a: T, b: T) -> Output`, … |
+| `a & b`, `a \| b`, `a ^ b` | `BitAnd`, `BitOr`, `BitXor` | `fn bitand(a: T, b: T) -> Output`, … |
+| `a << n`, `a >> n` | `Shl`, `Shr` | `fn shl(a: T, n: u32) -> Output`, … |
+| `-a`, `!a` | `Neg`, `Not` | `fn neg(a: T) -> Output`, `fn not(a: T) -> Output` |
+
+Each has an associated type `Output`, the type of the result, which is `T`
+unless an impl says otherwise, and each operator is defined as a function
+of its method, like `fn a + b = add(a, b);`. A generic function asks for
+the operator it needs, and works for any type with an impl:
+
+```bolt
+fn twice[T: Add](x: T) -> T.Output = add(x, x);
+
+struct Money { cents: i32 }
+
+impl Add[Money] {
+  type Output = Money;
+  fn add(a, b) = Money { cents: a.cents + b.cents };
+}
+
+twice(Money { cents: 150 }).cents;
+```
+
+```text
+300
+```
+
+The operators on numbers, `Bool` and `String` are built in, so the classes
+have no impls for them.
+
 ## Classes of type constructors
 
 A class can also be for *type constructors* like `Option` or `List`: types
