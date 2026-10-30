@@ -303,10 +303,13 @@ writes one that rule 2 found.
   be frozen when it ends, without a copy, and never changes after
   (`block_frees`, `block_never_changes`), with rules 1, 3, 4 and 5 and the
   restriction on generic functions above. A block there is any part of the
-  program whose region is new, and it's always freed to `imm`; blocks in
-  the language, and regions freed to a caller's mutability as rule 6 says,
-  are [#288](https://github.com/boltlang/Bolt/issues/288). A closure whose
-  type mentions a freed region can't be called there.
+  program whose region is new. For rule 6, a function's body is a block:
+  a caller that wants a changeable mutability gives it to the body, and
+  nothing is freed, while one that wants `imm` runs the body in a fresh
+  region, frozen when it ends (`call_frees`). So freeing is always to
+  `imm`. Freeing as a step of the program, with a fresh region for each
+  call, is [#288](https://github.com/boltlang/Bolt/issues/288). A closure
+  whose type mentions a freed region can't be called there.
 
 ## Open questions
 
