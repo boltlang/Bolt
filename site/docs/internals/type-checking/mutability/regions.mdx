@@ -312,8 +312,10 @@ writes one that rule 2 found.
   one freeze, and `freeze_in_place_of_typing` that rules 2, 3 and 5, and
   the restriction on generic functions above, make it so. Only objects of
   the region are copied, since a copy of a `mut` object would be noticed.
-  Leaving out every freeze of a program, not one, is the rest of #292, and
-  [uniqueness](./uniqueness.mdx) needs the same.
+  `program_blocks_freeze_in_place` leaves out every freeze of a program
+  written with blocks: nothing from before a block mentions its region, so
+  what's beside a block when it ends is older than the region and can't
+  reach it.
 
 ## Open questions
 

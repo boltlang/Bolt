@@ -807,19 +807,20 @@ theorem steps_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ (h₁.map Expr.erase) h₂ →
       Rel ρ e₁.erase e₂ →
-      (∀ σ' h e, Steps fns h₁ e₁ h e → HeapOk fns σ' h → HasType fns σ' .none false Ctx.empty e t → e.Sep σ') →
-      HeapClosed h₁ → e₁.Closed → h₂.length = h₁.length →
+      (∀ σ' h e, Steps fns h₁ e₁ h e → HeapOk fns σ' h → HasType fns σ' .none false Ctx.empty e t → AllocOk σ' →
+        e.Sep σ') →
+      HeapClosed h₁ → e₁.Closed → h₂.length = h₁.length → AllocOk σ →
       ∃ (M' : Nat → Prop) (ρ' : Nat → Nat → Prop) (h₂' : Heap) (e₂' : Expr),
         Steps (fns.map Fn.erase) h₂ e₂ h₂' e₂' ∧ Corr M' ρ' (h₁'.map Expr.erase) h₂' ∧ Rel ρ' e₁'.erase e₂' := by
   induction hs with
   | refl =>
-    intro σ t M ρ h₂ e₂ _ _ _ hc hr _ _ _ _
+    intro σ t M ρ h₂ e₂ _ _ _ hc hr _ _ _ _ _
     exact ⟨M, ρ, h₂, e₂, .refl, hc, hr⟩
   | @step h₀ _ _ _ _ _ s _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hsep hcl hcl' hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr hsep hcl hcl' hlen ha
     obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr', hl'⟩ :=
-      step_elide hf s hh ht hM hc hr (hsep σ _ _ .refl hh ht) (K := fun _ => False) (fun _ h => h.elim) hlen
-    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht hcl'
+      step_elide hf s hh ht hM hc hr (hsep σ _ _ .refl hh ht ha) (K := fun _ => False) (fun _ h => h.elim) hlen
+    obtain ⟨σ', hx, hh', ht', hal⟩ := preservation_alloc hf s hh ht hcl'
     obtain ⟨hcl₁, hcl₁'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hcl hcl'
     -- What isn't `imm` after the step wasn't before, or is new.
     have hM' : ∀ a m t', σ'[a]? = some (m, t') → m ≠ .immutable → M a ∨ h₀.length ≤ a := by
@@ -831,7 +832,8 @@ theorem steps_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
         exact .inl (hM a m t' (hp.trans ha) hm)
       · exact .inr (by omega)
     obtain ⟨M'', ρ'', h₂'', e₂'', ss, hc'', hr''⟩ :=
-      ih hh' ht' hM' hc' hr' (fun σ'' h e hs' hh'' ht'' => hsep σ'' h e (.step s hs') hh'' ht'') hcl₁ hcl₁' hl'
+      ih hh' ht' hM' hc' hr' (fun σ'' h e hs' hh'' ht'' ha'' => hsep σ'' h e (.step s hs') hh'' ht'' ha'') hcl₁ hcl₁'
+        hl' (hal ha)
     exact ⟨M'', ρ'', h₂'', e₂'', .step s₂ ss, hc'', hr''⟩
 
 /-- **Every freeze can be in place.** The program, with its freezes erased
@@ -842,7 +844,9 @@ that whenever the program reaches a freeze, what's around it can't reach
 the region's objects (`Expr.Sep`). -/
 theorem freezes_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h₁ : Heap}
     {e e₁ : Expr} {T : Ty} (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e T)
-    (hsep : ∀ σ' h' e', Steps fns h e h' e' → HeapOk fns σ' h' → HasType fns σ' .none false Ctx.empty e' T → e'.Sep σ')
+    (ha : AllocOk σ)
+    (hsep : ∀ σ' h' e', Steps fns h e h' e' → HeapOk fns σ' h' → HasType fns σ' .none false Ctx.empty e' T →
+      AllocOk σ' → e'.Sep σ')
     (hcl : HeapClosed h) (hec : e.Closed)
     (hs : Steps fns h e h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
@@ -871,7 +875,7 @@ theorem freezes_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
   have hr : Rel ρ e.erase e.erase :=
     Rel.refl fun l hl => ⟨rfl, by rw [hh.1]; exact ht.hasLoc_lt ((Expr.hasLoc_erase e l).mp hl)⟩
   obtain ⟨_, ρ', h₂, e₂, ss, _, hr'⟩ :=
-    steps_elide hf hs hh ht (fun a m t' h hm => ⟨m, t', h, hm⟩) hc hr hsep hcl hec (by simp)
+    steps_elide hf hs hh ht (fun a m t' h hm => ⟨m, t', h, hm⟩) hc hr hsep hcl hec (by simp) ha
   refine ⟨ρ', h₂, e₂, ss, hr', fun n hn => ?_⟩
   subst hn
   exact hr'.int_eq

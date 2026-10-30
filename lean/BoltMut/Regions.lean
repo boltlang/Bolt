@@ -146,6 +146,17 @@ example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
   .freeze (t := .cell (.region 0) .int) (.letE (.newR .int trivial (by simp)) (.letE (.setR (.var rfl) .int) (.var rfl)))
     ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩ (by simp) (by intro r h; simp [Ty.mentions, Mu.mentions] at h; subst h; simp)
 
+/-- The same block as written: `block` names its region `1` inside, and
+makes one when it starts, from an empty heap. -/
+example : HasType [] [] .none false Ctx.empty
+    (.block false 0 (.cell (.region 1) .int)
+      (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.var 0))))
+    (.cell .immutable .int) :=
+  .block (Γb := Ctx.empty) (fun _ _ h => h) (fun _ _ h => nomatch h) (fun _ h => by simp [Expr.HasLoc] at h)
+    (.letE (.newR .int trivial (by simp)) (.letE (.setR (.var rfl) .int) (.var rfl)))
+    ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
+    (by intro r h; simp [Ty.mentions, Mu.mentions] at h; subst h; simp)
+
 /-- A closure can't be copied, so a freeze can't make a function type that
 mentions the region `imm`: here one that takes the region's arrays, which
 could change the copy if it were given it. -/
