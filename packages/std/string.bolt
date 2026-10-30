@@ -5,6 +5,9 @@ import "./vec" (Vec, last, push, extend);
 import "./ops" (Eq, Lt, Gt, LtE, GtE, eq);
 import "./semigroup" (Semigroup);
 
+/// A single Unicode code point.
+pub type Char = u32;
+
 /// The bytes of `ch` in UTF-8: one for ASCII, and up to four for others.
 pub fn to_utf8(ch: Char) -> mut Vec[u8] {
   let c = ch as u32;
