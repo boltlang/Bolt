@@ -32,7 +32,7 @@ impl<'db> InferenceContext<'_, 'db> {
                 }
             }
             Pat::Lit { literal, .. } => {
-                let ty = self.literal_ty(literal);
+                let ty = self.literal_ty(ExprOrPat::Pat(pat), literal);
                 self.solver.equal(expected, &ty, self.pat_origin(pat));
             }
             Pat::Path(path) => {

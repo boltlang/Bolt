@@ -113,6 +113,23 @@ and `Point { x: 0, y: 0 }` alone is `imm Point`. A function that takes
 `Point` takes both, and can't change them. What an `imm` struct holds
 can't be changed either: its fields are `imm` too.
 
+A struct whose values never change, like the prelude's `String`, can be
+declared `imm struct`. Then it's always `imm`, so its type has no
+mutability at all: `String` means the same wherever it's written, and
+`mut String` is an error.
+
+```bolt
+imm struct Name(String);
+
+fn greet(n: Name) -> String = "hello, " <> n.0;
+
+greet(Name("Bolt"));
+```
+
+```text
+"hello, Bolt"
+```
+
 Structs are shared like arrays: `let q = p` makes another name for the
 same struct, and a function that takes `mut Point` can change the one it's
 given:

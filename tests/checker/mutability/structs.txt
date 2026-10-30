@@ -769,3 +769,32 @@ struct Box[T] { item: T }
 fn keep[T](x: T) -> mut Box[T] = mut Box { item: x };
 --------------------------------------------------------------------------------
 keep: forall T. fn(T) -> mut Box[T]
+
+================================================================================
+An imm struct is always imm, so its type has no mutability
+:test-prelude
+================================================================================
+imm struct Name(i32);
+fn id(n: Name) -> Name = n;
+fn first(xs: [Name]) -> Name = xs[0];
+let a = Name(1);
+let b: Name = id(a);
+--------------------------------------------------------------------------------
+id: fn(Name) -> Name
+first: fn([Name]) -> Name
+let a: Name
+let b: Name
+
+================================================================================
+An imm struct can't be mut
+:error
+================================================================================
+imm struct Name(i32);
+let a = mut Name(1);
+fn f(n: mut Name) = ();
+--------------------------------------------------------------------------------
+f: fn(Name) -> ()
+let a: Name
+--------------------------------------------------------------------------------
+error at `mut Name`: can't be mut or imm
+error at `Name`: can't be mut

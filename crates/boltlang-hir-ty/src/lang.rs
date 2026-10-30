@@ -8,12 +8,33 @@
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     Name,
-    ids::{ClassId, FunctionId, ItemContainerId, ModuleDefId, TypeAliasId},
+    hir::Mutability,
+    ids::{ClassId, FunctionId, ItemContainerId, ModuleDefId, StructId, TypeAliasId},
     item_tree::AssocItem,
     nameres::{Namespace, file_scope, prelude_lib},
 };
 
-use crate::lower::assoc_type;
+use crate::{
+    AdtId, Ty,
+    lower::assoc_type,
+};
+
+/// The type of strings: the struct `String` of the prelude, as `file` sees
+/// it, like `"hi"` has. Files of the prelude's own package find it too.
+pub fn string_struct<'db>(db: &'db dyn Db, file: File) -> Option<StructId<'db>> {
+    let lib = prelude_lib(db, file)?;
+    match file_scope(db, lib).scope.get(Namespace::Types, &Name::new("String"))?.def {
+        ModuleDefId::Struct(id) => Some(id),
+        _ => None,
+    }
+}
+
+/// [`string_struct`] as a type: an `imm String`.
+pub fn string_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
+    let id = string_struct(db, file)?;
+    Some(Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm)))
+}
+
 
 /// A class of the prelude that syntax uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

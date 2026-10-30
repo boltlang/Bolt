@@ -2,6 +2,8 @@
 import "./mutability" (to_mut, to_imm);
 import "./option" (unwrap);
 import "./vec" (Vec, last, push, extend);
+import "./ops" (Eq, Lt, Gt, LtE, GtE, eq);
+import "./semigroup" (Semigroup);
 
 /// The bytes of `ch` in UTF-8: one for ASCII, and up to four for others.
 pub fn to_utf8(ch: Char) -> mut Vec[u8] {
@@ -25,11 +27,47 @@ pub fn to_utf8(ch: Char) -> mut Vec[u8] {
   bytes
 }
 
-/// Text, as its bytes in UTF-8.
-pub struct String(Vec[u8]);
+/// Text, as its bytes in UTF-8. It's never changed in place, so it's an
+/// `imm struct`: a `String` is always `imm`.
+pub imm struct String(Vec[u8]);
 
 pub fn String.from_bytes(bytes: imm Vec[u8]) -> String {
   String(bytes)
+}
+
+/// Strings are equal when their bytes are.
+impl Eq[String] {
+  fn eq(a, b) = eq(a.0, b.0);
+}
+
+/// -1, 0 or 1 as `a` comes before `b`, is equal to it or comes after it,
+/// byte by byte: for UTF-8, that's the order of the characters.
+fn compare(a: String, b: String) -> i32 {
+  let x = a.0;
+  let y = b.0;
+  let mut i = 0;
+  while i < x.len && i < y.len {
+    if x[i] != y[i] {
+      return if x[i] < y[i] { -1 } else { 1 };
+    }
+    i += 1;
+  }
+  if x.len < y.len { -1 } else if x.len > y.len { 1 } else { 0 }
+}
+
+impl Lt[String] { fn lt(a, b) = compare(a, b) < 0; }
+impl Gt[String] { fn gt(a, b) = compare(a, b) > 0; }
+impl LtE[String] { fn lte(a, b) = compare(a, b) <= 0; }
+impl GtE[String] { fn gte(a, b) = compare(a, b) >= 0; }
+
+/// Joining strings, with `a <> b`.
+impl Semigroup[String] {
+  fn concat(a, b) {
+    let joined = StringBuilder.new();
+    joined.push_str(a);
+    joined.push_str(b);
+    joined.build()
+  }
 }
 
 /// Builds a `String` a piece at a time, without copying what it has so far

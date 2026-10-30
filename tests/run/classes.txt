@@ -15,6 +15,7 @@ twice(21);
 ================================================================================
 The impl is chosen by the type of the argument
 :todo wasm
+:test-prelude
 ================================================================================
 class Describe[T] { fn describe(x: T) -> String; }
 impl Describe[i32] { fn describe(x) = "a number"; }
@@ -26,6 +27,7 @@ impl Describe[Bool] { fn describe(x) = "a boolean"; }
 ================================================================================
 A generic function chooses the impl when it runs
 :todo wasm
+:test-prelude
 ================================================================================
 class Describe[T] { fn describe(x: T) -> String; }
 impl Describe[i32] { fn describe(x) = "a number"; }
@@ -39,6 +41,7 @@ fn twice[T](x: T) -> (String, String) where Describe[T] = (describe(x), describe
 ================================================================================
 A generic impl calls the impl of its parameter
 :todo wasm
+:test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
 import Option.*;
@@ -55,6 +58,7 @@ let nothing: Option[i32] = None;
 ================================================================================
 A class method with a default
 :todo wasm
+:test-prelude
 ================================================================================
 class Describe[T] {
   fn describe(x: T) -> String;
@@ -82,6 +86,7 @@ impl Twice[i32] { fn twice(x) = x * 2; }
 ================================================================================
 Class constants
 :todo wasm
+:test-prelude
 ================================================================================
 class Zero[T] { const ZERO: T; }
 impl Zero[i32] { const ZERO: i32 = 0; }

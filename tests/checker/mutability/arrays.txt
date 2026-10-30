@@ -690,6 +690,7 @@ error at `size`: no instance Size[imm [Bool]]
 
 ================================================================================
 Impls for both mutabilities
+:test-prelude
 ================================================================================
 class Name[T] { fn name(x: T) -> String; }
 impl Name[mut [i32]] { fn name(x) = "mut"; }
@@ -704,6 +705,7 @@ name([1]): String
 
 ================================================================================
 A class constraint on an array
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "i32"; }

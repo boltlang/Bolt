@@ -84,8 +84,8 @@ s;
 
 ================================================================================
 Returning without a value
+:test-prelude
 ================================================================================
-extern "bolt" { fn print(text: String); }
 fn greet(quiet: Bool) {
   if quiet { return; }
   print("hello");

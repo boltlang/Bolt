@@ -393,11 +393,12 @@ impl<'db> Evaluator<'db> {
             (Builtin::Prim(op, _), [lhs, rhs]) if op.cmp().is_some() => compare(op.cmp().unwrap(), lhs, rhs),
             (Builtin::Prim(PrimOp::Neg, _), [value]) => prefix(PrefixOp::Neg, value.clone()),
             (Builtin::Prim(PrimOp::Not, _), [value]) => prefix(PrefixOp::Not, value.clone()),
-            (Builtin::Print, [Value::Str(text)]) => {
-                self.host.print(text)?;
+            (Builtin::Print, [text]) if text.text().is_some() => {
+                let text = text.text().unwrap();
+                self.host.print(&text)?;
                 Ok(Value::unit())
             }
-            (Builtin::Panic, [Value::Str(text)]) => fail(ErrorKind::Panic(text.to_string())),
+            (Builtin::Panic, [text]) if text.text().is_some() => fail(ErrorKind::Panic(text.text().unwrap())),
             (Builtin::ArrayLen, [Value::Array(items)]) => Ok(Value::Int(items.borrow().len() as i128)),
             (Builtin::ArrayAlloc, [Value::Int(len)]) => {
                 let len = usize::try_from(*len).map_err(|_| ErrorKind::Overflow)?;
@@ -500,7 +501,7 @@ impl<'db> Evaluator<'db> {
         match &body[expr] {
             Expr::Missing => fail(ErrorKind::Missing),
             Expr::Path(path) => self.eval_path(f, expr, path),
-            Expr::Literal(literal) => literal_value(literal),
+            Expr::Literal(literal) => literal_value(self.db, f.def.def(self.db).file(self.db), literal),
             Expr::Block { statements, tail, label, kind } => {
                 if *kind == BlockKind::Async {
                     return fail(ErrorKind::Unsupported("`async`"));
@@ -658,9 +659,8 @@ impl<'db> Evaluator<'db> {
             Expr::For { pat, iterable: iterable_expr, body: loop_body, label } => {
                 let iterable = self.eval(f, *iterable_expr)?;
                 let mut items = match iterable {
-                    // Ranges and strings aren't type-checked yet, and have no
-                    // impls.
-                    Value::Str(_) | Value::Range { .. } => Items::Builtin(iterate(iterable)?),
+                    // Ranges aren't type-checked yet, and have no impls.
+                    Value::Range { .. } => Items::Builtin(iterate(iterable)?),
                     // Through the impl of `Iterable` for the type, arrays too,
                     // whose iterator gives the items.
                     _ => Items::Class(self.call_lang(f, *iterable_expr, LangClass::Iterable, vec![iterable])?),
@@ -795,6 +795,17 @@ impl<'db> Evaluator<'db> {
             BinaryOp::Cmp(op) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
+                // Structs and enums are compared by the function with the
+                // operator's name, like the prelude's `fn a < b`, as the type
+                // checker has it.
+                if let Value::Adt { .. } = &lhs {
+                    let path = Path::from_name(Name::new(op.as_str()));
+                    let callee = match self.resolve_value(f.def, expr, &path) {
+                        Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
+                        _ => return fail(ErrorKind::UnresolvedName(op.as_str().to_string())),
+                    };
+                    return self.apply(callee, vec![lhs, rhs]);
+                }
                 compare(*op, &lhs, &rhs)
             }
             BinaryOp::Assign(op) => {
@@ -1197,7 +1208,7 @@ impl<'db> Evaluator<'db> {
     fn pat_value(&mut self, f: &mut Frame<'db>, pat: PatId) -> Res<'db, Value<'db>> {
         match &f.body[pat] {
             Pat::Lit { literal, negative } => {
-                let value = literal_value(literal)?;
+                let value = literal_value(self.db, f.def.def(self.db).file(self.db), literal)?;
                 if !negative {
                     return Ok(value);
                 }
@@ -1285,7 +1296,7 @@ fn pat_bindings(body: &Body, pat: PatId, out: &mut Vec<BindingId>) {
     }
 }
 
-fn literal_value<'db>(literal: &Literal) -> Res<'db, Value<'db>> {
+fn literal_value<'db>(db: &'db dyn Db, file: File, literal: &Literal) -> Res<'db, Value<'db>> {
     Ok(match literal {
         Literal::Int(n, _) => Value::Int(i128::try_from(*n).map_err(|_| ErrorKind::Overflow)?),
         Literal::Float(text, _) => match text.parse() {
@@ -1294,7 +1305,9 @@ fn literal_value<'db>(literal: &Literal) -> Res<'db, Value<'db>> {
         },
         Literal::Char(c) => Value::Char(*c),
         Literal::Byte(b) => Value::Int(*b as i128),
-        Literal::String(s) | Literal::CString(s) => Value::str(s),
+        Literal::String(s) | Literal::CString(s) => {
+            Value::string(db, file, s).ok_or(ErrorKind::NoLangClass("String"))?
+        }
         Literal::ByteString(bytes) => {
             Value::array(Mutability::Imm, bytes.iter().map(|b| Value::Int(*b as i128)).collect())
         }
@@ -1368,7 +1381,6 @@ fn arith<'db>(op: ArithOp, lhs: Value<'db>, rhs: Value<'db>) -> Res<'db, Value<'
             ArithOp::BitXor => a ^ b,
             _ => return mismatch("arithmetic needs numbers"),
         })),
-        (Value::Str(a), Value::Str(b)) if op == ArithOp::Add => Ok(Value::Str(format!("{a}{b}").into())),
         _ => mismatch("bad operands of an arithmetic operator"),
     }
 }
@@ -1432,10 +1444,9 @@ fn option_value<'db>(db: &'db dyn Db, value: Value<'db>) -> Res<'db, Option<Valu
     }
 }
 
-/// The items of a string or range that a `for` loop goes over.
+/// The items of a range that a `for` loop goes over.
 fn iterate<'db>(value: Value<'db>) -> Res<'db, Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>> {
     match value {
-        Value::Str(s) => Ok(Box::new(s.chars().collect::<Vec<_>>().into_iter().map(|c| Ok(Value::Char(c))))),
         Value::Range { start: Some(start), end, inclusive } => {
             let Value::Int(start) = *start else { return mismatch("only ranges of integers can be iterated") };
             let end = match end.map(|e| *e) {

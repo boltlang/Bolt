@@ -183,6 +183,9 @@ pub enum DiagnosticKind<'db> {
     /// Syntax that needs a class of the prelude, like `xs[i]` needs
     /// `Index`, without a prelude that defines it.
     NoLangClass { class: &'static str },
+    /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
+    /// without a prelude that defines it.
+    NoLangType { ty: &'static str },
     /// The type an impl gives an associated type doesn't meet a bound the
     /// class puts on it, like `type Iter: Iterator;`.
     UnmetAssocBound { name: Name, class: ClassId<'db>, constraint: ClassConstraint<'db> },
@@ -740,8 +743,9 @@ impl<'db> Collector<'db> {
                 sig.params.iter().map(|t| t.clone().unwrap_or(Ty::Error)).collect::<Box<[_]>>(),
                 sig.ret.clone().unwrap_or(Ty::Error),
             );
-            if !builtin.has_signature(&declared) && !has_error(&declared) {
-                self.push(range, DiagnosticKind::BuiltinSignature { name, expected: builtin.signature() });
+            let file = block.file(db);
+            if !builtin.has_signature(db, file, &declared) && !has_error(&declared) {
+                self.push(range, DiagnosticKind::BuiltinSignature { name, expected: builtin.signature(db, file) });
             }
         }
     }
@@ -973,6 +977,7 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::NoLangClass { expr, class } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoLangClass { class })
                 }
+                InferenceDiagnostic::NoLangType { at: node, ty } => (at(node), DiagnosticKind::NoLangType { ty }),
                 // Reported at the function, which is the fallback.
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),
             };

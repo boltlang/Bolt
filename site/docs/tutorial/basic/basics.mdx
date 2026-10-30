@@ -130,20 +130,20 @@ numbers for you. Use `as` to convert explicitly:
 ## Characters and strings
 
 A character is written between single quotes and has type `Char`. A string
-is written between double quotes and has type `String`. Both understand escapes
-like `\n` and `\t`:
+is written between double quotes and has type `String`, which the prelude
+defines. Both understand escapes like `\n` and `\t`:
 
 ```bolt
 let c = 'B';
 let s = "Bolt\tlang";
-(c, s, "con" + "cat");
+(c, s, "con" <> "cat");
 ```
 
 ```text
 ('B', "Bolt\tlang", "concat")
 ```
 
-`+` joins two strings.
+`<>` joins two strings.
 
 ## Tuples
 

@@ -1,5 +1,5 @@
-//! `bolt test`, run on files in a temporary directory, without a prelude,
-//! so that it doesn't depend on `std`.
+//! `bolt test`, run on files in a temporary directory, with the prelude of
+//! the repository's `std`, which has `panic` and the `String` it takes.
 
 use std::{fs, path::PathBuf, process::Command};
 
@@ -15,12 +15,11 @@ fn dir_with(name: &str, files: &[(&str, &str)]) -> PathBuf {
     dir
 }
 
-/// Run `bolt test --no-prelude` with `args` in `dir`: whether it succeeded,
-/// and what it printed to stdout.
+/// Run `bolt test` with `args` in `dir`: whether it succeeded, and what it
+/// printed to stdout.
 fn bolt_test(dir: &PathBuf, args: &[&str]) -> (bool, String) {
     let output = Command::new(env!("CARGO_BIN_EXE_bolt"))
         .arg("test")
-        .arg("--no-prelude")
         .args(args)
         .current_dir(dir)
         .output()
@@ -28,16 +27,15 @@ fn bolt_test(dir: &PathBuf, args: &[&str]) -> (bool, String) {
     (output.status.success(), String::from_utf8(output.stdout).unwrap())
 }
 
-const PANIC: &str = "extern \"bolt\" { fn panic(message: String) -> !; }\n";
 
 #[test]
 fn runs_the_tests_of_a_directory() {
     let dir = dir_with(
         "runs",
         &[
-            ("a.bolt", &format!("{PANIC}#[test]\nfn passes() {{}}\n#[test]\nfn fails() {{ panic(\"no\"); }}\n")),
+            ("a.bolt", "#[test]\nfn passes() {}\n#[test]\nfn fails() { panic(\"no\"); }\n"),
             ("sub/b.bolt", "#[test]\nfn also_passes() { let x = 1; }\n"),
-            (".hidden/c.bolt", &format!("{PANIC}#[test]\nfn hidden() {{ panic(\"not run\"); }}\n")),
+            (".hidden/c.bolt", "#[test]\nfn hidden() { panic(\"not run\"); }\n"),
         ],
     );
     let (ok, out) = bolt_test(&dir, &[]);

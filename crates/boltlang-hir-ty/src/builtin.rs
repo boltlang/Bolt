@@ -19,7 +19,7 @@
 
 use std::sync::OnceLock;
 
-use boltlang_base_db::Db;
+use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::{ArithOp, CmpOp, Mutability},
@@ -27,7 +27,7 @@ use boltlang_hir_def::{
     item_tree::FunctionName,
 };
 
-use crate::ty::Ty;
+use crate::{AdtId, lang::string_struct, ty::Ty};
 
 /// The ABI of the `extern` blocks that declare builtins.
 pub const ABI: &str = "bolt";
@@ -150,7 +150,6 @@ impl PrimOp {
             BuiltinType::Float(_) => cmp || matches!(self, Add | Sub | Mul | Div | Rem | Neg),
             BuiltinType::Bool => cmp || matches!(self, BitAnd | BitOr | BitXor | Not),
             BuiltinType::Char => false,
-            BuiltinType::String => cmp || self == Add,
         }
     }
 
@@ -268,10 +267,18 @@ impl Builtin {
         }
     }
 
-    /// The type a declaration of it must have. Its type parameters, and
-    /// the mutabilities that can be either, are [`Ty::Bound`].
-    pub fn signature<'db>(self) -> Ty<'db> {
-        let str_ty = Ty::Builtin(BuiltinType::String);
+    /// The type a declaration of it in `file` must have. Its type
+    /// parameters, and the mutabilities that can be either, are
+    /// [`Ty::Bound`]. A string is the prelude's `String`, as `file` sees it
+    /// ([`string_struct`]): without one, `print` and `panic` can't be
+    /// declared. It's always `imm` when it's an `imm struct`, and can be of
+    /// either mutability otherwise.
+    pub fn signature<'db>(self, db: &'db dyn Db, file: File) -> Ty<'db> {
+        let str_ty = match string_struct(db, file) {
+            Some(id) if id.item(db).is_imm => Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm)),
+            Some(id) => Ty::adt(AdtId::Struct(id), [], [], Ty::Bound(0)),
+            None => Ty::Error,
+        };
         let i32_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I32));
         match self {
             Builtin::Print => Ty::func([str_ty], Ty::unit()),
@@ -309,10 +316,10 @@ impl Builtin {
         }
     }
 
-    /// Whether `declared`, the type of a declaration, is its signature,
-    /// with any names for the type parameters.
-    pub fn has_signature<'db>(self, declared: &Ty<'db>) -> bool {
-        canonical(declared) == canonical(&self.signature())
+    /// Whether `declared`, the type of a declaration in `file`, is its
+    /// signature, with any names for the type parameters.
+    pub fn has_signature<'db>(self, db: &'db dyn Db, file: File, declared: &Ty<'db>) -> bool {
+        canonical(declared) == canonical(&self.signature(db, file))
     }
 }
 
@@ -372,13 +379,15 @@ mod tests {
         let i32_ty = BuiltinType::Int(BuiltinInt::I32);
         assert_eq!(Builtin::by_name("i32_add"), Some(Builtin::Prim(PrimOp::Add, i32_ty)));
         assert_eq!(Builtin::by_name("bool_not"), Some(Builtin::Prim(PrimOp::Not, BuiltinType::Bool)));
-        assert_eq!(Builtin::by_name("string_add"), Some(Builtin::Prim(PrimOp::Add, BuiltinType::String)));
+        assert_eq!(Builtin::by_name("string_add"), None);
         // Only what the operators do: unsigned integers have no `-`, and
         // integers no `!`.
         assert_eq!(Builtin::by_name("u8_neg"), None);
         assert_eq!(Builtin::by_name("i32_not"), None);
         assert_eq!(Builtin::by_name("char_eq"), None);
-        let shl = Builtin::by_name("i64_shl").unwrap().signature();
+        let db = boltlang_base_db::TestDb::new();
+        let file = db.file("/main.bolt", "");
+        let shl = Builtin::by_name("i64_shl").unwrap().signature(&db, file);
         let i64_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I64));
         assert_eq!(shl, Ty::func([i64_ty.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], i64_ty));
     }

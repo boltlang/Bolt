@@ -111,9 +111,9 @@ fn type_mismatch() {
         r#"
 fn id(x) { return x }
   id(1) + 1;
-  id("foo") + 1;
-//^^^^^^^^^ label: this has type `String`
-            //^ error: expected `String`, found an integer
+  id(True) + 1;
+//^^^^^^^^ label: this has type `Bool`
+           //^ error: expected `Bool`, found an integer
 "#,
     );
 }
@@ -240,8 +240,8 @@ let p = Point { x: 1 };
 fn class_instances() {
     check(
         r#"
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
+class Show[T] { fn show(x: T) -> i32; }
+impl Show[i32] { fn show(x) = 1; }
   show(True);
 //^^^^ error: there is no instance `Show[Bool]`
 "#,
@@ -449,12 +449,12 @@ let p = Point { x: 1, y: 2 };
 fn branches_point_at_each_other() {
     check(
         r#"
-let a = if True { 1 } else { "no" };
+let a = if True { 1 } else { True };
               //^^^^^ label: this has type `i32`
-                           //^^^^ error: expected an integer, found `String`
-fn f(b) = match b { True => 1, False => "no" };
+                           //^^^^ error: expected an integer, found `Bool`
+fn f(b) = match b { True => 1, False => True };
                           //^ label: this has type `i32`
-                                      //^^^^ error: expected an integer, found `String`
+                                      //^^^^ error: expected an integer, found `Bool`
 "#,
     );
 }
@@ -508,9 +508,9 @@ let b: Bool = List.len(l);
 fn methods_must_be_declared_by_the_class() {
     check(
         r#"
-class Show[T] { fn show(x: T) -> String; }
+class Show[T] { fn show(x: T) -> i32; }
 impl Show[i32] {
-  fn show(x) = "int";
+  fn show(x) = 1;
   fn shwo(x) = x + 1;
    //^^^^ error: `shwo` is not a method of class `Show`
 }
@@ -585,7 +585,7 @@ let f = |x| x;
   f + 1;
 //^ label: this has type `fn(a) -> a`
     //^ error: expected `fn(a) -> a`, found an integer
-class Show[T] { fn show(x: T) -> String; }
+class Show[T] { fn show(x: T) -> i32; }
 let s = show([]);
       //^^^^ error: cannot tell which instance of `Show[imm [a]]` to use; add a type annotation
 "#,
@@ -742,8 +742,8 @@ fn size(y: i32) -> Bool = True;
  //^^^^ error: this `size`, of type `fn(i32) -> Bool`, overlaps the `size` of type `fn(i32) -> i32`: a call could fit both, so it couldn't choose one; give them different numbers or types of parameters
 fn f(it) = size(it);
          //^^^^ error: more than one function `size` fits this use: `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`; give the arguments types that leave one
-let v: i32 = size("no", 1);
-           //^^^^ error: no function `size` fits this use, of type `fn(String, i32) -> i32`; the functions called `size` are `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`
+let v: i32 = size(1.5, 1);
+           //^^^^ error: no function `size` fits this use, of type `fn(f64, i32) -> i32`; the functions called `size` are `fn(i32) -> i32`, `fn(Bool) -> i32` and `fn(i32) -> Bool`
 "#,
     );
 }
@@ -848,8 +848,8 @@ fn package_imports() {
         (
             "/toolchain/std/io.bolt",
             r#"
-pub fn print(s: String) -> () = ();
-              //^^^^^^ label: expected because of this parameter of `print`
+pub fn print(s: Bool) -> () = ();
+              //^^^^ label: expected because of this parameter of `print`
 "#,
         ),
         (
@@ -860,9 +860,9 @@ import "std" (x);
      //^^^^^ error: the package `std` has no file `lib.bolt`
 import "std/../secret" (y);
      //^^^^^^^^^^^^^^^ error: cannot import `std/../secret`: import a file with a path like `./file`, or a package with its name, like `std/io`
-print("hello");
+print(True);
 print(1);
-    //^ error: expected `String`, found an integer
+    //^ error: expected `Bool`, found an integer
 "#,
         ),
     ]);
@@ -939,11 +939,11 @@ let c = get_x(True);
 fn missing_instances_point_at_what_needs_them() {
     check(
         r#"
-class Show[T] { fn show(x: T) -> String; }
-impl Show[i32] { fn show(x) = "int"; }
+class Show[T] { fn show(x: T) -> i32; }
+impl Show[i32] { fn show(x) = 1; }
 fn shout(x) = show(x);
             //^^^^ label: needed by this use in `shout`
-fn loud[T: Show](x: T) -> String = show(x);
+fn loud[T: Show](x: T) -> i32 = show(x);
          //^^^^ label: needed by this bound of `loud`
 shout(1);
   shout(True);
@@ -960,7 +960,7 @@ shout(1);
 fn bounds_of_structs_and_enums_point_at_the_bound() {
     check(
         r#"
-class Show[T] { fn show(x: T) -> String; }
+class Show[T] { fn show(x: T) -> i32; }
 struct Labeled[A: Show] { value: A }
                 //^^^^ label: needed by this bound of `Labeled`
 enum Maybe[A] where Show[A] { Nothing, Has(A) }
@@ -1111,7 +1111,7 @@ fn what_needs_an_instance_can_be_in_another_file() {
         (
             "/lib.bolt",
             r#"
-pub class Show[T] { fn show(x: T) -> String; }
+pub class Show[T] { fn show(x: T) -> i32; }
 pub fn shout(x) = show(x);
                 //^^^^ label: needed by this use in `shout`
 "#,
@@ -1188,10 +1188,19 @@ pub struct B { a: A }
     ]);
 }
 
+/// A builtin's string is the prelude's `String`, so this has a prelude
+/// that has one.
 #[test]
 fn builtin_declarations() {
-    check(
-        r#"
+    let mut db = with_std_dir();
+    db.set_prelude(Some("std"), true);
+    check_db(
+        db,
+        &[
+            ("/toolchain/std/__prelude__.bolt", "pub imm struct String(i32);\n"),
+            (
+                "/main.bolt",
+                r#"
 extern "bolt" {
   fn print(text: String);
   fn prnt(text: String);
@@ -1200,6 +1209,8 @@ extern "bolt" {
    //^^^^^ error: the builtin `panic` must have the type `fn(String) -> !`
 }
 "#,
+            ),
+        ],
     );
 }
 

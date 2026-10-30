@@ -111,6 +111,7 @@ impl DiagnosticCode {
     pub const EQUALITY_NOT_ALLOWED: Self = Self("E0240");
     pub const UNMET_ASSOC_EQUALITY: Self = Self("E0241");
     pub const BAD_TEST: Self = Self("E0242");
+    pub const NO_LANG_TYPE: Self = Self("E0243");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -695,6 +696,10 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::NoLangClass { class } => (
             C::NO_LANG_CLASS,
             format!("this needs the class `{class}`, but there's no prelude that defines it"),
+        ),
+        K::NoLangType { ty } => (
+            C::NO_LANG_TYPE,
+            format!("this needs the type `{ty}`, but there's no prelude that defines it"),
         ),
         K::UnknownMutability => (
             C::UNKNOWN_MUTABILITY,

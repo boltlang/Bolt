@@ -1,5 +1,6 @@
 ================================================================================
 Annotations of lets
+:test-prelude
 ================================================================================
 let a: i32 = 1;
 let b: (Bool, String) = (True, "a");
@@ -70,6 +71,7 @@ error at `i32[Bool]`: expected 0 type arguments, found 1
 
 ================================================================================
 Things that aren't types
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 fn f() { let x: Show = 1; }
@@ -177,6 +179,7 @@ error at `Pair`: expected 1 type arguments, found 0
 
 ================================================================================
 A type alias with a parameter it doesn't use
+:test-prelude
 ================================================================================
 type Const[T] = i32;
 let a: Const[Bool] = 1;

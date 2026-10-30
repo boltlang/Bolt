@@ -128,7 +128,6 @@ fn fits<'db>(value: &Value<'db>, ty: &Ty<'db>) -> bool {
             (ty, value),
             (BuiltinType::Bool, Value::Bool(_))
                 | (BuiltinType::Char, Value::Char(_))
-                | (BuiltinType::String, Value::Str(_))
                 | (BuiltinType::Int(_) | BuiltinType::Uint(_), Value::Int(_))
                 | (BuiltinType::Float(_), Value::Float(_))
         ),

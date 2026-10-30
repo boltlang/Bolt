@@ -57,7 +57,6 @@ impl Scalar {
         Some(match ty {
             BuiltinType::Bool => Scalar::Bool,
             BuiltinType::Char => Scalar::Char,
-            BuiltinType::String => Scalar::Str,
             BuiltinType::Int(int) => match int {
                 BuiltinInt::I8 => Scalar::Int { bits: 8, signed: true },
                 BuiltinInt::I16 => Scalar::Int { bits: 16, signed: true },
@@ -554,7 +553,6 @@ impl<'db> Compiler<'db> {
             Value::Bool(b) => self.int_const(scalar, b as i128),
             Value::Char(c) => self.int_const(scalar, c as i128),
             Value::Float(x) => self.float_const(scalar, x),
-            Value::Str(s) => self.push(Inst::Str(s.as_ref().into())),
             Value::Adt { ctor: Ctor::Variant(v), .. } if scalar == Scalar::Enum => {
                 self.push(Inst::I32Const(v.index as i32))
             }
@@ -692,12 +690,20 @@ impl<'db> Compiler<'db> {
                 self.arith(expr, *op, scalar)
             }
             BinaryOp::Cmp(op) => {
+                // Structs, enums and type parameters are compared by the
+                // function with the operator's name, as the type checker
+                // has it, like `a <$> b`.
+                if matches!(self.ty(lhs), Ty::Adt(..) | Ty::Param(_)) {
+                    return match self.resolve(expr, &Path::from_name(Name::new(op.as_str()))) {
+                        Some(ValueResolution::Value(ValueNs::Function(f))) => {
+                            self.call_function(expr, f, None, &[lhs, rhs])
+                        }
+                        _ => Err(self.unsupported(expr, "this operator")),
+                    };
+                }
                 let scalar = self.scalar(lhs)?;
                 if scalar == Scalar::Str {
                     return Err(self.unsupported(expr, "comparing strings"));
-                }
-                if scalar == Scalar::Enum && !matches!(op, CmpOp::Eq | CmpOp::NotEq) {
-                    return Err(self.unsupported(expr, "ordering enums"));
                 }
                 self.expr(lhs)?;
                 self.expr(rhs)?;

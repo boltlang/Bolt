@@ -38,7 +38,7 @@ fn arithmetic() {
     assert_eq!(run("7 % 3 - -1"), "2");
     assert_eq!(run("1.5 * 2.0"), "3.0");
     assert_eq!(run("1 << 4 | 1"), "17");
-    assert_eq!(run("\"ab\" + \"cd\""), "\"abcd\"");
+    assert_eq!(run("\"ab\" <> \"cd\""), "\"abcd\"");
     assert_eq!(run("3 as f64"), "3.0");
 }
 

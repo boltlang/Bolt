@@ -70,6 +70,7 @@ area(2, 4): i32
 
 ================================================================================
 A function with the same name as a class method and other parameters
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "i32"; }
@@ -143,6 +144,7 @@ error at `size`: ambiguous, 2 overloads fit
 ================================================================================
 A call that no function fits is checked against the closest one
 :error
+:test-prelude
 ================================================================================
 fn clear(xs: mut [i32]) = ();
 fn clear(b: Bool, n: i32) = ();
@@ -163,6 +165,7 @@ error at `"no"`: expected mut [i32], found String
 ================================================================================
 Functions with the same name that a call could fit both overlap
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 fn show(x: Bool) -> String = "bool";
@@ -188,6 +191,7 @@ error at `id`: overlaps the id of type forall a. fn(a) -> a
 
 ================================================================================
 Functions with the same name in different files form one set
+:test-prelude
 ================================================================================
 //- /lib.bolt
 pub struct Point { x: i32, y: i32 }
@@ -207,6 +211,7 @@ size(3);
 ================================================================================
 A function that overlaps an imported one
 :error
+:test-prelude
 ================================================================================
 //- /lib.bolt
 pub fn size(x: i32) -> i32 = x;

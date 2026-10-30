@@ -57,6 +57,7 @@ error at `p.x`: type needed
 
 ================================================================================
 Generic structs
+:test-prelude
 ================================================================================
 struct Pair[A, B] { first: A, second: B }
 fn swap(p) = Pair { first: p.second, second: p.first };
@@ -73,6 +74,7 @@ error at `Pair { first: 1, second: True }`: expected Pair[Bool, i32], found imm 
 
 ================================================================================
 Tuple structs and unit structs
+:test-prelude
 ================================================================================
 struct Meters(f64);
 struct Unit;
@@ -90,6 +92,7 @@ error at `"a"`: expected f64, found String
 
 ================================================================================
 Generic enums
+:test-prelude
 ================================================================================
 enum Either[L, R] { Left(L), Right(R) }
 let a = Either.Left(1);
@@ -157,6 +160,7 @@ make: fn(i32, i32) -> imm Point
 
 ================================================================================
 Fields of tuples
+:test-prelude
 ================================================================================
 let t = (1, "a", True);
 t.0;
@@ -172,6 +176,7 @@ error at `t.3`: (i32, String, Bool) has no field 3
 
 ================================================================================
 Fields of generic structs
+:test-prelude
 ================================================================================
 struct Box[T] { value: T }
 fn get(b: Box[i32]) = b.value;
@@ -214,6 +219,7 @@ next: fn('m Loop) -> 'm Loop
 
 ================================================================================
 A generic struct with a parameter it doesn't use
+:test-prelude
 ================================================================================
 struct Tag[T] { id: i32 }
 let a = Tag { id: 1 };
@@ -325,6 +331,7 @@ error at `second`: (i32,) has no field 1
 
 ================================================================================
 Methods of fields
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }

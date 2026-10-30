@@ -24,7 +24,7 @@ use boltlang_hir_def::{
 
 use crate::{
     holds::struct_atoms_of,
-    lang::LangClass,
+    lang::{LangClass, string_ty},
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, struct_mutability,
         generic_predicates, identity_args, named_mutabilities, struct_args, subst_params,
@@ -171,6 +171,9 @@ pub enum InferenceDiagnostic<'db> {
     /// Syntax that needs a class of the prelude, like `xs[i]` needs
     /// `Index`, without a prelude that defines it.
     NoLangClass { expr: ExprId, class: &'static str },
+    /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
+    /// without a prelude that defines it.
+    NoLangType { at: ExprOrPat, ty: &'static str },
     /// Functions without complete signatures in files that import each
     /// other call each other; one of them needs a signature.
     CyclicInference,
@@ -564,7 +567,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match &body[expr] {
             Expr::Missing => Ty::Error,
             Expr::Path(path) => self.infer_path(expr, path),
-            Expr::Literal(lit) => self.literal_ty(lit),
+            Expr::Literal(lit) => self.literal_ty(ExprOrPat::Expr(expr), lit),
             Expr::Block { statements, tail, label, .. } => {
                 if let Some(label) = label {
                     let ty = self.expected_or_var(expected);
@@ -847,14 +850,20 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    fn literal_ty(&mut self, lit: &Literal) -> Ty<'db> {
+    fn literal_ty(&mut self, at: ExprOrPat, lit: &Literal) -> Ty<'db> {
         let suffixed = |suffix: &Option<Name>| suffix.as_ref().and_then(|s| BuiltinType::by_name(s.as_str())).map(Ty::Builtin);
         match lit {
             Literal::Int(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Int)),
             Literal::Float(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Float)),
             Literal::Char(_) => Ty::Builtin(BuiltinType::Char),
             Literal::Byte(_) => Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
-            Literal::String(_) | Literal::CString(_) => Ty::Builtin(BuiltinType::String),
+            Literal::String(_) | Literal::CString(_) => {
+                let file = self.def.def(self.db).file(self.db);
+                string_ty(self.db, file).unwrap_or_else(|| {
+                    self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: "String" });
+                    Ty::Error
+                })
+            }
             Literal::ByteString(_) => Ty::array(literal_mutability(false), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8))),
         }
     }
@@ -1202,8 +1211,15 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 ty
             }
-            BinaryOp::Cmp(_) => {
+            BinaryOp::Cmp(op) => {
                 let ty = self.infer_expr(lhs);
+                // Structs, enums and type parameters are compared by the
+                // function with the operator's name, like the prelude's
+                // `fn a < b = lt(a, b)`, like a custom operator. The
+                // primitive types are compared as they are.
+                if matches!(self.solver.unifier.shallow_resolve(&ty), Ty::Adt(..) | Ty::Param(_)) {
+                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, rhs);
+                }
                 self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 Ty::bool()
             }
@@ -1220,26 +1236,32 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             // `a <$> b` calls the function `(<$>)`.
             BinaryOp::Custom(name) => {
-                let resolver = self.resolver(expr);
-                let mut function = None;
-                let callee_ty = match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
-                    Some(ValueResolution::Value(value)) => {
-                        if let ValueNs::Function(f) = value {
-                            function = Some(f);
-                        }
-                        self.value_ty(expr, value)
-                    }
-                    _ => {
-                        self.unresolved(ExprOrPat::Expr(expr));
-                        Ty::Error
-                    }
-                };
                 let lhs_ty = self.infer_expr(lhs);
-                let ty = self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)));
-                self.solve_overloads();
-                ty
+                self.infer_operator_call(expr, name, lhs, lhs_ty, rhs)
             }
         }
+    }
+
+    /// `lhs <op> rhs` as a call of the function named `name` in scope, with
+    /// `lhs` of type `lhs_ty` already inferred.
+    fn infer_operator_call(&mut self, expr: ExprId, name: &Name, lhs: ExprId, lhs_ty: Ty<'db>, rhs: ExprId) -> Ty<'db> {
+        let resolver = self.resolver(expr);
+        let mut function = None;
+        let callee_ty = match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
+            Some(ValueResolution::Value(value)) => {
+                if let ValueNs::Function(f) = value {
+                    function = Some(f);
+                }
+                self.value_ty(expr, value)
+            }
+            _ => {
+                self.unresolved(ExprOrPat::Expr(expr));
+                Ty::Error
+            }
+        };
+        let ty = self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)));
+        self.solve_overloads();
+        ty
     }
 
     /// Report an assignment to `place` if it can't be assigned to. `plain`

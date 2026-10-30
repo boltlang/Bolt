@@ -2,9 +2,10 @@
 
 import "./mutability" (ToMut, ToImm, to_mut, to_imm);
 import "./option" (Option, None, Some);
-import "./ops" (Eq, Index, IndexMut);
+import "./ops" *;
 import "./array" (array_alloc, array_copy, array_freeze, array_len);
 import "./iter" (Iterable, Iterator, zip);
+import "./string" (String);
 import "./io" (panic, assert);
 
 

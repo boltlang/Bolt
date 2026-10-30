@@ -196,12 +196,12 @@ fn entry_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
 }
 
 /// A value that compiled code gave for `ty`, as the evaluator's value.
-fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, memory: &[u8]) -> Result<Value<'db>, RunError> {
+// `memory` is for strings, which compiled code doesn't support yet.
+fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, _memory: &[u8]) -> Result<Value<'db>, RunError> {
     let unexpected = || RunError::Invalid(format!("`main` gave {val:?} for a value of type `{}`", ty.display(db)));
     let value = match (Scalar::of(db, ty).ok_or_else(unexpected)?, &val) {
         (Scalar::Bool, Val::I32(n)) => Value::Bool(*n != 0),
         (Scalar::Char, Val::I32(n)) => Value::Char(char::from_u32(*n as u32).ok_or_else(unexpected)?),
-        (Scalar::Str, Val::I32(address)) => Value::str(&read_str(memory, *address).ok_or_else(unexpected)?),
         (Scalar::Enum, Val::I32(index)) => {
             let Ty::Adt(AdtId::Enum(parent), ..) = ty else { return Err(unexpected()) };
             let variant = EnumVariantId { parent: *parent, index: *index as u32 };

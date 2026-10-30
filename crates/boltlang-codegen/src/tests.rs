@@ -118,9 +118,13 @@ fn enums_with_fields_and_ordering_are_errors() {
         errors("enum Shape { Dot, Circle(f64) }\nShape.Dot;"),
         ["a value of type `Shape` is not supported by the code generator yet"]
     );
+    // Comparing enums calls the function with the operator's name, here
+    // one that's a class method, which isn't compiled yet.
     assert_eq!(
-        errors(&format!("{COLOR}Color.Red < Color.Blue;")),
-        ["ordering enums is not supported by the code generator yet"]
+        errors(&format!(
+            "{COLOR}class Ord[T] {{ fn less(a: T, b: T) -> Bool; }}\nfn a < b = less(a, b);\nColor.Red < Color.Blue;"
+        )),
+        ["calling a class method is not supported by the code generator yet"]
     );
 }
 

@@ -55,6 +55,7 @@ error at `fmap`: no instance Functor[F]
 
 ================================================================================
 Partially applied constructors
+:test-prelude
 ================================================================================
 enum Either[E, A] { Left(E), Right(A) }
 class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
@@ -168,6 +169,7 @@ error at `[True]`: expected Option[Bool], found imm [Bool]
 
 ================================================================================
 A type constructor inferred from a partially applied enum
+:test-prelude
 ================================================================================
 enum Either[E, A] { Left(E), Right(A) }
 fn inner[F, A](x: F[A]) -> F[A] = x;

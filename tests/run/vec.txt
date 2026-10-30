@@ -21,6 +21,7 @@ error: panicked: index out of bounds
 ================================================================================
 Copying a range of an array
 :todo wasm
+:test-prelude
 ================================================================================
 extern "bolt" { fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32); }
 let xs = mut [1, 2, 3, 4, 5];
@@ -34,6 +35,7 @@ array_copy(ys, 0, xs, 3, 2);
 ================================================================================
 Copying a range that doesn't fit
 :todo wasm
+:test-prelude
 ================================================================================
 extern "bolt" { fn array_copy[T](dst: mut [T], dst_start: i32, src: [T], src_start: i32, count: i32); }
 let xs = mut [1, 2, 3];

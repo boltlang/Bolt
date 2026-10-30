@@ -1,6 +1,6 @@
 //! `bolt dump-ast`, `bolt check`, `bolt run` and `bolt build`, run on files
 //! in a temporary directory, without a prelude, so that they don't depend on
-//! `std`.
+//! `std`, unless they print: strings are `std`'s.
 
 use std::{fs, path::PathBuf, process::Command};
 
@@ -27,9 +27,15 @@ struct Output {
 
 /// Run `bolt <command> --no-prelude` with `args` in `dir`.
 fn bolt(dir: &PathBuf, command: &str, args: &[&str]) -> Output {
+    let mut all = vec!["--no-prelude"];
+    all.extend(args);
+    bolt_std(dir, command, &all)
+}
+
+/// Run `bolt <command>` with `args` in `dir`, with the prelude of `std`.
+fn bolt_std(dir: &PathBuf, command: &str, args: &[&str]) -> Output {
     let output = Command::new(env!("CARGO_BIN_EXE_bolt"))
         .arg(command)
-        .arg("--no-prelude")
         .args(args)
         .current_dir(dir)
         .output()
@@ -41,7 +47,6 @@ fn bolt(dir: &PathBuf, command: &str, args: &[&str]) -> Output {
     }
 }
 
-const PRINT: &str = "extern \"bolt\" { fn print(text: String); }\n";
 
 #[test]
 fn dump_ast_prints_the_tree() {
@@ -116,13 +121,15 @@ fn check_reports_a_used_file_with_errors() {
 
 #[test]
 fn run_prints_what_the_program_prints_and_its_value() {
-    let dir = dir_with("run", &[("a.bolt", &format!("{PRINT}print(\"hi\");\n1 + 2;\n"))]);
-    for wasm in [false, true] {
-        let args: &[&str] = if wasm { &["a.bolt", "--wasm"] } else { &["a.bolt"] };
-        let o = bolt(&dir, "run", args);
-        assert!(o.ok, "wasm: {wasm}: {}", o.err);
-        assert_eq!(o.out, "hi\n3\n", "wasm: {wasm}");
-    }
+    let dir = dir_with("run", &[("a.bolt", "print(\"hi\");\n1 + 2;\n")]);
+    let o = bolt_std(&dir, "run", &["a.bolt"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "hi\n3\n");
+    // Compiled code doesn't have strings yet, but has values.
+    let dir = dir_with("run-wasm", &[("a.bolt", "1 + 2;\n")]);
+    let o = bolt(&dir, "run", &["a.bolt", "--wasm"]);
+    assert!(o.ok, "{}", o.err);
+    assert_eq!(o.out, "3\n");
 }
 
 #[test]
@@ -135,12 +142,12 @@ fn run_doesnt_print_a_unit_value() {
 
 #[test]
 fn run_doesnt_run_a_program_with_errors() {
-    let dir = dir_with("run-error", &[("a.bolt", &format!("{PRINT}print(\"hi\");\nlet x: i32 = True;\n"))]);
-    let o = bolt(&dir, "run", &["a.bolt"]);
+    let dir = dir_with("run-error", &[("a.bolt", "print(\"hi\");\nlet x: i32 = True;\n")]);
+    let o = bolt_std(&dir, "run", &["a.bolt"]);
     assert!(!o.ok);
     assert_eq!(o.out, "");
     // With `--no-check`, it runs anyway.
-    let o = bolt(&dir, "run", &["a.bolt", "--no-check"]);
+    let o = bolt_std(&dir, "run", &["a.bolt", "--no-check"]);
     assert_eq!(o.out, "hi\n", "{}", o.err);
 }
 

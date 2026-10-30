@@ -1,7 +1,7 @@
 ================================================================================
 Panic has any type
+:test-prelude
 ================================================================================
-extern "bolt" { fn panic(message: String) -> !; }
 fn f(x: i32) -> String = if x > 0 { "positive" } else { panic("negative") };
 fn g() -> i32 = panic("never");
 let a: Bool = panic("no");
@@ -13,8 +13,8 @@ let a: Bool
 ================================================================================
 Panic needs a message
 :error
+:test-prelude
 ================================================================================
-extern "bolt" { fn panic(message: String) -> !; }
 panic(1);
 panic();
 --------------------------------------------------------------------------------
@@ -26,8 +26,8 @@ error at `1`: expected String, found {integer}
 
 ================================================================================
 A function that never returns
+:test-prelude
 ================================================================================
-extern "bolt" { fn panic(message: String) -> !; }
 fn fail(msg: String) -> ! = panic(msg);
 fn f(x: i32) -> i32 = if x > 0 { x } else { fail("negative") };
 --------------------------------------------------------------------------------
@@ -66,8 +66,8 @@ error at `break`: expected !, found ()
 
 ================================================================================
 Never in a tuple and an array
+:test-prelude
 ================================================================================
-extern "bolt" { fn panic(message: String) -> !; }
 fn f() = (1, panic("x"));
 fn g() = [panic("x"), 1];
 fn h() = [panic("x")];
@@ -88,8 +88,8 @@ absurd2: forall T. fn(Void) -> T
 
 ================================================================================
 Print takes a String and gives unit
+:test-prelude
 ================================================================================
-extern "bolt" { fn print(text: String); }
 print("a");
 print(1);
 let x: i32 = print("b");

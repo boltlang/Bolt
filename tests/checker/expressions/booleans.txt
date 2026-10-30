@@ -59,6 +59,7 @@ error at `True`: expected i32, found Bool
 ================================================================================
 True and False of another file
 :error
+:test-prelude
 ================================================================================
 //- /lib.bolt
 pub fn id(x) = x;

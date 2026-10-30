@@ -45,7 +45,7 @@ class Describe[T] {
 struct Dog { name: String }
 
 impl Describe[Dog] {
-  fn describe(d) = "a dog called " + d.name;
+  fn describe(d) = "a dog called " <> d.name;
 }
 
 impl Describe[Bool] {
@@ -87,7 +87,7 @@ class Describe[T] {
   fn describe(x: T) -> String;
 }
 
-fn shout(x) = describe(x) + "!";
+fn shout(x) = describe(x) <> "!";
 ```
 
 `shout` gets the type
@@ -107,10 +107,10 @@ class Describe[T] {
   fn describe(x: T) -> String;
 }
 
-fn shout[T: Describe](x: T) -> String = describe(x) + "!";
+fn shout[T: Describe](x: T) -> String = describe(x) <> "!";
 
 fn both[A, B](a: A, b: B) -> String where Describe[A], Describe[B] =
-  describe(a) + " and " + describe(b);
+  describe(a) <> " and " <> describe(b);
 ```
 
 A struct or enum can have constraints on its type parameters too. They're
@@ -151,7 +151,7 @@ impl Describe[i32] {
 
 impl[T] Describe[Option[T]] where Describe[T] {
   fn describe(o) = match o {
-    Some(x) => "some " + describe(x),
+    Some(x) => "some " <> describe(x),
     None => "nothing",
   };
 }
@@ -375,6 +375,8 @@ The prelude also has a class for each operator, like Rust's `std::ops`:
 | `a & b`, `a \| b`, `a ^ b` | `BitAnd`, `BitOr`, `BitXor` | `fn bitand(a: T, b: T) -> Output`, … |
 | `a << n`, `a >> n` | `Shl`, `Shr` | `fn shl(a: T, n: u32) -> Output`, … |
 | `-a`, `!a` | `Neg`, `Not` | `fn neg(a: T) -> Output`, `fn not(a: T) -> Output` |
+| `a == b`, `a != b` | `Eq` | `fn eq(a: T, b: T) -> Bool`, `fn ne(a: T, b: T) -> Bool` |
+| `a < b`, `a > b`, `a <= b`, `a >= b` | `Lt`, `Gt`, `LtE`, `GtE` | `fn lt(a: T, b: T) -> Bool`, … |
 
 Each has an associated type `Output`, the type of the result, which is `T`
 unless an impl says otherwise, and each operator is defined as a function
@@ -398,9 +400,29 @@ twice(Money { cents: 150 }).cents;
 300
 ```
 
-The classes have impls for the primitive types, the numbers, `Bool` and
-`String`, for the operators each of them has. The operators on
-those types are built in, and don't go through the classes.
+The classes of arithmetic have impls for the primitive types, the numbers
+and `Bool`, for the operators each of them has, and those of comparisons
+for `String`. The operators on the primitive types are built in, and don't
+go through the classes. Comparing other values, like structs, enums or a
+value of a type parameter, calls the function with the operator's name,
+like the prelude's `fn a < b = lt(a, b)`, so that it works for any type
+with an impl of the class:
+
+```bolt
+struct Version { major: i32, minor: i32 }
+
+impl Lt[Version] {
+  fn lt(a, b) = a.major < b.major || a.major == b.major && a.minor < b.minor;
+}
+
+Version { major: 1, minor: 2 } < Version { major: 1, minor: 10 };
+```
+
+```text
+True
+```
+
+Strings are joined with `<>`, of `Semigroup`, rather than with `+`.
 
 ## Classes of type constructors
 

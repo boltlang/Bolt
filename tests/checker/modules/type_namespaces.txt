@@ -64,6 +64,7 @@ error at `p.norm`: unresolved
 
 ================================================================================
 Functions in the namespace of an imported type
+:test-prelude
 ================================================================================
 //- /lib.bolt
 pub struct Box[T] { item: T }

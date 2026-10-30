@@ -424,6 +424,9 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::NoLangClass { expr, class } => {
                         format!("error at `{}`: needs {class} from the prelude", at(ExprOrPat::Expr(*expr)))
                     }
+                    InferenceDiagnostic::NoLangType { at: node, ty } => {
+                        format!("error at `{}`: needs {ty} from the prelude", at(*node))
+                    }
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }

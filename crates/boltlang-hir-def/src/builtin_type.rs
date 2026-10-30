@@ -35,7 +35,6 @@ pub enum BuiltinFloat {
 pub enum BuiltinType {
     Bool,
     Char,
-    String,
     Int(BuiltinInt),
     Uint(BuiltinUint),
     Float(BuiltinFloat),
@@ -45,7 +44,6 @@ impl BuiltinType {
     pub const ALL: &[(&str, BuiltinType)] = &[
         ("Bool", BuiltinType::Bool),
         ("Char", BuiltinType::Char),
-        ("String", BuiltinType::String),
         ("i8", BuiltinType::Int(BuiltinInt::I8)),
         ("i16", BuiltinType::Int(BuiltinInt::I16)),
         ("i32", BuiltinType::Int(BuiltinInt::I32)),

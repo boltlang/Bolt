@@ -58,6 +58,7 @@ error at `"b"`: expected {integer}, found String
 
 ================================================================================
 Compound assignment checks its operands
+:test-prelude
 ================================================================================
 fn f() {
   let mut x = 1u8;
@@ -95,6 +96,7 @@ f: fn(i32) -> i32
 
 ================================================================================
 A mut without a value takes the type of its first assignment
+:test-prelude
 ================================================================================
 fn f(c: Bool) {
   let mut x;

@@ -1,7 +1,8 @@
 // A small prelude for the tests in `tests/`, which a case gets with the
 // attribute `:test-prelude`: the classes that syntax uses, `xs[i]`,
-// `xs[i] = x` and `for x in xs`, with their impls for arrays, and a few
-// functions the compiler provides. It's a copy of what `packages/std` has
+// `xs[i] = x`, `for x in xs` and `a == b`, with their impls for arrays,
+// `String`, the type of string literals, and a few functions the compiler
+// provides. It's a copy of what `packages/std` has
 // of them, so that a case that only needs these doesn't change when `std`
 // does.
 
@@ -20,6 +21,43 @@ extern "bolt" {
 
   pub(package) fn array_set[T](xs: mut [T], i: i32, x: T);
 
+}
+
+/// Text, as its bytes in UTF-8, like `std`'s `String`: the type of string
+/// literals, and what `print` and `panic` take.
+pub imm struct String(Bytes);
+
+/// The bytes of a `String`, laid out like `std`'s `Vec[u8]`, which is where
+/// the evaluator reads them.
+struct Bytes {
+  items: [u8],
+  len: i32,
+}
+
+/// Types whose values can be compared, with `a == b` and `a != b`.
+pub class Eq[T] {
+  fn eq(a: T, b: T) -> Bool;
+  fn ne(a: T, b: T) -> Bool = !eq(a, b);
+}
+
+pub fn a == b = eq(a, b);
+
+pub fn a != b = ne(a, b);
+
+impl Eq[String] {
+  fn eq(a, b) {
+    if a.0.len != b.0.len {
+      return False;
+    }
+    let mut i = 0;
+    while i < a.0.len {
+      if array_get(a.0.items, i) != array_get(b.0.items, i) {
+        return False;
+      }
+      i += 1;
+    }
+    True
+  }
 }
 
 pub enum Option[T] {

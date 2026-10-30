@@ -359,7 +359,7 @@ mod tests {
             // `?m[?a] = Either[String, i32]` gives `?m = Either[String]`, `?a = i32`.
             let m = u.new_var(VarKind::General);
             let a = u.new_var(VarKind::General);
-            let str_ty = Ty::Builtin(BuiltinType::String);
+            let str_ty = Ty::Builtin(BuiltinType::Bool);
             let target = Ty::app(either.clone(), [str_ty.clone(), i32()]);
             u.unify(&Ty::app(m.clone(), [a.clone()]), &target).unwrap();
             assert_eq!(u.resolve(&m), Ty::app(either.clone(), [str_ty.clone()]));

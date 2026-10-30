@@ -30,8 +30,9 @@ Blue
 
 ================================================================================
 Variants imported into scope
+:test-prelude
+:todo wasm
 ================================================================================
-extern "bolt" { fn print(text: String); }
 enum Color { Red, Green, Blue }
 import Color.*;
 fn code(c) = match c { Red => 1, Green => 2, Blue => 3 };
@@ -44,8 +45,16 @@ warm
 
 ================================================================================
 Equality of variants
+:todo wasm
+:test-prelude
 ================================================================================
 enum Color { Red, Green, Blue }
+impl Eq[Color] {
+  fn eq(a, b) = match (a, b) {
+    (Color.Red, Color.Red) | (Color.Green, Color.Green) | (Color.Blue, Color.Blue) => True,
+    _ => False,
+  };
+}
 Color.Red == Color.Red && Color.Red != Color.Blue;
 --------------------------------------------------------------------------------
 True
@@ -55,7 +64,7 @@ A variable that changes
 ================================================================================
 enum Color { Red, Green, Blue }
 let mut c = Color.Red;
-if c == Color.Red { c = Color.Blue; }
+if let Color.Red = c { c = Color.Blue; }
 c;
 --------------------------------------------------------------------------------
 Blue
@@ -75,7 +84,7 @@ A const variant in a pattern
 enum Color { Red, Green, Blue }
 const FAVORITE: Color = Color.Green;
 fn is_favorite(c: Color) -> Bool = match c { FAVORITE => True, _ => False };
-(FAVORITE == Color.Green) && is_favorite(Color.Green);
+is_favorite(Color.Green);
 --------------------------------------------------------------------------------
 True
 

@@ -27,6 +27,7 @@ warning at `impl Show`: unsupported
 
 ================================================================================
 Arithmetic on any type is accepted until there are numeric classes
+:test-prelude
 ================================================================================
 "a" + "b";
 True * False;

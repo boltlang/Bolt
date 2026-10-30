@@ -69,6 +69,21 @@ pub enum CmpOp {
     GtEq,
 }
 
+impl CmpOp {
+    /// The operator, which is also the name of the function that compares
+    /// values of other types than the primitive ones, like `fn a < b`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            CmpOp::Eq => "==",
+            CmpOp::NotEq => "!=",
+            CmpOp::Lt => "<",
+            CmpOp::LtEq => "<=",
+            CmpOp::Gt => ">",
+            CmpOp::GtEq => ">=",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum LogicOp {
     And,

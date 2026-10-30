@@ -20,6 +20,7 @@ let o: Option[Bool] = None;
 
 ================================================================================
 Names in the file and its imports replace the ones of the prelude
+:test-prelude
 ================================================================================
 //- /toolchain/std/__prelude__/lib.bolt
 pub fn id[T](x: T) -> T = x;
@@ -35,9 +36,14 @@ first(True, False);
 /toolchain/std/__prelude__/lib.bolt: id: forall T. fn(T) -> T
 /toolchain/std/__prelude__/lib.bolt: first: fn(i32, i32) -> i32
 /lib.bolt: first: fn(Bool, Bool) -> Bool
-/main.bolt: id: fn(i32) -> String
-/main.bolt: id(1): String
+/main.bolt: id: fn(i32) -> {error}
+/main.bolt: id(1): a
 /main.bolt: first(True, False): Bool
+--------------------------------------------------------------------------------
+/main.bolt: error at `id`: overlaps the id of type forall T. fn(T) -> T
+/main.bolt: error at `String`: unresolved type
+/main.bolt: error at `"mine"`: needs String from the prelude
+/main.bolt: error at `id`: ambiguous, 2 overloads fit
 
 ================================================================================
 Instances in the prelude are found
@@ -49,8 +55,10 @@ impl Show[i32] { fn show(x) = "int"; }
 //- /main.bolt
 show(1);
 --------------------------------------------------------------------------------
-/toolchain/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> String
-/main.bolt: show(1): String
+/toolchain/std/__prelude__/lib.bolt: Show[i32].show: fn(i32) -> {error}
+/main.bolt: show(1): {error}
+--------------------------------------------------------------------------------
+/toolchain/std/__prelude__/lib.bolt: error at `"int"`: needs String from the prelude
 
 ================================================================================
 The names of the prelude aren't re-exported

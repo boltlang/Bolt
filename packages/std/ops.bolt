@@ -27,7 +27,6 @@ pub class Eq[T] {
 }
 
 impl Eq[Bool] { fn eq(a, b) = bool_eq(a, b); fn ne(a, b) = bool_ne(a, b); }
-impl Eq[String] { fn eq(a, b) = string_eq(a, b); fn ne(a, b) = string_ne(a, b); }
 impl Eq[i8] { fn eq(a, b) = i8_eq(a, b); fn ne(a, b) = i8_ne(a, b); }
 impl Eq[i16] { fn eq(a, b) = i16_eq(a, b); fn ne(a, b) = i16_ne(a, b); }
 impl Eq[i32] { fn eq(a, b) = i32_eq(a, b); fn ne(a, b) = i32_ne(a, b); }
@@ -46,6 +45,34 @@ impl Eq[f64] { fn eq(a, b) = f64_eq(a, b); fn ne(a, b) = f64_ne(a, b); }
 pub fn a == b = eq(a, b);
 
 pub fn a != b = ne(a, b);
+
+/// Types whose values can be ordered, with `a < b`.
+pub class Lt[T] {
+  fn lt(a: T, b: T) -> Bool;
+}
+
+pub fn a < b = lt(a, b);
+
+/// Types whose values can be ordered, with `a > b`.
+pub class Gt[T] {
+  fn gt(a: T, b: T) -> Bool;
+}
+
+pub fn a > b = gt(a, b);
+
+/// Types whose values can be ordered, with `a <= b`.
+pub class LtE[T] {
+  fn lte(a: T, b: T) -> Bool;
+}
+
+pub fn a <= b = lte(a, b);
+
+/// Types whose values can be ordered, with `a >= b`.
+pub class GtE[T] {
+  fn gte(a: T, b: T) -> Bool;
+}
+
+pub fn a >= b = gte(a, b);
 
 // The classes of operators, like Rust's `std::ops`. Each operator is a
 // function of its class's method, so that it works on any type with an
@@ -74,7 +101,6 @@ impl Add[u128] { fn add(a, b) = u128_add(a, b); }
 impl Add[usize] { fn add(a, b) = usize_add(a, b); }
 impl Add[f32] { fn add(a, b) = f32_add(a, b); }
 impl Add[f64] { fn add(a, b) = f64_add(a, b); }
-impl Add[String] { fn add(a, b) = string_add(a, b); }
 
 pub fn a + b = add(a, b);
 
@@ -356,7 +382,6 @@ fn the_primitive_types_have_the_operators() {
   assert(bitxor(True, True) == False);
   assert(shl(1u8, 3) == 8u8);
   assert(shr(-8, 1) == -4);
-  assert(add("ab", "c") == "abc");
   assert(eq(True, True) && ne(1.5, 2.5));
 }
 

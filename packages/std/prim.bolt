@@ -15,15 +15,6 @@ extern "bolt" {
   pub(package) fn bool_gt(a: Bool, b: Bool) -> Bool;
   pub(package) fn bool_ge(a: Bool, b: Bool) -> Bool;
 
-  // String
-  pub(package) fn string_add(a: String, b: String) -> String;
-  pub(package) fn string_eq(a: String, b: String) -> Bool;
-  pub(package) fn string_ne(a: String, b: String) -> Bool;
-  pub(package) fn string_lt(a: String, b: String) -> Bool;
-  pub(package) fn string_le(a: String, b: String) -> Bool;
-  pub(package) fn string_gt(a: String, b: String) -> Bool;
-  pub(package) fn string_ge(a: String, b: String) -> Bool;
-
   // Signed integers
   pub(package) fn i8_add(a: i8, b: i8) -> i8;
   pub(package) fn i8_sub(a: i8, b: i8) -> i8;

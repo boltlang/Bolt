@@ -33,6 +33,7 @@ let b: imm [Bool]
 
 ================================================================================
 A None from a function is generic
+:test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
 fn none() = Option.None;
@@ -72,6 +73,7 @@ error at `n`: unresolved
 
 ================================================================================
 Shadowing gives a new type
+:test-prelude
 ================================================================================
 let x = 1;
 let x = "a";
@@ -120,6 +122,7 @@ error at `1`: expected ({integer}, {integer}), found {integer}
 
 ================================================================================
 Class constraints in lambdas are inferred for their function
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 fn f(x) = (|y| show(y))(x);
@@ -130,6 +133,7 @@ g: forall a. Show[a] => fn(a) -> String
 
 ================================================================================
 Generic functions used at several types in one function
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }

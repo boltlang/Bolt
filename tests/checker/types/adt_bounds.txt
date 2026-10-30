@@ -1,6 +1,7 @@
 ================================================================================
 Bounds of a struct are checked where a value is made
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -23,6 +24,7 @@ error at `Wrap`: no instance Show[String]
 ================================================================================
 Bounds of an enum are checked where a value is made
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -43,6 +45,7 @@ error at `Maybe.Nothing`: ambiguous
 
 ================================================================================
 A function that makes a value of a struct with bounds needs them too
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -57,6 +60,7 @@ label(1): imm Labeled[i32]
 ================================================================================
 A where clause on a struct
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }

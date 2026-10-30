@@ -124,7 +124,7 @@ An argument can be passed by the name of its parameter, like in Python. This
 makes calls with many arguments easier to read:
 
 ```bolt
-fn register(name: String, email: String) -> String = name + " <" + email + ">";
+fn register(name: String, email: String) -> String = name <> " <" <> email <> ">";
 
 // These calls are the same.
 (
@@ -151,7 +151,7 @@ A parameter can have a default value, written after `=`. A call can then
 leave that argument out:
 
 ```bolt
-fn greet(name: String, greeting: String = "Hello") -> String = greeting + ", " + name + "!";
+fn greet(name: String, greeting: String = "Hello") -> String = greeting <> ", " <> name <> "!";
 
 (greet("Sam"), greet("Sam", "Welcome"));
 ```
@@ -284,7 +284,7 @@ numbers or types of arguments. A call uses the one that its arguments fit:
 ```bolt
 fn describe(n: i32) -> String = "a number";
 fn describe(b: Bool) -> String = "a truth value";
-fn describe(n: i32, unit: String) -> String = "a number of " + unit;
+fn describe(n: i32, unit: String) -> String = "a number of " <> unit;
 
 (describe(3), describe(True), describe(3, "apples"));
 ```

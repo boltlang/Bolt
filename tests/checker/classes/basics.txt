@@ -1,5 +1,6 @@
 ================================================================================
 Class constraints are inferred and solved
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -29,6 +30,7 @@ error at `eq`: no instance Eq[T]
 
 ================================================================================
 Classes with several parameters
+:test-prelude
 ================================================================================
 class Convert[A, B] { fn convert(a: A) -> B; }
 impl Convert[i32, String] { fn convert(a) = "int"; }
@@ -43,6 +45,7 @@ error at `convert`: no instance Convert[i32, Bool]
 
 ================================================================================
 Generic impls
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 enum Option[T] { Some(T), None }
@@ -69,12 +72,13 @@ max: forall T. Ord[T] => fn(T, T) -> T
 
 ================================================================================
 Constraints are inferred from several methods
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
-class Eq[T] { fn eq(a: T, b: T) -> Bool; }
-fn show_if_same(a, b) = if eq(a, b) { show(a) } else { "different" };
+class Same[T] { fn same(a: T, b: T) -> Bool; }
+fn show_if_same(a, b) = if same(a, b) { show(a) } else { "different" };
 --------------------------------------------------------------------------------
-show_if_same: forall a. Eq[a] => Show[a] => fn(a, a) -> String
+show_if_same: forall a. Same[a] => Show[a] => fn(a, a) -> String
 
 ================================================================================
 A constraint on a type that is never known is ambiguous
@@ -92,6 +96,7 @@ error at `default`: ambiguous
 
 ================================================================================
 Methods of impls are checked against the class
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = 1; }
@@ -122,6 +127,7 @@ error at `ZERO`: ambiguous
 
 ================================================================================
 Method call syntax with class methods
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -136,6 +142,7 @@ error at `True.show`: no instance Show[Bool]
 
 ================================================================================
 Methods in an impl can call themselves without importing them
+:test-prelude
 ================================================================================
 //- /semigroup.bolt
 pub class Semigroup[T] { fn concat(a: T, b: T) -> T; }
@@ -167,6 +174,7 @@ Monoid[i32].concat3: fn(i32, i32, i32) -> i32
 ================================================================================
 Two impls for the same type make uses ambiguous
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
@@ -183,6 +191,7 @@ error at `show`: ambiguous
 ================================================================================
 Overlapping impls are reported where they're defined
 :todo
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "one"; }
@@ -196,6 +205,7 @@ error at `Show[i32]`: overlaps another impl of Show[i32]
 ================================================================================
 A generic impl that overlaps a specific one
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl[T] Show[T] { fn show(x) = "any"; }
@@ -243,6 +253,7 @@ error at `Size[mut [i32]]`: overlaps the impl for Size[[i32]]
 
 ================================================================================
 Impls in different files overlap where the second is defined
+:test-prelude
 ================================================================================
 //- /lib.bolt
 pub class Size[T] { fn size(x: T) -> i32; }
@@ -260,6 +271,7 @@ impl Size[[Bool]] { fn size(x) = 2; }
 ================================================================================
 An impl method with the wrong number of parameters
 :todo
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x, y) = "int"; }
@@ -271,6 +283,7 @@ error at `show`: expected 1 parameters, found 2
 ================================================================================
 An impl method with a signature that doesn't match
 :todo
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x: Bool) -> String = "int"; }
@@ -295,6 +308,7 @@ error at `Nope[i32]`: unresolved type
 ================================================================================
 An impl with the wrong number of arguments
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32, Bool] { fn show(x) = "int"; }
@@ -343,6 +357,7 @@ error at `weird`: ambiguous
 ================================================================================
 An impl that needs itself
 :skip
+:test-prelude
 ================================================================================
 // Hangs: looking for Show[i32] keeps finding the impl, which needs it again.
 class Show[T] { fn show(x: T) -> String; }
@@ -352,6 +367,7 @@ show(1);
 ================================================================================
 An impl that needs a bigger type
 :skip
+:test-prelude
 ================================================================================
 // Overflows the stack: Show[i32] needs Show[Option[i32]], which needs
 // Show[Option[Option[i32]]], and so on.
@@ -363,6 +379,7 @@ show(1);
 ================================================================================
 A where clause on a type without an impl
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 fn f() -> String where Show[Bool] = show(True);
@@ -375,6 +392,7 @@ error at `f`: no instance Show[Bool]
 
 ================================================================================
 Class methods as values
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -393,6 +411,7 @@ error at `show`: no instance Show[Bool]
 
 ================================================================================
 Method call syntax on a constrained parameter
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 fn f[T](x: T) -> String where Show[T] = x.show();
@@ -406,6 +425,7 @@ error at `x.show`: no instance Show[T]
 ================================================================================
 A multi-parameter class whose result is never known
 :error
+:test-prelude
 ================================================================================
 class Convert[A, B] { fn convert(a: A) -> B; }
 impl Convert[i32, String] { fn convert(a) = "int"; }
@@ -418,6 +438,7 @@ error at `convert`: ambiguous
 
 ================================================================================
 Impls for function types and tuples
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[(i32, Bool)] { fn show(x) = "pair"; }
@@ -436,6 +457,7 @@ error at `show`: no instance Show[(Bool, i32)]
 
 ================================================================================
 An impl for a type alias
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 type Int = i32;
@@ -447,6 +469,7 @@ show(1): String
 
 ================================================================================
 Defaults of class methods
+:test-prelude
 ================================================================================
 class Show[T] {
   fn show(x: T) -> String;
@@ -461,6 +484,7 @@ show_twice(1): String
 ================================================================================
 A constrained generic function called with a type without an impl
 :error
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[i32] { fn show(x) = "int"; }
@@ -490,6 +514,7 @@ f: fn() -> ()
 
 ================================================================================
 An impl for a function type and a closure whose types aren't known
+:test-prelude
 ================================================================================
 class Show[T] { fn show(x: T) -> String; }
 impl Show[fn(i32) -> i32] { fn show(x) = "function"; }
