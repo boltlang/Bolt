@@ -25,9 +25,9 @@ without a copy isn't a step of the program: it's giving the location
 
 A region's objects are made by `new true e` (rule `HasType.newR`) and
 changed by `set` (`HasType.setR`), like `mut` ones; what they hold is at
-most the region. A region can hold `mut` objects too, if it's marked so
-(`mut ⊑ r`, #286): then it becomes `mut` when its block ends, rather than
-`imm`, since what it holds needs that. Then, for a whole block:
+most the region, so a region can't hold `mut` objects. One that would have
+to, `mut ⊑ r`, is just `mut`: the checker decides that right away
+(`Le.eq_mutable` in `Solver.lean`, #286). Then, for a whole block:
 
 - `HeapOk.free_all`: freeing a region everywhere at once, in the heap
   typing, always keeps the heap well-typed: what refers to the region's
@@ -37,10 +37,9 @@ most the region. A region can hold `mut` objects too, if it's marked so
   freed type, and what comes after it, typed before it, is well-typed.
   What's from before can't hold the region's objects, since its types
   were fixed without the region: so the `leak` of the regions page is
-  rejected. The region's objects become `imm`, or `mut` if it holds
-  `mut` objects.
-- `block_never_changes`: after the block, the objects of a region that
-  became `imm` never change.
+  rejected. The region's objects become `imm`.
+- `block_never_changes`: after the block, the region's objects never
+  change.
 
 The blocks aren't in the language: a block is any part of the program
 whose region is new, run to its value. A `mut` closure can capture a
@@ -160,14 +159,11 @@ heap typing and in the types of what the block gives. `Mu.free` and
 `Ty.free` replace the region with a mutability. What a region's values
 hold is at most the region (rule 4 of the regions page), so freeing it to
 `imm` makes that `imm` all the way down (`AtMost.region_free`), as an `imm`
-location needs. A region that holds `mut` objects is always freed to
-`mut` instead, so freeing keeps "at most" with nothing to check
-(`AtMost.free`). -/
+location needs. -/
 
-/-- `m` with the region `r` replaced with `μ`, or with `mut` if the region
-holds `mut` objects: what it holds needs it (#286). -/
+/-- `m` with the region `r` replaced with `μ`. -/
 def Mu.free : Mu → Nat → Mu → Mu
-  | .region r' b, r, μ => if r' = r then (if b then .mutable else μ) else .region r' b
+  | .region r', r, μ => if r' = r then μ else .region r'
   | m, _, _ => m
 
 /-- `t` with the region `r` replaced with `μ`. A function type that
@@ -187,7 +183,7 @@ def Ty.free : Ty → Nat → Mu → Ty
 
 theorem Mu.free_not_mentions {m : Mu} {r : Nat} (h : m.mentions r = false) (μ : Mu) : m.free r μ = m := by
   cases m with
-  | region r' b =>
+  | region r' =>
     simp only [Mu.mentions, beq_eq_false_iff_ne] at h
     simp [Mu.free, h]
   | _ => rfl
@@ -212,12 +208,10 @@ theorem Ty.free_not_mentions {t : Ty} {r : Nat} (h : t.mentions r = false) (μ :
 theorem Mu.mentions_free {m ν : Mu} (hν : ν.NoRegion) {r r' : Nat} (h : (m.free r ν).mentions r' = true) :
     m.mentions r' = true ∧ r' ≠ r := by
   cases m with
-  | region r'' b =>
+  | region r'' =>
     simp only [Mu.free] at h
     split at h
-    · split at h
-      · cases h
-      · rw [hν.mentions] at h; cases h
+    · rw [hν.mentions] at h; cases h
     · rename_i hne
       simp only [Mu.mentions, beq_iff_eq] at h ⊢
       subst h
@@ -254,7 +248,7 @@ theorem Ty.mentions_free {t : Ty} {ν : Mu} (hν : ν.NoRegion) {r r' : Nat} (h 
 theorem Mu.mentions_free_of {μ ν : Mu} {r r' : Nat} (h : μ.mentions r' = true) (hne : r' ≠ r) :
     (μ.free r ν).mentions r' = true := by
   cases μ with
-  | region r'' b =>
+  | region r'' =>
     simp only [Mu.mentions, beq_iff_eq] at h
     subst h
     simp [Mu.free, hne, Mu.mentions]
@@ -275,20 +269,13 @@ theorem Ty.RegionsIn.free {t : Ty} {μ ν : Mu} (h : t.RegionsIn μ) (hν : ν.N
 
 @[simp] theorem Mu.free_mutable (r : Nat) (μ : Mu) : Mu.mutable.free r μ = .mutable := rfl
 @[simp] theorem Mu.free_immutable (r : Nat) (μ : Mu) : Mu.immutable.free r μ = .immutable := rfl
-@[simp] theorem Mu.free_self (r : Nat) (μ : Mu) : (Mu.region r false).free r μ = μ := by simp [Mu.free]
-@[simp] theorem Mu.free_self_mut (r : Nat) (μ : Mu) : (Mu.region r true).free r μ = .mutable := by
-  simp [Mu.free]
+@[simp] theorem Mu.free_self (r : Nat) (μ : Mu) : (Mu.region r).free r μ = μ := by simp [Mu.free]
 
 /-- Freeing a region keeps what's below what, with nothing assumed. -/
 theorem Le.free {m μ : Mu} (h : Le .none m μ) (r : Nat) (ν : Mu) : Le .none (m.free r ν) (μ.free r ν) := by
   induction h with
   | bot => exact .bot _
   | top => exact .top _
-  | regionMut r' =>
-    simp only [Mu.free]
-    split
-    · exact .refl _
-    · exact .regionMut r'
   | refl => exact .refl _
   | assume h => simp [Assume.none] at h
   | trans _ _ ih₁ ih₂ => exact .trans ih₁ ih₂
@@ -320,53 +307,41 @@ theorem AtMost.free {μ : Mu} {t : Ty} (h : AtMost .none μ t) (r : Nat) (ν : M
 
 /-- What a region holds becomes `imm` all the way down when the region is
 freed to `imm`: what an `imm` location of the freed region needs. -/
-theorem AtMost.region_free {r : Nat} {t : Ty} (h : AtMost .none (.region r false) t) :
+theorem AtMost.region_free {r : Nat} {t : Ty} (h : AtMost .none (.region r) t) :
     AtMost .none .immutable (t.free r .immutable) := by
   simpa using h.free r .immutable
 
 /-- With nothing assumed, only `imm` and the region itself are below a
-region that doesn't hold `mut` objects: neither `mut` nor another region. -/
-theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r false)) :
-    m = .immutable ∨ m = .region r false := by
-  rcases h.none_inv with h | h | h | ⟨_, h⟩
+region: neither `mut` nor another region. -/
+theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .immutable ∨ m = .region r := by
+  rcases h.none_inv with h | h | h
   · exact .inl h
   · cases h
   · exact .inr h
-  · cases h
 
 /-- `let xs = [1] in r; xs[0] = 2`: an object of a region can be changed,
 like a `mut` one. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 1)) (.set (.var 0) (.int 2))) .unit :=
-  .letE (.newR (r := 0) (b := false) .int trivial) (.setR (.var rfl) .int)
+  .letE (.newR (r := 0) .int trivial) (.setR (.var rfl) .int)
 
-/-- A region that becomes `imm` can't hold a `mut` object: `[mut [1]] in r`
-is rejected. -/
+/-- But it can't hold a `mut` object, since it becomes `imm` when its region
+is freed: `[mut [1]] in r` is rejected. Such an object makes the array `mut`
+instead, which is what the checker decides (#286). -/
 example : ¬ HasType [] [] .none false Ctx.empty
-    (.new true (.new true (.int 1))) (.cell (.region 0 false) (.cell .mutable .int)) := by
+    (.new true (.new true (.int 1))) (.cell (.region 0) (.cell .mutable .int)) := by
   intro h
   cases h with
   | newR _ hd => exact nomatch Le.below_region hd.1
-
-/-- But a region that holds `mut` objects can (#286): `[mut [1]] in r`,
-with `mut ⊑ r`. -/
-example : HasType [] [] .none false Ctx.empty
-    (.new true (.new true (.int 1))) (.cell (.region 0 true) (.cell .mutable .int)) :=
-  .newR (.new .int trivial) ⟨.regionMut 0, trivial⟩
-
-/-- And freeing it gives `mut`, even when the block's other regions become
-`imm`: what it holds needs it. -/
-example : (Ty.cell (.region 0 true) (.cell .mutable .int)).free 0 .immutable =
-    .cell .mutable (.cell .mutable .int) := rfl
 
 /-- `let xs = [0] in r; || xs[0] = 1`: a closure that changes an object of a
 region has the region as its mutability (#287, rule 5 of the regions
 page). -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1))))
-    (.fn (.region 0 false) .unit .unit) := by
-  refine .letE (.newR (r := 0) (b := false) .int trivial)
-    (.lam (.inr ⟨rfl, 0, false, rfl⟩) (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h)
+    (.fn (.region 0) .unit .unit) := by
+  refine .letE (.newR (r := 0) .int trivial)
+    (.lam (.inr ⟨rfl, 0, rfl⟩) (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h)
       (.setR (.var rfl) .int))
   · intro _ y s hy
     simp only [Ctx.update] at hy
@@ -384,7 +359,7 @@ example : HasType [] [] .none false Ctx.empty
 could be stored outside it as a `mut` closure, and still change the
 region. -/
 example (b : Bool) (t : Ty) : ¬ HasType [] [] .none false
-    (Ctx.empty.update 0 (.cell .mutable .int)) (.lam b 1 (.set (.var 0) (.int 1))) (.fn (.region 0 false) t .unit) := by
+    (Ctx.empty.update 0 (.cell .mutable .int)) (.lam b 1 (.set (.var 0) (.int 1))) (.fn (.region 0) t .unit) := by
   intro h
   cases h with
   | lam _ hc himm _ _ hb =>
@@ -404,7 +379,7 @@ example (b : Bool) (t : Ty) : ¬ HasType [] [] .none false
 
 /-- When its region is freed, the closure's type is `gone`, here an `imm`
 one, like `xs`: what it changes is `imm` now. -/
-example : (Ty.prod (.fn (.region 0 false) .unit .unit) (.cell (.region 0 false) .int)).free 0 .immutable =
+example : (Ty.prod (.fn (.region 0) .unit .unit) (.cell (.region 0) .int)).free 0 .immutable =
     .prod (.gone .immutable) (.cell .immutable .int) := rfl
 
 /-- And a `gone` closure can't be called. -/
@@ -452,13 +427,13 @@ theorem fill_sat (m : Mu) (hm : m.Changeable .none) : Sat .none fill.assume [m] 
 of its region, which `fill` changes. The block's value has the region's
 type, so it can be frozen when the block ends (`block_frees`). -/
 example : HasType [fill] [] .none false Ctx.empty
-    (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [.region 0 false] [.int] (.pair (.var 0) (.int 1))) (.var 0)))
-    (.cell (.region 0 false) .int) :=
+    (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [.region 0] [.int] (.pair (.var 0) (.int 1))) (.var 0)))
+    (.cell (.region 0) .int) :=
   .letE (.newR .int trivial)
     (.letE (.call rfl (fill_sat _ trivial) (.pair (.var rfl) .int)) (.var rfl))
 
 /-- Freed, that's `imm [i32]`. -/
-example : (Ty.cell (.region 0 false) .int).free 0 .immutable = .cell .immutable .int := rfl
+example : (Ty.cell (.region 0) .int).free 0 .immutable = .cell .immutable .int := rfl
 
 /-- But `fill` can't be given an `imm` object. -/
 example : ¬ Sat .none fill.assume [.immutable] [.int] := by
@@ -633,15 +608,13 @@ theorem HeapOk.free_all {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fn
   obtain ⟨rfl, rfl⟩ := he
   obtain ⟨hm, hd, v, hv, hval, hvt⟩ := hh.2 l m₀ t₀ h₀
   refine ⟨?_, hd.free r .immutable, v, hv, hval, hvt.free_value hval r⟩
-  rcases hm with rfl | rfl | ⟨r', b', rfl⟩
+  rcases hm with rfl | rfl | ⟨r', rfl⟩
   · exact .inl rfl
   · exact .inr (.inl rfl)
   · simp only [Mu.free]
     split
-    · split
-      · exact .inl rfl
-      · exact .inr (.inl rfl)
-    · exact .inr (.inr ⟨r', b', rfl⟩)
+    · exact .inr (.inl rfl)
+    · exact .inr (.inr ⟨r', rfl⟩)
 
 /-- Preservation for any number of steps. -/
 theorem preservation_steps {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
@@ -659,8 +632,7 @@ theorem preservation_steps {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
 /-- **A block's region can be frozen when it ends.** The heap typing `σ`
 before the block doesn't mention its region `r`, and the block `e` gives
 the value `v`. Then, with `r` freed to `imm`: the heap is well-typed, `v`
-has the freed type, the region's locations are `imm`, or `mut` if the
-region holds `mut` objects, and the heap typing
+has the freed type, the region's locations are `imm`, and the heap typing
 still has `σ`, so what comes after the block, `k` with `x` for `v`, typed
 before it, is well-typed. No copy is made: the heap is the same. -/
 theorem block_frees {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {e v : Expr} {t : Ty} {r : Nat}
@@ -668,10 +640,7 @@ theorem block_frees {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
     (hs : Steps fns h e h' v) (hv : v.IsValue) :
     ∃ σ' : HeapTy, Extends σ σ' ∧ Extends σ (σ'.free r) ∧ HeapOk fns (σ'.free r) h' ∧
       HasType fns (σ'.free r) .none false Ctx.empty v (t.free r .immutable) ∧
-      (∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r false, s) →
-        ∃ s' : Ty, (σ'.free r)[l]? = some (.immutable, s')) ∧
-      (∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r true, s) →
-        ∃ s' : Ty, (σ'.free r)[l]? = some (.mutable, s')) ∧
+      (∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r, s) → ∃ s' : Ty, (σ'.free r)[l]? = some (.immutable, s')) ∧
       ∀ (x : Nat) (k : Expr) (T : Ty), HasType fns σ .none false (Ctx.empty.update x (t.free r .immutable)) k T →
         HasType fns (σ'.free r) .none false Ctx.empty (k.subst x v) T := by
   obtain ⟨σ', hx, hh', hv'⟩ := preservation_steps hf hs hh ht
@@ -683,9 +652,7 @@ theorem block_frees {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
     rw [HeapTy.free_getElem?, hx l p hl]
     exact hfix
   have hvf := hv'.free_value hv r
-  refine ⟨σ', hx, hx', hh'.free_all r, hvf, ?_, ?_, ?_⟩
-  · intro l s hl
-    exact ⟨s.free r .immutable, by rw [HeapTy.free_getElem?, hl]; simp [Mu.free]⟩
+  refine ⟨σ', hx, hx', hh'.free_all r, hvf, ?_, ?_⟩
   · intro l s hl
     exact ⟨s.free r .immutable, by rw [HeapTy.free_getElem?, hl]; simp [Mu.free]⟩
   · intro x k T hk
@@ -693,16 +660,15 @@ theorem block_frees {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
 
 /-- **After its block, a region never changes.** Whatever runs after the
 block, as long as it was typed before it, leaves every location of the
-region as the block left it, unless the region holds `mut` objects and so
-became `mut`. -/
+region as the block left it. -/
 theorem block_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' h'' : Heap}
     {e v k e'' : Expr} {t T : Ty} {r x : Nat}
     (hh : HeapOk fns σ h) (hfresh : σ.free r = σ) (ht : HasType fns σ .none false Ctx.empty e t)
     (hs : Steps fns h e h' v) (hv : v.IsValue)
     (hk : HasType fns σ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
     (hs' : Steps fns h' (k.subst x v) h'' e'') :
-    ∃ σ' : HeapTy, Extends σ σ' ∧ ∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r false, s) → h''[l]? = h'[l]? := by
-  obtain ⟨σ₁, hx, _, hh₁, _, himm, _, hcont⟩ := block_frees hf hh hfresh ht hs hv
+    ∃ σ' : HeapTy, Extends σ σ' ∧ ∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r, s) → h''[l]? = h'[l]? := by
+  obtain ⟨σ₁, hx, _, hh₁, _, himm, hcont⟩ := block_frees hf hh hfresh ht hs hv
   refine ⟨σ₁, hx, fun l s hl => ?_⟩
   obtain ⟨s', hl'⟩ := himm l s hl
   exact imm_never_changes hf hs' hh₁ (hcont x k T hk) hl'
@@ -711,8 +677,8 @@ theorem block_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h'
 the block and `xs` of its region, is rejected. `log`'s type was fixed before
 the block, so it can't hold an object of the region: here `log` is location
 0, a `mut` cell holding a `mut` cell, and `xs` a cell of region 0. -/
-example (b : Bool) (t : Ty) : ¬ HasType [] [(.mutable, .cell .mutable .int)] .none false
-    (Ctx.empty.update 0 (.cell (.region 0 b) .int)) (.set (.loc 0) (.var 0)) t := by
+example (t : Ty) : ¬ HasType [] [(.mutable, .cell .mutable .int)] .none false
+    (Ctx.empty.update 0 (.cell (.region 0) .int)) (.set (.loc 0) (.var 0)) t := by
   intro h
   cases h with
   | setP _ hi _ => simp [Assume.none] at hi

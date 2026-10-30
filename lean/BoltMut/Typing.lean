@@ -15,8 +15,8 @@ The rules that matter for mutability:
   change it, since it may be called with `imm`.
 * `new true e` can make a cell of a region `r` (#209) instead of a `mut`
   one. What it holds is at most `r`, so it's `imm` all the way down once
-  the region is freed (`Regions.lean`). A region that holds `mut` objects
-  (#286) becomes `mut` instead.
+  the region is freed (`Regions.lean`). One that would have to hold `mut`
+  objects is just `mut` (#286).
 * Aliases share the mutability: a location has one type, `σ[l]`.
 * An `imm` closure, `lam false x body`, only captures what's `imm` all the
   way down: its body sees only the variables of such types, and only `imm`
@@ -83,14 +83,13 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       HasType fns σ Δ io Γ e₁ (.cell .mutable t) → HasType fns σ Δ io Γ e₂ t →
       HasType fns σ Δ io Γ (.set e₁ e₂) .unit
   /-- A `mut` object can be made in the region `r` instead: what it holds
-  is at most the region. So it's `imm` once the region is freed, or `mut`
-  if the region holds `mut` objects. -/
-  | newR {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} {b : Bool} :
-      HasType fns σ Δ io Γ e t → AtMost Δ (.region r b) t →
-      HasType fns σ Δ io Γ (.new true e) (.cell (.region r b) t)
+  is at most the region, so it's `imm` once the region is freed. -/
+  | newR {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
+      HasType fns σ Δ io Γ e t → AtMost Δ (.region r) t →
+      HasType fns σ Δ io Γ (.new true e) (.cell (.region r) t)
   /-- A region's objects can be changed, like `mut` ones. -/
-  | setR {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {t : Ty} {r : Nat} {b : Bool} :
-      HasType fns σ Δ io Γ e₁ (.cell (.region r b) t) → HasType fns σ Δ io Γ e₂ t →
+  | setR {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {t : Ty} {r : Nat} :
+      HasType fns σ Δ io Γ e₁ (.cell (.region r) t) → HasType fns σ Δ io Γ e₂ t →
       HasType fns σ Δ io Γ (.set e₁ e₂) .unit
   /-- A generic function can change what has a changeable mutability
   parameter: a call gives it `mut` or a region (rule 1 of the regions
@@ -114,7 +113,7 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   so when the function it's in is called: the parameters what it captures
   has can't be given a region (#285). -/
   | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} {μ : Mu} :
-      (μ = muOf b ∨ b = true ∧ ∃ r' hm, μ = .region r' hm) →
+      (μ = muOf b ∨ b = true ∧ ∃ r', μ = .region r') →
       Γc.Sub Γ → (μ ≠ .mutable → ∀ y s, Γc y = some s → AtMost Δ μ s) →
       (∀ y s, Γc y = some s → s.RegionsIn μ ∧ s.ParamsNoRegion Δ) →
       (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ) →

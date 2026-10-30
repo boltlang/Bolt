@@ -15,13 +15,10 @@ that they're right, and when.
   made `imm` right away, and one that something `mut` must be below is made
   `mut`. `Le.eq_immutable` and `Le.eq_mutable`: that loses no solution,
   unless an assumption ends at `imm`, like `'v: imm`, or starts at `mut`.
-  Then a parameter is a solution too, as the examples show. A region that
-  holds `mut` objects (#286) is as high as `mut`, so it's a solution too,
-  and the same as `mut` for the order.
+  Then a parameter is a solution too, as the examples show.
 - **Following assumptions** (`Solver::mutability_le`): `m ⊑ μ` holds by the
   order, or through a chain of assumptions. `leSearch` follows them, from
-  `m` and from `mut`, which everything is below, as it is below a region
-  that holds `mut` objects. `le_iff_leSearch`: it finds
+  `m` and from `mut`, which everything is below. `le_iff_leSearch`: it finds
   every chain once it can take as many steps as there are assumptions,
   since a chain never needs one twice. `leSearchOld`, which follows them
   from `m` only, at most 8 steps, misses some.
@@ -74,7 +71,6 @@ theorem Le.eq_immutable_of {Δ : Assume} (hΔ : ∀ p ∈ Δ.mus, p.2 ≠ .immut
   induction h with
   | bot => intro; rfl
   | top => intro h; cases h
-  | regionMut => intro h; cases h
   | refl => exact id
   | assume hp => intro h; subst h; exact (hΔ _ hp rfl).elim
   | trans _ _ ih₁ ih₂ => intro h; exact ih₁ (ih₂ h)
@@ -85,22 +81,20 @@ theorem Le.eq_immutable {Δ : Assume} (hΔ : ∀ p ∈ Δ.mus, p.2 ≠ .immutabl
     (h : Le Δ m .immutable) : m = .immutable :=
   Le.eq_immutable_of hΔ h rfl
 
-theorem Le.isTop_of {Δ : Assume} (hΔ : ∀ p ∈ Δ.mus, p.1.isTop = false) {m μ : Mu}
-    (h : Le Δ m μ) : m.isTop = true → μ.isTop = true := by
+theorem Le.eq_mutable_of {Δ : Assume} (hΔ : ∀ p ∈ Δ.mus, p.1 ≠ .mutable) {m μ : Mu}
+    (h : Le Δ m μ) : m = .mutable → μ = .mutable := by
   induction h with
   | bot => intro h; cases h
   | top => intro; rfl
-  | regionMut => intro; rfl
   | refl => exact id
-  | assume hp => intro h; rw [hΔ _ hp] at h; cases h
+  | assume hp => intro h; subst h; exact (hΔ _ hp rfl).elim
   | trans _ _ ih₁ ih₂ => intro h; exact ih₂ (ih₁ h)
 
-/-- Only `mut` is above `mut`, or a region that holds `mut` objects, which
-is as high (#286), unless an assumption starts at one of them. So the
+/-- Only `mut` is above `mut`, unless an assumption starts at `mut`. So the
 solver can make an unknown `μ` with `mut ⊑ μ` into `mut` right away. -/
-theorem Le.eq_mutable {Δ : Assume} (hΔ : ∀ p ∈ Δ.mus, p.1.isTop = false) {μ : Mu}
-    (h : Le Δ .mutable μ) : μ.isTop = true :=
-  Le.isTop_of hΔ h rfl
+theorem Le.eq_mutable {Δ : Assume} (hΔ : ∀ p ∈ Δ.mus, p.1 ≠ .mutable) {μ : Mu}
+    (h : Le Δ .mutable μ) : μ = .mutable :=
+  Le.eq_mutable_of hΔ h rfl
 
 /-- With `'v: imm` assumed, `'v` is at most `imm` too, so an unknown below
 `imm` can't be decided right away: it could be `'v`. -/
@@ -113,32 +107,21 @@ example : Le { mus := [(.mutable, .param 0)] } .mutable (.param 0) := .assume (b
 
 /-- `m ⊑ μ` by the order itself. -/
 def baseLe (m μ : Mu) : Bool :=
-  m == μ || m == .immutable || μ.isTop
+  m == μ || m == .immutable || μ == .mutable
 
 /-- Whether `m ⊑ μ`, following the assumptions at most `fuel` steps: by the
 order itself, or through an assumption `a ⊑ b` that starts at `m`, or at
-`mut` or a region that holds `mut` objects, which everything is below, with
-`b ⊑ μ`. -/
+`mut`, which everything is below, with `b ⊑ μ`. -/
 def leSearch (Δ : Assume) : Nat → Mu → Mu → Bool
   | 0, m, μ => baseLe m μ
-  | n + 1, m, μ => baseLe m μ || Δ.mus.any fun p => (p.1 == m || p.1.isTop) && leSearch Δ n p.2 μ
-
-/-- Everything is below `mut`, and below a region that holds `mut` objects. -/
-theorem Le.of_isTop {Δ : Assume} (m : Mu) {μ : Mu} (h : μ.isTop = true) : Le Δ m μ := by
-  cases μ with
-  | mutable => exact .top m
-  | region r b =>
-    cases b
-    · cases h
-    · exact .trans (.top m) (.regionMut r)
-  | _ => cases h
+  | n + 1, m, μ => baseLe m μ || Δ.mus.any fun p => (p.1 == m || p.1 == .mutable) && leSearch Δ n p.2 μ
 
 theorem Le.of_baseLe {Δ : Assume} {m μ : Mu} (h : baseLe m μ = true) : Le Δ m μ := by
   simp only [baseLe, Bool.or_eq_true, beq_iff_eq] at h
   rcases h with (h | h) | h
   · subst h; exact .refl _
   · subst h; exact .bot _
-  · exact .of_isTop m h
+  · subst h; exact .top _
 
 /-- What the search finds holds. -/
 theorem leSearch_sound {Δ : Assume} : ∀ {n : Nat} {m μ : Mu}, leSearch Δ n m μ = true → Le Δ m μ
@@ -151,15 +134,15 @@ theorem leSearch_sound {Δ : Assume} : ∀ {n : Nat} {m μ : Mu}, leSearch Δ n 
       simp only at hm
       rcases hm with hm | hm
       · subst hm; exact .trans (.assume hp) hb
-      · exact .trans (.of_isTop m hm) (.trans (.assume hp) hb)
+      · subst hm; exact .trans (.top m) (.trans (.assume hp) hb)
 
 /-- A chain of assumptions from `m` to `μ`, as the search follows them: each
-starts where the one before ended, or at `mut` or a region that holds
-`mut` objects, and the last ends below `μ` by the order. -/
+starts where the one before ended, or at `mut`, and the last ends below
+`μ` by the order. -/
 inductive Chain (Δ : Assume) : Mu → Mu → List (Mu × Mu) → Prop where
   | base {m μ : Mu} : baseLe m μ = true → Chain Δ m μ []
   | step {m μ a b : Mu} {ps : List (Mu × Mu)} :
-      (a, b) ∈ Δ.mus → (a = m ∨ a.isTop = true) → Chain Δ b μ ps → Chain Δ m μ ((a, b) :: ps)
+      (a, b) ∈ Δ.mus → (a = m ∨ a = .mutable) → Chain Δ b μ ps → Chain Δ m μ ((a, b) :: ps)
 
 theorem leSearch_of_baseLe {Δ : Assume} {n : Nat} {m μ : Mu} (h : baseLe m μ = true) :
     leSearch Δ n m μ = true := by
@@ -198,19 +181,16 @@ theorem Chain.trans {Δ : Assume} {m x ν : Mu} {ps qs : List (Mu × Mu)} (h₁ 
     rcases hb with (hb | hb) | hb
     · subst hb; exact ⟨_, h₂⟩
     · subst hb; exact ⟨[], .base (by simp [baseLe])⟩
-    · cases h₂ with
+    · subst hb
+      cases h₂ with
       | base hb' =>
         simp only [baseLe, Bool.or_eq_true, beq_iff_eq] at hb'
         refine ⟨[], .base ?_⟩
         rcases hb' with (h | h) | h
-        · subst h; simp [baseLe, hb]
-        · subst h; cases hb
-        · simp [baseLe, h]
-      | step hp hm hc =>
-        refine ⟨_, .step hp (.inr ?_) hc⟩
-        rcases hm with h | h
-        · subst h; exact hb
-        · exact h
+        · subst h; simp [baseLe]
+        · cases h
+        · subst h; simp [baseLe]
+      | step hp hm hc => exact ⟨_, .step hp (by rcases hm with h | h <;> exact .inr h) hc⟩
   | step hp hm _ ih =>
     intro h₂
     obtain ⟨rs, hr⟩ := ih h₂
@@ -220,8 +200,7 @@ theorem Chain.trans {Δ : Assume} {m x ν : Mu} {ps qs : List (Mu × Mu)} (h₁ 
 theorem Le.chain {Δ : Assume} {m μ : Mu} (h : Le Δ m μ) : ∃ ps, Chain Δ m μ ps := by
   induction h with
   | bot => exact ⟨[], .base (by simp [baseLe])⟩
-  | top => exact ⟨[], .base (by simp [baseLe, Mu.isTop])⟩
-  | regionMut => exact ⟨[], .base (by simp [baseLe, Mu.isTop])⟩
+  | top => exact ⟨[], .base (by simp [baseLe])⟩
   | refl => exact ⟨[], .base (by simp [baseLe])⟩
   | assume hp => exact ⟨_, .step hp (.inl rfl) (.base (by simp [baseLe]))⟩
   | trans _ _ ih₁ ih₂ =>

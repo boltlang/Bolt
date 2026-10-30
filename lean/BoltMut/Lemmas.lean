@@ -152,7 +152,7 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
       have hμ := Le.none_immutable hd
       subst hμ
       have hb' : b = false := by
-        rcases hk with h | ⟨_, _, _, h⟩
+        rcases hk with h | ⟨_, _, h⟩
         · exact muOf_immutable h.symm
         · cases h
       subst hb'
@@ -552,7 +552,7 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     revert h₁ hc
     cases ms[i]?.getD .immutable with
     | mutable => intro h₁ _; exact .set h₁ (ih₂ hn.2)
-    | region r b => intro h₁ _; exact .setR h₁ (ih₂ hn.2)
+    | region r => intro h₁ _; exact .setR h₁ (ih₂ hn.2)
     | param j => intro h₁ hc; exact .setP h₁ hc (ih₂ hn.2)
     | immutable => intro _ hc; exact hc.elim
   | letE _ _ ih₁ ih₂ =>
@@ -569,10 +569,10 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     simp only [Expr.inst, Ty.inst]
     have h := ih hn
     rw [Ctx.inst_update] at h
-    have hk' : μ.subst ms = muOf b ∨ b = true ∧ ∃ r' hm, μ.subst ms = .region r' hm := by
-      rcases hk with rfl | ⟨hb, r', hm, rfl⟩
+    have hk' : μ.subst ms = muOf b ∨ b = true ∧ ∃ r', μ.subst ms = .region r' := by
+      rcases hk with rfl | ⟨hb, r', rfl⟩
       · exact .inl (Mu.subst_muOf ms b)
-      · exact .inr ⟨hb, r', hm, rfl⟩
+      · exact .inr ⟨hb, r', rfl⟩
     refine .lam hk' (hc.inst ms τs) (fun hb y s hy => ?_) (fun y s hy => ?_)
       (fun l hl => ((Expr.NoLocs.inst ms τs hn).not_hasLoc l hl).elim) h
     · simp only [Ctx.inst, Option.map_eq_some_iff] at hy

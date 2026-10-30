@@ -71,8 +71,8 @@ example : HasType [first] [] .none false Ctx.empty (.call 0 [.immutable] [] (.ne
   exact .call rfl (sat_none _ _) (.new .int trivial)
 
 /-- And with an object of a region (#285). -/
-example : HasType [first] [] .none false Ctx.empty (.call 0 [.region 0 false] [] (.new true (.int 1))) .int := by
-  show HasType _ _ _ _ _ _ (first.retTy.inst [.region 0 false] [])
+example : HasType [first] [] .none false Ctx.empty (.call 0 [.region 0] [] (.new true (.int 1))) .int := by
+  show HasType _ _ _ _ _ _ (first.retTy.inst [.region 0] [])
   exact .call rfl (sat_none _ _) (.newR .int trivial)
 
 /-- A closure in a generic function that captures a `T`, as in
@@ -98,7 +98,7 @@ example : HasType [] [] { noRegionTys := [0] } false (Ctx.empty.update 0 (.tpara
     (captured_update 0 (.tparam 0) trivial (by simp [Ty.ParamsNoRegion]) _) (fun _ h => nomatch h) (.var rfl)
 
 /-- So a call can't give it one. -/
-example : ¬ Sat .none { noRegionTys := [0] } [] [.cell (.region 0 false) .int] := by
+example : ¬ Sat .none { noRegionTys := [0] } [] [.cell (.region 0) .int] := by
   intro h
   have := (h.2.2.2.2.1 0 (by simp)).1
   simp [Ty.NoRegion, Mu.NoRegion] at this
