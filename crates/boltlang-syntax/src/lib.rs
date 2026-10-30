@@ -670,4 +670,42 @@ mod tests {
         assert_eq!(T![macro_rules], MACRO_RULES_KEYWORD);
         assert_eq!(T![ident], IDENT);
     }
+
+    /// Every kind survives the trip through rowan's raw kinds, and has a
+    /// name for the parser's errors: "expected {name}".
+    #[test]
+    fn every_kind_has_a_name() {
+        use super::Lang;
+        use rowan::Language;
+        for raw in 0..=SOURCE_FILE as u16 {
+            let kind = Lang::kind_from_raw(rowan::SyntaxKind(raw));
+            assert_eq!(Lang::kind_to_raw(kind).0, raw);
+            if kind == TOMBSTONE {
+                continue;
+            }
+            let name = kind.pretty();
+            assert!(!name.is_empty(), "{kind:?} has no name");
+            assert!(
+                name.starts_with('\'') || name.starts_with(|c: char| c.is_ascii_lowercase()),
+                "{kind:?} has the name {name:?}, which doesn't fit after \"expected\""
+            );
+        }
+    }
+
+    #[test]
+    fn trivia() {
+        assert!(WHITESPACE.is_trivia());
+        assert!(LINE_COMMENT.is_trivia());
+        assert!(BLOCK_COMMENT.is_trivia());
+        assert!(!IDENT.is_trivia());
+        assert!(!SEMI.is_trivia());
+    }
+
+    #[test]
+    #[should_panic]
+    fn a_raw_kind_past_the_last_is_rejected() {
+        use super::Lang;
+        use rowan::Language;
+        Lang::kind_from_raw(rowan::SyntaxKind(SOURCE_FILE as u16 + 1));
+    }
 }
