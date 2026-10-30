@@ -509,14 +509,16 @@ theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .i
   · cases h
   · exact .inr h
 
-/-- No function type in `t` mentions the region `r`: a closure can't be
-copied, so a freeze can't make its type `imm` (rule 5 of the regions
-page). -/
-def Ty.FnFree (r : Nat) : Ty → Prop
+/-- What a freeze of the region `r` can copy (#292). A closure can't be
+copied, so no function type in `t` mentions `r` (rule 5 of the regions
+page). And only an object of `r` holds what mentions `r`: a copy of a `mut`
+one would be a second `mut` object where there was one, which can be
+noticed. So every copy is `imm`. -/
+def Ty.Freezable (r : Nat) : Ty → Prop
   | .unit | .int | .tparam _ => True
-  | .cell _ t => t.FnFree r
+  | .cell m t => (t.mentions r = true → m = .region r) ∧ t.Freezable r
   | .fn m a b => (Ty.fn m a b).mentions r = false
-  | .prod a b => a.FnFree r ∧ b.FnFree r
+  | .prod a b => a.Freezable r ∧ b.Freezable r
 
 /-- `t` has no type or mutability parameter. -/
 def Ty.NoParams : Ty → Prop

@@ -127,11 +127,11 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   | snd {io : Bool} {Γ : Ctx} {e : Expr} {a b : Ty} :
       HasType fns σ Δ io Γ e (.prod a b) → HasType fns σ Δ io Γ (.snd e) b
   /-- A block whose region `r` becomes `imm` ends with a freeze (#292): its
-  value is copied, with `r` replaced with `imm` in its type. A closure
-  can't be copied, so no function type in it mentions `r`. The type has no
-  parameters, so that a call can't give it the region. -/
+  value is copied, with `r` replaced with `imm` in its type
+  (`Ty.Freezable`): no closure, and nothing of `r` but in its own objects.
+  The type has no parameters, so that a call can't give it the region. -/
   | freeze {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
-      HasType fns σ Δ io Γ e t → t.FnFree r → t.NoParams →
+      HasType fns σ Δ io Γ e t → t.Freezable r → t.NoParams →
       HasType fns σ Δ io Γ (.freeze r t e) (t.free r .immutable)
 
 /-- Each function's body has its declared type, under what the function

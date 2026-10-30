@@ -112,7 +112,7 @@ the block, and the freeze copies the array into an `imm` one (#292). A
 caller that wants `mut` would give `'ρ` that instead, with no freeze. -/
 example : HasType [build] [] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
-  refine .freeze ?_ trivial ⟨(fun _ h => nomatch h), trivial⟩
+  refine .freeze ?_ ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
   show HasType _ _ _ _ _ _ (build.retTy.inst [.region 0] [])
   refine .call rfl ⟨?_, ?_, ?_, ?_⟩ .int
   · intro p h; simp [build] at h
@@ -132,7 +132,7 @@ example : HasType [] [] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.var 0))))
     (.cell .immutable .int) :=
-  .freeze (.letE (.newR .int trivial) (.letE (.setR (.var rfl) .int) (.var rfl))) trivial
+  .freeze (.letE (.newR .int trivial) (.letE (.setR (.var rfl) .int) (.var rfl))) ⟨(fun h => nomatch h), trivial⟩
     ⟨(fun _ h => nomatch h), trivial⟩
 
 /-- A closure can't be copied, so a freeze can't make a function type that
@@ -142,7 +142,7 @@ example (e : Expr) (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     (.freeze 0 (.prod (.fn .immutable (.cell (.region 0) .int) .unit) (.cell (.region 0) .int)) e) t := by
   intro h
   cases h with
-  | freeze _ hf _ => simp [Ty.FnFree, Ty.mentions, Mu.mentions] at hf
+  | freeze _ hf _ => simp [Ty.Freezable, Ty.mentions, Mu.mentions] at hf
 
 /-- A closure that changes the region's array but whose type doesn't
 mention the region is shared, not copied: `{ let xs = mut [1]; let f = ||
@@ -154,6 +154,7 @@ example : HasType [] [] .none false Ctx.empty
       (.letE 0 (.new true (.int 1)) (.letE 1 (.lam true 2 (.set (.var 0) (.int 2))) (.var 0))))
     (.cell .immutable .int) :=
   .freeze (.letE (.newR .int trivial) (.letE (.lam (a := .unit) (fun _ _ h => h) (fun h => nomatch h)
-    (.setR (.var rfl) .int)) (.var rfl))) trivial ⟨(fun _ h => nomatch h), trivial⟩
+    (.setR (.var rfl) .int)) (.var rfl))) ⟨(fun h => nomatch h), trivial⟩
+    ⟨(fun _ h => nomatch h), trivial⟩
 
 end BoltMut
