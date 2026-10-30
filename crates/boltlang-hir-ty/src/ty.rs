@@ -478,7 +478,10 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 None => write!(f, "?{}", var.0),
             },
             Ty::Adt(id, args, mutabilities, mutability) => {
-                if let AdtId::Struct(_) = id {
+                // An `imm struct` is always `imm`, like an enum.
+                if let AdtId::Struct(s) = id
+                    && !s.item(db).is_imm
+                {
                     self.write_mutability(f, mutability)?;
                 }
                 let name = match id {

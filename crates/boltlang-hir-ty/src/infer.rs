@@ -260,6 +260,15 @@ pub fn mut_inside_imm<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<(Ty<'db>, Ty
 
 /// The mutability of an array literal: `Mut` for `mut [a, b]`, and `Imm`
 /// for `[a, b]`.
+/// Whether the values of `def` are always `imm`: a variant, or an `imm
+/// struct`.
+fn is_always_imm<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> bool {
+    match def {
+        VariantDef::Variant(_) => true,
+        VariantDef::Struct(s) => s.item(db).is_imm,
+    }
+}
+
 fn literal_mutability<'db>(is_mut: bool) -> Ty<'db> {
     Ty::Mutability(if is_mut { Mutability::Mut } else { Mutability::Imm })
 }
@@ -411,6 +420,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// its mutability (see [`struct_args`]).
     pub(crate) fn fresh_adt(&mut self, def: VariantDef<'db>, mutability: Ty<'db>) -> (Ty<'db>, Box<[Ty<'db>]>) {
         let (adt, generic_def) = def.adt();
+        // An `imm struct` is always `imm`.
+        let mutability = match adt {
+            AdtId::Struct(s) if s.item(self.db).is_imm => Ty::Mutability(Mutability::Imm),
+            _ => mutability,
+        };
         let count = generic_def.generic_params(self.db).type_params.len();
         let args: Vec<Ty<'db>> = (0..count).map(|_| self.new_var()).collect();
         let named = named_mutabilities(self.db, generic_def).len();
@@ -960,6 +974,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// which must meet the bounds of the struct or enum.
     fn constructor_ty(&mut self, expr: ExprId, def: VariantDef<'db>, is_mut: bool) -> Ty<'db> {
         let (_, generic_def) = def.adt();
+        if is_mut && is_always_imm(self.db, def) {
+            self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
+        }
         let (adt_ty, args) = self.fresh_adt(def, literal_mutability(is_mut));
         self.struct_holds(&adt_ty, expr);
         self.require_bounds(def, &args, expr);
@@ -1368,8 +1385,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             return Ty::Error;
         };
         let (_, generic_def) = def.adt();
-        // A variant can't be `mut`: an enum's values can't be changed.
-        if is_mut && matches!(def, VariantDef::Variant(_)) {
+        // A variant can't be `mut`: an enum's values can't be changed; nor
+        // can those of an `imm struct`.
+        if is_mut && is_always_imm(self.db, def) {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
         let (ty, args) = self.fresh_adt(def, literal_mutability(is_mut));

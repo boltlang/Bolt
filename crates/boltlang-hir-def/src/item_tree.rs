@@ -228,6 +228,9 @@ pub struct Function {
 pub struct Struct {
     pub name: Option<Name>,
     pub visibility: RawVisibility,
+    /// `imm struct String(Vec[u8]);`: its values are all `imm`, so its type
+    /// has no mutability, like an enum's.
+    pub is_imm: bool,
     pub ast_id: AstId,
 }
 
@@ -354,7 +357,8 @@ impl ItemTree {
             E::Struct(s) => {
                 let ast_id = self.next_ast_id(STRUCT);
                 let visibility = RawVisibility::from_ast(s.visibility());
-                ModItem::Struct(push(&mut self.structs, Struct { name: name(s.name()), visibility, ast_id }))
+                let is_imm = s.imm_token().is_some();
+                ModItem::Struct(push(&mut self.structs, Struct { name: name(s.name()), visibility, is_imm, ast_id }))
             }
             E::Enum(e) => {
                 let ast_id = self.next_ast_id(ENUM);

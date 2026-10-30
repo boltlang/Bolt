@@ -344,9 +344,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         let (head, kind) = match resolution.ty {
             // Like an array, a struct written without `mut` or `imm` has its
             // mutability decided by where it's written.
+            // An `imm struct` is always `imm`, like an enum.
             TypeNs::Struct(s) => {
                 let mutabilities = self.mutability_args(id, s, args);
-                let head = Ty::adt(AdtId::Struct(s), [], mutabilities, Ty::Unwritten);
+                let own = if s.item(self.db).is_imm { imm() } else { Ty::Unwritten };
+                let head = Ty::adt(AdtId::Struct(s), [], mutabilities, own);
                 (head, def_kind(self.db, GenericDefId::Struct(s)))
             }
             TypeNs::Enum(e) => (Ty::adt(AdtId::Enum(e), [], [], imm()), def_kind(self.db, GenericDefId::Enum(e))),
@@ -1155,7 +1157,8 @@ pub fn field_types<'db>(db: &'db dyn Db, def: VariantDef<'db>) -> &'db FieldType
 pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes<'db> {
     let sig = struct_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Struct(id));
-    let own = struct_mutability(db, id);
+    // The fields of an `imm struct` are `imm`, like those of an enum.
+    let own = if id.item(db).is_imm { imm() } else { struct_mutability(db, id) };
     // A field can have a mutability the struct declares, like the `'v` of
     // `data: 'v Vec[T]` in `struct VecIter[T, 'v]`.
     let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Struct(id));

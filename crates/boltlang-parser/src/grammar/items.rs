@@ -41,6 +41,12 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
             struct_item(p, m);
             return Ok(());
         }
+        // `imm struct String(Vec[u8]);`: a struct whose values are all `imm`.
+        T![imm] if p.nth_at(1, T![struct]) => {
+            p.bump(T![imm]);
+            struct_item(p, m);
+            return Ok(());
+        }
         T![enum] => {
             enum_item(p, m);
             return Ok(());
@@ -299,8 +305,8 @@ pub(crate) fn opt_where_clause(p: &mut Parser) {
 }
 
 /// `struct Point[T] where T: Num { x: T, y: T }`, `struct Pair(A, B);` or
-/// `struct Unit;`. Like in the grammar, a `where` clause goes before named
-/// fields but after tuple fields.
+/// `struct Unit;`, after an `imm` if there's one. Like in the grammar, a
+/// `where` clause goes before named fields but after tuple fields.
 fn struct_item(p: &mut Parser, m: Marker) {
     p.bump(T![struct]);
     name(p);
