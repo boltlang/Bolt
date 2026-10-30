@@ -198,6 +198,22 @@ mod tests {
         fs::remove_dir_all(&base).unwrap();
     }
 
+    #[test]
+    fn the_errors_say_what_to_do() {
+        assert_eq!(
+            Error::NoDataDir.to_string(),
+            format!("there's no directory to put the standard library in: set HOME, or {ENV_VAR} to the directory of `std`")
+        );
+        let error = Error::Io(PathBuf::from("/x/std"), io::ErrorKind::PermissionDenied.into());
+        assert!(error.to_string().starts_with("can't write the standard library to `/x/std`: "), "{error}");
+        assert_eq!(Source::Shipped.to_string(), "comes with the compiler");
+    }
+
+    #[test]
+    fn installing_where_there_is_no_parent_fails() {
+        assert!(matches!(install(Path::new("/")), Err(Error::Io(..))));
+    }
+
     /// Read-only files can't always be removed.
     fn make_writable(dir: &Path) {
         for entry in fs::read_dir(dir).unwrap() {

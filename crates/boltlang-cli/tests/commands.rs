@@ -201,11 +201,49 @@ fn build_doesnt_write_a_module_with_errors() {
     assert!(!dir.join("b.wasm").exists());
 }
 
+/// `bolt --version`, with `BOLT_PRELUDE_PATH` set to `std`, or unset.
+fn version(std: Option<&str>) -> String {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_bolt"));
+    command.arg("--version");
+    match std {
+        Some(path) => command.env("BOLT_PRELUDE_PATH", path),
+        None => command.env_remove("BOLT_PRELUDE_PATH"),
+    };
+    let output = command.output().unwrap();
+    assert!(output.status.success());
+    String::from_utf8(output.stdout).unwrap()
+}
+
 #[test]
 fn version_says_where_std_is() {
-    let output = Command::new(env!("CARGO_BIN_EXE_bolt")).arg("--version").output().unwrap();
+    let dir = dir_with("version", &[]);
+    let real = dir.canonicalize().unwrap();
+    assert_eq!(
+        version(Some(dir.to_str().unwrap())),
+        format!("bolt {}\nstd: {} (from BOLT_PRELUDE_PATH)\n", env!("CARGO_PKG_VERSION"), real.display())
+    );
+    assert!(
+        version(Some("/no/such/dir")).ends_with("std: not found: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"),
+    );
+    // A debug build uses the `std` of its repository.
+    if cfg!(debug_assertions) {
+        assert!(version(None).ends_with("(from the repository of this debug build)\n"), "{}", version(None));
+    }
+}
+
+#[test]
+fn a_missing_std_is_a_warning() {
+    let dir = dir_with("no-std", &[("a.bolt", "1 + 2;\n")]);
+    let output = Command::new(env!("CARGO_BIN_EXE_bolt"))
+        .args(["run", "--no-prelude", "a.bolt"])
+        .env("BOLT_PRELUDE_PATH", "/no/such/dir")
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert!(output.status.success());
-    assert!(String::from_utf8(output.stdout).unwrap().starts_with("bolt "));
-    let output = Command::new(env!("CARGO_BIN_EXE_bolt")).arg("-V").output().unwrap();
-    assert!(output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "3\n");
+    assert_eq!(
+        String::from_utf8(output.stderr).unwrap(),
+        "warning: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"
+    );
 }
