@@ -65,8 +65,11 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   mutability, and then capture what's at most that region and mentions no
   other (rule 5 of the regions page, #287). Other closures capture nothing
   whose type mentions a region. Once a region is freed, a closure whose
-  type mentions it is `gone`: it can't be called. A call's arguments
-  mention no region.
+  type mentions it is `gone`: it can't be called. A call can give a region
+  to a generic function's parameters (#285), except to those that what a
+  closure in it captures has: the function lists them
+  (`Assume.noRegionMus`, `Assume.noRegionTys`), and a call gives them no
+  region.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -147,8 +150,7 @@ The theorems depend only on Lean's standard axioms, `propext`,
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
 - **The rest of regions** (#209): blocks as a part of the language, with
-  nested blocks freed in turn and recursion; generic functions called with
-  a region's objects (#285). A closure whose type mentions a freed region
+  nested blocks freed in turn and recursion. A closure whose type mentions a freed region
   can't be called, even when the region becomes `mut`, where rule 5 of
   the regions page lets it be called (#289). Also borrowed parameters (#283) and unique values at
   their last use (#284).

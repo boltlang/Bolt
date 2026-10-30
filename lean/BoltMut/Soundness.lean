@@ -134,7 +134,7 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     rcases ih₁ hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .letVal hv⟩
     · exact .inr ⟨_, _, .letCong hs⟩
-  | call hf _ _ _ ih =>
+  | call hf _ _ ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .callVal hf hv⟩
     · exact .inr ⟨_, _, .callCong hs⟩
@@ -223,19 +223,19 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
   | callCong _ ih =>
     intro σ t hh ht
     cases ht with
-    | call hf' hl hr he =>
+    | call hf' hl he =>
       obtain ⟨σ', hx, hh', he'⟩ := ih hh he
-      exact ⟨σ', hx, hh', .call hf' hl hr he'⟩
+      exact ⟨σ', hx, hh', .call hf' hl he'⟩
   | @callVal f fn ms τs v hfn hv =>
     intro σ t hh ht
     cases ht with
-    | call hf' hs hr he =>
+    | call hf' hs he =>
       rw [hfn] at hf'
       cases hf'
       obtain ⟨hn, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
       -- The arguments meet what the function assumes, so its body has the
       -- type with them.
-      have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hs hr
+      have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hs
       rw [Ctx.inst_update, Ctx.inst_empty] at hb
       exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he⟩
   | appCong₁ _ ih =>

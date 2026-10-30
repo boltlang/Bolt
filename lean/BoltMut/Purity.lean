@@ -151,7 +151,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | callCong _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | call _ _ _ he => exact ih hh he hn hc hhc
+    | call _ _ he => exact ih hh he hn hc hhc
   | @callVal f fn ms τs v hfn _ =>
     intro σ t n A _ _ hn hc hhc
     -- A function's body has no locations: only its argument does.

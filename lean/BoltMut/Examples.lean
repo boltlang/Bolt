@@ -42,38 +42,64 @@ def first : Fn :=
 
 /-- Arguments that only need every type argument to be well-formed. -/
 theorem sat_none (Δ : Assume) (ms : List Mu) : Sat Δ {} ms [] := by
-  refine ⟨?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · intro p h; simp at h
   · intro p h; simp at h
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp at h
+  · intro i h; simp at h
 
-theorem noRegion_args (ms : List Mu) (τs : List Ty) (hm : ∀ m ∈ ms, m.NoRegion := by simp [Mu.NoRegion])
-    (hτ : ∀ τ ∈ τs, τ.NoRegion := by simp [Ty.NoRegion, Mu.NoRegion]) : ArgsNoRegion ms τs := ⟨hm, hτ⟩
-
-/-- A context whose types mention no region. -/
-theorem noRegion_ctx {Γ : Ctx} (x : Nat) (t : Ty) (ht : t.NoRegion) (hΓ : ∀ y s, Γ y = some s → s.NoRegion) :
-    ∀ y s, Γ.update x t y = some s → s.NoRegion := by
+/-- What a closure captures of `x : t`, when `t` mentions no region and no
+parameter. -/
+theorem captured_update {Δ : Assume} (x : Nat) (t : Ty) (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) (μ : Mu) :
+    ∀ y s, Ctx.empty.update x t y = some s → s.RegionsIn μ ∧ s.ParamsNoRegion Δ := by
   intro y s hy
   simp only [Ctx.update] at hy
   split at hy
-  · cases hy; exact ht
-  · exact hΓ y s hy
-
-theorem noRegion_empty : ∀ y s, Ctx.empty y = some s → s.NoRegion := fun _ _ h => nomatch h
-
-/-- What a closure captures of such a context mentions no region but its
-own. -/
-theorem regionsIn_of_noRegion {Γ : Ctx} (hΓ : ∀ y s, Γ y = some s → s.NoRegion) (μ : Mu) :
-    ∀ y s, Γ y = some s → s.RegionsIn μ := fun y s h => (hΓ y s h).regionsIn μ
+  · cases hy; exact ⟨hn.regionsIn μ, hp⟩
+  · cases hy
 
 /-- It can be called with a `mut` object and with an `imm` one. -/
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new true (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.mutable] [])
-  exact .call rfl (sat_none _ _) (noRegion_args _ _) (.new .int trivial)
+  exact .call rfl (sat_none _ _) (.new .int trivial)
 
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.immutable] [] (.new false (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.immutable] [])
-  exact .call rfl (sat_none _ _) (noRegion_args _ _) (.new .int trivial)
+  exact .call rfl (sat_none _ _) (.new .int trivial)
+
+/-- And with an object of a region (#285). -/
+example : HasType [first] [] .none false Ctx.empty (.call 0 [.region 0 false] [] (.new true (.int 1))) .int := by
+  show HasType _ _ _ _ _ _ (first.retTy.inst [.region 0 false] [])
+  exact .call rfl (sat_none _ _) (.newR .int trivial)
+
+/-- A closure in a generic function that captures a `T`, as in
+`fn hold[T](x: T) = || x`, needs `T` to be a parameter that can't be given
+a region: otherwise, once `T` is a region's type, it would capture a
+region's value without being of that region. -/
+example (t : Ty) : ¬ HasType [] [] {} false (Ctx.empty.update 0 (.tparam 0)) (.lam true 1 (.var 0)) t := by
+  intro h
+  cases h with
+  | lam _ hc _ hrc _ hb =>
+    cases hb with
+    | var hx =>
+      simp only [Ctx.update] at hx
+      have hΓ := hc 0 _ hx
+      simp only [Ctx.update, ite_true, Option.some.injEq] at hΓ
+      subst hΓ
+      exact nomatch (hrc 0 _ hx).2
+  | gone hf _ => exact hf 0 (by simp [Expr.Free])
+
+example : HasType [] [] { noRegionTys := [0] } false (Ctx.empty.update 0 (.tparam 0)) (.lam true 1 (.var 0))
+    (.fn .mutable .unit (.tparam 0)) :=
+  .lam (.inl rfl) (fun _ _ h => h) (fun h => (h rfl).elim)
+    (captured_update 0 (.tparam 0) trivial (by simp [Ty.ParamsNoRegion]) _) (fun _ h => nomatch h) (.var rfl)
+
+/-- So a call can't give it one. -/
+example : ¬ Sat .none { noRegionTys := [0] } [] [.cell (.region 0 false) .int] := by
+  intro h
+  have := (h.2.2.2.2 0 (by simp)).1
+  simp [Ty.NoRegion, Mu.NoRegion] at this
 
 /-- But a generic function can't change what it's given:
 `fn poke(xs: 'm [i32]) { xs[0] = 1; }` is rejected, since `'m` may be `imm`. -/
@@ -92,7 +118,7 @@ is `mut`. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1)))) (.fn .mutable .unit .unit) :=
   .letE (.new .int trivial) (.lam (.inl rfl) (fun _ _ h => h) (fun h => (h rfl).elim)
-    (regionsIn_of_noRegion (noRegion_ctx 0 (.cell .mutable .int) ⟨trivial, trivial⟩ noRegion_empty) _)
+    (captured_update 0 (.cell .mutable .int) ⟨trivial, trivial⟩ ⟨trivial, trivial⟩ _)
     (fun _ h => by simp [Expr.HasLoc] at h) (.set (.var rfl) .int))
 
 /-- It can't be `imm`: an `imm` closure only sees what's `imm` all the way
@@ -140,7 +166,7 @@ example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new false (.int 1)) (.new false (.lam false 1 (.get (.var 0)))))
     (.cell .immutable (.fn .immutable .unit .int)) := by
   refine .letE (.new .int trivial) (.new (.lam (.inl rfl) (fun _ _ h => h) ?_
-    (regionsIn_of_noRegion (noRegion_ctx 0 (.cell .immutable .int) ⟨trivial, trivial⟩ noRegion_empty) _)
+    (captured_update 0 (.cell .immutable .int) ⟨trivial, trivial⟩ ⟨trivial, trivial⟩ _)
     (fun _ h => by simp [Expr.HasLoc] at h) (.get (.var rfl))) (.refl _))
   intro _ y s hy
   simp only [Ctx.update] at hy
@@ -247,7 +273,7 @@ theorem wrap_ok : FnsOk [wrap] := by
 example : HasType [wrap] [] .none false Ctx.empty
     (.call 0 [] [.cell .immutable .int] (.new false (.int 1))) (.cell .immutable (.cell .immutable .int)) := by
   show HasType _ _ _ _ _ _ (wrap.retTy.inst [] [.cell .immutable .int])
-  refine .call rfl ⟨?_, ?_, ?_⟩ (noRegion_args _ _) (.new .int trivial)
+  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_⟩ (.new .int trivial)
   · intro p h; simp [wrap, wrapAssume] at h
   · intro p hp
     simp [wrap, wrapAssume] at hp
@@ -257,13 +283,15 @@ example : HasType [wrap] [] .none false Ctx.empty
     cases i with
     | zero => exact ⟨.bot _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [wrap, wrapAssume] at h
+  · intro i h; simp [wrap, wrapAssume] at h
 
 /-- `wrap[mut [i32]](x)` doesn't: a `mut` array can't go in an `imm` box. -/
 example (e : Expr) (t : Ty) :
     ¬ HasType [wrap] [] .none false Ctx.empty (.call 0 [] [.cell .mutable .int] e) t := by
   intro h
   cases h with
-  | call hf hs _ _ =>
+  | call hf hs _ =>
     simp at hf
     subst hf
     have := hs.2.1 (0, .immutable) (by simp [wrap, wrapAssume])

@@ -169,8 +169,6 @@ def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mention
 /-- The only region `t` mentions is `μ`'s. -/
 def Ty.RegionsIn (t : Ty) (μ : Mu) : Prop := ∀ r, t.mentions r = true → μ.mentions r = true
 
-/-- Arguments for a function's parameters that mention no region. -/
-def ArgsNoRegion (ms : List Mu) (τs : List Ty) : Prop := (∀ m ∈ ms, m.NoRegion) ∧ ∀ τ ∈ τs, τ.NoRegion
 
 /-- Replace the mutability parameters with `ms`; one without an argument
 becomes `imm`. -/
@@ -281,6 +279,11 @@ that nothing in `T` is more `mut` than `μ`. -/
 structure Assume where
   mus : List (Mu × Mu) := []
   tys : List (Nat × Mu) := []
+  /-- The mutability parameters and type parameters that a call can't give
+  a region (#285): those that what a closure captures has. Then the closure
+  doesn't capture a region's value once the function is called. -/
+  noRegionMus : List Nat := []
+  noRegionTys : List Nat := []
 
 /-- Nothing assumed, as for the program that's running. -/
 def Assume.none : Assume := {}
@@ -309,13 +312,32 @@ def AtMost (Δ : Assume) (μ : Mu) : Ty → Prop
   | .tparam i => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
   | .gone m => Le Δ m μ
 
+/-- The parameters in `m` are ones that a call can't give a region. -/
+def Mu.ParamsNoRegion (Δ : Assume) : Mu → Prop
+  | .param i => i ∈ Δ.noRegionMus
+  | _ => True
+
+/-- The parameters in `t` are ones that a call can't give a region: once
+the function is called, `t` mentions no region that it doesn't now. -/
+def Ty.ParamsNoRegion (Δ : Assume) : Ty → Prop
+  | .unit | .int => True
+  | .tparam i => i ∈ Δ.noRegionTys
+  | .cell m t => m.ParamsNoRegion Δ ∧ t.ParamsNoRegion Δ
+  | .fn m a b => m.ParamsNoRegion Δ ∧ a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
+  | .prod a b => a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
+  | .gone m => m.ParamsNoRegion Δ
+
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
-the objects in it are well-formed. -/
+the objects in it are well-formed. A parameter that can't be given a region
+gets an argument that mentions none, and whose parameters can't be given
+one either. -/
 def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
   (∀ p ∈ Δ.mus, Le Δ' (p.1.subst ms) (p.2.subst ms)) ∧
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
-    (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit))
+    (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit)) ∧
+    (∀ i ∈ Δ.noRegionMus, (ms[i]?.getD .immutable).NoRegion ∧ (ms[i]?.getD .immutable).ParamsNoRegion Δ') ∧
+    (∀ i ∈ Δ.noRegionTys, (τs[i]?.getD .unit).NoRegion ∧ (τs[i]?.getD .unit).ParamsNoRegion Δ')
 
 /-- With nothing assumed, `m ⊑ μ` only by the order itself: `μ` is `mut`
 or a region that holds `mut` objects, which everything is below, or `m` is
@@ -385,7 +407,7 @@ theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat �
   | tparam i =>
     obtain ⟨μ', hmem, hle⟩ := h
     rcases hmem with rfl | hmem
-    · exact (hs.2.2 i).mono (Le.inst hs hle)
+    · exact (hs.2.2.1 i).mono (Le.inst hs hle)
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
   | gone m => exact Le.inst hs h
 
@@ -420,16 +442,56 @@ theorem Ty.inst_inst (ms ms' : List Mu) (τs τs' : List Ty) (t : Ty) :
 
 /-- Instantiating a call inside a generic function that's being
 instantiated still meets the callee's assumptions. -/
+theorem Mu.getD_subst (ms ms' : List Mu) (i : Nat) :
+    (ms'[i]?.getD .immutable).subst ms = (ms'.map (Mu.subst ms))[i]?.getD .immutable := by
+  simp only [List.getElem?_map]
+  cases ms'[i]? <;> rfl
+
+/-- What mentions no region, and has only parameters that can't be given
+one, mentions none once they're given. -/
+theorem Mu.noRegion_subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
+    (hn : m.NoRegion) (hp : m.ParamsNoRegion Δ) : (m.subst ms).NoRegion ∧ (m.subst ms).ParamsNoRegion Δ' := by
+  cases m with
+  | param i => exact hs.2.2.2.1 i hp
+  | region => exact hn.elim
+  | mutable | immutable => exact ⟨trivial, trivial⟩
+
+theorem Ty.noRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t : Ty}
+    (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) : (t.inst ms τs).NoRegion ∧ (t.inst ms τs).ParamsNoRegion Δ' := by
+  induction t with
+  | unit | int => exact ⟨trivial, trivial⟩
+  | cell m t ih =>
+    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
+    obtain ⟨h₃, h₄⟩ := ih hn.2 hp.2
+    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
+  | fn m a b iha ihb =>
+    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
+    obtain ⟨h₃, h₄⟩ := iha hn.2.1 hp.2.1
+    obtain ⟨h₅, h₆⟩ := ihb hn.2.2 hp.2.2
+    exact ⟨⟨h₁, h₃, h₅⟩, ⟨h₂, h₄, h₆⟩⟩
+  | prod a b iha ihb =>
+    obtain ⟨h₁, h₂⟩ := iha hn.1 hp.1
+    obtain ⟨h₃, h₄⟩ := ihb hn.2 hp.2
+    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
+  | tparam i => exact hs.2.2.2.2 i hp
+  | gone m => exact Mu.noRegion_subst hs hn hp
+
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (h₁ : Sat Δ₁ Δ₂ ms' τs') (h₀ : Sat Δ₀ Δ₁ ms τs) :
     Sat Δ₀ Δ₂ (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
-  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_, fun i hi => ?_⟩
   · have := Le.inst h₀ (h₁.1 p hp)
     rwa [Mu.subst_subst, Mu.subst_subst] at this
   · have := AtMost.inst h₀ (h₁.2.1 p hp)
     rwa [Mu.subst_subst, Ty.getD_inst] at this
-  · have := AtMost.inst h₀ (h₁.2.2 i)
+  · have := AtMost.inst h₀ (h₁.2.2.1 i)
     rwa [Ty.getD_inst] at this
+  · obtain ⟨hn, hp⟩ := h₁.2.2.2.1 i hi
+    rw [← Mu.getD_subst]
+    exact Mu.noRegion_subst h₀ hn hp
+  · obtain ⟨hn, hp⟩ := h₁.2.2.2.2 i hi
+    rw [← Ty.getD_inst]
+    exact Ty.noRegion_inst h₀ hn hp
 
 theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs) : (e.inst ms τs).NoLocs := by
   induction e with

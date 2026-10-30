@@ -47,8 +47,9 @@ whose region is new, run to its value. A `mut` closure can capture a
 region's values if the region is its mutability (#287, `HasType.lam`).
 Once the region is freed, its type, and that of any closure whose type
 mentions the region, is `gone`, which can't be called: so the program
-can't change the region afterwards through a closure. A call's arguments
-mention no region, for now (`HasType.call`, #285). The proofs after this
+can't change the region afterwards through a closure. A call can give a
+region to a generic function's parameters (#285), unless a closure in it
+captures what has them (`Assume.noRegionTys`). The proofs after this
 one are #283, for borrowed parameters, and #284, for unique values at
 their last use.
 -/
@@ -79,7 +80,7 @@ theorem HasType.retype {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
   | letE _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .letE (ih₁ hn.1) (ih₂ hn.2)
-  | call hf hs hr _ ih => exact .call hf hs hr (ih hn)
+  | call hf hs _ ih => exact .call hf hs (ih hn)
   | lam hk hc himm hrc hrl _ ih =>
     refine .lam hk hc himm hrc (fun k hk => ?_) (ih hn)
     have hlk : l ≠ k := fun he => hn (he ▸ hk)
@@ -369,10 +370,11 @@ example : HasType [] [] .none false Ctx.empty
     split at hy
     · cases hy; exact ⟨.refl _, trivial⟩
     · cases hy
-  · intro y s hy r' hr
+  · intro y s hy
     simp only [Ctx.update] at hy
     split at hy
-    · cases hy; simpa [Ty.mentions, Mu.mentions] using hr
+    · cases hy
+      exact ⟨fun r' hr => by simpa [Ty.mentions, Mu.mentions] using hr, trivial, trivial⟩
     · cases hy
 
 /-- It can't capture a `mut` object from outside the block too: then it
@@ -456,7 +458,7 @@ theorem HasType.congr_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io :
   | set _ _ ih₁ ih₂ => exact .set (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
-  | call hf hs hr _ ih => exact .call hf hs hr (ih hag)
+  | call hf hs _ ih => exact .call hf hs (ih hag)
   | lam hk hc himm hrc hrl _ ih =>
     refine .lam hk hc himm hrc (fun l hl => ?_) (ih hag)
     rw [hag l hl]
@@ -480,7 +482,7 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     subst hf
     rw [hy] at h; cases h
   | unit | int | loc => exact id
-  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih hy
+  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hy
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hf => hf.elim (ih₁ hy) (ih₂ hy)
   | @letE _ _ x _ _ _ _ _ _ ih₁ ih₂ =>
