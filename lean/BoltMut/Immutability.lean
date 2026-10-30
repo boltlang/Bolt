@@ -118,6 +118,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     -- A copy only adds to the heap.
     intro σ t l ty hh _ hl
     exact hc.keeps (hh.lt hl)
+  | blockEnter => intro σ t l ty hh ht hl; cases ht
   | keepCong _ _ => intro σ t l ty hh ht hl; cases ht
   | keepVal _ _ => intro σ t l ty hh ht hl; cases ht
 

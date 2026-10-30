@@ -271,6 +271,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     rw [he]
     simp
     omega
+  | blockEnter => intro σ t n A hh ht; cases ht
   | keepCong _ _ => intro σ t n A hh ht; cases ht
   | keepVal _ _ => intro σ t n A hh ht; cases ht
 

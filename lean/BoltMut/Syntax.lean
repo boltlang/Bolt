@@ -90,6 +90,10 @@ inductive Expr where
   the program goes on with the value itself. Only the program that leaves
   copies out has it (`Expr.erase`), so it isn't typed. -/
   | keep (r : Nat) (t : Ty) (e : Expr)
+  /-- A block `{ e }` whose value has type `t` (#292). Inside it, its region
+  is `2 * k + 1`. When it starts, it gets a new region, made in the heap,
+  and ends with a freeze of it. -/
+  | block (k : Nat) (t : Ty) (e : Expr)
   deriving Repr
 
 /-- The mutability of `new isMut _`. -/
@@ -119,6 +123,7 @@ def Expr.NoLocs : Expr → Prop
   | .snd e => e.NoLocs
   | .freeze _ _ e => e.NoLocs
   | .keep _ _ e => e.NoLocs
+  | .block _ _ e => e.NoLocs
 
 /-- The location `l` is in the expression: what a closure captured is in its
 body. -/
@@ -137,6 +142,7 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .snd e, l => e.HasLoc l
   | .freeze _ _ e, l => e.HasLoc l
   | .keep _ _ e, l => e.HasLoc l
+  | .block _ _ e, l => e.HasLoc l
 
 /-- A mutability that isn't a region. -/
 def Mu.NoRegion : Mu → Prop
@@ -235,6 +241,7 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .snd e => .snd (e.inst ms τs)
   | .freeze r t e => .freeze r (t.inst ms τs) (e.inst ms τs)
   | .keep r t e => .keep r (t.inst ms τs) (e.inst ms τs)
+  | .block k t e => .block k (t.inst ms τs) (e.inst ms τs)
 
 /-- Replace the variable `x` with the value `v`, which has no variables, so
 nothing can be captured. -/
@@ -255,6 +262,7 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .snd e, x, v => .snd (e.subst x v)
   | .freeze r t e, x, v => .freeze r t (e.subst x v)
   | .keep r t e, x, v => .keep r t (e.subst x v)
+  | .block k t e, x, v => .block k t (e.subst x v)
 
 /-! ## At most -/
 
@@ -484,7 +492,7 @@ theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lam _ _ _ ih => exact ih h
 
@@ -493,7 +501,7 @@ theorem Expr.NoLocs.not_hasLoc {e : Expr} (h : e.NoLocs) (l : Nat) : ¬ e.HasLoc
   induction e with
   | var | unit | int => exact id
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hl => hl.elim (ih₁ h.1) (ih₂ h.2)
 
@@ -508,7 +516,7 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -665,5 +673,45 @@ theorem Ty.NoParams.free {t : Ty} (h : t.NoParams) (r : Nat) : (t.free r .immuta
   | fn m a b iha ihb => exact ⟨Mu.free_ne_param h.1 r hi, iha h.2.1, ihb h.2.2⟩
   | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
 
+
+/-! ## Renaming a region
+
+When a block starts, its name for its region, `2 * k + 1`, becomes the
+region it makes (`Expr.ren`). An inner block with the same name has its
+own region, so renaming stops there. -/
+
+/-- `m` with the region `a` renamed `b`. -/
+def Mu.ren (a b : Nat) : Mu → Mu
+  | .region r => if r = a then .region b else .region r
+  | m => m
+
+/-- `t` with the region `a` renamed `b`. -/
+def Ty.ren (a b : Nat) : Ty → Ty
+  | .unit => .unit
+  | .int => .int
+  | .cell m t => .cell (m.ren a b) (t.ren a b)
+  | .fn m x y => .fn (m.ren a b) (x.ren a b) (y.ren a b)
+  | .prod x y => .prod (x.ren a b) (y.ren a b)
+  | .tparam i => .tparam i
+
+/-- `e` with the region `a` renamed `b`, where it isn't an inner block's. -/
+def Expr.ren (a b : Nat) : Expr → Expr
+  | .var x => .var x
+  | .unit => .unit
+  | .int n => .int n
+  | .loc l => .loc l
+  | .new c e => .new c (e.ren a b)
+  | .get e => .get (e.ren a b)
+  | .set e₁ e₂ => .set (e₁.ren a b) (e₂.ren a b)
+  | .letE x e₁ e₂ => .letE x (e₁.ren a b) (e₂.ren a b)
+  | .call f ms τs e => .call f (ms.map (Mu.ren a b)) (τs.map (Ty.ren a b)) (e.ren a b)
+  | .lam c x e => .lam c x (e.ren a b)
+  | .app e₁ e₂ => .app (e₁.ren a b) (e₂.ren a b)
+  | .pair e₁ e₂ => .pair (e₁.ren a b) (e₂.ren a b)
+  | .fst e => .fst (e.ren a b)
+  | .snd e => .snd (e.ren a b)
+  | .freeze r t e => .freeze (if r = a then b else r) (t.ren a b) (e.ren a b)
+  | .keep r t e => .keep (if r = a then b else r) (t.ren a b) (e.ren a b)
+  | .block k t e => if 2 * k + 1 = a then .block k t e else .block k (t.ren a b) (e.ren a b)
 
 end BoltMut

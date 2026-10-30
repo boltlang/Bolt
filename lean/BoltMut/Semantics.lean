@@ -77,6 +77,12 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
       Step fns h e h' e' → Step fns h (.freeze r t e) h' (.freeze r t e')
   | freezeVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
       v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze r t v) h' v'
+  /-- A block starts: it makes its region, with a marker at the end of the
+  heap, and its name for the region becomes that one. It ends with a
+  freeze of it. -/
+  | blockEnter {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
+      Step fns h (.block k t e) (h ++ [.unit])
+        (.freeze (2 * h.length) (t.ren (2 * k + 1) (2 * h.length)) (e.ren (2 * k + 1) (2 * h.length)))
   | keepCong {h h' : Heap} {r : Nat} {t : Ty} {e e' : Expr} :
       Step fns h e h' e' → Step fns h (.keep r t e) h' (.keep r t e')
   | keepVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :

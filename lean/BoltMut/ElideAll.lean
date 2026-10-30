@@ -48,6 +48,7 @@ def Expr.erase : Expr → Expr
   | .snd e => .snd e.erase
   | .freeze r t e => .keep r t e.erase
   | .keep r t e => .keep r t e.erase
+  | .block k t e => .block k t e.erase
 
 /-- A function whose freezes copy nothing. -/
 def Fn.erase (fn : Fn) : Fn := { fn with body := fn.body.erase }
@@ -56,7 +57,7 @@ theorem Expr.erase_subst (e : Expr) (x : Nat) (v : Expr) : (e.subst x v).erase =
   induction e with
   | var y => simp only [Expr.subst, Expr.erase]; split <;> simp [Expr.erase]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih =>
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih =>
     simp only [Expr.subst, Expr.erase, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.erase, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
@@ -73,7 +74,7 @@ theorem Expr.erase_inst (e : Expr) (ms : List Mu) (τs : List Ty) : (e.inst ms �
     simp only [Expr.inst, Expr.erase, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.erase, ih₁, ih₂]
-  | freeze _ _ _ ih | keep _ _ _ ih => simp only [Expr.inst, Expr.erase, ih]
+  | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => simp only [Expr.inst, Expr.erase, ih]
 
 theorem Expr.IsValue.erase {v : Expr} (hv : v.IsValue) : v.erase.IsValue := by
   induction hv with
@@ -86,7 +87,7 @@ theorem Expr.IsValue.erase {v : Expr} (hv : v.IsValue) : v.erase.IsValue := by
 theorem Expr.hasLoc_erase (e : Expr) (l : Nat) : e.erase.HasLoc l ↔ e.HasLoc l := by
   induction e with
   | var | unit | int | loc => simp [Expr.erase, Expr.HasLoc]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih =>
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih =>
     simp only [Expr.erase, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.erase, Expr.HasLoc, ih₁, ih₂]
@@ -95,7 +96,7 @@ theorem Expr.NoLocs.erase {e : Expr} (h : e.NoLocs) : e.erase.NoLocs := by
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
 /-- A relation of expressions that only needs the locations of the first
@@ -115,6 +116,7 @@ theorem Rel.mono_on {ρ ρ' : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel 
   | snd _ ih => exact .snd (ih hρ)
   | freeze _ ih => exact .freeze (ih hρ)
   | keep _ ih => exact .keep (ih hρ)
+  | block _ ih => exact .block (ih hρ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
   | app _ _ ih₁ ih₂ => exact .app (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
@@ -125,7 +127,7 @@ theorem Rel.mono_on {ρ ρ' : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel 
 /-- `e` has a freeze of the region `r`, maybe in a closure. -/
 def Expr.Freezes (r : Nat) : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => False
-  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e => e.Freezes r
+  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .block _ _ e => e.Freezes r
   | .set a b | .letE _ a b | .app a b | .pair a b => a.Freezes r ∨ b.Freezes r
   | .freeze r' _ e | .keep r' _ e => r' = r ∨ e.Freezes r
 
@@ -140,7 +142,7 @@ rest's locations mention. -/
 def Expr.Sep (σ : HeapTy) : Expr → Prop
   | .set a b | .app a b | .pair a b => Expr.Disj σ a b ∧ Expr.Disj σ b a ∧ a.Sep σ ∧ b.Sep σ
   | .letE _ a b => Expr.Disj σ a b ∧ a.Sep σ ∧ b.Sep σ
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e => e.Sep σ
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e | .block _ _ e => e.Sep σ
   | _ => True
 
 /-! ## A copy against the value it was made from -/
@@ -762,6 +764,7 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
             subst this
             obtain ⟨_, _, s', hs'⟩ := hπ o a hoa
             exact hc.func o c d hoc hod (hMo o s' hs')
+  | blockEnter => intro σ t M ρ K h₂ e₂ hh ht; cases ht
   | keepCong _ _ => intro σ t M ρ K h₂ e₂ hh ht; cases ht
   | keepVal _ _ => intro σ t M ρ K h₂ e₂ hh ht; cases ht
 

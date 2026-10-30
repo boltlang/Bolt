@@ -47,6 +47,7 @@ inductive Rel (ρ : Nat → Nat → Prop) : Expr → Expr → Prop where
   | snd {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.snd e₁) (.snd e₂)
   | freeze {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.freeze r t e₁) (.freeze r t e₂)
   | keep {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.keep r t e₁) (.keep r t e₂)
+  | block {k : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.block k t e₁) (.block k t e₂)
 
 theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' a c) {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) :
     Rel ρ' e₁ e₂ := by
@@ -67,6 +68,7 @@ theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' 
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
   | keep _ ih => exact .keep ih
+  | block _ ih => exact .block ih
 
 /-- What corresponds to a value is a value. -/
 theorem Rel.isValue {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) (hv : e₁.IsValue) : e₂.IsValue := by
@@ -99,6 +101,7 @@ theorem Rel.refl {ρ : Nat → Nat → Prop} : ∀ {e : Expr}, (∀ l, e.HasLoc 
   | .snd e, h => .snd (Rel.refl (e := e) h)
   | .freeze _ _ e, h => .freeze (Rel.refl (e := e) h)
   | .keep _ _ e, h => .keep (Rel.refl (e := e) h)
+  | .block _ _ e, h => .block (Rel.refl (e := e) h)
   | .set _ _, h => .set (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
   | .letE _ _ _, h => .letE (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
   | .app _ _, h => .app (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
@@ -136,6 +139,7 @@ theorem Rel.subst {ρ : Nat → Nat → Prop} {e₁ e₂ v₁ v₂ : Expr} (h : 
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
   | keep _ ih => exact .keep ih
+  | block _ ih => exact .block ih
 
 /-- The locations in a well-typed expression are in its heap typing. -/
 theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -625,6 +629,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
           hcp.sim hh ⟨[], by simp⟩ he hf (fun _ _ h => by simp at h) (m₂ := []) hM hc hr
             ⟨fun _ _ _ _ => .inl ⟨rfl, rfl⟩, fun _ _ h => by simp at h⟩
         exact ⟨ρ', h₂', v₂', .freezeVal (hr.isValue hv) hc₂, hρ, hc', hr'⟩
+  | blockEnter => intro σ t M ρ h₂ e₂ hh ht; cases ht
   | keepCong _ _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
   | keepVal _ _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
 
