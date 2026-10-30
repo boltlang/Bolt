@@ -472,6 +472,9 @@ fn lookup_value<'db>(db: &'db dyn Db, file: File, from: File, name: &Name) -> Op
 }
 
 /// The class an impl is an instance of, like `Show` for `impl Show[Dog]`.
+/// It's a query, since every name in the impl that isn't in scope otherwise
+/// may be one of the class's items.
+#[salsa::tracked(returns(copy))]
 pub fn impl_class<'db>(db: &'db dyn Db, id: ImplId<'db>) -> Option<ClassId<'db>> {
     let sig = impl_signature(db, id);
     let TypeRef::Path(path) = &sig.store[sig.class] else { return None };

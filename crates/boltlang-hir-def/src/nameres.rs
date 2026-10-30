@@ -470,11 +470,18 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     // `import Option.*;` comes after the other imports, so that the enum can
     // be one of the names they bring in, wherever the import is, or one of
     // the prelude.
-    let mut enums = out.scope.clone();
-    enums.extend(&prelude);
+    let has_variants = tree.imports.iter().any(|import| matches!(import.kind, ImportKind::Variants(_)));
+    // The names an enum can be found by: a copy, since the variants go into
+    // the scope while it's looked in. Most files have no such import.
+    let enums = has_variants.then(|| {
+        let mut enums = out.scope.clone();
+        enums.extend(&prelude);
+        enums
+    });
     for import in &tree.imports {
         let ImportKind::Variants(path) = &import.kind else { continue };
-        let (id, visibility) = match import_enum(db, file, import.ast_id, &enums, path) {
+        let Some(enums) = &enums else { continue };
+        let (id, visibility) = match import_enum(db, file, import.ast_id, enums, path) {
             Ok((id, visibility)) => (id, narrower(import.visibility, visibility)),
             Err(error) => {
                 out.diagnostics.push(error);
@@ -734,7 +741,10 @@ pub const STD: &str = "std";
 /// The package `file` is in, as its directory: `std`'s, for the files of
 /// the `std` that comes with the compiler, by their path or their real one,
 /// or else that of the nearest `bolt.toml` ([`package_manifest`]). `None`
-/// for a file in no package.
+/// for a file in no package. It's a query, since every visibility check of
+/// a `pub(package)` item asks it, and finding the real path of a file reads
+/// the file system.
+#[salsa::tracked(returns(clone))]
 pub fn package_of(db: &dyn Db, file: File) -> Option<SystemPathBuf> {
     let path = file.path(db).as_system_path_buf()?;
     if let Some(root) = Settings::get(db).std_dir(db) {
