@@ -52,9 +52,7 @@ inductive Mu where
 
 /-- Types. `cell m t` is a shared object with mutability `m` holding a `t`,
 `fn m a r` a closure with mutability `m` from `a` to `r`, and `tparam i` the
-`i`th type parameter of the function being checked. `gone m` is a closure
-with mutability `m` that captured a region that's been freed (#287): it
-can't be called any more, since what it changes may now be `imm`. -/
+`i`th type parameter of the function being checked. -/
 inductive Ty where
   | unit
   | int
@@ -62,7 +60,6 @@ inductive Ty where
   | fn (m : Mu) (a r : Ty)
   | prod (a b : Ty)
   | tparam (i : Nat)
-  | gone (m : Mu)
   deriving DecidableEq, Repr
 
 /-- Expressions. `loc` only appears while running: it's a location in the
@@ -138,7 +135,6 @@ def Mu.NoRegion : Mu → Prop
 /-- A type that mentions no region. -/
 def Ty.NoRegion : Ty → Prop
   | .unit | .int | .tparam _ => True
-  | .gone m => m.NoRegion
   | .cell m t => m.NoRegion ∧ t.NoRegion
   | .fn m a b => m.NoRegion ∧ a.NoRegion ∧ b.NoRegion
   | .prod a b => a.NoRegion ∧ b.NoRegion
@@ -154,15 +150,6 @@ def Ty.mentions (r : Nat) : Ty → Bool
   | .cell m t => m.mentions r || t.mentions r
   | .fn m a b => m.mentions r || a.mentions r || b.mentions r
   | .prod a b => a.mentions r || b.mentions r
-  | .gone m => m.mentions r
-
-/-- The only region `m` can be is `μ`'s: what a closure of mutability `μ`
-captures, by rule 5 of the regions page. -/
-def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mentions r = true
-
-/-- The only region `t` mentions is `μ`'s. -/
-def Ty.RegionsIn (t : Ty) (μ : Mu) : Prop := ∀ r, t.mentions r = true → μ.mentions r = true
-
 
 /-- Replace the mutability parameters with `ms`; one without an argument
 becomes `imm`. -/
@@ -179,7 +166,6 @@ def Ty.inst (ms : List Mu) (τs : List Ty) : Ty → Ty
   | .fn m a r => .fn (m.subst ms) (a.inst ms τs) (r.inst ms τs)
   | .prod a b => .prod (a.inst ms τs) (b.inst ms τs)
   | .tparam i => τs[i]?.getD .unit
-  | .gone m => .gone (m.subst ms)
 
 /-- The same for the arguments of the calls in an expression. -/
 def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
@@ -216,55 +202,6 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .fst e, x, v => .fst (e.subst x v)
   | .snd e, x, v => .snd (e.subst x v)
 
-/-- The variable `y` is free in the expression. -/
-def Expr.Free : Expr → Nat → Prop
-  | .var x, y => x = y
-  | .unit, _ | .int _, _ | .loc _, _ => False
-  | .new _ e, y => e.Free y
-  | .get e, y => e.Free y
-  | .call _ _ _ e, y => e.Free y
-  | .set e₁ e₂, y => e₁.Free y ∨ e₂.Free y
-  | .letE x e₁ e₂, y => e₁.Free y ∨ (x ≠ y ∧ e₂.Free y)
-  | .lam _ x body, y => x ≠ y ∧ body.Free y
-  | .app e₁ e₂, y => e₁.Free y ∨ e₂.Free y
-  | .pair e₁ e₂, y => e₁.Free y ∨ e₂.Free y
-  | .fst e, y => e.Free y
-  | .snd e, y => e.Free y
-
-/-- Substituting a variable that isn't free changes nothing. -/
-theorem Expr.subst_not_free {e : Expr} {x : Nat} (v : Expr) (h : ¬ e.Free x) : e.subst x v = e := by
-  induction e with
-  | var y =>
-    simp only [Expr.Free] at h
-    simp [Expr.subst, h]
-  | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih =>
-    simp only [Expr.subst]; rw [ih h]
-  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
-    simp only [Expr.Free, not_or] at h
-    simp only [Expr.subst]; rw [ih₁ h.1, ih₂ h.2]
-  | letE y _ _ ih₁ ih₂ =>
-    simp only [Expr.Free, not_or, not_and] at h
-    simp only [Expr.subst, ih₁ h.1]
-    split
-    · rfl
-    · rename_i hyx; rw [ih₂ (h.2 hyx)]
-  | lam b y _ ih =>
-    simp only [Expr.Free, not_and] at h
-    simp only [Expr.subst]
-    split
-    · rfl
-    · rename_i hyx; rw [ih (h hyx)]
-
-/-- Instantiating the calls of an expression keeps its variables. -/
-theorem Expr.free_inst {e : Expr} (ms : List Mu) (τs : List Ty) (y : Nat) : (e.inst ms τs).Free y ↔ e.Free y := by
-  induction e with
-  | var | unit | int | loc => simp [Expr.inst, Expr.Free]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => simp only [Expr.inst, Expr.Free, ih]
-  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ =>
-    simp only [Expr.inst, Expr.Free, ih₁, ih₂]
-  | lam _ _ _ ih => simp only [Expr.inst, Expr.Free, ih]
-
 /-! ## At most -/
 
 /-- What a function assumes about its parameters (#243): `m ⊑ μ` for
@@ -273,11 +210,6 @@ that nothing in `T` is more `mut` than `μ`. -/
 structure Assume where
   mus : List (Mu × Mu) := []
   tys : List (Nat × Mu) := []
-  /-- The mutability parameters and type parameters that a call can't give
-  a region (#285): those that what a closure captures has. Then the closure
-  doesn't capture a region's value once the function is called. -/
-  noRegionMus : List Nat := []
-  noRegionTys : List Nat := []
   /-- The mutability parameters that a call can only give `mut` or a
   region (rule 1 of the regions page): the function can change what has
   them. -/
@@ -306,22 +238,6 @@ def AtMost (Δ : Assume) (μ : Mu) : Ty → Prop
   | .fn m _ _ => Le Δ m μ
   | .prod a b => AtMost Δ μ a ∧ AtMost Δ μ b
   | .tparam i => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
-  | .gone m => Le Δ m μ
-
-/-- The parameters in `m` are ones that a call can't give a region. -/
-def Mu.ParamsNoRegion (Δ : Assume) : Mu → Prop
-  | .param i => i ∈ Δ.noRegionMus
-  | _ => True
-
-/-- The parameters in `t` are ones that a call can't give a region: once
-the function is called, `t` mentions no region that it doesn't now. -/
-def Ty.ParamsNoRegion (Δ : Assume) : Ty → Prop
-  | .unit | .int => True
-  | .tparam i => i ∈ Δ.noRegionTys
-  | .cell m t => m.ParamsNoRegion Δ ∧ t.ParamsNoRegion Δ
-  | .fn m a b => m.ParamsNoRegion Δ ∧ a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
-  | .prod a b => a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
-  | .gone m => m.ParamsNoRegion Δ
 
 /-- A mutability whose objects can be changed: `mut`, a region, or a
 parameter that's assumed to be one of them. -/
@@ -332,15 +248,12 @@ def Mu.Changeable (Δ : Assume) : Mu → Prop
 
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
-the objects in it are well-formed. A parameter that can't be given a region
-gets an argument that mentions none, and whose parameters can't be given
-one either, and a changeable parameter gets a changeable argument. -/
+the objects in it are well-formed. A changeable parameter gets a changeable
+argument. -/
 def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
   (∀ p ∈ Δ.mus, Le Δ' (p.1.subst ms) (p.2.subst ms)) ∧
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
     (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit)) ∧
-    (∀ i ∈ Δ.noRegionMus, (ms[i]?.getD .immutable).NoRegion ∧ (ms[i]?.getD .immutable).ParamsNoRegion Δ') ∧
-    (∀ i ∈ Δ.noRegionTys, (τs[i]?.getD .unit).NoRegion ∧ (τs[i]?.getD .unit).ParamsNoRegion Δ') ∧
     (∀ i ∈ Δ.changeable, (ms[i]?.getD .immutable).Changeable Δ')
 
 /-- With nothing assumed, `m ⊑ μ` only by the order itself. -/
@@ -376,7 +289,6 @@ theorem AtMost.mono {Δ : Assume} {m μ : Mu} {t : Ty} (h : AtMost Δ m t) (hle 
   | tparam i =>
     obtain ⟨μ', hmem, hle'⟩ := h
     exact ⟨μ', hmem, hle'.trans hle⟩
-  | gone m' => exact Le.trans h hle
 
 theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m μ : Mu}
     (h : Le Δ m μ) : Le Δ' (m.subst ms) (μ.subst ms) := by
@@ -400,7 +312,6 @@ theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat �
     rcases hmem with rfl | hmem
     · exact (hs.2.2.1 i).mono (Le.inst hs hle)
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
-  | gone m => exact Le.inst hs h
 
 theorem Mu.subst_muOf (ms : List Mu) (b : Bool) : (muOf b).subst ms = muOf b := by
   cases b <;> rfl
@@ -429,7 +340,6 @@ theorem Ty.inst_inst (ms ms' : List Mu) (τs τs' : List Ty) (t : Ty) :
   | fn m a r iha ihr => simp [Ty.inst, iha, ihr, Mu.subst_subst]
   | prod a b iha ihb => simp [Ty.inst, iha, ihb]
   | tparam i => exact Ty.getD_inst ms τs τs' i
-  | gone m => simp [Ty.inst, Mu.subst_subst]
 
 /-- Instantiating a call inside a generic function that's being
 instantiated still meets the callee's assumptions. -/
@@ -438,62 +348,27 @@ theorem Mu.getD_subst (ms ms' : List Mu) (i : Nat) :
   simp only [List.getElem?_map]
   cases ms'[i]? <;> rfl
 
-/-- What mentions no region, and has only parameters that can't be given
-one, mentions none once they're given. -/
-theorem Mu.noRegion_subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
-    (hn : m.NoRegion) (hp : m.ParamsNoRegion Δ) : (m.subst ms).NoRegion ∧ (m.subst ms).ParamsNoRegion Δ' := by
-  cases m with
-  | param i => exact hs.2.2.2.1 i hp
-  | region => exact hn.elim
-  | mutable | immutable => exact ⟨trivial, trivial⟩
-
-theorem Ty.noRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t : Ty}
-    (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) : (t.inst ms τs).NoRegion ∧ (t.inst ms τs).ParamsNoRegion Δ' := by
-  induction t with
-  | unit | int => exact ⟨trivial, trivial⟩
-  | cell m t ih =>
-    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
-    obtain ⟨h₃, h₄⟩ := ih hn.2 hp.2
-    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
-  | fn m a b iha ihb =>
-    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
-    obtain ⟨h₃, h₄⟩ := iha hn.2.1 hp.2.1
-    obtain ⟨h₅, h₆⟩ := ihb hn.2.2 hp.2.2
-    exact ⟨⟨h₁, h₃, h₅⟩, ⟨h₂, h₄, h₆⟩⟩
-  | prod a b iha ihb =>
-    obtain ⟨h₁, h₂⟩ := iha hn.1 hp.1
-    obtain ⟨h₃, h₄⟩ := ihb hn.2 hp.2
-    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
-  | tparam i => exact hs.2.2.2.2.1 i hp
-  | gone m => exact Mu.noRegion_subst hs hn hp
-
 /-- A changeable mutability stays so with arguments that meet the
 assumptions. -/
 theorem Mu.Changeable.subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
     (h : m.Changeable Δ) : (m.subst ms).Changeable Δ' := by
   cases m with
-  | param i => exact hs.2.2.2.2.2 i h
+  | param i => exact hs.2.2.2 i h
   | immutable => exact h.elim
   | _ => exact h
 
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (h₁ : Sat Δ₁ Δ₂ ms' τs') (h₀ : Sat Δ₀ Δ₁ ms τs) :
     Sat Δ₀ Δ₂ (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
-  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_, fun i hi => ?_, fun i hi => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_⟩
   · have := Le.inst h₀ (h₁.1 p hp)
     rwa [Mu.subst_subst, Mu.subst_subst] at this
   · have := AtMost.inst h₀ (h₁.2.1 p hp)
     rwa [Mu.subst_subst, Ty.getD_inst] at this
   · have := AtMost.inst h₀ (h₁.2.2.1 i)
     rwa [Ty.getD_inst] at this
-  · obtain ⟨hn, hp⟩ := h₁.2.2.2.1 i hi
-    rw [← Mu.getD_subst]
-    exact Mu.noRegion_subst h₀ hn hp
-  · obtain ⟨hn, hp⟩ := h₁.2.2.2.2.1 i hi
-    rw [← Ty.getD_inst]
-    exact Ty.noRegion_inst h₀ hn hp
   · rw [← Mu.getD_subst]
-    exact Mu.Changeable.subst h₀ (h₁.2.2.2.2.2 i hi)
+    exact Mu.Changeable.subst h₀ (h₁.2.2.2 i hi)
 
 theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs) : (e.inst ms τs).NoLocs := by
   induction e with
@@ -542,5 +417,90 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     split at h
     · exact .inl h
     · exact ih h
+
+/-! ## Freeing a region in types
+
+When a block's region becomes `imm`, its value is copied (#292), and the
+copy's type is the value's with the region replaced: `Mu.free` and
+`Ty.free`. What a region's values hold is at most the region (rule 4 of
+the regions page), so the copy is `imm` all the way down
+(`AtMost.region_free`). -/
+
+/-- `m` with the region `r` replaced with `μ`. -/
+def Mu.free : Mu → Nat → Mu → Mu
+  | .region r', r, μ => if r' = r then μ else .region r'
+  | m, _, _ => m
+
+/-- `t` with the region `r` replaced with `μ`. -/
+def Ty.free : Ty → Nat → Mu → Ty
+  | .unit, _, _ => .unit
+  | .int, _, _ => .int
+  | .cell m t, r, μ => .cell (m.free r μ) (t.free r μ)
+  | .fn m a b, r, μ => .fn (m.free r μ) (a.free r μ) (b.free r μ)
+  | .prod a b, r, μ => .prod (a.free r μ) (b.free r μ)
+  | .tparam i, _, _ => .tparam i
+
+theorem Mu.free_not_mentions {m : Mu} {r : Nat} (h : m.mentions r = false) (μ : Mu) : m.free r μ = m := by
+  cases m with
+  | region r' =>
+    simp only [Mu.mentions, beq_eq_false_iff_ne] at h
+    simp [Mu.free, h]
+  | _ => rfl
+
+theorem Ty.free_not_mentions {t : Ty} {r : Nat} (h : t.mentions r = false) (μ : Mu) : t.free r μ = t := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.free, Mu.free_not_mentions h.1, ih h.2]
+  | fn m a b iha ihb =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.free, Mu.free_not_mentions h.1.1, iha h.1.2, ihb h.2]
+  | prod a b iha ihb =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.free, iha h.1, ihb h.2]
+
+@[simp] theorem Mu.free_mutable (r : Nat) (μ : Mu) : Mu.mutable.free r μ = .mutable := rfl
+@[simp] theorem Mu.free_immutable (r : Nat) (μ : Mu) : Mu.immutable.free r μ = .immutable := rfl
+@[simp] theorem Mu.free_self (r : Nat) (μ : Mu) : (Mu.region r).free r μ = μ := by simp [Mu.free]
+
+/-- Freeing a region keeps what's below what, with nothing assumed. -/
+theorem Le.free {m μ : Mu} (h : Le .none m μ) (r : Nat) (ν : Mu) : Le .none (m.free r ν) (μ.free r ν) := by
+  induction h with
+  | bot => exact .bot _
+  | top => exact .top _
+  | refl => exact .refl _
+  | assume h => simp [Assume.none] at h
+  | trans _ _ ih₁ ih₂ => exact .trans ih₁ ih₂
+
+/-- Freeing a region keeps "at most", with nothing assumed. -/
+theorem AtMost.free {μ : Mu} {t : Ty} (h : AtMost .none μ t) (r : Nat) (ν : Mu) :
+    AtMost .none (μ.free r ν) (t.free r ν) := by
+  induction t generalizing μ with
+  | unit => trivial
+  | int => trivial
+  | cell m t ih => exact ⟨h.1.free r ν, ih h.2⟩
+  | fn m a b => exact Le.free h r ν
+  | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
+  | tparam i =>
+    obtain ⟨μ', hμ', hle⟩ := h
+    rcases hμ' with rfl | hmem
+    · exact ⟨.mutable, .inl rfl, Le.free hle r ν⟩
+    · simp [Assume.none] at hmem
+
+/-- What a region holds becomes `imm` all the way down when the region is
+freed to `imm`. -/
+theorem AtMost.region_free {r : Nat} {t : Ty} (h : AtMost .none (.region r) t) :
+    AtMost .none .immutable (t.free r .immutable) := by
+  simpa using h.free r .immutable
+
+/-- With nothing assumed, only `imm` and the region itself are below a
+region: neither `mut` nor another region. -/
+theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .immutable ∨ m = .region r := by
+  rcases h.none_inv with h | h | h
+  · exact .inl h
+  · cases h
+  · exact .inr h
+
 
 end BoltMut

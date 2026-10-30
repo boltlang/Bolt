@@ -14,21 +14,16 @@ The rules that matter for mutability:
   region: otherwise a generic function can read what it's given, but can't
   change it, since it may be called with `imm`.
 * `new true e` can make a cell of a region `r` (#209) instead of a `mut`
-  one. What it holds is at most `r`, so it's `imm` all the way down once
-  the region is freed (`Regions.lean`). One that would have to hold `mut`
-  objects is just `mut` (#286).
+  one. It can be changed like a `mut` one, and what it holds is at most
+  `r`, so a copy of it can be `imm` all the way down (`Regions.lean`). One
+  that would have to hold `mut` objects is just `mut` (#286).
 * Aliases share the mutability: a location has one type, `σ[l]`.
 * An `imm` closure, `lam false x body`, only captures what's `imm` all the
   way down: its body sees only the variables of such types, and only `imm`
   locations. Its type is `fn imm a r`, so an `imm` object can hold it. A
   `mut` closure captures anything, and an `imm` object can't hold it.
   Either can be called.
-* A `mut` closure can have a region as its mutability (#287), and then
-  capture what's of that region. Once the region is freed, its type is
-  `gone`, which can't be called. Other closures capture nothing whose
-  type mentions a region. A call can give a region to a parameter of a
-  generic function (#285), unless a closure in it captures what has that
-  parameter (`Assume.noRegionMus`, `Assume.noRegionTys`).
+* A call can give a region to a parameter of a generic function (#285).
 * A generic function is typed under what it assumes about its parameters
   (`Fn.assume`, #243), like `T ⊑ imm`, and a call must meet that with its
   arguments (`Sat`). Without an assumption, a value of type `T` can't be put
@@ -110,29 +105,14 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       fns[f]? = some fn → Sat Δ fn.assume ms τs →
       HasType fns σ Δ io Γ e (fn.argTy.inst ms τs) →
       HasType fns σ Δ io Γ (.call f ms τs e) (fn.retTy.inst ms τs)
-  /-- A closure sees the variables `Γc` of those in scope. Its mutability
-  `μ` is `muOf b`, or, for a `mut` one, a region (rule 5 of the regions
-  page, #287). Unless it's `mut`, what it captures is at most `μ`: for an
-  `imm` one, `imm` all the way down. The only region what it captures
-  mentions is `μ`'s, so a closure of no region captures nothing of one, and
-  freeing a region that isn't the closure's leaves it as it is. That stays
-  so when the function it's in is called: the parameters what it captures
-  has can't be given a region (#285). -/
-  | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} {μ : Mu} :
-      (μ = muOf b ∨ b = true ∧ ∃ r', μ = .region r') →
-      Γc.Sub Γ → (μ ≠ .mutable → ∀ y s, Γc y = some s → AtMost Δ μ s) →
-      (∀ y s, Γc y = some s → s.RegionsIn μ ∧ s.ParamsNoRegion Δ) →
-      (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ) →
+  /-- A closure sees the variables `Γc` of those in scope: for an `imm` one,
+  only some whose types are `imm` all the way down. A `mut` one can capture
+  a region's values: a region's objects are copied when they become `imm`
+  (#292), so changing them later changes nothing that's `imm`. -/
+  | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} :
+      Γc.Sub Γ → (b = false → ∀ y s, Γc y = some s → AtMost Δ .immutable s) →
       HasType fns σ Δ (io || !b) (Γc.update x a) body r →
-      HasType fns σ Δ io Γ (.lam b x body) (.fn μ a r)
-  /-- A closure that captured a region that's been freed: its body isn't
-  typed any more, so it can't be called. It has no free variables, and what it captured is still at most its mutability, and
-  `imm` inside an `imm` closure. -/
-  | gone {io : Bool} {Γ : Ctx} {b : Bool} {x : Nat} {body : Expr} {μ : Mu} :
-      (∀ y, ¬ (Expr.lam b x body).Free y) →
-      (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ ∧
-        (io = true → m = .immutable)) →
-      HasType fns σ Δ io Γ (.lam b x body) (.gone μ)
+      HasType fns σ Δ io Γ (.lam b x body) (.fn (muOf b) a r)
   | app {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {m : Mu} {a r : Ty} :
       HasType fns σ Δ io Γ e₁ (.fn m a r) → HasType fns σ Δ io Γ e₂ a →
       HasType fns σ Δ io Γ (.app e₁ e₂) r

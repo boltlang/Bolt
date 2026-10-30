@@ -78,7 +78,6 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
   | int => exact .inl .int
   | loc _ _ => exact .inl .loc
   | lam _ => exact .inl .lam
-  | gone _ _ => exact .inl .lam
   | app he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
@@ -262,7 +261,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     cases ht with
     | app he₁ he₂ =>
       cases he₁ with
-      | lam _ hc _ _ _ hbody =>
+      | lam hc _ hbody =>
         -- The body of an `imm` closure is typed inside one; outside, it
         -- has the same type. A closed closure saw nothing but its
         -- parameter.

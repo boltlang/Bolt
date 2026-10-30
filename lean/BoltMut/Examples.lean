@@ -44,23 +44,11 @@ def first : Fn :=
 
 /-- Arguments that only need every type argument to be well-formed. -/
 theorem sat_none (Δ : Assume) (ms : List Mu) : Sat Δ {} ms [] := by
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_⟩
   · intro p h; simp at h
   · intro p h; simp at h
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
   · intro i h; simp at h
-  · intro i h; simp at h
-  · intro i h; simp at h
-
-/-- What a closure captures of `x : t`, when `t` mentions no region and no
-parameter. -/
-theorem captured_update {Δ : Assume} (x : Nat) (t : Ty) (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) (μ : Mu) :
-    ∀ y s, Ctx.empty.update x t y = some s → s.RegionsIn μ ∧ s.ParamsNoRegion Δ := by
-  intro y s hy
-  simp only [Ctx.update] at hy
-  split at hy
-  · cases hy; exact ⟨hn.regionsIn μ, hp⟩
-  · cases hy
 
 /-- It can be called with a `mut` object and with an `imm` one. -/
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new true (.int 1))) .int := by
@@ -76,34 +64,6 @@ example : HasType [first] [] .none false Ctx.empty (.call 0 [.region 0] [] (.new
   show HasType _ _ _ _ _ _ (first.retTy.inst [.region 0] [])
   exact .call rfl (sat_none _ _) (.newR .int trivial)
 
-/-- A closure in a generic function that captures a `T`, as in
-`fn hold[T](x: T) = || x`, needs `T` to be a parameter that can't be given
-a region: otherwise, once `T` is a region's type, it would capture a
-region's value without being of that region. -/
-example (t : Ty) : ¬ HasType [] [] {} false (Ctx.empty.update 0 (.tparam 0)) (.lam true 1 (.var 0)) t := by
-  intro h
-  cases h with
-  | lam _ hc _ hrc _ hb =>
-    cases hb with
-    | var hx =>
-      simp only [Ctx.update] at hx
-      have hΓ := hc 0 _ hx
-      simp only [Ctx.update, ite_true, Option.some.injEq] at hΓ
-      subst hΓ
-      exact nomatch (hrc 0 _ hx).2
-  | gone hf _ => exact hf 0 (by simp [Expr.Free])
-
-example : HasType [] [] { noRegionTys := [0] } false (Ctx.empty.update 0 (.tparam 0)) (.lam true 1 (.var 0))
-    (.fn .mutable .unit (.tparam 0)) :=
-  .lam (.inl rfl) (fun _ _ h => h) (fun h => (h rfl).elim)
-    (captured_update 0 (.tparam 0) trivial (by simp [Ty.ParamsNoRegion]) _) (fun _ h => nomatch h) (.var rfl)
-
-/-- So a call can't give it one. -/
-example : ¬ Sat .none { noRegionTys := [0] } [] [.cell (.region 0) .int] := by
-  intro h
-  have := (h.2.2.2.2.1 0 (by simp)).1
-  simp [Ty.NoRegion, Mu.NoRegion] at this
-
 /-- But a generic function can't change what it's given:
 `fn poke(xs: 'm [i32]) { xs[0] = 1; }` is rejected, since `'m` may be `imm`.
 It can if it assumes `'m` is changeable (`fill` in `Regions.lean`). -/
@@ -111,10 +71,10 @@ example (t : Ty) :
     ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.param 0) .int)) (.set (.var 0) (.int 1)) t := by
   intro h
   cases h with
-  | setP _ hi _ => simp [Assume.none] at hi
   | set hx _ | setR hx _ =>
     cases hx with
     | var hx => simp [Ctx.update] at hx
+  | setP _ hi _ => simp [Assume.none] at hi
 
 /-! ## Closures -/
 
@@ -122,9 +82,7 @@ example (t : Ty) :
 is `mut`. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1)))) (.fn .mutable .unit .unit) :=
-  .letE (.new .int trivial) (.lam (.inl rfl) (fun _ _ h => h) (fun h => (h rfl).elim)
-    (captured_update 0 (.cell .mutable .int) ⟨trivial, trivial⟩ ⟨trivial, trivial⟩ _)
-    (fun _ h => by simp [Expr.HasLoc] at h) (.set (.var rfl) .int))
+  .letE (.new .int trivial) (.lam (fun _ _ h => h) (fun h => nomatch h) (.set (.var rfl) .int))
 
 /-- It can't be `imm`: an `imm` closure only sees what's `imm` all the way
 down, and `c` is `mut`. -/
@@ -134,21 +92,17 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   cases h with
   | letE h₁ h₂ =>
     cases h₁ with
-    | newP _ hi _ => simp [Assume.none] at hi
     | new _ _ | newR _ _ =>
       cases h₂ with
-      | lam hk _ himm _ _ hb =>
-        rcases hk with hk | ⟨hk, _⟩
-        · subst hk
-          cases hb with
-          | setP _ hi _ => simp [Assume.none] at hi
-          | set hx _ | setR hx _ =>
-            cases hx with
-            | var hx =>
-              simp only [Ctx.update] at hx
-              exact nomatch Le.none_immutable (himm (fun h => nomatch h) 0 _ hx).1
-        · cases hk
-      | gone hf _ => exact hf 0 (by simp [Expr.Free])
+      | lam _ himm hb =>
+        cases hb with
+        | set hx _ | setR hx _ =>
+          cases hx with
+          | var hx =>
+            simp only [Ctx.update] at hx
+            exact nomatch Le.none_immutable (himm rfl 0 _ hx).1
+        | setP _ hi _ => simp [Assume.none] at hi
+    | newP _ hi _ => simp [Assume.none] at hi
 
 /-- The hole from #244: `let c = mut [0]; [|| c[0] = 1]`, an `imm` object
 holding a closure that changes `c`, is rejected, since the closure is
@@ -161,20 +115,14 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     cases h₂ with
     | new hl hd =>
       cases hl with
-      | lam hk _ _ _ _ _ =>
-        have hμ := Le.none_immutable hd
-        subst hμ
-        rcases hk with h | ⟨_, _, _, h⟩ <;> exact nomatch h
-      | gone hf _ => exact hf 0 (by simp [Expr.Free])
+      | lam _ _ _ => exact nomatch Le.none_immutable hd
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new false (.int 1)) (.new false (.lam false 1 (.get (.var 0)))))
     (.cell .immutable (.fn .immutable .unit .int)) := by
-  refine .letE (.new .int trivial) (.new (.lam (.inl rfl) (fun _ _ h => h) ?_
-    (captured_update 0 (.cell .immutable .int) ⟨trivial, trivial⟩ ⟨trivial, trivial⟩ _)
-    (fun _ h => by simp [Expr.HasLoc] at h) (.get (.var rfl))) (.refl _))
+  refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_ (.get (.var rfl))) (.refl _))
   intro _ y s hy
   simp only [Ctx.update] at hy
   split at hy
@@ -282,7 +230,7 @@ theorem wrap_ok : FnsOk [wrap] := by
 example : HasType [wrap] [] .none false Ctx.empty
     (.call 0 [] [.cell .immutable .int] (.new false (.int 1))) (.cell .immutable (.cell .immutable .int)) := by
   show HasType _ _ _ _ _ _ (wrap.retTy.inst [] [.cell .immutable .int])
-  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ (.new .int trivial)
+  refine .call rfl ⟨?_, ?_, ?_, ?_⟩ (.new .int trivial)
   · intro p h; simp [wrap, wrapAssume] at h
   · intro p hp
     simp [wrap, wrapAssume] at hp
@@ -292,8 +240,6 @@ example : HasType [wrap] [] .none false Ctx.empty
     cases i with
     | zero => exact ⟨.bot _, trivial⟩
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
-  · intro i h; simp [wrap, wrapAssume] at h
-  · intro i h; simp [wrap, wrapAssume] at h
   · intro i h; simp [wrap, wrapAssume] at h
 
 /-- `wrap[mut [i32]](x)` doesn't: a `mut` array can't go in an `imm` box. -/
