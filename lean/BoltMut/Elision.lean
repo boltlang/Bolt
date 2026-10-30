@@ -17,9 +17,11 @@ a result that corresponds, and the same integer. The premise is that
 nothing of the region can be reached from `k`, or from the copy, which
 shares what it doesn't copy, like a closure.
 
-Rules 2, 3 and 5 of the regions page are what make that premise hold for
-the blocks the checker finds. Proving that from the typing, and leaving out
-every freeze of a program rather than one, is still to do.
+The typing gives that premise (`freeze_in_place_of_typing`): what comes
+after the block was typed before the block made its region (rules 2 and
+3 of the regions page), and a closure that captures a region's objects has
+the region in its type (rule 5). Leaving out every freeze of a program,
+rather than one, is still to do.
 
 The proof relates each copy to its original, and every other location that
 can still be reached to itself (`steps_sim` in `Sharing.lean` does the
@@ -228,5 +230,118 @@ theorem freeze_in_place_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
   obtain ⟨_, ρ', h₂, e₂, ss, _, hr'⟩ :=
     steps_sim hf hs hh' hte (fun a m t' h hm => ⟨m, t', h, hm⟩) hcorr (hrk.subst hrv x)
   exact ⟨ρ', h₂, e₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
+
+/-! ## The premise, from the typing
+
+A value can only reach an object of a region if its type mentions the
+region: a cell holds what its type says, and a closure captures only what
+mentions its own region, which its type does (rule 5 of the regions page,
+`HasType.lam`). What comes after a block was typed before the block made
+its region, so its type doesn't mention it; and the copy's type is the
+value's with the region replaced with `imm`. So neither can reach the
+region's objects (`freeze_in_place_of_typing`). -/
+
+/-- A value whose type doesn't mention `r` holds only locations whose types
+don't. -/
+theorem Expr.IsValue.hasLoc_notMentions {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
+    {v : Expr} {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) {r : Nat} (hs : s.mentions r = false)
+    {l : Nat} (hl : v.HasLoc l) : ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).mentions r = false := by
+  induction hv generalizing s with
+  | unit | int => exact hl.elim
+  | loc => cases ht with
+    | loc h _ =>
+      cases hl
+      exact ⟨_, _, h, hs⟩
+  | @lam b x body => cases ht with
+    | @lam _ _ _ _ _ _ _ _ μ _ _ _ _ hrl _ =>
+      have hl' : body.HasLoc l := hl
+      obtain ⟨m, t, h, _, hm, htr⟩ := hrl l hl'
+      have hμ : μ.mentions r = false := by
+        simp only [Ty.mentions, Bool.or_eq_false_iff] at hs
+        exact hs.1.1
+      refine ⟨m, t, h, ?_⟩
+      simp only [Ty.mentions, Bool.or_eq_false_iff]
+      constructor
+      · cases e : m.mentions r
+        · rfl
+        · rw [hm r e] at hμ; cases hμ
+      · cases e : t.mentions r
+        · rfl
+        · rw [htr r e] at hμ; cases hμ
+  | pair _ _ ih₁ ih₂ => cases ht with
+    | pair h₁ h₂ =>
+      simp only [Ty.mentions, Bool.or_eq_false_iff] at hs
+      exact hl.elim (ih₁ h₁ hs.1) (ih₂ h₂ hs.2)
+
+/-- In a well-typed heap, nothing that a location whose type doesn't mention
+`r` reaches is of `r`. -/
+theorem HeapOk.reaches_notMentions {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {r a b : Nat}
+    (hr : Reaches h a b) :
+    ∀ {m : Mu} {t : Ty}, σ[a]? = some (m, t) → (Ty.cell m t).mentions r = false →
+      ∃ m' t', σ[b]? = some (m', t') ∧ (Ty.cell m' t').mentions r = false := by
+  induction hr with
+  | refl => intro m t ha hm; exact ⟨m, t, ha, hm⟩
+  | step hv hl _ ih =>
+    intro m t ha hm
+    obtain ⟨_, _, w, hw, hwv, hwt⟩ := hh.2 _ _ _ ha
+    rw [hv] at hw
+    cases hw
+    have ht : t.mentions r = false := by
+      simp only [Ty.mentions, Bool.or_eq_false_iff] at hm
+      exact hm.2
+    obtain ⟨m₁, t₁, h₁, hm₁⟩ := hwv.hasLoc_notMentions hwt ht hl
+    exact ih h₁ hm₁
+
+/-- Replacing `r` with what mentions no region leaves no `r`. -/
+theorem Mu.free_mentions_self {m μ : Mu} (hμ : μ.NoRegion) (r : Nat) : (m.free r μ).mentions r = false := by
+  cases m with
+  | region r' =>
+    simp only [Mu.free]
+    split
+    · exact hμ.mentions r
+    · rename_i hne
+      simp [Mu.mentions, hne]
+  | _ => rfl
+
+theorem Ty.free_mentions_self {t : Ty} {μ : Mu} (hμ : μ.NoRegion) (r : Nat) : (t.free r μ).mentions r = false := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih => simp [Ty.free, Ty.mentions, Mu.free_mentions_self hμ r, ih]
+  | fn m a b iha ihb => simp [Ty.free, Ty.mentions, Mu.free_mentions_self hμ r, iha, ihb]
+  | prod a b iha ihb => simp [Ty.free, Ty.mentions, iha, ihb]
+
+/-- **The typing makes freezing in place unnoticeable.** A block `e`
+starts in a heap whose typing `σ₀` mentions its region `r` nowhere, and
+runs to the value `v`, whose freeze copies it to `v'`. What comes after
+it, `k`, was typed before it. Then going on with `v` itself, in the heap
+without the copies, computes what going on with the copy does. -/
+theorem freeze_in_place_of_typing {fns : List Fn} (hf : FnsOk fns) {σ₀ : HeapTy} {h₀ h h' h₁ : Heap}
+    {r x : Nat} {t T : Ty} {e v v' k e₁ : Expr} (hh₀ : HeapOk fns σ₀ h₀)
+    (hfresh : ∀ (l : Nat) (p : Mu × Ty), σ₀[l]? = some p → (Ty.cell p.1 p.2).mentions r = false)
+    (he : HasType fns σ₀ .none false Ctx.empty e t) (hfz : t.Freezable r)
+    (hk : HasType fns σ₀ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
+    (hse : Steps fns h₀ e h v) (hv : v.IsValue) (hc : Copy r t h v h' v')
+    (hs : Steps fns h' (k.subst x v') h₁ e₁) :
+    ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
+      Steps fns h (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
+  obtain ⟨σ, hx, hh, hvt⟩ := steps_preservation hf hse hh₀ he
+  obtain ⟨σ', hx', hh', hv', ht', _⟩ := hc.typed hh hv hvt hfz
+  refine freeze_in_place_changes_nothing hf hh hv hvt hfz (hk.weaken_heap hx) hc ?_ hs
+  intro a s ha
+  -- An object of `r` has a type that mentions `r`.
+  have hbad : ∀ m' t', σ'[a]? = some (m', t') → (Ty.cell m' t').mentions r = false → False := by
+    intro m' t' ha' hm'
+    rw [hx' a _ ha] at ha'
+    cases ha'
+    simp [Ty.mentions, Mu.mentions] at hm'
+  constructor
+  · rintro ⟨l, hl, hr⟩
+    obtain ⟨p, hp⟩ : ∃ p, σ₀[l]? = some p := ⟨_, List.getElem?_eq_getElem (hk.hasLoc_lt hl)⟩
+    obtain ⟨m', t', ha', hm'⟩ := hh'.reaches_notMentions hr (hx' l p (hx l p hp)) (hfresh l p hp)
+    exact hbad m' t' ha' hm'
+  · rintro ⟨l, hl, hr⟩
+    obtain ⟨m, t₀, hl', hm⟩ := hv'.hasLoc_notMentions ht' (Ty.free_mentions_self (μ := .immutable) trivial r) hl
+    obtain ⟨m', t', ha', hm'⟩ := hh'.reaches_notMentions hr hl' hm
+    exact hbad m' t' ha' hm'
 
 end BoltMut

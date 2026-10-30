@@ -62,10 +62,14 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 - **Regions** (#209): `new true e` can make a cell of a region `r` instead
   of a `mut` one, which can be changed like one. What it holds is at most
   `r`: `imm`, or of the same region. A value that would have to hold `mut`
-  objects is just `mut`, as the checker decides (#286). A call can give a
-  region to a generic function (#285), which can change and make what has
-  a changeable mutability parameter. A region that becomes `imm` is copied
-  (#292).
+  objects is just `mut`, as the checker decides (#286). A `mut` closure can
+  have a region as its mutability, and then capture what's of that region
+  (rule 5, #287); other closures capture nothing whose type mentions a
+  region. A call can give a region to a generic function (#285), except to
+  a parameter that a closure in it captures, and the function can change
+  and make what has a changeable mutability parameter. A region that
+  becomes `imm` is copied (#292), and leaving the copy out can't be
+  noticed.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -94,6 +98,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
 | `Copy.typed`, `Copy.exists` | `Soundness.lean` | a freeze's copy has the value's type with the region `imm`, and can always be made (#292): so preservation and progress hold for `freeze` like for any step |
 | `freeze_in_place_changes_nothing` | `Elision.lean` | at the end of a block, going on with the value itself rather than the freeze's copy computes the same, if nothing after the block, or the copy, can reach the region's objects (#292) |
+| `freeze_in_place_of_typing` | `Elision.lean` | the typing gives that: for a block whose region the heap typing didn't mention when it started, with what comes after typed before it. A value can only reach a region's objects if its type mentions the region, since a closure that captures them has the region as its mutability (rule 5) |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -142,10 +147,8 @@ The theorems depend only on Lean's standard axioms, `propext`,
   of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
-- **The rest of regions** (#209, #292): that rules 2, 3 and 5 of the
-  regions page make the premise of `freeze_in_place_changes_nothing` hold,
-  and leaving out every freeze of a program, not one. #284 needs the same
-  for unique values.
+- **The rest of regions** (#209, #292): leaving out every freeze of a
+  program, not one. #284 needs the same for unique values.
   Also borrowed parameters (#283).
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.

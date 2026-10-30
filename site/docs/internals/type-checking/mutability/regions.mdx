@@ -309,10 +309,11 @@ writes one that rule 2 found.
   proven as for any other step, with rules 1 and 4. Leaving the copy out
   is an optimization, and it's sound when nothing after the block can
   reach the originals: `freeze_in_place_changes_nothing` proves that for
-  one freeze. Only objects of the region are copied, since a copy of a
-  `mut` object would be noticed. That rules 2, 3 and 5, and the
-  restriction on generic functions above, give its premise is the rest of
-  #292, and the same is needed for [uniqueness](./uniqueness.mdx).
+  one freeze, and `freeze_in_place_of_typing` that rules 2, 3 and 5, and
+  the restriction on generic functions above, make it so. Only objects of
+  the region are copied, since a copy of a `mut` object would be noticed.
+  Leaving out every freeze of a program, not one, is the rest of #292, and
+  [uniqueness](./uniqueness.mdx) needs the same.
 
 ## Open questions
 
