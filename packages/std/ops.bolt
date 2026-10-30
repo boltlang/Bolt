@@ -27,7 +27,6 @@ pub class Eq[T] {
 }
 
 impl Eq[Bool] { fn eq(a, b) = bool_eq(a, b); fn ne(a, b) = bool_ne(a, b); }
-impl Eq[Char] { fn eq(a, b) = char_eq(a, b); fn ne(a, b) = char_ne(a, b); }
 impl Eq[String] { fn eq(a, b) = string_eq(a, b); fn ne(a, b) = string_ne(a, b); }
 impl Eq[i8] { fn eq(a, b) = i8_eq(a, b); fn ne(a, b) = i8_ne(a, b); }
 impl Eq[i16] { fn eq(a, b) = i16_eq(a, b); fn ne(a, b) = i16_ne(a, b); }
@@ -358,7 +357,7 @@ fn the_primitive_types_have_the_operators() {
   assert(shl(1u8, 3) == 8u8);
   assert(shr(-8, 1) == -4);
   assert(add("ab", "c") == "abc");
-  assert(eq('a', 'a') && ne(1.5, 2.5));
+  assert(eq(True, True) && ne(1.5, 2.5));
 }
 
 #[test]

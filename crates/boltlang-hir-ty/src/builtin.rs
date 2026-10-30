@@ -139,7 +139,8 @@ impl PrimOp {
     /// Whether `ty` has the operation, as it has the operator: integers
     /// all but `!`, and `-` only when they're signed; floats arithmetic,
     /// `-` and comparisons; `Bool` the bitwise ones, `!` and comparisons;
-    /// `Char` comparisons; and `String` `+` and comparisons.
+    /// and `String` `+` and comparisons. `Char` has none: `std` makes it
+    /// a `u32`.
     pub fn applies_to(self, ty: BuiltinType) -> bool {
         use PrimOp::*;
         let cmp = matches!(self, Eq | Ne | Lt | Le | Gt | Ge);
@@ -148,7 +149,7 @@ impl PrimOp {
             BuiltinType::Uint(_) => !matches!(self, Neg | Not),
             BuiltinType::Float(_) => cmp || matches!(self, Add | Sub | Mul | Div | Rem | Neg),
             BuiltinType::Bool => cmp || matches!(self, BitAnd | BitOr | BitXor | Not),
-            BuiltinType::Char => cmp,
+            BuiltinType::Char => false,
             BuiltinType::String => cmp || self == Add,
         }
     }
@@ -376,7 +377,7 @@ mod tests {
         // integers no `!`.
         assert_eq!(Builtin::by_name("u8_neg"), None);
         assert_eq!(Builtin::by_name("i32_not"), None);
-        assert_eq!(Builtin::by_name("char_add"), None);
+        assert_eq!(Builtin::by_name("char_eq"), None);
         let shl = Builtin::by_name("i64_shl").unwrap().signature();
         let i64_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I64));
         assert_eq!(shl, Ty::func([i64_ty.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], i64_ty));

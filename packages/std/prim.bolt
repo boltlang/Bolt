@@ -15,14 +15,6 @@ extern "bolt" {
   pub(package) fn bool_gt(a: Bool, b: Bool) -> Bool;
   pub(package) fn bool_ge(a: Bool, b: Bool) -> Bool;
 
-  // Char
-  pub(package) fn char_eq(a: Char, b: Char) -> Bool;
-  pub(package) fn char_ne(a: Char, b: Char) -> Bool;
-  pub(package) fn char_lt(a: Char, b: Char) -> Bool;
-  pub(package) fn char_le(a: Char, b: Char) -> Bool;
-  pub(package) fn char_gt(a: Char, b: Char) -> Bool;
-  pub(package) fn char_ge(a: Char, b: Char) -> Bool;
-
   // String
   pub(package) fn string_add(a: String, b: String) -> String;
   pub(package) fn string_eq(a: String, b: String) -> Bool;
