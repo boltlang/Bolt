@@ -92,8 +92,9 @@ inductive Expr where
   | keep (r : Nat) (t : Ty) (e : Expr)
   /-- A block `{ e }` whose value has type `t` (#292). Inside it, its region
   is `2 * k + 1`. When it starts, it gets a new region, made in the heap,
-  and ends with a freeze of it. -/
-  | block (k : Nat) (t : Ty) (e : Expr)
+  and ends with a freeze of it: `keep`, if it's `inPlace`, which only the
+  program that leaves copies out has. -/
+  | block (inPlace : Bool) (k : Nat) (t : Ty) (e : Expr)
   deriving Repr
 
 /-- The mutability of `new isMut _`. -/
@@ -123,7 +124,7 @@ def Expr.NoLocs : Expr → Prop
   | .snd e => e.NoLocs
   | .freeze _ _ e => e.NoLocs
   | .keep _ _ e => e.NoLocs
-  | .block _ _ e => e.NoLocs
+  | .block _ _ _ e => e.NoLocs
 
 /-- The location `l` is in the expression: what a closure captured is in its
 body. -/
@@ -142,7 +143,7 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .snd e, l => e.HasLoc l
   | .freeze _ _ e, l => e.HasLoc l
   | .keep _ _ e, l => e.HasLoc l
-  | .block _ _ e, l => e.HasLoc l
+  | .block _ _ _ e, l => e.HasLoc l
 
 /-- A mutability that isn't a region. -/
 def Mu.NoRegion : Mu → Prop
@@ -201,6 +202,13 @@ def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mention
 /-- The only region `t` mentions is `μ`'s. -/
 def Ty.RegionsIn (t : Ty) (μ : Mu) : Prop := ∀ r, t.mentions r = true → μ.mentions r = true
 
+/-- Every region `t` mentions exists: a block's or a freeze's type, which
+can't mention one that a block makes later. -/
+def Ty.Below (n : Nat) (t : Ty) : Prop := ∀ r, t.mentions r = true → Made n r
+
+theorem Ty.Below.mono {n n' : Nat} {t : Ty} (h : t.Below n) (hn : n ≤ n') : t.Below n' :=
+  fun r hr => (h r hr).mono hn
+
 /-- Replace the mutability parameters with `ms`; one without an argument
 becomes `imm`. -/
 def Mu.subst (ms : List Mu) : Mu → Mu
@@ -241,7 +249,7 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .snd e => .snd (e.inst ms τs)
   | .freeze r t e => .freeze r (t.inst ms τs) (e.inst ms τs)
   | .keep r t e => .keep r (t.inst ms τs) (e.inst ms τs)
-  | .block k t e => .block k (t.inst ms τs) (e.inst ms τs)
+  | .block c k t e => .block c k (t.inst ms τs) (e.inst ms τs)
 
 /-- Replace the variable `x` with the value `v`, which has no variables, so
 nothing can be captured. -/
@@ -262,7 +270,7 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .snd e, x, v => .snd (e.subst x v)
   | .freeze r t e, x, v => .freeze r t (e.subst x v)
   | .keep r t e, x, v => .keep r t (e.subst x v)
-  | .block k t e, x, v => .block k t (e.subst x v)
+  | .block c k t e, x, v => .block c k t (e.subst x v)
 
 /-! ## At most -/
 
@@ -492,7 +500,7 @@ theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lam _ _ _ ih => exact ih h
 
@@ -501,7 +509,7 @@ theorem Expr.NoLocs.not_hasLoc {e : Expr} (h : e.NoLocs) (l : Nat) : ¬ e.HasLoc
   induction e with
   | var | unit | int => exact id
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hl => hl.elim (ih₁ h.1) (ih₂ h.2)
 
@@ -516,7 +524,7 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -680,20 +688,6 @@ When a block starts, its name for its region, `2 * k + 1`, becomes the
 region it makes (`Expr.ren`). An inner block with the same name has its
 own region, so renaming stops there. -/
 
-/-- `m` with the region `a` renamed `b`. -/
-def Mu.ren (a b : Nat) : Mu → Mu
-  | .region r => if r = a then .region b else .region r
-  | m => m
-
-/-- `t` with the region `a` renamed `b`. -/
-def Ty.ren (a b : Nat) : Ty → Ty
-  | .unit => .unit
-  | .int => .int
-  | .cell m t => .cell (m.ren a b) (t.ren a b)
-  | .fn m x y => .fn (m.ren a b) (x.ren a b) (y.ren a b)
-  | .prod x y => .prod (x.ren a b) (y.ren a b)
-  | .tparam i => .tparam i
-
 /-- `e` with the region `a` renamed `b`, where it isn't an inner block's. -/
 def Expr.ren (a b : Nat) : Expr → Expr
   | .var x => .var x
@@ -704,14 +698,38 @@ def Expr.ren (a b : Nat) : Expr → Expr
   | .get e => .get (e.ren a b)
   | .set e₁ e₂ => .set (e₁.ren a b) (e₂.ren a b)
   | .letE x e₁ e₂ => .letE x (e₁.ren a b) (e₂.ren a b)
-  | .call f ms τs e => .call f (ms.map (Mu.ren a b)) (τs.map (Ty.ren a b)) (e.ren a b)
+  | .call f ms τs e => .call f (ms.map (Mu.free · a (.region b))) (τs.map (Ty.free · a (.region b))) (e.ren a b)
   | .lam c x e => .lam c x (e.ren a b)
   | .app e₁ e₂ => .app (e₁.ren a b) (e₂.ren a b)
   | .pair e₁ e₂ => .pair (e₁.ren a b) (e₂.ren a b)
   | .fst e => .fst (e.ren a b)
   | .snd e => .snd (e.ren a b)
-  | .freeze r t e => .freeze (if r = a then b else r) (t.ren a b) (e.ren a b)
-  | .keep r t e => .keep (if r = a then b else r) (t.ren a b) (e.ren a b)
-  | .block k t e => if 2 * k + 1 = a then .block k t e else .block k (t.ren a b) (e.ren a b)
+  | .freeze r t e => .freeze (if r = a then b else r) (t.free a (.region b)) (e.ren a b)
+  | .keep r t e => .keep (if r = a then b else r) (t.free a (.region b)) (e.ren a b)
+  | .block c k t e => if 2 * k + 1 = a then .block c k t e else .block c k (t.free a (.region b)) (e.ren a b)
+
+/-! ## Scoping
+
+A block's name for its region, `2 * k + 1`, only means something inside
+it. A running program's calls only give a function regions that exist, so
+a block in the function can't have the same name as one of them. -/
+
+/-- The odd regions `m` mentions are in `B`. -/
+def Mu.Scoped (B : Nat → Prop) (m : Mu) : Prop := ∀ r, m.mentions r = true → r % 2 = 1 → B r
+
+def Ty.Scoped (B : Nat → Prop) (t : Ty) : Prop := ∀ r, t.mentions r = true → r % 2 = 1 → B r
+
+/-- The arguments of `e`'s calls mention only the names of regions of the
+blocks they are in, and those in `B`. -/
+def Expr.Scoped : (Nat → Prop) → Expr → Prop
+  | _, .var _ | _, .unit | _, .int _ | _, .loc _ => True
+  | B, .new _ e | B, .get e | B, .lam _ _ e | B, .fst e | B, .snd e
+    | B, .freeze _ _ e | B, .keep _ _ e => e.Scoped B
+  | B, .set e₁ e₂ | B, .letE _ e₁ e₂ | B, .app e₁ e₂ | B, .pair e₁ e₂ => e₁.Scoped B ∧ e₂.Scoped B
+  | B, .call _ ms τs e => (∀ m ∈ ms, m.Scoped B) ∧ (∀ τ ∈ τs, τ.Scoped B) ∧ e.Scoped B
+  | B, .block _ k _ e => e.Scoped (fun r => r = 2 * k + 1 ∨ B r)
+
+/-- No region a running program mentions is a block's name. -/
+abbrev Expr.Closed (e : Expr) : Prop := e.Scoped (fun _ => False)
 
 end BoltMut

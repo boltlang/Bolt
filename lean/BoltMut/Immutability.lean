@@ -118,7 +118,11 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     -- A copy only adds to the heap.
     intro σ t l ty hh _ hl
     exact hc.keeps (hh.lt hl)
-  | blockEnter => intro σ t l ty hh ht hl; cases ht
+  | blockEnter =>
+    -- A block's marker only adds to the heap.
+    intro σ t l ty hh _ hl
+    exact List.getElem?_append_left (hh.lt hl)
+  | blockKeep => intro σ t l ty hh ht hl; cases ht
   | keepCong _ _ => intro σ t l ty hh ht hl; cases ht
   | keepVal _ _ => intro σ t l ty hh ht hl; cases ht
 
@@ -127,14 +131,15 @@ the same value. -/
 theorem imm_never_changes {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Steps fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty} {l : Nat} {ty : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
-      σ[l]? = some (.immutable, ty) → h'[l]? = h[l]? := by
+      HeapClosed h → e.Closed → σ[l]? = some (.immutable, ty) → h'[l]? = h[l]? := by
   induction hs with
   | refl => intros; rfl
   | step s _ ih =>
-    intro σ t l ty hh ht hl
+    intro σ t l ty hh ht hhc hc hl
     have h₁ := step_keeps_imm s hh ht hl
-    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
-    rw [ih hh' ht' (hx _ _ hl), h₁]
+    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht hc
+    obtain ⟨hhc', hc'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hhc hc
+    rw [ih hh' ht' hhc' hc' (hx _ _ hl), h₁]
 
 /-- `l'` can be reached from `l` through the heap: it's `l`, or reachable
 from a location in what `l` holds, which is the location itself or what a
@@ -164,23 +169,24 @@ theorem reaches_only_imm {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk f
 changes, however many steps a well-typed program takes. -/
 theorem reachable_from_imm_never_changes {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy}
     {h h' : Heap} {e e' : Expr} {t ty : Ty} {l l' : Nat}
-    (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e t) (hs : Steps fns h e h' e')
-    (hl : σ[l]? = some (.immutable, ty)) (hr : Reaches h l l') : h'[l']? = h[l']? := by
+    (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e t) (hhc : HeapClosed h) (hc : e.Closed)
+    (hs : Steps fns h e h' e') (hl : σ[l]? = some (.immutable, ty)) (hr : Reaches h l l') : h'[l']? = h[l']? := by
   obtain ⟨ty', hl'⟩ := reaches_only_imm hh hr hl
-  exact imm_never_changes hf hs hh ht hl'
+  exact imm_never_changes hf hs hh ht hhc hc hl'
 
 /-- A well-typed program never gets stuck: after any number of steps, it's a
 value or can take another step. -/
 theorem safety {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Steps fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
-      e'.IsValue ∨ ∃ h'' e'', Step fns h' e' h'' e'' := by
+      HeapClosed h → e.Closed → e'.IsValue ∨ ∃ h'' e'', Step fns h' e' h'' e'' := by
   induction hs with
-  | refl => intro σ t hh ht; exact progress hh ht
+  | refl => intro σ t hh ht _ _; exact progress hh ht
   | step s _ ih =>
-    intro σ t hh ht
-    obtain ⟨σ', _, hh', ht'⟩ := preservation hf s hh ht
-    exact ih hh' ht'
+    intro σ t hh ht hhc hc
+    obtain ⟨σ', _, hh', ht'⟩ := preservation hf s hh ht hc
+    obtain ⟨hhc', hc'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hhc hc
+    exact ih hh' ht' hhc' hc'
 
 end BoltMut
 
@@ -194,24 +200,28 @@ theorem HeapOk.empty (fns : List Fn) : HeapOk fns [] [] :=
 theorem steps_preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Steps fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
-      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' .none false Ctx.empty e' t := by
+      HeapClosed h → e.Closed →
+      ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' .none false Ctx.empty e' t ∧
+        HeapClosed h' ∧ e'.Closed := by
   induction hs with
-  | refl => intro σ t hh ht; exact ⟨σ, Extends.refl σ, hh, ht⟩
+  | refl => intro σ t hh ht hhc hc; exact ⟨σ, Extends.refl σ, hh, ht, hhc, hc⟩
   | step s _ ih =>
-    intro σ t hh ht
-    obtain ⟨σ₁, hx₁, hh₁, ht₁⟩ := preservation hf s hh ht
-    obtain ⟨σ₂, hx₂, hh₂, ht₂⟩ := ih hh₁ ht₁
-    exact ⟨σ₂, hx₁.trans hx₂, hh₂, ht₂⟩
+    intro σ t hh ht hhc hc
+    obtain ⟨σ₁, hx₁, hh₁, ht₁⟩ := preservation hf s hh ht hc
+    obtain ⟨hhc₁, hc₁⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hhc hc
+    obtain ⟨σ₂, hx₂, hh₂, ht₂, hhc₂, hc₂⟩ := ih hh₁ ht₁ hhc₁ hc₁
+    exact ⟨σ₂, hx₁.trans hx₂, hh₂, ht₂, hhc₂, hc₂⟩
 
 /-- For a whole program, run from an empty heap: at any point, there's a
 heap typing for the heap it has reached, such that nothing reachable from
 a location that's `imm` in it ever changes afterwards. -/
 theorem program_imm_never_changes {fns : List Fn} (hf : FnsOk fns) {e e₁ : Expr} {t : Ty}
-    {h₁ : Heap} (ht : HasType fns [] .none false Ctx.empty e t) (hs₁ : Steps fns [] e h₁ e₁) :
+    {h₁ : Heap} (ht : HasType fns [] .none false Ctx.empty e t) (hc : e.Closed) (hs₁ : Steps fns [] e h₁ e₁) :
     ∃ σ, HeapOk fns σ h₁ ∧
       ∀ {l l' : Nat} {ty : Ty} {h₂ : Heap} {e₂ : Expr}, σ[l]? = some (.immutable, ty) →
         Reaches h₁ l l' → Steps fns h₁ e₁ h₂ e₂ → h₂[l']? = h₁[l']? := by
-  obtain ⟨σ, _, hh, ht₁⟩ := steps_preservation hf hs₁ (HeapOk.empty fns) ht
-  exact ⟨σ, hh, fun hl hr hs₂ => reachable_from_imm_never_changes hf hh ht₁ hs₂ hl hr⟩
+  obtain ⟨σ, _, hh, ht₁, hhc, hc₁⟩ := steps_preservation hf hs₁ (HeapOk.empty fns) ht
+    (fun _ _ h => by simp at h) hc
+  exact ⟨σ, hh, fun hl hr hs₂ => reachable_from_imm_never_changes hf hh ht₁ hhc hc₁ hs₂ hl hr⟩
 
 end BoltMut

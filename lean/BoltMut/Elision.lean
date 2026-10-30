@@ -226,18 +226,20 @@ theorem Copy.map {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ
 /-- **Freezing in place can't be noticed.** At the end of a block whose
 region `r` becomes `imm`, the value `v` is copied to `v'`. If nothing of `r`
 can be reached from what comes after, `k`, or from the copy, then going on
-with `v` itself, in the heap without the copies, computes what going on
-with the copy does: whatever result the first gets, the second gets one
-that corresponds, and the same integer. -/
+with `v` itself computes what going on with the copy does: whatever result
+the first gets, the second gets one that corresponds, and the same
+integer. Both go on in the heap with the copies, so that blocks that start
+later make the same regions in both; the second just doesn't use them. -/
 theorem freeze_in_place_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' h₁ : Heap}
     {m' : List (Nat × Nat)} {r x : Nat} {t T : Ty} {v v' k e₁ : Expr} (hh : HeapOk fns σ h) (hv : v.IsValue)
     (ht : HasType fns σ .none false Ctx.empty v t) (hfz : t.Freezable r)
     (hk : HasType fns σ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
     (hc : Copy r t h [] v h' m' v')
     (hdead : ∀ a s, σ[a]? = some (.region r, s) → ¬ k.Reaches h' a ∧ ¬ v'.Reaches h' a)
+    (hcl : HeapClosed h) (hvc : v.Closed) (hkc : k.Closed)
     (hs : Steps fns h' (k.subst x v') h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
-      Steps fns h (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
+      Steps fns h' (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
   obtain ⟨σ', hx, hh', hv', ht', hnew, _⟩ := hc.typed hh hv ht hfz (MemoOk.nil σ r)
   obtain ⟨hπ₀, hrel⟩ := hc.map hh ⟨[], by simp⟩ ht hfz (fun _ _ h => by simp at h)
   -- Each copy `a` is of the original `b`.
@@ -270,13 +272,13 @@ theorem freeze_in_place_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
     · exact (hdead o s hs).1 ho
     · exact (hdead o s hs).2 ho
   let M : Nat → Prop := fun a => ∃ m t', σ'[a]? = some (m, t') ∧ m ≠ .immutable
-  have hcorr : Corr M ρ h' h := by
+  have hcorr : Corr M ρ h' h' := by
     refine ⟨?_, ?_, ?_⟩
     · intro a b hab
       rcases hab with ⟨rfl, ha, hLa⟩ | hab
       · obtain ⟨w, hw⟩ : ∃ w, h[a]? = some w := ⟨_, List.getElem?_eq_getElem ha⟩
         have hw' : h'[a]? = some w := by rw [hc.keeps ha]; exact hw
-        refine ⟨w, w, hw', hw, Rel.refl fun l hl => .inl ⟨rfl, ?_, hL a w l hLa hw' hl⟩⟩
+        refine ⟨w, w, hw', hw', Rel.refl fun l hl => .inl ⟨rfl, ?_, hL a w l hLa hw' hl⟩⟩
         obtain ⟨p, hp⟩ : ∃ p, σ[a]? = some p := ⟨_, List.getElem?_eq_getElem (hh.1 ▸ ha)⟩
         obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 a p.1 p.2 hp
         rw [hw] at hw₀
@@ -284,7 +286,8 @@ theorem freeze_in_place_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
         rw [hh.1]
         exact hwt.hasLoc_lt hl
       · obtain ⟨w, w', hw, hw', hr⟩ := hcon a b hab
-        exact ⟨w', w, hw', hw, hr⟩
+        obtain ⟨_, _, s, hs⟩ := hπ a b hab
+        exact ⟨w', w, hw', by rw [hc.keeps (hh.lt hs)]; exact hw, hr⟩
     · -- A copy is `imm`, so only a location that corresponds to itself
       -- counts, and no original can still be reached.
       intro a b c hac hbc hMa
@@ -315,8 +318,10 @@ theorem freeze_in_place_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
     exact hk.hasLoc_lt hl
   have hte : HasType fns σ' .none false Ctx.empty (k.subst x v') T :=
     (hk.weaken_heap hx).subst_update hv' ht'
+  obtain ⟨hcl', hvc'⟩ := hc.closed hcl hvc
   obtain ⟨_, ρ', h₂, e₂, ss, _, hr'⟩ :=
     steps_sim hf hs hh' hte (fun a m t' h hm => ⟨m, t', h, hm⟩) hcorr (hrk.subst hrv x)
+      hcl' (hkc.subst hvc' x) rfl
   exact ⟨ρ', h₂, e₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
 
 /-! ## The premise, from the typing
@@ -328,38 +333,6 @@ mentions its own region, which its type does (rule 5 of the regions page,
 its region, so its type doesn't mention it; and the copy's type is the
 value's with the region replaced with `imm`. So neither can reach the
 region's objects (`freeze_in_place_of_typing`). -/
-
-/-- A value whose type doesn't mention `r` holds only locations whose types
-don't. -/
-theorem Expr.IsValue.hasLoc_notMentions {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
-    {v : Expr} {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) {r : Nat} (hs : s.mentions r = false)
-    {l : Nat} (hl : v.HasLoc l) : ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).mentions r = false := by
-  induction hv generalizing s with
-  | unit | int => exact hl.elim
-  | loc => cases ht with
-    | loc h _ =>
-      cases hl
-      exact ⟨_, _, h, hs⟩
-  | @lam b x body => cases ht with
-    | @lam _ _ _ _ _ _ _ _ μ _ _ _ _ hrl _ =>
-      have hl' : body.HasLoc l := hl
-      obtain ⟨m, t, h, _, hm, htr⟩ := hrl l hl'
-      have hμ : μ.mentions r = false := by
-        simp only [Ty.mentions, Bool.or_eq_false_iff] at hs
-        exact hs.1.1
-      refine ⟨m, t, h, ?_⟩
-      simp only [Ty.mentions, Bool.or_eq_false_iff]
-      constructor
-      · cases e : m.mentions r
-        · rfl
-        · rw [hm r e] at hμ; cases hμ
-      · cases e : t.mentions r
-        · rfl
-        · rw [htr r e] at hμ; cases hμ
-  | pair _ _ ih₁ ih₂ => cases ht with
-    | pair h₁ h₂ =>
-      simp only [Ty.mentions, Bool.or_eq_false_iff] at hs
-      exact hl.elim (ih₁ h₁ hs.1) (ih₂ h₂ hs.2)
 
 /-- In a well-typed heap, nothing that a location whose type doesn't mention
 `r` reaches is of `r`. -/
@@ -380,41 +353,24 @@ theorem HeapOk.reaches_notMentions {fns : List Fn} {σ : HeapTy} {h : Heap} (hh 
     obtain ⟨m₁, t₁, h₁, hm₁⟩ := hwv.hasLoc_notMentions hwt ht hl
     exact ih h₁ hm₁
 
-/-- Replacing `r` with what mentions no region leaves no `r`. -/
-theorem Mu.free_mentions_self {m μ : Mu} (hμ : μ.NoRegion) (r : Nat) : (m.free r μ).mentions r = false := by
-  cases m with
-  | region r' =>
-    simp only [Mu.free]
-    split
-    · exact hμ.mentions r
-    · rename_i hne
-      simp [Mu.mentions, hne]
-  | _ => rfl
-
-theorem Ty.free_mentions_self {t : Ty} {μ : Mu} (hμ : μ.NoRegion) (r : Nat) : (t.free r μ).mentions r = false := by
-  induction t with
-  | unit | int | tparam => rfl
-  | cell m t ih => simp [Ty.free, Ty.mentions, Mu.free_mentions_self hμ r, ih]
-  | fn m a b iha ihb => simp [Ty.free, Ty.mentions, Mu.free_mentions_self hμ r, iha, ihb]
-  | prod a b iha ihb => simp [Ty.free, Ty.mentions, iha, ihb]
-
 /-- **The typing makes freezing in place unnoticeable.** A block `e`
 starts in a heap whose typing `σ₀` mentions its region `r` nowhere, and
 runs to the value `v`, whose freeze copies it to `v'`. What comes after
 it, `k`, was typed before it. Then going on with `v` itself, in the heap
-without the copies, computes what going on with the copy does. -/
+with the copies unused, computes what going on with the copy does. -/
 theorem freeze_in_place_of_typing {fns : List Fn} (hf : FnsOk fns) {σ₀ : HeapTy} {h₀ h h' h₁ : Heap}
     {r x : Nat} {t T : Ty} {e v v' k e₁ : Expr} (hh₀ : HeapOk fns σ₀ h₀)
     (hfresh : ∀ (l : Nat) (p : Mu × Ty), σ₀[l]? = some p → (Ty.cell p.1 p.2).mentions r = false)
     (he : HasType fns σ₀ .none false Ctx.empty e t) (hfz : t.Freezable r)
     (hk : HasType fns σ₀ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
+    (hcl₀ : HeapClosed h₀) (hec : e.Closed) (hkc : k.Closed)
     (hse : Steps fns h₀ e h v) (hv : v.IsValue) {m' : List (Nat × Nat)} (hc : Copy r t h [] v h' m' v')
     (hs : Steps fns h' (k.subst x v') h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
-      Steps fns h (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
-  obtain ⟨σ, hx, hh, hvt⟩ := steps_preservation hf hse hh₀ he
+      Steps fns h' (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
+  obtain ⟨σ, hx, hh, hvt, hcl, hvc⟩ := steps_preservation hf hse hh₀ he hcl₀ hec
   obtain ⟨σ', hx', hh', hv', ht', _, _⟩ := hc.typed hh hv hvt hfz (MemoOk.nil σ r)
-  refine freeze_in_place_changes_nothing hf hh hv hvt hfz (hk.weaken_heap hx) hc ?_ hs
+  refine freeze_in_place_changes_nothing hf hh hv hvt hfz (hk.weaken_heap hx) hc ?_ hcl hvc hkc hs
   intro a s ha
   -- An object of `r` has a type that mentions `r`.
   have hbad : ∀ m' t', σ'[a]? = some (m', t') → (Ty.cell m' t').mentions r = false → False := by

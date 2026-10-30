@@ -144,12 +144,30 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   (`Ty.Freezable`): no closure, and nothing of `r` but in its own objects.
   The type has no parameters, so that a call can't give it the region. -/
   | freeze {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
-      HasType fns σ Δ io Γ e t → t.Freezable r → t.NoParams →
+      HasType fns σ Δ io Γ e t → t.Freezable r → t.NoParams → Made σ.length r → t.Below σ.length →
       HasType fns σ Δ io Γ (.freeze r t e) (t.free r .immutable)
+  /-- A block, whose region is `2 * k + 1` inside (#292). Its body sees some
+  of the variables in scope, `Γb`, and none of them, nor any location in
+  it, mentions that region: so nothing from before the block has the
+  block's objects. Its value has type `t`, which it freezes, with its
+  region `imm`. -/
+  | block {io : Bool} {Γ Γb : Ctx} {k : Nat} {t : Ty} {e : Expr} :
+      Γb.Sub Γ → (∀ y s, Γb y = some s → s.mentions (2 * k + 1) = false) →
+      (∀ l, e.HasLoc l → ∃ m t', σ[l]? = some (m, t') ∧ (Ty.cell m t').mentions (2 * k + 1) = false) →
+      HasType fns σ Δ io Γb e t → t.Freezable (2 * k + 1) → t.NoParams → t.Below σ.length →
+      HasType fns σ Δ io Γ (.block false k t e) (t.free (2 * k + 1) .immutable)
+
+/-- A function's signature mentions no region: so renaming a region in a
+call is renaming it in the arguments. -/
+def Fn.NoRegions (fn : Fn) : Prop :=
+  fn.argTy.NoRegion ∧ fn.retTy.NoRegion ∧
+    (∀ p ∈ fn.assume.mus, p.1.NoRegion ∧ p.2.NoRegion) ∧ ∀ p ∈ fn.assume.tys, p.2.NoRegion
 
 /-- Each function's body has its declared type, under what the function
-assumes, with its parameters unknown, and no locations. -/
+assumes, with its parameters unknown, and no locations. Its signature
+mentions no region, and its body no block's name but inside the block. -/
 def FnsOk (fns : List Fn) : Prop :=
-  ∀ fn ∈ fns, fn.body.NoLocs ∧ HasType fns [] fn.assume false (Ctx.empty.update fn.param fn.argTy) fn.body fn.retTy
+  ∀ fn ∈ fns, fn.body.NoLocs ∧ HasType fns [] fn.assume false (Ctx.empty.update fn.param fn.argTy) fn.body fn.retTy ∧
+    fn.NoRegions ∧ fn.body.Closed
 
 end BoltMut

@@ -81,8 +81,12 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
   heap, and its name for the region becomes that one. It ends with a
   freeze of it. -/
   | blockEnter {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
-      Step fns h (.block k t e) (h ++ [.unit])
-        (.freeze (2 * h.length) (t.ren (2 * k + 1) (2 * h.length)) (e.ren (2 * k + 1) (2 * h.length)))
+      Step fns h (.block false k t e) (h ++ [.unit])
+        (.freeze (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
+  /-- The same, for a block that freezes in place. -/
+  | blockKeep {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
+      Step fns h (.block true k t e) (h ++ [.unit])
+        (.keep (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
   | keepCong {h h' : Heap} {r : Nat} {t : Ty} {e e' : Expr} :
       Step fns h e h' e' → Step fns h (.keep r t e) h' (.keep r t e')
   | keepVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :

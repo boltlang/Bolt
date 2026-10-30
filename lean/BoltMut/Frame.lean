@@ -35,10 +35,11 @@ def Frame (σ : HeapTy) (h : Heap) (e : Expr) (l : Nat) : Prop :=
 /-- However many steps a program takes, it changes nothing that existed
 before outside its frame. -/
 theorem changes_only_frame {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {e e' : Expr} {t : Ty}
-    (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e t) (hs : Steps fns h e h' e') :
+    (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e t) (hcl : HeapClosed h) (hc : e.Closed)
+    (hs : Steps fns h e h' e') :
     ∀ l, l < h.length → ¬ Frame σ h e l → h'[l]? = h[l]? := by
   intro l hl hA
-  refine steps_clean hf hs (A := Frame σ h e) hh ht (Nat.le_refl _) ?_ ?_ l hl hA
+  refine steps_clean hf hs (A := Frame σ h e) hh ht hcl hc (Nat.le_refl _) ?_ ?_ l hl hA
   · intro l₀ h₀
     by_cases himm : ∃ t, σ[l₀]? = some (.immutable, t)
     · exact .inr (.inr himm)
@@ -52,22 +53,22 @@ theorem changes_only_frame {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' 
 /-- What a program changes that existed before is in its frame, and isn't
 `imm`: the two theorems together, as the reactive design would use them. -/
 theorem changed_is_in_frame_and_mut {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {e e' : Expr}
-    {t : Ty} (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e t) (hs : Steps fns h e h' e')
-    {l : Nat} (hl : l < h.length) (hc : h'[l]? ≠ h[l]?) :
+    {t : Ty} (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e t) (hcl : HeapClosed h)
+    (hec : e.Closed) (hs : Steps fns h e h' e') {l : Nat} (hl : l < h.length) (hc : h'[l]? ≠ h[l]?) :
     Frame σ h e l ∧ ¬ ∃ ty, σ[l]? = some (.immutable, ty) := by
-  refine ⟨Classical.byContradiction fun hn => hc (changes_only_frame hf hh ht hs l hl hn), ?_⟩
+  refine ⟨Classical.byContradiction fun hn => hc (changes_only_frame hf hh ht hcl hec hs l hl hn), ?_⟩
   rintro ⟨ty, hty⟩
-  exact hc (imm_never_changes hf hs hh ht hty)
+  exact hc (imm_never_changes hf hs hh ht hcl hec hty)
 
 /-- A call changes only what's reachable from the function or its argument,
 through a location that isn't `imm`. -/
 theorem call_changes_only_what_args_reach {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
     {f v e' : Expr} {m : Mu} {a r : Ty} (hh : HeapOk fns σ h)
     (hft : HasType fns σ .none false Ctx.empty f (.fn m a r)) (hvt : HasType fns σ .none false Ctx.empty v a)
-    (hs : Steps fns h (.app f v) h' e') :
+    (hcl : HeapClosed h) (hfc : f.Closed) (hvc : v.Closed) (hs : Steps fns h (.app f v) h' e') :
     ∀ l, l < h.length → ¬ Frame σ h f l → ¬ Frame σ h v l → h'[l]? = h[l]? := by
   intro l hl hnf hnv
-  refine changes_only_frame hf hh (.app hft hvt) hs l hl ?_
+  refine changes_only_frame hf hh (.app hft hvt) hcl ⟨hfc, hvc⟩ hs l hl ?_
   rintro ⟨l₀, h₀ | h₀, himm, hr⟩
   · exact hnf ⟨l₀, h₀, himm, hr⟩
   · exact hnv ⟨l₀, h₀, himm, hr⟩
@@ -92,10 +93,11 @@ theorem imm_fn_changes_only_what_it_is_given {fns : List Fn} (hf : FnsOk fns) {�
     (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable (.prod a b) r))
     (hwt : HasType fns σ .none false Ctx.empty w a)
     (huv : u.IsValue) (hut : HasType fns σ .none false Ctx.empty u b) (hd : AtMost .none .immutable b)
+    (hcl : HeapClosed h) (hfc : f.Closed) (hwc : w.Closed) (huc : u.Closed)
     (hs : Steps fns h (.app f (.pair w u)) h' e') :
     ∀ l, l < h.length → ¬ Frame σ h w l → h'[l]? = h[l]? := by
   intro l hl hnw
-  refine call_changes_only_what_args_reach hf hh hft (.pair hwt hut) hs l hl (Frame.of_imm_fn hfv hft l) ?_
+  refine call_changes_only_what_args_reach hf hh hft (.pair hwt hut) hcl hfc ⟨hwc, huc⟩ hs l hl (Frame.of_imm_fn hfv hft l) ?_
   rintro ⟨l₀, h₀ | h₀, himm, hr⟩
   · exact hnw ⟨l₀, h₀, himm, hr⟩
   · exact Frame.of_deepImm huv hut hd l ⟨l₀, h₀, himm, hr⟩

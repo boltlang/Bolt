@@ -48,7 +48,7 @@ def Expr.erase : Expr → Expr
   | .snd e => .snd e.erase
   | .freeze r t e => .keep r t e.erase
   | .keep r t e => .keep r t e.erase
-  | .block k t e => .block k t e.erase
+  | .block _ k t e => .block true k t e.erase
 
 /-- A function whose freezes copy nothing. -/
 def Fn.erase (fn : Fn) : Fn := { fn with body := fn.body.erase }
@@ -57,7 +57,7 @@ theorem Expr.erase_subst (e : Expr) (x : Nat) (v : Expr) : (e.subst x v).erase =
   induction e with
   | var y => simp only [Expr.subst, Expr.erase]; split <;> simp [Expr.erase]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih =>
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih =>
     simp only [Expr.subst, Expr.erase, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.erase, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
@@ -74,7 +74,7 @@ theorem Expr.erase_inst (e : Expr) (ms : List Mu) (τs : List Ty) : (e.inst ms �
     simp only [Expr.inst, Expr.erase, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.erase, ih₁, ih₂]
-  | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => simp only [Expr.inst, Expr.erase, ih]
+  | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => simp only [Expr.inst, Expr.erase, ih]
 
 theorem Expr.IsValue.erase {v : Expr} (hv : v.IsValue) : v.erase.IsValue := by
   induction hv with
@@ -87,7 +87,7 @@ theorem Expr.IsValue.erase {v : Expr} (hv : v.IsValue) : v.erase.IsValue := by
 theorem Expr.hasLoc_erase (e : Expr) (l : Nat) : e.erase.HasLoc l ↔ e.HasLoc l := by
   induction e with
   | var | unit | int | loc => simp [Expr.erase, Expr.HasLoc]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih =>
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih =>
     simp only [Expr.erase, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.erase, Expr.HasLoc, ih₁, ih₂]
@@ -96,7 +96,7 @@ theorem Expr.NoLocs.erase {e : Expr} (h : e.NoLocs) : e.erase.NoLocs := by
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
 /-- A relation of expressions that only needs the locations of the first
@@ -127,7 +127,7 @@ theorem Rel.mono_on {ρ ρ' : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel 
 /-- `e` has a freeze of the region `r`, maybe in a closure. -/
 def Expr.Freezes (r : Nat) : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => False
-  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .block _ _ e => e.Freezes r
+  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .block _ _ _ e => e.Freezes r
   | .set a b | .letE _ a b | .app a b | .pair a b => a.Freezes r ∨ b.Freezes r
   | .freeze r' _ e | .keep r' _ e => r' = r ∨ e.Freezes r
 
@@ -142,7 +142,7 @@ rest's locations mention. -/
 def Expr.Sep (σ : HeapTy) : Expr → Prop
   | .set a b | .app a b | .pair a b => Expr.Disj σ a b ∧ Expr.Disj σ b a ∧ a.Sep σ ∧ b.Sep σ
   | .letE _ a b => Expr.Disj σ a b ∧ a.Sep σ ∧ b.Sep σ
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e | .block _ _ e => e.Sep σ
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e | .block _ _ _ e => e.Sep σ
   | _ => True
 
 /-! ## A copy against the value it was made from -/
@@ -408,6 +408,19 @@ theorem Expr.Disj.ctx {σ : HeapTy} {K : Nat → Prop} {a b e : Expr}
   rcases hl with hl | hl
   · exact hK l hl r (hae r hr)
   · exact hd l hl r hr
+
+/-- Erasing commutes with renaming a region. -/
+theorem Expr.erase_ren (e : Expr) (a b : Nat) : (e.ren a b).erase = e.erase.ren a b := by
+  induction e with
+  | var | unit | int | loc => rfl
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih =>
+    simp only [Expr.ren, Expr.erase, ih]
+  | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+    simp only [Expr.ren, Expr.erase, ih₁, ih₂]
+  | freeze _ _ _ ih | keep _ _ _ ih => simp only [Expr.ren, Expr.erase, ih]
+  | block _ k _ _ ih =>
+    simp only [Expr.ren]
+    split <;> simp [Expr.erase, Expr.ren, ih, *]
 
 /-- One step of the program that copies is one of the one that doesn't,
 and they still correspond, on everything that the context `K` reaches. -/
@@ -764,7 +777,22 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
             subst this
             obtain ⟨_, _, s', hs'⟩ := hπ o a hoa
             exact hc.func o c d hoc hod (hMo o s' hs')
-  | blockEnter => intro σ t M ρ K h₂ e₂ hh ht; cases ht
+  | @blockEnter k t e =>
+    -- The other program's block starts too, in a heap as long, so with the
+    -- same region, and ends with a `keep`.
+    intro σ T M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
+    simp only [Expr.erase] at hr
+    cases hr with
+    | block hr =>
+      have hc' := hc.alloc (v₁ := .unit) .unit
+      simp only [List.length_map] at hc'
+      refine ⟨fun a c => ρ a c ∨ (a = h₁.length ∧ c = h₂.length), h₂ ++ [.unit], _, .blockKeep,
+        fun a c h _ => Or.inl h, ?_, ?_, by simp [hlen]⟩
+      · simpa [Expr.erase] using hc'
+      · rw [hlen]
+        simp only [Expr.erase, Expr.erase_ren]
+        exact .keep ((hr.ren _ _).mono fun _ _ h => .inl h)
+  | blockKeep => intro σ t M ρ K h₂ e₂ hh ht; cases ht
   | keepCong _ _ => intro σ t M ρ K h₂ e₂ hh ht; cases ht
   | keepVal _ _ => intro σ t M ρ K h₂ e₂ hh ht; cases ht
 
@@ -780,18 +808,19 @@ theorem steps_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ (h₁.map Expr.erase) h₂ →
       Rel ρ e₁.erase e₂ →
       (∀ σ' h e, Steps fns h₁ e₁ h e → HeapOk fns σ' h → HasType fns σ' .none false Ctx.empty e t → e.Sep σ') →
-      h₂.length = h₁.length →
+      HeapClosed h₁ → e₁.Closed → h₂.length = h₁.length →
       ∃ (M' : Nat → Prop) (ρ' : Nat → Nat → Prop) (h₂' : Heap) (e₂' : Expr),
         Steps (fns.map Fn.erase) h₂ e₂ h₂' e₂' ∧ Corr M' ρ' (h₁'.map Expr.erase) h₂' ∧ Rel ρ' e₁'.erase e₂' := by
   induction hs with
   | refl =>
-    intro σ t M ρ h₂ e₂ _ _ _ hc hr _ _
+    intro σ t M ρ h₂ e₂ _ _ _ hc hr _ _ _ _
     exact ⟨M, ρ, h₂, e₂, .refl, hc, hr⟩
   | @step h₀ _ _ _ _ _ s _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hsep hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr hsep hcl hcl' hlen
     obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr', hl'⟩ :=
       step_elide hf s hh ht hM hc hr (hsep σ _ _ .refl hh ht) (K := fun _ => False) (fun _ h => h.elim) hlen
-    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
+    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht hcl'
+    obtain ⟨hcl₁, hcl₁'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hcl hcl'
     -- What isn't `imm` after the step wasn't before, or is new.
     have hM' : ∀ a m t', σ'[a]? = some (m, t') → m ≠ .immutable → M a ∨ h₀.length ≤ a := by
       intro a m t' ha hm
@@ -802,7 +831,7 @@ theorem steps_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
         exact .inl (hM a m t' (hp.trans ha) hm)
       · exact .inr (by omega)
     obtain ⟨M'', ρ'', h₂'', e₂'', ss, hc'', hr''⟩ :=
-      ih hh' ht' hM' hc' hr' (fun σ'' h e hs' hh'' ht'' => hsep σ'' h e (.step s hs') hh'' ht'') hl'
+      ih hh' ht' hM' hc' hr' (fun σ'' h e hs' hh'' ht'' => hsep σ'' h e (.step s hs') hh'' ht'') hcl₁ hcl₁' hl'
     exact ⟨M'', ρ'', h₂'', e₂'', .step s₂ ss, hc'', hr''⟩
 
 /-- **Every freeze can be in place.** The program, with its freezes erased
@@ -814,6 +843,7 @@ the region's objects (`Expr.Sep`). -/
 theorem freezes_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h₁ : Heap}
     {e e₁ : Expr} {T : Ty} (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e T)
     (hsep : ∀ σ' h' e', Steps fns h e h' e' → HeapOk fns σ' h' → HasType fns σ' .none false Ctx.empty e' T → e'.Sep σ')
+    (hcl : HeapClosed h) (hec : e.Closed)
     (hs : Steps fns h e h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
       Steps (fns.map Fn.erase) (h.map Expr.erase) e.erase h₂ e₂ ∧ Rel ρ e₁.erase e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
@@ -841,7 +871,7 @@ theorem freezes_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
   have hr : Rel ρ e.erase e.erase :=
     Rel.refl fun l hl => ⟨rfl, by rw [hh.1]; exact ht.hasLoc_lt ((Expr.hasLoc_erase e l).mp hl)⟩
   obtain ⟨_, ρ', h₂, e₂, ss, _, hr'⟩ :=
-    steps_elide hf hs hh ht (fun a m t' h hm => ⟨m, t', h, hm⟩) hc hr hsep (by simp)
+    steps_elide hf hs hh ht (fun a m t' h hm => ⟨m, t', h, hm⟩) hc hr hsep hcl hec (by simp)
   refine ⟨ρ', h₂, e₂, ss, hr', fun n hn => ?_⟩
   subst hn
   exact hr'.int_eq

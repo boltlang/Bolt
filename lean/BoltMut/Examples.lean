@@ -284,7 +284,8 @@ theorem wrap_ok : FnsOk [wrap] := by
   intro fn hfn
   simp at hfn
   subst hfn
-  exact ⟨trivial, .new (.var rfl) ⟨.immutable, .inr (by simp [wrap, wrapAssume]), .refl _⟩⟩
+  exact ⟨trivial, .new (.var rfl) ⟨.immutable, .inr (by simp [wrap, wrapAssume]), .refl _⟩,
+    by simp [Fn.NoRegions, Ty.NoRegion, Mu.NoRegion, wrap, wrapAssume], by simp [Expr.Scoped, wrap]⟩
 
 /-- `wrap[imm [i32]](x)` meets the assumption. -/
 example : HasType [wrap] [] .none false Ctx.empty

@@ -1,4 +1,4 @@
-import BoltMut.Lemmas
+import BoltMut.Rename
 
 /-!
 # Type safety
@@ -366,7 +366,8 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     · exact .inr ⟨_, _, .newVal hv⟩
     · exact .inr ⟨_, _, .newCong hs⟩
   | setP _ hi _ _ _ => simp [Assume.none] at hi
-  | freeze he hf _ ih =>
+  | block _ _ _ _ _ _ _ _ => exact .inr ⟨_, _, .blockEnter⟩
+  | freeze he hf _ _ _ ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · obtain ⟨h', m', v', hc⟩ := Copy.exists _ hh hv he hf (MemoOk.nil σ _)
       exact .inr ⟨_, _, .freezeVal hv hc⟩
@@ -405,22 +406,22 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
 only grows. -/
 theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') :
-    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t →
+    ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t → e.Closed →
       ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' .none false Ctx.empty e' t ∧
         (AllocOk σ → AllocOk σ') := by
   induction hs with
   | newCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | newP _ hi _ => simp [Assume.none] at hi
     | new he hd =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
       exact ⟨σ', hx, hh', .new he' hd, ha⟩
     | newR he hd hr =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
       exact ⟨σ', hx, hh', .newR he' hd (hr.mono hx.length_le), ha⟩
   | @newVal e b hv =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | newP _ hi _ => simp [Assume.none] at hi
     | @new _ _ _ s _ he hd =>
@@ -444,13 +445,13 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
           exact hr₀
         · exact hv.reachBelow ha he r' hr
   | getCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | get he =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
       exact ⟨σ', hx, hh', .get he', ha⟩
   | getLoc hl =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | get he =>
       cases he with
@@ -460,27 +461,27 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
         cases hv
         exact ⟨σ, Extends.refl σ, hh, hvt, id⟩
   | setCong₁ _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | set he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁
+      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁ hsc.1
       exact ⟨σ', hx, hh', .set he₁' (he₂.weaken_heap hx), ha⟩
     | setR he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁
+      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁ hsc.1
       exact ⟨σ', hx, hh', .setR he₁' (he₂.weaken_heap hx), ha⟩
     | setP _ hi _ => simp [Assume.none] at hi
   | setCong₂ _ _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | set he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂
+      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂ hsc.2
       exact ⟨σ', hx, hh', .set (he₁.weaken_heap hx) he₂', ha⟩
     | setR he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂
+      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂ hsc.2
       exact ⟨σ', hx, hh', .setR (he₁.weaken_heap hx) he₂', ha⟩
     | setP _ hi _ => simp [Assume.none] at hi
   | @setLoc l v hl hv =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | set he₁ he₂ =>
       cases he₁ with
@@ -490,48 +491,55 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
       | loc hσ _ => exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit, id⟩
     | setP _ hi _ => simp [Assume.none] at hi
   | letCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | letE he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁
+      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁ hsc.1
       exact ⟨σ', hx, hh', .letE he₁' (he₂.weaken_heap hx), ha⟩
   | letVal hv =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | letE he₁ he₂ =>
       exact ⟨σ, Extends.refl σ, hh, he₂.subst_update hv he₁, id⟩
   | callCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | call hf' hl he hb =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc.2.2
       exact ⟨σ', hx, hh', .call hf' hl he' (fun m hm => (hb m hm).mono hx.length_le), ha⟩
   | @callVal f fn ms τs v hfn hv =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | call hf' hs he hbw =>
       rw [hfn] at hf'
       cases hf'
-      obtain ⟨hn, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
+      obtain ⟨hn, hbody, _⟩ := hf fn (List.mem_of_getElem? hfn)
       -- The arguments meet what the function assumes, so its body has the
-      -- type with them.
-      have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hs hbw
+      -- type with them. They mention no block's name, so none in the body.
+      have hodd : ∀ r, ((∃ m ∈ ms, m.mentions r = true) ∨ ∃ τ ∈ τs, τ.mentions r = true) → r % 2 = 0 := by
+        intro r hr
+        rcases hr with ⟨m, hm, h⟩ | ⟨τ, hτ, h⟩
+        · have := hsc.1 m hm r h
+          exact (Nat.mod_two_eq_zero_or_one r).resolve_right this
+        · have := hsc.2.1 τ hτ r h
+          exact (Nat.mod_two_eq_zero_or_one r).resolve_right this
+      have hb := (hbody.weaken_heap (Extends.nil σ)).inst hn hs hbw hodd
       rw [Ctx.inst_update, Ctx.inst_empty] at hb
       exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he, id⟩
   | appCong₁ _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | app he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁
+      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁ hsc.1
       exact ⟨σ', hx, hh', .app he₁' (he₂.weaken_heap hx), ha⟩
   | appCong₂ _ _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | app he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂
+      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂ hsc.2
       exact ⟨σ', hx, hh', .app (he₁.weaken_heap hx) he₂', ha⟩
   | appVal hv =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | app he₁ he₂ =>
       cases he₁ with
@@ -542,64 +550,88 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
         have hb := (hbody.weaken_ctx (hc.update _ _)).weaken_imm (io' := false) (fun h => nomatch h)
         exact ⟨σ, Extends.refl σ, hh, hb.subst_update hv he₂, id⟩
   | pairCong₁ _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | pair he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁
+      obtain ⟨σ', hx, hh', he₁', ha⟩ := ih hh he₁ hsc.1
       exact ⟨σ', hx, hh', .pair he₁' (he₂.weaken_heap hx), ha⟩
   | pairCong₂ _ _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | pair he₁ he₂ =>
-      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂
+      obtain ⟨σ', hx, hh', he₂', ha⟩ := ih hh he₂ hsc.2
       exact ⟨σ', hx, hh', .pair (he₁.weaken_heap hx) he₂', ha⟩
   | fstCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | fst he =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
       exact ⟨σ', hx, hh', .fst he', ha⟩
   | sndCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | snd he =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
       exact ⟨σ', hx, hh', .snd he', ha⟩
   | fstVal _ _ =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | fst he => cases he with
       | pair h₁ _ => exact ⟨σ, Extends.refl σ, hh, h₁, id⟩
   | sndVal _ _ =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
     | snd he => cases he with
       | pair _ h₂ => exact ⟨σ, Extends.refl σ, hh, h₂, id⟩
   | freezeCong _ ih =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
-    | freeze he hf hp =>
-      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
-      exact ⟨σ', hx, hh', .freeze he' hf hp, ha⟩
+    | freeze he hf hp hr hb =>
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
+      exact ⟨σ', hx, hh', .freeze he' hf hp (hr.mono hx.length_le) (hb.mono hx.length_le), ha⟩
   | freezeVal hv hc =>
-    intro σ t hh ht
+    intro σ t hh ht hsc
     cases ht with
-    | freeze he hf _ =>
+    | freeze he hf _ _ _ =>
       -- The copy has the type with the region `imm`, in a heap typing that
       -- only grew.
       obtain ⟨σ', hx, hh', _, ht', _, _, hal⟩ := hc.typed hh hv he hf (MemoOk.nil σ _)
       exact ⟨σ', hx, hh', ht', hal⟩
-  | blockEnter => intro σ t hh ht; cases ht
-  | keepCong _ _ => intro σ t hh ht; cases ht
-  | keepVal _ _ => intro σ t hh ht; cases ht
+  | @blockEnter k t e =>
+    intro σ T hh ht hsc
+    cases ht with
+    | block hsub hnm hle hbody hf' hp hbt =>
+      -- The block makes its region `2 * n`, which nothing mentions yet, and
+      -- its name for it becomes that one.
+      rw [hh.1]
+      have hx := Extends.append σ (Mu.immutable, Ty.unit)
+      have hb : Made (σ ++ [(Mu.immutable, Ty.unit)]).length (2 * σ.length) := by simp [Made]
+      have hbn : ¬ Made σ.length (2 * σ.length) := by simp [Made]
+      have htb : t.mentions (2 * σ.length) = false := by
+        cases e : t.mentions (2 * σ.length) with
+        | false => rfl
+        | true => exact (hbn (hbt _ e)).elim
+      have hbody' := hbody.ren (fun fn h => (hf fn h).2.2.1) (by omega) hx hb hbn hle
+      refine ⟨_, hx, hh.alloc (.inr (.inl rfl)) trivial .unit .unit, ?_, fun ha => ha.append ?_⟩
+      · rw [← Ty.free_back (μ := .immutable) htb]
+        refine .freeze (hbody'.weaken_ctx fun y s h => ?_) (hf'.ren_self htb) (hp.ren _ _) hb
+          ((hbt.mono hx.length_le).ren hb)
+        simp only [Ctx.free, Option.map_eq_some_iff] at h
+        obtain ⟨s₀, h₀, _⟩ := h
+        exact absurd (hsub y s₀ h₀) (by simp [Ctx.empty])
+      · intro r hr
+        simp [Ty.reaches, Mu.mentions] at hr
+  | blockKeep => intro σ t hh ht _; cases ht
+  | keepCong _ _ => intro σ t hh ht _; cases ht
+  | keepVal _ _ => intro σ t hh ht _; cases ht
 
 /-- Preservation: a step keeps the heap matching a typing that only grew,
 and the program's type. -/
 theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') {σ : HeapTy} {t : Ty} (hh : HeapOk fns σ h)
-    (ht : HasType fns σ .none false Ctx.empty e t) :
+    (ht : HasType fns σ .none false Ctx.empty e t) (hsc : e.Closed) :
     ∃ σ', Extends σ σ' ∧ HeapOk fns σ' h' ∧ HasType fns σ' .none false Ctx.empty e' t :=
-  let ⟨σ', hx, hh', ht', _⟩ := preservation_alloc hf hs hh ht
+  let ⟨σ', hx, hh', ht', _⟩ := preservation_alloc hf hs hh ht hsc
   ⟨σ', hx, hh', ht'⟩
 
 end BoltMut

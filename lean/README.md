@@ -94,8 +94,10 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `call_changes_only_what_args_reach` | `Frame.lean` | for a call, that's what the function and its argument reach; what's `imm` all the way down, like an `imm` closure or array, adds nothing |
 | `changed_is_in_frame_and_mut` | `Frame.lean` | what a program changes is in its frame and isn't `imm` |
 | `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254) |
-| `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
+| `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same. Both runs have the copy in their heap, so that blocks make the same regions in both |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
+| `HasType.ren` | `Rename.lean` | a block's body stays well-typed when it starts and its name for its region, `2 * k + 1`, becomes the region `2 * n` it makes, with its marker at location `n` (#292). Nothing outside the block, and no location, mentions its name, and nothing in the heap mentions the new region |
+| `step_closed` | `Rename.lean` | a running program's calls only give functions regions that exist, never a block's name for its region (`Expr.Closed`), so a block in a function can't take the name of an argument |
 | `Copy.typed`, `Copy.exists` | `Soundness.lean` | a freeze's copy has the value's type with the region `imm`, and can always be made (#292): so preservation and progress hold for `freeze` like for any step |
 | `freeze_in_place_changes_nothing` | `Elision.lean` | at the end of a block, going on with the value itself rather than the freeze's copy computes the same, if nothing after the block, or the copy, can reach the region's objects (#292) |
 | `freeze_in_place_of_typing` | `Elision.lean` | the typing gives that: for a block whose region the heap typing didn't mention when it started, with what comes after typed before it. A value can only reach a region's objects if its type mentions the region, since a closure that captures them has the region as its mutability (rule 5) |

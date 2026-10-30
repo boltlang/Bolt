@@ -62,7 +62,11 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ hf hp ih => exact .freeze ih hf hp
+  | freeze _ hf hp hr hb ih => exact .freeze ih hf hp (hr.mono hx.length_le) (hb.mono hx.length_le)
+  | block hsub hnm hl _ hf hp hb ih =>
+    refine .block hsub hnm (fun l h => ?_) ih hf hp (hb.mono hx.length_le)
+    obtain ⟨m, t, e, hm⟩ := hl l h
+    exact ⟨m, t, hx _ _ e, hm⟩
 
 theorem Ctx.Sub.update {Γ Γ' : Ctx} (h : Γ.Sub Γ') (x : Nat) (t : Ty) :
     (Γ.update x t).Sub (Γ'.update x t) := by
@@ -101,7 +105,8 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
   | fst _ ih => exact .fst (ih hΓ)
   | snd _ ih => exact .snd (ih hΓ)
-  | freeze _ hf hp ih => exact .freeze (ih hΓ) hf hp
+  | freeze _ hf hp hr hb ih => exact .freeze (ih hΓ) hf hp hr hb
+  | block hsub hnm hl hbody hf hp hb _ => exact .block (hsub.trans hΓ) hnm hl hbody hf hp hb
 
 /-- Outside an `imm` closure, anything typed inside one has its type too. -/
 theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -130,7 +135,8 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hio) (ih₂ hio)
   | fst _ ih => exact .fst (ih hio)
   | snd _ ih => exact .snd (ih hio)
-  | freeze _ hf hp ih => exact .freeze (ih hio) hf hp
+  | freeze _ hf hp hr hb ih => exact .freeze (ih hio) hf hp hr hb
+  | block hsub hnm hl _ hf hp hb ih => exact .block hsub hnm hl (ih hio) hf hp hb
 
 theorem muOf_cases (b : Bool) : muOf b = .mutable ∨ muOf b = .immutable := by
   cases b
@@ -232,7 +238,11 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih => exact ih h
+  | block hsub _ _ _ _ _ _ ih =>
+    rcases ih h with h | ⟨⟨s, hs⟩, h⟩
+    · exact .inl h
+    · exact .inr ⟨⟨s, hsub _ _ hs⟩, h⟩
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -312,6 +322,38 @@ theorem Expr.IsValue.hasLoc_regionsIn {fns : List Fn} {σ : HeapTy} {Δ : Assume
     | pair h₁ h₂ =>
       exact hl.elim (ih₁ h₁ (fun r h => hs r (by simp [Ty.mentions, h])) (fun hμ => (hle hμ).1))
         (ih₂ h₂ (fun r h => hs r (by simp [Ty.mentions, h])) (fun hμ => (hle hμ).2))
+
+/-- A value whose type doesn't mention `r` holds only locations whose types
+don't. -/
+theorem Expr.IsValue.hasLoc_notMentions {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
+    {v : Expr} {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) {r : Nat} (hs : s.mentions r = false)
+    {l : Nat} (hl : v.HasLoc l) : ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).mentions r = false := by
+  induction hv generalizing s with
+  | unit | int => exact hl.elim
+  | loc => cases ht with
+    | loc h _ =>
+      cases hl
+      exact ⟨_, _, h, hs⟩
+  | @lam b x body => cases ht with
+    | @lam _ _ _ _ _ _ _ _ μ _ _ _ _ hrl _ =>
+      have hl' : body.HasLoc l := hl
+      obtain ⟨m, t, h, _, hm, htr⟩ := hrl l hl'
+      have hμ : μ.mentions r = false := by
+        simp only [Ty.mentions, Bool.or_eq_false_iff] at hs
+        exact hs.1.1
+      refine ⟨m, t, h, ?_⟩
+      simp only [Ty.mentions, Bool.or_eq_false_iff]
+      constructor
+      · cases e : m.mentions r
+        · rfl
+        · rw [hm r e] at hμ; cases hμ
+      · cases e : t.mentions r
+        · rfl
+        · rw [htr r e] at hμ; cases hμ
+  | pair _ _ ih₁ ih₂ => cases ht with
+    | pair h₁ h₂ =>
+      simp only [Ty.mentions, Bool.or_eq_false_iff] at hs
+      exact hl.elim (ih₁ h₁ hs.1) (ih₂ h₂ hs.2)
 
 /-- Substituting a value for `x`, where `x` has the value's type or isn't in
 scope (in the body of an `imm` closure that didn't capture it). -/
@@ -409,7 +451,19 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ hx) (ih₂ hΓ hx)
   | fst _ ih => exact .fst (ih hΓ hx)
   | snd _ ih => exact .snd (ih hΓ hx)
-  | freeze _ hf hp ih => exact .freeze (ih hΓ hx) hf hp
+  | freeze _ hf hp hr hb ih => exact .freeze (ih hΓ hx) hf hp hr hb
+  | @block io₀ Γ₀ Γb k t e hsub hnm hl hbody hf hp hb ih =>
+    -- The block sees what it saw, without `x`; what it gets of `v` doesn't
+    -- mention its region, since `x`'s type doesn't.
+    have hsub' := Ctx.drop_sub (x := x) hsub hΓ
+    have hnm' : ∀ y s, (Γb.drop x) y = some s → s.mentions (2 * k + 1) = false :=
+      fun y s h => hnm y s (Ctx.drop_some h)
+    simp only [Expr.subst]
+    refine .block hsub' hnm' (fun l hl' => ?_) (ih (fun y hy => by simp [Ctx.drop, hy])
+      (fun s hs => hx s (hsub _ _ hs))) hf hp hb
+    rcases hbody.hasLoc_subst hl' with hl' | ⟨⟨s, hs⟩, hl'⟩
+    · exact hl l hl'
+    · exact hv.hasLoc_notMentions (hx s (hsub _ _ hs)) (hnm _ _ hs) hl'
 
 /-- Substituting a closed value for a variable just put in scope. -/
 theorem HasType.subst_update {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {x : Nat} {t₁ t : Ty}
@@ -493,6 +547,58 @@ theorem Mu.mentions_subst_of {ms : List Mu} {m : Mu} {r : Nat} (h : m.mentions r
   | region => exact h
   | _ => cases h
 
+/-- What a type mentions with arguments in place, it mentions itself, or
+an argument does. -/
+theorem Mu.mentions_subst_or {m : Mu} {ms : List Mu} {r : Nat} (h : (m.subst ms).mentions r = true) :
+    m.mentions r = true ∨ ∃ m' ∈ ms, m'.mentions r = true := by
+  cases m with
+  | param i =>
+    simp only [Mu.subst] at h
+    cases hi : ms[i]? with
+    | none => rw [hi] at h; simp [Mu.mentions] at h
+    | some m' => rw [hi] at h; exact .inr ⟨m', List.mem_of_getElem? hi, h⟩
+  | _ => exact .inl h
+
+theorem Ty.mentions_inst_or {t : Ty} {ms : List Mu} {τs : List Ty} {r : Nat} (h : (t.inst ms τs).mentions r = true) :
+    t.mentions r = true ∨ ((∃ m ∈ ms, m.mentions r = true) ∨ ∃ τ ∈ τs, τ.mentions r = true) := by
+  induction t with
+  | unit | int => cases h
+  | cell m t ih =>
+    simp only [Ty.inst, Ty.mentions, Bool.or_eq_true] at h ⊢
+    rcases h with h | h
+    · rcases Mu.mentions_subst_or h with h | h
+      · exact .inl (.inl h)
+      · exact .inr (.inl h)
+    · rcases ih h with h | h
+      · exact .inl (.inr h)
+      · exact .inr h
+  | fn m a b iha ihb =>
+    simp only [Ty.inst, Ty.mentions, Bool.or_eq_true] at h ⊢
+    rcases h with (h | h) | h
+    · rcases Mu.mentions_subst_or h with h | h
+      · exact .inl (.inl (.inl h))
+      · exact .inr (.inl h)
+    · rcases iha h with h | h
+      · exact .inl (.inl (.inr h))
+      · exact .inr h
+    · rcases ihb h with h | h
+      · exact .inl (.inr h)
+      · exact .inr h
+  | prod a b iha ihb =>
+    simp only [Ty.inst, Ty.mentions, Bool.or_eq_true] at h ⊢
+    rcases h with h | h
+    · rcases iha h with h | h
+      · exact .inl (.inl h)
+      · exact .inr h
+    · rcases ihb h with h | h
+      · exact .inl (.inr h)
+      · exact .inr h
+  | tparam i =>
+    simp only [Ty.inst] at h
+    cases hi : τs[i]? with
+    | none => rw [hi] at h; simp [Ty.mentions] at h
+    | some τ => rw [hi] at h; exact .inr (.inr ⟨τ, List.mem_of_getElem? hi, h⟩)
+
 /-- The key to #243: a body typed under its assumptions, with its
 parameters unknown, has the type with any arguments that meet them. This
 is where a generic function can't change what it's given (`set` needs
@@ -503,7 +609,8 @@ only put a value of a type parameter in an `imm` object if it assumes that
 the parameter is `imm`. -/
 theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
     (ht : HasType fns σ Δ io Γ e t) (hn : e.NoLocs) {Δ' : Assume} {ms : List Mu} {τs : List Ty}
-    (hs : Sat Δ' Δ ms τs) (hb : ∀ m ∈ ms, m.Below σ.length) :
+    (hs : Sat Δ' Δ ms τs) (hb : ∀ m ∈ ms, m.Below σ.length)
+    (hodd : ∀ r, ((∃ m ∈ ms, m.mentions r = true) ∨ ∃ τ ∈ τs, τ.mentions r = true) → r % 2 = 0) :
     HasType fns σ Δ' io (Γ.inst ms τs) (e.inst ms τs) (t.inst ms τs) := by
   induction ht with
   | var h => exact .var (by simp [Ctx.inst, h])
@@ -602,13 +709,31 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := ih hn
     simp only [Ty.inst] at h
     exact .snd h
-  | @freeze _ _ _ t r _ hf hp ih =>
+  | @block _ Γ₀ Γb k t e hsub hnm _ _ hf hp hb ih =>
+    -- The arguments mention no block's name for its region.
+    simp only [Expr.inst]
+    have h := ih (by simpa [Expr.NoLocs] using hn)
+    rw [Ty.inst_noParams hp] at h
+    rw [Ty.inst_noParams hp, Ty.inst_noParams (hp.free _)]
+    refine .block (hsub.inst ms τs) (fun y s hy => ?_)
+      (fun l hl => ((Expr.NoLocs.inst ms τs (by simpa [Expr.NoLocs] using hn)).not_hasLoc l hl).elim)
+      h hf hp hb
+    simp only [Ctx.inst, Option.map_eq_some_iff] at hy
+    obtain ⟨s₀, h₀, rfl⟩ := hy
+    cases e : (s₀.inst ms τs).mentions (2 * k + 1) with
+    | false => rfl
+    | true =>
+      rcases Ty.mentions_inst_or e with h' | h'
+      · rw [hnm y s₀ h₀] at h'; cases h'
+      · have := hodd _ h'
+        omega
+  | @freeze _ _ _ t r _ hf hp hr hb' ih =>
     -- The type has no parameters, so the arguments don't change it.
     simp only [Expr.inst]
-    have h := ih hn
+    have h := ih (by simpa [Expr.NoLocs] using hn)
     rw [Ty.inst_noParams hp] at h
     rw [Ty.inst_noParams hp, Ty.inst_noParams (hp.free r)]
-    exact .freeze h hf hp
+    exact .freeze h hf hp hr hb'
 
 /-- Inside an `imm` closure, every location is `imm`. -/
 theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -619,7 +744,7 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih hio hl
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | block _ _ _ _ _ _ _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
   | lam _ _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl

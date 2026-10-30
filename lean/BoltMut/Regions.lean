@@ -59,7 +59,8 @@ theorem fill_ok : FnsOk [fill] := by
   intro fn hfn
   simp only [List.mem_singleton] at hfn
   subst hfn
-  exact ⟨⟨trivial, trivial⟩, .setP (.fst (.var rfl)) (by simp [fill]) (.snd (.var rfl))⟩
+  exact ⟨⟨trivial, trivial⟩, .setP (.fst (.var rfl)) (by simp [fill]) (.snd (.var rfl)),
+    by simp [Fn.NoRegions, Ty.NoRegion, Mu.NoRegion, fill], by simp [Expr.Scoped, fill]⟩
 
 theorem fill_sat (m : Mu) (hm : m.Changeable .none) : Sat .none fill.assume [m] [.int] := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -105,7 +106,8 @@ theorem build_ok : FnsOk [build] := by
   simp only [List.mem_singleton] at hfn
   subst hfn
   exact ⟨⟨trivial, ⟨trivial, trivial⟩, trivial⟩,
-    .letE (.newP (.var rfl) (by simp [build]) trivial) (.letE (.setP (.var rfl) (by simp [build]) .int) (.var rfl))⟩
+    .letE (.newP (.var rfl) (by simp [build]) trivial) (.letE (.setP (.var rfl) (by simp [build]) .int) (.var rfl)),
+    by simp [Fn.NoRegions, Ty.NoRegion, Mu.NoRegion, build], by simp [Expr.Scoped, build]⟩
 
 /-- A caller that wants an `imm` array can't call it as it is, since `imm`
 isn't changeable... -/
@@ -118,7 +120,8 @@ the block, and the freeze copies the array into an `imm` one (#292). A
 caller that wants `mut` would give `'ρ` that instead, with no freeze. -/
 example : HasType [build] [(.immutable, .unit)] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
-  refine .freeze ?_ ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
+  refine .freeze (t := .cell (.region 0) .int) ?_ ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
+    (by simp) (by intro r h; simp [Ty.mentions, Mu.mentions] at h; subst h; simp)
   show HasType _ _ _ _ _ _ (build.retTy.inst [.region 0] [])
   refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ .int region0_below
   · intro p h; simp [build] at h
@@ -140,8 +143,8 @@ example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.var 0))))
     (.cell .immutable .int) :=
-  .freeze (.letE (.newR .int trivial (by simp)) (.letE (.setR (.var rfl) .int) (.var rfl))) ⟨(fun h => nomatch h), trivial⟩
-    ⟨(fun _ h => nomatch h), trivial⟩
+  .freeze (t := .cell (.region 0) .int) (.letE (.newR .int trivial (by simp)) (.letE (.setR (.var rfl) .int) (.var rfl)))
+    ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩ (by simp) (by intro r h; simp [Ty.mentions, Mu.mentions] at h; subst h; simp)
 
 /-- A closure can't be copied, so a freeze can't make a function type that
 mentions the region `imm`: here one that takes the region's arrays, which
@@ -150,7 +153,7 @@ example (e : Expr) (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     (.freeze 0 (.prod (.fn .immutable (.cell (.region 0) .int) .unit) (.cell (.region 0) .int)) e) t := by
   intro h
   cases h with
-  | freeze _ hf _ => simp [Ty.Freezable, Ty.mentions, Mu.mentions] at hf
+  | freeze _ hf _ _ _ => simp [Ty.Freezable, Ty.mentions, Mu.mentions] at hf
 
 /-- `{ let xs = mut [1]; let f = || xs[0] = 2; xs }`: a closure that changes
 the region's array has the region as its mutability (rule 5 of the
@@ -160,10 +163,10 @@ example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.lam true 2 (.set (.var 0) (.int 2))) (.var 0))))
     (.cell .immutable .int) := by
-  refine .freeze (.letE (.newR .int trivial (by simp)) (.letE (.lam (a := .unit) (μ := .region 0) (.inr ⟨rfl, 0, rfl⟩)
+  refine .freeze (t := .cell (.region 0) .int) (.letE (.newR .int trivial (by simp)) (.letE (.lam (a := .unit) (μ := .region 0) (.inr ⟨rfl, 0, rfl⟩)
     (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h) (.setR (.var rfl) .int)
     (fun r h => by simp [Mu.mentions] at h; subst h; simp)) (.var rfl)))
-    ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
+    ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩ (by simp) (by intro r h; simp [Ty.mentions, Mu.mentions] at h; subst h; simp)
   · intro _ y s hy
     simp only [Ctx.update] at hy
     split at hy
