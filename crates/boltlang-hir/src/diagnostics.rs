@@ -36,7 +36,7 @@ use boltlang_hir_ty::{
     infer_body,
     overlap::{overlapped_functions, overlapped_impls},
     lower::{
-        ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, enum_field_types, fn_sig,
+        ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, default_refers_to_itself, enum_field_types, fn_sig,
         generic_predicates, impl_header, named_mutabilities, struct_field_types, subst_params, type_alias_ty,
         unused_impl_params,
     },
@@ -789,8 +789,10 @@ impl<'db> Collector<'db> {
             self.written_type(map, sig.type_ref, aliased);
         }
         // The alias is where its cycle is found, so it has no diagnostics of
-        // its own about it; its uses do.
-        if ty.recursive {
+        // its own about it; its uses do. A default of an associated type
+        // that leads back to it through the class's other defaults is
+        // reported the same way (#298).
+        if ty.recursive || default_refers_to_itself(db, id) {
             self.push(None, DiagnosticKind::RecursiveAlias);
         }
         self.lower(map, &ty.diagnostics);
