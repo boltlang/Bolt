@@ -119,11 +119,6 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
     }
 }
 
-/// The bounds of the associated types of an impl's class that the impl's
-/// types for them don't meet, like `Iterator[Pair]` for `type Iter = Pair;`
-/// in an impl of `class Iterable[C] { type Iter: Iterator; }` when `Pair`
-/// has no impl of `Iterator`. The impl's own bounds and `where` clauses are
-/// assumed. Each is given with the associated type of the class.
 /// What the bounds of the class's associated types say other associated
 /// types are, like the `Item = Item` of `type Iter: Iterator[Item = Item];`
 /// in `class Iterable[C]`, that the impl's types don't meet: the impl's
@@ -141,9 +136,9 @@ pub fn unmet_assoc_equalities<'db>(
     let origin = Origin::new(def, ExprOrPat::Expr(body(db, def).body_expr));
     let class_def = GenericDefId::Class(target.class);
     let aliases = class_assoc_types(db, target.class);
-    // The class's associated types for the impl's instance are the impl's.
-    // One the impl doesn't give is the error type, so that it's skipped: it's
-    // reported with the impl's other missing items.
+    // The class's associated types for the impl's instance are the impl's,
+    // or the class's defaults. One that has neither is the error type, so
+    // that it's skipped: it's reported with the impl's other missing items.
     let own = |t: &Ty<'db>| {
         let t = subst_params(t, class_def, &target.args);
         let t = t.fold(&mut |t| match t {
@@ -154,6 +149,15 @@ pub fn unmet_assoc_equalities<'db>(
         });
         normalize_assoc(db, file, &t)
     };
+    // The impl's own bounds and `where` clauses, assumed once for all.
+    let mut assuming = Solver::new(db, file);
+    let predicates = generic_predicates(db, GenericDefId::Impl(imp));
+    for predicate in predicates.predicates.iter() {
+        assuming.assume(predicate.clone());
+    }
+    for (assumption, _) in predicates.equalities.iter() {
+        assuming.assume_assoc(assumption.clone());
+    }
     let mut unmet = Vec::new();
     for &alias in &aliases {
         // A missing one is reported with the impl's other missing items.
@@ -166,13 +170,7 @@ pub fn unmet_assoc_equalities<'db>(
             if expected.any(&mut |t| *t == Ty::Error) || args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
                 continue;
             }
-            let mut solver = Solver::new(db, file);
-            for predicate in generic_predicates(db, GenericDefId::Impl(imp)).predicates.iter() {
-                solver.assume(predicate.clone());
-            }
-            for (assumption, _) in generic_predicates(db, GenericDefId::Impl(imp)).equalities.iter() {
-                solver.assume_assoc(assumption.clone());
-            }
+            let mut solver = assuming.clone();
             let actual = solver.new_var(VarKind::General);
             let constraint = AssocConstraint { alias: equality.alias, args, ty: actual.clone() };
             solver.add(Constraint::Assoc { constraint, origin });
@@ -195,6 +193,11 @@ pub fn unmet_assoc_equalities<'db>(
     unmet
 }
 
+/// The bounds of the associated types of an impl's class that the impl's
+/// types for them don't meet, like `Iterator[Pair]` for `type Iter = Pair;`
+/// in an impl of `class Iterable[C] { type Iter: Iterator; }` when `Pair`
+/// has no impl of `Iterator`. The impl's own bounds and `where` clauses are
+/// assumed. Each is given with the associated type of the class.
 #[salsa::tracked(returns(ref))]
 pub fn unmet_assoc_bounds<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<(TypeAliasId<'db>, ClassConstraint<'db>)> {
     let Some(target) = impl_header(db, imp).class.clone() else { return Vec::new() };
@@ -203,6 +206,10 @@ pub fn unmet_assoc_bounds<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<(TypeAl
     let def = DefWithBodyId::new(db, DefWithBody::File(file));
     let origin = Origin::new(def, ExprOrPat::Expr(body(db, def).body_expr));
     let class_def = GenericDefId::Class(target.class);
+    let mut assuming = Solver::new(db, file);
+    for predicate in generic_predicates(db, GenericDefId::Impl(imp)).predicates.iter() {
+        assuming.assume(predicate.clone());
+    }
     let mut unmet = Vec::new();
     for alias in class_assoc_types(db, target.class) {
         // A missing one is reported with the impl's other missing items.
@@ -216,10 +223,7 @@ pub fn unmet_assoc_bounds<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<(TypeAl
                 });
                 normalize_assoc(db, file, &t)
             });
-            let mut solver = Solver::new(db, file);
-            for predicate in generic_predicates(db, GenericDefId::Impl(imp)).predicates.iter() {
-                solver.assume(predicate.clone());
-            }
+            let mut solver = assuming.clone();
             solver.add(Constraint::Class { constraint: constraint.clone(), origin });
             solver.solve();
             if solver.errors.iter().any(|e| matches!(e, TypeError::NoInstance { .. })) {

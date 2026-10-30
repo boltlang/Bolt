@@ -186,15 +186,12 @@ pub enum AtMostSource<'db> {
 /// types become known, and never guesses: see [`Solver::narrow_overloads`].
 #[derive(Debug, Clone)]
 pub struct OverloadConstraint<'db> {
-    /// The candidates that still fit.
-    pub candidates: Vec<FunctionId<'db>>,
-    /// The type of each candidate, with new variables for its parameters, to
-    /// try against `ty` without deciding anything.
-    pub probes: Vec<Ty<'db>>,
+    /// The candidates that still fit, each with its type, with new variables
+    /// for its parameters, to try against `ty` without deciding anything.
+    pub candidates: Vec<(FunctionId<'db>, Ty<'db>)>,
     pub ty: Ty<'db>,
-    /// All the functions with the name, and their probes, for errors.
-    pub all: Vec<FunctionId<'db>>,
-    pub all_probes: Vec<Ty<'db>>,
+    /// All the functions with the name, with their types, for errors.
+    pub all: Vec<(FunctionId<'db>, Ty<'db>)>,
     /// The call, when the use is the method of a method call like `x.f(y)`.
     pub method_call: Option<ExprId>,
     /// Where the arguments are, when the use is called: then `ty` is a
@@ -283,6 +280,7 @@ impl<'db> TypeError<'db> {
     }
 }
 
+#[derive(Clone)]
 pub struct Solver<'db> {
     db: &'db dyn Db,
     pub unifier: Unifier<'db>,
@@ -340,13 +338,13 @@ impl<'db> Solver<'db> {
         self.unifier.new_var(kind)
     }
 
-    /// Assume a class constraint holds, and with it its superclasses.
     /// Assume what an associated type is, like the `Item = T` of
     /// `I: Iterator[Item = T]`: `I.Item` is `T` from now on.
     pub fn assume_assoc(&mut self, constraint: AssocConstraint<'db>) {
         self.assoc_assumptions.push(constraint);
     }
 
+    /// Assume a class constraint holds, and with it its superclasses.
     pub fn assume(&mut self, constraint: ClassConstraint<'db>) {
         let mut stack = vec![constraint];
         while let Some(c) = stack.pop() {
@@ -838,11 +836,7 @@ impl<'db> Solver<'db> {
     pub fn narrow_overloads(&mut self) -> Vec<(OverloadConstraint<'db>, Origin<'db>, FunctionId<'db>)> {
         let mut ready = Vec::new();
         for (mut c, origin) in std::mem::take(&mut self.pending_overloads) {
-            let fits: Vec<bool> = c.probes.iter().map(|probe| self.fits(probe, &c.ty)).collect();
-            let mut keep = fits.iter();
-            c.candidates.retain(|_| *keep.next().unwrap());
-            let mut keep = fits.iter();
-            c.probes.retain(|_| *keep.next().unwrap());
+            c.candidates.retain(|(_, probe)| self.fits(probe, &c.ty));
             match c.candidates.as_slice() {
                 [] => match self.best_overload(&c) {
                     // Checked as if it had been chosen, for the errors of the
@@ -850,10 +844,11 @@ impl<'db> Solver<'db> {
                     Some(f) => ready.push((c, origin, f)),
                     None => {
                         let ty = self.unifier.resolve(&c.ty);
-                        self.errors.push(TypeError::NoOverload { origin, ty, candidates: c.all.clone() });
+                        let candidates = c.all.iter().map(|(f, _)| *f).collect();
+                        self.errors.push(TypeError::NoOverload { origin, ty, candidates });
                     }
                 },
-                [f] => {
+                [(f, _)] => {
                     let f = *f;
                     ready.push((c, origin, f));
                 }
@@ -876,13 +871,12 @@ impl<'db> Solver<'db> {
         let scores: Vec<(FunctionId<'db>, (usize, usize))> = c
             .all
             .iter()
-            .zip(&c.all_probes)
-            .filter_map(|(&f, probe)| match probe {
+            .filter_map(|(f, probe)| match probe {
                 Ty::Fn(own, _, _) if own.len() == params.len() => {
                     let pairs = || own.iter().zip(params.iter());
                     let strict = pairs().filter(|(a, b)| self.fits(a, b)).count();
                     let loose = pairs().filter(|(a, b)| self.fits(&loose(a), &loose(&self.unifier.resolve(b)))).count();
-                    Some((f, (strict, loose)))
+                    Some((*f, (strict, loose)))
                 }
                 _ => None,
             })
@@ -916,7 +910,8 @@ impl<'db> Solver<'db> {
                 continue;
             }
             let ty = self.unifier.resolve(&c.ty);
-            self.errors.push(TypeError::AmbiguousOverload { origin, ty, candidates: c.candidates });
+            let candidates = c.candidates.into_iter().map(|(f, _)| f).collect();
+            self.errors.push(TypeError::AmbiguousOverload { origin, ty, candidates });
         }
     }
 

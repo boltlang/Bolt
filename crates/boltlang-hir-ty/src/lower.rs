@@ -865,7 +865,9 @@ pub fn assoc_type<'db>(db: &'db dyn Db, class: ClassId<'db>, name: &Name) -> Opt
 /// The type that `imp` gives the associated type `alias` of its class, in
 /// terms of the impl's parameters, if it defines it. An array or struct in
 /// it without `mut` or `imm` is `imm`, as in the return type of a function
-/// without a body.
+/// without a body. It's a query, since solving any projection through the
+/// impl needs it.
+#[salsa::tracked(returns(clone))]
 pub fn impl_assoc_ty<'db>(db: &'db dyn Db, imp: ImplId<'db>, alias: TypeAliasId<'db>) -> Option<Ty<'db>> {
     impl_assoc_ty_seen(db, imp, alias, &mut Vec::new())
 }

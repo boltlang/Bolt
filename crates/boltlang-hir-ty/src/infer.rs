@@ -862,13 +862,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// decides once the types leave one of them. `method_call` is the call
     /// if the use is the method of `x.f(y)`.
     fn overloaded_ty(&mut self, expr: ExprId, set: OverloadSet<'db>, method_call: Option<ExprId>) -> Ty<'db> {
-        let all = set.functions(self.db).clone();
-        let probes: Vec<_> = all.iter().map(|&f| self.probe_ty(f)).collect();
+        let all: Vec<_> = set.functions(self.db).iter().map(|&f| (f, self.probe_ty(f))).collect();
         let ty = self.new_var();
         let constraint = OverloadConstraint {
             candidates: all.clone(),
-            all_probes: probes.clone(),
-            probes,
             ty: ty.clone(),
             all,
             method_call,
