@@ -25,11 +25,15 @@ changeable mutability parameter (`HasType.setP`) and make values with one
 
 namespace BoltMut
 
+/-- The examples' region `0` exists: the heap typing has its marker. -/
+theorem region0_below : ∀ m ∈ [Mu.region 0], m.Below [(Mu.immutable, Ty.unit)].length :=
+  fun m hm r hr => by simp at hm; subst hm; simp [Mu.mentions] at hr; subst hr; simp
+
 /-- `let xs = [1] in r; xs[0] = 2`: an object of a region can be changed,
 like a `mut` one. -/
-example : HasType [] [] .none false Ctx.empty
+example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
     (.letE 0 (.new true (.int 1)) (.set (.var 0) (.int 2))) .unit :=
-  .letE (.newR (r := 0) .int trivial) (.setR (.var rfl) .int)
+  .letE (.newR (r := 0) .int trivial (by simp)) (.setR (.var rfl) .int)
 
 /-- But it can't hold a `mut` object, since it becomes `imm` when its region
 is freed: `[mut [1]] in r` is rejected. Such an object makes the array `mut`
@@ -75,11 +79,11 @@ theorem fill_sat (m : Mu) (hm : m.Changeable .none) : Sat .none fill.assume [m] 
 /-- `let xs = [0] in r; fill(xs, 1); xs`: the block gives `fill` an object
 of its region, which `fill` changes. The block's value has the region's
 type, so it can be frozen when the block ends. -/
-example : HasType [fill] [] .none false Ctx.empty
+example : HasType [fill] [(.immutable, .unit)] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [.region 0] [.int] (.pair (.var 0) (.int 1))) (.var 0)))
     (.cell (.region 0) .int) :=
-  .letE (.newR .int trivial)
-    (.letE (.call rfl (fill_sat _ trivial) (.pair (.var rfl) .int)) (.var rfl))
+  .letE (.newR .int trivial (by simp))
+    (.letE (.call rfl (fill_sat _ trivial) (.pair (.var rfl) .int) region0_below) (.var rfl))
 
 /-- Freed, that's `imm [i32]`. -/
 example : (Ty.cell (.region 0) .int).free 0 .immutable = .cell .immutable .int := rfl
@@ -112,11 +116,11 @@ example : ¬ Sat .none build.assume [.immutable] [] := by
 /-- ...but it can call it with a region, `r`, and freeze it: the call is
 the block, and the freeze copies the array into an `imm` one (#292). A
 caller that wants `mut` would give `'ρ` that instead, with no freeze. -/
-example : HasType [build] [] .none false Ctx.empty
+example : HasType [build] [(.immutable, .unit)] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
   refine .freeze ?_ ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
   show HasType _ _ _ _ _ _ (build.retTy.inst [.region 0] [])
-  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ .int
+  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ .int region0_below
   · intro p h; simp [build] at h
   · intro p h; simp [build] at h
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
@@ -132,11 +136,11 @@ example : HasType [build] [] .none false Ctx.empty
 /-- `let ys: imm [i32] = { let xs = mut [1]; xs[0] = 2; xs }`: the block's
 region becomes `imm`, so it ends with a freeze, and `ys` is an `imm`
 array. -/
-example : HasType [] [] .none false Ctx.empty
+example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.var 0))))
     (.cell .immutable .int) :=
-  .freeze (.letE (.newR .int trivial) (.letE (.setR (.var rfl) .int) (.var rfl))) ⟨(fun h => nomatch h), trivial⟩
+  .freeze (.letE (.newR .int trivial (by simp)) (.letE (.setR (.var rfl) .int) (.var rfl))) ⟨(fun h => nomatch h), trivial⟩
     ⟨(fun _ h => nomatch h), trivial⟩
 
 /-- A closure can't be copied, so a freeze can't make a function type that
@@ -152,12 +156,13 @@ example (e : Expr) (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
 the region's array has the region as its mutability (rule 5 of the
 regions page), so it can't be in the frozen value, and nothing after the
 block can reach the original through it. -/
-example : HasType [] [] .none false Ctx.empty
+example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.lam true 2 (.set (.var 0) (.int 2))) (.var 0))))
     (.cell .immutable .int) := by
-  refine .freeze (.letE (.newR .int trivial) (.letE (.lam (a := .unit) (μ := .region 0) (.inr ⟨rfl, 0, rfl⟩)
-    (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h) (.setR (.var rfl) .int)) (.var rfl)))
+  refine .freeze (.letE (.newR .int trivial (by simp)) (.letE (.lam (a := .unit) (μ := .region 0) (.inr ⟨rfl, 0, rfl⟩)
+    (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h) (.setR (.var rfl) .int)
+    (fun r h => by simp [Mu.mentions] at h; subst h; simp)) (.var rfl)))
     ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
   · intro _ y s hy
     simp only [Ctx.update] at hy

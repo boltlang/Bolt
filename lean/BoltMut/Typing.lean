@@ -86,9 +86,10 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       HasType fns σ Δ io Γ e₁ (.cell .mutable t) → HasType fns σ Δ io Γ e₂ t →
       HasType fns σ Δ io Γ (.set e₁ e₂) .unit
   /-- A `mut` object can be made in the region `r` instead: what it holds
-  is at most the region, so it's `imm` once the region is freed. -/
+  is at most the region, so it's `imm` once the region is freed. The region
+  exists already: a block makes it when it starts (#292). -/
   | newR {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
-      HasType fns σ Δ io Γ e t → AtMost Δ (.region r) t →
+      HasType fns σ Δ io Γ e t → AtMost Δ (.region r) t → r < σ.length →
       HasType fns σ Δ io Γ (.new true e) (.cell (.region r) t)
   /-- A generic function can make an object with a changeable mutability
   parameter (#288): a call gives it `mut` or a region, so the object can be
@@ -111,7 +112,7 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       HasType fns σ Δ io Γ (.letE x e₁ e₂) t₂
   | call {io : Bool} {Γ : Ctx} {f : Nat} {fn : Fn} {ms : List Mu} {τs : List Ty} {e : Expr} :
       fns[f]? = some fn → Sat Δ fn.assume ms τs →
-      HasType fns σ Δ io Γ e (fn.argTy.inst ms τs) →
+      HasType fns σ Δ io Γ e (fn.argTy.inst ms τs) → (∀ m ∈ ms, m.Below σ.length) →
       HasType fns σ Δ io Γ (.call f ms τs e) (fn.retTy.inst ms τs)
   /-- A closure sees the variables `Γc` of those in scope. Its mutability
   `μ` is `muOf b`, or, for a `mut` one, a region (rule 5 of the regions
@@ -120,13 +121,13 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   mentions is `μ`'s, so a closure whose type doesn't mention a region
   captures nothing of it. That stays so when the function it's in is
   called: the parameters what it captures has can't be given a region
-  (#285). -/
+  (#285). Its region exists already. -/
   | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} {μ : Mu} :
       (μ = muOf b ∨ b = true ∧ ∃ r', μ = .region r') →
       Γc.Sub Γ → (μ ≠ .mutable → ∀ y s, Γc y = some s → AtMost Δ μ s) →
       (∀ y s, Γc y = some s → s.RegionsIn μ ∧ s.ParamsNoRegion Δ) →
       (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ) →
-      HasType fns σ Δ (io || !b) (Γc.update x a) body r →
+      HasType fns σ Δ (io || !b) (Γc.update x a) body r → μ.Below σ.length →
       HasType fns σ Δ io Γ (.lam b x body) (.fn μ a r)
   | app {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {m : Mu} {a r : Ty} :
       HasType fns σ Δ io Γ e₁ (.fn m a r) → HasType fns σ Δ io Γ e₂ a →

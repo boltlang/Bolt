@@ -156,6 +156,21 @@ def Ty.mentions (r : Nat) : Ty → Bool
   | .fn m a b => m.mentions r || a.mentions r || b.mentions r
   | .prod a b => a.mentions r || b.mentions r
 
+/-- Every region `m` mentions is below `n`: one that exists, when `n` is
+the heap's length. -/
+def Mu.Below (n : Nat) (m : Mu) : Prop := ∀ r, m.mentions r = true → r < n
+
+theorem Mu.Below.mono {n n' : Nat} {m : Mu} (h : m.Below n) (hn : n ≤ n') : m.Below n' :=
+  fun r hr => Nat.lt_of_lt_of_le (h r hr) hn
+
+/-- What a list of mutabilities gives for a parameter is below `n` if they all
+are. -/
+theorem Mu.Below.getD {n : Nat} {ms : List Mu} (hb : ∀ m ∈ ms, m.Below n) (i : Nat) :
+    (ms[i]?.getD .immutable).Below n := by
+  cases h : ms[i]? with
+  | none => intro r hr; simp [Mu.mentions] at hr
+  | some m => exact hb m (List.mem_of_getElem? h)
+
 /-- The only region `m` can be is `μ`'s: what a closure of mutability `μ`
 captures, by rule 5 of the regions page. -/
 def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mentions r = true
@@ -168,6 +183,12 @@ becomes `imm`. -/
 def Mu.subst (ms : List Mu) : Mu → Mu
   | .param i => ms[i]?.getD .immutable
   | m => m
+
+theorem Mu.Below.subst {n : Nat} {m : Mu} {ms : List Mu} (h : m.Below n) (hb : ∀ m ∈ ms, m.Below n) :
+    (m.subst ms).Below n := by
+  cases m with
+  | param i => exact Mu.Below.getD hb i
+  | _ => exact h
 
 /-- Replace the mutability parameters with `ms` and the type parameters with
 `τs`; one without an argument becomes `()`. -/

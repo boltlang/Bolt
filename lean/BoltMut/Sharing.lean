@@ -142,7 +142,7 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih hl
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
 
 /-! ## Heaps that correspond -/

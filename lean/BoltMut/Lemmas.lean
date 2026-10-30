@@ -24,6 +24,16 @@ theorem Extends.append (σ : HeapTy) (p : Mu × Ty) : Extends σ (σ ++ [p]) := 
   rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp h).1]
   exact h
 
+/-- A heap typing that has every location of another is at least as long. -/
+theorem Extends.length_le {σ σ' : HeapTy} (hx : Extends σ σ') : σ.length ≤ σ'.length := by
+  cases e : σ.length with
+  | zero => exact Nat.zero_le _
+  | succ n =>
+    have hn : n < σ.length := by omega
+    have := hx n _ (List.getElem?_eq_getElem hn)
+    have := (List.getElem?_eq_some_iff.mp this).1
+    omega
+
 theorem Extends.nil (σ : HeapTy) : Extends [] σ := by
   intro l p h
   simp at h
@@ -36,16 +46,16 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | int => exact .int
   | loc h hio => exact .loc (hx _ _ h) hio
   | new _ hd ih => exact .new ih hd
-  | newR _ hd ih => exact .newR ih hd
+  | newR _ hd hr ih => exact .newR ih hd (Nat.lt_of_lt_of_le hr hx.length_le)
   | newP _ hi hd ih => exact .newP ih hi hd
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | setR _ _ ih₁ ih₂ => exact .setR ih₁ ih₂
   | setP _ hi _ ih₁ ih₂ => exact .setP ih₁ hi ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
-  | call hf hs _ ih => exact .call hf hs ih
-  | lam hk hc himm hrc hrl _ ih =>
-    refine .lam hk hc himm hrc (fun l hl => ?_) ih
+  | call hf hs _ hb ih => exact .call hf hs ih (fun m hm => (hb m hm).mono hx.length_le)
+  | lam hk hc himm hrc hrl _ hw ih =>
+    refine .lam hk hc himm hrc (fun l hl => ?_) ih (hw.mono hx.length_le)
     obtain ⟨m, t, h, hm⟩ := hrl l hl
     exact ⟨m, t, hx _ _ h, hm⟩
   | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
@@ -78,15 +88,15 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | int => exact .int
   | loc h hio => exact .loc h hio
   | new _ hd ih => exact .new (ih hΓ) hd
-  | newR _ hd ih => exact .newR (ih hΓ) hd
+  | newR _ hd hr ih => exact .newR (ih hΓ) hd hr
   | newP _ hi hd ih => exact .newP (ih hΓ) hi hd
   | get _ ih => exact .get (ih hΓ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ) (ih₂ hΓ)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hΓ) (ih₂ hΓ)
   | setP _ hi _ ih₁ ih₂ => exact .setP (ih₁ hΓ) hi (ih₂ hΓ)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hΓ) (ih₂ (hΓ.update _ _))
-  | call hf hs _ ih => exact .call hf hs (ih hΓ)
-  | lam hk hc himm hrc hrl hb _ => exact .lam hk (hc.trans hΓ) himm hrc hrl hb
+  | call hf hs _ hb ih => exact .call hf hs (ih hΓ) hb
+  | lam hk hc himm hrc hrl hb hw _ => exact .lam hk (hc.trans hΓ) himm hrc hrl hb hw
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ) (ih₂ hΓ)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
   | fst _ ih => exact .fst (ih hΓ)
@@ -103,16 +113,16 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | int => exact .int
   | loc h hm => exact .loc h (fun h' => hm (hio h'))
   | new _ hd ih => exact .new (ih hio) hd
-  | newR _ hd ih => exact .newR (ih hio) hd
+  | newR _ hd hr ih => exact .newR (ih hio) hd hr
   | newP _ hi hd ih => exact .newP (ih hio) hi hd
   | get _ ih => exact .get (ih hio)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hio) (ih₂ hio)
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hio) (ih₂ hio)
   | setP _ hi _ ih₁ ih₂ => exact .setP (ih₁ hio) hi (ih₂ hio)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hio) (ih₂ hio)
-  | call hf hs _ ih => exact .call hf hs (ih hio)
-  | lam hk hc himm hrc hrl _ ih =>
-    refine .lam hk hc himm hrc hrl (ih ?_)
+  | call hf hs _ hb ih => exact .call hf hs (ih hio) hb
+  | lam hk hc himm hrc hrl _ hw ih =>
+    refine .lam hk hc himm hrc hrl (ih ?_) hw
     intro h
     simp only [Bool.or_eq_true] at h ⊢
     exact h.imp_left hio
@@ -145,7 +155,7 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
   | loc => cases ht with
     | loc h _ => exact .loc h (fun _ => Le.none_immutable hd.1)
   | @lam b x body => cases ht with
-    | lam hk hc himm hrc hrl hb =>
+    | lam hk hc himm hrc hrl hb hw =>
       have hμ := Le.none_immutable hd
       subst hμ
       have hb' : b = false := by
@@ -153,7 +163,7 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
         · exact muOf_immutable h.symm
         · cases h
       subst hb'
-      exact .lam hk hc himm hrc hrl (hb.weaken_imm (fun _ => by simp))
+      exact .lam hk hc himm hrc hrl (hb.weaken_imm (fun _ => by simp)) hw
 
 /-- A value of a cell type is a location of that type. -/
 theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
@@ -222,7 +232,7 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -239,7 +249,7 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
         · exact .inl (.inr h)
         · simp only [Ctx.update, Ne.symm hyx, ite_false] at hs
           exact .inr ⟨⟨s, hs⟩, h⟩
-  | @lam _ _ _ _ y _ _ _ _ _ hc _ _ _ _ ih =>
+  | @lam _ _ _ _ y _ _ _ _ _ hc _ _ _ _ _ ih =>
     simp only [Expr.subst, Expr.HasLoc] at h
     by_cases hyx : y = x
     · simp only [hyx, ite_true] at h
@@ -322,7 +332,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | int => exact .int
   | loc h hio => exact .loc h hio
   | new _ hd ih => exact .new (ih hΓ hx) hd
-  | newR _ hd ih => exact .newR (ih hΓ hx) hd
+  | newR _ hd hr ih => exact .newR (ih hΓ hx) hd hr
   | newP _ hi hd ih => exact .newP (ih hΓ hx) hi hd
   | get _ ih => exact .get (ih hΓ hx)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ hΓ hx) (ih₂ hΓ hx)
@@ -350,8 +360,8 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
       · intro s' hs'
         simp only [Ctx.update, Ne.symm hyx, ite_false] at hs'
         exact hx s' hs'
-  | call hf hs _ ih => exact .call hf hs (ih hΓ hx)
-  | @lam io₀ Γ₀ Γc b y body a r μ hk hc himm hrc hrl hbody ih =>
+  | call hf hs _ hb ih => exact .call hf hs (ih hΓ hx) hb
+  | @lam io₀ Γ₀ Γc b y body a r μ hk hc himm hrc hrl hbody hw ih =>
     -- The closure sees what it saw, without `x`.
     have hsub := Ctx.drop_sub (x := x) hc hΓ
     have himm' : μ ≠ .mutable → ∀ z s, (Γc.drop x) z = some s → AtMost .none μ s :=
@@ -362,7 +372,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
     by_cases hyx : y = x
     · subst hyx
       simp only [ite_true]
-      refine .lam hk hsub himm' hrc' hrl (hbody.weaken_ctx ?_)
+      refine .lam hk hsub himm' hrc' hrl (hbody.weaken_ctx ?_) hw
       intro z s' hz
       simp only [Ctx.update, Ctx.drop] at hz ⊢
       by_cases hzy : z = y
@@ -377,7 +387,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
         · exact hrl l hl
         · simp only [Ctx.update, Ne.symm hyx, ite_false] at hs
           exact hv.hasLoc_regionsIn (hx s (hc _ _ hs)) (hrc _ _ hs).1 (fun hμ => himm hμ _ _ hs) hl
-      refine .lam hk hsub himm' hrc' hrl' (ih ?_ ?_)
+      refine .lam hk hsub himm' hrc' hrl' (ih ?_ ?_) hw
       · intro z hzx
         simp only [Ctx.update, Ctx.drop]
         split
@@ -493,7 +503,7 @@ only put a value of a type parameter in an `imm` object if it assumes that
 the parameter is `imm`. -/
 theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
     (ht : HasType fns σ Δ io Γ e t) (hn : e.NoLocs) {Δ' : Assume} {ms : List Mu} {τs : List Ty}
-    (hs : Sat Δ' Δ ms τs) :
+    (hs : Sat Δ' Δ ms τs) (hb : ∀ m ∈ ms, m.Below σ.length) :
     HasType fns σ Δ' io (Γ.inst ms τs) (e.inst ms τs) (t.inst ms τs) := by
   induction ht with
   | var h => exact .var (by simp [Ctx.inst, h])
@@ -505,23 +515,24 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := AtMost.inst hs hd
     rw [Mu.subst_muOf] at h
     exact .new (ih hn) h
-  | newR _ hd ih =>
+  | newR _ hd hr ih =>
     simp only [Expr.inst, Ty.inst, Mu.subst]
     have h := AtMost.inst hs hd
     simp only [Mu.subst] at h
-    exact .newR (ih hn) h
+    exact .newR (ih hn) h hr
   | @newP _ _ _ _ i _ hi hd ih =>
     -- The argument is `mut`, a region, or a changeable parameter of the
     -- caller.
     have h := AtMost.inst hs hd
     have hc := hs.2.2.2.2.2 i hi
+    have hbi : (ms[i]?.getD .immutable).Below σ.length := Mu.Below.getD hb i
     simp only [Expr.inst, Ty.inst, Mu.subst] at h ⊢
-    revert h hc
+    revert h hc hbi
     cases ms[i]?.getD .immutable with
-    | mutable => intro h _; exact .new (b := true) (ih hn) h
-    | region r => intro h _; exact .newR (ih hn) h
-    | param j => intro h hc; exact .newP (ih hn) hc h
-    | immutable => intro _ hc; exact hc.elim
+    | mutable => intro h _ _; exact .new (b := true) (ih hn) h
+    | region r => intro h _ hbi; exact .newR (ih hn) h (hbi r (by simp [Mu.mentions]))
+    | param j => intro h hc _; exact .newP (ih hn) hc h
+    | immutable => intro _ hc _; exact hc.elim
   | get _ ih =>
     have := ih hn
     simp only [Ty.inst] at this
@@ -550,13 +561,15 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h₂ := ih₂ hn.2
     rw [Ctx.inst_update] at h₂
     exact .letE (ih₁ hn.1) h₂
-  | @call _ _ f fn ms' τs' _ hf hsat _ ih =>
+  | @call _ _ f fn ms' τs' _ hf hsat _ hb' ih =>
     simp only [Expr.inst]
     rw [Ty.inst_inst]
     have h := ih hn
     rw [Ty.inst_inst] at h
-    exact .call hf (hsat.comp hs) h
-  | @lam _ Γ₀ Γc b x _ a r μ hk hc himm hrc _ _ ih =>
+    refine .call hf (hsat.comp hs) h (fun m hm => ?_)
+    obtain ⟨m', hm', rfl⟩ := List.mem_map.mp hm
+    exact (hb' m' hm').subst hb
+  | @lam _ Γ₀ Γc b x _ a r μ hk hc himm hrc _ _ hw ih =>
     simp only [Expr.inst, Ty.inst]
     have h := ih hn
     rw [Ctx.inst_update] at h
@@ -564,8 +577,9 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
       rcases hk with rfl | ⟨hb, r', rfl⟩
       · exact .inl (Mu.subst_muOf ms b)
       · exact .inr ⟨hb, r', rfl⟩
+    have hw' : (μ.subst ms).Below σ.length := hw.subst hb
     refine .lam hk' (hc.inst ms τs) (fun hb y s hy => ?_) (fun y s hy => ?_)
-      (fun l hl => ((Expr.NoLocs.inst ms τs hn).not_hasLoc l hl).elim) h
+      (fun l hl => ((Expr.NoLocs.inst ms τs hn).not_hasLoc l hl).elim) h hw'
     · simp only [Ctx.inst, Option.map_eq_some_iff] at hy
       obtain ⟨s₀, h₀, rfl⟩ := hy
       have hμ : μ ≠ .mutable := fun he => hb (by rw [he]; rfl)
@@ -605,9 +619,9 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih hio hl
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
-  | lam _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl
+  | lam _ _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl
 
 end BoltMut
