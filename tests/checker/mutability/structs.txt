@@ -375,10 +375,9 @@ error at `[mut Point { x: 0, y: 0 }]`: imm [mut Point] holds mut Point
 ================================================================================
 An imm array can't hold a tuple with a mut array
 :error
-:test-prelude
 ================================================================================
 let a = [(mut [1], True)];
-let b = [|xs: mut [i32]| xs[0] = 1];
+let b = [|xs: mut [i32]| ()];
 --------------------------------------------------------------------------------
 let a: imm [(mut [i32], Bool)]
 let b: imm [fn(mut [i32]) -> ()]

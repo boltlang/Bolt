@@ -1,10 +1,9 @@
 ================================================================================
 A type argument that the fields don't hold can be mut (#256)
-:test-prelude
 ================================================================================
 struct Handler[T] { f: fn(T) -> () }
 struct Tag[T] { id: i32 }
-let h = Handler { f: |xs: mut [i32]| { xs[0] = 1; } };
+let h = Handler { f: |xs: mut [i32]| () };
 let t: Tag[mut [i32]] = Tag { id: 1 };
 --------------------------------------------------------------------------------
 let h: imm Handler[mut [i32]]

@@ -1,16 +1,16 @@
 ================================================================================
 An imm struct can't hold a closure that changes what it captures (#244)
 :error
-:test-prelude
 ================================================================================
 struct Holder { poke: fn() }
-let xs = mut [0];
-let h = Holder { poke: || { xs[0] += 1; } };
+struct Counter { n: i32 }
+let c = mut Counter { n: 0 };
+let h = Holder { poke: || { c.n = 1; } };
 --------------------------------------------------------------------------------
-let xs: mut [i32]
+let c: mut Counter
 let h: imm Holder
 --------------------------------------------------------------------------------
-error at `|| { xs[0] += 1; }`: expected fn() -> (), found mut fn() -> ()
+error at `|| { c.n = 1; }`: expected fn() -> (), found mut fn() -> ()
 
 ================================================================================
 A closure that assigns a let mut variable is mut (#244)
@@ -27,28 +27,24 @@ error at `|| { n += 1; n }`: expected fn() -> i32, found mut fn() -> i32
 
 ================================================================================
 A mut struct can hold a mut closure
-:test-prelude
 ================================================================================
 struct Holder { poke: fn() }
-let xs = mut [0];
-let h = mut Holder { poke: || { xs[0] += 1; } };
-h.poke();
+struct Counter { n: i32 }
+let c = mut Counter { n: 0 };
+let h = mut Holder { poke: || { c.n = 1; } };
 --------------------------------------------------------------------------------
-let xs: mut [i32]
+let c: mut Counter
 let h: mut Holder
-h.poke(): ()
 
 ================================================================================
 A closure that captures nothing that can change is imm
-:test-prelude
 ================================================================================
 struct Holder { get: fn() -> i32 }
-let k = 1;
-let xs = [1, 2];
-let h = Holder { get: || k + xs[0] };
+struct Counter { n: i32 }
+let c = Counter { n: 1 };
+let h = Holder { get: || c.n };
 --------------------------------------------------------------------------------
-let k: i32
-let xs: imm [i32]
+let c: imm Counter
 let h: imm Holder
 
 ================================================================================
@@ -67,15 +63,15 @@ apply_twice(|x| x + 1, 1): i32
 ================================================================================
 An imm array can't hold a mut closure
 :error
-:test-prelude
 ================================================================================
-let xs = mut [0];
-let fs = [|| { xs[0] += 1; }];
+struct Counter { n: i32 }
+let c = mut Counter { n: 0 };
+let fs = [|| { c.n = 1; }];
 --------------------------------------------------------------------------------
-let xs: mut [i32]
+let c: mut Counter
 let fs: imm [mut fn() -> ()]
 --------------------------------------------------------------------------------
-error at `[|| { xs[0] += 1; }]`: imm [mut fn() -> ()] holds mut fn() -> ()
+error at `[|| { c.n = 1; }]`: imm [mut fn() -> ()] holds mut fn() -> ()
 
 ================================================================================
 A closure that only reads a let mut variable is mut
@@ -119,30 +115,28 @@ let n: i32
 let f: mut fn() -> i32
 
 ================================================================================
-A closure has the mutability of the array it captures
-:test-prelude
+A closure has the mutability of what it captures
 ================================================================================
-fn reader(xs: [i32]) = || xs[0];
-let a = reader([1]);
-let b = reader(mut [1]);
+struct Counter { n: i32 }
+fn reader(c: Counter) = || c.n;
+let a = reader(Counter { n: 1 });
+let b = reader(mut Counter { n: 1 });
 --------------------------------------------------------------------------------
-reader: 'm: 'n => fn('m [i32]) -> 'n fn() -> i32
+reader: 'm: 'n => fn('m Counter) -> 'n fn() -> i32
 let a: fn() -> i32
 let b: mut fn() -> i32
 
 ================================================================================
 A closure is at most what it captures, even a value of a type parameter (#243)
-:test-prelude
 ================================================================================
-fn reader(xs) = || xs[0];
+struct Counter { n: i32 }
 fn always[T](x: T) -> fn() -> T = || x;
-let r = reader(mut [1]);
 let a = always(1);
+let b = always(mut Counter { n: 1 });
 --------------------------------------------------------------------------------
-reader: forall a. Index[a] => a: 'm => fn(a) -> 'm fn() -> a.Item
 always: forall T. T: 'm => fn(T) -> 'm fn() -> T
-let r: mut fn() -> i32
 let a: fn() -> i32
+let b: mut fn() -> mut Counter
 
 ================================================================================
 A field can't be a mut fn

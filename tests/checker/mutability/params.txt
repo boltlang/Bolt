@@ -1,33 +1,33 @@
 ================================================================================
 A struct can take a mutability for a field (#243)
-:test-prelude
 ================================================================================
-struct Iter['v] { data: 'v [i32], index: i32 }
-fn start(xs: 'v [i32]) -> mut Iter['v] = mut Iter { data: xs, index: 0 };
-let a = start([1, 2]);
-let b = start(mut [1, 2]);
+struct Counter { n: i32 }
+struct Iter['v] { data: 'v Counter, index: i32 }
+fn start(c: 'v Counter) -> mut Iter['v] = mut Iter { data: c, index: 0 };
+let a = start(Counter { n: 1 });
+let b = start(mut Counter { n: 1 });
 a.index = 1;
-b.data[0] = 5;
+b.data.n = 5;
 --------------------------------------------------------------------------------
-start: fn('v [i32]) -> mut Iter['v]
+start: fn('v Counter) -> mut Iter['v]
 let a: mut Iter[imm]
 let b: mut Iter[mut]
 a.index = 1: ()
-b.data[0] = 5: ()
+b.data.n = 5: ()
 
 ================================================================================
 A field with the struct's mutability can't be changed in a mut struct that has an imm one
 :error
-:test-prelude
 ================================================================================
-struct Iter['v] { data: 'v [i32], index: i32 }
-let a = mut Iter { data: [1, 2], index: 0 };
-a.data[0] = 5;
+struct Counter { n: i32 }
+struct Iter['v] { data: 'v Counter, index: i32 }
+let a = mut Iter { data: Counter { n: 1 }, index: 0 };
+a.data.n = 5;
 --------------------------------------------------------------------------------
 let a: mut Iter[imm]
-a.data[0] = 5: ()
+a.data.n = 5: ()
 --------------------------------------------------------------------------------
-error at `a.data`: can't change imm [i32]
+error at `a.data`: can't change imm Counter
 
 ================================================================================
 Reading a field gives its own mutability
@@ -41,18 +41,18 @@ index: fn(Iter) -> i32
 
 ================================================================================
 Type and mutability arguments
-:test-prelude
 ================================================================================
-struct Iter[T, 'v] { data: 'v [T], index: i32 }
-fn first(it: Iter[i32, imm]) -> i32 = it.data[0];
-fn poke(it: Iter[i32, mut]) { it.data[0] = 1; }
-let a = first(Iter { data: [1], index: 0 });
-poke(mut Iter { data: mut [1], index: 0 });
+struct Box[T] { item: T }
+struct Iter[T, 'v] { data: 'v Box[T], index: i32 }
+fn first(it: Iter[i32, imm]) -> i32 = it.data.item;
+fn poke(it: Iter[i32, mut]) { it.data.item = 1; }
+let a = first(Iter { data: Box { item: 1 }, index: 0 });
+poke(mut Iter { data: mut Box { item: 1 }, index: 0 });
 --------------------------------------------------------------------------------
 first: fn(Iter[i32, imm]) -> i32
 poke: fn(Iter[i32, mut]) -> ()
 let a: i32
-poke(mut Iter { data: mut [1], index: 0 }): ()
+poke(mut Iter { data: mut Box { item: 1 }, index: 0 }): ()
 
 ================================================================================
 An inferred function
@@ -111,17 +111,17 @@ error at `mut Frozen { data: mut [1] }`: mut isn't at most imm
 
 ================================================================================
 Without a mutability argument, a field's struct has its outer struct's
-:test-prelude
 ================================================================================
-struct Iter['v] { data: 'v [i32], index: i32 }
+struct Counter { n: i32 }
+struct Iter['v] { data: 'v Counter, index: i32 }
 struct Outer { it: Iter }
-fn data(o: Outer) -> [i32] = o.it.data;
-let o = mut Outer { it: mut Iter { data: mut [1], index: 0 } };
-o.it.data[0] = 2;
+fn data(o: Outer) -> Counter = o.it.data;
+let o = mut Outer { it: mut Iter { data: mut Counter { n: 1 }, index: 0 } };
+o.it.data.n = 2;
 --------------------------------------------------------------------------------
-data: fn('m Outer) -> 'm [i32]
+data: fn('m Outer) -> 'm Counter
 let o: mut Outer
-o.it.data[0] = 2: ()
+o.it.data.n = 2: ()
 
 ================================================================================
 A struct can pass its mutability on

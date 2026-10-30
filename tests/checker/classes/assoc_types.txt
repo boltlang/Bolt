@@ -1,146 +1,142 @@
 ================================================================================
 An associated type is given by the impl
-:test-prelude
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-struct Box[T] { items: [T] }
-impl[T] Index[Box[T]] {
+struct Box[T] { item: T }
+impl[T] Get[Box[T]] {
   type Item = T;
-  fn get(c, i) = c.items[i];
+  fn get(c) = c.item;
 }
-let b = Box { items: [True] };
-get(b, 0);
+get(Box { item: True });
 --------------------------------------------------------------------------------
-Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
-let b: imm Box[Bool]
-get(b, 0): Bool
+Get[Box[T]].get: forall T. fn(Box[T]) -> T
+get(Box { item: True }): Bool
 
 ================================================================================
 An inferred function keeps the associated type in its type
-:test-prelude
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn at(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-struct Box[T] { items: [T] }
-impl[T] Index[Box[T]] {
+struct Box[T] { item: T }
+impl[T] Get[Box[T]] {
   type Item = T;
-  fn at(c, i) = c.items[i];
+  fn get(c) = c.item;
 }
-fn second(c) = at(c, 1);
-second(Box { items: [1, 2] });
+fn f(c) = get(c);
+f(Box { item: 1 });
 --------------------------------------------------------------------------------
-Index[Box[T]].at: forall T. fn(Box[T], i32) -> T
-second: forall a. Index[a] => fn(a) -> a.Item
-second(Box { items: [1, 2] }): i32
+Get[Box[T]].get: forall T. fn(Box[T]) -> T
+f: forall a. Get[a] => fn(a) -> a.Item
+f(Box { item: 1 }): i32
 
 ================================================================================
 C.Item names the associated type of a parameter's class
-:test-prelude
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-struct Box[T] { items: [T] }
-impl[T] Index[Box[T]] {
+struct Box[T] { item: T }
+impl[T] Get[Box[T]] {
   type Item = T;
-  fn get(c, i) = c.items[i];
+  fn get(c) = c.item;
 }
-fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
-let x: Bool = first(Box { items: [True] });
+fn first[C](c: C) -> C.Item where Get[C] = get(c);
+let x: Bool = first(Box { item: True });
 --------------------------------------------------------------------------------
-Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
-first: forall C. Index[C] => fn(C) -> C.Item
+Get[Box[T]].get: forall T. fn(Box[T]) -> T
+first: forall C. Get[C] => fn(C) -> C.Item
 let x: Bool
 
 ================================================================================
 C.Item only equals itself
 :error
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-fn first[C](c: C) -> C.Item where Index[C] = get(c, 0);
-fn wrong[C](c: C) -> i32 where Index[C] = get(c, 0);
+fn first[C](c: C) -> C.Item where Get[C] = get(c);
+fn wrong[C](c: C) -> i32 where Get[C] = get(c);
 --------------------------------------------------------------------------------
-first: forall C. Index[C] => fn(C) -> C.Item
-wrong: forall C. Index[C] => fn(C) -> i32
+first: forall C. Get[C] => fn(C) -> C.Item
+wrong: forall C. Get[C] => fn(C) -> i32
 --------------------------------------------------------------------------------
-error at `get(c, 0)`: expected i32, found C.Item
+error at `get(c)`: expected i32, found C.Item
 
 ================================================================================
 A superclass's associated type
-:test-prelude
+:error
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-class IndexMut[C] where Index[C] {
-  fn set(c: C, i: i32, x: C.Item);
+class Put[C] where Get[C] {
+  fn put(c: C, x: C.Item);
 }
-struct Box[T] { items: [T] }
-impl[T] Index[Box[T]] {
+struct Box[T] { item: T }
+impl[T] Get[Box[T]] {
   type Item = T;
-  fn get(c, i) = c.items[i];
+  fn get(c) = c.item;
 }
-impl[T] IndexMut[mut Box[T]] {
-  fn set(c, i, x) { c.items[i] = x; }
+impl[T] Put[Box[T]] {
+  fn put(c, x) = ();
 }
-fn put[C](c: C, x: C.Item) where IndexMut[C] = set(c, 0, x);
-let b = mut Box { items: mut [1] };
-put(b, 2);
+fn f[C](c: C, x: C.Item) where Put[C] = put(c, x);
+f(Box { item: 1 }, 2);
+f(Box { item: 1 }, True);
 --------------------------------------------------------------------------------
-Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
-IndexMut[mut Box[T]].set: forall T. fn(mut Box[T], i32, T) -> ()
-put: forall C. IndexMut[C] => fn(C, C.Item) -> ()
-let b: mut Box[i32]
-put(b, 2): ()
+Get[Box[T]].get: forall T. fn(Box[T]) -> T
+Put[Box[T]].put: forall T. fn(Box[T], T) -> ()
+f: forall C. Put[C] => fn(C, C.Item) -> ()
+f(Box { item: 1 }, 2): ()
+f(Box { item: 1 }, True): ()
+--------------------------------------------------------------------------------
+error at `f`: expected Bool, found {integer}
 
 ================================================================================
 The wrong type for an associated type
 :error
-:test-prelude
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-struct Box[T] { items: [T] }
-impl[T] Index[Box[T]] {
+struct Box[T] { item: T }
+impl[T] Get[Box[T]] {
   type Item = T;
-  fn get(c, i) = c.items[i];
+  fn get(c) = c.item;
 }
-let n: i32 = get(Box { items: ["a"] }, 0);
+let n: i32 = get(Box { item: True });
 --------------------------------------------------------------------------------
-Index[Box[T]].get: forall T. fn(Box[T], i32) -> T
+Get[Box[T]].get: forall T. fn(Box[T]) -> T
 let n: i32
 --------------------------------------------------------------------------------
-error at `get(Box { items: ["a"] }, 0)`: expected i32, found String
+error at `get(Box { item: True })`: expected i32, found Bool
 
 ================================================================================
 C.Item needs a class that declares it
 :error
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-fn none[C](c: C) -> C.Item = get(c, 0);
-fn other[C](c: C) -> C.Thing where Index[C] = get(c, 0);
+fn none[C](c: C) -> C.Item = get(c);
+fn other[C](c: C) -> C.Thing where Get[C] = get(c);
 --------------------------------------------------------------------------------
 none: forall C. fn(C) -> {error}
-other: forall C. Index[C] => fn(C) -> {error}
+other: forall C. Get[C] => fn(C) -> {error}
 --------------------------------------------------------------------------------
 error at `C.Item`: no such associated type
 error at `C.Thing`: no such associated type
-error at `get`: no instance Index[C]
+error at `get`: no instance Get[C]
 
 ================================================================================
 C.Item can be ambiguous
@@ -158,15 +154,15 @@ error at `C.Item`: ambiguous associated type
 No instance for the associated type
 :error
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn get(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-get(1, 0);
+get(1);
 --------------------------------------------------------------------------------
-get(1, 0): {error}
+get(1): {error}
 --------------------------------------------------------------------------------
-error at `get`: no instance Index[i32]
+error at `get`: no instance Get[i32]
 
 ================================================================================
 An associated type given by other associated types
@@ -179,15 +175,11 @@ impl[A: Iterator, B: Iterator] Iterator[Pair[A, B]] {
   type Item = (A.Item, B.Item);
   fn next(it) = (next(it.first), next(it.second));
 }
-let p = Pair { first: Ints { n: 1 }, second: Ints { n: 2 } };
-let (a, b) = next(p);
-a + 1;
+next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } });
 --------------------------------------------------------------------------------
 Iterator[Ints].next: fn(Ints) -> i32
 Iterator[Pair[A, B]].next: forall A B. Iterator[A] => Iterator[B] => fn(Pair[A, B]) -> (A.Item, B.Item)
-let p: imm Pair[imm Ints, imm Ints]
-let (a, b): (i32, i32)
-a + 1: i32
+next(Pair { first: Ints { n: 1 }, second: Ints { n: 2 } }): (i32, i32)
 
 ================================================================================
 A bound on an associated type holds wherever its class does
