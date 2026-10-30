@@ -134,7 +134,7 @@ def Expr.Freezes (r : Nat) : Expr → Prop
 /-- `b`'s locations have types that don't mention a region that `a`
 freezes. -/
 def Expr.Disj (σ : HeapTy) (a b : Expr) : Prop :=
-  ∀ l, b.HasLoc l → ∀ r, a.Freezes r → ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).mentions r = false
+  ∀ l, b.HasLoc l → ∀ r, a.Freezes r → ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).reaches r = false
 
 /-- **What's around a freeze can't reach its region's objects.** Whatever
 runs before the rest of an expression has no freeze of a region that the
@@ -401,9 +401,9 @@ theorem Copy.simE {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns �
 /-- The context's locations, with those of `b`, don't mention what `a`
 freezes. -/
 theorem Expr.Disj.ctx {σ : HeapTy} {K : Nat → Prop} {a b e : Expr}
-    (hK : ∀ l, K l → ∀ r, e.Freezes r → ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).mentions r = false)
+    (hK : ∀ l, K l → ∀ r, e.Freezes r → ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).reaches r = false)
     (hae : ∀ r, a.Freezes r → e.Freezes r) (hd : Expr.Disj σ a b) :
-    ∀ l, (K l ∨ b.HasLoc l) → ∀ r, a.Freezes r → ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).mentions r = false := by
+    ∀ l, (K l ∨ b.HasLoc l) → ∀ r, a.Freezes r → ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).reaches r = false := by
   intro l hl r hr
   rcases hl with hl | hl
   · exact hK l hl r (hae r hr)
@@ -420,7 +420,7 @@ theorem Expr.erase_ren (e : Expr) (a b : Nat) : (e.ren a b).erase = e.erase.ren 
   | freeze _ _ _ ih | keep _ _ _ ih => simp only [Expr.ren, Expr.erase, ih]
   | block _ k _ _ ih =>
     simp only [Expr.ren]
-    split <;> simp [Expr.erase, Expr.ren, ih, *]
+    split <;> simp [Expr.erase, Expr.ren, *]
 
 /-- One step of the program that copies is one of the one that doesn't,
 and they still correspond, on everything that the context `K` reaches. -/
@@ -430,7 +430,7 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ (h₁.map Expr.erase) h₂ →
       Rel ρ e₁.erase e₂ → e₁.Sep σ →
-      (∀ l, K l → ∀ r, e₁.Freezes r → ∃ m t', σ[l]? = some (m, t') ∧ (Ty.cell m t').mentions r = false) →
+      (∀ l, K l → ∀ r, e₁.Freezes r → ∃ m t', σ[l]? = some (m, t') ∧ (Ty.cell m t').reaches r = false) →
       h₂.length = h₁.length →
       ∃ ρ' h₂' e₂', Step (fns.map Fn.erase) h₂ e₂ h₂' e₂' ∧ (∀ a c, ρ a c → K a → ρ' a c) ∧
         Corr (fun a => M a ∨ h₁.length ≤ a) ρ' (h₁'.map Expr.erase) h₂' ∧ Rel ρ' e₁'.erase e₂' ∧
@@ -695,17 +695,17 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
         -- No object of the region can be reached any more.
         have horig : ∀ o s, σ[o]? = some (.region r, s) → ¬ Live o := by
           intro o s ho ⟨l, hl, hrl⟩
-          have hbad : ∀ m' t', σ'[o]? = some (m', t') → (Ty.cell m' t').mentions r = false → False := by
+          have hbad : ∀ m' t', σ'[o]? = some (m', t') → (Ty.cell m' t').reaches r = false → False := by
             intro m' t' ho' hm'
             rw [hx o _ ho] at ho'
             cases ho'
-            simp [Ty.mentions, Mu.mentions] at hm'
+            simp [Ty.reaches, Mu.mentions] at hm'
           rcases hl with hl | hl
           · obtain ⟨m₀, t₀, hσl, hm₀⟩ := hK l hl r (.inl rfl)
-            obtain ⟨m', t', ho', hm'⟩ := hh'.reaches_notMentions hrl (hx l _ hσl) hm₀
+            obtain ⟨m', t', ho', hm'⟩ := hh'.reaches_notReaches hrl (hx l _ hσl) hm₀
             exact hbad m' t' ho' hm'
           · obtain ⟨m₀, t₀, hσl, hm₀⟩ := hv'.hasLoc_notMentions ht' (Ty.free_mentions_self (μ := .immutable) trivial r) hl
-            obtain ⟨m', t', ho', hm'⟩ := hh'.reaches_notMentions hrl hσl hm₀
+            obtain ⟨m', t', ho', hm'⟩ := hh'.reaches_notReaches hrl hσl (Ty.reaches_of_not_mentions hm₀)
             exact hbad m' t' ho' hm'
         have hMo : ∀ o s, σ[o]? = some (.region r, s) → M o := fun o s ho => hM o _ _ ho (by simp)
         have hlen : h₁.length ≤ h₁'.length := by

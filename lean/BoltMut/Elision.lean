@@ -353,6 +353,69 @@ theorem HeapOk.reaches_notMentions {fns : List Fn} {σ : HeapTy} {h : Heap} (hh 
     obtain ⟨m₁, t₁, h₁, hm₁⟩ := hwv.hasLoc_notMentions hwt ht hl
     exact ih h₁ hm₁
 
+/-- What doesn't mention a region doesn't reach it. -/
+theorem Ty.reaches_of_not_mentions {t : Ty} {r : Nat} (h : t.mentions r = false) : t.reaches r = false := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.reaches, h.1, ih h.2]
+  | fn m a b =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.reaches, h.1.1]
+  | prod a b iha ihb =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.reaches, iha h.1, ihb h.2]
+
+/-- A value whose type doesn't reach `r` holds only locations whose types
+don't: a closure captures only what mentions its own region. -/
+theorem Expr.IsValue.hasLoc_notReaches {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx}
+    {v : Expr} {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) {r : Nat} (hs : s.reaches r = false)
+    {l : Nat} (hl : v.HasLoc l) : ∃ m t, σ[l]? = some (m, t) ∧ (Ty.cell m t).reaches r = false := by
+  induction hv generalizing s with
+  | unit | int => exact hl.elim
+  | loc => cases ht with
+    | loc h _ =>
+      cases hl
+      exact ⟨_, _, h, hs⟩
+  | @lam b x body => cases ht with
+    | @lam _ _ _ _ _ _ _ _ μ _ _ _ _ hrl _ =>
+      have hl' : body.HasLoc l := hl
+      obtain ⟨m, t, h, _, hm, htr⟩ := hrl l hl'
+      have hμ : μ.mentions r = false := hs
+      refine ⟨m, t, h, Ty.reaches_of_not_mentions ?_⟩
+      simp only [Ty.mentions, Bool.or_eq_false_iff]
+      constructor
+      · cases e : m.mentions r
+        · rfl
+        · rw [hm r e] at hμ; cases hμ
+      · cases e : t.mentions r
+        · rfl
+        · rw [htr r e] at hμ; cases hμ
+  | pair _ _ ih₁ ih₂ => cases ht with
+    | pair h₁ h₂ =>
+      simp only [Ty.reaches, Bool.or_eq_false_iff] at hs
+      exact hl.elim (ih₁ h₁ hs.1) (ih₂ h₂ hs.2)
+
+/-- In a well-typed heap, nothing that a location whose type doesn't reach
+`r` reaches is of `r`. -/
+theorem HeapOk.reaches_notReaches {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {r a b : Nat}
+    (hr : Reaches h a b) :
+    ∀ {m : Mu} {t : Ty}, σ[a]? = some (m, t) → (Ty.cell m t).reaches r = false →
+      ∃ m' t', σ[b]? = some (m', t') ∧ (Ty.cell m' t').reaches r = false := by
+  induction hr with
+  | refl => intro m t ha hm; exact ⟨m, t, ha, hm⟩
+  | step hv hl _ ih =>
+    intro m t ha hm
+    obtain ⟨_, _, w, hw, hwv, hwt⟩ := hh.2 _ _ _ ha
+    rw [hv] at hw
+    cases hw
+    have ht : t.reaches r = false := by
+      simp only [Ty.reaches, Bool.or_eq_false_iff] at hm
+      exact hm.2
+    obtain ⟨m₁, t₁, h₁, hm₁⟩ := hwv.hasLoc_notReaches hwt ht hl
+    exact ih h₁ hm₁
+
 /-- **The typing makes freezing in place unnoticeable.** A block `e`
 starts in a heap whose typing `σ₀` mentions its region `r` nowhere, and
 runs to the value `v`, whose freeze copies it to `v'`. What comes after
