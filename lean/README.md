@@ -99,6 +99,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `Copy.typed`, `Copy.exists` | `Soundness.lean` | a freeze's copy has the value's type with the region `imm`, and can always be made (#292): so preservation and progress hold for `freeze` like for any step |
 | `freeze_in_place_changes_nothing` | `Elision.lean` | at the end of a block, going on with the value itself rather than the freeze's copy computes the same, if nothing after the block, or the copy, can reach the region's objects (#292) |
 | `freeze_in_place_of_typing` | `Elision.lean` | the typing gives that: for a block whose region the heap typing didn't mention when it started, with what comes after typed before it. A value can only reach a region's objects if its type mentions the region, since a closure that captures them has the region as its mutability (rule 5) |
+| `freezes_in_place_change_nothing` | `ElideAll.lean` | every freeze of a program can be in place: the program with its freezes erased, in it and its functions, computes what it does, if whenever it gets to a freeze, what's around it can't reach the region's objects (`Expr.Sep`). A copy copies each object once, so that copies and originals correspond one to one |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -147,8 +148,10 @@ The theorems depend only on Lean's standard axioms, `propext`,
   of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
-- **The rest of regions** (#209, #292): leaving out every freeze of a
-  program, not one. #284 needs the same for unique values.
+- **The rest of regions** (#209, #292): that the typing gives the premise
+  of `freezes_in_place_change_nothing` for a whole program, which needs a
+  fresh region each time a block runs. #284 needs the same for unique
+  values.
   Also borrowed parameters (#283).
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
