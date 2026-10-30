@@ -16,15 +16,15 @@ exactly when its mutability is at most `μ` and its arguments meet what its
 fields imply (`StructDecl.implied`): the atoms that "the fields are at most
 the struct's own mutability" splits into. For `VecIter` that's `'v ⊑ m`
 and `T ⊑ 'v`. It's what Rust does for `T: 'a`, which it infers from a
-struct's fields.
+struct's fields. The checker does the same (`struct_atoms_of` in
+`holds.rs`), where a value is made and wherever it splits a struct type.
 
-The checker asks something else where a value is made (`struct_holds` in
-`infer.rs`, `ArgsHold` here): that each type argument, and each mutability
-argument, is at most the struct's mutability. That's neither enough nor
-needed, as the examples at the end show: it rejects an `imm Handler[mut
-[i32]]` whose `T` is only the parameter of a closure, and accepts
-`mut VecIter[mut [i32], imm]`, whose `data` would be an `imm` array of
-`mut` arrays.
+Before #256, it asked something else (`ArgsHold` here): that each type
+argument, and each mutability argument, is at most the struct's
+mutability. That's neither enough nor needed, as the examples at the end
+show: it rejects an `imm Handler[mut [i32]]` whose `T` is only the
+parameter of a closure, and accepts `mut VecIter[mut [i32], imm]`, whose
+`data` would be an `imm` array of `mut` arrays.
 -/
 
 namespace BoltMut
@@ -52,8 +52,9 @@ def ty (d : StructDecl) (τs : List Ty) (vs : List Mu) (m : Mu) : Ty :=
 most the struct's own mutability". -/
 def implied (d : StructDecl) : List Atom := split d.own d.fields
 
-/-- What the checker asks of the arguments where a value is made: each type
-argument and each mutability argument is at most `m`. -/
+/-- What the checker asked of the arguments before #256: each type argument
+and each mutability argument is at most `m`. The examples below show why
+it was replaced by `implied`. -/
 def ArgsHold (Δ : Assume) (τs : List Ty) (vs : List Mu) (m : Mu) : Prop :=
   (∀ τ ∈ τs, AtMost Δ m τ) ∧ (∀ v ∈ vs, Le Δ v m)
 
@@ -106,7 +107,7 @@ def vecIter : StructDecl := { types := 1, muts := 1, fields := .prod (.cell (.pa
 
 example : vecIter.implied = [.le (.param 0) (.param 1), .tparam 0 (.param 0)] := rfl
 
-/-- `mut VecIter[mut [i32], imm]` meets what the checker asks... -/
+/-- `mut VecIter[mut [i32], imm]` met what the checker asked before #256... -/
 example : StructDecl.ArgsHold .none [.cell .mutable .int] [.immutable] .mutable :=
   ⟨by simp [AtMost]; exact .refl _, by simp; exact .bot _⟩
 
@@ -133,7 +134,8 @@ example : AtMost .none .mutable (handler.ty [.cell .mutable .int] [] .immutable)
   subst ha
   exact .refl _
 
-/-- ...but the checker rejects it, since `mut [i32]` isn't at most `imm`. -/
+/-- ...but the checker rejected it before #256, since `mut [i32]` isn't at
+most `imm`. -/
 example : ¬ StructDecl.ArgsHold .none [.cell .mutable .int] [] .immutable := by
   intro ⟨h, _⟩
   have h₁ : Le .none .mutable .immutable := by simpa [AtMost] using h (.cell .mutable .int) (by simp)
