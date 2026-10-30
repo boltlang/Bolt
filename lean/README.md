@@ -106,6 +106,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `HeapOk.free_all` | `Regions.lean` | freeing a region everywhere at once keeps the heap well-typed: what refers to its objects gets the freed type too, and a closure whose type mentions it becomes `gone`, which can't be called |
 | `block_frees` | `Regions.lean` | a block whose region the heap typing didn't mention before can freeze its region when it ends, without a copy: its value has the type with the region `imm`, and what comes after it, typed before it, is well-typed. What's from before can't hold the region's objects, so the regions page's `leak` is rejected |
 | `block_never_changes` | `Regions.lean` | after the block, the region's objects never change |
+| `call_frees` | `Regions.lean` | a call whose caller wants `imm` for a changeable mutability parameter `ρ` of the function's result can run the body with `ρ` as a fresh region, and freeze it when the body ends: the caller gets the type it asked for, without a copy (rule 6 of the regions page, with the body as the block) |
 | `AtMost.free`, `AtMost.region_free` | `Regions.lean` | freeing a region, giving it a mutability everywhere, keeps "at most"; and what a region holds is `imm` all the way down once the region is freed to `imm` |
 | `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v` |
 
@@ -152,8 +153,10 @@ The theorems depend only on Lean's standard axioms, `propext`,
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
 - **The rest of regions** (#209): blocks as a part of the language, with
-  nested blocks freed in turn and recursion, and regions freed to a
-  mutability the caller chooses (#288). Closures in generic functions
+  nested blocks freed in turn and recursion, as a step that frees a
+  region (#288). `call_frees` covers a function's body as a block, but
+  as a theorem about a run of the body, like `block_frees`, not as a
+  step. Closures in generic functions
   that capture a type parameter given a region (#290). Also borrowed
   parameters (#283) and unique values at their last use (#284).
 - **Effects that suspend**, like `Async`. Only operations that resume right

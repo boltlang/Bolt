@@ -48,7 +48,9 @@ Once the region is freed, its type, and that of any closure whose type
 mentions the region, is `gone`, which can't be called: so the program
 can't change the region afterwards through a closure. A call can give a
 region to a generic function's parameters (#285), unless a closure in it
-captures what has them (`Assume.noRegionTys`). The proofs after this
+captures what has them (`Assume.noRegionTys`). A function's body is a
+block too: `call_frees` runs it in a fresh region when the caller wants
+`imm` (rule 6 of the regions page). The proofs after this
 one are #283, for borrowed parameters, and #284, for unique values at
 their last use.
 -/
@@ -718,5 +720,190 @@ example (fns : List Fn) :
     cases hv
     cases htv with
     | loc h _ => simp at h
+
+/-! ## A call whose caller wants `imm` (rule 6, #288)
+
+A function can make the values it gives back with a changeable mutability
+parameter `ρ` (`HasType.newP`), and change them (`HasType.setP`), like
+`fn squares(n) -> 'ρ [i32]`. A caller that wants them `mut`, or of its own
+region, gives `ρ` that: then nothing needs freeing. A caller that wants
+them `imm` can't, since `imm` isn't changeable. Then the body runs with
+`ρ` as a fresh region instead, and the region is frozen when it returns:
+that's rule 6 of the regions page, with the function's body as the block.
+`call_frees` proves that the caller then gets what it asked for, without a
+copy. Blocks inside a body, and the step that frees a region, are still
+#288. -/
+
+/-- The mutability parameter `ρ` is in `m`. -/
+def Mu.hasParam (ρ : Nat) : Mu → Bool
+  | .param i => i == ρ
+  | _ => false
+
+/-- The mutability parameter `ρ` is in `t`. -/
+def Ty.hasParam (ρ : Nat) : Ty → Bool
+  | .unit | .int | .tparam _ => false
+  | .cell m t => m.hasParam ρ || t.hasParam ρ
+  | .fn m a b => m.hasParam ρ || a.hasParam ρ || b.hasParam ρ
+  | .prod a b => a.hasParam ρ || b.hasParam ρ
+  | .gone m => m.hasParam ρ
+
+/-- No function type in `t` has `ρ`: a region in one isn't freed (rule 5
+of the regions page). -/
+def Ty.NoFnParam (ρ : Nat) : Ty → Prop
+  | .unit | .int | .tparam _ | .gone _ => True
+  | .cell _ t => t.NoFnParam ρ
+  | .fn m a b => (Ty.fn m a b).hasParam ρ = false
+  | .prod a b => a.NoFnParam ρ ∧ b.NoFnParam ρ
+
+theorem Mu.subst_set_of {m : Mu} {ρ : Nat} (h : m.hasParam ρ = false) (ms : List Mu) (x : Mu) :
+    m.subst (ms.set ρ x) = m.subst ms := by
+  cases m with
+  | param i =>
+    simp only [Mu.hasParam, beq_eq_false_iff_ne] at h
+    simp only [Mu.subst, List.getElem?_set_ne (Ne.symm h)]
+  | _ => rfl
+
+theorem Ty.inst_set_of {t : Ty} {ρ : Nat} (h : t.hasParam ρ = false) (ms : List Mu) (x : Mu) (τs : List Ty) :
+    t.inst (ms.set ρ x) τs = t.inst ms τs := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih =>
+    simp only [Ty.hasParam, Bool.or_eq_false_iff] at h
+    simp [Ty.inst, Mu.subst_set_of h.1, ih h.2]
+  | fn m a b iha ihb =>
+    simp only [Ty.hasParam, Bool.or_eq_false_iff] at h
+    simp [Ty.inst, Mu.subst_set_of h.1.1, iha h.1.2, ihb h.2]
+  | prod a b iha ihb =>
+    simp only [Ty.hasParam, Bool.or_eq_false_iff] at h
+    simp [Ty.inst, iha h.1, ihb h.2]
+  | gone m =>
+    simp only [Ty.hasParam] at h
+    simp [Ty.inst, Mu.subst_set_of h]
+
+/-- Arguments that don't mention `r` don't add it. -/
+theorem Mu.mentions_subst_none {m : Mu} {ms : List Mu} {r : Nat} (hm : m.NoRegion)
+    (hms : ∀ m' ∈ ms, m'.mentions r = false) : (m.subst ms).mentions r = false := by
+  cases m with
+  | param i =>
+    simp only [Mu.subst]
+    cases h : ms[i]? with
+    | none => rfl
+    | some m' => exact hms m' (List.mem_of_getElem? h)
+  | region => exact hm.elim
+  | _ => rfl
+
+theorem Ty.mentions_inst_none {t : Ty} {ms : List Mu} {τs : List Ty} {r : Nat} (ht : t.NoRegion)
+    (hms : ∀ m ∈ ms, m.mentions r = false) (hτs : ∀ τ ∈ τs, τ.mentions r = false) :
+    (t.inst ms τs).mentions r = false := by
+  induction t with
+  | unit | int => rfl
+  | cell m t ih => simp [Ty.inst, Ty.mentions, Mu.mentions_subst_none ht.1 hms, ih ht.2]
+  | fn m a b iha ihb =>
+    simp [Ty.inst, Ty.mentions, Mu.mentions_subst_none ht.1 hms, iha ht.2.1, ihb ht.2.2]
+  | prod a b iha ihb => simp [Ty.inst, Ty.mentions, iha ht.1, ihb ht.2]
+  | tparam i =>
+    simp only [Ty.inst]
+    cases h : τs[i]? with
+    | none => rfl
+    | some τ => exact hτs τ (List.mem_of_getElem? h)
+  | gone m => exact Mu.mentions_subst_none ht hms
+
+/-- With `ρ` a fresh region `r` and `r` frozen after, a type is what it is
+with `ρ` being `imm`: what the caller asked for. -/
+theorem Mu.subst_region_free {m : Mu} {ms : List Mu} {ρ r : Nat} (hρ : ms[ρ]? = some .immutable)
+    (hms : ∀ m' ∈ ms, m'.mentions r = false) (hm : m.NoRegion) :
+    (m.subst (ms.set ρ (.region r))).free r .immutable = m.subst ms := by
+  have hlt : ρ < ms.length := (List.getElem?_eq_some_iff.mp hρ).1
+  cases m with
+  | param i =>
+    by_cases hi : i = ρ
+    · subst hi
+      simp [Mu.subst, List.getElem?_set_self hlt, hρ, Mu.free]
+    · simp only [Mu.subst, List.getElem?_set_ne (Ne.symm hi)]
+      exact Mu.free_not_mentions (Mu.mentions_subst_none (m := .param i) trivial hms) _
+  | region => exact hm.elim
+  | _ => rfl
+
+theorem Ty.inst_region_free {t : Ty} {ms : List Mu} {τs : List Ty} {ρ r : Nat} (hρ : ms[ρ]? = some .immutable)
+    (hms : ∀ m ∈ ms, m.mentions r = false) (hτs : ∀ τ ∈ τs, τ.mentions r = false)
+    (hn : t.NoRegion) (hf : t.NoFnParam ρ) :
+    (t.inst (ms.set ρ (.region r)) τs).free r .immutable = t.inst ms τs := by
+  induction t with
+  | unit | int => rfl
+  | cell m t ih => simp [Ty.inst, Ty.free, Mu.subst_region_free hρ hms hn.1, ih hn.2 hf]
+  | fn m a b =>
+    have heq : (Ty.fn m a b).inst (ms.set ρ (.region r)) τs = (Ty.fn m a b).inst ms τs :=
+      Ty.inst_set_of hf ms _ τs
+    rw [heq]
+    exact Ty.free_not_mentions (Ty.mentions_inst_none hn hms hτs) _
+  | prod a b iha ihb => simp [Ty.inst, Ty.free, iha hn.1 hf.1, ihb hn.2 hf.2]
+  | tparam i =>
+    simp only [Ty.inst]
+    cases h : τs[i]? with
+    | none => rfl
+    | some τ => exact Ty.free_not_mentions (hτs τ (List.mem_of_getElem? h)) _
+  | gone m => simp [Ty.inst, Ty.free, Mu.subst_region_free hρ hms hn]
+
+/-- **A call whose caller wants `imm` can run its body in a fresh region.**
+The caller gives `ρ` the argument `imm`, in `ms`. The body runs with `ρ` as
+the region `r` instead, which nothing has yet, to the value `v`. Then, with
+`r` frozen, `v` has the type the caller asked for, the heap is well-typed,
+and the heap typing still has `σ`, so what comes after the call is
+well-typed (`block_frees`). No copy is made. -/
+theorem call_frees {fns : List Fn} (hf : FnsOk fns) {f : Nat} {fn : Fn} (hfn : fns[f]? = some fn)
+    {ms : List Mu} {τs : List Ty} {ρ r : Nat}
+    (hs : Sat .none fn.assume (ms.set ρ (.region r)) τs) (hρ : ms[ρ]? = some .immutable)
+    (hms : ∀ m ∈ ms, m.mentions r = false) (hτs : ∀ τ ∈ τs, τ.mentions r = false)
+    (hn : fn.retTy.NoRegion) (hnf : fn.retTy.NoFnParam ρ)
+    {σ : HeapTy} {h h' : Heap} {a v : Expr} (hh : HeapOk fns σ h) (hfresh : σ.free r = σ)
+    (ha : a.IsValue) (hat : HasType fns σ .none false Ctx.empty a (fn.argTy.inst (ms.set ρ (.region r)) τs))
+    (hsteps : Steps fns h ((fn.body.inst (ms.set ρ (.region r)) τs).subst fn.param a) h' v) (hv : v.IsValue) :
+    ∃ σ' : HeapTy, Extends σ (σ'.free r) ∧ HeapOk fns (σ'.free r) h' ∧
+      HasType fns (σ'.free r) .none false Ctx.empty v (fn.retTy.inst ms τs) ∧
+      ∀ (l : Nat) (s : Ty), σ'[l]? = some (.region r, s) → ∃ s' : Ty, (σ'.free r)[l]? = some (.immutable, s') := by
+  obtain ⟨hnl, hbody⟩ := hf fn (List.mem_of_getElem? hfn)
+  -- The body, with `ρ` the region, has the type with it.
+  have hb := (hbody.weaken_heap (Extends.nil σ)).inst hnl hs
+  rw [Ctx.inst_update, Ctx.inst_empty] at hb
+  have he := hb.subst_update ha hat
+  obtain ⟨σ', _, hx', hh', hvt, himm, _⟩ := block_frees hf hh hfresh he hsteps hv
+  rw [Ty.inst_region_free hρ hms hτs hn hnf] at hvt
+  exact ⟨σ', hx', hh', hvt, himm⟩
+
+/-- `fn build(n) -> 'ρ [i32] { let xs = mut [n]; xs[0] = 5; xs }`, with a
+changeable `'ρ` that the caller chooses, like `squares` on the regions
+page. -/
+def build : Fn :=
+  { assume := { changeable := [0] }, param := 0, argTy := .int, retTy := .cell (.param 0) .int,
+    body := .letE 1 (.new true (.var 0)) (.letE 2 (.set (.var 1) (.int 5)) (.var 1)) }
+
+theorem build_ok : FnsOk [build] := by
+  intro fn hfn
+  simp only [List.mem_singleton] at hfn
+  subst hfn
+  exact ⟨⟨trivial, ⟨trivial, trivial⟩, trivial⟩,
+    .letE (.newP (.var rfl) (by simp [build]) trivial) (.letE (.setP (.var rfl) (by simp [build]) .int) (.var rfl))⟩
+
+/-- A caller that wants an `imm` array can't call it as it is, since `imm`
+isn't changeable... -/
+example : ¬ Sat .none build.assume [.immutable] [] := by
+  intro h
+  exact h.2.2.2.2.2 0 (by simp [build])
+
+/-- ...but the body can run with `'ρ` as a fresh region, which `call_frees`
+then freezes, and the caller gets `imm [i32]`. -/
+example : Sat .none build.assume ([Mu.immutable].set 0 (.region 0)) [] ∧
+    build.retTy.inst [.immutable] [] = .cell .immutable .int ∧
+    build.retTy.NoRegion ∧ build.retTy.NoFnParam 0 := by
+  refine ⟨⟨?_, ?_, ?_, ?_, ?_, ?_⟩, rfl, ⟨trivial, trivial⟩, trivial⟩
+  · intro p h; simp [build] at h
+  · intro p h; simp [build] at h
+  · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [build] at h
+  · intro i h; simp [build] at h
+  · intro i h
+    simp [build] at h
+    subst h
+    trivial
 
 end BoltMut
