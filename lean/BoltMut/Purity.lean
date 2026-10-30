@@ -56,12 +56,15 @@ theorem clean_of_deepImm {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Pr
 /-- A freeze's copy keeps them clean: what it makes is new, and what it
 shares is in the value or in a clean location, which holds what's clean. -/
 theorem Copy.clean {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Prop} {h₀ : Heap} (hh : HeapOk fns σ h₀)
-    (hn : n ≤ h₀.length) {r : Nat} {t : Ty} {h h' : Heap} {v v' : Expr} (hc : Copy r t h v h' v') :
-    (∃ ext, h = h₀ ++ ext) → Clean σ n A v → HeapClean σ n A h → Clean σ n A v' ∧ HeapClean σ n A h' := by
+    (hn : n ≤ h₀.length) {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
+    (hc : Copy r t h m v h' m' v') :
+    (∃ ext, h = h₀ ++ ext) → (∀ l c, m.lookup l = some c → n ≤ c) → Clean σ n A v → HeapClean σ n A h →
+      Clean σ n A v' ∧ HeapClean σ n A h' ∧ ∀ l c, m'.lookup l = some c → n ≤ c := by
   induction hc with
-  | keep => intro _ hcv hhc; exact ⟨hcv, hhc⟩
-  | @cell m s h h' l w w' _ hw hc' ih =>
-    intro hpre hcv hhc
+  | keep => intro _ hm hcv hhc; exact ⟨hcv, hhc, hm⟩
+  | seen _ hlk => intro _ hm _ hhc; exact ⟨fun l' hl' => .inl (hl' ▸ hm _ _ hlk), hhc, hm⟩
+  | @cell μ s h h' m m' l w w' _ _ hw hc' ih =>
+    intro hpre hm hcv hhc
     -- What the location holds is clean.
     have hcw : Clean σ n A w := by
       rcases hcv l rfl with h₁ | h₁ | ⟨t₀, ht₀⟩
@@ -72,33 +75,38 @@ theorem Copy.clean {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Prop} {h
         rw [List.getElem?_append_left (hh.lt ht₀), hw₀] at hw
         cases hw
         exact clean_of_deepImm hwv hwt hd
-    obtain ⟨hcw', hhc'⟩ := ih hpre hcw hhc
+    obtain ⟨hcw', hhc', hm'⟩ := ih hpre hm hcw hhc
     have hlen : n ≤ h'.length := by
       obtain ⟨ext, rfl⟩ := hpre
       obtain ⟨ext', rfl⟩ := hc'.prefix
       simp; omega
-    refine ⟨fun l' hl' => .inl (hl' ▸ hlen), ?_⟩
-    intro l' u hA hu
-    by_cases hlt : l' < h'.length
-    · rw [List.getElem?_append_left hlt] at hu
-      exact hhc' l' u hA hu
-    · have hl' : l' = h'.length := by
-        have := (List.getElem?_eq_some_iff.mp hu).1
-        simp at this
-        omega
-      subst hl'
-      rw [List.getElem?_concat_length] at hu
-      cases hu
-      exact hcw'
-  | @pair _ _ _ h₁ _ _ _ _ _ _ hc₁ _ ih₁ ih₂ =>
-    intro hpre hcv hhc
-    obtain ⟨hc₁', hhc₁⟩ := ih₁ hpre (fun l hl => hcv l (.inl hl)) hhc
+    refine ⟨fun l' hl' => .inl (hl' ▸ hlen), ?_, ?_⟩
+    · intro l' u hA hu
+      by_cases hlt : l' < h'.length
+      · rw [List.getElem?_append_left hlt] at hu
+        exact hhc' l' u hA hu
+      · have hl' : l' = h'.length := by
+          have := (List.getElem?_eq_some_iff.mp hu).1
+          simp at this
+          omega
+        subst hl'
+        rw [List.getElem?_concat_length] at hu
+        cases hu
+        exact hcw'
+    · intro k c hk
+      simp only [List.lookup] at hk
+      split at hk
+      · cases hk; exact hlen
+      · exact hm' k c hk
+  | @pair _ _ _ h₁ _ _ _ _ _ _ _ _ _ hc₁ _ ih₁ ih₂ =>
+    intro hpre hm hcv hhc
+    obtain ⟨hc₁', hhc₁, hm₁⟩ := ih₁ hpre hm (fun l hl => hcv l (.inl hl)) hhc
     have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
       obtain ⟨ext, rfl⟩ := hpre
       obtain ⟨ext', rfl⟩ := hc₁.prefix
       exact ⟨ext ++ ext', by simp⟩
-    obtain ⟨hc₂', hhc₂⟩ := ih₂ hpre₁ (fun l hl => hcv l (.inr hl)) hhc₁
-    exact ⟨fun l hl => hl.elim (hc₁' l) (hc₂' l), hhc₂⟩
+    obtain ⟨hc₂', hhc₂, hm₂⟩ := ih₂ hpre₁ hm₁ (fun l hl => hcv l (.inr hl)) hhc₁
+    exact ⟨fun l hl => hl.elim (hc₁' l) (hc₂' l), hhc₂, hm₂⟩
 
 /-- A step keeps the program and the heap clean, and changes no location
 that's old and not allowed. -/
@@ -257,7 +265,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     | freeze he _ _ => exact ih hh he hn hc hhc
   | freezeVal _ hc' =>
     intro σ t n A hh _ hn hc hhc
-    obtain ⟨hcv, hhc'⟩ := Copy.clean hh hn hc' ⟨[], by simp⟩ hc hhc
+    obtain ⟨hcv, hhc', _⟩ := Copy.clean hh hn hc' ⟨[], by simp⟩ (fun _ _ h => by simp at h) hc hhc
     refine ⟨fun l hl _ => hc'.keeps (by omega), ?_, hcv, hhc'⟩
     obtain ⟨ext, he⟩ := hc'.prefix
     rw [he]

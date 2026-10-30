@@ -48,100 +48,180 @@ theorem Reaches.append {h : Heap} {a b : Nat} (hr : Reaches h a b) (ext : Heap) 
     rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hv).1]
     exact hv
 
-/-- **What a freeze's copy corresponds to.** Each copy `c` is of an object
-`o` of the region (`π c o`), and is new. With the copies corresponding to
-their originals, and what the copy shares to itself, the copy corresponds
-to the value, and each copy holds what corresponds to what its original
-holds. -/
-theorem Copy.map {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ h₀) {r : Nat} {t : Ty}
-    {h h' : Heap} {v v' : Expr} (hc : Copy r t h v h' v') :
-    (∃ ext, h = h₀ ++ ext) → ∀ {io : Bool} {Γ : Ctx}, HasType fns σ .none io Γ v t → t.Freezable r →
-      ∃ π : Nat → Nat → Prop,
-        (∀ c o, π c o → h.length ≤ c ∧ c < h'.length ∧ ∃ s, σ[o]? = some (.region r, s)) ∧
-        ∀ (ρ : Nat → Nat → Prop) (hfin : Heap), (∃ ext, hfin = h' ++ ext) → (∀ c o, π c o → ρ c o) →
-          (∀ l, l < h₀.length → v'.Reaches hfin l → ρ l l) →
-          Rel ρ v' v ∧ ∀ c o, π c o → ∃ w w', h₀[o]? = some w ∧ hfin[c]? = some w' ∧ Rel ρ w' w := by
+/-- The size of a type. -/
+def Ty.size : Ty → Nat
+  | .unit | .int | .tparam _ => 1
+  | .cell _ t => t.size + 1
+  | .fn _ a b => a.size + b.size + 1
+  | .prod a b => a.size + b.size + 1
+
+/-- What a copy copies has a type no bigger than the value's: so copying
+what an object holds never copies the object itself again. -/
+theorem Copy.keys_small {fns : List Fn} {σ : HeapTy} {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)}
+    {v v' : Expr} (hc : Copy r t h m v h' m' v') {h₀ : Heap} (hh : HeapOk fns σ h₀) :
+    (∃ ext, h = h₀ ++ ext) → ∀ {io : Bool} {Γ : Ctx}, HasType fns σ .none io Γ v t →
+      ∀ k c, m'.lookup k = some c → m.lookup k = none → ∃ μ s, σ[k]? = some (μ, s) ∧ (Ty.cell μ s).size ≤ t.size := by
   induction hc with
-  | @keep t h v _ =>
-    intro _ io Γ ht _
-    refine ⟨fun _ _ => False, fun _ _ h => h.elim, fun ρ hfin _ _ hid => ⟨?_, fun _ _ h => h.elim⟩⟩
-    -- What's shared is old, and corresponds to itself.
-    refine Rel.refl fun l hl => hid l ?_ ⟨l, hl, .refl⟩
-    rw [hh.1]
-    exact ht.hasLoc_lt hl
-  | @cell m s h h' l w w' hmen hw _ ih =>
-    intro hpre io Γ ht hf
+  | keep | seen => intro _ io Γ _ k c h₁ h₂; rw [h₁] at h₂; cases h₂
+  | @cell μ s h h' m m' l w w' _ _ hw _ ih =>
+    intro hpre io Γ ht k c hk hkm
     cases ht with
     | loc hσ _ =>
-      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l m s hσ
-      have hl₀ : l < h₀.length := hh.lt hσ
+      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l μ s hσ
       obtain ⟨ext, rfl⟩ := hpre
-      rw [List.getElem?_append_left hl₀, hw₀] at hw
-      obtain rfl : w₀ = w := Option.some.inj hw
-      have hreg : m = .region r := by
-        simp only [Ty.mentions, Bool.or_eq_true] at hmen
-        rcases hmen with hm | hm
-        · cases m with
-          | region r' => simp only [Mu.mentions, beq_iff_eq] at hm; rw [hm]
-          | _ => cases hm
-        · exact hf.1 hm
-      subst hreg
-      obtain ⟨π, hπ, hrel⟩ := ih ⟨ext, rfl⟩ hwt hf.2
-      have hle : (h₀ ++ ext).length ≤ h'.length := by
-        obtain ⟨e', rfl⟩ := ‹Copy r s (h₀ ++ ext) w₀ h' w'›.prefix
-        simp
-      refine ⟨fun c o => π c o ∨ (c = h'.length ∧ o = l), ?_, ?_⟩
-      · intro c o hco
-        rcases hco with hco | ⟨rfl, rfl⟩
-        · obtain ⟨h₁, h₂, h₃⟩ := hπ c o hco
-          exact ⟨h₁, by simp; omega, h₃⟩
-        · exact ⟨hle, by simp, s, hσ⟩
-      · intro ρ hfin hfin' hρ hid
-        obtain ⟨ext', rfl⟩ := hfin'
-        have hc' : (h' ++ [w'] ++ ext')[h'.length]? = some w' := by simp
-        -- What the copy holds can be reached from it.
-        have hid' : ∀ l', l' < h₀.length → w'.Reaches (h' ++ [w'] ++ ext') l' → ρ l' l' := by
-          intro l' hl' ⟨l₁, hl₁, hr⟩
-          exact hid l' hl' ⟨h'.length, rfl, .step hc' hl₁ hr⟩
-        obtain ⟨hrw, hcon⟩ := hrel ρ _ ⟨[w'] ++ ext', by simp⟩ (fun c o h => hρ c o (.inl h)) hid'
-        refine ⟨.loc (hρ _ _ (.inr ⟨rfl, rfl⟩)), ?_⟩
-        intro c o hco
-        rcases hco with hco | ⟨rfl, rfl⟩
-        · exact hcon c o hco
-        · exact ⟨w₀, w', hw₀, hc', hrw⟩
-  | @pair a b h h₁ h₂ v₁ v₂ v₁' v₂' _ hc₁ hc₂ ih₁ ih₂ =>
-    intro hpre io Γ ht hf
+      rw [List.getElem?_append_left (hh.lt hσ), hw₀] at hw
+      cases hw
+      simp only [List.lookup_cons_nat] at hk
+      split at hk
+      · rename_i he
+        subst he
+        exact ⟨μ, s, hσ, Nat.le_refl _⟩
+      · obtain ⟨μ', s', h₁, h₂⟩ := ih ⟨ext, rfl⟩ hwt k c hk hkm
+        exact ⟨μ', s', h₁, by simp only [Ty.size] at h₂ ⊢; omega⟩
+  | @pair a b h h₁ h₂ m m₁ m₂ _ _ _ _ _ hc₁ _ ih₁ ih₂ =>
+    intro hpre io Γ ht k c hk hkm
     cases ht with
     | pair ht₁ ht₂ =>
-      obtain ⟨π₁, hπ₁, hrel₁⟩ := ih₁ hpre ht₁ hf.1
       have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
         obtain ⟨e₁, rfl⟩ := hpre
         obtain ⟨e₂, rfl⟩ := hc₁.prefix
         exact ⟨e₁ ++ e₂, by simp⟩
-      obtain ⟨π₂, hπ₂, hrel₂⟩ := ih₂ hpre₁ ht₂ hf.2
-      have hle₁ : h.length ≤ h₁.length := by
-        obtain ⟨e₂, rfl⟩ := hc₁.prefix
+      cases h₁k : m₁.lookup k with
+      | none =>
+        obtain ⟨μ', s', e₁, e₂⟩ := ih₂ hpre₁ ht₂ k c hk h₁k
+        exact ⟨μ', s', e₁, by simp only [Ty.size] at e₂ ⊢; omega⟩
+      | some c' =>
+        obtain ⟨μ', s', e₁, e₂⟩ := ih₁ hpre ht₁ k c' h₁k hkm
+        exact ⟨μ', s', e₁, by simp only [Ty.size] at e₂ ⊢; omega⟩
+
+/-- What a copy copied stays copied, to the same place. -/
+theorem Copy.memo_mono {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
+    (hc : Copy r t h m v h' m' v') : ∀ o c, m.lookup o = some c → m'.lookup o = some c := by
+  induction hc with
+  | keep | seen => exact fun _ _ h => h
+  | @cell _ _ _ _ _ _ l _ _ _ hnone _ _ ih =>
+    intro o c ho
+    rw [List.lookup_cons_nat]
+    have : o ≠ l := by rintro rfl; rw [hnone] at ho; cases ho
+    simp only [this, ite_false]
+    exact ih o c ho
+  | pair _ _ _ ih₁ ih₂ => exact fun o c ho => ih₂ o c (ih₁ o c ho)
+
+/-- **What a freeze's copy corresponds to.** Each object `o` of the region
+it copies, it copies once, to a new `c` (`m'.lookup o = some c`). With
+the copies corresponding to their originals, and what the copy shares to
+itself, the copy corresponds to the value, and each copy holds what
+corresponds to what its original holds. -/
+theorem Copy.map {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ h₀) {r : Nat} {t : Ty}
+    {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr} (hc : Copy r t h m v h' m' v') :
+    (∃ ext, h = h₀ ++ ext) → ∀ {io : Bool} {Γ : Ctx}, HasType fns σ .none io Γ v t → t.Freezable r →
+      (∀ o c, m.lookup o = some c → h₀.length ≤ c ∧ c < h.length ∧ ∃ s, σ[o]? = some (.region r, s)) →
+      (∀ o c, m'.lookup o = some c → h₀.length ≤ c ∧ c < h'.length ∧ ∃ s, σ[o]? = some (.region r, s)) ∧
+      ∀ (ρ : Nat → Nat → Prop) (hfin : Heap), (∃ ext, hfin = h' ++ ext) → (∀ o c, m'.lookup o = some c → ρ c o) →
+        (∀ l, l < h₀.length → v'.Reaches hfin l → ρ l l) →
+        Rel ρ v' v ∧ ∀ o c, m'.lookup o = some c → m.lookup o = none →
+          ∃ w w', h₀[o]? = some w ∧ hfin[c]? = some w' ∧ Rel ρ w' w := by
+  induction hc with
+  | @keep t h m v _ =>
+    intro _ io Γ ht _ hm
+    refine ⟨hm, fun ρ hfin _ _ hid => ⟨?_, fun o c h₁ h₂ => by rw [h₁] at h₂; cases h₂⟩⟩
+    -- What's shared is old, and corresponds to itself.
+    refine Rel.refl fun l hl => hid l ?_ ⟨l, hl, .refl⟩
+    rw [hh.1]
+    exact ht.hasLoc_lt hl
+  | @seen μ s h m l c _ hlk =>
+    intro _ io Γ _ _ hm
+    exact ⟨hm, fun ρ hfin _ hρ _ => ⟨.loc (hρ l c hlk), fun o c h₁ h₂ => by rw [h₁] at h₂; cases h₂⟩⟩
+  | @cell μ s h h' m m' l w w' hmen hnone hw hcw ih =>
+    intro hpre io Γ ht hf hm
+    cases ht with
+    | loc hσ _ =>
+      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l μ s hσ
+      have hl₀ : l < h₀.length := hh.lt hσ
+      have hw' : w₀ = w := by
+        obtain ⟨ext, rfl⟩ := hpre
+        rw [List.getElem?_append_left hl₀, hw₀] at hw
+        exact Option.some.inj hw
+      subst hw'
+      have hreg := hf.cell_region hmen
+      subst hreg
+      have hle : h.length ≤ h'.length := by
+        obtain ⟨e', rfl⟩ := hcw.prefix
         simp
-      have hle₂ : h₁.length ≤ h₂.length := by
-        obtain ⟨e₂, rfl⟩ := hc₂.prefix
+      have hh₀ : h₀.length ≤ h.length := by
+        obtain ⟨e, rfl⟩ := hpre
         simp
-      refine ⟨fun c o => π₁ c o ∨ π₂ c o, ?_, ?_⟩
-      · intro c o hco
-        rcases hco with hco | hco
-        · obtain ⟨h₁', h₂', h₃'⟩ := hπ₁ c o hco
-          exact ⟨h₁', by omega, h₃'⟩
-        · obtain ⟨h₁', h₂', h₃'⟩ := hπ₂ c o hco
-          exact ⟨by omega, h₂', h₃'⟩
+      -- Copying what `l` holds didn't copy `l`: its type is smaller.
+      have hnone' : m'.lookup l = none := by
+        cases e : m'.lookup l with
+        | none => rfl
+        | some c =>
+          obtain ⟨μ', s', h₁, h₂⟩ := hcw.keys_small hh hpre hwt l c e hnone
+          rw [hσ] at h₁
+          cases h₁
+          simp only [Ty.size] at h₂
+          omega
+      obtain ⟨hπ, hrel⟩ := ih hpre hwt hf.2 hm
+      refine ⟨?_, ?_⟩
+      · intro o c hoc
+        rw [List.lookup_cons_nat] at hoc
+        split at hoc
+        · rename_i he
+          cases hoc
+          subst he
+          exact ⟨by omega, by simp, s, hσ⟩
+        · obtain ⟨h₁, h₂, h₃⟩ := hπ o c hoc
+          exact ⟨h₁, by simp; omega, h₃⟩
       · intro ρ hfin hfin' hρ hid
-        have hfin₁ : ∃ ext, hfin = h₁ ++ ext := by
-          obtain ⟨e₁, rfl⟩ := hfin'
-          obtain ⟨e₂, rfl⟩ := hc₂.prefix
-          exact ⟨e₂ ++ e₁, by simp⟩
-        obtain ⟨hr₁, hc₁'⟩ := hrel₁ ρ hfin hfin₁ (fun c o h => hρ c o (.inl h))
-          (fun l hl ⟨l₁, hl₁, hr⟩ => hid l hl ⟨l₁, .inl hl₁, hr⟩)
-        obtain ⟨hr₂, hc₂'⟩ := hrel₂ ρ hfin hfin' (fun c o h => hρ c o (.inr h))
-          (fun l hl ⟨l₁, hl₁, hr⟩ => hid l hl ⟨l₁, .inr hl₁, hr⟩)
-        exact ⟨.pair hr₁ hr₂, fun c o hco => hco.elim (hc₁' c o) (hc₂' c o)⟩
+        obtain ⟨ext', rfl⟩ := hfin'
+        have hc' : (h' ++ [w'] ++ ext')[h'.length]? = some w' := by simp
+        have hρ' : ∀ o c, m'.lookup o = some c → ρ c o := by
+          intro o c hoc
+          have : o ≠ l := by rintro rfl; rw [hnone'] at hoc; cases hoc
+          apply hρ o c
+          rw [List.lookup_cons_nat]
+          simp only [this, ite_false]
+          exact hoc
+        -- What the copy holds can be reached from it.
+        have hid' : ∀ l', l' < h₀.length → w'.Reaches (h' ++ [w'] ++ ext') l' → ρ l' l' := by
+          intro l' hl' ⟨l₁, hl₁, hr⟩
+          exact hid l' hl' ⟨h'.length, rfl, .step hc' hl₁ hr⟩
+        obtain ⟨hrw, hcon⟩ := hrel ρ _ ⟨[w'] ++ ext', by simp⟩ hρ' hid'
+        refine ⟨.loc (hρ l h'.length (by simp)), ?_⟩
+        intro o c hoc hom
+        rw [List.lookup_cons_nat] at hoc
+        split at hoc
+        · rename_i he
+          cases hoc
+          subst he
+          exact ⟨w₀, w', hw₀, hc', hrw⟩
+        · exact hcon o c hoc hom
+  | @pair a b h h₁ h₂ m m₁ m₂ v₁ v₂ v₁' v₂' _ hc₁ hc₂ ih₁ ih₂ =>
+    intro hpre io Γ ht hf hm
+    cases ht with
+    | pair ht₁ ht₂ =>
+      obtain ⟨hπ₁, hrel₁⟩ := ih₁ hpre ht₁ hf.1 hm
+      have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
+        obtain ⟨e₁, rfl⟩ := hpre
+        obtain ⟨e₂, rfl⟩ := hc₁.prefix
+        exact ⟨e₁ ++ e₂, by simp⟩
+      obtain ⟨hπ₂, hrel₂⟩ := ih₂ hpre₁ ht₂ hf.2 hπ₁
+      refine ⟨hπ₂, fun ρ hfin hfin' hρ hid => ?_⟩
+      have hfin₁ : ∃ ext, hfin = h₁ ++ ext := by
+        obtain ⟨e₁, rfl⟩ := hfin'
+        obtain ⟨e₂, rfl⟩ := hc₂.prefix
+        exact ⟨e₂ ++ e₁, by simp⟩
+      obtain ⟨hr₁, hc₁'⟩ := hrel₁ ρ hfin hfin₁ (fun o c h => hρ o c (hc₂.memo_mono o c h))
+        (fun l hl ⟨l₁, hl₁, hr⟩ => hid l hl ⟨l₁, .inl hl₁, hr⟩)
+      obtain ⟨hr₂, hc₂'⟩ := hrel₂ ρ hfin hfin' hρ (fun l hl ⟨l₁, hl₁, hr⟩ => hid l hl ⟨l₁, .inr hl₁, hr⟩)
+      refine ⟨.pair hr₁ hr₂, fun o c hoc hom => ?_⟩
+      cases h₁o : m₁.lookup o with
+      | none => exact hc₂' o c hoc h₁o
+      | some c' =>
+        have e := hc₂.memo_mono o c' h₁o
+        rw [hoc] at e
+        obtain rfl := Option.some.inj e
+        exact hc₁' o c h₁o hom
 
 /-- **Freezing in place can't be noticed.** At the end of a block whose
 region `r` becomes `imm`, the value `v` is copied to `v'`. If nothing of `r`
@@ -150,24 +230,32 @@ with `v` itself, in the heap without the copies, computes what going on
 with the copy does: whatever result the first gets, the second gets one
 that corresponds, and the same integer. -/
 theorem freeze_in_place_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' h₁ : Heap}
-    {r x : Nat} {t T : Ty} {v v' k e₁ : Expr} (hh : HeapOk fns σ h) (hv : v.IsValue)
+    {m' : List (Nat × Nat)} {r x : Nat} {t T : Ty} {v v' k e₁ : Expr} (hh : HeapOk fns σ h) (hv : v.IsValue)
     (ht : HasType fns σ .none false Ctx.empty v t) (hfz : t.Freezable r)
     (hk : HasType fns σ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
-    (hc : Copy r t h v h' v')
+    (hc : Copy r t h [] v h' m' v')
     (hdead : ∀ a s, σ[a]? = some (.region r, s) → ¬ k.Reaches h' a ∧ ¬ v'.Reaches h' a)
     (hs : Steps fns h' (k.subst x v') h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
       Steps fns h (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
-  obtain ⟨σ', hx, hh', hv', ht', hnew⟩ := hc.typed hh hv ht hfz
-  obtain ⟨π, hπ, hrel⟩ := hc.map hh ⟨[], by simp⟩ ht hfz
+  obtain ⟨σ', hx, hh', hv', ht', hnew, _⟩ := hc.typed hh hv ht hfz (MemoOk.nil σ r)
+  obtain ⟨hπ₀, hrel⟩ := hc.map hh ⟨[], by simp⟩ ht hfz (fun _ _ h => by simp at h)
+  -- Each copy `a` is of the original `b`.
+  let π : Nat → Nat → Prop := fun a b => m'.lookup b = some a
+  have hπ : ∀ c o, π c o → h.length ≤ c ∧ c < h'.length ∧ ∃ s, σ[o]? = some (.region r, s) := by
+    intro c o hco
+    obtain ⟨h₁, h₂, h₃⟩ := hπ₀ o c hco
+    exact ⟨h₁, h₂, h₃⟩
   -- What can still be reached: from `k`, or from the copy.
   let L : Nat → Prop := fun a => k.Reaches h' a ∨ v'.Reaches h' a
   let ρ : Nat → Nat → Prop := fun a b => (a = b ∧ a < h.length ∧ L a) ∨ π a b
   have hlen : h.length ≤ h'.length := by
     obtain ⟨e, rfl⟩ := hc.prefix
     simp
-  obtain ⟨hrv, hcon⟩ := hrel ρ h' ⟨[], by simp⟩ (fun c o h => .inr h)
-    (fun l hl hr => .inl ⟨rfl, hl, .inr hr⟩)
+  obtain ⟨hrv, hcon₀⟩ := hrel ρ h' ⟨[], by simp⟩ (fun o c h => .inr h)
+    (fun l hl hr => .inl ⟨rfl, by rw [hh.1]; rw [hh.1] at hl; exact hl, .inr hr⟩)
+  have hcon : ∀ c o, π c o → ∃ w w', h[o]? = some w ∧ h'[c]? = some w' ∧ Rel ρ w' w :=
+    fun c o hco => hcon₀ o c hco (by simp)
   -- An old location that can be reached holds what can be reached.
   have hL : ∀ a w l, L a → h'[a]? = some w → w.HasLoc l → L l := by
     intro a w l ha hw hl
@@ -320,12 +408,12 @@ theorem freeze_in_place_of_typing {fns : List Fn} (hf : FnsOk fns) {σ₀ : Heap
     (hfresh : ∀ (l : Nat) (p : Mu × Ty), σ₀[l]? = some p → (Ty.cell p.1 p.2).mentions r = false)
     (he : HasType fns σ₀ .none false Ctx.empty e t) (hfz : t.Freezable r)
     (hk : HasType fns σ₀ .none false (Ctx.empty.update x (t.free r .immutable)) k T)
-    (hse : Steps fns h₀ e h v) (hv : v.IsValue) (hc : Copy r t h v h' v')
+    (hse : Steps fns h₀ e h v) (hv : v.IsValue) {m' : List (Nat × Nat)} (hc : Copy r t h [] v h' m' v')
     (hs : Steps fns h' (k.subst x v') h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
       Steps fns h (k.subst x v) h₂ e₂ ∧ Rel ρ e₁ e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by
   obtain ⟨σ, hx, hh, hvt⟩ := steps_preservation hf hse hh₀ he
-  obtain ⟨σ', hx', hh', hv', ht', _⟩ := hc.typed hh hv hvt hfz
+  obtain ⟨σ', hx', hh', hv', ht', _, _⟩ := hc.typed hh hv hvt hfz (MemoOk.nil σ r)
   refine freeze_in_place_changes_nothing hf hh hv hvt hfz (hk.weaken_heap hx) hc ?_ hs
   intro a s ha
   -- An object of `r` has a type that mentions `r`.
