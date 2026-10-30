@@ -40,12 +40,14 @@ namespace BoltMut
 `imm`, the `i`th mutability parameter of the function being checked, or
 the region `r`: the mutability of the values a block makes and that nothing
 outside the block has, which can be changed while the block runs (#209;
-see `Regions.lean`). -/
+see `Regions.lean`). `holdsMut` says the region can hold `mut` objects,
+`mut ⊑ r`, so that it becomes `mut` when its block ends rather than `imm`
+(#286). -/
 inductive Mu where
   | mutable
   | immutable
   | param (i : Nat)
-  | region (r : Nat)
+  | region (r : Nat) (holdsMut : Bool)
   deriving DecidableEq, Repr
 
 /-- Types. `cell m t` is a shared object with mutability `m` holding a `t`,
@@ -125,9 +127,15 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .fst e, l => e.HasLoc l
   | .snd e, l => e.HasLoc l
 
+/-- `mut`, or a region that holds `mut` objects: everything is below it. -/
+def Mu.isTop : Mu → Bool
+  | .mutable => true
+  | .region _ b => b
+  | _ => false
+
 /-- A mutability that isn't a region. -/
 def Mu.NoRegion : Mu → Prop
-  | .region _ => False
+  | .region _ _ => False
   | _ => True
 
 /-- A type that mentions no region. -/
@@ -204,10 +212,12 @@ structure Assume where
 def Assume.none : Assume := {}
 
 /-- `m ⊑ μ`: mutabilities are ordered `imm ⊑ mut`, and a parameter is only
-below another by an assumption. -/
+below another by an assumption. A region that holds `mut` objects is above
+`mut` (#286), so it's as high as `mut`. -/
 inductive Le (Δ : Assume) : Mu → Mu → Prop where
   | bot (μ : Mu) : Le Δ .immutable μ
   | top (m : Mu) : Le Δ m .mutable
+  | regionMut (r : Nat) : Le Δ .mutable (.region r true)
   | refl (m : Mu) : Le Δ m m
   | assume {m μ : Mu} : (m, μ) ∈ Δ.mus → Le Δ m μ
   | trans {m₁ m₂ m₃ : Mu} : Le Δ m₁ m₂ → Le Δ m₂ m₃ → Le Δ m₁ m₃
@@ -232,28 +242,40 @@ def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
     (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit))
 
-/-- With nothing assumed, `m ⊑ μ` only by the order itself. -/
-theorem Le.none_inv {m μ : Mu} (h : Le .none m μ) : m = .immutable ∨ μ = .mutable ∨ m = μ := by
+/-- With nothing assumed, `m ⊑ μ` only by the order itself: `μ` is `mut`
+or a region that holds `mut` objects, which everything is below, or `m` is
+`imm` or `μ`. -/
+theorem Le.none_inv {m μ : Mu} (h : Le .none m μ) :
+    m = .immutable ∨ μ = .mutable ∨ m = μ ∨ ∃ r, μ = .region r true := by
   induction h with
   | bot => exact .inl rfl
   | top => exact .inr (.inl rfl)
-  | refl => exact .inr (.inr rfl)
+  | regionMut r => exact .inr (.inr (.inr ⟨r, rfl⟩))
+  | refl => exact .inr (.inr (.inl rfl))
   | assume h => simp [Assume.none] at h
   | trans _ _ ih₁ ih₂ =>
-    rcases ih₁ with h₁ | h₁ | h₁
+    rcases ih₁ with h₁ | h₁ | h₁ | ⟨r, h₁⟩
     · exact .inl h₁
     · subst h₁
-      rcases ih₂ with h₂ | h₂ | h₂
+      rcases ih₂ with h₂ | h₂ | h₂ | h₂
       · cases h₂
       · exact .inr (.inl h₂)
       · subst h₂; exact .inr (.inl rfl)
+      · exact .inr (.inr (.inr h₂))
     · subst h₁; exact ih₂
+    · subst h₁
+      rcases ih₂ with h₂ | h₂ | h₂ | h₂
+      · cases h₂
+      · exact .inr (.inl h₂)
+      · subst h₂; exact .inr (.inr (.inr ⟨r, rfl⟩))
+      · exact .inr (.inr (.inr h₂))
 
 theorem Le.none_immutable {m : Mu} (h : Le .none m .immutable) : m = .immutable := by
-  rcases h.none_inv with h | h | h
+  rcases h.none_inv with h | h | h | ⟨_, h⟩
   · exact h
   · cases h
   · exact h
+  · cases h
 
 /-- Something at most `m` is at most anything above `m`. -/
 theorem AtMost.mono {Δ : Assume} {m μ : Mu} {t : Ty} (h : AtMost Δ m t) (hle : Le Δ m μ) : AtMost Δ μ t := by
@@ -271,6 +293,7 @@ theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' �
   induction h with
   | bot => exact .bot _
   | top => exact .top _
+  | regionMut r => exact .regionMut r
   | refl => exact .refl _
   | assume h => exact hs.1 _ h
   | trans _ _ ih₁ ih₂ => exact ih₁.trans ih₂
@@ -300,7 +323,7 @@ theorem Mu.subst_subst (ms ms' : List Mu) (m : Mu) :
   | param i =>
     simp only [Mu.subst, List.getElem?_map]
     cases ms'[i]? <;> rfl
-  | region _ => rfl
+  | region _ _ => rfl
 
 theorem Ty.getD_inst (ms : List Mu) (τs τs' : List Ty) (i : Nat) :
     (τs'[i]?.getD .unit).inst ms τs = (τs'.map (Ty.inst ms τs))[i]?.getD .unit := by

@@ -58,9 +58,10 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   function can read what it's given but not change it.
 - **Regions** (#209): `new true e` can make a cell of a region `r` instead
   of a `mut` one. What it holds is at most `r`: `imm`, or of the same
-  region, so that it's `imm` all the way down once `r` is freed. A closure
-  captures nothing whose type mentions a region, and a call's arguments
-  mention none.
+  region, so that it's `imm` all the way down once `r` is freed. A region
+  can be marked as holding `mut` objects too (`mut ⊑ r`, #286): then it
+  becomes `mut` when it's freed. A closure captures nothing whose type
+  mentions a region, and a call's arguments mention none.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -88,13 +89,13 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
-| `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
-| `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
+| `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut`. A region that holds `mut` objects is as high as `mut` |
+| `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut` or a region that holds `mut` objects, finds every `m ⊑ μ` within as many steps as there are assumptions |
 | `HeapOk.free` | `Regions.lean` | a `mut` location that nothing in the heap refers to, and that holds what's `imm` all the way down, can be made `imm` without a copy: the heap is still well-typed with it `imm`. That's when a region is freed (#209) |
 | `freed_never_changes` | `Regions.lean` | after that, a program that's well-typed with the location `imm` never changes it |
 | `HeapOk.free_all` | `Regions.lean` | freeing a region everywhere at once keeps the heap well-typed: what refers to its objects gets the freed type too |
-| `block_frees` | `Regions.lean` | a block whose region the heap typing didn't mention before can freeze its region when it ends, without a copy: its value has the type with the region `imm`, and what comes after it, typed before it, is well-typed. What's from before can't hold the region's objects, so the regions page's `leak` is rejected |
-| `block_never_changes` | `Regions.lean` | after the block, the region's objects never change |
+| `block_frees` | `Regions.lean` | a block whose region the heap typing didn't mention before can freeze its region when it ends, without a copy: its value has the type with the region `imm`, or `mut` if the region holds `mut` objects, and what comes after it, typed before it, is well-typed. What's from before can't hold the region's objects, so the regions page's `leak` is rejected |
+| `block_never_changes` | `Regions.lean` | after the block, the objects of a region that became `imm` never change |
 | `AtMost.free`, `AtMost.region_free` | `Regions.lean` | freeing a region, giving it a mutability everywhere, keeps "at most"; and what a region holds is `imm` all the way down once the region is freed to `imm` |
 | `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v`; the checker's check, that each argument is at most the struct's mutability, is neither enough nor needed |
 

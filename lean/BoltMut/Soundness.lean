@@ -17,7 +17,7 @@ down. -/
 def HeapOk (fns : List Fn) (σ : HeapTy) (h : Heap) : Prop :=
   h.length = σ.length ∧
     ∀ (l : Nat) (m : Mu) (t : Ty), σ[l]? = some (m, t) →
-      (m = .mutable ∨ m = .immutable ∨ ∃ r, m = .region r) ∧ AtMost .none m t ∧
+      (m = .mutable ∨ m = .immutable ∨ ∃ r b, m = .region r b) ∧ AtMost .none m t ∧
         ∃ v, h[l]? = some v ∧ v.IsValue ∧ HasType fns σ .none false Ctx.empty v t
 
 theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {l : Nat} {p : Mu × Ty}
@@ -28,7 +28,7 @@ theorem HeapOk.lt {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h
 /-- Adding a location that holds a value of its type keeps the heap
 matching its typing. -/
 theorem HeapOk.alloc {fns : List Fn} {σ : HeapTy} {h : Heap} (hh : HeapOk fns σ h) {m : Mu} {s : Ty} {v : Expr}
-    (hm : m = .mutable ∨ m = .immutable ∨ ∃ r, m = .region r) (hd : AtMost .none m s)
+    (hm : m = .mutable ∨ m = .immutable ∨ ∃ r b, m = .region r b) (hd : AtMost .none m s)
     (hv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v s) :
     HeapOk fns (σ ++ [(m, s)]) (h ++ [v]) := by
   refine ⟨by simp [hh.1], ?_⟩
@@ -161,8 +161,8 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
       refine ⟨σ ++ [(muOf b, s)], Extends.append σ _, hh.alloc ((muOf_cases b).imp_right .inl) hd hv he,
         .loc ?_ (fun h => nomatch h)⟩
       rw [hh.1, List.getElem?_concat_length]
-    | @newR _ _ _ s r he hd =>
-      refine ⟨σ ++ [(.region r, s)], Extends.append σ _, hh.alloc (.inr (.inr ⟨r, rfl⟩)) hd hv he,
+    | @newR _ _ _ s r b he hd =>
+      refine ⟨σ ++ [(.region r b, s)], Extends.append σ _, hh.alloc (.inr (.inr ⟨r, b, rfl⟩)) hd hv he,
         .loc ?_ (fun h => nomatch h)⟩
       rw [hh.1, List.getElem?_concat_length]
   | getCong _ ih =>
