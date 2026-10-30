@@ -95,22 +95,20 @@ let b: String = ZERO;
 ================================================================================
 An associated type
 :todo wasm
-:test-prelude
 ================================================================================
-class Index[C] {
+class Get[C] {
   type Item;
-  fn at(c: C, i: i32) -> Item;
+  fn get(c: C) -> Item;
 }
-struct Stack[T] { items: [T] }
-impl[T] Index[Stack[T]] {
+struct Box[T] { item: T }
+impl[T] Get[Box[T]] {
   type Item = T;
-  fn at(s, i) = s.items[i];
+  fn get(b) = b.item;
 }
-fn first[C](c: C) -> C.Item where Index[C] = at(c, 0);
-let s = Stack { items: [True, False] };
-(at(s, 1), first(s));
+fn first[C](c: C) -> C.Item where Get[C] = get(c);
+(get(Box { item: True }), first(Box { item: 1 }));
 --------------------------------------------------------------------------------
-(False, True)
+(True, 1)
 
 ================================================================================
 Looping over a type with its own iterator
@@ -118,30 +116,28 @@ Looping over a type with its own iterator
 :test-prelude
 ================================================================================
 struct Countdown { from: i32 }
-struct CountdownIter { left: [i32] }
+struct CountdownIter { left: i32 }
 impl Iterator[mut CountdownIter] {
   type Item = i32;
-  fn next(it) = if it.left[0] > 0 {
-    it.left[0] -= 1;
-    Some(it.left[0] + 1)
+  fn next(it) = if it.left > 0 {
+    it.left -= 1;
+    Some(it.left + 1)
   } else {
     None
   };
 }
 impl Iterable[Countdown] {
   type Iter = mut CountdownIter;
-  fn iter(c) = mut CountdownIter { left: mut [c.from] };
+  fn iter(c) = mut CountdownIter { left: c.from };
 }
-let mut seen = mut [0, 0, 0];
-let mut i = 0;
 let countdown = Countdown { from: 3 };
+let mut digits = 0;
 for n in countdown {
-  seen[i] = n;
-  i += 1;
+  digits = digits * 10 + n;
 }
-seen;
+digits;
 --------------------------------------------------------------------------------
-[3, 2, 1]
+321
 
 ================================================================================
 Looping over an iterator made from a function
