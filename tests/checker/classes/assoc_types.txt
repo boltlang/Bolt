@@ -374,3 +374,18 @@ first(Bag { n: 1 }): Option[i32]
 let y: Option[Bool]
 --------------------------------------------------------------------------------
 error at `first(Bag { n: 1 })`: expected Option[Bool], found Option[i32]
+
+================================================================================
+A default of an associated type must meet its bound (#294)
+:todo
+:error
+================================================================================
+class Iter2[I] { type Item; fn next2(it: I) -> Item; }
+struct Ints { n: i32 }
+impl Iter2[Ints] { type Item = i32; fn next2(it) = it.n; }
+class Bad[C] { type It: Iter2 = Bool; }
+class Good[C] { type It: Iter2 = Ints; }
+--------------------------------------------------------------------------------
+Iter2[Ints].next2: fn(Ints) -> i32
+--------------------------------------------------------------------------------
+error at `Bool`: no instance Iter2[Bool]
