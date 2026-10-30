@@ -77,6 +77,10 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
       Step fns h e h' e' → Step fns h (.freeze r t e) h' (.freeze r t e')
   | freezeVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
       v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze r t v) h' v'
+  | keepCong {h h' : Heap} {r : Nat} {t : Ty} {e e' : Expr} :
+      Step fns h e h' e' → Step fns h (.keep r t e) h' (.keep r t e')
+  | keepVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
+      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.keep r t v) h' v
 
 /-- Any number of steps. -/
 inductive Steps (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where

@@ -271,6 +271,8 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     rw [he]
     simp
     omega
+  | keepCong _ _ => intro σ t n A hh ht; cases ht
+  | keepVal _ _ => intro σ t n A hh ht; cases ht
 
 /-- However many steps a clean program takes, the locations that are old
 and not allowed keep their values. -/

@@ -5,8 +5,12 @@ import BoltMut.Elision
 
 `freeze_in_place_changes_nothing` leaves out one freeze's copy. Here, all
 of them: the program that freezes in place is the same program with every
-freeze erased (`Expr.erase`, `Fn.erase`), so that it copies nothing. It
-computes what the program that copies does (`freezes_in_place_change_nothing`).
+freeze erased into `keep` (`Expr.erase`, `Fn.erase`), which makes the same
+copy but goes on with the value itself. It computes what the program that
+copies does (`freezes_in_place_change_nothing`). Making the copy anyway
+keeps both heaps as long, so that blocks that start later get the same
+regions in both; that the copy, which nothing uses, needn't be made is
+the usual fact that garbage can't be noticed, which isn't proven here.
 
 The premise is that when a block ends, nothing that's still to run can
 reach its region's objects: what's around a freeze has only locations
@@ -25,8 +29,8 @@ namespace BoltMut
 
 /-! ## Erasing freezes -/
 
-/-- `e` with every freeze copying nothing: its type is `()`, which mentions
-no region. -/
+/-- `e` with every freeze in place: it makes the same copy, but goes on
+with the value itself. -/
 def Expr.erase : Expr → Expr
   | .var x => .var x
   | .unit => .unit
@@ -42,7 +46,8 @@ def Expr.erase : Expr → Expr
   | .pair a b => .pair a.erase b.erase
   | .fst e => .fst e.erase
   | .snd e => .snd e.erase
-  | .freeze r _ e => .freeze r .unit e.erase
+  | .freeze r t e => .keep r t e.erase
+  | .keep r t e => .keep r t e.erase
 
 /-- A function whose freezes copy nothing. -/
 def Fn.erase (fn : Fn) : Fn := { fn with body := fn.body.erase }
@@ -51,7 +56,7 @@ theorem Expr.erase_subst (e : Expr) (x : Nat) (v : Expr) : (e.subst x v).erase =
   induction e with
   | var y => simp only [Expr.subst, Expr.erase]; split <;> simp [Expr.erase]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih =>
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih =>
     simp only [Expr.subst, Expr.erase, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.erase, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
@@ -68,7 +73,7 @@ theorem Expr.erase_inst (e : Expr) (ms : List Mu) (τs : List Ty) : (e.inst ms �
     simp only [Expr.inst, Expr.erase, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.erase, ih₁, ih₂]
-  | freeze _ _ _ ih => simp only [Expr.inst, Expr.erase, ih, Ty.inst]
+  | freeze _ _ _ ih | keep _ _ _ ih => simp only [Expr.inst, Expr.erase, ih]
 
 theorem Expr.IsValue.erase {v : Expr} (hv : v.IsValue) : v.erase.IsValue := by
   induction hv with
@@ -81,7 +86,7 @@ theorem Expr.IsValue.erase {v : Expr} (hv : v.IsValue) : v.erase.IsValue := by
 theorem Expr.hasLoc_erase (e : Expr) (l : Nat) : e.erase.HasLoc l ↔ e.HasLoc l := by
   induction e with
   | var | unit | int | loc => simp [Expr.erase, Expr.HasLoc]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih =>
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih =>
     simp only [Expr.erase, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.erase, Expr.HasLoc, ih₁, ih₂]
@@ -90,7 +95,7 @@ theorem Expr.NoLocs.erase {e : Expr} (h : e.NoLocs) : e.erase.NoLocs := by
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
 /-- A relation of expressions that only needs the locations of the first
@@ -109,6 +114,7 @@ theorem Rel.mono_on {ρ ρ' : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel 
   | fst _ ih => exact .fst (ih hρ)
   | snd _ ih => exact .snd (ih hρ)
   | freeze _ ih => exact .freeze (ih hρ)
+  | keep _ ih => exact .keep (ih hρ)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
   | app _ _ ih₁ ih₂ => exact .app (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
@@ -121,7 +127,7 @@ def Expr.Freezes (r : Nat) : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => False
   | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e => e.Freezes r
   | .set a b | .letE _ a b | .app a b | .pair a b => a.Freezes r ∨ b.Freezes r
-  | .freeze r' _ e => r' = r ∨ e.Freezes r
+  | .freeze r' _ e | .keep r' _ e => r' = r ∨ e.Freezes r
 
 /-- `b`'s locations have types that don't mention a region that `a`
 freezes. -/
@@ -134,7 +140,7 @@ rest's locations mention. -/
 def Expr.Sep (σ : HeapTy) : Expr → Prop
   | .set a b | .app a b | .pair a b => Expr.Disj σ a b ∧ Expr.Disj σ b a ∧ a.Sep σ ∧ b.Sep σ
   | .letE _ a b => Expr.Disj σ a b ∧ a.Sep σ ∧ b.Sep σ
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e => e.Sep σ
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e => e.Sep σ
   | _ => True
 
 /-! ## A copy against the value it was made from -/
@@ -282,6 +288,112 @@ theorem Copy.mapRel {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns
           obtain rfl := Option.some.inj e
           exact c₁ o c c₂' h₁o hom hoc₂
 
+/-- The two programs' copies have copied the objects that correspond, of
+those that only one corresponds to. -/
+def MemoRelE (M : Nat → Prop) (ρ : Nat → Nat → Prop) (m₁ m₂ : List (Nat × Nat)) : Prop :=
+  (∀ l₁ l₂, ρ l₁ l₂ → M l₁ → (m₁.lookup l₁ = none ↔ m₂.lookup l₂ = none)) ∧
+  (∀ l₂ c₂, m₂.lookup l₂ = some c₂ → ∃ l₁ c₁, ρ l₁ l₂ ∧ M l₁ ∧ m₁.lookup l₁ = some c₁)
+
+/-- **The other program makes the same copy.** It copies the objects that
+correspond to those the first copies, so it adds as many to its heap: the
+heaps stay as long, and the blocks that start later get the same regions.
+It goes on with the value itself, so its copy isn't used. -/
+theorem Copy.simE {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ h₀)
+    {r : Nat} {t : Ty} {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v₁' : Expr}
+    (hcp : Copy r t h₁ m₁ v₁ h₁' m₁' v₁') :
+    (∃ ext, h₁ = h₀ ++ ext) → ∀ {io : Bool} {Γ : Ctx}, HasType fns σ .none io Γ v₁ t → t.Freezable r →
+    ∀ {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂₀ h₂ : Heap} {m₂ : List (Nat × Nat)} {v₂ : Expr},
+      (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) →
+      (∀ a c, ρ a c → ∃ u₁ u₂, (h₀.map Expr.erase)[a]? = some u₁ ∧ h₂₀[c]? = some u₂ ∧ Rel ρ u₁ u₂) →
+      (∀ a b c, ρ a c → ρ b c → M a → a = b) → (∀ a c d, ρ a c → ρ a d → M a → c = d) →
+      (∃ ext, h₂ = h₂₀ ++ ext) → Rel ρ v₁.erase v₂ → MemoRelE M ρ m₁ m₂ →
+      ∃ h₂' m₂' v₂', Copy r t h₂ m₂ v₂ h₂' m₂' v₂' ∧ h₂'.length + h₁.length = h₁'.length + h₂.length ∧
+        MemoRelE M ρ m₁' m₂' := by
+  induction hcp with
+  | keep hm =>
+    intro _ io Γ _ _ M ρ h₂₀ h₂ m₂ v₂ _ _ _ _ _ _ hmr
+    exact ⟨h₂, m₂, v₂, .keep hm, by omega, hmr⟩
+  | @seen μ s h m l c hmen hlk =>
+    intro _ io Γ ht hf M ρ h₂₀ h₂ m₂ v₂ hM _ _ _ _ hr hmr
+    cases ht with
+    | loc hσ _ =>
+      have hreg := hf.cell_region hmen
+      subst hreg
+      simp only [Expr.erase] at hr
+      cases hr with
+      | @loc _ l₂ hlc =>
+        have hn : m₂.lookup l₂ ≠ none := fun h =>
+          absurd ((hmr.1 l l₂ hlc (hM l _ _ hσ (by simp))).mpr h) (by rw [hlk]; simp)
+        obtain ⟨c₂, hc₂⟩ := Option.ne_none_iff_exists'.mp hn
+        exact ⟨h₂, m₂, _, .seen hmen hc₂, by omega, hmr⟩
+  | @cell μ s h h' m m' l w w' hmen hnone hw hcw ih =>
+    intro hpre io Γ ht hf M ρ h₂₀ h₂ m₂ v₂ hM hcor hinj hfun hpre₂ hr hmr
+    cases ht with
+    | loc hσ _ =>
+      have hreg := hf.cell_region hmen
+      subst hreg
+      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l _ s hσ
+      have hl₀ : l < h₀.length := hh.lt hσ
+      have hw' : w₀ = w := by
+        obtain ⟨ext, rfl⟩ := hpre
+        rw [List.getElem?_append_left hl₀, hw₀] at hw
+        exact Option.some.inj hw
+      subst hw'
+      have hMl : M l := hM l _ _ hσ (by simp)
+      simp only [Expr.erase] at hr
+      cases hr with
+      | @loc _ l₂ hlc =>
+        have hnone₂ : m₂.lookup l₂ = none := (hmr.1 l l₂ hlc hMl).mp hnone
+        obtain ⟨u₁, u₂, hu₁, hu₂, hru⟩ := hcor l l₂ hlc
+        rw [List.getElem?_map, hw₀] at hu₁
+        cases hu₁
+        have hu₂' : h₂[l₂]? = some u₂ := by
+          obtain ⟨e, rfl⟩ := hpre₂
+          rw [List.getElem?_append_left (List.getElem?_eq_some_iff.mp hu₂).1, hu₂]
+        obtain ⟨h₂c, m₂c, u₂', hc₂, hlen, hmr'⟩ := ih hpre hwt hf.2 hM hcor hinj hfun hpre₂ hru hmr
+        refine ⟨h₂c ++ [u₂'], (l₂, h₂c.length) :: m₂c, .loc h₂c.length, .cell hmen hnone₂ hu₂' hc₂,
+          by simp; omega, ⟨?_, ?_⟩⟩
+        · intro k₁ k₂ hk hMk
+          rw [List.lookup_cons_nat, List.lookup_cons_nat]
+          by_cases hkl : k₁ = l
+          · subst hkl
+            have : k₂ = l₂ := hfun k₁ k₂ l₂ hk hlc hMk
+            subst this
+            simp
+          · have hk₂ : k₂ ≠ l₂ := fun he => hkl (hinj k₁ l k₂ hk (he ▸ hlc) hMk)
+            simp only [hkl, hk₂, ite_false]
+            exact hmr'.1 k₁ k₂ hk hMk
+        · intro k₂ c₂ hk
+          rw [List.lookup_cons_nat] at hk
+          split at hk
+          · rename_i he
+            subst he
+            exact ⟨l, h'.length, hlc, hMl, by simp⟩
+          · rename_i hne
+            obtain ⟨k₁, c₁, hk₁, hMk, hl₁⟩ := hmr'.2 k₂ c₂ hk
+            have hkl : k₁ ≠ l := by
+              rintro rfl
+              exact hne (hfun k₁ k₂ l₂ hk₁ hlc hMk)
+            exact ⟨k₁, c₁, hk₁, hMk, by simp [List.lookup_cons_nat, hkl, hl₁]⟩
+  | @pair a b h h₁ h₂ m m₁ m₂ _ _ _ _ hm hc₁ hc₂ ih₁ ih₂ =>
+    intro hpre io Γ ht hf M ρ h₂₀ k₂ mm₂ e₂ hM hcor hinj hfun hpre₂ hr hmr
+    cases ht with
+    | pair ht₁ ht₂ =>
+      simp only [Expr.erase] at hr
+      cases hr with
+      | pair hr₁ hr₂ =>
+        have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
+          obtain ⟨e₁, rfl⟩ := hpre
+          obtain ⟨e₂, rfl⟩ := hc₁.prefix
+          exact ⟨e₁ ++ e₂, by simp⟩
+        obtain ⟨k₂₁, n₂₁, u₁, hk₁, hlen₁, hmr₁⟩ := ih₁ hpre ht₁ hf.1 hM hcor hinj hfun hpre₂ hr₁ hmr
+        have hpre₂₁ : ∃ ext, k₂₁ = h₂₀ ++ ext := by
+          obtain ⟨e₁, rfl⟩ := hpre₂
+          obtain ⟨e₂, rfl⟩ := hk₁.prefix
+          exact ⟨e₁ ++ e₂, by simp⟩
+        obtain ⟨k₂₂, n₂₂, u₂, hk₂, hlen₂, hmr₂⟩ := ih₂ hpre₁ ht₂ hf.2 hM hcor hinj hfun hpre₂₁ hr₂ hmr₁
+        exact ⟨k₂₂, n₂₂, _, .pair hm hk₁ hk₂, by omega, hmr₂⟩
+
 /-! ## One step -/
 
 /-- The context's locations, with those of `b`, don't mention what `a`
@@ -304,41 +416,43 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ (h₁.map Expr.erase) h₂ →
       Rel ρ e₁.erase e₂ → e₁.Sep σ →
       (∀ l, K l → ∀ r, e₁.Freezes r → ∃ m t', σ[l]? = some (m, t') ∧ (Ty.cell m t').mentions r = false) →
+      h₂.length = h₁.length →
       ∃ ρ' h₂' e₂', Step (fns.map Fn.erase) h₂ e₂ h₂' e₂' ∧ (∀ a c, ρ a c → K a → ρ' a c) ∧
-        Corr (fun a => M a ∨ h₁.length ≤ a) ρ' (h₁'.map Expr.erase) h₂' ∧ Rel ρ' e₁'.erase e₂' := by
+        Corr (fun a => M a ∨ h₁.length ≤ a) ρ' (h₁'.map Expr.erase) h₂' ∧ Rel ρ' e₁'.erase e₂' ∧
+        h₂'.length = h₁'.length := by
   induction hs with
   | newCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | newP _ hi _ => simp [Assume.none] at hi
     | new he _ | newR he _ =>
       cases hr with
       | new hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr hsep hK
-        exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hsep hK hlen
+        exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr', hl'⟩
   | @newVal e b hv =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | @new _ _ e' hr =>
       have hc' := hc.alloc hr
       simp only [List.length_map] at hc'
       refine ⟨fun a c => ρ a c ∨ (a = h₁.length ∧ c = h₂.length), h₂ ++ [e'], .loc h₂.length,
-        .newVal (hr.isValue hv.erase), fun a c h _ => Or.inl h, ?_, .loc (Or.inr ⟨rfl, rfl⟩)⟩
+        .newVal (hr.isValue hv.erase), fun a c h _ => Or.inl h, ?_, .loc (Or.inr ⟨rfl, rfl⟩), by simp [hlen]⟩
       simp only [List.map_append, List.map_cons, List.map_nil]
       exact hc'
   | getCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | get he =>
       cases hr with
       | get hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr hsep hK
-        exact ⟨ρ', h₂', _, .getCong s₂, hρ, hc', .get hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hsep hK hlen
+        exact ⟨ρ', h₂', _, .getCong s₂, hρ, hc', .get hr', hl'⟩
   | @getLoc l v hl =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | get hr =>
@@ -347,33 +461,33 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
         obtain ⟨v₁, v₂, h₁v, h₂v, hrel⟩ := hc.heap _ _ hρ
         rw [List.getElem?_map, hl] at h₁v
         cases h₁v
-        exact ⟨ρ, h₂, v₂, .getLoc h₂v, fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), hrel⟩
+        exact ⟨ρ, h₂, v₂, .getLoc h₂v, fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), hrel, hlen⟩
   | setCong₁ _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
       cases hr with
       | set hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁ hsep.2.2.1
-          (hsep.1.ctx hK fun r h => Or.inl h)
-        refine ⟨ρ', h₂', _, .setCong₁ s₂, fun a c h hk => hρ a c h (.inl hk), hc', .set hr' ?_⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hsep.2.2.1
+          (hsep.1.ctx hK fun r h => Or.inl h) hlen
+        refine ⟨ρ', h₂', _, .setCong₁ s₂, fun a c h hk => hρ a c h (.inl hk), hc', .set hr' ?_, hl'⟩
         exact hr₂.mono_on fun a c ha h => hρ a c h (.inr ((Expr.hasLoc_erase _ a).mp ha))
   | setCong₂ hv _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set _ he₂ | setR _ he₂ =>
       cases hr with
       | set hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂ hsep.2.2.2
-          (hsep.2.1.ctx hK fun r h => Or.inr h)
-        refine ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv.erase) s₂, fun a c h hk => hρ a c h (.inl hk), hc', .set ?_ hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hsep.2.2.2
+          (hsep.2.1.ctx hK fun r h => Or.inr h) hlen
+        refine ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv.erase) s₂, fun a c h hk => hρ a c h (.inl hk), hc', .set ?_ hr', hl'⟩
         exact hr₁.mono_on fun c d hc h => hρ c d h (.inr ((Expr.hasLoc_erase _ c).mp hc))
   | @setLoc l₀ v hl hv =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
@@ -387,7 +501,8 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
           | @loc _ c hρ =>
             have hc₂ : c < h₂.length := hc.lt₂ hρ
             have hl' : l₀ < (h₁.map Expr.erase).length := by simpa using hl
-            refine ⟨ρ, h₂.set c v', .unit, .setLoc hc₂ (hr₂.isValue hv.erase), fun _ _ h _ => h, ?_, .unit⟩
+            refine ⟨ρ, h₂.set c v', .unit, .setLoc hc₂ (hr₂.isValue hv.erase), fun _ _ h _ => h, ?_, .unit,
+              by simp [hlen]⟩
             have key : Corr M ρ ((h₁.map Expr.erase).set l₀ v.erase) (h₂.set c v') := by
               refine ⟨?_, hc.inj, hc.func⟩
               intro a d had
@@ -408,35 +523,35 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
             rw [List.map_set]
             exact this
   | letCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | letE he₁ _ =>
       cases hr with
       | letE hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁ hsep.2.1
-          (hsep.1.ctx hK fun r h => Or.inl h)
-        refine ⟨ρ', h₂', _, .letCong s₂, fun a c h hk => hρ a c h (.inl hk), hc', .letE hr' ?_⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hsep.2.1
+          (hsep.1.ctx hK fun r h => Or.inl h) hlen
+        refine ⟨ρ', h₂', _, .letCong s₂, fun a c h hk => hρ a c h (.inl hk), hc', .letE hr' ?_, hl'⟩
         exact hr₂.mono_on fun a c ha h => hρ a c h (.inr ((Expr.hasLoc_erase _ a).mp ha))
   | @letVal x v _ hv =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | letE hr₁ hr₂ =>
-      refine ⟨ρ, h₂, _, .letVal (hr₁.isValue hv.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), ?_⟩
+      refine ⟨ρ, h₂, _, .letVal (hr₁.isValue hv.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), ?_, hlen⟩
       rw [Expr.erase_subst]
       exact hr₂.subst hr₁ x
   | callCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | call _ _ he =>
       cases hr with
       | call hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr hsep hK
-        exact ⟨ρ', h₂', _, .callCong s₂, hρ, hc', .call hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hsep hK hlen
+        exact ⟨ρ', h₂', _, .callCong s₂, hρ, hc', .call hr', hl'⟩
   | @callVal f fn ms τs v hfn hv =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | call hr =>
@@ -445,115 +560,118 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
       have hb := (((hf fn (List.mem_of_getElem? hfn)).1).erase).inst ms τs
       have hbody : Rel ρ (fn.body.erase.inst ms τs) (fn.body.erase.inst ms τs) :=
         Rel.refl fun l hl => (hb.not_hasLoc l hl).elim
-      refine ⟨ρ, h₂, _, .callVal hfn' (hr.isValue hv.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), ?_⟩
+      refine ⟨ρ, h₂, _, .callVal hfn' (hr.isValue hv.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), ?_, hlen⟩
       rw [Expr.erase_subst, Expr.erase_inst]
       exact hbody.subst hr fn.param
   | appCong₁ _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | app he₁ _ =>
       cases hr with
       | app hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁ hsep.2.2.1
-          (hsep.1.ctx hK fun r h => Or.inl h)
-        refine ⟨ρ', h₂', _, .appCong₁ s₂, fun a c h hk => hρ a c h (.inl hk), hc', .app hr' ?_⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hsep.2.2.1
+          (hsep.1.ctx hK fun r h => Or.inl h) hlen
+        refine ⟨ρ', h₂', _, .appCong₁ s₂, fun a c h hk => hρ a c h (.inl hk), hc', .app hr' ?_, hl'⟩
         exact hr₂.mono_on fun a c ha h => hρ a c h (.inr ((Expr.hasLoc_erase _ a).mp ha))
   | appCong₂ hv _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | app _ he₂ =>
       cases hr with
       | app hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂ hsep.2.2.2
-          (hsep.2.1.ctx hK fun r h => Or.inr h)
-        refine ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv.erase) s₂, fun a c h hk => hρ a c h (.inl hk), hc', .app ?_ hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hsep.2.2.2
+          (hsep.2.1.ctx hK fun r h => Or.inr h) hlen
+        refine ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv.erase) s₂, fun a c h hk => hρ a c h (.inl hk), hc', .app ?_ hr', hl'⟩
         exact hr₁.mono_on fun c d hc h => hρ c d h (.inr ((Expr.hasLoc_erase _ c).mp hc))
   | @appVal b x body v hv =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | app hr₁ hr₂ =>
       cases hr₁ with
       | lam hbody =>
-        refine ⟨ρ, h₂, _, .appVal (hr₂.isValue hv.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), ?_⟩
+        refine ⟨ρ, h₂, _, .appVal (hr₂.isValue hv.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), ?_, hlen⟩
         rw [Expr.erase_subst]
         exact hbody.subst hr₂ x
   | pairCong₁ _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | pair he₁ _ =>
       cases hr with
       | pair hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁ hsep.2.2.1
-          (hsep.1.ctx hK fun r h => Or.inl h)
-        refine ⟨ρ', h₂', _, .pairCong₁ s₂, fun a c h hk => hρ a c h (.inl hk), hc', .pair hr' ?_⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hsep.2.2.1
+          (hsep.1.ctx hK fun r h => Or.inl h) hlen
+        refine ⟨ρ', h₂', _, .pairCong₁ s₂, fun a c h hk => hρ a c h (.inl hk), hc', .pair hr' ?_, hl'⟩
         exact hr₂.mono_on fun a c ha h => hρ a c h (.inr ((Expr.hasLoc_erase _ a).mp ha))
   | pairCong₂ hv _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | pair _ he₂ =>
       cases hr with
       | pair hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂ hsep.2.2.2
-          (hsep.2.1.ctx hK fun r h => Or.inr h)
-        refine ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv.erase) s₂, fun a c h hk => hρ a c h (.inl hk), hc', .pair ?_ hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hsep.2.2.2
+          (hsep.2.1.ctx hK fun r h => Or.inr h) hlen
+        refine ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv.erase) s₂, fun a c h hk => hρ a c h (.inl hk), hc', .pair ?_ hr', hl'⟩
         exact hr₁.mono_on fun c d hc h => hρ c d h (.inr ((Expr.hasLoc_erase _ c).mp hc))
   | fstCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | fst he =>
       cases hr with
       | fst hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr hsep hK
-        exact ⟨ρ', h₂', _, .fstCong s₂, hρ, hc', .fst hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hsep hK hlen
+        exact ⟨ρ', h₂', _, .fstCong s₂, hρ, hc', .fst hr', hl'⟩
   | sndCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | snd he =>
       cases hr with
       | snd hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr hsep hK
-        exact ⟨ρ', h₂', _, .sndCong s₂, hρ, hc', .snd hr'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hsep hK hlen
+        exact ⟨ρ', h₂', _, .sndCong s₂, hρ, hc', .snd hr', hl'⟩
   | fstVal hv₁ hv₂ =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | fst hr =>
       cases hr with
       | pair hr₁ hr₂ =>
-        exact ⟨ρ, h₂, _, .fstVal (hr₁.isValue hv₁.erase) (hr₂.isValue hv₂.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), hr₁⟩
+        exact ⟨ρ, h₂, _, .fstVal (hr₁.isValue hv₁.erase) (hr₂.isValue hv₂.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), hr₁, hlen⟩
   | sndVal hv₁ hv₂ =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr _ _ hlen
     simp only [Expr.erase] at hr
     cases hr with
     | snd hr =>
       cases hr with
       | pair hr₁ hr₂ =>
-        exact ⟨ρ, h₂, _, .sndVal (hr₁.isValue hv₁.erase) (hr₂.isValue hv₂.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), hr₂⟩
+        exact ⟨ρ, h₂, _, .sndVal (hr₁.isValue hv₁.erase) (hr₂.isValue hv₂.erase), fun _ _ h _ => h, (by simpa only [List.length_map] using hc.widen), hr₂, hlen⟩
   | freezeCong _ ih =>
-    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK
+    intro σ t M ρ K h₂ e₂ hh ht hM hc hr hsep hK hlen
     simp only [Expr.erase] at hr
     cases ht with
     | freeze he _ _ =>
       cases hr with
-      | freeze hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr hsep
-          (fun l hl r' hr' => hK l hl r' (.inr hr'))
-        exact ⟨ρ', h₂', _, .freezeCong s₂, hρ, hc', .freeze hr'⟩
+      | keep hr =>
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hsep
+          (fun l hl r' hr' => hK l hl r' (.inr hr')) hlen
+        exact ⟨ρ', h₂', _, .keepCong s₂, hρ, hc', .keep hr', hl'⟩
   | @freezeVal h₁' r t m v v' hv hcp =>
-    intro σ T M ρ K h₂ e₂ hh ht hM hc hr _ hK
+    intro σ T M ρ K h₂ e₂ hh ht hM hc hr _ hK hlen
     cases ht with
     | freeze he hf _ =>
       simp only [Expr.erase] at hr
       cases hr with
-      | @freeze _ _ _ v₂ hr =>
+      | @keep _ _ _ v₂ hr =>
         obtain ⟨σ', hx, hh', hv', ht', _, _⟩ := hcp.typed hh hv he hf (MemoOk.nil σ r)
+        -- The other program makes the same copy, but goes on with `v₂`.
+        obtain ⟨h₂', m₂, v₂', hc₂, hlen₂, _⟩ := hcp.simE hh ⟨[], by simp⟩ he hf (h₂₀ := h₂) (h₂ := h₂) (m₂ := [])
+          hM hc.heap hc.inj hc.func ⟨[], by simp⟩ hr ⟨fun _ _ _ _ => by simp, fun _ _ h => by simp at h⟩
         obtain ⟨hπ, _⟩ := hcp.map hh ⟨[], by simp⟩ he hf (fun _ _ h => by simp at h)
         obtain ⟨_, hinj⟩ := hcp.memo_inj (fun _ _ h => by simp at h) (fun _ _ _ h => by simp at h)
         -- What can still be reached: from the context, or from the copy.
@@ -585,8 +703,10 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
         obtain ⟨hrv, hcon⟩ := hcp.mapRel hh ⟨[], by simp⟩ he hf (fun _ _ h => by simp at h) ρ ρ' h₂ v₂ h₁'
           ⟨[], by simp⟩ hc.heap hr (fun o c c₂ hoc hoc₂ => .inr ⟨o, hoc, hoc₂⟩)
           (fun a c₂ hac _ ⟨l, hl, hrl⟩ => .inl ⟨hac, l, .inr hl, hrl⟩)
-        refine ⟨ρ', h₂, v₂, .freezeVal (hr.isValue hv.erase) (.keep rfl),
-          fun a c hac hKa => .inl ⟨hac, a, .inl hKa, .refl⟩, ⟨?_, ?_, ?_⟩, hrv⟩
+        -- The other program's copy only adds to its heap.
+        have hk₂ : ∀ c, c < h₂.length → h₂'[c]? = h₂[c]? := fun c hc' => hc₂.keeps hc'
+        refine ⟨ρ', h₂', v₂, .keepVal (hr.isValue hv.erase) hc₂,
+          fun a c hac hKa => .inl ⟨hac, a, .inl hKa, .refl⟩, ⟨?_, ?_, ?_⟩, hrv, by omega⟩
         · intro a c hac
           rcases hac with ⟨hac, hLa⟩ | ⟨o, hoa, hoc⟩
           · obtain ⟨u₁, u₂, hu₁, hu₂, hru⟩ := hc.heap a c hac
@@ -594,10 +714,10 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
             rw [List.getElem?_map] at hu₁
             obtain ⟨w, hw, rfl⟩ := Option.map_eq_some_iff.mp hu₁
             have hw' : h₁'[a]? = some w := by rw [hcp.keeps ha]; exact hw
-            refine ⟨w.erase, u₂, by rw [List.getElem?_map, hw']; rfl, hu₂, ?_⟩
+            refine ⟨w.erase, u₂, by rw [List.getElem?_map, hw']; rfl, by rw [hk₂ c (hc.lt₂ hac)]; exact hu₂, ?_⟩
             exact hru.mono_on fun l c' hl hlc => .inl ⟨hlc, hlive a w l hLa hw' ((Expr.hasLoc_erase w l).mp hl)⟩
           · obtain ⟨w', w₂, hw', hw₂, hrw⟩ := hcon o a c hoa (by simp) hoc
-            exact ⟨w'.erase, w₂, by rw [List.getElem?_map, hw']; rfl, hw₂, hrw⟩
+            exact ⟨w'.erase, w₂, by rw [List.getElem?_map, hw']; rfl, by rw [hk₂ c (hc.lt₂ hoc)]; exact hw₂, hrw⟩
         · -- A copy is of one original, and no original is live, so only
           -- one location corresponds to each.
           intro a b c hac hbc hMa
@@ -642,6 +762,8 @@ theorem step_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
             subst this
             obtain ⟨_, _, s', hs'⟩ := hπ o a hoa
             exact hc.func o c d hoc hod (hMo o s' hs')
+  | keepCong _ _ => intro σ t M ρ K h₂ e₂ hh ht; cases ht
+  | keepVal _ _ => intro σ t M ρ K h₂ e₂ hh ht; cases ht
 
 /-! ## The whole run -/
 
@@ -655,16 +777,17 @@ theorem steps_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ (h₁.map Expr.erase) h₂ →
       Rel ρ e₁.erase e₂ →
       (∀ σ' h e, Steps fns h₁ e₁ h e → HeapOk fns σ' h → HasType fns σ' .none false Ctx.empty e t → e.Sep σ') →
+      h₂.length = h₁.length →
       ∃ (M' : Nat → Prop) (ρ' : Nat → Nat → Prop) (h₂' : Heap) (e₂' : Expr),
         Steps (fns.map Fn.erase) h₂ e₂ h₂' e₂' ∧ Corr M' ρ' (h₁'.map Expr.erase) h₂' ∧ Rel ρ' e₁'.erase e₂' := by
   induction hs with
   | refl =>
-    intro σ t M ρ h₂ e₂ _ _ _ hc hr _
+    intro σ t M ρ h₂ e₂ _ _ _ hc hr _ _
     exact ⟨M, ρ, h₂, e₂, .refl, hc, hr⟩
   | @step h₀ _ _ _ _ _ s _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hsep
-    obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr'⟩ :=
-      step_elide hf s hh ht hM hc hr (hsep σ _ _ .refl hh ht) (K := fun _ => False) (fun _ h => h.elim)
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr hsep hlen
+    obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr', hl'⟩ :=
+      step_elide hf s hh ht hM hc hr (hsep σ _ _ .refl hh ht) (K := fun _ => False) (fun _ h => h.elim) hlen
     obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
     -- What isn't `imm` after the step wasn't before, or is new.
     have hM' : ∀ a m t', σ'[a]? = some (m, t') → m ≠ .immutable → M a ∨ h₀.length ≤ a := by
@@ -676,7 +799,7 @@ theorem steps_elide {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
         exact .inl (hM a m t' (hp.trans ha) hm)
       · exact .inr (by omega)
     obtain ⟨M'', ρ'', h₂'', e₂'', ss, hc'', hr''⟩ :=
-      ih hh' ht' hM' hc' hr' (fun σ'' h e hs' hh'' ht'' => hsep σ'' h e (.step s hs') hh'' ht'')
+      ih hh' ht' hM' hc' hr' (fun σ'' h e hs' hh'' ht'' => hsep σ'' h e (.step s hs') hh'' ht'') hl'
     exact ⟨M'', ρ'', h₂'', e₂'', .step s₂ ss, hc'', hr''⟩
 
 /-- **Every freeze can be in place.** The program, with its freezes erased
@@ -715,7 +838,7 @@ theorem freezes_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) {σ : H
   have hr : Rel ρ e.erase e.erase :=
     Rel.refl fun l hl => ⟨rfl, by rw [hh.1]; exact ht.hasLoc_lt ((Expr.hasLoc_erase e l).mp hl)⟩
   obtain ⟨_, ρ', h₂, e₂, ss, _, hr'⟩ :=
-    steps_elide hf hs hh ht (fun a m t' h hm => ⟨m, t', h, hm⟩) hc hr hsep
+    steps_elide hf hs hh ht (fun a m t' h hm => ⟨m, t', h, hm⟩) hc hr hsep (by simp)
   refine ⟨ρ', h₂, e₂, ss, hr', fun n hn => ?_⟩
   subst hn
   exact hr'.int_eq

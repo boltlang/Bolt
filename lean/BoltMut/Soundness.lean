@@ -590,6 +590,8 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
       -- only grew.
       obtain ⟨σ', hx, hh', _, ht', _, _, hal⟩ := hc.typed hh hv he hf (MemoOk.nil σ _)
       exact ⟨σ', hx, hh', ht', hal⟩
+  | keepCong _ _ => intro σ t hh ht; cases ht
+  | keepVal _ _ => intro σ t hh ht; cases ht
 
 /-- Preservation: a step keeps the heap matching a typing that only grew,
 and the program's type. -/

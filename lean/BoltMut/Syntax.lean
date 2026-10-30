@@ -86,6 +86,10 @@ inductive Expr where
   /-- The end of a block whose region `r` becomes `imm` (#292): `e`'s value,
   of type `t`, copied, with what's of `r` in new `imm` objects. -/
   | freeze (r : Nat) (t : Ty) (e : Expr)
+  /-- A freeze in place (#292): the same copy as `freeze r t e` makes, but
+  the program goes on with the value itself. Only the program that leaves
+  copies out has it (`Expr.erase`), so it isn't typed. -/
+  | keep (r : Nat) (t : Ty) (e : Expr)
   deriving Repr
 
 /-- The mutability of `new isMut _`. -/
@@ -114,6 +118,7 @@ def Expr.NoLocs : Expr → Prop
   | .fst e => e.NoLocs
   | .snd e => e.NoLocs
   | .freeze _ _ e => e.NoLocs
+  | .keep _ _ e => e.NoLocs
 
 /-- The location `l` is in the expression: what a closure captured is in its
 body. -/
@@ -131,6 +136,7 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .fst e, l => e.HasLoc l
   | .snd e, l => e.HasLoc l
   | .freeze _ _ e, l => e.HasLoc l
+  | .keep _ _ e, l => e.HasLoc l
 
 /-- A mutability that isn't a region. -/
 def Mu.NoRegion : Mu → Prop
@@ -217,6 +223,7 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .fst e => .fst (e.inst ms τs)
   | .snd e => .snd (e.inst ms τs)
   | .freeze r t e => .freeze r (t.inst ms τs) (e.inst ms τs)
+  | .keep r t e => .keep r (t.inst ms τs) (e.inst ms τs)
 
 /-- Replace the variable `x` with the value `v`, which has no variables, so
 nothing can be captured. -/
@@ -236,6 +243,7 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .fst e, x, v => .fst (e.subst x v)
   | .snd e, x, v => .snd (e.subst x v)
   | .freeze r t e, x, v => .freeze r t (e.subst x v)
+  | .keep r t e, x, v => .keep r t (e.subst x v)
 
 /-! ## At most -/
 
@@ -465,7 +473,7 @@ theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lam _ _ _ ih => exact ih h
 
@@ -474,7 +482,7 @@ theorem Expr.NoLocs.not_hasLoc {e : Expr} (h : e.NoLocs) (l : Nat) : ¬ e.HasLoc
   induction e with
   | var | unit | int => exact id
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hl => hl.elim (ih₁ h.1) (ih₂ h.2)
 
@@ -489,7 +497,7 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
