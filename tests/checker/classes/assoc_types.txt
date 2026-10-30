@@ -377,6 +377,7 @@ error at `first(Bag { n: 1 })`: expected Option[Bool], found Option[i32]
 
 ================================================================================
 Defaults of associated types that refer to each other don't loop
+:error
 ================================================================================
 class Pair[C] { type A = B; type B = A; fn left(c: C) -> A; fn right(c: C) -> B; }
 struct Bag { n: i32 }
@@ -390,6 +391,9 @@ Pair[Bag].right: fn(Bag) -> {error}
 get: forall C. Pair[C] => fn(C) -> C.A
 get(Bag { n: 1 }): {error}
 right(Bag { n: 1 }): {error}
+--------------------------------------------------------------------------------
+error at `A`: recursive alias
+error at `B`: recursive alias
 
 ================================================================================
 A default of an associated type must meet its bound (#294)
