@@ -58,13 +58,15 @@ theorem fill_ok : FnsOk [fill] := by
   exact ⟨⟨trivial, trivial⟩, .setP (.fst (.var rfl)) (by simp [fill]) (.snd (.var rfl))⟩
 
 theorem fill_sat (m : Mu) (hm : m.Changeable .none) : Sat .none fill.assume [m] [.int] := by
-  refine ⟨?_, ?_, ?_, ?_⟩
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro p h; simp [fill] at h
   · intro p h; simp [fill] at h
   · intro i
     cases i with
     | zero => trivial
     | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [fill] at h
+  · intro i h; simp [fill] at h
   · intro i h
     simp [fill] at h
     subst h
@@ -85,7 +87,7 @@ example : (Ty.cell (.region 0) .int).free 0 .immutable = .cell .immutable .int :
 /-- But `fill` can't be given an `imm` object. -/
 example : ¬ Sat .none fill.assume [.immutable] [.int] := by
   intro h
-  exact h.2.2.2 0 (by simp [fill])
+  exact h.2.2.2.2.2 0 (by simp [fill])
 
 /-- `fn build(n) -> 'ρ [i32] { let xs = mut [n]; xs[0] = 5; xs }`, with a
 changeable `'ρ` that the caller chooses, like `squares` on the regions
@@ -105,7 +107,7 @@ theorem build_ok : FnsOk [build] := by
 isn't changeable... -/
 example : ¬ Sat .none build.assume [.immutable] [] := by
   intro h
-  exact h.2.2.2 0 (by simp [build])
+  exact h.2.2.2.2.2 0 (by simp [build])
 
 /-- ...but it can call it with a region, `r`, and freeze it: the call is
 the block, and the freeze copies the array into an `imm` one (#292). A
@@ -114,10 +116,12 @@ example : HasType [build] [] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
   refine .freeze ?_ ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
   show HasType _ _ _ _ _ _ (build.retTy.inst [.region 0] [])
-  refine .call rfl ⟨?_, ?_, ?_, ?_⟩ .int
+  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩ .int
   · intro p h; simp [build] at h
   · intro p h; simp [build] at h
   · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [build] at h
+  · intro i h; simp [build] at h
   · intro i h
     simp [build] at h
     subst h
@@ -144,17 +148,27 @@ example (e : Expr) (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
   cases h with
   | freeze _ hf _ => simp [Ty.Freezable, Ty.mentions, Mu.mentions] at hf
 
-/-- A closure that changes the region's array but whose type doesn't
-mention the region is shared, not copied: `{ let xs = mut [1]; let f = ||
-xs[0] = 2; xs }`. The copy is `imm`, and `f` changes the original. That's
-sound, but the copy can't be left out here, which is what the rules of the
-regions page for closures are for (#292). -/
+/-- `{ let xs = mut [1]; let f = || xs[0] = 2; xs }`: a closure that changes
+the region's array has the region as its mutability (rule 5 of the
+regions page), so it can't be in the frozen value, and nothing after the
+block can reach the original through it. -/
 example : HasType [] [] .none false Ctx.empty
     (.freeze 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.lam true 2 (.set (.var 0) (.int 2))) (.var 0))))
-    (.cell .immutable .int) :=
-  .freeze (.letE (.newR .int trivial) (.letE (.lam (a := .unit) (fun _ _ h => h) (fun h => nomatch h)
-    (.setR (.var rfl) .int)) (.var rfl))) ⟨(fun h => nomatch h), trivial⟩
-    ⟨(fun _ h => nomatch h), trivial⟩
+    (.cell .immutable .int) := by
+  refine .freeze (.letE (.newR .int trivial) (.letE (.lam (a := .unit) (μ := .region 0) (.inr ⟨rfl, 0, rfl⟩)
+    (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h) (.setR (.var rfl) .int)) (.var rfl)))
+    ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
+  · intro _ y s hy
+    simp only [Ctx.update] at hy
+    split at hy
+    · cases hy; exact ⟨.refl _, trivial⟩
+    · cases hy
+  · intro y s hy
+    simp only [Ctx.update] at hy
+    split at hy
+    · cases hy
+      exact ⟨fun r' hr => by simpa [Ty.mentions, Mu.mentions] using hr, trivial, trivial⟩
+    · cases hy
 
 end BoltMut

@@ -23,7 +23,12 @@ The rules that matter for mutability:
   locations. Its type is `fn imm a r`, so an `imm` object can hold it. A
   `mut` closure captures anything, and an `imm` object can't hold it.
   Either can be called.
-* A call can give a region to a parameter of a generic function (#285).
+* A `mut` closure can have a region as its mutability (#287), and then
+  capture what's of that region. Other closures capture nothing whose type
+  mentions a region. A call can give a region to a parameter of a generic
+  function (#285), unless a closure in it captures what has that parameter
+  (`Assume.noRegionMus`, `Assume.noRegionTys`). So a value can only reach
+  a region's objects if its type mentions the region (`Elision.lean`).
 * A block whose region becomes `imm` ends with `freeze`, which copies
   its value with the region replaced with `imm` (#292). So the heap typing
   only grows.
@@ -108,14 +113,21 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       fns[f]? = some fn → Sat Δ fn.assume ms τs →
       HasType fns σ Δ io Γ e (fn.argTy.inst ms τs) →
       HasType fns σ Δ io Γ (.call f ms τs e) (fn.retTy.inst ms τs)
-  /-- A closure sees the variables `Γc` of those in scope: for an `imm` one,
-  only some whose types are `imm` all the way down. A `mut` one can capture
-  a region's values: a region's objects are copied when they become `imm`
-  (#292), so changing them later changes nothing that's `imm`. -/
-  | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} :
-      Γc.Sub Γ → (b = false → ∀ y s, Γc y = some s → AtMost Δ .immutable s) →
+  /-- A closure sees the variables `Γc` of those in scope. Its mutability
+  `μ` is `muOf b`, or, for a `mut` one, a region (rule 5 of the regions
+  page, #287). Unless it's `mut`, what it captures is at most `μ`: for an
+  `imm` one, `imm` all the way down. The only region what it captures
+  mentions is `μ`'s, so a closure whose type doesn't mention a region
+  captures nothing of it. That stays so when the function it's in is
+  called: the parameters what it captures has can't be given a region
+  (#285). -/
+  | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} {μ : Mu} :
+      (μ = muOf b ∨ b = true ∧ ∃ r', μ = .region r') →
+      Γc.Sub Γ → (μ ≠ .mutable → ∀ y s, Γc y = some s → AtMost Δ μ s) →
+      (∀ y s, Γc y = some s → s.RegionsIn μ ∧ s.ParamsNoRegion Δ) →
+      (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ) →
       HasType fns σ Δ (io || !b) (Γc.update x a) body r →
-      HasType fns σ Δ io Γ (.lam b x body) (.fn (muOf b) a r)
+      HasType fns σ Δ io Γ (.lam b x body) (.fn μ a r)
   | app {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {m : Mu} {a r : Ty} :
       HasType fns σ Δ io Γ e₁ (.fn m a r) → HasType fns σ Δ io Γ e₂ a →
       HasType fns σ Δ io Γ (.app e₁ e₂) r

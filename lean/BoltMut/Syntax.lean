@@ -156,6 +156,13 @@ def Ty.mentions (r : Nat) : Ty → Bool
   | .fn m a b => m.mentions r || a.mentions r || b.mentions r
   | .prod a b => a.mentions r || b.mentions r
 
+/-- The only region `m` can be is `μ`'s: what a closure of mutability `μ`
+captures, by rule 5 of the regions page. -/
+def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mentions r = true
+
+/-- The only region `t` mentions is `μ`'s. -/
+def Ty.RegionsIn (t : Ty) (μ : Mu) : Prop := ∀ r, t.mentions r = true → μ.mentions r = true
+
 /-- Replace the mutability parameters with `ms`; one without an argument
 becomes `imm`. -/
 def Mu.subst (ms : List Mu) : Mu → Mu
@@ -217,6 +224,11 @@ that nothing in `T` is more `mut` than `μ`. -/
 structure Assume where
   mus : List (Mu × Mu) := []
   tys : List (Nat × Mu) := []
+  /-- The mutability parameters and type parameters that a call can't give
+  a region (#285): those that what a closure captures has. Then the closure
+  doesn't capture a region's value once the function is called. -/
+  noRegionMus : List Nat := []
+  noRegionTys : List Nat := []
   /-- The mutability parameters that a call can only give `mut` or a
   region (rule 1 of the regions page): the function can change what has
   them. -/
@@ -246,6 +258,20 @@ def AtMost (Δ : Assume) (μ : Mu) : Ty → Prop
   | .prod a b => AtMost Δ μ a ∧ AtMost Δ μ b
   | .tparam i => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
 
+/-- The parameters in `m` are ones that a call can't give a region. -/
+def Mu.ParamsNoRegion (Δ : Assume) : Mu → Prop
+  | .param i => i ∈ Δ.noRegionMus
+  | _ => True
+
+/-- The parameters in `t` are ones that a call can't give a region: once
+the function is called, `t` mentions no region that it doesn't now. -/
+def Ty.ParamsNoRegion (Δ : Assume) : Ty → Prop
+  | .unit | .int => True
+  | .tparam i => i ∈ Δ.noRegionTys
+  | .cell m t => m.ParamsNoRegion Δ ∧ t.ParamsNoRegion Δ
+  | .fn m a b => m.ParamsNoRegion Δ ∧ a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
+  | .prod a b => a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
+
 /-- A mutability whose objects can be changed: `mut`, a region, or a
 parameter that's assumed to be one of them. -/
 def Mu.Changeable (Δ : Assume) : Mu → Prop
@@ -255,12 +281,15 @@ def Mu.Changeable (Δ : Assume) : Mu → Prop
 
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
-the objects in it are well-formed. A changeable parameter gets a changeable
-argument. -/
+the objects in it are well-formed. A parameter that can't be given a region
+gets an argument that mentions none, and whose parameters can't be given
+one either, and a changeable parameter gets a changeable argument. -/
 def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
   (∀ p ∈ Δ.mus, Le Δ' (p.1.subst ms) (p.2.subst ms)) ∧
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
     (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit)) ∧
+    (∀ i ∈ Δ.noRegionMus, (ms[i]?.getD .immutable).NoRegion ∧ (ms[i]?.getD .immutable).ParamsNoRegion Δ') ∧
+    (∀ i ∈ Δ.noRegionTys, (τs[i]?.getD .unit).NoRegion ∧ (τs[i]?.getD .unit).ParamsNoRegion Δ') ∧
     (∀ i ∈ Δ.changeable, (ms[i]?.getD .immutable).Changeable Δ')
 
 /-- With nothing assumed, `m ⊑ μ` only by the order itself. -/
@@ -355,27 +384,61 @@ theorem Mu.getD_subst (ms ms' : List Mu) (i : Nat) :
   simp only [List.getElem?_map]
   cases ms'[i]? <;> rfl
 
+/-- What mentions no region, and has only parameters that can't be given
+one, mentions none once they're given. -/
+theorem Mu.noRegion_subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
+    (hn : m.NoRegion) (hp : m.ParamsNoRegion Δ) : (m.subst ms).NoRegion ∧ (m.subst ms).ParamsNoRegion Δ' := by
+  cases m with
+  | param i => exact hs.2.2.2.1 i hp
+  | region => exact hn.elim
+  | mutable | immutable => exact ⟨trivial, trivial⟩
+
+theorem Ty.noRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t : Ty}
+    (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) : (t.inst ms τs).NoRegion ∧ (t.inst ms τs).ParamsNoRegion Δ' := by
+  induction t with
+  | unit | int => exact ⟨trivial, trivial⟩
+  | cell m t ih =>
+    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
+    obtain ⟨h₃, h₄⟩ := ih hn.2 hp.2
+    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
+  | fn m a b iha ihb =>
+    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
+    obtain ⟨h₃, h₄⟩ := iha hn.2.1 hp.2.1
+    obtain ⟨h₅, h₆⟩ := ihb hn.2.2 hp.2.2
+    exact ⟨⟨h₁, h₃, h₅⟩, ⟨h₂, h₄, h₆⟩⟩
+  | prod a b iha ihb =>
+    obtain ⟨h₁, h₂⟩ := iha hn.1 hp.1
+    obtain ⟨h₃, h₄⟩ := ihb hn.2 hp.2
+    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
+  | tparam i => exact hs.2.2.2.2.1 i hp
+
 /-- A changeable mutability stays so with arguments that meet the
 assumptions. -/
 theorem Mu.Changeable.subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
     (h : m.Changeable Δ) : (m.subst ms).Changeable Δ' := by
   cases m with
-  | param i => exact hs.2.2.2 i h
+  | param i => exact hs.2.2.2.2.2 i h
   | immutable => exact h.elim
   | _ => exact h
 
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (h₁ : Sat Δ₁ Δ₂ ms' τs') (h₀ : Sat Δ₀ Δ₁ ms τs) :
     Sat Δ₀ Δ₂ (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
-  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_, fun i hi => ?_, fun i hi => ?_⟩
   · have := Le.inst h₀ (h₁.1 p hp)
     rwa [Mu.subst_subst, Mu.subst_subst] at this
   · have := AtMost.inst h₀ (h₁.2.1 p hp)
     rwa [Mu.subst_subst, Ty.getD_inst] at this
   · have := AtMost.inst h₀ (h₁.2.2.1 i)
     rwa [Ty.getD_inst] at this
+  · obtain ⟨hn, hp⟩ := h₁.2.2.2.1 i hi
+    rw [← Mu.getD_subst]
+    exact Mu.noRegion_subst h₀ hn hp
+  · obtain ⟨hn, hp⟩ := h₁.2.2.2.2.1 i hi
+    rw [← Ty.getD_inst]
+    exact Ty.noRegion_inst h₀ hn hp
   · rw [← Mu.getD_subst]
-    exact Mu.Changeable.subst h₀ (h₁.2.2.2 i hi)
+    exact Mu.Changeable.subst h₀ (h₁.2.2.2.2.2 i hi)
 
 theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs) : (e.inst ms τs).NoLocs := by
   induction e with

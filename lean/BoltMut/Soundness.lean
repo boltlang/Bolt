@@ -382,7 +382,7 @@ theorem preservation {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr
     cases ht with
     | app he₁ he₂ =>
       cases he₁ with
-      | lam hc _ hbody =>
+      | lam _ hc _ _ _ hbody =>
         -- The body of an `imm` closure is typed inside one; outside, it
         -- has the same type. A closed closure saw nothing but its
         -- parameter.
