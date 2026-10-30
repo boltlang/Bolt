@@ -93,6 +93,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
 | `Copy.typed`, `Copy.exists` | `Soundness.lean` | a freeze's copy has the value's type with the region `imm`, and can always be made (#292): so preservation and progress hold for `freeze` like for any step |
+| `freeze_in_place_changes_nothing` | `Elision.lean` | at the end of a block, going on with the value itself rather than the freeze's copy computes the same, if nothing after the block, or the copy, can reach the region's objects (#292) |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -141,9 +142,10 @@ The theorems depend only on Lean's standard axioms, `propext`,
   of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
-- **The rest of regions** (#209, #292): the freeze that copies a region
-  that becomes `imm`, and that leaving the copy out can't be noticed, with
-  rules 2, 3 and 5 of the regions page, which is also what #284 needs.
+- **The rest of regions** (#209, #292): that rules 2, 3 and 5 of the
+  regions page make the premise of `freeze_in_place_changes_nothing` hold,
+  and leaving out every freeze of a program, not one. #284 needs the same
+  for unique values.
   Also borrowed parameters (#283).
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.

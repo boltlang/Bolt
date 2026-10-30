@@ -11,3 +11,4 @@ import BoltMut.Structs
 import BoltMut.Frame
 import BoltMut.Sharing
 import BoltMut.Regions
+import BoltMut.Elision

@@ -308,9 +308,11 @@ writes one that rule 2 found.
   so `imm` values never changing and programs never getting stuck are
   proven as for any other step, with rules 1 and 4. Leaving the copy out
   is an optimization, and it's sound when nothing after the block can
-  reach the originals: that's what rules 2, 3 and 5, and the restriction
-  on generic functions above, are for. Proving it is the rest of #292,
-  the same theorem as for [fewer copies](./copies.mdx).
+  reach the originals: `freeze_in_place_changes_nothing` proves that for
+  one freeze. Only objects of the region are copied, since a copy of a
+  `mut` object would be noticed. That rules 2, 3 and 5, and the
+  restriction on generic functions above, give its premise is the rest of
+  #292, and the same is needed for [fewer copies](./copies.mdx).
 
 ## Open questions
 
