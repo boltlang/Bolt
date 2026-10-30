@@ -102,7 +102,7 @@ changeable, and appears in no type from outside the block: not in a
 variable from outside it, a parameter, a top-level variable, or an
 effect's operation. That's like the check that
 [generalization](../generalization.mdx) makes before it generalizes a
-type variable.
+type variable. Rules 4 and 5 say when it's still not one.
 
 **3. A value leaves its region when its type meets one from outside.**
 Then its mutability is no longer a region, and it stays `Mut`:
@@ -119,14 +119,29 @@ The error should say why: "`xs` can't be `imm`, because it's stored in
 `log` here". It should describe the region rather than show `@r`, and
 showing it as `mut` would give "expected `mut [i32]`, found `mut [i32]`".
 
-**4. A region can hold values from outside, but an `imm` value can't hold
-a region's.** The "at most" order gets $\mathsf{Imm} \sqsubseteq r$. What
-a region's values hold, like the `B` of a `@r Vec[B]`, gives a constraint
-$B \sqsubseteq r$, which stays with the region and applies to whatever it
-becomes. $r \sqsubseteq \mathsf{Imm}$ is false, since an `imm` value would
-hold one that's still being changed. $r \sqsubseteq \mathsf{Mut}$ can't
-happen, since a `Mut` value from outside would hold the region's, which
-rule 3 rules out.
+**4. A region can hold `imm` values from outside, but an `imm` value can't
+hold a region's.** The "at most" order gets $\mathsf{Imm} \sqsubseteq r$,
+and $r \sqsubseteq \mathsf{Imm}$ is false, since an `imm` value would hold
+one that's still being changed. What a region's values hold, like the `B`
+of a `@r Vec[B]`, gives a constraint $B \sqsubseteq r$, which stays with
+the region and applies to whatever it becomes (rule 6).
+
+A value that holds something `Mut` isn't a region's:
+$\mathsf{Mut} \sqsubseteq r$ makes `r` be `Mut` right away, as for any
+unknown that something `Mut` must be below. Nothing is lost, since it could only become
+`Mut` anyway:
+
+```bolt
+let outer = mut [];
+let rows = {
+  let rows = mut [];
+  rows.push(outer);   // `Mut ⊑ r`: `rows` is `mut [mut [a]]`
+  rows
+};
+```
+
+Like every mutability, a region is at most `Mut`. What keeps a value from
+outside from holding a region's is rule 3, not the order.
 
 **5. A closure that captures a region's value has that region as its
 mutability**, not just one that's at least the region. A closure's type
@@ -136,9 +151,11 @@ stored outside, and still change the region's values. A `let mut` variable
 makes a closure changeable rather than `Mut`, so that a closure that
 counts in a block can be a region's too.
 
-A region that a function type in the block's value has, directly, in a
-type argument or in a field of a struct, isn't freed: it stays
-changeable, and so `Mut`:
+A mutability that a function type in the block's value mentions isn't a
+region: it stays changeable, and so `Mut`. That's whether it's the
+function's own mutability or in what the function takes or gives, and
+whether the function type is the block's value, in a type argument or in
+a field of a struct:
 
 ```bolt
 fn counter() -> (fn(), imm [i32]) {
@@ -149,7 +166,32 @@ fn counter() -> (fn(), imm [i32]) {
 
 If `xs` became `imm`, calling the closure would still change it. Calling a
 function doesn't need it to be `mut` ([deep `imm`](./index.mdx#deep-imm)),
-so this can't be left to the caller.
+so this can't be left to the caller. A function that only takes the
+region's values is the same: in `(f, xs)`, with `f = |ys| ys[0] = 1` and
+`f(xs)` before, `f` would change `xs` once it's `imm`.
+
+**In a generic function, a closure's mutability is only at least what it
+captures.** Its scheme says `T: 'm`, and a caller chooses `'m`. So rule 5
+doesn't hold through a call, and a region's value could leave in a `mut`
+closure whose type doesn't show it:
+
+```bolt
+fn poker(xs: mut [i32]) = || { xs[0] = 1; };  // changeable 'c, 'c: 'm => fn('c [i32]) -> 'm fn() -> ()
+
+let log: mut [mut fn() -> ()] = mut [];
+let xs: imm [i32] = {
+  let xs = mut [0];
+  log.push(poker(xs));   // with `'c = @r` and `'m = Mut`
+  xs
+};
+log[0]();                // would change `xs`
+```
+
+So a type or mutability parameter that a closure in the function captures
+can't be given a region: for rule 2, its argument counts as a type from
+outside the block, and here `xs` stays `Mut`. Following the region
+through the scheme instead, so that the closure's `'m` becomes the region
+too, is [#290](https://github.com/boltlang/Bolt/issues/290).
 
 **6. The block's value gets a fresh mutability for each of its regions.**
 The constraints that rule 4 kept go with it, and "changeable" doesn't.
@@ -257,9 +299,14 @@ writes one that rule 2 found.
   block ends is tagged `Mut`, so `with_mutability_checks` would stop on an
   `imm` value that holds it. The tag would have to change when the block
   ends.
-- **Proof**: the Lean proof doesn't cover regions. It would need rules 2
-  to 5, and the guarantee that a region's values can't be reached from
-  outside while the block runs.
+- **Proof**: `lean/BoltMut/Regions.lean` proves that a block's region can
+  be frozen when it ends, without a copy, and never changes after
+  (`block_frees`, `block_never_changes`), with rules 1, 3, 4 and 5 and the
+  restriction on generic functions above. A block there is any part of the
+  program whose region is new, and it's always freed to `imm`; blocks in
+  the language, and regions freed to a caller's mutability as rule 6 says,
+  are [#288](https://github.com/boltlang/Bolt/issues/288). A closure whose
+  type mentions a freed region can't be called there.
 
 ## Open questions
 
