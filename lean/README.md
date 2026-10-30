@@ -39,6 +39,7 @@ A small language with what matters for mutability:
 | a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
 | a value a block makes, that nothing outside it has (#209) | a cell of the region `r`: `new true x` of type `cell (region r) t` |
+| the end of a block whose region becomes `imm` | `freeze r t e`: a copy of `e`'s value, with what's of `r` in new `imm` objects (#292) |
 
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 
@@ -91,6 +92,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254) |
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
+| `Copy.typed`, `Copy.exists` | `Soundness.lean` | a freeze's copy has the value's type with the region `imm`, and can always be made (#292): so preservation and progress hold for `freeze` like for any step |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |

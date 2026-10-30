@@ -110,6 +110,14 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     cases ht with
     | snd he => exact ih hh he hl
   | fstVal _ _ | sndVal _ _ => intros; rfl
+  | freezeCong _ ih =>
+    intro σ t l ty hh ht hl
+    cases ht with
+    | freeze he _ _ => exact ih hh he hl
+  | freezeVal _ hc =>
+    -- A copy only adds to the heap.
+    intro σ t l ty hh _ hl
+    exact hc.keeps (hh.lt hl)
 
 /-- However many steps a well-typed program takes, an `imm` location holds
 the same value. -/

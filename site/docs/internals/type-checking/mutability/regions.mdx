@@ -297,19 +297,20 @@ writes one that rule 2 found.
 - **The evaluator** tags each array and struct with the mutability it was
   made with (`Object::mutability`). A value that becomes `imm` when its
   block ends is tagged `Mut`, so `with_mutability_checks` would stop on an
-  `imm` value that holds it. The tag would have to change when the block
-  ends.
-- **Proof**: `lean/BoltMut/Regions.lean` proves that a block's region can
-  be frozen when it ends, without a copy, and never changes after
-  (`block_frees`, `block_never_changes`), with rules 1, 3, 4 and 5 and the
-  restriction on generic functions above. A block there is any part of the
-  program whose region is new. For rule 6, a function's body is a block:
-  a caller that wants a changeable mutability gives it to the body, and
-  nothing is freed, while one that wants `imm` runs the body in a fresh
-  region, frozen when it ends (`call_frees`). So freeing is always to
-  `imm`. Freeing as a step of the program, with a fresh region for each
-  call, is [#288](https://github.com/boltlang/Bolt/issues/288). A closure
-  whose type mentions a freed region can't be called there.
+  `imm` value that holds it. Copying the value when the block ends, as
+  the proof does, is always right; changing the tag instead is the
+  optimization below.
+- **Proof**: in the Lean proof, a block whose region becomes `imm` ends
+  with a freeze that copies the region's part of its value into new `imm`
+  objects ([#292](https://github.com/boltlang/Bolt/issues/292)). A region
+  that becomes `mut` or another region needs no freeze: its objects are
+  made with that mutability. With the copy, the heap's types only grow,
+  so `imm` values never changing and programs never getting stuck are
+  proven as for any other step, with rules 1 and 4. Leaving the copy out
+  is an optimization, and it's sound when nothing after the block can
+  reach the originals: that's what rules 2, 3 and 5, and the restriction
+  on generic functions above, are for. Proving it is the rest of #292,
+  the same theorem as for [fewer copies](./copies.mdx).
 
 ## Open questions
 

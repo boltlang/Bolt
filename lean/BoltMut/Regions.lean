@@ -107,4 +107,53 @@ example : ¬ Sat .none build.assume [.immutable] [] := by
   intro h
   exact h.2.2.2 0 (by simp [build])
 
+/-- ...but it can call it with a region, `r`, and freeze it: the call is
+the block, and the freeze copies the array into an `imm` one (#292). A
+caller that wants `mut` would give `'ρ` that instead, with no freeze. -/
+example : HasType [build] [] .none false Ctx.empty
+    (.freeze 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
+  refine .freeze ?_ trivial ⟨(fun _ h => nomatch h), trivial⟩
+  show HasType _ _ _ _ _ _ (build.retTy.inst [.region 0] [])
+  refine .call rfl ⟨?_, ?_, ?_, ?_⟩ .int
+  · intro p h; simp [build] at h
+  · intro p h; simp [build] at h
+  · intro i; simp only [List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h
+    simp [build] at h
+    subst h
+    trivial
+
+/-! ## Freezing -/
+
+/-- `let ys: imm [i32] = { let xs = mut [1]; xs[0] = 2; xs }`: the block's
+region becomes `imm`, so it ends with a freeze, and `ys` is an `imm`
+array. -/
+example : HasType [] [] .none false Ctx.empty
+    (.freeze 0 (.cell (.region 0) .int)
+      (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.var 0))))
+    (.cell .immutable .int) :=
+  .freeze (.letE (.newR .int trivial) (.letE (.setR (.var rfl) .int) (.var rfl))) trivial
+    ⟨(fun _ h => nomatch h), trivial⟩
+
+/-- A closure can't be copied, so a freeze can't make a function type that
+mentions the region `imm`: here one that takes the region's arrays, which
+could change the copy if it were given it. -/
+example (e : Expr) (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
+    (.freeze 0 (.prod (.fn .immutable (.cell (.region 0) .int) .unit) (.cell (.region 0) .int)) e) t := by
+  intro h
+  cases h with
+  | freeze _ hf _ => simp [Ty.FnFree, Ty.mentions, Mu.mentions] at hf
+
+/-- A closure that changes the region's array but whose type doesn't
+mention the region is shared, not copied: `{ let xs = mut [1]; let f = ||
+xs[0] = 2; xs }`. The copy is `imm`, and `f` changes the original. That's
+sound, but the copy can't be left out here, which is what the rules of the
+regions page for closures are for (#292). -/
+example : HasType [] [] .none false Ctx.empty
+    (.freeze 0 (.cell (.region 0) .int)
+      (.letE 0 (.new true (.int 1)) (.letE 1 (.lam true 2 (.set (.var 0) (.int 2))) (.var 0))))
+    (.cell .immutable .int) :=
+  .freeze (.letE (.newR .int trivial) (.letE (.lam (a := .unit) (fun _ _ h => h) (fun h => nomatch h)
+    (.setR (.var rfl) .int)) (.var rfl))) trivial ⟨(fun _ h => nomatch h), trivial⟩
+
 end BoltMut

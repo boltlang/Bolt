@@ -53,6 +53,53 @@ theorem clean_of_deepImm {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Pr
     {v : Expr} {t : Ty} (hv : v.IsValue) (ht : HasType fns σ .none io Γ v t) (hd : AtMost .none .immutable t) : Clean σ n A v :=
   fun _ hl => .inr (.inr ((ht.value_imm hv hd).hasLoc_imm rfl hl))
 
+/-- A freeze's copy keeps them clean: what it makes is new, and what it
+shares is in the value or in a clean location, which holds what's clean. -/
+theorem Copy.clean {fns : List Fn} {σ : HeapTy} {n : Nat} {A : Nat → Prop} {h₀ : Heap} (hh : HeapOk fns σ h₀)
+    (hn : n ≤ h₀.length) {r : Nat} {t : Ty} {h h' : Heap} {v v' : Expr} (hc : Copy r t h v h' v') :
+    (∃ ext, h = h₀ ++ ext) → Clean σ n A v → HeapClean σ n A h → Clean σ n A v' ∧ HeapClean σ n A h' := by
+  induction hc with
+  | keep => intro _ hcv hhc; exact ⟨hcv, hhc⟩
+  | @cell m s h h' l w w' _ hw hc' ih =>
+    intro hpre hcv hhc
+    -- What the location holds is clean.
+    have hcw : Clean σ n A w := by
+      rcases hcv l rfl with h₁ | h₁ | ⟨t₀, ht₀⟩
+      · exact hhc l w (.inl h₁) hw
+      · exact hhc l w (.inr h₁) hw
+      · obtain ⟨_, hd, w₀, hw₀, hwv, hwt⟩ := hh.2 _ _ _ ht₀
+        obtain ⟨ext, rfl⟩ := hpre
+        rw [List.getElem?_append_left (hh.lt ht₀), hw₀] at hw
+        cases hw
+        exact clean_of_deepImm hwv hwt hd
+    obtain ⟨hcw', hhc'⟩ := ih hpre hcw hhc
+    have hlen : n ≤ h'.length := by
+      obtain ⟨ext, rfl⟩ := hpre
+      obtain ⟨ext', rfl⟩ := hc'.prefix
+      simp; omega
+    refine ⟨fun l' hl' => .inl (hl' ▸ hlen), ?_⟩
+    intro l' u hA hu
+    by_cases hlt : l' < h'.length
+    · rw [List.getElem?_append_left hlt] at hu
+      exact hhc' l' u hA hu
+    · have hl' : l' = h'.length := by
+        have := (List.getElem?_eq_some_iff.mp hu).1
+        simp at this
+        omega
+      subst hl'
+      rw [List.getElem?_concat_length] at hu
+      cases hu
+      exact hcw'
+  | @pair _ _ _ h₁ _ _ _ _ _ _ hc₁ _ ih₁ ih₂ =>
+    intro hpre hcv hhc
+    obtain ⟨hc₁', hhc₁⟩ := ih₁ hpre (fun l hl => hcv l (.inl hl)) hhc
+    have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
+      obtain ⟨ext, rfl⟩ := hpre
+      obtain ⟨ext', rfl⟩ := hc₁.prefix
+      exact ⟨ext ++ ext', by simp⟩
+    obtain ⟨hc₂', hhc₂⟩ := ih₂ hpre₁ (fun l hl => hcv l (.inr hl)) hhc₁
+    exact ⟨fun l hl => hl.elim (hc₁' l) (hc₂' l), hhc₂⟩
+
 /-- A step keeps the program and the heap clean, and changes no location
 that's old and not allowed. -/
 theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} (hs : Step fns h e h' e') :
@@ -204,6 +251,18 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | sndVal _ _ =>
     intro σ t n A _ _ hn hc hhc
     exact ⟨fun _ _ _ => rfl, hn, fun l hl => hc l (.inr hl), hhc⟩
+  | freezeCong _ ih =>
+    intro σ t n A hh ht hn hc hhc
+    cases ht with
+    | freeze he _ _ => exact ih hh he hn hc hhc
+  | freezeVal _ hc' =>
+    intro σ t n A hh _ hn hc hhc
+    obtain ⟨hcv, hhc'⟩ := Copy.clean hh hn hc' ⟨[], by simp⟩ hc hhc
+    refine ⟨fun l hl _ => hc'.keeps (by omega), ?_, hcv, hhc'⟩
+    obtain ⟨ext, he⟩ := hc'.prefix
+    rw [he]
+    simp
+    omega
 
 /-- However many steps a clean program takes, the locations that are old
 and not allowed keep their values. -/

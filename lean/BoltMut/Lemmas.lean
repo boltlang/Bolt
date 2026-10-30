@@ -49,6 +49,7 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
+  | freeze _ hf hp ih => exact .freeze ih hf hp
 
 theorem Ctx.Sub.update {Γ Γ' : Ctx} (h : Γ.Sub Γ') (x : Nat) (t : Ty) :
     (Γ.update x t).Sub (Γ'.update x t) := by
@@ -87,6 +88,7 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
   | fst _ ih => exact .fst (ih hΓ)
   | snd _ ih => exact .snd (ih hΓ)
+  | freeze _ hf hp ih => exact .freeze (ih hΓ) hf hp
 
 /-- Outside an `imm` closure, anything typed inside one has its type too. -/
 theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -115,6 +117,7 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hio) (ih₂ hio)
   | fst _ ih => exact .fst (ih hio)
   | snd _ ih => exact .snd (ih hio)
+  | freeze _ hf hp ih => exact .freeze (ih hio) hf hp
 
 theorem muOf_cases (b : Bool) : muOf b = .mutable ∨ muOf b = .immutable := by
   cases b
@@ -277,6 +280,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ hx) (ih₂ hΓ hx)
   | fst _ ih => exact .fst (ih hΓ hx)
   | snd _ ih => exact .snd (ih hΓ hx)
+  | freeze _ hf hp ih => exact .freeze (ih hΓ hx) hf hp
 
 /-- Substituting a closed value for a variable just put in scope. -/
 theorem HasType.subst_update {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {x : Nat} {t₁ t : Ty}
@@ -401,6 +405,13 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := ih hn
     simp only [Ty.inst] at h
     exact .snd h
+  | @freeze _ _ _ t r _ hf hp ih =>
+    -- The type has no parameters, so the arguments don't change it.
+    simp only [Expr.inst]
+    have h := ih hn
+    rw [Ty.inst_noParams hp] at h
+    rw [Ty.inst_noParams hp, Ty.inst_noParams (hp.free r)]
+    exact .freeze h hf hp
 
 /-- Inside an `imm` closure, every location is `imm`. -/
 theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -411,7 +422,7 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
+  | new _ _ ih | newR _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
   | lam _ _ _ ih => exact ih (by simp [hio]) hl

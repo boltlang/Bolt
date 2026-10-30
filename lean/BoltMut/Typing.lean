@@ -24,6 +24,9 @@ The rules that matter for mutability:
   `mut` closure captures anything, and an `imm` object can't hold it.
   Either can be called.
 * A call can give a region to a parameter of a generic function (#285).
+* A block whose region becomes `imm` ends with `freeze`, which copies
+  its value with the region replaced with `imm` (#292). So the heap typing
+  only grows.
 * A generic function is typed under what it assumes about its parameters
   (`Fn.assume`, #243), like `T ⊑ imm`, and a call must meet that with its
   arguments (`Sat`). Without an assumption, a value of type `T` can't be put
@@ -123,6 +126,13 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       HasType fns σ Δ io Γ e (.prod a b) → HasType fns σ Δ io Γ (.fst e) a
   | snd {io : Bool} {Γ : Ctx} {e : Expr} {a b : Ty} :
       HasType fns σ Δ io Γ e (.prod a b) → HasType fns σ Δ io Γ (.snd e) b
+  /-- A block whose region `r` becomes `imm` ends with a freeze (#292): its
+  value is copied, with `r` replaced with `imm` in its type. A closure
+  can't be copied, so no function type in it mentions `r`. The type has no
+  parameters, so that a call can't give it the region. -/
+  | freeze {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
+      HasType fns σ Δ io Γ e t → t.FnFree r → t.NoParams →
+      HasType fns σ Δ io Γ (.freeze r t e) (t.free r .immutable)
 
 /-- Each function's body has its declared type, under what the function
 assumes, with its parameters unknown, and no locations. -/

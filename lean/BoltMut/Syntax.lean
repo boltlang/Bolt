@@ -83,6 +83,9 @@ inductive Expr where
   | pair (e₁ e₂ : Expr)
   | fst (e : Expr)
   | snd (e : Expr)
+  /-- The end of a block whose region `r` becomes `imm` (#292): `e`'s value,
+  of type `t`, copied, with what's of `r` in new `imm` objects. -/
+  | freeze (r : Nat) (t : Ty) (e : Expr)
   deriving Repr
 
 /-- The mutability of `new isMut _`. -/
@@ -110,6 +113,7 @@ def Expr.NoLocs : Expr → Prop
   | .pair e₁ e₂ => e₁.NoLocs ∧ e₂.NoLocs
   | .fst e => e.NoLocs
   | .snd e => e.NoLocs
+  | .freeze _ _ e => e.NoLocs
 
 /-- The location `l` is in the expression: what a closure captured is in its
 body. -/
@@ -126,6 +130,7 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .pair e₁ e₂, l => e₁.HasLoc l ∨ e₂.HasLoc l
   | .fst e, l => e.HasLoc l
   | .snd e, l => e.HasLoc l
+  | .freeze _ _ e, l => e.HasLoc l
 
 /-- A mutability that isn't a region. -/
 def Mu.NoRegion : Mu → Prop
@@ -183,6 +188,7 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .pair e₁ e₂ => .pair (e₁.inst ms τs) (e₂.inst ms τs)
   | .fst e => .fst (e.inst ms τs)
   | .snd e => .snd (e.inst ms τs)
+  | .freeze r t e => .freeze r (t.inst ms τs) (e.inst ms τs)
 
 /-- Replace the variable `x` with the value `v`, which has no variables, so
 nothing can be captured. -/
@@ -201,6 +207,7 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .pair e₁ e₂, x, v => .pair (e₁.subst x v) (e₂.subst x v)
   | .fst e, x, v => .fst (e.subst x v)
   | .snd e, x, v => .snd (e.subst x v)
+  | .freeze r t e, x, v => .freeze r t (e.subst x v)
 
 /-! ## At most -/
 
@@ -374,7 +381,7 @@ theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lam _ _ _ ih => exact ih h
 
@@ -383,7 +390,7 @@ theorem Expr.NoLocs.not_hasLoc {e : Expr} (h : e.NoLocs) (l : Nat) : ¬ e.HasLoc
   induction e with
   | var | unit | int => exact id
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hl => hl.elim (ih₁ h.1) (ih₂ h.2)
 
@@ -398,7 +405,7 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -501,6 +508,57 @@ theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .i
   · exact .inl h
   · cases h
   · exact .inr h
+
+/-- No function type in `t` mentions the region `r`: a closure can't be
+copied, so a freeze can't make its type `imm` (rule 5 of the regions
+page). -/
+def Ty.FnFree (r : Nat) : Ty → Prop
+  | .unit | .int | .tparam _ => True
+  | .cell _ t => t.FnFree r
+  | .fn m a b => (Ty.fn m a b).mentions r = false
+  | .prod a b => a.FnFree r ∧ b.FnFree r
+
+/-- `t` has no type or mutability parameter. -/
+def Ty.NoParams : Ty → Prop
+  | .unit | .int => True
+  | .tparam _ => False
+  | .cell m t => (∀ i, m ≠ .param i) ∧ t.NoParams
+  | .fn m a b => (∀ i, m ≠ .param i) ∧ a.NoParams ∧ b.NoParams
+  | .prod a b => a.NoParams ∧ b.NoParams
+
+theorem Mu.subst_of_ne {m : Mu} (h : ∀ i, m ≠ .param i) (ms : List Mu) : m.subst ms = m := by
+  cases m with
+  | param i => exact (h i rfl).elim
+  | _ => rfl
+
+theorem Ty.inst_noParams {t : Ty} (h : t.NoParams) (ms : List Mu) (τs : List Ty) : t.inst ms τs = t := by
+  induction t with
+  | unit | int => rfl
+  | tparam => exact h.elim
+  | cell m t ih => simp [Ty.inst, Mu.subst_of_ne h.1, ih h.2]
+  | fn m a b iha ihb => simp [Ty.inst, Mu.subst_of_ne h.1, iha h.2.1, ihb h.2.2]
+  | prod a b iha ihb => simp [Ty.inst, iha h.1, ihb h.2]
+
+theorem Mu.free_ne_param {m : Mu} (h : ∀ i, m ≠ .param i) (r : Nat) {μ : Mu} (hμ : ∀ i, μ ≠ .param i) :
+    ∀ i, m.free r μ ≠ .param i := by
+  intro i he
+  cases m with
+  | param j => exact h j rfl
+  | region r' =>
+    simp only [Mu.free] at he
+    split at he
+    · exact hμ i he
+    · cases he
+  | _ => cases he
+
+theorem Ty.NoParams.free {t : Ty} (h : t.NoParams) (r : Nat) : (t.free r .immutable).NoParams := by
+  have hi : ∀ i, Mu.immutable ≠ .param i := fun _ he => nomatch he
+  induction t with
+  | unit | int => trivial
+  | tparam => exact h.elim
+  | cell m t ih => exact ⟨Mu.free_ne_param h.1 r hi, ih h.2⟩
+  | fn m a b iha ihb => exact ⟨Mu.free_ne_param h.1 r hi, iha h.2.1, ihb h.2.2⟩
+  | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
 
 
 end BoltMut
