@@ -2,6 +2,7 @@
 // type with an impl of them. Arrays have theirs in `array.bolt`.
 
 import "./option" (Option, None, Some);
+import "./io" (assert);
 
 /// Types whose elements can be read by position, with `c[i]`.
 pub class Index[C] {
@@ -27,3 +28,150 @@ pub class Eq[T] {
 pub fn a == b = eq(a, b);
 
 pub fn a != b = ne(a, b);
+
+// The classes of operators, like Rust's `std::ops`. Each operator is a
+// function of its class's method, so that it works on any type with an
+// impl of the class.
+
+/// Addition: `a + b`.
+pub class Add[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn add(a: T, b: T) -> Output;
+}
+
+pub fn a + b = add(a, b);
+
+/// Subtraction: `a - b`.
+pub class Sub[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn sub(a: T, b: T) -> Output;
+}
+
+pub fn a - b = sub(a, b);
+
+/// Multiplication: `a * b`.
+pub class Mul[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn mul(a: T, b: T) -> Output;
+}
+
+pub fn a * b = mul(a, b);
+
+/// Division: `a / b`.
+pub class Div[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn div(a: T, b: T) -> Output;
+}
+
+pub fn a / b = div(a, b);
+
+/// The remainder of a division: `a % b`.
+pub class Rem[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn rem(a: T, b: T) -> Output;
+}
+
+pub fn a % b = rem(a, b);
+
+/// Bitwise and: `a & b`.
+pub class BitAnd[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn bitand(a: T, b: T) -> Output;
+}
+
+pub fn a & b = bitand(a, b);
+
+/// Bitwise or: `a | b`.
+pub class BitOr[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn bitor(a: T, b: T) -> Output;
+}
+
+pub fn a | b = bitor(a, b);
+
+/// Bitwise exclusive or: `a ^ b`.
+pub class BitXor[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn bitxor(a: T, b: T) -> Output;
+}
+
+pub fn a ^ b = bitxor(a, b);
+
+/// Shifting the bits left: `a << n`.
+pub class Shl[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn shl(a: T, n: u32) -> Output;
+}
+
+pub fn a << n = shl(a, n);
+
+/// Shifting the bits right: `a >> n`.
+pub class Shr[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn shr(a: T, n: u32) -> Output;
+}
+
+pub fn a >> n = shr(a, n);
+
+/// Negation: `-a`.
+pub class Neg[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn neg(a: T) -> Output;
+}
+
+pub fn -a = neg(a);
+
+/// Logical negation: `!a`.
+pub class Not[T] {
+  /// The type of the result.
+  type Output = T;
+
+  fn not(a: T) -> Output;
+}
+
+pub fn !a = not(a);
+
+/// What the classes give generic code: the operator of the type it's
+/// called with.
+fn twice[T: Add](x: T) -> T.Output = add(x, x);
+
+struct Money { cents: i32 }
+
+impl Add[Money] {
+  type Output = Money;
+  fn add(a, b) = Money { cents: a.cents + b.cents };
+}
+
+impl Neg[Money] {
+  type Output = Money;
+  fn neg(a) = Money { cents: 0 - a.cents };
+}
+
+#[test]
+fn a_type_with_an_impl_has_the_operator() {
+  assert(add(Money { cents: 1 }, Money { cents: 2 }).cents == 3);
+  assert(neg(Money { cents: 5 }).cents == -5);
+  assert(twice(Money { cents: 150 }).cents == 300);
+}
