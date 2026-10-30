@@ -912,6 +912,35 @@ fn impl_assoc_ty_seen<'db>(
     Some(ty.fill_unwritten(&mut imm))
 }
 
+/// Whether the default of the associated type `alias` of a class leads back
+/// to `alias` through the class's defaults, like those of `type A = B; type
+/// B = A;` (#298). An impl that gives neither gets the error type for both,
+/// in [`impl_assoc_ty`]; one that gives one of them breaks the cycle.
+pub fn default_refers_to_itself<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> bool {
+    let ItemContainerId::Class(class) = alias.container(db) else { return false };
+    let own = identity_args(db, GenericDefId::Class(class));
+    let mut todo = vec![alias];
+    let mut seen = Vec::new();
+    while let Some(next) = todo.pop() {
+        if seen.contains(&next) {
+            continue;
+        }
+        seen.push(next);
+        let Some(default) = &type_alias_ty(db, next).ty else { continue };
+        let found = default.any(&mut |t| match t {
+            Ty::Assoc(a, args) if a.container(db) == ItemContainerId::Class(class) && *args == own => {
+                todo.push(*a);
+                *a == alias
+            }
+            _ => false,
+        });
+        if found {
+            return true;
+        }
+    }
+    false
+}
+
 /// Replace the type parameters of `def` with `args`.
 pub fn subst_params<'db>(ty: &Ty<'db>, def: GenericDefId<'db>, args: &[Ty<'db>]) -> Ty<'db> {
     ty.fold(&mut |t| match t {

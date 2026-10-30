@@ -79,7 +79,7 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::{
     InferenceCycle, InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
     lower::{
-        LowerDiagnostic, const_ty, enum_field_types, fn_sig, generic_predicates, impl_header, named_mutabilities,
+        LowerDiagnostic, class_assoc_types, const_ty, default_refers_to_itself, enum_field_types, fn_sig, generic_predicates, impl_header, named_mutabilities,
         struct_field_types, type_alias_ty, unused_impl_params,
     },
     overlap::{overlapped_functions, overlapped_impls},
@@ -206,6 +206,14 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     let (_, map) = class_signature_with_source_map(&db, id);
                     for lower in &generic_predicates(&db, GenericDefId::Class(id)).diagnostics {
                         diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    }
+                    // The defaults of associated types that lead back to
+                    // themselves (#298).
+                    for alias in class_assoc_types(&db, id) {
+                        if default_refers_to_itself(&db, alias) {
+                            let name = alias.item(&db).name.as_ref().unwrap();
+                            diagnostics.push(format!("{prefix}error at `{name}`: recursive alias"));
+                        }
                     }
                 }
                 ModItem::Const(idx) => consts.push(ConstId::new(&db, ItemContainerId::File(file), idx)),

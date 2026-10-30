@@ -1348,6 +1348,21 @@ type A = A;
 }
 
 #[test]
+fn defaults_of_associated_types_that_refer_to_each_other() {
+    check(
+        r#"
+class Pair[C] { type A = B; type B = A; type C = A; type D = (D, i32); }
+                   //^ error: type alias `A` refers to itself
+                               //^ error: type alias `B` refers to itself
+                                                       //^ error: type alias `D` refers to itself
+struct Bag { n: i32 }
+impl Pair[Bag] { type B = i32; type D = i32; }
+let x: i32 = 1;
+"#,
+    );
+}
+
+#[test]
 fn break_outside_a_loop() {
     check(
         r#"
