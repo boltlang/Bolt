@@ -36,7 +36,8 @@ A small language with what matters for mutability:
 | a field with a mutability of its own, `'v Vec[T]` (#243) | a cell with a mutability parameter |
 | what a function assumes, like `T ⊑ imm` or `'v ⊑ 'm` (#243) | `Fn.assume`: an `Assume` |
 | a generic function, called with the arguments the checker finds | a top-level `Fn`, called as `call f ms τs e` with mutability and type arguments |
-| a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
+| a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes, or a region's (#287) |
+| a closure whose region has been freed | a closure of type `gone m`, which can't be called |
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
 | a value a block makes, that nothing outside it has (#209) | a cell of the region `r`: `new true x` of type `cell (region r) t` |
 
@@ -60,8 +61,12 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   of a `mut` one. What it holds is at most `r`: `imm`, or of the same
   region, so that it's `imm` all the way down once `r` is freed. A region
   can be marked as holding `mut` objects too (`mut ⊑ r`, #286): then it
-  becomes `mut` when it's freed. A closure captures nothing whose type
-  mentions a region, and a call's arguments mention none.
+  becomes `mut` when it's freed. A `mut` closure can have a region as its
+  mutability, and then capture what's at most that region and mentions no
+  other (rule 5 of the regions page, #287). Other closures capture nothing
+  whose type mentions a region. Once a region is freed, a closure whose
+  type mentions it is `gone`: it can't be called. A call's arguments
+  mention no region.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -93,7 +98,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut` or a region that holds `mut` objects, finds every `m ⊑ μ` within as many steps as there are assumptions |
 | `HeapOk.free` | `Regions.lean` | a `mut` location that nothing in the heap refers to, and that holds what's `imm` all the way down, can be made `imm` without a copy: the heap is still well-typed with it `imm`. That's when a region is freed (#209) |
 | `freed_never_changes` | `Regions.lean` | after that, a program that's well-typed with the location `imm` never changes it |
-| `HeapOk.free_all` | `Regions.lean` | freeing a region everywhere at once keeps the heap well-typed: what refers to its objects gets the freed type too |
+| `HeapOk.free_all` | `Regions.lean` | freeing a region everywhere at once keeps the heap well-typed: what refers to its objects gets the freed type too, and a closure whose type mentions it becomes `gone`, which can't be called |
 | `block_frees` | `Regions.lean` | a block whose region the heap typing didn't mention before can freeze its region when it ends, without a copy: its value has the type with the region `imm`, or `mut` if the region holds `mut` objects, and what comes after it, typed before it, is well-typed. What's from before can't hold the region's objects, so the regions page's `leak` is rejected |
 | `block_never_changes` | `Regions.lean` | after the block, the objects of a region that became `imm` never change |
 | `AtMost.free`, `AtMost.region_free` | `Regions.lean` | freeing a region, giving it a mutability everywhere, keeps "at most"; and what a region holds is `imm` all the way down once the region is freed to `imm` |
@@ -142,10 +147,10 @@ The theorems depend only on Lean's standard axioms, `propext`,
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
 - **The rest of regions** (#209): blocks as a part of the language, with
-  nested blocks freed in turn and recursion; closures that capture a
-  region's objects (rule 5 of the regions page); regions that hold `mut`
-  objects and can only become `mut`; and generic functions called with a
-  region's objects. Also borrowed parameters (#283) and unique values at
+  nested blocks freed in turn and recursion; generic functions called with
+  a region's objects (#285). A closure whose type mentions a freed region
+  can't be called, even when the region becomes `mut`, where rule 5 of
+  the regions page lets it be called (#289). Also borrowed parameters (#283) and unique values at
   their last use (#284).
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.

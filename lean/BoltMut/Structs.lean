@@ -75,6 +75,7 @@ theorem atMost_inst_iff (Δ : Assume) (ms : List Mu) (τs : List Ty) (μ : Mu) (
   | fn m a r => simp [AtMost, Ty.inst, split, Atom.HoldsInst]
   | prod a b iha ihb => simp [AtMost, Ty.inst, split, iha, ihb, or_imp, forall_and]
   | tparam i => simp [Ty.inst, split, Atom.HoldsInst]
+  | gone m => simp [AtMost, Ty.inst, split, Atom.HoldsInst]
 
 namespace StructDecl
 

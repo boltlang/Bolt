@@ -52,7 +52,9 @@ inductive Mu where
 
 /-- Types. `cell m t` is a shared object with mutability `m` holding a `t`,
 `fn m a r` a closure with mutability `m` from `a` to `r`, and `tparam i` the
-`i`th type parameter of the function being checked. -/
+`i`th type parameter of the function being checked. `gone m` is a closure
+with mutability `m` that captured a region that's been freed (#287): it
+can't be called any more, since what it changes may now be `imm`. -/
 inductive Ty where
   | unit
   | int
@@ -60,6 +62,7 @@ inductive Ty where
   | fn (m : Mu) (a r : Ty)
   | prod (a b : Ty)
   | tparam (i : Nat)
+  | gone (m : Mu)
   deriving DecidableEq, Repr
 
 /-- Expressions. `loc` only appears while running: it's a location in the
@@ -141,9 +144,30 @@ def Mu.NoRegion : Mu → Prop
 /-- A type that mentions no region. -/
 def Ty.NoRegion : Ty → Prop
   | .unit | .int | .tparam _ => True
+  | .gone m => m.NoRegion
   | .cell m t => m.NoRegion ∧ t.NoRegion
   | .fn m a b => m.NoRegion ∧ a.NoRegion ∧ b.NoRegion
   | .prod a b => a.NoRegion ∧ b.NoRegion
+
+/-- `m` is the region `r`. -/
+def Mu.mentions (r : Nat) : Mu → Bool
+  | .region r' _ => r' == r
+  | _ => false
+
+/-- `t` mentions the region `r`. -/
+def Ty.mentions (r : Nat) : Ty → Bool
+  | .unit | .int | .tparam _ => false
+  | .cell m t => m.mentions r || t.mentions r
+  | .fn m a b => m.mentions r || a.mentions r || b.mentions r
+  | .prod a b => a.mentions r || b.mentions r
+  | .gone m => m.mentions r
+
+/-- The only region `m` can be is `μ`'s: what a closure of mutability `μ`
+captures, by rule 5 of the regions page. -/
+def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mentions r = true
+
+/-- The only region `t` mentions is `μ`'s. -/
+def Ty.RegionsIn (t : Ty) (μ : Mu) : Prop := ∀ r, t.mentions r = true → μ.mentions r = true
 
 /-- Arguments for a function's parameters that mention no region. -/
 def ArgsNoRegion (ms : List Mu) (τs : List Ty) : Prop := (∀ m ∈ ms, m.NoRegion) ∧ ∀ τ ∈ τs, τ.NoRegion
@@ -163,6 +187,7 @@ def Ty.inst (ms : List Mu) (τs : List Ty) : Ty → Ty
   | .fn m a r => .fn (m.subst ms) (a.inst ms τs) (r.inst ms τs)
   | .prod a b => .prod (a.inst ms τs) (b.inst ms τs)
   | .tparam i => τs[i]?.getD .unit
+  | .gone m => .gone (m.subst ms)
 
 /-- The same for the arguments of the calls in an expression. -/
 def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
@@ -199,6 +224,55 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .fst e, x, v => .fst (e.subst x v)
   | .snd e, x, v => .snd (e.subst x v)
 
+/-- The variable `y` is free in the expression. -/
+def Expr.Free : Expr → Nat → Prop
+  | .var x, y => x = y
+  | .unit, _ | .int _, _ | .loc _, _ => False
+  | .new _ e, y => e.Free y
+  | .get e, y => e.Free y
+  | .call _ _ _ e, y => e.Free y
+  | .set e₁ e₂, y => e₁.Free y ∨ e₂.Free y
+  | .letE x e₁ e₂, y => e₁.Free y ∨ (x ≠ y ∧ e₂.Free y)
+  | .lam _ x body, y => x ≠ y ∧ body.Free y
+  | .app e₁ e₂, y => e₁.Free y ∨ e₂.Free y
+  | .pair e₁ e₂, y => e₁.Free y ∨ e₂.Free y
+  | .fst e, y => e.Free y
+  | .snd e, y => e.Free y
+
+/-- Substituting a variable that isn't free changes nothing. -/
+theorem Expr.subst_not_free {e : Expr} {x : Nat} (v : Expr) (h : ¬ e.Free x) : e.subst x v = e := by
+  induction e with
+  | var y =>
+    simp only [Expr.Free] at h
+    simp [Expr.subst, h]
+  | unit | int | loc => rfl
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih =>
+    simp only [Expr.subst]; rw [ih h]
+  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+    simp only [Expr.Free, not_or] at h
+    simp only [Expr.subst]; rw [ih₁ h.1, ih₂ h.2]
+  | letE y _ _ ih₁ ih₂ =>
+    simp only [Expr.Free, not_or, not_and] at h
+    simp only [Expr.subst, ih₁ h.1]
+    split
+    · rfl
+    · rename_i hyx; rw [ih₂ (h.2 hyx)]
+  | lam b y _ ih =>
+    simp only [Expr.Free, not_and] at h
+    simp only [Expr.subst]
+    split
+    · rfl
+    · rename_i hyx; rw [ih (h hyx)]
+
+/-- Instantiating the calls of an expression keeps its variables. -/
+theorem Expr.free_inst {e : Expr} (ms : List Mu) (τs : List Ty) (y : Nat) : (e.inst ms τs).Free y ↔ e.Free y := by
+  induction e with
+  | var | unit | int | loc => simp [Expr.inst, Expr.Free]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => simp only [Expr.inst, Expr.Free, ih]
+  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ =>
+    simp only [Expr.inst, Expr.Free, ih₁, ih₂]
+  | lam _ _ _ ih => simp only [Expr.inst, Expr.Free, ih]
+
 /-! ## At most -/
 
 /-- What a function assumes about its parameters (#243): `m ⊑ μ` for
@@ -233,6 +307,7 @@ def AtMost (Δ : Assume) (μ : Mu) : Ty → Prop
   | .fn m _ _ => Le Δ m μ
   | .prod a b => AtMost Δ μ a ∧ AtMost Δ μ b
   | .tparam i => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
+  | .gone m => Le Δ m μ
 
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
@@ -287,6 +362,7 @@ theorem AtMost.mono {Δ : Assume} {m μ : Mu} {t : Ty} (h : AtMost Δ m t) (hle 
   | tparam i =>
     obtain ⟨μ', hmem, hle'⟩ := h
     exact ⟨μ', hmem, hle'.trans hle⟩
+  | gone m' => exact Le.trans h hle
 
 theorem Le.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m μ : Mu}
     (h : Le Δ m μ) : Le Δ' (m.subst ms) (μ.subst ms) := by
@@ -311,6 +387,7 @@ theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat �
     rcases hmem with rfl | hmem
     · exact (hs.2.2 i).mono (Le.inst hs hle)
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
+  | gone m => exact Le.inst hs h
 
 theorem Mu.subst_muOf (ms : List Mu) (b : Bool) : (muOf b).subst ms = muOf b := by
   cases b <;> rfl
@@ -339,6 +416,7 @@ theorem Ty.inst_inst (ms ms' : List Mu) (τs τs' : List Ty) (t : Ty) :
   | fn m a r iha ihr => simp [Ty.inst, iha, ihr, Mu.subst_subst]
   | prod a b iha ihb => simp [Ty.inst, iha, ihb]
   | tparam i => exact Ty.getD_inst ms τs τs' i
+  | gone m => simp [Ty.inst, Mu.subst_subst]
 
 /-- Instantiating a call inside a generic function that's being
 instantiated still meets the callee's assumptions. -/

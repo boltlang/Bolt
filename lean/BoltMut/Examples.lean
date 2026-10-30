@@ -61,6 +61,11 @@ theorem noRegion_ctx {Γ : Ctx} (x : Nat) (t : Ty) (ht : t.NoRegion) (hΓ : ∀ 
 
 theorem noRegion_empty : ∀ y s, Ctx.empty y = some s → s.NoRegion := fun _ _ h => nomatch h
 
+/-- What a closure captures of such a context mentions no region but its
+own. -/
+theorem regionsIn_of_noRegion {Γ : Ctx} (hΓ : ∀ y s, Γ y = some s → s.NoRegion) (μ : Mu) :
+    ∀ y s, Γ y = some s → s.RegionsIn μ := fun y s h => (hΓ y s h).regionsIn μ
+
 /-- It can be called with a `mut` object and with an `imm` one. -/
 example : HasType [first] [] .none false Ctx.empty (.call 0 [.mutable] [] (.new true (.int 1))) .int := by
   show HasType _ _ _ _ _ _ (first.retTy.inst [.mutable] [])
@@ -86,9 +91,9 @@ example (t : Ty) :
 is `mut`. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1)))) (.fn .mutable .unit .unit) :=
-  .letE (.new .int trivial) (.lam (fun _ _ h => h) (fun h => nomatch h)
-    (noRegion_ctx 0 _ ⟨trivial, trivial⟩ noRegion_empty) (fun _ h => by simp [Expr.HasLoc] at h)
-    (.set (.var rfl) .int))
+  .letE (.new .int trivial) (.lam (.inl rfl) (fun _ _ h => h) (fun h => (h rfl).elim)
+    (regionsIn_of_noRegion (noRegion_ctx 0 (.cell .mutable .int) ⟨trivial, trivial⟩ noRegion_empty) _)
+    (fun _ h => by simp [Expr.HasLoc] at h) (.set (.var rfl) .int))
 
 /-- It can't be `imm`: an `imm` closure only sees what's `imm` all the way
 down, and `c` is `mut`. -/
@@ -100,13 +105,17 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     cases h₁ with
     | new _ _ | newR _ _ =>
       cases h₂ with
-      | lam _ himm _ _ hb =>
-        cases hb with
-        | set hx _ | setR hx _ =>
-          cases hx with
-          | var hx =>
-            simp only [Ctx.update] at hx
-            exact nomatch Le.none_immutable (himm rfl 0 _ hx).1
+      | lam hk _ himm _ _ hb =>
+        rcases hk with hk | ⟨hk, _⟩
+        · subst hk
+          cases hb with
+          | set hx _ | setR hx _ =>
+            cases hx with
+            | var hx =>
+              simp only [Ctx.update] at hx
+              exact nomatch Le.none_immutable (himm (fun h => nomatch h) 0 _ hx).1
+        · cases hk
+      | gone hf _ => exact hf 0 (by simp [Expr.Free])
 
 /-- The hole from #244: `let c = mut [0]; [|| c[0] = 1]`, an `imm` object
 holding a closure that changes `c`, is rejected, since the closure is
@@ -119,16 +128,20 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
     cases h₂ with
     | new hl hd =>
       cases hl with
-      | lam _ _ _ _ _ => exact nomatch Le.none_immutable hd
+      | lam hk _ _ _ _ _ =>
+        have hμ := Le.none_immutable hd
+        subst hμ
+        rcases hk with h | ⟨_, _, _, h⟩ <;> exact nomatch h
+      | gone hf _ => exact hf 0 (by simp [Expr.Free])
 
 /-- `let xs = [1]; [|| xs[0]]`: an `imm` closure that reads an `imm` object
 can be held by an `imm` one. -/
 example : HasType [] [] .none false Ctx.empty
     (.letE 0 (.new false (.int 1)) (.new false (.lam false 1 (.get (.var 0)))))
     (.cell .immutable (.fn .immutable .unit .int)) := by
-  refine .letE (.new .int trivial) (.new (.lam (fun _ _ h => h) ?_
-    (noRegion_ctx 0 _ ⟨trivial, trivial⟩ noRegion_empty) (fun _ h => by simp [Expr.HasLoc] at h)
-    (.get (.var rfl))) (.refl _))
+  refine .letE (.new .int trivial) (.new (.lam (.inl rfl) (fun _ _ h => h) ?_
+    (regionsIn_of_noRegion (noRegion_ctx 0 (.cell .immutable .int) ⟨trivial, trivial⟩ noRegion_empty) _)
+    (fun _ h => by simp [Expr.HasLoc] at h) (.get (.var rfl))) (.refl _))
   intro _ y s hy
   simp only [Ctx.update] at hy
   split at hy

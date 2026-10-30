@@ -21,9 +21,11 @@ The rules that matter for mutability:
   locations. Its type is `fn imm a r`, so an `imm` object can hold it. A
   `mut` closure captures anything, and an `imm` object can't hold it.
   Either can be called.
-* Regions (#209) stay out of closures and generic calls, for now: a
-  closure captures nothing whose type mentions a region, and the
-  arguments of a call mention none.
+* A `mut` closure can have a region as its mutability (#287), and then
+  capture what's of that region. Once the region is freed, its type is
+  `gone`, which can't be called. Other closures capture nothing whose
+  type mentions a region, and the arguments of a call mention none, for
+  now.
 * A generic function is typed under what it assumes about its parameters
   (`Fn.assume`, #243), like `T ⊑ imm`, and a call must meet that with its
   arguments (`Sat`). Without an assumption, a value of type `T` can't be put
@@ -94,16 +96,27 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       fns[f]? = some fn → Sat Δ fn.assume ms τs → ArgsNoRegion ms τs →
       HasType fns σ Δ io Γ e (fn.argTy.inst ms τs) →
       HasType fns σ Δ io Γ (.call f ms τs e) (fn.retTy.inst ms τs)
-  /-- A closure sees the variables `Γc` of those in scope: for an `imm` one,
-  only some whose types are `imm` all the way down. It captures nothing
-  of a region: no variable whose type mentions one, and no location
-  (#209, `Regions.lean`). -/
-  | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} :
-      Γc.Sub Γ → (b = false → ∀ y s, Γc y = some s → AtMost Δ .immutable s) →
-      (∀ y s, Γc y = some s → s.NoRegion) →
-      (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ m.NoRegion ∧ t.NoRegion) →
+  /-- A closure sees the variables `Γc` of those in scope. Its mutability
+  `μ` is `muOf b`, or, for a `mut` one, a region (rule 5 of the regions
+  page, #287). Unless it's `mut`, what it captures is at most `μ`: for an
+  `imm` one, `imm` all the way down. The only region what it captures
+  mentions is `μ`'s, so a closure of no region captures nothing of one, and
+  freeing a region that isn't the closure's leaves it as it is. -/
+  | lam {io : Bool} {Γ Γc : Ctx} {b : Bool} {x : Nat} {body : Expr} {a r : Ty} {μ : Mu} :
+      (μ = muOf b ∨ b = true ∧ ∃ r' hm, μ = .region r' hm) →
+      Γc.Sub Γ → (μ ≠ .mutable → ∀ y s, Γc y = some s → AtMost Δ μ s) →
+      (∀ y s, Γc y = some s → s.RegionsIn μ) →
+      (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ) →
       HasType fns σ Δ (io || !b) (Γc.update x a) body r →
-      HasType fns σ Δ io Γ (.lam b x body) (.fn (muOf b) a r)
+      HasType fns σ Δ io Γ (.lam b x body) (.fn μ a r)
+  /-- A closure that captured a region that's been freed: its body isn't
+  typed any more, so it can't be called. It has no free variables, and what it captured is still at most its mutability, and
+  `imm` inside an `imm` closure. -/
+  | gone {io : Bool} {Γ : Ctx} {b : Bool} {x : Nat} {body : Expr} {μ : Mu} :
+      (∀ y, ¬ (Expr.lam b x body).Free y) →
+      (∀ l, body.HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ ∧
+        (io = true → m = .immutable)) →
+      HasType fns σ Δ io Γ (.lam b x body) (.gone μ)
   | app {io : Bool} {Γ : Ctx} {e₁ e₂ : Expr} {m : Mu} {a r : Ty} :
       HasType fns σ Δ io Γ e₁ (.fn m a r) → HasType fns σ Δ io Γ e₂ a →
       HasType fns σ Δ io Γ (.app e₁ e₂) r

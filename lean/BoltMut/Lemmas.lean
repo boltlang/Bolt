@@ -42,10 +42,14 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | setR _ _ ih₁ ih₂ => exact .setR ih₁ ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
   | call hf hs hr _ ih => exact .call hf hs hr ih
-  | lam hc himm hrc hrl _ ih =>
-    refine .lam hc himm hrc (fun l hl => ?_) ih
-    obtain ⟨m, t, h, hm, ht⟩ := hrl l hl
-    exact ⟨m, t, hx _ _ h, hm, ht⟩
+  | lam hk hc himm hrc hrl _ ih =>
+    refine .lam hk hc himm hrc (fun l hl => ?_) ih
+    obtain ⟨m, t, h, hm⟩ := hrl l hl
+    exact ⟨m, t, hx _ _ h, hm⟩
+  | gone hf hl =>
+    refine .gone hf (fun l h' => ?_)
+    obtain ⟨m, t, h, hm⟩ := hl l h'
+    exact ⟨m, t, hx _ _ h, hm⟩
   | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
@@ -81,7 +85,8 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hΓ) (ih₂ hΓ)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hΓ) (ih₂ (hΓ.update _ _))
   | call hf hs hr _ ih => exact .call hf hs hr (ih hΓ)
-  | lam hc himm hrc hrl hb _ => exact .lam (hc.trans hΓ) himm hrc hrl hb
+  | lam hk hc himm hrc hrl hb _ => exact .lam hk (hc.trans hΓ) himm hrc hrl hb
+  | gone hf hl => exact .gone hf hl
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ) (ih₂ hΓ)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
   | fst _ ih => exact .fst (ih hΓ)
@@ -103,11 +108,15 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ hio) (ih₂ hio)
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ hio) (ih₂ hio)
   | call hf hs hr _ ih => exact .call hf hs hr (ih hio)
-  | lam hc himm hrc hrl _ ih =>
-    refine .lam hc himm hrc hrl (ih ?_)
+  | lam hk hc himm hrc hrl _ ih =>
+    refine .lam hk hc himm hrc hrl (ih ?_)
     intro h
     simp only [Bool.or_eq_true] at h ⊢
     exact h.imp_left hio
+  | gone hf hl =>
+    refine .gone hf (fun l h' => ?_)
+    obtain ⟨m, t, h, hle, hm, ht, hi⟩ := hl l h'
+    exact ⟨m, t, h, hle, hm, ht, fun h'' => hi (hio h'')⟩
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hio) (ih₂ hio)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hio) (ih₂ hio)
   | fst _ ih => exact .fst (ih hio)
@@ -136,10 +145,21 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
   | loc => cases ht with
     | loc h _ => exact .loc h (fun _ => Le.none_immutable hd.1)
   | @lam b x body => cases ht with
-    | lam hc himm hrc hrl hb =>
-      have hb' : b = false := muOf_immutable (Le.none_immutable hd)
+    | lam hk hc himm hrc hrl hb =>
+      have hμ := Le.none_immutable hd
+      subst hμ
+      have hb' : b = false := by
+        rcases hk with h | ⟨_, _, _, h⟩
+        · exact muOf_immutable h.symm
+        · cases h
       subst hb'
-      exact .lam hc himm hrc hrl (hb.weaken_imm (fun _ => by simp))
+      exact .lam hk hc himm hrc hrl (hb.weaken_imm (fun _ => by simp))
+    | gone hf hl =>
+      have hμ := Le.none_immutable hd
+      subst hμ
+      refine .gone hf (fun l h' => ?_)
+      obtain ⟨m, t, h, hle, hm, ht, _⟩ := hl l h'
+      exact ⟨m, t, h, hle, hm, ht, fun _ => Le.none_immutable hle⟩
 
 /-- A value of a cell type is a location of that type. -/
 theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
@@ -225,7 +245,10 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
         · exact .inl (.inr h)
         · simp only [Ctx.update, Ne.symm hyx, ite_false] at hs
           exact .inr ⟨⟨s, hs⟩, h⟩
-  | @lam _ _ _ _ y _ _ _ hc _ _ _ _ ih =>
+  | gone hf =>
+    rw [Expr.subst_not_free _ (hf x)] at h
+    exact .inl h
+  | @lam _ _ _ _ y _ _ _ _ _ hc _ _ _ _ ih =>
     simp only [Expr.subst, Expr.HasLoc] at h
     by_cases hyx : y = x
     · simp only [hyx, ite_true] at h
@@ -236,21 +259,64 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
       · simp only [Ctx.update, Ne.symm hyx, ite_false] at hs
         exact .inr ⟨⟨s, hc _ _ hs⟩, h⟩
 
-/-- The locations in a value whose type mentions no region mention none
-either: what a closure in it captured mentions none. -/
-theorem Expr.IsValue.hasLoc_noRegion {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
-    {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) (hs : s.NoRegion) {l : Nat} (hl : v.HasLoc l) :
-    ∃ m t, σ[l]? = some (m, t) ∧ m.NoRegion ∧ t.NoRegion := by
+theorem Mu.RegionsIn.trans {m μ ν : Mu} (h₁ : m.RegionsIn μ) (h₂ : μ.RegionsIn ν) : m.RegionsIn ν :=
+  fun r h => h₂ r (h₁ r h)
+
+theorem Ty.RegionsIn.trans {t : Ty} {μ ν : Mu} (h₁ : t.RegionsIn μ) (h₂ : μ.RegionsIn ν) : t.RegionsIn ν :=
+  fun r h => h₂ r (h₁ r h)
+
+theorem Mu.NoRegion.mentions {m : Mu} (h : m.NoRegion) (r : Nat) : m.mentions r = false := by
+  cases m with
+  | region => exact h.elim
+  | _ => rfl
+
+theorem Ty.NoRegion.mentions {t : Ty} (h : t.NoRegion) (r : Nat) : t.mentions r = false := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih => simp [Ty.mentions, h.1.mentions, ih h.2]
+  | fn m a b iha ihb => simp [Ty.mentions, h.1.mentions, iha h.2.1, ihb h.2.2]
+  | prod a b iha ihb => simp [Ty.mentions, iha h.1, ihb h.2]
+  | gone m => simp [Ty.mentions, Mu.NoRegion.mentions h]
+
+theorem Ty.NoRegion.regionsIn {t : Ty} (h : t.NoRegion) (μ : Mu) : t.RegionsIn μ := by
+  intro r hr
+  rw [h.mentions r] at hr
+  cases hr
+
+/-- Only `μ`'s region is in a value whose type mentions only that region,
+and so in what the closures in it captured. If the type is at most `μ`,
+so are its locations. -/
+theorem Expr.IsValue.hasLoc_regionsIn {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
+    {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) {μ : Mu} (hs : s.RegionsIn μ)
+    (hle : μ ≠ .mutable → AtMost Δ μ s) {l : Nat} (hl : v.HasLoc l) :
+    ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ := by
+  have top : ∀ {m : Mu}, (μ ≠ .mutable → Le Δ m μ) → Le Δ m μ := by
+    intro m h
+    by_cases hμ : μ = .mutable
+    · subst hμ; exact .top m
+    · exact h hμ
   induction hv generalizing s with
   | unit | int => exact hl.elim
   | loc => cases ht with
     | loc h _ =>
       cases hl
-      exact ⟨_, _, h, hs.1, hs.2⟩
-  | lam => cases ht with
-    | lam _ _ _ hrl _ => exact hrl l hl
+      exact ⟨_, _, h, top fun hμ => (hle hμ).1, fun r h => hs r (by simp [Ty.mentions, h]),
+        fun r h => hs r (by simp [Ty.mentions, h])⟩
+  | @lam b x body => cases ht with
+    | @lam _ _ _ _ _ _ _ _ μc _ _ _ _ hrl _ =>
+      have hl' : body.HasLoc l := hl
+      obtain ⟨m, t, hσ, hm, hmr, htr⟩ := hrl l hl'
+      have hμc : μc.RegionsIn μ := fun r hr => hs r (by simp [Ty.mentions, hr])
+      exact ⟨m, t, hσ, top fun hμ => hm.trans (hle hμ), hmr.trans hμc, htr.trans hμc⟩
+    | @gone _ _ _ _ _ μc _ hgl =>
+      have hl' : body.HasLoc l := hl
+      obtain ⟨m, t, hσ, hm, hmr, htr, _⟩ := hgl l hl'
+      have hμc : μc.RegionsIn μ := fun r hr => hs r (by simp [Ty.mentions, hr])
+      exact ⟨m, t, hσ, top fun hμ => hm.trans (hle hμ), hmr.trans hμc, htr.trans hμc⟩
   | pair _ _ ih₁ ih₂ => cases ht with
-    | pair h₁ h₂ => exact hl.elim (ih₁ h₁ hs.1) (ih₂ h₂ hs.2)
+    | pair h₁ h₂ =>
+      exact hl.elim (ih₁ h₁ (fun r h => hs r (by simp [Ty.mentions, h])) (fun hμ => (hle hμ).1))
+        (ih₂ h₂ (fun r h => hs r (by simp [Ty.mentions, h])) (fun hμ => (hle hμ).2))
 
 /-- Substituting a value for `x`, where `x` has the value's type or isn't in
 scope (in the body of an `imm` closure that didn't capture it). -/
@@ -298,31 +364,35 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
         simp only [Ctx.update, Ne.symm hyx, ite_false] at hs'
         exact hx s' hs'
   | call hf hs hr _ ih => exact .call hf hs hr (ih hΓ hx)
-  | @lam io₀ Γ₀ Γc b y body a r hc himm hrc hrl hbody ih =>
+  | gone hf hl =>
+    rw [Expr.subst_not_free _ (hf x)]
+    exact .gone hf hl
+  | @lam io₀ Γ₀ Γc b y body a r μ hk hc himm hrc hrl hbody ih =>
     -- The closure sees what it saw, without `x`.
     have hsub := Ctx.drop_sub (x := x) hc hΓ
-    have himm' : b = false → ∀ z s, (Γc.drop x) z = some s → AtMost .none .immutable s :=
+    have himm' : μ ≠ .mutable → ∀ z s, (Γc.drop x) z = some s → AtMost .none μ s :=
       fun hb z s hz => himm hb z s (Ctx.drop_some hz)
-    have hrc' : ∀ z s, (Γc.drop x) z = some s → s.NoRegion := fun z s hz => hrc z s (Ctx.drop_some hz)
+    have hrc' : ∀ z s, (Γc.drop x) z = some s → s.RegionsIn μ := fun z s hz => hrc z s (Ctx.drop_some hz)
     simp only [Expr.subst]
     by_cases hyx : y = x
     · subst hyx
       simp only [ite_true]
-      refine .lam hsub himm' hrc' hrl (hbody.weaken_ctx ?_)
+      refine .lam hk hsub himm' hrc' hrl (hbody.weaken_ctx ?_)
       intro z s' hz
       simp only [Ctx.update, Ctx.drop] at hz ⊢
       by_cases hzy : z = y
       · simpa [hzy] using hz
       · simpa [hzy] using hz
     · simp only [hyx, ite_false]
-      -- What it captures of `v` mentions no region, since its type doesn't.
-      have hrl' : ∀ l, (body.subst x v).HasLoc l → ∃ m t, σ[l]? = some (m, t) ∧ m.NoRegion ∧ t.NoRegion := by
+      -- What it captures of `v` has only its region, since its type does.
+      have hrl' : ∀ l, (body.subst x v).HasLoc l →
+          ∃ m t, σ[l]? = some (m, t) ∧ Le .none m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ := by
         intro l hl
         rcases hbody.hasLoc_subst hl with hl | ⟨⟨s, hs⟩, hl⟩
         · exact hrl l hl
         · simp only [Ctx.update, Ne.symm hyx, ite_false] at hs
-          exact hv.hasLoc_noRegion (hx s (hc _ _ hs)) (hrc _ _ hs) hl
-      refine .lam hsub himm' hrc' hrl' (ih ?_ ?_)
+          exact hv.hasLoc_regionsIn (hx s (hc _ _ hs)) (hrc _ _ hs) (fun hμ => himm hμ _ _ hs) hl
+      refine .lam hk hsub himm' hrc' hrl' (ih ?_ ?_)
       · intro z hzx
         simp only [Ctx.update, Ctx.drop]
         split
@@ -333,7 +403,12 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
         have hv' := hx s' (hc _ _ hs')
         cases b
         · -- An `imm` closure only saw `x` if it's `imm` all the way down.
-          exact (hv'.value_imm hv (himm rfl x s' hs')).weaken_imm (fun _ => rfl)
+          have hμ : μ = .immutable := by
+            rcases hk with h | ⟨h, _⟩
+            · exact h
+            · cases h
+          subst hμ
+          exact (hv'.value_imm hv (himm (fun h => nomatch h) x s' hs')).weaken_imm (fun _ => rfl)
         · simpa using hv'
   | app _ _ ih₁ ih₂ => exact .app (ih₁ hΓ hx) (ih₂ hΓ hx)
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ hx) (ih₂ hΓ hx)
@@ -392,6 +467,49 @@ theorem Ty.inst_noRegion {ms : List Mu} {τs : List Ty} (hr : ArgsNoRegion ms τ
     cases h : τs[i]? with
     | none => trivial
     | some τ => exact hr.2 τ (List.mem_of_getElem? h)
+  | gone m => exact Mu.subst_noRegion hr.1 ht
+
+/-- Arguments that mention no region add none. -/
+theorem Mu.mentions_subst {ms : List Mu} (hms : ∀ m' ∈ ms, m'.NoRegion) {m : Mu} {r : Nat}
+    (h : (m.subst ms).mentions r = true) : m.mentions r = true := by
+  cases m with
+  | param i =>
+    simp only [Mu.subst] at h
+    cases hi : ms[i]? with
+    | none => rw [hi] at h; cases h
+    | some m' =>
+      rw [hi, Option.getD_some, (hms m' (List.mem_of_getElem? hi)).mentions r] at h; cases h
+  | _ => exact h
+
+theorem Ty.mentions_inst {ms : List Mu} {τs : List Ty} (hr : ArgsNoRegion ms τs) {t : Ty} {r : Nat}
+    (h : (t.inst ms τs).mentions r = true) : t.mentions r = true := by
+  induction t with
+  | unit | int => cases h
+  | cell m t ih =>
+    simp only [Ty.inst, Ty.mentions, Bool.or_eq_true] at h ⊢
+    exact h.imp (Mu.mentions_subst hr.1) ih
+  | fn m a b iha ihb =>
+    simp only [Ty.inst, Ty.mentions, Bool.or_eq_true] at h ⊢
+    rcases h with (h | h) | h
+    · exact .inl (.inl (Mu.mentions_subst hr.1 h))
+    · exact .inl (.inr (iha h))
+    · exact .inr (ihb h)
+  | prod a b iha ihb =>
+    simp only [Ty.inst, Ty.mentions, Bool.or_eq_true] at h ⊢
+    exact h.imp iha ihb
+  | tparam i =>
+    simp only [Ty.inst] at h
+    cases hi : τs[i]? with
+    | none => rw [hi] at h; cases h
+    | some τ =>
+      rw [hi, Option.getD_some, (hr.2 τ (List.mem_of_getElem? hi)).mentions r] at h; cases h
+  | gone m => exact Mu.mentions_subst hr.1 h
+
+theorem Mu.mentions_subst_of {ms : List Mu} {m : Mu} {r : Nat} (h : m.mentions r = true) :
+    (m.subst ms).mentions r = true := by
+  cases m with
+  | region => exact h
+  | _ => cases h
 
 theorem ArgsNoRegion.comp {ms ms' : List Mu} {τs τs' : List Ty} (h' : ArgsNoRegion ms' τs')
     (h : ArgsNoRegion ms τs) : ArgsNoRegion (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
@@ -448,18 +566,30 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := ih hn
     rw [Ty.inst_inst] at h
     exact .call hf (hsat.comp hs) (hr'.comp hr) h
-  | @lam _ Γ₀ Γc b x _ a r hc himm hrc _ _ ih =>
-    simp only [Expr.inst, Ty.inst, Mu.subst_muOf]
+  | @lam _ Γ₀ Γc b x _ a r μ hk hc himm hrc _ _ ih =>
+    simp only [Expr.inst, Ty.inst]
     have h := ih hn
     rw [Ctx.inst_update] at h
-    refine .lam (hc.inst ms τs) (fun hb y s hy => ?_) (fun y s hy => ?_)
+    have hk' : μ.subst ms = muOf b ∨ b = true ∧ ∃ r' hm, μ.subst ms = .region r' hm := by
+      rcases hk with rfl | ⟨hb, r', hm, rfl⟩
+      · exact .inl (Mu.subst_muOf ms b)
+      · exact .inr ⟨hb, r', hm, rfl⟩
+    refine .lam hk' (hc.inst ms τs) (fun hb y s hy => ?_) (fun y s hy => ?_)
       (fun l hl => ((Expr.NoLocs.inst ms τs hn).not_hasLoc l hl).elim) h
     · simp only [Ctx.inst, Option.map_eq_some_iff] at hy
       obtain ⟨s₀, h₀, rfl⟩ := hy
-      exact AtMost.inst hs (himm hb y s₀ h₀)
+      have hμ : μ ≠ .mutable := fun he => hb (by rw [he]; rfl)
+      exact AtMost.inst hs (himm hμ y s₀ h₀)
     · simp only [Ctx.inst, Option.map_eq_some_iff] at hy
       obtain ⟨s₀, h₀, rfl⟩ := hy
-      exact Ty.inst_noRegion hr (hrc y s₀ h₀)
+      exact fun r' h' => Mu.mentions_subst_of (hrc y s₀ h₀ r' (Ty.mentions_inst hr h'))
+  | @gone _ _ b x body _ hf _ =>
+    simp only [Expr.inst, Ty.inst]
+    refine .gone (fun y hy => ?_) (fun l hl => ((Expr.NoLocs.inst ms τs hn).not_hasLoc l hl).elim)
+    have hy' : (Expr.lam b x body).Free y := by
+      simp only [Expr.Free] at hy ⊢
+      exact ⟨hy.1, (Expr.free_inst ms τs y).mp hy.2⟩
+    exact hf y hy'
   | app _ _ ih₁ ih₂ =>
     have h₁ := ih₁ hn.1
     simp only [Ty.inst] at h₁
@@ -486,6 +616,9 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
-  | lam _ _ _ _ _ ih => exact ih (by simp [hio]) hl
+  | lam _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl
+  | gone _ hgl =>
+    obtain ⟨m, t, h, _, _, _, hi⟩ := hgl l hl
+    exact ⟨t, hi hio ▸ h⟩
 
 end BoltMut

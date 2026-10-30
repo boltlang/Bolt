@@ -43,11 +43,14 @@ most the region. A region can hold `mut` objects too, if it's marked so
   became `imm` never change.
 
 The blocks aren't in the language: a block is any part of the program
-whose region is new, run to its value. For now, a closure captures
-nothing of a region, and a call's arguments mention none (`HasType.lam`,
-`HasType.call`), so that the program can't change the region afterwards
-through a closure. The proofs after this one are #283, for borrowed
-parameters, and #284, for unique values at their last use.
+whose region is new, run to its value. A `mut` closure can capture a
+region's values if the region is its mutability (#287, `HasType.lam`).
+Once the region is freed, its type, and that of any closure whose type
+mentions the region, is `gone`, which can't be called: so the program
+can't change the region afterwards through a closure. A call's arguments
+mention no region, for now (`HasType.call`, #285). The proofs after this
+one are #283, for borrowed parameters, and #284, for unique values at
+their last use.
 -/
 
 namespace BoltMut
@@ -77,11 +80,16 @@ theorem HasType.retype {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
     simp only [Expr.HasLoc, not_or] at hn
     exact .letE (ih₁ hn.1) (ih₂ hn.2)
   | call hf hs hr _ ih => exact .call hf hs hr (ih hn)
-  | lam hc himm hrc hrl _ ih =>
-    refine .lam hc himm hrc (fun k hk => ?_) (ih hn)
+  | lam hk hc himm hrc hrl _ ih =>
+    refine .lam hk hc himm hrc (fun k hk => ?_) (ih hn)
     have hlk : l ≠ k := fun he => hn (he ▸ hk)
     rw [List.getElem?_set_ne hlk]
     exact hrl k hk
+  | gone hf hl =>
+    refine .gone hf (fun k hk => ?_)
+    have hlk : l ≠ k := fun he => hn (he ▸ hk)
+    rw [List.getElem?_set_ne hlk]
+    exact hl k hk
   | app _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at hn
     exact .app (ih₁ hn.1) (ih₂ hn.2)
@@ -158,17 +166,108 @@ def Mu.free : Mu → Nat → Mu → Mu
   | .region r' b, r, μ => if r' = r then (if b then .mutable else μ) else .region r' b
   | m, _, _ => m
 
-/-- `t` with the region `r` replaced with `μ`. A function type keeps its
-parameter and result: a closure captures nothing of a region, so its body
-has the same type after, and a value of a type with the region in it
-can't be given to it. -/
+/-- `t` with the region `r` replaced with `μ`. A function type that
+mentions the region becomes `gone` (#287): the closure may change the
+region's objects, or be given them, and they may be `imm` now, so it can't
+be called any more. It keeps its mutability, freed. Other function types
+stay as they are: what such a closure captured is of no region or of
+another one. -/
 def Ty.free : Ty → Nat → Mu → Ty
   | .unit, _, _ => .unit
   | .int, _, _ => .int
   | .cell m t, r, μ => .cell (m.free r μ) (t.free r μ)
-  | .fn m a b, r, μ => .fn (m.free r μ) a b
+  | .fn m a b, r, μ => if (Ty.fn m a b).mentions r then .gone (m.free r μ) else .fn m a b
   | .prod a b, r, μ => .prod (a.free r μ) (b.free r μ)
   | .tparam i, _, _ => .tparam i
+  | .gone m, r, μ => .gone (m.free r μ)
+
+theorem Mu.free_not_mentions {m : Mu} {r : Nat} (h : m.mentions r = false) (μ : Mu) : m.free r μ = m := by
+  cases m with
+  | region r' b =>
+    simp only [Mu.mentions, beq_eq_false_iff_ne] at h
+    simp [Mu.free, h]
+  | _ => rfl
+
+theorem Ty.free_not_mentions {t : Ty} {r : Nat} (h : t.mentions r = false) (μ : Mu) : t.free r μ = t := by
+  induction t with
+  | unit | int | tparam => rfl
+  | cell m t ih =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.free, Mu.free_not_mentions h.1, ih h.2]
+  | fn m a b =>
+    have h' := h
+    simp only [Ty.free, h', Bool.false_eq_true, ite_false]
+  | prod a b iha ihb =>
+    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
+    simp [Ty.free, iha h.1, ihb h.2]
+  | gone m =>
+    simp only [Ty.mentions] at h
+    simp [Ty.free, Mu.free_not_mentions h]
+
+/-- Freeing `r` to what mentions no region leaves only the other regions. -/
+theorem Mu.mentions_free {m ν : Mu} (hν : ν.NoRegion) {r r' : Nat} (h : (m.free r ν).mentions r' = true) :
+    m.mentions r' = true ∧ r' ≠ r := by
+  cases m with
+  | region r'' b =>
+    simp only [Mu.free] at h
+    split at h
+    · split at h
+      · cases h
+      · rw [hν.mentions] at h; cases h
+    · rename_i hne
+      simp only [Mu.mentions, beq_iff_eq] at h ⊢
+      subst h
+      exact ⟨rfl, hne⟩
+  | _ => cases h
+
+theorem Ty.mentions_free {t : Ty} {ν : Mu} (hν : ν.NoRegion) {r r' : Nat} (h : (t.free r ν).mentions r' = true) :
+    t.mentions r' = true ∧ r' ≠ r := by
+  induction t with
+  | unit | int | tparam => cases h
+  | cell m t ih =>
+    simp only [Ty.free, Ty.mentions, Bool.or_eq_true] at h ⊢
+    rcases h with h | h
+    · exact (Mu.mentions_free hν h).imp_left .inl
+    · exact (ih h).imp_left .inr
+  | fn m a b =>
+    simp only [Ty.free] at h
+    split at h
+    · obtain ⟨hm, hne⟩ := Mu.mentions_free hν h
+      exact ⟨by simp [Ty.mentions, hm], hne⟩
+    · rename_i hn
+      refine ⟨h, fun he => ?_⟩
+      subst he
+      exact hn h
+  | prod a b iha ihb =>
+    simp only [Ty.free, Ty.mentions, Bool.or_eq_true] at h ⊢
+    rcases h with h | h
+    · exact (iha h).imp_left .inl
+    · exact (ihb h).imp_left .inr
+  | gone m =>
+    simp only [Ty.free, Ty.mentions] at h ⊢
+    exact Mu.mentions_free hν h
+
+theorem Mu.mentions_free_of {μ ν : Mu} {r r' : Nat} (h : μ.mentions r' = true) (hne : r' ≠ r) :
+    (μ.free r ν).mentions r' = true := by
+  cases μ with
+  | region r'' b =>
+    simp only [Mu.mentions, beq_iff_eq] at h
+    subst h
+    simp [Mu.free, hne, Mu.mentions]
+  | _ => cases h
+
+/-- Freeing a region keeps "only the regions of `μ`". -/
+theorem Mu.RegionsIn.free {m μ ν : Mu} (h : m.RegionsIn μ) (hν : ν.NoRegion) (r : Nat) :
+    (m.free r ν).RegionsIn (μ.free r ν) := by
+  intro r' hr
+  obtain ⟨hm, hne⟩ := Mu.mentions_free hν hr
+  exact Mu.mentions_free_of (h r' hm) hne
+
+theorem Ty.RegionsIn.free {t : Ty} {μ ν : Mu} (h : t.RegionsIn μ) (hν : ν.NoRegion) (r : Nat) :
+    (t.free r ν).RegionsIn (μ.free r ν) := by
+  intro r' hr
+  obtain ⟨hm, hne⟩ := Ty.mentions_free hν hr
+  exact Mu.mentions_free_of (h r' hm) hne
 
 @[simp] theorem Mu.free_mutable (r : Nat) (μ : Mu) : Mu.mutable.free r μ = .mutable := rfl
 @[simp] theorem Mu.free_immutable (r : Nat) (μ : Mu) : Mu.immutable.free r μ = .immutable := rfl
@@ -197,13 +296,23 @@ theorem AtMost.free {μ : Mu} {t : Ty} (h : AtMost .none μ t) (r : Nat) (ν : M
   | unit => trivial
   | int => trivial
   | cell m t ih => exact ⟨h.1.free r ν, ih h.2⟩
-  | fn m a b => exact Le.free h r ν
+  | fn m a b =>
+    simp only [Ty.free]
+    split
+    · exact Le.free h r ν
+    · rename_i hn
+      have hm : m.mentions r = false := by
+        simp only [Ty.mentions, Bool.or_eq_true, not_or] at hn
+        simpa using hn.1.1
+      have := Le.free h r ν
+      rwa [Mu.free_not_mentions hm] at this
   | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
   | tparam i =>
     obtain ⟨μ', hμ', hle⟩ := h
     rcases hμ' with rfl | hmem
     · exact ⟨.mutable, .inl rfl, Le.free hle r ν⟩
     · simp [Assume.none] at hmem
+  | gone m => exact Le.free h r ν
 
 /-- What a region holds becomes `imm` all the way down when the region is
 freed to `imm`: what an `imm` location of the freed region needs. -/
@@ -246,6 +355,61 @@ example : HasType [] [] .none false Ctx.empty
 example : (Ty.cell (.region 0 true) (.cell .mutable .int)).free 0 .immutable =
     .cell .mutable (.cell .mutable .int) := rfl
 
+/-- `let xs = [0] in r; || xs[0] = 1`: a closure that changes an object of a
+region has the region as its mutability (#287, rule 5 of the regions
+page). -/
+example : HasType [] [] .none false Ctx.empty
+    (.letE 0 (.new true (.int 0)) (.lam true 1 (.set (.var 0) (.int 1))))
+    (.fn (.region 0 false) .unit .unit) := by
+  refine .letE (.newR (r := 0) (b := false) .int trivial)
+    (.lam (.inr ⟨rfl, 0, false, rfl⟩) (fun _ _ h => h) ?_ ?_ (fun _ h => by simp [Expr.HasLoc] at h)
+      (.setR (.var rfl) .int))
+  · intro _ y s hy
+    simp only [Ctx.update] at hy
+    split at hy
+    · cases hy; exact ⟨.refl _, trivial⟩
+    · cases hy
+  · intro y s hy r' hr
+    simp only [Ctx.update] at hy
+    split at hy
+    · cases hy; simpa [Ty.mentions, Mu.mentions] using hr
+    · cases hy
+
+/-- It can't capture a `mut` object from outside the block too: then it
+could be stored outside it as a `mut` closure, and still change the
+region. -/
+example (b : Bool) (t : Ty) : ¬ HasType [] [] .none false
+    (Ctx.empty.update 0 (.cell .mutable .int)) (.lam b 1 (.set (.var 0) (.int 1))) (.fn (.region 0 false) t .unit) := by
+  intro h
+  cases h with
+  | lam _ hc himm _ _ hb =>
+    cases hb with
+    | set hx _ =>
+      cases hx with
+      | var hx =>
+        simp only [Ctx.update] at hx
+        exact nomatch Le.below_region (himm (fun h => nomatch h) 0 _ hx).1
+    | setR hx _ =>
+      cases hx with
+      | var hx =>
+        simp only [Ctx.update] at hx
+        have hΓ := hc 0 _ hx
+        simp [Ctx.update] at hΓ
+
+/-- When its region is freed, the closure's type is `gone`, here an `imm`
+one, like `xs`: what it changes is `imm` now. -/
+example : (Ty.prod (.fn (.region 0 false) .unit .unit) (.cell (.region 0 false) .int)).free 0 .immutable =
+    .prod (.gone .immutable) (.cell .immutable .int) := rfl
+
+/-- And a `gone` closure can't be called. -/
+example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.gone .immutable))
+    (.app (.var 0) .unit) t := by
+  intro h
+  cases h with
+  | app h₁ _ =>
+    cases h₁ with
+    | var hx => simp [Ctx.update] at hx
+
 /-! ## Freeing a region when its block ends
 
 A block is a part of the program whose region nothing before it has: the
@@ -265,8 +429,9 @@ theorem Ty.free_noRegion {t : Ty} (ht : t.NoRegion) (r : Nat) (μ : Mu) : t.free
   induction t with
   | unit | int | tparam => rfl
   | cell m t ih => simp only [Ty.free, Mu.free_noRegion ht.1, ih ht.2]
-  | fn m a b => simp only [Ty.free, Mu.free_noRegion ht.1]
+  | fn m a b => exact Ty.free_not_mentions (Ty.NoRegion.mentions ht r) μ
   | prod a b iha ihb => simp only [Ty.free, iha ht.1, ihb ht.2]
+  | gone m => simp only [Ty.free, Mu.free_noRegion ht]
 
 /-- The heap typing with the region `r` freed to `imm`. -/
 def HeapTy.free (r : Nat) (σ : HeapTy) : HeapTy :=
@@ -292,21 +457,64 @@ theorem HasType.congr_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io :
   | setR _ _ ih₁ ih₂ => exact .setR (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | call hf hs hr _ ih => exact .call hf hs hr (ih hag)
-  | lam hc himm hrc hrl _ ih =>
-    refine .lam hc himm hrc (fun l hl => ?_) (ih hag)
+  | lam hk hc himm hrc hrl _ ih =>
+    refine .lam hk hc himm hrc (fun l hl => ?_) (ih hag)
     rw [hag l hl]
     exact hrl l hl
+  | gone hf hl =>
+    refine .gone hf (fun l h => ?_)
+    rw [hag l h]
+    exact hl l h
   | app _ _ ih₁ ih₂ => exact .app (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ fun l h => hag l (.inl h)) (ih₂ fun l h => hag l (.inr h))
   | fst _ ih => exact .fst (ih hag)
   | snd _ ih => exact .snd (ih hag)
 
+/-- A variable that isn't in scope isn't free in a well-typed expression. -/
+theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
+    (ht : HasType fns σ Δ io Γ e t) {y : Nat} (hy : Γ y = none) : ¬ e.Free y := by
+  induction ht with
+  | @var _ _ x _ h =>
+    intro hf
+    simp only [Expr.Free] at hf
+    subst hf
+    rw [hy] at h; cases h
+  | unit | int | loc => exact id
+  | new _ _ ih | newR _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih hy
+  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+    exact fun hf => hf.elim (ih₁ hy) (ih₂ hy)
+  | @letE _ _ x _ _ _ _ _ _ ih₁ ih₂ =>
+    rintro (hf | ⟨hxy, hf⟩)
+    · exact ih₁ hy hf
+    · exact ih₂ (by simp [Ctx.update, Ne.symm hxy, hy]) hf
+  | @lam _ _ Γc _ x _ _ _ _ _ hc _ _ _ _ ih =>
+    rintro ⟨hxy, hf⟩
+    have hcy : Γc y = none := by
+      cases h : Γc y with
+      | none => rfl
+      | some s => rw [hc y s h] at hy; cases hy
+    exact ih (by simp [Ctx.update, Ne.symm hxy, hcy]) hf
+  | gone hf => exact hf y
+
+/-- What a closure captured, as `HasType.lam` and `HasType.gone` say it, with
+the region `r` freed. -/
+theorem free_captured {σ : HeapTy} {m μ : Mu} {t : Ty} {l r : Nat} (h : σ[l]? = some (m, t))
+    (hle : Le .none m μ) (hm : m.RegionsIn μ) (ht : t.RegionsIn μ) :
+    ∃ m' t', (σ.free r)[l]? = some (m', t') ∧ Le .none m' (μ.free r .immutable) ∧
+      m'.RegionsIn (μ.free r .immutable) ∧ t'.RegionsIn (μ.free r .immutable) ∧
+      (m = .immutable → m' = .immutable) := by
+  refine ⟨m.free r .immutable, t.free r .immutable, by rw [HeapTy.free_getElem?, h]; rfl,
+    hle.free r .immutable, hm.free (ν := .immutable) trivial r, ht.free (ν := .immutable) trivial r, ?_⟩
+  rintro rfl
+  rfl
+
 /-- A value has the freed type when the region is freed: a location's type
-is freed with it, and a closure, which captures nothing of a region, keeps
-its type. -/
-theorem HasType.free_value {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {t : Ty}
-    (ht : HasType fns σ Δ io Γ v t) (hv : v.IsValue) (r : Nat) :
-    HasType fns (σ.free r) Δ io Γ v (t.free r .immutable) := by
+is freed with it. A closure of the region, or one whose type mentions it,
+can't be called any more, and one of another region, or of none, keeps its
+type, since what it captured doesn't change. -/
+theorem HasType.free_value {fns : List Fn} {σ : HeapTy} {io : Bool} {v : Expr} {t : Ty}
+    (ht : HasType fns σ .none io Ctx.empty v t) (hv : v.IsValue) (r : Nat) :
+    HasType fns (σ.free r) .none io Ctx.empty v (t.free r .immutable) := by
   induction hv generalizing t with
   | unit => cases ht; exact .unit
   | int => cases ht; exact .int
@@ -314,15 +522,45 @@ theorem HasType.free_value {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
     | loc h hio =>
       exact .loc (by rw [HeapTy.free_getElem?, h]; rfl) (fun h' => by rw [hio h']; rfl)
   | @lam b x body => cases ht with
-    | lam hc himm hrc hrl hb =>
-      have hag : ∀ l, body.HasLoc l → (σ.free r)[l]? = σ[l]? := by
-        intro l hl
-        obtain ⟨m, t, h, hm, ht⟩ := hrl l hl
-        rw [HeapTy.free_getElem?, h]
-        simp [Mu.free_noRegion hm, Ty.free_noRegion ht]
-      have hmu : (muOf b).free r .immutable = muOf b := by cases b <;> rfl
-      simp only [Ty.free, hmu]
-      exact .lam hc himm hrc (fun l hl => by rw [hag l hl]; exact hrl l hl) (hb.congr_heap hag)
+    | @lam _ _ _ _ _ _ a res μ hk hc himm hrc hrl hb =>
+      simp only [Ty.free]
+      split
+      · -- It can't be called any more.
+        rename_i hm
+        refine .gone (fun y => ?_) (fun l hl => ?_)
+        · exact (HasType.lam (fns := fns) hk hc himm hrc hrl hb).not_free rfl
+        · obtain ⟨m, t, h, hle, hmr, htr⟩ := hrl l hl
+          obtain ⟨m', t', h', hle', hmr', htr', him⟩ := free_captured (r := r) h hle hmr htr
+          refine ⟨m', t', h', hle', hmr', htr', fun hio => him ?_⟩
+          obtain ⟨_, himm'⟩ := hb.hasLoc_imm (by simp [hio]) hl
+          rw [h] at himm'
+          cases himm'
+          rfl
+      · -- What it captured doesn't change.
+        rename_i hm
+        have hμ : μ.mentions r = false := by
+          simp only [Ty.mentions, Bool.or_eq_true, not_or] at hm
+          simpa using hm.1.1
+        have hag : ∀ l, body.HasLoc l → (σ.free r)[l]? = σ[l]? := by
+          intro l hl
+          obtain ⟨m, t, h, _, hmr, htr⟩ := hrl l hl
+          have hm' : m.mentions r = false := by
+            cases e : m.mentions r
+            · rfl
+            · rw [hmr r e] at hμ; cases hμ
+          have ht' : t.mentions r = false := by
+            cases e : t.mentions r
+            · rfl
+            · rw [htr r e] at hμ; cases hμ
+          rw [HeapTy.free_getElem?, h]
+          simp [Mu.free_not_mentions hm', Ty.free_not_mentions ht']
+        exact .lam hk hc himm hrc (fun l hl => by rw [hag l hl]; exact hrl l hl) (hb.congr_heap hag)
+    | gone hf hl =>
+      simp only [Ty.free]
+      refine .gone hf (fun l h => ?_)
+      obtain ⟨m, t, hσ, hle, hmr, htr, hio⟩ := hl l h
+      obtain ⟨m', t', h', hle', hmr', htr', him⟩ := free_captured (r := r) hσ hle hmr htr
+      exact ⟨m', t', h', hle', hmr', htr', fun h'' => him (hio h'')⟩
   | pair _ _ ih₁ ih₂ => cases ht with
     | pair h₁ h₂ => exact .pair (ih₁ h₁) (ih₂ h₂)
 
