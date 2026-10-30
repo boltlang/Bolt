@@ -89,7 +89,7 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   is at most the region, so it's `imm` once the region is freed. The region
   exists already: a block makes it when it starts (#292). -/
   | newR {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
-      HasType fns σ Δ io Γ e t → AtMost Δ (.region r) t → r < σ.length →
+      HasType fns σ Δ io Γ e t → AtMost Δ (.region r) t → Made σ.length r →
       HasType fns σ Δ io Γ (.new true e) (.cell (.region r) t)
   /-- A generic function can make an object with a changeable mutability
   parameter (#288): a call gives it `mut` or a region, so the object can be

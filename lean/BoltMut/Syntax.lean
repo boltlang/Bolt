@@ -162,12 +162,23 @@ def Ty.mentions (r : Nat) : Ty → Bool
   | .fn m a b => m.mentions r || a.mentions r || b.mentions r
   | .prod a b => a.mentions r || b.mentions r
 
-/-- Every region `m` mentions is below `n`: one that exists, when `n` is
-the heap's length. -/
-def Mu.Below (n : Nat) (m : Mu) : Prop := ∀ r, m.mentions r = true → r < n
+/-- Regions are numbered (#292): an even one, `2 * n`, is the one a block
+made when it started, with its marker at location `n`; an odd one,
+`2 * k + 1`, is how `block k` calls its region before it starts. `Made n r`:
+if `r` is one a block made, it's one of the first `n` locations, so it
+exists when `n` is the heap's length. -/
+def Made (n r : Nat) : Prop := r % 2 = 0 → r / 2 < n
+
+@[simp] theorem made_iff {n r : Nat} : Made n r ↔ (r % 2 = 0 → r / 2 < n) := Iff.rfl
+
+theorem Made.mono {n n' r : Nat} (h : Made n r) (hn : n ≤ n') : Made n' r :=
+  fun he => Nat.lt_of_lt_of_le (h he) hn
+
+/-- Every region `m` mentions exists. -/
+def Mu.Below (n : Nat) (m : Mu) : Prop := ∀ r, m.mentions r = true → Made n r
 
 theorem Mu.Below.mono {n n' : Nat} {m : Mu} (h : m.Below n) (hn : n ≤ n') : m.Below n' :=
-  fun r hr => Nat.lt_of_lt_of_le (h r hr) hn
+  fun r hr => (h r hr).mono hn
 
 /-- What a list of mutabilities gives for a parameter is below `n` if they all
 are. -/

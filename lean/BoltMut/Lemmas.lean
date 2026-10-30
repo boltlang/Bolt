@@ -46,7 +46,7 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | int => exact .int
   | loc h hio => exact .loc (hx _ _ h) hio
   | new _ hd ih => exact .new ih hd
-  | newR _ hd hr ih => exact .newR ih hd (Nat.lt_of_lt_of_le hr hx.length_le)
+  | newR _ hd hr ih => exact .newR ih hd (hr.mono hx.length_le)
   | newP _ hi hd ih => exact .newP ih hi hd
   | get _ ih => exact .get ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂

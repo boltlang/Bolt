@@ -81,15 +81,15 @@ def Ty.reaches (r : Nat) : Ty → Bool
   | .fn m _ _ => m.mentions r
   | .prod a b => a.reaches r || b.reaches r
 
-/-- What a value of type `t` can reach is of regions below `n`. -/
-def Ty.ReachBelow (n : Nat) (t : Ty) : Prop := ∀ r, t.reaches r = true → r < n
+/-- What a value of type `t` can reach is of regions that exist. -/
+def Ty.ReachBelow (n : Nat) (t : Ty) : Prop := ∀ r, t.reaches r = true → Made n r
 
 /-- **Allocation order.** Each location's type reaches only regions below
 it, which existed when it was made. -/
 def AllocOk (σ : HeapTy) : Prop := ∀ (l : Nat) (m : Mu) (t : Ty), σ[l]? = some (m, t) → (Ty.cell m t).ReachBelow l
 
 theorem Ty.ReachBelow.mono {n n' : Nat} {t : Ty} (h : t.ReachBelow n) (hn : n ≤ n') : t.ReachBelow n' :=
-  fun r hr => Nat.lt_of_lt_of_le (h r hr) hn
+  fun r hr => (h r hr).mono hn
 
 /-- Freeing a region to what mentions none reaches no more. -/
 theorem Ty.reaches_free {t : Ty} {r r' : Nat} (h : (t.free r .immutable).reaches r' = true) : t.reaches r' = true := by
@@ -272,8 +272,7 @@ theorem Copy.typed {fns : List Fn} {r : Nat} {t : Ty} {h h' : Heap} {m m' : List
         simp only [Ty.reaches, Mu.mentions, Bool.false_or] at hr'
         have h₁ := ha l _ s hσ r' (by simp [Ty.reaches, Ty.reaches_free hr'])
         have h₂ : l < σ.length := (List.getElem?_eq_some_iff.mp hσ).1
-        have h₃ := hx.length_le
-        omega
+        exact h₁.mono (by have := hx.length_le; omega)
   | pair _ _ _ ih₁ ih₂ =>
     intro σ io Γ hh hv ht hf hmo
     cases hv with
@@ -419,7 +418,7 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
       exact ⟨σ', hx, hh', .new he' hd, ha⟩
     | newR he hd hr =>
       obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he
-      exact ⟨σ', hx, hh', .newR he' hd (Nat.lt_of_lt_of_le hr hx.length_le), ha⟩
+      exact ⟨σ', hx, hh', .newR he' hd (hr.mono hx.length_le), ha⟩
   | @newVal e b hv =>
     intro σ t hh ht
     cases ht with
