@@ -95,10 +95,10 @@ Comparisons and Bool operations as builtins
 extern "bolt" {
   fn i32_lt(a: i32, b: i32) -> Bool;
   fn f32_ge(a: f32, b: f32) -> Bool;
-  fn u32_eq(a: u32, b: u32) -> Bool;
+  fn char_eq(a: Char, b: Char) -> Bool;
   fn bool_not(a: Bool) -> Bool;
   fn bool_bitxor(a: Bool, b: Bool) -> Bool;
 }
-i32_lt(1, 2) && f32_ge(1.5, 1.5) && u32_eq(7, 7) && bool_not(False) && bool_bitxor(True, False);
+i32_lt(1, 2) && f32_ge(1.5, 1.5) && char_eq('a', 'a') && bool_not(False) && bool_bitxor(True, False);
 --------------------------------------------------------------------------------
 True
