@@ -1,6 +1,7 @@
 //! The unit tests of `std`: the functions with `#[test]` in the `.bolt`
 //! files of `packages/std`, each a test, like `vec::pushing_and_popping`,
-//! run by the evaluator as `bolt test` runs them.
+//! run by the evaluator as `bolt test` runs them. The tests of `vec.bolt`
+//! are in `test_vec.bolt`.
 //!
 //! Run the tests of one file with `cargo test --test std vec::`. A test
 //! fails when its file has errors, or when it stops with an error, like a
@@ -72,10 +73,16 @@ fn std_file(db: &TestDb, relative: &str) -> File {
 
 /// The name of a file of `std` in test names: its path without `.bolt`,
 /// with `::` between directories, and without `__prelude__`, whose files
-/// are most of `std`: `__prelude__/vec.bolt` is `vec`.
+/// are most of `std`: `__prelude__/vec.bolt` is `vec`. The tests of a file
+/// are in another file named after it, like `test_vec.bolt`, which is
+/// `vec` too.
 fn module(relative: &str) -> String {
     let relative = relative.strip_prefix("__prelude__/").unwrap_or(relative);
-    relative.strip_suffix(".bolt").unwrap_or(relative).replace('/', "::")
+    let relative = relative.strip_suffix(".bolt").unwrap_or(relative);
+    let (dir, name) = relative.rsplit_once('/').map_or(("", relative), |(d, n)| (d, n));
+    let name = name.strip_prefix("test_").unwrap_or(name);
+    let path = if dir.is_empty() { name.to_string() } else { format!("{dir}/{name}") };
+    path.replace('/', "::")
 }
 
 /// The `.bolt` files in `dir` and the directories in it, in order.
