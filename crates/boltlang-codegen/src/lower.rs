@@ -16,7 +16,7 @@ use boltlang_hir_def::{
         PatId, Path, PathSegment, PrefixOp, Statement,
     },
     ids::{ConstId, EnumId, EnumVariantId, FunctionId, ItemContainerId},
-    resolver::{Resolver, ValueNs, ValueResolution},
+    resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     signatures::{FieldList, enum_signature},
 };
 use boltlang_hir_ty::{
@@ -28,6 +28,7 @@ use boltlang_hir_ty::{
 use crate::{
     CodegenError, ErrorKind, Instance,
     ir::{BlockTy, Callee, CompiledFn, Inst, Op, ValTy},
+    layout::{self, Layout, Repr},
 };
 
 type Result<'db, T> = std::result::Result<T, CodegenError<'db>>;
@@ -76,7 +77,7 @@ impl Scalar {
         })
     }
 
-    fn val_ty(self) -> ValTy {
+    pub(crate) fn val_ty(self) -> ValTy {
         match self {
             Scalar::Int { bits: 64, .. } => ValTy::I64,
             Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str | Scalar::Enum => ValTy::I32,
@@ -213,14 +214,19 @@ impl<'db> Compiler<'db> {
     /// The Wasm type of values of `ty`, or `None` for `()` and `!`.
     fn val_ty(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Option<ValTy>> {
         match ty {
-            Ty::Never => Ok(None),
-            Ty::Tuple(tys) if tys.is_empty() => Ok(None),
             Ty::Var(_) | Ty::Error | Ty::Bound(_) | Ty::Param(_) => Err(self.error(at, ErrorKind::UnknownType)),
-            _ => match Scalar::of(self.db, ty) {
-                Some(scalar) => Ok(Some(scalar.val_ty())),
-                None => Err(self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))),
-            },
+            _ => layout::val_ty(self.db, ty)
+                .ok_or_else(|| self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))),
         }
+    }
+
+    fn repr(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Repr<'db>> {
+        layout::repr(self.db, ty).ok_or_else(|| self.unsupported(at, format!("a value of type `{}`", ty.display(self.db))))
+    }
+
+    /// The fields of a struct or tuple of type `ty` in memory.
+    fn layout(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Layout<'db>> {
+        layout::layout(self.db, ty).ok_or_else(|| self.unsupported(at, format!("a value of type `{}`", ty.display(self.db))))
     }
 
     fn expr_val_ty(&self, expr: ExprId) -> Result<'db, Option<ValTy>> {
@@ -266,17 +272,26 @@ impl<'db> Compiler<'db> {
     fn function(&mut self, scheme: &'db Scheme<'db>) -> Result<'db, ()> {
         let body = self.body;
         let Ty::Fn(params, ret, _) = self.subst(&scheme.ty) else { unreachable!("a function has a function type") };
-        for (&pat, ty) in body.params.iter().zip(params.iter()) {
-            let index = self.val_ty(ty, body.body_expr)?.map(|ty| {
+        // All the parameters first, since locals are numbered after them.
+        let mut indices = Vec::new();
+        for ty in params.iter() {
+            indices.push(self.val_ty(ty, body.body_expr)?.map(|ty| {
                 self.params.push(ty);
                 self.params.len() as u32 - 1
-            });
+            }));
+        }
+        for ((&pat, ty), index) in body.params.iter().zip(params.iter()).zip(indices) {
             match &body[pat] {
                 Pat::Bind { id, subpat: None } => {
                     self.bindings.insert(*id, index);
                 }
                 Pat::Wild => {}
-                _ => return Err(self.unsupported(body.body_expr, "a pattern in a parameter")),
+                // A pattern like `(a, b)`, which the checker made sure
+                // always matches.
+                _ => {
+                    self.pattern(pat, index, ty, body.body_expr)?;
+                    self.push(Inst::Drop);
+                }
             }
         }
         self.result = self.val_ty(&ret, body.body_expr)?;
@@ -393,6 +408,20 @@ impl<'db> Compiler<'db> {
             Expr::Prefix { op, expr: inner } => self.prefix(expr, *op, *inner),
             Expr::Binary { op, lhs, rhs } => self.binary(expr, op, *lhs, *rhs),
             Expr::Tuple { exprs } if exprs.is_empty() => Ok(()),
+            Expr::Tuple { exprs } => {
+                let fields: Vec<_> = exprs.iter().enumerate().map(|(i, &e)| (Name::new(i.to_string()), e)).collect();
+                self.construct(expr, &fields, None)
+            }
+            Expr::Record { path, fields, spread, .. } => {
+                let resolution = path.as_ref().and_then(|p| self.resolve(expr, p));
+                match resolution {
+                    Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
+                        let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
+                        self.construct(expr, &fields, *spread)
+                    }
+                    _ => Err(self.unsupported(expr, "an enum with fields")),
+                }
+            }
             Expr::If { condition, then_branch, else_branch } => {
                 self.expr(*condition)?;
                 let result = self.expr_val_ty(expr)?;
@@ -456,10 +485,15 @@ impl<'db> Compiler<'db> {
                 self.push(Inst::Return);
                 Ok(())
             }
-            Expr::Field { .. } => match expr_as_path(body, expr).and_then(|path| self.resolve(expr, &path)) {
-                Some(ValueResolution::Value(ValueNs::Variant(v))) => self.variant(expr, v),
-                _ => Err(self.unsupported(expr, "a field")),
-            },
+            Expr::Field { expr: base, name } => {
+                if layout::fields(self.db, &self.ty(*base)).is_some() {
+                    return self.field(*base, name);
+                }
+                match expr_as_path(body, expr).and_then(|path| self.resolve(expr, &path)) {
+                    Some(ValueResolution::Value(ValueNs::Variant(v))) => self.variant(expr, v),
+                    _ => Err(self.unsupported(expr, "a field")),
+                }
+            }
             other => Err(self.unsupported(expr, describe(other))),
         }
     }
@@ -524,7 +558,182 @@ impl<'db> Compiler<'db> {
             }
             Some(ValueResolution::Value(ValueNs::Function(_))) => Err(self.unsupported(expr, "a function as a value")),
             Some(ValueResolution::Value(ValueNs::Variant(v))) => self.variant(expr, v),
+            // A struct without fields, like `struct Unit;`.
+            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None }))
+                if layout::fields(self.db, &self.ty(expr)).is_some_and(|f| f.is_empty()) =>
+            {
+                self.construct(expr, &[], None)
+            }
+            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
+                Err(self.unsupported(expr, "a constructor as a value"))
+            }
             _ => Err(self.unsupported(expr, "this path")),
+        }
+    }
+
+    // Structs and tuples
+
+    /// A new struct or tuple of the type of `expr`, with the values of
+    /// `given` for its fields, in that order, and copies of those of
+    /// `spread` for the others.
+    fn construct(&mut self, expr: ExprId, given: &[(Name, ExprId)], spread: Option<ExprId>) -> Result<'db, ()> {
+        let ty = self.ty(expr);
+        match self.repr(&ty, expr)? {
+            // Its one field is the value.
+            Repr::Newtype(_) => match (given, spread) {
+                ([(_, field)], _) => self.expr(*field),
+                ([], Some(base)) => self.expr(base),
+                _ => Err(self.unsupported(expr, "this struct")),
+            },
+            Repr::Boxed => {
+                let layout = self.layout(&ty, expr)?;
+                // The base first, like the evaluator.
+                let base = match spread {
+                    Some(base) => self.temp(base)?,
+                    None => None,
+                };
+                let address = self.alloc(layout.size);
+                // The copies first, so that the given fields can't change
+                // what's copied.
+                if let Some(base) = base {
+                    for slot in &layout.slots {
+                        let Some(val_ty) = slot.val_ty else { continue };
+                        if given.iter().any(|(name, _)| *name == slot.name) {
+                            continue;
+                        }
+                        self.push(Inst::LocalGet(address));
+                        self.push(Inst::LocalGet(base));
+                        self.push(Inst::Load(val_ty, slot.offset));
+                        self.push(Inst::Store(val_ty, slot.offset));
+                    }
+                }
+                for (name, value) in given {
+                    let Some(slot) = layout.slot(name) else { return Err(self.unsupported(*value, "this field")) };
+                    match slot.val_ty {
+                        Some(val_ty) => {
+                            self.push(Inst::LocalGet(address));
+                            self.expr(*value)?;
+                            self.push(Inst::Store(val_ty, slot.offset));
+                        }
+                        None => self.expr_as(*value, None)?,
+                    }
+                }
+                self.push(Inst::LocalGet(address));
+                Ok(())
+            }
+            Repr::Unit | Repr::Scalar(_) => Err(self.unsupported(expr, "this struct")),
+        }
+    }
+
+    /// Allocate `size` bytes, into a new local that it gives.
+    fn alloc(&mut self, size: u32) -> u32 {
+        self.push(Inst::I32Const(size as i32));
+        self.call_callee(Callee::Alloc);
+        let local = self.new_local(ValTy::I32);
+        self.push(Inst::LocalSet(local));
+        local
+    }
+
+    fn call_callee(&mut self, callee: Callee<'db>) {
+        if !self.callees.contains(&callee) {
+            self.callees.push(callee);
+        }
+        self.push(Inst::Call(callee));
+    }
+
+    /// The field `name` of the struct or tuple that `base` gives.
+    fn field(&mut self, base: ExprId, name: &Name) -> Result<'db, ()> {
+        let ty = self.ty(base);
+        match self.repr(&ty, base)? {
+            Repr::Newtype(_) => self.expr(base),
+            _ => {
+                let layout = self.layout(&ty, base)?;
+                let Some(slot) = layout.slot(name) else { return Err(self.unsupported(base, "this field")) };
+                self.expr(base)?;
+                match slot.val_ty {
+                    Some(val_ty) => self.push(Inst::Load(val_ty, slot.offset)),
+                    None => self.push(Inst::Drop),
+                }
+                Ok(())
+            }
+        }
+    }
+
+    /// Store the value on the stack, if `place` has one, in `place`: a
+    /// variable, or a field of one, or of a field, and so on. A struct is
+    /// changed in place, since it's shared; a tuple is a value, so a copy
+    /// with the new field replaces it.
+    ///
+    /// The places in `place` are evaluated again, which is fine, since
+    /// they're only variables and fields: see [`Self::is_place`].
+    fn assign(&mut self, place: ExprId) -> Result<'db, ()> {
+        let value_ty = self.expr_val_ty(place)?;
+        match &self.body[place] {
+            Expr::Path(path) => {
+                let local = match self.resolve(place, path) {
+                    Some(ValueResolution::Value(ValueNs::Local(binding))) => self.binding_local(binding, place)?,
+                    _ => return Err(self.unsupported(place, "assigning to this")),
+                };
+                match local {
+                    Some(local) => self.push(Inst::LocalSet(local)),
+                    None if value_ty.is_some() => self.push(Inst::Drop),
+                    None => {}
+                }
+                Ok(())
+            }
+            &Expr::Field { expr: base, ref name } => {
+                let name = name.clone();
+                let base_ty = self.ty(base);
+                if self.repr(&base_ty, base)? != Repr::Boxed {
+                    return Err(self.unsupported(place, "assigning to this field"));
+                }
+                let layout = self.layout(&base_ty, base)?;
+                let Some(slot) = layout.slot(&name).cloned() else {
+                    return Err(self.unsupported(place, "this field"));
+                };
+                let value = value_ty.map(|ty| self.new_local(ty));
+                if let Some(value) = value {
+                    self.push(Inst::LocalSet(value));
+                }
+                if matches!(base_ty, Ty::Tuple(_)) {
+                    let old = self.temp(base)?.expect("a tuple is an address");
+                    let new = self.alloc(layout.size);
+                    for other in &layout.slots {
+                        let Some(val_ty) = other.val_ty else { continue };
+                        self.push(Inst::LocalGet(new));
+                        match value {
+                            Some(value) if other.name == slot.name => self.push(Inst::LocalGet(value)),
+                            _ => {
+                                self.push(Inst::LocalGet(old));
+                                self.push(Inst::Load(val_ty, other.offset));
+                            }
+                        }
+                        self.push(Inst::Store(val_ty, other.offset));
+                    }
+                    self.push(Inst::LocalGet(new));
+                    return self.assign(base);
+                }
+                match (value, slot.val_ty) {
+                    (Some(value), Some(val_ty)) => {
+                        self.expr(base)?;
+                        self.push(Inst::LocalGet(value));
+                        self.push(Inst::Store(val_ty, slot.offset));
+                    }
+                    _ => self.expr_as(base, None)?,
+                }
+                Ok(())
+            }
+            _ => Err(self.unsupported(place, "assigning to an element")),
+        }
+    }
+
+    /// Whether `expr` is a variable, or a field of a place, so that
+    /// evaluating it has no effects.
+    fn is_place(&self, expr: ExprId) -> bool {
+        match &self.body[expr] {
+            Expr::Path(_) => true,
+            Expr::Field { expr: base, .. } => self.is_place(*base),
+            _ => false,
         }
     }
 
@@ -710,27 +919,25 @@ impl<'db> Compiler<'db> {
                 self.op(cmp_op(*op, scalar));
                 Ok(())
             }
+            // The value first, then the place, like the evaluator.
             BinaryOp::Assign(op) => {
-                let local = match &self.body[lhs] {
-                    Expr::Path(path) => match self.resolve(lhs, path) {
-                        Some(ValueResolution::Value(ValueNs::Local(binding))) => self.binding_local(binding, lhs)?,
-                        _ => return Err(self.unsupported(lhs, "assigning to this")),
-                    },
-                    _ => return Err(self.unsupported(lhs, "assigning to a field or an element")),
-                };
-                let Some(local) = local else { return self.expr_as(rhs, None) };
+                if !self.is_place(lhs) {
+                    return Err(self.unsupported(lhs, "assigning to this"));
+                }
                 match op {
                     None => self.expr(rhs)?,
                     Some(op) => {
                         let scalar = self.scalar(lhs)?;
-                        self.push(Inst::LocalGet(local));
-                        self.expr(rhs)?;
+                        let value = self.temp(rhs)?;
+                        self.expr(lhs)?;
+                        if let Some(value) = value {
+                            self.push(Inst::LocalGet(value));
+                        }
                         self.shift_amount(*op, scalar, rhs)?;
                         self.arith(expr, *op, scalar)?;
                     }
                 }
-                self.push(Inst::LocalSet(local));
-                Ok(())
+                self.assign(lhs)
             }
             // `a <$> b` calls the function `(<$>)`.
             BinaryOp::Custom(name) => match self.resolve(expr, &Path::from_name(name.clone())) {
@@ -830,6 +1037,11 @@ impl<'db> Compiler<'db> {
         };
         match path.and_then(|p| self.resolve(callee, &p)) {
             Some(ValueResolution::Value(ValueNs::Function(f))) => self.call_function(expr, f, Some(callee), args),
+            // `Wrap(x)`, a tuple struct.
+            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
+                let fields: Vec<_> = args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
+                self.construct(expr, &fields, None)
+            }
             _ => Err(self.unsupported(callee, "calling something other than a function")),
         }
     }
@@ -864,10 +1076,7 @@ impl<'db> Compiler<'db> {
         for &arg in args {
             self.expr(arg)?;
         }
-        if !self.callees.contains(&target) {
-            self.callees.push(target);
-        }
-        self.push(Inst::Call(target));
+        self.call_callee(target);
         if builtin == Some(Builtin::Panic) {
             // The host doesn't return from `panic`.
             self.push(Inst::Unreachable);
@@ -988,7 +1197,66 @@ impl<'db> Compiler<'db> {
                     }
                 }
             }
+            Pat::Tuple { args, rest } => {
+                let fields = positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
+                self.field_patterns(&fields, local, ty, at)?;
+            }
+            Pat::TupleStruct { path, args, rest } => {
+                self.struct_pattern_path(path, at)?;
+                let fields = positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
+                self.field_patterns(&fields, local, ty, at)?;
+            }
+            Pat::Record { path, fields, .. } => {
+                self.struct_pattern_path(path, at)?;
+                let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.pat)).collect();
+                self.field_patterns(&fields, local, ty, at)?;
+            }
             _ => return Err(self.unsupported(at, "this pattern")),
+        }
+        Ok(())
+    }
+
+    /// That the path of a pattern like `Wrap(x)` names a struct, which a
+    /// value of its type always is.
+    fn struct_pattern_path(&self, path: &Path, at: ExprId) -> Result<'db, ()> {
+        match Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path) {
+            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => Ok(()),
+            _ => Err(self.unsupported(at, "a pattern of an enum with fields")),
+        }
+    }
+
+    /// Test the fields of the struct or tuple in `local`, of type `ty`,
+    /// against their patterns, leaving 1 if all match.
+    fn field_patterns(&mut self, fields: &[(Name, PatId)], local: Option<u32>, ty: &Ty<'db>, at: ExprId) -> Result<'db, ()> {
+        if let Repr::Newtype(field_ty) = self.repr(ty, at)? {
+            return match fields {
+                [(_, pat)] => self.pattern(*pat, local, &field_ty, at),
+                _ => {
+                    self.push(Inst::I32Const(1));
+                    Ok(())
+                }
+            };
+        }
+        let layout = self.layout(ty, at)?;
+        if fields.is_empty() {
+            self.push(Inst::I32Const(1));
+        }
+        for (i, (name, pat)) in fields.iter().enumerate() {
+            let Some(slot) = layout.slot(name) else { return Err(self.unsupported(at, "this field")) };
+            let field = match (slot.val_ty, local) {
+                (Some(val_ty), Some(local)) => {
+                    let field = self.new_local(val_ty);
+                    self.push(Inst::LocalGet(local));
+                    self.push(Inst::Load(val_ty, slot.offset));
+                    self.push(Inst::LocalSet(field));
+                    Some(field)
+                }
+                _ => None,
+            };
+            self.pattern(*pat, field, &slot.ty.clone(), at)?;
+            if i > 0 {
+                self.op(Op::I32And);
+            }
         }
         Ok(())
     }
@@ -1114,6 +1382,20 @@ fn bind_type_args<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, fo
         }
         _ => {}
     }
+}
+
+/// The fields that the patterns of `(a, .., b)` are for, of `count`
+/// fields: those before the `..` from the start, and those after it from
+/// the end.
+fn positional(args: &[PatId], rest: Option<u32>, count: usize) -> Vec<(Name, PatId)> {
+    let rest = rest.map_or(args.len(), |r| r as usize);
+    args.iter()
+        .enumerate()
+        .map(|(i, &pat)| {
+            let index = if i < rest { i } else { count + i - args.len() };
+            (Name::new(index.to_string()), pat)
+        })
+        .collect()
 }
 
 /// `a.b.c` as a path, if `expr` is one.

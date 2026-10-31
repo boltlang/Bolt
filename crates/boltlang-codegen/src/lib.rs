@@ -1,25 +1,31 @@
 //! A code generator from Bolt to WebAssembly.
 //!
 //! It's minimal for now: it compiles the scalar types (integers, floats,
-//! `Bool`, `Char` and `()`), enums whose variants have no fields, string
-//! literals, functions, `let`, `if`, loops, `break`, `continue`, `return`,
-//! and `match` on scalars and on those enums. Anything else is an
-//! [`ErrorKind::Unsupported`] error.
+//! `Bool`, `Char` and `()`), enums whose variants have no fields, structs,
+//! tuples, string literals, functions, `let`, `if`, loops, `break`,
+//! `continue`, `return`, and `match` on scalars, on those enums, and on
+//! structs and tuples. Anything else is an [`ErrorKind::Unsupported`] error.
 //!
 //! A value of an enum without fields, like `enum Color { Red, Green }`, is
 //! an `i32`: the index of its variant, so `Color.Green` is 1. Enums can be
 //! compared with `==` and `!=`, but not ordered.
 //!
+//! A struct or a tuple is the address of its fields in memory, except for an
+//! `imm struct` with one field, which is that field: see the module
+//! `layout`. Memory comes from an allocator that linking adds to the module,
+//! and is never freed yet.
+//!
 //! The module exports its memory as `memory`. A `String` is the address in it
 //! of the string's length, as a little-endian `u32`, followed by its UTF-8
-//! bytes; literals are data segments. The host provides:
+//! bytes; literals are data segments, and the heap comes after them. The host
+//! provides:
 //!
 //! - the builtins, like `print`, in the module `bolt`, which take strings
 //!   as addresses: see [`Builtin`](boltlang_hir_ty::builtin::Builtin);
 //! - the functions of `extern` blocks, in the module `env`.
 //!
 //! `runtime/bolt.mjs` provides the module `bolt` for browsers and Node, and
-//! [`run`] provides it with wasmi, for `bolt run --wasm`.
+//! [`run()`] provides it with wasmi, for `bolt run --wasm`.
 //!
 //! The code generator works on the bodies of hir-def and the types that
 //! hir-ty infers for them, through Salsa queries:
@@ -43,6 +49,7 @@
 
 mod emit;
 mod ir;
+mod layout;
 mod lower;
 mod run;
 

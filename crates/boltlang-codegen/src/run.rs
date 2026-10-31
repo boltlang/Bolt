@@ -17,7 +17,11 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::{AdtId, Ty, builtin::Builtin, infer_body};
 use wasmi::{Caller, Config, Engine, Extern, Linker, Module, Store, TrapCode, Val};
 
-use crate::lower::Scalar;
+use crate::{
+    ir::ValTy,
+    layout::{self, Repr},
+    lower::Scalar,
+};
 
 /// Why running a module failed.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -177,9 +181,9 @@ pub fn run<'db, H: Host + 'static>(
         return Err(run_error(&mut store, error));
     }
     let memory = instance.get_memory(&store, "memory").map_or(&[][..], |m| m.data(&store));
-    match (entry_ty(db, file), results.pop()) {
-        (Some(ty), Some(val)) => to_value(db, &ty, val, memory),
-        _ => Ok(Value::unit()),
+    match entry_ty(db, file) {
+        Some(ty) => to_value(db, &ty, results.pop(), memory),
+        None => Ok(Value::unit()),
     }
 }
 
@@ -195,11 +199,49 @@ fn entry_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
     }
 }
 
-/// A value that compiled code gave for `ty`, as the evaluator's value.
-// `memory` is for strings, which compiled code doesn't support yet.
-fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, _memory: &[u8]) -> Result<Value<'db>, RunError> {
+/// A value that compiled code gave for `ty`, as the evaluator's value:
+/// `None` for a type without values. Structs and tuples are read from
+/// `memory`.
+fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8]) -> Result<Value<'db>, RunError> {
     let unexpected = || RunError::Invalid(format!("`main` gave {val:?} for a value of type `{}`", ty.display(db)));
-    let value = match (Scalar::of(db, ty).ok_or_else(unexpected)?, &val) {
+    let repr = layout::repr(db, ty).ok_or_else(unexpected)?;
+    let scalar = match (repr, &val) {
+        (Repr::Unit, None) => return Ok(Value::unit()),
+        (Repr::Scalar(scalar), Some(_)) => scalar,
+        (Repr::Newtype(field_ty), _) => {
+            let Ty::Adt(AdtId::Struct(id), ..) = ty else { return Err(unexpected()) };
+            let fields = layout::fields(db, ty).ok_or_else(unexpected)?;
+            let value = to_value(db, &field_ty, val.clone(), memory)?;
+            let name = fields.into_iter().next().ok_or_else(unexpected)?.0;
+            return Ok(Value::adt(Ctor::Struct(*id), Mutability::Imm, vec![(name, value)]));
+        }
+        (Repr::Boxed, Some(Val::I32(address))) => {
+            let layout = layout::layout(db, ty).ok_or_else(unexpected)?;
+            let mut fields = Vec::new();
+            for slot in &layout.slots {
+                let field = match slot.val_ty {
+                    Some(val_ty) => {
+                        let at = (*address as u32).checked_add(slot.offset).ok_or_else(unexpected)?;
+                        Some(load(memory, at, val_ty).ok_or_else(unexpected)?)
+                    }
+                    None => None,
+                };
+                fields.push((slot.name.clone(), to_value(db, &slot.ty, field, memory)?));
+            }
+            return Ok(match ty {
+                Ty::Tuple(_) => Value::Tuple(fields.into_iter().map(|(_, v)| v).collect()),
+                Ty::Adt(AdtId::Struct(id), _, _, own) => {
+                    let mutability =
+                        if **own == Ty::Mutability(Mutability::Mut) { Mutability::Mut } else { Mutability::Imm };
+                    Value::adt(Ctor::Struct(*id), mutability, fields)
+                }
+                _ => return Err(unexpected()),
+            });
+        }
+        _ => return Err(unexpected()),
+    };
+    let val = val.clone().ok_or_else(unexpected)?;
+    let value = match (scalar, &val) {
         (Scalar::Bool, Val::I32(n)) => Value::Bool(*n != 0),
         (Scalar::Char, Val::I32(n)) => Value::Char(char::from_u32(*n as u32).ok_or_else(unexpected)?),
         (Scalar::Enum, Val::I32(index)) => {
@@ -216,4 +258,16 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Val, _memory: &[u8]) -> Res
         _ => return Err(unexpected()),
     };
     Ok(value)
+}
+
+/// The value of type `ty` at `address` in `memory`, little-endian.
+fn load(memory: &[u8], address: u32, ty: ValTy) -> Option<Val> {
+    let start = address as usize;
+    let bytes = memory.get(start..start.checked_add(ty.size() as usize)?)?;
+    Some(match ty {
+        ValTy::I32 => Val::I32(i32::from_le_bytes(bytes.try_into().ok()?)),
+        ValTy::I64 => Val::I64(i64::from_le_bytes(bytes.try_into().ok()?)),
+        ValTy::F32 => Val::F32(f32::from_le_bytes(bytes.try_into().ok()?).into()),
+        ValTy::F64 => Val::F64(f64::from_le_bytes(bytes.try_into().ok()?).into()),
+    })
 }

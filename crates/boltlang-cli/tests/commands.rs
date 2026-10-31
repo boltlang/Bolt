@@ -175,7 +175,7 @@ fn run_stops_when_it_runs_out_of_fuel() {
 
 #[test]
 fn run_reports_what_the_code_generator_doesnt_support() {
-    let dir = dir_with("run-unsupported", &[("a.bolt", "(1, 2);\n")]);
+    let dir = dir_with("run-unsupported", &[("a.bolt", "[1, 2];\n")]);
     let o = bolt(&dir, "run", &["a.bolt", "--wasm"]);
     assert!(!o.ok);
     assert!(o.err.contains("not supported"), "{}", o.err);
@@ -197,7 +197,7 @@ fn build_writes_a_module() {
 fn build_doesnt_write_a_module_with_errors() {
     let dir = dir_with(
         "build-error",
-        &[("a.bolt", "let x: i32 = True;\n"), ("b.bolt", "(1, 2);\n")],
+        &[("a.bolt", "let x: i32 = True;\n"), ("b.bolt", "[1, 2];\n")],
     );
     let o = bolt(&dir, "build", &["a.bolt"]);
     assert!(!o.ok);

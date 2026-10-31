@@ -131,12 +131,38 @@ fn enums_with_fields_and_ordering_are_errors() {
 #[test]
 fn unsupported_code_is_an_error() {
     let db = TestDb::new();
-    let file = db.file("/main.bolt", "struct P { x: i32 }\nfn f() -> i32 = 1;\nlet p = P { x: f() };\n");
+    let code = "fn f() -> i32 = 1;\nlet xs = [f(), 2];\n";
+    let file = db.file("/main.bolt", code);
     let errors = link(&db, file).unwrap_err();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].to_string(), "a struct is not supported by the code generator yet");
+    assert_eq!(errors[0].to_string(), "an array is not supported by the code generator yet");
     let (_, range) = errors[0].source_range(&db).unwrap();
-    assert_eq!(&"struct P { x: i32 }\nfn f() -> i32 = 1;\nlet p = P { x: f() };\n"[range.start as usize..range.end as usize], "P { x: f() }");
+    assert_eq!(&code[range.start as usize..range.end as usize], "[f(), 2]");
+}
+
+#[test]
+fn an_imm_struct_with_one_field_is_its_field() {
+    // `Code` is an `i32`, and nothing is allocated.
+    let db = TestDb::new();
+    let file = db.file("/main.bolt", "imm struct Code(u32);\nfn next(c: Code) -> Code = Code(c.0 + 1);\nnext(Code(1));");
+    let bytes = compile(&db, file);
+    let (mut store, instance) = instantiate(&bytes);
+    assert_eq!(call(&mut store, &instance, "next", &[Val::I32(41)]).and_then(|v| v.i32()), Some(42));
+    assert!(instance.get_func(&store, "alloc").is_none());
+    assert!(!bytes.windows(5).any(|w| w == b"alloc"));
+}
+
+#[test]
+fn structs_are_allocated_in_memory() {
+    // Enough points to grow the memory past its first page.
+    let db = TestDb::new();
+    let code = "struct P { x: i64, y: i64 }\nlet mut i = 0;\nlet mut last = P { x: 0, y: 0 };\n\
+                while i < 10000 { last = P { x: i, y: last.x }; i += 1; }\nlast.x + last.y;";
+    let file = db.file("/main.bolt", code);
+    let (mut store, instance) = instantiate(&compile(&db, file));
+    assert_eq!(call(&mut store, &instance, "main", &[]).and_then(|v| v.i64()), Some(9999 + 9998));
+    let memory = instance.get_memory(&store, "memory").unwrap();
+    assert!(memory.data(&store).len() > 65536);
 }
 
 #[test]
