@@ -19,6 +19,16 @@ pub enum ValTy {
     F64,
 }
 
+impl ValTy {
+    /// The bytes a value takes in memory.
+    pub fn size(self) -> u32 {
+        match self {
+            ValTy::I32 | ValTy::F32 => 4,
+            ValTy::I64 | ValTy::F64 => 8,
+        }
+    }
+}
+
 /// The type of a `block`, `loop` or `if`: what it leaves on the stack.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum BlockTy {
@@ -42,6 +52,10 @@ pub enum Callee<'db> {
     Import(FunctionId<'db>),
     /// A builtin, which the host provides in the module `bolt`.
     Builtin(Builtin),
+    /// The allocator that linking adds to the module: it takes a size in
+    /// bytes, and gives the address of that many new bytes, aligned to 8.
+    /// Nothing is freed yet.
+    Alloc,
 }
 
 /// A Wasm instruction. Floats are kept as bits, so that code can be
@@ -58,6 +72,11 @@ pub enum Inst<'db> {
     LocalGet(u32),
     LocalSet(u32),
     LocalTee(u32),
+    /// Load a value from the address on the stack plus the offset.
+    Load(ValTy, u32),
+    /// Store the value on the stack at the address under it plus the
+    /// offset.
+    Store(ValTy, u32),
     Call(Callee<'db>),
     Block(BlockTy),
     Loop(BlockTy),

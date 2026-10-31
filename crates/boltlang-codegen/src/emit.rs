@@ -14,8 +14,8 @@ use boltlang_hir_ty::{Ty, function_scheme};
 use boltlang_hir_ty::builtin::Builtin;
 use wasm_encoder::{
     BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function,
-    FunctionSection, ImportSection, Instruction, MemorySection, MemoryType, Module, NameMap, NameSection,
-    TypeSection, ValType,
+    FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemArg, MemorySection, MemoryType,
+    Module, NameMap, NameSection, TypeSection, ValType,
 };
 
 use crate::{
@@ -59,6 +59,11 @@ pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenErro
     for (i, (instance, _)) in compiled.iter().enumerate() {
         index.insert(Callee::Instance(*instance), (imports.len() + i) as u32);
     }
+    // The allocator comes after the instances, when something allocates.
+    let allocates = compiled.iter().any(|(_, code)| code.callees.contains(&Callee::Alloc));
+    if allocates {
+        index.insert(Callee::Alloc, (imports.len() + compiled.len()) as u32);
+    }
 
     let mut signatures: Vec<Signature> = Vec::new();
     let mut type_of = |signature: Signature| -> u32 {
@@ -77,7 +82,7 @@ pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenErro
         let (module, name, signature) = match *callee {
             Callee::Import(f) => ("env", function_name(db, f), import_signature(db, f)?),
             Callee::Builtin(builtin) => ("bolt", builtin.name().to_string(), builtin_signature(builtin)),
-            Callee::Instance(_) => unreachable!("an instance isn't imported"),
+            Callee::Instance(_) | Callee::Alloc => unreachable!("only imports are imported"),
         };
         import_section.import(module, &name, EntityType::Function(type_of(signature)));
         names.append(i as u32, &name);
@@ -102,6 +107,18 @@ pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenErro
         names.append(idx, &name);
         codes.function(&function(code, &index, &strings));
     }
+    let mut globals = GlobalSection::new();
+    if allocates {
+        let idx = (imports.len() + compiled.len()) as u32;
+        functions.function(type_of((vec![ValTy::I32], Some(ValTy::I32))));
+        names.append(idx, "alloc");
+        codes.function(&alloc_function());
+        // The heap starts after the strings.
+        globals.global(
+            GlobalType { val_type: ValType::I32, mutable: true, shared: false },
+            &ConstExpr::i32_const(strings.end.next_multiple_of(8) as i32),
+        );
+    }
     exports.export("memory", ExportKind::Memory, 0);
 
     // One memory, with the strings from `STRINGS_START` on.
@@ -125,6 +142,7 @@ pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenErro
     module.section(&import_section);
     module.section(&functions);
     module.section(&memories);
+    module.section(&globals);
     module.section(&exports);
     module.section(&codes);
     module.section(&data);
@@ -135,6 +153,61 @@ pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenErro
         .validate_all(&bytes)
         .map_err(|e| vec![CodegenError { kind: ErrorKind::Invalid(e.to_string()), location: None }])?;
     Ok(bytes)
+}
+
+/// The allocator: `alloc(size)` gives the address of `size` new bytes,
+/// aligned to 8, from the heap pointer, the only global, and grows the
+/// memory when they don't fit. It traps when the memory can't grow.
+fn alloc_function() -> Function {
+    use Instruction as I;
+    // The parameter `size`, then the address it gives.
+    let (size, address) = (0, 1);
+    let mut f = Function::new([(1, ValType::I32)]);
+    for inst in [
+        I::GlobalGet(0),
+        I::LocalSet(address),
+        // The heap pointer moves past the bytes, aligned to 8.
+        I::LocalGet(address),
+        I::LocalGet(size),
+        I::I32Add,
+        I::I32Const(7),
+        I::I32Add,
+        I::I32Const(-8),
+        I::I32And,
+        I::GlobalSet(0),
+        // It wrapped around: there are no more addresses.
+        I::GlobalGet(0),
+        I::LocalGet(address),
+        I::I32LtU,
+        I::If(BlockType::Empty),
+        I::Unreachable,
+        I::End,
+        // The pages the heap needs, minus those there are.
+        I::GlobalGet(0),
+        I::I32Const(65535),
+        I::I32Add,
+        I::I32Const(16),
+        I::I32ShrU,
+        I::MemorySize(0),
+        I::I32Sub,
+        I::LocalTee(size),
+        I::I32Const(0),
+        I::I32GtS,
+        I::If(BlockType::Empty),
+        I::LocalGet(size),
+        I::MemoryGrow(0),
+        I::I32Const(-1),
+        I::I32Eq,
+        I::If(BlockType::Empty),
+        I::Unreachable,
+        I::End,
+        I::End,
+        I::LocalGet(address),
+        I::End,
+    ] {
+        f.instruction(&inst);
+    }
+    f
 }
 
 /// Where the strings start in memory. Address 0 is left unused, so that it
@@ -213,6 +286,24 @@ fn instruction<'a, 'db>(inst: &Inst<'db>, index: &HashMap<Callee<'db>, u32>, str
         Inst::LocalGet(i) => Instruction::LocalGet(*i),
         Inst::LocalSet(i) => Instruction::LocalSet(*i),
         Inst::LocalTee(i) => Instruction::LocalTee(*i),
+        Inst::Load(ty, offset) => {
+            let arg = mem_arg(*ty, *offset);
+            match ty {
+                ValTy::I32 => Instruction::I32Load(arg),
+                ValTy::I64 => Instruction::I64Load(arg),
+                ValTy::F32 => Instruction::F32Load(arg),
+                ValTy::F64 => Instruction::F64Load(arg),
+            }
+        }
+        Inst::Store(ty, offset) => {
+            let arg = mem_arg(*ty, *offset);
+            match ty {
+                ValTy::I32 => Instruction::I32Store(arg),
+                ValTy::I64 => Instruction::I64Store(arg),
+                ValTy::F32 => Instruction::F32Store(arg),
+                ValTy::F64 => Instruction::F64Store(arg),
+            }
+        }
         Inst::Call(callee) => Instruction::Call(index[callee]),
         Inst::Block(ty) => Instruction::Block(block_type(*ty)),
         Inst::Loop(ty) => Instruction::Loop(block_type(*ty)),
@@ -226,6 +317,11 @@ fn instruction<'a, 'db>(inst: &Inst<'db>, index: &HashMap<Callee<'db>, u32>, str
         Inst::Drop => Instruction::Drop,
         Inst::Op(op) => op_instruction(*op),
     }
+}
+
+/// A value of `ty` at an offset, aligned to its size.
+fn mem_arg(ty: ValTy, offset: u32) -> MemArg {
+    MemArg { offset: offset as u64, align: ty.size().trailing_zeros(), memory_index: 0 }
 }
 
 fn op_instruction<'a>(op: Op) -> Instruction<'a> {
