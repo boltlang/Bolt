@@ -38,7 +38,6 @@ fn arithmetic() {
     assert_eq!(run("7 % 3 - -1"), "2");
     assert_eq!(run("1.5 * 2.0"), "3.0");
     assert_eq!(run("1 << 4 | 1"), "17");
-    assert_eq!(run("\"ab\" <> \"cd\""), "\"abcd\"");
     assert_eq!(run("3 as f64"), "3.0");
 }
 
@@ -327,13 +326,6 @@ fn effects_are_refused_without_a_host_and_in_consts() {
 }
 
 #[test]
-fn array_len_counts_the_elements() {
-    let (db, file) = db_with_std("let xs = mut [1, 2];\nlet n = array_len(xs);\nxs[0] = 3;\n(n, array_len([True]), array_len([]));");
-    let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();
-    assert_eq!(value.display(&db).to_string(), "(2, 1, 0)");
-}
-
-#[test]
 fn array_alloc_makes_elements_to_set() {
     let (db, file) =
         db_with_std(&format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);"));
@@ -352,21 +344,6 @@ fn reading_an_unset_element_is_an_error() {
     let (db, file) = db_with_std(&format!("{ARRAY_ALLOC}struct P {{ x: i32 }}\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;"));
     let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnsetElement { index: 0 });
-}
-
-#[test]
-fn array_copy_copies_ranges() {
-    // Between arrays, and within one, to the right and to the left.
-    let code = "let a = mut [1, 2, 3, 4, 5];\n\
-                let b = mut [0, 0, 0];\n\
-                array_copy(b, 1, a, 3, 2);\n\
-                let c = mut [1, 2, 3, 4, 5];\n\
-                array_copy(c, 1, c, 0, 3);\n\
-                let d = mut [1, 2, 3, 4, 5];\n\
-                array_copy(d, 0, d, 2, 3);\n\
-                array_copy(d, 5, d, 0, 0);\n\
-                (b, c, d);";
-    assert_eq!(run(code), "([0, 4, 5], [1, 1, 2, 3, 5], [3, 4, 5, 4, 5])");
 }
 
 #[test]

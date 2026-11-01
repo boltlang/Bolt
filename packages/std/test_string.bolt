@@ -2,6 +2,7 @@
 
 import "./string" *;
 import "./ops" *;
+import "./semigroup" *;
 import "./io" (assert);
 
 #[test]
@@ -35,4 +36,11 @@ fn a_builder_builds_only_what_was_added() {
   b.push('!');
   assert(s == "hello");
   assert(b.build() == "hello!");
+}
+
+#[test]
+fn strings_are_joined_with_concat() {
+  assert("ab" <> "cd" == "abcd");
+  assert("" <> "x" == "x" && "x" <> "" == "x");
+  assert(("é" <> "✓").len() == 5);
 }

@@ -39,3 +39,35 @@ fn arrays_are_equal_when_their_elements_are() {
   assert([1, 2, 3] != [1, 2, 4]);
   assert([1, 2] != [1, 2, 3]);
 }
+
+#[test]
+fn array_len_counts_the_elements() {
+  let xs = mut [1, 2];
+  let n = array_len(xs);
+  xs[0] = 3;
+  assert(n == 2);
+  assert(array_len([True]) == 1);
+  assert(array_len([]) == 0);
+}
+
+#[test]
+fn array_copy_copies_ranges() {
+  let a = mut [1, 2, 3, 4, 5];
+  let b = mut [0, 0, 0];
+  array_copy(b, 1, a, 3, 2);
+  assert(b == mut [0, 4, 5]);
+}
+
+#[test]
+fn array_copy_copies_within_one_array() {
+  // To the right, and to the left; the ranges overlap.
+  let c = mut [1, 2, 3, 4, 5];
+  array_copy(c, 1, c, 0, 3);
+  assert(c == mut [1, 1, 2, 3, 5]);
+  let d = mut [1, 2, 3, 4, 5];
+  array_copy(d, 0, d, 2, 3);
+  assert(d == mut [3, 4, 5, 4, 5]);
+  // Copying nothing, at the end, changes nothing.
+  array_copy(d, 5, d, 0, 0);
+  assert(d == mut [3, 4, 5, 4, 5]);
+}
