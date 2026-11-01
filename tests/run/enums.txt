@@ -31,7 +31,6 @@ Blue
 ================================================================================
 Variants imported into scope
 :test-prelude
-:todo wasm
 ================================================================================
 enum Color { Red, Green, Blue }
 import Color.*;

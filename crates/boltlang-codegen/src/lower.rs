@@ -24,6 +24,7 @@ use boltlang_hir_ty::{
     builtin::{ArithOp, Builtin, CmpOp, PrefixOp, PrimOp, builtin},
     function_scheme, infer_body,
     instances::{bind_scheme_args, class_args, impl_method, select_impl, subst_scheme_args},
+    lang::string_struct,
     solve::normalize_assoc,
 };
 
@@ -813,6 +814,14 @@ impl<'db> Compiler<'db> {
         let value = Evaluator::new(self.db)
             .eval_const(id)
             .map_err(|e| self.unsupported(expr, format!("a const whose value can't be computed ({e})")))?;
+        // A `String`, laid out like a literal.
+        if let Ty::Adt(AdtId::Struct(s), ..) = self.ty(expr)
+            && string_struct(self.db, s.file(self.db)) == Some(s)
+            && let Some(text) = value.text()
+        {
+            self.push(Inst::Str(text.as_str().into()));
+            return Ok(());
+        }
         let Some(scalar) = Scalar::through(self.db, &self.ty(expr)) else {
             return match value {
                 Value::Tuple(items) if items.is_empty() => Ok(()),

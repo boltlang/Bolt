@@ -146,7 +146,6 @@ let xs = mut [1, 2, 3];
 
 ================================================================================
 A mut struct can hold an imm array through a mutability parameter
-:todo wasm
 :test-prelude
 ================================================================================
 struct Cursor['v] { data: 'v [i32], index: i32 }

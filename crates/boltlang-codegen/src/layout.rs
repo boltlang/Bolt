@@ -24,7 +24,6 @@ use boltlang_base_db::Db;
 use boltlang_hir_def::{Name, resolver::GenericDefId};
 use boltlang_hir_ty::{
     AdtId, Ty,
-    lang::string_struct,
     lower::{VariantDef, field_types, struct_args, subst_params},
 };
 
@@ -109,12 +108,9 @@ pub(crate) fn repr<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Repr<'db>> {
         Ty::Never => Some(Repr::Unit),
         Ty::Tuple(tys) if tys.is_empty() => Some(Repr::Unit),
         Ty::Tuple(_) => Some(Repr::Boxed),
+        // The prelude's `String`, an `imm struct` of its `[u8]`, is that
+        // array, laid out like a literal: its length, then its bytes.
         Ty::Adt(AdtId::Struct(id), ..) => {
-            // Compiled code doesn't have strings yet: a literal is the
-            // address of its bytes, which isn't the prelude's `String`.
-            if string_struct(db, id.file(db)) == Some(*id) {
-                return None;
-            }
             let fields = fields(db, ty)?;
             match &fields[..] {
                 [(_, field)] if id.item(db).is_imm => Some(Repr::Newtype(field.clone())),

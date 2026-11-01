@@ -9,7 +9,6 @@ Hello, world!
 ================================================================================
 Printing from functions
 :test-prelude
-:todo wasm
 ================================================================================
 fn greet(name: String) {
   print("hello");
@@ -26,7 +25,6 @@ Wasm
 ================================================================================
 Strings in variables, consts and results
 :test-prelude
-:todo wasm
 ================================================================================
 const GREETING: String = "hi";
 fn pick(b: Bool) -> String = if b { GREETING } else { "bye" };

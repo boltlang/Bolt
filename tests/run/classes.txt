@@ -14,7 +14,6 @@ twice(21);
 
 ================================================================================
 The impl is chosen by the type of the argument
-:todo wasm
 :test-prelude
 ================================================================================
 class Describe[T] { fn describe(x: T) -> String; }
@@ -26,7 +25,6 @@ impl Describe[Bool] { fn describe(x) = "a boolean"; }
 
 ================================================================================
 A generic function chooses the impl when it runs
-:todo wasm
 :test-prelude
 ================================================================================
 class Describe[T] { fn describe(x: T) -> String; }
@@ -57,7 +55,6 @@ let nothing: Option[i32] = None;
 
 ================================================================================
 A class method with a default
-:todo wasm
 :test-prelude
 ================================================================================
 class Describe[T] {
