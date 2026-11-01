@@ -63,6 +63,7 @@ with `.bolt` already: `./parser.v2` is the file `parser.v2.bolt`.
 |---|---|
 | `import "./geometry" (Point, origin);` | the names in the list |
 | `import "./geometry" (Point as P);` | `Point`, under the name `P` |
+| `import "./geometry" (==, -);` | the operators `==` and `-`; `-` is both `fn -a` and `fn a - b` |
 | `import "./geometry" as geo;` | the file, as `geo`: write `geo.origin()` |
 | `import "./geometry" *;` | every public name of the file |
 | `import "./geometry";` | nothing, but the file's impls become visible |

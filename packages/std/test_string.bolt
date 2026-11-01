@@ -2,7 +2,7 @@
 
 import "./string" *;
 import "./ops" *;
-import "./semigroup" *;
+import "./semigroup" (<>);
 import "./io" (assert);
 
 #[test]
