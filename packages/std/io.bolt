@@ -1,4 +1,5 @@
 import "./string" (String);
+import "./ops" *;
 
 // Functions that the compiler provides.
 extern "bolt" {

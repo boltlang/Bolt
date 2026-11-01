@@ -13,8 +13,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId},
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::{
-        ArithOp, BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
-        PrefixOp, RecordField, Statement, TypeRefId,
+        BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
+        RecordField, Statement, TypeRefId,
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
     signatures::function_signature,
@@ -643,17 +643,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_expr(*index, &Ty::Builtin(BuiltinType::Int(BuiltinInt::I32)));
                 self.lang_assoc(LangClass::Index, &base_ty, expr).unwrap_or(Ty::Error)
             }
+            // `-a` calls the function `-` in scope, like the prelude's
+            // `fn -a = neg(a)`.
             Expr::Prefix { op, expr: inner } => {
                 let ty = self.infer_expr(*inner);
-                // Like infix operators: `-a` of a struct calls `fn -a`.
-                if self.is_called_operand(&ty) {
-                    return self.infer_operator_call(expr, &Name::new(op.as_str()), *inner, ty, &[]);
-                }
-                if *op == PrefixOp::Not && matches!(self.solver.unifier.shallow_resolve(&ty), Ty::Var(_)) {
-                    // `!x` of an unknown type is most likely a boolean.
-                    self.solver.equal(&Ty::bool(), &ty, self.origin(*inner));
-                }
-                ty
+                let result = self.infer_operator_call(expr, &Name::new(op.as_str()), *inner, ty.clone(), &[]);
+                self.number_result(expr, &ty, result)
             }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
             Expr::Range { lhs, rhs, .. } => {
@@ -1170,7 +1165,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         };
         self.result.expr_types.insert(callee, callee_ty.clone());
-        let ty = self.apply(expr, callee, &callee_ty, function, args, Some((receiver, receiver_ty)));
+        let ty = self.apply(expr, callee, &callee_ty, function, args, Some((receiver, receiver_ty, false)));
         self.solve_overloads();
         ty
     }
@@ -1184,7 +1179,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         callee_ty: &Ty<'db>,
         function: Option<FunctionId<'db>>,
         args: &[ExprId],
-        receiver: Option<(ExprId, &Ty<'db>)>,
+        // The receiver of `x.f(y)` or the left operand of `a + b`, and
+        // whether the other arguments must have its type, as for `+`.
+        receiver: Option<(ExprId, &Ty<'db>, bool)>,
     ) -> Ty<'db> {
         let count = args.len() + receiver.is_some() as usize;
         let (params, ret) = match self.solver.unifier.shallow_resolve(callee_ty) {
@@ -1199,7 +1196,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.solver.equal(&fn_ty, callee_ty, self.origin(callee));
                 // A use of a name with several functions is checked against
                 // the arguments where they are, once one is chosen (#275).
-                let at = receiver.map(|(r, _)| r).into_iter().chain(args.iter().copied());
+                let at = receiver.map(|(r, _, _)| r).into_iter().chain(args.iter().copied());
                 let at = at.map(|e| self.origin(e)).collect();
                 self.solver.attach_overload_args(callee_ty, at);
                 (params, ret)
@@ -1225,12 +1222,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 found: count,
             });
         }
-        let reason = |index: usize| match function {
-            Some(function) => Reason::Argument { function, index: index as u32 },
-            None => Reason::None,
+        let reason = |index: usize| match (function, receiver) {
+            // `b` of `a + b` must be what `a` is.
+            (_, Some((receiver, _, true))) if index > 0 => Reason::SameAs(receiver),
+            (Some(function), _) => Reason::Argument { function, index: index as u32 },
+            (None, _) => Reason::None,
         };
         let mut params = params.iter();
-        if let Some((receiver, receiver_ty)) = receiver
+        if let Some((receiver, receiver_ty, _)) = receiver
             && let Some(param) = params.next()
         {
             self.solver.equal(param, receiver_ty, Origin { reason: reason(0), ..self.origin(receiver) });
@@ -1256,30 +1255,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     fn infer_binary(&mut self, expr: ExprId, op: &BinaryOp, lhs: ExprId, rhs: ExprId) -> Ty<'db> {
         match op {
-            BinaryOp::Arith(op @ (ArithOp::Shl | ArithOp::Shr)) => {
-                let ty = self.infer_expr(lhs);
-                if self.is_called_operand(&ty) {
-                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs]);
-                }
-                let shift = self.solver.new_var(VarKind::Int);
-                self.check_expr(rhs, &shift);
-                ty
-            }
+            // `a + b` and `a < b` call the functions `+` and `<` in scope,
+            // like the prelude's `fn a + b = add(a, b)`, for every type: only
+            // the operations the prelude's impls use, like `i32_add`, are
+            // built in.
             BinaryOp::Arith(op) => {
                 let ty = self.infer_expr(lhs);
-                if self.is_called_operand(&ty) {
-                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs]);
-                }
-                self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
-                ty
+                let result = self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty.clone(), &[rhs]);
+                self.number_result(expr, &ty, result)
             }
             BinaryOp::Cmp(op) => {
                 let ty = self.infer_expr(lhs);
-                if self.is_called_operand(&ty) {
-                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs]);
-                }
-                self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
-                Ty::bool()
+                self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs])
             }
             BinaryOp::Logic(_) => {
                 self.check_expr(lhs, &Ty::bool());
@@ -1289,8 +1276,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             BinaryOp::Assign(op) => {
                 let ty = self.infer_expr(lhs);
                 match op {
-                    // `a += b` of a struct is `a = a + b`, with the `+` of `a`.
-                    Some(op) if self.is_called_operand(&ty) => {
+                    // `a += b` is `a = a + b`.
+                    Some(op) => {
                         let result = self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty.clone(), &[rhs]);
                         self.solver.equal(&ty, &result, Origin { reason: Reason::SameAs(lhs), ..self.origin(expr) });
                     }
@@ -1307,12 +1294,19 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
     }
 
-    /// Whether a built-in operator on a value of type `ty` calls the function
-    /// with the operator's name, like the prelude's `fn a + b = add(a, b)`:
-    /// for structs, enums and type parameters. The primitive types have the
-    /// operators built in.
-    fn is_called_operand(&mut self, ty: &Ty<'db>) -> bool {
-        matches!(self.solver.unifier.shallow_resolve(ty), Ty::Adt(..) | Ty::Param(_))
+    /// The type of `-a` or `a + b` at `expr`, whose operator gives `result`,
+    /// with `a` of type `operand`. While `a` is a number literal whose type
+    /// isn't known, like the `1` of `let x: i64 = 1 << 40`, the result has its
+    /// type, as it has for every number type's impl: so that what the result
+    /// must be, like `i64`, decides the literal's type, as in Rust.
+    fn number_result(&mut self, expr: ExprId, operand: &Ty<'db>, result: Ty<'db>) -> Ty<'db> {
+        if let Ty::Var(v) = self.solver.unifier.shallow_resolve(operand)
+            && matches!(self.solver.unifier.var_kind(v), Some(VarKind::Int | VarKind::Float))
+        {
+            self.solver.equal(operand, &result, self.origin(expr));
+            return operand.clone();
+        }
+        result
     }
 
     /// `lhs <op> rhs`, or `<op> lhs` when `rest` is empty, as a call of the
@@ -1333,7 +1327,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Error
             }
         };
-        let ty = self.apply(expr, expr, &callee_ty, function, rest, Some((lhs, &lhs_ty)));
+        // An operator whose operands have one type, like `fn(T, T)` for `+`,
+        // says that the right one must be what the left one is.
+        let same = match self.solver.unifier.shallow_resolve(&callee_ty) {
+            Ty::Fn(params, ..) => params.len() == 2 && params[0] == params[1],
+            _ => false,
+        };
+        let ty = self.apply(expr, expr, &callee_ty, function, rest, Some((lhs, &lhs_ty, same)));
         self.solve_overloads();
         ty
     }

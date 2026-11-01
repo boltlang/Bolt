@@ -12,7 +12,8 @@ id(1) + 1: i32
 id("foo") + 1: {error}
 let b: Bool
 --------------------------------------------------------------------------------
-error at `id("foo") + 1`: unresolved
+error at `1`: expected String, found {integer}
+error at `id("foo") + 1`: no instance Add[String]
 
 ================================================================================
 Functions used before their definition
@@ -25,6 +26,7 @@ first: forall a. fn(a) -> a
 
 ================================================================================
 Mutual recursion
+:test-prelude
 ================================================================================
 fn even(n) = if n == 0 { True } else { odd(n - 1) };
 fn odd(n) = if n == 0 { False } else { even(n - 1) };

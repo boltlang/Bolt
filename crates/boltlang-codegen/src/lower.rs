@@ -457,7 +457,7 @@ impl<'db> Compiler<'db> {
             }
             Expr::Call { callee, args, .. } => self.call(expr, *callee, args),
             Expr::Cast { expr: inner, .. } => self.cast(expr, *inner),
-            Expr::Prefix { op, expr: inner } => self.prefix(expr, *op, *inner),
+            Expr::Prefix { op, expr: inner } => self.call_operator(expr, op.as_str(), &[*inner]),
             Expr::Binary { op, lhs, rhs } => self.binary(expr, op, *lhs, *rhs),
             Expr::Tuple { exprs } if exprs.is_empty() => Ok(()),
             Expr::Tuple { exprs } => {
@@ -877,10 +877,8 @@ impl<'db> Compiler<'db> {
         }
     }
 
+    /// A builtin of a primitive type for a prefix operator, like `i32_neg`.
     fn prefix(&mut self, expr: ExprId, op: PrefixOp, inner: ExprId) -> Result<'db, ()> {
-        if self.is_called_operand(inner) {
-            return self.call_operator(expr, op.as_str(), &[inner]);
-        }
         let scalar = self.scalar(inner)?;
         match (op, scalar) {
             (PrefixOp::Neg, Scalar::F32) => {
@@ -942,26 +940,10 @@ impl<'db> Compiler<'db> {
                 self.close();
                 Ok(())
             }
-            BinaryOp::Arith(op) => {
-                if self.is_called_operand(lhs) {
-                    return self.call_operator(expr, op.as_str(), &[lhs, rhs]);
-                }
-                let scalar = self.scalar(lhs)?;
-                self.expr(lhs)?;
-                self.expr(rhs)?;
-                self.shift_amount(*op, scalar, rhs)?;
-                self.arith(expr, *op, scalar)
-            }
-            BinaryOp::Cmp(op) => {
-                if self.is_called_operand(lhs) {
-                    return self.call_operator(expr, op.as_str(), &[lhs, rhs]);
-                }
-                let scalar = self.scalar(lhs)?;
-                self.expr(lhs)?;
-                self.expr(rhs)?;
-                self.op(cmp_op(*op, scalar));
-                Ok(())
-            }
+            // The functions of the prelude, like `fn a + b = add(a, b)`, whose
+            // impls for the primitive types are builtins like `i32_add`.
+            BinaryOp::Arith(op) => self.call_operator(expr, op.as_str(), &[lhs, rhs]),
+            BinaryOp::Cmp(op) => self.call_operator(expr, op.as_str(), &[lhs, rhs]),
             // The value first, then the place, like the evaluator.
             BinaryOp::Assign(op) => {
                 if !self.is_place(lhs) {
@@ -969,30 +951,13 @@ impl<'db> Compiler<'db> {
                 }
                 match op {
                     None => self.expr(rhs)?,
-                    Some(op) if self.is_called_operand(lhs) => self.compound_operator(expr, *op, lhs, rhs)?,
-                    Some(op) => {
-                        let scalar = self.scalar(lhs)?;
-                        let value = self.temp(rhs)?;
-                        self.expr(lhs)?;
-                        if let Some(value) = value {
-                            self.push(Inst::LocalGet(value));
-                        }
-                        self.shift_amount(*op, scalar, rhs)?;
-                        self.arith(expr, *op, scalar)?;
-                    }
+                    Some(op) => self.compound_operator(expr, *op, lhs, rhs)?,
                 }
                 self.assign(lhs)
             }
             // `a <$> b` calls the function `(<$>)`.
             BinaryOp::Custom(name) => self.call_operator(expr, name.as_str(), &[lhs, rhs]),
         }
-    }
-
-    /// Whether a built-in operator on `operand` calls the function with the
-    /// operator's name, as the type checker has it: for structs, enums and
-    /// type parameters.
-    fn is_called_operand(&self, operand: ExprId) -> bool {
-        matches!(self.ty(operand), Ty::Adt(..) | Ty::Param(_))
     }
 
     /// A call of the function named `op` for the operator at `expr`, like
@@ -1004,7 +969,7 @@ impl<'db> Compiler<'db> {
         }
     }
 
-    /// `lhs <op> rhs` for `lhs <op>= rhs` of a struct, with the value first,
+    /// `lhs <op> rhs` for `lhs <op>= rhs`, with the value first,
     /// then the place, like the evaluator. The call has the type of the
     /// place, since its result is stored there.
     fn compound_operator(&mut self, expr: ExprId, op: ArithOp, lhs: ExprId, rhs: ExprId) -> Result<'db, ()> {

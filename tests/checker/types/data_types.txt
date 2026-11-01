@@ -1,5 +1,6 @@
 ================================================================================
 Data types and patterns
+:test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
 struct Point { x: i32, y: i32 }
@@ -11,7 +12,7 @@ get(Option.Some(p), Point { x: 0 });
 p.z;
 --------------------------------------------------------------------------------
 get: forall a. fn(Option[a], a) -> a
-norm: forall a b. a.x: b => fn(a) -> b
+norm: forall a b. Mul[b] => a.x: b => fn(a) -> b.Output
 let p: imm Point
 let Point { x, .. }: imm Point
 get(Option.Some(p), Point { x: 0 }): imm Point
@@ -189,12 +190,13 @@ unbox(Box { value: "a" }): String
 
 ================================================================================
 Fields of a value with a field constraint
+:test-prelude
 ================================================================================
 fn sum(p) = p.x + p.y;
 struct V { x: i32, y: i32 }
 sum(V { x: 1, y: 2 });
 --------------------------------------------------------------------------------
-sum: forall a b. a.x: b => a.y: b => fn(a) -> b
+sum: forall a b. Add[b] => a.x: b => a.y: b => fn(a) -> b.Output
 sum(V { x: 1, y: 2 }): i32
 
 ================================================================================
@@ -441,6 +443,7 @@ error at `Option.Some(1)`: expected Option[Option[Bool]], found Option[{integer}
 
 ================================================================================
 Recursive generic enums
+:test-prelude
 ================================================================================
 enum List[T] { Cons(T, List[T]), Nil }
 import List.*;

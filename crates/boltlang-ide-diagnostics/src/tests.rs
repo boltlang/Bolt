@@ -38,6 +38,16 @@ fn check_with_std(fixture: &str) {
     check_db(db, &[("/main.bolt", fixture)]);
 }
 
+/// Like [`check`], with the small prelude of `tests/std`, for code that
+/// uses operators: they're functions of the prelude, like `fn a + b`.
+#[track_caller]
+fn check_with_test_std(fixture: &str) {
+    let mut db = TestDb::new();
+    db.add_test_std();
+    db.set_prelude(Some("std"), true);
+    check_db(db, &[("/main.bolt", fixture)]);
+}
+
 #[track_caller]
 fn check_db(db: TestDb, files: &[(&str, &str)]) {
     let files: Vec<_> = files.iter().map(|(path, text)| (*path, db.file(path, text))).collect();
@@ -107,13 +117,13 @@ let p = Point { x: id(1), y: 2 };
 
 #[test]
 fn type_mismatch() {
-    check(
+    check_with_test_std(
         r#"
 fn id(x) { return x }
-  id(1) + 1;
-  id(True) + 1;
+  id(1) == 1;
+  id(True) == 1;
 //^^^^^^^^ label: this has type `Bool`
-           //^ error: expected `Bool`, found an integer
+            //^ error: expected `Bool`, found an integer
 "#,
     );
 }
@@ -131,12 +141,12 @@ fn f(x: i32) -> Bool { x }
 
 #[test]
 fn unresolved_name_does_not_cascade() {
-    check(
+    check_with_test_std(
         r#"
   foo + 1;
 //^^^ error: cannot find `foo`
-  True + foo;
-       //^^^ error: cannot find `foo`
+  True == foo;
+        //^^^ error: cannot find `foo`
 "#,
     );
 }
@@ -315,7 +325,7 @@ fn imported_variant_in_a_pattern_matches_the_variant() {
   };
   fn g(o: Opt) -> Opt = match o {
     None => None,
-    Some(x) => Some(x + 1),
+    Some(x) => Some(x),
   };
 "#,
     );
@@ -418,7 +428,7 @@ fn parameters_can_be_in_other_files() {
         (
             "/lib.bolt",
             r#"
-pub fn negate(x) = !x;
+pub fn negate(x) = if x { False } else { True };
             //^ label: expected because of this parameter of `negate`
 "#,
         ),
@@ -511,7 +521,7 @@ fn methods_must_be_declared_by_the_class() {
 class Show[T] { fn show(x: T) -> i32; }
 impl Show[i32] {
   fn show(x) = 1;
-  fn shwo(x) = x + 1;
+  fn shwo(x) = x;
    //^^^^ error: `shwo` is not a method of class `Show`
 }
 struct Dog;
@@ -527,7 +537,7 @@ fn impls_must_define_the_methods_of_their_class() {
         r#"
 class Eq[T] {
   fn eq(a: T, b: T) -> Bool;
-  fn ne(a: T, b: T) -> Bool = !eq(a, b);
+  fn ne(a: T, b: T) -> Bool = eq(b, a);
 }
 class Ord[T] { fn lt(a: T, b: T) -> Bool; fn gt(a: T, b: T) -> Bool; }
 impl Eq[i32] { fn eq(a, b) = True; }
@@ -579,12 +589,12 @@ impl Default[Bool] { const VALUE: i32 = 0; }
 
 #[test]
 fn unknown_types_are_named_per_message() {
-    check(
+    check_with_test_std(
         r#"
 let f = |x| x;
-  f + 1;
-//^ label: this has type `fn(a) -> a`
-    //^ error: expected `fn(a) -> a`, found an integer
+  if True { f } else { 1 };
+        //^^^^^ label: this has type `fn(a) -> a`
+                     //^ error: expected `fn(a) -> a`, found an integer
 class Show[T] { fn show(x: T) -> i32; }
 let s = show([]);
       //^^^^ error: cannot tell which instance of `Show[imm [a]]` to use; add a type annotation

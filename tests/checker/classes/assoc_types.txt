@@ -207,6 +207,7 @@ error at `next2`: no instance Iter2[C.It]
 
 ================================================================================
 A bound can say what an associated type is
+:test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
 class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }

@@ -40,6 +40,7 @@ twice(1): imm Box[imm Box[i32]]
 
 ================================================================================
 Functions in the namespace of an enum
+:test-prelude
 ================================================================================
 enum Sign { Neg, Pos }
 fn Sign.of(x: i32) -> Sign = if x < 0 { Sign.Neg } else { Sign.Pos };
@@ -50,6 +51,7 @@ Sign.of(3): Sign
 
 ================================================================================
 Functions in the namespace of a type aren't methods
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 fn Point.norm(p: Point) -> i32 = p.x * p.x + p.y * p.y;

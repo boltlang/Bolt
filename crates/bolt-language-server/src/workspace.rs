@@ -317,7 +317,7 @@ mod tests {
         let (mut workspace, _) = workspace();
         workspace.set_text(SystemPath::new(MAIN), "import \"./lib\" (negate);\nnegate(1);\n".into());
         assert_eq!(messages(&workspace, MAIN), ["cannot find the file `./lib`", "cannot find `negate`"]);
-        workspace.set_text(SystemPath::new(LIB), "pub fn negate(x) = !x;\n".into());
+        workspace.set_text(SystemPath::new(LIB), "pub fn negate(x) = if x { False } else { True };\n".into());
         let found = workspace.diagnostics(SystemPath::new(MAIN));
         assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `Bool`, found an integer"]);
         // The label points at the parameter in the other file.
@@ -334,7 +334,7 @@ mod tests {
         disk.create_symlink(SystemPath::new("/project/link.bolt"), SystemPath::new("real/lib.bolt")).unwrap();
         let link = "/project/link.bolt";
         // The editor opens the link, and adds `negate` without saving (#238).
-        workspace.set_text(SystemPath::new(link), "pub fn f() -> i32 = 1;\npub fn negate(x) = !x;\n".into());
+        workspace.set_text(SystemPath::new(link), "pub fn f() -> i32 = 1;\npub fn negate(x) = if x { False } else { True };\n".into());
         workspace.set_text(SystemPath::new(MAIN), "import \"./link\" (f, negate);\nnegate(1);\n".into());
         let found = workspace.diagnostics(SystemPath::new(MAIN));
         assert_eq!(found.iter().map(|d| d.message.as_str()).collect::<Vec<_>>(), ["expected `Bool`, found an integer"]);

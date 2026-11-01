@@ -650,12 +650,7 @@ impl<'db> Evaluator<'db> {
             }
             Expr::Prefix { op, expr: inner } => {
                 let value = self.eval(f, *inner)?;
-                // `-a` of a struct or an enum calls `fn -a`, as the type
-                // checker has it.
-                if let Value::Adt { .. } = &value {
-                    return self.call_operator(f, expr, op.as_str(), vec![value]);
-                }
-                prefix(*op, value)
+                self.call_operator(f, expr, op.as_str(), vec![value])
             }
             Expr::Binary { op, lhs, rhs } => self.eval_binary(f, expr, op, *lhs, *rhs),
             Expr::Range { lhs, rhs, inclusive } => {
@@ -888,18 +883,12 @@ impl<'db> Evaluator<'db> {
             BinaryOp::Arith(op) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
-                if let Value::Adt { .. } = &lhs {
-                    return self.call_operator(f, expr, op.as_str(), vec![lhs, rhs]);
-                }
-                arith(*op, lhs, rhs)
+                self.call_operator(f, expr, op.as_str(), vec![lhs, rhs])
             }
             BinaryOp::Cmp(op) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
-                if let Value::Adt { .. } = &lhs {
-                    return self.call_operator(f, expr, op.as_str(), vec![lhs, rhs]);
-                }
-                compare(*op, &lhs, &rhs)
+                self.call_operator(f, expr, op.as_str(), vec![lhs, rhs])
             }
             BinaryOp::Assign(op) => {
                 let rhs = self.eval(f, rhs)?;
@@ -920,9 +909,9 @@ impl<'db> Evaluator<'db> {
         }
     }
 
-    /// A built-in operator on structs and enums: a call of the function with
-    /// the operator's name, like the prelude's `fn a < b`, as the type
-    /// checker has it.
+    /// An operator: a call of the function with its name, like the prelude's
+    /// `fn a < b = lt(a, b)`, as the type checker has it. Only the operations
+    /// that the prelude's impls use, like `i32_lt`, are built in.
     fn call_operator(&mut self, f: &mut Frame<'db>, expr: ExprId, op: &str, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
         let callee = match self.resolve_value(f.def, expr, &Path::from_name(Name::new(op))) {
             Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
@@ -1168,8 +1157,7 @@ impl<'db> Evaluator<'db> {
 
     // Assignment
 
-    /// `current <op> value` for `current <op>= value` at `at`: through the
-    /// function with the operator's name for structs and enums, like `a + b`.
+    /// `current <op> value` for `current <op>= value` at `at`, like `a + b`.
     fn combine(
         &mut self,
         f: &mut Frame<'db>,
@@ -1178,10 +1166,7 @@ impl<'db> Evaluator<'db> {
         current: Value<'db>,
         value: Value<'db>,
     ) -> Res<'db, Value<'db>> {
-        if let Value::Adt { .. } = &current {
-            return self.call_operator(f, at, op.as_str(), vec![current, value]);
-        }
-        arith(op, current, value)
+        self.call_operator(f, at, op.as_str(), vec![current, value])
     }
 
     fn assign(
@@ -1203,11 +1188,11 @@ impl<'db> Evaluator<'db> {
         // `c[i] = x` through `IndexMut`, arrays too. For `c[i] += x` or
         // `c[i].0 = x`, the element is read through `Index` first, changed,
         // and set back.
-        if let Place::Indexed { container, index, at } = place {
+        if let Place::Indexed { container, index, at: indexed } = place {
             let value = if op.is_none() && fields.is_empty() {
                 value
             } else {
-                let mut element = self.call_lang(f, at, LangClass::Index, vec![container.clone(), index.clone()])?;
+                let mut element = self.call_lang(f, indexed, LangClass::Index, vec![container.clone(), index.clone()])?;
                 let current = tuple_field(Some(&mut element), &fields)?.clone();
                 let value = match op {
                     Some(op) => self.combine(f, at, op, current, value)?,
@@ -1216,7 +1201,7 @@ impl<'db> Evaluator<'db> {
                 *tuple_field(Some(&mut element), &fields)? = value;
                 element
             };
-            self.call_lang(f, at, LangClass::IndexMut, vec![container, index, value])?;
+            self.call_lang(f, indexed, LangClass::IndexMut, vec![container, index, value])?;
             return Ok(());
         }
         // A field of a struct, or of a tuple in one: the struct changes.

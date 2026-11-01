@@ -26,7 +26,7 @@ f: fn({error}) -> {error}
 warning at `impl Show`: unsupported
 
 ================================================================================
-Arithmetic on any type is accepted until there are numeric classes
+Arithmetic needs an impl of its class
 :test-prelude
 ================================================================================
 "a" + "b";
@@ -36,10 +36,12 @@ let x = 1u8;
 -x;
 --------------------------------------------------------------------------------
 "a" + "b": {error}
-True * False: Bool
+True * False: {error}
 -"a": {error}
 let x: u8
--x: u8
+-x: {error}
 --------------------------------------------------------------------------------
-error at `"a" + "b"`: unresolved
-error at `-"a"`: unresolved
+error at `"a" + "b"`: no instance Add[String]
+error at `True * False`: no instance Mul[Bool]
+error at `-"a"`: no instance Neg[String]
+error at `-x`: no instance Neg[u8]

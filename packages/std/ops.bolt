@@ -2,7 +2,6 @@
 // type with an impl of them. Arrays have theirs in `array.bolt`.
 
 import "./option" (Option, None, Some);
-import "./io" (assert);
 import "./prim" *;
 
 /// Types whose elements can be read by position, with `c[i]`.
@@ -228,6 +227,49 @@ pub fn a > b = gt(a, b);
 pub fn a <= b = lte(a, b);
 
 pub fn a >= b = gte(a, b);
+
+// Tuples are compared element by element, from the first. A tuple has
+// `Eq`, `PartialOrd` or `Ord` when each of its elements does.
+
+impl Eq[()] { fn eq(a, b) = True; }
+impl PartialOrd[()] { fn partial_cmp(a, b) = Some(Ordering.Equal); }
+impl Ord[()] { fn cmp(a, b) = Ordering.Equal; }
+
+impl[A, B] Eq[(A, B)] where Eq[A], Eq[B] {
+  fn eq(a, b) = a.0 == b.0 && a.1 == b.1;
+}
+
+impl[A, B] PartialOrd[(A, B)] where PartialOrd[A], PartialOrd[B] {
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) { Some(Ordering.Equal) => partial_cmp(a.1, b.1), other => other };
+}
+
+impl[A, B] Ord[(A, B)] where Ord[A], Ord[B] {
+  fn cmp(a, b) = match cmp(a.0, b.0) { Ordering.Equal => cmp(a.1, b.1), other => other };
+}
+
+impl[A, B, C] Eq[(A, B, C)] where Eq[A], Eq[B], Eq[C] {
+  fn eq(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2;
+}
+
+impl[A, B, C] PartialOrd[(A, B, C)] where PartialOrd[A], PartialOrd[B], PartialOrd[C] {
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) { Some(Ordering.Equal) => match partial_cmp(a.1, b.1) { Some(Ordering.Equal) => partial_cmp(a.2, b.2), other => other }, other => other };
+}
+
+impl[A, B, C] Ord[(A, B, C)] where Ord[A], Ord[B], Ord[C] {
+  fn cmp(a, b) = match cmp(a.0, b.0) { Ordering.Equal => match cmp(a.1, b.1) { Ordering.Equal => cmp(a.2, b.2), other => other }, other => other };
+}
+
+impl[A, B, C, D] Eq[(A, B, C, D)] where Eq[A], Eq[B], Eq[C], Eq[D] {
+  fn eq(a, b) = a.0 == b.0 && a.1 == b.1 && a.2 == b.2 && a.3 == b.3;
+}
+
+impl[A, B, C, D] PartialOrd[(A, B, C, D)] where PartialOrd[A], PartialOrd[B], PartialOrd[C], PartialOrd[D] {
+  fn partial_cmp(a, b) = match partial_cmp(a.0, b.0) { Some(Ordering.Equal) => match partial_cmp(a.1, b.1) { Some(Ordering.Equal) => match partial_cmp(a.2, b.2) { Some(Ordering.Equal) => partial_cmp(a.3, b.3), other => other }, other => other }, other => other };
+}
+
+impl[A, B, C, D] Ord[(A, B, C, D)] where Ord[A], Ord[B], Ord[C], Ord[D] {
+  fn cmp(a, b) = match cmp(a.0, b.0) { Ordering.Equal => match cmp(a.1, b.1) { Ordering.Equal => match cmp(a.2, b.2) { Ordering.Equal => cmp(a.3, b.3), other => other }, other => other }, other => other };
+}
 
 // The classes of operators, like Rust's `std::ops`. Each operator is a
 // function of its class's method, so that it works on any type with an

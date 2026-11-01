@@ -376,7 +376,7 @@ The prelude also has a class for each operator, like Rust's `std::ops`:
 | `a << n`, `a >> n` | `Shl`, `Shr` | `fn shl(a: T, n: u32) -> Output`, … |
 | `-a`, `!a` | `Neg`, `Not` | `fn neg(a: T) -> Output`, `fn not(a: T) -> Output` |
 | `a == b`, `a != b` | `Eq` | `fn eq(a: T, b: T) -> Bool`, `fn ne(a: T, b: T) -> Bool` |
-| `a < b`, `a > b`, `a <= b`, `a >= b` | `Lt`, `Gt`, `LtE`, `GtE` | `fn lt(a: T, b: T) -> Bool`, … |
+| `a < b`, `a > b`, `a <= b`, `a >= b` | `PartialOrd` | `fn partial_cmp(a: T, b: T) -> Option[Ordering]`, and `fn lt(a: T, b: T) -> Bool`, … |
 
 Each has an associated type `Output`, the type of the result, which is `T`
 unless an impl says otherwise, and each operator is defined as a function
@@ -400,19 +400,27 @@ twice(Money { cents: 150 }).cents;
 300
 ```
 
-The classes of arithmetic have impls for the primitive types, the numbers
-and `Bool`, for the operators each of them has, and `Char` and `String`,
-which the prelude defines, have impls of `Eq` and `PartialOrd`. The operators on the primitive types are
-built in, and don't go through the classes. Comparing other values, like structs, enums or a
-value of a type parameter, calls the function with the operator's name,
-like the prelude's `fn a < b = lt(a, b)`, so that it works for any type
-with an impl of the class:
+The classes have impls for the primitive types, the numbers and `Bool`,
+for the operators each of them has, and for tuples whose elements have
+them; `Char` and `String`, which the prelude defines, have impls of `Eq`
+and `PartialOrd`. No operator is built in: `a < b` is always a call of the
+function `<` in scope, like the prelude's `fn a < b = lt(a, b)`, and the
+impls for the primitive types call what is, like `i32_lt`. So an operator
+works for any type with an impl of its class, and only for those:
+comparing two closures, or two structs without an impl of `Eq`, is an
+error.
+
+`PartialOrd`'s `lt`, `gt`, `lte` and `gte` have defaults from
+`partial_cmp`, so an impl only needs that:
 
 ```bolt
 struct Version { major: i32, minor: i32 }
 
-impl Lt[Version] {
-  fn lt(a, b) = a.major < b.major || a.major == b.major && a.minor < b.minor;
+impl PartialOrd[Version] {
+  fn partial_cmp(a, b) = match partial_cmp(a.major, b.major) {
+    Some(Ordering.Equal) => partial_cmp(a.minor, b.minor),
+    other => other,
+  };
 }
 
 Version { major: 1, minor: 2 } < Version { major: 1, minor: 10 };

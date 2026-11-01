@@ -156,6 +156,7 @@ impl Semigroup[i32] {
 
 ================================================================================
 Methods in an impl can use the other items of the class
+:test-prelude
 ================================================================================
 class Monoid[T] {
   const empty: T;

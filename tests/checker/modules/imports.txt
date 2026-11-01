@@ -345,18 +345,19 @@ mm.f();
 
 ================================================================================
 Imported operators
+:test-prelude
 ================================================================================
 //- /ops.bolt
 pub struct V { x: i32 }
-pub fn a <> b = V { x: a.x + b.x };
-pub fn a <+> b = V { x: a.x * b.x };
+pub fn (a: V) <> (b: V) = V { x: a.x + b.x };
+pub fn (a: V) <+> (b: V) = V { x: a.x * b.x };
 //- /main.bolt
 import "./ops" (V, <>);
 fn f(a: V, b: V) = a <> b;
 fn g(a: V, b: V) = a <+> b;
 --------------------------------------------------------------------------------
-/ops.bolt: <>: forall a b. a.x: i32 => b.x: i32 => fn(a, b) -> imm V
-/ops.bolt: <+>: forall a b. a.x: i32 => b.x: i32 => fn(a, b) -> imm V
+/ops.bolt: <>: fn(V, V) -> imm V
+/ops.bolt: <+>: fn(V, V) -> imm V
 /main.bolt: f: fn(V, V) -> imm V
 /main.bolt: g: fn(V, V) -> {error}
 --------------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 ================================================================================
 Calling a class method
+:test-prelude
 ================================================================================
 class Twice[T] {
   fn twice(x: T) -> T;
@@ -74,6 +75,7 @@ impl Describe[Bool] {
 
 ================================================================================
 Method call syntax with a class method
+:test-prelude
 ================================================================================
 class Twice[T] { fn twice(x: T) -> T; }
 impl Twice[i32] { fn twice(x) = x * 2; }
@@ -178,6 +180,7 @@ total(iter([1, 2, 3]));
 
 ================================================================================
 Generic code uses the impl of the types it's called with
+:test-prelude
 ================================================================================
 class Describe[T] { fn describe(x: T) -> i32; }
 impl Describe[i32] { fn describe(x) = 1; }
@@ -189,6 +192,7 @@ shout(1) * 10 + shout(2i64);
 
 ================================================================================
 A default method calls the impl's methods
+:test-prelude
 ================================================================================
 class Greet[T] { fn name(x: T) -> i32; fn greet(x: T) -> i32 = name(x) + 100; }
 impl Greet[i32] { fn name(x) = x; }

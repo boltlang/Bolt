@@ -179,6 +179,7 @@ error at `'v`: can't have a mutability parameter
 
 ================================================================================
 Updating a struct keeps its mutability arguments
+:test-prelude
 ================================================================================
 struct Iter['v] { data: 'v [i32], index: i32 }
 fn advance(it: mut Iter['v]) -> mut Iter['v] = mut Iter { index: it.index + 1, ..it };

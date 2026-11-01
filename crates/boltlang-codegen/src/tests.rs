@@ -2,7 +2,7 @@
 //! the same output as the evaluator is tested by the programs in
 //! `tests/run`: see `tests/run.rs`.
 
-use boltlang_base_db::{File, Settings, SystemPathBuf, TestDb};
+use boltlang_base_db::{File, TestDb};
 use boltlang_eval::{ErrorKind, Host};
 use wasmi::{Caller, Linker, Module, Store, Val};
 
@@ -63,9 +63,18 @@ fn call(store: &mut Store<State<TestHost>>, instance: &wasmi::Instance, name: &s
     results.pop()
 }
 
+/// A database with the small prelude of `tests/std`, whose operators are
+/// functions like `fn a + b = add(a, b)`.
+fn test_db() -> TestDb {
+    let mut db = TestDb::new();
+    db.add_test_std();
+    db.set_prelude(Some("std"), true);
+    db
+}
+
 /// Run `main`, and give its result and what was logged.
 fn run_main(code: &str) -> (Option<Val>, Vec<i64>) {
-    let db = TestDb::new();
+    let db = test_db();
     let file = db.file("/main.bolt", code);
     let (mut store, instance) = instantiate(&compile(&db, file));
     let result = call(&mut store, &instance, "main", &[]);
@@ -75,10 +84,11 @@ fn run_main(code: &str) -> (Option<Val>, Vec<i64>) {
 #[test]
 fn generic_functions_are_monomorphized() {
     let code = "fn id(x) = x;\nid(1) as f64 + id(1.5);";
-    let db = TestDb::new();
+    let db = test_db();
     let file = db.file("/main.bolt", code);
-    // `main`, `id` for `i32` and `id` for `f64`.
-    assert_eq!(reachable_instances(&db, file).len(), 3);
+    // `main`, `id` for `i32` and `id` for `f64`, and the `+` of the prelude
+    // and its impl for `f64`.
+    assert_eq!(reachable_instances(&db, file).len(), 5);
 }
 
 #[test]
@@ -98,7 +108,7 @@ fn extern_functions_are_imports() {
 
 #[test]
 fn functions_are_exported() {
-    let db = TestDb::new();
+    let db = test_db();
     let file = db.file("/main.bolt", "fn fac(n: i64) -> i64 = if n == 0 { 1 } else { n * fac(n - 1) };\nfac(1);");
     let (mut store, instance) = instantiate(&compile(&db, file));
     let result = call(&mut store, &instance, "fac", &[Val::I64(20)]);
@@ -109,6 +119,7 @@ const COLOR: &str = "enum Color { Red, Green, Blue }\n";
 
 #[test]
 fn enums_with_fields_and_ordering_are_errors() {
+    // Without a prelude, since the code has an `Ord` and a `<` of its own.
     let errors = |code: &str| {
         let db = TestDb::new();
         let file = db.file("/main.bolt", code);
@@ -130,7 +141,7 @@ fn enums_with_fields_and_ordering_are_errors() {
 
 #[test]
 fn unsupported_code_is_an_error() {
-    let db = TestDb::new();
+    let db = test_db();
     let code = "fn f() -> i32 = 1;\nlet xs = [f(), 2];\n";
     let file = db.file("/main.bolt", code);
     let errors = link(&db, file).unwrap_err();
@@ -143,11 +154,11 @@ fn unsupported_code_is_an_error() {
 #[test]
 fn an_imm_struct_with_one_field_is_its_field() {
     // `Code` is an `i32`, and nothing is allocated.
-    let db = TestDb::new();
-    let file = db.file("/main.bolt", "imm struct Code(u32);\nfn next(c: Code) -> Code = Code(c.0 + 1);\nnext(Code(1));");
+    let db = test_db();
+    let file = db.file("/main.bolt", "imm struct Code(u32);\nfn bump(c: Code) -> Code = Code(c.0 + 1);\nbump(Code(1));");
     let bytes = compile(&db, file);
     let (mut store, instance) = instantiate(&bytes);
-    assert_eq!(call(&mut store, &instance, "next", &[Val::I32(41)]).and_then(|v| v.i32()), Some(42));
+    assert_eq!(call(&mut store, &instance, "bump", &[Val::I32(41)]).and_then(|v| v.i32()), Some(42));
     assert!(instance.get_func(&store, "alloc").is_none());
     assert!(!bytes.windows(5).any(|w| w == b"alloc"));
 }
@@ -155,7 +166,7 @@ fn an_imm_struct_with_one_field_is_its_field() {
 #[test]
 fn structs_are_allocated_in_memory() {
     // Enough points to grow the memory past its first page.
-    let db = TestDb::new();
+    let db = test_db();
     let code = "struct P { x: i64, y: i64 }\nlet mut i = 0;\nlet mut last = P { x: 0, y: 0 };\n\
                 while i < 10000 { last = P { x: i, y: last.x }; i += 1; }\nlast.x + last.y;";
     let file = db.file("/main.bolt", code);
@@ -167,7 +178,7 @@ fn structs_are_allocated_in_memory() {
 
 #[test]
 fn editing_a_function_recompiles_only_that_function() {
-    let mut db = TestDb::new();
+    let mut db = test_db();
     let file = db.file("/main.bolt", "fn f(n: i32) -> i32 = n + 1;\nfn g(n: i32) -> i32 = n * 2;\nf(g(1));");
     compile(&db, file);
     let executed = db.log_executed(|db| {
@@ -179,14 +190,10 @@ fn editing_a_function_recompiles_only_that_function() {
     assert_eq!(compiled.len(), 1, "{executed:#?}");
 }
 
-/// A prelude that declares the builtins, as `std`'s does.
-const BUILTINS: &str = "extern \"bolt\" {\n  pub fn print(text: String);\n  pub fn panic(message: String) -> !;\n}\n";
-
+/// A database with the test prelude, which has `print` and `panic`, and
+/// `code` as the program.
 fn db_with_builtins(code: &str) -> (TestDb, File) {
-    let mut db = TestDb::new();
-    db.file(&format!("{}/__prelude__/lib.bolt", TestDb::STD_DIR), BUILTINS);
-    Settings::change_std_dir(&mut db, Some(SystemPathBuf::from(TestDb::STD_DIR)));
-    db.set_prelude(Some("std"), true);
+    let db = test_db();
     let file = db.file("/main.bolt", code);
     (db, file)
 }

@@ -18,6 +18,7 @@ let e: imm Unit
 
 ================================================================================
 Changing a field of a mut struct
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 let p = mut Point { x: 1, y: 2 };
@@ -33,6 +34,7 @@ p: mut Point
 ================================================================================
 Changing a field of a struct that isn't mut
 :error
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 let p = Point { x: 1, y: 2 };
@@ -122,6 +124,7 @@ error at `Point { x: 1, y: 2 }`: expected mut Point, found imm Point
 
 ================================================================================
 A parameter without mut or imm takes either kind of struct
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 fn norm(p: Point) -> i32 = p.x + p.y;
@@ -468,6 +471,7 @@ error at `move_x`: can't change imm Point
 
 ================================================================================
 An inferred function that changes a field of a known struct
+:test-prelude
 ================================================================================
 struct Point { x: i32, y: i32 }
 fn reset(p: Point, q) { q.x = p.x; }
@@ -569,6 +573,7 @@ error at `size`: no instance Size[imm Point]
 ================================================================================
 A method that changes its receiver
 :error
+:test-prelude
 ================================================================================
 struct Circle { r: f64 }
 fn grow(c: mut Circle) { c.r = c.r * 2.0; }
@@ -603,6 +608,7 @@ error at `Maybe.Just(mut Node { value: 2, next: Maybe.Nothing })`: expected Mayb
 
 ================================================================================
 An impl for a struct type constructor can't make new values yet
+:test-prelude
 ================================================================================
 struct Box[T] { item: T }
 class Functor[F] { fn fmap[A, B](f: fn(A) -> B, x: F[A]) -> F[B]; }

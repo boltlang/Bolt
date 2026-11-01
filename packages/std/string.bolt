@@ -3,7 +3,7 @@ import "./mutability" (to_mut, to_imm);
 import "./array" (array_len);
 import "./option" (Some, unwrap);
 import "./vec" (Vec, last, push, extend, to_array);
-import "./ops" (PartialOrd, Eq, Ordering, eq);
+import "./ops" *;
 import "./semigroup" (Semigroup);
 import "./char" (Char, to_utf8, push_escaped);
 import "./debug" (Debug);

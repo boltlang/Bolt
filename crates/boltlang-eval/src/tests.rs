@@ -260,8 +260,8 @@ fn consts() {
 
 #[test]
 fn calling_from_outside() {
-    let db = TestDb::new();
-    let file = db.file("/main.bolt", "fn square(x) = x * x;");
+    // A call from outside has no types, so the function says which `*`.
+    let (db, file) = db_with_std("fn square(x: i32) -> i32 = x * x;");
     let mut evaluator = Evaluator::new(&db).with_mutability_checks();
     let square = evaluator.function(file, "square").unwrap();
     let result = evaluator.call_function(square, vec![Value::Int(12)]).unwrap();

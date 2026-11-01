@@ -1,5 +1,6 @@
 ================================================================================
 A class of type constructors
+:test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
 class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
@@ -32,6 +33,7 @@ Functor[Option].fmap: forall A B. fn(fn(A) -> B, Option[A]) -> Option[B]
 
 ================================================================================
 Generic functions over type constructors
+:test-prelude
 ================================================================================
 enum Option[T] { None, Some(T) }
 class Functor[F] { fn fmap[A, B](f: fn (A) -> B, x: F[A]) -> F[B]; }
@@ -127,6 +129,7 @@ unwrap(w): Option[Bool]
 
 ================================================================================
 Recursive impls
+:test-prelude
 ================================================================================
 enum List[T] { Cons(T, List[T]), Nil }
 import List.*;

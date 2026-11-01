@@ -127,7 +127,7 @@ fn run_prints_what_the_program_prints_and_its_value() {
     assert_eq!(o.out, "hi\n3\n");
     // Compiled code doesn't have strings yet, but has values.
     let dir = dir_with("run-wasm", &[("a.bolt", "1 + 2;\n")]);
-    let o = bolt(&dir, "run", &["a.bolt", "--wasm"]);
+    let o = bolt_std(&dir, "run", &["a.bolt", "--wasm"]);
     assert!(o.ok, "{}", o.err);
     assert_eq!(o.out, "3\n");
 }
@@ -153,8 +153,8 @@ fn run_doesnt_run_a_program_with_errors() {
 
 #[test]
 fn run_reports_an_error_while_running() {
-    let dir = dir_with("run-panic", &[("a.bolt", "fn div(a: i32, b: i32) -> i32 = a / b;\ndiv(1, 0);\n")]);
-    let o = bolt(&dir, "run", &["a.bolt"]);
+    let dir = dir_with("run-panic", &[("a.bolt", "fn divide(a: i32, b: i32) -> i32 = a / b;\ndivide(1, 0);\n")]);
+    let o = bolt_std(&dir, "run", &["a.bolt"]);
     assert!(!o.ok);
     assert!(o.err.contains("division by zero"), "{}", o.err);
 }
@@ -184,11 +184,11 @@ fn run_reports_what_the_code_generator_doesnt_support() {
 #[test]
 fn build_writes_a_module() {
     let dir = dir_with("build", &[("a.bolt", "1 + 2;\n")]);
-    let o = bolt(&dir, "build", &["a.bolt"]);
+    let o = bolt_std(&dir, "build", &["a.bolt"]);
     assert!(o.ok, "{}", o.err);
     let bytes = fs::read(dir.join("a.wasm")).unwrap();
     assert_eq!(&bytes[..4], b"\0asm");
-    let o = bolt(&dir, "build", &["a.bolt", "-o", "out.wasm"]);
+    let o = bolt_std(&dir, "build", &["a.bolt", "-o", "out.wasm"]);
     assert!(o.ok, "{}", o.err);
     assert_eq!(fs::read(dir.join("out.wasm")).unwrap(), bytes);
 }
@@ -240,7 +240,8 @@ fn version_says_where_std_is() {
 
 #[test]
 fn a_missing_std_is_a_warning() {
-    let dir = dir_with("no-std", &[("a.bolt", "1 + 2;\n")]);
+    // Without `std` there are no operators: `+` is a function of the prelude.
+    let dir = dir_with("no-std", &[("a.bolt", "True;\n")]);
     let output = Command::new(env!("CARGO_BIN_EXE_bolt"))
         .args(["run", "--no-prelude", "a.bolt"])
         .env("BOLT_PRELUDE_PATH", "/no/such/dir")
@@ -248,7 +249,7 @@ fn a_missing_std_is_a_warning() {
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "3\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "True\n");
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
         "warning: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"

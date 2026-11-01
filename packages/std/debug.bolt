@@ -5,6 +5,7 @@
 
 import "./string" (String, StringBuilder, push, build);
 import "./char" (Char);
+import "./ops" *;
 
 /// Types whose values can be shown as they look in code.
 pub class Debug[T] {

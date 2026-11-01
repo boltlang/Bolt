@@ -346,7 +346,9 @@ fn a <> b = (a, b);
 ((1, 2), 3)
 ```
 
-Custom operators bind tighter than the built-in ones, and group from left
-to right. The built-in operators, like `+`, can't be redefined yet.
+Custom operators bind tighter than the ones of the language, like `+`, and
+group from left to right. Those are functions of the prelude too, like
+`fn a + b = add(a, b)`; to make `+` work on a type of your own, give it an
+impl of the operator's class, as in [classes](./classes.mdx#classes-of-operators).
 
 Next: [control flow](./control-flow.mdx).

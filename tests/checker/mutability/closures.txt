@@ -15,6 +15,7 @@ error at `|| { c.n = 1; }`: expected fn() -> (), found mut fn() -> ()
 ================================================================================
 A closure that assigns a let mut variable is mut (#244)
 :error
+:test-prelude
 ================================================================================
 struct Counter { next: fn() -> i32 }
 let mut n = 0;
@@ -49,6 +50,7 @@ let h: imm Holder
 
 ================================================================================
 Calling a mut closure needs nothing mut
+:test-prelude
 ================================================================================
 fn apply_twice(f, x) = f(f(x));
 let mut total = 0;
@@ -88,6 +90,7 @@ error at `|| n`: expected fn() -> i32, found mut fn() -> i32
 
 ================================================================================
 A closure inside a closure makes both mut
+:test-prelude
 ================================================================================
 let mut n = 0;
 let outer = || { let inner = || { n += 1; }; inner };
@@ -97,6 +100,7 @@ let outer: mut fn() -> mut fn() -> ()
 
 ================================================================================
 A named function is imm
+:test-prelude
 ================================================================================
 struct Op { f: fn(i32) -> i32 }
 fn inc(x: i32) -> i32 = x + 1;
@@ -107,6 +111,7 @@ let op: imm Op
 
 ================================================================================
 A mut closure can be given a written mut fn type
+:test-prelude
 ================================================================================
 let mut n = 0;
 let f: mut fn() -> i32 = || { n += 1; n };
