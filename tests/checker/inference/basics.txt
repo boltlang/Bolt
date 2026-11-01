@@ -9,10 +9,10 @@ let b = id(True);
 --------------------------------------------------------------------------------
 id: forall a. fn(a) -> a
 id(1) + 1: i32
-id("foo") + 1: String
+id("foo") + 1: {error}
 let b: Bool
 --------------------------------------------------------------------------------
-error at `1`: expected String, found {integer}
+error at `id("foo") + 1`: unresolved
 
 ================================================================================
 Functions used before their definition

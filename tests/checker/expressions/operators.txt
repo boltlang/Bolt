@@ -23,11 +23,11 @@ Arithmetic needs operands of the same type
 --------------------------------------------------------------------------------
 1u8 + 1i32: u8
 1 + True: i32
-"a" - 1: String
+"a" - 1: {error}
 --------------------------------------------------------------------------------
+error at `"a" - 1`: unresolved
 error at `1i32`: expected u8, found i32
 error at `True`: expected {integer}, found Bool
-error at `1`: expected String, found {integer}
 
 ================================================================================
 Shifts can shift by any integer type
@@ -307,3 +307,35 @@ P { x: 1 } == P { x: 2 };
 P { x: 1 } == P { x: 2 }: {error}
 --------------------------------------------------------------------------------
 error at `P { x: 1 } == P { x: 2 }`: unresolved
+
+================================================================================
+Operators on structs call the functions of the prelude
+:prelude
+================================================================================
+struct Money { cents: i32 }
+impl Add[Money] { type Output = Money; fn add(a, b) = Money { cents: a.cents + b.cents }; }
+impl Neg[Money] { type Output = i32; fn neg(a) = 0 - a.cents; }
+fn total(a: Money) = a + a;
+fn owed(a: Money) = -a;
+fn twice[T: Add](x: T) = x + x;
+--------------------------------------------------------------------------------
+Add[Money].add: fn('m Money, 'm Money) -> imm Money
+Neg[Money].neg: fn(Money) -> i32
+total: fn(Money) -> imm Money
+owed: fn(Money) -> i32
+twice: forall T. Add[T] => fn(T) -> T.Output
+
+================================================================================
+An operator on a struct needs an impl
+:error
+:prelude
+================================================================================
+struct Point { x: i32 }
+fn f(p: Point) = p * p;
+fn g(p: Point) = !p;
+--------------------------------------------------------------------------------
+f: fn(Point) -> {error}
+g: fn(Point) -> {error}
+--------------------------------------------------------------------------------
+error at `p * p`: no instance Mul[Point]
+error at `!p`: no instance Not[Point]

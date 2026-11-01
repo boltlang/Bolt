@@ -619,6 +619,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Prefix { op, expr: inner } => {
                 let ty = self.infer_expr(*inner);
+                // Like infix operators: `-a` of a struct calls `fn -a`.
+                if self.is_called_operand(&ty) {
+                    return self.infer_operator_call(expr, &Name::new(op.as_str()), *inner, ty, &[]);
+                }
                 if *op == PrefixOp::Not && matches!(self.solver.unifier.shallow_resolve(&ty), Ty::Var(_)) {
                     // `!x` of an unknown type is most likely a boolean.
                     self.solver.equal(&Ty::bool(), &ty, self.origin(*inner));
@@ -1226,25 +1230,27 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     fn infer_binary(&mut self, expr: ExprId, op: &BinaryOp, lhs: ExprId, rhs: ExprId) -> Ty<'db> {
         match op {
-            BinaryOp::Arith(ArithOp::Shl | ArithOp::Shr) => {
+            BinaryOp::Arith(op @ (ArithOp::Shl | ArithOp::Shr)) => {
                 let ty = self.infer_expr(lhs);
+                if self.is_called_operand(&ty) {
+                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs]);
+                }
                 let shift = self.solver.new_var(VarKind::Int);
                 self.check_expr(rhs, &shift);
                 ty
             }
-            BinaryOp::Arith(_) => {
+            BinaryOp::Arith(op) => {
                 let ty = self.infer_expr(lhs);
+                if self.is_called_operand(&ty) {
+                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs]);
+                }
                 self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 ty
             }
             BinaryOp::Cmp(op) => {
                 let ty = self.infer_expr(lhs);
-                // Structs, enums and type parameters are compared by the
-                // function with the operator's name, like the prelude's
-                // `fn a < b = lt(a, b)`, like a custom operator. The
-                // primitive types are compared as they are.
-                if matches!(self.solver.unifier.shallow_resolve(&ty), Ty::Adt(..) | Ty::Param(_)) {
-                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, rhs);
+                if self.is_called_operand(&ty) {
+                    return self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs]);
                 }
                 self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
                 Ty::bool()
@@ -1256,21 +1262,37 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             BinaryOp::Assign(op) => {
                 let ty = self.infer_expr(lhs);
-                self.check_expr_because(rhs, &ty, Reason::SameAs(lhs));
+                match op {
+                    // `a += b` of a struct is `a = a + b`, with the `+` of `a`.
+                    Some(op) if self.is_called_operand(&ty) => {
+                        let result = self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty.clone(), &[rhs]);
+                        self.solver.equal(&ty, &result, Origin { reason: Reason::SameAs(lhs), ..self.origin(expr) });
+                    }
+                    _ => self.check_expr_because(rhs, &ty, Reason::SameAs(lhs)),
+                }
                 self.check_place(lhs, op.is_none());
                 Ty::unit()
             }
             // `a <$> b` calls the function `(<$>)`.
             BinaryOp::Custom(name) => {
                 let lhs_ty = self.infer_expr(lhs);
-                self.infer_operator_call(expr, name, lhs, lhs_ty, rhs)
+                self.infer_operator_call(expr, name, lhs, lhs_ty, &[rhs])
             }
         }
     }
 
-    /// `lhs <op> rhs` as a call of the function named `name` in scope, with
-    /// `lhs` of type `lhs_ty` already inferred.
-    fn infer_operator_call(&mut self, expr: ExprId, name: &Name, lhs: ExprId, lhs_ty: Ty<'db>, rhs: ExprId) -> Ty<'db> {
+    /// Whether a built-in operator on a value of type `ty` calls the function
+    /// with the operator's name, like the prelude's `fn a + b = add(a, b)`:
+    /// for structs, enums and type parameters. The primitive types have the
+    /// operators built in.
+    fn is_called_operand(&mut self, ty: &Ty<'db>) -> bool {
+        matches!(self.solver.unifier.shallow_resolve(ty), Ty::Adt(..) | Ty::Param(_))
+    }
+
+    /// `lhs <op> rhs`, or `<op> lhs` when `rest` is empty, as a call of the
+    /// function named `name` in scope, with `lhs` of type `lhs_ty` already
+    /// inferred.
+    fn infer_operator_call(&mut self, expr: ExprId, name: &Name, lhs: ExprId, lhs_ty: Ty<'db>, rest: &[ExprId]) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let mut function = None;
         let callee_ty = match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
@@ -1285,7 +1307,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Error
             }
         };
-        let ty = self.apply(expr, expr, &callee_ty, function, &[rhs], Some((lhs, &lhs_ty)));
+        let ty = self.apply(expr, expr, &callee_ty, function, rest, Some((lhs, &lhs_ty)));
         self.solve_overloads();
         ty
     }

@@ -801,9 +801,9 @@ let a = Iter { data: mut [1], index: 0 };
 fn unknown_types_skip_the_names_of_type_parameters() {
     check(
         r#"
-fn g[a](x: a) = x + (|y| y);
-              //^ label: this has type `a`
-                   //^^^^^ error: expected `a`, found `fn(b) -> b`
+fn g[a](x: a) = if True { x } else { |y| y };
+                      //^^^^^ label: this has type `a`
+                                   //^^^^^ error: expected `a`, found `fn(b) -> b`
 "#,
     );
 }

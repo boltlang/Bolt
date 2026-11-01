@@ -851,6 +851,9 @@ impl<'db> Compiler<'db> {
     }
 
     fn prefix(&mut self, expr: ExprId, op: PrefixOp, inner: ExprId) -> Result<'db, ()> {
+        if self.is_called_operand(inner) {
+            return self.call_operator(expr, op.as_str(), &[inner]);
+        }
         let scalar = self.scalar(inner)?;
         match (op, scalar) {
             (PrefixOp::Neg, Scalar::F32) => {
@@ -913,6 +916,9 @@ impl<'db> Compiler<'db> {
                 Ok(())
             }
             BinaryOp::Arith(op) => {
+                if self.is_called_operand(lhs) {
+                    return self.call_operator(expr, op.as_str(), &[lhs, rhs]);
+                }
                 let scalar = self.scalar(lhs)?;
                 self.expr(lhs)?;
                 self.expr(rhs)?;
@@ -920,16 +926,8 @@ impl<'db> Compiler<'db> {
                 self.arith(expr, *op, scalar)
             }
             BinaryOp::Cmp(op) => {
-                // Structs, enums and type parameters are compared by the
-                // function with the operator's name, as the type checker
-                // has it, like `a <$> b`.
-                if matches!(self.ty(lhs), Ty::Adt(..) | Ty::Param(_)) {
-                    return match self.resolve(expr, &Path::from_name(Name::new(op.as_str()))) {
-                        Some(ValueResolution::Value(ValueNs::Function(f))) => {
-                            self.call_function(expr, f, None, &[lhs, rhs])
-                        }
-                        _ => Err(self.unsupported(expr, "this operator")),
-                    };
+                if self.is_called_operand(lhs) {
+                    return self.call_operator(expr, op.as_str(), &[lhs, rhs]);
                 }
                 let scalar = self.scalar(lhs)?;
                 self.expr(lhs)?;
@@ -944,6 +942,7 @@ impl<'db> Compiler<'db> {
                 }
                 match op {
                     None => self.expr(rhs)?,
+                    Some(op) if self.is_called_operand(lhs) => self.compound_operator(expr, *op, lhs, rhs)?,
                     Some(op) => {
                         let scalar = self.scalar(lhs)?;
                         let value = self.temp(rhs)?;
@@ -958,11 +957,46 @@ impl<'db> Compiler<'db> {
                 self.assign(lhs)
             }
             // `a <$> b` calls the function `(<$>)`.
-            BinaryOp::Custom(name) => match self.resolve(expr, &Path::from_name(name.clone())) {
-                Some(ValueResolution::Value(ValueNs::Function(f))) => self.call_function(expr, f, None, &[lhs, rhs]),
-                _ => Err(self.unsupported(expr, "this operator")),
-            },
+            BinaryOp::Custom(name) => self.call_operator(expr, name.as_str(), &[lhs, rhs]),
         }
+    }
+
+    /// Whether a built-in operator on `operand` calls the function with the
+    /// operator's name, as the type checker has it: for structs, enums and
+    /// type parameters.
+    fn is_called_operand(&self, operand: ExprId) -> bool {
+        matches!(self.ty(operand), Ty::Adt(..) | Ty::Param(_))
+    }
+
+    /// A call of the function named `op` for the operator at `expr`, like
+    /// `a <$> b` or `a + b` of structs.
+    fn call_operator(&mut self, expr: ExprId, op: &str, args: &[ExprId]) -> Result<'db, ()> {
+        match self.resolve(expr, &Path::from_name(Name::new(op))) {
+            Some(ValueResolution::Value(ValueNs::Function(f))) => self.call_function(expr, f, None, args),
+            _ => Err(self.unsupported(expr, "this operator")),
+        }
+    }
+
+    /// `lhs <op> rhs` for `lhs <op>= rhs` of a struct, with the value first,
+    /// then the place, like the evaluator. The call has the type of the
+    /// place, since its result is stored there.
+    fn compound_operator(&mut self, expr: ExprId, op: ArithOp, lhs: ExprId, rhs: ExprId) -> Result<'db, ()> {
+        let Some(ValueResolution::Value(ValueNs::Function(f))) = self.resolve(expr, &Path::from_name(Name::new(op.as_str())))
+        else {
+            return Err(self.unsupported(expr, "this operator"));
+        };
+        if builtin(self.db, f).is_some() || !f.item(self.db).has_body {
+            return Err(self.unsupported(expr, "this operator"));
+        }
+        let at_call = Ty::func(vec![self.ty(lhs), self.ty(rhs)], self.ty(lhs));
+        let instance = self.instance_at(expr, f, &at_call)?;
+        let value = self.temp(rhs)?;
+        self.expr(lhs)?;
+        if let Some(value) = value {
+            self.push(Inst::LocalGet(value));
+        }
+        self.call_callee(Callee::Instance(instance));
+        Ok(())
     }
 
     /// The right side of a shift can be of another integer type than the
@@ -1134,13 +1168,18 @@ impl<'db> Compiler<'db> {
         callee: Option<ExprId>,
         args: &[ExprId],
     ) -> Result<'db, Instance<'db>> {
-        let db = self.db;
-        let scheme = function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
         let at_call = callee.map(|c| self.ty(c)).filter(|t| matches!(t, Ty::Fn(..))).unwrap_or_else(|| {
             Ty::func(args.iter().map(|&a| self.ty(a)).collect::<Box<[_]>>(), self.ty(expr))
         });
+        self.instance_at(expr, f, &at_call)
+    }
+
+    /// The instance of `f` that a call at `expr` of type `at_call` calls.
+    fn instance_at(&self, expr: ExprId, f: FunctionId<'db>, at_call: &Ty<'db>) -> Result<'db, Instance<'db>> {
+        let db = self.db;
+        let scheme = function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
         let mut found = vec![None; scheme.params.len() + scheme.bound as usize];
-        bind_type_args(&scheme.ty, &at_call, scheme, &mut found);
+        bind_type_args(&scheme.ty, at_call, scheme, &mut found);
         let mut type_args = Vec::new();
         for ty in found {
             // A parameter that isn't in the function's type doesn't decide

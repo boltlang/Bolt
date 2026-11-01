@@ -44,6 +44,17 @@ pub enum PrefixOp {
     Not,
 }
 
+impl PrefixOp {
+    /// The operator, which is also the name of the function for values of
+    /// other types than the primitive ones, like `fn -a`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PrefixOp::Neg => "-",
+            PrefixOp::Not => "!",
+        }
+    }
+}
+
 /// A built-in arithmetic or bitwise operator.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum ArithOp {
@@ -57,6 +68,25 @@ pub enum ArithOp {
     BitXor,
     Shl,
     Shr,
+}
+
+impl ArithOp {
+    /// The operator, which is also the name of the function for values of
+    /// other types than the primitive ones, like `fn a + b`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ArithOp::Add => "+",
+            ArithOp::Sub => "-",
+            ArithOp::Mul => "*",
+            ArithOp::Div => "/",
+            ArithOp::Rem => "%",
+            ArithOp::BitAnd => "&",
+            ArithOp::BitOr => "|",
+            ArithOp::BitXor => "^",
+            ArithOp::Shl => "<<",
+            ArithOp::Shr => ">>",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]

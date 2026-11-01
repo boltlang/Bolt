@@ -631,6 +631,11 @@ impl<'db> Evaluator<'db> {
             }
             Expr::Prefix { op, expr: inner } => {
                 let value = self.eval(f, *inner)?;
+                // `-a` of a struct or an enum calls `fn -a`, as the type
+                // checker has it.
+                if let Value::Adt { .. } = &value {
+                    return self.call_operator(f, expr, op.as_str(), vec![value]);
+                }
                 prefix(*op, value)
             }
             Expr::Binary { op, lhs, rhs } => self.eval_binary(f, expr, op, *lhs, *rhs),
@@ -859,27 +864,22 @@ impl<'db> Evaluator<'db> {
             BinaryOp::Arith(op) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
+                if let Value::Adt { .. } = &lhs {
+                    return self.call_operator(f, expr, op.as_str(), vec![lhs, rhs]);
+                }
                 arith(*op, lhs, rhs)
             }
             BinaryOp::Cmp(op) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
-                // Structs and enums are compared by the function with the
-                // operator's name, like the prelude's `fn a < b`, as the type
-                // checker has it.
                 if let Value::Adt { .. } = &lhs {
-                    let path = Path::from_name(Name::new(op.as_str()));
-                    let callee = match self.resolve_value(f.def, expr, &path) {
-                        Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
-                        _ => return fail(ErrorKind::UnresolvedName(op.as_str().to_string())),
-                    };
-                    return self.apply(callee, vec![lhs, rhs]);
+                    return self.call_operator(f, expr, op.as_str(), vec![lhs, rhs]);
                 }
                 compare(*op, &lhs, &rhs)
             }
             BinaryOp::Assign(op) => {
                 let rhs = self.eval(f, rhs)?;
-                self.assign(f, lhs, *op, rhs)?;
+                self.assign(f, expr, lhs, *op, rhs)?;
                 Ok(Value::unit())
             }
             // `a <$> b` calls the function `(<$>)` in scope.
@@ -894,6 +894,17 @@ impl<'db> Evaluator<'db> {
                 self.apply(callee, vec![lhs, rhs])
             }
         }
+    }
+
+    /// A built-in operator on structs and enums: a call of the function with
+    /// the operator's name, like the prelude's `fn a < b`, as the type
+    /// checker has it.
+    fn call_operator(&mut self, f: &mut Frame<'db>, expr: ExprId, op: &str, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
+        let callee = match self.resolve_value(f.def, expr, &Path::from_name(Name::new(op))) {
+            Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
+            _ => return fail(ErrorKind::UnresolvedName(op.to_string())),
+        };
+        self.apply(callee, args)
     }
 
     fn eval_call(&mut self, f: &mut Frame<'db>, expr: ExprId, callee: ExprId, args: &[ExprId]) -> Res<'db, Value<'db>> {
@@ -1063,7 +1074,30 @@ impl<'db> Evaluator<'db> {
 
     // Assignment
 
-    fn assign(&mut self, f: &mut Frame<'db>, target: ExprId, op: Option<ArithOp>, value: Value<'db>) -> Res<'db, ()> {
+    /// `current <op> value` for `current <op>= value` at `at`: through the
+    /// function with the operator's name for structs and enums, like `a + b`.
+    fn combine(
+        &mut self,
+        f: &mut Frame<'db>,
+        at: ExprId,
+        op: ArithOp,
+        current: Value<'db>,
+        value: Value<'db>,
+    ) -> Res<'db, Value<'db>> {
+        if let Value::Adt { .. } = &current {
+            return self.call_operator(f, at, op.as_str(), vec![current, value]);
+        }
+        arith(op, current, value)
+    }
+
+    fn assign(
+        &mut self,
+        f: &mut Frame<'db>,
+        at: ExprId,
+        target: ExprId,
+        op: Option<ArithOp>,
+        value: Value<'db>,
+    ) -> Res<'db, ()> {
         let (place, fields) = self.place(f, target)?;
         if let Place::Variable(slot) = &place
             && fields.is_empty()
@@ -1080,11 +1114,12 @@ impl<'db> Evaluator<'db> {
                 value
             } else {
                 let mut element = self.call_lang(f, at, LangClass::Index, vec![container.clone(), index.clone()])?;
-                let current = tuple_field(Some(&mut element), &fields)?;
-                *current = match op {
-                    Some(op) => arith(op, current.clone(), value)?,
+                let current = tuple_field(Some(&mut element), &fields)?.clone();
+                let value = match op {
+                    Some(op) => self.combine(f, at, op, current, value)?,
                     None => value,
                 };
+                *tuple_field(Some(&mut element), &fields)? = value;
                 element
             };
             self.call_lang(f, at, LangClass::IndexMut, vec![container, index, value])?;
@@ -1094,12 +1129,17 @@ impl<'db> Evaluator<'db> {
         if let Place::Field(fields, _) = &place {
             self.changing(fields.mutability)?;
         }
+        // The new value is worked out before the place is written, since
+        // `+` of a struct runs code that may read it.
+        let value = match op {
+            Some(op) => {
+                let current = place.update(|current| Ok(tuple_field(current, &fields)?.clone()))?;
+                self.combine(f, at, op, current, value)?
+            }
+            None => value,
+        };
         place.update(|current| {
-            let current = tuple_field(current, &fields)?;
-            *current = match op {
-                Some(op) => arith(op, current.clone(), value)?,
-                None => value,
-            };
+            *tuple_field(current, &fields)? = value;
             Ok(())
         })
     }
