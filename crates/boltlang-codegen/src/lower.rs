@@ -12,8 +12,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId, body},
     builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType, BuiltinUint},
     hir::{
-        ArithOp, BinaryOp, BindingId, BlockKind, CmpOp, Expr, ExprId, LabelId, Literal, LogicOp, MatchArm, Pat,
-        PatId, Path, PathSegment, PrefixOp, Statement,
+        BinaryOp, BindingId, BlockKind, Expr, ExprId, LabelId, Literal, LogicOp, MatchArm, Pat, PatId, Path,
+        PathSegment, Statement,
     },
     ids::{ConstId, EnumId, EnumVariantId, FunctionId, ItemContainerId},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
@@ -21,7 +21,7 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::{
     AdtId, InferenceResult, Scheme, Ty,
-    builtin::{Builtin, PrimOp, builtin},
+    builtin::{ArithOp, Builtin, CmpOp, PrefixOp, PrimOp, builtin},
     function_scheme, infer_body,
     instances::{bind_scheme_args, class_args, impl_method, select_impl, subst_scheme_args},
     solve::normalize_assoc,
@@ -941,9 +941,9 @@ impl<'db> Compiler<'db> {
                 Ok(())
             }
             // The functions of the prelude, like `fn a + b = add(a, b)`, whose
-            // impls for the primitive types are builtins like `i32_add`.
-            BinaryOp::Arith(op) => self.call_operator(expr, op.as_str(), &[lhs, rhs]),
-            BinaryOp::Cmp(op) => self.call_operator(expr, op.as_str(), &[lhs, rhs]),
+            // impls for the primitive types are builtins like `i32_add`, and
+            // the program's own, like `fn a <$> b`.
+            BinaryOp::Operator(name) => self.call_operator(expr, name.as_str(), &[lhs, rhs]),
             // The value first, then the place, like the evaluator.
             BinaryOp::Assign(op) => {
                 if !self.is_place(lhs) {
@@ -951,12 +951,10 @@ impl<'db> Compiler<'db> {
                 }
                 match op {
                     None => self.expr(rhs)?,
-                    Some(op) => self.compound_operator(expr, *op, lhs, rhs)?,
+                    Some(op) => self.compound_operator(expr, op, lhs, rhs)?,
                 }
                 self.assign(lhs)
             }
-            // `a <$> b` calls the function `(<$>)`.
-            BinaryOp::Custom(name) => self.call_operator(expr, name.as_str(), &[lhs, rhs]),
         }
     }
 
@@ -972,7 +970,7 @@ impl<'db> Compiler<'db> {
     /// `lhs <op> rhs` for `lhs <op>= rhs`, with the value first,
     /// then the place, like the evaluator. The call has the type of the
     /// place, since its result is stored there.
-    fn compound_operator(&mut self, expr: ExprId, op: ArithOp, lhs: ExprId, rhs: ExprId) -> Result<'db, ()> {
+    fn compound_operator(&mut self, expr: ExprId, op: &Name, lhs: ExprId, rhs: ExprId) -> Result<'db, ()> {
         let Some(ValueResolution::Value(ValueNs::Function(f))) = self.resolve(expr, &Path::from_name(Name::new(op.as_str())))
         else {
             return Err(self.unsupported(expr, "this operator"));

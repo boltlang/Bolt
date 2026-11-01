@@ -10,8 +10,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId, body},
     builtin_type::BuiltinType,
     hir::{
-        ArithOp, BinaryOp, BindingId, BlockKind, CmpOp, Expr, ExprId, LabelId, Literal, LogicOp, Mutability, Pat, PatId,
-        Path, PathSegment, PrefixOp, Statement, TypeRef,
+        BinaryOp, BindingId, BlockKind, Expr, ExprId, LabelId, Literal, LogicOp, Mutability, Pat, PatId, Path,
+        PathSegment, Statement, TypeRef,
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId, ModuleDefId},
     nameres::{Namespace, file_scope, package_of},
@@ -21,7 +21,7 @@ use boltlang_hir_def::{
 
 use boltlang_hir_ty::{
     GenericParamId, Ty,
-    builtin::{Builtin, PrimOp, builtin},
+    builtin::{ArithOp, Builtin, CmpOp, PrefixOp, PrimOp, builtin},
     function_scheme, infer_body,
     instances::{bind_scheme_args, class_args, impl_const, impl_method, select_impl, subst_scheme_args},
     lang::{LangClass, debug_string_fn},
@@ -880,31 +880,15 @@ impl<'db> Evaluator<'db> {
                 };
                 Ok(Value::Bool(value))
             }
-            BinaryOp::Arith(op) => {
+            BinaryOp::Operator(name) => {
                 let lhs = self.eval(f, lhs)?;
                 let rhs = self.eval(f, rhs)?;
-                self.call_operator(f, expr, op.as_str(), vec![lhs, rhs])
-            }
-            BinaryOp::Cmp(op) => {
-                let lhs = self.eval(f, lhs)?;
-                let rhs = self.eval(f, rhs)?;
-                self.call_operator(f, expr, op.as_str(), vec![lhs, rhs])
+                self.call_operator(f, expr, name.as_str(), vec![lhs, rhs])
             }
             BinaryOp::Assign(op) => {
                 let rhs = self.eval(f, rhs)?;
-                self.assign(f, expr, lhs, *op, rhs)?;
+                self.assign(f, expr, lhs, op.as_ref(), rhs)?;
                 Ok(Value::unit())
-            }
-            // `a <$> b` calls the function `(<$>)` in scope.
-            BinaryOp::Custom(name) => {
-                let path = Path::from_name(name.clone());
-                let callee = match self.resolve_value(f.def, expr, &path) {
-                    Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
-                    _ => return fail(ErrorKind::UnresolvedName(name.to_string())),
-                };
-                let lhs = self.eval(f, lhs)?;
-                let rhs = self.eval(f, rhs)?;
-                self.apply(callee, vec![lhs, rhs])
             }
         }
     }
@@ -1162,7 +1146,7 @@ impl<'db> Evaluator<'db> {
         &mut self,
         f: &mut Frame<'db>,
         at: ExprId,
-        op: ArithOp,
+        op: &Name,
         current: Value<'db>,
         value: Value<'db>,
     ) -> Res<'db, Value<'db>> {
@@ -1174,7 +1158,7 @@ impl<'db> Evaluator<'db> {
         f: &mut Frame<'db>,
         at: ExprId,
         target: ExprId,
-        op: Option<ArithOp>,
+        op: Option<&Name>,
         value: Value<'db>,
     ) -> Res<'db, ()> {
         let (place, fields) = self.place(f, target)?;

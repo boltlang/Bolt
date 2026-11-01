@@ -644,7 +644,10 @@ fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<
                 paths.extend(field_path(body, id));
                 paths
             }
-            Expr::Binary { op: BinaryOp::Custom(name), .. } => vec![Path::from_name(name.clone())],
+            // Every operator is a call of the function with its name.
+            Expr::Binary { op: BinaryOp::Operator(name) | BinaryOp::Assign(Some(name)), .. } | Expr::Prefix { op: name, .. } => {
+                vec![Path::from_name(name.clone())]
+            }
             _ => continue,
         };
         let resolver = Resolver::for_expr(db, def, id);

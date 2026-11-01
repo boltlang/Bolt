@@ -120,11 +120,14 @@ impl Printer<'_> {
             Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
             Expr::Cast { expr, type_ref } => format!("(as {} {})", self.expr(*expr), self.ty(*type_ref)),
             Expr::Index { base, index } => format!("(index {} {})", self.expr(*base), self.expr(*index)),
-            Expr::Prefix { op, expr } => format!("({op:?} {})", self.expr(*expr)),
+            Expr::Prefix { op, expr } => format!("({op} {})", self.expr(*expr)),
             Expr::Binary { op, lhs, rhs } => {
                 let op = match op {
-                    BinaryOp::Custom(name) => name.to_string(),
-                    other => format!("{other:?}"),
+                    BinaryOp::Operator(name) => name.to_string(),
+                    BinaryOp::Assign(Some(name)) => format!("{name}="),
+                    BinaryOp::Assign(None) => "=".to_string(),
+                    BinaryOp::Logic(LogicOp::And) => "&&".to_string(),
+                    BinaryOp::Logic(LogicOp::Or) => "||".to_string(),
                 };
                 format!("({op} {} {})", self.expr(*lhs), self.expr(*rhs))
             }
@@ -303,10 +306,10 @@ impl Printer<'_> {
 fn operators() {
     assert_eq!(
         render("a + b * c;\nx += (1 - 2);\nf <$> x;\n-a == !b;\nx as u8 as i32;"),
-        "(Arith(Add) a (Arith(Mul) b c));\n\
-         (Assign(Some(Add)) x (Arith(Sub) 1 2));\n\
+        "(+ a (* b c));\n\
+         (+= x (- 1 2));\n\
          (<$> f x);\n\
-         (Cmp(Eq) (Neg a) (Not b));\n\
+         (== (- a) (! b));\n\
          (as (as x u8) i32);"
     );
 }
@@ -361,8 +364,8 @@ fn control_flow() {
              for (i, x) in xs { yield x; }\n\
              loop { break; }"
         ),
-        "(if (Logic(And) (let Some(x) o) (Cmp(Gt) x 0)) {a} (if b {c} {d}))\n\
-         (match x [0 | 1 => a] [n if (Cmp(Gt) n 1) => b] [_ => {}])\n\
+        "(if (&& (let Some(x) o) (> x 0)) {a} (if b {c} {d}))\n\
+         (match x [0 | 1 => a] [n if (> n 1) => b] [_ => {}])\n\
          ('outer while c {(continue 'outer);})\n\
          (for (i, x) xs {(yield x);})\n\
          (loop {(break);})"
@@ -376,7 +379,7 @@ fn compound_expressions() {
             "(a, b);\n();\n[1, 2];\n[0; n + 1];\nPoint { x, y: 1, ..base };\nShape.Circle { radius: r };\n\
              a..b; ..=c; d..; ..;"
         ),
-        "(tuple a b);\n(tuple );\n[1 2];\n[0; (Arith(Add) n 1)];\n\
+        "(tuple a b);\n(tuple );\n[1 2];\n[0; (+ n 1)];\n\
          (record Point x: x, y: 1 ..base);\n(record Shape.Circle radius: r);\n\
          (.. a b);\n(..= _ c);\n(.. d _);\n(.. _ _);"
     );
@@ -389,7 +392,7 @@ fn lambdas_and_macros() {
         "(Closure (x) x);\n\
          (Closure (a, b: i32) -> i32 {a});\n\
          (AsyncClosure () 1);\n\
-         (Function (x) (Arith(Add) x 1));\n\
+         (Function (x) (+ x 1));\n\
          (Function (x: i32) -> i32 x);\n\
          (println!);"
     );
@@ -423,7 +426,7 @@ fn types() {
         ),
         "(let a : Vec[Vec[i32]])\n\
          (let b : (A B))\n\
-         (let c : [u8; (Arith(Add) N 1)])\n\
+         (let c : [u8; (+ N 1)])\n\
          (let d : fn(x: i32, ...) -> !)\n\
          (let e : extern C fn())\n\
          (let f : Box[fn(T) -> U])\n\

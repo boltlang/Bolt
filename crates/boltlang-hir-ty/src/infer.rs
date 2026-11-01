@@ -647,8 +647,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             // `fn -a = neg(a)`.
             Expr::Prefix { op, expr: inner } => {
                 let ty = self.infer_expr(*inner);
-                let result = self.infer_operator_call(expr, &Name::new(op.as_str()), *inner, ty.clone(), &[]);
-                self.number_result(expr, &ty, result)
+                self.infer_operator_call(expr, op, *inner, ty, &[])
             }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
             Expr::Range { lhs, rhs, .. } => {
@@ -1255,18 +1254,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     fn infer_binary(&mut self, expr: ExprId, op: &BinaryOp, lhs: ExprId, rhs: ExprId) -> Ty<'db> {
         match op {
-            // `a + b` and `a < b` call the functions `+` and `<` in scope,
-            // like the prelude's `fn a + b = add(a, b)`, for every type: only
-            // the operations the prelude's impls use, like `i32_add`, are
-            // built in.
-            BinaryOp::Arith(op) => {
+            // `a + b`, `a < b` and `a <$> b` call the functions `+`, `<` and
+            // `<$>` in scope, like the prelude's `fn a + b = add(a, b)`, for
+            // every type: only the operations that the prelude's impls use,
+            // like `i32_add`, are built in.
+            BinaryOp::Operator(name) => {
                 let ty = self.infer_expr(lhs);
-                let result = self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty.clone(), &[rhs]);
-                self.number_result(expr, &ty, result)
-            }
-            BinaryOp::Cmp(op) => {
-                let ty = self.infer_expr(lhs);
-                self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty, &[rhs])
+                self.infer_operator_call(expr, name, lhs, ty, &[rhs])
             }
             BinaryOp::Logic(_) => {
                 self.check_expr(lhs, &Ty::bool());
@@ -1278,7 +1272,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 match op {
                     // `a += b` is `a = a + b`.
                     Some(op) => {
-                        let result = self.infer_operator_call(expr, &Name::new(op.as_str()), lhs, ty.clone(), &[rhs]);
+                        let result = self.infer_operator_call(expr, op, lhs, ty.clone(), &[rhs]);
                         self.solver.equal(&ty, &result, Origin { reason: Reason::SameAs(lhs), ..self.origin(expr) });
                     }
                     _ => self.check_expr_because(rhs, &ty, Reason::SameAs(lhs)),
@@ -1286,27 +1280,40 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.check_place(lhs, op.is_none());
                 Ty::unit()
             }
-            // `a <$> b` calls the function `(<$>)`.
-            BinaryOp::Custom(name) => {
-                let lhs_ty = self.infer_expr(lhs);
-                self.infer_operator_call(expr, name, lhs, lhs_ty, &[rhs])
-            }
         }
     }
 
-    /// The type of `-a` or `a + b` at `expr`, whose operator gives `result`,
-    /// with `a` of type `operand`. While `a` is a number literal whose type
-    /// isn't known, like the `1` of `let x: i64 = 1 << 40`, the result has its
-    /// type, as it has for every number type's impl: so that what the result
-    /// must be, like `i64`, decides the literal's type, as in Rust.
-    fn number_result(&mut self, expr: ExprId, operand: &Ty<'db>, result: Ty<'db>) -> Ty<'db> {
-        if let Ty::Var(v) = self.solver.unifier.shallow_resolve(operand)
-            && matches!(self.solver.unifier.var_kind(v), Some(VarKind::Int | VarKind::Float))
-        {
-            self.solver.equal(operand, &result, self.origin(expr));
-            return operand.clone();
+    /// Whether the functions that `value` names, with `arity` parameters,
+    /// all give an associated type of their first parameter's type, like the
+    /// `T.Output` of the prelude's `fn a + b = add(a, b)`.
+    fn gives_operand_assoc(&self, value: ValueNs<'db>, arity: usize) -> bool {
+        let functions = match value {
+            ValueNs::Function(f) => vec![f],
+            ValueNs::Overloaded(set) => set.functions(self.db).clone(),
+            _ => return false,
+        };
+        let mut found = false;
+        for f in functions {
+            if self.env.mono.contains_key(&f) {
+                return false;
+            }
+            let scheme = match self.env.done.get(&f) {
+                Some(scheme) => scheme,
+                None => match function_scheme(self.db, f) {
+                    Ok(scheme) => scheme,
+                    Err(_) => return false,
+                },
+            };
+            let Ty::Fn(params, ret, _) = &scheme.ty else { return false };
+            if params.len() != arity {
+                continue;
+            }
+            match &**ret {
+                Ty::Assoc(_, args) if args.first() == params.first() => found = true,
+                _ => return false,
+            }
         }
-        result
+        found
     }
 
     /// `lhs <op> rhs`, or `<op> lhs` when `rest` is empty, as a call of the
@@ -1315,11 +1322,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     fn infer_operator_call(&mut self, expr: ExprId, name: &Name, lhs: ExprId, lhs_ty: Ty<'db>, rest: &[ExprId]) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let mut function = None;
+        let mut gives_operand_assoc = false;
         let callee_ty = match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
             Some(ValueResolution::Value(value)) => {
                 if let ValueNs::Function(f) = value {
                     function = Some(f);
                 }
+                gives_operand_assoc = self.gives_operand_assoc(value, rest.len() + 1);
                 self.value_ty(expr, value)
             }
             _ => {
@@ -1335,6 +1344,18 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         };
         let ty = self.apply(expr, expr, &callee_ty, function, rest, Some((lhs, &lhs_ty, same)));
         self.solve_overloads();
+        // While `lhs` is a number literal whose type isn't known, like the `1`
+        // of `let x: i64 = 1 << 40`, an operator that gives an associated type
+        // of it, like `+`'s `T.Output`, gives its type, as every number type's
+        // impl does: so that what the result must be decides the literal's
+        // type, as in Rust.
+        if gives_operand_assoc
+            && let Ty::Var(v) = self.solver.unifier.shallow_resolve(&lhs_ty)
+            && matches!(self.solver.unifier.var_kind(v), Some(VarKind::Int | VarKind::Float))
+        {
+            self.solver.equal(&lhs_ty, &ty, self.origin(expr));
+            return lhs_ty;
+        }
         ty
     }
 

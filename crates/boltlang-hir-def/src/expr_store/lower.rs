@@ -14,8 +14,8 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     hir::{
-        ArithOp, BinaryOp, Binding, BlockKind, CmpOp, Expr, ExprId, GenericArg, Label, LambdaKind, Literal, LogicOp,
-        MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment, PrefixOp, RecordField, RecordFieldPat, Statement, TypeRef,
+        BinaryOp, Binding, BlockKind, Expr, ExprId, GenericArg, Label, LambdaKind, Literal, LogicOp,
+        MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment, RecordField, RecordFieldPat, Statement, TypeRef,
         TypeRefId,
     },
 };
@@ -281,10 +281,10 @@ impl ExprCollector {
             }
             E::Prefix(e) => {
                 let op = match e.operator().map(|t| t.kind()) {
-                    Some(MINUS) => PrefixOp::Neg,
-                    _ => PrefixOp::Not,
+                    Some(MINUS) => "-",
+                    _ => "!",
                 };
-                Expr::Prefix { op, expr: self.lower_opt_expr(e.expr()) }
+                Expr::Prefix { op: Name::new(op), expr: self.lower_opt_expr(e.expr()) }
             }
             E::Bin(e) => {
                 let lhs = self.lower_opt_expr(e.lhs());
@@ -618,39 +618,20 @@ fn label_name(label: &ast::Label) -> Option<Name> {
     Some(Name::new(ident.text().trim_start_matches('\'')))
 }
 
+/// The operator `op`: `&&`, `||`, an assignment, or a call of the function
+/// with its name. A compound assignment like `+=` uses the function `+`.
 fn binary_op(op: &str) -> BinaryOp {
-    use ArithOp::*;
     match op {
-        "+" => BinaryOp::Arith(Add),
-        "-" => BinaryOp::Arith(Sub),
-        "*" => BinaryOp::Arith(Mul),
-        "/" => BinaryOp::Arith(Div),
-        "%" => BinaryOp::Arith(Rem),
-        "&" => BinaryOp::Arith(BitAnd),
-        "|" => BinaryOp::Arith(BitOr),
-        "^" => BinaryOp::Arith(BitXor),
-        "<<" => BinaryOp::Arith(Shl),
-        ">>" => BinaryOp::Arith(Shr),
-        "==" => BinaryOp::Cmp(CmpOp::Eq),
-        "!=" => BinaryOp::Cmp(CmpOp::NotEq),
-        "<" => BinaryOp::Cmp(CmpOp::Lt),
-        "<=" => BinaryOp::Cmp(CmpOp::LtEq),
-        ">" => BinaryOp::Cmp(CmpOp::Gt),
-        ">=" => BinaryOp::Cmp(CmpOp::GtEq),
         "&&" => BinaryOp::Logic(LogicOp::And),
         "||" => BinaryOp::Logic(LogicOp::Or),
         "=" => BinaryOp::Assign(None),
-        "+=" => BinaryOp::Assign(Some(Add)),
-        "-=" => BinaryOp::Assign(Some(Sub)),
-        "*=" => BinaryOp::Assign(Some(Mul)),
-        "/=" => BinaryOp::Assign(Some(Div)),
-        "%=" => BinaryOp::Assign(Some(Rem)),
-        "&=" => BinaryOp::Assign(Some(BitAnd)),
-        "|=" => BinaryOp::Assign(Some(BitOr)),
-        "^=" => BinaryOp::Assign(Some(BitXor)),
-        "<<=" => BinaryOp::Assign(Some(Shl)),
-        ">>=" => BinaryOp::Assign(Some(Shr)),
-        other => BinaryOp::Custom(Name::new(other)),
+        // `!=`, `<=` and `>=` aren't assignments, and neither is an operator
+        // with more than one `=`, like `==`, as the lexer has it.
+        "!=" | "<=" | ">=" => BinaryOp::Operator(Name::new(op)),
+        _ if op.len() > 1 && op.ends_with('=') && op.matches('=').count() == 1 => {
+            BinaryOp::Assign(Some(Name::new(&op[..op.len() - 1])))
+        }
+        _ => BinaryOp::Operator(Name::new(op)),
     }
 }
 

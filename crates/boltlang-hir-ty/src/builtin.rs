@@ -22,12 +22,49 @@ use std::sync::OnceLock;
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
-    hir::{ArithOp, CmpOp, Mutability},
+    hir::Mutability,
     ids::{ExternBlockId, FunctionId, ItemContainerId},
     item_tree::FunctionName,
 };
 
 use crate::{AdtId, lang::string_struct, ty::Ty};
+
+/// What a builtin of a primitive type for a prefix operator does, like
+/// `i32_neg`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum PrefixOp {
+    /// `-x`
+    Neg,
+    /// `!x`
+    Not,
+}
+
+/// What a builtin of a primitive type for an arithmetic or bitwise operator
+/// does, like `i32_add`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum ArithOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+    Rem,
+    BitAnd,
+    BitOr,
+    BitXor,
+    Shl,
+    Shr,
+}
+
+/// What a builtin of a primitive type for a comparison does, like `i32_lt`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum CmpOp {
+    Eq,
+    NotEq,
+    Lt,
+    LtEq,
+    Gt,
+    GtEq,
+}
 
 /// The ABI of the `extern` blocks that declare builtins.
 pub const ABI: &str = "bolt";

@@ -5,8 +5,10 @@
 //!
 //! - Parentheses are gone.
 //! - Closures and anonymous functions (`fn (x) = e`) are both [`Expr::Lambda`].
-//! - Custom operators like `<$>` are [`BinaryOp::Custom`], and assignments
-//!   are binary operators too.
+//! - Every operator but `&&`, `||` and `=`, like `+`, `==` or `<$>`, is
+//!   [`BinaryOp::Operator`] with its name, since it's a call of the function
+//!   with that name. `+=` is [`BinaryOp::Assign`] with `+`, and `-a` is
+//!   [`Expr::Prefix`] with `-`.
 //! - `mut x` is a [`Binding`] with `mutable` set.
 //! - Macro invocations are opaque, since macros aren't expanded yet.
 //!
@@ -37,84 +39,6 @@ pub enum Literal {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
-pub enum PrefixOp {
-    /// `-x`
-    Neg,
-    /// `!x`
-    Not,
-}
-
-impl PrefixOp {
-    /// The operator, which is also the name of the function for values of
-    /// other types than the primitive ones, like `fn -a`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            PrefixOp::Neg => "-",
-            PrefixOp::Not => "!",
-        }
-    }
-}
-
-/// A built-in arithmetic or bitwise operator.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
-pub enum ArithOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-    Rem,
-    BitAnd,
-    BitOr,
-    BitXor,
-    Shl,
-    Shr,
-}
-
-impl ArithOp {
-    /// The operator, which is also the name of the function for values of
-    /// other types than the primitive ones, like `fn a + b`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            ArithOp::Add => "+",
-            ArithOp::Sub => "-",
-            ArithOp::Mul => "*",
-            ArithOp::Div => "/",
-            ArithOp::Rem => "%",
-            ArithOp::BitAnd => "&",
-            ArithOp::BitOr => "|",
-            ArithOp::BitXor => "^",
-            ArithOp::Shl => "<<",
-            ArithOp::Shr => ">>",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
-pub enum CmpOp {
-    Eq,
-    NotEq,
-    Lt,
-    LtEq,
-    Gt,
-    GtEq,
-}
-
-impl CmpOp {
-    /// The operator, which is also the name of the function that compares
-    /// values of other types than the primitive ones, like `fn a < b`.
-    pub fn as_str(self) -> &'static str {
-        match self {
-            CmpOp::Eq => "==",
-            CmpOp::NotEq => "!=",
-            CmpOp::Lt => "<",
-            CmpOp::LtEq => "<=",
-            CmpOp::Gt => ">",
-            CmpOp::GtEq => ">=",
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum LogicOp {
     And,
     Or,
@@ -122,13 +46,13 @@ pub enum LogicOp {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum BinaryOp {
-    Arith(ArithOp),
-    Cmp(CmpOp),
+    /// `&&` and `||`, which aren't functions, since they short-circuit.
     Logic(LogicOp),
-    /// `=`, or a compound assignment like `+=` with its operator.
-    Assign(Option<ArithOp>),
-    /// An operator the grammar doesn't define, like `<$>`.
-    Custom(Name),
+    /// `=`, or a compound assignment like `+=` with its operator, `+`.
+    Assign(Option<Name>),
+    /// Every other operator, like `+`, `==` or `<$>`: a call of the function
+    /// with its name, like the prelude's `fn a + b = add(a, b)`.
+    Operator(Name),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
@@ -167,7 +91,8 @@ pub enum Expr {
     Try { expr: ExprId },
     Cast { expr: ExprId, type_ref: TypeRefId },
     Index { base: ExprId, index: ExprId },
-    Prefix { op: PrefixOp, expr: ExprId },
+    /// `-a` or `!a`: a call of the function `-` or `!`, like `fn -a`.
+    Prefix { op: Name, expr: ExprId },
     Binary { op: BinaryOp, lhs: ExprId, rhs: ExprId },
     /// `a..b`, `a..=b`, `a..`, `..b` or `..`
     Range { lhs: Option<ExprId>, rhs: Option<ExprId>, inclusive: bool },
