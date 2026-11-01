@@ -1,19 +1,26 @@
 
 import "./mutability" (to_mut, to_imm);
+import "./array" (array_len);
 import "./option" (Some, unwrap);
-import "./vec" (Vec, last, push, extend);
+import "./vec" (Vec, last, push, extend, to_array);
 import "./ops" (PartialOrd, Eq, Ordering, eq);
 import "./semigroup" (Semigroup);
 import "./char" (Char, to_utf8, push_escaped);
 import "./debug" (Debug);
 
 /// Text, as its bytes in UTF-8. It's never changed in place, so it's an
-/// `imm struct`: a `String` is always `imm`.
-pub imm struct String(Vec[u8]);
+/// `imm struct`: a `String` is always `imm`. Since it never grows, it's an
+/// array, not a `Vec`: a `StringBuilder` is what grows.
+pub imm struct String([u8]);
 
-pub fn String.from_bytes(bytes: imm Vec[u8]) -> String {
+/// The text of `bytes`, which must be UTF-8.
+pub fn String.from_bytes(bytes: imm [u8]) -> String {
   String(bytes)
 }
+
+/// The number of bytes of `s`, which is the number of characters only when
+/// they're all ASCII.
+pub fn len(s: String) -> i32 = array_len(s.0);
 
 /// Strings are equal when their bytes are.
 impl Eq[String] {
@@ -25,14 +32,15 @@ impl Eq[String] {
 fn compare(a: String, b: String) -> Ordering {
   let x = a.0;
   let y = b.0;
+  let (m, n) = (array_len(x), array_len(y));
   let mut i = 0;
-  while i < x.len && i < y.len {
+  while i < m && i < n {
     if x[i] != y[i] {
       return if x[i] < y[i] { Ordering.Less } else { Ordering.Greater };
     }
     i += 1;
   }
-  if x.len < y.len { Ordering.Less } else if x.len > y.len { Ordering.Greater } else { Ordering.Equal }
+  if m < n { Ordering.Less } else if m > n { Ordering.Greater } else { Ordering.Equal }
 }
 
 impl PartialOrd[String] {
@@ -99,8 +107,9 @@ pub fn push_str(b: mut StringBuilder, s: String) {
 /// The number of bytes added so far.
 pub fn len(b: StringBuilder) -> i32 = b.bytes.len;
 
-/// The text added so far, as a `String`. It's a copy, so the builder can
+/// The text added so far, as a `String`. It's a copy of only the bytes
+/// added, without the room the builder has for more, so the builder can
 /// still be added to without changing it.
 pub fn build(b: StringBuilder) -> String {
-  String.from_bytes(to_imm(b.bytes))
+  String.from_bytes(to_imm(b.bytes.to_array()))
 }

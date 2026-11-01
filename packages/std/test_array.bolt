@@ -32,3 +32,10 @@ fn copies_of_arrays_are_shallow() {
   copy[0].x = 5;
   assert(points[0].x == 5);
 }
+
+#[test]
+fn arrays_are_equal_when_their_elements_are() {
+  assert([1, 2, 3] == [1, 2, 3]);
+  assert([1, 2, 3] != [1, 2, 4]);
+  assert([1, 2] != [1, 2, 3]);
+}

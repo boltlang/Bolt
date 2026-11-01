@@ -1853,7 +1853,7 @@ impl Struct {
     pub fn visibility(&self) -> Option<Visibility> {
         self.find_node()
     }
-    /// The `imm` of `imm struct String(Vec[u8]);`.
+    /// The `imm` of `imm struct String([u8]);`.
     pub fn imm_token(&self) -> Option<SyntaxToken> {
         self.find_token(IMM_KEYWORD)
     }

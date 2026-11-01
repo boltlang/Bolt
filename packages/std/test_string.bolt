@@ -1,0 +1,38 @@
+// The tests of `string.bolt`.
+
+import "./string" *;
+import "./ops" *;
+import "./io" (assert);
+
+#[test]
+fn the_length_of_a_string_is_its_number_of_bytes() {
+  assert("".len() == 0);
+  assert("abc".len() == 3);
+  assert("é✓".len() == 5);
+}
+
+#[test]
+fn strings_are_equal_when_their_bytes_are() {
+  assert("abc" == "abc");
+  assert("abc" != "abd");
+  assert("ab" != "abc");
+}
+
+#[test]
+fn strings_are_ordered_byte_by_byte() {
+  assert("abc" < "abd" && "ab" < "abc" && "b" > "abc");
+  assert("abc" <= "abc" && !("abc" < "abc"));
+}
+
+#[test]
+fn a_builder_builds_only_what_was_added() {
+  let b = StringBuilder.new();
+  b.push('h');
+  b.push_str("ello");
+  let s = b.build();
+  assert(s == "hello");
+  assert(s.len() == 5);
+  b.push('!');
+  assert(s == "hello");
+  assert(b.build() == "hello!");
+}

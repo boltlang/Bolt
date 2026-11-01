@@ -228,7 +228,7 @@ pub struct Function {
 pub struct Struct {
     pub name: Option<Name>,
     pub visibility: RawVisibility,
-    /// `imm struct String(Vec[u8]);`: its values are all `imm`, so its type
+    /// `imm struct String([u8]);`: its values are all `imm`, so its type
     /// has no mutability, like an enum's.
     pub is_imm: bool,
     pub ast_id: AstId,

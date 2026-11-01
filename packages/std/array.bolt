@@ -1,7 +1,7 @@
 // Arrays: the functions on them that the compiler provides, and the impls
 // that make `xs[i]`, `xs[i] = x` and `for x in xs` work on them.
 
-import "./ops" (Index, IndexMut);
+import "./ops" *;
 import "./option" (Option, Some, None);
 import "./iter" (Iterable, Iterator);
 import "./mutability" (ToMut, ToImm, to_mut, to_imm);
@@ -86,4 +86,23 @@ impl[T] ToMut[[T]] {
 impl[T: imm] ToImm[[T]] {
   type Imm = imm [T];
   fn to_imm(xs) = array_freeze(xs);
+}
+
+/// Arrays are equal when they're as long and their elements are equal, in
+/// order.
+impl[T] Eq[[T]] where Eq[T] {
+  fn eq(a, b) {
+    let n = array_len(a);
+    if n != array_len(b) {
+      return False;
+    }
+    let mut i = 0;
+    while i < n {
+      if a[i] != b[i] {
+        return False;
+      }
+      i += 1;
+    }
+    True
+  }
 }

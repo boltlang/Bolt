@@ -8,11 +8,7 @@ use boltlang_hir_def::{
     ids::{EnumVariantId, FunctionId, StructId},
     item_tree::FunctionName,
 };
-use boltlang_hir_ty::{
-    AdtId, Ty,
-    lang::{char_struct, string_struct},
-    lower::struct_field_types,
-};
+use boltlang_hir_ty::lang::{char_struct, string_struct};
 
 /// The storage of a local variable. It's shared, so that closures see and
 /// make changes to the variables they capture. `None` until it's assigned.
@@ -119,18 +115,12 @@ impl<'db> Value<'db> {
     }
 
     /// `text` as the prelude's `String`, as `file` sees it: a struct that
-    /// holds a `Vec` of its bytes in UTF-8. `None` without one.
+    /// holds an `imm` array of its bytes in UTF-8. `None` without one.
     pub fn string(db: &'db dyn Db, file: File, text: &str) -> Option<Self> {
         let id = string_struct(db, file)?;
-        let vec = match &struct_field_types(db, id).fields.first()?.1 {
-            Ty::Adt(AdtId::Struct(vec), ..) => *vec,
-            _ => return None,
-        };
-        let bytes: Vec<Value<'db>> = text.bytes().map(|b| Value::Int(b as i128)).collect();
-        let len = Value::Int(bytes.len() as i128);
-        let vec_fields = vec![(Name::new("items"), Value::array(Mutability::Imm, bytes)), (Name::new("len"), len)];
-        let vec = Value::Adt { ctor: Ctor::Struct(vec), fields: Object::new(Mutability::Imm, vec_fields) };
-        Some(Value::Adt { ctor: Ctor::Struct(id), fields: Object::new(Mutability::Imm, vec![(Name::new("0"), vec)]) })
+        let bytes = text.bytes().map(|b| Value::Int(b as i128)).collect();
+        let fields = vec![(Name::new("0"), Value::array(Mutability::Imm, bytes))];
+        Some(Value::Adt { ctor: Ctor::Struct(id), fields: Object::new(Mutability::Imm, fields) })
     }
 
     /// `c` as the prelude's `Char`, as `file` sees it: a struct that holds
@@ -141,21 +131,17 @@ impl<'db> Value<'db> {
         Some(Value::Adt { ctor: Ctor::Struct(id), fields: Object::new(Mutability::Imm, fields) })
     }
 
-    /// The text of a `String`, if this is one: the first `len` bytes of the
-    /// `items` of its `Vec`, decoded as UTF-8.
+    /// The text of a `String`, if this is one: its array of bytes, decoded
+    /// as UTF-8.
     pub fn text(&self) -> Option<String> {
         let Value::Adt { fields, .. } = self else { return None };
         let fields = fields.borrow();
-        let [(_, Value::Adt { fields: vec, .. })] = &fields[..] else { return None };
-        let vec = vec.borrow();
-        let field = |name: &str| vec.iter().find(|(n, _)| n.as_str() == name).map(|(_, v)| v);
-        let (Some(Value::Array(items)), Some(Value::Int(len))) = (field("items"), field("len")) else { return None };
+        let [(_, Value::Array(items))] = &fields[..] else { return None };
         let bytes = items
             .borrow()
             .iter()
-            .take(*len as usize)
             .map(|v| match v {
-                Value::Int(b) => Some(*b as u8),
+                Value::Int(b) => u8::try_from(*b).ok(),
                 _ => None,
             })
             .collect::<Option<Vec<u8>>>()?;

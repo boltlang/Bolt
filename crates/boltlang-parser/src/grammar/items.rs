@@ -41,7 +41,7 @@ pub(crate) fn opt_item(p: &mut Parser, m: Marker) -> Result<(), Marker> {
             struct_item(p, m);
             return Ok(());
         }
-        // `imm struct String(Vec[u8]);`: a struct whose values are all `imm`.
+        // `imm struct String([u8]);`: a struct whose values are all `imm`.
         T![imm] if p.nth_at(1, T![struct]) => {
             p.bump(T![imm]);
             struct_item(p, m);

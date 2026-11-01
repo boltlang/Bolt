@@ -26,14 +26,7 @@ extern "bolt" {
 
 /// Text, as its bytes in UTF-8, like `std`'s `String`: the type of string
 /// literals, and what `print` and `panic` take.
-pub imm struct String(Bytes);
-
-/// The bytes of a `String`, laid out like `std`'s `Vec[u8]`, which is where
-/// the evaluator reads them.
-struct Bytes {
-  items: [u8],
-  len: i32,
-}
+pub imm struct String([u8]);
 
 /// Types whose values can be compared, with `a == b` and `a != b`.
 pub class Eq[T] {
@@ -47,12 +40,12 @@ pub fn a != b = ne(a, b);
 
 impl Eq[String] {
   fn eq(a, b) {
-    if a.0.len != b.0.len {
+    if array_len(a.0) != array_len(b.0) {
       return False;
     }
     let mut i = 0;
-    while i < a.0.len {
-      if array_get(a.0.items, i) != array_get(b.0.items, i) {
+    while i < array_len(a.0) {
+      if array_get(a.0, i) != array_get(b.0, i) {
         return False;
       }
       i += 1;
@@ -80,7 +73,7 @@ pub fn debug_string[T](x: T) -> String where Debug[T] = debug(x);
 /// Characters look like `'a'`. Only ASCII ones without escapes, which is
 /// what the tests show.
 impl Debug[Char] {
-  fn debug(c) = String(Bytes { items: [39, c.0 as u8, 39], len: 3 });
+  fn debug(c) = String([39, c.0 as u8, 39]);
 }
 
 pub enum Option[T] {
