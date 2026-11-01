@@ -95,6 +95,17 @@ fn area() {}
     ));
 }
 
+#[test]
+fn imports_of_operators() {
+    let db = TestDb::new();
+    db.file("/ops.bolt", "pub fn a - b = a;\npub fn -a = a;\npub fn a == b = a;\nfn a * b = a;\n");
+    let main = db.file("/main.bolt", "import \"./ops\" (-, ==, *, +);\n");
+    let scope = file_scope(&db, main);
+    // `-` brings in both its infix and its prefix definition.
+    assert_eq!(names(&scope.scope, Namespace::Values), ["- (imported)", "- (imported)", "== (imported)"]);
+    assert_eq!(diagnostics(scope), ["private *", "unresolved name +"]);
+}
+
 /// An import names a file without its `.bolt`, even when the rest of its
 /// name has a dot, or with it.
 #[test]

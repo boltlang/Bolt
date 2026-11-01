@@ -621,7 +621,8 @@ fn import_item(p: &mut Parser, m: Marker) {
     m.complete(p, IMPORT);
 }
 
-/// `(a, b as c)`
+/// `(a, b as c, ==)`. An operator imports every function of that name,
+/// prefix and infix: `-` brings in both `fn -a` and `fn a - b`.
 fn import_list(p: &mut Parser) {
     let m = p.start();
     delimited(
@@ -629,9 +630,15 @@ fn import_list(p: &mut Parser) {
         T!['('],
         T![')'],
         T![,],
-        || "expected a name".into(),
-        TokenSet::new(&[IDENT]),
+        || "expected a name or an operator".into(),
+        TokenSet::new(&[IDENT, OPERATOR, VBAR, LT, GT, STAR, PLUS, MINUS, EXCL]),
         |p| {
+            if is_infix_operator(p.current()) || is_prefix_operator(p.current()) {
+                let name = p.start();
+                p.bump_any();
+                name.complete(p, NAME_REF);
+                return true;
+            }
             if !p.at(IDENT) {
                 return false;
             }
