@@ -1332,6 +1332,10 @@ fn compare<'db>(op: CmpOp, lhs: &Value<'db>, rhs: &Value<'db>) -> Res<'db, Value
         CmpOp::NotEq => !lhs.equals(rhs),
         _ => {
             let Some(ord) = lhs.compare(rhs) else {
+                // NaN is neither less than, equal to nor greater than a float.
+                if matches!((lhs, rhs), (Value::Float(_), Value::Float(_))) {
+                    return Ok(Value::Bool(false));
+                }
                 return mismatch("these values can't be compared");
             };
             match op {
