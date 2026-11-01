@@ -5,7 +5,7 @@
 
 use std::collections::HashMap;
 
-use boltlang_base_db::Db;
+use boltlang_base_db::{Db, File};
 use boltlang_eval::{Ctor, Evaluator, Value};
 use boltlang_hir_def::{
     Name,
@@ -23,6 +23,8 @@ use boltlang_hir_ty::{
     AdtId, InferenceResult, Scheme, Ty,
     builtin::{Builtin, PrimOp, builtin},
     function_scheme, infer_body,
+    instances::{class_args, impl_method, select_impl, subst_scheme_args},
+    solve::normalize_assoc,
 };
 
 use crate::{
@@ -158,6 +160,7 @@ pub(crate) fn compile<'db>(db: &'db dyn Db, instance: Instance<'db>) -> Result<'
         infer: infer_body(db, def),
         scheme,
         type_args: instance.type_args(db),
+        root: instance.root(db),
         params: Vec::new(),
         result: None,
         locals: Vec::new(),
@@ -181,6 +184,8 @@ struct Compiler<'db> {
     infer: &'db InferenceResult<'db>,
     scheme: Option<&'db Scheme<'db>>,
     type_args: &'db [Ty<'db>],
+    /// The program's entry file, for the impls it can use.
+    root: File,
     params: Vec<ValTy>,
     result: Option<ValTy>,
     /// The locals after the parameters.
@@ -223,13 +228,35 @@ impl<'db> Compiler<'db> {
 
     /// A type of the body, with the instance's type arguments for the
     /// parameters and bound variables of the function's scheme.
+    /// The associated types it then has, like `Money.Output`, are what the
+    /// impls give them.
     fn subst(&self, ty: &Ty<'db>) -> Ty<'db> {
         let Some(scheme) = self.scheme else { return ty.clone() };
-        ty.fold(&mut |t| match t {
-            Ty::Param(p) => scheme.params.iter().position(|q| q == p).map(|i| self.type_args[i].clone()),
-            Ty::Bound(i) => self.type_args.get(scheme.params.len() + *i as usize).cloned(),
-            _ => None,
-        })
+        let ty = subst_scheme_args(&scheme.params, self.type_args, ty);
+        normalize_assoc(self.db, self.root, &ty)
+    }
+
+    /// The function that a use of `f` at `at` calls: for a class method, the
+    /// method of the impl that the types of the use choose, or the class's
+    /// default for it (#182).
+    fn dispatch(&self, at: ExprId, f: FunctionId<'db>) -> Result<'db, FunctionId<'db>> {
+        let db = self.db;
+        let ItemContainerId::Class(class) = f.container(db) else { return Ok(f) };
+        // Where the types decide it, the type checker chose it; in a generic
+        // function, the instance's types do.
+        let imp = match self.infer.instance(at, class) {
+            Some(imp) => Some(imp),
+            None => {
+                let scheme = function_scheme(db, f).map_err(|_| self.error(at, ErrorKind::UnknownType))?;
+                let type_args: Vec<Ty<'db>> =
+                    self.infer.type_args(at).unwrap_or_default().iter().map(|t| self.subst(t)).collect();
+                select_impl(db, &[self.root], class, &class_args(db, class, &scheme.params, &type_args))
+            }
+        };
+        match imp {
+            Some(imp) => Ok(impl_method(db, imp, f)),
+            None => Err(self.unsupported(at, "calling a class method whose impl isn't known")),
+        }
     }
 
     fn ty(&self, expr: ExprId) -> Ty<'db> {
@@ -985,6 +1012,7 @@ impl<'db> Compiler<'db> {
         else {
             return Err(self.unsupported(expr, "this operator"));
         };
+        let f = self.dispatch(expr, f)?;
         if builtin(self.db, f).is_some() || !f.item(self.db).has_body {
             return Err(self.unsupported(expr, "this operator"));
         }
@@ -1103,6 +1131,7 @@ impl<'db> Compiler<'db> {
         args: &[ExprId],
     ) -> Result<'db, ()> {
         let db = self.db;
+        let f = self.dispatch(callee.unwrap_or(expr), f)?;
         let builtin = builtin(db, f);
         // An operation of a primitive type is what its operator compiles to.
         if let Some(Builtin::Prim(op, _)) = builtin {
@@ -1118,7 +1147,9 @@ impl<'db> Compiler<'db> {
         } else {
             match f.container(db) {
                 ItemContainerId::ExternBlock(_) => Callee::Import(f),
-                ItemContainerId::Class(_) => return Err(self.unsupported(expr, "calling a class method")),
+                ItemContainerId::Class(_) => {
+                    return Err(self.unsupported(expr, "calling a class method whose impl isn't known"));
+                }
                 _ => return Err(self.unsupported(expr, "calling a function without a body")),
             }
         };
@@ -1191,7 +1222,7 @@ impl<'db> Compiler<'db> {
             type_args.push(ty);
         }
         let type_args: Box<[Ty<'db>]> = type_args.into();
-        Ok(Instance::new(db, DefWithBodyId::new(db, DefWithBody::Function(f)), type_args))
+        Ok(Instance::new(db, DefWithBodyId::new(db, DefWithBody::Function(f)), type_args, self.root))
     }
 
     // Patterns

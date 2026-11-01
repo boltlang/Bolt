@@ -80,11 +80,15 @@ pub struct Instance<'db> {
     /// bound variables: see [`boltlang_hir_ty::Scheme`].
     #[returns(ref)]
     pub type_args: Box<[Ty<'db>]>,
+    /// The entry file of the program, whose visible impls are those that a
+    /// class method in the instance can use (#182).
+    #[returns(copy)]
+    pub root: File,
 }
 
 /// The instance for the top-level statements of `file`.
 pub fn entry_instance<'db>(db: &'db dyn Db, file: File) -> Instance<'db> {
-    Instance::new(db, DefWithBodyId::new(db, DefWithBody::File(file)), Box::<[Ty<'db>]>::default())
+    Instance::new(db, DefWithBodyId::new(db, DefWithBody::File(file)), Box::<[Ty<'db>]>::default(), file)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]

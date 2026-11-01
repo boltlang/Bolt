@@ -70,7 +70,6 @@ v.x;
 ================================================================================
 Operators on structs call the impls of std
 :prelude
-:todo wasm
 ================================================================================
 struct Money { cents: i32 }
 impl Add[Money] { type Output = Money; fn add(a, b) = Money { cents: a.cents + b.cents }; }

@@ -119,12 +119,12 @@ fn enums_with_fields_and_ordering_are_errors() {
         ["a value of type `Shape` is not supported by the code generator yet"]
     );
     // Comparing enums calls the function with the operator's name, here
-    // one that's a class method, which isn't compiled yet.
+    // one that calls a class method without an impl for `Color`.
     assert_eq!(
         errors(&format!(
             "{COLOR}class Ord[T] {{ fn less(a: T, b: T) -> Bool; }}\nfn a < b = less(a, b);\nColor.Red < Color.Blue;"
         )),
-        ["calling a class method is not supported by the code generator yet"]
+        ["calling a class method whose impl isn't known is not supported by the code generator yet"]
     );
 }
 
