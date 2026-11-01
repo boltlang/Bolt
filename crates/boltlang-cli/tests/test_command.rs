@@ -95,11 +95,11 @@ fn runs_the_tests_compiled_to_wasm() {
 
 #[test]
 fn a_test_that_cant_be_compiled_fails() {
-    let dir = dir_with("wasm-unsupported", &[("a.bolt", "#[test]\nfn indexes() { assert([1, 2][0] == 1); }\n")]);
+    let dir = dir_with("wasm-unsupported", &[("a.bolt", "#[test]\nfn calls_a_closure() { let f = |x: i32| x; assert(f(1) == 1); }\n")]);
     let output =
         Command::new(env!("CARGO_BIN_EXE_bolt")).args(["test", "--wasm"]).current_dir(&dir).output().unwrap();
     assert!(!output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "test a.bolt::indexes ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "test a.bolt::calls_a_closure ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n");
     assert!(String::from_utf8(output.stderr).unwrap().contains("not supported by the code generator"));
     fs::remove_dir_all(dir).unwrap();
 }

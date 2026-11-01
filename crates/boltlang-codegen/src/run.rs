@@ -18,7 +18,7 @@ use boltlang_hir_ty::{AdtId, Ty, builtin::Builtin, infer_body};
 use wasmi::{Caller, Config, Engine, Extern, Linker, Module, Store, TrapCode, Val};
 
 use crate::{
-    ir::ValTy,
+    ir::{Failure, Narrow, ValTy},
     layout::{self, Repr},
     lower::Scalar,
 };
@@ -106,6 +106,33 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
         };
         result.expect("each builtin is defined once");
     }
+    // The errors that compiled code stops with, as the evaluator's.
+    linker
+        .func_wrap(
+            "bolt",
+            Failure::IndexOutOfBounds.name(),
+            |mut caller: Caller<'_, State<H>>, index: i32, len: i32| -> Result<(), wasmi::Error> {
+                let kind = ErrorKind::IndexOutOfBounds { index: index as i128, len: len as u32 as usize };
+                Err(fail(&mut caller, RunError::Eval(kind)))
+            },
+        )
+        .expect("each failure is defined once");
+    linker
+        .func_wrap(
+            "bolt",
+            Failure::RangeOutOfBounds.name(),
+            |mut caller: Caller<'_, State<H>>, start: i32, count: i32, len: i32| -> Result<(), wasmi::Error> {
+                let (start, end) = (start as i128, start as i128 + count as i128);
+                let kind = ErrorKind::RangeOutOfBounds { start, end, len: len as u32 as usize };
+                Err(fail(&mut caller, RunError::Eval(kind)))
+            },
+        )
+        .expect("each failure is defined once");
+    linker
+        .func_wrap("bolt", Failure::Overflow.name(), |mut caller: Caller<'_, State<H>>| -> Result<(), wasmi::Error> {
+            Err(fail(&mut caller, RunError::Eval(ErrorKind::Overflow)))
+        })
+        .expect("each failure is defined once");
     linker
 }
 
@@ -179,7 +206,9 @@ fn call_main<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Res
     let engine = engine(fuel);
     let module = Module::new(&engine, bytes).map_err(|e| RunError::Invalid(e.to_string()))?;
     for import in module.imports() {
-        if import.module() != "bolt" || !Builtin::HOST.iter().any(|b| b.name() == import.name()) {
+        let known = Builtin::HOST.iter().any(|b| b.name() == import.name())
+            || Failure::ALL.iter().any(|f| f.name() == import.name());
+        if import.module() != "bolt" || !known {
             return Err(RunError::MissingImport { module: import.module().into(), name: import.name().into() });
         }
     }
@@ -252,6 +281,28 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
                 _ => return Err(unexpected()),
             });
         }
+        (Repr::Array(elem_ty), Some(Val::I32(address))) => {
+            let el = layout::element(db, &elem_ty).ok_or_else(unexpected)?;
+            let address = *address as u32;
+            let len = match load(memory, address, ValTy::I32) {
+                Some(Val::I32(len)) => len as u32,
+                _ => return Err(unexpected()),
+            };
+            let mut items = Vec::new();
+            for i in 0..len {
+                let at = i.checked_mul(el.size).and_then(|n| n.checked_add(address + el.start)).ok_or_else(unexpected)?;
+                let item = match (el.narrow, el.val_ty) {
+                    (Some(narrow), _) => Some(load_narrow(memory, at, narrow).ok_or_else(unexpected)?),
+                    (None, Some(val_ty)) => Some(load(memory, at, val_ty).ok_or_else(unexpected)?),
+                    (None, None) => None,
+                };
+                items.push(to_value(db, &elem_ty, item, memory)?);
+            }
+            let Ty::Array(mutability, _) = ty else { return Err(unexpected()) };
+            let mutability =
+                if **mutability == Ty::Mutability(Mutability::Mut) { Mutability::Mut } else { Mutability::Imm };
+            return Ok(Value::array(mutability, items));
+        }
         _ => return Err(unexpected()),
     };
     let val = val.clone().ok_or_else(unexpected)?;
@@ -271,6 +322,18 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
         _ => return Err(unexpected()),
     };
     Ok(value)
+}
+
+/// The `i32` kept in fewer bytes at `address` in `memory`, as `narrow` says.
+fn load_narrow(memory: &[u8], address: u32, narrow: Narrow) -> Option<Val> {
+    let start = address as usize;
+    let bytes = memory.get(start..start.checked_add(narrow.size() as usize)?)?;
+    Some(Val::I32(match narrow {
+        Narrow::U8 => bytes[0] as i32,
+        Narrow::S8 => bytes[0] as i8 as i32,
+        Narrow::U16 => u16::from_le_bytes(bytes.try_into().ok()?) as i32,
+        Narrow::S16 => i16::from_le_bytes(bytes.try_into().ok()?) as i32,
+    }))
 }
 
 /// The value of type `ty` at `address` in `memory`, little-endian.

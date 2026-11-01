@@ -33,6 +33,8 @@ use crate::{
     layout::{self, Layout, Repr},
 };
 
+mod arrays;
+
 type Result<'db, T> = std::result::Result<T, CodegenError<'db>>;
 
 /// A type the code generator can compile, and how its values behave.
@@ -99,7 +101,7 @@ impl Scalar {
             match layout::repr(db, &ty)? {
                 Repr::Scalar(scalar) => return Some(scalar),
                 Repr::Newtype(field) => ty = field,
-                Repr::Unit | Repr::Boxed => return None,
+                Repr::Unit | Repr::Boxed | Repr::Array(_) => return None,
             }
         }
         None
@@ -459,6 +461,9 @@ impl<'db> Compiler<'db> {
             Expr::Cast { expr: inner, .. } => self.cast(expr, *inner),
             Expr::Prefix { op, expr: inner } => self.call_operator(expr, op.as_str(), &[*inner]),
             Expr::Binary { op, lhs, rhs } => self.binary(expr, op, *lhs, *rhs),
+            Expr::Array { exprs, .. } => self.array_literal(expr, exprs),
+            Expr::ArrayRepeat { value, count, .. } => self.array_repeat(expr, *value, *count),
+            Expr::Index { base, index } => self.index(expr, *base, *index),
             Expr::Tuple { exprs } if exprs.is_empty() => Ok(()),
             Expr::Tuple { exprs } => {
                 let fields: Vec<_> = exprs.iter().enumerate().map(|(i, &e)| (Name::new(i.to_string()), e)).collect();
@@ -673,7 +678,7 @@ impl<'db> Compiler<'db> {
                 self.push(Inst::LocalGet(address));
                 Ok(())
             }
-            Repr::Unit | Repr::Scalar(_) => Err(self.unsupported(expr, "this struct")),
+            Repr::Unit | Repr::Scalar(_) | Repr::Array(_) => Err(self.unsupported(expr, "this struct")),
         }
     }
 
@@ -775,7 +780,8 @@ impl<'db> Compiler<'db> {
                 }
                 Ok(())
             }
-            _ => Err(self.unsupported(place, "assigning to an element")),
+            &Expr::Index { base, index } => self.assign_index(place, base, index),
+            _ => Err(self.unsupported(place, "assigning to this")),
         }
     }
 
@@ -785,6 +791,10 @@ impl<'db> Compiler<'db> {
         match &self.body[expr] {
             Expr::Path(_) => true,
             Expr::Field { expr: base, .. } => self.is_place(*base),
+            // `c[i]`, evaluated again by `c[i] += x`.
+            Expr::Index { base, index } => {
+                self.is_place(*base) && (self.is_place(*index) || matches!(self.body[*index], Expr::Literal(_)))
+            }
             _ => false,
         }
     }
@@ -946,7 +956,10 @@ impl<'db> Compiler<'db> {
             BinaryOp::Operator(name) => self.call_operator(expr, name.as_str(), &[lhs, rhs]),
             // The value first, then the place, like the evaluator.
             BinaryOp::Assign(op) => {
-                if !self.is_place(lhs) {
+                // `c[i] = x` evaluates `c` and `i` once, but `c[i] += x` and
+                // the others evaluate their place again.
+                let once = op.is_none() && matches!(self.body[lhs], Expr::Index { .. });
+                if !once && !self.is_place(lhs) {
                     return Err(self.unsupported(lhs, "assigning to this"));
                 }
                 match op {
@@ -1099,6 +1112,17 @@ impl<'db> Compiler<'db> {
         // An operation of a primitive type is what its operator compiles to.
         if let Some(Builtin::Prim(op, _)) = builtin {
             return self.prim(expr, op, args);
+        }
+        if let Some(
+            b @ (Builtin::ArrayLen
+            | Builtin::ArrayAlloc
+            | Builtin::ArrayGet
+            | Builtin::ArraySet
+            | Builtin::ArrayCopy
+            | Builtin::ArrayFreeze),
+        ) = builtin
+        {
+            return self.array_builtin(expr, b, args);
         }
         let target = if let Some(builtin) = builtin {
             if !Builtin::HOST.contains(&builtin) {
@@ -1421,9 +1445,7 @@ fn describe(expr: &Expr) -> &'static str {
         Expr::Lambda { .. } => "a closure",
         Expr::Record { .. } => "a struct",
         Expr::Tuple { .. } => "a tuple",
-        Expr::Array { .. } | Expr::ArrayRepeat { .. } => "an array",
         Expr::Field { .. } => "a field",
-        Expr::Index { .. } => "indexing",
         Expr::Range { .. } => "a range",
         Expr::For { .. } => "a `for` loop",
         Expr::Try { .. } => "`?`",

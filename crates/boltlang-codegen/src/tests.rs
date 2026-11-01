@@ -142,13 +142,13 @@ fn enums_with_fields_and_ordering_are_errors() {
 #[test]
 fn unsupported_code_is_an_error() {
     let db = test_db();
-    let code = "fn f() -> i32 = 1;\nlet xs = [f(), 2];\n";
+    let code = "fn f() -> i32 = 1;\nlet g = |x: i32| x + f();\n";
     let file = db.file("/main.bolt", code);
     let errors = link(&db, file).unwrap_err();
     assert_eq!(errors.len(), 1);
-    assert_eq!(errors[0].to_string(), "an array is not supported by the code generator yet");
+    assert_eq!(errors[0].to_string(), "a closure is not supported by the code generator yet");
     let (_, range) = errors[0].source_range(&db).unwrap();
-    assert_eq!(&code[range.start as usize..range.end as usize], "[f(), 2]");
+    assert_eq!(&code[range.start as usize..range.end as usize], "|x: i32| x + f()");
 }
 
 #[test]

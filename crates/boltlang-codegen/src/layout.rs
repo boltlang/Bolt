@@ -10,8 +10,14 @@
 //!   offset aligned to that size, in the order they're declared. A field
 //!   without a value takes no room.
 //!
-//! Structs are shared, so a change to a field shows through every name for
-//! the struct. Tuples are values: the code generator never changes one in
+//! - An array is the `i32` address of its length, a `u32`, followed by its
+//!   elements, from 4 bytes on, or 8 when they're 8 bytes each. Each element
+//!   takes the bytes of its type: 1 for `u8`, `i8` and `Bool`, 2 for `u16`
+//!   and `i16`, and the size of its Wasm value for the others. So a `[u8]`
+//!   is laid out like a string literal: its length, then its bytes.
+//!
+//! Structs and arrays are shared, so a change to a field or an element
+//! shows through every name for it. Tuples are values: the code generator never changes one in
 //! place, but makes a changed copy, so sharing them is safe.
 
 use boltlang_base_db::Db;
@@ -22,7 +28,10 @@ use boltlang_hir_ty::{
     lower::{VariantDef, field_types, struct_args, subst_params},
 };
 
-use crate::{ir::ValTy, lower::Scalar};
+use crate::{
+    ir::{Narrow, ValTy},
+    lower::Scalar,
+};
 
 /// How the values of a type are kept.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +43,39 @@ pub(crate) enum Repr<'db> {
     Newtype(Ty<'db>),
     /// A struct or a tuple: the address of its fields.
     Boxed,
+    /// An array of elements of this type: the address of its length.
+    Array(Ty<'db>),
+}
+
+/// How the elements of an array are kept: see the module's docs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Element {
+    /// Their Wasm value, `None` for a type without values, like `()`.
+    pub val_ty: Option<ValTy>,
+    /// For an `i32` kept in fewer bytes, how.
+    pub narrow: Option<Narrow>,
+    /// The bytes each takes.
+    pub size: u32,
+    /// Where the first one is, after the length.
+    pub start: u32,
+}
+
+/// How elements of type `ty` are kept in an array, or `None` for a type the
+/// code generator doesn't support.
+pub(crate) fn element<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Element> {
+    let val_ty = val_ty(db, ty)?;
+    let narrow = match Scalar::through(db, ty) {
+        Some(Scalar::Bool) => Some(Narrow::U8),
+        Some(Scalar::Int { bits: 8, signed }) => Some(if signed { Narrow::S8 } else { Narrow::U8 }),
+        Some(Scalar::Int { bits: 16, signed }) => Some(if signed { Narrow::S16 } else { Narrow::U16 }),
+        _ => None,
+    };
+    let size = match (narrow, val_ty) {
+        (Some(narrow), _) => narrow.size(),
+        (None, Some(val_ty)) => val_ty.size(),
+        (None, None) => 0,
+    };
+    Some(Element { val_ty, narrow, size, start: if size == 8 { 8 } else { 4 } })
 }
 
 /// The fields of a struct or tuple in memory.
@@ -79,6 +121,10 @@ pub(crate) fn repr<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Repr<'db>> {
                 _ => Some(Repr::Boxed),
             }
         }
+        Ty::Array(_, elem) => {
+            element(db, elem)?;
+            Some(Repr::Array((**elem).clone()))
+        }
         _ => Scalar::of(db, ty).map(Repr::Scalar),
     }
 }
@@ -92,7 +138,7 @@ pub(crate) fn val_ty<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Option<ValTy>
         match repr(db, &ty)? {
             Repr::Unit => return Some(None),
             Repr::Scalar(scalar) => return Some(Some(scalar.val_ty())),
-            Repr::Boxed => return Some(Some(ValTy::I32)),
+            Repr::Boxed | Repr::Array(_) => return Some(Some(ValTy::I32)),
             Repr::Newtype(field) => ty = field,
         }
     }

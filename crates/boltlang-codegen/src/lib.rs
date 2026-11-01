@@ -67,7 +67,7 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::Ty;
 
 pub use emit::{link, link_function};
-pub use ir::{BlockTy, Callee, CompiledFn, Inst, Op, ValTy};
+pub use ir::{BlockTy, Callee, CompiledFn, Failure, Inst, Narrow, Op, ValTy};
 pub use run::{RunError, run, run_test};
 
 /// A body compiled for concrete type arguments: a function, or the

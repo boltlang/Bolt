@@ -20,7 +20,7 @@ use wasm_encoder::{
 
 use crate::{
     CodegenError, ErrorKind, Instance, compile_instance,
-    ir::{BlockTy, Callee, CompiledFn, Inst, Op, ValTy},
+    ir::{BlockTy, Callee, CompiledFn, Inst, Narrow, Op, ValTy},
     reachable_from, reachable_instances,
 };
 
@@ -58,7 +58,7 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
     let mut imports: Vec<Callee<'db>> = Vec::new();
     for (_, code) in &compiled {
         for callee in &code.callees {
-            if matches!(callee, Callee::Import(_) | Callee::Builtin(_)) && !imports.contains(callee) {
+            if matches!(callee, Callee::Import(_) | Callee::Builtin(_) | Callee::Fail(_)) && !imports.contains(callee) {
                 imports.push(*callee);
             }
         }
@@ -94,6 +94,7 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
         let (module, name, signature) = match *callee {
             Callee::Import(f) => ("env", function_name(db, f), import_signature(db, f)?),
             Callee::Builtin(builtin) => ("bolt", builtin.name().to_string(), builtin_signature(builtin)),
+            Callee::Fail(failure) => ("bolt", failure.name().to_string(), (vec![ValTy::I32; failure.arity()], None)),
             Callee::Instance(_) | Callee::Alloc => unreachable!("only imports are imported"),
         };
         import_section.import(module, &name, EntityType::Function(type_of(signature)));
@@ -316,6 +317,23 @@ fn instruction<'a, 'db>(inst: &Inst<'db>, index: &HashMap<Callee<'db>, u32>, str
                 ValTy::F64 => Instruction::F64Store(arg),
             }
         }
+        Inst::LoadNarrow(narrow, offset) => {
+            let arg = narrow_mem_arg(*narrow, *offset);
+            match narrow {
+                Narrow::U8 => Instruction::I32Load8U(arg),
+                Narrow::S8 => Instruction::I32Load8S(arg),
+                Narrow::U16 => Instruction::I32Load16U(arg),
+                Narrow::S16 => Instruction::I32Load16S(arg),
+            }
+        }
+        Inst::StoreNarrow(narrow, offset) => {
+            let arg = narrow_mem_arg(*narrow, *offset);
+            match narrow {
+                Narrow::U8 | Narrow::S8 => Instruction::I32Store8(arg),
+                Narrow::U16 | Narrow::S16 => Instruction::I32Store16(arg),
+            }
+        }
+        Inst::MemoryCopy => Instruction::MemoryCopy { src_mem: 0, dst_mem: 0 },
         Inst::Call(callee) => Instruction::Call(index[callee]),
         Inst::Block(ty) => Instruction::Block(block_type(*ty)),
         Inst::Loop(ty) => Instruction::Loop(block_type(*ty)),
@@ -332,6 +350,10 @@ fn instruction<'a, 'db>(inst: &Inst<'db>, index: &HashMap<Callee<'db>, u32>, str
 }
 
 /// A value of `ty` at an offset, aligned to its size.
+fn narrow_mem_arg(narrow: Narrow, offset: u32) -> MemArg {
+    MemArg { offset: offset as u64, align: narrow.size().trailing_zeros(), memory_index: 0 }
+}
+
 fn mem_arg(ty: ValTy, offset: u32) -> MemArg {
     MemArg { offset: offset as u64, align: ty.size().trailing_zeros(), memory_index: 0 }
 }

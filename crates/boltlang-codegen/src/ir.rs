@@ -56,6 +56,63 @@ pub enum Callee<'db> {
     /// bytes, and gives the address of that many new bytes, aligned to 8.
     /// Nothing is freed yet.
     Alloc,
+    /// A host function of the module `bolt` that stops the program with an
+    /// error of the evaluator.
+    Fail(Failure),
+}
+
+/// The errors that compiled code stops with through the host, with what it
+/// passes for them, so that it fails as the evaluator does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Failure {
+    /// `(index, len)`: an element that isn't there, like `xs[5]` of two.
+    IndexOutOfBounds,
+    /// `(start, count, len)`: a range that isn't there, for `array_copy`.
+    RangeOutOfBounds,
+    /// `()`: a number too large or too small, like a negative length.
+    Overflow,
+}
+
+impl Failure {
+    pub const ALL: [Failure; 3] = [Failure::IndexOutOfBounds, Failure::RangeOutOfBounds, Failure::Overflow];
+
+    /// Its name in the module `bolt`.
+    pub fn name(self) -> &'static str {
+        match self {
+            Failure::IndexOutOfBounds => "index_out_of_bounds",
+            Failure::RangeOutOfBounds => "range_out_of_bounds",
+            Failure::Overflow => "overflow",
+        }
+    }
+
+    /// The `i32`s it takes.
+    pub fn arity(self) -> usize {
+        match self {
+            Failure::IndexOutOfBounds => 2,
+            Failure::RangeOutOfBounds => 3,
+            Failure::Overflow => 0,
+        }
+    }
+}
+
+/// A value of less than 32 bits in memory, like an element of a `[u8]`,
+/// which is an `i32` on the stack.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub enum Narrow {
+    U8,
+    S8,
+    U16,
+    S16,
+}
+
+impl Narrow {
+    /// The bytes it takes in memory.
+    pub fn size(self) -> u32 {
+        match self {
+            Narrow::U8 | Narrow::S8 => 1,
+            Narrow::U16 | Narrow::S16 => 2,
+        }
+    }
 }
 
 /// A Wasm instruction. Floats are kept as bits, so that code can be
@@ -77,6 +134,13 @@ pub enum Inst<'db> {
     /// Store the value on the stack at the address under it plus the
     /// offset.
     Store(ValTy, u32),
+    /// Like [`Inst::Load`] and [`Inst::Store`] for an `i32` kept in fewer
+    /// bytes.
+    LoadNarrow(Narrow, u32),
+    StoreNarrow(Narrow, u32),
+    /// Copy as many bytes as the top of the stack says from the address
+    /// under it to the address under that, which may overlap.
+    MemoryCopy,
     Call(Callee<'db>),
     Block(BlockTy),
     Loop(BlockTy),
