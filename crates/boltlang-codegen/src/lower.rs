@@ -40,8 +40,6 @@ pub(crate) enum Scalar {
     F32,
     F64,
     Bool,
-    /// A pointer to a string in linear memory.
-    Str,
     /// An enum whose variants have no fields, like `enum Color { Red, Green }`:
     /// the index of the variant.
     Enum,
@@ -78,7 +76,7 @@ impl Scalar {
     pub(crate) fn val_ty(self) -> ValTy {
         match self {
             Scalar::Int { bits: 64, .. } => ValTy::I64,
-            Scalar::Int { .. } | Scalar::Bool | Scalar::Str | Scalar::Enum => ValTy::I32,
+            Scalar::Int { .. } | Scalar::Bool | Scalar::Enum => ValTy::I32,
             Scalar::F32 => ValTy::F32,
             Scalar::F64 => ValTy::F64,
         }
@@ -916,9 +914,6 @@ impl<'db> Compiler<'db> {
             }
             BinaryOp::Arith(op) => {
                 let scalar = self.scalar(lhs)?;
-                if scalar == Scalar::Str {
-                    return Err(self.unsupported(expr, "joining strings"));
-                }
                 self.expr(lhs)?;
                 self.expr(rhs)?;
                 self.shift_amount(*op, scalar, rhs)?;
@@ -937,9 +932,6 @@ impl<'db> Compiler<'db> {
                     };
                 }
                 let scalar = self.scalar(lhs)?;
-                if scalar == Scalar::Str {
-                    return Err(self.unsupported(expr, "comparing strings"));
-                }
                 self.expr(lhs)?;
                 self.expr(rhs)?;
                 self.op(cmp_op(*op, scalar));
@@ -1003,9 +995,6 @@ impl<'db> Compiler<'db> {
         let to = self.scalar(expr)?;
         if to == Scalar::Bool && from != Scalar::Bool {
             return Err(self.unsupported(expr, "a cast to `Bool`"));
-        }
-        if (from == Scalar::Str) != (to == Scalar::Str) {
-            return Err(self.unsupported(expr, "a cast from or to `String`"));
         }
         if from == Scalar::Enum || to == Scalar::Enum {
             return Err(self.unsupported(expr, "a cast from or to an enum"));
@@ -1115,9 +1104,6 @@ impl<'db> Compiler<'db> {
     fn prim(&mut self, expr: ExprId, op: PrimOp, args: &[ExprId]) -> Result<'db, ()> {
         let (lhs, rhs) = (args[0], args.get(1).copied());
         let scalar = self.scalar(lhs)?;
-        if scalar == Scalar::Str {
-            return Err(self.unsupported(expr, "an operation on strings"));
-        }
         match (op.arith(), op.cmp(), rhs) {
             (Some(arith), _, Some(rhs)) => {
                 self.expr(lhs)?;
@@ -1289,7 +1275,7 @@ impl<'db> Compiler<'db> {
 
     fn pattern_operand(&self, ty: &Ty<'db>, local: Option<u32>, at: ExprId) -> Result<'db, (Scalar, u32)> {
         match (Scalar::through(self.db, ty), local) {
-            (Some(scalar), Some(local)) if scalar != Scalar::Str => Ok((scalar, local)),
+            (Some(scalar), Some(local)) => Ok((scalar, local)),
             _ => Err(self.unsupported(at, format!("matching a value of type `{}`", ty.display(self.db)))),
         }
     }
@@ -1507,7 +1493,7 @@ fn arith_op(op: ArithOp, scalar: Scalar) -> Option<Op> {
             Div => Op::F64Div,
             _ => return None,
         },
-        Scalar::Str | Scalar::Enum => return None,
+        Scalar::Enum => return None,
     })
 }
 
@@ -1526,7 +1512,7 @@ fn cmp_op(op: CmpOp, scalar: Scalar) -> Op {
             (GtEq, true) => Op::I64GeS,
             (GtEq, false) => Op::I64GeU,
         },
-        Scalar::Int { .. } | Scalar::Bool | Scalar::Str | Scalar::Enum => match (op, scalar.signed()) {
+        Scalar::Int { .. } | Scalar::Bool | Scalar::Enum => match (op, scalar.signed()) {
             (Eq, _) => Op::I32Eq,
             (NotEq, _) => Op::I32Ne,
             (Lt, true) => Op::I32LtS,
