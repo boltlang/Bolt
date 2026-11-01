@@ -159,6 +159,23 @@ pub fn run<'db, H: Host + 'static>(
     host: H,
     fuel: Option<u64>,
 ) -> Result<Value<'db>, RunError> {
+    let (results, memory) = call_main(bytes, host, fuel)?;
+    match entry_ty(db, file) {
+        Some(ty) => to_value(db, &ty, results.into_iter().last(), &memory),
+        None => Ok(Value::unit()),
+    }
+}
+
+/// Run the module that [`link_function`](crate::link_function) compiled
+/// from a test, like [`run`], without its result: a test passes when it
+/// returns.
+pub fn run_test<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Result<(), RunError> {
+    call_main(bytes, host, fuel).map(|_| ())
+}
+
+/// Call the `main` of the module `bytes`, and give what it returns and the
+/// memory after.
+fn call_main<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Result<(Vec<Val>, Vec<u8>), RunError> {
     let engine = engine(fuel);
     let module = Module::new(&engine, bytes).map_err(|e| RunError::Invalid(e.to_string()))?;
     for import in module.imports() {
@@ -180,11 +197,8 @@ pub fn run<'db, H: Host + 'static>(
     if let Err(error) = main.call(&mut store, &[], &mut results) {
         return Err(run_error(&mut store, error));
     }
-    let memory = instance.get_memory(&store, "memory").map_or(&[][..], |m| m.data(&store));
-    match entry_ty(db, file) {
-        Some(ty) => to_value(db, &ty, results.pop(), memory),
-        None => Ok(Value::unit()),
-    }
+    let memory = instance.get_memory(&store, "memory").map_or(Vec::new(), |m| m.data(&store).to_vec());
+    Ok((results, memory))
 }
 
 /// The type of the last top-level statement of `file`, which `main` returns

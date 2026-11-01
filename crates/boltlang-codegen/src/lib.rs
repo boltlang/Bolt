@@ -66,9 +66,9 @@ use boltlang_hir_def::{
 };
 use boltlang_hir_ty::Ty;
 
-pub use emit::link;
+pub use emit::{link, link_function};
 pub use ir::{BlockTy, Callee, CompiledFn, Inst, Op, ValTy};
-pub use run::{RunError, run};
+pub use run::{RunError, run, run_test};
 
 /// A body compiled for concrete type arguments: a function, or the
 /// top-level statements of the entry file.
@@ -141,11 +141,17 @@ pub fn compile_instance<'db>(db: &'db dyn Db, instance: Instance<'db>) -> Result
 }
 
 /// The instances that the entry of `file` calls, directly or not, with the
-/// entry first. They're found with a worklist rather than by recursion, so
-/// that recursive functions aren't cycles of queries.
+/// entry first.
+pub fn reachable_instances<'db>(db: &'db dyn Db, file: File) -> &'db Vec<Instance<'db>> {
+    reachable_from(db, entry_instance(db, file))
+}
+
+/// The instances that `entry` calls, directly or not, with `entry` first.
+/// They're found with a worklist rather than by recursion, so that
+/// recursive functions aren't cycles of queries.
 #[salsa::tracked(returns(ref))]
-pub fn reachable_instances<'db>(db: &'db dyn Db, file: File) -> Vec<Instance<'db>> {
-    let mut found = vec![entry_instance(db, file)];
+pub fn reachable_from<'db>(db: &'db dyn Db, entry: Instance<'db>) -> Vec<Instance<'db>> {
+    let mut found = vec![entry];
     let mut next = 0;
     while next < found.len() {
         if let Ok(compiled) = compile_instance(db, found[next]) {

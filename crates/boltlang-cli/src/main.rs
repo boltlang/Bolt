@@ -10,9 +10,9 @@ use std::{
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
-use boltlang_codegen::{CodegenError, link, run};
+use boltlang_codegen::{CodegenError, link, link_function, run, run_test};
 use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
-use boltlang_hir_def::nameres::test_functions;
+use boltlang_hir_def::{ids::FunctionId, nameres::test_functions};
 use boltlang_ide_diagnostics::{
     Diagnostic, DiagnosticCode, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
 };
@@ -234,9 +234,14 @@ struct TestCommand {
     /// Only run the tests whose name contains this.
     #[arg(long, value_name = "NAME")]
     filter: Option<String>,
-    /// Stop a test after evaluating this many expressions.
+    /// Stop a test after evaluating this many expressions, or with
+    /// `--wasm`, after about this many WebAssembly instructions.
     #[arg(long, value_name = "STEPS")]
     fuel: Option<u64>,
+    /// Compile each test to WebAssembly and run that, instead of evaluating
+    /// it.
+    #[arg(long)]
+    wasm: bool,
 }
 
 impl Exec for TestCommand {
@@ -281,18 +286,14 @@ impl Exec for TestCommand {
                 let name = f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
                 print!("test {}::{name} ... ", display_path(&db, file));
                 io::stdout().flush()?;
-                // Each test gets a new evaluator, so that tests don't see
-                // each other's values.
-                let limits = Limits { fuel: self.fuel, ..Limits::default() };
-                let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
-                match evaluator.call_function(f, Vec::new()) {
-                    Ok(_) => {
+                match self.run_test(&db, file, f) {
+                    Ok(()) => {
                         println!("ok");
                         passed += 1;
                     }
-                    Err(error) => {
+                    Err(found) => {
                         println!("FAILED");
-                        report(&db, &[runtime_diagnostic(&db, file, &error)])?;
+                        report(&db, &found)?;
                         failed += 1;
                     }
                 }
@@ -302,6 +303,24 @@ impl Exec for TestCommand {
         let skipped = if skipped > 0 { format!("; {skipped} not run") } else { String::new() };
         println!("test result: {result}. {passed} passed; {failed} failed{skipped}");
         Ok(ok && failed == 0)
+    }
+}
+
+impl TestCommand {
+    /// Run the test `f` of `file`, or give why it failed: the error it
+    /// stopped with, or with `--wasm`, why it couldn't be compiled.
+    fn run_test<'db>(&self, db: &'db CliDatabase, file: File, f: FunctionId<'db>) -> Result<(), Vec<Diagnostic>> {
+        if self.wasm {
+            // Each test is a module of its own, whose `main` is the test.
+            let bytes = link_function(db, f, file).map_err(|errors| codegen_diagnostics(db, file, &errors))?;
+            return run_test(&bytes, Stdout, self.fuel)
+                .map_err(|error| vec![located_diagnostic(file, None, DiagnosticCode::RUNTIME_ERROR, error.to_string())]);
+        }
+        // Each test gets a new evaluator, so that tests don't see each
+        // other's values.
+        let limits = Limits { fuel: self.fuel, ..Limits::default() };
+        let mut evaluator = Evaluator::with_limits(db, limits).with_host(Stdout);
+        evaluator.call_function(f, Vec::new()).map(|_| ()).map_err(|error| vec![runtime_diagnostic(db, file, &error)])
     }
 }
 

@@ -68,3 +68,38 @@ fn stops_a_test_that_runs_out_of_fuel() {
     assert_eq!(out, "test a.bolt::looping ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n");
     fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn runs_the_tests_compiled_to_wasm() {
+    let dir = dir_with(
+        "wasm",
+        &[(
+            "a.bolt",
+            "fn double(x: i32) -> i32 = x * 2;\n\
+             #[test]\nfn doubles() { assert(double(21) == 42); }\n\
+             #[test]\nfn fails() { assert(double(1) == 3); }\n\
+             #[test]\nfn loops() { loop {} }\n",
+        )],
+    );
+    let (ok, out) = bolt_test(&dir, &["--wasm", "--fuel", "100000"]);
+    assert!(!ok, "{out}");
+    assert_eq!(
+        out,
+        "test a.bolt::doubles ... ok\ntest a.bolt::fails ... FAILED\ntest a.bolt::loops ... FAILED\n\
+         test result: FAILED. 1 passed; 2 failed\n"
+    );
+    let (ok, out) = bolt_test(&dir, &["--wasm", "--filter", "doubles"]);
+    assert!(ok, "{out}");
+    fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn a_test_that_cant_be_compiled_fails() {
+    let dir = dir_with("wasm-unsupported", &[("a.bolt", "#[test]\nfn indexes() { assert([1, 2][0] == 1); }\n")]);
+    let output =
+        Command::new(env!("CARGO_BIN_EXE_bolt")).args(["test", "--wasm"]).current_dir(&dir).output().unwrap();
+    assert!(!output.status.success());
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "test a.bolt::indexes ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n");
+    assert!(String::from_utf8(output.stderr).unwrap().contains("not supported by the code generator"));
+    fs::remove_dir_all(dir).unwrap();
+}

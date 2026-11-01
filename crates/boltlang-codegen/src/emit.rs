@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
-    body::DefWithBody,
+    body::{DefWithBody, DefWithBodyId},
     ids::{FunctionId, ItemContainerId},
     item_tree::FunctionName,
 };
@@ -21,7 +21,7 @@ use wasm_encoder::{
 use crate::{
     CodegenError, ErrorKind, Instance, compile_instance,
     ir::{BlockTy, Callee, CompiledFn, Inst, Op, ValTy},
-    reachable_instances,
+    reachable_from, reachable_instances,
 };
 
 type Signature = (Vec<ValTy>, Option<ValTy>);
@@ -29,7 +29,19 @@ type Signature = (Vec<ValTy>, Option<ValTy>);
 /// The Wasm module of the program whose entry is `file`, or why it can't be
 /// compiled.
 pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
-    let instances = reachable_instances(db, file);
+    link_entry(db, reachable_instances(db, file))
+}
+
+/// The Wasm module whose `main` is the function `f`, which takes no
+/// arguments, like a test, for the program whose entry file is `root`.
+pub fn link_function<'db>(db: &'db dyn Db, f: FunctionId<'db>, root: File) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
+    let def = DefWithBodyId::new(db, DefWithBody::Function(f));
+    let entry = Instance::new(db, def, Box::<[Ty<'db>]>::default(), root);
+    link_entry(db, reachable_from(db, entry))
+}
+
+/// The Wasm module of `instances`, whose first is its `main`.
+fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
     let mut compiled: Vec<(Instance<'db>, &CompiledFn<'db>)> = Vec::new();
     let mut errors = Vec::new();
     for &instance in instances {
