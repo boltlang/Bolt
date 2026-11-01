@@ -309,6 +309,10 @@ pub struct Solver<'db> {
     /// first per use and class: the constraints that it leads to, like the
     /// `Show[i32]` of an impl `Show[Option[T]] where Show[T]`, come after.
     pub chosen: Vec<(Origin<'db>, ClassId<'db>, ImplId<'db>)>,
+    /// The types that each use of a function or constant gives the
+    /// parameters of its scheme, then its bound variables, at the use: see
+    /// [`crate::InferenceResult::type_args`].
+    pub instantiations: Vec<(Origin<'db>, Box<[Ty<'db>]>)>,
     pub errors: Vec<TypeError<'db>>,
 }
 
@@ -330,6 +334,7 @@ impl<'db> Solver<'db> {
             pending_overloads: Vec::new(),
             overload_choices: Vec::new(),
             chosen: Vec::new(),
+            instantiations: Vec::new(),
             errors: Vec::new(),
         }
     }
@@ -1109,7 +1114,7 @@ enum Step<'db> {
 }
 
 #[derive(Clone, Copy)]
-enum Match {
+pub(crate) enum Match {
     Yes,
     No,
     /// It depends on variables that aren't decided yet.
@@ -1141,7 +1146,7 @@ impl Match {
 
 /// Match the types of an impl, where its parameters stand for any type,
 /// against the types of a goal, without deciding any variables.
-fn match_all<'db>(
+pub(crate) fn match_all<'db>(
     patterns: &[Ty<'db>],
     tys: &[Ty<'db>],
     subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>,

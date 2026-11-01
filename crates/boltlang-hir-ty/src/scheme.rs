@@ -100,9 +100,13 @@ impl<'db> Scheme<'db> {
 
     /// The type with fresh variables for the parameters, adding the
     /// predicates as constraints.
+    /// The types it gives the parameters and bound variables are kept, by
+    /// `origin`, for the code generator and the evaluator.
     pub fn instantiate(&self, solver: &mut Solver<'db>, origin: Origin<'db>) -> Ty<'db> {
-        let params: HashMap<_, _> = self.params.iter().map(|p| (*p, solver.new_var(VarKind::General))).collect();
+        let args: Vec<Ty<'db>> = self.params.iter().map(|_| solver.new_var(VarKind::General)).collect();
+        let params: HashMap<_, _> = self.params.iter().copied().zip(args.iter().cloned()).collect();
         let bound: Vec<_> = (0..self.bound).map(|_| solver.new_var(VarKind::General)).collect();
+        solver.instantiations.push((origin, args.iter().chain(&bound).cloned().collect()));
         let subst = |t: &Ty<'db>| {
             t.fold(&mut |t| match t {
                 Ty::Param(p) => params.get(p).cloned(),

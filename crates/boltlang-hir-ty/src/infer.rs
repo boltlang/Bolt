@@ -50,6 +50,14 @@ pub struct InferenceResult<'db> {
     /// The function that a use of a name with several functions is, by the
     /// expression that names it, when the types decide it (#275).
     pub overloads: ArenaMap<Expr, FunctionId<'db>>,
+    /// The types that a use of a function or constant gives the parameters
+    /// of its scheme, then its bound variables, by the expression that names
+    /// it, like `[i32]` for the `id` of `id(1)`. In a generic function they
+    /// can be its own parameters, like `[T]` for `show(x)` with `x: T`: the
+    /// code generator and the evaluator replace them with the types it's
+    /// used with, and then know which impl a class method uses. A function
+    /// inferred together with the body, like itself, has none.
+    pub type_args: ArenaMap<Expr, Box<[Ty<'db>]>>,
     pub diagnostics: Vec<InferenceDiagnostic<'db>>,
 }
 
@@ -72,14 +80,29 @@ impl<'db> InferenceResult<'db> {
         self.instances.iter().find(|(e, c, _)| *e == expr && *c == class).map(|(_, _, imp)| *imp)
     }
 
-    /// Keep the impls and overloads that `solver` chose for uses in the
-    /// body `def`.
+    /// The types that the use of a function or constant at `expr` gives its
+    /// scheme: see [`InferenceResult::type_args`].
+    pub fn type_args(&self, expr: ExprId) -> Option<&[Ty<'db>]> {
+        self.type_args.get(expr).map(|args| &**args)
+    }
+
+    /// Keep the impls, overloads and type arguments that `solver` chose for
+    /// uses in the body `def`.
     pub(crate) fn add_instances(&mut self, def: DefWithBodyId<'db>, solver: &Solver<'db>) {
         for (origin, class, imp) in &solver.chosen {
             if origin.body == def
                 && let ExprOrPat::Expr(expr) = origin.node
             {
                 self.instances.push((expr, *class, *imp));
+            }
+        }
+        for (origin, args) in &solver.instantiations {
+            if origin.body == def
+                && let ExprOrPat::Expr(expr) = origin.node
+            {
+                // Resolved here, since a body that isn't generalized, like a
+                // file's, has its types resolved before.
+                self.type_args.insert(expr, args.iter().map(|t| solver.unifier.resolve(t)).collect());
             }
         }
         for (origin, method_call, f) in &solver.overload_choices {
@@ -133,6 +156,9 @@ impl<'db> InferenceResult<'db> {
     pub(crate) fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
         for ty in self.expr_types.values_mut().chain(self.pat_types.values_mut()).chain(self.binding_types.values_mut()) {
             *ty = f(ty);
+        }
+        for args in self.type_args.values_mut() {
+            *args = args.iter().map(&mut *f).collect();
         }
         for diagnostic in &mut self.diagnostics {
             diagnostic.map_types(f);
