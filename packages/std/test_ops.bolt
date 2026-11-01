@@ -69,13 +69,12 @@ fn the_primitive_types_are_ordered() {
   assert(partial_cmp(7u32, 9u32) == Some(Ordering.Less));
 }
 
-// TODO: also order numbers in generic code, once the evaluator can tell
-// which impl a number in generic code uses.
 #[test]
 fn the_comparison_classes_come_from_partial_ord() {
   assert(lt('a', 'b') && lte('b', 'b') && gt('c', 'b') && gte('c', 'c'));
   assert(!lt(True, False) && !gte(False, True));
   assert(smaller('x', 'q') == 'q');
+  assert(smaller(5, 3) == 3 && smaller(2u8, 9u8) == 2u8 && smaller(1.5, -0.5) == -0.5);
 }
 
 #[test]

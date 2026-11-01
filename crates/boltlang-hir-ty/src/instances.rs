@@ -15,6 +15,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
+    Scheme,
     lower::{identity_args, impl_header},
     solve::{Match, match_all, normalize_assoc, visible_impls},
     ty::{GenericParamId, Ty},
@@ -40,6 +41,52 @@ pub fn class_args<'db>(
     type_args: &[Ty<'db>],
 ) -> Box<[Ty<'db>]> {
     identity_args(db, GenericDefId::Class(class)).iter().map(|t| subst_scheme_args(params, type_args, t)).collect()
+}
+
+/// The types that a use of type `ty` gives the parameters and then the bound
+/// variables of `scheme`, found by matching `ty` with the scheme's type,
+/// like `[i32]` for `id` at `fn(i32) -> i32`. `None` for those that `ty`
+/// doesn't decide.
+pub fn bind_scheme_args<'db>(scheme: &Scheme<'db>, ty: &Ty<'db>) -> Vec<Option<Ty<'db>>> {
+    let mut found = vec![None; scheme.params.len() + scheme.bound as usize];
+    bind(&scheme.ty, ty, scheme, &mut found);
+    found
+}
+
+fn bind<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, found: &mut [Option<Ty<'db>>]) {
+    let all = |found: &mut [Option<Ty<'db>>], xs: &[Ty<'db>], ys: &[Ty<'db>]| {
+        for (x, y) in xs.iter().zip(ys) {
+            bind(x, y, scheme, found);
+        }
+    };
+    match (pattern, ty) {
+        (Ty::Param(p), _) => {
+            if let Some(i) = scheme.params.iter().position(|q| q == p) {
+                found[i].get_or_insert_with(|| ty.clone());
+            }
+        }
+        (Ty::Bound(i), _) => {
+            if let Some(slot) = found.get_mut(scheme.params.len() + *i as usize) {
+                slot.get_or_insert_with(|| ty.clone());
+            }
+        }
+        (Ty::Adt(a, xs, ms, m), Ty::Adt(b, ys, ns, n)) if a == b => {
+            all(found, xs, ys);
+            all(found, ms, ns);
+            bind(m, n, scheme, found);
+        }
+        (Ty::Tuple(xs), Ty::Tuple(ys)) => all(found, xs, ys),
+        (Ty::Array(m, x), Ty::Array(n, y)) => {
+            bind(m, n, scheme, found);
+            bind(x, y, scheme, found);
+        }
+        (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
+            all(found, xs, ys);
+            bind(x, y, scheme, found);
+            bind(m, n, scheme, found);
+        }
+        _ => {}
+    }
 }
 
 /// Whether a type is known well enough to choose an impl by.

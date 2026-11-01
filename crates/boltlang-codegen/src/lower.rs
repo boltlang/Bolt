@@ -23,7 +23,7 @@ use boltlang_hir_ty::{
     AdtId, InferenceResult, Scheme, Ty,
     builtin::{Builtin, PrimOp, builtin},
     function_scheme, infer_body,
-    instances::{class_args, impl_method, select_impl, subst_scheme_args},
+    instances::{bind_scheme_args, class_args, impl_method, select_impl, subst_scheme_args},
     solve::normalize_assoc,
 };
 
@@ -1209,8 +1209,7 @@ impl<'db> Compiler<'db> {
     fn instance_at(&self, expr: ExprId, f: FunctionId<'db>, at_call: &Ty<'db>) -> Result<'db, Instance<'db>> {
         let db = self.db;
         let scheme = function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
-        let mut found = vec![None; scheme.params.len() + scheme.bound as usize];
-        bind_type_args(&scheme.ty, at_call, scheme, &mut found);
+        let found = bind_scheme_args(scheme, at_call);
         let mut type_args = Vec::new();
         for ty in found {
             // A parameter that isn't in the function's type doesn't decide
@@ -1424,44 +1423,6 @@ impl<'db> Compiler<'db> {
         self.push(Inst::Unreachable);
         self.close();
         Ok(())
-    }
-}
-
-/// Match a function's scheme type with the type it has at a call, to find
-/// the types of its parameters and bound variables.
-fn bind_type_args<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, scheme: &Scheme<'db>, found: &mut [Option<Ty<'db>>]) {
-    let all = |found: &mut [Option<Ty<'db>>], xs: &[Ty<'db>], ys: &[Ty<'db>]| {
-        for (x, y) in xs.iter().zip(ys) {
-            bind_type_args(x, y, scheme, found);
-        }
-    };
-    match (pattern, ty) {
-        (Ty::Param(p), _) => {
-            if let Some(i) = scheme.params.iter().position(|q| q == p) {
-                found[i].get_or_insert_with(|| ty.clone());
-            }
-        }
-        (Ty::Bound(i), _) => {
-            if let Some(slot) = found.get_mut(scheme.params.len() + *i as usize) {
-                slot.get_or_insert_with(|| ty.clone());
-            }
-        }
-        (Ty::Adt(a, xs, ms, m), Ty::Adt(b, ys, ns, n)) if a == b => {
-            all(found, xs, ys);
-            all(found, ms, ns);
-            bind_type_args(m, n, scheme, found);
-        }
-        (Ty::Tuple(xs), Ty::Tuple(ys)) => all(found, xs, ys),
-        (Ty::Array(m, x), Ty::Array(n, y)) => {
-            bind_type_args(m, n, scheme, found);
-            bind_type_args(x, y, scheme, found);
-        }
-        (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
-            all(found, xs, ys);
-            bind_type_args(x, y, scheme, found);
-            bind_type_args(m, n, scheme, found);
-        }
-        _ => {}
     }
 }
 

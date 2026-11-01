@@ -1,14 +1,13 @@
-//! Finding the impl that a use of a class method or constant uses. The
-//! type checker records it where the types decide it, like for `show(1)`.
-//! In a generic function, like `fn f(x) = show(x)`, they don't, and the
-//! impl is chosen at run time, by the values of the arguments whose type
-//! is a parameter of the class.
+//! Finding the impl that a call of a class method uses when no types say,
+//! by the values of its arguments. A use in a body has its impl from the
+//! types the body is run with (`Evaluator::impl_at`, #236); this is for a
+//! call from outside, like `debug_string(x)` for `Evaluator::show`, which
+//! has none. Numbers of different types can't be told apart this way.
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
     builtin_type::BuiltinType,
-    ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
-    item_tree::AssocItem,
+    ids::{ClassId, FunctionId, ImplId, ItemContainerId},
     resolver::GenericDefId,
 };
 use boltlang_hir_ty::{
@@ -25,40 +24,6 @@ pub(crate) fn method_class<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<C
         ItemContainerId::Class(class) => Some(class),
         _ => None,
     }
-}
-
-/// The function of `imp` for the class method `method`, or the method
-/// itself if the impl leaves it to the class's default.
-pub(crate) fn impl_method<'db>(db: &'db dyn Db, imp: ImplId<'db>, method: FunctionId<'db>) -> FunctionId<'db> {
-    let name = &method.item(db).name;
-    imp.item(db)
-        .items
-        .iter()
-        .find_map(|item| match *item {
-            AssocItem::Function(idx) => {
-                let f = FunctionId::new(db, ItemContainerId::Impl(imp), idx);
-                (f.item(db).name == *name).then_some(f)
-            }
-            _ => None,
-        })
-        .unwrap_or(method)
-}
-
-/// The const of `imp` for the class constant `c`, or `c` itself if the impl
-/// leaves it to the class's default.
-pub(crate) fn impl_const<'db>(db: &'db dyn Db, imp: ImplId<'db>, c: ConstId<'db>) -> ConstId<'db> {
-    let name = &c.item(db).name;
-    imp.item(db)
-        .items
-        .iter()
-        .find_map(|item| match *item {
-            AssocItem::Const(idx) => {
-                let own = ConstId::new(db, ItemContainerId::Impl(imp), idx);
-                (own.item(db).name == *name).then_some(own)
-            }
-            _ => None,
-        })
-        .unwrap_or(c)
 }
 
 /// The impl of the class of `method` that a call with `args` uses, chosen
@@ -123,7 +88,7 @@ fn fits<'db>(value: &Value<'db>, ty: &Ty<'db>) -> bool {
         (Ty::Tuple(tys), Value::Tuple(values)) => {
             tys.len() == values.len() && tys.iter().zip(values).all(|(t, v)| fits(v, t))
         }
-        (Ty::Fn(..), Value::Function(_) | Value::Closure(_) | Value::Constructor(_)) => true,
+        (Ty::Fn(..), Value::Function(..) | Value::Closure(_) | Value::Constructor(_)) => true,
         (Ty::Builtin(ty), value) => matches!(
             (ty, value),
             (BuiltinType::Bool, Value::Bool(_))

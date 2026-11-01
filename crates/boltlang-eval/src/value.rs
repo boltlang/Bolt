@@ -8,7 +8,16 @@ use boltlang_hir_def::{
     ids::{EnumVariantId, FunctionId, StructId},
     item_tree::FunctionName,
 };
-use boltlang_hir_ty::lang::{char_struct, string_struct};
+use boltlang_hir_ty::{
+    Ty,
+    lang::{char_struct, string_struct},
+};
+
+/// The types that a function's scheme is used with, for its parameters and
+/// then its bound variables: see [`boltlang_hir_ty::InferenceResult::type_args`].
+/// They choose the impls of the class methods it uses (#236). Empty when
+/// they aren't known, as for a function called from outside.
+pub type TypeArgs<'db> = Rc<[Ty<'db>]>;
 
 /// The storage of a local variable. It's shared, so that closures see and
 /// make changes to the variables they capture. `None` until it's assigned.
@@ -72,6 +81,8 @@ pub struct Closure<'db> {
     /// Its [`Expr::Lambda`](boltlang_hir_def::hir::Expr::Lambda).
     pub(crate) expr: ExprId,
     pub(crate) captured: Locals<'db>,
+    /// The types the body it's in is run with.
+    pub(crate) type_args: TypeArgs<'db>,
 }
 
 impl fmt::Debug for Closure<'_> {
@@ -96,7 +107,8 @@ pub enum Value<'db> {
     /// structs and variants are named `0`, `1`, ... Shared, like an array.
     /// A variant can't be changed, so it being shared makes no difference.
     Adt { ctor: Ctor<'db>, fields: Shared<Fields<'db>> },
-    Function(FunctionId<'db>),
+    /// A function, with the types it's used with.
+    Function(FunctionId<'db>, TypeArgs<'db>),
     /// A tuple struct or variant used as a function, like `Some`.
     Constructor(Ctor<'db>),
     Closure(Rc<Closure<'db>>),
@@ -215,7 +227,7 @@ impl<'db> Value<'db> {
                 };
                 i1 == i2 && eq(s1, s2) && eq(e1, e2)
             }
-            (Value::Function(a), Value::Function(b)) => a == b,
+            (Value::Function(a, _), Value::Function(b, _)) => a == b,
             (Value::Constructor(a), Value::Constructor(b)) => a == b,
             (Value::Closure(a), Value::Closure(b)) => Rc::ptr_eq(a, b),
             _ => false,
@@ -392,7 +404,7 @@ impl<'db> DisplayValue<'_, 'db> {
                     f.write_str(" }")
                 }
             }
-            Value::Function(id) => match &id.item(db).name {
+            Value::Function(id, _) => match &id.item(db).name {
                 Some(FunctionName::Name(name)) => write!(f, "<fn {name}>"),
                 Some(FunctionName::Operator(name)) => write!(f, "<fn ({name})>"),
                 None => write!(f, "<fn>"),

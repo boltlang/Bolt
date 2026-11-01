@@ -13,23 +13,27 @@ use boltlang_hir_def::{
         ArithOp, BinaryOp, BindingId, BlockKind, CmpOp, Expr, ExprId, LabelId, Literal, LogicOp, Mutability, Pat, PatId,
         Path, PathSegment, PrefixOp, Statement, TypeRef,
     },
-    ids::{ConstId, FunctionId, ItemContainerId, ModuleDefId},
+    ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId, ModuleDefId},
     nameres::{Namespace, file_scope, package_of},
-    resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
+    resolver::{GenericDefId, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
     signatures::{FieldList, enum_signature, struct_signature},
 };
 
 use boltlang_hir_ty::{
+    GenericParamId, Ty,
     builtin::{Builtin, PrimOp, builtin},
-    infer_body,
+    function_scheme, infer_body,
+    instances::{bind_scheme_args, class_args, impl_const, impl_method, select_impl, subst_scheme_args},
     lang::{LangClass, debug_string_fn},
+    scheme::generic_param_ids,
+    solve::normalize_assoc,
 };
 
 use crate::{
-    dispatch::{impl_const, impl_for_args, impl_method, method_class},
+    dispatch::{impl_for_args, method_class},
     error::{ErrorKind, EvalError},
     host::{Host, NoEffects},
-    value::{Closure, Ctor, Fields, Locals, Shared, Shown, Slot, Value},
+    value::{Closure, Ctor, Fields, Locals, Shared, Shown, Slot, TypeArgs, Value},
 };
 
 /// Bounds on an evaluation.
@@ -82,6 +86,11 @@ struct Frame<'db> {
     def: DefWithBodyId<'db>,
     body: &'db Body,
     locals: Locals<'db>,
+    /// The parameters of the scheme of the function the body is of, and
+    /// the types it's run with, which choose the impls of the class methods
+    /// it uses (#236).
+    params: &'db [GenericParamId<'db>],
+    type_args: TypeArgs<'db>,
 }
 
 /// What an assignment writes to: a variable, a field of a struct, or an
@@ -147,6 +156,8 @@ pub struct Evaluator<'db> {
     /// The files being run, whose impls a class method can use when the
     /// impl is chosen at run time.
     files: Vec<File>,
+    /// No type arguments, shared.
+    no_type_args: TypeArgs<'db>,
 }
 
 impl<'db> Evaluator<'db> {
@@ -163,6 +174,7 @@ impl<'db> Evaluator<'db> {
             consts: HashMap::new(),
             resolutions: HashMap::new(),
             files: Vec::new(),
+            no_type_args: Rc::from(Vec::new()),
             host: Box::new(NoEffects),
             in_consts: 0,
             mutability_checks: false,
@@ -228,7 +240,7 @@ impl<'db> Evaluator<'db> {
         }
         let def = DefWithBodyId::new(self.db, DefWithBody::File(file));
         let body = body(self.db, def);
-        let mut frame = Frame { def, body, locals: Locals::new() };
+        let mut frame = self.frame(def, Locals::new(), self.no_type_args.clone());
         let Expr::Block { statements, .. } = &body[body.body_expr] else {
             unreachable!("the body of a file is a block")
         };
@@ -262,7 +274,7 @@ impl<'db> Evaluator<'db> {
         if !self.files.contains(&file) {
             self.files.push(file);
         }
-        finish(self.call_function_inner(function, args))
+        finish(self.call_function_inner(function, self.no_type_args.clone(), args))
     }
 
     /// Call any callable value: a function, closure or constructor.
@@ -333,7 +345,7 @@ impl<'db> Evaluator<'db> {
         if impl_for_args(db, &self.files, method, std::slice::from_ref(value)).is_none() {
             return Ok(None);
         }
-        match self.call_function_inner(debug_string, vec![value.clone()])?.text() {
+        match self.call_function_inner(debug_string, self.no_type_args.clone(), vec![value.clone()])?.text() {
             Some(text) => Ok(Some(text)),
             None => mismatch("`debug_string` didn't give a `String`"),
         }
@@ -373,7 +385,7 @@ impl<'db> Evaluator<'db> {
         self.consts.insert(id, None);
         self.enter()?;
         self.in_consts += 1;
-        let mut frame = Frame { def, body, locals: Locals::new() };
+        let mut frame = self.frame(def, Locals::new(), self.no_type_args.clone());
         let result = self.eval_body(&mut frame, body.body_expr);
         self.in_consts -= 1;
         self.depth -= 1;
@@ -399,19 +411,26 @@ impl<'db> Evaluator<'db> {
         }
     }
 
-    fn call_function_inner(&mut self, function: FunctionId<'db>, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
+    /// Call `function`, run with `type_args`.
+    fn call_function_inner(
+        &mut self,
+        function: FunctionId<'db>,
+        type_args: TypeArgs<'db>,
+        args: Vec<Value<'db>>,
+    ) -> Res<'db, Value<'db>> {
         let db = self.db;
         if let Some(builtin) = builtin(db, function) {
             return self.call_builtin(builtin, args);
         }
-        // A class method whose impl the types didn't decide, like `show` in
-        // `fn f(x) = show(x)`: the arguments decide it.
+        // A class method whose impl no types decide, which happens for a
+        // call from outside, like `debug_string(x)` for `show`: the
+        // arguments decide it.
         if method_class(db, function).is_some() {
             match impl_for_args(db, &self.files, function, &args) {
                 Some(imp) => {
                     let target = impl_method(db, imp, function);
                     if target != function {
-                        return self.call_function_inner(target, args);
+                        return self.call_function_inner(target, self.no_type_args.clone(), args);
                     }
                 }
                 None if !function.item(db).has_body => {
@@ -437,7 +456,7 @@ impl<'db> Evaluator<'db> {
             return fail(ErrorKind::WrongArgCount { expected: body.params.len(), found: args.len() });
         }
         self.enter()?;
-        let mut frame = Frame { def, body, locals: Locals::new() };
+        let mut frame = self.frame(def, Locals::new(), type_args);
         let result = (|| {
             for (&pat, arg) in body.params.iter().zip(&args) {
                 if !self.match_pat(&mut frame, pat, arg)? {
@@ -510,7 +529,7 @@ impl<'db> Evaluator<'db> {
 
     fn apply(&mut self, callee: Value<'db>, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
         match callee {
-            Value::Function(id) => self.call_function_inner(id, args),
+            Value::Function(id, type_args) => self.call_function_inner(id, type_args, args),
             Value::Closure(closure) => self.call_closure(&closure, args),
             Value::Constructor(ctor) => {
                 let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
@@ -529,7 +548,7 @@ impl<'db> Evaluator<'db> {
             return fail(ErrorKind::WrongArgCount { expected: params.len(), found: args.len() });
         }
         self.enter()?;
-        let mut frame = Frame { def: closure.def, body, locals: closure.captured.clone() };
+        let mut frame = self.frame(closure.def, closure.captured.clone(), closure.type_args.clone());
         let result = (|| {
             for (&pat, arg) in params.iter().zip(&args) {
                 if !self.match_pat(&mut frame, pat, arg)? {
@@ -781,7 +800,12 @@ impl<'db> Evaluator<'db> {
                 Err(Unwind::Return(value))
             }
             Expr::Lambda { .. } => {
-                Ok(Value::Closure(Rc::new(Closure { def: f.def, expr, captured: f.locals.clone() })))
+                Ok(Value::Closure(Rc::new(Closure {
+                    def: f.def,
+                    expr,
+                    captured: f.locals.clone(),
+                    type_args: f.type_args.clone(),
+                })))
             }
         }
     }
@@ -991,7 +1015,7 @@ impl<'db> Evaluator<'db> {
             Some(imp) => impl_method(db, imp, method),
             None => method,
         };
-        self.call_function_inner(target, args)
+        self.call_function_inner(target, self.no_type_args.clone(), args)
     }
 
     /// The value of what the name used by `expr` refers to. A class method
@@ -1007,22 +1031,92 @@ impl<'db> Evaluator<'db> {
                 };
             }
             ValueNs::Function(id) => {
-                if let Some(class) = method_class(db, id)
-                    && let Some(imp) = infer_body(db, f.def).instance(expr, class)
-                {
-                    return Ok(Value::Function(impl_method(db, imp, id)));
+                let type_args = self.use_type_args(f, expr);
+                let Some(class) = method_class(db, id) else { return Ok(Value::Function(id, type_args)) };
+                let Ok(scheme) = function_scheme(db, id) else { return Ok(Value::Function(id, type_args)) };
+                let Some(imp) = self.impl_at(f, expr, class, &scheme.params, &type_args) else {
+                    return Ok(Value::Function(id, type_args));
+                };
+                let target = impl_method(db, imp, id);
+                if target == id {
+                    // The class's default for the method, with its types.
+                    return Ok(Value::Function(id, type_args));
                 }
+                // The impl's method has the type the class method has here.
+                let at = subst_scheme_args(&scheme.params, &type_args, &scheme.ty);
+                let target_args = match function_scheme(db, target) {
+                    Ok(scheme) => {
+                        bind_scheme_args(scheme, &at).into_iter().map(|t| t.unwrap_or_else(Ty::unit)).collect()
+                    }
+                    Err(_) => self.no_type_args.clone(),
+                };
+                return Ok(Value::Function(target, target_args));
             }
             ValueNs::Const(id) => {
-                if let ItemContainerId::Class(class) = id.container(db)
-                    && let Some(imp) = infer_body(db, f.def).instance(expr, class)
-                {
-                    return self.eval_const_inner(impl_const(db, imp, id));
+                if let ItemContainerId::Class(class) = id.container(db) {
+                    let type_args = self.use_type_args(f, expr);
+                    let params = generic_param_ids(db, [GenericDefId::Class(class)]);
+                    if let Some(imp) = self.impl_at(f, expr, class, &params, &type_args) {
+                        return self.eval_const_inner(impl_const(db, imp, id));
+                    }
                 }
             }
             _ => {}
         }
         self.value_of(f, value)
+    }
+
+    /// A frame for running the body `def` with `type_args`.
+    fn frame(&self, def: DefWithBodyId<'db>, locals: Locals<'db>, type_args: TypeArgs<'db>) -> Frame<'db> {
+        let db = self.db;
+        let params = match def.def(db) {
+            DefWithBody::Function(id) => function_scheme(db, id).map_or(&[][..], |s| &s.params[..]),
+            _ => &[],
+        };
+        Frame { def, body: body(db, def), locals, params, type_args }
+    }
+
+    /// `ty`, a type of the body `f` runs, with the types it's run with. Its
+    /// associated types are then what the impls give them.
+    fn subst(&self, f: &Frame<'db>, ty: &Ty<'db>) -> Ty<'db> {
+        let ty = subst_scheme_args(f.params, &f.type_args, ty);
+        match self.files.first() {
+            Some(&file) => normalize_assoc(self.db, file, &ty),
+            None => ty,
+        }
+    }
+
+    /// The types that the use of a function or constant at `expr` gives its
+    /// scheme, with those of the frame for its own parameters.
+    fn use_type_args(&self, f: &Frame<'db>, expr: ExprId) -> TypeArgs<'db> {
+        match infer_body(self.db, f.def).type_args(expr) {
+            Some(args) if !args.is_empty() => args.iter().map(|t| self.subst(f, t)).collect(),
+            _ => self.no_type_args.clone(),
+        }
+    }
+
+    /// The impl of `class` that a use at `expr` of one of its methods or
+    /// constants uses, whose scheme has `params` and gets `type_args` there:
+    /// the type checker's choice, or in a generic function the one for the
+    /// types it's run with (#236).
+    fn impl_at(
+        &self,
+        f: &Frame<'db>,
+        expr: ExprId,
+        class: ClassId<'db>,
+        params: &[GenericParamId<'db>],
+        type_args: &[Ty<'db>],
+    ) -> Option<ImplId<'db>> {
+        let db = self.db;
+        if let Some(imp) = infer_body(db, f.def).instance(expr, class) {
+            return Some(imp);
+        }
+        let mut files = self.files.clone();
+        let own = f.def.def(db).file(db);
+        if !files.contains(&own) {
+            files.push(own);
+        }
+        select_impl(db, &files, class, &class_args(db, class, params, type_args))
     }
 
     fn value_of(&mut self, f: &mut Frame<'db>, value: ValueNs<'db>) -> Res<'db, Value<'db>> {
@@ -1031,7 +1125,7 @@ impl<'db> Evaluator<'db> {
                 let slot = f.locals.get(&binding).and_then(|slot| slot.borrow().clone());
                 slot.ok_or_else(|| ErrorKind::Uninitialized(f.body[binding].name.clone()).into())
             }
-            ValueNs::Function(id) => Ok(Value::Function(id)),
+            ValueNs::Function(id) => Ok(Value::Function(id, self.no_type_args.clone())),
             ValueNs::Overloaded(_) => fail(ErrorKind::Unsupported("a name with several functions that the types don't decide")),
             ValueNs::Const(id) => self.eval_const_inner(id),
             ValueNs::Variant(id) => Ok(self.ctor_value(Ctor::Variant(id))),

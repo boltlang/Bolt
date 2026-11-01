@@ -178,7 +178,6 @@ total(iter([1, 2, 3]));
 
 ================================================================================
 Generic code uses the impl of the types it's called with
-:todo eval
 ================================================================================
 class Describe[T] { fn describe(x: T) -> i32; }
 impl Describe[i32] { fn describe(x) = 1; }
@@ -201,9 +200,36 @@ greet(5) + greet(True);
 ================================================================================
 Generic code with a bound over numbers
 :prelude
-:todo eval
 ================================================================================
 fn twice[T: Add](x: T) -> T.Output = add(x, x);
 twice(21);
 --------------------------------------------------------------------------------
 42
+
+================================================================================
+A class constant in generic code
+:todo wasm
+================================================================================
+class Zero[T] { const ZERO: T; }
+impl Zero[i32] { const ZERO: i32 = 0; }
+impl Zero[Bool] { const ZERO: Bool = False; }
+fn zero[T]() -> T where Zero[T] = ZERO;
+let n: i32 = zero();
+let b: Bool = zero();
+(n, b);
+--------------------------------------------------------------------------------
+(0, False)
+
+================================================================================
+An impl with a bound uses the impl of its type's argument
+:prelude
+:todo wasm
+================================================================================
+class Name[T] { fn name(x: T) -> String; }
+impl Name[i32] { fn name(x) = "i32"; }
+impl Name[i64] { fn name(x) = "i64"; }
+impl[T] Name[Option[T]] where Name[T] { fn name(x) = match x { Some(y) => "Some " <> name(y), None => "None" }; }
+fn later(x) = || name(x);
+(later(Some(1))(), later(Some(2i64))());
+--------------------------------------------------------------------------------
+("Some i32", "Some i64")
