@@ -66,8 +66,23 @@ pub class Ord[T] {
   fn cmp(a: T, b: T) -> Ordering;
 }
 
+/// Types whose values can be ordered, with `a < b`, `a > b`, `a <= b` and
+/// `a >= b`. Two values may have no order, like NaN and a float, which
+/// `partial_cmp` gives as `None`: then all four are `False`. An impl only
+/// needs `partial_cmp`; the primitive types define the others too, with
+/// their builtins.
 pub class PartialOrd[T] {
   fn partial_cmp(a: T, b: T) -> Option[Ordering];
+  fn lt(a: T, b: T) -> Bool = partial_cmp(a, b) == Some(Ordering.Less);
+  fn gt(a: T, b: T) -> Bool = partial_cmp(a, b) == Some(Ordering.Greater);
+  fn lte(a: T, b: T) -> Bool = match partial_cmp(a, b) {
+    Some(Ordering.Less) | Some(Ordering.Equal) => True,
+    _ => False,
+  };
+  fn gte(a: T, b: T) -> Bool = match partial_cmp(a, b) {
+    Some(Ordering.Greater) | Some(Ordering.Equal) => True,
+    _ => False,
+  };
 }
 
 /// The ordering of two values, from whether the first is less than or
@@ -92,19 +107,97 @@ impl Ord[u64] { fn cmp(a, b) = ordering(u64_lt(a, b), u64_gt(a, b)); }
 impl Ord[u128] { fn cmp(a, b) = ordering(u128_lt(a, b), u128_gt(a, b)); }
 impl Ord[usize] { fn cmp(a, b) = ordering(usize_lt(a, b), usize_gt(a, b)); }
 
-impl PartialOrd[Bool] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[i8] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[i16] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[i32] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[i64] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[i128] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[isize] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[u8] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[u16] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[u32] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[u64] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[u128] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[usize] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
+impl PartialOrd[Bool] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = bool_lt(a, b);
+  fn gt(a, b) = bool_gt(a, b);
+  fn lte(a, b) = bool_le(a, b);
+  fn gte(a, b) = bool_ge(a, b);
+}
+impl PartialOrd[i8] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = i8_lt(a, b);
+  fn gt(a, b) = i8_gt(a, b);
+  fn lte(a, b) = i8_le(a, b);
+  fn gte(a, b) = i8_ge(a, b);
+}
+impl PartialOrd[i16] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = i16_lt(a, b);
+  fn gt(a, b) = i16_gt(a, b);
+  fn lte(a, b) = i16_le(a, b);
+  fn gte(a, b) = i16_ge(a, b);
+}
+impl PartialOrd[i32] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = i32_lt(a, b);
+  fn gt(a, b) = i32_gt(a, b);
+  fn lte(a, b) = i32_le(a, b);
+  fn gte(a, b) = i32_ge(a, b);
+}
+impl PartialOrd[i64] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = i64_lt(a, b);
+  fn gt(a, b) = i64_gt(a, b);
+  fn lte(a, b) = i64_le(a, b);
+  fn gte(a, b) = i64_ge(a, b);
+}
+impl PartialOrd[i128] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = i128_lt(a, b);
+  fn gt(a, b) = i128_gt(a, b);
+  fn lte(a, b) = i128_le(a, b);
+  fn gte(a, b) = i128_ge(a, b);
+}
+impl PartialOrd[isize] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = isize_lt(a, b);
+  fn gt(a, b) = isize_gt(a, b);
+  fn lte(a, b) = isize_le(a, b);
+  fn gte(a, b) = isize_ge(a, b);
+}
+impl PartialOrd[u8] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = u8_lt(a, b);
+  fn gt(a, b) = u8_gt(a, b);
+  fn lte(a, b) = u8_le(a, b);
+  fn gte(a, b) = u8_ge(a, b);
+}
+impl PartialOrd[u16] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = u16_lt(a, b);
+  fn gt(a, b) = u16_gt(a, b);
+  fn lte(a, b) = u16_le(a, b);
+  fn gte(a, b) = u16_ge(a, b);
+}
+impl PartialOrd[u32] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = u32_lt(a, b);
+  fn gt(a, b) = u32_gt(a, b);
+  fn lte(a, b) = u32_le(a, b);
+  fn gte(a, b) = u32_ge(a, b);
+}
+impl PartialOrd[u64] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = u64_lt(a, b);
+  fn gt(a, b) = u64_gt(a, b);
+  fn lte(a, b) = u64_le(a, b);
+  fn gte(a, b) = u64_ge(a, b);
+}
+impl PartialOrd[u128] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = u128_lt(a, b);
+  fn gt(a, b) = u128_gt(a, b);
+  fn lte(a, b) = u128_le(a, b);
+  fn gte(a, b) = u128_ge(a, b);
+}
+impl PartialOrd[usize] {
+  fn partial_cmp(a, b) = Some(cmp(a, b));
+  fn lt(a, b) = usize_lt(a, b);
+  fn gt(a, b) = usize_gt(a, b);
+  fn lte(a, b) = usize_le(a, b);
+  fn gte(a, b) = usize_ge(a, b);
+}
 
 // Floats have no `Ord`: NaN is neither less than, equal to nor greater
 // than any float, so comparing with it gives `None`.
@@ -113,56 +206,26 @@ impl PartialOrd[usize] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
 fn float_ordering(lt: Bool, gt: Bool, eq: Bool) -> Option[Ordering] =
   if lt || gt || eq { Some(ordering(lt, gt)) } else { None };
 
-impl PartialOrd[f32] { fn partial_cmp(a, b) = float_ordering(f32_lt(a, b), f32_gt(a, b), f32_eq(a, b)); }
-impl PartialOrd[f64] { fn partial_cmp(a, b) = float_ordering(f64_lt(a, b), f64_gt(a, b), f64_eq(a, b)); }
-
-/// Types whose values can be ordered, with `a < b`.
-pub class Lt[T] {
-  fn lt(a: T, b: T) -> Bool;
+impl PartialOrd[f32] {
+  fn partial_cmp(a, b) = float_ordering(f32_lt(a, b), f32_gt(a, b), f32_eq(a, b));
+  fn lt(a, b) = f32_lt(a, b);
+  fn gt(a, b) = f32_gt(a, b);
+  fn lte(a, b) = f32_le(a, b);
+  fn gte(a, b) = f32_ge(a, b);
 }
-
-impl[T] Lt[T] where PartialOrd[T] {
-  fn lt(a, b) = partial_cmp(a, b) == Some(Ordering.Less);
+impl PartialOrd[f64] {
+  fn partial_cmp(a, b) = float_ordering(f64_lt(a, b), f64_gt(a, b), f64_eq(a, b));
+  fn lt(a, b) = f64_lt(a, b);
+  fn gt(a, b) = f64_gt(a, b);
+  fn lte(a, b) = f64_le(a, b);
+  fn gte(a, b) = f64_ge(a, b);
 }
 
 pub fn a < b = lt(a, b);
 
-/// Types whose values can be ordered, with `a > b`.
-pub class Gt[T] {
-  fn gt(a: T, b: T) -> Bool;
-}
-
-impl[T] Gt[T] where PartialOrd[T] {
-  fn gt(a, b) = partial_cmp(a, b) == Some(Ordering.Greater);
-}
-
 pub fn a > b = gt(a, b);
 
-/// Types whose values can be ordered, with `a <= b`.
-pub class LtE[T] {
-  fn lte(a: T, b: T) -> Bool;
-}
-
-impl[T] LtE[T] where PartialOrd[T] {
-  fn lte(a, b) = match partial_cmp(a, b) {
-    Some(Ordering.Less) | Some(Ordering.Equal) => True,
-    _ => False,
-  };
-}
-
 pub fn a <= b = lte(a, b);
-
-/// Types whose values can be ordered, with `a >= b`.
-pub class GtE[T] {
-  fn gte(a: T, b: T) -> Bool;
-}
-
-impl[T] GtE[T] where PartialOrd[T] {
-  fn gte(a, b) = match partial_cmp(a, b) {
-    Some(Ordering.Greater) | Some(Ordering.Equal) => True,
-    _ => False,
-  };
-}
 
 pub fn a >= b = gte(a, b);
 
