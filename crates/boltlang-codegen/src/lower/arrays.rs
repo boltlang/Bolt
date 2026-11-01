@@ -33,6 +33,16 @@ impl<'db> Compiler<'db> {
 
     /// `[a, b, c]`.
     pub(super) fn array_literal(&mut self, expr: ExprId, items: &[ExprId]) -> Result<'db, ()> {
+        // `[]` is its length, whatever its elements would be, which the types
+        // may not even say, as for `array_len([])`.
+        if items.is_empty() {
+            let address = self.alloc(4);
+            self.push(Inst::LocalGet(address));
+            self.push(Inst::I32Const(0));
+            self.push(Inst::Store(ValTy::I32, 0));
+            self.push(Inst::LocalGet(address));
+            return Ok(());
+        }
         let el = self.element_of(&self.ty(expr), expr)?;
         let address = self.alloc(el.start + items.len() as u32 * el.size);
         self.push(Inst::LocalGet(address));

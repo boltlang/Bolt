@@ -281,6 +281,25 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
                 _ => return Err(unexpected()),
             });
         }
+        (Repr::Enum, Some(Val::I32(address))) => {
+            let Ty::Adt(AdtId::Enum(parent), ..) = ty else { return Err(unexpected()) };
+            let address = *address as u32;
+            let index = match load(memory, address, ValTy::I32) {
+                Some(Val::I32(index)) => index as u32,
+                _ => return Err(unexpected()),
+            };
+            let variant = EnumVariantId { parent: *parent, index };
+            let layout = layout::variant_layout(db, ty, variant).ok_or_else(unexpected)?;
+            let mut fields = Vec::new();
+            for slot in &layout.slots {
+                let field = match slot.val_ty {
+                    Some(val_ty) => Some(load(memory, address + slot.offset, val_ty).ok_or_else(unexpected)?),
+                    None => None,
+                };
+                fields.push((slot.name.clone(), to_value(db, &slot.ty, field, memory)?));
+            }
+            return Ok(Value::adt(Ctor::Variant(variant), Mutability::Imm, fields));
+        }
         (Repr::Array(elem_ty), Some(Val::I32(address))) => {
             let el = layout::element(db, &elem_ty).ok_or_else(unexpected)?;
             let address = *address as u32;

@@ -118,17 +118,13 @@ fn functions_are_exported() {
 const COLOR: &str = "enum Color { Red, Green, Blue }\n";
 
 #[test]
-fn enums_with_fields_and_ordering_are_errors() {
+fn a_class_method_without_an_impl_is_an_error() {
     // Without a prelude, since the code has an `Ord` and a `<` of its own.
     let errors = |code: &str| {
         let db = TestDb::new();
         let file = db.file("/main.bolt", code);
         link(&db, file).unwrap_err().iter().map(|e| e.to_string()).collect::<Vec<_>>()
     };
-    assert_eq!(
-        errors("enum Shape { Dot, Circle(f64) }\nShape.Dot;"),
-        ["a value of type `Shape` is not supported by the code generator yet"]
-    );
     // Comparing enums calls the function with the operator's name, here
     // one that calls a class method without an impl for `Color`.
     assert_eq!(

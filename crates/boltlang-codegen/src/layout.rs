@@ -16,12 +16,17 @@
 //!   and `i16`, and the size of its Wasm value for the others. So a `[u8]`
 //!   is laid out like a string literal: its length, then its bytes.
 //!
+//! - An enum without fields is the index of its variant, an `i32`. One
+//!   with fields is the `i32` address of the index of its variant, an
+//!   `i32`, followed by the variant's fields, laid out like a struct's from
+//!   4 bytes on. A variant without fields takes just the index.
+//!
 //! Structs and arrays are shared, so a change to a field or an element
 //! shows through every name for it. Tuples are values: the code generator never changes one in
 //! place, but makes a changed copy, so sharing them is safe.
 
 use boltlang_base_db::Db;
-use boltlang_hir_def::{Name, resolver::GenericDefId};
+use boltlang_hir_def::{Name, ids::EnumVariantId, resolver::GenericDefId};
 use boltlang_hir_ty::{
     AdtId, Ty,
     lower::{VariantDef, field_types, struct_args, subst_params},
@@ -44,6 +49,10 @@ pub(crate) enum Repr<'db> {
     Boxed,
     /// An array of elements of this type: the address of its length.
     Array(Ty<'db>),
+    /// An enum with fields: the address of its variant's index and fields.
+    /// The fields' types aren't checked here, since an enum can hold
+    /// itself, like a list.
+    Enum,
 }
 
 /// How the elements of an array are kept: see the module's docs.
@@ -121,6 +130,7 @@ pub(crate) fn repr<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Repr<'db>> {
             element(db, elem)?;
             Some(Repr::Array((**elem).clone()))
         }
+        Ty::Adt(AdtId::Enum(_), ..) => Some(Scalar::of(db, ty).map_or(Repr::Enum, Repr::Scalar)),
         _ => Scalar::of(db, ty).map(Repr::Scalar),
     }
 }
@@ -134,7 +144,7 @@ pub(crate) fn val_ty<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Option<ValTy>
         match repr(db, &ty)? {
             Repr::Unit => return Some(None),
             Repr::Scalar(scalar) => return Some(Some(scalar.val_ty())),
-            Repr::Boxed | Repr::Array(_) => return Some(Some(ValTy::I32)),
+            Repr::Boxed | Repr::Array(_) | Repr::Enum => return Some(Some(ValTy::I32)),
             Repr::Newtype(field) => ty = field,
         }
     }
@@ -159,9 +169,32 @@ pub(crate) fn fields<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Vec<(Name, Ty
 /// Where the fields of a struct or tuple of type `ty` are, or `None` when
 /// it isn't one, or a field has a type the code generator doesn't support.
 pub(crate) fn layout<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Layout<'db>> {
+    layout_from(db, fields(db, ty)?, 0)
+}
+
+/// The names and types of the fields of the variant `v` of the enum of
+/// type `ty`, with its type arguments in them.
+pub(crate) fn variant_fields<'db>(db: &'db dyn Db, ty: &Ty<'db>, v: EnumVariantId<'db>) -> Option<Vec<(Name, Ty<'db>)>> {
+    let Ty::Adt(AdtId::Enum(id), args, ..) = ty else { return None };
+    if *id != v.parent {
+        return None;
+    }
+    let def = GenericDefId::Enum(*id);
+    let fields = &field_types(db, VariantDef::Variant(v)).fields;
+    Some(fields.iter().map(|(name, t)| (name.clone(), subst_params(t, def, args))).collect())
+}
+
+/// Where the fields of the variant `v` of an enum with fields of type `ty`
+/// are, after its index.
+pub(crate) fn variant_layout<'db>(db: &'db dyn Db, ty: &Ty<'db>, v: EnumVariantId<'db>) -> Option<Layout<'db>> {
+    layout_from(db, variant_fields(db, ty, v)?, 4)
+}
+
+/// The layout of `fields`, from the byte `start` on.
+fn layout_from<'db>(db: &'db dyn Db, fields: Vec<(Name, Ty<'db>)>, start: u32) -> Option<Layout<'db>> {
     let mut slots = Vec::new();
-    let mut end: u32 = 0;
-    for (name, ty) in fields(db, ty)? {
+    let mut end: u32 = start;
+    for (name, ty) in fields {
         let val_ty = val_ty(db, &ty)?;
         let size = val_ty.map_or(0, |t| t.size());
         let offset = if size == 0 { end } else { end.next_multiple_of(size) };

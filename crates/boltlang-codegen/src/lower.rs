@@ -35,6 +35,7 @@ use crate::{
 };
 
 mod arrays;
+mod enums;
 
 type Result<'db, T> = std::result::Result<T, CodegenError<'db>>;
 
@@ -102,7 +103,7 @@ impl Scalar {
             match layout::repr(db, &ty)? {
                 Repr::Scalar(scalar) => return Some(scalar),
                 Repr::Newtype(field) => ty = field,
-                Repr::Unit | Repr::Boxed | Repr::Array(_) => return None,
+                Repr::Unit | Repr::Boxed | Repr::Array(_) | Repr::Enum => return None,
             }
         }
         None
@@ -477,7 +478,15 @@ impl<'db> Compiler<'db> {
                         let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
                         self.construct(expr, &fields, *spread)
                     }
-                    _ => Err(self.unsupported(expr, "an enum with fields")),
+                    // `Shape.Rect { w, h }`, a variant with named fields.
+                    Some(
+                        ValueResolution::Value(ValueNs::Variant(v))
+                        | ValueResolution::Type(TypeResolution { ty: TypeNs::Variant(v), unresolved: None }),
+                    ) if spread.is_none() => {
+                        let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
+                        self.construct_variant(expr, v, &fields)
+                    }
+                    _ => Err(self.unsupported(expr, "this struct or variant")),
                 }
             }
             Expr::If { condition, then_branch, else_branch } => {
@@ -679,7 +688,7 @@ impl<'db> Compiler<'db> {
                 self.push(Inst::LocalGet(address));
                 Ok(())
             }
-            Repr::Unit | Repr::Scalar(_) | Repr::Array(_) => Err(self.unsupported(expr, "this struct")),
+            Repr::Unit | Repr::Scalar(_) | Repr::Array(_) | Repr::Enum => Err(self.unsupported(expr, "this struct")),
         }
     }
 
@@ -800,13 +809,17 @@ impl<'db> Compiler<'db> {
         }
     }
 
-    /// A variant of an enum without fields: the index of the variant.
+    /// A variant without fields, like `None`: the index of the variant, or
+    /// for an enum with fields, a new value of it.
     fn variant(&mut self, expr: ExprId, v: EnumVariantId<'db>) -> Result<'db, ()> {
-        if self.scalar(expr)? != Scalar::Enum {
-            return Err(self.unsupported(expr, "an enum with fields"));
+        match self.repr(&self.ty(expr), expr)? {
+            Repr::Scalar(Scalar::Enum) => {
+                self.push(Inst::I32Const(v.index as i32));
+                Ok(())
+            }
+            Repr::Enum => self.construct_variant(expr, v, &[]),
+            _ => Err(self.unsupported(expr, "this variant")),
         }
-        self.push(Inst::I32Const(v.index as i32));
-        Ok(())
     }
 
     /// A const, whose value the evaluator computes at compile time.
@@ -1099,6 +1112,11 @@ impl<'db> Compiler<'db> {
         };
         match path.and_then(|p| self.resolve(callee, &p)) {
             Some(ValueResolution::Value(ValueNs::Function(f))) => self.call_function(expr, f, Some(callee), args),
+            // `Some(x)`, a variant with fields.
+            Some(ValueResolution::Value(ValueNs::Variant(v))) => {
+                let fields: Vec<_> = args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
+                self.construct_variant(expr, v, &fields)
+            }
             // `Wrap(x)`, a tuple struct.
             Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
                 let fields: Vec<_> = args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
@@ -1239,6 +1257,11 @@ impl<'db> Compiler<'db> {
                     self.push(Inst::LocalSet(binding));
                 }
             }
+            // A variant without fields of an enum with fields.
+            Pat::Path(path) if self.repr(ty, at)? == Repr::Enum => {
+                let v = self.pattern_variant(path, at)?;
+                self.variant_pattern(v, &[], local, ty, at)?;
+            }
             Pat::Lit { .. } | Pat::Path(_) => {
                 let (scalar, value) = self.pattern_operand(ty, local, at)?;
                 self.push(Inst::LocalGet(value));
@@ -1278,6 +1301,16 @@ impl<'db> Compiler<'db> {
                 let fields = positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
                 self.field_patterns(&fields, local, ty, at)?;
             }
+            Pat::TupleStruct { path, args, rest } if self.repr(ty, at)? == Repr::Enum => {
+                let v = self.pattern_variant(path, at)?;
+                let count = layout::variant_fields(self.db, ty, v).map_or(0, |f| f.len());
+                self.variant_pattern(v, &positional(args, *rest, count), local, ty, at)?;
+            }
+            Pat::Record { path, fields, .. } if self.repr(ty, at)? == Repr::Enum => {
+                let v = self.pattern_variant(path, at)?;
+                let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.pat)).collect();
+                self.variant_pattern(v, &fields, local, ty, at)?;
+            }
             Pat::TupleStruct { path, args, rest } => {
                 self.struct_pattern_path(path, at)?;
                 let fields = positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
@@ -1315,6 +1348,12 @@ impl<'db> Compiler<'db> {
             };
         }
         let layout = self.layout(ty, at)?;
+        self.slot_patterns(fields, local, &layout, at)
+    }
+
+    /// Test the fields in `layout` of what's at the address in `local`
+    /// against their patterns, leaving 1 if all match.
+    fn slot_patterns(&mut self, fields: &[(Name, PatId)], local: Option<u32>, layout: &Layout<'db>, at: ExprId) -> Result<'db, ()> {
         if fields.is_empty() {
             self.push(Inst::I32Const(1));
         }
