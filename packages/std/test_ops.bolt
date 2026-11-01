@@ -2,6 +2,7 @@
 
 import "./ops" *;
 import "./io" (assert);
+import "./option" (Some, None);
 
 /// What the classes give generic code: the operator of the type it's
 /// called with.
@@ -33,6 +34,38 @@ fn the_primitive_types_have_the_operators() {
   assert(shl(1u8, 3) == 8u8);
   assert(shr(-8, 1) == -4);
   assert(eq('a', 'a') && ne(1.5, 2.5));
+}
+
+/// Generic code that orders values through the classes, not the builtins.
+fn smaller[T: PartialOrd](a: T, b: T) -> T = if lt(a, b) { a } else { b };
+
+#[test]
+fn the_primitive_types_are_ordered() {
+  assert(cmp(1, 2) == Ordering.Less);
+  assert(cmp(-3i64, -3i64) == Ordering.Equal);
+  assert(cmp(200u8, 100u8) == Ordering.Greater);
+  assert(cmp('b', 'a') == Ordering.Greater);
+  assert(cmp(False, True) == Ordering.Less);
+  assert(partial_cmp(7u32, 9u32) == Some(Ordering.Less));
+}
+
+// TODO: also order numbers in generic code, once the evaluator can tell
+// which impl a number in generic code uses.
+#[test]
+fn the_comparison_classes_come_from_partial_ord() {
+  assert(lt('a', 'b') && lte('b', 'b') && gt('c', 'b') && gte('c', 'c'));
+  assert(!lt(True, False) && !gte(False, True));
+  assert(smaller('x', 'q') == 'q');
+}
+
+#[test]
+fn floats_are_only_partially_ordered() {
+  let nan = 0.0 / 0.0;
+  assert(partial_cmp(1.5, 2.5) == Some(Ordering.Less));
+  assert(partial_cmp(2.0f32, 2.0f32) == Some(Ordering.Equal));
+  assert(partial_cmp(3.5, -1.0) == Some(Ordering.Greater));
+  assert(partial_cmp(nan, 1.0) == None);
+  assert(partial_cmp(nan, nan) == None);
 }
 
 #[test]
