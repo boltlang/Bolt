@@ -20,6 +20,26 @@ impl Neg[Money] {
   fn neg(a) = Money { cents: 0 - a.cents };
 }
 
+impl Sub[Money] {
+  type Output = Money;
+  fn sub(a, b) = Money { cents: a.cents - b.cents };
+}
+
+impl Shl[Money] {
+  type Output = Money;
+  fn shl(a, n) = Money { cents: a.cents * 10 };
+}
+
+struct Switch { on: Bool }
+
+impl Not[Switch] {
+  type Output = Switch;
+  fn not(s) = Switch { on: !s.on };
+}
+
+/// Generic code with the operator, not the class method.
+fn doubled[T: Add](x: T) -> T.Output = x + x;
+
 #[test]
 fn the_primitive_types_have_the_operators() {
   assert(add(2, 3) == 5);
@@ -73,4 +93,30 @@ fn a_type_with_an_impl_has_the_operator() {
   assert(add(Money { cents: 1 }, Money { cents: 2 }).cents == 3);
   assert(neg(Money { cents: 5 }).cents == -5);
   assert(twice(Money { cents: 150 }).cents == 300);
+}
+
+#[test]
+fn the_operators_of_a_type_call_its_impls() {
+  assert((Money { cents: 1 } + Money { cents: 2 }).cents == 3);
+  assert((Money { cents: 5 } - Money { cents: 2 }).cents == 3);
+  assert((Money { cents: 3 } << 1).cents == 30);
+  assert(doubled(Money { cents: 150 }).cents == 300);
+}
+
+#[test]
+fn prefix_operators_call_their_impls_too() {
+  assert((-Money { cents: 5 }).cents == -5);
+  assert((-(Money { cents: 5 } - Money { cents: 7 })).cents == 2);
+  assert((!Switch { on: True }).on == False);
+}
+
+#[test]
+fn compound_assignments_call_the_impls() {
+  let mut m = Money { cents: 1 };
+  m += Money { cents: 2 };
+  m -= Money { cents: 1 };
+  assert(m.cents == 2);
+  let mut t = (Money { cents: 5 }, 0);
+  t.0 += Money { cents: 5 };
+  assert(t.0.cents == 10);
 }
