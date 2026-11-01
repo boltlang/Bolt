@@ -138,8 +138,8 @@ impl PrimOp {
 
     /// Whether `ty` has the operation, as it has the operator: integers
     /// all but `!`, and `-` only when they're signed; floats arithmetic,
-    /// `-` and comparisons; `Bool` the bitwise ones, `!` and comparisons;
-    /// and `Char` comparisons.
+    /// `-` and comparisons; and `Bool` the bitwise ones, `!` and
+    /// comparisons.
     pub fn applies_to(self, ty: BuiltinType) -> bool {
         use PrimOp::*;
         let cmp = matches!(self, Eq | Ne | Lt | Le | Gt | Ge);
@@ -148,7 +148,6 @@ impl PrimOp {
             BuiltinType::Uint(_) => !matches!(self, Neg | Not),
             BuiltinType::Float(_) => cmp || matches!(self, Add | Sub | Mul | Div | Rem | Neg),
             BuiltinType::Bool => cmp || matches!(self, BitAnd | BitOr | BitXor | Not),
-            BuiltinType::Char => cmp,
         }
     }
 

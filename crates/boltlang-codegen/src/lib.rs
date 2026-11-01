@@ -1,7 +1,8 @@
 //! A code generator from Bolt to WebAssembly.
 //!
 //! It's minimal for now: it compiles the scalar types (integers, floats,
-//! `Bool`, `Char` and `()`), enums whose variants have no fields, structs,
+//! `Bool` and `()`), enums whose variants have no fields, structs, like the
+//! prelude's `Char`, which is the `u32` of its code point,
 //! tuples, string literals, functions, `let`, `if`, loops, `break`,
 //! `continue`, `return`, and `match` on scalars, on those enums, and on
 //! structs and tuples. Anything else is an [`ErrorKind::Unsupported`] error.

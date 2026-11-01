@@ -1,0 +1,49 @@
+// The tests of `char.bolt`.
+
+import "./char" *;
+import "./ops" *;
+import "./option" (Some, None);
+import "./vec" (len);
+import "./io" (assert);
+
+#[test]
+fn characters_are_compared_by_their_code_points() {
+  assert('a' == 'a' && 'a' != 'b');
+  assert('a' < 'b' && 'Z' < 'a' && 'é' > 'z');
+  assert(cmp('b', 'a') == Ordering.Greater);
+  assert(partial_cmp('a', 'a') == Some(Ordering.Equal));
+}
+
+#[test]
+fn a_character_is_its_code_point() {
+  assert('a'.to_u32() == 97);
+  assert('✓'.to_u32() == 0x2713);
+  assert(Char.from_u32(97) == Some('a'));
+}
+
+#[test]
+fn surrogates_and_numbers_past_unicode_are_no_characters() {
+  assert(Char.from_u32(0xD800) == None);
+  assert(Char.from_u32(0xDFFF) == None);
+  assert(Char.from_u32(0x110000) == None);
+  assert(Char.from_u32(0x10FFFF) != None);
+}
+
+#[test]
+fn characters_take_one_to_four_bytes_in_utf8() {
+  assert('a'.to_utf8().len == 1);
+  assert('é'.to_utf8().len == 2);
+  assert('✓'.to_utf8().len == 3);
+  assert('😀'.to_utf8().len == 4);
+}
+
+#[test]
+fn matching_on_characters() {
+  let kind = |c: Char| match c {
+    'a'..='z' => 1,
+    '0'..='9' => 2,
+    ' ' | '\n' => 3,
+    _ => 4,
+  };
+  assert(kind('q') == 1 && kind('7') == 2 && kind('\n') == 3 && kind('!') == 4);
+}

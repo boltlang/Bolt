@@ -1,0 +1,48 @@
+// The tests of `debug.bolt`, and of the impls of `Debug` of `char.bolt` and
+// `string.bolt`.
+
+import "./debug" *;
+import "./char" (Char);
+import "./string" *;
+import "./option" (unwrap);
+import "./io" (assert);
+import "./ops" *;
+
+#[test]
+fn characters_look_like_their_literals() {
+  assert(debug_string('a') == "'a'");
+  assert(debug_string('é') == "'é'");
+  assert(debug_string('"') == "'\"'");
+  assert(debug_string('\'') == "'\\''");
+  assert(debug_string('\\') == "'\\\\'");
+  assert(debug_string('\n') == "'\\n'");
+  assert(debug_string('\t') == "'\\t'");
+  assert(debug_string('\0') == "'\\0'");
+}
+
+#[test]
+fn other_control_characters_look_like_unicode_escapes() {
+  assert(debug_string(unwrap(Char.from_u32(0x1B))) == "'\\u{1b}'");
+  assert(debug_string(unwrap(Char.from_u32(0x7F))) == "'\\u{7f}'");
+  assert(debug_string(unwrap(Char.from_u32(0x01))) == "'\\u{1}'");
+}
+
+#[test]
+fn strings_look_like_their_literals() {
+  assert(debug_string("hi") == "\"hi\"");
+  assert(debug_string("") == "\"\"");
+  assert(debug_string("it's") == "\"it's\"");
+  assert(debug_string("a \"b\"\n") == "\"a \\\"b\\\"\\n\"");
+  assert(debug_string("wörld ✓") == "\"wörld ✓\"");
+}
+
+struct Point { x: i32, y: i32 }
+
+impl Debug[Point] {
+  fn debug(p, out) = out.push_str("<point>");
+}
+
+#[test]
+fn a_type_can_have_an_impl_of_its_own() {
+  assert(debug_string(Point { x: 1, y: 2 }) == "<point>");
+}

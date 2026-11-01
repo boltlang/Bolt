@@ -1,4 +1,8 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::{HashMap, HashSet},
+    rc::Rc,
+};
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
@@ -18,14 +22,14 @@ use boltlang_hir_def::{
 use boltlang_hir_ty::{
     builtin::{Builtin, PrimOp, builtin},
     infer_body,
-    lang::LangClass,
+    lang::{LangClass, debug_string_fn},
 };
 
 use crate::{
     dispatch::{impl_const, impl_for_args, impl_method, method_class},
     error::{ErrorKind, EvalError},
     host::{Host, NoEffects},
-    value::{Closure, Ctor, Fields, Locals, Shared, Slot, Value},
+    value::{Closure, Ctor, Fields, Locals, Shared, Shown, Slot, Value},
 };
 
 /// Bounds on an evaluation.
@@ -268,6 +272,71 @@ impl<'db> Evaluator<'db> {
 
     pub fn eval_const(&mut self, id: ConstId<'db>) -> Result<Value<'db>, EvalError<'db>> {
         finish(self.eval_const_inner(id))
+    }
+
+    /// How `value`, which `file` gave, looks as Bolt code, like `'a'` for
+    /// a `Char`. A struct or variant whose type has an impl of the
+    /// prelude's `Debug` is shown by the prelude's `debug_string`, and the
+    /// rest as [`Value::display`] shows it, with the parts that have an
+    /// impl shown by theirs, like the `Char` in `Some('a')`.
+    pub fn show(&mut self, file: File, value: &Value<'db>) -> Result<String, EvalError<'db>> {
+        if !self.files.contains(&file) {
+            self.files.push(file);
+        }
+        let mut shown = Shown::new();
+        finish(self.debug_parts(file, value, &mut shown, &mut HashSet::new()).map(|()| Value::unit()))?;
+        Ok(value.display_with(self.db, &shown).to_string())
+    }
+
+    /// Show each struct and variant in `value` whose type has an impl of
+    /// `Debug` with it, in `shown`, but not those inside them. `seen` is the
+    /// arrays and structs already looked at, since a value can contain
+    /// itself.
+    fn debug_parts(
+        &mut self,
+        file: File,
+        value: &Value<'db>,
+        shown: &mut Shown,
+        seen: &mut HashSet<*const ()>,
+    ) -> Res<'db, ()> {
+        if let Some(ptr) = value.shared_ptr()
+            && !seen.insert(ptr)
+        {
+            return Ok(());
+        }
+        let parts: Vec<Value<'db>> = match value {
+            Value::Adt { fields, .. } => {
+                if let Some(text) = self.debug(file, value)? {
+                    shown.insert(value.shared_ptr().unwrap(), text);
+                    return Ok(());
+                }
+                fields.borrow().iter().map(|(_, v)| v.clone()).collect()
+            }
+            Value::Tuple(items) => items.clone(),
+            Value::Array(items) => items.borrow().clone(),
+            Value::Range { start, end, .. } => start.iter().chain(end.iter()).map(|v| (**v).clone()).collect(),
+            _ => return Ok(()),
+        };
+        for part in &parts {
+            self.debug_parts(file, part, shown, seen)?;
+        }
+        Ok(())
+    }
+
+    /// How `value` looks, from the impl of `Debug` for its type, or `None`
+    /// when there's none, or no prelude with `Debug` and `debug_string`.
+    fn debug(&mut self, file: File, value: &Value<'db>) -> Res<'db, Option<String>> {
+        let db = self.db;
+        let Some(class) = LangClass::Debug.class(db, file) else { return Ok(None) };
+        let Some(method) = LangClass::Debug.method(db, class) else { return Ok(None) };
+        let Some(debug_string) = debug_string_fn(db, file) else { return Ok(None) };
+        if impl_for_args(db, &self.files, method, std::slice::from_ref(value)).is_none() {
+            return Ok(None);
+        }
+        match self.call_function_inner(debug_string, vec![value.clone()])?.text() {
+            Some(text) => Ok(Some(text)),
+            None => mismatch("`debug_string` didn't give a `String`"),
+        }
     }
 
     fn tick(&mut self) -> Res<'db, ()> {
@@ -1303,7 +1372,7 @@ fn literal_value<'db>(db: &'db dyn Db, file: File, literal: &Literal) -> Res<'db
             Ok(x) => Value::Float(x),
             Err(_) => return mismatch(format!("bad float literal `{text}`")),
         },
-        Literal::Char(c) => Value::Char(*c),
+        Literal::Char(c) => Value::char(db, file, *c).ok_or(ErrorKind::NoLangClass("Char"))?,
         Literal::Byte(b) => Value::Int(*b as i128),
         Literal::String(s) | Literal::CString(s) => {
             Value::string(db, file, s).ok_or(ErrorKind::NoLangClass("String"))?
@@ -1396,12 +1465,7 @@ fn cast<'db>(value: Value<'db>, type_ref: &TypeRef) -> Res<'db, Value<'db>> {
     Ok(match (value, ty) {
         (Value::Int(n), BuiltinType::Float(_)) => Value::Float(n as f64),
         (Value::Float(x), BuiltinType::Int(_) | BuiltinType::Uint(_)) => Value::Int(x as i128),
-        (Value::Char(c), BuiltinType::Int(_) | BuiltinType::Uint(_)) => Value::Int(c as i128),
         (Value::Bool(b), BuiltinType::Int(_) | BuiltinType::Uint(_)) => Value::Int(b as i128),
-        (Value::Int(n), BuiltinType::Char) => match u32::try_from(n).ok().and_then(char::from_u32) {
-            Some(c) => Value::Char(c),
-            None => return mismatch(format!("{n} is not a character")),
-        },
         (value, _) => value,
     })
 }

@@ -129,9 +129,10 @@ numbers for you. Use `as` to convert explicitly:
 
 ## Characters and strings
 
-A character is written between single quotes and has type `Char`. A string
-is written between double quotes and has type `String`, which the prelude
-defines. Both understand escapes like `\n` and `\t`:
+A character is written between single quotes and has type `Char`, a
+Unicode code point. A string is written between double quotes and has type
+`String`. The prelude defines both. Both understand escapes like `\n` and
+`\t`:
 
 ```bolt
 let c = 'B';

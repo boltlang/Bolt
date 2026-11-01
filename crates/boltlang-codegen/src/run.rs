@@ -243,7 +243,6 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
     let val = val.clone().ok_or_else(unexpected)?;
     let value = match (scalar, &val) {
         (Scalar::Bool, Val::I32(n)) => Value::Bool(*n != 0),
-        (Scalar::Char, Val::I32(n)) => Value::Char(char::from_u32(*n as u32).ok_or_else(unexpected)?),
         (Scalar::Enum, Val::I32(index)) => {
             let Ty::Adt(AdtId::Enum(parent), ..) = ty else { return Err(unexpected()) };
             let variant = EnumVariantId { parent: *parent, index: *index as u32 };

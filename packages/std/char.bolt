@@ -1,0 +1,78 @@
+// Characters: the type of literals like `'a'`.
+
+import "./ops" *;
+import "./option" (Option, Some, None);
+import "./vec" (Vec, push);
+import "./string" (StringBuilder, push, push_str);
+import "./debug" (Debug, push_hex);
+
+/// A Unicode code point that isn't a surrogate, like Rust's `char`. The
+/// type of literals like `'a'`.
+pub imm struct Char(u32);
+
+impl Eq[Char] { fn eq(a, b) = a.0 == b.0; }
+impl Ord[Char] { fn cmp(a, b) = a.0.cmp(b.0); }
+impl PartialOrd[Char] { fn partial_cmp(a, b) = Some(a.cmp(b)); }
+
+/// The code point of `c`, like 97 for `'a'`.
+pub fn to_u32(c: Char) -> u32 = c.0;
+
+/// The character with code point `n`, or `None` when it's a surrogate or
+/// past `0x10FFFF`.
+pub fn Char.from_u32(n: u32) -> Option[Char] =
+  if n > 0x10FFFF || (n >= 0xD800 && n <= 0xDFFF) { None } else { Some(Char(n)) };
+
+/// The bytes of `ch` in UTF-8: one for ASCII, and up to four for others.
+pub fn to_utf8(ch: Char) -> mut Vec[u8] {
+  let c = ch.0;
+  let bytes = Vec.with_capacity(4);
+  if c < 0x80 {
+    bytes.push(c as u8);
+  } else if c < 0x800 {
+    bytes.push((0xC0 | (c >> 6)) as u8);
+    bytes.push((0x80 | (c & 0x3F)) as u8);
+  } else if c < 0x10000 {
+    bytes.push((0xE0 | (c >> 12)) as u8);
+    bytes.push((0x80 | ((c >> 6) & 0x3F)) as u8);
+    bytes.push((0x80 | (c & 0x3F)) as u8);
+  } else {
+    bytes.push((0xF0 | (c >> 18)) as u8);
+    bytes.push((0x80 | ((c >> 12) & 0x3F)) as u8);
+    bytes.push((0x80 | ((c >> 6) & 0x3F)) as u8);
+    bytes.push((0x80 | (c & 0x3F)) as u8);
+  }
+  bytes
+}
+
+/// Characters look like `'a'`, with `\` before `'` and `\`, the escapes
+/// `\n`, `\r`, `\t` and `\0`, and other control characters as `\u{7f}`, as
+/// in Rust.
+impl Debug[Char] {
+  fn debug(c, out) {
+    out.push('\'');
+    match c {
+      '\'' => out.push_str("\\'"),
+      _ => push_escaped(out, c),
+    };
+    out.push('\'');
+  }
+}
+
+/// Add `c` to the end of `out` as it is in a literal, with the escapes that
+/// both character and string literals have.
+pub(package) fn push_escaped(out: mut StringBuilder, c: Char) {
+  match c {
+    '\\' => out.push_str("\\\\"),
+    '\n' => out.push_str("\\n"),
+    '\r' => out.push_str("\\r"),
+    '\t' => out.push_str("\\t"),
+    '\0' => out.push_str("\\0"),
+    _ => if c.0 < 0x20 || c.0 == 0x7F {
+      out.push_str("\\u{");
+      push_hex(out, c.0);
+      out.push('}');
+    } else {
+      out.push(c);
+    },
+  };
+}

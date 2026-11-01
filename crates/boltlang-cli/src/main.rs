@@ -185,6 +185,8 @@ impl Exec for RunCommand {
         if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
             return Ok(false);
         }
+        let limits = Limits { fuel: self.fuel, ..Limits::default() };
+        let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
         let result = if self.wasm {
             let bytes = match link(&db, file) {
                 Ok(bytes) => bytes,
@@ -197,14 +199,18 @@ impl Exec for RunCommand {
                 located_diagnostic(file, None, DiagnosticCode::RUNTIME_ERROR, error.to_string())
             })
         } else {
-            let limits = Limits { fuel: self.fuel, ..Limits::default() };
-            let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
             evaluator.eval_file(file).map_err(|error| runtime_diagnostic(&db, file, &error))
         };
-        match result {
-            Ok(value) => {
-                if !value.is_unit() {
-                    println!("{}", value.display(&db));
+        // Shown with the impls of `Debug`, which the evaluator runs, for
+        // compiled code too.
+        let shown = result.and_then(|value| match value.is_unit() {
+            true => Ok(None),
+            false => evaluator.show(file, &value).map(Some).map_err(|error| runtime_diagnostic(&db, file, &error)),
+        });
+        match shown {
+            Ok(text) => {
+                if let Some(text) = text {
+                    println!("{text}");
                 }
                 Ok(true)
             }

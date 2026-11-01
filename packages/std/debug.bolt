@@ -1,0 +1,30 @@
+// How values look in code, like Rust's `Debug`: `'a'` for a character and
+// `"hi"` for a string. The evaluator shows the values of types with an impl
+// with it, like the result of `bolt run`, and others as they are, like
+// `Some(1)`.
+
+import "./string" (String, StringBuilder, push, build);
+import "./char" (Char);
+
+/// Types whose values can be shown as they look in code.
+pub class Debug[T] {
+  /// Add how `x` looks to the end of `out`.
+  fn debug(x: T, out: mut StringBuilder);
+}
+
+/// How `x` looks in code, as a `String`.
+pub fn debug_string[T](x: T) -> String where Debug[T] {
+  let out = StringBuilder.new();
+  debug(x, out);
+  out.build()
+}
+
+/// Add `n` in hexadecimal to the end of `out`, with lowercase letters and
+/// without leading zeros, like the `7f` of `'\u{7f}'`.
+pub(package) fn push_hex(out: mut StringBuilder, n: u32) {
+  if n >= 16 {
+    push_hex(out, n >> 4);
+  }
+  let digit = n & 0xF;
+  out.push(Char(if digit < 10 { 0x30 + digit } else { 0x57 + digit }));
+}

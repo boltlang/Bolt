@@ -4,6 +4,10 @@
 //! the prelude's impls for arrays use the builtins `array_get` and
 //! `array_set`. Without a prelude that defines the classes, the syntax is an
 //! error.
+//!
+//! The types of literals are the prelude's too: `"hi"` is a `String` and
+//! `'a'` a `Char`. And the evaluator shows a value of a type with an impl
+//! of `Debug` with it.
 
 use boltlang_base_db::{Db, File};
 use boltlang_hir_def::{
@@ -19,22 +23,54 @@ use crate::{
     lower::assoc_type,
 };
 
-/// The type of strings: the struct `String` of the prelude, as `file` sees
-/// it, like `"hi"` has. Files of the prelude's own package find it too.
-pub fn string_struct<'db>(db: &'db dyn Db, file: File) -> Option<StructId<'db>> {
+/// The struct called `name` in the prelude, as `file` sees it. Files of
+/// the prelude's own package find it too.
+fn prelude_struct<'db>(db: &'db dyn Db, file: File, name: &str) -> Option<StructId<'db>> {
     let lib = prelude_lib(db, file)?;
-    match file_scope(db, lib).scope.get(Namespace::Types, &Name::new("String"))?.def {
+    match file_scope(db, lib).scope.get(Namespace::Types, &Name::new(name))?.def {
         ModuleDefId::Struct(id) => Some(id),
         _ => None,
     }
 }
 
-/// [`string_struct`] as a type: an `imm String`.
-pub fn string_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
-    let id = string_struct(db, file)?;
-    Some(Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm)))
+/// The struct `id` as a type, if it's an `imm struct` without type
+/// parameters, like `String` and `Char`.
+fn imm_struct_ty<'db>(id: StructId<'db>) -> Ty<'db> {
+    Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm))
 }
 
+/// The type of strings: the struct `String` of the prelude, as `file` sees
+/// it, like `"hi"` has. Files of the prelude's own package find it too.
+pub fn string_struct<'db>(db: &'db dyn Db, file: File) -> Option<StructId<'db>> {
+    prelude_struct(db, file, "String")
+}
+
+/// [`string_struct`] as a type: an `imm String`.
+pub fn string_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
+    string_struct(db, file).map(imm_struct_ty)
+}
+
+/// The type of characters: the struct `Char` of the prelude, as `file` sees
+/// it, like `'a'` has. It's an `imm struct` with the code point as its one
+/// field, a `u32`.
+pub fn char_struct<'db>(db: &'db dyn Db, file: File) -> Option<StructId<'db>> {
+    prelude_struct(db, file, "Char")
+}
+
+/// [`char_struct`] as a type: an `imm Char`.
+pub fn char_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
+    char_struct(db, file).map(imm_struct_ty)
+}
+
+/// The function `debug_string` of the prelude, as `file` sees it: how a
+/// value of a type with an impl of `Debug` looks, as a `String`.
+pub fn debug_string_fn<'db>(db: &'db dyn Db, file: File) -> Option<FunctionId<'db>> {
+    let lib = prelude_lib(db, file)?;
+    match file_scope(db, lib).scope.get(Namespace::Values, &Name::new("debug_string"))?.def {
+        ModuleDefId::Function(id) => Some(id),
+        _ => None,
+    }
+}
 
 /// A class of the prelude that syntax uses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -47,6 +83,9 @@ pub enum LangClass {
     Iterable,
     /// `class Iterator[I] { type Item; fn next(it: I) -> Option[Item]; }`
     Iterator,
+    /// `class Debug[T] { fn debug(x: T, out: mut StringBuilder); }`, which
+    /// the evaluator shows values with.
+    Debug,
 }
 
 impl LangClass {
@@ -56,6 +95,7 @@ impl LangClass {
             LangClass::IndexMut => "IndexMut",
             LangClass::Iterable => "Iterable",
             LangClass::Iterator => "Iterator",
+            LangClass::Debug => "Debug",
         }
     }
 
@@ -66,6 +106,7 @@ impl LangClass {
             LangClass::IndexMut => "set_index",
             LangClass::Iterable => "iter",
             LangClass::Iterator => "next",
+            LangClass::Debug => "debug",
         }
     }
 
@@ -75,7 +116,7 @@ impl LangClass {
         match self {
             LangClass::Index | LangClass::Iterator => Some("Item"),
             LangClass::Iterable => Some("Iter"),
-            LangClass::IndexMut => None,
+            LangClass::IndexMut | LangClass::Debug => None,
         }
     }
 

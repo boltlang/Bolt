@@ -213,9 +213,15 @@ fn output(case: &Case, attributes: &Attributes, backend: Backend) -> Result<Stri
             })
         })?,
     };
+    // Shown with the impls of `Debug`, which the evaluator runs, for
+    // compiled code too.
+    let result = result.and_then(|value| match value.is_unit() {
+        true => Ok(None),
+        false => Evaluator::new(&db).show(file, &value).map(Some).map_err(|e| vec![e.kind.to_string()]),
+    });
     let mut out = printed.output();
     match result {
-        Ok(value) if !value.is_unit() => out.push_str(&format!("{}\n", value.display(&db))),
+        Ok(Some(text)) => out.push_str(&format!("{text}\n")),
         Ok(_) => {}
         Err(errors) => {
             for error in errors {

@@ -4,28 +4,8 @@ import "./option" (Some, unwrap);
 import "./vec" (Vec, last, push, extend);
 import "./ops" (PartialOrd, Eq, Ordering, eq);
 import "./semigroup" (Semigroup);
-
-/// The bytes of `ch` in UTF-8: one for ASCII, and up to four for others.
-pub fn to_utf8(ch: Char) -> mut Vec[u8] {
-  let c = ch as u32;
-  let bytes = Vec.with_capacity(4);
-  if c < 0x80 {
-    bytes.push(c as u8);
-  } else if c < 0x800 {
-    bytes.push((0xC0 | (c >> 6)) as u8);
-    bytes.push((0x80 | (c & 0x3F)) as u8);
-  } else if c < 0x10000 {
-    bytes.push((0xE0 | (c >> 12)) as u8);
-    bytes.push((0x80 | ((c >> 6) & 0x3F)) as u8);
-    bytes.push((0x80 | (c & 0x3F)) as u8);
-  } else {
-    bytes.push((0xF0 | (c >> 18)) as u8);
-    bytes.push((0x80 | ((c >> 12) & 0x3F)) as u8);
-    bytes.push((0x80 | ((c >> 6) & 0x3F)) as u8);
-    bytes.push((0x80 | (c & 0x3F)) as u8);
-  }
-  bytes
-}
+import "./char" (Char, to_utf8, push_escaped);
+import "./debug" (Debug);
 
 /// Text, as its bytes in UTF-8. It's never changed in place, so it's an
 /// `imm struct`: a `String` is always `imm`.
@@ -59,6 +39,25 @@ impl PartialOrd[String] {
   fn partial_cmp(a, b) = Some(compare(a, b));
 }
 
+/// Strings look like `"hi"`, with `\` before `"` and the escapes of
+/// characters, like `\n`.
+impl Debug[String] {
+  fn debug(s, out) {
+    out.push('"');
+    for byte in s.0 {
+      if byte == b'"' {
+        out.push_str("\\\"");
+      } else if byte < 0x80 {
+        push_escaped(out, Char(byte as u32));
+      } else {
+        // The bytes of a character that isn't ASCII, which is as it is.
+        out.bytes.push(byte);
+      }
+    }
+    out.push('"');
+  }
+}
+
 /// Joining strings, with `a <> b`.
 impl Semigroup[String] {
   fn concat(a, b) {
@@ -89,7 +88,7 @@ pub fn StringBuilder.new() -> mut StringBuilder {
 
 /// Add the character `c` at the end.
 pub fn push(b: mut StringBuilder, c: Char) {
-  b.bytes.extend(to_utf8(c));
+  b.bytes.extend(c.to_utf8());
 }
 
 /// Add the text of `s` at the end.

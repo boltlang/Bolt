@@ -24,7 +24,7 @@ use boltlang_hir_def::{
 
 use crate::{
     holds::struct_atoms_of,
-    lang::{LangClass, string_ty},
+    lang::{LangClass, char_ty, string_ty},
     lower::{
         ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, struct_mutability,
         generic_predicates, identity_args, named_mutabilities, struct_args, subst_params,
@@ -855,7 +855,13 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match lit {
             Literal::Int(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Int)),
             Literal::Float(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Float)),
-            Literal::Char(_) => Ty::Builtin(BuiltinType::Char),
+            Literal::Char(_) => {
+                let file = self.def.def(self.db).file(self.db);
+                char_ty(self.db, file).unwrap_or_else(|| {
+                    self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: "Char" });
+                    Ty::Error
+                })
+            }
             Literal::Byte(_) => Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
             Literal::String(_) | Literal::CString(_) => {
                 let file = self.def.def(self.db).file(self.db);

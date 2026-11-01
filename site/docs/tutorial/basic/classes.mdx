@@ -401,8 +401,8 @@ twice(Money { cents: 150 }).cents;
 ```
 
 The classes of arithmetic have impls for the primitive types, the numbers
-and `Bool`, for the operators each of them has; `Char` has one of `Eq`,
-and `String` those of comparisons. The operators on the primitive types are
+and `Bool`, for the operators each of them has, and `Char` and `String`,
+which the prelude defines, have impls of `Eq` and `PartialOrd`. The operators on the primitive types are
 built in, and don't go through the classes. Comparing other values, like structs, enums or a
 value of a type parameter, calls the function with the operator's name,
 like the prelude's `fn a < b = lt(a, b)`, so that it works for any type

@@ -1,8 +1,9 @@
 // A small prelude for the tests in `tests/`, which a case gets with the
 // attribute `:test-prelude`: the classes that syntax uses, `xs[i]`,
 // `xs[i] = x`, `for x in xs` and `a == b`, with their impls for arrays,
-// `String`, the type of string literals, and a few functions the compiler
-// provides. It's a copy of what `packages/std` has
+// `String` and `Char`, the types of string and character literals, `Debug`,
+// which the evaluator shows characters with, and a few functions the
+// compiler provides. It's a copy of what `packages/std` has
 // of them, so that a case that only needs these doesn't change when `std`
 // does.
 
@@ -58,6 +59,28 @@ impl Eq[String] {
     }
     True
   }
+}
+
+/// A character, like `std`'s `Char`: the type of character literals, which
+/// holds its code point.
+pub imm struct Char(u32);
+
+impl Eq[Char] {
+  fn eq(a, b) = a.0 == b.0;
+}
+
+/// How values look in code, like `std`'s `Debug`, but giving a `String`.
+/// The evaluator shows values of types with an impl with `debug_string`.
+pub class Debug[T] {
+  fn debug(x: T) -> String;
+}
+
+pub fn debug_string[T](x: T) -> String where Debug[T] = debug(x);
+
+/// Characters look like `'a'`. Only ASCII ones without escapes, which is
+/// what the tests show.
+impl Debug[Char] {
+  fn debug(c) = String(Bytes { items: [39, c.0 as u8, 39], len: 3 });
 }
 
 pub enum Option[T] {

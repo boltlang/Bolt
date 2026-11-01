@@ -6,12 +6,14 @@ pub import "./monoid" *;
 pub import "./ops" *;
 pub import "./iter" *;
 pub import "./mutability" *;
+pub import "./debug" *;
 
 // Types
 pub import "./array" *;
 pub import "./option" *;
 pub import "./vec" *;
 pub import "./string" *;
+pub import "./char" *;
 pub import "./list" *;
 
 // Interfacing with the system

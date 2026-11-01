@@ -8,7 +8,11 @@ use boltlang_hir_def::{
     ids::{EnumVariantId, FunctionId, StructId},
     item_tree::FunctionName,
 };
-use boltlang_hir_ty::{AdtId, Ty, lang::string_struct, lower::struct_field_types};
+use boltlang_hir_ty::{
+    AdtId, Ty,
+    lang::{char_struct, string_struct},
+    lower::struct_field_types,
+};
 
 /// The storage of a local variable. It's shared, so that closures see and
 /// make changes to the variables they capture. `None` until it's assigned.
@@ -87,7 +91,6 @@ pub enum Value<'db> {
     /// Any integer, whatever its type.
     Int(i128),
     Float(f64),
-    Char(char),
     /// `(a, b)`, or `()`, which is what statements evaluate to.
     Tuple(Vec<Value<'db>>),
     /// Shared: `let ys = xs` makes another name for the same array.
@@ -128,6 +131,14 @@ impl<'db> Value<'db> {
         let vec_fields = vec![(Name::new("items"), Value::array(Mutability::Imm, bytes)), (Name::new("len"), len)];
         let vec = Value::Adt { ctor: Ctor::Struct(vec), fields: Object::new(Mutability::Imm, vec_fields) };
         Some(Value::Adt { ctor: Ctor::Struct(id), fields: Object::new(Mutability::Imm, vec![(Name::new("0"), vec)]) })
+    }
+
+    /// `c` as the prelude's `Char`, as `file` sees it: a struct that holds
+    /// its code point. `None` without one.
+    pub fn char(db: &'db dyn Db, file: File, c: char) -> Option<Self> {
+        let id = char_struct(db, file)?;
+        let fields = vec![(Name::new("0"), Value::Int(c as i128))];
+        Some(Value::Adt { ctor: Ctor::Struct(id), fields: Object::new(Mutability::Imm, fields) })
     }
 
     /// The text of a `String`, if this is one: the first `len` bytes of the
@@ -201,7 +212,6 @@ impl<'db> Value<'db> {
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
-            (Value::Char(a), Value::Char(b)) => a == b,
             (Value::Tuple(a), Value::Tuple(b)) => equal_items(a, b),
             (Value::Array(a), Value::Array(b)) => equal_items(&a.borrow(), &b.borrow()),
             (Value::Adt { ctor: c1, fields: f1 }, Value::Adt { ctor: c2, fields: f2 }) => {
@@ -226,28 +236,42 @@ impl<'db> Value<'db> {
         }
     }
 
-    /// The order of numbers, characters, strings, and tuples and arrays of
-    /// them. `None` for values that can't be ordered.
+    /// The order of numbers, and of tuples, arrays and structs of them,
+    /// field by field: a `Char` is ordered by its code point, for range
+    /// patterns like `'a'..='z'`. `None` for values that can't be ordered.
     pub fn compare(&self, other: &Value<'db>) -> Option<Ordering> {
         match (self, other) {
             (Value::Bool(a), Value::Bool(b)) => Some(a.cmp(b)),
             (Value::Int(a), Value::Int(b)) => Some(a.cmp(b)),
             (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
-            (Value::Char(a), Value::Char(b)) => Some(a.cmp(b)),
             (Value::Tuple(a), Value::Tuple(b)) => compare_items(a, b),
             (Value::Array(a), Value::Array(b)) => compare_items(&a.borrow(), &b.borrow()),
+            (Value::Adt { ctor: c1 @ Ctor::Struct(_), fields: f1 }, Value::Adt { ctor: c2, fields: f2 }) if c1 == c2 => {
+                let values = |f: &Fields<'db>| f.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();
+                compare_items(&values(&f1.borrow()), &values(&f2.borrow()))
+            }
             _ => None,
         }
     }
 
     /// Show the value like Bolt code, with the names of structs and
-    /// variants from `db`.
+    /// variants from `db`. It doesn't run Bolt code, so it doesn't use the
+    /// impls of `Debug`: [`Evaluator::show`](crate::Evaluator::show) does.
     pub fn display(&self, db: &'db dyn Db) -> impl fmt::Display + '_ {
-        DisplayValue { value: self, db, outer: Rc::new(RefCell::new(Vec::new())) }
+        DisplayValue { value: self, db, outer: Rc::new(RefCell::new(Vec::new())), shown: None }
+    }
+
+    /// [`Value::display`], but showing the structs and variants in `shown`,
+    /// by the address of their fields, as the text there.
+    pub(crate) fn display_with<'a>(&'a self, db: &'db dyn Db, shown: &'a Shown) -> impl fmt::Display + 'a
+    where
+        'db: 'a,
+    {
+        DisplayValue { value: self, db, outer: Rc::new(RefCell::new(Vec::new())), shown: Some(shown) }
     }
 
     /// The address of the shared array or struct, if it's one.
-    fn shared_ptr(&self) -> Option<*const ()> {
+    pub(crate) fn shared_ptr(&self) -> Option<*const ()> {
         match self {
             Value::Array(items) => Some(Rc::as_ptr(items) as *const ()),
             Value::Adt { fields, .. } => Some(Rc::as_ptr(fields) as *const ()),
@@ -270,23 +294,34 @@ fn compare_items<'db>(a: &[Value<'db>], b: &[Value<'db>]) -> Option<Ordering> {
     Some(a.len().cmp(&b.len()))
 }
 
+/// How structs and variants are shown instead, by the address of their
+/// fields, like a `Char` as `'a'`: what the impls of `Debug` give.
+pub(crate) type Shown = HashMap<*const (), String>;
+
 struct DisplayValue<'a, 'db> {
     value: &'a Value<'db>,
     db: &'db dyn Db,
+    shown: Option<&'a Shown>,
     /// The arrays and structs being shown, outermost first. A value can
     /// contain itself, like `xs[0] = S { xs }`, and is shown as `...` there.
     outer: Rc<RefCell<Vec<*const ()>>>,
 }
 
 impl<'a, 'db> DisplayValue<'a, 'db> {
-    fn inner<'b>(&self, value: &'b Value<'db>) -> DisplayValue<'b, 'db> {
-        DisplayValue { value, db: self.db, outer: self.outer.clone() }
+    fn inner<'b>(&self, value: &'b Value<'db>) -> DisplayValue<'b, 'db>
+    where
+        'a: 'b,
+    {
+        DisplayValue { value, db: self.db, outer: self.outer.clone(), shown: self.shown }
     }
 }
 
 impl<'db> fmt::Display for DisplayValue<'_, 'db> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let ptr = self.value.shared_ptr();
+        if let Some(text) = ptr.zip(self.shown).and_then(|(ptr, shown)| shown.get(&ptr)) {
+            return f.write_str(text);
+        }
         if let Some(ptr) = ptr {
             if self.outer.borrow().contains(&ptr) {
                 return f.write_str("...");
@@ -317,7 +352,6 @@ impl<'db> DisplayValue<'_, 'db> {
             Value::Bool(b) => f.write_str(if *b { "True" } else { "False" }),
             Value::Int(n) => write!(f, "{n}"),
             Value::Float(x) => write!(f, "{x:?}"),
-            Value::Char(c) => write!(f, "{c:?}"),
             Value::Tuple(items) => {
                 f.write_str("(")?;
                 list(f, items)?;
@@ -341,7 +375,8 @@ impl<'db> DisplayValue<'_, 'db> {
                 }
                 Ok(())
             }
-            // The prelude's `String`, as its text.
+            // The prelude's `String`, as its text, for a prelude without an
+            // impl of `Debug` for it, like the small one of the tests.
             Value::Adt { ctor: Ctor::Struct(id), .. } if string_struct(db, id.file(db)) == Some(*id) => {
                 match self.value.text() {
                     Some(text) => write!(f, "{text:?}"),

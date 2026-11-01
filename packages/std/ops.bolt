@@ -27,7 +27,6 @@ pub class Eq[T] {
 }
 
 impl Eq[Bool] { fn eq(a, b) = bool_eq(a, b); fn ne(a, b) = bool_ne(a, b); }
-impl Eq[Char] { fn eq(a, b) = char_eq(a, b); fn ne(a, b) = char_ne(a, b); }
 impl Eq[i8] { fn eq(a, b) = i8_eq(a, b); fn ne(a, b) = i8_ne(a, b); }
 impl Eq[i16] { fn eq(a, b) = i16_eq(a, b); fn ne(a, b) = i16_ne(a, b); }
 impl Eq[i32] { fn eq(a, b) = i32_eq(a, b); fn ne(a, b) = i32_ne(a, b); }
@@ -80,7 +79,6 @@ fn ordering(lt: Bool, gt: Bool) -> Ordering =
 // `Some` of their `cmp`, as in Rust.
 
 impl Ord[Bool] { fn cmp(a, b) = ordering(bool_lt(a, b), bool_gt(a, b)); }
-impl Ord[Char] { fn cmp(a, b) = ordering(char_lt(a, b), char_gt(a, b)); }
 impl Ord[i8] { fn cmp(a, b) = ordering(i8_lt(a, b), i8_gt(a, b)); }
 impl Ord[i16] { fn cmp(a, b) = ordering(i16_lt(a, b), i16_gt(a, b)); }
 impl Ord[i32] { fn cmp(a, b) = ordering(i32_lt(a, b), i32_gt(a, b)); }
@@ -95,7 +93,6 @@ impl Ord[u128] { fn cmp(a, b) = ordering(u128_lt(a, b), u128_gt(a, b)); }
 impl Ord[usize] { fn cmp(a, b) = ordering(usize_lt(a, b), usize_gt(a, b)); }
 
 impl PartialOrd[Bool] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
-impl PartialOrd[Char] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
 impl PartialOrd[i8] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
 impl PartialOrd[i16] { fn partial_cmp(a, b) = Some(cmp(a, b)); }
 impl PartialOrd[i32] { fn partial_cmp(a, b) = Some(cmp(a, b)); }

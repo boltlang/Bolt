@@ -127,7 +127,6 @@ fn fits<'db>(value: &Value<'db>, ty: &Ty<'db>) -> bool {
         (Ty::Builtin(ty), value) => matches!(
             (ty, value),
             (BuiltinType::Bool, Value::Bool(_))
-                | (BuiltinType::Char, Value::Char(_))
                 | (BuiltinType::Int(_) | BuiltinType::Uint(_), Value::Int(_))
                 | (BuiltinType::Float(_), Value::Float(_))
         ),

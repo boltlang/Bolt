@@ -34,7 +34,6 @@ pub enum BuiltinFloat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, salsa::SalsaValue)]
 pub enum BuiltinType {
     Bool,
-    Char,
     Int(BuiltinInt),
     Uint(BuiltinUint),
     Float(BuiltinFloat),
@@ -43,7 +42,6 @@ pub enum BuiltinType {
 impl BuiltinType {
     pub const ALL: &[(&str, BuiltinType)] = &[
         ("Bool", BuiltinType::Bool),
-        ("Char", BuiltinType::Char),
         ("i8", BuiltinType::Int(BuiltinInt::I8)),
         ("i16", BuiltinType::Int(BuiltinInt::I16)),
         ("i32", BuiltinType::Int(BuiltinInt::I32)),

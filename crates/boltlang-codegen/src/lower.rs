@@ -40,7 +40,6 @@ pub(crate) enum Scalar {
     F32,
     F64,
     Bool,
-    Char,
     /// A pointer to a string in linear memory.
     Str,
     /// An enum whose variants have no fields, like `enum Color { Red, Green }`:
@@ -57,7 +56,6 @@ impl Scalar {
         };
         Some(match ty {
             BuiltinType::Bool => Scalar::Bool,
-            BuiltinType::Char => Scalar::Char,
             BuiltinType::Int(int) => match int {
                 BuiltinInt::I8 => Scalar::Int { bits: 8, signed: true },
                 BuiltinInt::I16 => Scalar::Int { bits: 16, signed: true },
@@ -80,7 +78,7 @@ impl Scalar {
     pub(crate) fn val_ty(self) -> ValTy {
         match self {
             Scalar::Int { bits: 64, .. } => ValTy::I64,
-            Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str | Scalar::Enum => ValTy::I32,
+            Scalar::Int { .. } | Scalar::Bool | Scalar::Str | Scalar::Enum => ValTy::I32,
             Scalar::F32 => ValTy::F32,
             Scalar::F64 => ValTy::F64,
         }
@@ -89,6 +87,35 @@ impl Scalar {
     /// Whether comparisons and conversions treat it as signed.
     fn signed(self) -> bool {
         matches!(self, Scalar::Int { signed: true, .. })
+    }
+
+    /// [`Scalar::of`], or that of the field of an `imm struct` with one
+    /// field, like `Char`, which is the value of its field: the `u32` of a
+    /// `Char`.
+    pub(crate) fn through(db: &dyn Db, ty: &Ty<'_>) -> Option<Scalar> {
+        let mut ty = ty.clone();
+        // An `imm struct A(A)` has no values, but mustn't hang.
+        for _ in 0..64 {
+            match layout::repr(db, &ty)? {
+                Repr::Scalar(scalar) => return Some(scalar),
+                Repr::Newtype(field) => ty = field,
+                Repr::Unit | Repr::Boxed => return None,
+            }
+        }
+        None
+    }
+}
+
+/// The value of the field of an `imm struct` with one field, as compiled
+/// code has it, like the code point of a `Char`, and other values as they
+/// are.
+fn through_newtypes(mut value: Value<'_>) -> Value<'_> {
+    loop {
+        let inner = match &value {
+            Value::Adt { ctor: Ctor::Struct(_), fields } if fields.borrow().len() == 1 => fields.borrow()[0].1.clone(),
+            _ => return value,
+        };
+        value = inner;
     }
 }
 
@@ -751,16 +778,15 @@ impl<'db> Compiler<'db> {
         let value = Evaluator::new(self.db)
             .eval_const(id)
             .map_err(|e| self.unsupported(expr, format!("a const whose value can't be computed ({e})")))?;
-        let Some(scalar) = Scalar::of(self.db, &self.ty(expr)) else {
+        let Some(scalar) = Scalar::through(self.db, &self.ty(expr)) else {
             return match value {
                 Value::Tuple(items) if items.is_empty() => Ok(()),
                 _ => Err(self.unsupported(expr, "a const of this type")),
             };
         };
-        match value {
+        match through_newtypes(value) {
             Value::Int(n) => self.int_const(scalar, n),
             Value::Bool(b) => self.int_const(scalar, b as i128),
-            Value::Char(c) => self.int_const(scalar, c as i128),
             Value::Float(x) => self.float_const(scalar, x),
             Value::Adt { ctor: Ctor::Variant(v), .. } if scalar == Scalar::Enum => {
                 self.push(Inst::I32Const(v.index as i32))
@@ -1262,7 +1288,7 @@ impl<'db> Compiler<'db> {
     }
 
     fn pattern_operand(&self, ty: &Ty<'db>, local: Option<u32>, at: ExprId) -> Result<'db, (Scalar, u32)> {
-        match (Scalar::of(self.db, ty), local) {
+        match (Scalar::through(self.db, ty), local) {
             (Some(scalar), Some(local)) if scalar != Scalar::Str => Ok((scalar, local)),
             _ => Err(self.unsupported(at, format!("matching a value of type `{}`", ty.display(self.db)))),
         }
@@ -1303,11 +1329,10 @@ impl<'db> Compiler<'db> {
                 let value = Evaluator::new(self.db)
                     .eval_const(id)
                     .map_err(|e| self.unsupported(at, format!("a const whose value can't be computed ({e})")))?;
-                match value {
+                match through_newtypes(value) {
                     Value::Int(n) => self.int_const(scalar, n),
                     Value::Bool(b) => self.int_const(scalar, b as i128),
-                    Value::Char(c) => self.int_const(scalar, c as i128),
-                    Value::Float(x) => self.float_const(scalar, x),
+                            Value::Float(x) => self.float_const(scalar, x),
                     Value::Adt { ctor: Ctor::Variant(v), .. } if scalar == Scalar::Enum => {
                         self.push(Inst::I32Const(v.index as i32))
                     }
@@ -1482,7 +1507,7 @@ fn arith_op(op: ArithOp, scalar: Scalar) -> Option<Op> {
             Div => Op::F64Div,
             _ => return None,
         },
-        Scalar::Char | Scalar::Str | Scalar::Enum => return None,
+        Scalar::Str | Scalar::Enum => return None,
     })
 }
 
@@ -1501,7 +1526,7 @@ fn cmp_op(op: CmpOp, scalar: Scalar) -> Op {
             (GtEq, true) => Op::I64GeS,
             (GtEq, false) => Op::I64GeU,
         },
-        Scalar::Int { .. } | Scalar::Bool | Scalar::Char | Scalar::Str | Scalar::Enum => match (op, scalar.signed()) {
+        Scalar::Int { .. } | Scalar::Bool | Scalar::Str | Scalar::Enum => match (op, scalar.signed()) {
             (Eq, _) => Op::I32Eq,
             (NotEq, _) => Op::I32Ne,
             (Lt, true) => Op::I32LtS,
