@@ -186,6 +186,8 @@ pub enum DiagnosticKind<'db> {
     /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
     /// without a prelude that defines it.
     NoLangType { ty: &'static str },
+    /// `x as T` for a struct or an enum, which `as` doesn't convert.
+    InvalidCast { from: Ty<'db>, to: Ty<'db> },
     /// The type an impl gives an associated type doesn't meet a bound the
     /// class puts on it, like `type Iter: Iterator;`.
     UnmetAssocBound { name: Name, class: ClassId<'db>, constraint: ClassConstraint<'db> },
@@ -978,6 +980,12 @@ impl<'db> Collector<'db> {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoLangClass { class })
                 }
                 InferenceDiagnostic::NoLangType { at: node, ty } => (at(node), DiagnosticKind::NoLangType { ty }),
+                InferenceDiagnostic::InvalidCast { expr, from, to } => {
+                    if has_error(&from) || has_error(&to) {
+                        continue;
+                    }
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::InvalidCast { from, to })
+                }
                 // Reported at the function, which is the fallback.
                 InferenceDiagnostic::CyclicInference => (None, DiagnosticKind::CyclicInference),
             };

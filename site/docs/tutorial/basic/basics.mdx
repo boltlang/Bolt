@@ -144,7 +144,9 @@ let s = "Bolt\tlang";
 ('B', "Bolt\tlang", "concat")
 ```
 
-`<>` joins two strings.
+`<>` joins two strings. A `Char` isn't a number, so `as` doesn't convert it:
+`c.to_u32()` gives its code point, and `Char.from_u32(n)` the character with
+code point `n`, if there's one.
 
 ## Tuples
 

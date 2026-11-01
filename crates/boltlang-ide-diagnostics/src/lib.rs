@@ -112,6 +112,7 @@ impl DiagnosticCode {
     pub const UNMET_ASSOC_EQUALITY: Self = Self("E0241");
     pub const BAD_TEST: Self = Self("E0242");
     pub const NO_LANG_TYPE: Self = Self("E0243");
+    pub const INVALID_CAST: Self = Self("E0244");
 
     /// An error while running a program, like a division by zero.
     pub const RUNTIME_ERROR: Self = Self("E0301");
@@ -396,6 +397,7 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         | DiagnosticKind::NoValues { field_ty: ty, .. }
         | DiagnosticKind::BuiltinSignature { expected: ty, .. } => vec![ty],
         DiagnosticKind::MutInsideImm { ty, inner } => vec![ty, inner],
+        DiagnosticKind::InvalidCast { from, to } => vec![from, to],
         DiagnosticKind::NotAtMost { held, .. } => vec![held],
         DiagnosticKind::NoInstance { constraint, .. }
         | DiagnosticKind::AmbiguousConstraint { constraint, .. }
@@ -696,6 +698,14 @@ fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>
         K::NoLangClass { class } => (
             C::NO_LANG_CLASS,
             format!("this needs the class `{class}`, but there's no prelude that defines it"),
+        ),
+        K::InvalidCast { from, to } => (
+            C::INVALID_CAST,
+            format!(
+                "cannot convert `{}` to `{}` with `as`, which only converts between the primitive types, like numbers",
+                from.display_with(db, names),
+                to.display_with(db, names)
+            ),
         ),
         K::NoLangType { ty } => (
             C::NO_LANG_TYPE,

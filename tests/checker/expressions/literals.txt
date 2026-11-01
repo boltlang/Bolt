@@ -180,3 +180,23 @@ b'a' + 1: u8
 b'a' + 1i32: u8
 --------------------------------------------------------------------------------
 error at `1i32`: expected u8, found i32
+
+================================================================================
+Casts only convert between the primitive types
+:error
+:test-prelude
+================================================================================
+enum Color { Red }
+let a = 'a' as u32;
+let b = 97u32 as Char;
+let c = Color.Red as i32;
+let d = 1.5 as u8;
+--------------------------------------------------------------------------------
+let a: u32
+let b: Char
+let c: i32
+let d: u8
+--------------------------------------------------------------------------------
+error at `'a' as u32`: can't cast Char to u32
+error at `97u32 as Char`: can't cast u32 to Char
+error at `Color.Red as i32`: can't cast Color to i32

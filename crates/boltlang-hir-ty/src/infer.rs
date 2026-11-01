@@ -174,6 +174,9 @@ pub enum InferenceDiagnostic<'db> {
     /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
     /// without a prelude that defines it.
     NoLangType { at: ExprOrPat, ty: &'static str },
+    /// `x as T` where `x` or `T` is a struct or an enum, like a `Char`:
+    /// `as` only converts between the primitive types.
+    InvalidCast { expr: ExprId, from: Ty<'db>, to: Ty<'db> },
     /// Functions without complete signatures in files that import each
     /// other call each other; one of them needs a signature.
     CyclicInference,
@@ -184,6 +187,10 @@ impl<'db> InferenceDiagnostic<'db> {
         match self {
             InferenceDiagnostic::Type(error) => error.map_types(f),
             InferenceDiagnostic::NotAFunction { ty, .. } => *ty = f(ty),
+            InferenceDiagnostic::InvalidCast { from, to, .. } => {
+                *from = f(from);
+                *to = f(to);
+            }
             InferenceDiagnostic::MutInsideImm { ty, inner, .. } => {
                 *ty = f(ty);
                 *inner = f(inner);
@@ -588,8 +595,21 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Error
             }
             Expr::Cast { expr: inner, type_ref } => {
-                self.infer_expr(*inner);
-                self.lower_ty(expr, *type_ref)
+                let from = self.infer_expr(*inner);
+                let to = self.lower_ty(expr, *type_ref);
+                // A struct or enum isn't a number, even an `imm struct`
+                // that holds one, like `Char`: it has functions for that,
+                // like `to_u32`.
+                let from = self.solver.unifier.shallow_resolve(&from);
+                let adt = |ty: &Ty<'db>| match ty {
+                    Ty::Adt(id, ..) => Some(*id),
+                    _ => None,
+                };
+                let known = |ty: &Ty<'db>| !matches!(ty, Ty::Var(_) | Ty::Error | Ty::Never);
+                if known(&from) && known(&to) && (adt(&from).is_some() || adt(&to).is_some()) && adt(&from) != adt(&to) {
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidCast { expr, from, to: to.clone() });
+                }
+                to
             }
             Expr::Index { base, index } => {
                 // Through the impl of `Index` for the type, arrays too.

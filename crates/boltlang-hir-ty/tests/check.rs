@@ -427,6 +427,10 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     InferenceDiagnostic::NoLangType { at: node, ty } => {
                         format!("error at `{}`: needs {ty} from the prelude", at(*node))
                     }
+                    InferenceDiagnostic::InvalidCast { expr, from, to } => {
+                        let tys = show(&[from, to]);
+                        format!("error at `{}`: can't cast {} to {}", at(ExprOrPat::Expr(*expr)), tys[0], tys[1])
+                    }
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }
