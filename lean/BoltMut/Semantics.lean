@@ -90,14 +90,14 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
   /-- In place, it makes the same copy, but goes on with the value. -/
   | freezeKeep {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
       v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze true r t v) h' v
-  | frzCong {h h' : Heap} {b : Bool} {e e' : Expr} :
-      Step fns h e h' e' → Step fns h (.frz b e) h' (.frz b e')
+  | toImmCong {h h' : Heap} {b : Bool} {e e' : Expr} :
+      Step fns h e h' e' → Step fns h (.toImm b e) h' (.toImm b e')
   /-- A freeze copies the object to the end of the heap. -/
-  | frzVal {h : Heap} {l : Nat} {w : Expr} :
-      h[l]? = some w → Step fns h (.frz false (.loc l)) (h ++ [w]) (.loc h.length)
+  | toImmVal {h : Heap} {l : Nat} {w : Expr} :
+      h[l]? = some w → Step fns h (.toImm false (.loc l)) (h ++ [w]) (.loc h.length)
   /-- In place, it makes the same copy, but goes on with the object. -/
-  | frzKeep {h : Heap} {l : Nat} {w : Expr} :
-      h[l]? = some w → Step fns h (.frz true (.loc l)) (h ++ [w]) (.loc l)
+  | toImmKeep {h : Heap} {l : Nat} {w : Expr} :
+      h[l]? = some w → Step fns h (.toImm true (.loc l)) (h ++ [w]) (.loc l)
 
 /-- Any number of steps. -/
 inductive Steps (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where

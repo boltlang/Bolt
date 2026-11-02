@@ -1,7 +1,7 @@
 import BoltMut.ElideAll
 
 /-!
-# Freezing a unique value in place (#284)
+# `toImm` in place for a unique value (#284)
 
 Making an `imm` value from a `mut` one copies it, as `array_freeze` does in
 Bolt: `new false (get xs)` is an `imm` object holding what `xs` holds,
@@ -13,7 +13,7 @@ copy were left out. Uniqueness is tracked separately from typing: the
 program that copies is the one that's typed, and the one that uses `xs`
 itself is shown to compute the same, as for regions (`Elision.lean`).
 
-`unique_freeze_changes_nothing`: once the copy is made, a program that uses
+`unique_toImm_changes_nothing`: once the copy is made, a program that uses
 `xs` in place of the copy, and doesn't use `xs` otherwise, computes what the
 one with the copy does, if no object holds `xs`.
 -/
@@ -23,7 +23,7 @@ namespace BoltMut
 /-- The correspondence of using `l` for its copy, at the end of a heap of
 `n` locations: each other location to itself, and the copy to `l`. `l`
 itself corresponds to nothing, since only the copy is used. -/
-def freezeCorr (n l : Nat) : Nat → Nat → Prop := fun a c => (a = c ∧ a < n ∧ a ≠ l) ∨ (a = n ∧ c = l)
+def toImmCorr (n l : Nat) : Nat → Nat → Prop := fun a c => (a = c ∧ a < n ∧ a ≠ l) ∨ (a = n ∧ c = l)
 
 /-- **A unique `mut` object can be frozen in place.** With `l` a `mut`
 location of `h` that holds `w`, which is `imm` all the way down, and that
@@ -32,11 +32,11 @@ no object holds: put the copy, `w`, at the end of the heap, as
 `l` computes what `e₂` does, which is `e₁` with `l` in place of the copy:
 with a result that corresponds, and the same integer. Both run with the
 copy in the heap; `e₂` just doesn't use it. -/
-theorem unique_freeze_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {l : Nat}
+theorem unique_toImm_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {l : Nat}
     {t t₀ : Ty} {w e₁ e₂ v₁ : Expr} (hh : HeapOk fns σ h) (hl : σ[l]? = some (.mutable, t))
     (hd : AtMost .none .immutable t) (hw : h[l]? = some w) (hno : ∀ (a : Nat) (v : Expr), h[a]? = some v → ¬ v.HasLoc l)
     (ht : HasType fns (σ ++ [(.immutable, t)]) .none false Ctx.empty e₁ t₀)
-    (hr : Rel (freezeCorr h.length l) e₁ e₂) (hcl : HeapClosed h) (hc₁ : e₁.Closed)
+    (hr : Rel (toImmCorr h.length l) e₁ e₂) (hcl : HeapClosed h) (hc₁ : e₁.Closed)
     (hs : Steps fns (h ++ [w]) e₁ h' v₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (v₂ : Expr),
       Steps fns (h ++ [w]) e₂ h₂ v₂ ∧ Rel ρ v₁ v₂ ∧ ∀ n, v₁ = .int n → v₂ = .int n := by
@@ -53,7 +53,7 @@ theorem unique_freeze_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : Hea
     cases h'
     exact hm rfl
   -- What an old object holds corresponds to itself: it doesn't hold `l`.
-  have self : ∀ {a : Nat} {v : Expr}, h[a]? = some v → Rel (freezeCorr h.length l) v v := by
+  have self : ∀ {a : Nat} {v : Expr}, h[a]? = some v → Rel (toImmCorr h.length l) v v := by
     intro a v hv
     have ha : a < σ.length := hh.1 ▸ (List.getElem?_eq_some_iff.mp hv).1
     obtain ⟨⟨m, s⟩, hp⟩ : ∃ p, σ[a]? = some p := ⟨_, List.getElem?_eq_getElem ha⟩
@@ -63,7 +63,7 @@ theorem unique_freeze_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : Hea
     refine Rel.refl fun l' hl' => .inl ⟨rfl, by rw [hh.1]; exact hvt.hasLoc_lt hl', ?_⟩
     rintro rfl
     exact hno a v hv hl'
-  have hc : Corr M (freezeCorr h.length l) (h ++ [w]) (h ++ [w]) := by
+  have hc : Corr M (toImmCorr h.length l) (h ++ [w]) (h ++ [w]) := by
     refine ⟨?_, ?_, ?_⟩
     · intro a c hac
       rcases hac with ⟨rfl, ha, _⟩ | ⟨rfl, rfl⟩
@@ -87,16 +87,16 @@ theorem unique_freeze_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : Hea
     (fun _ m t' h hm => ⟨m, t', h, hm⟩) hc hr (hcl.append (hcl _ _ hw)) hc₁ rfl
   exact ⟨ρ, h₂, v₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
 
-/-! ## Every freeze in place
+/-! ## Every `toImm` in place
 
-The program that freezes in place is the same program with every `frz` in
+The program that leaves copies out is the same program with every `toImm` in
 place (`Expr.inPlace`, `Fn.inPlace`). The premise is that whenever the
-program that copies reaches a freeze of `l`, `l` is unique: it's in the
-program once, there, and no object holds it (`Expr.UniqFrz`). A closure
-has no `frz` (`Expr.LamNoFrz`), so values, and the heap, have none: a
-closure that freezes copies with `new false (get xs)` instead. -/
+program that copies reaches a `toImm` of `l`, `l` is unique: it's in the
+program once, there, and no object holds it (`Expr.UniqToImm`). A closure
+has no `toImm` (`Expr.LamNoToImm`), so values, and the heap, have none: a
+closure that makes an `imm` copy uses `new false (get xs)` instead. -/
 
-/-- `e` with every freeze in place. -/
+/-- `e` with every `toImm` in place. -/
 def Expr.inPlace : Expr → Expr
   | .var x => .var x
   | .unit => .unit
@@ -114,72 +114,72 @@ def Expr.inPlace : Expr → Expr
   | .snd e => .snd e.inPlace
   | .freeze c r t e => .freeze c r t e.inPlace
   | .block c k t e => .block c k t e.inPlace
-  | .frz _ e => .frz true e.inPlace
+  | .toImm _ e => .toImm true e.inPlace
 
-/-- A function whose freezes are in place. -/
+/-- A function whose `toImm`s are in place. -/
 def Fn.inPlace (fn : Fn) : Fn := { fn with body := fn.body.inPlace }
 
-/-- `e` has no `frz`. -/
-def Expr.NoFrz : Expr → Prop
+/-- `e` has no `toImm`. -/
+def Expr.NoToImm : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => True
   | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ _ e
-    | .block _ _ _ e => e.NoFrz
-  | .set a b | .letE _ a b | .app a b | .pair a b => a.NoFrz ∧ b.NoFrz
-  | .frz _ _ => False
+    | .block _ _ _ e => e.NoToImm
+  | .set a b | .letE _ a b | .app a b | .pair a b => a.NoToImm ∧ b.NoToImm
+  | .toImm _ _ => False
 
-/-- No closure in `e` has a `frz`. -/
-def Expr.LamNoFrz : Expr → Prop
+/-- No closure in `e` has a `toImm`. -/
+def Expr.LamNoToImm : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => True
-  | .lam _ _ e => e.NoFrz
+  | .lam _ _ e => e.NoToImm
   | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e
-    | .block _ _ _ e | .frz _ e => e.LamNoFrz
-  | .set a b | .letE _ a b | .app a b | .pair a b => a.LamNoFrz ∧ b.LamNoFrz
+    | .block _ _ _ e | .toImm _ e => e.LamNoToImm
+  | .set a b | .letE _ a b | .app a b | .pair a b => a.LamNoToImm ∧ b.LamNoToImm
 
 /-- How many times `l` is in `e`. -/
 def Expr.count (l : Nat) : Expr → Nat
   | .var _ | .unit | .int _ => 0
   | .loc l' => if l' = l then 1 else 0
   | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ _ e
-    | .block _ _ _ e | .frz _ e => e.count l
+    | .block _ _ _ e | .toImm _ e => e.count l
   | .set a b | .letE _ a b | .app a b | .pair a b => a.count l + b.count l
 
-/-- `e` is about to freeze `l`: `frz _ (loc l)` is where `e` runs next, or
+/-- `e` is about to make `l` `imm`: `toImm _ (loc l)` is where `e` runs next, or
 on the way there, past what's run already. -/
-def Expr.FrzOf (l : Nat) : Expr → Prop
+def Expr.ToImmOf (l : Nat) : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ | .lam _ _ _ | .block _ _ _ _ => False
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e => e.FrzOf l
-  | .letE _ a _ => a.FrzOf l
-  | .set a b | .app a b | .pair a b => a.FrzOf l ∨ a.IsValue ∧ b.FrzOf l
-  | .frz _ e => e = .loc l ∨ e.FrzOf l
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e => e.ToImmOf l
+  | .letE _ a _ => a.ToImmOf l
+  | .set a b | .app a b | .pair a b => a.ToImmOf l ∨ a.IsValue ∧ b.ToImmOf l
+  | .toImm _ e => e = .loc l ∨ e.ToImmOf l
 
-/-- **What a program freezes is unique** when it gets there: it's in the
+/-- **What a program makes `imm` is unique** when it gets there: it's in the
 program once, and no object holds it. -/
-def Expr.UniqFrz (h : Heap) (e : Expr) : Prop :=
-  ∀ l, e.FrzOf l → e.count l = 1 ∧ ∀ (a : Nat) (v : Expr), h[a]? = some v → ¬ v.HasLoc l
+def Expr.UniqToImm (h : Heap) (e : Expr) : Prop :=
+  ∀ l, e.ToImmOf l → e.count l = 1 ∧ ∀ (a : Nat) (v : Expr), h[a]? = some v → ¬ v.HasLoc l
 
-/-- Every value in the heap has no `frz`. -/
-def HeapNoFrz (h : Heap) : Prop := ∀ (l : Nat) (v : Expr), h[l]? = some v → v.NoFrz
+/-- Every value in the heap has no `toImm`. -/
+def HeapNoToImm (h : Heap) : Prop := ∀ (l : Nat) (v : Expr), h[l]? = some v → v.NoToImm
 
-theorem Expr.NoFrz.inPlace {e : Expr} (h : e.NoFrz) : e.inPlace = e := by
+theorem Expr.NoToImm.inPlace {e : Expr} (h : e.NoToImm) : e.inPlace = e := by
   induction e with
   | var | unit | int | loc => rfl
   | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih => simp only [Expr.inPlace, ih h]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inPlace, ih₁ h.1, ih₂ h.2]
-  | frz => exact h.elim
+  | toImm => exact h.elim
 
-theorem Expr.NoFrz.lamNoFrz {e : Expr} (h : e.NoFrz) : e.LamNoFrz := by
+theorem Expr.NoToImm.lamNoToImm {e : Expr} (h : e.NoToImm) : e.LamNoToImm := by
   induction e with
   | var | unit | int | loc => trivial
   | lam => exact h
   | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
-  | frz => exact h.elim
+  | toImm => exact h.elim
 
-/-- A value with no `frz` in its closures has none. -/
-theorem Expr.IsValue.noFrz {v : Expr} (hv : v.IsValue) (h : v.LamNoFrz) : v.NoFrz := by
+/-- A value with no `toImm` in its closures has none. -/
+theorem Expr.IsValue.noToImm {v : Expr} (hv : v.IsValue) (h : v.LamNoToImm) : v.NoToImm := by
   induction hv with
   | unit | int | loc => trivial
   | lam => exact h
@@ -199,7 +199,7 @@ theorem Expr.inPlace_subst (e : Expr) (x : Nat) (v : Expr) :
   | var y => simp only [Expr.subst, Expr.inPlace]; split <;> simp [Expr.inPlace]
   | unit | int | loc => rfl
   | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.subst, Expr.inPlace, ih]
+    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.subst, Expr.inPlace, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.inPlace, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
     simp only [Expr.subst, Expr.inPlace, ih₁]
@@ -213,7 +213,7 @@ theorem Expr.inPlace_inst (e : Expr) (ms : List Mu) (τs : List Ty) :
   induction e with
   | var | unit | int | loc => rfl
   | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inst, Expr.inPlace, ih]
+    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.inst, Expr.inPlace, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.inPlace, ih₁, ih₂]
 
@@ -221,7 +221,7 @@ theorem Expr.inPlace_ren (e : Expr) (a b : Nat) : (e.ren a b).inPlace = e.inPlac
   induction e with
   | var | unit | int | loc => rfl
   | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
-    | frz _ _ ih => simp only [Expr.ren, Expr.inPlace, ih]
+    | toImm _ _ ih => simp only [Expr.ren, Expr.inPlace, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.ren, Expr.inPlace, ih₁, ih₂]
   | block _ k _ _ ih =>
@@ -232,7 +232,7 @@ theorem Expr.hasLoc_inPlace (e : Expr) (l : Nat) : e.inPlace.HasLoc l ↔ e.HasL
   induction e with
   | var | unit | int | loc => simp [Expr.inPlace, Expr.HasLoc]
   | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inPlace, Expr.HasLoc, ih]
+    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.inPlace, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inPlace, Expr.HasLoc, ih₁, ih₂]
 
@@ -241,7 +241,7 @@ theorem Expr.NoLocs.inPlace {e : Expr} (h : e.NoLocs) : e.inPlace.NoLocs := by
   | var | unit | int => trivial
   | loc => exact h.elim
   | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => exact ih h
+    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
 /-- A location in `e` is counted. -/
@@ -250,32 +250,32 @@ theorem Expr.count_pos {e : Expr} {l : Nat} (h : e.HasLoc l) : 0 < e.count l := 
   | var | unit | int => exact h.elim
   | loc l' => simp only [Expr.HasLoc] at h; simp [Expr.count, h]
   | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => exact ih h
+    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.count]
     rcases h with h | h
     · have := ih₁ h; omega
     · have := ih₂ h; omega
 
-/-- What `e` freezes is in it. -/
-theorem Expr.FrzOf.hasLoc {e : Expr} {l : Nat} (h : e.FrzOf l) : e.HasLoc l := by
+/-- What `e` makes `imm` is in it. -/
+theorem Expr.ToImmOf.hasLoc {e : Expr} {l : Nat} (h : e.ToImmOf l) : e.HasLoc l := by
   induction e with
   | var | unit | int | loc | lam | block => exact h.elim
   | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     => exact ih h
   | letE _ _ _ ih₁ _ => exact .inl (ih₁ h)
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ fun h => ih₂ h.2
-  | frz _ e ih =>
+  | toImm _ e ih =>
     rcases h with rfl | h
     · rfl
     · exact ih h
 
-/-- A part of a program that freezes uniquely does too, and what it
-freezes isn't in the rest. -/
-theorem Expr.UniqFrz.part {h : Heap} {e a b : Expr} (hu : e.UniqFrz h)
-    (hc : ∀ l, e.count l = a.count l + b.count l) (hf : ∀ l, a.FrzOf l → e.FrzOf l) :
-    a.UniqFrz h ∧ ∀ l, a.FrzOf l → ¬ b.HasLoc l := by
-  have key : ∀ l, a.FrzOf l → a.count l = 1 ∧ b.count l = 0 := by
+/-- A part of a program whose `toImm`s are unique has unique ones too, and
+what it makes `imm` isn't in the rest. -/
+theorem Expr.UniqToImm.part {h : Heap} {e a b : Expr} (hu : e.UniqToImm h)
+    (hc : ∀ l, e.count l = a.count l + b.count l) (hf : ∀ l, a.ToImmOf l → e.ToImmOf l) :
+    a.UniqToImm h ∧ ∀ l, a.ToImmOf l → ¬ b.HasLoc l := by
+  have key : ∀ l, a.ToImmOf l → a.count l = 1 ∧ b.count l = 0 := by
     intro l hl
     have h₁ := (hu l (hf l hl)).1
     have h₂ := Expr.count_pos hl.hasLoc
@@ -286,7 +286,7 @@ theorem Expr.UniqFrz.part {h : Heap} {e a b : Expr} (hu : e.UniqFrz h)
   have := (key l hl).2
   omega
 
-theorem Expr.NoFrz.subst {e v : Expr} (h : e.NoFrz) (hv : v.NoFrz) (x : Nat) : (e.subst x v).NoFrz := by
+theorem Expr.NoToImm.subst {e v : Expr} (h : e.NoToImm) (hv : v.NoToImm) (x : Nat) : (e.subst x v).NoToImm := by
   induction e with
   | var y => simp only [Expr.subst]; split; exact hv; trivial
   | unit | int | loc => trivial
@@ -300,15 +300,15 @@ theorem Expr.NoFrz.subst {e v : Expr} (h : e.NoFrz) (hv : v.NoFrz) (x : Nat) : (
   | lam _ y _ ih =>
     simp only [Expr.subst]
     split; exact h; exact ih h
-  | frz => exact h.elim
+  | toImm => exact h.elim
 
-theorem Expr.LamNoFrz.subst {e v : Expr} (h : e.LamNoFrz) (hv : v.NoFrz) (x : Nat) :
-    (e.subst x v).LamNoFrz := by
+theorem Expr.LamNoToImm.subst {e v : Expr} (h : e.LamNoToImm) (hv : v.NoToImm) (x : Nat) :
+    (e.subst x v).LamNoToImm := by
   induction e with
-  | var y => simp only [Expr.subst]; split; exact hv.lamNoFrz; trivial
+  | var y => simp only [Expr.subst]; split; exact hv.lamNoToImm; trivial
   | unit | int | loc => trivial
   | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => exact ih h
+    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
     simp only [Expr.subst]
@@ -316,44 +316,44 @@ theorem Expr.LamNoFrz.subst {e v : Expr} (h : e.LamNoFrz) (hv : v.NoFrz) (x : Na
     split; exact h.2; exact ih₂ h.2
   | lam _ y _ _ =>
     simp only [Expr.subst]
-    split; exact h; exact Expr.NoFrz.subst h hv x
+    split; exact h; exact Expr.NoToImm.subst h hv x
 
-theorem Expr.NoFrz.inst {e : Expr} (h : e.NoFrz) (ms : List Mu) (τs : List Ty) : (e.inst ms τs).NoFrz := by
+theorem Expr.NoToImm.inst {e : Expr} (h : e.NoToImm) (ms : List Mu) (τs : List Ty) : (e.inst ms τs).NoToImm := by
   induction e with
   | var | unit | int | loc => trivial
   | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
-  | frz => exact h.elim
+  | toImm => exact h.elim
 
-theorem Expr.LamNoFrz.inst {e : Expr} (h : e.LamNoFrz) (ms : List Mu) (τs : List Ty) :
-    (e.inst ms τs).LamNoFrz := by
+theorem Expr.LamNoToImm.inst {e : Expr} (h : e.LamNoToImm) (ms : List Mu) (τs : List Ty) :
+    (e.inst ms τs).LamNoToImm := by
   induction e with
   | var | unit | int | loc => trivial
-  | lam => exact Expr.NoFrz.inst h ms τs
+  | lam => exact Expr.NoToImm.inst h ms τs
   | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | frz _ _ ih => exact ih h
+    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
-theorem Expr.NoFrz.ren {e : Expr} (h : e.NoFrz) (a b : Nat) : (e.ren a b).NoFrz := by
+theorem Expr.NoToImm.ren {e : Expr} (h : e.NoToImm) (a b : Nat) : (e.ren a b).NoToImm := by
   induction e with
   | var | unit | int | loc => trivial
   | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
     => exact ih h
   | block _ _ _ _ ih => simp only [Expr.ren]; split; exact h; exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
-  | frz => exact h.elim
+  | toImm => exact h.elim
 
-theorem Expr.LamNoFrz.ren {e : Expr} (h : e.LamNoFrz) (a b : Nat) : (e.ren a b).LamNoFrz := by
+theorem Expr.LamNoToImm.ren {e : Expr} (h : e.LamNoToImm) (a b : Nat) : (e.ren a b).LamNoToImm := by
   induction e with
   | var | unit | int | loc => trivial
-  | lam => exact Expr.NoFrz.ren h a b
+  | lam => exact Expr.NoToImm.ren h a b
   | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
-    | frz _ _ ih => exact ih h
+    | toImm _ _ ih => exact ih h
   | block _ _ _ _ ih => simp only [Expr.ren]; split; exact h; exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
-theorem HeapNoFrz.append {h : Heap} (hh : HeapNoFrz h) {v : Expr} (hv : v.NoFrz) : HeapNoFrz (h ++ [v]) := by
+theorem HeapNoToImm.append {h : Heap} (hh : HeapNoToImm h) {v : Expr} (hv : v.NoToImm) : HeapNoToImm (h ++ [v]) := by
   intro l w hl
   by_cases hlt : l < h.length
   · rw [List.getElem?_append_left hlt] at hl; exact hh l w hl
@@ -366,8 +366,8 @@ theorem HeapNoFrz.append {h : Heap} (hh : HeapNoFrz h) {v : Expr} (hv : v.NoFrz)
     cases hl
     exact hv
 
-theorem HeapNoFrz.set {h : Heap} (hh : HeapNoFrz h) {v : Expr} (hv : v.NoFrz) (l : Nat) :
-    HeapNoFrz (h.set l v) := by
+theorem HeapNoToImm.set {h : Heap} (hh : HeapNoToImm h) {v : Expr} (hv : v.NoToImm) (l : Nat) :
+    HeapNoToImm (h.set l v) := by
   intro l' w hl
   rw [List.getElem?_set] at hl
   split at hl
@@ -376,8 +376,8 @@ theorem HeapNoFrz.set {h : Heap} (hh : HeapNoFrz h) {v : Expr} (hv : v.NoFrz) (l
     · cases hl
   · exact hh l' w hl
 
-theorem Copy.noFrz {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
-    (hc : Copy r t h m v h' m' v') : HeapNoFrz h → v.NoFrz → HeapNoFrz h' ∧ v'.NoFrz := by
+theorem Copy.noToImm {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
+    (hc : Copy r t h m v h' m' v') : HeapNoToImm h → v.NoToImm → HeapNoToImm h' ∧ v'.NoToImm := by
   induction hc with
   | keep => exact fun hh hv => ⟨hh, hv⟩
   | seen => exact fun hh _ => ⟨hh, trivial⟩
@@ -391,12 +391,12 @@ theorem Copy.noFrz {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {
     obtain ⟨hh₂, hv₂⟩ := ih₂ hh₁ hv.2
     exact ⟨hh₂, hv₁, hv₂⟩
 
-/-- A step keeps closures without `frz`, and the heap without any. -/
-theorem step_lamNoFrz {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.LamNoFrz) {h h' : Heap} {e e' : Expr}
-    (hs : Step fns h e h' e') : HeapNoFrz h → e.LamNoFrz → HeapNoFrz h' ∧ e'.LamNoFrz := by
+/-- A step keeps closures without `toImm`, and the heap without any. -/
+theorem step_lamNoToImm {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.LamNoToImm) {h h' : Heap} {e e' : Expr}
+    (hs : Step fns h e h' e') : HeapNoToImm h → e.LamNoToImm → HeapNoToImm h' ∧ e'.LamNoToImm := by
   induction hs with
   | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | callCong _ ih | freezeCong _ ih
-    | frzCong _ ih => exact ih
+    | toImmCong _ ih => exact ih
   | setCong₁ _ ih | letCong _ ih | appCong₁ _ ih | pairCong₁ _ ih =>
     intro hh he
     obtain ⟨hh', he'⟩ := ih hh he.1
@@ -405,37 +405,37 @@ theorem step_lamNoFrz {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.LamNoFrz) {
     intro hh he
     obtain ⟨hh', he'⟩ := ih hh he.2
     exact ⟨hh', he.1, he'⟩
-  | newVal hv => exact fun hh he => ⟨hh.append (hv.noFrz he), trivial⟩
-  | getLoc hl => exact fun hh _ => ⟨hh, (hh _ _ hl).lamNoFrz⟩
-  | setLoc _ hv => exact fun hh he => ⟨hh.set (hv.noFrz he.2) _, trivial⟩
-  | @letVal x v e₂ hv => exact fun hh he => ⟨hh, he.2.subst (hv.noFrz he.1) x⟩
+  | newVal hv => exact fun hh he => ⟨hh.append (hv.noToImm he), trivial⟩
+  | getLoc hl => exact fun hh _ => ⟨hh, (hh _ _ hl).lamNoToImm⟩
+  | setLoc _ hv => exact fun hh he => ⟨hh.set (hv.noToImm he.2) _, trivial⟩
+  | @letVal x v e₂ hv => exact fun hh he => ⟨hh, he.2.subst (hv.noToImm he.1) x⟩
   | @callVal f fn ms τs v hf hv =>
-    exact fun hh he => ⟨hh, ((hfn fn (List.mem_of_getElem? hf)).inst ms τs).subst (hv.noFrz he) fn.param⟩
+    exact fun hh he => ⟨hh, ((hfn fn (List.mem_of_getElem? hf)).inst ms τs).subst (hv.noToImm he) fn.param⟩
   | @appVal b x body v hv =>
-    exact fun hh he => ⟨hh, (Expr.NoFrz.subst (e := body) he.1 (hv.noFrz he.2) x).lamNoFrz⟩
+    exact fun hh he => ⟨hh, (Expr.NoToImm.subst (e := body) he.1 (hv.noToImm he.2) x).lamNoToImm⟩
   | fstVal _ _ => exact fun hh he => ⟨hh, he.1⟩
   | sndVal _ _ => exact fun hh he => ⟨hh, he.2⟩
   | freezeVal hv hc =>
     intro hh he
-    obtain ⟨hh', hv'⟩ := hc.noFrz hh (hv.noFrz he)
-    exact ⟨hh', hv'.lamNoFrz⟩
-  | freezeKeep hv hc => exact fun hh he => ⟨(hc.noFrz hh (hv.noFrz he)).1, he⟩
-  | @blockEnter k t e => exact fun hh he => ⟨hh.append trivial, Expr.LamNoFrz.ren (e := e) he _ _⟩
-  | @blockKeep k t e => exact fun hh he => ⟨hh.append trivial, Expr.LamNoFrz.ren (e := e) he _ _⟩
-  | frzVal hl | frzKeep hl => exact fun hh _ => ⟨hh.append (hh _ _ hl), trivial⟩
+    obtain ⟨hh', hv'⟩ := hc.noToImm hh (hv.noToImm he)
+    exact ⟨hh', hv'.lamNoToImm⟩
+  | freezeKeep hv hc => exact fun hh he => ⟨(hc.noToImm hh (hv.noToImm he)).1, he⟩
+  | @blockEnter k t e => exact fun hh he => ⟨hh.append trivial, Expr.LamNoToImm.ren (e := e) he _ _⟩
+  | @blockKeep k t e => exact fun hh he => ⟨hh.append trivial, Expr.LamNoToImm.ren (e := e) he _ _⟩
+  | toImmVal hl | toImmKeep hl => exact fun hh _ => ⟨hh.append (hh _ _ hl), trivial⟩
 
-theorem Expr.UniqFrz.sub {h : Heap} {e a : Expr} (hu : e.UniqFrz h) (hc : ∀ l, e.count l = a.count l)
-    (hf : ∀ l, a.FrzOf l → e.FrzOf l) : a.UniqFrz h :=
+theorem Expr.UniqToImm.sub {h : Heap} {e a : Expr} (hu : e.UniqToImm h) (hc : ∀ l, e.count l = a.count l)
+    (hf : ∀ l, a.ToImmOf l → e.ToImmOf l) : a.UniqToImm h :=
   (hu.part (b := .unit) (fun l => by simp [hc l, Expr.count]) hf).1
 
 /-- What's beside the part that steps keeps corresponding, if the part's
-freezes aren't in it. -/
+`toImm`s aren't in it. -/
 theorem Rel.beside {ρ ρ' : Nat → Nat → Prop} {a b₁ b₂ : Expr} (hr : Rel ρ b₁.inPlace b₂)
-    (hρ : ∀ x c, ρ x c → ¬ a.FrzOf x → ρ' x c) (hd : ∀ l, a.FrzOf l → ¬ b₁.HasLoc l) :
+    (hρ : ∀ x c, ρ x c → ¬ a.ToImmOf x → ρ' x c) (hd : ∀ l, a.ToImmOf l → ¬ b₁.HasLoc l) :
     Rel ρ' b₁.inPlace b₂ :=
   hr.mono_on fun x c hx hxc => hρ x c hxc fun hfx => hd x hfx ((Expr.hasLoc_inPlace b₁ x).mp hx)
 
-/-- One step of the program that copies is one of the one that freezes in
+/-- One step of the program that copies is one of the one whose `toImm`s are in
 place, and they still correspond, but for what the step froze: the copy
 corresponds to what the original did, and the original, which nothing
 has any more, to nothing. -/
@@ -444,8 +444,8 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
     ∀ {σ : HeapTy} {t : Ty} {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {e₂ : Expr},
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁.inPlace e₂ →
-      e₁.UniqFrz h₁ → HeapNoFrz h₁ → e₁.LamNoFrz → h₂.length = h₁.length →
-      ∃ ρ' h₂' e₂', Step (fns.map Fn.inPlace) h₂ e₂ h₂' e₂' ∧ (∀ a c, ρ a c → ¬ e₁.FrzOf a → ρ' a c) ∧
+      e₁.UniqToImm h₁ → HeapNoToImm h₁ → e₁.LamNoToImm → h₂.length = h₁.length →
+      ∃ ρ' h₂' e₂', Step (fns.map Fn.inPlace) h₂ e₂ h₂' e₂' ∧ (∀ a c, ρ a c → ¬ e₁.ToImmOf a → ρ' a c) ∧
         Corr (fun a => M a ∨ h₁.length ≤ a) ρ' h₁' h₂' ∧ Rel ρ' e₁'.inPlace e₂' ∧ h₂'.length = h₁'.length := by
   induction hs with
   | newCong _ ih =>
@@ -461,7 +461,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
         exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr', hl'⟩
   | @newVal e b hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
-    simp only [Expr.inPlace, (hv.noFrz hln).inPlace] at hr
+    simp only [Expr.inPlace, (hv.noToImm hln).inPlace] at hr
     cases hr with
     | @new _ _ e' hr =>
       refine ⟨_, h₂ ++ [e'], .loc h₂.length, .newVal (hr.isValue hv), fun _ _ h _ => .inl h, hc.alloc hr,
@@ -514,7 +514,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
           hc', .set (hr₁.beside hρ hd) hr', hl'⟩
   | @setLoc l₀ v hl hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
-    simp only [Expr.inPlace, (hv.noFrz hln.2).inPlace] at hr
+    simp only [Expr.inPlace, (hv.noToImm hln.2).inPlace] at hr
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
@@ -580,7 +580,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
     simp only [Expr.inPlace] at hr
     cases hr with
     | call hr =>
-      -- The other run calls the function with its freezes in place.
+      -- The other run calls the function with its `toImm`s in place.
       have hfn' : (fns.map Fn.inPlace)[f]? = some fn.inPlace := by simp [hfn]
       have hb := (((hf fn (List.mem_of_getElem? hfn)).1).inst ms τs).inPlace
       have hbody : Rel ρ (fn.body.inst ms τs).inPlace (fn.body.inst ms τs).inPlace :=
@@ -694,7 +694,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
         exact ⟨ρ', h₂', _, .freezeCong s₂, hρ, hc', .freeze hr', hl'⟩
   | freezeVal hv hcp =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
-    have hvn := hv.noFrz hln
+    have hvn := hv.noToImm hln
     simp only [Expr.inPlace, hvn.inPlace] at hr
     cases ht with
     | freeze he hfz _ _ _ =>
@@ -704,7 +704,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
         obtain ⟨ρ', h₂', m₂', v₂', hc₂, hρ, hc', hr', _, _, hl'⟩ :=
           hcp.sim hh ⟨[], by simp⟩ he hfz (fun _ _ h => by simp at h) (m₂ := []) hM hc hr
             ⟨fun _ _ _ _ => .inl ⟨rfl, rfl⟩, fun _ _ h => by simp at h⟩
-        rw [(hcp.noFrz hnh hvn).2.inPlace]
+        rw [(hcp.noToImm hnh hvn).2.inPlace]
         exact ⟨ρ', h₂', v₂', .freezeVal (hr.isValue hv) hc₂, fun a c h _ => hρ a c h, hc', hr', by omega⟩
   | @blockEnter k t e =>
     intro σ T M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
@@ -718,28 +718,28 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
       exact .freeze ((hr.ren _ _).mono fun _ _ h => .inl h)
   | blockKeep => intro σ t M ρ h₂ e₂ hh ht; cases ht
   | freezeKeep _ _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
-  | frzCong _ ih =>
+  | toImmCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr
     cases ht with
-    | frz he _ =>
+    | toImm he _ =>
       cases hr with
-      | frz hr =>
+      | toImm hr =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ :=
           ih hh he hM hc hr (hu.sub (fun _ => rfl) fun _ h => .inr h) hnh hln hlen
-        exact ⟨ρ', h₂', _, .frzCong s₂, fun x c h hn => hρ x c h fun h' => hn (.inr h'), hc', .frz hr', hl'⟩
-  | @frzVal l w hl =>
+        exact ⟨ρ', h₂', _, .toImmCong s₂, fun x c h hn => hρ x c h fun h' => hn (.inr h'), hc', .toImm hr', hl'⟩
+  | @toImmVal l w hl =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr
     cases ht with
-    | frz he _ =>
+    | toImm he _ =>
       obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he (by simp)
       cases hl'
       have hMl : M l := hM _ _ _ hσ (by intro h; cases h)
       -- `l` is unique: no object holds it.
       have hno := (hu l (.inl rfl)).2
       cases hr with
-      | frz hr =>
+      | toImm hr =>
         cases hr with
         | @loc _ c hρ =>
           obtain ⟨w₁, w₂, h₁w, h₂w, hrel⟩ := hc.heap _ _ hρ
@@ -750,7 +750,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
           have hlt : l < h₁.length := hc.lt₁ hρ
           have hold : ∀ {u : Expr} {u' : Expr} {a : Nat}, h₁[a]? = some u → Rel ρ u u' → Rel ρ' u u' :=
             fun hu' hr' => hr'.mono_on fun x d hx hxd => .inl ⟨hxd, fun he => hno _ _ hu' (he ▸ hx)⟩
-          refine ⟨ρ', h₂ ++ [w₂], .loc c, .frzKeep h₂w, fun a d h hn => .inl ⟨h, fun he => hn (.inl (he ▸ rfl))⟩,
+          refine ⟨ρ', h₂ ++ [w₂], .loc c, .toImmKeep h₂w, fun a d h hn => .inl ⟨h, fun he => hn (.inl (he ▸ rfl))⟩,
             ⟨?_, ?_, ?_⟩, .loc (.inr ⟨rfl, rfl⟩), by simp [hlen]⟩
           · intro a d had
             rcases had with ⟨had, _⟩ | ⟨rfl, rfl⟩
@@ -770,19 +770,19 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
             · exact absurd (hc.lt₁ had) (by omega)
             · exact absurd (hc.lt₁ had') (by omega)
             · rfl
-  | frzKeep _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
+  | toImmKeep _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
 
-/-- However many steps the program that copies takes, the one that freezes
+/-- However many steps the program that copies takes, the one whose `toImm`s are
 in place takes them too, and they still correspond, if what's frozen is
 unique whenever the program gets there. -/
-theorem steps_unique {fns : List Fn} (hf : FnsOk fns) (hfn : ∀ fn ∈ fns, fn.body.LamNoFrz) {h₁ h₁' : Heap}
+theorem steps_unique {fns : List Fn} (hf : FnsOk fns) (hfn : ∀ fn ∈ fns, fn.body.LamNoToImm) {h₁ h₁' : Heap}
     {e₁ e₁' : Expr} (hs : Steps fns h₁ e₁ h₁' e₁') :
     ∀ {σ : HeapTy} {t : Ty} {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {e₂ : Expr},
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁.inPlace e₂ →
       (∀ σ' h e, Steps fns h₁ e₁ h e → HeapOk fns σ' h → HasType fns σ' .none false Ctx.empty e t →
-        e.UniqFrz h) →
-      HeapNoFrz h₁ → e₁.LamNoFrz → HeapClosed h₁ → e₁.Closed → h₂.length = h₁.length →
+        e.UniqToImm h) →
+      HeapNoToImm h₁ → e₁.LamNoToImm → HeapClosed h₁ → e₁.Closed → h₂.length = h₁.length →
       ∃ (M' : Nat → Prop) (ρ' : Nat → Nat → Prop) (h₂' : Heap) (e₂' : Expr),
         Steps (fns.map Fn.inPlace) h₂ e₂ h₂' e₂' ∧ Corr M' ρ' h₁' h₂' ∧ Rel ρ' e₁'.inPlace e₂' := by
   induction hs with
@@ -795,7 +795,7 @@ theorem steps_unique {fns : List Fn} (hf : FnsOk fns) (hfn : ∀ fn ∈ fns, fn.
       step_unique hf s hh ht hM hc hr (hu σ _ _ .refl hh ht) hnh hln hlen
     obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht hcl'
     obtain ⟨hcl₁, hcl₁'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hcl hcl'
-    obtain ⟨hnh', hln'⟩ := step_lamNoFrz hfn s hnh hln
+    obtain ⟨hnh', hln'⟩ := step_lamNoToImm hfn s hnh hln
     -- What isn't `imm` after the step wasn't before, or is new.
     have hM' : ∀ a m t', σ'[a]? = some (m, t') → m ≠ .immutable → M a ∨ h₀.length ≤ a := by
       intro a m t' ha hm
@@ -810,17 +810,17 @@ theorem steps_unique {fns : List Fn} (hf : FnsOk fns) (hfn : ∀ fn ∈ fns, fn.
         hcl₁ hcl₁' hl'
     exact ⟨M'', ρ'', h₂'', e₂'', .step s₂ ss, hc'', hr''⟩
 
-/-- **Every unique freeze can be in place.** The program, with every `frz`
+/-- **Every unique `toImm` can be in place.** The program, with every `toImm`
 in place in it and in its functions, computes what it computes: whatever
 result the program that copies gets, the other gets one that corresponds,
 and the same integer. The premise is that whenever the program reaches a
-freeze, what it freezes is unique (`Expr.UniqFrz`): in the program once,
-and held by no object. No closure has a `frz`. -/
-theorem frzs_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) (hfn : ∀ fn ∈ fns, fn.body.LamNoFrz)
+`toImm`, what it makes `imm` is unique (`Expr.UniqToImm`): in the program once,
+and held by no object. No closure has a `toImm`. -/
+theorem toImms_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns) (hfn : ∀ fn ∈ fns, fn.body.LamNoToImm)
     {σ : HeapTy} {h h₁ : Heap} {e e₁ : Expr} {T : Ty} (hh : HeapOk fns σ h)
-    (ht : HasType fns σ .none false Ctx.empty e T) (hnh : HeapNoFrz h) (hln : e.LamNoFrz)
+    (ht : HasType fns σ .none false Ctx.empty e T) (hnh : HeapNoToImm h) (hln : e.LamNoToImm)
     (hu : ∀ σ' h' e', Steps fns h e h' e' → HeapOk fns σ' h' → HasType fns σ' .none false Ctx.empty e' T →
-      e'.UniqFrz h')
+      e'.UniqToImm h')
     (hcl : HeapClosed h) (hec : e.Closed) (hs : Steps fns h e h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
       Steps (fns.map Fn.inPlace) h e.inPlace h₂ e₂ ∧ Rel ρ e₁.inPlace e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n := by

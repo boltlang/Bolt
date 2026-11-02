@@ -47,7 +47,7 @@ inductive Rel (ρ : Nat → Nat → Prop) : Expr → Expr → Prop where
   | snd {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.snd e₁) (.snd e₂)
   | freeze {c : Bool} {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.freeze c r t e₁) (.freeze c r t e₂)
   | block {c : Bool} {k : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.block c k t e₁) (.block c k t e₂)
-  | frz {b : Bool} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.frz b e₁) (.frz b e₂)
+  | toImm {b : Bool} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.toImm b e₁) (.toImm b e₂)
 
 theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' a c) {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) :
     Rel ρ' e₁ e₂ := by
@@ -68,7 +68,7 @@ theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' 
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
   | block _ ih => exact .block ih
-  | frz _ ih => exact .frz ih
+  | toImm _ ih => exact .toImm ih
 
 /-- What corresponds to a value is a value. -/
 theorem Rel.isValue {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) (hv : e₁.IsValue) : e₂.IsValue := by
@@ -101,7 +101,7 @@ theorem Rel.refl {ρ : Nat → Nat → Prop} : ∀ {e : Expr}, (∀ l, e.HasLoc 
   | .snd e, h => .snd (Rel.refl (e := e) h)
   | .freeze _ _ _ e, h => .freeze (Rel.refl (e := e) h)
   | .block _ _ _ e, h => .block (Rel.refl (e := e) h)
-  | .frz _ e, h => .frz (Rel.refl (e := e) h)
+  | .toImm _ e, h => .toImm (Rel.refl (e := e) h)
   | .set _ _, h => .set (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
   | .letE _ _ _, h => .letE (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
   | .app _ _, h => .app (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
@@ -139,7 +139,7 @@ theorem Rel.subst {ρ : Nat → Nat → Prop} {e₁ e₂ v₁ v₂ : Expr} (h : 
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
   | block _ ih => exact .block ih
-  | frz _ ih => exact .frz ih
+  | toImm _ ih => exact .toImm ih
 
 /-- Renaming a region in both keeps them corresponding. -/
 theorem Rel.ren {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) (a b : Nat) :
@@ -165,7 +165,7 @@ theorem Rel.ren {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ 
     split
     · exact .block h
     · exact .block ih
-  | frz _ ih => exact .frz ih
+  | toImm _ ih => exact .toImm ih
 
 /-- The locations in a well-typed expression are in its heap typing. -/
 theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -176,7 +176,7 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | frz _ _ ih => exact ih hl
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | toImm _ _ ih => exact ih hl
   | block _ _ hle _ _ _ _ _ =>
     obtain ⟨_, _, h, _⟩ := hle _ hl
     exact (List.getElem?_eq_some_iff.mp h).1
@@ -672,27 +672,27 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
       exact .freeze ((hr.ren _ _).mono fun _ _ h => .inl h)
   | blockKeep => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
   | freezeKeep _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
-  | frzCong _ ih =>
+  | toImmCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
     cases ht with
-    | frz he _ =>
+    | toImm he _ =>
       cases hr with
-      | frz hr =>
+      | toImm hr =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .frzCong s₂, hρ, hc', .frz hr', hl'⟩
-  | @frzVal l w hl =>
+        exact ⟨ρ', h₂', _, .toImmCong s₂, hρ, hc', .toImm hr', hl'⟩
+  | @toImmVal l w hl =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
     cases hr with
-    | frz hr =>
+    | toImm hr =>
       cases hr with
       | @loc _ c hρ =>
         -- Both copy what corresponds.
         obtain ⟨v₁, v₂, h₁v, h₂v, hrel⟩ := hc.heap _ _ hρ
         rw [hl] at h₁v
         cases h₁v
-        exact ⟨_, h₂ ++ [v₂], .loc h₂.length, .frzVal h₂v, fun _ _ h => .inl h, hc.alloc hrel,
+        exact ⟨_, h₂ ++ [v₂], .loc h₂.length, .toImmVal h₂v, fun _ _ h => .inl h, hc.alloc hrel,
           .loc (.inr ⟨rfl, rfl⟩), by simp [hlen]⟩
-  | frzKeep _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
+  | toImmKeep _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
 
 /-- However many steps the first run takes, the second takes them too, and
 they still correspond. -/

@@ -125,15 +125,15 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     exact List.getElem?_append_left (hh.lt hl)
   | blockKeep => intro σ t l ty hh ht hl; cases ht
   | freezeKeep _ _ => intro σ t l ty hh ht hl; cases ht
-  | frzCong _ ih =>
+  | toImmCong _ ih =>
     intro σ t l ty hh ht hl
     cases ht with
-    | frz he _ => exact ih hh he hl
-  | frzVal _ =>
+    | toImm he _ => exact ih hh he hl
+  | toImmVal _ =>
     -- A freeze's copy only adds to the heap.
     intro σ t l ty hh _ hl
     exact List.getElem?_append_left (hh.lt hl)
-  | frzKeep _ => intro σ t l ty hh ht hl; cases ht
+  | toImmKeep _ => intro σ t l ty hh ht hl; cases ht
 
 /-- However many steps a well-typed program takes, an `imm` location holds
 the same value. -/

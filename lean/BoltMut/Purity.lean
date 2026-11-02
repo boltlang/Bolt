@@ -284,14 +284,14 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
       exact fun _ h => h.elim
   | blockKeep => intro σ t n A hh ht; cases ht
   | freezeKeep _ _ => intro σ t n A hh ht; cases ht
-  | frzCong _ ih =>
+  | toImmCong _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | frz he _ => exact ih hh he hn hc hhc
-  | @frzVal l w hl =>
+    | toImm he _ => exact ih hh he hn hc hhc
+  | @toImmVal l w hl =>
     intro σ t n A hh ht hn hc hhc
     cases ht with
-    | frz he _ =>
+    | toImm he _ =>
       -- The copy is new, and holds what the object does, which is clean:
       -- the object isn't `imm`, so it's new or allowed.
       obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he (by simp)
@@ -315,7 +315,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
         rw [List.getElem?_concat_length] at hv
         cases hv
         exact hcw
-  | frzKeep _ => intro σ t n A hh ht; cases ht
+  | toImmKeep _ => intro σ t n A hh ht; cases ht
 
 /-- However many steps a clean program takes, the locations that are old
 and not allowed keep their values. -/

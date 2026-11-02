@@ -64,7 +64,7 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | frz _ hd ih => exact .frz ih hd
+  | toImm _ hd ih => exact .toImm ih hd
   | freeze _ hf hp hr hb ih => exact .freeze ih hf hp (hr.mono hx.length_le) (hb.mono hx.length_le)
   | block hsub hnm hl _ hf hp hb ih =>
     refine .block hsub hnm (fun l h => ?_) ih hf hp (hb.mono hx.length_le)
@@ -110,7 +110,7 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ) (ih₂ hΓ)
   | fst _ ih => exact .fst (ih hΓ)
   | snd _ ih => exact .snd (ih hΓ)
-  | frz _ hd ih => exact .frz (ih hΓ) hd
+  | toImm _ hd ih => exact .toImm (ih hΓ) hd
   | freeze _ hf hp hr hb ih => exact .freeze (ih hΓ) hf hp hr hb
   | block hsub hnm hl hbody hf hp hb _ => exact .block (hsub.trans hΓ) hnm hl hbody hf hp hb
 
@@ -143,7 +143,7 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hio) (ih₂ hio)
   | fst _ ih => exact .fst (ih hio)
   | snd _ ih => exact .snd (ih hio)
-  | frz _ hd ih => exact .frz (ih hio) hd
+  | toImm _ hd ih => exact .toImm (ih hio) hd
   | freeze _ hf hp hr hb ih => exact .freeze (ih hio) hf hp hr hb
   | block hsub hnm hl _ hf hp hb ih => exact .block hsub hnm hl (ih hio) hf hp hb
 
@@ -303,7 +303,7 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
     · exact h.elim
   | unit | int => exact h.elim
   | loc | locSub => exact .inl h
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | frz _ _ ih => exact ih h
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | toImm _ _ ih => exact ih h
   | block hsub _ _ _ _ _ _ ih =>
     rcases ih h with h | ⟨⟨s, hs⟩, h⟩
     · exact .inl h
@@ -542,7 +542,7 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
   | pair _ _ ih₁ ih₂ => exact .pair (ih₁ hΓ hx) (ih₂ hΓ hx)
   | fst _ ih => exact .fst (ih hΓ hx)
   | snd _ ih => exact .snd (ih hΓ hx)
-  | frz _ hd ih => exact .frz (ih hΓ hx) hd
+  | toImm _ hd ih => exact .toImm (ih hΓ hx) hd
   | freeze _ hf hp hr hb ih => exact .freeze (ih hΓ hx) hf hp hr hb
   | @block io₀ Γ₀ Γb k t e hsub hnm hl hbody hf hp hb ih =>
     -- The block sees what it saw, without `x`; what it gets of `v` doesn't
@@ -798,11 +798,11 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     have h := ih hn
     simp only [Ty.inst] at h
     exact .fst h
-  | frz _ hd ih =>
+  | toImm _ hd ih =>
     have h := ih hn
     have hd' := AtMost.inst hs hd
     simp only [Ty.inst, Mu.subst] at h hd' ⊢
-    exact .frz h hd'
+    exact .toImm h hd'
   | snd _ ih =>
     have h := ih hn
     simp only [Ty.inst] at h
@@ -842,7 +842,7 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | loc h hm | locSub h hm _ =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | block _ _ _ _ _ _ _ ih | frz _ _ ih => exact ih hio hl
+  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | block _ _ _ _ _ _ _ ih | toImm _ _ ih => exact ih hio hl
   | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact hl.elim (ih₁ hio) (ih₂ hio)
   | lam _ _ _ _ _ _ _ ih => exact ih (by simp [hio]) hl
