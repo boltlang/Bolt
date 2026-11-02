@@ -350,8 +350,8 @@ left out before one that's shown is `'_`.
 
 1. [Functions and annotations](./functions.mdx): inferred functions, what
    `[T]` means in a signature, and return types.
-2. [Regions](./regions.mdx): making an `imm` value from a `mut` one
-   without a copy, a proposal.
+2. [Regions](./regions.mdx) and [uniqueness](./uniqueness.mdx): leaving
+   out the copy of `imm e`, a proposed optimization step in `boltlang-mir`.
 3. [Errors](./errors.mdx).
 4. [Implementation](./implementation.mdx): where each rule is in the
    checker, the tests and the Lean proof.
@@ -366,8 +366,7 @@ left out before one that's shown is `'_`.
   of the one it's given, which it can't make: `Box { item: f(b.item) }` is
   `imm`. Higher-kinded types tie the mutability of the result to that of
   the argument, and what that should mean isn't decided.
-  [Regions](./regions.mdx) would let `fmap` make a `Box` of any
-  mutability.
+  `imm e` gives an `imm` one, but not one of a caller's mutability.
 - **Enums with a mutability**, so that a variant can hold something that
   can be changed without a type parameter, and so that an enum can be
   changed in place.

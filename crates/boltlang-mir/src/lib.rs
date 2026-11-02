@@ -4,6 +4,11 @@
 //! Only the representation is here yet: lowering from the HIR and
 //! monomorphization come later, and nothing uses it so far.
 //!
+//! The optimizations about mutability will run here too, on the IR once
+//! the types are known (#209): the region and uniqueness analyses, which
+//! find when the copy of `imm e` ([`Rvalue::Imm`]) can be left out. They
+//! never change which programs type-check.
+//!
 //! - **Structured control flow.** Blocks, `loop`, `if` and `switch`, with
 //!   labels, `break`, `continue` and `return`, as in Wasm. There's no
 //!   control-flow graph. A labeled block is also a join point: several

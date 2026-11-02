@@ -9,12 +9,20 @@ description: A proposal for making an imm value from a mut one without a copy, w
 :::info[Superseded]
 This page describes regions as a kind of mutability in the types, a design
 for [#209](https://github.com/boltlang/Bolt/issues/209) that wasn't
-implemented. The type checker has no regions. Instead, a program makes an
-`imm` value from a `mut` one with `imm e`, which means a copy, and regions
-become an analysis on the IR that leaves the copy out when nothing outside
-the block that made the value can reach it. The rules and the Lean proof
-below are what that analysis relies on: `program_blocks_freeze_in_place`
-says when the copy can be left out.
+implemented, and won't be: the type checker has no regions. A program
+makes an `imm` value from a `mut` one with `imm e`, which means a copy.
+
+Regions become an optimization step in `boltlang-mir`, on the IR after
+type checking, like [uniqueness](./uniqueness.mdx). Both are about
+mutability: they find when the copy of `imm e` can be left out, because
+nothing outside the block that made the value can reach it, or because it
+has one name. Neither changes which programs type-check. Nothing of it is
+implemented yet.
+
+The rules and the Lean proof below are what the region analysis relies
+on: `program_blocks_freeze_in_place` says when the copy can be left out.
+On the IR, a closure lists what it captures, so the analysis can follow
+what a closure holds rather than going by its type, as rule 5 does.
 :::
 
 ## Making a value that can't be changed from one that can

@@ -8,9 +8,11 @@ description: A proposal for leaving out the copies that make imm values, when no
 
 :::info[Proposal]
 Nothing on this page is implemented. It's part of the design for
-[#209](https://github.com/boltlang/Bolt/issues/209), which isn't decided
-yet, and it builds on [regions](./regions.mdx). Nothing on it is
-written in a program: what it finds only exists inside the compiler.
+[#209](https://github.com/boltlang/Bolt/issues/209): an optimization step
+in `boltlang-mir`, on the IR after type checking, like the
+[region](./regions.mdx) analysis. Both are about mutability: they find
+when the copy that `imm e` makes can be left out. Nothing on this page is
+written in a program, and it never changes which programs type-check.
 :::
 
 ## The copies
@@ -40,8 +42,8 @@ leaves its block: it goes to `push` and to `build`.
 one copies it, and a function never takes a value away from its caller.
 The compiler leaves a copy out only when nothing could tell the
 difference, so no program is rejected because of this, and nothing new is
-written. It's an optimization, which the type checker's results make
-possible.
+written. It's an optimization step in `boltlang-mir`, which runs on the
+IR once the types are known.
 
 Rust's moves do something like it, but they're part of the meaning: using
 a value after it's moved is an error. Here, using it again only means that
@@ -74,19 +76,17 @@ call returns.
 
 ### How it's found
 
-Each parameter has its own mutability variable. A hidden one, for a
-parameter without `mut` or `imm`, already does. A written `mut` would be a
-changeable variable too, like a `mut` value in [rule 1 of
-regions](./regions.mdx#the-rules), rather than `Mut`: otherwise a `mut`
-parameter stored in another looks like one that isn't.
+The IR gives every value a name and says where each one goes, so the
+analysis follows a parameter through the body: into the locals it's
+copied to, the tuples, variants and objects it's put in, and the closures
+that capture it. **A parameter is borrowed when none of that escapes**:
+it isn't returned, stored in a field or an element of something from
+outside the call (`SetField`, or a call to a parameter that escapes), or
+captured by a closure that's returned or stored. That's what the region
+analysis checks for a block, for a call instead.
 
-Storing a value unifies its mutability with that of where it's stored:
-`log.push(xs)` makes the mutability of `xs` that of the elements of `log`.
-Returning it puts its mutability in the return type. So once the body is
-solved, **a parameter is borrowed when its mutability appears in no other
-type of the function**: not in the return type, the other parameters, or a
-closure that's returned or stored. That's the check of [rule 2 of
-regions](./regions.mdx#the-rules), for a call rather than a block.
+The types don't decide it: a `mut` parameter means `Mut`, as everywhere,
+and whether it's borrowed is a separate fact about the body.
 
 Functions that call each other are solved together, as now. Each of their
 parameters starts as borrowed, and those that escape stop being so, until
@@ -139,9 +139,10 @@ Each function gets a summary, found like its type:
   out the copy when its argument is unique there;
 - whether what it gives is fresh, like `StringBuilder.new()`.
 
-Callers only use summaries. So, as now, checking stays per function and
-incremental, an explanation is about one function, and a library is
-checked without the code that uses it. Looking at the whole program at
+Callers only use summaries. So the analysis stays per function and
+incremental, a query on each body like the IR itself, an explanation is
+about one function, and a library is analyzed without the code that uses
+it. Looking at the whole program at
 once would find a few more copies to leave out, but gives up all three.
 
 ## What this doesn't do
@@ -166,11 +167,11 @@ mostly in `std`, would.
   made and why ("copies the bytes, since `b` is used on line 7"), and an
   attribute like `#[no_copy]` could make a copy a warning, for code where
   that matters.
-- **Complete signatures.** A function whose types are all written is
-  checked on its own, and its callers don't depend on its body. If its
-  summary comes from its body, editing the body checks its callers again,
-  like a function whose types are inferred. Or a complete signature could
-  say which parameters it borrows.
+- **Complete signatures.** A summary comes from a function's body, even
+  when its types are all written. Type checking never uses it, so editing
+  a body never checks its callers again, but it does analyze them again.
+  A complete signature could say which parameters it borrows, which would
+  also be the only way for a library's API to promise it.
 - **Saying that a class method borrows.** Something like `fn len(c: & C)`
   in a class, which also decides what a function type that borrows looks
   like.

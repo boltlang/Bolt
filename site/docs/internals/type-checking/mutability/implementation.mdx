@@ -86,6 +86,16 @@ description: Where the rules of mutability are in the checker, the tests and the
     at are reported where they're written, the same way: those of a
     function without a body, like a class method, of a type alias, and of
     an impl's instance (`written_type` in `boltlang-hir`).
+- **`imm e`** (`solve.rs`): an `ImmConstraint` from the type of `e` to
+  that of the copy, solved once the type of `e` is known
+  (`Solver::solve_imm`). An array or struct becomes `imm`, and a struct or
+  variant's type arguments are what `imm` makes of its fields
+  (`solve_imm_adt`), so one that's only in a function type stays as it is.
+  A closure, a type parameter, or a type still unknown when the body is
+  solved (`Solver::settle_imm`) stays as it is, and must be at most `imm`.
+  The evaluator copies with `Value::freeze`; the IR has `Rvalue::Imm`.
+  Leaving the copy out is for the region and uniqueness analyses, an
+  optimization step in `boltlang-mir` that doesn't exist yet.
 - **Defaulting** (`solve.rs`): a mutability left over when a body is
   checked, and not generalized, becomes `Imm`. That happens after the
   errors are resolved, so that an undecided mutability is shown as `[T]` in
