@@ -13,8 +13,10 @@ and doesn't let anything else have it: not another name, an object, a
 closure, or a function that keeps it.
 
 A function borrows its argument if its body only reads and writes it, or
-gives it to functions that borrow it too (`Borrows`). The functions that
-do are a set `B` that the check is given, so they can call each other.
+gives it to functions that borrow it too (`Borrows`). It can borrow all of
+it, or a part of a tuple, like `xs` in `push((xs, 1))`, which its body
+reads and writes through `fst` or `snd` (a `Path`). The functions that do
+are a set `B` that the check is given, so they can call each other.
 
 The check is about the program with each such `x` replaced with its
 object's location, which is what running it does: `Con B l e` says that
@@ -24,9 +26,16 @@ that every `toImm` is of such a variable.
 
 namespace BoltMut
 
--- `B`: the functions that borrow their argument, which they only read
--- and write, and don't keep.
-variable {B : Nat → Prop}
+/-- Where a function's argument has what it borrows: all of it, or a part of
+a tuple, like `xs` in `push((xs, 1))`. -/
+inductive Pos where
+  | whole
+  | fst
+  | snd
+
+-- `B f p`: the function `f` borrows its argument at `p`, which it only
+-- reads and writes, and doesn't keep.
+variable {B : Nat → Pos → Prop}
 
 /-! ## Free variables -/
 
@@ -192,13 +201,25 @@ theorem Expr.hasLoc_subst_of {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : e.Ha
 
 /-! ## The check -/
 
-/-- `e` only borrows `l`: it reads it, `get (loc l)`, writes to it,
-`set (loc l) b`, or gives it to a function that borrows it, `call f (loc l)`
-with `B f`, and has it nowhere else, so what it computes doesn't hold `l`. -/
-inductive Bor (B : Nat → Prop) (l : Nat) : Expr → Prop where
+/-- `e` is `l`, or a projection of a tuple that holds it, `fst (l, w)`: what a
+function that borrows part of its argument reads and writes. -/
+inductive Path (l : Nat) : Expr → Prop where
+  | loc : Path l (.loc l)
+  | fst {w : Expr} : w.IsValue → ¬ w.HasLoc l → Path l (.fst (.pair (.loc l) w))
+  | snd {w : Expr} : w.IsValue → ¬ w.HasLoc l → Path l (.snd (.pair w (.loc l)))
+
+/-- `e` only borrows `l`: it reads it, `get a`, writes to it, `set a b`,
+with `a` a `Path` to it, or gives it to a function that borrows it, whole
+or as part of a tuple, and has it nowhere else, so what it computes doesn't
+hold `l`. -/
+
+inductive Bor (B : Nat → Pos → Prop) (l : Nat) : Expr → Prop where
   | none {e : Expr} : ¬ e.HasLoc l → Bor B l e
-  | getL : Bor B l (.get (.loc l))
-  | setL {b : Expr} : Bor B l b → Bor B l (.set (.loc l) b)
+  | getP {a : Expr} : Path l a → Bor B l (.get a)
+  | setP {a b : Expr} : Path l a → Bor B l b → Bor B l (.set a b)
+  /-- The other part of a tuple that holds `l`. -/
+  | fstD {w : Expr} : w.IsValue → ¬ w.HasLoc l → Bor B l (.fst (.pair w (.loc l)))
+  | sndD {w : Expr} : w.IsValue → ¬ w.HasLoc l → Bor B l (.snd (.pair (.loc l) w))
   | new {b : Bool} {e : Expr} : Bor B l e → Bor B l (.new b e)
   | get {e : Expr} : Bor B l e → Bor B l (.get e)
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Bor B l e → Bor B l (.call f ms τs e)
@@ -208,7 +229,12 @@ inductive Bor (B : Nat → Prop) (l : Nat) : Expr → Prop where
   | block {c : Bool} {k : Nat} {t : Ty} {e : Expr} : Bor B l e → Bor B l (.block c k t e)
   | toImm {b : Bool} {e : Expr} : Bor B l e → Bor B l (.toImm b e)
   /-- A call of a function that borrows its argument, with `l`. -/
-  | callL {f : Nat} {ms : List Mu} {τs : List Ty} : B f → Bor B l (.call f ms τs (.loc l))
+  | callL {f : Nat} {ms : List Mu} {τs : List Ty} {a : Expr} : B f .whole → Path l a → Bor B l (.call f ms τs a)
+  /-- A call with `l` in a tuple, at the part the function borrows. -/
+  | callT₁ {f : Nat} {ms : List Mu} {τs : List Ty} {w : Expr} : B f .fst → w.IsValue → ¬ w.HasLoc l →
+      Bor B l (.call f ms τs (.pair (.loc l) w))
+  | callT₂ {f : Nat} {ms : List Mu} {τs : List Ty} {w : Expr} : B f .snd → w.IsValue → ¬ w.HasLoc l →
+      Bor B l (.call f ms τs (.pair w (.loc l)))
   | set {a b : Expr} : Bor B l a → Bor B l b → Bor B l (.set a b)
   | letE {x : Nat} {a b : Expr} : Bor B l a → Bor B l b → Bor B l (.letE x a b)
   | app {a b : Expr} : Bor B l a → Bor B l b → Bor B l (.app a b)
@@ -217,7 +243,7 @@ inductive Bor (B : Nat → Prop) (l : Nat) : Expr → Prop where
 /-- `e` consumes `l`: it borrows it until it makes it `imm`, once, which is its
 last use. A `let` can name it, `let x = loc l in b`, and then `b` consumes
 it. -/
-inductive Con (B : Nat → Prop) (l : Nat) : Expr → Prop where
+inductive Con (B : Nat → Pos → Prop) (l : Nat) : Expr → Prop where
   | toImm : Con B l (.toImm false (.loc l))
   | toImmC {b : Bool} {e : Expr} : Con B l e → Con B l (.toImm b e)
   | new {b : Bool} {e : Expr} : Con B l e → Con B l (.new b e)
@@ -241,7 +267,7 @@ inductive Con (B : Nat → Prop) (l : Nat) : Expr → Prop where
 a variable that holds a new `mut` object, `let x = mut [..] in b`, where
 `b` consumes it: for whatever location the object gets, at least `n`. A
 closure has no `toImm`. -/
-inductive Ok (B : Nat → Prop) : Nat → (Nat → Prop) → Expr → Prop where
+inductive Ok (B : Nat → Pos → Prop) : Nat → (Nat → Prop) → Expr → Prop where
   | var {n : Nat} {L : Nat → Prop} {x : Nat} : Ok B n L (.var x)
   | unit {n : Nat} {L : Nat → Prop} : Ok B n L .unit
   | int {n : Nat} {L : Nat → Prop} {i : Int} : Ok B n L (.int i)
@@ -269,6 +295,43 @@ inductive Ok (B : Nat → Prop) : Nat → (Nat → Prop) → Expr → Prop where
   /-- The same, once the object is made. -/
   | bound {n : Nat} {L : Nat → Prop} {x l : Nat} {b : Expr} : L l → Ok B n L (b.subst x (.loc l)) →
       Ok B n L (.letE x (.loc l) b)
+
+/-! ## Paths and values -/
+
+theorem Expr.IsValue.not_toImmOf {v : Expr} (hv : v.IsValue) {l : Nat} : ¬ v.ToImmOf l := by
+  induction hv with
+  | unit | int | loc | lam => exact id
+  | pair _ _ ih₁ ih₂ => exact fun h => h.elim ih₁ fun h => ih₂ h.2
+
+theorem Expr.IsValue.subst {v : Expr} (hv : v.IsValue) (x : Nat) (u : Expr) : (v.subst x u).IsValue := by
+  induction hv with
+  | unit => exact .unit
+  | int => exact .int
+  | loc => exact .loc
+  | lam => simp only [Expr.subst]; split <;> exact .lam
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+
+theorem Expr.IsValue.inst {v : Expr} (hv : v.IsValue) (ms : List Mu) (τs : List Ty) : (v.inst ms τs).IsValue := by
+  induction hv with
+  | unit => exact .unit
+  | int => exact .int
+  | loc => exact .loc
+  | lam => exact .lam
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+
+theorem Expr.IsValue.ren {v : Expr} (hv : v.IsValue) (a b : Nat) : (v.ren a b).IsValue := by
+  induction hv with
+  | unit => exact .unit
+  | int => exact .int
+  | loc => exact .loc
+  | lam => exact .lam
+  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
+
+theorem Path.not_toImmOf {l : Nat} {a : Expr} (h : Path l a) {l' : Nat} : ¬ a.ToImmOf l' := by
+  cases h with
+  | loc => exact id
+  | fst hw _ => exact fun hf => hf.elim id fun h => hw.not_toImmOf h.2
+  | snd hw _ => exact fun hf => hf.elim hw.not_toImmOf fun h => h.2
 
 /-! ## What the check says -/
 
@@ -312,9 +375,10 @@ theorem Con.not_value {l : Nat} {v : Expr} (hv : v.IsValue) (h : Con B l v) : Fa
 theorem Bor.not_toImmOf {l : Nat} {e : Expr} (h : Bor B l e) : ¬ e.ToImmOf l := by
   induction h with
   | none h => exact fun hf => h hf.hasLoc
-  | callL _ => exact id
-  | getL => exact id
-  | setL _ ih => exact fun hf => hf.elim id fun h => ih h.2
+  | callL _ hp | getP hp => exact hp.not_toImmOf
+  | setP hp _ ih => exact fun hf => hf.elim hp.not_toImmOf fun h => ih h.2
+  | fstD hw _ | callT₂ _ hw _ => exact fun hf => hf.elim hw.not_toImmOf fun h => h.2
+  | sndD hw _ | callT₁ _ hw _ => exact fun hf => hf.elim id fun h => hw.not_toImmOf h.2
   | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih
   | block => exact id
   | @toImm _ e h ih =>
@@ -360,13 +424,57 @@ theorem Expr.hasLoc_inst {e : Expr} {ms : List Mu} {τs : List Ty} {l : Nat} :
 theorem Expr.noLoc_subst {e v : Expr} {x l : Nat} (he : ¬ e.HasLoc l) (hv : ¬ v.HasLoc l) :
     ¬ (e.subst x v).HasLoc l := fun h => (Expr.hasLoc_subst h).elim he hv
 
+theorem Path.subst {l : Nat} {a : Expr} (h : Path l a) {u : Expr} (hu : ¬ u.HasLoc l) (x : Nat) :
+    Path l (a.subst x u) := by
+  cases h with
+  | loc => exact .loc
+  | fst hw hwl => exact .fst (hw.subst x u) (Expr.noLoc_subst hwl hu)
+  | snd hw hwl => exact .snd (hw.subst x u) (Expr.noLoc_subst hwl hu)
+
+theorem Path.inst {l : Nat} {a : Expr} (h : Path l a) (ms : List Mu) (τs : List Ty) : Path l (a.inst ms τs) := by
+  cases h with
+  | loc => exact .loc
+  | fst hw hwl => exact .fst (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
+  | snd hw hwl => exact .snd (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
+
+theorem Path.ren {l : Nat} {a : Expr} (h : Path l a) (x y : Nat) : Path l (a.ren x y) := by
+  cases h with
+  | loc => exact .loc
+  | fst hw hwl => exact .fst (hw.ren x y) fun h' => hwl (Expr.hasLoc_ren h')
+  | snd hw hwl => exact .snd (hw.ren x y) fun h' => hwl (Expr.hasLoc_ren h')
+
+/-- A path that's a value is the location. -/
+theorem Path.value {l : Nat} {a : Expr} (h : Path l a) (hv : a.IsValue) : a = .loc l := by
+  cases h with
+  | loc => rfl
+  | fst => cases hv
+  | snd => cases hv
+
+/-- A path steps to the location, and changes nothing. -/
+theorem Path.step {fns : List Fn} {l : Nat} {a a' : Expr} {h h' : Heap} (hp : Path l a)
+    (s : Step fns h a h' a') : h' = h ∧ Path l a' := by
+  cases hp with
+  | loc => exact (Expr.IsValue.loc.no_step s).elim
+  | fst hw _ =>
+    cases s with
+    | fstCong s' => exact ((Expr.IsValue.pair .loc hw).no_step s').elim
+    | fstVal _ _ => exact ⟨rfl, .loc⟩
+  | snd hw _ =>
+    cases s with
+    | sndCong s' => exact ((Expr.IsValue.pair hw .loc).no_step s').elim
+    | sndVal _ _ => exact ⟨rfl, .loc⟩
+
 theorem Bor.subst {l : Nat} {e : Expr} (h : Bor B l e) {v : Expr} (hv : ¬ v.HasLoc l) (x : Nat) :
     Bor B l (e.subst x v) := by
   induction h with
   | none h => exact .none (Expr.noLoc_subst h hv)
-  | callL hf => exact .callL hf
-  | getL => exact .getL
-  | setL _ ih => exact .setL ih
+  | callL hf hp => exact .callL hf (hp.subst hv x)
+  | getP hp => exact .getP (hp.subst hv x)
+  | setP hp _ ih => exact .setP (hp.subst hv x) ih
+  | fstD hw hwl => exact .fstD (hw.subst x v) (Expr.noLoc_subst hwl hv)
+  | sndD hw hwl => exact .sndD (hw.subst x v) (Expr.noLoc_subst hwl hv)
+  | callT₁ hf hw hwl => exact .callT₁ hf (hw.subst x v) (Expr.noLoc_subst hwl hv)
+  | callT₂ hf hw hwl => exact .callT₂ hf (hw.subst x v) (Expr.noLoc_subst hwl hv)
   | new _ ih => exact .new ih
   | get _ ih => exact .get ih
   | call _ ih => exact .call ih
@@ -593,7 +701,7 @@ theorem Ok.lamNoToImm {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) :
 /-- **What the running program keeps**: it's checked, with the locations
 it owns in `L`, and each of those it either consumes or no longer has,
 and no object holds it. -/
-def Inv (B : Nat → Prop) (h : Heap) (e : Expr) : Prop :=
+def Inv (B : Nat → Pos → Prop) (h : Heap) (e : Expr) : Prop :=
   ∃ L : Nat → Prop, Ok B h.length L e ∧
     ∀ l, L l → l < h.length ∧ (Con B l e ∨ ¬ e.HasLoc l) ∧ ∀ (a : Nat) (v : Expr), h[a]? = some v → ¬ v.HasLoc l
 
@@ -611,9 +719,13 @@ theorem Inv.uniqToImm {h : Heap} {e : Expr} (hi : Inv B h e) : e.UniqToImm h := 
 theorem Bor.inst {l : Nat} {e : Expr} (h : Bor B l e) (ms : List Mu) (τs : List Ty) : Bor B l (e.inst ms τs) := by
   induction h with
   | none h => exact .none fun h' => h (Expr.hasLoc_inst.mp h')
-  | callL hf => exact .callL hf
-  | getL => exact .getL
-  | setL _ ih => exact .setL ih
+  | callL hf hp => exact .callL hf (hp.inst ms τs)
+  | getP hp => exact .getP (hp.inst ms τs)
+  | setP hp _ ih => exact .setP (hp.inst ms τs) ih
+  | fstD hw hwl => exact .fstD (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
+  | sndD hw hwl => exact .sndD (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
+  | callT₁ hf hw hwl => exact .callT₁ hf (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
+  | callT₂ hf hw hwl => exact .callT₂ hf (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
   | new _ ih => exact .new ih
   | get _ ih => exact .get ih
   | call _ ih => exact .call ih
@@ -689,9 +801,13 @@ theorem Ok.inst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) (ms : L
 theorem Bor.ren {l : Nat} {e : Expr} (h : Bor B l e) (a b : Nat) : Bor B l (e.ren a b) := by
   induction h with
   | none h => exact .none fun h' => h (Expr.hasLoc_ren h')
-  | callL hf => exact .callL hf
-  | getL => exact .getL
-  | setL _ ih => exact .setL ih
+  | callL hf hp => exact .callL hf (hp.ren a b)
+  | getP hp => exact .getP (hp.ren a b)
+  | setP hp _ ih => exact .setP (hp.ren a b) ih
+  | fstD hw hwl => exact .fstD (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
+  | sndD hw hwl => exact .sndD (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
+  | callT₁ hf hw hwl => exact .callT₁ hf (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
+  | callT₂ hf hw hwl => exact .callT₂ hf (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
   | new _ ih => exact .new ih
   | get _ ih => exact .get ih
   | call _ ih => exact .call ih
@@ -884,10 +1000,17 @@ theorem step_noLoc {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' 
 
 /-! ## A step keeps borrowing and consuming -/
 
+/-- An argument with `l` at `p`, the rest of which doesn't have it. -/
+def ArgAt (l : Nat) : Pos → Expr → Prop
+  | .whole, v => v = .loc l
+  | .fst, v => ∃ w, v = .pair (.loc l) w ∧ w.IsValue ∧ ¬ w.HasLoc l
+  | .snd, v => ∃ w, v = .pair w (.loc l) ∧ w.IsValue ∧ ¬ w.HasLoc l
+
 /-- The functions in `B` borrow their argument: a body, with a location as
 its argument, only borrows it. -/
-def Borrows (B : Nat → Prop) (fns : List Fn) : Prop :=
-  ∀ f fn, B f → fns[f]? = some fn → ∀ l, Bor B l (fn.body.subst fn.param (.loc l))
+def Borrows (B : Nat → Pos → Prop) (fns : List Fn) : Prop :=
+  ∀ f fn p, B f p → fns[f]? = some fn → ∀ ms τs l v, ArgAt l p v →
+    Bor B l ((fn.body.inst ms τs).subst fn.param v)
 
 /-- **A step keeps borrowing**: what only borrows `l` still does, and no
 object gets `l`. -/
@@ -913,27 +1036,27 @@ theorem step_bor {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) (hB : Bo
     intro hb hl hh
     cases hb with
     | none hn => exact nl (.getCong s) hn hl hh
-    | getL => exact (Expr.IsValue.loc.no_step s).elim
+    | getP hp => obtain ⟨rfl, hp'⟩ := hp.step s; exact ⟨.getP hp', hh, hl⟩
     | get hb => obtain ⟨a, b, c⟩ := ih hb hl hh; exact ⟨.get a, b, c⟩
   | getLoc hw => exact fun _ hl hh => ⟨.none (hh _ _ hw), hh, hl⟩
   | setCong₁ s ih =>
     intro hb hl hh
     cases hb with
     | none hn => exact nl (.setCong₁ s) hn hl hh
-    | setL _ => exact (Expr.IsValue.loc.no_step s).elim
+    | setP hp hb₂ => obtain ⟨rfl, hp'⟩ := hp.step s; exact ⟨.setP hp' hb₂, hh, hl⟩
     | set hb₁ hb₂ => obtain ⟨a, b, c⟩ := ih hb₁ hl hh; exact ⟨.set a hb₂, b, c⟩
   | setCong₂ hv s ih =>
     intro hb hl hh
     cases hb with
     | none hn => exact nl (.setCong₂ hv s) hn hl hh
-    | setL hb₂ => obtain ⟨a, b, c⟩ := ih hb₂ hl hh; exact ⟨.setL a, b, c⟩
+    | setP hp hb₂ => obtain ⟨a, b, c⟩ := ih hb₂ hl hh; exact ⟨.setP hp a, b, c⟩
     | set hb₁ hb₂ => obtain ⟨a, b, c⟩ := ih hb₂ hl hh; exact ⟨.set hb₁ a, b, c⟩
   | @setLoc a v hlen hv =>
     intro hb hl hh
     have hvl : ¬ v.HasLoc l := by
       cases hb with
       | none hn => exact fun h => hn (.inr h)
-      | setL hb₂ => exact hb₂.value hv
+      | setP _ hb₂ => exact hb₂.value hv
       | set _ hb₂ => exact hb₂.value hv
     exact ⟨.none id, hh.set hvl _, by simp [hl]⟩
   | letCong s ih =>
@@ -951,18 +1074,21 @@ theorem step_bor {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) (hB : Bo
     cases hb with
     | none hn => exact nl (.callCong s) hn hl hh
     | call hb => obtain ⟨a, b, c⟩ := ih hb hl hh; exact ⟨.call a, b, c⟩
-    | callL _ => exact (Expr.IsValue.loc.no_step s).elim
+    | callL hf hp => obtain ⟨rfl, hp'⟩ := hp.step s; exact ⟨.callL hf hp', hh, hl⟩
+    | callT₁ _ hw _ => exact ((Expr.IsValue.pair .loc hw).no_step s).elim
+    | callT₂ _ hw _ => exact ((Expr.IsValue.pair hw .loc).no_step s).elim
   | @callVal f fn ms τs v hf hv =>
     intro hb hl hh
     have hbody := ((hfn _ (List.mem_of_getElem? hf)).inst ms τs).not_hasLoc l
     cases hb with
     | none hn => exact ⟨.none (Expr.noLoc_subst hbody hn), hh, hl⟩
     | call hb => exact ⟨.none (Expr.noLoc_subst hbody (hb.value hv)), hh, hl⟩
-    | callL hfB =>
-      -- The function borrows what it's given.
-      have := (hB f fn hfB hf l).inst ms τs
-      rw [Expr.subst_inst] at this
-      exact ⟨this, hh, hl⟩
+    -- The function borrows what it's given.
+    | callL hfB hp =>
+      obtain rfl := hp.value hv
+      exact ⟨hB f fn .whole hfB hf ms τs l _ rfl, hh, hl⟩
+    | callT₁ hfB hw hwl => exact ⟨hB f fn .fst hfB hf ms τs l _ ⟨_, rfl, hw, hwl⟩, hh, hl⟩
+    | callT₂ hfB hw hwl => exact ⟨hB f fn .snd hfB hf ms τs l _ ⟨_, rfl, hw, hwl⟩, hh, hl⟩
   | appCong₁ s ih =>
     intro hb hl hh
     cases hb with
@@ -996,21 +1122,25 @@ theorem step_bor {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) (hB : Bo
     cases hb with
     | none hn => exact nl (.fstCong s) hn hl hh
     | fst hb => obtain ⟨a, b, c⟩ := ih hb hl hh; exact ⟨.fst a, b, c⟩
+    | fstD hw _ => exact ((Expr.IsValue.pair hw .loc).no_step s).elim
   | sndCong s ih =>
     intro hb hl hh
     cases hb with
     | none hn => exact nl (.sndCong s) hn hl hh
     | snd hb => obtain ⟨a, b, c⟩ := ih hb hl hh; exact ⟨.snd a, b, c⟩
+    | sndD hw _ => exact ((Expr.IsValue.pair .loc hw).no_step s).elim
   | fstVal hv₁ hv₂ =>
     intro hb hl hh
     cases hb with
     | none hn => exact nl (.fstVal hv₁ hv₂) hn hl hh
     | fst hb => exact ⟨.none fun h => hb.value (.pair hv₁ hv₂) (.inl h), hh, hl⟩
+    | fstD _ hwl => exact ⟨.none hwl, hh, hl⟩
   | sndVal hv₁ hv₂ =>
     intro hb hl hh
     cases hb with
     | none hn => exact nl (.sndVal hv₁ hv₂) hn hl hh
     | snd hb => exact ⟨.none fun h => hb.value (.pair hv₁ hv₂) (.inr h), hh, hl⟩
+    | sndD _ hwl => exact ⟨.none hwl, hh, hl⟩
   | freezeCong s ih =>
     intro hb hl hh
     cases hb with
@@ -1492,7 +1622,7 @@ example : Ok B 0 (fun _ => False)
     (.letE 0 (.new true (.int 0)) (.letE 1 (.set (.var 0) (.int 1)) (.toImm false (.var 0)))) := by
   refine .own .int (fun l _ => ?_) (fun l _ => ?_)
   · show Con B l (.letE 1 (.set (.loc l) (.int 1)) (.toImm false (.loc l)))
-    exact .let₂ (.setL (.none id)) .toImm
+    exact .let₂ (.setP .loc (.none id)) .toImm
   · show Ok B _ _ (.letE 1 (.set (.loc l) (.int 1)) (.toImm false (.loc l)))
     exact .letE (.set .loc .int) (.toImm (.inl rfl))
 
@@ -1507,32 +1637,58 @@ example (l : Nat) : ¬ Con B l (.letE 1 (.toImm false (.loc l)) (.set (.loc l) (
   | let₁ _ hb => exact hb (.inl rfl)
   | let₂ ha _ => exact ha.not_toImmOf (.inl rfl)
 
-/-- `fn fill(xs: mut [i32]) { xs[0] = 1; }` borrows its argument. -/
+/-- `fn fill(xs: mut [i32]) { xs[0] = 1; }` borrows its whole argument. -/
 def fill₁ : Fn :=
   { assume := {}, param := 0, argTy := .cell .mutable .int, retTy := .unit, body := .set (.var 0) (.int 1) }
 
-theorem fill₁_borrows : Borrows (· = 0) [fill₁] := by
-  intro f fn hf hfn l
-  subst hf
+theorem fill₁_borrows : Borrows (fun f p => f = 0 ∧ p = .whole) [fill₁] := by
+  intro f fn p hp hfn ms τs l v hv
+  obtain ⟨rfl, rfl⟩ := hp
   simp only [List.getElem?_cons_zero, Option.some.injEq] at hfn
   subst hfn
-  exact .setL (.none id)
+  cases hv
+  exact .setP .loc (.none id)
 
 /-- `let xs = mut [0]; fill(xs); array_freeze(xs)` is checked: `fill` only
 borrows `xs`, so the `toImm` can be in place. -/
-example : Ok (· = 0) 0 (fun _ => False)
+example : Ok (fun f p => f = 0 ∧ p = .whole) 0 (fun _ => False)
     (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [] [] (.var 0)) (.toImm false (.var 0)))) := by
   refine .own .int (fun l _ => ?_) (fun l _ => ?_)
-  · show Con (· = 0) l (.letE 1 (.call 0 [] [] (.loc l)) (.toImm false (.loc l)))
-    exact .let₂ (.callL rfl) .toImm
-  · show Ok (· = 0) _ _ (.letE 1 (.call 0 [] [] (.loc l)) (.toImm false (.loc l)))
+  · show Con _ l (.letE 1 (.call 0 [] [] (.loc l)) (.toImm false (.loc l)))
+    exact .let₂ (.callL ⟨rfl, rfl⟩ .loc) .toImm
+  · show Ok _ _ _ (.letE 1 (.call 0 [] [] (.loc l)) (.toImm false (.loc l)))
     exact .letE (.call .loc) (.toImm (.inl rfl))
+
+/-- `fn push(p: (mut [i32], i32)) { p.0[0] = p.1; }` borrows the array in
+its argument, with what's put in it. -/
+def push₁ : Fn :=
+  { assume := {}, param := 0, argTy := .prod (.cell .mutable .int) .int, retTy := .unit,
+    body := .set (.fst (.var 0)) (.snd (.var 0)) }
+
+theorem push₁_borrows : Borrows (fun f p => f = 0 ∧ p = .fst) [push₁] := by
+  intro f fn p hp hfn ms τs l v hv
+  obtain ⟨rfl, rfl⟩ := hp
+  simp only [List.getElem?_cons_zero, Option.some.injEq] at hfn
+  subst hfn
+  obtain ⟨w, rfl, hw, hwl⟩ := hv
+  exact .setP (.fst hw hwl) (.sndD hw hwl)
+
+/-- `let xs = mut [0]; push(xs, 1); array_freeze(xs)` is checked: the call
+borrows `xs` in a tuple, so the `toImm` can be in place. -/
+example : Ok (fun f p => f = 0 ∧ p = .fst) 0 (fun _ => False)
+    (.letE 0 (.new true (.int 0)) (.letE 1 (.call 0 [] [] (.pair (.var 0) (.int 1))) (.toImm false (.var 0)))) := by
+  refine .own .int (fun l _ => ?_) (fun l _ => ?_)
+  · show Con _ l (.letE 1 (.call 0 [] [] (.pair (.loc l) (.int 1))) (.toImm false (.loc l)))
+    exact .let₂ (.callT₁ ⟨rfl, rfl⟩ .int id) .toImm
+  · show Ok _ _ _ (.letE 1 (.call 0 [] [] (.pair (.loc l) (.int 1))) (.toImm false (.loc l)))
+    exact .letE (.call (.pair .loc .int)) (.toImm (.inl rfl))
 
 /-- `fn id(xs: mut [i32]) -> mut [i32] = xs` doesn't borrow its argument: it
 gives it back, so the caller would have another name for it. -/
 def id₁ : Fn :=
   { assume := {}, param := 0, argTy := .cell .mutable .int, retTy := .cell .mutable .int, body := .var 0 }
 
-example : ¬ Borrows (· = 0) [id₁] := fun h => (h 0 id₁ rfl rfl 0).not_loc
+example : ¬ Borrows (fun f p => f = 0 ∧ p = .whole) [id₁] :=
+  fun h => (h 0 id₁ .whole ⟨rfl, rfl⟩ rfl [] [] 0 _ rfl).not_loc
 
 end BoltMut
