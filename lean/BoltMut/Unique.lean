@@ -144,16 +144,17 @@ def Expr.count (l : Nat) : Expr → Nat
     | .block _ _ _ e | .frz _ e => e.count l
   | .set a b | .letE _ a b | .app a b | .pair a b => a.count l + b.count l
 
-/-- `e` freezes `l`: it has `frz _ (loc l)`. -/
+/-- `e` is about to freeze `l`: `frz _ (loc l)` is where `e` runs next, or
+on the way there, past what's run already. -/
 def Expr.FrzOf (l : Nat) : Expr → Prop
-  | .var _ | .unit | .int _ | .loc _ => False
-  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e
-    | .block _ _ _ e => e.FrzOf l
-  | .set a b | .letE _ a b | .app a b | .pair a b => a.FrzOf l ∨ b.FrzOf l
+  | .var _ | .unit | .int _ | .loc _ | .lam _ _ _ | .block _ _ _ _ => False
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e => e.FrzOf l
+  | .letE _ a _ => a.FrzOf l
+  | .set a b | .app a b | .pair a b => a.FrzOf l ∨ a.IsValue ∧ b.FrzOf l
   | .frz _ e => e = .loc l ∨ e.FrzOf l
 
-/-- **What a program freezes is unique**: it's in the program once, and no
-object holds it. -/
+/-- **What a program freezes is unique** when it gets there: it's in the
+program once, and no object holds it. -/
 def Expr.UniqFrz (h : Heap) (e : Expr) : Prop :=
   ∀ l, e.FrzOf l → e.count l = 1 ∧ ∀ (a : Nat) (v : Expr), h[a]? = some v → ¬ v.HasLoc l
 
@@ -260,10 +261,11 @@ theorem Expr.count_pos {e : Expr} {l : Nat} (h : e.HasLoc l) : 0 < e.count l := 
 /-- What `e` freezes is in it. -/
 theorem Expr.FrzOf.hasLoc {e : Expr} {l : Nat} (h : e.FrzOf l) : e.HasLoc l := by
   induction e with
-  | var | unit | int | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
-  | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ ih₂
+  | var | unit | int | loc | lam | block => exact h.elim
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
+    | keep _ _ _ ih => exact ih h
+  | letE _ _ _ ih₁ _ => exact .inl (ih₁ h)
+  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ fun h => ih₂ h.2
   | frz _ e ih =>
     rcases h with rfl | h
     · rfl
@@ -502,14 +504,14 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
   | @setCong₂ _ a b b' hv s ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr
-    have ⟨hub, hd⟩ := hu.part (a := b) (b := a) (fun _ => by simp only [Expr.count]; omega) fun _ h => .inr h
+    have ⟨hub, hd⟩ := hu.part (a := b) (b := a) (fun _ => by simp only [Expr.count]; omega) fun _ h => .inr ⟨hv, h⟩
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set _ he₂ | setR _ he₂ =>
       cases hr with
       | set hr₁ hr₂ =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hub hnh hln.2 hlen
-        exact ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv.inPlace) s₂, fun x c h hn => hρ x c h fun h' => hn (.inr h'),
+        exact ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv.inPlace) s₂, fun x c h hn => hρ x c h fun h' => hn (.inr ⟨hv, h'⟩),
           hc', .set (hr₁.beside hρ hd) hr', hl'⟩
   | @setLoc l₀ v hl hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
@@ -548,13 +550,13 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
   | @letCong _ x a a' b s ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr
-    have ⟨hua, hd⟩ := hu.part (a := a) (b := b) (fun _ => rfl) fun _ h => .inl h
+    have ⟨hua, hd⟩ := hu.part (a := a) (b := b) (fun _ => rfl) fun _ h => h
     cases ht with
     | letE he₁ _ =>
       cases hr with
       | letE hr₁ hr₂ =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hua hnh hln.1 hlen
-        exact ⟨ρ', h₂', _, .letCong s₂, fun x c h hn => hρ x c h fun h' => hn (.inl h'), hc',
+        exact ⟨ρ', h₂', _, .letCong s₂, fun x c h hn => hρ x c h hn, hc',
           .letE hr' (hr₂.beside hρ hd), hl'⟩
   | @letVal x v e₂₀ hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
@@ -603,13 +605,13 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
   | @appCong₂ _ a b b' hv s ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr
-    have ⟨hub, hd⟩ := hu.part (a := b) (b := a) (fun _ => by simp only [Expr.count]; omega) fun _ h => .inr h
+    have ⟨hub, hd⟩ := hu.part (a := b) (b := a) (fun _ => by simp only [Expr.count]; omega) fun _ h => .inr ⟨hv, h⟩
     cases ht with
     | app _ he₂ =>
       cases hr with
       | app hr₁ hr₂ =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hub hnh hln.2 hlen
-        exact ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv.inPlace) s₂, fun x c h hn => hρ x c h fun h' => hn (.inr h'),
+        exact ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv.inPlace) s₂, fun x c h hn => hρ x c h fun h' => hn (.inr ⟨hv, h'⟩),
           hc', .app (hr₁.beside hρ hd) hr', hl'⟩
   | @appVal b x body v hv =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
@@ -635,13 +637,13 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
   | @pairCong₂ _ a b b' hv s ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr
-    have ⟨hub, hd⟩ := hu.part (a := b) (b := a) (fun _ => by simp only [Expr.count]; omega) fun _ h => .inr h
+    have ⟨hub, hd⟩ := hu.part (a := b) (b := a) (fun _ => by simp only [Expr.count]; omega) fun _ h => .inr ⟨hv, h⟩
     cases ht with
     | pair _ he₂ =>
       cases hr with
       | pair hr₁ hr₂ =>
         obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hub hnh hln.2 hlen
-        exact ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv.inPlace) s₂, fun x c h hn => hρ x c h fun h' => hn (.inr h'),
+        exact ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv.inPlace) s₂, fun x c h hn => hρ x c h fun h' => hn (.inr ⟨hv, h'⟩),
           hc', .pair (hr₁.beside hρ hd) hr', hl'⟩
   | fstCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
