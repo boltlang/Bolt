@@ -236,6 +236,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "boltlang-mir"
+version = "0.2.0"
+dependencies = [
+ "boltlang-base-db",
+ "boltlang-hir-def",
+ "boltlang-hir-ty",
+ "salsa",
+]
+
+[[package]]
 name = "boltlang-parser"
 version = "0.2.0"
 dependencies = [

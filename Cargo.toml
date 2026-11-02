@@ -8,6 +8,7 @@ members = [
   "crates/boltlang-hir-def",
   "crates/boltlang-hir",
   "crates/boltlang-hir-ty",
+  "crates/boltlang-mir",
   "crates/boltlang-eval",
   "crates/boltlang-codegen",
   "crates/boltlang-corpus",
