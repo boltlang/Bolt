@@ -26,8 +26,9 @@
 //!   cell ([`Local::cell`]), shared between the closure and its body (#181).
 //! - **Types.** Every local has a type, which can mention the function's
 //!   type parameters: one IR per body, generic like the body.
-//! - **Sources.** Every statement keeps the expression it comes from, for
-//!   errors and for the evaluator's fuel.
+//! - **Sources.** Every statement keeps the expression it comes from, with
+//!   the body that expression is in, for errors and for the evaluator's
+//!   fuel. Naming the body keeps a source right once a call is inlined.
 //!
 //! A body's locals and labels are numbered in tables of the [`Body`];
 //! blocks, statements and operands are a tree that its blocks own. Every
@@ -53,6 +54,7 @@ mod tests;
 use boltlang_hir_def::{
     Name,
     arena::{Arena, Idx},
+    body::DefWithBodyId,
     hir::ExprId,
     ids::{ClassId, EnumVariantId, FunctionId, StructId},
 };
@@ -110,7 +112,16 @@ pub struct Block<'db> {
 pub struct Stmt<'db> {
     pub kind: StmtKind<'db>,
     /// The expression it comes from, if there is one.
-    pub source: Option<ExprId>,
+    pub source: Option<Source<'db>>,
+}
+
+/// An expression of the HIR and the body it's in: an [`ExprId`] alone
+/// only means something in its own body, and an inlined statement can
+/// come from another one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, salsa::SalsaValue)]
+pub struct Source<'db> {
+    pub body: DefWithBodyId<'db>,
+    pub expr: ExprId,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
