@@ -6,11 +6,15 @@ description: A proposal for making an imm value from a mut one without a copy, w
 
 # Regions
 
-:::info[Proposal]
-Nothing on this page is implemented. It's a design for
-[#209](https://github.com/boltlang/Bolt/issues/209), which isn't decided
-yet. Regions only exist inside the type checker: a program never writes
-one, and the tutorial and the reference don't mention them.
+:::info[Superseded]
+This page describes regions as a kind of mutability in the types, a design
+for [#209](https://github.com/boltlang/Bolt/issues/209) that wasn't
+implemented. The type checker has no regions. Instead, a program makes an
+`imm` value from a `mut` one with `imm e`, which means a copy, and regions
+become an analysis on the IR that leaves the copy out when nothing outside
+the block that made the value can reach it. The rules and the Lean proof
+below are what that analysis relies on: `program_blocks_freeze_in_place`
+says when the copy can be left out.
 :::
 
 ## Making a value that can't be changed from one that can

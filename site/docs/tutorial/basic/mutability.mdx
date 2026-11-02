@@ -218,6 +218,29 @@ mine[1] = 4;
 ([2, 3, 5], [1, 4, 5], [1, 3, 5])
 ```
 
+`imm` before an expression makes a copy that never changes of everything
+in it: the arrays and structs it holds are copied too, and what's already
+`imm` is shared as it is. It's how a value that's built step by step ends
+up `imm`:
+
+```bolt
+let squares = imm {
+  let xs = mut [0; 4];
+  xs[1] = 1;
+  xs[2] = 4;
+  xs[3] = 9;
+  xs
+};
+squares;
+```
+
+```text
+[0, 1, 4, 9]
+```
+
+`squares` is an `imm [i32]`. A closure can't be copied, so `imm` of one
+that changes something, which is `mut`, is an error.
+
 [Mutability](../advanced/mutability.mdx) in the advanced part goes on with
 values that hold other values, generic functions and closures. The
 [internals](../../internals/type-checking/mutability/index.mdx) explain how
