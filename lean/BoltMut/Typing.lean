@@ -165,6 +165,11 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
       (∀ l, e.HasLoc l → ∃ m t', σ[l]? = some (m, t') ∧ (Ty.cell m t').mentions (2 * k + 1) = false) →
       HasType fns σ Δ io Γb e t → t.Freezable (2 * k + 1) → t.NoParams → t.Below σ.length →
       HasType fns σ Δ io Γ (.block false k t e) (t.free (2 * k + 1) .immutable)
+  /-- Making an `imm` object from a `mut` one copies it (#284): what it
+  holds must be `imm` all the way down already, as for `array_freeze`. -/
+  | frz {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} :
+      HasType fns σ Δ io Γ e (.cell .mutable t) → AtMost Δ .immutable t →
+      HasType fns σ Δ io Γ (.frz false e) (.cell .immutable t)
 
 /-- A function's signature mentions no region: so renaming a region in a
 call is renaming it in the arguments. -/

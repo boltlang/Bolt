@@ -457,4 +457,27 @@ example : HasType [both] [] .none false Ctx.empty
   · intro i h; simp [both] at h
   · intro i h; simp [both] at h
 
+/-! ## Freezing (#284)
+
+`frz false e` makes an `imm` copy of a `mut` object, as `array_freeze`
+does: what it holds is `imm` already, so the copy is shallow. -/
+
+/-- `let xs = mut [1]; xs[0] = 2; array_freeze(xs)`. -/
+example : HasType [] [] .none false Ctx.empty
+    (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.frz false (.var 0))))
+    (.cell .immutable .int) :=
+  .letE (.new .int trivial) (.letE (.set (.var rfl) .int) (.frz (.var (by simp [Ctx.update, muOf])) trivial))
+
+/-- `array_freeze(mut [mut [1]])` is rejected: an `imm` copy can't hold the
+`mut` array, which it would share. -/
+example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty (.frz false (.new true (.new true (.int 1)))) t := by
+  intro h
+  cases h with
+  | frz he hd =>
+    cases he with
+    | new hin _ =>
+      cases hin with
+      | newP _ hi _ => simp [Assume.none] at hi
+      | new _ _ | newR _ _ => exact nomatch Le.none_immutable hd.1
+
 end BoltMut

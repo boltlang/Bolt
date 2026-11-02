@@ -99,6 +99,12 @@ inductive Expr where
   and ends with a freeze of it: `keep`, if it's `inPlace`, which only the
   program that leaves copies out has. -/
   | block (inPlace : Bool) (k : Nat) (t : Ty) (e : Expr)
+  /-- Making an `imm` object from a `mut` one, as `array_freeze` does in
+  Bolt (#284): a copy of the object, whose contents are `imm` already, so
+  the copy is shallow. One `inPlace` makes the same copy but goes on with
+  the object itself, which can't be noticed when nothing else has it; only
+  the program that leaves copies out has it, so it isn't typed. -/
+  | frz (inPlace : Bool) (e : Expr)
   deriving Repr
 
 /-- The mutability of `new isMut _`. -/
@@ -129,6 +135,7 @@ def Expr.NoLocs : Expr → Prop
   | .freeze _ _ e => e.NoLocs
   | .keep _ _ e => e.NoLocs
   | .block _ _ _ e => e.NoLocs
+  | .frz _ e => e.NoLocs
 
 /-- The location `l` is in the expression: what a closure captured is in its
 body. -/
@@ -148,6 +155,7 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .freeze _ _ e, l => e.HasLoc l
   | .keep _ _ e, l => e.HasLoc l
   | .block _ _ _ e, l => e.HasLoc l
+  | .frz _ e, l => e.HasLoc l
 
 /-- A mutability that isn't a region. -/
 def Mu.NoRegion : Mu → Prop
@@ -254,6 +262,7 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .freeze r t e => .freeze r (t.inst ms τs) (e.inst ms τs)
   | .keep r t e => .keep r (t.inst ms τs) (e.inst ms τs)
   | .block c k t e => .block c k (t.inst ms τs) (e.inst ms τs)
+  | .frz b e => .frz b (e.inst ms τs)
 
 /-- Replace the variable `x` with the value `v`, which has no variables, so
 nothing can be captured. -/
@@ -275,6 +284,7 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .freeze r t e, x, v => .freeze r t (e.subst x v)
   | .keep r t e, x, v => .keep r t (e.subst x v)
   | .block c k t e, x, v => .block c k t (e.subst x v)
+  | .frz b e, x, v => .frz b (e.subst x v)
 
 /-! ## At most -/
 
@@ -505,7 +515,7 @@ theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lam _ _ _ ih => exact ih h
 
@@ -514,7 +524,7 @@ theorem Expr.NoLocs.not_hasLoc {e : Expr} (h : e.NoLocs) (l : Nat) : ¬ e.HasLoc
   induction e with
   | var | unit | int => exact id
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hl => hl.elim (ih₁ h.1) (ih₂ h.2)
 
@@ -529,7 +539,7 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -792,6 +802,7 @@ def Expr.ren (a b : Nat) : Expr → Expr
   | .freeze r t e => .freeze (if r = a then b else r) (t.free a (.region b)) (e.ren a b)
   | .keep r t e => .keep (if r = a then b else r) (t.free a (.region b)) (e.ren a b)
   | .block c k t e => if 2 * k + 1 = a then .block c k t e else .block c k (t.free a (.region b)) (e.ren a b)
+  | .frz c e => .frz c (e.ren a b)
 
 /-! ## Scoping
 
@@ -809,7 +820,7 @@ blocks they are in, and those in `B`. -/
 def Expr.Scoped : (Nat → Prop) → Expr → Prop
   | _, .var _ | _, .unit | _, .int _ | _, .loc _ => True
   | B, .new _ e | B, .get e | B, .lam _ _ e | B, .fst e | B, .snd e
-    | B, .freeze _ _ e | B, .keep _ _ e => e.Scoped B
+    | B, .freeze _ _ e | B, .keep _ _ e | B, .frz _ e => e.Scoped B
   | B, .set e₁ e₂ | B, .letE _ e₁ e₂ | B, .app e₁ e₂ | B, .pair e₁ e₂ => e₁.Scoped B ∧ e₂.Scoped B
   | B, .call _ ms τs e => (∀ m ∈ ms, m.Scoped B) ∧ (∀ τ ∈ τs, τ.Scoped B) ∧ e.Scoped B
   | B, .block _ k _ e => e.Scoped (fun r => r = 2 * k + 1 ∨ B r)

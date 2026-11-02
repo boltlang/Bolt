@@ -41,6 +41,7 @@ A small language with what matters for mutability:
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
 | a value a block makes, that nothing outside it has (#209) | a cell of the region `r`: `new true x` of type `cell (region r) t` |
 | the end of a block whose region becomes `imm` | `freeze r t e`: a copy of `e`'s value, with what's of `r` in new `imm` objects (#292) |
+| `array_freeze(xs)`: an `imm` copy of a `mut` array (#284) | `frz false e`, a shallow copy, since what `xs` holds is `imm` already; `frz true e` makes the same copy but goes on with `xs`, and isn't typed |
 
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 

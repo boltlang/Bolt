@@ -285,6 +285,38 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
   | blockKeep => intro σ t n A hh ht; cases ht
   | keepCong _ _ => intro σ t n A hh ht; cases ht
   | keepVal _ _ => intro σ t n A hh ht; cases ht
+  | frzCong _ ih =>
+    intro σ t n A hh ht hn hc hhc
+    cases ht with
+    | frz he _ => exact ih hh he hn hc hhc
+  | @frzVal l w hl =>
+    intro σ t n A hh ht hn hc hhc
+    cases ht with
+    | frz he _ =>
+      -- The copy is new, and holds what the object does, which is clean:
+      -- the object isn't `imm`, so it's new or allowed.
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he (by simp)
+      cases hl'
+      have hcw : Clean σ n A w := by
+        rcases hc l rfl with h₁ | h₁ | ⟨t₀, ht₀⟩
+        · exact hhc l w (.inl h₁) hl
+        · exact hhc l w (.inr h₁) hl
+        · rw [hσ] at ht₀; cases ht₀
+      refine ⟨fun l' hl' _ => List.getElem?_append_left (by omega), by simp; omega,
+        fun l' hl' => .inl (hl' ▸ hn), ?_⟩
+      intro l' v hA hv
+      by_cases hlt : l' < h.length
+      · rw [List.getElem?_append_left hlt] at hv
+        exact hhc l' v hA hv
+      · have hlen : l' = h.length := by
+          have := (List.getElem?_eq_some_iff.mp hv).1
+          simp at this
+          omega
+        subst hlen
+        rw [List.getElem?_concat_length] at hv
+        cases hv
+        exact hcw
+  | frzKeep _ => intro σ t n A hh ht; cases ht
 
 /-- However many steps a clean program takes, the locations that are old
 and not allowed keep their values. -/

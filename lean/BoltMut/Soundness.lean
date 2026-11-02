@@ -412,6 +412,12 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     rcases ih₁ hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .letVal hv⟩
     · exact .inr ⟨_, _, .letCong hs⟩
+  | frz he _ ih =>
+    rcases ih hΓ with hv | ⟨h', e', hs⟩
+    · obtain ⟨l, rfl, hl⟩ := canonical_cell hv he (by simp)
+      obtain ⟨_, _, w, hw, _⟩ := hh.2 _ _ _ hl
+      exact .inr ⟨_, _, .frzVal hw⟩
+    · exact .inr ⟨_, _, .frzCong hs⟩
   | call hf _ _ _ ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
     · exact .inr ⟨_, _, .callVal hf hv⟩
@@ -651,6 +657,29 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
   | blockKeep => intro σ t hh ht _; cases ht
   | keepCong _ _ => intro σ t hh ht _; cases ht
   | keepVal _ _ => intro σ t hh ht _; cases ht
+  | frzCong _ ih =>
+    intro σ t hh ht hsc
+    cases ht with
+    | frz he hd =>
+      obtain ⟨σ', hx, hh', he', ha⟩ := ih hh he hsc
+      exact ⟨σ', hx, hh', .frz he' hd, ha⟩
+  | @frzVal l w hw =>
+    intro σ T hh ht _
+    cases ht with
+    | @frz _ _ _ s he hd =>
+      -- The copy is `imm`, and holds what the object does.
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he (by simp)
+      cases hl'
+      obtain ⟨_, _, w₀, hw₀, hwv, hwt⟩ := hh.2 _ _ _ hσ
+      rw [hw] at hw₀
+      cases hw₀
+      refine ⟨σ ++ [(.immutable, s)], Extends.append σ _, hh.alloc (.inr (.inl rfl)) hd hwv hwt,
+        .loc ?_ (fun h => nomatch h), fun ha => ha.append fun r hr => ?_⟩
+      · rw [hh.1, List.getElem?_concat_length]
+      · simp only [Ty.reaches, Mu.mentions, Bool.false_or] at hr
+        exact (ha _ _ _ hσ).mono (Nat.le_of_lt (List.getElem?_eq_some_iff.mp hσ).1) r
+          (by simp [Ty.reaches, Mu.mentions, hr])
+  | frzKeep _ => intro σ t hh ht _; cases ht
 
 /-- Preservation: a step keeps the heap matching a typing that only grew,
 and the program's type. -/
