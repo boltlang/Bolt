@@ -105,7 +105,7 @@ theorem Expr.subst_comm (e : Expr) {x y : Nat} {v w : Expr} (hxy : x ≠ y) (hv 
     by_cases hzx : z = x <;> by_cases hzy : z = y <;> simp [hzx, hzy, ih₂] <;> omega
   | lam b z _ ih =>
     simp only [Expr.subst]
-    by_cases hzx : z = x <;> by_cases hzy : z = y <;> simp [Expr.subst, hzx, hzy, ih] <;> omega
+    by_cases hzx : z = x <;> by_cases hzy : z = y <;> simp [hzx, hzy, ih] <;> omega
 
 /-- A variable that isn't in scope isn't free in what's typed. -/
 theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
@@ -1415,7 +1415,7 @@ theorem noLoc_of_lt {e : Expr} {n l : Nat} (he : ∀ l, e.HasLoc l → l < n) (h
 /-- **A step keeps the check.** Its bound grows with the heap; and a new
 `mut` object that a `let` names, whose body consumes it, is owned from now
 on, consumed, and held by no object. -/
-theorem step_ok {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) (hR : Returns B fns)
+theorem step_ok {fns : List Fn} (hR : Returns B fns)
     (hfo : ∀ fn ∈ fns, Ok B 0 (fun _ => False) fn.body) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') {L : Nat → Prop} :
     Ok B h.length L e → (∀ l, e.HasLoc l → l < h.length) →
@@ -1640,7 +1640,7 @@ theorem step_inv {fns : List Fn} (hf : FnsOk fns) (hfo : ∀ fn ∈ fns, Ok B 0 
     cases hw
     rw [hh.1]
     exact hwt.hasLoc_lt hl'
-  obtain ⟨N, hN, hok'⟩ := step_ok hfn hR hfo hs hok hl hhl hnh ht.noFree
+  obtain ⟨N, hN, hok'⟩ := step_ok hR hfo hs hok hl hhl hnh ht.noFree
   refine ⟨fun l => L l ∨ N l, hok', fun l hl' => ?_⟩
   rcases hl' with hl' | hl'
   · obtain ⟨hlt, hc, hno⟩ := hL l hl'
