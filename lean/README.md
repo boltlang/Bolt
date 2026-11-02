@@ -117,7 +117,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
 | `unique_toImm_changes_nothing` | `Unique.lean` | making an `imm` copy of a `mut` object that no object holds, `new false (get xs)`, can use `xs` itself instead of the copy: a program that has the copy, but not `xs`, computes what it does with `xs` in place of the copy (#284). The copy is shallow, like `array_freeze`, so only `xs` needs to be unique |
 | `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, what it makes `imm` is unique: in the program once, and held by no object (`Expr.UniqToImm`). The simulation gives up the original at the freeze and relates the copy to it. No closure may have a `toImm` |
-| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function (`Ok`, `Con`, `Bor`). Then the program with every `toImm` in place computes what it does. The proof keeps an invariant of the running program (`Inv`): each object it owns is consumed, or gone from it, and no object holds it |
+| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`. Then the program with every `toImm` in place computes what it does. The proof keeps an invariant of the running program (`Inv`): each object it owns is consumed, or gone from it, and no object holds it |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -179,9 +179,10 @@ no `sorry`.
   cell can't be seen as `ro`; and there's no rule for other places, like
   `if` branches, which the core doesn't have. Impls and inference aren't
   covered either.
-- **The rest of uniqueness** (#284): the check is local. A unique object
-  can't go to a function, even one that only borrows it, like `push`, and
-  a function can't return one, like `StringBuilder.new()`. A closure can't
-  freeze in place, and a freeze's argument must be a variable.
+- **The rest of uniqueness** (#284): a unique object can go to a function
+  that borrows it only as the whole argument, like `fill(xs)`, not inside
+  a tuple, like `push(xs, 1)`. A function can't return a new unique
+  object, like `StringBuilder.new()`. A closure can't make an `imm` copy
+  in place, and a `toImm`'s argument must be a variable.
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
