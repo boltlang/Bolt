@@ -15,3 +15,4 @@ import BoltMut.Regions
 import BoltMut.Elision
 import BoltMut.ElideAll
 import BoltMut.Scope
+import BoltMut.Unique
