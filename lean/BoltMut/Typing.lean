@@ -77,6 +77,15 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   | loc {io : Bool} {Γ : Ctx} {l : Nat} {m : Mu} {t : Ty} :
       σ[l]? = some (m, t) → (io = true → m = .immutable) →
       HasType fns σ Δ io Γ (.loc l) (.cell m t)
+  /-- A variable can be used as a subtype of its type: a `mut` or `imm`
+  object it holds can be seen as `ro` (#320). Subtyping happens only here
+  and at locations, so an argument is converted by naming it first. -/
+  | varSub {io : Bool} {Γ : Ctx} {x : Nat} {s t : Ty} :
+      Γ x = some s → Sub Δ s t → HasType fns σ Δ io Γ (.var x) t
+  /-- A location seen as a subtype of its type, as for `varSub`. -/
+  | locSub {io : Bool} {Γ : Ctx} {l : Nat} {m : Mu} {t t' : Ty} :
+      σ[l]? = some (m, t) → (io = true → m = .immutable) → Sub Δ (.cell m t) t' →
+      HasType fns σ Δ io Γ (.loc l) t'
   | new {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {b : Bool} :
       HasType fns σ Δ io Γ e t → AtMost Δ (muOf b) t →
       HasType fns σ Δ io Γ (.new b e) (.cell (muOf b) t)

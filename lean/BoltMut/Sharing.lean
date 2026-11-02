@@ -171,8 +171,8 @@ theorem Rel.ren {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ 
 theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty}
     (ht : HasType fns σ Δ io Γ e t) {l : Nat} (hl : e.HasLoc l) : l < σ.length := by
   induction ht with
-  | var | unit | int => exact hl.elim
-  | loc hσ _ =>
+  | var | varSub | unit | int => exact hl.elim
+  | loc hσ _ | locSub hσ _ _ =>
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
@@ -297,9 +297,10 @@ theorem Copy.sim {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ
     exact ⟨ρ, h₂, m₂, v₂, .keep hm, fun _ _ h => h, hc.widen, hr, hmr.widen hc, hk, Nat.add_comm _ _⟩
   | @seen μ s h m l c hmen hlk =>
     intro _ io Γ ht hf hk M ρ h₂ m₂ v₂ hM hc hr hmr
-    cases ht with
-    | loc hσ _ =>
-      have hreg := hf.cell_region hmen
+    -- A region's object isn't seen as `ro`.
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by rw [hf.cell_region hmen]; simp)
+    cases hl'
+    · have hreg := hf.cell_region hmen
       subst hreg
       cases hr with
       | @loc _ c₂ hlc =>
@@ -310,9 +311,10 @@ theorem Copy.sim {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ
           exact ⟨ρ, h₂, m₂, _, .seen hmen h₂', fun _ _ h => h, hc.widen, .loc hcc, hmr.widen hc, hk, Nat.add_comm _ _⟩
   | @cell μ s h h' m m' l w w' hmen hnone hw hcw ih =>
     intro hpre io Γ ht hf hk M ρ h₂ m₂ v₂ hM hc hr hmr
-    cases ht with
-    | loc hσ _ =>
-      have hreg := hf.cell_region hmen
+    -- A region's object isn't seen as `ro`.
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by rw [hf.cell_region hmen]; simp)
+    cases hl'
+    · have hreg := hf.cell_region hmen
       subst hreg
       obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l _ s hσ
       have hl₀ : l < h₀.length := hh.lt hσ
@@ -515,9 +517,9 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
-      cases he₁ with
-      | loc hσ _ =>
-        have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+      cases hl'
+      · have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
         cases hr with
         | @set _ _ _ v' hr₁ hr₂ =>
           cases hr₁ with

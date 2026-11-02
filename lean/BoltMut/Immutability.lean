@@ -55,9 +55,10 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ =>
-      cases he₁ with
-      | loc hσ _ =>
-        -- The location written is `mut`, so it isn't `l`.
+      -- A `ro` view isn't `mut`, so the location written is.
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+      cases hl'
+      · -- The location written is `mut`, so it isn't `l`.
         have hne : l₀ ≠ l := by
           intro heq
           subst heq
@@ -65,9 +66,9 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
           cases hl
         exact List.getElem?_set_ne hne
     | setR he₁ _ =>
-      cases he₁ with
-      | loc hσ _ =>
-        -- Or it's in a region, so it isn't `l` either.
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+      cases hl'
+      · -- Or it's in a region, so it isn't `l` either.
         have hne : l₀ ≠ l := by
           intro heq
           subst heq

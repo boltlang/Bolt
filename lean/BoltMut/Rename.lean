@@ -237,7 +237,7 @@ theorem Mu.Changeable.ren {m : Mu} (h : m.Changeable .none) (a b : Nat) :
   cases m with
   | region r => simp only [Mu.free]; split <;> trivial
   | mutable => trivial
-  | immutable => exact h.elim
+  | immutable | readonly => exact h.elim
   | param i => exact h
 
 theorem Mu.NoRegion.free {m : Mu} (h : m.NoRegion) (a : Nat) (ν : Mu) : m.free a ν = m :=
@@ -324,6 +324,17 @@ theorem Expr.hasLoc_ren {e : Expr} {a b l : Nat} (h : (e.ren a b).HasLoc l) : e.
     · exact h
     · exact ih h
 
+/-- Seeing objects as `ro` survives replacing a region. -/
+theorem Sub.free {t t' : Ty} (h : Sub .none t t') (r : Nat) (ν : Mu) :
+    Sub .none (t.free r ν) (t'.free r ν) := by
+  induction h with
+  | refl => exact .refl _
+  | @ro m t₀ t₁ hv _ ha ih =>
+    have := ha.free r ν
+    simp only [Ty.free, Mu.free_not_mentions (hv.mentions r)] at this ⊢
+    exact .ro hv ih this
+  | prod _ _ iha ihb => exact .prod iha ihb
+
 /-! ## The renaming lemma -/
 
 /-- **Renaming a block's region keeps its body well-typed.** `a` is renamed
@@ -344,6 +355,7 @@ theorem HasType.ren {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.NoRegions) {σ σ'
     simp [Mu.mentions]; omega
   induction ht with
   | var hx' => intro _; exact .var (by simp [Ctx.free, hx'])
+  | varSub hx' hsub => intro _; exact .varSub (by simp [Ctx.free, hx']) (hsub.free a (.region b))
   | unit => intro _; exact .unit
   | int => intro _; exact .int
   | loc hσ hio =>
@@ -353,6 +365,13 @@ theorem HasType.ren {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.NoRegions) {σ σ'
     cases hσ'
     rw [Ty.free_not_mentions hm]
     exact .loc (hx _ _ hσ) hio
+  | locSub hσ hio hsub =>
+    intro hl
+    obtain ⟨m, t', hσ', hm⟩ := hl _ rfl
+    rw [hσ] at hσ'
+    cases hσ'
+    rw [Ty.free_not_mentions ((hsub.mentions a).trans hm)]
+    exact .locSub (hx _ _ hσ) hio hsub
   | @new _ _ _ _ c _ hd ih =>
     intro hl
     have h := hd.free a (.region b)

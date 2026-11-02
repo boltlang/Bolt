@@ -46,6 +46,10 @@ decides that right away, as `Le.eq_mutable` in `Solver.lean` says (#286). -/
 inductive Mu where
   | mutable
   | immutable
+  /-- `ro` (#320): a view that can read an object but not change it, and
+  that doesn't promise it won't change. No object is made `ro`: a `mut`
+  or `imm` one is seen as `ro` through subtyping (`Sub`). -/
+  | readonly
   | param (i : Nat)
   | region (r : Nat)
   deriving DecidableEq, Repr
@@ -333,7 +337,7 @@ parameter that's assumed to be one of them. -/
 def Mu.Changeable (Δ : Assume) : Mu → Prop
   | .mutable | .region _ => True
   | .param i => i ∈ Δ.changeable
-  | .immutable => False
+  | .immutable | .readonly => False
 
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
@@ -413,6 +417,7 @@ theorem Mu.subst_subst (ms ms' : List Mu) (m : Mu) :
   cases m with
   | mutable => rfl
   | immutable => rfl
+  | readonly => rfl
   | param i =>
     simp only [Mu.subst, List.getElem?_map]
     cases ms'[i]? <;> rfl
@@ -447,7 +452,7 @@ theorem Mu.noRegion_subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs :
   cases m with
   | param i => exact hs.2.2.2.1 i hp
   | region => exact hn.elim
-  | mutable | immutable => exact ⟨trivial, trivial⟩
+  | mutable | immutable | readonly => exact ⟨trivial, trivial⟩
 
 theorem Ty.noRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t : Ty}
     (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) : (t.inst ms τs).NoRegion ∧ (t.inst ms τs).ParamsNoRegion Δ' := by
@@ -474,7 +479,7 @@ theorem Mu.Changeable.subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs
     (h : m.Changeable Δ) : (m.subst ms).Changeable Δ' := by
   cases m with
   | param i => exact hs.2.2.2.2.2 i h
-  | immutable => exact h.elim
+  | immutable | readonly => exact h.elim
   | _ => exact h
 
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
@@ -543,6 +548,86 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     split at h
     · exact .inl h
     · exact ih h
+
+/-! ## Read-only views
+
+`ro` (#320) sits between `imm` and `mut` in what an object can hold. It's
+also above both in subtyping: a `mut` or an `imm` object can be seen as
+`ro`, which can read it but not change it (`Sub`). The two orders differ:
+an `imm` object can't hold a `ro` one, since that may change, but an `imm`
+object can be seen as `ro`.
+
+A `ro` view is deep: what it holds is at most `ro`, so what's read through
+it can't be changed either. A region's or a parameter's object isn't seen
+as `ro`, so a type still mentions every region its values reach. -/
+
+/-- The mutabilities whose objects can be seen as `ro`. -/
+def Mu.Viewable : Mu → Prop
+  | .mutable | .immutable | .readonly => True
+  | .param _ | .region _ => False
+
+/-- `t` can be used where `t'` is expected: the same type, with some of its
+`mut`, `imm` and `ro` objects seen as `ro`. A `mut` object's contents can
+be seen as `ro` too, since nothing can be stored through the view. -/
+inductive Sub (Δ : Assume) : Ty → Ty → Prop where
+  | refl (t : Ty) : Sub Δ t t
+  | ro {m : Mu} {t t' : Ty} : m.Viewable → Sub Δ t t' → AtMost Δ .readonly t' →
+      Sub Δ (.cell m t) (.cell .readonly t')
+  | prod {a a' b b' : Ty} : Sub Δ a a' → Sub Δ b b' → Sub Δ (.prod a b) (.prod a' b')
+
+theorem Sub.trans {Δ : Assume} {t₁ t₂ t₃ : Ty} (h₁ : Sub Δ t₁ t₂) (h₂ : Sub Δ t₂ t₃) : Sub Δ t₁ t₃ := by
+  induction h₁ generalizing t₃ with
+  | refl => exact h₂
+  | ro hv _ _ ih =>
+    cases h₂ with
+    | refl => exact .ro hv (by assumption) (by assumption)
+    | ro _ h₂ ha => exact .ro hv (ih h₂) ha
+  | prod _ _ iha ihb =>
+    cases h₂ with
+    | refl => exact .prod (by assumption) (by assumption)
+    | prod ha hb => exact .prod (iha ha) (ihb hb)
+
+theorem Mu.Viewable.subst {m : Mu} (h : m.Viewable) (ms : List Mu) : m.subst ms = m := by
+  cases m <;> first | rfl | exact h.elim
+
+/-- Seeing an object as `ro` survives instantiating. -/
+theorem Sub.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t t' : Ty}
+    (h : Sub Δ t t') : Sub Δ' (t.inst ms τs) (t'.inst ms τs) := by
+  induction h with
+  | refl => exact .refl _
+  | ro hv _ ha ih =>
+    simp only [Ty.inst, hv.subst]
+    have := AtMost.inst hs ha
+    simp only [Mu.subst] at this
+    exact .ro hv ih this
+  | prod _ _ iha ihb => exact .prod iha ihb
+
+/-- What `t` can be used as, when `t` isn't a `ro` view or a tuple: only `t`. -/
+theorem Sub.cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ (.cell m t) t') :
+    t' = .cell m t ∨ ∃ s, t' = .cell .readonly s ∧ m.Viewable ∧ Sub Δ t s ∧ AtMost Δ .readonly s := by
+  cases h with
+  | refl => exact .inl rfl
+  | ro hv h ha => exact .inr ⟨_, rfl, hv, h, ha⟩
+
+theorem Sub.to_cell_inv {Δ : Assume} {m : Mu} {t t' : Ty} (h : Sub Δ t (.cell m t')) (hm : m ≠ .readonly) :
+    t = .cell m t' := by
+  cases h with
+  | refl => rfl
+  | ro => exact (hm rfl).elim
+
+theorem Sub.prod_inv {Δ : Assume} {a b t' : Ty} (h : Sub Δ (.prod a b) t') :
+    ∃ a' b', t' = .prod a' b' ∧ Sub Δ a a' ∧ Sub Δ b b' := by
+  cases h with
+  | refl => exact ⟨a, b, rfl, .refl _, .refl _⟩
+  | prod ha hb => exact ⟨_, _, rfl, ha, hb⟩
+
+/-- Other types are only subtypes of themselves. -/
+theorem Sub.eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
+    (hc : ∀ m s, t ≠ .cell m s) (hp : ∀ a b, t ≠ .prod a b) : t' = t := by
+  cases h with
+  | refl => rfl
+  | ro => exact (hc _ _ rfl).elim
+  | prod => exact (hp _ _ rfl).elim
 
 /-! ## Freeing a region in types
 

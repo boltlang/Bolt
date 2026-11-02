@@ -25,6 +25,11 @@ example (t : Ty) :
       | set hx _ | setR hx _ =>
         cases hx with
         | var hx => simp [Ctx.update, muOf] at hx
+        | varSub hx hs =>
+          -- Seeing it as `ro` doesn't make it changeable either.
+          simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+          subst hx
+          cases hs
 
 /-- `[mut [1]]`: an `imm` object can't hold a `mut` one, since `imm` is
 deep. -/
@@ -95,7 +100,7 @@ example (t : Ty) : ¬ HasType [] [] {} false (Ctx.empty.update 0 (.tparam 0)) (.
   cases h with
   | lam _ hc _ hrc _ hb =>
     cases hb with
-    | var hx =>
+    | var hx | varSub hx _ =>
       simp only [Ctx.update] at hx
       have hΓ := hc 0 _ hx
       simp only [Ctx.update, ite_true, Option.some.injEq] at hΓ
@@ -125,6 +130,10 @@ example (t : Ty) :
   | set hx _ | setR hx _ =>
     cases hx with
     | var hx => simp [Ctx.update] at hx
+    | varSub hx hs =>
+      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+      subst hx
+      cases hs
 
 /-! ## Closures -/
 
@@ -155,6 +164,10 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
           | set hx _ | setR hx _ =>
             cases hx with
             | var hx =>
+              simp only [Ctx.update] at hx
+              exact nomatch Le.none_immutable (himm (fun h => nomatch h) 0 _ hx).1
+            | varSub hx hs =>
+              cases hs.to_cell_inv (by simp)
               simp only [Ctx.update] at hx
               exact nomatch Le.none_immutable (himm (fun h => nomatch h) 0 _ hx).1
         · cases hk
@@ -234,6 +247,18 @@ example (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
                     simp only [Ctx.update, ite_true, Option.some.injEq, Ty.cell.injEq, Ty.prod.injEq] at hx
                     obtain ⟨_, rfl, _⟩ := hx
                     exact nomatch Le.none_immutable hd.1.1
+                  | varSub hx hs =>
+                    -- Seeing `l.a` as `ro` doesn't help: an `imm` object
+                    -- can't hold a `ro` one either.
+                    simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+                    subst hx
+                    rcases hs.cell_inv with h | ⟨s, h, _, hs', _⟩
+                    · cases h
+                      exact nomatch Le.none_immutable hd.1.1
+                    · cases h
+                      obtain ⟨a', b', h', ha', _⟩ := hs'.prod_inv
+                      cases h'
+                      rcases ha'.cell_inv with h | ⟨_, h, _⟩ <;> (cases h; exact nomatch Le.none_immutable hd.1.1)
 
 /-- But `Line { a: Point { x: 0 }, ..l }` gives the shared field anew, and
 copies only the number. -/
@@ -258,9 +283,10 @@ example (t : Ty) :
   cases h with
   | new hx hd =>
     cases hx with
-    | var hx =>
+    | var hx | varSub hx _ =>
       simp only [Ctx.update, ite_true, Option.some.injEq] at hx
       subst hx
+      try (rename_i hs; cases hs.eq_of_not (by simp) (by simp))
       obtain ⟨μ', hμ', hle⟩ := hd
       rcases hμ' with rfl | hmem
       · exact nomatch Le.none_immutable hle
@@ -336,10 +362,99 @@ example (t : Ty) : ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell (.par
         simp only [Ctx.update, ite_true, Option.some.injEq] at hx
         subst hx
         exact nomatch Le.none_immutable hd.1.1
+      | varSub hx hs =>
+        -- A parameter's object isn't seen as `ro`.
+        simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+        subst hx
+        rcases hs.cell_inv with rfl | ⟨_, _, hv, _⟩
+        · exact nomatch Le.none_immutable hd.1.1
+        · exact hv.elim
 
 /-- ...unless the function assumes `'v ⊑ imm`. -/
 example : HasType [] [] { mus := [(.param 0, .immutable)] } false (Ctx.empty.update 0 (.cell (.param 0) .int))
     (.new false (.pair (.var 0) (.int 0))) (.cell .immutable (.prod (.cell (.param 0) .int) .int)) :=
   .new (.pair (.var rfl) .int) ⟨⟨.assume (by simp [muOf]), trivial⟩, trivial⟩
+
+/-! ## Read-only views (#320)
+
+A `mut` or `imm` object can be seen as `ro`, which reads it but can't
+change it. Subtyping happens at variables, so an argument is named first. -/
+
+/-- `fn peek(xs: ro [i32]) -> i32 = xs[0]`. -/
+def peek : Fn :=
+  { assume := {}, param := 0, argTy := .cell .readonly .int, retTy := .int, body := .get (.var 0) }
+
+theorem peek_ok : FnsOk [peek] := by
+  intro fn hfn
+  simp at hfn
+  subst hfn
+  exact ⟨trivial, .get (.var rfl), by simp [Fn.NoRegions, Ty.NoRegion, Mu.NoRegion, peek], by simp [Expr.Scoped, peek]⟩
+
+/-- `let xs = mut [1]; peek(xs)` and `let xs = [1]; peek(xs)`: it takes
+either, with no mutability parameter. -/
+example (b : Bool) : HasType [peek] [] .none false Ctx.empty
+    (.letE 0 (.new b (.int 1)) (.call 0 [] [] (.var 0))) .int := by
+  refine .letE (.new .int trivial) ?_
+  show HasType _ _ _ _ _ _ (peek.retTy.inst [] [])
+  refine .call rfl (sat_none _ _) (.varSub rfl (.ro ?_ (.refl _) trivial)) (fun _ h => by simp at h)
+  cases b <;> trivial
+
+/-- `xs[0] = 1` with `xs : ro [i32]` is rejected: a `ro` view can't change
+what it sees. -/
+example (t : Ty) :
+    ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.set (.var 0) (.int 1)) t := by
+  intro h
+  cases h with
+  | setP _ hi _ => simp [Assume.none] at hi
+  | set hx _ | setR hx _ =>
+    cases hx with
+    | var hx => simp [Ctx.update] at hx
+    | varSub hx hs =>
+      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+      subst hx
+      cases hs
+
+/-- `[xs]` with `xs : ro [i32]` is rejected: an `imm` object can't hold a
+`ro` one, since what's seen as `ro` may change. -/
+example (t : Ty) :
+    ¬ HasType [] [] .none false (Ctx.empty.update 0 (.cell .readonly .int)) (.new false (.var 0)) t := by
+  intro h
+  cases h with
+  | new hx hd =>
+    cases hx with
+    | var hx =>
+      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+      subst hx
+      exact nomatch Le.none_immutable hd.1
+    | varSub hx hs =>
+      -- However it's seen, `xs` is still `ro`.
+      simp only [Ctx.update, ite_true, Option.some.injEq] at hx
+      subst hx
+      rcases hs.cell_inv with rfl | ⟨_, rfl, _⟩ <;> exact nomatch Le.none_immutable hd.1
+
+/-- The case from #320: one type parameter for a `mut` and an `imm` value.
+`fn both[T](p: (T, T))`, called with `(xs, ys)` where `xs` is `mut` and
+`ys` is `imm`, takes `T` to be `ro [i32]`. -/
+def both : Fn :=
+  { assume := {}, param := 0, argTy := .prod (.tparam 0) (.tparam 0), retTy := .unit, body := .unit }
+
+example : HasType [both] [] .none false Ctx.empty
+    (.letE 0 (.new true (.int 1)) (.letE 1 (.new false (.int 2))
+      (.call 0 [] [.cell .readonly .int] (.pair (.var 0) (.var 1))))) .unit := by
+  refine .letE (.new .int trivial) (.letE (.new .int trivial) ?_)
+  show HasType _ _ _ _ _ _ (both.retTy.inst [] [.cell .readonly .int])
+  refine .call rfl ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+    (.pair (.varSub (s := .cell .mutable .int) (by simp [Ctx.update, muOf]) (.ro trivial (.refl _) trivial))
+      (.varSub (s := .cell .immutable .int) (by simp [Ctx.update, muOf]) (.ro trivial (.refl _) trivial)))
+    (fun _ h => by simp at h)
+  · intro p h; simp [both] at h
+  · intro p h; simp [both] at h
+  · intro i
+    cases i with
+    | zero => exact ⟨.top _, trivial⟩
+    | succ i => simp only [List.getElem?_cons_succ, List.getElem?_nil, Option.getD_none]; trivial
+  · intro i h; simp [both] at h
+  · intro i h; simp [both] at h
+  · intro i h; simp [both] at h
 
 end BoltMut

@@ -171,9 +171,9 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
     cases ht with
     | setP _ hi _ => simp [Assume.none] at hi
     | set he₁ _ | setR he₁ _ =>
-      cases he₁ with
-      | loc hσ _ =>
-        -- The location written is `mut` or in a region, so it's new or
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+      cases hl'
+      · -- The location written is `mut` or in a region, so it's new or
         -- allowed.
         have hw : n ≤ l₀ ∨ A l₀ := by
           rcases hc l₀ (.inl rfl) with h₁ | h₁ | ⟨t₀, ht₀⟩

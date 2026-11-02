@@ -42,9 +42,11 @@ theorem HasType.weaken_heap {fns : List Fn} {σ σ' : HeapTy} {Δ : Assume} {io 
     {t : Ty} (ht : HasType fns σ Δ io Γ e t) (hx : Extends σ σ') : HasType fns σ' Δ io Γ e t := by
   induction ht with
   | var h => exact .var h
+  | varSub h hs => exact .varSub h hs
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc (hx _ _ h) hio
+  | locSub h hio hs => exact .locSub (hx _ _ h) hio hs
   | new _ hd ih => exact .new ih hd
   | newR _ hd hr ih => exact .newR ih hd (hr.mono hx.length_le)
   | newP _ hi hd ih => exact .newP ih hi hd
@@ -88,9 +90,11 @@ theorem HasType.weaken_ctx {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
     {t : Ty} (ht : HasType fns σ Δ io Γ e t) (hΓ : Γ.Sub Γ') : HasType fns σ Δ io Γ' e t := by
   induction ht generalizing Γ' with
   | var h => exact .var (hΓ _ _ h)
+  | varSub h hs => exact .varSub (hΓ _ _ h) hs
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc h hio
+  | locSub h hio hs => exact .locSub h hio hs
   | new _ hd ih => exact .new (ih hΓ) hd
   | newR _ hd hr ih => exact .newR (ih hΓ) hd hr
   | newP _ hi hd ih => exact .newP (ih hΓ) hi hd
@@ -116,7 +120,9 @@ theorem HasType.weaken_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
   | var h => exact .var h
   | unit => exact .unit
   | int => exact .int
+  | varSub h hs => exact .varSub h hs
   | loc h hm => exact .loc h (fun h' => hm (hio h'))
+  | locSub h hm hs => exact .locSub h (fun h' => hm (hio h')) hs
   | new _ hd ih => exact .new (ih hio) hd
   | newR _ hd hr ih => exact .newR (ih hio) hd hr
   | newP _ hi hd ih => exact .newP (ih hio) hi hd
@@ -160,6 +166,12 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
   | int => cases ht; exact .int
   | loc => cases ht with
     | loc h _ => exact .loc h (fun _ => Le.none_immutable hd.1)
+    | locSub h _ hs =>
+      -- Nothing seen as `ro` is `imm` all the way down.
+      refine .locSub h (fun _ => ?_) hs
+      rcases hs.cell_inv with rfl | ⟨s, rfl, _⟩
+      · exact Le.none_immutable hd.1
+      · exact nomatch Le.none_immutable hd.1
   | @lam b x body => cases ht with
     | lam hk hc himm hrc hrl hb hw =>
       have hμ := Le.none_immutable hd
@@ -171,17 +183,26 @@ theorem HasType.value_imm {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {
       subst hb'
       exact .lam hk hc himm hrc hrl (hb.weaken_imm (fun _ => by simp)) hw
 
-/-- A value of a cell type is a location of that type. -/
-theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
+/-- A value of a cell type is a location, whose type is a subtype of it. -/
+theorem canonical_cell_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
     {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) :
-    ∃ l, v = .loc l ∧ σ[l]? = some (m, t) := by
+    ∃ l m' t', v = .loc l ∧ σ[l]? = some (m', t') ∧ Sub Δ (.cell m' t') (.cell m t) := by
   cases hv with
   | unit => cases ht
   | int => cases ht
   | loc => cases ht with
-    | loc h _ => exact ⟨_, rfl, h⟩
+    | loc h _ => exact ⟨_, _, _, rfl, h, .refl _⟩
+    | locSub h _ hs => exact ⟨_, _, _, rfl, h, hs⟩
   | lam => cases ht
   | pair => cases ht
+
+/-- A value of a cell type that isn't `ro` is a location of that type. -/
+theorem canonical_cell {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
+    {t : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v (.cell m t)) (hm : m ≠ .readonly) :
+    ∃ l, v = .loc l ∧ σ[l]? = some (m, t) := by
+  obtain ⟨l, m', t', rfl, h, hs⟩ := canonical_cell_sub hv ht
+  cases hs.to_cell_inv hm
+  exact ⟨l, rfl, h⟩
 
 /-- A value of a function type is a closure. -/
 theorem canonical_fn {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr} {m : Mu}
@@ -189,7 +210,8 @@ theorem canonical_fn {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
   cases hv with
   | unit => cases ht
   | int => cases ht
-  | loc => cases ht
+  | loc => cases ht with
+    | locSub _ _ hs => cases hs
   | lam => exact ⟨_, _, _, rfl⟩
   | pair => cases ht
 
@@ -200,9 +222,42 @@ theorem canonical_prod {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {
   cases hv with
   | unit => cases ht
   | int => cases ht
-  | loc => cases ht
+  | loc => cases ht with
+    | locSub _ _ hs => cases hs
   | lam => cases ht
   | pair h₁ h₂ => exact ⟨_, _, rfl, h₁, h₂⟩
+
+theorem Mu.Viewable.mentions {m : Mu} (h : m.Viewable) (r : Nat) : m.mentions r = false := by
+  cases m <;> first | rfl | exact h.elim
+
+/-- Seeing objects as `ro` keeps the regions a type mentions. -/
+theorem Sub.mentions {Δ : Assume} {t t' : Ty} (h : Sub Δ t t') (r : Nat) : t'.mentions r = t.mentions r := by
+  induction h with
+  | refl => rfl
+  | @ro m t₀ t₁ hv _ _ ih =>
+    show (Mu.readonly.mentions r || t₁.mentions r) = (m.mentions r || t₀.mentions r)
+    rw [hv.mentions r, ih]
+    rfl
+  | prod _ _ iha ihb => simp [Ty.mentions, iha, ihb]
+
+/-- A value can be used at any supertype of its type: what's seen as `ro`
+in it is a location. -/
+theorem HasType.value_sub {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
+    {t t' : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v t) (hs : Sub Δ t t') :
+    HasType fns σ Δ io Γ v t' := by
+  induction hv generalizing t t' with
+  | unit => cases ht; cases hs.eq_of_not (by intros; simp) (by intros; simp); exact .unit
+  | int => cases ht; cases hs.eq_of_not (by intros; simp) (by intros; simp); exact .int
+  | loc => cases ht with
+    | loc h hio => exact .locSub h hio hs
+    | locSub h hio hs' => exact .locSub h hio (hs'.trans hs)
+  | lam =>
+    have : t' = t := hs.eq_of_not (by intros; cases ht <;> simp) (by intros; cases ht <;> simp)
+    exact this ▸ ht
+  | pair _ _ ih₁ ih₂ => cases ht with
+    | pair h₁ h₂ =>
+      obtain ⟨a', b', rfl, ha, hb⟩ := hs.prod_inv
+      exact .pair (ih₁ h₁ ha) (ih₂ h₂ hb)
 
 /-- `Γ` without `x`. -/
 def Ctx.drop (Γ : Ctx) (x : Nat) : Ctx := fun z => if z = x then none else Γ z
@@ -236,8 +291,15 @@ theorem HasType.hasLoc_subst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : B
       subst hyx
       exact .inr ⟨⟨s, hy⟩, h⟩
     · exact h.elim
+  | @varSub _ _ y s _ hy _ =>
+    simp only [Expr.subst] at h
+    split at h
+    · rename_i hyx
+      subst hyx
+      exact .inr ⟨⟨s, hy⟩, h⟩
+    · exact h.elim
   | unit | int => exact h.elim
-  | loc => exact .inl h
+  | loc | locSub => exact .inl h
   | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih => exact ih h
   | block hsub _ _ _ _ _ _ ih =>
     rcases ih h with h | ⟨⟨s, hs⟩, h⟩
@@ -296,11 +358,11 @@ theorem Ty.NoRegion.regionsIn {t : Ty} (h : t.NoRegion) (μ : Mu) : t.RegionsIn 
 /-- Only `μ`'s region is in a value whose type mentions only that region,
 and so in what the closures in it captured. If the type is at most `μ`,
 so are its locations. -/
-theorem Expr.IsValue.hasLoc_regionsIn {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ : Ctx} {v : Expr}
-    {s : Ty} (hv : v.IsValue) (ht : HasType fns σ Δ io Γ v s) {μ : Mu} (hs : s.RegionsIn μ)
-    (hle : μ ≠ .mutable → AtMost Δ μ s) {l : Nat} (hl : v.HasLoc l) :
-    ∃ m t, σ[l]? = some (m, t) ∧ Le Δ m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ := by
-  have top : ∀ {m : Mu}, (μ ≠ .mutable → Le Δ m μ) → Le Δ m μ := by
+theorem Expr.IsValue.hasLoc_regionsIn {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ : Ctx} {v : Expr}
+    {s : Ty} (hv : v.IsValue) (ht : HasType fns σ .none io Γ v s) {μ : Mu} (hμr : μ ≠ .readonly)
+    (hs : s.RegionsIn μ) (hle : μ ≠ .mutable → AtMost .none μ s) {l : Nat} (hl : v.HasLoc l) :
+    ∃ m t, σ[l]? = some (m, t) ∧ Le .none m μ ∧ m.RegionsIn μ ∧ t.RegionsIn μ := by
+  have top : ∀ {m : Mu}, (μ ≠ .mutable → Le .none m μ) → Le .none m μ := by
     intro m h
     by_cases hμ : μ = .mutable
     · subst hμ; exact .top m
@@ -312,6 +374,18 @@ theorem Expr.IsValue.hasLoc_regionsIn {fns : List Fn} {σ : HeapTy} {Δ : Assume
       cases hl
       exact ⟨_, _, h, top fun hμ => (hle hμ).1, fun r h => hs r (by simp [Ty.mentions, h]),
         fun r h => hs r (by simp [Ty.mentions, h])⟩
+    | locSub h _ hsub =>
+      -- Only a closure that's `mut` can capture what's seen as `ro`.
+      cases hl
+      rcases hsub.cell_inv with rfl | ⟨s', rfl, hvw, hsub', _⟩
+      · exact ⟨_, _, h, top fun hμ => (hle hμ).1, fun r h => hs r (by simp [Ty.mentions, h]),
+          fun r h => hs r (by simp [Ty.mentions, h])⟩
+      · refine ⟨_, _, h, top fun hμ => ?_, fun r h => by simp [hvw.mentions r] at h,
+          fun r h => hs r (by simp [Ty.mentions, hsub'.mentions r, h])⟩
+        rcases (hle hμ).1.none_inv with h | h | h
+        · cases h
+        · exact (hμ h).elim
+        · exact (hμr h.symm).elim
   | @lam b x body => cases ht with
     | @lam _ _ _ _ _ _ _ _ μc _ _ _ _ hrl _ =>
       have hl' : body.HasLoc l := hl
@@ -334,6 +408,9 @@ theorem Expr.IsValue.hasLoc_notMentions {fns : List Fn} {σ : HeapTy} {Δ : Assu
     | loc h _ =>
       cases hl
       exact ⟨_, _, h, hs⟩
+    | locSub h _ hsub =>
+      cases hl
+      exact ⟨_, _, h, (hsub.mentions r).symm.trans hs⟩
   | @lam b x body => cases ht with
     | @lam _ _ _ _ _ _ _ _ μ _ _ _ _ hrl _ =>
       have hl' : body.HasLoc l := hl
@@ -370,9 +447,18 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
       exact (hx _ h).weaken_ctx (Ctx.Sub.empty Γ)
     · simp only [hyx, ite_false]
       exact .var (hΓ y hyx ▸ h)
+  | @varSub _ _ y s _ h hsub =>
+    simp only [Expr.subst]
+    by_cases hyx : y = x
+    · subst hyx
+      simp only [ite_true]
+      exact ((hx _ h).value_sub hv hsub).weaken_ctx (Ctx.Sub.empty Γ)
+    · simp only [hyx, ite_false]
+      exact .varSub (hΓ y hyx ▸ h) hsub
   | unit => exact .unit
   | int => exact .int
   | loc h hio => exact .loc h hio
+  | locSub h hio hsub => exact .locSub h hio hsub
   | new _ hd ih => exact .new (ih hΓ hx) hd
   | newR _ hd hr ih => exact .newR (ih hΓ hx) hd hr
   | newP _ hi hd ih => exact .newP (ih hΓ hx) hi hd
@@ -428,7 +514,9 @@ theorem HasType.subst {fns : List Fn} {σ : HeapTy} {io : Bool} {Γ' : Ctx} {e :
         rcases hbody.hasLoc_subst hl with hl | ⟨⟨s, hs⟩, hl⟩
         · exact hrl l hl
         · simp only [Ctx.update, Ne.symm hyx, ite_false] at hs
-          exact hv.hasLoc_regionsIn (hx s (hc _ _ hs)) (hrc _ _ hs).1 (fun hμ => himm hμ _ _ hs) hl
+          have hμr : μ ≠ .readonly := by
+            rcases hk with h | ⟨_, r', h⟩ <;> rw [h] <;> (try cases b) <;> simp [muOf]
+          exact hv.hasLoc_regionsIn (hx s (hc _ _ hs)) hμr (hrc _ _ hs).1 (fun hμ => himm hμ _ _ hs) hl
       refine .lam hk hsub himm' hrc' hrl' (ih ?_ ?_) hw
       · intro z hzx
         simp only [Ctx.update, Ctx.drop]
@@ -614,9 +702,10 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     HasType fns σ Δ' io (Γ.inst ms τs) (e.inst ms τs) (t.inst ms τs) := by
   induction ht with
   | var h => exact .var (by simp [Ctx.inst, h])
+  | varSub h hsub => exact .varSub (by simp [Ctx.inst, h]) (Sub.inst hs hsub)
   | unit => exact .unit
   | int => exact .int
-  | loc _ _ => exact hn.elim
+  | loc _ _ | locSub _ _ _ => exact hn.elim
   | @new _ _ _ s b _ hd ih =>
     simp only [Expr.inst, Ty.inst, Mu.subst_muOf]
     have h := AtMost.inst hs hd
@@ -639,7 +728,7 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     | mutable => intro h _ _; exact .new (b := true) (ih hn) h
     | region r => intro h _ hbi; exact .newR (ih hn) h (hbi r (by simp [Mu.mentions]))
     | param j => intro h hc _; exact .newP (ih hn) hc h
-    | immutable => intro _ hc _; exact hc.elim
+    | immutable | readonly => intro _ hc _; exact hc.elim
   | get _ ih =>
     have := ih hn
     simp only [Ty.inst] at this
@@ -663,7 +752,7 @@ theorem HasType.inst {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {Γ
     | mutable => intro h₁ _; exact .set h₁ (ih₂ hn.2)
     | region r => intro h₁ _; exact .setR h₁ (ih₂ hn.2)
     | param j => intro h₁ hc; exact .setP h₁ hc (ih₂ hn.2)
-    | immutable => intro _ hc; exact hc.elim
+    | immutable | readonly => intro _ hc; exact hc.elim
   | letE _ _ ih₁ ih₂ =>
     have h₂ := ih₂ hn.2
     rw [Ctx.inst_update] at h₂
@@ -740,8 +829,8 @@ theorem HasType.hasLoc_imm {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Boo
     (ht : HasType fns σ Δ io Γ e t) (hio : io = true) {l : Nat} (hl : e.HasLoc l) :
     ∃ t', σ[l]? = some (.immutable, t') := by
   induction ht with
-  | var | unit | int => exact hl.elim
-  | loc h hm =>
+  | var | varSub | unit | int => exact hl.elim
+  | loc h hm | locSub h hm _ =>
     cases hl
     exact ⟨_, hm hio ▸ h⟩
   | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | block _ _ _ _ _ _ _ ih => exact ih hio hl

@@ -55,6 +55,19 @@ def Ty.size : Ty → Nat
   | .fn _ a b => a.size + b.size + 1
   | .prod a b => a.size + b.size + 1
 
+/-- Seeing objects as `ro` keeps a type's size. -/
+theorem Sub.size {Δ : Assume} {t t' : Ty} (h : Sub Δ t t') : t'.size = t.size := by
+  induction h with
+  | refl => rfl
+  | ro _ _ _ ih => simp [Ty.size, ih]
+  | prod _ _ iha ihb => simp [Ty.size, iha, ihb]
+
+theorem Sub.cell_contents {Δ : Assume} {m m' : Mu} {t t' : Ty} (h : Sub Δ (.cell m t) (.cell m' t')) :
+    Sub Δ t t' := by
+  rcases h.cell_inv with h | ⟨s, h, _, hs, _⟩
+  · cases h; exact .refl _
+  · cases h; exact hs
+
 /-- What a copy copies has a type no bigger than the value's: so copying
 what an object holds never copies the object itself again. -/
 theorem Copy.keys_small {fns : List Fn} {σ : HeapTy} {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)}
@@ -65,9 +78,10 @@ theorem Copy.keys_small {fns : List Fn} {σ : HeapTy} {r : Nat} {t : Ty} {h h' :
   | keep | seen => intro _ io Γ _ k c h₁ h₂; rw [h₁] at h₂; cases h₂
   | @cell μ s h h' m m' l w w' _ _ hw _ ih =>
     intro hpre io Γ ht k c hk hkm
-    cases ht with
-    | loc hσ _ =>
-      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l μ s hσ
+    -- The location may be seen as `ro`, which keeps the type's size.
+    obtain ⟨_, μ₀, s₀, hl', hσ, hsub⟩ := canonical_cell_sub .loc ht
+    cases hl'
+    · obtain ⟨_, _, w₀, hw₀, hwv, hwt⟩ := hh.2 l μ₀ s₀ hσ
       obtain ⟨ext, rfl⟩ := hpre
       rw [List.getElem?_append_left (hh.lt hσ), hw₀] at hw
       cases hw
@@ -75,8 +89,8 @@ theorem Copy.keys_small {fns : List Fn} {σ : HeapTy} {r : Nat} {t : Ty} {h h' :
       split at hk
       · rename_i he
         subst he
-        exact ⟨μ, s, hσ, Nat.le_refl _⟩
-      · obtain ⟨μ', s', h₁, h₂⟩ := ih ⟨ext, rfl⟩ hwt k c hk hkm
+        exact ⟨μ₀, s₀, hσ, Nat.le_of_eq hsub.size.symm⟩
+      · obtain ⟨μ', s', h₁, h₂⟩ := ih ⟨ext, rfl⟩ (hwt.value_sub hwv hsub.cell_contents) k c hk hkm
         exact ⟨μ', s', h₁, by simp only [Ty.size] at h₂ ⊢; omega⟩
   | @pair a b h h₁ h₂ m m₁ m₂ _ _ _ _ _ hc₁ _ ih₁ ih₂ =>
     intro hpre io Γ ht k c hk hkm
@@ -134,9 +148,10 @@ theorem Copy.map {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ
     exact ⟨hm, fun ρ hfin _ hρ _ => ⟨.loc (hρ l c hlk), fun o c h₁ h₂ => by rw [h₁] at h₂; cases h₂⟩⟩
   | @cell μ s h h' m m' l w w' hmen hnone hw hcw ih =>
     intro hpre io Γ ht hf hm
-    cases ht with
-    | loc hσ _ =>
-      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l μ s hσ
+    -- A region's object isn't seen as `ro`.
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by rw [hf.cell_region hmen]; simp)
+    cases hl'
+    · obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l μ s hσ
       have hl₀ : l < h₀.length := hh.lt hσ
       have hw' : w₀ = w := by
         obtain ⟨ext, rfl⟩ := hpre
@@ -378,6 +393,9 @@ theorem Expr.IsValue.hasLoc_notReaches {fns : List Fn} {σ : HeapTy} {Δ : Assum
     | loc h _ =>
       cases hl
       exact ⟨_, _, h, hs⟩
+    | locSub h _ hsub =>
+      cases hl
+      exact ⟨_, _, h, (hsub.reaches r).symm.trans hs⟩
   | @lam b x body => cases ht with
     | @lam _ _ _ _ _ _ _ _ μ _ _ _ _ hrl _ =>
       have hl' : body.HasLoc l := hl

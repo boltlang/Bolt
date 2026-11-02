@@ -81,6 +81,16 @@ def Ty.reaches (r : Nat) : Ty → Bool
   | .fn m _ _ => m.mentions r
   | .prod a b => a.reaches r || b.reaches r
 
+/-- Seeing objects as `ro` keeps what a type reaches. -/
+theorem Sub.reaches {Δ : Assume} {t t' : Ty} (h : Sub Δ t t') (r : Nat) : t'.reaches r = t.reaches r := by
+  induction h with
+  | refl => rfl
+  | @ro m t₀ t₁ hv _ _ ih =>
+    show (Mu.readonly.mentions r || t₁.reaches r) = (m.mentions r || t₀.reaches r)
+    rw [hv.mentions r, ih]
+    rfl
+  | prod _ _ iha ihb => simp [Ty.reaches, iha, ihb]
+
 /-- What a value of type `t` can reach is of regions that exist. -/
 def Ty.ReachBelow (n : Nat) (t : Ty) : Prop := ∀ r, t.reaches r = true → Made n r
 
@@ -128,6 +138,10 @@ theorem Expr.IsValue.reachBelow {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io 
   | int => cases ht; intro r h; cases h
   | loc => cases ht with
     | loc h _ => exact (ha _ _ _ h).mono (Nat.le_of_lt (List.getElem?_eq_some_iff.mp h).1)
+    | locSub h _ hs =>
+      intro r hr
+      rw [hs.reaches r] at hr
+      exact (ha _ _ _ h).mono (Nat.le_of_lt (List.getElem?_eq_some_iff.mp h).1) r hr
   | lam => cases ht with
     | lam _ _ _ _ _ _ hw => exact fun r h => hw r h
   | pair _ _ ih₁ ih₂ => cases ht with
@@ -216,11 +230,12 @@ theorem Copy.typed {fns : List Fn} {r : Nat} {t : Ty} {h h' : Heap} {m m' : List
     omega
   | @seen μ s h m l c hmen hlk =>
     intro σ io Γ hh _ ht hf hmo
-    cases ht with
-    | loc hσ _ =>
-      have hreg := hf.cell_region hmen
-      subst hreg
-      obtain ⟨p, hp, hc⟩ := hmo l c hlk
+    -- A region's object isn't seen as `ro`.
+    have hreg := hf.cell_region hmen
+    subst hreg
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by simp)
+    cases hl'
+    · obtain ⟨p, hp, hc⟩ := hmo l c hlk
       rw [hσ] at hp
       cases hp
       refine ⟨σ, Extends.refl σ, hh, .loc, .loc hc (fun _ => by simp), fun l' p' hl' hp' => ?_, hmo, id⟩
@@ -228,9 +243,9 @@ theorem Copy.typed {fns : List Fn} {r : Nat} {t : Ty} {h h' : Heap} {m m' : List
       omega
   | @cell μ s h h' m m' l w w' hmen _ hw _ ih =>
     intro σ io Γ hh _ ht hf hmo
-    cases ht with
-    | loc hσ _ =>
-      obtain ⟨_, hd, w₀, hw₀, hwv, hwt⟩ := hh.2 l μ s hσ
+    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by rw [hf.cell_region hmen]; simp)
+    cases hl'
+    · obtain ⟨_, hd, w₀, hw₀, hwv, hwt⟩ := hh.2 l μ s hσ
       rw [hw] at hw₀
       cases hw₀
       obtain ⟨σ₁, hx, hh₁, hv', ht', hnew, hmo₁, hal₁⟩ := ih hh hwv hwt hf.2 hmo
@@ -300,7 +315,7 @@ theorem Copy.exists {fns : List Fn} {r : Nat} (t : Ty) :
     cases hmen : (Ty.cell μ s).mentions r with
     | false => exact ⟨_, _, _, .keep hmen⟩
     | true =>
-      obtain ⟨l, rfl, hσ⟩ := canonical_cell hv ht
+      obtain ⟨l, rfl, hσ⟩ := canonical_cell hv ht (by rw [hf.cell_region hmen]; simp)
       cases hlk : m.lookup l with
       | some c => exact ⟨_, _, _, .seen hmen hlk⟩
       | none =>
@@ -327,12 +342,12 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
     e.IsValue ∨ ∃ h' e', Step fns h e h' e' := by
   generalize hΓ : Ctx.empty = Γ at ht
   induction ht with
-  | var hx =>
+  | var hx | varSub hx _ =>
     subst hΓ
     cases hx
   | unit => exact .inl .unit
   | int => exact .inl .int
-  | loc _ _ => exact .inl .loc
+  | loc _ _ | locSub _ _ _ => exact .inl .loc
   | lam _ => exact .inl .lam
   | app he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
@@ -376,20 +391,20 @@ theorem progress {fns : List Fn} {σ : HeapTy} {h : Heap} {io : Bool} {e : Expr}
   | setR he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
-      · obtain ⟨l, rfl, hl⟩ := canonical_cell hv₁ he₁
+      · obtain ⟨l, rfl, hl⟩ := canonical_cell hv₁ he₁ (by simp)
         exact .inr ⟨_, _, .setLoc (hh.lt hl) hv₂⟩
       · exact .inr ⟨_, _, .setCong₂ hv₁ hs⟩
     · exact .inr ⟨_, _, .setCong₁ hs⟩
   | get he ih =>
     rcases ih hΓ with hv | ⟨h', e', hs⟩
-    · obtain ⟨l, rfl, hl⟩ := canonical_cell hv he
+    · obtain ⟨l, _, _, rfl, hl, _⟩ := canonical_cell_sub hv he
       obtain ⟨_, _, v, hv, _⟩ := hh.2 _ _ _ hl
       exact .inr ⟨_, _, .getLoc hv⟩
     · exact .inr ⟨_, _, .getCong hs⟩
   | set he₁ _ ih₁ ih₂ =>
     rcases ih₁ hΓ with hv₁ | ⟨h', e', hs⟩
     · rcases ih₂ hΓ with hv₂ | ⟨h', e', hs⟩
-      · obtain ⟨l, rfl, hl⟩ := canonical_cell hv₁ he₁
+      · obtain ⟨l, rfl, hl⟩ := canonical_cell hv₁ he₁ (by simp)
         exact .inr ⟨_, _, .setLoc (hh.lt hl) hv₂⟩
       · exact .inr ⟨_, _, .setCong₂ hv₁ hs⟩
     · exact .inr ⟨_, _, .setCong₁ hs⟩
@@ -460,6 +475,16 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
         rw [hl] at hv
         cases hv
         exact ⟨σ, Extends.refl σ, hh, hvt, id⟩
+      | locSub hσ _ hsub =>
+        -- Read through a `ro` view, the value is seen as `ro` too.
+        obtain ⟨_, hvm, v, hv, hvv, hvt⟩ := hh.2 _ _ _ hσ
+        rw [hl] at hv
+        cases hv
+        rcases hsub.cell_inv with h | ⟨s, h, _, hs, _⟩
+        · cases h
+          exact ⟨σ, Extends.refl σ, hh, hvt, id⟩
+        · cases h
+          exact ⟨σ, Extends.refl σ, hh, hvt.value_sub hvv hs, id⟩
   | setCong₁ _ ih =>
     intro σ t hh ht hsc
     cases ht with
@@ -484,11 +509,13 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
     intro σ t hh ht hsc
     cases ht with
     | set he₁ he₂ =>
-      cases he₁ with
-      | loc hσ _ => exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit, id⟩
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+      cases hl'
+      exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit, id⟩
     | setR he₁ he₂ =>
-      cases he₁ with
-      | loc hσ _ => exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit, id⟩
+      obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
+      cases hl'
+      exact ⟨σ, Extends.refl σ, hh.write hσ hl hv he₂, .unit, id⟩
     | setP _ hi _ => simp [Assume.none] at hi
   | letCong _ ih =>
     intro σ t hh ht hsc
