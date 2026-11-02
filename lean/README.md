@@ -116,6 +116,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `blocks_freeze_in_place`, `program_blocks_freeze_in_place` | `Scope.lean` | the premise of `freezes_in_place_change_nothing` holds for a program written without freezes, whose blocks make them. A running program keeps an order (`Expr.Run`): what's beside a freeze of a block's region has only locations older than the block's marker, and such a location's type can't reach the region (`AllocOk`) |
 | `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
 | `unique_freeze_changes_nothing` | `Unique.lean` | freezing a `mut` object that no object holds, `new false (get xs)`, can use `xs` itself instead of the copy: a program that has the copy, but not `xs`, computes what it does with `xs` in place of the copy (#284). The freeze is shallow, like `array_freeze`, so only `xs` needs to be unique |
+| `frzs_in_place_change_nothing` | `Unique.lean` | every freeze of a program can be in place: the program with every `frz` in place, in it and its functions, computes what it does, if whenever it gets to a freeze, what it freezes is unique: in the program once, and held by no object (`Expr.UniqFrz`). The simulation gives up the original at the freeze and relates the copy to it. No closure may have a `frz` |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -177,9 +178,10 @@ no `sorry`.
   cell can't be seen as `ro`; and there's no rule for other places, like
   `if` branches, which the core doesn't have. Impls and inference aren't
   covered either.
-- **The rest of uniqueness** (#284): `Unique.lean` only proves that one
-  freeze in place can't be noticed, given that no object holds the value.
-  That the program's variables give this, by last uses and borrowed
-  parameters, isn't proven yet.
+- **The rest of uniqueness** (#284): `Unique.lean` proves that freezes in
+  place can't be noticed when what they freeze is unique each time the
+  program gets there. That a check of the program's variables, by last
+  uses, gives this isn't proven yet, nor borrowed parameters. A closure
+  can't freeze in place.
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
