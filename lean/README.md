@@ -31,6 +31,7 @@ A small language with what matters for mutability:
 | `mut [x]`, `[x]` | `new true x`, `new false x` |
 | `xs[i]`, `xs[i] = y` | `get e`, `set e y` |
 | `'m [T]`, or `[T]` in a signature: either mutability | a mutability parameter, `Mu.param i` |
+| `ro [T]`, a read-only view (#320) | `cell readonly t`; a `mut` or `imm` cell can be seen as one (`Sub`) |
 | a type parameter `T` | `Ty.tparam i` |
 | `struct Box[T] { item: T }` | `cell m (tparam i)` |
 | a field with a mutability of its own, `'v Vec[T]` (#243) | a cell with a mutability parameter |
@@ -70,6 +71,15 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   and make what has a changeable mutability parameter. A region that
   becomes `imm` is copied (#292), and leaving the copy out can't be
   noticed.
+- **Read-only views** (#320): `ro` is a fifth mutability. For holding it
+  sits between the two, `imm ⊑ ro ⊑ mut`, so an `imm` object can't hold a
+  `ro` one, which may change. For subtyping it's above both: `Sub` sees a
+  `mut`, `imm` or `ro` cell as `ro`, and its contents too, as long as they
+  are at most `ro`, so the view is deep. No object is made `ro`, and `set`
+  never takes one. A region's or a parameter's cell isn't seen as `ro`, so
+  a type still mentions every region its values reach. Subtyping happens
+  only at variables and locations (`varSub`, `locSub`): the other rules
+  stay syntax-directed, and an argument is converted by naming it first.
 - **Aliases share the mutability**: a location has one type in the heap
   typing.
 - **Closures have a mutability** (#244): an `imm` closure only sees the
@@ -103,6 +113,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `freeze_in_place_of_typing` | `Elision.lean` | the typing gives that: for a block whose region the heap typing didn't mention when it started, with what comes after typed before it. A value can only reach a region's objects if its type mentions the region, since a closure that captures them has the region as its mutability (rule 5) |
 | `freezes_in_place_change_nothing` | `ElideAll.lean` | every freeze of a program can be in place: the program with its freezes erased, in it and its functions, computes what it does, if whenever it gets to a freeze, what's around it can't reach the region's objects (`Expr.Sep`). A copy copies each object once, so that copies and originals correspond one to one |
 | `blocks_freeze_in_place`, `program_blocks_freeze_in_place` | `Scope.lean` | the premise of `freezes_in_place_change_nothing` holds for a program written without freezes, whose blocks make them. A running program keeps an order (`Expr.Run`): what's beside a freeze of a block's region has only locations older than the block's marker, and such a location's type can't reach the region (`AllocOk`) |
+| `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -125,11 +136,14 @@ with a `mut` `l` is rejected, since it shares `l.a`, a `mut Point`, with an
 holding a `T` rejected without `T ⊑ imm` and accepted with it, `wrap` called
 with an `imm` array but not a `mut` one, and an iterator whose array has a
 mutability `'v` of its own: `mut` with any `'v`, `imm` only with
-`'v ⊑ imm`.
+`'v ⊑ imm`. For #320, it shows `fn peek(xs: ro [i32])` taking a `mut`
+array and an `imm` one, `fn both[T](p: (T, T))` called with a `mut` and an
+`imm` array as `T = ro [i32]`, and that a `ro` view can't be changed or put
+in an `imm` object.
 
 The theorems depend only on Lean's standard axioms, `propext`,
-`Quot.sound` and, in `Purity.lean`, `Frame.lean` and for `le_iff_leSearch`, `Classical.choice` (check with
-`#print axioms`); there's no `sorry`.
+`Quot.sound` and `Classical.choice` (check with `#print axioms`); there's
+no `sorry`.
 
 ## What's left out
 
@@ -156,5 +170,10 @@ The theorems depend only on Lean's standard axioms, `propext`,
   fresh region each time a block runs. #284 needs the same for unique
   values.
   Also borrowed parameters (#283).
+- **The rest of `ro`** (#320): subtyping is only for cells and tuples, not
+  for closures, whose types stay as they are; a parameter's or a region's
+  cell can't be seen as `ro`; and there's no rule for other places, like
+  `if` branches, which the core doesn't have. Impls and inference aren't
+  covered either.
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
