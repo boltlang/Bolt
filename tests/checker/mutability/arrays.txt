@@ -727,13 +727,13 @@ fn clear(xs: mut [i32]) { xs[0] = 0; }
 let xs = mut [1];
 xs.clear();
 [1].clear();
-mut [1].clear();
+(mut [1]).clear();
 --------------------------------------------------------------------------------
 clear: fn(mut [i32]) -> ()
 let xs: mut [i32]
 xs.clear(): ()
 [1].clear(): ()
-mut [1].clear(): ()
+(mut [1]).clear(): ()
 --------------------------------------------------------------------------------
 error at `[1]`: expected mut [i32], found imm [i32]
 

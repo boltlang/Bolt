@@ -31,7 +31,7 @@ use crate::{
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError},
+    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, ImmConstraint, MutConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -58,6 +58,10 @@ pub struct InferenceResult<'db> {
     /// used with, and then know which impl a class method uses. A function
     /// inferred together with the body, like itself, has none.
     pub type_args: ArenaMap<Expr, Box<[Ty<'db>]>>,
+    /// The `mut e` that make an array or struct `mut`, like `mut [1]`, `mut
+    /// Point { x: 1 }` or `mut Wrapper(1)`, each with its `e`. The others
+    /// copy what's `imm` in a value.
+    pub mut_literals: Vec<(ExprId, ExprId)>,
     pub diagnostics: Vec<InferenceDiagnostic<'db>>,
 }
 
@@ -78,6 +82,13 @@ impl<'db> InferenceResult<'db> {
     /// decide it.
     pub fn instance(&self, expr: ExprId, class: ClassId<'db>) -> Option<ImplId<'db>> {
         self.instances.iter().find(|(e, c, _)| *e == expr && *c == class).map(|(_, _, imp)| *imp)
+    }
+
+    /// Whether the `mut e` at `expr` makes its array or struct `mut`, rather
+    /// than copying what's `imm` in a value: see
+    /// [`InferenceResult::mut_literals`].
+    pub fn is_mut_literal(&self, expr: ExprId) -> bool {
+        self.mut_literals.iter().any(|(e, _)| *e == expr)
     }
 
     /// The types that the use of a function or constant at `expr` gives its
@@ -139,7 +150,9 @@ impl<'db> InferenceResult<'db> {
                 _ => None,
             })
             .collect();
-        let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(e), t));
+        // A literal after `mut` is reported with its `mut`.
+        let outer = |e: ExprId| self.mut_literals.iter().find(|(_, inner)| *inner == e).map_or(e, |(outer, _)| *outer);
+        let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(outer(e)), t));
         let pats = self.pat_types.iter().map(|(p, t)| (ExprOrPat::Pat(p), t));
         for (at, ty) in exprs.chain(pats) {
             if let Some((outer, inner)) = mut_inside_imm(db, ty)
@@ -613,7 +626,7 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     self.infer_block(statements, *tail, expected)
                 }
             }
-            Expr::Call { callee, args, is_mut } => self.infer_call(expr, *callee, args, *is_mut),
+            Expr::Call { callee, args } => self.infer_call(expr, *callee, args, false),
             Expr::Field { expr: base, name } => self.infer_field(expr, *base, name),
             Expr::Await { expr: inner } | Expr::Try { expr: inner } => {
                 self.infer_expr(*inner);
@@ -657,6 +670,28 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.solver.add(Constraint::Imm { constraint, origin: self.origin(expr) });
                 to
             }
+            // `mut [1]`, `mut Point { x: 1 }` and `mut Wrapper(1)` make an
+            // array or struct `mut`; `mut e` of anything else copies what's
+            // `imm` in it.
+            Expr::Mut { expr: inner } => {
+                let literal = match &body[*inner] {
+                    Expr::Array { .. } | Expr::ArrayRepeat { .. } | Expr::Record { .. } => true,
+                    Expr::Call { callee, .. } => self.constructs_struct(*callee),
+                    _ => false,
+                };
+                if literal {
+                    self.result.mut_literals.push((expr, *inner));
+                    let ty = self.infer_literal(expr, *inner, expected, true);
+                    self.result.expr_types.insert(*inner, ty.clone());
+                    ty
+                } else {
+                    let from = self.infer_expr(*inner);
+                    let to = self.new_var();
+                    let constraint = MutConstraint { from, to: to.clone() };
+                    self.solver.add(Constraint::Mut { constraint, origin: self.origin(expr) });
+                    to
+                }
+            }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
             Expr::Range { lhs, rhs, .. } => {
                 for e in lhs.iter().chain(rhs.iter()) {
@@ -677,25 +712,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     .collect();
                 Ty::Tuple(tys)
             }
-            Expr::Array { exprs, is_mut } => {
-                let elem = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                    Some(Ty::Array(_, elem)) => *elem,
-                    _ => self.new_var(),
-                };
-                for (i, e) in exprs.iter().enumerate() {
-                    self.check_expr_because(*e, &elem, reason_for_nth(reason, exprs[0], i));
-                }
-                self.holds(&elem, &literal_mutability(*is_mut), expr);
-                Ty::array(literal_mutability(*is_mut), elem)
-            }
-            Expr::ArrayRepeat { value, count, is_mut } => {
-                let elem = self.infer_expr(*value);
-                self.check_expr(*count, &Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)));
-                self.holds(&elem, &literal_mutability(*is_mut), expr);
-                Ty::array(literal_mutability(*is_mut), elem)
-            }
-            Expr::Record { path, fields, spread, is_mut } => {
-                self.infer_record(expr, path.as_ref(), fields, *spread, *is_mut)
+            Expr::Array { .. } | Expr::ArrayRepeat { .. } | Expr::Record { .. } => {
+                self.infer_literal(expr, expr, expected, false)
             }
             Expr::If { condition, then_branch, else_branch } => {
                 self.check_expr(*condition, &Ty::bool());
@@ -1104,6 +1122,60 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let constraint = FieldConstraint { ty: base_ty, name: name.clone(), field: field.clone(), assign: false };
         self.solver.add(Constraint::Field { constraint, origin: self.origin(expr) });
         field
+    }
+
+    /// The array, struct literal or call `literal`, made `mut` with
+    /// `is_mut`, as `mut [1]`, `mut Point { x: 1 }` or `mut Wrapper(1)` do.
+    /// `expr` is where it's reported: the `mut` around it, if there is one.
+    fn infer_literal(
+        &mut self,
+        expr: ExprId,
+        literal: ExprId,
+        expected: Option<Expectation<'_, 'db>>,
+        is_mut: bool,
+    ) -> Ty<'db> {
+        let body = self.body;
+        let reason = expected.map_or(Reason::None, |e| e.reason);
+        let mutability = literal_mutability(is_mut);
+        match &body[literal] {
+            Expr::Array { exprs } => {
+                let elem = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
+                    Some(Ty::Array(_, elem)) => *elem,
+                    _ => self.new_var(),
+                };
+                for (i, e) in exprs.iter().enumerate() {
+                    self.check_expr_because(*e, &elem, reason_for_nth(reason, exprs[0], i));
+                }
+                self.holds(&elem, &mutability, expr);
+                Ty::array(mutability, elem)
+            }
+            Expr::ArrayRepeat { value, count } => {
+                let elem = self.infer_expr(*value);
+                self.check_expr(*count, &Ty::Builtin(BuiltinType::Uint(BuiltinUint::Usize)));
+                self.holds(&elem, &mutability, expr);
+                Ty::array(mutability, elem)
+            }
+            Expr::Record { path, fields, spread } => self.infer_record(expr, path.as_ref(), fields, *spread, is_mut),
+            Expr::Call { callee, args } => self.infer_call(expr, *callee, args, is_mut),
+            _ => unreachable!("only arrays, struct literals and calls are literals"),
+        }
+    }
+
+    /// Whether `callee` names a struct, which a call of makes a tuple
+    /// struct, like the `Wrapper` of `Wrapper(1)` or `m.Wrapper(1)`.
+    fn constructs_struct(&self, callee: ExprId) -> bool {
+        let path = match &self.body[callee] {
+            Expr::Path(path) => path.clone(),
+            Expr::Field { expr: base, name } => match self.path_extended(*base, name) {
+                Some(path) => path,
+                None => return false,
+            },
+            _ => return false,
+        };
+        matches!(
+            self.resolver(callee).resolve_path_in_value_ns(self.db, &path),
+            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None }))
+        )
     }
 
     fn infer_call(&mut self, expr: ExprId, callee: ExprId, args: &[ExprId], is_mut: bool) -> Ty<'db> {

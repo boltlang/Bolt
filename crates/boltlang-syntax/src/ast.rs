@@ -638,6 +638,7 @@ ast_enum!(
         Bin(BinExpr) = BIN_EXPR,
         Prefix(PrefixExpr) = PREFIX_EXPR,
         Imm(ImmExpr) = IMM_EXPR,
+        Mut(MutExpr) = MUT_EXPR,
         Nest(NestExpr) = NEST_EXPR,
         Tuple(TupleExpr) = TUPLE_EXPR,
         Index(IndexExpr) = INDEX_EXPR,
@@ -904,16 +905,12 @@ impl ClosureExpr {
     }
 }
 
-/// `[a, b, c]` or `[x; n]`, maybe after `mut`
+/// `[a, b, c]` or `[x; n]`
 pub struct ArrayExpr(SyntaxNode);
 
 simple_node!(ArrayExpr, ARRAY_EXPR);
 
 impl ArrayExpr {
-    /// The `mut` of `mut [a, b]`.
-    pub fn mut_token(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
-    }
     /// The elements of `[a, b, c]`, or the repeated value of `[x; n]`.
     pub fn elements(&self) -> ChildrenIter<Expr> {
         ChildrenIter::new(&self.0)
@@ -934,10 +931,6 @@ pub struct RecordExpr(SyntaxNode);
 simple_node!(RecordExpr, RECORD_EXPR);
 
 impl RecordExpr {
-    /// The `mut` of `mut Point { x: 1 }`.
-    pub fn mut_token(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
-    }
     pub fn path(&self) -> Option<Path> {
         self.find_node()
     }
@@ -1177,6 +1170,18 @@ impl ImmExpr {
     }
 }
 
+/// `mut e`: `e` made `mut`, copying what's `imm` in it, or an array or a
+/// struct made `mut`, like `mut [1]` or `mut Point { x: 1 }`.
+pub struct MutExpr(SyntaxNode);
+
+simple_node!(MutExpr, MUT_EXPR);
+
+impl MutExpr {
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
 /// `(a)`
 pub struct NestExpr(SyntaxNode);
 
@@ -1380,11 +1385,6 @@ impl Node for CallExpr {
 
 
 impl CallExpr {
-    /// The `mut` of `mut Wrapper(1)`, which makes a tuple struct that can be
-    /// changed.
-    pub fn mut_token(&self) -> Option<SyntaxToken> {
-        self.find_token(MUT_KEYWORD)
-    }
     pub fn operator(&self) -> Option<Expr> {
         self.find_node()
     }

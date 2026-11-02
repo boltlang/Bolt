@@ -420,21 +420,24 @@ An enum can't be mut
 :error
 ================================================================================
 struct Point { x: i32, y: i32 }
-enum Maybe[T] { Just(T), Nothing }
 enum Shape { Circle { radius: f64 } }
-fn f(x: i32) -> i32 = x;
 let a = mut Shape.Circle { radius: 1.0 };
-let b = mut Maybe.Just(1);
+--------------------------------------------------------------------------------
+let a: Shape
+--------------------------------------------------------------------------------
+error at `mut Shape.Circle { radius: 1.0 }`: can't be mut
+
+================================================================================
+Mut of a variant or a call copies what's imm in it
+================================================================================
+enum Maybe[T] { Just(T), Nothing }
+fn f(x: i32) -> i32 = x;
+let b = mut Maybe.Just([1]);
 let c = mut f(1);
 --------------------------------------------------------------------------------
 f: fn(i32) -> i32
-let a: Shape
-let b: Maybe[i32]
+let b: Maybe[mut [i32]]
 let c: i32
---------------------------------------------------------------------------------
-error at `mut Shape.Circle { radius: 1.0 }`: can't be mut
-error at `mut Maybe.Just(1)`: can't be mut
-error at `mut f(1)`: can't be mut
 
 ================================================================================
 Types that can't be mut or imm

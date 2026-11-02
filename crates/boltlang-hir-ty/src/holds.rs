@@ -16,10 +16,13 @@
 //! the atoms are about the structs' parameters, of which there are few.
 
 use boltlang_base_db::Db;
-use boltlang_hir_def::{ids::StructId, resolver::GenericDefId};
+use boltlang_hir_def::{
+    ids::{EnumId, StructId},
+    resolver::GenericDefId,
+};
 
 use crate::{
-    lower::{struct_args, struct_field_types, struct_mutability, subst_params},
+    lower::{enum_field_types, struct_args, struct_field_types, struct_mutability, subst_params},
     solve::{AtMostConstraint, Held},
     ty::{AdtId, Mutability, Ty},
 };
@@ -106,5 +109,87 @@ pub fn split<'db>(db: &'db dyn Db, ty: &Ty<'db>, bound: &Ty<'db>, out: &mut Vec<
         | Ty::Never
         | Ty::Error => {}
         Ty::Param(_) | Ty::Var(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => push(out, Held::Type(ty.clone()), bound),
+    }
+}
+
+/// Which type parameters of the struct `s` `mut e` can make `mut` when it
+/// copies a value of it: those that are only where the struct's own
+/// mutability decides, like the `T` of `items: [T]` or of `item: T`. One in
+/// a function type, an `imm` field, a field with a mutability the struct
+/// declares, or an associated type stays as it is, since making it `mut`
+/// would change what a closure takes, or put something `mut` in something
+/// `imm`. A struct that refers to itself starts out with all of them, and
+/// Salsa takes them away until that stops changing.
+#[salsa::tracked(returns(ref), cycle_initial = struct_thawable_initial)]
+pub fn struct_thawable<'db>(db: &'db dyn Db, s: StructId<'db>) -> Box<[bool]> {
+    let def = GenericDefId::Struct(s);
+    let own = struct_mutability(db, s);
+    let mut out = vec![true; def.generic_params(db).type_params.len()];
+    for (_, ty) in struct_field_types(db, s).fields.iter() {
+        thawable_in(db, def, ty, Some(&own), true, &mut out);
+    }
+    out.into()
+}
+
+fn struct_thawable_initial<'db>(db: &'db dyn Db, _id: salsa::Id, s: StructId<'db>) -> Box<[bool]> {
+    vec![true; GenericDefId::Struct(s).generic_params(db).type_params.len()].into()
+}
+
+/// [`struct_thawable`] for an enum, which has no mutability of its own: an
+/// array or struct in a variant is `imm`, so only a type parameter that's a
+/// field, or in a tuple or an enum that's one, can be made `mut`.
+#[salsa::tracked(returns(ref), cycle_initial = enum_thawable_initial)]
+pub fn enum_thawable<'db>(db: &'db dyn Db, e: EnumId<'db>) -> Box<[bool]> {
+    let def = GenericDefId::Enum(e);
+    let mut out = vec![true; def.generic_params(db).type_params.len()];
+    for variant in enum_field_types(db, e) {
+        for (_, ty) in variant.fields.iter() {
+            thawable_in(db, def, ty, None, true, &mut out);
+        }
+    }
+    out.into()
+}
+
+fn enum_thawable_initial<'db>(db: &'db dyn Db, _id: salsa::Id, e: EnumId<'db>) -> Box<[bool]> {
+    vec![true; GenericDefId::Enum(e).generic_params(db).type_params.len()].into()
+}
+
+/// Take away from `out` the type parameters of `def` that appear in `ty`
+/// where `mut e` can't change them. `ok` says whether it can change `ty`
+/// itself, and `own` is the mutability that the copy makes `mut`.
+fn thawable_in<'db>(
+    db: &'db dyn Db,
+    def: GenericDefId<'db>,
+    ty: &Ty<'db>,
+    own: Option<&Ty<'db>>,
+    ok: bool,
+    out: &mut [bool],
+) {
+    match ty {
+        Ty::Param(p) if p.def == def => {
+            if !ok && let Some(slot) = out.get_mut(p.index as usize) {
+                *slot = false;
+            }
+        }
+        Ty::Array(m, elem) => thawable_in(db, def, elem, own, ok && own == Some(&**m), out),
+        Ty::Adt(AdtId::Struct(s), args, _, m) => {
+            let inner = ok && own == Some(&**m);
+            let thawable = struct_thawable(db, *s);
+            for (i, arg) in args.iter().enumerate() {
+                thawable_in(db, def, arg, own, inner && thawable.get(i).copied().unwrap_or(false), out);
+            }
+        }
+        Ty::Adt(AdtId::Enum(e), args, ..) => {
+            let thawable = enum_thawable(db, *e);
+            for (i, arg) in args.iter().enumerate() {
+                thawable_in(db, def, arg, own, ok && thawable.get(i).copied().unwrap_or(false), out);
+            }
+        }
+        Ty::Tuple(tys) => {
+            for t in tys.iter() {
+                thawable_in(db, def, t, own, ok, out);
+            }
+        }
+        _ => ty.walk_children(|t| thawable_in(db, def, t, own, false, out)),
     }
 }

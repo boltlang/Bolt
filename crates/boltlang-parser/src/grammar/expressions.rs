@@ -40,7 +40,7 @@ pub(crate) struct Restrictions {
 
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
-const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![imm], T![..], T![..=], T![#]]));
+const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![imm], T![mut], T![..], T![..=], T![#]]));
 
 /// Whether an expression can start here. Besides [`EXPR_FIRST`], `||` can
 /// start a closure without parameters; the lexer joins it into an operator.
@@ -286,12 +286,14 @@ fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> 
         expr_bp(p, None, r, 255);
         return Some((m.complete(p, PREFIX_EXPR), BlockLike::NotBlock));
     }
-    // `imm e` binds like a prefix operator: `imm f(x)` is `imm (f(x))`.
-    if p.at(T![imm]) {
+    // `imm e` and `mut e` bind like prefix operators: `imm f(x)` is
+    // `imm (f(x))`, and `mut Point { x: 1 }.x` is `mut (Point { x: 1 }.x)`.
+    if matches!(p.current(), T![imm] | T![mut]) {
+        let kind = if p.at(T![imm]) { IMM_EXPR } else { MUT_EXPR };
         let m = p.start();
-        p.bump(T![imm]);
+        p.bump_any();
         expr_bp(p, None, r, 255);
-        return Some((m.complete(p, IMM_EXPR), BlockLike::NotBlock));
+        return Some((m.complete(p, kind), BlockLike::NotBlock));
     }
     let (lhs, blocklike) = atom_expr(p, r)?;
     let (lhs, blocklike) = postfix_expr(p, lhs, blocklike, !(r.prefer_stmt && blocklike.is_block()));

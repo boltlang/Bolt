@@ -334,7 +334,7 @@ fn infer_group<'db>(
     solver.solve_with_defaults();
     solve_overloads(db, &mut solver, env);
     solver.report_pending_overloads();
-    solver.settle_imm();
+    solver.settle_copies();
     solver.keep_pending_assoc();
     // What's left about the functions' types becomes part of them; the
     // other unknowns in "at most" constraints can be chosen to meet them.

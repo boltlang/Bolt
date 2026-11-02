@@ -253,6 +253,7 @@ fn children(expr: &Expr) -> Vec<ExprId> {
         | Expr::Await { expr }
         | Expr::Try { expr }
         | Expr::Imm { expr }
+        | Expr::Mut { expr }
         | Expr::Cast { expr, .. }
         | Expr::Prefix { expr, .. } => out.push(*expr),
         Expr::Index { base, index } => out.extend([*base, *index]),

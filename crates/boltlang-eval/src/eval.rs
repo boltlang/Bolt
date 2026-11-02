@@ -601,16 +601,7 @@ impl<'db> Evaluator<'db> {
                     (result, _) => result,
                 }
             }
-            // `mut Wrap(x)` makes a `mut` struct; other calls ignore `mut`.
-            Expr::Call { callee, args, is_mut: true } => match self.eval(f, *callee)? {
-                Value::Constructor(ctor @ Ctor::Struct(_)) => {
-                    let args = self.eval_all(f, args)?;
-                    let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
-                    Ok(Value::adt(ctor, Mutability::Mut, fields))
-                }
-                _ => self.eval_call(f, expr, *callee, args),
-            },
-            Expr::Call { callee, args, .. } => self.eval_call(f, expr, *callee, args),
+            Expr::Call { callee, args } => self.eval_call(f, expr, *callee, args),
             Expr::Field { expr: base, name } => {
                 if let Some(value) = self.eval_extended_path(f, expr)? {
                     return Ok(value);
@@ -624,6 +615,17 @@ impl<'db> Evaluator<'db> {
             Expr::Imm { expr: inner } => {
                 let value = self.eval(f, *inner)?;
                 self.made(value.freeze())
+            }
+            // `mut [1]` makes the array `mut`; `mut e` of anything else
+            // copies what the types say is `imm` in it.
+            Expr::Mut { expr: inner } => {
+                let result = infer_body(self.db, f.def);
+                if result.is_mut_literal(expr) {
+                    return self.eval_literal(f, *inner, Mutability::Mut);
+                }
+                let (from, to) = (result.expr_ty(*inner).clone(), result.expr_ty(expr).clone());
+                let value = self.eval(f, *inner)?;
+                self.made(value.thaw(self.db, &from, &to))
             }
             Expr::Await { .. } => fail(ErrorKind::Unsupported("`await`")),
             Expr::Yield { .. } => fail(ErrorKind::Unsupported("`yield`")),
@@ -663,43 +665,8 @@ impl<'db> Evaluator<'db> {
                 Ok(Value::Range { start, end, inclusive: *inclusive })
             }
             Expr::Tuple { exprs } => Ok(Value::Tuple(self.eval_all(f, exprs)?)),
-            Expr::Array { exprs, is_mut } => {
-                let items = self.eval_all(f, exprs)?;
-                self.made(Value::array(mutability(*is_mut), items))
-            }
-            Expr::ArrayRepeat { value, count, is_mut } => {
-                let value = self.eval(f, *value)?;
-                let Value::Int(count) = self.eval(f, *count)? else {
-                    return mismatch("the length of an array must be an integer");
-                };
-                let count = usize::try_from(count).map_err(|_| ErrorKind::Overflow)?;
-                // The value is evaluated once, so `mut [mut []; 2]` holds the
-                // same array twice.
-                self.made(Value::array(mutability(*is_mut), vec![value; count]))
-            }
-            Expr::Record { path, fields, spread, is_mut } => {
-                let Some(path) = path else {
-                    return fail(ErrorKind::Unsupported("a record without a name"));
-                };
-                let Some(ctor) = Self::resolve_ctor(self.resolve_value(f.def, expr, path)) else {
-                    return fail(ErrorKind::UnresolvedName(path_to_string(path)));
-                };
-                let mut values = match spread {
-                    Some(base) => match self.eval(f, *base)? {
-                        // A new struct, with copies of the fields.
-                        Value::Adt { ctor: base_ctor, fields } if base_ctor == ctor => fields.borrow().clone(),
-                        _ => return mismatch("the base of `..` must be of the same struct"),
-                    },
-                    None => Vec::new(),
-                };
-                for field in fields.iter() {
-                    let value = self.eval(f, field.expr)?;
-                    match values.iter_mut().find(|(n, _)| *n == field.name) {
-                        Some((_, slot)) => *slot = value,
-                        None => values.push((field.name.clone(), value)),
-                    }
-                }
-                self.made(Value::adt(ctor, mutability(*is_mut), values))
+            Expr::Array { .. } | Expr::ArrayRepeat { .. } | Expr::Record { .. } => {
+                self.eval_literal(f, expr, Mutability::Imm)
             }
             Expr::If { condition, then_branch, else_branch } => {
                 if self.eval_bool(f, *condition)? {
@@ -806,6 +773,62 @@ impl<'db> Evaluator<'db> {
                     type_args: f.type_args.clone(),
                 })))
             }
+        }
+    }
+
+    /// An array, a struct literal or a call of a tuple struct's
+    /// constructor, made with `mutability`: `mut [1]`, `mut Point { x: 1 }`
+    /// and `mut Wrapper(1)` are `mut`.
+    fn eval_literal(&mut self, f: &mut Frame<'db>, expr: ExprId, mutability: Mutability) -> Res<'db, Value<'db>> {
+        let body = f.body;
+        match &body[expr] {
+            Expr::Array { exprs } => {
+                let items = self.eval_all(f, exprs)?;
+                self.made(Value::array(mutability, items))
+            }
+            Expr::ArrayRepeat { value, count } => {
+                let value = self.eval(f, *value)?;
+                let Value::Int(count) = self.eval(f, *count)? else {
+                    return mismatch("the length of an array must be an integer");
+                };
+                let count = usize::try_from(count).map_err(|_| ErrorKind::Overflow)?;
+                // The value is evaluated once, so `mut [mut []; 2]` holds the
+                // same array twice.
+                self.made(Value::array(mutability, vec![value; count]))
+            }
+            Expr::Record { path, fields, spread } => {
+                let Some(path) = path else {
+                    return fail(ErrorKind::Unsupported("a record without a name"));
+                };
+                let Some(ctor) = Self::resolve_ctor(self.resolve_value(f.def, expr, path)) else {
+                    return fail(ErrorKind::UnresolvedName(path_to_string(path)));
+                };
+                let mut values = match spread {
+                    Some(base) => match self.eval(f, *base)? {
+                        // A new struct, with copies of the fields.
+                        Value::Adt { ctor: base_ctor, fields } if base_ctor == ctor => fields.borrow().clone(),
+                        _ => return mismatch("the base of `..` must be of the same struct"),
+                    },
+                    None => Vec::new(),
+                };
+                for field in fields.iter() {
+                    let value = self.eval(f, field.expr)?;
+                    match values.iter_mut().find(|(n, _)| *n == field.name) {
+                        Some((_, slot)) => *slot = value,
+                        None => values.push((field.name.clone(), value)),
+                    }
+                }
+                self.made(Value::adt(ctor, mutability, values))
+            }
+            Expr::Call { callee, args } => match self.eval(f, *callee)? {
+                Value::Constructor(ctor @ Ctor::Struct(_)) => {
+                    let args = self.eval_all(f, args)?;
+                    let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
+                    self.made(Value::adt(ctor, mutability, fields))
+                }
+                _ => self.eval_call(f, expr, *callee, args),
+            },
+            _ => mismatch("only arrays, struct literals and calls are made `mut`"),
         }
     }
 
@@ -1600,11 +1623,6 @@ fn element<'db>(items: &[Value<'db>], index: usize) -> Res<'db, Value<'db>> {
         Value::Unset => fail(ErrorKind::UnsetElement { index }),
         item => Ok(item.clone()),
     }
-}
-
-/// The mutability of a literal, written `mut [..]` or `[..]`.
-fn mutability(is_mut: bool) -> Mutability {
-    if is_mut { Mutability::Mut } else { Mutability::Imm }
 }
 
 /// The item in `Some(item)`, or `None` for `None`.

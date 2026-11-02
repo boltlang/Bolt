@@ -26,7 +26,6 @@ pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&
     T!['('],
     T!['{'],
     T!['['],
-    T![mut],
     T![|],
     T![return],
     T![fn],
@@ -98,7 +97,6 @@ pub(super) fn atom_expr(p: &mut Parser, r: Restrictions) -> Option<(CompletedMar
     let done = match p.current() {
         T!['('] => paren_or_tuple_expr(p),
         T!['['] => array_expr(p),
-        T![mut] => mut_expr(p, r),
         T![|] => closure_expr(p, r),
         _ if p.at_op("||") => closure_expr(p, r),
         T![async] if p.nth_at(1, T![|]) || p.nth_at_op(1, "||") => closure_expr(p, r),
@@ -249,47 +247,9 @@ fn paren_or_tuple_expr(p: &mut Parser) -> CompletedMarker {
     m.complete(p, if saw_expr && !saw_comma { NEST_EXPR } else { TUPLE_EXPR })
 }
 
-/// Something that can be changed: `mut [1, 2]`, a struct literal like
-/// `mut Point { x: 1, y: 2 }`, or a call of a tuple struct's constructor,
-/// like `mut Wrapper(1)`. The `mut` is part of the array, struct literal or
-/// call.
-fn mut_expr(p: &mut Parser, r: Restrictions) -> CompletedMarker {
-    if p.nth_at(1, T!['[']) {
-        return array_expr(p);
-    }
-    let m = p.start();
-    p.bump(T![mut]);
-    if is_path_start(p) {
-        if !r.forbid_structs && at_struct_literal(p) {
-            dotted_path(p);
-            record_expr_field_list(p);
-            return m.complete(p, RECORD_EXPR);
-        }
-        // The constructor, which can be in a module or an enum, like
-        // `m.Wrapper` or `Shape.Circle`: a field access, as elsewhere.
-        let mut callee = path_expr(p);
-        while p.at(T![.]) && p.nth_at(1, IDENT) {
-            let field = callee.precede(p);
-            p.bump(T![.]);
-            let name = p.start();
-            p.bump(IDENT);
-            name.complete(p, NAME_REF);
-            callee = field.complete(p, FIELD_EXPR);
-        }
-        if p.at(T!['(']) {
-            super::arg_list(p);
-            return m.complete(p, CALL_EXPR);
-        }
-    }
-    p.error("expected an array or a struct after `mut`, like `mut [1]` or `mut Point { x: 1 }`");
-    m.complete(p, ERROR)
-}
-
-/// `[a, b, c]`, `[]` or `[x; n]`, or one of those after `mut`, like
-/// `mut [1, 2]`, for an array that can be changed.
+/// `[a, b, c]`, `[]` or `[x; n]`.
 fn array_expr(p: &mut Parser) -> CompletedMarker {
     let m = p.start();
-    p.eat(T![mut]);
     p.bump(T!['[']);
     let mut first = true;
     while !p.at(EOF) && !p.at(T![']']) {

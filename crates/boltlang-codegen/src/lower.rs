@@ -459,12 +459,15 @@ impl<'db> Compiler<'db> {
                 }
                 Ok(())
             }
-            Expr::Call { callee, args, .. } => self.call(expr, *callee, args),
+            Expr::Call { callee, args } => self.call(expr, *callee, args),
+            // `mut [1]` is an array like `[1]`; the code doesn't keep track
+            // of which can be changed.
+            Expr::Mut { expr: inner } if self.infer.is_mut_literal(expr) => self.expr(*inner),
             Expr::Cast { expr: inner, .. } => self.cast(expr, *inner),
             Expr::Prefix { op, expr: inner } => self.call_operator(expr, op.as_str(), &[*inner]),
             Expr::Binary { op, lhs, rhs } => self.binary(expr, op, *lhs, *rhs),
-            Expr::Array { exprs, .. } => self.array_literal(expr, exprs),
-            Expr::ArrayRepeat { value, count, .. } => self.array_repeat(expr, *value, *count),
+            Expr::Array { exprs } => self.array_literal(expr, exprs),
+            Expr::ArrayRepeat { value, count } => self.array_repeat(expr, *value, *count),
             Expr::Index { base, index } => self.index(expr, *base, *index),
             Expr::Tuple { exprs } if exprs.is_empty() => Ok(()),
             Expr::Tuple { exprs } => {
@@ -1498,6 +1501,7 @@ fn describe(expr: &Expr) -> &'static str {
         Expr::For { .. } => "a `for` loop",
         Expr::Try { .. } => "`?`",
         Expr::Imm { .. } => "`imm`",
+        Expr::Mut { .. } => "`mut` of a value",
         Expr::Await { .. } => "`await`",
         Expr::Yield { .. } => "`yield`",
         Expr::MacroCall { .. } => "a macro call",

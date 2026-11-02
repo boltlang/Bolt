@@ -109,16 +109,21 @@ impl Printer<'_> {
                 };
                 format!("{}{kind}{{{}}}", self.label(*label), parts.join(" "))
             }
-            Expr::Call { callee, args, is_mut } => format!(
-                "({}call {} {})",
-                if *is_mut { "mut " } else { "" },
-                self.expr(*callee),
-                self.list(args, Self::expr)
-            ),
+            Expr::Call { callee, args } => format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr)),
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
             Expr::Await { expr } => format!("(await {})", self.expr(*expr)),
             Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
             Expr::Imm { expr } => format!("(imm {})", self.expr(*expr)),
+            // As the literals were written before `mut e`: `mut [1]` and
+            // `(mut record ...)`.
+            Expr::Mut { expr } => {
+                let inner = self.expr(*expr);
+                match &self.0[*expr] {
+                    Expr::Array { .. } | Expr::ArrayRepeat { .. } => format!("mut {inner}"),
+                    Expr::Record { .. } | Expr::Call { .. } => format!("(mut {}", &inner[1..]),
+                    _ => format!("(mut {inner})"),
+                }
+            }
             Expr::Cast { expr, type_ref } => format!("(as {} {})", self.expr(*expr), self.ty(*type_ref)),
             Expr::Index { base, index } => format!("(index {} {})", self.expr(*base), self.expr(*index)),
             Expr::Prefix { op, expr } => format!("({op} {})", self.expr(*expr)),
@@ -136,15 +141,10 @@ impl Printer<'_> {
                 format!("({} {} {})", if *inclusive { "..=" } else { ".." }, self.opt_expr(*lhs), self.opt_expr(*rhs))
             }
             Expr::Tuple { exprs } => format!("(tuple {})", self.list(exprs, Self::expr)),
-            Expr::Array { exprs, is_mut } => {
-                format!("{}[{}]", if *is_mut { "mut " } else { "" }, self.list(exprs, Self::expr))
-            }
-            Expr::ArrayRepeat { value, count, is_mut } => {
-                format!("{}[{}; {}]", if *is_mut { "mut " } else { "" }, self.expr(*value), self.expr(*count))
-            }
-            Expr::Record { path, fields, spread, is_mut } => format!(
-                "({}record {} {}{})",
-                if *is_mut { "mut " } else { "" },
+            Expr::Array { exprs } => format!("[{}]", self.list(exprs, Self::expr)),
+            Expr::ArrayRepeat { value, count } => format!("[{}; {}]", self.expr(*value), self.expr(*count)),
+            Expr::Record { path, fields, spread } => format!(
+                "(record {} {}{})",
                 path.as_ref().map_or("_".into(), |p| self.path(p)),
                 fields.iter().map(|f| format!("{}: {}", f.name, self.expr(f.expr))).collect::<Vec<_>>().join(", "),
                 spread.map_or(String::new(), |s| format!(" ..{}", self.expr(s))),

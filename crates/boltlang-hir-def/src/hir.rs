@@ -82,9 +82,8 @@ pub enum Expr {
     Path(Path),
     Literal(Literal),
     Block { statements: Box<[Statement]>, tail: Option<ExprId>, label: Option<LabelId>, kind: BlockKind },
-    /// `f(a, b)`, or `mut Wrapper(a)` with `is_mut`, which makes a tuple
-    /// struct that can be changed.
-    Call { callee: ExprId, args: Box<[ExprId]>, is_mut: bool },
+    /// `f(a, b)`
+    Call { callee: ExprId, args: Box<[ExprId]> },
     /// `x.name` or `t.0`; a tuple index is a name like `0`.
     Field { expr: ExprId, name: Name },
     Await { expr: ExprId },
@@ -97,17 +96,21 @@ pub enum Expr {
     /// holds that's `mut` copied too. Not a function, since its type can't
     /// be written as a signature.
     Imm { expr: ExprId },
+    /// `mut e`. Before an array, a struct literal or a call of a tuple
+    /// struct's constructor, like `mut [1]`, it makes that one `mut`, which
+    /// the type checker finds. Before anything else, it's `e` with what's
+    /// `imm` in it copied into `mut` objects, keeping what's `mut` already.
+    Mut { expr: ExprId },
     Binary { op: BinaryOp, lhs: ExprId, rhs: ExprId },
     /// `a..b`, `a..=b`, `a..`, `..b` or `..`
     Range { lhs: Option<ExprId>, rhs: Option<ExprId>, inclusive: bool },
     Tuple { exprs: Box<[ExprId]> },
-    /// `[a, b]`, or `mut [a, b]` with `is_mut`
-    Array { exprs: Box<[ExprId]>, is_mut: bool },
-    /// `[value; count]`, or `mut [value; count]` with `is_mut`
-    ArrayRepeat { value: ExprId, count: ExprId, is_mut: bool },
+    /// `[a, b]`
+    Array { exprs: Box<[ExprId]> },
+    /// `[value; count]`
+    ArrayRepeat { value: ExprId, count: ExprId },
     /// `Point { x, y: 1, ..base }`
-    /// With `is_mut`, `mut Point { x, y: 1 }`, a struct that can be changed.
-    Record { path: Option<Path>, fields: Box<[RecordField]>, spread: Option<ExprId>, is_mut: bool },
+    Record { path: Option<Path>, fields: Box<[RecordField]>, spread: Option<ExprId> },
     If { condition: ExprId, then_branch: ExprId, else_branch: Option<ExprId> },
     /// `let pattern = value` in a condition
     Let { pat: PatId, expr: ExprId },

@@ -260,7 +260,7 @@ impl ExprCollector {
             E::Call(e) => {
                 let callee = self.lower_opt_expr(e.operator());
                 let args = e.args().map(|a| self.lower_expr(a)).collect();
-                Expr::Call { callee, args, is_mut: e.mut_token().is_some() }
+                Expr::Call { callee, args }
             }
             E::Field(e) => {
                 let expr = self.lower_opt_expr(e.expr());
@@ -270,6 +270,7 @@ impl ExprCollector {
             E::Await(e) => Expr::Await { expr: self.lower_opt_expr(e.expr()) },
             E::Try(e) => Expr::Try { expr: self.lower_opt_expr(e.expr()) },
             E::Imm(e) => Expr::Imm { expr: self.lower_opt_expr(e.expr()) },
+            E::Mut(e) => Expr::Mut { expr: self.lower_opt_expr(e.expr()) },
             E::Cast(e) => {
                 let expr = self.lower_opt_expr(e.expr());
                 let type_ref = self.lower_opt_type(e.type_expr());
@@ -301,13 +302,12 @@ impl ExprCollector {
             }
             E::Tuple(e) => Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() },
             E::Array(e) => {
-                let is_mut = e.mut_token().is_some();
                 if e.is_repeat() {
                     let value = self.lower_opt_expr(e.elements().next());
                     let count = self.lower_opt_expr(e.repeat_count());
-                    Expr::ArrayRepeat { value, count, is_mut }
+                    Expr::ArrayRepeat { value, count }
                 } else {
-                    Expr::Array { exprs: e.elements().map(|x| self.lower_expr(x)).collect(), is_mut }
+                    Expr::Array { exprs: e.elements().map(|x| self.lower_expr(x)).collect() }
                 }
             }
             E::Record(e) => {
@@ -327,7 +327,7 @@ impl ExprCollector {
                     }
                     spread = list.spread().map(|s| self.lower_expr(s));
                 }
-                Expr::Record { path, fields: fields.into(), spread, is_mut: e.mut_token().is_some() }
+                Expr::Record { path, fields: fields.into(), spread }
             }
             E::If(e) => {
                 let condition = self.lower_opt_expr(e.condition());

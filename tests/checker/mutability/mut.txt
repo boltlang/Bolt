@@ -1,0 +1,77 @@
+================================================================================
+Mut copies what's imm, and keeps what's mut
+:prelude
+================================================================================
+let xs = [1, 2];
+let a = mut xs;
+a[0] = 3;
+let ys = mut [1];
+let b = mut ys;
+let c = [[1]];
+let d = mut c;
+let e = mut [[1]];
+--------------------------------------------------------------------------------
+let xs: imm [i32]
+let a: mut [i32]
+a[0] = 3: ()
+let ys: mut [i32]
+let b: mut [i32]
+let c: imm [imm [i32]]
+let d: mut [mut [i32]]
+let e: mut [imm [i32]]
+
+================================================================================
+Mut keeps a mut array as it is, with what it holds
+================================================================================
+let xs = mut [[1]];
+let ys = mut xs;
+let t = mut ([1], 2);
+--------------------------------------------------------------------------------
+let xs: mut [imm [i32]]
+let ys: mut [imm [i32]]
+let t: (mut [i32], i32)
+
+================================================================================
+Mut of a struct
+================================================================================
+struct Point { x: i32 }
+struct Line { a: Point, b: Point }
+struct Box[T] { item: T }
+struct Frozen[T] { items: imm [T] }
+struct Handler[T] { f: imm fn(T) -> () }
+let l = Line { a: Point { x: 1 }, b: Point { x: 2 } };
+let ml = mut l;
+let b = mut Box { item: [1] };
+let mb = mut Box { item: [1] }.item;
+let cb = Box { item: [1] };
+let thawed = mut cb;
+let f = mut Frozen { items: [1] };
+let h = mut Handler { f: |_: mut [i32]| {} };
+--------------------------------------------------------------------------------
+let l: imm Line
+let ml: mut Line
+let b: mut Box[imm [i32]]
+let mb: mut [i32]
+let cb: imm Box[imm [i32]]
+let thawed: mut Box[mut [i32]]
+let f: mut Frozen[i32]
+let h: mut Handler[mut [i32]]
+
+================================================================================
+Mut of an imm struct keeps it
+:prelude
+================================================================================
+let s = mut "abc";
+--------------------------------------------------------------------------------
+let s: String
+
+================================================================================
+Mut decides by the type, not by what's given
+================================================================================
+fn f(xs: 'm [i32]) -> mut [i32] = mut xs;
+fn g[T](x: T) -> T = mut x;
+fn h(x) = mut x;
+--------------------------------------------------------------------------------
+f: fn('m [i32]) -> mut [i32]
+g: forall T. fn(T) -> T
+h: forall a. fn(a) -> a

@@ -8,9 +8,11 @@ use boltlang_hir_def::{
     ids::{EnumVariantId, FunctionId, StructId},
     item_tree::FunctionName,
 };
+use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_ty::{
-    Ty,
+    AdtId, Ty,
     lang::{char_struct, string_struct},
+    lower::{VariantDef, field_types, struct_args, subst_params},
 };
 
 /// The types that a function's scheme is used with, for its parameters and
@@ -250,6 +252,85 @@ impl<'db> Value<'db> {
         }
     }
 
+    /// `mut e` of this value, which has the type `from`, giving the type
+    /// `to`: what the types say is `imm`, or of a mutability the code doesn't
+    /// know, is copied into new `mut` objects, once each, and what they say
+    /// is `mut` is kept as it is. The two types differ exactly where a copy
+    /// is made, so they're compared rather than the objects, which keeps a
+    /// generic function's `mut xs` a copy even when it's given a `mut` one.
+    pub fn thaw(&self, db: &'db dyn Db, from: &Ty<'db>, to: &Ty<'db>) -> Value<'db> {
+        self.thaw_with(db, from, to, &mut HashMap::new())
+    }
+
+    fn thaw_with(
+        &self,
+        db: &'db dyn Db,
+        from: &Ty<'db>,
+        to: &Ty<'db>,
+        copies: &mut HashMap<*const (), Value<'db>>,
+    ) -> Value<'db> {
+        if from == to {
+            return self.clone();
+        }
+        match (self, from, to) {
+            (Value::Array(items), Ty::Array(_, from_elem), Ty::Array(_, to_elem)) => {
+                let key = Rc::as_ptr(items) as *const ();
+                if let Some(copy) = copies.get(&key) {
+                    return copy.clone();
+                }
+                let copy = Object::new(Mutability::Mut, Vec::new());
+                copies.insert(key, Value::Array(copy.clone()));
+                let thawed = items.borrow().iter().map(|v| v.thaw_with(db, from_elem, to_elem, copies)).collect();
+                *copy.borrow_mut() = thawed;
+                Value::Array(copy)
+            }
+            (Value::Adt { ctor, fields }, Ty::Adt(id, ..), Ty::Adt(..)) => {
+                let def = match *ctor {
+                    Ctor::Struct(s) => VariantDef::Struct(s),
+                    Ctor::Variant(v) => VariantDef::Variant(v),
+                };
+                let generic_def = match id {
+                    AdtId::Struct(s) => GenericDefId::Struct(*s),
+                    AdtId::Enum(e) => GenericDefId::Enum(*e),
+                };
+                let key = Rc::as_ptr(fields) as *const ();
+                if let Some(copy) = copies.get(&key) {
+                    return copy.clone();
+                }
+                let mutability = match ctor {
+                    Ctor::Struct(_) => Mutability::Mut,
+                    Ctor::Variant(_) => Mutability::Imm,
+                };
+                let copy = Object::new(mutability, Vec::new());
+                copies.insert(key, Value::Adt { ctor: *ctor, fields: copy.clone() });
+                let (from_args, to_args) = (adt_subst(from), adt_subst(to));
+                let field_tys = field_types(db, def);
+                let thawed = fields
+                    .borrow()
+                    .iter()
+                    .map(|(name, v)| {
+                        let v = match field_tys.field(name) {
+                            Some((_, t)) => v.thaw_with(
+                                db,
+                                &subst_params(t, generic_def, &from_args),
+                                &subst_params(t, generic_def, &to_args),
+                                copies,
+                            ),
+                            None => v.clone(),
+                        };
+                        (name.clone(), v)
+                    })
+                    .collect();
+                *copy.borrow_mut() = thawed;
+                Value::Adt { ctor: *ctor, fields: copy }
+            }
+            (Value::Tuple(items), Ty::Tuple(from_tys), Ty::Tuple(to_tys)) => Value::Tuple(
+                items.iter().zip(from_tys.iter().zip(to_tys.iter())).map(|(v, (f, t))| v.thaw_with(db, f, t, copies)).collect(),
+            ),
+            _ => self.clone(),
+        }
+    }
+
     /// The field called `name`, of a struct or variant or tuple.
     pub fn field(&self, name: &Name) -> Option<Value<'db>> {
         match self {
@@ -471,5 +552,16 @@ impl<'db> DisplayValue<'_, 'db> {
             Value::Closure(_) => write!(f, "<closure>"),
             Value::Unset => write!(f, "_"),
         }
+    }
+}
+
+/// What to substitute in the field types of a struct or enum of type `ty`:
+/// its type arguments, and for a struct its mutability arguments and its
+/// mutability.
+fn adt_subst<'db>(ty: &Ty<'db>) -> Vec<Ty<'db>> {
+    match ty {
+        Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) => struct_args(args, mutabilities, mutability),
+        Ty::Adt(AdtId::Enum(_), args, ..) => args.to_vec(),
+        _ => Vec::new(),
     }
 }
