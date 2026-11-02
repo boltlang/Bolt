@@ -112,8 +112,7 @@ def Expr.inPlace : Expr → Expr
   | .pair a b => .pair a.inPlace b.inPlace
   | .fst e => .fst e.inPlace
   | .snd e => .snd e.inPlace
-  | .freeze r t e => .freeze r t e.inPlace
-  | .keep r t e => .keep r t e.inPlace
+  | .freeze c r t e => .freeze c r t e.inPlace
   | .block c k t e => .block c k t e.inPlace
   | .frz _ e => .frz true e.inPlace
 
@@ -123,7 +122,7 @@ def Fn.inPlace (fn : Fn) : Fn := { fn with body := fn.body.inPlace }
 /-- `e` has no `frz`. -/
 def Expr.NoFrz : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => True
-  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e
+  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ _ e
     | .block _ _ _ e => e.NoFrz
   | .set a b | .letE _ a b | .app a b | .pair a b => a.NoFrz ∧ b.NoFrz
   | .frz _ _ => False
@@ -132,7 +131,7 @@ def Expr.NoFrz : Expr → Prop
 def Expr.LamNoFrz : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ => True
   | .lam _ _ e => e.NoFrz
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e
     | .block _ _ _ e | .frz _ e => e.LamNoFrz
   | .set a b | .letE _ a b | .app a b | .pair a b => a.LamNoFrz ∧ b.LamNoFrz
 
@@ -140,7 +139,7 @@ def Expr.LamNoFrz : Expr → Prop
 def Expr.count (l : Nat) : Expr → Nat
   | .var _ | .unit | .int _ => 0
   | .loc l' => if l' = l then 1 else 0
-  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e
+  | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .freeze _ _ _ e
     | .block _ _ _ e | .frz _ e => e.count l
   | .set a b | .letE _ a b | .app a b | .pair a b => a.count l + b.count l
 
@@ -148,7 +147,7 @@ def Expr.count (l : Nat) : Expr → Nat
 on the way there, past what's run already. -/
 def Expr.FrzOf (l : Nat) : Expr → Prop
   | .var _ | .unit | .int _ | .loc _ | .lam _ _ _ | .block _ _ _ _ => False
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e => e.FrzOf l
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e => e.FrzOf l
   | .letE _ a _ => a.FrzOf l
   | .set a b | .app a b | .pair a b => a.FrzOf l ∨ a.IsValue ∧ b.FrzOf l
   | .frz _ e => e = .loc l ∨ e.FrzOf l
@@ -164,8 +163,8 @@ def HeapNoFrz (h : Heap) : Prop := ∀ (l : Nat) (v : Expr), h[l]? = some v → 
 theorem Expr.NoFrz.inPlace {e : Expr} (h : e.NoFrz) : e.inPlace = e := by
   induction e with
   | var | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih => simp only [Expr.inPlace, ih h]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih => simp only [Expr.inPlace, ih h]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inPlace, ih₁ h.1, ih₂ h.2]
   | frz => exact h.elim
@@ -174,8 +173,8 @@ theorem Expr.NoFrz.lamNoFrz {e : Expr} (h : e.NoFrz) : e.LamNoFrz := by
   induction e with
   | var | unit | int | loc => trivial
   | lam => exact h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | frz => exact h.elim
 
@@ -199,7 +198,7 @@ theorem Expr.inPlace_subst (e : Expr) (x : Nat) (v : Expr) :
   induction e with
   | var y => simp only [Expr.subst, Expr.inPlace]; split <;> simp [Expr.inPlace]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.subst, Expr.inPlace, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.inPlace, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
@@ -213,16 +212,16 @@ theorem Expr.inPlace_inst (e : Expr) (ms : List Mu) (τs : List Ty) :
     (e.inst ms τs).inPlace = e.inPlace.inst ms τs := by
   induction e with
   | var | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inst, Expr.inPlace, ih]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inst, Expr.inPlace, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.inPlace, ih₁, ih₂]
 
 theorem Expr.inPlace_ren (e : Expr) (a b : Nat) : (e.ren a b).inPlace = e.inPlace.ren a b := by
   induction e with
   | var | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | frz _ _ ih => simp only [Expr.ren, Expr.inPlace, ih]
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
+    | frz _ _ ih => simp only [Expr.ren, Expr.inPlace, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.ren, Expr.inPlace, ih₁, ih₂]
   | block _ k _ _ ih =>
@@ -232,8 +231,8 @@ theorem Expr.inPlace_ren (e : Expr) (a b : Nat) : (e.ren a b).inPlace = e.inPlac
 theorem Expr.hasLoc_inPlace (e : Expr) (l : Nat) : e.inPlace.HasLoc l ↔ e.HasLoc l := by
   induction e with
   | var | unit | int | loc => simp [Expr.inPlace, Expr.HasLoc]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inPlace, Expr.HasLoc, ih]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inPlace, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inPlace, Expr.HasLoc, ih₁, ih₂]
 
@@ -241,8 +240,8 @@ theorem Expr.NoLocs.inPlace {e : Expr} (h : e.NoLocs) : e.inPlace.NoLocs := by
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
 /-- A location in `e` is counted. -/
@@ -250,8 +249,8 @@ theorem Expr.count_pos {e : Expr} {l : Nat} (h : e.HasLoc l) : 0 < e.count l := 
   induction e with
   | var | unit | int => exact h.elim
   | loc l' => simp only [Expr.HasLoc] at h; simp [Expr.count, h]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.count]
     rcases h with h | h
@@ -262,8 +261,8 @@ theorem Expr.count_pos {e : Expr} {l : Nat} (h : e.HasLoc l) : 0 < e.count l := 
 theorem Expr.FrzOf.hasLoc {e : Expr} {l : Nat} (h : e.FrzOf l) : e.HasLoc l := by
   induction e with
   | var | unit | int | loc | lam | block => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    => exact ih h
   | letE _ _ _ ih₁ _ => exact .inl (ih₁ h)
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ fun h => ih₂ h.2
   | frz _ e ih =>
@@ -291,7 +290,7 @@ theorem Expr.NoFrz.subst {e v : Expr} (h : e.NoFrz) (hv : v.NoFrz) (x : Nat) : (
   induction e with
   | var y => simp only [Expr.subst]; split; exact hv; trivial
   | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
@@ -308,7 +307,7 @@ theorem Expr.LamNoFrz.subst {e v : Expr} (h : e.LamNoFrz) (hv : v.NoFrz) (x : Na
   induction e with
   | var y => simp only [Expr.subst]; split; exact hv.lamNoFrz; trivial
   | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
@@ -322,8 +321,8 @@ theorem Expr.LamNoFrz.subst {e v : Expr} (h : e.LamNoFrz) (hv : v.NoFrz) (x : Na
 theorem Expr.NoFrz.inst {e : Expr} (h : e.NoFrz) (ms : List Mu) (τs : List Ty) : (e.inst ms τs).NoFrz := by
   induction e with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | frz => exact h.elim
 
@@ -332,15 +331,15 @@ theorem Expr.LamNoFrz.inst {e : Expr} (h : e.LamNoFrz) (ms : List Mu) (τs : Lis
   induction e with
   | var | unit | int | loc => trivial
   | lam => exact Expr.NoFrz.inst h ms τs
-  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
 
 theorem Expr.NoFrz.ren {e : Expr} (h : e.NoFrz) (a b : Nat) : (e.ren a b).NoFrz := by
   induction e with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
+    => exact ih h
   | block _ _ _ _ ih => simp only [Expr.ren]; split; exact h; exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | frz => exact h.elim
@@ -349,7 +348,7 @@ theorem Expr.LamNoFrz.ren {e : Expr} (h : e.LamNoFrz) (a b : Nat) : (e.ren a b).
   induction e with
   | var | unit | int | loc => trivial
   | lam => exact Expr.NoFrz.ren h a b
-  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | freeze _ _ _ _ ih
     | frz _ _ ih => exact ih h
   | block _ _ _ _ ih => simp only [Expr.ren]; split; exact h; exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
@@ -397,7 +396,7 @@ theorem step_lamNoFrz {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.LamNoFrz) {
     (hs : Step fns h e h' e') : HeapNoFrz h → e.LamNoFrz → HeapNoFrz h' ∧ e'.LamNoFrz := by
   induction hs with
   | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | callCong _ ih | freezeCong _ ih
-    | keepCong _ ih | frzCong _ ih => exact ih
+    | frzCong _ ih => exact ih
   | setCong₁ _ ih | letCong _ ih | appCong₁ _ ih | pairCong₁ _ ih =>
     intro hh he
     obtain ⟨hh', he'⟩ := ih hh he.1
@@ -420,7 +419,7 @@ theorem step_lamNoFrz {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.LamNoFrz) {
     intro hh he
     obtain ⟨hh', hv'⟩ := hc.noFrz hh (hv.noFrz he)
     exact ⟨hh', hv'.lamNoFrz⟩
-  | keepVal hv hc => exact fun hh he => ⟨(hc.noFrz hh (hv.noFrz he)).1, he⟩
+  | freezeKeep hv hc => exact fun hh he => ⟨(hc.noFrz hh (hv.noFrz he)).1, he⟩
   | @blockEnter k t e => exact fun hh he => ⟨hh.append trivial, Expr.LamNoFrz.ren (e := e) he _ _⟩
   | @blockKeep k t e => exact fun hh he => ⟨hh.append trivial, Expr.LamNoFrz.ren (e := e) he _ _⟩
   | frzVal hl | frzKeep hl => exact fun hh _ => ⟨hh.append (hh _ _ hl), trivial⟩
@@ -718,8 +717,7 @@ theorem step_unique {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e
       rw [Expr.inPlace_ren]
       exact .freeze ((hr.ren _ _).mono fun _ _ h => .inl h)
   | blockKeep => intro σ t M ρ h₂ e₂ hh ht; cases ht
-  | keepCong _ _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
-  | keepVal _ _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
+  | freezeKeep _ _ => intro σ t M ρ h₂ e₂ hh ht; cases ht
   | frzCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hu hnh hln hlen
     simp only [Expr.inPlace] at hr

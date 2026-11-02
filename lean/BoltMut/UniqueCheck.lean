@@ -25,7 +25,7 @@ namespace BoltMut
 def Expr.Free (x : Nat) : Expr → Prop
   | .var y => y = x
   | .unit | .int _ | .loc _ => False
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ e | .keep _ _ e | .block _ _ _ e
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e | .block _ _ _ e
     | .frz _ e => e.Free x
   | .set a b | .app a b | .pair a b => a.Free x ∨ b.Free x
   | .letE y a b => a.Free x ∨ (y ≠ x ∧ b.Free x)
@@ -40,7 +40,7 @@ theorem Expr.subst_of_not_free {e : Expr} {x : Nat} (h : ¬ e.Free x) (v : Expr)
     simp only [Expr.Free] at h
     simp [Expr.subst, h]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.subst, ih h]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.Free, not_or] at h
@@ -74,7 +74,7 @@ theorem Expr.subst_comm (e : Expr) {x y : Nat} {v w : Expr} (hxy : x ≠ y) (hv 
         simp [Expr.subst, hzx, Expr.subst_of_not_free (hw x)]
       · simp [Expr.subst, hzx, hzy]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.subst, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, ih₁, ih₂]
   | letE z _ _ ih₁ ih₂ =>
@@ -129,7 +129,7 @@ theorem Expr.subst_inst (e : Expr) (x : Nat) (v : Expr) (ms : List Mu) (τs : Li
   induction e with
   | var y => simp only [Expr.subst]; split <;> simp [Expr.inst, Expr.subst, *]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.subst, Expr.inst, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.inst, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
@@ -146,7 +146,7 @@ theorem Expr.subst_ren (e : Expr) (x : Nat) {v : Expr} {a b : Nat} (hv : v.ren a
   induction e with
   | var y => simp only [Expr.subst]; split <;> simp [Expr.ren, Expr.subst, *]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | frz _ _ ih => simp only [Expr.subst, Expr.ren, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.ren, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
@@ -165,7 +165,7 @@ theorem Expr.hasLoc_subst_of {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : e.Ha
   induction e with
   | var | unit | int => exact h.elim
   | loc => exact h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ ih₂
   | letE y _ _ ih₁ ih₂ =>
@@ -195,8 +195,7 @@ inductive Bor (l : Nat) : Expr → Prop where
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Bor l e → Bor l (.call f ms τs e)
   | fst {e : Expr} : Bor l e → Bor l (.fst e)
   | snd {e : Expr} : Bor l e → Bor l (.snd e)
-  | freeze {r : Nat} {t : Ty} {e : Expr} : Bor l e → Bor l (.freeze r t e)
-  | keep {r : Nat} {t : Ty} {e : Expr} : Bor l e → Bor l (.keep r t e)
+  | freeze {c : Bool} {r : Nat} {t : Ty} {e : Expr} : Bor l e → Bor l (.freeze c r t e)
   | block {c : Bool} {k : Nat} {t : Ty} {e : Expr} : Bor l e → Bor l (.block c k t e)
   | frz {b : Bool} {e : Expr} : Bor l e → Bor l (.frz b e)
   | set {a b : Expr} : Bor l a → Bor l b → Bor l (.set a b)
@@ -215,8 +214,7 @@ inductive Con (l : Nat) : Expr → Prop where
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Con l e → Con l (.call f ms τs e)
   | fst {e : Expr} : Con l e → Con l (.fst e)
   | snd {e : Expr} : Con l e → Con l (.snd e)
-  | freeze {r : Nat} {t : Ty} {e : Expr} : Con l e → Con l (.freeze r t e)
-  | keep {r : Nat} {t : Ty} {e : Expr} : Con l e → Con l (.keep r t e)
+  | freeze {c : Bool} {r : Nat} {t : Ty} {e : Expr} : Con l e → Con l (.freeze c r t e)
   | block {c : Bool} {k : Nat} {t : Ty} {e : Expr} : Con l e → Con l (.block c k t e)
   | set₁ {a b : Expr} : Con l a → ¬ b.HasLoc l → Con l (.set a b)
   | set₂ {a b : Expr} : Bor l a → Con l b → Con l (.set a b)
@@ -244,8 +242,7 @@ inductive Ok : Nat → (Nat → Prop) → Expr → Prop where
       Ok n L e → Ok n L (.call f ms τs e)
   | fst {n : Nat} {L : Nat → Prop} {e : Expr} : Ok n L e → Ok n L (.fst e)
   | snd {n : Nat} {L : Nat → Prop} {e : Expr} : Ok n L e → Ok n L (.snd e)
-  | freeze {n : Nat} {L : Nat → Prop} {r : Nat} {t : Ty} {e : Expr} : Ok n L e → Ok n L (.freeze r t e)
-  | keep {n : Nat} {L : Nat → Prop} {r : Nat} {t : Ty} {e : Expr} : Ok n L e → Ok n L (.keep r t e)
+  | freeze {n : Nat} {L : Nat → Prop} {c : Bool} {r : Nat} {t : Ty} {e : Expr} : Ok n L e → Ok n L (.freeze c r t e)
   | block {n : Nat} {L : Nat → Prop} {c : Bool} {k : Nat} {t : Ty} {e : Expr} :
       Ok n L e → Ok n L (.block c k t e)
   | set {n : Nat} {L : Nat → Prop} {a b : Expr} : Ok n L a → Ok n L b → Ok n L (.set a b)
@@ -270,8 +267,8 @@ theorem Expr.count_zero {e : Expr} {l : Nat} (h : ¬ e.HasLoc l) : e.count l = 0
   | loc l' =>
     simp only [Expr.HasLoc] at h
     simp [Expr.count, h]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at h
     simp only [Expr.count, ih₁ h.1, ih₂ h.2]
@@ -306,7 +303,7 @@ theorem Bor.not_frzOf {l : Nat} {e : Expr} (h : Bor l e) : ¬ e.FrzOf l := by
   | none h => exact fun hf => h hf.hasLoc
   | getL => exact id
   | setL _ ih => exact fun hf => hf.elim id fun h => ih h.2
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih | keep _ ih => exact ih
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih
   | block => exact id
   | @frz _ e h ih =>
     intro hf
@@ -325,7 +322,7 @@ theorem Con.count {l : Nat} {e : Expr} (h : Con l e) (hf : e.FrzOf l) : e.count 
     rcases hf with rfl | hf
     · cases h
     · exact ih hf
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih | keep _ ih => exact ih hf
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih hf
   | block => exact hf.elim
   | set₁ ha hb ih | app₁ ha hb ih | pair₁ ha hb ih =>
     rcases hf with hf | ⟨hv, _⟩
@@ -343,8 +340,8 @@ theorem Expr.hasLoc_inst {e : Expr} {ms : List Mu} {τs : List Ty} {l : Nat} :
     (e.inst ms τs).HasLoc l ↔ e.HasLoc l := by
   induction e with
   | var | unit | int | loc => simp [Expr.inst, Expr.HasLoc]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih
-    | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inst, Expr.HasLoc, ih]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
+    | block _ _ _ _ ih | frz _ _ ih => simp only [Expr.inst, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.HasLoc, ih₁, ih₂]
 
@@ -363,7 +360,6 @@ theorem Bor.subst {l : Nat} {e : Expr} (h : Bor l e) {v : Expr} (hv : ¬ v.HasLo
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | frz _ ih => exact .frz ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
@@ -388,7 +384,6 @@ theorem Con.subst {l : Nat} {e : Expr} (h : Con l e) {v : Expr} (hv : ¬ v.HasLo
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | set₁ _ hb ih => exact .set₁ ih (Expr.noLoc_subst hb hv)
   | set₂ ha _ ih => exact .set₂ (ha.subst hv x) ih
@@ -427,8 +422,7 @@ theorem Ok.of_noFrz {n : Nat} {L : Nat → Prop} {e : Expr} (h : e.NoFrz) : Ok n
   | call _ _ _ _ ih => exact .call (ih h)
   | fst _ ih => exact .fst (ih h)
   | snd _ ih => exact .snd (ih h)
-  | freeze _ _ _ ih => exact .freeze (ih h)
-  | keep _ _ _ ih => exact .keep (ih h)
+  | freeze _ _ _ _ ih => exact .freeze (ih h)
   | block _ _ _ _ ih => exact .block (ih h)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ h.1) (ih₂ h.2)
   | letE _ _ _ ih₁ ih₂ => exact .letE (ih₁ h.1) (ih₂ h.2)
@@ -451,7 +445,6 @@ theorem Ok.mono {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) :
   | fst _ ih => exact fun hn hL => .fst (ih hn hL)
   | snd _ ih => exact fun hn hL => .snd (ih hn hL)
   | freeze _ ih => exact fun hn hL => .freeze (ih hn hL)
-  | keep _ ih => exact fun hn hL => .keep (ih hn hL)
   | block _ ih => exact fun hn hL => .block (ih hn hL)
   | set _ _ ih₁ ih₂ => exact fun hn hL => .set (ih₁ hn hL) (ih₂ hn hL)
   | letE _ _ ih₁ ih₂ => exact fun hn hL => .letE (ih₁ hn hL) (ih₂ hn hL)
@@ -489,7 +482,6 @@ theorem Ok.subst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) :
   | fst _ ih => exact fun x _ a b c d => .fst (ih x a b c d)
   | snd _ ih => exact fun x _ a b c d => .snd (ih x a b c d)
   | freeze _ ih => exact fun x _ a b c d => .freeze (ih x a b c d)
-  | keep _ ih => exact fun x _ a b c d => .keep (ih x a b c d)
   | block _ ih => exact fun x _ a b c d => .block (ih x a b c d)
   | set _ _ ih₁ ih₂ => exact fun x _ a b c d => .set (ih₁ x a b c d) (ih₂ x a b c d)
   | app _ _ ih₁ ih₂ => exact fun x _ a b c d => .app (ih₁ x a b c d) (ih₂ x a b c d)
@@ -527,7 +519,7 @@ theorem Ok.subst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) :
 theorem Ok.frzOf {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) {l : Nat} (hf : e.FrzOf l) : L l := by
   induction h with
   | var | unit | int | loc | lam | block | bound => exact hf.elim
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih | keep _ ih => exact ih hf
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih hf
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hf.elim ih₁ fun h => ih₂ h.2
   | letE _ _ ih₁ _ => exact ih₁ hf
   | @frz _ _ _ l' hl =>
@@ -539,7 +531,7 @@ theorem Ok.frzOf {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) {l : Nat
 theorem Expr.NoFrz.of_subst {e : Expr} {x : Nat} {v : Expr} (h : (e.subst x v).NoFrz) : e.NoFrz := by
   induction e with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
@@ -558,7 +550,7 @@ theorem Expr.NoFrz.of_subst {e : Expr} {x : Nat} {v : Expr} (h : (e.subst x v).N
 theorem Expr.LamNoFrz.of_subst {e : Expr} {x : Nat} {v : Expr} (h : (e.subst x v).LamNoFrz) : e.LamNoFrz := by
   induction e with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
     | block _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
@@ -578,7 +570,7 @@ theorem Ok.lamNoFrz {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) : e.L
   induction h with
   | var | unit | int | loc | frz => trivial
   | lam h => exact h
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih | keep _ ih | block _ ih => exact ih
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih | block _ ih => exact ih
   | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁, ih₂⟩
   | @own n _ _ _ _ _ _ _ ih₀ ih => exact ⟨ih₀, (ih n (Nat.le_refl _)).of_subst⟩
   | bound _ _ ih => exact ⟨trivial, ih.of_subst⟩
@@ -614,7 +606,6 @@ theorem Bor.inst {l : Nat} {e : Expr} (h : Bor l e) (ms : List Mu) (τs : List T
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | frz _ ih => exact .frz ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
@@ -633,7 +624,6 @@ theorem Con.inst {l : Nat} {e : Expr} (h : Con l e) (ms : List Mu) (τs : List T
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | set₁ _ hb ih => exact .set₁ ih (nl hb)
   | set₂ ha _ ih => exact .set₂ (ha.inst ms τs) ih
@@ -663,7 +653,6 @@ theorem Ok.inst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) (ms : Lis
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
@@ -694,7 +683,6 @@ theorem Bor.ren {l : Nat} {e : Expr} (h : Bor l e) (a b : Nat) : Bor l (e.ren a 
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | @block _ k _ _ hb ih =>
     simp only [Expr.ren]
     split
@@ -717,7 +705,6 @@ theorem Con.ren {l : Nat} {e : Expr} (h : Con l e) (a b : Nat) : Con l (e.ren a 
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | @block _ k _ _ hc ih =>
     simp only [Expr.ren]
     split
@@ -750,7 +737,6 @@ theorem Ok.ren {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok n L e) (a b : Nat
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | @block _ _ _ k _ _ hb ih =>
     simp only [Expr.ren]
     split
@@ -837,7 +823,7 @@ theorem step_noLoc {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' 
     ¬ e.HasLoc l → l < h.length → HeapNoLoc h l → ¬ e'.HasLoc l ∧ HeapNoLoc h' l ∧ l < h'.length := by
   induction hs with
   | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | callCong _ ih | freezeCong _ ih
-    | keepCong _ ih | frzCong _ ih => exact ih
+    | frzCong _ ih => exact ih
   | setCong₁ _ ih | letCong _ ih | appCong₁ _ ih | pairCong₁ _ ih =>
     intro he hl hh
     obtain ⟨he', hh', hl'⟩ := ih (fun h => he (.inl h)) hl hh
@@ -865,7 +851,7 @@ theorem step_noLoc {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' 
     exact ⟨Expr.noLoc_subst (fun h => he (.inl h)) (fun h => he (.inr h)), hh, hl⟩
   | fstVal _ _ => exact fun he hl hh => ⟨fun h => he (.inl h), hh, hl⟩
   | sndVal _ _ => exact fun he hl hh => ⟨fun h => he (.inr h), hh, hl⟩
-  | freezeVal _ hc | keepVal _ hc =>
+  | freezeVal _ hc | freezeKeep _ hc =>
     intro he hl hh
     obtain ⟨hh', hv', _⟩ := hc.noLoc hh he hl (fun _ _ h => by simp at h)
     have hlen : _ := hc.prefix
@@ -1022,17 +1008,12 @@ theorem step_bor {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' : 
     intro hb hl hh
     cases hb with
     | none hn => exact nl .blockKeep hn hl hh
-    | block hb => exact ⟨.keep (hb.ren _ _), hh.append id, by simp; omega⟩
-  | keepCong s ih =>
+    | block hb => exact ⟨.freeze (hb.ren _ _), hh.append id, by simp; omega⟩
+  | freezeKeep hv hc =>
     intro hb hl hh
     cases hb with
-    | none hn => exact nl (.keepCong s) hn hl hh
-    | keep hb => obtain ⟨a, b, c⟩ := ih hb hl hh; exact ⟨.keep a, b, c⟩
-  | keepVal hv hc =>
-    intro hb hl hh
-    cases hb with
-    | none hn => exact nl (.keepVal hv hc) hn hl hh
-    | keep hb =>
+    | none hn => exact nl (.freezeKeep hv hc) hn hl hh
+    | freeze hb =>
       obtain ⟨hh', _, _⟩ := hc.noLoc hh (hb.value hv) hl (fun _ _ h => by simp at h)
       obtain ⟨ext, rfl⟩ := hc.prefix
       exact ⟨hb, hh', by simp; omega⟩
@@ -1172,12 +1153,8 @@ theorem step_con {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' : 
   | blockKeep =>
     intro hc _ hl hh
     cases hc with
-    | block hc => exact ⟨.inl (.keep (hc.ren _ _)), hh.append id, by simp; omega⟩
-  | keepCong _ ih =>
-    intro hc hf hl hh
-    cases hc with
-    | keep hc => obtain ⟨a, b, c⟩ := ih hc hf hl hh; exact ⟨a.imp .keep id, b, c⟩
-  | keepVal hv _ => intro hc; cases hc with | keep hc => exact (hc.not_value hv).elim
+    | block hc => exact ⟨.inl (.freeze (hc.ren _ _)), hh.append id, by simp; omega⟩
+  | freezeKeep hv _ => intro hc; cases hc with | freeze hc => exact (hc.not_value hv).elim
   | frzCong s ih =>
     intro hc hf hl hh
     cases hc with
@@ -1199,11 +1176,11 @@ theorem step_len {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fns h e 
   induction hs with
   | newCong _ ih | getCong _ ih | setCong₁ _ ih | setCong₂ _ _ ih | letCong _ ih | callCong _ ih
     | appCong₁ _ ih | appCong₂ _ _ ih | pairCong₁ _ ih | pairCong₂ _ _ ih | fstCong _ ih | sndCong _ ih
-    | freezeCong _ ih | keepCong _ ih | frzCong _ ih => exact ih
+    | freezeCong _ ih | frzCong _ ih => exact ih
   | newVal _ | blockEnter | blockKeep | frzVal _ | frzKeep _ => simp
   | setLoc _ _ => simp
   | getLoc _ | letVal _ | callVal _ _ | appVal _ | fstVal _ _ | sndVal _ _ => exact Nat.le_refl _
-  | freezeVal _ hc | keepVal _ hc =>
+  | freezeVal _ hc | freezeKeep _ hc =>
     obtain ⟨e, rfl⟩ := hc.prefix
     simp
 
@@ -1405,17 +1382,11 @@ theorem step_ok {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs)
   | blockKeep =>
     intro hok _ _ _ _
     cases hok with
-    | block hok => exact okNone (.keep ((hok.ren _ _).up (by simp) _))
-  | keepCong _ ih =>
-    intro hok hl hhl hnh hf
-    cases hok with
-    | keep hok =>
-      obtain ⟨N, hN, hok'⟩ := ih hok hl hhl hnh hf
-      exact ⟨N, fun l h => let ⟨a, b, c, d⟩ := hN l h; ⟨a, b, .keep c, d⟩, .keep hok'⟩
-  | keepVal _ hc =>
+    | block hok => exact okNone (.freeze ((hok.ren _ _).up (by simp) _))
+  | freezeKeep _ hc =>
     intro hok _ _ _ _
     cases hok with
-    | keep hok => exact okNone (hok.up (by obtain ⟨e, rfl⟩ := hc.prefix; simp) _)
+    | freeze hok => exact okNone (hok.up (by obtain ⟨e, rfl⟩ := hc.prefix; simp) _)
   | frzCong s _ =>
     intro hok
     cases hok with

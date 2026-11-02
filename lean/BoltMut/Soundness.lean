@@ -655,8 +655,7 @@ theorem preservation_alloc {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' 
       · intro r hr
         simp [Ty.reaches, Mu.mentions] at hr
   | blockKeep => intro σ t hh ht _; cases ht
-  | keepCong _ _ => intro σ t hh ht _; cases ht
-  | keepVal _ _ => intro σ t hh ht _; cases ht
+  | freezeKeep _ _ => intro σ t hh ht _; cases ht
   | frzCong _ ih =>
     intro σ t hh ht hsc
     cases ht with

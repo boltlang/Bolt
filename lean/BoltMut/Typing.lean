@@ -154,7 +154,7 @@ inductive HasType (fns : List Fn) (σ : HeapTy) (Δ : Assume) : Bool → Ctx →
   The type has no parameters, so that a call can't give it the region. -/
   | freeze {io : Bool} {Γ : Ctx} {e : Expr} {t : Ty} {r : Nat} :
       HasType fns σ Δ io Γ e t → t.Freezable r → t.NoParams → Made σ.length r → t.Below σ.length →
-      HasType fns σ Δ io Γ (.freeze r t e) (t.free r .immutable)
+      HasType fns σ Δ io Γ (.freeze false r t e) (t.free r .immutable)
   /-- A block, whose region is `2 * k + 1` inside (#292). Its body sees some
   of the variables in scope, `Γb`, and none of them, nor any location in
   it, mentions that region: so nothing from before the block has the

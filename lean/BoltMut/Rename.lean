@@ -313,7 +313,7 @@ theorem Expr.hasLoc_ren {e : Expr} {a b l : Nat} (h : (e.ren a b).HasLoc l) : e.
   induction e with
   | var | unit | int | loc => exact h
   | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih
-    | freeze _ _ _ ih | keep _ _ _ ih | frz _ _ ih => exact ih h
+    | freeze _ _ _ _ ih | frz _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact .inl (ih₁ h)
@@ -506,7 +506,7 @@ theorem Expr.Scoped.mono {B B' : Nat → Prop} (hB : ∀ r, B r → B' r) {e : E
     e.Scoped B' := by
   induction e generalizing B B' with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | frz _ _ ih =>
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | frz _ _ ih =>
     exact ih hB h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact ⟨ih₁ hB h.1, ih₂ hB h.2⟩
@@ -524,7 +524,7 @@ theorem Expr.Scoped.subst {B : Nat → Prop} {e v : Expr} (h : e.Scoped B) (hv :
     · exact hv.mono fun _ h => h.elim
     · trivial
   | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | block _ _ _ _ ih | frz _ _ ih =>
+  | new _ _ ih | get _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | block _ _ _ _ ih | frz _ _ ih =>
     exact ih h
   | call _ _ _ _ ih => exact ⟨h.1, h.2.1, ih h.2.2⟩
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
@@ -561,7 +561,7 @@ theorem Expr.Scoped.inst {B : Nat → Prop} {e : Expr} (h : e.Scoped B) {ms : Li
     (e.inst ms τs).Scoped B := by
   induction e generalizing B with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | frz _ _ ih
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | frz _ _ ih
     | block _ _ _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact ⟨ih₁ h.1, ih₂ h.2⟩
@@ -587,7 +587,7 @@ theorem Expr.Scoped.ren {B : Nat → Prop} {a b : Nat} {e : Expr} (h : e.Scoped 
     · exact (h r h' ho).resolve_left hra
   induction e generalizing B with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ ih | keep _ _ _ ih | frz _ _ ih =>
+  | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | frz _ _ ih =>
     exact ih h hm ht
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact ⟨ih₁ h.1 hm ht, ih₂ h.2 hm ht⟩
@@ -662,7 +662,7 @@ theorem Copy.closed {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} 
 theorem step_closed {fns : List Fn} (hf : ∀ fn ∈ fns, fn.body.Closed) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') : HeapClosed h → e.Closed → HeapClosed h' ∧ e'.Closed := by
   induction hs with
-  | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | freezeCong _ ih | keepCong _ ih | frzCong _ ih =>
+  | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | freezeCong _ ih | frzCong _ ih =>
     exact ih
   | setCong₁ _ ih | letCong _ ih | appCong₁ _ ih | pairCong₁ _ ih =>
     intro hh he
@@ -687,7 +687,7 @@ theorem step_closed {fns : List Fn} (hf : ∀ fn ∈ fns, fn.body.Closed) {h h' 
   | fstVal _ _ => exact fun hh he => ⟨hh, he.1⟩
   | sndVal _ _ => exact fun hh he => ⟨hh, he.2⟩
   | freezeVal _ hc => exact fun hh he => hc.closed hh he
-  | keepVal _ hc => exact fun hh he => ⟨(hc.closed hh he).1, he⟩
+  | freezeKeep _ hc => exact fun hh he => ⟨(hc.closed hh he).1, he⟩
   | frzVal hl | frzKeep hl => exact fun hh _ => ⟨hh.append (hh _ _ hl), trivial⟩
   | blockEnter =>
     exact fun hh he => ⟨hh.append trivial, Expr.Scoped.ren (B := fun _ => False)

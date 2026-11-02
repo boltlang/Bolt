@@ -45,8 +45,7 @@ inductive Rel (ρ : Nat → Nat → Prop) : Expr → Expr → Prop where
   | pair {a₁ a₂ b₁ b₂ : Expr} : Rel ρ a₁ a₂ → Rel ρ b₁ b₂ → Rel ρ (.pair a₁ b₁) (.pair a₂ b₂)
   | fst {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.fst e₁) (.fst e₂)
   | snd {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.snd e₁) (.snd e₂)
-  | freeze {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.freeze r t e₁) (.freeze r t e₂)
-  | keep {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.keep r t e₁) (.keep r t e₂)
+  | freeze {c : Bool} {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.freeze c r t e₁) (.freeze c r t e₂)
   | block {c : Bool} {k : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.block c k t e₁) (.block c k t e₂)
   | frz {b : Bool} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.frz b e₁) (.frz b e₂)
 
@@ -68,7 +67,6 @@ theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' 
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | frz _ ih => exact .frz ih
 
@@ -101,8 +99,7 @@ theorem Rel.refl {ρ : Nat → Nat → Prop} : ∀ {e : Expr}, (∀ l, e.HasLoc 
   | .lam _ _ e, h => .lam (Rel.refl (e := e) h)
   | .fst e, h => .fst (Rel.refl (e := e) h)
   | .snd e, h => .snd (Rel.refl (e := e) h)
-  | .freeze _ _ e, h => .freeze (Rel.refl (e := e) h)
-  | .keep _ _ e, h => .keep (Rel.refl (e := e) h)
+  | .freeze _ _ _ e, h => .freeze (Rel.refl (e := e) h)
   | .block _ _ _ e, h => .block (Rel.refl (e := e) h)
   | .frz _ e, h => .frz (Rel.refl (e := e) h)
   | .set _ _, h => .set (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
@@ -141,7 +138,6 @@ theorem Rel.subst {ρ : Nat → Nat → Prop} {e₁ e₂ v₁ v₂ : Expr} (h : 
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | block _ ih => exact .block ih
   | frz _ ih => exact .frz ih
 
@@ -164,7 +160,6 @@ theorem Rel.ren {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ 
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
   | freeze _ ih => exact .freeze ih
-  | keep _ ih => exact .keep ih
   | @block _ k _ _ _ h ih =>
     simp only [Expr.ren]
     split
@@ -676,8 +671,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
       rw [hlen]
       exact .freeze ((hr.ren _ _).mono fun _ _ h => .inl h)
   | blockKeep => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
-  | keepCong _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
-  | keepVal _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
+  | freezeKeep _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
   | frzCong _ ih =>
     intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
     cases ht with

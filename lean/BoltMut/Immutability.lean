@@ -124,8 +124,7 @@ theorem step_keeps_imm {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fn
     intro σ t l ty hh _ hl
     exact List.getElem?_append_left (hh.lt hl)
   | blockKeep => intro σ t l ty hh ht hl; cases ht
-  | keepCong _ _ => intro σ t l ty hh ht hl; cases ht
-  | keepVal _ _ => intro σ t l ty hh ht hl; cases ht
+  | freezeKeep _ _ => intro σ t l ty hh ht hl; cases ht
   | frzCong _ ih =>
     intro σ t l ty hh ht hl
     cases ht with

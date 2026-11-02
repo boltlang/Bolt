@@ -283,8 +283,7 @@ theorem step_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr} 
       rw [← hv]
       exact fun _ h => h.elim
   | blockKeep => intro σ t n A hh ht; cases ht
-  | keepCong _ _ => intro σ t n A hh ht; cases ht
-  | keepVal _ _ => intro σ t n A hh ht; cases ht
+  | freezeKeep _ _ => intro σ t n A hh ht; cases ht
   | frzCong _ ih =>
     intro σ t n A hh ht hn hc hhc
     cases ht with

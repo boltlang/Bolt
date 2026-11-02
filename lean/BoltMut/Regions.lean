@@ -119,7 +119,7 @@ example : ¬ Sat .none build.assume [.immutable] [] := by
 the block, and the freeze copies the array into an `imm` one (#292). A
 caller that wants `mut` would give `'ρ` that instead, with no freeze. -/
 example : HasType [build] [(.immutable, .unit)] .none false Ctx.empty
-    (.freeze 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
+    (.freeze false 0 (.cell (.region 0) .int) (.call 0 [.region 0] [] (.int 3))) (.cell .immutable .int) := by
   refine .freeze (t := .cell (.region 0) .int) ?_ ⟨(fun h => nomatch h), trivial⟩ ⟨(fun _ h => nomatch h), trivial⟩
     (by simp) (by intro r h; simp [Ty.mentions, Mu.mentions] at h; subst h; simp)
   show HasType _ _ _ _ _ _ (build.retTy.inst [.region 0] [])
@@ -140,7 +140,7 @@ example : HasType [build] [(.immutable, .unit)] .none false Ctx.empty
 region becomes `imm`, so it ends with a freeze, and `ys` is an `imm`
 array. -/
 example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
-    (.freeze 0 (.cell (.region 0) .int)
+    (.freeze false 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.set (.var 0) (.int 2)) (.var 0))))
     (.cell .immutable .int) :=
   .freeze (t := .cell (.region 0) .int) (.letE (.newR .int trivial (by simp)) (.letE (.setR (.var rfl) .int) (.var rfl)))
@@ -161,7 +161,7 @@ example : HasType [] [] .none false Ctx.empty
 mentions the region `imm`: here one that takes the region's arrays, which
 could change the copy if it were given it. -/
 example (e : Expr) (t : Ty) : ¬ HasType [] [] .none false Ctx.empty
-    (.freeze 0 (.prod (.fn .immutable (.cell (.region 0) .int) .unit) (.cell (.region 0) .int)) e) t := by
+    (.freeze false 0 (.prod (.fn .immutable (.cell (.region 0) .int) .unit) (.cell (.region 0) .int)) e) t := by
   intro h
   cases h with
   | freeze _ hf _ _ _ => simp [Ty.Freezable, Ty.mentions, Mu.mentions] at hf
@@ -171,7 +171,7 @@ the region's array has the region as its mutability (rule 5 of the
 regions page), so it can't be in the frozen value, and nothing after the
 block can reach the original through it. -/
 example : HasType [] [(.immutable, .unit)] .none false Ctx.empty
-    (.freeze 0 (.cell (.region 0) .int)
+    (.freeze false 0 (.cell (.region 0) .int)
       (.letE 0 (.new true (.int 1)) (.letE 1 (.lam true 2 (.set (.var 0) (.int 2))) (.var 0))))
     (.cell .immutable .int) := by
   refine .freeze (t := .cell (.region 0) .int) (.letE (.newR .int trivial (by simp)) (.letE (.lam (a := .unit) (μ := .region 0) (.inr ⟨rfl, 0, rfl⟩)

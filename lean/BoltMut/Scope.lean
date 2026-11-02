@@ -23,7 +23,7 @@ def Expr.NoFreeze : Expr → Prop
   | .new _ e | .get e | .call _ _ _ e | .lam _ _ e | .fst e | .snd e | .frz _ e => e.NoFreeze
   | .block c _ _ e => c = false ∧ e.NoFreeze
   | .set a b | .letE _ a b | .app a b | .pair a b => a.NoFreeze ∧ b.NoFreeze
-  | .freeze _ _ _ | .keep _ _ _ => False
+  | .freeze _ _ _ _ => False
 
 /-- `b`'s locations are older than the markers of the regions that `a`
 freezes. -/
@@ -35,8 +35,7 @@ def Expr.Run : Expr → Prop
   | .lam _ _ e => e.NoFreeze
   | .block c _ _ e => c = false ∧ e.NoFreeze
   | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .frz _ e => e.Run
-  | .freeze r _ e => r % 2 = 0 ∧ e.Run
-  | .keep _ _ _ => False
+  | .freeze _ r _ e => r % 2 = 0 ∧ e.Run
   | .set a b | .app a b | .pair a b =>
     a.Run ∧ b.Run ∧ (a.IsValue ∨ b.NoFreeze) ∧ Expr.Before a b ∧ Expr.Before b a
   | .letE _ a b => a.Run ∧ b.NoFreeze ∧ Expr.Before a b
@@ -52,7 +51,7 @@ theorem Expr.NoFreeze.not_freezes {e : Expr} (h : e.NoFreeze) (r : Nat) : ¬ e.F
   | block _ _ _ _ ih => exact ih h.2
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hf => hf.elim (ih₁ h.1) (ih₂ h.2)
-  | freeze | keep => exact h.elim
+  | freeze => exact h.elim
 
 theorem Expr.Before.of_noFreeze {a b : Expr} (h : a.NoFreeze) : Expr.Before a b :=
   fun r hr => (h.not_freezes r hr).elim
@@ -66,7 +65,7 @@ theorem Expr.NoFreeze.run {e : Expr} (h : e.NoFreeze) : e.Run := by
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact ⟨ih₁ h.1, ih₂ h.2, .inr h.2, .of_noFreeze h.1, .of_noFreeze h.2⟩
   | letE _ _ _ ih₁ _ => exact ⟨ih₁ h.1, h.2, .of_noFreeze h.1⟩
-  | freeze | keep => exact h.elim
+  | freeze => exact h.elim
 
 theorem Expr.NoFreeze.subst {e v : Expr} (h : e.NoFreeze) (hv : v.NoFreeze) (x : Nat) :
     (e.subst x v).NoFreeze := by
@@ -91,7 +90,7 @@ theorem Expr.NoFreeze.subst {e v : Expr} (h : e.NoFreeze) (hv : v.NoFreeze) (x :
     split
     · exact h
     · exact ih h
-  | freeze | keep => exact h.elim
+  | freeze => exact h.elim
 
 theorem Expr.NoFreeze.inst {e : Expr} (h : e.NoFreeze) (ms : List Mu) (τs : List Ty) :
     (e.inst ms τs).NoFreeze := by
@@ -100,7 +99,7 @@ theorem Expr.NoFreeze.inst {e : Expr} (h : e.NoFreeze) (ms : List Mu) (τs : Lis
   | new _ _ ih | get _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | call _ _ _ _ ih | frz _ _ ih => exact ih h
   | block _ _ _ _ ih => exact ⟨h.1, ih h.2⟩
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
-  | freeze | keep => exact h.elim
+  | freeze => exact h.elim
 
 theorem Expr.NoFreeze.ren {e : Expr} (h : e.NoFreeze) (a b : Nat) : (e.ren a b).NoFreeze := by
   induction e with
@@ -112,7 +111,7 @@ theorem Expr.NoFreeze.ren {e : Expr} (h : e.NoFreeze) (a b : Nat) : (e.ren a b).
     · exact h
     · exact ⟨h.1, ih h.2⟩
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
-  | freeze | keep => exact h.elim
+  | freeze => exact h.elim
 
 /-- A running program only freezes regions that blocks made. -/
 theorem Expr.Run.freezes_even {e : Expr} (h : e.Run) {r : Nat} (hr : e.Freezes r) : r % 2 = 0 := by
@@ -123,11 +122,10 @@ theorem Expr.Run.freezes_even {e : Expr} (h : e.Run) {r : Nat} (hr : e.Freezes r
   | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | frz _ _ ih => exact ih h hr
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hr.elim (ih₁ h.1) (ih₂ h.2.1)
   | letE _ _ _ ih₁ _ => exact hr.elim (ih₁ h.1) fun hb => (h.2.1.not_freezes r hb).elim
-  | freeze r' _ _ ih =>
+  | freeze _ r' _ _ ih =>
     rcases hr with rfl | hr
     · exact h.1
     · exact ih h.2 hr
-  | keep => exact h.elim
 
 theorem Expr.IsValue.noFreeze {v : Expr} (hv : v.IsValue) (h : v.Run) : v.NoFreeze := by
   induction hv with
@@ -260,7 +258,10 @@ theorem step_run {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoFreeze) {h h' 
     · exact .inr rfl
     · exact (h'.not_freezes r hr).elim
   | blockKeep => intro _ he; cases he.1
-  | keepCong _ _ | keepVal _ _ => intro _ he; exact he.elim
+  | freezeKeep hv hc =>
+    intro hh he _
+    have hv' := hv.noFreeze he.2
+    exact ⟨(hc.noFreeze hh hv').1, he.2, fun r hr => (hv'.not_freezes r hr).elim⟩
   | frzVal hl | frzKeep hl =>
     exact fun hh _ _ => ⟨hh.append (hh _ _ hl), trivial, fun _ hr => hr.elim⟩
 
@@ -282,8 +283,7 @@ theorem Expr.Run.sep {σ : HeapTy} (ha : AllocOk σ) {e : Expr} (h : e.Run)
   induction e with
   | var | unit | int | loc | lam => trivial
   | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | frz _ _ ih => exact ih h hl
-  | freeze _ _ _ ih => exact ih h.2 hl
-  | keep => exact h.elim
+  | freeze _ _ _ _ ih => exact ih h.2 hl
   | block _ _ _ _ ih => exact ih h.2.run hl
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact ⟨disj h.1 h.2.2.2.1 fun l h => hl l (.inr h), disj h.2.1 h.2.2.2.2 fun l h => hl l (.inl h),

@@ -73,24 +73,23 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
       Step fns h e h' e' → Step fns h (.snd e) h' (.snd e')
   | sndVal {h : Heap} {v₁ v₂ : Expr} :
       v₁.IsValue → v₂.IsValue → Step fns h (.snd (.pair v₁ v₂)) h v₂
-  | freezeCong {h h' : Heap} {r : Nat} {t : Ty} {e e' : Expr} :
-      Step fns h e h' e' → Step fns h (.freeze r t e) h' (.freeze r t e')
+  | freezeCong {h h' : Heap} {c : Bool} {r : Nat} {t : Ty} {e e' : Expr} :
+      Step fns h e h' e' → Step fns h (.freeze c r t e) h' (.freeze c r t e')
   | freezeVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
-      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze r t v) h' v'
+      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze false r t v) h' v'
   /-- A block starts: it makes its region, with a marker at the end of the
   heap, and its name for the region becomes that one. It ends with a
   freeze of it. -/
   | blockEnter {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
       Step fns h (.block false k t e) (h ++ [.unit])
-        (.freeze (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
+        (.freeze false (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
   /-- The same, for a block that freezes in place. -/
   | blockKeep {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
       Step fns h (.block true k t e) (h ++ [.unit])
-        (.keep (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
-  | keepCong {h h' : Heap} {r : Nat} {t : Ty} {e e' : Expr} :
-      Step fns h e h' e' → Step fns h (.keep r t e) h' (.keep r t e')
-  | keepVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
-      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.keep r t v) h' v
+        (.freeze true (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
+  /-- In place, it makes the same copy, but goes on with the value. -/
+  | freezeKeep {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
+      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze true r t v) h' v
   | frzCong {h h' : Heap} {b : Bool} {e e' : Expr} :
       Step fns h e h' e' → Step fns h (.frz b e) h' (.frz b e')
   /-- A freeze copies the object to the end of the heap. -/
