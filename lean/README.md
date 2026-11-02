@@ -117,7 +117,7 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
 | `unique_toImm_changes_nothing` | `Unique.lean` | making an `imm` copy of a `mut` object that no object holds, `new false (get xs)`, can use `xs` itself instead of the copy: a program that has the copy, but not `xs`, computes what it does with `xs` in place of the copy (#284). The copy is shallow, like `array_freeze`, so only `xs` needs to be unique |
 | `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, what it makes `imm` is unique: in the program once, and held by no object (`Expr.UniqToImm`). The simulation gives up the original at the freeze and relates the copy to it. No closure may have a `toImm` |
-| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`; or a part of a tuple, like `push((xs, 1))`, which the body reaches with `fst` or `snd`. Then the program with every `toImm` in place computes what it does. The proof keeps an invariant of the running program (`Inv`): each object it owns is consumed, or gone from it, and no object holds it |
+| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`; or a part of a tuple, like `push((xs, 1))`, which the body reaches with `fst` or `snd`. A variable can also hold what a function gives back new, like `make()`, when the function's body is `mut [e]` (`Returns`). Then the program with every `toImm` in place computes what it does. The proof keeps an invariant of the running program (`Inv`): each object it owns is consumed, or gone from it, and no object holds it |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -183,7 +183,10 @@ no `sorry`.
   that borrows it as the whole argument or as one part of a pair, with
   the other part a value. A function that borrows part of a tuple reaches
   it with `fst` or `snd` each time, not by naming it with `let`. A
-  function can't return a new unique object, like `StringBuilder.new()`.
+  function can give back a new unique object, like `StringBuilder.new()`,
+  only if its body is `mut [e]` once it's called: one that changes the
+  object before it gives it back, like `let b = mut []; b.push(1); b`,
+  isn't covered.
   A closure can't make an `imm` copy in place, and a `toImm`'s argument
   must be a variable.
 - **Effects that suspend**, like `Async`. Only operations that resume right
