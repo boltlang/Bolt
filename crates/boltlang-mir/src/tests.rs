@@ -385,3 +385,45 @@ body() {
 "
     );
 }
+
+#[test]
+fn imm_copy() {
+    // `let ys = imm { let xs = mut [0, 0]; xs }; ys`
+    let db = TestDb::new();
+    let array = |m| Ty::Array(Box::new(Ty::Mutability(m)), Box::new(i32_ty()));
+
+    let mut b = Builder::new();
+    let xs = b.var("xs", array(Mutability::Mut));
+    let t0 = b.temp(array(Mutability::Mut));
+    let ys = b.var("ys", array(Mutability::Imm));
+    let built = block(
+        vec![stmt(StmtKind::Let {
+            local: xs,
+            value: Rvalue::Construct { kind: ConstructKind::Array, args: vec![int(0), int(0)] },
+        })],
+        local(xs),
+    );
+    let body = b.finish(
+        vec![],
+        block(
+            vec![
+                stmt(StmtKind::Let { local: t0, value: Rvalue::Block(built) }),
+                stmt(StmtKind::Let { local: ys, value: Rvalue::Imm(local(t0)) }),
+            ],
+            local(ys),
+        ),
+    );
+    assert_eq!(
+        body.display(&db).to_string(),
+        "\
+body() {
+  let %0: mut [i32] = {
+    let xs: mut [i32] = construct [0i32, 0i32]
+    xs
+  }
+  let ys: imm [i32] = imm %0
+  ys
+}
+"
+    );
+}

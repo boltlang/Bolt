@@ -21,6 +21,9 @@
 //!   `t.0 = x`, changes only the local that holds it ([`StmtKind::Assign`]
 //!   to a [`Place`]). A struct is an object that every name for it shares:
 //!   changing one of its fields is [`StmtKind::SetField`].
+//! - **Freezing.** [`Rvalue::Imm`] is `imm e`, which copies what's `mut`
+//!   in a value into `imm` objects. It isn't a call, since its type can't
+//!   be written as a signature.
 //! - **Closures and cells.** A [`Rvalue::Closure`] lists the locals it
 //!   captures. A local that a closure captures and that's assigned is a
 //!   cell ([`Local::cell`]), shared between the closure and its body (#181).
@@ -176,6 +179,12 @@ pub enum Rvalue<'db> {
         base: Operand<'db>,
         field: u32,
     },
+    /// `imm e`: a copy of the operand with every `mut` array and struct it
+    /// reaches made `imm`, each copied once, and what's `imm` shared as it
+    /// is. The type of the local it's put in says what it gives. Leaving
+    /// the copy out, when nothing else can reach the originals, is up to a
+    /// later analysis (#209).
+    Imm(Operand<'db>),
     Block(Block<'db>),
     If {
         cond: Operand<'db>,
