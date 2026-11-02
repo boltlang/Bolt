@@ -179,6 +179,10 @@ impl<'db> Printer<'_, 'db> {
                 let operand = self.operand(operand);
                 let _ = write!(self.out, "imm {operand}");
             }
+            Rvalue::Mut(operand) => {
+                let operand = self.operand(operand);
+                let _ = write!(self.out, "mut {operand}");
+            }
             Rvalue::Block(block) => self.block(block),
             Rvalue::If { cond, then_block, else_block } => {
                 let cond = self.operand(cond);
