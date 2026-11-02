@@ -186,8 +186,15 @@ no `sorry`.
   function can give back a new unique object, like `StringBuilder.new()`,
   only if its body is `mut [e]` once it's called: one that changes the
   object before it gives it back, like `let b = mut []; b.push(1); b`,
-  isn't covered.
-  A closure can't make an `imm` copy in place, and a `toImm`'s argument
-  must be a variable.
+  isn't covered, and left out on purpose for now: the check would have to
+  remember that the call gives back an object it owns, and every
+  substitution would then need to know what each owned object is used
+  for. Freezing where the object is built is covered. A closure can't
+  make an `imm` copy in place, and a `toImm`'s argument must be a
+  variable.
+- **Leaving out the copy** (#293): freezing in place, of a region
+  (`freezeKeep`) or with `toImm` (`toImmKeep`), still makes the copy and
+  only goes on with the original. That a run that also skips the copy
+  computes the same, since nothing uses it, isn't proven.
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
