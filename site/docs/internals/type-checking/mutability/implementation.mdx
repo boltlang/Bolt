@@ -96,6 +96,18 @@ description: Where the rules of mutability are in the checker, the tests and the
   The evaluator copies with `Value::freeze`; the IR has `Rvalue::Imm`.
   Leaving the copy out is for the region and uniqueness analyses, an
   optimization step in `boltlang-mir` that doesn't exist yet.
+- **`mut e`** (`infer.rs`, `solve.rs`): `mut` before an array, a struct
+  literal or a call of a tuple struct's constructor (`constructs_struct`)
+  makes that literal `mut`, and is kept in `InferenceResult::mut_literals`.
+  Otherwise it's a `MutConstraint`, solved once the type of `e` is known
+  (`Solver::solve_mut`): an array or struct whose type says `mut` stays as
+  it is; one that says anything else becomes `mut`, and so do the type
+  arguments of a struct or enum that only it holds (`struct_thawable` and
+  `enum_thawable` in `holds.rs`), so one in a function type or an `imm`
+  field stays as it is. What's still unknown when the body is solved
+  stays as it is, or copies when only its mutability is unknown. The
+  evaluator compares the types of `e` and `mut e` to know what to copy
+  (`Value::thaw`); the IR has `Rvalue::Mut`.
 - **Defaulting** (`solve.rs`): a mutability left over when a body is
   checked, and not generalized, becomes `Imm`. That happens after the
   errors are resolved, so that an undecided mutability is shown as `[T]` in

@@ -98,8 +98,20 @@ be changed. Variables only pass it on:
   struct, `mut Meters(1.0)` can be changed.
 - A function's result has the mutability of its type: `Vec.new()` could
   return `mut [T]`, and `xs.copy()` a new `mut [T]`.
-- `mut` before a variant, like `mut Shape.Circle { radius: 1.0 }`, or before
-  the call of a function, is an error (E0222).
+- `mut` before a variant's literal, like `mut Shape.Circle { radius: 1.0 }`,
+  is an error (E0222).
+- `mut` before anything else, like a variable or the call of a function,
+  is `mut e`: a copy of what the type of `e` says is `imm`, into new `mut`
+  arrays and structs, keeping what it says is `mut` already. So `mut xs`
+  of an `xs: mut [i32]` is `xs` itself, and of an `xs: imm [i32]` a copy.
+  The type decides, not the array: `mut xs` of an `xs: 'm [i32]` always
+  copies, so a generic function never changes what it's given that way.
+  `imm e` is the other way round, and copies what's `mut`.
+
+  A literal is told apart by the checker, not the parser: `mut` before an
+  array, a struct literal or a call of a tuple struct's constructor makes
+  that one `mut`. `mut` binds like `-`, so `mut [1].len()` is `mut` of
+  the length, and `(mut [1]).len()` that of a `mut` array.
 
 `let mut` no longer has anything to do with the contents of an array or a
 struct. It only means the variable can be assigned again:

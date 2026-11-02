@@ -241,6 +241,21 @@ squares;
 `squares` is an `imm [i32]`. A closure can't be copied, so `imm` of one
 that changes something, which is `mut`, is an error.
 
+`mut` before a value is the other way round: it copies what's `imm` into
+arrays and structs you can change, and keeps what's `mut` already, since
+you could change that anyway:
+
+```bolt
+let grid = [[0, 0], [0, 0]];
+let editable = mut grid;
+editable[0][1] = 1;
+(grid, editable);
+```
+
+```text
+([[0, 0], [0, 0]], [[0, 1], [0, 0]])
+```
+
 [Mutability](../advanced/mutability.mdx) in the advanced part goes on with
 values that hold other values, generic functions and closures. The
 [internals](../../internals/type-checking/mutability/index.mdx) explain how
