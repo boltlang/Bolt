@@ -31,7 +31,7 @@ use crate::{
     },
     check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError},
+    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError},
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -648,6 +648,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Expr::Prefix { op, expr: inner } => {
                 let ty = self.infer_expr(*inner);
                 self.infer_operator_call(expr, op, *inner, ty, &[])
+            }
+            // `imm e`: a copy of `e` with each array and struct `imm`.
+            Expr::Imm { expr: inner } => {
+                let from = self.infer_expr(*inner);
+                let to = self.new_var();
+                let constraint = ImmConstraint { from, to: to.clone() };
+                self.solver.add(Constraint::Imm { constraint, origin: self.origin(expr) });
+                to
             }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
             Expr::Range { lhs, rhs, .. } => {

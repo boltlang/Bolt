@@ -93,6 +93,10 @@ pub enum Expr {
     Index { base: ExprId, index: ExprId },
     /// `-a` or `!a`: a call of the function `-` or `!`, like `fn -a`.
     Prefix { op: Name, expr: ExprId },
+    /// `imm e`: a copy of `e` that can't be changed, with everything it
+    /// holds that's `mut` copied too. Not a function, since its type can't
+    /// be written as a signature.
+    Imm { expr: ExprId },
     Binary { op: BinaryOp, lhs: ExprId, rhs: ExprId },
     /// `a..b`, `a..=b`, `a..`, `..b` or `..`
     Range { lhs: Option<ExprId>, rhs: Option<ExprId>, inclusive: bool },

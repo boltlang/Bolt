@@ -621,6 +621,10 @@ impl<'db> Evaluator<'db> {
                     None => fail(ErrorKind::NoSuchField(name.clone())),
                 }
             }
+            Expr::Imm { expr: inner } => {
+                let value = self.eval(f, *inner)?;
+                self.made(value.freeze())
+            }
             Expr::Await { .. } => fail(ErrorKind::Unsupported("`await`")),
             Expr::Yield { .. } => fail(ErrorKind::Unsupported("`yield`")),
             Expr::MacroCall { .. } => fail(ErrorKind::Unsupported("a macro call")),

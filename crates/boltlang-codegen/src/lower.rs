@@ -1497,6 +1497,7 @@ fn describe(expr: &Expr) -> &'static str {
         Expr::Range { .. } => "a range",
         Expr::For { .. } => "a `for` loop",
         Expr::Try { .. } => "`?`",
+        Expr::Imm { .. } => "`imm`",
         Expr::Await { .. } => "`await`",
         Expr::Yield { .. } => "`yield`",
         Expr::MacroCall { .. } => "a macro call",

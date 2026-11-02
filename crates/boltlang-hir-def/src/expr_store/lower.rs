@@ -269,6 +269,7 @@ impl ExprCollector {
             }
             E::Await(e) => Expr::Await { expr: self.lower_opt_expr(e.expr()) },
             E::Try(e) => Expr::Try { expr: self.lower_opt_expr(e.expr()) },
+            E::Imm(e) => Expr::Imm { expr: self.lower_opt_expr(e.expr()) },
             E::Cast(e) => {
                 let expr = self.lower_opt_expr(e.expr());
                 let type_ref = self.lower_opt_type(e.type_expr());

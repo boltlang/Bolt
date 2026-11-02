@@ -911,10 +911,19 @@ Mut before an expression that isn't an array
 let x = mut 1;
 
 ================================================================================
-Imm before an array expression
-:error
+Imm expressions
 ================================================================================
 let x = imm [1];
+let ys = imm { let xs = mut []; xs.push(1); xs };
+let zs = imm xs.items;
+let n = imm f(x) + 1;
+imm (a, b);
+
+================================================================================
+Imm without an expression
+:error
+================================================================================
+let x = imm;
 
 ================================================================================
 Mutable struct literals

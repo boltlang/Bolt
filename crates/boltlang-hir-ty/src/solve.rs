@@ -17,7 +17,7 @@ use boltlang_hir_def::{
 use crate::{
     holds::struct_atoms_of,
     lower::{
-        ClassConstraint, VariantDef, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
+        ClassConstraint, VariantDef, enum_field_types, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
         implied_by, implied_equalities, subst_params, with_superclasses,
     },
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
@@ -164,6 +164,19 @@ impl<'db> AtMostConstraint<'db> {
     }
 }
 
+/// That `to` is the type of `imm e` for an `e` of type `from`: the same
+/// type, with each array and struct `imm`. What a struct or variant holds
+/// decides its type arguments in `to`, field by field, since an argument
+/// that's only in a function type, like the `T` of `fn(T)`, stays as it
+/// is. What can't be copied stays as it is too, and must already be `imm`
+/// all the way down: a closure, a type parameter, or a type that's still
+/// unknown when the body is solved ([`Solver::settle_imm`]).
+#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
+pub struct ImmConstraint<'db> {
+    pub from: Ty<'db>,
+    pub to: Ty<'db>,
+}
+
 /// Where an "at most" constraint comes from, which decides how breaking it
 /// is reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -213,6 +226,8 @@ pub enum Constraint<'db> {
     Assoc { constraint: AssocConstraint<'db>, origin: Origin<'db> },
     /// Something is at most a mutability.
     AtMost { constraint: AtMostConstraint<'db>, source: AtMostSource<'db>, origin: Origin<'db> },
+    /// The type of `imm e` for the type of `e`.
+    Imm { constraint: ImmConstraint<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -301,6 +316,11 @@ pub struct Solver<'db> {
     pending_assoc: Vec<(AssocConstraint<'db>, Origin<'db>)>,
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
+    pending_imm: Vec<(ImmConstraint<'db>, Origin<'db>)>,
+    /// The structs and enums that `imm` constraints were split into, with
+    /// their types after `imm`, so that a type that holds itself, like a
+    /// list, is split once.
+    imm_split: Vec<(Ty<'db>, Ty<'db>)>,
     /// The function chosen for each use of a name with several, at the use,
     /// with the call if it's a method call.
     pub overload_choices: Vec<(Origin<'db>, Option<ExprId>, FunctionId<'db>)>,
@@ -332,6 +352,8 @@ impl<'db> Solver<'db> {
             pending_assoc: Vec::new(),
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
+            pending_imm: Vec::new(),
+            imm_split: Vec::new(),
             overload_choices: Vec::new(),
             chosen: Vec::new(),
             instantiations: Vec::new(),
@@ -460,6 +482,186 @@ impl<'db> Solver<'db> {
                     self.pending_at_most.push((constraint, source, origin));
                 }
             }
+            // Solved right away when possible, so that the type of `imm e`
+            // is known for what follows.
+            Constraint::Imm { constraint, origin } => {
+                if !self.solve_imm(&constraint, origin) {
+                    self.pending_imm.push((constraint, origin));
+                }
+            }
+        }
+    }
+
+    /// Split an `imm` constraint once the type of `e` is known well enough.
+    /// Returns `false` if it has to wait.
+    fn solve_imm(&mut self, c: &ImmConstraint<'db>, origin: Origin<'db>) -> bool {
+        let sub = |solver: &mut Self, from: Ty<'db>, to: Ty<'db>| {
+            solver.add(Constraint::Imm { constraint: ImmConstraint { from, to }, origin });
+        };
+        let imm = Ty::Mutability(Mutability::Imm);
+        match self.unifier.shallow_resolve(&c.from) {
+            Ty::Var(_) => false,
+            Ty::App(head, _) if matches!(*head, Ty::Var(_)) => false,
+            Ty::Array(_, elem) => {
+                let elem_to = self.new_var(VarKind::General);
+                self.equal(&c.to, &Ty::array(imm, elem_to.clone()), origin);
+                sub(self, *elem, elem_to);
+                true
+            }
+            Ty::Tuple(tys) => {
+                let tos: Vec<Ty<'db>> =
+                    tys.iter().map(|_| self.new_var(VarKind::General)).collect();
+                self.equal(&c.to, &Ty::Tuple(tos.clone().into()), origin);
+                for (from, to) in tys.into_iter().zip(tos) {
+                    sub(self, from, to);
+                }
+                true
+            }
+            Ty::Adt(id, args, mutabilities, mutability) => {
+                self.solve_imm_adt(id, &args, &mutabilities, &mutability, &c.to, origin);
+                true
+            }
+            // An associated type is split once an impl decides it.
+            t @ Ty::Assoc(..) => {
+                let t = self.unifier.resolve(&t);
+                let decided = normalize_assoc(self.db, self.file, &t);
+                if decided != t {
+                    sub(self, decided, c.to.clone());
+                    return true;
+                }
+                if has_vars(&t) {
+                    return false;
+                }
+                self.imm_as_is(&t, &c.to, origin);
+                true
+            }
+            // A closure can't be copied, and what a type parameter is isn't
+            // known.
+            t @ (Ty::Fn(..) | Ty::Param(_) | Ty::Bound(_) | Ty::App(..)) => {
+                self.imm_as_is(&t, &c.to, origin);
+                true
+            }
+            // A value that holds nothing that can be changed.
+            t => {
+                self.equal(&c.to, &t, origin);
+                true
+            }
+        }
+    }
+
+    /// `imm` of a struct or enum: an `imm` one, whose type arguments are
+    /// what `imm` makes of its fields.
+    fn solve_imm_adt(
+        &mut self,
+        id: AdtId<'db>,
+        args: &[Ty<'db>],
+        mutabilities: &[Ty<'db>],
+        mutability: &Ty<'db>,
+        to: &Ty<'db>,
+        origin: Origin<'db>,
+    ) {
+        let from = self.unifier.resolve(&Ty::Adt(
+            id,
+            args.into(),
+            mutabilities.into(),
+            Box::new(mutability.clone()),
+        ));
+        let seen = self.imm_split.iter().position(|(k, _)| self.unifier.resolve(k) == from);
+        if let Some(index) = seen {
+            let split = self.imm_split[index].1.clone();
+            self.equal(to, &split, origin);
+            return;
+        }
+        // A type that holds itself with other arguments, like `struct
+        // Nested[T] { inner: Option[Nested[[T]]] }`, would be split without
+        // end: it stays as it is instead.
+        if self.imm_split.iter().filter(|(k, _)| matches!(k, Ty::Adt(i, ..) if *i == id)).count()
+            >= 16
+        {
+            self.imm_as_is(&from, to, origin);
+            return;
+        }
+        let (def, fields): (GenericDefId<'db>, Vec<Ty<'db>>) = match id {
+            AdtId::Struct(s) => (
+                GenericDefId::Struct(s),
+                field_types(self.db, VariantDef::Struct(s))
+                    .fields
+                    .iter()
+                    .map(|(_, t)| t.clone())
+                    .collect(),
+            ),
+            AdtId::Enum(e) => (
+                GenericDefId::Enum(e),
+                enum_field_types(self.db, e)
+                    .iter()
+                    .flat_map(|v| v.fields.iter().map(|(_, t)| t.clone()))
+                    .collect(),
+            ),
+        };
+        // A parameter that no field mentions keeps its argument.
+        let used = |index: usize| {
+            let param = Ty::Param(GenericParamId { def, index: index as u32 });
+            fields.iter().any(|t| t.any(&mut |t| *t == param))
+        };
+        let args_to: Vec<Ty<'db>> = args
+            .iter()
+            .enumerate()
+            .map(|(i, a)| if used(i) { self.new_var(VarKind::General) } else { a.clone() })
+            .collect();
+        let mutabilities_to: Vec<Ty<'db>> =
+            mutabilities
+                .iter()
+                .enumerate()
+                .map(|(i, m)| {
+                    if used(args.len() + i) { self.new_var(VarKind::Mutability) } else { m.clone() }
+                })
+                .collect();
+        let imm = Ty::Mutability(Mutability::Imm);
+        let split = Ty::adt(id, args_to.clone(), mutabilities_to.clone(), imm.clone());
+        self.imm_split.push((from, split.clone()));
+        self.equal(to, &split, origin);
+        let (subst_from, subst_to) = match id {
+            AdtId::Struct(_) => (
+                struct_args(args, mutabilities, mutability),
+                struct_args(&args_to, &mutabilities_to, &imm),
+            ),
+            AdtId::Enum(_) => (args.to_vec(), args_to),
+        };
+        for field in &fields {
+            let constraint = ImmConstraint {
+                from: subst_params(field, def, &subst_from),
+                to: subst_params(field, def, &subst_to),
+            };
+            self.add(Constraint::Imm { constraint, origin });
+        }
+    }
+
+    /// `imm e` that gives `e` itself, of type `ty`: what it holds must
+    /// already be `imm` all the way down.
+    fn imm_as_is(&mut self, ty: &Ty<'db>, to: &Ty<'db>, origin: Origin<'db>) {
+        self.equal(to, ty, origin);
+        let constraint = AtMostConstraint {
+            held: Held::Type(ty.clone()),
+            bound: Ty::Mutability(Mutability::Imm),
+        };
+        let source = AtMostSource::Needed(constraint.clone());
+        self.add(Constraint::AtMost { constraint, source, origin });
+    }
+
+    /// Settle the `imm` constraints whose type is still unknown once the
+    /// body is solved: `imm e` gives `e` itself, which must then be `imm`
+    /// all the way down, like `forall a. a ⊑ imm => fn(a) -> a` for `fn
+    /// f(x) = imm x`. A scheme can't say more, since what `imm` makes of a
+    /// type isn't a type.
+    pub fn settle_imm(&mut self) {
+        loop {
+            self.solve();
+            if self.pending_imm.is_empty() {
+                return;
+            }
+            let (c, origin) = self.pending_imm.remove(0);
+            let from = self.unifier.resolve(&c.from);
+            self.imm_as_is(&from, &c.to, origin);
         }
     }
 
@@ -947,6 +1149,13 @@ impl<'db> Solver<'db> {
                     self.pending_at_most.push((constraint, source, origin));
                 }
             }
+            for (constraint, origin) in std::mem::take(&mut self.pending_imm) {
+                if self.solve_imm(&constraint, origin) {
+                    progress = true;
+                } else {
+                    self.pending_imm.push((constraint, origin));
+                }
+            }
             for (constraint, origin) in std::mem::take(&mut self.pending) {
                 let constraint = constraint.map(|t| self.unifier.resolve(t));
                 match self.try_solve(&constraint) {
@@ -1021,6 +1230,7 @@ impl<'db> Solver<'db> {
     pub fn finish(&mut self) {
         self.solve_with_defaults();
         self.report_pending_overloads();
+        self.settle_imm();
         // A body checked on its own can't add to its function's type.
         self.settle_at_most(&[], false);
         self.keep_pending_assoc();

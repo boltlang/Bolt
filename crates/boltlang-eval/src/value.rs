@@ -192,6 +192,64 @@ impl<'db> Value<'db> {
         }
     }
 
+    /// `imm e` of this value: each `mut` array and struct it reaches is
+    /// copied into an `imm` one, once, so that what it shares stays shared
+    /// and a cycle stays a cycle. What's `imm` is shared as it is, since it
+    /// holds only what's `imm`. A closure is kept: the type checker makes
+    /// sure it's `imm`.
+    pub fn freeze(&self) -> Value<'db> {
+        self.freeze_with(&mut HashMap::new())
+    }
+
+    /// [`Value::freeze`], with the copies made so far, by the address of
+    /// what they copy.
+    fn freeze_with(&self, copies: &mut HashMap<*const (), Value<'db>>) -> Value<'db> {
+        match self {
+            Value::Array(items) if items.mutability == Mutability::Imm => self.clone(),
+            Value::Array(items) => {
+                let key = Rc::as_ptr(items) as *const ();
+                if let Some(copy) = copies.get(&key) {
+                    return copy.clone();
+                }
+                let copy = Object::new(Mutability::Imm, Vec::new());
+                copies.insert(key, Value::Array(copy.clone()));
+                let frozen = items.borrow().iter().map(|v| v.freeze_with(copies)).collect();
+                *copy.borrow_mut() = frozen;
+                Value::Array(copy)
+            }
+            Value::Adt { ctor: Ctor::Struct(_), fields }
+                if fields.mutability == Mutability::Imm =>
+            {
+                self.clone()
+            }
+            Value::Adt { ctor: Ctor::Variant(_), .. } if self.holds_only_imm() => self.clone(),
+            Value::Adt { ctor, fields } => {
+                let key = Rc::as_ptr(fields) as *const ();
+                if let Some(copy) = copies.get(&key) {
+                    return copy.clone();
+                }
+                let copy = Object::new(Mutability::Imm, Vec::new());
+                copies.insert(key, Value::Adt { ctor: *ctor, fields: copy.clone() });
+                let frozen = fields
+                    .borrow()
+                    .iter()
+                    .map(|(n, v)| (n.clone(), v.freeze_with(copies)))
+                    .collect();
+                *copy.borrow_mut() = frozen;
+                Value::Adt { ctor: *ctor, fields: copy }
+            }
+            Value::Tuple(items) => {
+                Value::Tuple(items.iter().map(|v| v.freeze_with(copies)).collect())
+            }
+            Value::Range { start, end, inclusive } => Value::Range {
+                start: start.as_ref().map(|v| Box::new(v.freeze_with(copies))),
+                end: end.as_ref().map(|v| Box::new(v.freeze_with(copies))),
+                inclusive: *inclusive,
+            },
+            _ => self.clone(),
+        }
+    }
+
     /// The field called `name`, of a struct or variant or tuple.
     pub fn field(&self, name: &Name) -> Option<Value<'db>> {
         match self {

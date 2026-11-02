@@ -118,6 +118,7 @@ impl Printer<'_> {
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
             Expr::Await { expr } => format!("(await {})", self.expr(*expr)),
             Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
+            Expr::Imm { expr } => format!("(imm {})", self.expr(*expr)),
             Expr::Cast { expr, type_ref } => format!("(as {} {})", self.expr(*expr), self.ty(*type_ref)),
             Expr::Index { base, index } => format!("(index {} {})", self.expr(*base), self.expr(*index)),
             Expr::Prefix { op, expr } => format!("({op} {})", self.expr(*expr)),
@@ -448,6 +449,16 @@ fn mutability_of_arrays() {
          (let b : imm [mut [u8; 4]] = [mut [0; 4]])\n\
          (let c : [Bool] = mut [])\n\
          (let d : fn(mut [i32]) -> imm [i32])"
+    );
+}
+
+#[test]
+fn imm_copies() {
+    assert_eq!(
+        render("let a = imm xs;\nlet b = imm f(x) + 1;\nlet c = imm { xs };"),
+        "(let a = (imm xs))\n\
+         (let b = (+ (imm (call f x)) 1))\n\
+         (let c = (imm {xs}))"
     );
 }
 

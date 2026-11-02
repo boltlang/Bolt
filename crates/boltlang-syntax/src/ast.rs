@@ -637,6 +637,7 @@ ast_enum!(
         Block(BlockExpr) = BLOCK_EXPR,
         Bin(BinExpr) = BIN_EXPR,
         Prefix(PrefixExpr) = PREFIX_EXPR,
+        Imm(ImmExpr) = IMM_EXPR,
         Nest(NestExpr) = NEST_EXPR,
         Tuple(TupleExpr) = TUPLE_EXPR,
         Index(IndexExpr) = INDEX_EXPR,
@@ -1160,6 +1161,17 @@ impl PrefixExpr {
     pub fn operator(&self) -> Option<SyntaxToken> {
         first_non_trivia_token(&self.0)
     }
+    pub fn expr(&self) -> Option<Expr> {
+        self.find_node()
+    }
+}
+
+/// `imm e`: a copy of `e` that can't be changed.
+pub struct ImmExpr(SyntaxNode);
+
+simple_node!(ImmExpr, IMM_EXPR);
+
+impl ImmExpr {
     pub fn expr(&self) -> Option<Expr> {
         self.find_node()
     }
