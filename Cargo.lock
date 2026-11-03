@@ -171,6 +171,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "boltlang-codegen-conduit"
+version = "0.2.0"
+
+[[package]]
 name = "boltlang-common"
 version = "0.2.0"
 

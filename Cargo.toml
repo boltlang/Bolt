@@ -11,6 +11,7 @@ members = [
   "crates/boltlang-mir",
   "crates/boltlang-eval",
   "crates/boltlang-codegen",
+  "crates/boltlang-codegen-conduit",
   "crates/boltlang-corpus",
   "crates/boltlang-ide-diagnostics",
   "crates/boltlang-std",
