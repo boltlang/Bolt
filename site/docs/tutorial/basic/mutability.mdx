@@ -241,13 +241,13 @@ squares;
 `squares` is an `imm [i32]`. A closure can't be copied, so `imm` of one
 that changes something, which is `mut`, is an error.
 
-`mut` before a value is the other way round: it copies what's `imm` into
-arrays and structs you can change, and keeps what's `mut` already, since
-you could change that anyway:
+`to_mut` only copies the value itself: what it holds is shared with the
+original. To copy all of it, so that every array and struct in it can be
+changed, use `to_mut_deep`:
 
 ```bolt
 let grid = [[0, 0], [0, 0]];
-let editable = mut grid;
+let editable = to_mut_deep(grid);
 editable[0][1] = 1;
 (grid, editable);
 ```

@@ -101,12 +101,12 @@ be changed. Variables only pass it on:
 - `mut` before a variant's literal, like `mut Shape.Circle { radius: 1.0 }`,
   is an error (E0222).
 - `mut` before anything else, like a variable or the call of a function,
-  is `mut e`: a copy of what the type of `e` says is `imm`, into new `mut`
-  arrays and structs, keeping what it says is `mut` already. So `mut xs`
-  of an `xs: mut [i32]` is `xs` itself, and of an `xs: imm [i32]` a copy.
-  The type decides, not the array: `mut xs` of an `xs: 'm [i32]` always
-  copies, so a generic function never changes what it's given that way.
-  `imm e` is the other way round, and copies what's `mut`.
+  is an error (E0222). A copy that can be changed is a call: `to_mut(e)`
+  copies the value itself and shares what it holds, and `to_mut_deep(e)`
+  copies all of it. Each type says how with an impl of `ToMut` or
+  `ToMutDeep`, so a `Vec` copies only its elements, not the room it has
+  to grow. `imm e` stays built in, since it must be deep: it copies
+  what's `mut`.
 
   A literal is told apart by the checker, not the parser: `mut` before an
   array, a struct literal or a call of a tuple struct's constructor makes
