@@ -20,8 +20,7 @@ that they're right, and when.
   order, or through a chain of assumptions. `leSearch` follows them, from
   `m` and from `mut`, which everything is below. `le_iff_leSearch`: it finds
   every chain once it can take as many steps as there are assumptions,
-  since a chain never needs one twice. `leSearchOld`, which follows them
-  from `m` only, at most 8 steps, misses some.
+  since a chain never needs one twice.
 -/
 
 namespace BoltMut
@@ -236,28 +235,5 @@ theorem leSearch_complete {Δ : Assume} {m μ : Mu} (h : Le Δ m μ) : leSearch 
 
 theorem le_iff_leSearch (Δ : Assume) (m μ : Mu) : Le Δ m μ ↔ leSearch Δ Δ.mus.length m μ = true :=
   ⟨leSearch_complete, leSearch_sound⟩
-
-/-! ## What the solver did before
-
-`Solver::mutability_le` followed assumptions from `m` only, at most 8
-steps. It misses chains of more than 8 assumptions, and those through
-`mut`. -/
-
-/-- The search of `Solver::mutability_le` before, with `fuel` 8. -/
-def leSearchOld (Δ : Assume) : Nat → Mu → Mu → Bool
-  | 0, m, μ => baseLe m μ
-  | n + 1, m, μ => baseLe m μ || Δ.mus.any fun p => p.1 == m && leSearchOld Δ n p.2 μ
-
-/-- `'a: 'b, 'b: 'c, ...`: nine assumptions, from `'0` to `'9`. -/
-def nineSteps : Assume := { mus := (List.range 9).map fun i => (.param i, .param (i + 1)) }
-
-example : Le nineSteps (.param 0) (.param 9) := leSearch_sound (n := 9) (by decide)
-example : leSearchOld nineSteps 8 (.param 0) (.param 9) = false := by decide
-
-/-- `mut: 'v`, so every mutability is at most `'v`. -/
-def throughMut : Assume := { mus := [(.mutable, .param 1)] }
-
-example : Le throughMut (.param 0) (.param 1) := .trans (.top _) (.assume (by simp [throughMut]))
-example : leSearchOld throughMut 8 (.param 0) (.param 1) = false := by decide
 
 end BoltMut

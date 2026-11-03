@@ -137,10 +137,7 @@ no `sorry`.
 - **Inference.** The proof is about the typing rules, with the arguments
   of each call and the assumptions of each function given. That the
   checker finds them, and the most general ones, isn't proven, beyond the
-  solver's shortcuts for "at most" in `Solver.lean`. `leSearchOld` there is
-  how `Solver::mutability_le` followed assumptions before: from `m` only,
-  at most 8 steps, which missed chains of 9 and those through `mut`. In
-  particular, a closure's mutability is written here; in Bolt, it's a
+  solver's shortcuts for "at most" in `Solver.lean`. In particular, a closure's mutability is written here; in Bolt, it's a
   parameter `'f` that the checker infers, with assumptions like `T ⊑ 'f`.
 - **Generic closures.** Closures are monomorphic within a function: a
   closure can't take a type argument.
