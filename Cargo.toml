@@ -9,6 +9,7 @@ members = [
   "crates/boltlang-hir",
   "crates/boltlang-hir-ty",
   "crates/boltlang-mir",
+  "crates/boltlang-lower",
   "crates/boltlang-codegen-conduit",
   "crates/boltlang-corpus",
   "crates/boltlang-ide-diagnostics",
