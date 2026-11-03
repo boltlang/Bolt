@@ -428,7 +428,8 @@ let a: Shape
 error at `mut Shape.Circle { radius: 1.0 }`: can't be mut
 
 ================================================================================
-Mut of a variant or a call copies what's imm in it
+Mut before a variant or a call is an error
+:error
 ================================================================================
 enum Maybe[T] { Just(T), Nothing }
 fn f(x: i32) -> i32 = x;
@@ -436,8 +437,11 @@ let b = mut Maybe.Just([1]);
 let c = mut f(1);
 --------------------------------------------------------------------------------
 f: fn(i32) -> i32
-let b: Maybe[mut [i32]]
+let b: Maybe[imm [i32]]
 let c: i32
+--------------------------------------------------------------------------------
+error at `mut Maybe.Just([1])`: can't be mut
+error at `mut f(1)`: can't be mut
 
 ================================================================================
 Types that can't be mut or imm

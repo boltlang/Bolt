@@ -37,7 +37,7 @@ use crate::{
     scheme::{Scheme, generic_param_ids},
     solve::{
         AtMostConstraint, AtMostSource, Constraint, ConstraintSource, ExprOrPat, FieldConstraint,
-        Held, ImmConstraint, MutConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError,
+        Held, ImmConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError,
     },
     ty::{AdtId, Mutability, Ty, VarKind},
 };
@@ -774,8 +774,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 to
             }
             // `mut [1]`, `mut Point { x: 1 }` and `mut Wrapper(1)` make an
-            // array or struct `mut`; `mut e` of anything else copies what's
-            // `imm` in it.
+            // array or struct `mut`. `mut` before anything else is an error:
+            // a copy is `to_mut(e)` or `to_mut_deep(e)`.
             Expr::Mut { expr: inner } => {
                 let literal = match &body[*inner] {
                     Expr::Array { .. } | Expr::ArrayRepeat { .. } | Expr::Record { .. } => true,
@@ -788,11 +788,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     self.result.expr_types.insert(*inner, ty.clone());
                     ty
                 } else {
-                    let from = self.infer_expr(*inner);
-                    let to = self.new_var();
-                    let constraint = MutConstraint { from, to: to.clone() };
-                    self.solver.add(Constraint::Mut { constraint, origin: self.origin(expr) });
-                    to
+                    self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
+                    self.infer_expr(*inner)
                 }
             }
             Expr::Binary { op, lhs, rhs } => self.infer_binary(expr, op, *lhs, *rhs),
