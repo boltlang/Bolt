@@ -15,7 +15,7 @@ use boltlang_hir_def::{
 };
 
 use crate::{
-    holds::{enum_thawable, struct_atoms_of, struct_thawable},
+    holds::struct_atoms_of,
     lower::{
         ClassConstraint, VariantDef, enum_field_types, field_types, generic_predicates,
         impl_assoc_ty, impl_header, implied_by, implied_equalities, struct_args, subst_params,
@@ -183,23 +183,6 @@ pub struct ImmConstraint<'db> {
     pub to: Ty<'db>,
 }
 
-/// That `to` is the type of `mut e` for an `e` of type `from`, other than a
-/// literal: an array or struct whose type says `mut` stays as it is, with
-/// what it holds, and one whose type says anything else, `imm` or a
-/// mutability that a caller chooses, is copied into a `mut` one. The type
-/// decides, not the object, so a generic function's `mut xs` of an `xs:
-/// 'm [i32]` always copies, and never changes what a caller gave it. What
-/// such a copy holds is made `mut` the same way, through an array's
-/// elements and those type arguments of a struct or enum that only it holds
-/// ([`crate::holds::struct_thawable`]). What can't be copied stays as it
-/// is: a closure, a type parameter, or a type that's still unknown when the
-/// body is solved ([`Solver::settle_copies`]).
-#[derive(Debug, Clone, PartialEq, Eq, Hash, salsa::SalsaValue)]
-pub struct MutConstraint<'db> {
-    pub from: Ty<'db>,
-    pub to: Ty<'db>,
-}
-
 /// Where an "at most" constraint comes from, which decides how breaking it
 /// is reported.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -251,8 +234,6 @@ pub enum Constraint<'db> {
     AtMost { constraint: AtMostConstraint<'db>, source: AtMostSource<'db>, origin: Origin<'db> },
     /// The type of `imm e` for the type of `e`.
     Imm { constraint: ImmConstraint<'db>, origin: Origin<'db> },
-    /// The type of `mut e` for the type of `e`.
-    Mut { constraint: MutConstraint<'db>, origin: Origin<'db> },
 }
 
 /// A type error. Its types are resolved as far as inference got.
@@ -375,7 +356,6 @@ pub struct Solver<'db> {
     pending_at_most: Vec<(AtMostConstraint<'db>, AtMostSource<'db>, Origin<'db>)>,
     pending_overloads: Vec<(OverloadConstraint<'db>, Origin<'db>)>,
     pending_imm: Vec<(ImmConstraint<'db>, Origin<'db>)>,
-    pending_mut: Vec<(MutConstraint<'db>, Origin<'db>)>,
     /// The structs and enums that `imm` constraints were split into, with
     /// their types after `imm`, so that a type that holds itself, like a
     /// list, is split once.
@@ -412,7 +392,6 @@ impl<'db> Solver<'db> {
             pending_at_most: Vec::new(),
             pending_overloads: Vec::new(),
             pending_imm: Vec::new(),
-            pending_mut: Vec::new(),
             imm_split: Vec::new(),
             overload_choices: Vec::new(),
             chosen: Vec::new(),
@@ -553,114 +532,7 @@ impl<'db> Solver<'db> {
                     self.pending_imm.push((constraint, origin));
                 }
             }
-            Constraint::Mut { constraint, origin } => {
-                if !self.solve_mut(&constraint, origin, false) {
-                    self.pending_mut.push((constraint, origin));
-                }
-            }
         }
-    }
-
-    /// Split a `mut` constraint once the type of `e` is known well enough.
-    /// Returns `false` if it has to wait. With `settle`, nothing waits: an
-    /// unknown type stays as it is, and an unknown mutability copies, since
-    /// nothing says it's `mut`.
-    fn solve_mut(&mut self, c: &MutConstraint<'db>, origin: Origin<'db>, settle: bool) -> bool {
-        let sub = |solver: &mut Self, from: Ty<'db>, to: Ty<'db>| {
-            solver.add(Constraint::Mut { constraint: MutConstraint { from, to }, origin });
-        };
-        // Whether a mutability says `mut`, or `None` if it isn't known yet.
-        let says_mut = |solver: &Self, m: &Ty<'db>| match solver.unifier.shallow_resolve(m) {
-            Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never => Some(true),
-            Ty::Var(_) if !settle => None,
-            _ => Some(false),
-        };
-        let from = self.unifier.shallow_resolve(&c.from);
-        let mutable = Ty::Mutability(Mutability::Mut);
-        match &from {
-            Ty::Var(_) if !settle => return false,
-            Ty::App(head, _) if matches!(**head, Ty::Var(_)) && !settle => return false,
-            Ty::Array(m, elem) => match says_mut(self, m) {
-                None => return false,
-                Some(true) => self.equal(&c.to, &from, origin),
-                Some(false) => {
-                    let elem_to = self.new_var(VarKind::General);
-                    self.equal(&c.to, &Ty::array(mutable, elem_to.clone()), origin);
-                    sub(self, (**elem).clone(), elem_to);
-                }
-            },
-            Ty::Adt(AdtId::Struct(s), args, mutabilities, m) => {
-                // An `imm struct` is never `mut`, so there's nothing to copy.
-                let copies = if s.item(self.db).is_imm {
-                    Some(false)
-                } else {
-                    says_mut(self, m).map(|is| !is)
-                };
-                match copies {
-                    None => return false,
-                    Some(false) => self.equal(&c.to, &from, origin),
-                    Some(true) => {
-                        let args_to = self.mut_args(args, struct_thawable(self.db, *s), origin);
-                        let to = Ty::adt(AdtId::Struct(*s), args_to, mutabilities.clone(), mutable);
-                        self.equal(&c.to, &to, origin);
-                    }
-                }
-            }
-            Ty::Adt(AdtId::Enum(e), args, ..) => {
-                let args_to = self.mut_args(args, enum_thawable(self.db, *e), origin);
-                self.equal(
-                    &c.to,
-                    &Ty::adt(AdtId::Enum(*e), args_to, [], Ty::Mutability(Mutability::Imm)),
-                    origin,
-                );
-            }
-            Ty::Tuple(tys) => {
-                let tos: Vec<Ty<'db>> =
-                    tys.iter().map(|_| self.new_var(VarKind::General)).collect();
-                self.equal(&c.to, &Ty::Tuple(tos.clone().into()), origin);
-                for (from, to) in tys.iter().zip(tos) {
-                    sub(self, from.clone(), to);
-                }
-            }
-            // An associated type is split once an impl decides it.
-            t @ Ty::Assoc(..) => {
-                let t = self.unifier.resolve(t);
-                let decided = normalize_assoc(self.db, self.file, &t);
-                if decided != t {
-                    sub(self, decided, c.to.clone());
-                } else if has_vars(&t) && !settle {
-                    return false;
-                } else {
-                    self.equal(&c.to, &t, origin);
-                }
-            }
-            // A closure, a type parameter, or what holds nothing to copy.
-            _ => self.equal(&c.to, &from, origin),
-        }
-        true
-    }
-
-    /// The type arguments of a struct or enum that `mut e` copies: those
-    /// that `thawable` says only it holds are made `mut` the same way, and
-    /// the others stay as they are.
-    fn mut_args(
-        &mut self,
-        args: &[Ty<'db>],
-        thawable: &[bool],
-        origin: Origin<'db>,
-    ) -> Vec<Ty<'db>> {
-        args.iter()
-            .enumerate()
-            .map(|(i, arg)| {
-                if !thawable.get(i).copied().unwrap_or(false) {
-                    return arg.clone();
-                }
-                let to = self.new_var(VarKind::General);
-                let constraint = MutConstraint { from: arg.clone(), to: to.clone() };
-                self.add(Constraint::Mut { constraint, origin });
-                to
-            })
-            .collect()
     }
 
     /// Split an `imm` constraint once the type of `e` is known well enough.
@@ -819,13 +691,11 @@ impl<'db> Solver<'db> {
         self.add(Constraint::AtMost { constraint, source, origin });
     }
 
-    /// Settle the `imm` and `mut` constraints whose type is still unknown
-    /// once the body is solved, one at a time, since each can decide others.
-    /// `imm e` gives `e` itself, which must then be `imm` all the way down,
-    /// like `forall a. a ⊑ imm => fn(a) -> a` for `fn f(x) = imm x`; `mut e`
-    /// gives `e` itself too, or a copy where only its mutability is unknown.
-    /// A scheme can't say more, since what `imm` or `mut` makes of a type
-    /// isn't a type (#329).
+    /// Settle the `imm` constraints whose type is still unknown once the
+    /// body is solved, one at a time, since each can decide others. `imm e`
+    /// gives `e` itself, which must then be `imm` all the way down, like
+    /// `forall a. a ⊑ imm => fn(a) -> a` for `fn f(x) = imm x`. A scheme
+    /// can't say more, since what `imm` makes of a type isn't a type (#329).
     pub fn settle_copies(&mut self) {
         loop {
             self.solve();
@@ -833,9 +703,6 @@ impl<'db> Solver<'db> {
                 let (c, origin) = self.pending_imm.remove(0);
                 let from = self.unifier.resolve(&c.from);
                 self.imm_as_is(&from, &c.to, origin);
-            } else if !self.pending_mut.is_empty() {
-                let (c, origin) = self.pending_mut.remove(0);
-                self.solve_mut(&c, origin, true);
             } else {
                 return;
             }
@@ -1368,13 +1235,6 @@ impl<'db> Solver<'db> {
                     progress = true;
                 } else {
                     self.pending_imm.push((constraint, origin));
-                }
-            }
-            for (constraint, origin) in std::mem::take(&mut self.pending_mut) {
-                if self.solve_mut(&constraint, origin, false) {
-                    progress = true;
-                } else {
-                    self.pending_mut.push((constraint, origin));
                 }
             }
             for (constraint, origin) in std::mem::take(&mut self.pending) {

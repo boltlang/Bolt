@@ -67,7 +67,7 @@ pub struct InferenceResult<'db> {
     pub type_args: ArenaMap<Expr, Box<[Ty<'db>]>>,
     /// The `mut e` that make an array or struct `mut`, like `mut [1]`, `mut
     /// Point { x: 1 }` or `mut Wrapper(1)`, each with its `e`. The others
-    /// copy what's `imm` in a value.
+    /// are errors.
     pub mut_literals: Vec<(ExprId, ExprId)>,
     pub diagnostics: Vec<InferenceDiagnostic<'db>>,
 }
@@ -92,8 +92,7 @@ impl<'db> InferenceResult<'db> {
     }
 
     /// Whether the `mut e` at `expr` makes its array or struct `mut`, rather
-    /// than copying what's `imm` in a value: see
-    /// [`InferenceResult::mut_literals`].
+    /// than being an error: see [`InferenceResult::mut_literals`].
     pub fn is_mut_literal(&self, expr: ExprId) -> bool {
         self.mut_literals.iter().any(|(e, _)| *e == expr)
     }

@@ -427,27 +427,3 @@ body() {
 "
     );
 }
-
-#[test]
-fn mut_copy() {
-    // `fn f(xs: imm [i32]) -> mut [i32] = mut xs;`
-    let db = TestDb::new();
-    let array = |m| Ty::Array(Box::new(Ty::Mutability(m)), Box::new(i32_ty()));
-
-    let mut b = Builder::new();
-    let xs = b.var("xs", array(Mutability::Imm));
-    let t0 = b.temp(array(Mutability::Mut));
-    let body = b.finish(
-        vec![xs],
-        block(vec![stmt(StmtKind::Let { local: t0, value: Rvalue::Mut(local(xs)) })], local(t0)),
-    );
-    assert_eq!(
-        body.display(&db).to_string(),
-        "\
-body(xs: imm [i32]) {
-  let %0: mut [i32] = mut xs
-  %0
-}
-"
-    );
-}

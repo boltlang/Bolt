@@ -124,8 +124,8 @@ pub enum Expr {
     },
     /// `mut e`. Before an array, a struct literal or a call of a tuple
     /// struct's constructor, like `mut [1]`, it makes that one `mut`, which
-    /// the type checker finds. Before anything else, it's `e` with what's
-    /// `imm` in it copied into `mut` objects, keeping what's `mut` already.
+    /// the type checker finds. Before anything else, it's an error: a copy
+    /// is `to_mut(e)` or `to_mut_deep(e)`.
     Mut {
         expr: ExprId,
     },
