@@ -59,5 +59,8 @@ fn types_without_values_spread() {
 
 #[test]
 fn type_parameters_have_values() {
-    assert_eq!(values("struct Wrap[T] { t: T }\nstruct Unit;"), named(&[("Wrap", true), ("Unit", true)]));
+    assert_eq!(
+        values("struct Wrap[T] { t: T }\nstruct Unit;"),
+        named(&[("Wrap", true), ("Unit", true)])
+    );
 }

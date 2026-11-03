@@ -47,7 +47,6 @@ fn bolt_std(dir: &PathBuf, command: &str, args: &[&str]) -> Output {
     }
 }
 
-
 #[test]
 fn dump_ast_prints_the_tree() {
     let dir = dir_with("dump", &[("a.bolt", "let x = 1;\n")]);
@@ -89,7 +88,10 @@ fn a_missing_file_is_an_error() {
 
 #[test]
 fn check_succeeds_without_errors() {
-    let dir = dir_with("check-ok", &[("a.bolt", "fn id(x) = x;\nid(1);\n"), ("b.bolt", "let y = True;\n")]);
+    let dir = dir_with(
+        "check-ok",
+        &[("a.bolt", "fn id(x) = x;\nid(1);\n"), ("b.bolt", "let y = True;\n")],
+    );
     let o = bolt(&dir, "check", &["a.bolt", "b.bolt"]);
     assert!(o.ok, "{}", o.err);
     assert_eq!(o.err, "");
@@ -108,7 +110,10 @@ fn check_reports_type_errors_with_the_file() {
 fn check_reports_a_used_file_with_errors() {
     let dir = dir_with(
         "check-dependency",
-        &[("lib.bolt", "pub fn f() -> i32 = True;\n"), ("main.bolt", "import \"./lib\" (f);\nf();\n")],
+        &[
+            ("lib.bolt", "pub fn f() -> i32 = True;\n"),
+            ("main.bolt", "import \"./lib\" (f);\nf();\n"),
+        ],
     );
     let o = bolt(&dir, "check", &["main.bolt"]);
     assert!(!o.ok);
@@ -153,7 +158,10 @@ fn run_doesnt_run_a_program_with_errors() {
 
 #[test]
 fn run_reports_an_error_while_running() {
-    let dir = dir_with("run-panic", &[("a.bolt", "fn divide(a: i32, b: i32) -> i32 = a / b;\ndivide(1, 0);\n")]);
+    let dir = dir_with(
+        "run-panic",
+        &[("a.bolt", "fn divide(a: i32, b: i32) -> i32 = a / b;\ndivide(1, 0);\n")],
+    );
     let o = bolt_std(&dir, "run", &["a.bolt"]);
     assert!(!o.ok);
     assert!(o.err.contains("division by zero"), "{}", o.err);
@@ -227,14 +235,22 @@ fn version_says_where_std_is() {
     let real = dir.canonicalize().unwrap();
     assert_eq!(
         version(Some(dir.to_str().unwrap())),
-        format!("bolt {}\nstd: {} (from BOLT_PRELUDE_PATH)\n", env!("CARGO_PKG_VERSION"), real.display())
+        format!(
+            "bolt {}\nstd: {} (from BOLT_PRELUDE_PATH)\n",
+            env!("CARGO_PKG_VERSION"),
+            real.display()
+        )
     );
-    assert!(
-        version(Some("/no/such/dir")).ends_with("std: not found: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"),
-    );
+    assert!(version(Some("/no/such/dir")).ends_with(
+        "std: not found: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"
+    ),);
     // A debug build uses the `std` of its repository.
     if cfg!(debug_assertions) {
-        assert!(version(None).ends_with("(from the repository of this debug build)\n"), "{}", version(None));
+        assert!(
+            version(None).ends_with("(from the repository of this debug build)\n"),
+            "{}",
+            version(None)
+        );
     }
 }
 

@@ -61,12 +61,16 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Error::NotADirectory(path) => write!(f, "{ENV_VAR} is `{}`, which isn't a directory", path.display()),
+            Error::NotADirectory(path) => {
+                write!(f, "{ENV_VAR} is `{}`, which isn't a directory", path.display())
+            }
             Error::NoDataDir => write!(
                 f,
                 "there's no directory to put the standard library in: set HOME, or {ENV_VAR} to the directory of `std`"
             ),
-            Error::Io(path, error) => write!(f, "can't write the standard library to `{}`: {error}", path.display()),
+            Error::Io(path, error) => {
+                write!(f, "can't write the standard library to `{}`: {error}", path.display())
+            }
         }
     }
 }
@@ -133,7 +137,8 @@ pub fn install(dir: &Path) -> Result<(), Error> {
         let path = path.to_path_buf();
         move |e| Error::Io(path, e)
     };
-    let parent = dir.parent().ok_or_else(|| Error::Io(dir.to_path_buf(), io::ErrorKind::NotFound.into()))?;
+    let parent =
+        dir.parent().ok_or_else(|| Error::Io(dir.to_path_buf(), io::ErrorKind::NotFound.into()))?;
     fs::create_dir_all(parent).map_err(io(parent))?;
     let staging = parent.join(format!(".std-{}", std::process::id()));
     let _ = fs::remove_dir_all(&staging);
@@ -190,7 +195,10 @@ mod tests {
         let dir = base.join("std");
         install(&dir).unwrap();
         let lib = dir.join("__prelude__.bolt");
-        assert_eq!(fs::read_to_string(&lib).unwrap(), FILES.iter().find(|(p, _)| *p == "__prelude__.bolt").unwrap().1);
+        assert_eq!(
+            fs::read_to_string(&lib).unwrap(),
+            FILES.iter().find(|(p, _)| *p == "__prelude__.bolt").unwrap().1
+        );
         assert!(fs::metadata(&lib).unwrap().permissions().readonly());
         // A second time, it's there already.
         install(&dir).unwrap();
@@ -202,10 +210,15 @@ mod tests {
     fn the_errors_say_what_to_do() {
         assert_eq!(
             Error::NoDataDir.to_string(),
-            format!("there's no directory to put the standard library in: set HOME, or {ENV_VAR} to the directory of `std`")
+            format!(
+                "there's no directory to put the standard library in: set HOME, or {ENV_VAR} to the directory of `std`"
+            )
         );
         let error = Error::Io(PathBuf::from("/x/std"), io::ErrorKind::PermissionDenied.into());
-        assert!(error.to_string().starts_with("can't write the standard library to `/x/std`: "), "{error}");
+        assert!(
+            error.to_string().starts_with("can't write the standard library to `/x/std`: "),
+            "{error}"
+        );
         assert_eq!(Source::Shipped.to_string(), "comes with the compiler");
     }
 

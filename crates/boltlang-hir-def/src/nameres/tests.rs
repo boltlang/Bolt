@@ -24,13 +24,25 @@ fn diagnostics(scope: &FileScope) -> Vec<String> {
         .iter()
         .map(|d| match d {
             NameResDiagnostic::Duplicate { name, .. } => format!("duplicate {name}"),
-            NameResDiagnostic::UnresolvedImportPath { path, error, .. } => format!("unresolved path {path}: {error:?}"),
-            NameResDiagnostic::UnresolvedImportName { name, .. } => format!("unresolved name {name}"),
-            NameResDiagnostic::PrivateImport { name, package_only: false, .. } => format!("private {name}"),
-            NameResDiagnostic::PrivateImport { name, package_only: true, .. } => format!("package-only {name}"),
-            NameResDiagnostic::UnresolvedImportEnum { path, .. } => format!("unresolved enum {path}"),
+            NameResDiagnostic::UnresolvedImportPath { path, error, .. } => {
+                format!("unresolved path {path}: {error:?}")
+            }
+            NameResDiagnostic::UnresolvedImportName { name, .. } => {
+                format!("unresolved name {name}")
+            }
+            NameResDiagnostic::PrivateImport { name, package_only: false, .. } => {
+                format!("private {name}")
+            }
+            NameResDiagnostic::PrivateImport { name, package_only: true, .. } => {
+                format!("package-only {name}")
+            }
+            NameResDiagnostic::UnresolvedImportEnum { path, .. } => {
+                format!("unresolved enum {path}")
+            }
             NameResDiagnostic::NotAnEnum { path, .. } => format!("not an enum {path}"),
-            NameResDiagnostic::UnresolvedPrelude { package, error } => format!("unresolved prelude {package}: {error:?}"),
+            NameResDiagnostic::UnresolvedPrelude { package, error } => {
+                format!("unresolved prelude {package}: {error:?}")
+            }
             NameResDiagnostic::UnresolvedOwner { name, .. } => format!("unresolved owner {name}"),
             NameResDiagnostic::OwnerNotTopLevel { .. } => "owner not top level".to_string(),
         })
@@ -85,9 +97,15 @@ fn area() {}
 "#,
     );
     let scope = file_scope(&db, main);
-    assert_eq!(names(&scope.scope, Namespace::Types), ["Circle (imported)", "Shape (imported)", "io (imported)"]);
+    assert_eq!(
+        names(&scope.scope, Namespace::Types),
+        ["Circle (imported)", "Shape (imported)", "io (imported)"]
+    );
     // The local `area` and the one from the glob import are overloads.
-    assert_eq!(names(&scope.scope, Namespace::Values), ["PI (imported)", "area", "area (imported)", "compute_area (imported)"]);
+    assert_eq!(
+        names(&scope.scope, Namespace::Values),
+        ["PI (imported)", "area", "area (imported)", "compute_area (imported)"]
+    );
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
     assert!(matches!(
         scope.scope.get(Namespace::Types, &Name::new("io")).unwrap().def,
@@ -102,7 +120,10 @@ fn imports_of_operators() {
     let main = db.file("/main.bolt", "import \"./ops\" (-, ==, *, +);\n");
     let scope = file_scope(&db, main);
     // `-` brings in both its infix and its prefix definition.
-    assert_eq!(names(&scope.scope, Namespace::Values), ["- (imported)", "- (imported)", "== (imported)"]);
+    assert_eq!(
+        names(&scope.scope, Namespace::Values),
+        ["- (imported)", "- (imported)", "== (imported)"]
+    );
     assert_eq!(diagnostics(scope), ["private *", "unresolved name +"]);
 }
 
@@ -129,7 +150,10 @@ fn glob_imports_give_way_to_names_imported_by_name() {
     let db = TestDb::new();
     let a = db.file("/a.bolt", "pub struct Point;\npub struct Line;\n");
     let b = db.file("/b.bolt", "pub struct Point;\n");
-    for text in ["import \"./a\" *;\nimport \"./b\" (Point);\n", "import \"./b\" (Point);\nimport \"./a\" *;\n"] {
+    for text in [
+        "import \"./a\" *;\nimport \"./b\" (Point);\n",
+        "import \"./b\" (Point);\nimport \"./a\" *;\n",
+    ] {
         let main = db.file("/main.bolt", text);
         let scope = file_scope(&db, main);
         assert!(diagnostics(scope).is_empty(), "{text}: {:?}", diagnostics(scope));
@@ -143,7 +167,10 @@ fn glob_imports_give_way_to_names_imported_by_name() {
 #[test]
 fn imports_of_variants() {
     let db = TestDb::new();
-    db.file("/shapes.bolt", "pub enum Shape { Circle { r: f64 }, Square(f64) }\nenum Hidden { A }\n");
+    db.file(
+        "/shapes.bolt",
+        "pub enum Shape { Circle { r: f64 }, Square(f64) }\nenum Hidden { A }\n",
+    );
     db.file("/option.bolt", "pub enum Option[T] { Some(T), None }\n");
     let main = db.file(
         "/main.bolt",
@@ -161,13 +188,10 @@ fn Red() {}
     // The enum can come from a later import. Like a glob import, a variant
     // doesn't replace a name that's already in scope: the function `Red`
     // stays, and `Square` is the one of `Shape`, imported first.
-    assert_eq!(names(&scope.scope, Namespace::Values), [
-        "Circle (imported)",
-        "None (imported)",
-        "Red",
-        "Some (imported)",
-        "Square (imported)",
-    ]);
+    assert_eq!(
+        names(&scope.scope, Namespace::Values),
+        ["Circle (imported)", "None (imported)", "Red", "Some (imported)", "Square (imported)",]
+    );
     assert!(names(&scope.scope, Namespace::Types).contains(&"Circle (imported)".to_string()));
     let square = scope.scope.get(Namespace::Values, &Name::new("Square")).unwrap().def;
     let ModuleDefId::Variant(square) = square else { panic!("{square:?}") };
@@ -195,7 +219,10 @@ import "./reexport" (Circle);
     );
     let scope = file_scope(&db, main);
     // `A` isn't exported by a private import, nor `B` by a private enum.
-    assert_eq!(names(&scope.scope, Namespace::Values), ["Circle (imported)", "None (imported)", "Some (imported)"]);
+    assert_eq!(
+        names(&scope.scope, Namespace::Values),
+        ["Circle (imported)", "None (imported)", "Some (imported)"]
+    );
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
 }
 
@@ -217,7 +244,13 @@ enum Color { Red }
     );
     assert_eq!(
         diagnostics(file_scope(&db, main)),
-        ["unresolved enum Nope", "private Hidden", "not an enum s.Point", "unresolved enum Color.Red", "unresolved enum s.Nope"]
+        [
+            "unresolved enum Nope",
+            "private Hidden",
+            "not an enum s.Point",
+            "unresolved enum Color.Red",
+            "unresolved enum s.Nope"
+        ]
     );
 }
 
@@ -274,7 +307,10 @@ fn packages_are_the_dependencies_in_bolt_toml() {
         "/proj/bolt.toml",
         "[package]\nname = \"demo\"\n[dependencies]\nshapes = { path = \"../shapes\" }\nlost = { path = \"../nowhere\" }\n",
     );
-    db.file("/shapes/bolt.toml", "[package]\nname = \"shapes\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
+    db.file(
+        "/shapes/bolt.toml",
+        "[package]\nname = \"shapes\"\n[dependencies]\ngeo = { path = \"../geo\" }\n",
+    );
     db.file("/geo/bolt.toml", "[package]\nname = \"geo\"\n");
     let geo = db.file("/geo/lib.bolt", "");
     let lib = db.file("/shapes/lib.bolt", "");
@@ -293,13 +329,22 @@ fn packages_are_the_dependencies_in_bolt_toml() {
     );
     // A dependency's own dependencies are its own.
     assert_eq!(resolve(circle, "geo"), Ok(geo));
-    assert_eq!(resolve(main, "geo"), Err(ImportPathError::NotADependency { package: "geo".into() }));
+    assert_eq!(
+        resolve(main, "geo"),
+        Err(ImportPathError::NotADependency { package: "geo".into() })
+    );
     assert_eq!(
         resolve(main, "lost"),
-        Err(ImportPathError::DependencyNotFound { package: "lost".into(), path: "../nowhere".into() })
+        Err(ImportPathError::DependencyNotFound {
+            package: "lost".into(),
+            path: "../nowhere".into()
+        })
     );
     // A file in no package can only use `std`, which this database lacks.
-    assert_eq!(resolve(loose, "shapes"), Err(ImportPathError::NoManifest { package: "shapes".into() }));
+    assert_eq!(
+        resolve(loose, "shapes"),
+        Err(ImportPathError::NoManifest { package: "shapes".into() })
+    );
     assert_eq!(resolve(loose, "std"), Err(ImportPathError::NoStd));
 }
 
@@ -337,7 +382,11 @@ fn import_paths_must_be_relative_or_in_a_package() {
     let db = TestDb::new();
     let main = db.file("/proj/main.bolt", "");
     for source in ["/proj/main", "1std/io", "std/../io", "std/./io", "std//io", "std/", ""] {
-        assert_eq!(resolve_import_path(&db, main, source), Err(ImportPathError::Invalid), "{source}");
+        assert_eq!(
+            resolve_import_path(&db, main, source),
+            Err(ImportPathError::Invalid),
+            "{source}"
+        );
     }
 }
 
@@ -348,11 +397,17 @@ fn package_items_are_only_visible_in_their_package() {
     db.file("/geo/lib.bolt", "pub(package) fn helper() {}\npub fn area() {}\nfn secret() {}\n");
     let inside = db.file("/geo/shapes.bolt", "import \"./lib\" (helper, area);\n");
     let glob_inside = db.file("/geo/all.bolt", "import \"./lib\" *;\n");
-    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
+    db.file(
+        "/proj/bolt.toml",
+        "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n",
+    );
     let outside = db.file("/proj/main.bolt", "import \"geo\" (helper, area, secret);\n");
     let glob_outside = db.file("/proj/src/all.bolt", "import \"geo\" *;\n");
     assert!(diagnostics(file_scope(&db, inside)).is_empty());
-    assert_eq!(names(&file_scope(&db, glob_inside).scope, Namespace::Values), ["area (imported)", "helper (imported)"]);
+    assert_eq!(
+        names(&file_scope(&db, glob_inside).scope, Namespace::Values),
+        ["area (imported)", "helper (imported)"]
+    );
     assert_eq!(diagnostics(file_scope(&db, outside)), ["package-only helper", "private secret"]);
     assert_eq!(names(&file_scope(&db, glob_outside).scope, Namespace::Values), ["area (imported)"]);
 }
@@ -426,7 +481,10 @@ fn files_can_re_export_from_each_other() {
     let main = db.file("/main.bolt", "import \"./a\" (a, b);\n");
     assert_eq!(names(&file_scope(&db, a).scope, Namespace::Values), ["a", "b (imported)"]);
     assert_eq!(names(&file_scope(&db, b).scope, Namespace::Values), ["a (imported)", "b"]);
-    assert_eq!(names(&file_scope(&db, main).scope, Namespace::Values), ["a (imported)", "b (imported)"]);
+    assert_eq!(
+        names(&file_scope(&db, main).scope, Namespace::Values),
+        ["a (imported)", "b (imported)"]
+    );
     assert!(diagnostics(file_scope(&db, main)).is_empty());
 }
 
@@ -437,10 +495,20 @@ fn re_exports_are_as_visible_as_the_import_and_the_item() {
     db.file("/geo/shapes.bolt", "pub fn area() {}\npub(package) fn helper() {}\n");
     db.file("/geo/lib.bolt", "pub import \"./shapes\" (area, helper);\npub(package) import \"./shapes\" (area as area2);\n");
     let inside = db.file("/geo/user.bolt", "import \"./lib\" (area, helper, area2);\n");
-    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n");
+    db.file(
+        "/proj/bolt.toml",
+        "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n",
+    );
     let outside = db.file("/proj/main.bolt", "import \"geo\" (area, helper, area2);\n");
-    assert!(diagnostics(file_scope(&db, inside)).is_empty(), "{:?}", diagnostics(file_scope(&db, inside)));
-    assert_eq!(diagnostics(file_scope(&db, outside)), ["package-only helper", "package-only area2"]);
+    assert!(
+        diagnostics(file_scope(&db, inside)).is_empty(),
+        "{:?}",
+        diagnostics(file_scope(&db, inside))
+    );
+    assert_eq!(
+        diagnostics(file_scope(&db, outside)),
+        ["package-only helper", "package-only area2"]
+    );
 }
 
 #[test]
@@ -461,27 +529,29 @@ fn the_prelude_comes_last() {
     // `Some` is the one of `Maybe`, and `None` the one of `Option`, whose
     // enum is found in the prelude. The prelude's `id` is one more
     // overload of `id`.
-    assert_eq!(names(&scope.scope, Namespace::Values), [
-        "None (imported)",
-        "Nothing (imported)",
-        "Some (imported)",
-        "id",
-        "id (prelude)"
-    ]);
-    assert_eq!(names(&scope.scope, Namespace::Types), ["Maybe", "None (imported)", "Nothing (imported)", "Option (prelude)", "Some (imported)"]);
+    assert_eq!(
+        names(&scope.scope, Namespace::Values),
+        ["None (imported)", "Nothing (imported)", "Some (imported)", "id", "id (prelude)"]
+    );
+    assert_eq!(
+        names(&scope.scope, Namespace::Types),
+        ["Maybe", "None (imported)", "Nothing (imported)", "Option (prelude)", "Some (imported)"]
+    );
     let some = scope.scope.get(Namespace::Values, &Name::new("Some")).unwrap().def;
     let ModuleDefId::Variant(some) = some else { panic!("{some:?}") };
     assert_eq!(some.parent.item(&db).name, Some(Name::new("Maybe")));
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
 }
 
-
 #[test]
 fn a_dependency_reached_through_a_link_is_one_package() {
     let db = TestDb::new();
     db.file("/shapes/bolt.toml", "[package]\nname = \"shapes\"\n");
     let real = db.file("/shapes/lib.bolt", "");
-    db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\nshapes = { path = \"vendor/shapes\" }\n");
+    db.file(
+        "/proj/bolt.toml",
+        "[package]\nname = \"proj\"\n[dependencies]\nshapes = { path = \"vendor/shapes\" }\n",
+    );
     db.symlink("/proj/vendor/shapes", "../../shapes");
     let main = db.file("/proj/main.bolt", "");
     // Imports reach it by its real path, and a file opened through the link
@@ -503,7 +573,10 @@ fn a_file_reached_through_a_link_is_one_file() {
     // next to it, not next to the link (#238).
     let through_link = db.files().resolve(&db, SystemPath::new("/proj/link.bolt"));
     assert_eq!(through_link, real);
-    assert_eq!(through_link.path(&db).as_system_path_buf(), Some(&SystemPathBuf::from("/proj/real/lib.bolt")));
+    assert_eq!(
+        through_link.path(&db).as_system_path_buf(),
+        Some(&SystemPathBuf::from("/proj/real/lib.bolt"))
+    );
     assert_eq!(resolve_import_path(&db, through_link, "./helper"), Ok(helper));
 }
 
@@ -556,9 +629,12 @@ fn a_missing_prelude_is_an_error_only_when_asked_for() {
     db.file("/empty/bolt.toml", "[package]\nname = \"empty\"\n");
     db.file("/proj/bolt.toml", "[package]\nname = \"proj\"\nprelude = \"empty\"\n[dependencies]\nempty = { path = \"../empty\" }\n");
     let own = db.file("/proj/main.bolt", "fn f() {}\n");
-    assert_eq!(diagnostics(file_scope(&db, own)), [
-        "unresolved prelude empty: NotInPackage { package: \"empty\", path: \"__prelude__/lib.bolt\" }"
-    ]);
+    assert_eq!(
+        diagnostics(file_scope(&db, own)),
+        [
+            "unresolved prelude empty: NotInPackage { package: \"empty\", path: \"__prelude__/lib.bolt\" }"
+        ]
+    );
 }
 
 #[test]
@@ -579,7 +655,10 @@ fn new() {}
     // `Vec.new` doesn't take the name `new` in the file.
     assert_eq!(names(&scope.scope, Namespace::Values), ["new"]);
     let members = |owner: &str| -> Vec<String> {
-        scope.members.get(&Name::new(owner)).map_or(Vec::new(), |m| m.keys().map(|n| n.to_string()).collect())
+        scope
+            .members
+            .get(&Name::new(owner))
+            .map_or(Vec::new(), |m| m.keys().map(|n| n.to_string()).collect())
     };
     assert_eq!(members("Vec"), ["len", "new"]);
     assert_eq!(members("Shape"), ["unit"]);
@@ -637,8 +716,10 @@ fn other() {}
     let scope = local_scope(&db, file);
     // The test called `push` isn't one more `push`.
     assert_eq!(names(&scope.scope, Namespace::Values), ["other", "push"]);
-    let names: Vec<String> =
-        test_functions(&db, file).iter().map(|f| f.item(&db).name.as_ref().unwrap().name().to_string()).collect();
+    let names: Vec<String> = test_functions(&db, file)
+        .iter()
+        .map(|f| f.item(&db).name.as_ref().unwrap().name().to_string())
+        .collect();
     assert_eq!(names, ["push", "second"]);
     assert!(diagnostics(scope).is_empty(), "{:?}", diagnostics(scope));
 }

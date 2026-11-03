@@ -8,8 +8,8 @@ mod files;
 mod parse;
 mod settings;
 mod system;
-mod text;
 mod test_db;
+mod text;
 mod vfs;
 
 use std::hash::BuildHasherDefault;
@@ -35,7 +35,10 @@ pub use {
     files::{File, FilePath, Files},
     parse::{Parse, parse_file},
     settings::{DEFAULT_PRELUDE, Settings},
-    system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf, WritableSystem, InMemorySystem},
+    system::{
+        InMemorySystem, System, SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf,
+        WritableSystem,
+    },
     text::source_text,
     vfs::{FileRevision, FileType, MemoryFs, Metadata, Path, PathBuf},
 };

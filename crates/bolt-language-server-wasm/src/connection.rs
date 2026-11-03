@@ -6,8 +6,8 @@ use std::sync::Arc;
 use bolt_language_server::{
     NotAFile, Server,
     ls_types::{
-        DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentDiagnosticParams,
-        InitializeParams, MessageType,
+        DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
+        DocumentDiagnosticParams, InitializeParams, MessageType,
     },
 };
 use boltlang_base_db::{InMemorySystem, SystemPath, WritableSystem};
@@ -56,7 +56,11 @@ impl Connection {
     pub fn handle(&mut self, message: &str) -> Vec<String> {
         let message: Value = match serde_json::from_str(message) {
             Ok(message) => message,
-            Err(error) => return vec![error_response(Value::Null, PARSE_ERROR, error.to_string()).to_string()],
+            Err(error) => {
+                return vec![
+                    error_response(Value::Null, PARSE_ERROR, error.to_string()).to_string(),
+                ];
+            }
         };
         let method = message.get("method").and_then(Value::as_str).map(str::to_string);
         let id = message.get("id").cloned();
@@ -67,7 +71,11 @@ impl Connection {
             // The client's response to a request of the server's, like a
             // refresh, which needs nothing.
             (None, Some(_)) => Vec::new(),
-            (None, None) => vec![error_response(Value::Null, INVALID_REQUEST, "not a request or a notification")],
+            (None, None) => vec![error_response(
+                Value::Null,
+                INVALID_REQUEST,
+                "not a request or a notification",
+            )],
         };
         out.into_iter().map(|message| message.to_string()).collect()
     }
@@ -76,7 +84,9 @@ impl Connection {
     /// a file of a package that a document imports.
     pub fn write_file(&mut self, path: &str, text: &str) -> Result<Vec<String>, String> {
         let system_path = absolute(path)?;
-        self.files.write_file_bytes(system_path, text.as_bytes()).map_err(|e| format!("can't write {path}: {e}"))?;
+        self.files
+            .write_file_bytes(system_path, text.as_bytes())
+            .map_err(|e| format!("can't write {path}: {e}"))?;
         Ok(self.file_changed(system_path))
     }
 
@@ -115,7 +125,11 @@ impl Connection {
             };
         }
         if !self.initialized {
-            return vec![error_response(id, SERVER_NOT_INITIALIZED, "the server isn't initialized yet")];
+            return vec![error_response(
+                id,
+                SERVER_NOT_INITIALIZED,
+                "the server isn't initialized yet",
+            )];
         }
         match method {
             "textDocument/diagnostic" => match parse::<DocumentDiagnosticParams>(params) {
@@ -144,9 +158,15 @@ impl Connection {
             return Vec::new();
         }
         let result = match method {
-            "textDocument/didOpen" => parse::<DidOpenTextDocumentParams>(params).map(|p| self.server.did_open(p)),
-            "textDocument/didChange" => parse::<DidChangeTextDocumentParams>(params).map(|p| self.server.did_change(p)),
-            "textDocument/didClose" => parse::<DidCloseTextDocumentParams>(params).map(|p| self.server.did_close(p)),
+            "textDocument/didOpen" => {
+                parse::<DidOpenTextDocumentParams>(params).map(|p| self.server.did_open(p))
+            }
+            "textDocument/didChange" => {
+                parse::<DidChangeTextDocumentParams>(params).map(|p| self.server.did_change(p))
+            }
+            "textDocument/didClose" => {
+                parse::<DidCloseTextDocumentParams>(params).map(|p| self.server.did_close(p))
+            }
             _ => return Vec::new(),
         };
         match result {
@@ -232,7 +252,10 @@ mod tests {
 
     fn open(connection: &mut Connection, uri: &str, text: &str) -> Vec<Value> {
         let document = json!({ "uri": uri, "languageId": "bolt", "version": 1, "text": text });
-        send(connection, json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": { "textDocument": document } }))
+        send(
+            connection,
+            json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": { "textDocument": document } }),
+        )
     }
 
     fn messages(connection: &mut Connection, uri: &str) -> Vec<String> {
@@ -241,7 +264,12 @@ mod tests {
             json!({ "jsonrpc": "2.0", "id": 7, "method": "textDocument/diagnostic", "params": { "textDocument": { "uri": uri } } }),
         );
         assert_eq!(out[0]["id"], 7);
-        out[0]["result"]["items"].as_array().unwrap().iter().map(|d| d["message"].as_str().unwrap().to_string()).collect()
+        out[0]["result"]["items"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|d| d["message"].as_str().unwrap().to_string())
+            .collect()
     }
 
     #[test]
@@ -258,31 +286,48 @@ mod tests {
         let mut connection = initialized();
         // A change asks the client to pull the diagnostics again.
         let out = open(&mut connection, MAIN, "let x: i32 = True;\n");
-        assert_eq!(out, [json!({ "jsonrpc": "2.0", "id": 1, "method": "workspace/diagnostic/refresh" })]);
+        assert_eq!(
+            out,
+            [json!({ "jsonrpc": "2.0", "id": 1, "method": "workspace/diagnostic/refresh" })]
+        );
         assert_eq!(messages(&mut connection, MAIN), ["expected `i32`, found `Bool`"]);
         let change = json!({
             "textDocument": { "uri": MAIN, "version": 2 },
             "contentChanges": [{ "text": "let x: i32 = 1;\n" }],
         });
-        let out = send(&mut connection, json!({ "jsonrpc": "2.0", "method": "textDocument/didChange", "params": change }));
+        let out = send(
+            &mut connection,
+            json!({ "jsonrpc": "2.0", "method": "textDocument/didChange", "params": change }),
+        );
         assert_eq!(out[0]["id"], 2);
         assert!(messages(&mut connection, MAIN).is_empty());
         // The client's response to a refresh needs nothing.
-        assert!(send(&mut connection, json!({ "jsonrpc": "2.0", "id": 2, "result": null })).is_empty());
+        assert!(
+            send(&mut connection, json!({ "jsonrpc": "2.0", "id": 2, "result": null })).is_empty()
+        );
     }
 
     #[test]
     fn documents_import_the_files_of_the_page() {
         let mut connection = initialized();
-        connection.write_file("/project/lib.bolt", "pub fn negate(x: Bool) -> Bool = !x;\n").unwrap();
+        connection
+            .write_file("/project/lib.bolt", "pub fn negate(x: Bool) -> Bool = !x;\n")
+            .unwrap();
         open(&mut connection, MAIN, "import \"./lib\" (negate);\nnegate(1);\n");
         assert_eq!(messages(&mut connection, MAIN), ["expected `Bool`, found an integer"]);
         // Writing a file asks for new diagnostics, which see it.
-        let out = parsed(connection.write_file("/project/lib.bolt", "pub fn negate(x: i32) -> i32 = -x;\n").unwrap());
+        let out = parsed(
+            connection
+                .write_file("/project/lib.bolt", "pub fn negate(x: i32) -> i32 = -x;\n")
+                .unwrap(),
+        );
         assert_eq!(out[0]["method"], "workspace/diagnostic/refresh");
         assert!(messages(&mut connection, MAIN).is_empty());
         connection.remove_file("/project/lib.bolt").unwrap();
-        assert_eq!(messages(&mut connection, MAIN), ["cannot find the file `./lib`", "cannot find `negate`"]);
+        assert_eq!(
+            messages(&mut connection, MAIN),
+            ["cannot find the file `./lib`", "cannot find `negate`"]
+        );
         assert!(connection.write_file("lib.bolt", "").is_err());
         assert!(connection.remove_file("/project/lib.bolt").is_err());
     }
@@ -290,7 +335,9 @@ mod tests {
     #[test]
     fn errors_of_files_the_documents_use() {
         let mut connection = initialized();
-        connection.write_file("/project/lib.bolt", "pub fn negate(x: Bool) -> Bool = 1;\n").unwrap();
+        connection
+            .write_file("/project/lib.bolt", "pub fn negate(x: Bool) -> Bool = 1;\n")
+            .unwrap();
         // Opening a document that uses it warns once, then asks for a refresh.
         let out = open(&mut connection, MAIN, "import \"./lib\" (negate);\nnegate(True);\n");
         assert_eq!(out[0]["method"], "window/showMessage");
@@ -316,7 +363,10 @@ mod tests {
         let mut connection = initialized();
         let out = open(&mut connection, "untitled:Untitled-1", "let x: i32 = True;\n");
         assert_eq!(out[0]["method"], "window/logMessage");
-        assert_eq!(out[0]["params"]["message"], "only files are supported, not untitled:Untitled-1");
+        assert_eq!(
+            out[0]["params"]["message"],
+            "only files are supported, not untitled:Untitled-1"
+        );
         assert!(messages(&mut connection, "untitled:Untitled-1").is_empty());
     }
 
@@ -324,11 +374,20 @@ mod tests {
     fn errors() {
         let mut connection = initialized();
         assert_eq!(parsed(connection.handle("{"))[0]["error"]["code"], PARSE_ERROR);
-        let out = send(&mut connection, json!({ "jsonrpc": "2.0", "id": 3, "method": "textDocument/hover", "params": {} }));
+        let out = send(
+            &mut connection,
+            json!({ "jsonrpc": "2.0", "id": 3, "method": "textDocument/hover", "params": {} }),
+        );
         assert_eq!(out[0]["error"]["code"], METHOD_NOT_FOUND);
-        let out = send(&mut connection, json!({ "jsonrpc": "2.0", "id": 4, "method": "textDocument/diagnostic", "params": 1 }));
+        let out = send(
+            &mut connection,
+            json!({ "jsonrpc": "2.0", "id": 4, "method": "textDocument/diagnostic", "params": 1 }),
+        );
         assert_eq!(out[0]["error"]["code"], INVALID_PARAMS);
-        let out = send(&mut connection, json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {} }));
+        let out = send(
+            &mut connection,
+            json!({ "jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {} }),
+        );
         assert_eq!(out[0]["params"]["type"], 1);
         let out = send(&mut connection, json!({ "jsonrpc": "2.0", "id": 5, "method": "shutdown" }));
         assert_eq!(out, [json!({ "jsonrpc": "2.0", "id": 5, "result": null })]);

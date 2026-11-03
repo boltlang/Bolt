@@ -4,12 +4,16 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{LITERAL_FIRST, outer_attrs, delimited, name, parse_block_expr, parse_literal_expr, trait_bounds, type_},
+    grammar::{
+        LITERAL_FIRST, delimited, name, outer_attrs, parse_block_expr, parse_literal_expr,
+        trait_bounds, type_,
+    },
     parser::Parser,
     token_set::TokenSet,
 };
 
-const GENERIC_PARAM_FIRST: TokenSet = TokenSet::new(&[IDENT, METAVARIABLE, LABEL_IDENT, T![const], T![#]]);
+const GENERIC_PARAM_FIRST: TokenSet =
+    TokenSet::new(&[IDENT, METAVARIABLE, LABEL_IDENT, T![const], T![#]]);
 
 /// `[T, U: Bound = Default, const N: usize = 3, 'v: imm]`
 pub(crate) fn generic_param_list(p: &mut Parser) {

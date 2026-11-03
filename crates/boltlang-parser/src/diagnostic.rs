@@ -1,4 +1,3 @@
-
 use std::fmt::Display;
 
 use boltlang_common::Span;
@@ -9,11 +8,8 @@ pub struct Diagnostics {
 }
 
 impl Diagnostics {
-
     pub fn new() -> Self {
-        Self {
-            buffer: Vec::new(),
-        }
+        Self { buffer: Vec::new() }
     }
 
     pub fn push(&mut self, diag: Diagnostic) {
@@ -23,7 +19,6 @@ impl Diagnostics {
     pub fn take_diagnostics(&mut self) -> Vec<Diagnostic> {
         std::mem::take(&mut self.buffer)
     }
-
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
@@ -33,7 +28,6 @@ pub enum Diagnostic {
 }
 
 impl Diagnostic {
-
     pub fn span(&self) -> &Span {
         match self {
             Self::ExpectedToken(diag) => &diag.span,
@@ -47,7 +41,6 @@ impl Diagnostic {
             Self::UnexpectedChar(diag) => diag.message.clone(),
         }
     }
-
 }
 
 impl Display for Diagnostic {
@@ -97,9 +90,6 @@ impl From<ExpectedTokenDiagnostic> for Diagnostic {
 
 impl ExpectedTokenDiagnostic {
     pub fn new<S: Into<String>>(message: S, span: Span) -> Self {
-        Self {
-            message: message.into(),
-            span,
-        }
+        Self { message: message.into(), span }
     }
 }

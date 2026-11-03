@@ -42,7 +42,11 @@ pub fn struct_atoms<'db>(db: &'db dyn Db, s: StructId<'db>) -> Box<[AtMostConstr
 }
 
 /// Structs that refer to themselves start out implying nothing.
-fn struct_atoms_initial<'db>(_db: &'db dyn Db, _id: salsa::Id, _s: StructId<'db>) -> Box<[AtMostConstraint<'db>]> {
+fn struct_atoms_initial<'db>(
+    _db: &'db dyn Db,
+    _id: salsa::Id,
+    _s: StructId<'db>,
+) -> Box<[AtMostConstraint<'db>]> {
     Box::new([])
 }
 
@@ -67,7 +71,12 @@ pub fn struct_atoms_of<'db>(
 /// an enum or tuple is a value, which holds its parts; a type parameter, an
 /// associated type or an unknown stays as it is. Atoms that hold by the
 /// order alone, like `imm ⊑ m`, are left out.
-pub fn split<'db>(db: &'db dyn Db, ty: &Ty<'db>, bound: &Ty<'db>, out: &mut Vec<AtMostConstraint<'db>>) {
+pub fn split<'db>(
+    db: &'db dyn Db,
+    ty: &Ty<'db>,
+    bound: &Ty<'db>,
+    out: &mut Vec<AtMostConstraint<'db>>,
+) {
     let push = |out: &mut Vec<AtMostConstraint<'db>>, held: Held<'db>, bound: &Ty<'db>| {
         let trivial = match &held {
             Held::Mutability(m) => {
@@ -108,7 +117,9 @@ pub fn split<'db>(db: &'db dyn Db, ty: &Ty<'db>, bound: &Ty<'db>, out: &mut Vec<
         | Ty::Number(_)
         | Ty::Never
         | Ty::Error => {}
-        Ty::Param(_) | Ty::Var(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => push(out, Held::Type(ty.clone()), bound),
+        Ty::Param(_) | Ty::Var(_) | Ty::Bound(_) | Ty::App(..) | Ty::Assoc(..) => {
+            push(out, Held::Type(ty.clone()), bound)
+        }
     }
 }
 
@@ -176,13 +187,27 @@ fn thawable_in<'db>(
             let inner = ok && own == Some(&**m);
             let thawable = struct_thawable(db, *s);
             for (i, arg) in args.iter().enumerate() {
-                thawable_in(db, def, arg, own, inner && thawable.get(i).copied().unwrap_or(false), out);
+                thawable_in(
+                    db,
+                    def,
+                    arg,
+                    own,
+                    inner && thawable.get(i).copied().unwrap_or(false),
+                    out,
+                );
             }
         }
         Ty::Adt(AdtId::Enum(e), args, ..) => {
             let thawable = enum_thawable(db, *e);
             for (i, arg) in args.iter().enumerate() {
-                thawable_in(db, def, arg, own, ok && thawable.get(i).copied().unwrap_or(false), out);
+                thawable_in(
+                    db,
+                    def,
+                    arg,
+                    own,
+                    ok && thawable.get(i).copied().unwrap_or(false),
+                    out,
+                );
             }
         }
         Ty::Tuple(tys) => {

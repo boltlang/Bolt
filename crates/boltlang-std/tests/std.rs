@@ -35,7 +35,9 @@ fn main() -> ExitCode {
         for f in test_functions(&db, file) {
             let name = f.item(&db).display_name().unwrap().to_string();
             let (relative, test) = (relative.clone(), name.clone());
-            trials.push(Trial::test(format!("{}::{name}", module(&relative)), move || run(&relative, &test)));
+            trials.push(Trial::test(format!("{}::{name}", module(&relative)), move || {
+                run(&relative, &test)
+            }));
         }
     }
     libtest_mimic::run(&args, trials).exit_code()

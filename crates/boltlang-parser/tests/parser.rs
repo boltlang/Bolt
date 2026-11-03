@@ -110,14 +110,27 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
         let (attributes, title): (Vec<&str>, Vec<&str>) =
             lines[start..i].iter().partition(|line| line.trim_start().starts_with(':'));
         let title = title.join(" ").trim().to_string();
-        let mut case = Case { title, rule: Rule::File, error: false, todo: false, skip: false, input: String::new() };
+        let mut case = Case {
+            title,
+            rule: Rule::File,
+            error: false,
+            todo: false,
+            skip: false,
+            input: String::new(),
+        };
         for attribute in attributes {
             let attribute = attribute.trim();
             match attribute.split_once(' ') {
                 Some((":rule", rule)) => {
-                    let Some((_, rule)) = Rule::ALL.iter().find(|(name, _)| *name == rule.trim()) else {
-                        let names: Vec<_> = Rule::ALL.iter().map(|(name, _)| format!("`{name}`")).collect();
-                        return Err(format!("`{}`: unknown rule `{rule}`; the rules are {}", case.title, names.join(", ")));
+                    let Some((_, rule)) = Rule::ALL.iter().find(|(name, _)| *name == rule.trim())
+                    else {
+                        let names: Vec<_> =
+                            Rule::ALL.iter().map(|(name, _)| format!("`{name}`")).collect();
+                        return Err(format!(
+                            "`{}`: unknown rule `{rule}`; the rules are {}",
+                            case.title,
+                            names.join(", ")
+                        ));
                     };
                     case.rule = *rule;
                 }
@@ -154,7 +167,8 @@ fn parse_cases(text: &str) -> Result<Vec<Case>, String> {
 
 /// The test name for a title: `Mutual recursion` is `mutual_recursion`.
 fn slug(title: &str) -> String {
-    let slug: String = title.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+    let slug: String =
+        title.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
     slug.split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("_")
 }
 
@@ -175,10 +189,15 @@ fn parse_with_timeout(rule: Rule, text: &str) -> Result<(GreenNode, Vec<Diagnost
 
 fn run(case: &Case) -> Result<(), Failed> {
     let (node, diagnostics) = parse_with_timeout(case.rule, &case.input)?;
-    let has_error_node = SyntaxNode::new_root(node.clone()).descendants().any(|n| n.kind() == SyntaxKind::ERROR);
+    let has_error_node =
+        SyntaxNode::new_root(node.clone()).descendants().any(|n| n.kind() == SyntaxKind::ERROR);
     match (case.error, diagnostics.is_empty() && !has_error_node) {
-        (false, false) => Err(format!("expected the code to parse\n{}", dump(&node, &diagnostics)).into()),
-        (true, true) => Err(format!("expected a syntax error (`:error`)\n{}", dump(&node, &diagnostics)).into()),
+        (false, false) => {
+            Err(format!("expected the code to parse\n{}", dump(&node, &diagnostics)).into())
+        }
+        (true, true) => {
+            Err(format!("expected a syntax error (`:error`)\n{}", dump(&node, &diagnostics)).into())
+        }
         _ => Ok(()),
     }
 }

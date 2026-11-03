@@ -2,12 +2,17 @@
 //! enums, traits, impls, imports and so on. Laid out like rust-analyzer's
 //! `items` module.
 
-use boltlang_syntax::{SyntaxKind::{self, *}, T};
+use boltlang_syntax::{
+    SyntaxKind::{self, *},
+    T,
+};
 
 use crate::{
     grammar::{
-        abi, at_macro_call, at_macro_rules, macro_rules, macro_call, attr, at_inner_attr, delimited, outer_attrs, name_ref, expr, function_modifiers, let_stmt, Semicolon, generic_param_list, name, type_, opt_ret_type, param, param_list, parse_block_expr,
-        trait_bounds, type_no_bounds, is_path_start, dotted_path, TYPE_FIRST, at_mutability, mutability,
+        Semicolon, TYPE_FIRST, abi, at_inner_attr, at_macro_call, at_macro_rules, at_mutability,
+        attr, delimited, dotted_path, expr, function_modifiers, generic_param_list, is_path_start,
+        let_stmt, macro_call, macro_rules, mutability, name, name_ref, opt_ret_type, outer_attrs,
+        param, param_list, parse_block_expr, trait_bounds, type_, type_no_bounds,
     },
     parser::{Marker, Parser},
     token_set::TokenSet,
@@ -165,7 +170,8 @@ pub(crate) fn opt_visibility(p: &mut Parser) -> bool {
     }
     let m = p.start();
     p.bump(T![pub]);
-    if p.at(T!['(']) && matches!(p.nth(1), T![super] | T![package] | IDENT) && p.nth_at(2, T![')']) {
+    if p.at(T!['(']) && matches!(p.nth(1), T![super] | T![package] | IDENT) && p.nth_at(2, T![')'])
+    {
         // Another name, like the `self` of Rust's `pub(self)`, is parsed
         // like these, so that only it is reported.
         if p.nth_at(1, IDENT) {

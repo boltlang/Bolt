@@ -22,7 +22,10 @@ fn main() {
         for byte in relative.bytes().chain([0]).chain(fs::read(path).unwrap()).chain([0]) {
             hash = (hash ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
         }
-        entries.push_str(&format!("    ({relative:?}, include_str!({:?})),\n", path.display().to_string()));
+        entries.push_str(&format!(
+            "    ({relative:?}, include_str!({:?})),\n",
+            path.display().to_string()
+        ));
     }
     let out = PathBuf::from(env::var("OUT_DIR").unwrap()).join("files.rs");
     let code = format!(

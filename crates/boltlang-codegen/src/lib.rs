@@ -88,7 +88,12 @@ pub struct Instance<'db> {
 
 /// The instance for the top-level statements of `file`.
 pub fn entry_instance<'db>(db: &'db dyn Db, file: File) -> Instance<'db> {
-    Instance::new(db, DefWithBodyId::new(db, DefWithBody::File(file)), Box::<[Ty<'db>]>::default(), file)
+    Instance::new(
+        db,
+        DefWithBodyId::new(db, DefWithBody::File(file)),
+        Box::<[Ty<'db>]>::default(),
+        file,
+    )
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
@@ -112,9 +117,13 @@ pub enum ErrorKind {
 impl fmt::Display for CodegenError<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match &self.kind {
-            ErrorKind::Unsupported(what) => write!(f, "{what} is not supported by the code generator yet"),
+            ErrorKind::Unsupported(what) => {
+                write!(f, "{what} is not supported by the code generator yet")
+            }
             ErrorKind::UnknownType => write!(f, "the type of this expression is not known"),
-            ErrorKind::Invalid(message) => write!(f, "the code generator made an invalid module: {message}"),
+            ErrorKind::Invalid(message) => {
+                write!(f, "the code generator made an invalid module: {message}")
+            }
         }
     }
 }
@@ -136,7 +145,10 @@ impl<'db> CodegenError<'db> {
 
 /// The code of an instance, or why it can't be compiled.
 #[salsa::tracked(returns(ref))]
-pub fn compile_instance<'db>(db: &'db dyn Db, instance: Instance<'db>) -> Result<CompiledFn<'db>, CodegenError<'db>> {
+pub fn compile_instance<'db>(
+    db: &'db dyn Db,
+    instance: Instance<'db>,
+) -> Result<CompiledFn<'db>, CodegenError<'db>> {
     lower::compile(db, instance)
 }
 

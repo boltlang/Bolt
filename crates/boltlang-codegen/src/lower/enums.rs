@@ -19,14 +19,28 @@ use crate::{
 impl<'db> Compiler<'db> {
     /// Where the fields of the variant `v` of an enum with fields of type
     /// `ty` are.
-    fn variant_layout(&self, ty: &Ty<'db>, v: EnumVariantId<'db>, at: ExprId) -> Result<'db, layout::Layout<'db>> {
-        layout::variant_layout(self.db, ty, v)
-            .ok_or_else(|| self.unsupported(at, format!("a variant of `{}` with these fields", ty.display(self.db))))
+    fn variant_layout(
+        &self,
+        ty: &Ty<'db>,
+        v: EnumVariantId<'db>,
+        at: ExprId,
+    ) -> Result<'db, layout::Layout<'db>> {
+        layout::variant_layout(self.db, ty, v).ok_or_else(|| {
+            self.unsupported(
+                at,
+                format!("a variant of `{}` with these fields", ty.display(self.db)),
+            )
+        })
     }
 
     /// A new value of the variant `v` of the enum with fields of the type of
     /// `expr`, with the values of `given` for its fields.
-    pub(super) fn construct_variant(&mut self, expr: ExprId, v: EnumVariantId<'db>, given: &[(Name, ExprId)]) -> Result<'db, ()> {
+    pub(super) fn construct_variant(
+        &mut self,
+        expr: ExprId,
+        v: EnumVariantId<'db>,
+        given: &[(Name, ExprId)],
+    ) -> Result<'db, ()> {
         let ty = self.ty(expr);
         let layout = self.variant_layout(&ty, v, expr)?;
         let address = self.alloc(layout.size.max(4));
@@ -34,7 +48,9 @@ impl<'db> Compiler<'db> {
         self.push(Inst::I32Const(v.index as i32));
         self.push(Inst::Store(ValTy::I32, 0));
         for (name, value) in given {
-            let Some(slot) = layout.slot(name) else { return Err(self.unsupported(*value, "this field")) };
+            let Some(slot) = layout.slot(name) else {
+                return Err(self.unsupported(*value, "this field"));
+            };
             match slot.val_ty {
                 Some(val_ty) => {
                     self.push(Inst::LocalGet(address));
@@ -50,7 +66,11 @@ impl<'db> Compiler<'db> {
 
     /// The variant that the path of a pattern, like the `Some` of `Some(x)`,
     /// names.
-    pub(super) fn pattern_variant(&self, path: &Path, at: ExprId) -> Result<'db, EnumVariantId<'db>> {
+    pub(super) fn pattern_variant(
+        &self,
+        path: &Path,
+        at: ExprId,
+    ) -> Result<'db, EnumVariantId<'db>> {
         match Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path) {
             Some(
                 ValueResolution::Value(ValueNs::Variant(v))

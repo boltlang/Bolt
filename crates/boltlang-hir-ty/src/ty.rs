@@ -154,7 +154,9 @@ impl<'db> Ty<'db> {
     /// The mutability of an array or a struct.
     pub fn mutability(&self) -> Option<&Ty<'db>> {
         match self {
-            Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, _, mutability) => Some(mutability),
+            Ty::Array(mutability, _) | Ty::Adt(AdtId::Struct(_), _, _, mutability) => {
+                Some(mutability)
+            }
             _ => None,
         }
     }
@@ -188,7 +190,9 @@ impl<'db> Ty<'db> {
             return head;
         }
         match head {
-            Ty::Adt(id, xs, ms, m) => Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect(), ms, m),
+            Ty::Adt(id, xs, ms, m) => {
+                Ty::Adt(id, xs.into_vec().into_iter().chain(args).collect(), ms, m)
+            }
             Ty::App(head, xs) => Ty::App(head, xs.into_vec().into_iter().chain(args).collect()),
             // An error applied to anything is still an error.
             Ty::Error => Ty::Error,
@@ -243,9 +247,12 @@ impl<'db> Ty<'db> {
         }
         let fold_all = |tys: &[Ty<'db>], f: &mut _| tys.iter().map(|t| t.fold(f)).collect();
         match self {
-            Ty::Adt(id, args, mutabilities, mutability) => {
-                Ty::Adt(*id, fold_all(args, f), fold_all(mutabilities, f), Box::new(mutability.fold(f)))
-            }
+            Ty::Adt(id, args, mutabilities, mutability) => Ty::Adt(
+                *id,
+                fold_all(args, f),
+                fold_all(mutabilities, f),
+                Box::new(mutability.fold(f)),
+            ),
             // The head can become a struct or enum, like `F` in `F[A]` when
             // `F` is replaced by `Option`.
             Ty::App(head, args) => Ty::app(head.fold(f), fold_all(args, f).into_vec()),
@@ -285,7 +292,11 @@ impl<'db> Ty<'db> {
     }
 
     /// Like [`Ty::display`], with the names `names` gives unknown types.
-    pub fn display_with<'a>(&'a self, db: &'db dyn Db, names: &'a TyNames<'db>) -> DisplayTy<'a, 'db> {
+    pub fn display_with<'a>(
+        &'a self,
+        db: &'db dyn Db,
+        names: &'a TyNames<'db>,
+    ) -> DisplayTy<'a, 'db> {
         DisplayTy { ty: self, db, names: Some(names) }
     }
 }
@@ -386,10 +397,12 @@ impl<'db> TyNames<'db> {
         }
         // From `'m`, like a name written in a signature, so that they don't
         // read like the type variables `a`, `b`, ...
-        let mut candidates =
-            (12..).map(|i| format!("'{}", bound_name(i))).filter(|n| !found.taken_mutabilities.contains(n));
+        let mut candidates = (12..)
+            .map(|i| format!("'{}", bound_name(i)))
+            .filter(|n| !found.taken_mutabilities.contains(n));
         for &unknown in &found.mutabilities {
-            let shared = explicit || found.mutabilities.iter().filter(|u| **u == unknown).count() > 1;
+            let shared =
+                explicit || found.mutabilities.iter().filter(|u| **u == unknown).count() > 1;
             if shared && !out.mutabilities.iter().any(|(u, _)| *u == unknown) {
                 out.mutabilities.push((unknown, candidates.next().unwrap()));
             }
@@ -437,8 +450,12 @@ pub fn is_hidden_param<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> bool
 
 /// The name of a mutability parameter that the function or impl names,
 /// like the `m` of `'m Point`, without its `'`.
-fn mutability_name<'db>(db: &'db dyn Db, param: GenericParamId<'db>) -> Option<boltlang_hir_def::Name> {
-    let index = (param.index as usize).checked_sub(param.def.generic_params(db).type_params.len())?;
+fn mutability_name<'db>(
+    db: &'db dyn Db,
+    param: GenericParamId<'db>,
+) -> Option<boltlang_hir_def::Name> {
+    let index =
+        (param.index as usize).checked_sub(param.def.generic_params(db).type_params.len())?;
     crate::lower::named_mutabilities(db, param.def).get(index).cloned()
 }
 
@@ -492,7 +509,8 @@ impl fmt::Display for DisplayTy<'_, '_> {
                 // Like before a type, a mutability argument that's unknown or
                 // generic and used once isn't shown, unless one after it is,
                 // where it's `'_`.
-                let mutabilities: Vec<Option<String>> = mutabilities.iter().map(|m| self.shown_mutability(m)).collect();
+                let mutabilities: Vec<Option<String>> =
+                    mutabilities.iter().map(|m| self.shown_mutability(m)).collect();
                 let shown = mutabilities.iter().rposition(Option::is_some).map_or(0, |i| i + 1);
                 if !args.is_empty() || shown > 0 {
                     f.write_str("[")?;
@@ -549,7 +567,9 @@ impl fmt::Display for DisplayTy<'_, '_> {
                     [arg] if !matches!(arg, Ty::Fn(..)) => write!(f, "{}.{name}", show(arg)),
                     _ => {
                         let class = match alias.container(db) {
-                            ItemContainerId::Class(c) => c.item(db).name.as_ref().map_or("?", |n| n.as_str()),
+                            ItemContainerId::Class(c) => {
+                                c.item(db).name.as_ref().map_or("?", |n| n.as_str())
+                            }
                             _ => "?",
                         };
                         write!(f, "{class}[")?;

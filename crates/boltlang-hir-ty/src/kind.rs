@@ -22,8 +22,8 @@ use boltlang_hir_def::{
     item_tree::AssocItem,
     resolver::{GenericDefId, Resolver, TypeNs},
     signatures::{
-        FieldList, GenericParams, class_signature, const_signature, enum_signature, function_signature,
-        impl_signature, struct_signature, type_alias_signature,
+        FieldList, GenericParams, class_signature, const_signature, enum_signature,
+        function_signature, impl_signature, struct_signature, type_alias_signature,
     },
 };
 
@@ -74,7 +74,9 @@ impl fmt::Display for Kind {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Kind::Type => f.write_str("Type"),
-            Kind::Arrow(param, result) if matches!(**param, Kind::Arrow(..)) => write!(f, "({param}) -> {result}"),
+            Kind::Arrow(param, result) if matches!(**param, Kind::Arrow(..)) => {
+                write!(f, "({param}) -> {result}")
+            }
             Kind::Arrow(param, result) => write!(f, "{param} -> {result}"),
         }
     }
@@ -83,7 +85,10 @@ impl fmt::Display for Kind {
 /// The kinds of the type parameters of `def`.
 pub fn generic_param_kinds<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[Kind]> {
     let count = def.generic_params(db).type_params.len();
-    let kinds = group_kinds(db, group_root(db, def)).iter().find(|(d, _)| *d == def).map(|(_, k)| k.clone());
+    let kinds = group_kinds(db, group_root(db, def))
+        .iter()
+        .find(|(d, _)| *d == def)
+        .map(|(_, k)| k.clone());
     kinds.filter(|k| k.len() == count).unwrap_or_else(|| vec![Kind::Type; count].into())
 }
 
@@ -118,8 +123,12 @@ fn group_members<'db>(db: &'db dyn Db, root: GenericDefId<'db>) -> Vec<GenericDe
     };
     for item in items {
         match *item {
-            AssocItem::Function(idx) => members.push(GenericDefId::Function(FunctionId::new(db, container, idx))),
-            AssocItem::TypeAlias(idx) => members.push(GenericDefId::TypeAlias(TypeAliasId::new(db, container, idx))),
+            AssocItem::Function(idx) => {
+                members.push(GenericDefId::Function(FunctionId::new(db, container, idx)))
+            }
+            AssocItem::TypeAlias(idx) => {
+                members.push(GenericDefId::TypeAlias(TypeAliasId::new(db, container, idx)))
+            }
             AssocItem::Const(_) | AssocItem::MacroCall(_) => {}
         }
     }
@@ -129,7 +138,10 @@ fn group_members<'db>(db: &'db dyn Db, root: GenericDefId<'db>) -> Vec<GenericDe
 /// The kinds of the type parameters of each definition of the group of
 /// `root`.
 #[salsa::tracked(returns(ref), cycle_result = group_kinds_cycle)]
-fn group_kinds<'db>(db: &'db dyn Db, root: GenericDefId<'db>) -> Vec<(GenericDefId<'db>, Box<[Kind]>)> {
+fn group_kinds<'db>(
+    db: &'db dyn Db,
+    root: GenericDefId<'db>,
+) -> Vec<(GenericDefId<'db>, Box<[Kind]>)> {
     let mut inference = KindInference { db, vars: Vec::new(), members: Vec::new() };
     for def in group_members(db, root) {
         let count = def.generic_params(db).type_params.len();
@@ -146,7 +158,10 @@ fn group_kinds<'db>(db: &'db dyn Db, root: GenericDefId<'db>) -> Vec<(GenericDef
         inference.walk_consts(ItemContainerId::Impl(id), &id.item(db).items);
     }
     let members = std::mem::take(&mut inference.members);
-    members.into_iter().map(|(def, vars)| (def, vars.iter().map(|k| inference.finish(k)).collect())).collect()
+    members
+        .into_iter()
+        .map(|(def, vars)| (def, vars.iter().map(|k| inference.finish(k)).collect()))
+        .collect()
 }
 
 /// When definitions of different groups refer to each other, like two
@@ -250,7 +265,9 @@ impl<'db> KindInference<'db> {
     fn param_kind(&self, def: GenericDefId<'db>, index: u32) -> K {
         match self.member_params(def) {
             Some(vars) => vars.get(index as usize).cloned().unwrap_or(K::Type),
-            None => generic_param_kinds(self.db, def).get(index as usize).map_or(K::Type, K::from_kind),
+            None => {
+                generic_param_kinds(self.db, def).get(index as usize).map_or(K::Type, K::from_kind)
+            }
         }
     }
 
@@ -317,7 +334,12 @@ impl<'db> KindInference<'db> {
         }
     }
 
-    fn walk_fields(&mut self, resolver: &Resolver<'db>, store: &ExpressionStore, fields: &FieldList) {
+    fn walk_fields(
+        &mut self,
+        resolver: &Resolver<'db>,
+        store: &ExpressionStore,
+        fields: &FieldList,
+    ) {
         let fields = match fields {
             FieldList::Record(fields) | FieldList::Tuple(fields) => &fields[..],
             FieldList::Unit => &[],
@@ -411,16 +433,23 @@ impl<'db> KindInference<'db> {
             }
             TypeRef::Mut { inner, .. } => self.kind_of(resolver, store, *inner),
             TypeRef::Never => K::Type,
-            TypeRef::Error | TypeRef::ImplTrait { .. } | TypeRef::Bounded(_) | TypeRef::MacroCall { .. } => {
-                self.new_var()
-            }
+            TypeRef::Error
+            | TypeRef::ImplTrait { .. }
+            | TypeRef::Bounded(_)
+            | TypeRef::MacroCall { .. } => self.new_var(),
         }
     }
 
     /// A class constraint like `Functor[F]`, whose arguments have the kinds
     /// of the class's parameters. `target` is the kind of the type before
     /// the `:` of a bound, which is the first argument.
-    fn class_constraint(&mut self, resolver: &Resolver<'db>, store: &ExpressionStore, id: TypeRefId, target: Option<K>) {
+    fn class_constraint(
+        &mut self,
+        resolver: &Resolver<'db>,
+        store: &ExpressionStore,
+        id: TypeRefId,
+        target: Option<K>,
+    ) {
         let TypeRef::Path(path) = &store[id] else { return };
         let Some(r) = resolver.resolve_path_in_type_ns(self.db, path) else { return };
         let (TypeNs::Class(class), None) = (r.ty, r.unresolved) else { return };

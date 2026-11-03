@@ -18,8 +18,13 @@ fn function<'db>(db: &'db TestDb, file: File, index: usize) -> FunctionId<'db> {
 /// The signature of a function as `fn(A, ?) -> R`, with `?` for a missing
 /// type.
 fn show_sig(db: &TestDb, sig: &FnSig<'_>) -> String {
-    let show = |t: &Option<Ty<'_>>| t.as_ref().map_or("?".to_string(), |t| t.display(db).to_string());
-    format!("fn({}) -> {}", sig.params.iter().map(show).collect::<Vec<_>>().join(", "), show(&sig.ret))
+    let show =
+        |t: &Option<Ty<'_>>| t.as_ref().map_or("?".to_string(), |t| t.display(db).to_string());
+    format!(
+        "fn({}) -> {}",
+        sig.params.iter().map(show).collect::<Vec<_>>().join(", "),
+        show(&sig.ret)
+    )
 }
 
 const SOURCE: &str = "\
@@ -41,7 +46,10 @@ const N: Swap[u8, Bool] = 1;
 #[test]
 fn named_mutabilities_complete_a_signature() {
     let db = TestDb::new();
-    let file = db.file("/main.bolt", "fn a(xs: 'm [i32]) -> 'm [i32] = xs;\nfn b(xs: [i32]) -> [i32] = xs;\n");
+    let file = db.file(
+        "/main.bolt",
+        "fn a(xs: 'm [i32]) -> 'm [i32] = xs;\nfn b(xs: [i32]) -> [i32] = xs;\n",
+    );
     // The return type of `a` names its mutability, so `a` is checked on its
     // own. That of `b` doesn't, so its body decides it.
     assert!(fn_sig(&db, function(&db, file, 0)).is_complete());
@@ -63,7 +71,9 @@ fn function_signatures() {
     let preds = &generic_predicates(&db, GenericDefId::Function(f)).predicates;
     let shown: Vec<_> = preds
         .iter()
-        .map(|p| format!("{}[{}]", p.class.item(&db).name.as_ref().unwrap(), p.args[0].display(&db)))
+        .map(|p| {
+            format!("{}[{}]", p.class.item(&db).name.as_ref().unwrap(), p.args[0].display(&db))
+        })
         .collect();
     assert_eq!(shown, ["Show[T]", "Show[List[T]]"]);
 

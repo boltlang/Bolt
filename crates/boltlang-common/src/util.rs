@@ -6,18 +6,13 @@ pub struct DropBomb {
 }
 
 impl DropBomb {
-
     pub fn new(msg: impl Into<Cow<'static, str>>) -> Self {
-        DropBomb {
-            msg: msg.into(),
-            defused: false
-        }
+        DropBomb { msg: msg.into(), defused: false }
     }
 
     pub fn defuse(&mut self) {
         self.defused = true;
     }
-
 }
 
 impl Drop for DropBomb {
@@ -34,7 +29,7 @@ pub struct SkipLast<I: Iterator> {
     count: usize,
 }
 
-impl <I: Iterator> Iterator for SkipLast<I> {
+impl<I: Iterator> Iterator for SkipLast<I> {
     type Item = I::Item;
     fn next(&mut self) -> Option<Self::Item> {
         while self.buffer.len() <= self.count {
@@ -54,13 +49,12 @@ impl <I: Iterator> Iterator for SkipLast<I> {
     }
 }
 
-pub trait IterExt : Iterator {
-    fn skip_last(self, n: usize) -> SkipLast<Self> where Self: Sized {
-        SkipLast {
-            buffer: VecDeque::new(),
-            iter: self,
-            count: n,
-        }
+pub trait IterExt: Iterator {
+    fn skip_last(self, n: usize) -> SkipLast<Self>
+    where
+        Self: Sized,
+    {
+        SkipLast { buffer: VecDeque::new(), iter: self, count: n }
     }
 }
 
@@ -73,7 +67,7 @@ mod test {
 
     #[test]
     fn test_skip_last_two() {
-        let v = [1,2,3,4,5];
+        let v = [1, 2, 3, 4, 5];
         let w: Vec<_> = v.iter().skip_last(2).collect();
         assert_eq!(w.len(), 3);
         assert_eq!(*w[0], 1);
@@ -83,7 +77,7 @@ mod test {
 
     #[test]
     fn test_skip_nothing() {
-        let v = [1,2,3,4,5];
+        let v = [1, 2, 3, 4, 5];
         let w: Vec<_> = v.iter().skip_last(0).collect();
         assert_eq!(w.len(), 5);
         assert_eq!(*w[0], 1);
@@ -92,5 +86,4 @@ mod test {
         assert_eq!(*w[3], 4);
         assert_eq!(*w[4], 5);
     }
-
 }

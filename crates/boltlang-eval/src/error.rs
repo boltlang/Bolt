@@ -26,19 +26,31 @@ pub enum ErrorKind {
     NoSuchField(Name),
     NotCallable,
     NotAssignable,
-    WrongArgCount { expected: usize, found: usize },
+    WrongArgCount {
+        expected: usize,
+        found: usize,
+    },
     Uninitialized(Name),
     /// A function or const that is only declared, like in a class.
     NoBody(String),
     Overflow,
     DivisionByZero,
-    IndexOutOfBounds { index: i128, len: usize },
+    IndexOutOfBounds {
+        index: i128,
+        len: usize,
+    },
     /// A range of `start..end` that isn't in an array of `len` elements, or
     /// whose end is before its start.
-    RangeOutOfBounds { start: i128, end: i128, len: usize },
+    RangeOutOfBounds {
+        start: i128,
+        end: i128,
+        len: usize,
+    },
     /// An element of an array from `array_alloc` that was read before it
     /// was set.
-    UnsetElement { index: usize },
+    UnsetElement {
+        index: usize,
+    },
     /// No arm of a `match`, or the pattern of a `let`, matched.
     NoMatch,
     /// `break` or `continue` outside of a loop.
@@ -97,7 +109,9 @@ impl fmt::Display for ErrorKind {
             ErrorKind::WrongArgCount { expected, found } => {
                 write!(f, "expected {expected} arguments, found {found}")
             }
-            ErrorKind::Uninitialized(name) => write!(f, "`{name}` is used before it is initialized"),
+            ErrorKind::Uninitialized(name) => {
+                write!(f, "`{name}` is used before it is initialized")
+            }
             ErrorKind::NoBody(name) => write!(f, "`{name}` has no body"),
             ErrorKind::Overflow => write!(f, "integer overflow"),
             ErrorKind::DivisionByZero => write!(f, "division by zero"),
@@ -107,16 +121,24 @@ impl fmt::Display for ErrorKind {
             ErrorKind::RangeOutOfBounds { start, end, len } => {
                 write!(f, "the range {start}..{end} is out of bounds for length {len}")
             }
-            ErrorKind::UnsetElement { index } => write!(f, "element {index} of the array is read before it is set"),
+            ErrorKind::UnsetElement { index } => {
+                write!(f, "element {index} of the array is read before it is set")
+            }
             ErrorKind::NoMatch => write!(f, "no pattern matched the value"),
             ErrorKind::BreakOutsideLoop => write!(f, "`break` or `continue` outside of a loop"),
             ErrorKind::ConstCycle(name) => write!(f, "the value of `{name}` depends on itself"),
             ErrorKind::StackOverflow => write!(f, "too many nested calls"),
             ErrorKind::OutOfFuel => write!(f, "evaluation took too many steps"),
-            ErrorKind::Unsupported(what) => write!(f, "{what} is not supported by the evaluator yet"),
-            ErrorKind::Effect(builtin) => write!(f, "`{builtin}` can't be used here, since it has an effect"),
+            ErrorKind::Unsupported(what) => {
+                write!(f, "{what} is not supported by the evaluator yet")
+            }
+            ErrorKind::Effect(builtin) => {
+                write!(f, "`{builtin}` can't be used here, since it has an effect")
+            }
             ErrorKind::Panic(message) => write!(f, "panicked: {message}"),
-            ErrorKind::NoLangClass(class) => write!(f, "this needs the class `{class}` of the prelude"),
+            ErrorKind::NoLangClass(class) => {
+                write!(f, "this needs the class `{class}` of the prelude")
+            }
             ErrorKind::MutabilityViolation(what) => {
                 write!(f, "{what}, which the type checker should have ruled out")
             }

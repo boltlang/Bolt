@@ -6,10 +6,11 @@ use std::{fmt, sync::Arc};
 
 use boltlang_base_db::{System, SystemPath, SystemPathBuf};
 use ls_types::{
-    DiagnosticOptions, DiagnosticServerCapabilities, DidChangeTextDocumentParams, DidCloseTextDocumentParams,
-    DidOpenTextDocumentParams, DocumentDiagnosticParams, DocumentDiagnosticReport, DocumentDiagnosticReportResult,
-    FullDocumentDiagnosticReport, InitializeParams, InitializeResult, RelatedFullDocumentDiagnosticReport,
-    ServerCapabilities, ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, Uri,
+    DiagnosticOptions, DiagnosticServerCapabilities, DidChangeTextDocumentParams,
+    DidCloseTextDocumentParams, DidOpenTextDocumentParams, DocumentDiagnosticParams,
+    DocumentDiagnosticReport, DocumentDiagnosticReportResult, FullDocumentDiagnosticReport,
+    InitializeParams, InitializeResult, RelatedFullDocumentDiagnosticReport, ServerCapabilities,
+    ServerInfo, TextDocumentSyncCapability, TextDocumentSyncKind, TextDocumentSyncOptions, Uri,
     WorkspaceDiagnosticReport, WorkspaceDiagnosticReportResult, WorkspaceDocumentDiagnosticReport,
     WorkspaceFullDocumentDiagnosticReport,
 };
@@ -56,12 +57,18 @@ impl Server {
         self.workspace.encoding = encoding;
         // `{ "prelude": "name" }` picks the prelude, and `{ "prelude": null }`
         // turns it off. Without it, the default prelude is used.
-        if let Some(prelude) = params.initialization_options.as_ref().and_then(|o| o.get("prelude")) {
+        if let Some(prelude) = params.initialization_options.as_ref().and_then(|o| o.get("prelude"))
+        {
             self.workspace.set_prelude(prelude.as_str().map(str::to_string));
         }
         // `{ "std": "/path" }` says where `std` is, for a server without one,
         // like in the browser, where the page gives it the files.
-        if let Some(std) = params.initialization_options.as_ref().and_then(|o| o.get("std")).and_then(|s| s.as_str()) {
+        if let Some(std) = params
+            .initialization_options
+            .as_ref()
+            .and_then(|o| o.get("std"))
+            .and_then(|s| s.as_str())
+        {
             self.workspace.set_std_dir(Some(SystemPathBuf::from(std)));
         }
         self.refresh_support = capabilities
@@ -71,23 +78,30 @@ impl Server {
             .and_then(|d| d.refresh_support)
             .unwrap_or(false);
         InitializeResult {
-            server_info: Some(ServerInfo { name: NAME.to_string(), version: Some(VERSION.to_string()) }),
+            server_info: Some(ServerInfo {
+                name: NAME.to_string(),
+                version: Some(VERSION.to_string()),
+            }),
             capabilities: ServerCapabilities {
                 position_encoding: Some(encoding.kind()),
-                text_document_sync: Some(TextDocumentSyncCapability::Options(TextDocumentSyncOptions {
-                    open_close: Some(true),
-                    change: Some(TextDocumentSyncKind::FULL),
-                    ..Default::default()
-                })),
-                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(DiagnosticOptions {
-                    identifier: Some("bolt".to_string()),
-                    // Imports and labels make diagnostics depend on other files.
-                    inter_file_dependencies: true,
-                    // For the files that open documents use without being
-                    // open, like the prelude's (#249).
-                    workspace_diagnostics: true,
-                    ..Default::default()
-                })),
+                text_document_sync: Some(TextDocumentSyncCapability::Options(
+                    TextDocumentSyncOptions {
+                        open_close: Some(true),
+                        change: Some(TextDocumentSyncKind::FULL),
+                        ..Default::default()
+                    },
+                )),
+                diagnostic_provider: Some(DiagnosticServerCapabilities::Options(
+                    DiagnosticOptions {
+                        identifier: Some("bolt".to_string()),
+                        // Imports and labels make diagnostics depend on other files.
+                        inter_file_dependencies: true,
+                        // For the files that open documents use without being
+                        // open, like the prelude's (#249).
+                        workspace_diagnostics: true,
+                        ..Default::default()
+                    },
+                )),
                 ..ServerCapabilities::default()
             },
         }
@@ -126,7 +140,10 @@ impl Server {
     }
 
     /// The diagnostics of a document. A document that isn't a file has none.
-    pub fn diagnostic(&self, params: &DocumentDiagnosticParams) -> (DocumentDiagnosticReportResult, Option<NotAFile>) {
+    pub fn diagnostic(
+        &self,
+        params: &DocumentDiagnosticParams,
+    ) -> (DocumentDiagnosticReportResult, Option<NotAFile>) {
         let (items, error) = match path_of(&params.text_document.uri) {
             Ok(path) => (self.workspace.diagnostics(&path), None),
             Err(error) => (Vec::new(), Some(error)),
@@ -134,7 +151,10 @@ impl Server {
         let report = DocumentDiagnosticReportResult::Report(DocumentDiagnosticReport::Full(
             RelatedFullDocumentDiagnosticReport {
                 related_documents: None,
-                full_document_diagnostic_report: FullDocumentDiagnosticReport { result_id: None, items },
+                full_document_diagnostic_report: FullDocumentDiagnosticReport {
+                    result_id: None,
+                    items,
+                },
             },
         ));
         (report, error)
@@ -154,7 +174,10 @@ impl Server {
                 WorkspaceDocumentDiagnosticReport::Full(WorkspaceFullDocumentDiagnosticReport {
                     uri,
                     version: None,
-                    full_document_diagnostic_report: FullDocumentDiagnosticReport { result_id: None, items },
+                    full_document_diagnostic_report: FullDocumentDiagnosticReport {
+                        result_id: None,
+                        items,
+                    },
                 })
             })
             .collect();
@@ -191,7 +214,10 @@ mod tests {
 
     #[test]
     fn only_file_uris_are_files() {
-        let path = |uri: &str| path_of(&Uri::from_str(uri).unwrap()).map(|p| p.as_std_path().to_string_lossy().into_owned());
+        let path = |uri: &str| {
+            path_of(&Uri::from_str(uri).unwrap())
+                .map(|p| p.as_std_path().to_string_lossy().into_owned())
+        };
         assert_eq!(path("file:///project/main.bolt"), Ok("/project/main.bolt".to_string()));
         assert_eq!(path("file:///a%20b.bolt"), Ok("/a b.bolt".to_string()));
         assert!(path("untitled:Untitled-1").is_err());

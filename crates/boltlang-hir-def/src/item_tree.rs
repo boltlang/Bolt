@@ -32,7 +32,8 @@ pub fn item_tree(db: &dyn Db, file: File) -> ItemTree {
     let root = SyntaxNode::new_root(parse.tree(db).clone());
     let mut tree = ItemTree::default();
     if let Some(source_file) = ast::SourceFile::cast(root) {
-        tree.top_level = source_file.elements().filter_map(|element| tree.lower_item(element)).collect();
+        tree.top_level =
+            source_file.elements().filter_map(|element| tree.lower_item(element)).collect();
     }
     tree
 }
@@ -101,11 +102,12 @@ fn item_nodes(root: &SyntaxNode) -> impl Iterator<Item = SyntaxNode> {
     out.into_iter()
 }
 
+#[rustfmt::skip]
 fn is_item_kind(kind: SyntaxKind) -> bool {
     matches!(
         kind,
-        FUNC_DECL | STRUCT | ENUM | CLASS | IMPL | CONST | TYPE_ALIAS | IMPORT | EXTERN_BLOCK | MACRO_RULES
-            | MACRO_CALL
+        FUNC_DECL | STRUCT | ENUM | CLASS | IMPL | CONST | TYPE_ALIAS | IMPORT | EXTERN_BLOCK
+            | MACRO_RULES | MACRO_CALL
     )
 }
 
@@ -358,7 +360,10 @@ impl ItemTree {
                 let ast_id = self.next_ast_id(STRUCT);
                 let visibility = RawVisibility::from_ast(s.visibility());
                 let is_imm = s.imm_token().is_some();
-                ModItem::Struct(push(&mut self.structs, Struct { name: name(s.name()), visibility, is_imm, ast_id }))
+                ModItem::Struct(push(
+                    &mut self.structs,
+                    Struct { name: name(s.name()), visibility, is_imm, ast_id },
+                ))
             }
             E::Enum(e) => {
                 let ast_id = self.next_ast_id(ENUM);
@@ -376,7 +381,12 @@ impl ItemTree {
             E::Class(c) => {
                 let ast_id = self.next_ast_id(CLASS);
                 let items = self.lower_assoc_items(c.item_list());
-                let class = Class { name: name(c.name()), visibility: RawVisibility::from_ast(c.visibility()), items, ast_id };
+                let class = Class {
+                    name: name(c.name()),
+                    visibility: RawVisibility::from_ast(c.visibility()),
+                    items,
+                    ast_id,
+                };
                 ModItem::Class(push(&mut self.classes, class))
             }
             E::Impl(i) => {
@@ -388,7 +398,10 @@ impl ItemTree {
                 let ast_id = self.next_ast_id(EXTERN_BLOCK);
                 let abi = b.abi().and_then(|abi| abi.string()).map(|s| unquote(s.text()));
                 let items = self.lower_assoc_items(b.item_list());
-                ModItem::ExternBlock(push(&mut self.extern_blocks, ExternBlock { abi, items, ast_id }))
+                ModItem::ExternBlock(push(
+                    &mut self.extern_blocks,
+                    ExternBlock { abi, items, ast_id },
+                ))
             }
             E::Const(c) => ModItem::Const(self.lower_const(&c)),
             E::TypeAlias(t) => ModItem::TypeAlias(self.lower_type_alias(&t)),
@@ -404,13 +417,15 @@ impl ItemTree {
             }
             E::MacroRules(m) => {
                 let ast_id = self.next_ast_id(MACRO_RULES);
-                ModItem::MacroRules(push(&mut self.macro_rules, MacroRules { name: name(m.name()), ast_id }))
+                ModItem::MacroRules(push(
+                    &mut self.macro_rules,
+                    MacroRules { name: name(m.name()), ast_id },
+                ))
             }
             E::VarDecl(_) | E::ExprStmt(_) | E::MacroCall(_) => return None,
         };
         Some(item)
     }
-
 
     fn lower_assoc_items(&mut self, list: Option<ast::ItemList>) -> Vec<AssocItem> {
         let Some(list) = list else {
@@ -426,7 +441,10 @@ impl ItemTree {
                     E::MacroCall(m) => {
                         let ast_id = self.next_ast_id(MACRO_CALL);
                         let name = m.name_ref().map(|n| Name::from_ident(&n.text()));
-                        AssocItem::MacroCall(push(&mut self.macro_calls, MacroCall { name, ast_id }))
+                        AssocItem::MacroCall(push(
+                            &mut self.macro_calls,
+                            MacroCall { name, ast_id },
+                        ))
                     }
                     // Other items can't appear here; the parser reports them.
                     _ => return None,
@@ -458,13 +476,19 @@ impl ItemTree {
     fn lower_const(&mut self, c: &ast::Const) -> Idx<Const> {
         let ast_id = self.next_ast_id(CONST);
         let visibility = RawVisibility::from_ast(c.visibility());
-        push(&mut self.consts, Const { name: name(c.name()), visibility, has_value: c.expr().is_some(), ast_id })
+        push(
+            &mut self.consts,
+            Const { name: name(c.name()), visibility, has_value: c.expr().is_some(), ast_id },
+        )
     }
 
     fn lower_type_alias(&mut self, t: &ast::TypeAlias) -> Idx<TypeAlias> {
         let ast_id = self.next_ast_id(TYPE_ALIAS);
         let visibility = RawVisibility::from_ast(t.visibility());
-        push(&mut self.type_aliases, TypeAlias { name: name(t.name()), visibility, has_value: t.ty().is_some(), ast_id })
+        push(
+            &mut self.type_aliases,
+            TypeAlias { name: name(t.name()), visibility, has_value: t.ty().is_some(), ast_id },
+        )
     }
 }
 
@@ -524,7 +548,6 @@ fn has_attr(node: &impl ast::HasAttrs, name: &str) -> bool {
 fn name(name: Option<ast::Name>) -> Option<Name> {
     name.map(|n| Name::from_ident(&n.text()))
 }
-
 
 #[cfg(test)]
 mod tests;

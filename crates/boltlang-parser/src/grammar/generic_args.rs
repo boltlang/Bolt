@@ -5,14 +5,16 @@ use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
     grammar::{
-        LITERAL_FIRST, TYPE_FIRST, delimited, name_ref, parse_block_expr, parse_literal_expr,
-        PathMode, path_for_qualifier, path_type_after_path, trait_bounds, type_, type_no_bounds,
+        LITERAL_FIRST, PathMode, TYPE_FIRST, delimited, name_ref, parse_block_expr,
+        parse_literal_expr, path_for_qualifier, path_type_after_path, trait_bounds, type_,
+        type_no_bounds,
     },
     parser::Parser,
     token_set::TokenSet,
 };
 
-const GENERIC_ARG_FIRST: TokenSet = TYPE_FIRST.union(LITERAL_FIRST).union(TokenSet::new(&[T!['{'], T![-]]));
+const GENERIC_ARG_FIRST: TokenSet =
+    TYPE_FIRST.union(LITERAL_FIRST).union(TokenSet::new(&[T!['{'], T![-]]));
 
 /// `[A, B]`
 pub(crate) fn generic_arg_list(p: &mut Parser) {

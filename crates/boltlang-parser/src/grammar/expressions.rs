@@ -6,10 +6,13 @@ mod atom;
 
 pub(crate) use atom::*;
 
-use boltlang_syntax::{SyntaxKind::{self, *}, T};
+use boltlang_syntax::{
+    SyntaxKind::{self, *},
+    T,
+};
 
 use crate::{
-    grammar::{attr, at_inner_attr, opt_item, outer_attrs, parse_pattern, type_, type_no_bounds},
+    grammar::{at_inner_attr, attr, opt_item, outer_attrs, parse_pattern, type_, type_no_bounds},
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
@@ -40,7 +43,8 @@ pub(crate) struct Restrictions {
 
 const EXPR_FIRST: TokenSet = LHS_FIRST;
 
-const LHS_FIRST: TokenSet = ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![imm], T![mut], T![..], T![..=], T![#]]));
+const LHS_FIRST: TokenSet =
+    ATOM_EXPR_FIRST.union(TokenSet::new(&[T![-], T![!], T![imm], T![mut], T![..], T![..=], T![#]]));
 
 /// Whether an expression can start here. Besides [`EXPR_FIRST`], `||` can
 /// start a closure without parameters; the lexer joins it into an operator.
@@ -203,7 +207,12 @@ fn current_op(p: &Parser) -> (u8, SyntaxKind, Associativity) {
 }
 
 /// Parse an expression whose operators bind at least as tightly as `bp`.
-fn expr_bp(p: &mut Parser, m: Option<Marker>, r: Restrictions, bp: u8) -> Option<(CompletedMarker, BlockLike)> {
+fn expr_bp(
+    p: &mut Parser,
+    m: Option<Marker>,
+    r: Restrictions,
+    bp: u8,
+) -> Option<(CompletedMarker, BlockLike)> {
     let m = m.unwrap_or_else(|| {
         let m = p.start();
         outer_attrs(p);
@@ -296,7 +305,8 @@ fn lhs(p: &mut Parser, r: Restrictions) -> Option<(CompletedMarker, BlockLike)> 
         return Some((m.complete(p, kind), BlockLike::NotBlock));
     }
     let (lhs, blocklike) = atom_expr(p, r)?;
-    let (lhs, blocklike) = postfix_expr(p, lhs, blocklike, !(r.prefer_stmt && blocklike.is_block()));
+    let (lhs, blocklike) =
+        postfix_expr(p, lhs, blocklike, !(r.prefer_stmt && blocklike.is_block()));
     Some((lhs, blocklike))
 }
 

@@ -114,7 +114,9 @@ fn token_repetition(p: &mut Parser, is_pattern: bool) {
     let m = p.start();
     p.bump(T![$]);
     macro_token_tree(p, is_pattern);
-    if !matches!(p.current(), T![*] | T![+] | T![?]) && !matches!(p.current(), T!['('] | T!['['] | T!['{'] | T![')'] | T![']'] | T!['}'] | EOF) {
+    if !matches!(p.current(), T![*] | T![+] | T![?])
+        && !matches!(p.current(), T!['('] | T!['['] | T!['{'] | T![')'] | T![']'] | T!['}'] | EOF)
+    {
         // The separator, like `,` or `;`.
         p.bump_any();
     }

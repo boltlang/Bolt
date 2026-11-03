@@ -50,7 +50,8 @@ impl Case {
 }
 
 /// The line between the sections of a case.
-pub const SECTION: &str = "--------------------------------------------------------------------------------";
+pub const SECTION: &str =
+    "--------------------------------------------------------------------------------";
 
 /// Whether `line` is made of at least three `c`s.
 fn is_separator(line: &str, c: char) -> bool {
@@ -82,7 +83,8 @@ pub fn parse_cases(text: &str, max_sections: usize) -> Result<Vec<Case>, String>
         let (attribute_lines, title_lines): (Vec<&str>, Vec<&str>) =
             lines[start..i].iter().partition(|line| line.trim_start().starts_with(':'));
         let title = title_lines.join(" ").trim().to_string();
-        let attributes = attribute_lines.iter().map(|line| line.trim()[1..].trim().to_string()).collect();
+        let attributes =
+            attribute_lines.iter().map(|line| line.trim()[1..].trim().to_string()).collect();
         i += 1;
         // The input and the sections, up to the next case.
         let mut parts = vec![Vec::new()];
@@ -97,7 +99,11 @@ pub fn parse_cases(text: &str, max_sections: usize) -> Result<Vec<Case>, String>
             i += 1;
         }
         if parts.len() > max_sections + 1 {
-            let n = if max_sections == 1 { "one section".to_string() } else { format!("{max_sections} sections") };
+            let n = if max_sections == 1 {
+                "one section".to_string()
+            } else {
+                format!("{max_sections} sections")
+            };
             return Err(format!("`{title}`: expected the input and at most {n} of output"));
         }
         let mut parts = parts.into_iter().map(|part| part.join("\n").trim().to_string());
@@ -111,7 +117,8 @@ pub fn parse_cases(text: &str, max_sections: usize) -> Result<Vec<Case>, String>
 
 /// The test name for a title: `Mutual recursion` is `mutual_recursion`.
 pub fn slug(title: &str) -> String {
-    let slug: String = title.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
+    let slug: String =
+        title.to_lowercase().chars().map(|c| if c.is_alphanumeric() { c } else { '_' }).collect();
     slug.split('_').filter(|s| !s.is_empty()).collect::<Vec<_>>().join("_")
 }
 
@@ -126,7 +133,9 @@ pub fn split_files(input: &str) -> Result<Vec<(String, String)>, String> {
         if let Some(rest) = line.strip_prefix("//-") {
             let path = rest.trim();
             if !path.starts_with('/') || path.contains(char::is_whitespace) {
-                return Err(format!("expected an absolute path after `//-`, like `//- /lib.bolt`: `{line}`"));
+                return Err(format!(
+                    "expected an absolute path after `//-`, like `//- /lib.bolt`: `{line}`"
+                ));
             }
             if files.iter().any(|(p, _)| p == path) {
                 return Err(format!("two files are called `{path}`"));
@@ -147,7 +156,9 @@ pub fn split_files(input: &str) -> Result<Vec<(String, String)>, String> {
 pub fn show(sections: &[String]) -> String {
     let end = sections.iter().rposition(|s| !s.is_empty()).map_or(1, |i| i + 1);
     let mut out = String::new();
-    for (i, section) in sections.iter().chain(std::iter::repeat(&String::new())).take(end).enumerate() {
+    for (i, section) in
+        sections.iter().chain(std::iter::repeat(&String::new())).take(end).enumerate()
+    {
         if i > 0 {
             out.push_str(SECTION);
             out.push('\n');
@@ -161,7 +172,11 @@ pub fn show(sections: &[String]) -> String {
 /// Write new output into the cases of `text`. `found` gives a case's
 /// sections, or `None` to keep the case as it is, like one whose output is
 /// written by hand.
-pub fn update(text: &str, cases: &[Case], mut found: impl FnMut(&Case) -> Option<Vec<String>>) -> String {
+pub fn update(
+    text: &str,
+    cases: &[Case],
+    mut found: impl FnMut(&Case) -> Option<Vec<String>>,
+) -> String {
     let lines: Vec<&str> = text.lines().collect();
     let mut out = String::new();
     let first = cases.first().map_or(lines.len(), |c| c.head.start);
@@ -215,7 +230,9 @@ pub fn updating() -> bool {
 /// of their paths.
 pub fn data_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
-    for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display())) {
+    for entry in
+        std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display()))
+    {
         let path = entry.unwrap().path();
         if path.is_dir() {
             files.extend(data_files(&path));
@@ -231,7 +248,11 @@ pub fn data_files(dir: &Path) -> Vec<PathBuf> {
 /// without `.txt`, with `::` between directories, like `mutability::arrays`.
 pub fn data_name(root: &Path, path: &Path) -> String {
     let relative = path.strip_prefix(root).unwrap_or(path).with_extension("");
-    relative.components().map(|c| c.as_os_str().to_string_lossy().into_owned()).collect::<Vec<_>>().join("::")
+    relative
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect::<Vec<_>>()
+        .join("::")
 }
 
 /// What `f` gives, or the message it panicked with, after `what`.
@@ -253,7 +274,9 @@ mod tests {
     #[test]
     fn update_puts_the_output_right_after_the_input() {
         let sep = "=".repeat(80);
-        let text = format!("{sep}\nA case\n{sep}\nlet x = 1;\n\n\n{SECTION}\nold\n\n{sep}\nNo output yet\n{sep}\nx;\n\n");
+        let text = format!(
+            "{sep}\nA case\n{sep}\nlet x = 1;\n\n\n{SECTION}\nold\n\n{sep}\nNo output yet\n{sep}\nx;\n\n"
+        );
         let cases = parse_cases(&text, 2).unwrap();
         let updated = update(&text, &cases, |case| Some(vec![format!("new {}", case.title)]));
         let expected = format!(

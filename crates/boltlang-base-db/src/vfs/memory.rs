@@ -1,4 +1,3 @@
-
 use std::collections::hash_map::Entry as HashMapEntry;
 use std::sync::{Arc, RwLock};
 
@@ -7,7 +6,7 @@ use rustc_hash::FxHashMap;
 
 use crate::system::{SystemVirtualPath, file_time_now};
 
-use super::{FileType, Path, PathBuf, Metadata};
+use super::{FileType, Metadata, Path, PathBuf};
 
 #[derive(Clone)]
 pub struct MemoryFs {
@@ -21,7 +20,6 @@ pub struct MemoryFsInner {
 }
 
 impl MemoryFs {
-
     pub fn new() -> Self {
         Self::with_cwd("/")
     }
@@ -33,10 +31,9 @@ impl MemoryFs {
                 by_path: RwLock::new(FxHashMap::default()),
                 virtual_by_path: RwLock::new(FxHashMap::default()),
                 cwd,
-            })
+            }),
         }
     }
-
 }
 
 impl Default for MemoryFs {
@@ -73,7 +70,6 @@ fn other_error<E: std::fmt::Display>(error: E) -> std::io::Error {
 }
 
 impl MemoryFs {
-
     /// Permission used by all files and directories
     const PERMISSION: u32 = 0o755;
 
@@ -159,7 +155,7 @@ impl MemoryFs {
     }
 
     /// # Panics
-    /// 
+    ///
     /// Panics if the current working directory variable could not be locked. In
     /// classic scenarios, this should never happen.
     fn normalize_path(&self, path: impl AsRef<Path>) -> PathBuf {
@@ -179,13 +175,11 @@ impl MemoryFs {
             Entry::Directory(entry) => Metadata::new(
                 entry.last_modified.into(),
                 Some(Self::PERMISSION),
-                FileType::Directory
+                FileType::Directory,
             ),
-            Entry::File(entry) => Metadata::new(
-                entry.last_modified.into(),
-                Some(Self::PERMISSION),
-                FileType::File,
-            ),
+            Entry::File(entry) => {
+                Metadata::new(entry.last_modified.into(), Some(Self::PERMISSION), FileType::File)
+            }
             // `canonicalize` resolved the links.
             Entry::Symlink(_) => unreachable!("a resolved path isn't a link"),
         })
@@ -208,10 +202,10 @@ impl MemoryFs {
                 Entry::File(file) => {
                     file.content = content.into();
                     file.last_modified = later_than(file.last_modified);
-                },
+                }
                 Entry::Directory(_) => return Err(is_a_dir()),
                 Entry::Symlink(_) => unreachable!("a resolved path isn't a link"),
-            }
+            },
             HashMapEntry::Vacant(entry) => {
                 entry.insert(Entry::File(File {
                     last_modified: file_time_now(),
@@ -237,7 +231,11 @@ impl MemoryFs {
         }
     }
 
-    pub fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, content: impl AsRef<[u8]>) -> std::io::Result<()> {
+    pub fn write_file_bytes_virtual(
+        &self,
+        path: &SystemVirtualPath,
+        content: impl AsRef<[u8]>,
+    ) -> std::io::Result<()> {
         let content = content.as_ref();
         // Not `canonicalize`, which fails if the file doesn't exist yet.
         let path = self.normalize_path(path);
@@ -247,11 +245,11 @@ impl MemoryFs {
                 Entry::File(file) => {
                     file.content = content.into();
                     file.last_modified = later_than(file.last_modified);
-                },
+                }
                 Entry::Directory(_) => return Err(is_a_dir()),
                 // Virtual paths have no links.
                 Entry::Symlink(_) => unreachable!("a virtual path isn't a link"),
-            }
+            },
             HashMapEntry::Vacant(entry) => {
                 entry.insert(Entry::File(File {
                     last_modified: file_time_now(),
@@ -261,7 +259,6 @@ impl MemoryFs {
         }
         Ok(())
     }
-
 }
 
 enum Entry {
@@ -301,12 +298,21 @@ mod tests {
     fn symbolic_links_are_followed() {
         let fs = MemoryFs::new();
         fs.write_file_bytes(SystemPath::new("/proj/packages/std/lib.bolt"), b"lib").unwrap();
-        fs.create_symlink(SystemPath::new("/proj/.bolt/packages/std"), SystemPath::new("../../packages/std")).unwrap();
+        fs.create_symlink(
+            SystemPath::new("/proj/.bolt/packages/std"),
+            SystemPath::new("../../packages/std"),
+        )
+        .unwrap();
         let through = SystemPath::new("/proj/.bolt/packages/std/lib.bolt");
         assert_eq!(fs.read_to_string(through).unwrap(), "lib");
         let real = fs.canonicalize(through).unwrap();
         assert_eq!(real.as_std_path(), std::path::Path::new("/proj/packages/std/lib.bolt"));
-        assert!(fs.metadata(SystemPath::new("/proj/.bolt/packages/std")).unwrap().file_type().is_directory());
+        assert!(
+            fs.metadata(SystemPath::new("/proj/.bolt/packages/std"))
+                .unwrap()
+                .file_type()
+                .is_directory()
+        );
         // Listed under the path given, not the target.
         let list = |dir: &str| -> Vec<String> {
             let entries = fs.read_directory(SystemPath::new(dir)).unwrap();
@@ -316,7 +322,10 @@ mod tests {
         assert_eq!(list("/proj/.bolt/packages/std"), ["/proj/.bolt/packages/std/lib.bolt"]);
         // Writing through a link writes the target.
         fs.write_file_bytes(through, b"new").unwrap();
-        assert_eq!(fs.read_to_string(SystemPath::new("/proj/packages/std/lib.bolt")).unwrap(), "new");
+        assert_eq!(
+            fs.read_to_string(SystemPath::new("/proj/packages/std/lib.bolt")).unwrap(),
+            "new"
+        );
     }
 
     #[test]

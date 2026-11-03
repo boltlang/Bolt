@@ -10,12 +10,12 @@ use boltlang_hir_def::{
     ids::{FunctionId, ItemContainerId},
     item_tree::FunctionName,
 };
-use boltlang_hir_ty::{Ty, function_scheme};
 use boltlang_hir_ty::builtin::Builtin;
+use boltlang_hir_ty::{Ty, function_scheme};
 use wasm_encoder::{
-    BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection, Function,
-    FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemArg, MemorySection, MemoryType,
-    Module, NameMap, NameSection, TypeSection, ValType,
+    BlockType, CodeSection, ConstExpr, DataSection, EntityType, ExportKind, ExportSection,
+    Function, FunctionSection, GlobalSection, GlobalType, ImportSection, Instruction, MemArg,
+    MemorySection, MemoryType, Module, NameMap, NameSection, TypeSection, ValType,
 };
 
 use crate::{
@@ -34,14 +34,21 @@ pub fn link<'db>(db: &'db dyn Db, file: File) -> Result<Vec<u8>, Vec<CodegenErro
 
 /// The Wasm module whose `main` is the function `f`, which takes no
 /// arguments, like a test, for the program whose entry file is `root`.
-pub fn link_function<'db>(db: &'db dyn Db, f: FunctionId<'db>, root: File) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
+pub fn link_function<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+    root: File,
+) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
     let def = DefWithBodyId::new(db, DefWithBody::Function(f));
     let entry = Instance::new(db, def, Box::<[Ty<'db>]>::default(), root);
     link_entry(db, reachable_from(db, entry))
 }
 
 /// The Wasm module of `instances`, whose first is its `main`.
-fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
+fn link_entry<'db>(
+    db: &'db dyn Db,
+    instances: &[Instance<'db>],
+) -> Result<Vec<u8>, Vec<CodegenError<'db>>> {
     let mut compiled: Vec<(Instance<'db>, &CompiledFn<'db>)> = Vec::new();
     let mut errors = Vec::new();
     for &instance in instances {
@@ -58,7 +65,9 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
     let mut imports: Vec<Callee<'db>> = Vec::new();
     for (_, code) in &compiled {
         for callee in &code.callees {
-            if matches!(callee, Callee::Import(_) | Callee::Builtin(_) | Callee::Fail(_)) && !imports.contains(callee) {
+            if matches!(callee, Callee::Import(_) | Callee::Builtin(_) | Callee::Fail(_))
+                && !imports.contains(callee)
+            {
                 imports.push(*callee);
             }
         }
@@ -93,8 +102,12 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
     for (i, callee) in imports.iter().enumerate() {
         let (module, name, signature) = match *callee {
             Callee::Import(f) => ("env", function_name(db, f), import_signature(db, f)?),
-            Callee::Builtin(builtin) => ("bolt", builtin.name().to_string(), builtin_signature(builtin)),
-            Callee::Fail(failure) => ("bolt", failure.name().to_string(), (vec![ValTy::I32; failure.arity()], None)),
+            Callee::Builtin(builtin) => {
+                ("bolt", builtin.name().to_string(), builtin_signature(builtin))
+            }
+            Callee::Fail(failure) => {
+                ("bolt", failure.name().to_string(), (vec![ValTy::I32; failure.arity()], None))
+            }
             Callee::Instance(_) | Callee::Alloc => unreachable!("only imports are imported"),
         };
         import_section.import(module, &name, EntityType::Function(type_of(signature)));
@@ -137,7 +150,13 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
     // One memory, with the strings from `STRINGS_START` on.
     let mut memories = MemorySection::new();
     let pages = (strings.end as u64).div_ceil(65536).max(1);
-    memories.memory(MemoryType { minimum: pages, maximum: None, memory64: false, shared: false, page_size_log2: None });
+    memories.memory(MemoryType {
+        minimum: pages,
+        maximum: None,
+        memory64: false,
+        shared: false,
+        page_size_log2: None,
+    });
     let mut data = DataSection::new();
     if !strings.bytes.is_empty() {
         data.active(0, &ConstExpr::i32_const(STRINGS_START as i32), strings.bytes.iter().copied());
@@ -145,7 +164,9 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
 
     let mut types = TypeSection::new();
     for (params, result) in &signatures {
-        types.ty().function(params.iter().map(|&t| val_type(t)), result.iter().map(|&t| val_type(t)));
+        types
+            .ty()
+            .function(params.iter().map(|&t| val_type(t)), result.iter().map(|&t| val_type(t)));
     }
     let mut name_section = NameSection::new();
     name_section.functions(&names);
@@ -162,9 +183,9 @@ fn link_entry<'db>(db: &'db dyn Db, instances: &[Instance<'db>]) -> Result<Vec<u
     module.section(&name_section);
     let bytes = module.finish();
 
-    wasmparser::Validator::new()
-        .validate_all(&bytes)
-        .map_err(|e| vec![CodegenError { kind: ErrorKind::Invalid(e.to_string()), location: None }])?;
+    wasmparser::Validator::new().validate_all(&bytes).map_err(|e| {
+        vec![CodegenError { kind: ErrorKind::Invalid(e.to_string()), location: None }]
+    })?;
     Ok(bytes)
 }
 
@@ -237,7 +258,8 @@ struct Strings {
 
 impl Strings {
     fn new<'a, 'db: 'a>(code: impl Iterator<Item = &'a Inst<'db>>) -> Self {
-        let mut strings = Strings { addresses: HashMap::new(), bytes: Vec::new(), end: STRINGS_START };
+        let mut strings =
+            Strings { addresses: HashMap::new(), bytes: Vec::new(), end: STRINGS_START };
         for inst in code {
             let Inst::Str(s) = inst else { continue };
             if strings.addresses.contains_key(s) {
@@ -257,7 +279,11 @@ impl Strings {
     }
 }
 
-fn function<'db>(code: &CompiledFn<'db>, index: &HashMap<Callee<'db>, u32>, strings: &Strings) -> Function {
+fn function<'db>(
+    code: &CompiledFn<'db>,
+    index: &HashMap<Callee<'db>, u32>,
+    strings: &Strings,
+) -> Function {
     // Consecutive locals of the same type are declared together.
     let mut locals: Vec<(u32, ValType)> = Vec::new();
     for &ty in &code.locals {
@@ -289,7 +315,11 @@ fn block_type(ty: BlockTy) -> BlockType {
     }
 }
 
-fn instruction<'a, 'db>(inst: &Inst<'db>, index: &HashMap<Callee<'db>, u32>, strings: &Strings) -> Instruction<'a> {
+fn instruction<'a, 'db>(
+    inst: &Inst<'db>,
+    index: &HashMap<Callee<'db>, u32>,
+    strings: &Strings,
+) -> Instruction<'a> {
     match inst {
         Inst::Str(s) => Instruction::I32Const(strings.addresses[s] as i32),
         Inst::I32Const(n) => Instruction::I32Const(*n),
@@ -473,12 +503,18 @@ fn builtin_signature(builtin: Builtin) -> Signature {
 }
 
 /// The signature of a function of an `extern` block.
-fn import_signature<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<Signature, Vec<CodegenError<'db>>> {
-    let unsupported = |what: String| vec![CodegenError { kind: ErrorKind::Unsupported(what), location: None }];
+fn import_signature<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> Result<Signature, Vec<CodegenError<'db>>> {
+    let unsupported =
+        |what: String| vec![CodegenError { kind: ErrorKind::Unsupported(what), location: None }];
     let scheme = function_scheme(db, f).map_err(|_| unsupported("this extern function".into()))?;
     let Ty::Fn(params, ret, _) = &scheme.ty else { unreachable!("a function has a function type") };
     let val_ty = |ty: &Ty<'db>| -> Result<Option<ValTy>, Vec<CodegenError<'db>>> {
-        use boltlang_hir_def::builtin_type::{BuiltinInt::*, BuiltinType::*, BuiltinUint::*, BuiltinFloat};
+        use boltlang_hir_def::builtin_type::{
+            BuiltinFloat, BuiltinInt::*, BuiltinType::*, BuiltinUint::*,
+        };
         match ty {
             Ty::Tuple(tys) if tys.is_empty() => Ok(None),
             Ty::Builtin(Bool | Int(I8 | I16 | I32 | Isize) | Uint(U8 | U16 | U32 | Usize)) => {
@@ -504,7 +540,9 @@ fn import_signature<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<Signatur
 fn function_name(db: &dyn Db, f: FunctionId<'_>) -> String {
     match &f.item(db).name {
         // `Vec.new` for one in the namespace of a type.
-        Some(FunctionName::Name(_)) => f.item(db).display_name().map_or("?".to_string(), |n| n.to_string()),
+        Some(FunctionName::Name(_)) => {
+            f.item(db).display_name().map_or("?".to_string(), |n| n.to_string())
+        }
         Some(FunctionName::Operator(op)) => format!("({op})"),
         None => "?".to_string(),
     }

@@ -1,9 +1,14 @@
+use std::{
+    collections::{HashMap, VecDeque},
+    str::Chars,
+};
 
-use std::{collections::{HashMap, VecDeque}, str::Chars};
-
+use crate::{
+    diagnostic::{Diagnostics, UnexpectedCharDiagnostic},
+    parser::{Input, Split},
+};
 use boltlang_common::Span;
 use boltlang_syntax::SyntaxKind::{self, *};
-use crate::{diagnostic::{Diagnostics, UnexpectedCharDiagnostic}, parser::{Input, Split}};
 
 use lazy_static::lazy_static;
 use unicode_ident::{is_xid_continue, is_xid_start};
@@ -71,7 +76,7 @@ fn is_dec_num(ch: char) -> bool {
 }
 
 fn is_hex_num(ch: char) -> bool {
-    matches!(ch, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' | 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'A' | 'B' | 'C' | 'D' | 'E' | 'F')
+    matches!(ch, '0'..='9' | 'a'..='f' | 'A'..='F')
 }
 
 /// The kind of token for a run of operator characters, e.g. `->` or `+=`.
@@ -105,7 +110,8 @@ pub(crate) fn operator_kind(text: &str) -> SyntaxKind {
 
 /// The numeric types a number literal can have as a suffix, like `10u8`.
 const NUMERIC_SUFFIXES: &[&str] = &[
-    "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "isize", "usize", "f32", "f64",
+    "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "isize", "usize", "f32",
+    "f64",
 ];
 
 /// Characters that are joined into operators like `<$>`. `?` is not one of
@@ -154,21 +160,13 @@ lazy_static! {
     };
 }
 
-impl <'d, 'a> Lexer<'d, Chars<'a>> {
-
+impl<'d, 'a> Lexer<'d, Chars<'a>> {
     pub fn new(iter: Chars<'a>, diags: &'d mut Diagnostics) -> Self {
-        Self {
-            iter,
-            pos: Pos::default(),
-            buffer: VecDeque::new(),
-            diags,
-        }
+        Self { iter, pos: Pos::default(), buffer: VecDeque::new(), diags }
     }
-
 }
 
-impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
-
+impl<'d, I: Iterator<Item = char>> Lexer<'d, I> {
     fn read(&mut self) -> char {
         self.iter.next().unwrap_or(CHAR_EOF)
     }
@@ -233,7 +231,10 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 }
                 self.get();
                 if digits.is_empty() || digits.len() > 6 {
-                    self.error("expected one to six hex digits in a unicode escape", start..self.pos.offset);
+                    self.error(
+                        "expected one to six hex digits in a unicode escape",
+                        start..self.pos.offset,
+                    );
                     return;
                 }
                 self.check_code_point(&digits, start);
@@ -242,7 +243,10 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 let mut digits = String::new();
                 for _ in 0..4 {
                     if !is_hex_num(self.peek(0)) {
-                        self.error("expected `{` or four hex digits after `\\u`", start..self.pos.offset);
+                        self.error(
+                            "expected `{` or four hex digits after `\\u`",
+                            start..self.pos.offset,
+                        );
                         return;
                     }
                     digits.push(self.get());
@@ -268,7 +272,10 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
         loop {
             match self.get() {
                 CHAR_EOF => {
-                    self.error("expected '\"' to delimit the string literal but found end-of-file", self.pos.offset-1..self.pos.offset);
+                    self.error(
+                        "expected '\"' to delimit the string literal but found end-of-file",
+                        self.pos.offset - 1..self.pos.offset,
+                    );
                     break;
                 }
                 '"' => break,
@@ -380,7 +387,8 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             is_float = true;
         }
         if matches!(self.peek(0), 'e' | 'E')
-            && (is_dec_num(self.peek(1)) || (matches!(self.peek(1), '+' | '-') && is_dec_num(self.peek(2))))
+            && (is_dec_num(self.peek(1))
+                || (matches!(self.peek(1), '+' | '-') && is_dec_num(self.peek(2))))
         {
             self.get();
             if matches!(self.peek(0), '+' | '-') {
@@ -412,7 +420,10 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
             NUMERIC_SUFFIXES.contains(&suffix.as_str())
         };
         if !valid {
-            self.error(format!("invalid suffix `{suffix}` for a number literal"), suffix_start..self.pos.offset);
+            self.error(
+                format!("invalid suffix `{suffix}` for a number literal"),
+                suffix_start..self.pos.offset,
+            );
         }
         matches!(suffix.as_str(), "f32" | "f64")
     }
@@ -552,19 +563,23 @@ impl <'d, I: Iterator<Item = char>> Lexer<'d, I> {
                 let mut text = String::new();
                 text.push(c0);
                 // Stop before `//` and `/*`, so `a +// note` is `+` followed by a comment.
-                while is_operator(self.peek(0)) && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*')) {
+                while is_operator(self.peek(0))
+                    && !(self.peek(0) == '/' && matches!(self.peek(1), '/' | '*'))
+                {
                     text.push(self.get());
                 }
                 operator_kind(&text)
             }
             ch => {
                 let start = self.pos.offset - ch.len_utf8();
-                self.error(format!("unexpected character `{}`", ch.escape_debug()), start..self.pos.offset);
+                self.error(
+                    format!("unexpected character `{}`", ch.escape_debug()),
+                    start..self.pos.offset,
+                );
                 ERROR
             }
         }
     }
-
 }
 
 #[derive(Debug)]
@@ -574,7 +589,6 @@ pub struct LexResult {
 }
 
 impl LexResult {
-
     pub fn token_kind(&self, n: u32) -> SyntaxKind {
         self.kinds[n as usize]
     }
@@ -636,7 +650,6 @@ impl LexResult {
         }
         Input::new(text, kinds, ranges)
     }
-
 }
 
 #[derive(Debug, Clone)]
@@ -646,14 +659,9 @@ pub struct LineColumn {
 }
 
 impl LineColumn {
-
     pub fn new(line: usize, column: usize) -> Self {
-        Self {
-            line,
-            column,
-        }
+        Self { line, column }
     }
-
 }
 
 impl Default for LineColumn {
@@ -669,7 +677,6 @@ impl From<&Pos> for LineColumn {
 }
 
 pub fn tokenize(text: &str, diags: &mut Diagnostics) -> LexResult {
-
     // Output
     let mut kinds = Vec::new();
     let mut lens = Vec::new();
@@ -695,10 +702,7 @@ pub fn tokenize(text: &str, diags: &mut Diagnostics) -> LexResult {
     //     eprintln!("{i}. {a:?} = {b}");
     // }
 
-    LexResult {
-        kinds,
-        lens,
-    }
+    LexResult { kinds, lens }
 }
 
 #[cfg(test)]
@@ -734,7 +738,9 @@ mod tests {
 
     #[test]
     fn integers() {
-        for text in ["0", "42", "1_000", "0xff", "0xFF_FF", "0b1010", "0o17", "10u8", "0xffi64", "1usize"] {
+        for text in
+            ["0", "42", "1_000", "0xff", "0xFF_FF", "0b1010", "0o17", "10u8", "0xffi64", "1usize"]
+        {
             assert_eq!(lex(text), [(INT_NUMBER, text)], "{text}");
         }
     }
@@ -778,7 +784,9 @@ mod tests {
 
     #[test]
     fn chars() {
-        for (text, kind) in [("'a'", CHAR), ("'\\''", CHAR), ("'\\u{e9}'", CHAR), ("'é'", CHAR), ("b'a'", BYTE)] {
+        for (text, kind) in
+            [("'a'", CHAR), ("'\\''", CHAR), ("'\\u{e9}'", CHAR), ("'é'", CHAR), ("b'a'", BYTE)]
+        {
             assert_eq!(lex(text), [(kind, text)], "{text}");
         }
     }
@@ -800,7 +808,10 @@ mod tests {
         assert_eq!(lex_errors(r#""\x7""#).len(), 1);
         assert_eq!(lex_errors(r#""\u{12""#).len(), 1);
         assert_eq!(lex_errors(r#""\u{}""#), ["expected one to six hex digits in a unicode escape"]);
-        assert_eq!(lex_errors(r#""\u{0000041}""#), ["expected one to six hex digits in a unicode escape"]);
+        assert_eq!(
+            lex_errors(r#""\u{0000041}""#),
+            ["expected one to six hex digits in a unicode escape"]
+        );
         assert_eq!(lex_errors(r#""\u{FFFFFF}""#), ["`FFFFFF` is not a unicode character"]);
         assert_eq!(lex_errors(r#""\u{D800}""#), ["`D800` is not a unicode character"]);
         assert_eq!(lex_errors(r#""\uDFFF""#), ["`DFFF` is not a unicode character"]);
@@ -819,7 +830,10 @@ mod tests {
     #[test]
     fn shebang() {
         assert_eq!(lex("#!/usr/bin/env bolt\nx"), [(SHEBANG, "#!/usr/bin/env bolt"), (IDENT, "x")]);
-        assert_eq!(lex("#![attr]"), [(HASHTAG, "#"), (EXCL, "!"), (L_BRACKET, "["), (IDENT, "attr"), (R_BRACKET, "]")]);
+        assert_eq!(
+            lex("#![attr]"),
+            [(HASHTAG, "#"), (EXCL, "!"), (L_BRACKET, "["), (IDENT, "attr"), (R_BRACKET, "]")]
+        );
         assert_eq!(lex("x #!y")[1], (HASHTAG, "#"));
     }
 
@@ -834,15 +848,31 @@ mod tests {
         assert_eq!(lex("a: b"), [(IDENT, "a"), (COLON, ":"), (IDENT, "b")]);
         assert_eq!(lex("x @ y"), [(IDENT, "x"), (AT, "@"), (IDENT, "y")]);
         assert_eq!(lex("$name $"), [(METAVARIABLE, "$name"), (DOLLAR, "$")]);
-        assert_eq!(lex("'outer: loop"), [(LABEL_IDENT, "'outer"), (COLON, ":"), (LOOP_KEYWORD, "loop")]);
+        assert_eq!(
+            lex("'outer: loop"),
+            [(LABEL_IDENT, "'outer"), (COLON, ":"), (LOOP_KEYWORD, "loop")]
+        );
     }
 
     #[test]
     fn operators_with_a_role_of_their_own() {
         let ops = [
-            ("->", R_ARROW), ("=>", FAT_ARROW), ("|", VBAR), (".", DOT), ("..", DOTDOT),
-            ("...", DOTDOTDOT), ("..=", DOTDOTEQUALS), ("=", EQUALS), ("!", EXCL), ("?", QUEST),
-            ("<", LT), (">", GT), ("*", STAR), ("+", PLUS), ("-", MINUS), ("$", DOLLAR),
+            ("->", R_ARROW),
+            ("=>", FAT_ARROW),
+            ("|", VBAR),
+            (".", DOT),
+            ("..", DOTDOT),
+            ("...", DOTDOTDOT),
+            ("..=", DOTDOTEQUALS),
+            ("=", EQUALS),
+            ("!", EXCL),
+            ("?", QUEST),
+            ("<", LT),
+            (">", GT),
+            ("*", STAR),
+            ("+", PLUS),
+            ("-", MINUS),
+            ("$", DOLLAR),
         ];
         for (text, kind) in ops {
             assert_eq!(lex(text), [(kind, text)], "{text}");
@@ -856,6 +886,9 @@ mod tests {
         assert_eq!(lex("||"), [(OPERATOR, "||")]);
         assert_eq!(lex("<="), [(OPERATOR, "<=")]);
         assert_eq!(lex("+="), [(ASSIGNMENT, "+=")]);
-        assert_eq!(lex("x?.y??"), [(IDENT, "x"), (QUEST, "?"), (DOT, "."), (IDENT, "y"), (QUEST, "?"), (QUEST, "?")]);
+        assert_eq!(
+            lex("x?.y??"),
+            [(IDENT, "x"), (QUEST, "?"), (DOT, "."), (IDENT, "y"), (QUEST, "?"), (QUEST, "?")]
+        );
     }
 }

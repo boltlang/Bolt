@@ -94,8 +94,12 @@ impl<'db> Unifier<'db> {
     pub fn default_numeric_vars(&mut self) {
         for var in &mut self.vars {
             let (ty, kind) = match var.state {
-                VarState::Unbound(VarKind::Int) => (BuiltinType::Int(BuiltinInt::I32), NumberKind::Int),
-                VarState::Unbound(VarKind::Float) => (BuiltinType::Float(BuiltinFloat::F64), NumberKind::Float),
+                VarState::Unbound(VarKind::Int) => {
+                    (BuiltinType::Int(BuiltinInt::I32), NumberKind::Int)
+                }
+                VarState::Unbound(VarKind::Float) => {
+                    (BuiltinType::Float(BuiltinFloat::F64), NumberKind::Float)
+                }
                 _ => continue,
             };
             var.state = VarState::Bound(Ty::Builtin(ty));
@@ -184,7 +188,9 @@ impl<'db> Unifier<'db> {
             (Ty::Never | Ty::Error, _) | (_, Ty::Never | Ty::Error) => Ok(()),
             (Ty::Var(x), Ty::Var(y)) if x == y => Ok(()),
             (Ty::Var(x), Ty::Var(y)) => {
-                let (Some(kx), Some(ky)) = (self.var_kind(*x), self.var_kind(*y)) else { unreachable!() };
+                let (Some(kx), Some(ky)) = (self.var_kind(*x), self.var_kind(*y)) else {
+                    unreachable!()
+                };
                 let kind = match (kx, ky) {
                     (VarKind::General, k) | (k, VarKind::General) => k,
                     (k1, k2) if k1 == k2 => k1,
@@ -208,7 +214,9 @@ impl<'db> Unifier<'db> {
             // side. With more arguments on one side, its head takes the
             // first ones: `?m[a] = Either[String, i32]` makes `?m` the
             // constructor `Either[String]` and `a` the type `i32`.
-            (Ty::App(f, ys), Ty::Adt(id, xs, ms, m)) | (Ty::Adt(id, xs, ms, m), Ty::App(f, ys)) if xs.len() >= ys.len() => {
+            (Ty::App(f, ys), Ty::Adt(id, xs, ms, m)) | (Ty::Adt(id, xs, ms, m), Ty::App(f, ys))
+                if xs.len() >= ys.len() =>
+            {
                 let split = xs.len() - ys.len();
                 self.unify(f, &Ty::Adt(*id, xs[..split].into(), ms.clone(), m.clone()))?;
                 self.unify_all(&xs[split..], ys)
@@ -239,7 +247,9 @@ impl<'db> Unifier<'db> {
             (Ty::Param(x), Ty::Param(y)) if x == y => Ok(()),
             (Ty::Bound(x), Ty::Bound(y)) if x == y => Ok(()),
             // `C.Item` only equals itself.
-            (Ty::Assoc(x, xs), Ty::Assoc(y, ys)) if x == y && xs.len() == ys.len() => self.unify_all(xs, ys),
+            (Ty::Assoc(x, xs), Ty::Assoc(y, ys)) if x == y && xs.len() == ys.len() => {
+                self.unify_all(xs, ys)
+            }
             _ => Err(UnifyError::Mismatch(a.clone(), b.clone())),
         }
     }
@@ -294,7 +304,10 @@ mod tests {
     #[test]
     fn reports_the_innermost_mismatch() {
         let mut u = Unifier::new();
-        let err = u.unify(&Ty::Tuple(Box::new([i32(), Ty::bool()])), &Ty::Tuple(Box::new([i32(), Ty::unit()])));
+        let err = u.unify(
+            &Ty::Tuple(Box::new([i32(), Ty::bool()])),
+            &Ty::Tuple(Box::new([i32(), Ty::unit()])),
+        );
         assert_eq!(err, Err(UnifyError::Mismatch(Ty::bool(), Ty::unit())));
         // Different arities differ as a whole.
         let err = u.unify(&fun(vec![], i32()), &fun(vec![i32()], i32()));
@@ -339,14 +352,23 @@ mod tests {
     /// Unify types with the enums of a small file, `Either[E, A]` and
     /// `Option[T]`.
     fn with_enums(f: impl for<'db> FnOnce(&mut Unifier<'db>, Ty<'db>, Ty<'db>)) {
-        use boltlang_hir_def::{ids::EnumId, item_tree::{ModItem, item_tree}};
+        use boltlang_hir_def::{
+            ids::EnumId,
+            item_tree::{ModItem, item_tree},
+        };
         let db = boltlang_base_db::TestDb::new();
-        let file = db.file("/main.bolt", "enum Either[E, A] { L(E), R(A) }\nenum Option[T] { N, S(T) }");
+        let file =
+            db.file("/main.bolt", "enum Either[E, A] { L(E), R(A) }\nenum Option[T] { N, S(T) }");
         let enums: Vec<_> = item_tree(&db, file)
             .top_level
             .iter()
             .filter_map(|item| match *item {
-                ModItem::Enum(idx) => Some(Ty::adt(crate::ty::AdtId::Enum(EnumId::new(&db, file, idx)), [], [], Ty::Error)),
+                ModItem::Enum(idx) => Some(Ty::adt(
+                    crate::ty::AdtId::Enum(EnumId::new(&db, file, idx)),
+                    [],
+                    [],
+                    Ty::Error,
+                )),
                 _ => None,
             })
             .collect();

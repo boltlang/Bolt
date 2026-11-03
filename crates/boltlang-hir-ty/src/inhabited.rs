@@ -26,7 +26,9 @@ use crate::{
 pub fn has_values<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> bool {
     match def {
         GenericDefId::Struct(id) => fields_have_values(db, &struct_field_types(db, id).fields),
-        GenericDefId::Enum(id) => enum_field_types(db, id).iter().any(|v| fields_have_values(db, &v.fields)),
+        GenericDefId::Enum(id) => {
+            enum_field_types(db, id).iter().any(|v| fields_have_values(db, &v.fields))
+        }
         _ => true,
     }
 }
@@ -54,7 +56,10 @@ pub fn ty_has_values<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> bool {
 
 /// The first field without values among `fields`: why a struct or variant
 /// can't be built.
-pub fn field_without_values<'a, 'db>(db: &'db dyn Db, fields: &'a [(Name, Ty<'db>)]) -> Option<&'a (Name, Ty<'db>)> {
+pub fn field_without_values<'a, 'db>(
+    db: &'db dyn Db,
+    fields: &'a [(Name, Ty<'db>)],
+) -> Option<&'a (Name, Ty<'db>)> {
     fields.iter().find(|(_, ty)| !ty_has_values(db, ty))
 }
 

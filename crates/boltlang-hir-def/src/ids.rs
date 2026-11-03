@@ -127,12 +127,16 @@ pub enum ModuleDefId<'db> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{item_tree::{AssocItem, ModItem, item_tree}, test_db::TestDb};
+    use crate::{
+        item_tree::{AssocItem, ModItem, item_tree},
+        test_db::TestDb,
+    };
 
     #[test]
     fn ids_lead_back_to_their_items() {
         let db = TestDb::new();
-        let file = db.file("/main.bolt", "enum Color { Red, Green }\nclass Show[T] { fn show(x: T); }\n");
+        let file =
+            db.file("/main.bolt", "enum Color { Red, Green }\nclass Show[T] { fn show(x: T); }\n");
         let tree = item_tree(&db, file);
 
         let ModItem::Enum(idx) = tree.top_level[0] else { panic!() };
@@ -148,6 +152,8 @@ mod tests {
         let AssocItem::Function(idx) = class.item(&db).items[0] else { panic!() };
         let show = FunctionId::new(&db, ItemContainerId::Class(class), idx);
         assert_eq!(show.file(&db), file);
-        assert!(matches!(&show.item(&db).name, Some(crate::item_tree::FunctionName::Name(n)) if n.as_str() == "show"));
+        assert!(
+            matches!(&show.item(&db).name, Some(crate::item_tree::FunctionName::Name(n)) if n.as_str() == "show")
+        );
     }
 }

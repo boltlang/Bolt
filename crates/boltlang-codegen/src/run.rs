@@ -46,7 +46,9 @@ impl fmt::Display for RunError {
             RunError::MissingImport { module, name } => {
                 write!(f, "`{module}.{name}` isn't available when running the compiled module")
             }
-            RunError::Invalid(message) => write!(f, "the compiled module couldn't be run: {message}"),
+            RunError::Invalid(message) => {
+                write!(f, "the compiled module couldn't be run: {message}")
+            }
         }
     }
 }
@@ -76,13 +78,15 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
     let mut linker = Linker::new(engine);
     for builtin in Builtin::HOST {
         let result = match builtin {
-            Builtin::Print => linker.func_wrap("bolt", "print", |mut caller: Caller<'_, State<H>>, text: i32| {
-                let result = match read_str(memory_of(&caller), text) {
-                    Some(text) => caller.data_mut().host.print(&text).map_err(RunError::Eval),
-                    None => Err(RunError::Trap(TrapCode::MemoryOutOfBounds.trap_message())),
-                };
-                result.map_err(|error| fail(&mut caller, error))
-            }),
+            Builtin::Print => {
+                linker.func_wrap("bolt", "print", |mut caller: Caller<'_, State<H>>, text: i32| {
+                    let result = match read_str(memory_of(&caller), text) {
+                        Some(text) => caller.data_mut().host.print(&text).map_err(RunError::Eval),
+                        None => Err(RunError::Trap(TrapCode::MemoryOutOfBounds.trap_message())),
+                    };
+                    result.map_err(|error| fail(&mut caller, error))
+                })
+            }
             Builtin::Panic => linker.func_wrap(
                 "bolt",
                 "panic",
@@ -112,7 +116,8 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
             "bolt",
             Failure::IndexOutOfBounds.name(),
             |mut caller: Caller<'_, State<H>>, index: i32, len: i32| -> Result<(), wasmi::Error> {
-                let kind = ErrorKind::IndexOutOfBounds { index: index as i128, len: len as u32 as usize };
+                let kind =
+                    ErrorKind::IndexOutOfBounds { index: index as i128, len: len as u32 as usize };
                 Err(fail(&mut caller, RunError::Eval(kind)))
             },
         )
@@ -121,7 +126,11 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
         .func_wrap(
             "bolt",
             Failure::RangeOutOfBounds.name(),
-            |mut caller: Caller<'_, State<H>>, start: i32, count: i32, len: i32| -> Result<(), wasmi::Error> {
+            |mut caller: Caller<'_, State<H>>,
+             start: i32,
+             count: i32,
+             len: i32|
+             -> Result<(), wasmi::Error> {
                 let (start, end) = (start as i128, start as i128 + count as i128);
                 let kind = ErrorKind::RangeOutOfBounds { start, end, len: len as u32 as usize };
                 Err(fail(&mut caller, RunError::Eval(kind)))
@@ -129,9 +138,13 @@ pub(crate) fn linker<H: Host + 'static>(engine: &Engine) -> Linker<State<H>> {
         )
         .expect("each failure is defined once");
     linker
-        .func_wrap("bolt", Failure::Overflow.name(), |mut caller: Caller<'_, State<H>>| -> Result<(), wasmi::Error> {
-            Err(fail(&mut caller, RunError::Eval(ErrorKind::Overflow)))
-        })
+        .func_wrap(
+            "bolt",
+            Failure::Overflow.name(),
+            |mut caller: Caller<'_, State<H>>| -> Result<(), wasmi::Error> {
+                Err(fail(&mut caller, RunError::Eval(ErrorKind::Overflow)))
+            },
+        )
         .expect("each failure is defined once");
     linker
 }
@@ -154,7 +167,8 @@ fn memory_of<'a, H>(caller: &'a Caller<'_, State<H>>) -> &'a [u8] {
 /// then its UTF-8 bytes.
 pub(crate) fn read_str(memory: &[u8], address: i32) -> Option<String> {
     let start = address as u32 as usize;
-    let len = u32::from_le_bytes(memory.get(start..start.checked_add(4)?)?.try_into().ok()?) as usize;
+    let len =
+        u32::from_le_bytes(memory.get(start..start.checked_add(4)?)?.try_into().ok()?) as usize;
     let bytes = memory.get(start + 4..(start + 4).checked_add(len)?)?;
     Some(String::from_utf8_lossy(bytes).into_owned())
 }
@@ -196,20 +210,31 @@ pub fn run<'db, H: Host + 'static>(
 /// Run the module that [`link_function`](crate::link_function) compiled
 /// from a test, like [`run`], without its result: a test passes when it
 /// returns.
-pub fn run_test<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Result<(), RunError> {
+pub fn run_test<H: Host + 'static>(
+    bytes: &[u8],
+    host: H,
+    fuel: Option<u64>,
+) -> Result<(), RunError> {
     call_main(bytes, host, fuel).map(|_| ())
 }
 
 /// Call the `main` of the module `bytes`, and give what it returns and the
 /// memory after.
-fn call_main<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Result<(Vec<Val>, Vec<u8>), RunError> {
+fn call_main<H: Host + 'static>(
+    bytes: &[u8],
+    host: H,
+    fuel: Option<u64>,
+) -> Result<(Vec<Val>, Vec<u8>), RunError> {
     let engine = engine(fuel);
     let module = Module::new(&engine, bytes).map_err(|e| RunError::Invalid(e.to_string()))?;
     for import in module.imports() {
         let known = Builtin::HOST.iter().any(|b| b.name() == import.name())
             || Failure::ALL.iter().any(|f| f.name() == import.name());
         if import.module() != "bolt" || !known {
-            return Err(RunError::MissingImport { module: import.module().into(), name: import.name().into() });
+            return Err(RunError::MissingImport {
+                module: import.module().into(),
+                name: import.name().into(),
+            });
         }
     }
     let mut store = Store::new(&engine, State::new(host));
@@ -220,13 +245,16 @@ fn call_main<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Res
         Ok(instance) => instance,
         Err(error) => return Err(run_error(&mut store, error)),
     };
-    let main = instance.get_func(&store, "main").ok_or_else(|| RunError::Invalid("no export `main`".into()))?;
+    let main = instance
+        .get_func(&store, "main")
+        .ok_or_else(|| RunError::Invalid("no export `main`".into()))?;
     let mut results: Vec<Val> =
         main.ty(&store).results().iter().map(|ty| Val::default_for_ty(*ty)).collect();
     if let Err(error) = main.call(&mut store, &[], &mut results) {
         return Err(run_error(&mut store, error));
     }
-    let memory = instance.get_memory(&store, "memory").map_or(Vec::new(), |m| m.data(&store).to_vec());
+    let memory =
+        instance.get_memory(&store, "memory").map_or(Vec::new(), |m| m.data(&store).to_vec());
     Ok((results, memory))
 }
 
@@ -235,7 +263,9 @@ fn call_main<H: Host + 'static>(bytes: &[u8], host: H, fuel: Option<u64>) -> Res
 fn entry_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
     let def = DefWithBodyId::new(db, DefWithBody::File(file));
     let body = body(db, def);
-    let Expr::Block { statements, .. } = &body[body.body_expr] else { unreachable!("a file's body is a block") };
+    let Expr::Block { statements, .. } = &body[body.body_expr] else {
+        unreachable!("a file's body is a block")
+    };
     match statements.last()? {
         Statement::Expr { expr, .. } => Some(infer_body(db, def).expr_ty(*expr).clone()),
         _ => None,
@@ -245,8 +275,15 @@ fn entry_ty<'db>(db: &'db dyn Db, file: File) -> Option<Ty<'db>> {
 /// A value that compiled code gave for `ty`, as the evaluator's value:
 /// `None` for a type without values. Structs and tuples are read from
 /// `memory`.
-fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8]) -> Result<Value<'db>, RunError> {
-    let unexpected = || RunError::Invalid(format!("`main` gave {val:?} for a value of type `{}`", ty.display(db)));
+fn to_value<'db>(
+    db: &'db dyn Db,
+    ty: &Ty<'db>,
+    val: Option<Val>,
+    memory: &[u8],
+) -> Result<Value<'db>, RunError> {
+    let unexpected = || {
+        RunError::Invalid(format!("`main` gave {val:?} for a value of type `{}`", ty.display(db)))
+    };
     let repr = layout::repr(db, ty).ok_or_else(unexpected)?;
     let scalar = match (repr, &val) {
         (Repr::Unit, None) => return Ok(Value::unit()),
@@ -264,7 +301,8 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
             for slot in &layout.slots {
                 let field = match slot.val_ty {
                     Some(val_ty) => {
-                        let at = (*address as u32).checked_add(slot.offset).ok_or_else(unexpected)?;
+                        let at =
+                            (*address as u32).checked_add(slot.offset).ok_or_else(unexpected)?;
                         Some(load(memory, at, val_ty).ok_or_else(unexpected)?)
                     }
                     None => None,
@@ -274,8 +312,11 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
             return Ok(match ty {
                 Ty::Tuple(_) => Value::Tuple(fields.into_iter().map(|(_, v)| v).collect()),
                 Ty::Adt(AdtId::Struct(id), _, _, own) => {
-                    let mutability =
-                        if **own == Ty::Mutability(Mutability::Mut) { Mutability::Mut } else { Mutability::Imm };
+                    let mutability = if **own == Ty::Mutability(Mutability::Mut) {
+                        Mutability::Mut
+                    } else {
+                        Mutability::Imm
+                    };
                     Value::adt(Ctor::Struct(*id), mutability, fields)
                 }
                 _ => return Err(unexpected()),
@@ -293,7 +334,9 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
             let mut fields = Vec::new();
             for slot in &layout.slots {
                 let field = match slot.val_ty {
-                    Some(val_ty) => Some(load(memory, address + slot.offset, val_ty).ok_or_else(unexpected)?),
+                    Some(val_ty) => {
+                        Some(load(memory, address + slot.offset, val_ty).ok_or_else(unexpected)?)
+                    }
                     None => None,
                 };
                 fields.push((slot.name.clone(), to_value(db, &slot.ty, field, memory)?));
@@ -309,17 +352,25 @@ fn to_value<'db>(db: &'db dyn Db, ty: &Ty<'db>, val: Option<Val>, memory: &[u8])
             };
             let mut items = Vec::new();
             for i in 0..len {
-                let at = i.checked_mul(el.size).and_then(|n| n.checked_add(address + el.start)).ok_or_else(unexpected)?;
+                let at = i
+                    .checked_mul(el.size)
+                    .and_then(|n| n.checked_add(address + el.start))
+                    .ok_or_else(unexpected)?;
                 let item = match (el.narrow, el.val_ty) {
-                    (Some(narrow), _) => Some(load_narrow(memory, at, narrow).ok_or_else(unexpected)?),
+                    (Some(narrow), _) => {
+                        Some(load_narrow(memory, at, narrow).ok_or_else(unexpected)?)
+                    }
                     (None, Some(val_ty)) => Some(load(memory, at, val_ty).ok_or_else(unexpected)?),
                     (None, None) => None,
                 };
                 items.push(to_value(db, &elem_ty, item, memory)?);
             }
             let Ty::Array(mutability, _) = ty else { return Err(unexpected()) };
-            let mutability =
-                if **mutability == Ty::Mutability(Mutability::Mut) { Mutability::Mut } else { Mutability::Imm };
+            let mutability = if **mutability == Ty::Mutability(Mutability::Mut) {
+                Mutability::Mut
+            } else {
+                Mutability::Imm
+            };
             return Ok(Value::array(mutability, items));
         }
         _ => return Err(unexpected()),

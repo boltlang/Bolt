@@ -3,7 +3,10 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{at_macro_call, macro_call, delimited, outer_attrs, generic_param_list, is_path_start, parse_expr, pattern_single, type_path},
+    grammar::{
+        at_macro_call, delimited, generic_param_list, is_path_start, macro_call, outer_attrs,
+        parse_expr, pattern_single, type_path,
+    },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
@@ -152,7 +155,8 @@ pub(crate) fn opt_ret_type(p: &mut Parser) {
     }
 }
 
-const FN_TYPE_PARAM_FIRST: TokenSet = TYPE_FIRST.union(TokenSet::new(&[T![_], T![mut], T![...], T![#]]));
+const FN_TYPE_PARAM_FIRST: TokenSet =
+    TYPE_FIRST.union(TokenSet::new(&[T![_], T![mut], T![...], T![#]]));
 
 /// The parameters of a function type. Unlike in a function declaration, a
 /// bare name is a type here: `fn(i32)` takes an `i32`. A parameter can still

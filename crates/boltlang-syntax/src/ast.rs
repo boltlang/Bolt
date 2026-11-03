@@ -1,12 +1,13 @@
-
-use std::{marker::PhantomData};
+use std::marker::PhantomData;
 
 use rowan::SyntaxElement;
 
-use crate::{SyntaxKind::{self, *}, SyntaxNode, SyntaxNodeChildren, SyntaxToken};
+use crate::{
+    SyntaxKind::{self, *},
+    SyntaxNode, SyntaxNodeChildren, SyntaxToken,
+};
 
-pub trait Node : Sized {
-
+pub trait Node: Sized {
     fn kind() -> SyntaxKind {
         panic!("dynamic Node does not have a single SyntaxKind");
     }
@@ -16,11 +17,7 @@ pub trait Node : Sized {
     fn syntax(&self) -> &SyntaxNode;
 
     fn cast(syntax: SyntaxNode) -> Option<Self> {
-        if Self::can_cast(syntax.kind()) {
-            Some(Self::wrap(syntax))
-        } else {
-            None
-        }
+        if Self::can_cast(syntax.kind()) { Some(Self::wrap(syntax)) } else { None }
     }
 
     fn can_cast(kind: SyntaxKind) -> bool {
@@ -35,21 +32,13 @@ pub trait Node : Sized {
     }
 
     fn find_node<N: Node>(&self) -> Option<N> {
-        self.syntax()
-            .children()
-            .find_map(N::cast)
+        self.syntax().children().find_map(N::cast)
     }
 
     fn rfind_node<N: Node>(&self) -> Option<N> {
         // FIXME this could be optimised in Rowan
-        self.syntax()
-            .children()
-            .collect::<Vec<_>>()
-            .into_iter()
-            .rev()
-            .find_map(N::cast)
+        self.syntax().children().collect::<Vec<_>>().into_iter().rev().find_map(N::cast)
     }
-
 }
 
 /// An iterator over `SyntaxNode` children of a particular AST type.
@@ -597,11 +586,17 @@ impl RangePattern {
     }
     pub fn start(&self) -> Option<Pattern> {
         let op = self.op_token()?;
-        self.0.children().filter(|n| n.text_range().end() <= op.text_range().start()).find_map(Pattern::cast)
+        self.0
+            .children()
+            .filter(|n| n.text_range().end() <= op.text_range().start())
+            .find_map(Pattern::cast)
     }
     pub fn end(&self) -> Option<Pattern> {
         let op = self.op_token()?;
-        self.0.children().filter(|n| n.text_range().start() >= op.text_range().end()).find_map(Pattern::cast)
+        self.0
+            .children()
+            .filter(|n| n.text_range().start() >= op.text_range().end())
+            .find_map(Pattern::cast)
     }
 }
 
@@ -710,7 +705,6 @@ impl MacroType {
         self.find_node()
     }
 }
-
 
 /// A reference to a variable or function, like `x`.
 pub struct PathExpr(SyntaxNode);
@@ -876,11 +870,17 @@ impl RangeExpr {
     }
     pub fn start(&self) -> Option<Expr> {
         let op = self.op_token()?;
-        self.0.children().filter(|n| n.text_range().end() <= op.text_range().start()).find_map(Expr::cast)
+        self.0
+            .children()
+            .filter(|n| n.text_range().end() <= op.text_range().start())
+            .find_map(Expr::cast)
     }
     pub fn end(&self) -> Option<Expr> {
         let op = self.op_token()?;
-        self.0.children().filter(|n| n.text_range().start() >= op.text_range().end()).find_map(Expr::cast)
+        self.0
+            .children()
+            .filter(|n| n.text_range().start() >= op.text_range().end())
+            .find_map(Expr::cast)
     }
 }
 
@@ -1301,7 +1301,6 @@ impl Node for Block {
 }
 
 impl Block {
-
     /// The statements, leaving out the tail expression.
     pub fn elements(&self) -> ChildrenIter<SourceElement> {
         ChildrenIter::new(&self.0)
@@ -1311,7 +1310,6 @@ impl Block {
     pub fn tail_expr(&self) -> Option<Expr> {
         self.find_node()
     }
-
 }
 
 pub struct FunExpr(SyntaxNode);
@@ -1348,10 +1346,14 @@ pub struct LitExpr(SyntaxNode);
 impl LitExpr {
     pub fn value(&self) -> Option<SyntaxToken> {
         self.0.children_with_tokens().find_map(|x| match x {
-            SyntaxElement::Token(token) if matches!(
-                token.kind(),
-                INT_NUMBER | FLOAT_NUMBER | STRING | BYTE_STRING | C_STRING | CHAR | BYTE
-            ) => Some(token),
+            SyntaxElement::Token(token)
+                if matches!(
+                    token.kind(),
+                    INT_NUMBER | FLOAT_NUMBER | STRING | BYTE_STRING | C_STRING | CHAR | BYTE
+                ) =>
+            {
+                Some(token)
+            }
             _ => None,
         })
     }
@@ -1383,7 +1385,6 @@ impl Node for CallExpr {
     }
 }
 
-
 impl CallExpr {
     pub fn operator(&self) -> Option<Expr> {
         self.find_node()
@@ -1396,7 +1397,6 @@ impl CallExpr {
             .flat_map(|list| list.children().filter_map(Expr::cast))
     }
 }
-
 
 pub struct VarDecl(SyntaxNode);
 
@@ -1413,7 +1413,6 @@ impl Node for VarDecl {
 }
 
 impl VarDecl {
-
     pub fn pattern(&self) -> Option<Pattern> {
         self.find_node()
     }
@@ -1434,9 +1433,7 @@ impl VarDecl {
             .filter(|n| n.text_range().start() >= else_token.text_range().end())
             .find_map(BlockExpr::cast)
     }
-
 }
-
 
 /// `(a, b: T = 1)`
 pub struct ParamList(SyntaxNode);
@@ -1480,7 +1477,6 @@ impl Node for Param {
 }
 
 impl Param {
-
     pub fn pattern(&self) -> Option<Pattern> {
         self.find_node()
     }
@@ -1492,7 +1488,6 @@ impl Param {
     pub fn default(&self) -> Option<Expr> {
         self.find_node()
     }
-
 }
 
 pub struct FuncDecl(SyntaxNode);
@@ -1510,7 +1505,6 @@ impl Node for FuncDecl {
 }
 
 impl FuncDecl {
-
     pub fn visibility(&self) -> Option<Visibility> {
         self.find_node()
     }
@@ -1568,7 +1562,6 @@ impl FuncDecl {
     pub fn body(&self) -> Option<Expr> {
         self.find_node()
     }
-
 }
 
 /// `pub`, `pub(super)` or `pub(package)`
@@ -2084,9 +2077,27 @@ macro_rules! has_attrs {
 }
 
 has_attrs!(
-    SourceFile, FuncDecl, VarDecl, ExprStmt, Struct, Enum, Variant, RecordField, TupleField, Const,
-    TypeAlias, Class, Impl, ItemList, ExternBlock, Import, Param, MatchArm, MatchArmList,
-    RecordExprField, Block,
+    SourceFile,
+    FuncDecl,
+    VarDecl,
+    ExprStmt,
+    Struct,
+    Enum,
+    Variant,
+    RecordField,
+    TupleField,
+    Const,
+    TypeAlias,
+    Class,
+    Impl,
+    ItemList,
+    ExternBlock,
+    Import,
+    Param,
+    MatchArm,
+    MatchArmList,
+    RecordExprField,
+    Block,
 );
 
 /// What kind of comment a [`Comment`] is.
@@ -2190,6 +2201,20 @@ macro_rules! has_docs {
 }
 
 has_docs!(
-    SourceFile, FuncDecl, Struct, Enum, Variant, RecordField, TupleField, Const, TypeAlias, Class, Impl,
-    ExternBlock, Import, MacroRules, Block, ItemList,
+    SourceFile,
+    FuncDecl,
+    Struct,
+    Enum,
+    Variant,
+    RecordField,
+    TupleField,
+    Const,
+    TypeAlias,
+    Class,
+    Impl,
+    ExternBlock,
+    Import,
+    MacroRules,
+    Block,
+    ItemList,
 );

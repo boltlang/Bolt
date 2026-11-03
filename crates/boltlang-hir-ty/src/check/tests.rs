@@ -21,7 +21,10 @@ fn editing_a_declared_function_does_not_rerun_its_callers() {
         db.edit(file, "fn f(x: i32) -> i32 = x + 1;\nfn g(y) = y;\nf(g(1));\n");
         assert!(*top_level_ok(db, file));
     });
-    assert!(!executed.iter().any(|q| q.contains("file_inference") || q.contains("top_level_ok")), "{executed:?}");
+    assert!(
+        !executed.iter().any(|q| q.contains("file_inference") || q.contains("top_level_ok")),
+        "{executed:?}"
+    );
 
     // Editing a function without a signature reinfers the file's group.
     let executed = db.log_executed(|db| {

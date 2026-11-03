@@ -16,7 +16,10 @@ fn resolutions(source: &str) -> Vec<String> {
     let db = TestDb::new();
     let file: File = db.file("/main.bolt", source);
     let ModItem::Function(idx) = item_tree(&db, file).top_level[0] else { panic!() };
-    let def = DefWithBodyId::new(&db, DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(file), idx)));
+    let def = DefWithBodyId::new(
+        &db,
+        DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(file), idx)),
+    );
     let (body, source_map) = crate::body::body_with_source_map(&db, def);
     let scopes = expr_scopes(&db, def);
 
@@ -33,7 +36,9 @@ fn resolutions(source: &str) -> Vec<String> {
         .exprs
         .iter()
         .filter_map(|(id, expr)| match expr {
-            Expr::Path(path) => Some((source_map.expr_syntax(id)?.start, id, path.as_name()?.clone())),
+            Expr::Path(path) => {
+                Some((source_map.expr_syntax(id)?.start, id, path.as_name()?.clone()))
+            }
             _ => None,
         })
         .collect();
@@ -66,7 +71,9 @@ fn blocks_end_their_bindings() {
 #[test]
 fn match_arms_lambdas_and_loops() {
     assert_eq!(
-        resolutions("fn f(o) { match o { Some(v) if v > 0 => v, _ => v }; |w| w; for i in i { i } }"),
+        resolutions(
+            "fn f(o) { match o { Some(v) if v > 0 => v, _ => v }; |w| w; for i in i { i } }"
+        ),
         ["o@5", "v@25", "v@25", "v-", "w@54", "i-", "i@64"]
     );
 }
@@ -84,10 +91,14 @@ fn labels() {
     let db = TestDb::new();
     let file = db.file("/main.bolt", "fn f() { 'a: loop { 'b: while True { break 'a; break; } } }");
     let ModItem::Function(idx) = item_tree(&db, file).top_level[0] else { panic!() };
-    let def = DefWithBodyId::new(&db, DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(file), idx)));
+    let def = DefWithBodyId::new(
+        &db,
+        DefWithBody::Function(FunctionId::new(&db, ItemContainerId::File(file), idx)),
+    );
     let body = body(&db, def);
     let scopes = expr_scopes(&db, def);
-    let breaks: Vec<_> = body.exprs.iter().filter(|(_, e)| matches!(e, Expr::Break { .. })).collect();
+    let breaks: Vec<_> =
+        body.exprs.iter().filter(|(_, e)| matches!(e, Expr::Break { .. })).collect();
     let resolve = |(id, expr): (ExprId, &Expr)| {
         let Expr::Break { label, .. } = expr else { unreachable!() };
         let label = scopes.resolve_label(scopes.scope_for(id).unwrap(), label.as_ref()).unwrap();

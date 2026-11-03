@@ -16,7 +16,6 @@ pub struct TestDb {
 }
 
 impl TestDb {
-
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let executed: Arc<Mutex<Option<Vec<String>>>> = Default::default();
@@ -48,7 +47,9 @@ impl TestDb {
     /// Add the `.bolt` files in the directory `dir` on disk, and in the
     /// directories in it, under `at`.
     pub fn add_dir(&self, dir: &std::path::Path, at: &str) {
-        for entry in std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display())) {
+        for entry in
+            std::fs::read_dir(dir).unwrap_or_else(|e| panic!("can't read {}: {e}", dir.display()))
+        {
             let path = entry.unwrap().path();
             let name = format!("{at}/{}", path.file_name().unwrap().to_str().unwrap());
             if path.is_dir() {
@@ -107,13 +108,8 @@ impl TestDb {
     #[allow(unused)]
     pub fn take_logs(&mut self) -> Vec<String> {
         let mut logs = self.executed.lock().unwrap();
-        if let Some(logs) = &mut *logs {
-            std::mem::take(logs)
-        } else {
-            vec![]
-        }
+        if let Some(logs) = &mut *logs { std::mem::take(logs) } else { vec![] }
     }
-
 }
 
 impl salsa::Database for TestDb {}
@@ -139,5 +135,4 @@ mod test {
         let file = db.files().resolve(&db, SystemPath::new("foo/bar.txt"));
         assert_eq!(file.path(&db), &FilePath::System(SystemPathBuf::from("/foo/bar.txt")));
     }
-
 }

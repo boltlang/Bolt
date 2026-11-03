@@ -1,4 +1,3 @@
-
 mod db;
 
 use std::{
@@ -9,14 +8,19 @@ use std::{
 };
 
 use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
-use boltlang_base_db::{DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text};
+use boltlang_base_db::{
+    DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text,
+};
 use boltlang_codegen::{CodegenError, link, link_function, run, run_test};
 use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
 use boltlang_hir_def::{ids::FunctionId, nameres::test_functions};
 use boltlang_ide_diagnostics::{
     Diagnostic, DiagnosticCode, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
 };
-use boltlang_syntax::{SyntaxElement, SyntaxKind, SyntaxNode, rowan::{NodeOrToken, TextRange}};
+use boltlang_syntax::{
+    SyntaxElement, SyntaxKind, SyntaxNode,
+    rowan::{NodeOrToken, TextRange},
+};
 use clap::Parser;
 
 use db::CliDatabase;
@@ -180,7 +184,8 @@ impl Exec for RunCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database()?;
         let Some(file) = open(&db, &self.file) else { return Ok(false) };
-        let found = if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
+        let found =
+            if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
         report(&db, &found)?;
         if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
             return Ok(false);
@@ -205,7 +210,10 @@ impl Exec for RunCommand {
         // compiled code too.
         let shown = result.and_then(|value| match value.is_unit() {
             true => Ok(None),
-            false => evaluator.show(file, &value).map(Some).map_err(|error| runtime_diagnostic(&db, file, &error)),
+            false => evaluator
+                .show(file, &value)
+                .map(Some)
+                .map_err(|error| runtime_diagnostic(&db, file, &error)),
         });
         match shown {
             Ok(text) => {
@@ -248,7 +256,8 @@ impl Exec for TestCommand {
     fn exec(&self) -> anyhow::Result<bool> {
         let db = self.prelude.database()?;
         let mut paths = Vec::new();
-        let roots = if self.paths.is_empty() { vec![PathBuf::from(".")] } else { self.paths.clone() };
+        let roots =
+            if self.paths.is_empty() { vec![PathBuf::from(".")] } else { self.paths.clone() };
         for root in &roots {
             bolt_files(root, &mut paths)?;
         }
@@ -266,7 +275,8 @@ impl Exec for TestCommand {
                 .iter()
                 .copied()
                 .filter(|f| {
-                    let name = f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
+                    let name =
+                        f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
                     self.filter.as_ref().is_none_or(|filter| name.contains(filter.as_str()))
                 })
                 .collect();
@@ -309,18 +319,33 @@ impl Exec for TestCommand {
 impl TestCommand {
     /// Run the test `f` of `file`, or give why it failed: the error it
     /// stopped with, or with `--wasm`, why it couldn't be compiled.
-    fn run_test<'db>(&self, db: &'db CliDatabase, file: File, f: FunctionId<'db>) -> Result<(), Vec<Diagnostic>> {
+    fn run_test<'db>(
+        &self,
+        db: &'db CliDatabase,
+        file: File,
+        f: FunctionId<'db>,
+    ) -> Result<(), Vec<Diagnostic>> {
         if self.wasm {
             // Each test is a module of its own, whose `main` is the test.
-            let bytes = link_function(db, f, file).map_err(|errors| codegen_diagnostics(db, file, &errors))?;
-            return run_test(&bytes, Stdout, self.fuel)
-                .map_err(|error| vec![located_diagnostic(file, None, DiagnosticCode::RUNTIME_ERROR, error.to_string())]);
+            let bytes = link_function(db, f, file)
+                .map_err(|errors| codegen_diagnostics(db, file, &errors))?;
+            return run_test(&bytes, Stdout, self.fuel).map_err(|error| {
+                vec![located_diagnostic(
+                    file,
+                    None,
+                    DiagnosticCode::RUNTIME_ERROR,
+                    error.to_string(),
+                )]
+            });
         }
         // Each test gets a new evaluator, so that tests don't see each
         // other's values.
         let limits = Limits { fuel: self.fuel, ..Limits::default() };
         let mut evaluator = Evaluator::with_limits(db, limits).with_host(Stdout);
-        evaluator.call_function(f, Vec::new()).map(|_| ()).map_err(|error| vec![runtime_diagnostic(db, file, &error)])
+        evaluator
+            .call_function(f, Vec::new())
+            .map(|_| ())
+            .map_err(|error| vec![runtime_diagnostic(db, file, &error)])
     }
 }
 
@@ -332,7 +357,8 @@ fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<
         out.push(path.to_path_buf());
         return Ok(());
     }
-    let mut entries: Vec<PathBuf> = std::fs::read_dir(path)?.map(|e| e.map(|e| e.path())).collect::<Result<_, _>>()?;
+    let mut entries: Vec<PathBuf> =
+        std::fs::read_dir(path)?.map(|e| e.map(|e| e.path())).collect::<Result<_, _>>()?;
     entries.sort();
     for entry in entries {
         let hidden = entry.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
@@ -368,7 +394,8 @@ impl Exec for BuildCommand {
         }
         match link(&db, file) {
             Ok(bytes) => {
-                let output = self.output.clone().unwrap_or_else(|| self.file.with_extension("wasm"));
+                let output =
+                    self.output.clone().unwrap_or_else(|| self.file.with_extension("wasm"));
                 std::fs::write(&output, bytes)?;
                 Ok(true)
             }
@@ -385,22 +412,40 @@ impl Exec for BuildCommand {
 fn checked(db: &dyn Db, file: File, reported: &[File]) -> Vec<Diagnostic> {
     let mut found = diagnostics(db, file);
     let broken = dependency_diagnostics(db, file);
-    found.extend(broken.into_iter().filter(|d| !d.labels.iter().any(|l| reported.contains(&l.file))));
+    found.extend(
+        broken.into_iter().filter(|d| !d.labels.iter().any(|l| reported.contains(&l.file))),
+    );
     found
 }
 
 /// Why `file` couldn't be compiled, as diagnostics.
-fn codegen_diagnostics<'db>(db: &'db dyn Db, file: File, errors: &[CodegenError<'db>]) -> Vec<Diagnostic> {
+fn codegen_diagnostics<'db>(
+    db: &'db dyn Db,
+    file: File,
+    errors: &[CodegenError<'db>],
+) -> Vec<Diagnostic> {
     errors
         .iter()
-        .map(|e| located_diagnostic(file, e.source_range(db), DiagnosticCode::CODEGEN_ERROR, e.to_string()))
+        .map(|e| {
+            located_diagnostic(
+                file,
+                e.source_range(db),
+                DiagnosticCode::CODEGEN_ERROR,
+                e.to_string(),
+            )
+        })
         .collect()
 }
 
 /// An error of the evaluator as a diagnostic, at the expression where it
 /// happened, or at the start of `file` when that isn't known.
 fn runtime_diagnostic<'db>(db: &'db dyn Db, file: File, error: &EvalError<'db>) -> Diagnostic {
-    located_diagnostic(file, error.source_range(db), DiagnosticCode::RUNTIME_ERROR, error.to_string())
+    located_diagnostic(
+        file,
+        error.source_range(db),
+        DiagnosticCode::RUNTIME_ERROR,
+        error.to_string(),
+    )
 }
 
 /// A diagnostic at a byte range of a file, or at the start of `file` when
@@ -458,7 +503,8 @@ fn report(db: &dyn Db, diagnostics: &[Diagnostic]) -> std::io::Result<()> {
                 files.push(label.file);
             }
         }
-        let sources: Vec<(String, String)> = files.iter().map(|&f| (display_path(db, f), source_text(db, f).clone())).collect();
+        let sources: Vec<(String, String)> =
+            files.iter().map(|&f| (display_path(db, f), source_text(db, f).clone())).collect();
         let span = |file: File, range: TextRange| {
             let name = display_path(db, file);
             let text = &sources.iter().find(|(n, _)| *n == name).unwrap().1;
@@ -480,7 +526,9 @@ fn report(db: &dyn Db, diagnostics: &[Diagnostic]) -> std::io::Result<()> {
                     .with_color(primary),
             )
             .with_labels(diagnostic.labels.iter().map(|label| {
-                Label::new(span(label.file, label.range)).with_message(&label.message).with_color(Color::Blue)
+                Label::new(span(label.file, label.range))
+                    .with_message(&label.message)
+                    .with_color(Color::Blue)
             }))
             .finish()
             .eprint(ariadne::sources(sources.clone()))?;

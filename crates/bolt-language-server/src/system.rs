@@ -11,7 +11,9 @@ use std::{
     },
 };
 
-use boltlang_base_db::{FileRevision, FileType, Metadata, System, SystemPath, SystemPathBuf, SystemVirtualPath};
+use boltlang_base_db::{
+    FileRevision, FileType, Metadata, System, SystemPath, SystemPathBuf, SystemVirtualPath,
+};
 
 /// The text of an open document, and a revision that changes with each
 /// edit, so that Salsa notices it.

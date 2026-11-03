@@ -82,7 +82,8 @@ pub enum BuiltinValue {
 }
 
 impl BuiltinValue {
-    pub const ALL: &[(&str, BuiltinValue)] = &[("True", BuiltinValue::True), ("False", BuiltinValue::False)];
+    pub const ALL: &[(&str, BuiltinValue)] =
+        &[("True", BuiltinValue::True), ("False", BuiltinValue::False)];
 
     pub fn by_name(name: &str) -> Option<BuiltinValue> {
         Self::ALL.iter().find(|(n, _)| *n == name).map(|(_, v)| *v)

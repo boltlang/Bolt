@@ -2,7 +2,10 @@
 //! and the statements at the top level of a file.
 
 use boltlang_base_db::{Db, File, parse_file};
-use boltlang_syntax::{SyntaxNode, ast::{self, Node}};
+use boltlang_syntax::{
+    SyntaxNode,
+    ast::{self, Node},
+};
 
 use crate::{
     builtin_type::BuiltinValue,
@@ -61,7 +64,10 @@ impl std::ops::Deref for Body {
 
 /// The body of `def`, and where its parts came from.
 #[salsa::tracked(returns(ref))]
-pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (Body, ExpressionStoreSourceMap) {
+pub fn body_with_source_map<'db>(
+    db: &'db dyn Db,
+    def: DefWithBodyId<'db>,
+) -> (Body, ExpressionStoreSourceMap) {
     let def = def.def(db);
     let file = def.file(db);
     let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
@@ -73,7 +79,8 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
             match decl {
                 Some(decl) => {
                     if let Some(list) = decl.param_list() {
-                        params = list.params().map(|p| collector.lower_opt_pat(p.pattern())).collect();
+                        params =
+                            list.params().map(|p| collector.lower_opt_pat(p.pattern())).collect();
                     }
                     collector.lower_opt_expr(decl.body())
                 }
@@ -81,7 +88,12 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
             }
         }
         DefWithBody::Const(id) => {
-            let value = id.item(db).ast_id.to_node(db, file, &root).and_then(ast::Const::cast).and_then(|c| c.expr());
+            let value = id
+                .item(db)
+                .ast_id
+                .to_node(db, file, &root)
+                .and_then(ast::Const::cast)
+                .and_then(|c| c.expr());
             collector.lower_opt_expr(value)
         }
         DefWithBody::Variant(id) => {
@@ -91,7 +103,9 @@ pub fn body_with_source_map<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> (B
                 .ast_id
                 .to_node(db, file, &root)
                 .and_then(ast::Enum::cast)
-                .and_then(|e| e.variants().into_iter().filter(|v| v.name().is_some()).nth(id.index as usize))
+                .and_then(|e| {
+                    e.variants().into_iter().filter(|v| v.name().is_some()).nth(id.index as usize)
+                })
                 .and_then(|v| v.expr());
             collector.lower_opt_expr(value)
         }

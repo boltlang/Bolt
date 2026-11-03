@@ -1,11 +1,11 @@
-use std::{sync::Arc};
+use std::sync::Arc;
 
 use salsa::{Durability, Setter};
 
 use crate::{
-    Db, FxDashMap, system::{
-        SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf
-    }, vfs::FileRevision
+    Db, FxDashMap,
+    system::{SystemPath, SystemPathBuf, SystemVirtualPath, SystemVirtualPathBuf},
+    vfs::FileRevision,
 };
 
 use self::private::FileStatus;
@@ -22,18 +22,18 @@ struct FilesInner {
 }
 
 impl Files {
-
     pub fn new() -> Self {
         Self {
             inner: Arc::new(FilesInner {
                 system_by_path: FxDashMap::default(),
                 virtual_system_by_path: FxDashMap::default(),
-            })
+            }),
         }
     }
 
     pub fn try_resolve(&self, db: &dyn Db, path: &SystemPath) -> Option<File> {
-        let absolute: crate::PathBuf = SystemPath::absolute(path, db.system().current_directory().unwrap());
+        let absolute: crate::PathBuf =
+            SystemPath::absolute(path, db.system().current_directory().unwrap());
         if let Some(file) = self.inner.system_by_path.get(&absolute) {
             return Some(*file);
         }
@@ -52,9 +52,9 @@ impl Files {
     ///
     /// The operation always succeeds even if the path doesn't exist on disk, isn't accessible or if the path points to a directory.
     /// In these cases, a file with status [`FileStatus::NotFound`] is returned.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the current working directory could not be retreived, which should never happen in practical scenarios.
     pub fn resolve(&self, db: &dyn Db, path: &SystemPath) -> File {
         let absolute = SystemPath::absolute(path, db.system().current_directory().unwrap());
@@ -65,26 +65,24 @@ impl Files {
             Ok(real) => real,
             Err(_) => absolute.clone(),
         };
-        let file = *self
-            .inner
-            .system_by_path
-            .entry(real.clone())
-            .or_insert_with(|| {
-                let metadata = db.system().path_metadata(&real);
-                let durability = Durability::default();
-                let builder = File::builder(FilePath::System(real.clone()))
-                    .path_durability(Durability::HIGH);
-                let builder  = match metadata {
-                    Ok(metadata) if metadata.file_type().is_file() => builder
-                        .revision(metadata.revision()),
-                    Ok(metadata) if metadata.file_type().is_directory() => builder
-                        .status(FileStatus::IsADirectory),
-                    _ => builder
-                        .status(FileStatus::NotFound)
-                        .status_durability(Durability::MEDIUM.max(durability))
-                };
-                builder.new(db)
-            });
+        let file = *self.inner.system_by_path.entry(real.clone()).or_insert_with(|| {
+            let metadata = db.system().path_metadata(&real);
+            let durability = Durability::default();
+            let builder =
+                File::builder(FilePath::System(real.clone())).path_durability(Durability::HIGH);
+            let builder = match metadata {
+                Ok(metadata) if metadata.file_type().is_file() => {
+                    builder.revision(metadata.revision())
+                }
+                Ok(metadata) if metadata.file_type().is_directory() => {
+                    builder.status(FileStatus::IsADirectory)
+                }
+                _ => builder
+                    .status(FileStatus::NotFound)
+                    .status_durability(Durability::MEDIUM.max(durability)),
+            };
+            builder.new(db)
+        });
         if real != absolute {
             self.inner.system_by_path.insert(absolute, file);
         }
@@ -97,35 +95,31 @@ impl Files {
     ///
     /// The operation always succeeds even if the path doesn't exist on disk, isn't accessible or if the path points to a directory.
     /// In these cases, a file with status [`FileStatus::NotFound`] is returned.
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the current working directory could not be retreived, which should never happen in practical scenarios.
     pub fn resolve_virtual(&self, db: &dyn Db, path: &SystemVirtualPath) -> File {
         let absolute = SystemPath::absolute(path, db.system().current_directory().unwrap());
-        *self
-            .inner
-            .virtual_system_by_path
-            .entry(absolute.clone())
-            .or_insert_with(|| {
-                let metadata = db.system().virtual_path_metadata(path);
-                let durability = Durability::default();
-                let builder = File::builder(FilePath::System(absolute))
-                    .path_durability(Durability::HIGH);
-                let builder  = match metadata {
-                    Ok(metadata) if metadata.file_type().is_file() => builder
-                        .revision(metadata.revision()),
-                    Ok(metadata) if metadata.file_type().is_directory() => builder
-                        .status(FileStatus::IsADirectory),
-                    _ => builder
-                        .status(FileStatus::NotFound)
-                        .status_durability(Durability::MEDIUM.max(durability))
-                };
-                builder.new(db)
-            })
+        *self.inner.virtual_system_by_path.entry(absolute.clone()).or_insert_with(|| {
+            let metadata = db.system().virtual_path_metadata(path);
+            let durability = Durability::default();
+            let builder =
+                File::builder(FilePath::System(absolute)).path_durability(Durability::HIGH);
+            let builder = match metadata {
+                Ok(metadata) if metadata.file_type().is_file() => {
+                    builder.revision(metadata.revision())
+                }
+                Ok(metadata) if metadata.file_type().is_directory() => {
+                    builder.status(FileStatus::IsADirectory)
+                }
+                _ => builder
+                    .status(FileStatus::NotFound)
+                    .status_durability(Durability::MEDIUM.max(durability)),
+            };
+            builder.new(db)
+        })
     }
-
-
 }
 
 /// A file that's either stored on the host system's file system or in the vendored file system.
@@ -137,7 +131,6 @@ impl Files {
 #[salsa::input]
 #[derive(Debug, PartialOrd, Ord)]
 pub struct File {
-
     /// The path of the file (immutable).
     #[returns(ref)]
     pub path: FilePath,
@@ -146,7 +139,7 @@ pub struct File {
     /// or when the file has been deleted.
     #[default]
     pub permissions: Option<u32>,
-    
+
     /// The file revision. A file has changed if the revisions don't compare equal.
     #[default]
     pub revision: FileRevision,
@@ -157,11 +150,9 @@ pub struct File {
     /// the file has been deleted is to change the status to `Deleted`.
     #[default]
     pub status: FileStatus,
-
 }
 
 impl File {
-
     /// Whether the file exists and is a file rather than a directory.
     pub fn exists(self, db: &dyn Db) -> bool {
         *self.status(db) == FileStatus::Exists
@@ -207,15 +198,14 @@ impl File {
             FilePath::SystemVirtual(_) => {
                 tracing::debug!("Updating the revision of `{:?}`", self.path(db));
                 let current_revision = *self.revision(db);
-                self.set_revision(db)
-                    .to(FileRevision::new(current_revision.as_u128() + 1));
+                self.set_revision(db).to(FileRevision::new(current_revision.as_u128() + 1));
             }
         }
     }
 
     /// Private method providing the implementation for [`Self::sync_path`] and [`Self::sync`] for
     /// system paths.
-    /// 
+    ///
     /// Takes in the resolved file handle if any. Otherwise resolves the file using the system.
     fn sync_system_path(db: &mut dyn Db, path: &SystemPath, file: Option<File>) {
         let Some(file) = file.or_else(|| db.files().try_resolve(db, path)) else {
@@ -223,11 +213,9 @@ impl File {
         };
 
         let (status, revision, permission) = match db.system().path_metadata(path) {
-            Ok(metadata) if metadata.file_type().is_file() => (
-                FileStatus::Exists,
-                metadata.revision(),
-                metadata.permissions(),
-            ),
+            Ok(metadata) if metadata.file_type().is_file() => {
+                (FileStatus::Exists, metadata.revision(), metadata.permissions())
+            }
             Ok(metadata) if metadata.file_type().is_directory() => {
                 (FileStatus::IsADirectory, FileRevision::zero(), None)
             }
@@ -248,9 +236,7 @@ impl File {
             tracing::debug!("Updating the permissions of `{:?}`", file.path(db));
             file.set_permissions(db).to(permission);
         }
-
     }
-
 }
 
 // The types in here need to be public because they're salsa ingredients but we
@@ -287,9 +273,7 @@ pub enum FilePath {
     // Vendored(VendoredPathBuf),
 }
 
-
 impl FilePath {
-
     pub fn as_system_path_buf(&self) -> Option<&SystemPathBuf> {
         match self {
             FilePath::System(pb) => Some(pb),
@@ -303,7 +287,6 @@ impl FilePath {
             _ => None,
         }
     }
-
 }
 
 impl From<SystemPathBuf> for FilePath {

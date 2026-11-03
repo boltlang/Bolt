@@ -62,7 +62,11 @@ pub(crate) fn type_path(p: &mut Parser) -> Option<CompletedMarker> {
 }
 
 /// Continue the path `qualifier` with `.` and one more segment.
-pub(crate) fn path_for_qualifier(p: &mut Parser, qualifier: CompletedMarker, mode: PathMode) -> CompletedMarker {
+pub(crate) fn path_for_qualifier(
+    p: &mut Parser,
+    qualifier: CompletedMarker,
+    mode: PathMode,
+) -> CompletedMarker {
     let m = qualifier.precede(p);
     p.bump(T![.]);
     path_segment(p, mode);

@@ -16,8 +16,9 @@ mod native {
         Client, LanguageServer, LspService, jsonrpc,
         ls_types::{
             DidChangeTextDocumentParams, DidCloseTextDocumentParams, DidOpenTextDocumentParams,
-            DocumentDiagnosticParams, DocumentDiagnosticReportResult, InitializeParams, InitializeResult,
-            InitializedParams, MessageType, WorkspaceDiagnosticParams, WorkspaceDiagnosticReportResult,
+            DocumentDiagnosticParams, DocumentDiagnosticReportResult, InitializeParams,
+            InitializeResult, InitializedParams, MessageType, WorkspaceDiagnosticParams,
+            WorkspaceDiagnosticReportResult,
         },
     };
 
@@ -33,7 +34,9 @@ mod native {
         async fn with_server<T>(&self, f: impl FnOnce(&mut Server) -> T) -> Result<T, String> {
             let result = guarded(&self.server, f);
             if let Err(message) = &result {
-                self.client.log_message(MessageType::ERROR, format!("internal error: {message}")).await;
+                self.client
+                    .log_message(MessageType::ERROR, format!("internal error: {message}"))
+                    .await;
             }
             result
         }
@@ -57,7 +60,12 @@ mod native {
                 return;
             }
             if let Err(error) = self.client.workspace_diagnostic_refresh().await {
-                self.client.log_message(MessageType::ERROR, format!("refreshing diagnostics failed: {error}")).await;
+                self.client
+                    .log_message(
+                        MessageType::ERROR,
+                        format!("refreshing diagnostics failed: {error}"),
+                    )
+                    .await;
             }
         }
     }
@@ -86,8 +94,12 @@ mod native {
             self.changed(result).await;
         }
 
-        async fn diagnostic(&self, params: DocumentDiagnosticParams) -> jsonrpc::Result<DocumentDiagnosticReportResult> {
-            let (report, error) = self.with_server(|s| s.diagnostic(&params)).await.map_err(internal_error)?;
+        async fn diagnostic(
+            &self,
+            params: DocumentDiagnosticParams,
+        ) -> jsonrpc::Result<DocumentDiagnosticReportResult> {
+            let (report, error) =
+                self.with_server(|s| s.diagnostic(&params)).await.map_err(internal_error)?;
             if let Some(error) = error {
                 self.warn_not_a_file(error).await;
             }
@@ -117,7 +129,8 @@ mod native {
     /// work; a lock poisoned some other way is used anyway.
     fn guarded<W, T>(mutex: &Mutex<W>, f: impl FnOnce(&mut W) -> T) -> Result<T, String> {
         let mut value = mutex.lock().unwrap_or_else(PoisonError::into_inner);
-        panic::catch_unwind(AssertUnwindSafe(|| f(&mut value))).map_err(|payload| panic_message(&*payload))
+        panic::catch_unwind(AssertUnwindSafe(|| f(&mut value)))
+            .map_err(|payload| panic_message(&*payload))
     }
 
     fn panic_message(payload: &(dyn Any + Send)) -> String {
@@ -140,7 +153,9 @@ mod native {
         }
         let server = Mutex::new(server);
         let (service, socket) = LspService::new(|client| Backend { client, server });
-        tower_lsp_server::Server::new(tokio::io::stdin(), tokio::io::stdout(), socket).serve(service).await;
+        tower_lsp_server::Server::new(tokio::io::stdin(), tokio::io::stdout(), socket)
+            .serve(service)
+            .await;
     }
 
     #[cfg(test)]
@@ -153,7 +168,13 @@ mod native {
             let result: Result<(), _> = guarded(&mutex, |_| panic!("oops"));
             assert_eq!(result, Err("oops".to_string()));
             assert!(!mutex.is_poisoned());
-            assert_eq!(guarded(&mutex, |n| { *n += 1; *n }), Ok(1));
+            assert_eq!(
+                guarded(&mutex, |n| {
+                    *n += 1;
+                    *n
+                }),
+                Ok(1)
+            );
         }
     }
 }

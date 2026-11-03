@@ -45,7 +45,8 @@ pub fn expr_scopes<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> ExprScopes 
 
 impl ExprScopes {
     pub fn new(body: &Body) -> ExprScopes {
-        let mut scopes = ExprScopes { scopes: Arena::default(), scope_by_expr: ArenaMap::default() };
+        let mut scopes =
+            ExprScopes { scopes: Arena::default(), scope_by_expr: ArenaMap::default() };
         let root = scopes.new_scope(None);
         for &param in body.params.iter() {
             scopes.add_pat_bindings(body, root, param);
@@ -79,8 +80,9 @@ impl ExprScopes {
 
     /// The binding a name refers to in `scope`, if it's a local variable.
     pub fn resolve_name(&self, scope: ScopeId, name: &Name) -> Option<BindingId> {
-        self.scope_chain(Some(scope))
-            .find_map(|s| self.scopes[s].entries.iter().rev().find(|e| &e.name == name).map(|e| e.binding))
+        self.scope_chain(Some(scope)).find_map(|s| {
+            self.scopes[s].entries.iter().rev().find(|e| &e.name == name).map(|e| e.binding)
+        })
     }
 
     /// The label `'name` refers to in `scope`, or the innermost label if
@@ -96,7 +98,12 @@ impl ExprScopes {
         self.scopes.alloc(ScopeData { parent, entries: Vec::new(), label: None })
     }
 
-    fn new_labeled_scope(&mut self, body: &Body, parent: ScopeId, label: Option<LabelId>) -> ScopeId {
+    fn new_labeled_scope(
+        &mut self,
+        body: &Body,
+        parent: ScopeId,
+        label: Option<LabelId>,
+    ) -> ScopeId {
         let scope = self.new_scope(Some(parent));
         self.scopes[scope].label = label.map(|id| (id, body[id].name.clone()));
         scope
@@ -244,7 +251,11 @@ impl ExprScopes {
 fn children(expr: &Expr) -> Vec<ExprId> {
     let mut out = Vec::new();
     match expr {
-        Expr::Missing | Expr::Path(_) | Expr::Literal(_) | Expr::Continue { .. } | Expr::MacroCall { .. } => {}
+        Expr::Missing
+        | Expr::Path(_)
+        | Expr::Literal(_)
+        | Expr::Continue { .. }
+        | Expr::MacroCall { .. } => {}
         Expr::Call { callee, args, .. } => {
             out.push(*callee);
             out.extend(args.iter().copied());
@@ -265,7 +276,9 @@ fn children(expr: &Expr) -> Vec<ExprId> {
             out.extend(fields.iter().map(|f| f.expr));
             out.extend(*spread);
         }
-        Expr::Break { expr, .. } | Expr::Return { expr } | Expr::Yield { expr } => out.extend(*expr),
+        Expr::Break { expr, .. } | Expr::Return { expr } | Expr::Yield { expr } => {
+            out.extend(*expr)
+        }
         // These are handled by walk_expr.
         Expr::Let { .. }
         | Expr::Block { .. }

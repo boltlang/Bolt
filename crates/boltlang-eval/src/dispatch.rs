@@ -44,7 +44,9 @@ pub(crate) fn impl_for_args<'db>(
         .iter()
         .enumerate()
         .filter_map(|(i, ty)| match ty {
-            Some(Ty::Param(GenericParamId { def, index })) if *def == class_def => Some((i, *index as usize)),
+            Some(Ty::Param(GenericParamId { def, index })) if *def == class_def => {
+                Some((i, *index as usize))
+            }
             _ => None,
         })
         .collect();
@@ -55,7 +57,9 @@ pub(crate) fn impl_for_args<'db>(
     // may have impls of their own.
     let mut impls: Vec<ImplId<'db>> = visible_impls(db, method.file(db)).clone();
     for &file in files {
-        impls.extend(visible_impls(db, file).iter().filter(|i| !impls.contains(i)).collect::<Vec<_>>());
+        impls.extend(
+            visible_impls(db, file).iter().filter(|i| !impls.contains(i)).collect::<Vec<_>>(),
+        );
     }
     let mut found = None;
     for imp in impls {
@@ -63,10 +67,11 @@ pub(crate) fn impl_for_args<'db>(
         if target.class != class {
             continue;
         }
-        let fits = deciding.iter().all(|&(arg, param)| match (args.get(arg), target.args.get(param)) {
-            (Some(value), Some(ty)) => fits(value, ty),
-            _ => false,
-        });
+        let fits =
+            deciding.iter().all(|&(arg, param)| match (args.get(arg), target.args.get(param)) {
+                (Some(value), Some(ty)) => fits(value, ty),
+                _ => false,
+            });
         if fits {
             if found.is_some() {
                 return None;

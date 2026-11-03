@@ -55,7 +55,12 @@ impl<T> std::hash::Hash for Idx<T> {
 
 impl<T> fmt::Debug for Idx<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Idx::<{}>({})", std::any::type_name::<T>().rsplit("::").next().unwrap(), self.raw)
+        write!(
+            f,
+            "Idx::<{}>({})",
+            std::any::type_name::<T>().rsplit("::").next().unwrap(),
+            self.raw
+        )
     }
 }
 
@@ -152,7 +157,9 @@ impl<K, V> ArenaMap<K, V> {
 
 impl<K, V: fmt::Debug> fmt::Debug for ArenaMap<K, V> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_map().entries(self.data.iter().enumerate().filter_map(|(i, v)| Some((i, v.as_ref()?)))).finish()
+        f.debug_map()
+            .entries(self.data.iter().enumerate().filter_map(|(i, v)| Some((i, v.as_ref()?))))
+            .finish()
     }
 }
 

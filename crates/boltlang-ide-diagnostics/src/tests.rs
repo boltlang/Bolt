@@ -52,12 +52,17 @@ fn check_with_test_std(fixture: &str) {
 fn check_db(db: TestDb, files: &[(&str, &str)]) {
     let files: Vec<_> = files.iter().map(|(path, text)| (*path, db.file(path, text))).collect();
     // Only Bolt files have diagnostics: a `bolt.toml` is read by the others.
-    let all: Vec<_> =
-        files.iter().filter(|(path, _)| path.ends_with(".bolt")).flat_map(|&(_, file)| diagnostics(&db, file)).collect();
+    let all: Vec<_> = files
+        .iter()
+        .filter(|(path, _)| path.ends_with(".bolt"))
+        .flat_map(|&(_, file)| diagnostics(&db, file))
+        .collect();
     for &(path, file) in &files {
         let text = source_text(&db, file);
-        let mut expected: Vec<String> =
-            annotations(text).into_iter().map(|(range, message)| show(path, text, range, &message)).collect();
+        let mut expected: Vec<String> = annotations(text)
+            .into_iter()
+            .map(|(range, message)| show(path, text, range, &message))
+            .collect();
         let mut actual = Vec::new();
         for d in &all {
             if d.file == file {
@@ -78,12 +83,18 @@ fn annotations(text: &str) -> Vec<(TextRange, String)> {
     let mut target = None;
     let mut offset = 0;
     for line in text.split_inclusive('\n') {
-        let is_annotation = line.trim_start().strip_prefix("//").is_some_and(|rest| rest.trim_start().starts_with('^'));
+        let is_annotation = line
+            .trim_start()
+            .strip_prefix("//")
+            .is_some_and(|rest| rest.trim_start().starts_with('^'));
         match target {
             Some(start) if is_annotation => {
                 let column = line.find('^').unwrap();
                 let len = line[column..].chars().take_while(|&c| c == '^').count();
-                let range = TextRange::at(TextSize::from((start + column) as u32), TextSize::from(len as u32));
+                let range = TextRange::at(
+                    TextSize::from((start + column) as u32),
+                    TextSize::from(len as u32),
+                );
                 out.push((range, line[column + len..].trim().to_string()));
             }
             _ => target = Some(offset),
@@ -499,7 +510,10 @@ let n: i32 = c.get();
 #[test]
 fn one_type_per_file() {
     check_files(&[
-        ("/list.bolt", "pub struct List { n: i32 }\npub fn new() -> List = List { n: 0 };\npub fn len(l: List) -> i32 = l.n;\n"),
+        (
+            "/list.bolt",
+            "pub struct List { n: i32 }\npub fn new() -> List = List { n: 0 };\npub fn len(l: List) -> i32 = l.n;\n",
+        ),
         (
             "/main.bolt",
             r#"
@@ -854,17 +868,19 @@ fn with_std_dir() -> TestDb {
 
 #[test]
 fn package_imports() {
-    check_db(with_std_dir(), &[
-        (
-            "/toolchain/std/io.bolt",
-            r#"
+    check_db(
+        with_std_dir(),
+        &[
+            (
+                "/toolchain/std/io.bolt",
+                r#"
 pub fn print(s: Bool) -> () = ();
               //^^^^ label: expected because of this parameter of `print`
 "#,
-        ),
-        (
-            "/proj/main.bolt",
-            r#"
+            ),
+            (
+                "/proj/main.bolt",
+                r#"
 import "std/io" (print);
 import "std" (x);
      //^^^^^ error: the package `std` has no file `lib.bolt`
@@ -874,16 +890,23 @@ print(True);
 print(1);
     //^ error: expected `Bool`, found an integer
 "#,
-        ),
-    ]);
+            ),
+        ],
+    );
 }
 
 #[test]
 fn package_items_through_an_alias() {
     check_files(&[
         ("/geo/bolt.toml", "[package]\nname = \"geo\"\n"),
-        ("/geo/lib.bolt", "pub(package) fn helper() -> i32 = 1;\npub fn area() -> i32 = helper();\n"),
-        ("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n"),
+        (
+            "/geo/lib.bolt",
+            "pub(package) fn helper() -> i32 = 1;\npub fn area() -> i32 = helper();\n",
+        ),
+        (
+            "/proj/bolt.toml",
+            "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n",
+        ),
         (
             "/proj/main.bolt",
             r#"
@@ -906,7 +929,10 @@ fn hidden_names_through_an_alias() {
             "/geo/lib.bolt",
             "pub(package) struct Secret { x: i32 }\npub(package) enum Kind { Round, Square }\nfn mine() -> i32 = 1;\npub fn area() -> i32 = 1;\n",
         ),
-        ("/proj/bolt.toml", "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n"),
+        (
+            "/proj/bolt.toml",
+            "[package]\nname = \"proj\"\n[dependencies]\ngeo = { path = \"../geo\" }\n",
+        ),
         (
             "/proj/main.bolt",
             r#"
@@ -989,7 +1015,10 @@ fn a_file_of_std_has_no_prelude() {
     // prelude that it's part of.
     let mut db = with_std_dir();
     db.file("/toolchain/std/__prelude__/lib.bolt", "pub import \"./option\" *;\n");
-    db.file("/toolchain/std/__prelude__/option.bolt", "pub enum Option[T] { Some(T), None }\npub import Option.*;\n");
+    db.file(
+        "/toolchain/std/__prelude__/option.bolt",
+        "pub enum Option[T] { Some(T), None }\npub import Option.*;\n",
+    );
     db.set_prelude(Some("std"), true);
     check_db(
         db,
@@ -1314,7 +1343,13 @@ fn broken(db: &TestDb, main: File) -> Vec<String> {
         .into_iter()
         .map(|d| {
             let label = &d.labels[0];
-            format!("{} {} | {} {}", at(d.file, d.range), d.message, at(label.file, label.range), label.message)
+            format!(
+                "{} {} | {} {}",
+                at(d.file, d.range),
+                d.message,
+                at(label.file, label.range),
+                label.message
+            )
         })
         .collect()
 }
@@ -1323,17 +1358,24 @@ fn broken(db: &TestDb, main: File) -> Vec<String> {
 fn errors_in_files_a_file_uses() {
     let mut db = with_std_dir();
     db.set_prelude(Some("std"), true);
-    db.file("/toolchain/std/__prelude__/lib.bolt", "import \"./more\";\npub fn id(x: i32) -> i32 = x;\n");
-    let more = db.file("/toolchain/std/__prelude__/more.bolt", "let a: i32 = True;\nlet b: Bool = 1;\n");
+    db.file(
+        "/toolchain/std/__prelude__/lib.bolt",
+        "import \"./more\";\npub fn id(x: i32) -> i32 = x;\n",
+    );
+    let more =
+        db.file("/toolchain/std/__prelude__/more.bolt", "let a: i32 = True;\nlet b: Bool = 1;\n");
     db.file("/proj/deep.bolt", "pub fn f() -> i32 = True;\n");
     db.file("/proj/lib.bolt", "import \"./deep\" (f);\npub fn g() -> i32 = f();\n");
     let main = db.file("/proj/main.bolt", "let x = 1;\nimport \"./lib\" (g);\ng();\n");
-    assert_eq!(broken(&db, main), [
-        "1:1 `std/__prelude__/more.bolt`, which this file uses through the prelude, has 2 errors; fix them first \
+    assert_eq!(
+        broken(&db, main),
+        [
+            "1:1 `std/__prelude__/more.bolt`, which this file uses through the prelude, has 2 errors; fix them first \
          | 1:14 the first: expected `i32`, found `Bool`",
-        "2:8 `deep.bolt`, which this file uses through this import, has 1 error; fix them first \
+            "2:8 `deep.bolt`, which this file uses through this import, has 1 error; fix them first \
          | 1:21 the first: expected `i32`, found `Bool`",
-    ]);
+        ]
+    );
     // A file's own errors aren't among them.
     assert!(broken(&db, more).is_empty());
 }

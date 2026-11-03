@@ -1,11 +1,15 @@
 use crate::{
-    system::{SystemPathBuf, path::{SystemPath, SystemVirtualPath}}, vfs::Metadata
+    system::{
+        SystemPathBuf,
+        path::{SystemPath, SystemVirtualPath},
+    },
+    vfs::Metadata,
 };
 
 pub type Result<T> = std::io::Result<T>;
 
 /// All interactions in the Salsa database with the broader world should be provided by this trait.
-pub trait System : Send + Sync {
+pub trait System: Send + Sync {
     fn read_to_string(&self, path: &SystemPath) -> Result<String>;
     fn read_virtual_path_to_string(&self, path: &SystemVirtualPath) -> Result<String>;
     fn path_metadata(&self, path: &SystemPath) -> Result<Metadata>;
@@ -16,7 +20,7 @@ pub trait System : Send + Sync {
     fn read_directory(&self, path: &SystemPath) -> Result<Vec<SystemPathBuf>>;
 }
 
-pub trait WritableSystem : System {
+pub trait WritableSystem: System {
     fn write_file_bytes(&self, path: &SystemPath, contents: &[u8]) -> Result<()>;
     fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, contents: &[u8]) -> Result<()>;
 }

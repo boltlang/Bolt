@@ -3,22 +3,21 @@
 
 use boltlang_syntax::{SyntaxKind::*, T};
 
-use super::{BlockLike, at_expr_start, Restrictions, expr, expr_block_contents, expr_bp, expr_no_struct, expr_stmt};
+use super::{
+    BlockLike, Restrictions, at_expr_start, expr, expr_block_contents, expr_bp, expr_no_struct,
+    expr_stmt,
+};
 use crate::{
-    grammar::{at_macro_call, macro_call, attr, at_inner_attr, at_outer_attr, dotted_path, outer_attrs, expr_path, is_path_start, opt_ret_type, param_list, parse_pattern, pattern_single, type_},
+    grammar::{
+        at_inner_attr, at_macro_call, at_outer_attr, attr, dotted_path, expr_path, is_path_start,
+        macro_call, opt_ret_type, outer_attrs, param_list, parse_pattern, pattern_single, type_,
+    },
     parser::{CompletedMarker, Marker, Parser},
     token_set::TokenSet,
 };
 
-pub(crate) const LITERAL_FIRST: TokenSet = TokenSet::new(&[
-    INT_NUMBER,
-    FLOAT_NUMBER,
-    BYTE,
-    CHAR,
-    STRING,
-    BYTE_STRING,
-    C_STRING,
-]);
+pub(crate) const LITERAL_FIRST: TokenSet =
+    TokenSet::new(&[INT_NUMBER, FLOAT_NUMBER, BYTE, CHAR, STRING, BYTE_STRING, C_STRING]);
 
 pub(crate) const ATOM_EXPR_FIRST: TokenSet = LITERAL_FIRST.union(TokenSet::new(&[
     IDENT,
@@ -543,7 +542,8 @@ mod tests {
         let (green, diags) = parse_file("let p = Point { #[a] };\nlet y = 1;\n");
         let messages: Vec<_> = diags.iter().map(ToString::to_string).collect();
         assert_eq!(messages, ["expected a field"]);
-        let lets = SyntaxNode::new_root(green).descendants().filter(|n| n.kind() == LET_STMT).count();
+        let lets =
+            SyntaxNode::new_root(green).descendants().filter(|n| n.kind() == LET_STMT).count();
         assert_eq!(lets, 2);
     }
 }

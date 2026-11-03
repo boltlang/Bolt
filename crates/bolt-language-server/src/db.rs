@@ -16,7 +16,11 @@ impl LspDatabase {
     /// A database with the default prelude, until the client says
     /// otherwise.
     pub fn new(disk: Arc<dyn System>) -> Self {
-        let db = Self { storage: salsa::Storage::new(None), files: Files::new(), system: LspSystem::new(disk) };
+        let db = Self {
+            storage: salsa::Storage::new(None),
+            files: Files::new(),
+            system: LspSystem::new(disk),
+        };
         Settings::init(&db, Some(DEFAULT_PRELUDE.to_string()), false);
         db
     }

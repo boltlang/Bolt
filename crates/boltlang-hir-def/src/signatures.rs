@@ -7,7 +7,11 @@
 //! moves.
 
 use boltlang_base_db::{Db, File, parse_file};
-use boltlang_syntax::{SyntaxKind::*, SyntaxNode, ast::{self, Node}};
+use boltlang_syntax::{
+    SyntaxKind::*,
+    SyntaxNode,
+    ast::{self, Node},
+};
 
 use crate::{
     Name,
@@ -169,7 +173,10 @@ pub struct TypeAliasSignature {
 // without, which only changes when the signature does.
 
 #[salsa::tracked(returns(ref))]
-pub fn function_signature_with_source_map<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignature, ExpressionStoreSourceMap) {
+pub fn function_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: FunctionId<'db>,
+) -> (FunctionSignature, ExpressionStoreSourceMap) {
     lower_function(db, id)
 }
 
@@ -179,7 +186,10 @@ pub fn function_signature<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> Function
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn struct_signature_with_source_map<'db>(db: &'db dyn Db, id: StructId<'db>) -> (StructSignature, ExpressionStoreSourceMap) {
+pub fn struct_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: StructId<'db>,
+) -> (StructSignature, ExpressionStoreSourceMap) {
     lower_struct(db, id)
 }
 
@@ -189,7 +199,10 @@ pub fn struct_signature<'db>(db: &'db dyn Db, id: StructId<'db>) -> StructSignat
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn enum_signature_with_source_map<'db>(db: &'db dyn Db, id: EnumId<'db>) -> (EnumSignature, ExpressionStoreSourceMap) {
+pub fn enum_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: EnumId<'db>,
+) -> (EnumSignature, ExpressionStoreSourceMap) {
     lower_enum(db, id)
 }
 
@@ -199,7 +212,10 @@ pub fn enum_signature<'db>(db: &'db dyn Db, id: EnumId<'db>) -> EnumSignature {
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn class_signature_with_source_map<'db>(db: &'db dyn Db, id: ClassId<'db>) -> (ClassSignature, ExpressionStoreSourceMap) {
+pub fn class_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: ClassId<'db>,
+) -> (ClassSignature, ExpressionStoreSourceMap) {
     lower_class(db, id)
 }
 
@@ -209,7 +225,10 @@ pub fn class_signature<'db>(db: &'db dyn Db, id: ClassId<'db>) -> ClassSignature
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn impl_signature_with_source_map<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, ExpressionStoreSourceMap) {
+pub fn impl_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: ImplId<'db>,
+) -> (ImplSignature, ExpressionStoreSourceMap) {
     lower_impl(db, id)
 }
 
@@ -219,7 +238,10 @@ pub fn impl_signature<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplSignature {
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn const_signature_with_source_map<'db>(db: &'db dyn Db, id: ConstId<'db>) -> (ConstSignature, ExpressionStoreSourceMap) {
+pub fn const_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: ConstId<'db>,
+) -> (ConstSignature, ExpressionStoreSourceMap) {
     lower_const(db, id)
 }
 
@@ -229,7 +251,10 @@ pub fn const_signature<'db>(db: &'db dyn Db, id: ConstId<'db>) -> ConstSignature
 }
 
 #[salsa::tracked(returns(ref))]
-pub fn type_alias_signature_with_source_map<'db>(db: &'db dyn Db, id: TypeAliasId<'db>) -> (TypeAliasSignature, ExpressionStoreSourceMap) {
+pub fn type_alias_signature_with_source_map<'db>(
+    db: &'db dyn Db,
+    id: TypeAliasId<'db>,
+) -> (TypeAliasSignature, ExpressionStoreSourceMap) {
     lower_type_alias(db, id)
 }
 
@@ -240,10 +265,15 @@ pub fn type_alias_signature<'db>(db: &'db dyn Db, id: TypeAliasId<'db>) -> TypeA
 
 /// The syntax of the item at `ast_id` in `file`, if it's an `N`.
 fn item_node<N: Node>(db: &dyn Db, file: File, ast_id: AstId) -> Option<N> {
-    ast_id.to_node(db, file, &SyntaxNode::new_root(parse_file(db, file).tree(db).clone())).and_then(N::cast)
+    ast_id
+        .to_node(db, file, &SyntaxNode::new_root(parse_file(db, file).tree(db).clone()))
+        .and_then(N::cast)
 }
 
-fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignature, ExpressionStoreSourceMap) {
+fn lower_function<'db>(
+    db: &'db dyn Db,
+    id: FunctionId<'db>,
+) -> (FunctionSignature, ExpressionStoreSourceMap) {
     let item = id.item(db);
     let decl = item_node::<ast::FuncDecl>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
@@ -253,7 +283,11 @@ fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignatu
     let mut ret_type = None;
     let mut abi = None;
     if let Some(decl) = &decl {
-        generic_params = lower_generic_params(&mut c, decl.generic_param_list(), decl.where_clause().into_iter());
+        generic_params = lower_generic_params(
+            &mut c,
+            decl.generic_param_list(),
+            decl.where_clause().into_iter(),
+        );
         if let Some(list) = decl.param_list() {
             is_variadic = list.variadic_param().is_some();
             for param in list.params() {
@@ -281,19 +315,35 @@ fn lower_function<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> (FunctionSignatu
     (sig, source_map)
 }
 
-fn lower_struct<'db>(db: &'db dyn Db, id: StructId<'db>) -> (StructSignature, ExpressionStoreSourceMap) {
+fn lower_struct<'db>(
+    db: &'db dyn Db,
+    id: StructId<'db>,
+) -> (StructSignature, ExpressionStoreSourceMap) {
     let item = id.item(db);
     let node = item_node::<ast::Struct>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
     let (generic_params, fields) = match &node {
         Some(node) => (
-            lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter()),
+            lower_generic_params(
+                &mut c,
+                node.generic_param_list(),
+                node.where_clause().into_iter(),
+            ),
             lower_field_list(&mut c, node.field_list()),
         ),
         None => (GenericParams::default(), FieldList::Unit),
     };
     let (store, source_map) = c.finish();
-    (StructSignature { name: item.name.clone(), visibility: item.visibility, generic_params, fields, store }, source_map)
+    (
+        StructSignature {
+            name: item.name.clone(),
+            visibility: item.visibility,
+            generic_params,
+            fields,
+            store,
+        },
+        source_map,
+    )
 }
 
 fn lower_enum<'db>(db: &'db dyn Db, id: EnumId<'db>) -> (EnumSignature, ExpressionStoreSourceMap) {
@@ -303,7 +353,11 @@ fn lower_enum<'db>(db: &'db dyn Db, id: EnumId<'db>) -> (EnumSignature, Expressi
     let mut generic_params = GenericParams::default();
     let mut variants = Vec::new();
     if let Some(node) = &node {
-        generic_params = lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter());
+        generic_params = lower_generic_params(
+            &mut c,
+            node.generic_param_list(),
+            node.where_clause().into_iter(),
+        );
         for variant in node.variants() {
             // Like the item tree, leave out variants without a name.
             let Some(name) = variant.name() else { continue };
@@ -312,21 +366,39 @@ fn lower_enum<'db>(db: &'db dyn Db, id: EnumId<'db>) -> (EnumSignature, Expressi
         }
     }
     let (store, source_map) = c.finish();
-    let sig =
-        EnumSignature { name: item.name.clone(), visibility: item.visibility, generic_params, variants: variants.into(), store };
+    let sig = EnumSignature {
+        name: item.name.clone(),
+        visibility: item.visibility,
+        generic_params,
+        variants: variants.into(),
+        store,
+    };
     (sig, source_map)
 }
 
-fn lower_class<'db>(db: &'db dyn Db, id: ClassId<'db>) -> (ClassSignature, ExpressionStoreSourceMap) {
+fn lower_class<'db>(
+    db: &'db dyn Db,
+    id: ClassId<'db>,
+) -> (ClassSignature, ExpressionStoreSourceMap) {
     let item = id.item(db);
     let node = item_node::<ast::Class>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
     let generic_params = match &node {
-        Some(node) => lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter()),
+        Some(node) => {
+            lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter())
+        }
         None => GenericParams::default(),
     };
     let (store, source_map) = c.finish();
-    (ClassSignature { name: item.name.clone(), visibility: item.visibility, generic_params, store }, source_map)
+    (
+        ClassSignature {
+            name: item.name.clone(),
+            visibility: item.visibility,
+            generic_params,
+            store,
+        },
+        source_map,
+    )
 }
 
 fn lower_impl<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, ExpressionStoreSourceMap) {
@@ -335,7 +407,11 @@ fn lower_impl<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, Expressi
     let mut c = ExprCollector::new();
     let (generic_params, class) = match &node {
         Some(node) => (
-            lower_generic_params(&mut c, node.generic_param_list(), node.where_clause().into_iter()),
+            lower_generic_params(
+                &mut c,
+                node.generic_param_list(),
+                node.where_clause().into_iter(),
+            ),
             c.lower_opt_type(node.ty()),
         ),
         None => (GenericParams::default(), c.lower_opt_type(None)),
@@ -344,16 +420,25 @@ fn lower_impl<'db>(db: &'db dyn Db, id: ImplId<'db>) -> (ImplSignature, Expressi
     (ImplSignature { generic_params, class, store }, source_map)
 }
 
-fn lower_const<'db>(db: &'db dyn Db, id: ConstId<'db>) -> (ConstSignature, ExpressionStoreSourceMap) {
+fn lower_const<'db>(
+    db: &'db dyn Db,
+    id: ConstId<'db>,
+) -> (ConstSignature, ExpressionStoreSourceMap) {
     let item = id.item(db);
     let node = item_node::<ast::Const>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
     let type_ref = c.lower_opt_type(node.and_then(|n| n.ty()));
     let (store, source_map) = c.finish();
-    (ConstSignature { name: item.name.clone(), visibility: item.visibility, type_ref, store }, source_map)
+    (
+        ConstSignature { name: item.name.clone(), visibility: item.visibility, type_ref, store },
+        source_map,
+    )
 }
 
-fn lower_type_alias<'db>(db: &'db dyn Db, id: TypeAliasId<'db>) -> (TypeAliasSignature, ExpressionStoreSourceMap) {
+fn lower_type_alias<'db>(
+    db: &'db dyn Db,
+    id: TypeAliasId<'db>,
+) -> (TypeAliasSignature, ExpressionStoreSourceMap) {
     let item = id.item(db);
     let node = item_node::<ast::TypeAlias>(db, id.file(db), item.ast_id);
     let mut c = ExprCollector::new();
@@ -361,8 +446,12 @@ fn lower_type_alias<'db>(db: &'db dyn Db, id: TypeAliasId<'db>) -> (TypeAliasSig
     let mut bounds = Vec::new();
     let mut type_ref = None;
     if let Some(node) = &node {
-        generic_params = lower_generic_params(&mut c, node.generic_param_list(), node.where_clauses());
-        bounds = node.bounds().map(|b| b.bounds().map(|t| c.lower_type(t)).collect()).unwrap_or_default();
+        generic_params =
+            lower_generic_params(&mut c, node.generic_param_list(), node.where_clauses());
+        bounds = node
+            .bounds()
+            .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
+            .unwrap_or_default();
         type_ref = node.ty().map(|t| c.lower_type(t));
     }
     let (store, source_map) = c.finish();
@@ -391,12 +480,17 @@ fn lower_generic_params(
                 // A metavariable like `$t` in a macro has no NAME node.
                 let name = match p.name() {
                     Some(name) => Name::from_ident(&name.text()),
-                    None => match p.syntax().children_with_tokens().find(|t| t.kind() == METAVARIABLE) {
-                        Some(token) => Name::new(token.as_token().unwrap().text()),
-                        None => continue,
-                    },
+                    None => {
+                        match p.syntax().children_with_tokens().find(|t| t.kind() == METAVARIABLE) {
+                            Some(token) => Name::new(token.as_token().unwrap().text()),
+                            None => continue,
+                        }
+                    }
                 };
-                let bounds = p.bounds().map(|b| b.bounds().map(|t| c.lower_type(t)).collect()).unwrap_or_default();
+                let bounds = p
+                    .bounds()
+                    .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
+                    .unwrap_or_default();
                 let default = p.default_type().map(|t| c.lower_type(t));
                 type_params.push(TypeParamData { name, bounds, default });
             }
@@ -404,7 +498,11 @@ fn lower_generic_params(
                 let Some(name) = p.name() else { continue };
                 let type_ref = c.lower_opt_type(p.ty());
                 let default = p.default_value().map(|e| c.lower_expr(e));
-                const_params.push(ConstParamData { name: Name::from_ident(&name.text()), type_ref, default });
+                const_params.push(ConstParamData {
+                    name: Name::from_ident(&name.text()),
+                    type_ref,
+                    default,
+                });
             }
             ast::GenericParam::Mutability(p) => {
                 if let Some((name, type_ref, bounds)) = c.lower_mutability_param(&p) {
@@ -417,7 +515,10 @@ fn lower_generic_params(
     for clause in where_clauses {
         for pred in clause.predicates() {
             let target = c.lower_opt_type(pred.ty());
-            let bounds = pred.bounds().map(|b| b.bounds().map(|t| c.lower_type(t)).collect()).unwrap_or_default();
+            let bounds = pred
+                .bounds()
+                .map(|b| b.bounds().map(|t| c.lower_type(t)).collect())
+                .unwrap_or_default();
             where_predicates.push(WherePredicate { target, bounds });
         }
     }
@@ -437,7 +538,11 @@ fn lower_field_list(c: &mut ExprCollector, list: Option<ast::FieldList>) -> Fiel
             list.fields()
                 .filter_map(|f| {
                     let name = Name::from_ident(&f.name()?.text());
-                    Some(FieldData { name, visibility: visibility(f.visibility()), type_ref: c.lower_opt_type(f.ty()) })
+                    Some(FieldData {
+                        name,
+                        visibility: visibility(f.visibility()),
+                        type_ref: c.lower_opt_type(f.ty()),
+                    })
                 })
                 .collect(),
         ),

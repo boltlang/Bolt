@@ -1,4 +1,3 @@
-
 use crate::system::file_time_now;
 
 /// A number representing the revision of a file.
@@ -30,7 +29,6 @@ impl FileRevision {
     pub fn as_u128(self) -> u128 {
         self.0
     }
-
 }
 
 impl From<u128> for FileRevision {
@@ -62,7 +60,6 @@ pub enum FileType {
 }
 
 impl FileType {
-
     pub const fn is_file(self) -> bool {
         matches!(self, FileType::File)
     }
@@ -74,9 +71,7 @@ impl FileType {
     pub const fn is_symlink(self) -> bool {
         matches!(self, FileType::Symlink)
     }
-
 }
-
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Metadata {
@@ -86,17 +81,8 @@ pub struct Metadata {
 }
 
 impl Metadata {
-
-    pub fn new(
-        revision: FileRevision,
-        permissions: Option<u32>,
-        file_type: FileType
-    ) -> Self {
-        Self {
-            revision,
-            permissions,
-            file_type,
-        }
+    pub fn new(revision: FileRevision, permissions: Option<u32>, file_type: FileType) -> Self {
+        Self { revision, permissions, file_type }
     }
 
     pub fn revision(&self) -> FileRevision {
@@ -110,5 +96,4 @@ impl Metadata {
     pub fn file_type(&self) -> FileType {
         self.file_type
     }
-
 }

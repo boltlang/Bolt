@@ -14,7 +14,6 @@ fn is_absolute(path: &std::path::Path) -> bool {
 pub struct Path(std::path::Path);
 
 impl Path {
-
     pub fn display(&self) -> std::path::Display<'_> {
         self.0.display()
     }
@@ -39,9 +38,8 @@ impl Path {
             let path = &path.0;
 
             let mut components = path.components().peekable();
-            let mut ret = if let Some(
-                c @ (Component::Prefix(..) | Component::RootDir),
-            ) = components.peek().cloned()
+            let mut ret = if let Some(c @ (Component::Prefix(..) | Component::RootDir)) =
+                components.peek().cloned()
             {
                 components.next();
                 std::path::PathBuf::from(c.as_os_str())
@@ -74,10 +72,9 @@ impl Path {
     pub fn to_system_path_buf(&self) -> PathBuf {
         PathBuf(self.0.to_path_buf())
     }
-
 }
 
-impl <'a> From<&'a std::path::Path> for &'a Path {
+impl<'a> From<&'a std::path::Path> for &'a Path {
     fn from(value: &'a std::path::Path) -> Self {
         Path::new(value)
     }
@@ -128,7 +125,6 @@ impl AsRef<Path> for String {
 pub struct PathBuf(std::path::PathBuf);
 
 impl PathBuf {
-
     pub fn from_std_path_buf(pb: std::path::PathBuf) -> Self {
         Self(pb)
     }
@@ -144,7 +140,6 @@ impl PathBuf {
     pub fn as_str(&self) -> Option<&str> {
         self.0.as_os_str().to_str()
     }
-
 }
 
 impl From<std::path::PathBuf> for SystemPathBuf {

@@ -31,8 +31,15 @@ fn uses(db: &dyn Db, def: DefWithBodyId<'_>, name: &str) -> Vec<ExprId> {
 }
 
 /// The function that `name` names at `expr`.
-fn function<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>, expr: ExprId, name: &str) -> FunctionId<'db> {
-    match Resolver::for_expr(db, def, expr).resolve_path_in_value_ns(db, &Path::from_name(Name::new(name))) {
+fn function<'db>(
+    db: &'db dyn Db,
+    def: DefWithBodyId<'db>,
+    expr: ExprId,
+    name: &str,
+) -> FunctionId<'db> {
+    match Resolver::for_expr(db, def, expr)
+        .resolve_path_in_value_ns(db, &Path::from_name(Name::new(name)))
+    {
         Some(ValueResolution::Value(ValueNs::Function(f))) => f,
         other => panic!("{other:?}"),
     }
@@ -49,8 +56,10 @@ fn a_use_in_generic_code_has_the_impl_of_the_types_it_s_used_with() {
     let int = |b| Ty::Builtin(BuiltinType::Int(b));
 
     // The calls give `shout` the type of their argument.
-    let calls: Vec<Vec<Ty<'_>>> =
-        uses(&db, top, "shout").into_iter().map(|e| infer_body(&db, top).type_args(e).unwrap().to_vec()).collect();
+    let calls: Vec<Vec<Ty<'_>>> = uses(&db, top, "shout")
+        .into_iter()
+        .map(|e| infer_body(&db, top).type_args(e).unwrap().to_vec())
+        .collect();
     assert_eq!(calls, [vec![int(BuiltinInt::I32)], vec![int(BuiltinInt::I64)]]);
 
     // In `shout`, `describe` is used with `shout`'s own type, which the
@@ -64,8 +73,11 @@ fn a_use_in_generic_code_has_the_impl_of_the_types_it_s_used_with() {
     let chosen: Vec<Ty<'_>> = calls
         .iter()
         .map(|call| {
-            let args: Vec<_> = inner.iter().map(|t| subst_scheme_args(shout_params, call, t)).collect();
-            let imp = select_impl(&db, &[file], class, &class_args(&db, class, describe_params, &args)).unwrap();
+            let args: Vec<_> =
+                inner.iter().map(|t| subst_scheme_args(shout_params, call, t)).collect();
+            let imp =
+                select_impl(&db, &[file], class, &class_args(&db, class, describe_params, &args))
+                    .unwrap();
             impl_header(&db, imp).class.as_ref().unwrap().args[0].clone()
         })
         .collect();

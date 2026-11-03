@@ -34,7 +34,11 @@ pub struct Settings {
 impl Settings {
     /// Create the settings of `db`. They rarely change, so they're stored
     /// with a high durability, which saves checking them after each edit.
-    pub fn init<Db: ?Sized + salsa::Database>(db: &Db, prelude: Option<String>, prelude_required: bool) -> Self {
+    pub fn init<Db: ?Sized + salsa::Database>(
+        db: &Db,
+        prelude: Option<String>,
+        prelude_required: bool,
+    ) -> Self {
         Settings::builder(prelude, prelude_required).durability(Durability::HIGH).new(db)
     }
 
@@ -44,7 +48,11 @@ impl Settings {
     }
 
     /// Change the prelude, keeping the durability high.
-    pub fn change_prelude<Db: salsa::Database>(db: &mut Db, prelude: Option<String>, prelude_required: bool) {
+    pub fn change_prelude<Db: salsa::Database>(
+        db: &mut Db,
+        prelude: Option<String>,
+        prelude_required: bool,
+    ) {
         let settings = Settings::get(db);
         settings.set_prelude(db).with_durability(Durability::HIGH).to(prelude);
         settings.set_prelude_required(db).with_durability(Durability::HIGH).to(prelude_required);

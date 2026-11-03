@@ -1,23 +1,20 @@
-mod token_set;
-mod lexer;
-mod event;
-mod parser;
-pub mod grammar;
 mod diagnostic;
+mod event;
+pub mod grammar;
+mod lexer;
+mod parser;
+mod token_set;
 
 use boltlang_syntax::SyntaxKind::{EOF, ERROR};
 pub use boltlang_syntax::rowan;
 
 use rowan::GreenNode;
 
-pub(crate) use event::{process_events, intersperse_trivia};
+pub(crate) use event::{intersperse_trivia, process_events};
 
 pub use diagnostic::Diagnostic;
 
-pub use {
-    lexer::LineColumn,
-    parser::Parser,
-};
+pub use {lexer::LineColumn, parser::Parser};
 
 use crate::{diagnostic::Diagnostics, lexer::tokenize};
 
@@ -50,12 +47,7 @@ pub fn parse<R, F: Fn(&mut Parser) -> R>(text: &str, rule: F) -> (GreenNode, Vec
     let (events, splits) = p.finish();
     lexed.apply_splits(&splits);
     let interspersed = intersperse_trivia(events, &lexed);
-    let node = process_events(
-        interspersed.into_iter(),
-        &lexed,
-        text,
-        &mut diags
-    );
+    let node = process_events(interspersed.into_iter(), &lexed, text, &mut diags);
     (node, diags.take_diagnostics())
 }
 
@@ -66,7 +58,10 @@ mod tests {
     use super::parse;
 
     /// The (kind, text) of every token in the tree.
-    fn tokens(text: &str, rule: impl Fn(&mut crate::Parser)) -> Vec<(boltlang_syntax::SyntaxKind, String)> {
+    fn tokens(
+        text: &str,
+        rule: impl Fn(&mut crate::Parser),
+    ) -> Vec<(boltlang_syntax::SyntaxKind, String)> {
         let (green, diags) = parse(text, rule);
         assert!(diags.is_empty(), "{diags:?}");
         SyntaxNode::new_root(green)
@@ -89,7 +84,8 @@ mod tests {
             p.bump_any();
             m.complete(p, SOURCE_FILE);
         });
-        let kinds: Vec<_> = tokens.iter().map(|(kind, _)| *kind).filter(|kind| *kind != WHITESPACE).collect();
+        let kinds: Vec<_> =
+            tokens.iter().map(|(kind, _)| *kind).filter(|kind| *kind != WHITESPACE).collect();
         assert_eq!(kinds, [MACRO_RULES_KEYWORD, OPERATOR, IDENT]);
     }
 
@@ -129,8 +125,10 @@ mod tests {
     #[test]
     #[should_panic(expected = "the parser seems stuck")]
     fn a_stuck_parser_panics() {
-        parse("x", |p| loop {
-            p.at(IDENT);
+        parse("x", |p| {
+            loop {
+                p.at(IDENT);
+            }
         });
     }
 
@@ -155,11 +153,14 @@ mod tests {
             p.bump_any();
             m.complete(p, SOURCE_FILE);
         });
-        assert_eq!(tokens, [
-            (WHITESPACE, " ".to_string()),
-            (GT, ">".to_string()),
-            (GT, ">".to_string()),
-            (WHITESPACE, " ".to_string()),
-        ]);
+        assert_eq!(
+            tokens,
+            [
+                (WHITESPACE, " ".to_string()),
+                (GT, ">".to_string()),
+                (GT, ">".to_string()),
+                (WHITESPACE, " ".to_string()),
+            ]
+        );
     }
 }

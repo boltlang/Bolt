@@ -120,19 +120,34 @@ pub fn parse(text: &str) -> Result<Manifest, ManifestError> {
     let error = |message: String, range| Err(ManifestError { message, range });
     let name = raw.package.name.get_ref();
     if !is_package_name(name) {
-        return error(format!("`{name}` can't be the name of a package: use letters, digits, `_` and `-`"), range(&raw.package.name));
+        return error(
+            format!("`{name}` can't be the name of a package: use letters, digits, `_` and `-`"),
+            range(&raw.package.name),
+        );
     }
     let mut dependencies = Vec::new();
     for (key, dependency) in raw.dependencies {
         let name = key.get_ref();
         if !is_package_name(name) {
-            return error(format!("`{name}` can't be the name of a dependency: use letters, digits, `_` and `-`"), range(&key));
+            return error(
+                format!(
+                    "`{name}` can't be the name of a dependency: use letters, digits, `_` and `-`"
+                ),
+                range(&key),
+            );
         }
         if name == crate::nameres::STD {
-            return error("`std` comes with the compiler, so it can't be a dependency".to_string(), range(&key));
+            return error(
+                "`std` comes with the compiler, so it can't be a dependency".to_string(),
+                range(&key),
+            );
         }
         let path_range = range(&dependency.path).unwrap_or_default();
-        dependencies.push(Dependency { name: name.clone(), path: dependency.path.into_inner(), path_range });
+        dependencies.push(Dependency {
+            name: name.clone(),
+            path: dependency.path.into_inner(),
+            path_range,
+        });
     }
     let prelude = match raw.package.prelude {
         None => PreludeChoice::Default,
@@ -141,7 +156,10 @@ pub fn parse(text: &str) -> Result<Manifest, ManifestError> {
             RawPrelude::Enabled(false) => PreludeChoice::None,
             RawPrelude::Package(name) => {
                 if name != crate::nameres::STD && !dependencies.iter().any(|d| d.name == *name) {
-                    return error(format!("the prelude is that of `{name}`, which isn't a dependency"), range(&prelude));
+                    return error(
+                        format!("the prelude is that of `{name}`, which isn't a dependency"),
+                        range(&prelude),
+                    );
                 }
                 PreludeChoice::Package(name.clone())
             }
@@ -155,9 +173,13 @@ pub fn parse(text: &str) -> Result<Manifest, ManifestError> {
 /// `bolt.toml`.
 pub fn dependency_dir(db: &dyn Db, manifest_file: File, path: &str) -> Option<SystemPathBuf> {
     let base = package_root(db, manifest_file)?;
-    let dir = SystemPath::absolute(SystemPath::new(&base.as_std_path().join(path)), SystemPath::new("/"));
+    let dir =
+        SystemPath::absolute(SystemPath::new(&base.as_std_path().join(path)), SystemPath::new("/"));
     let dir = db.system().canonicalize_path(&dir).unwrap_or(dir);
-    db.files().resolve(db, SystemPath::new(&dir.as_std_path().join(MANIFEST))).exists(db).then_some(dir)
+    db.files()
+        .resolve(db, SystemPath::new(&dir.as_std_path().join(MANIFEST)))
+        .exists(db)
+        .then_some(dir)
 }
 
 /// What's wrong with the manifest in `file`, with where: that it can't be
@@ -210,7 +232,8 @@ mod tests {
 
     #[test]
     fn manifests() {
-        let text = "[package]\nname = \"demo\"\n\n[dependencies]\nshapes = { path = \"../shapes\" }\n";
+        let text =
+            "[package]\nname = \"demo\"\n\n[dependencies]\nshapes = { path = \"../shapes\" }\n";
         let m = parse(text).unwrap();
         assert_eq!(m.name, "demo");
         assert_eq!(m.prelude, PreludeChoice::Default);
@@ -219,7 +242,10 @@ mod tests {
         assert_eq!(&text[start as usize..end as usize], "\"../shapes\"");
         let m = parse("[package]\nname = \"bare\"\nprelude = false\n").unwrap();
         assert_eq!(m.prelude, PreludeChoice::None);
-        let m = parse("[package]\nname = \"p\"\nprelude = \"geo\"\n[dependencies]\ngeo = { path = \"g\" }\n").unwrap();
+        let m = parse(
+            "[package]\nname = \"p\"\nprelude = \"geo\"\n[dependencies]\ngeo = { path = \"g\" }\n",
+        )
+        .unwrap();
         assert_eq!(m.prelude, PreludeChoice::Package("geo".into()));
     }
 
@@ -231,11 +257,25 @@ mod tests {
         let text = "[package]\nname = \"a b\"\n";
         let (start, end) = parse(text).unwrap_err().range.unwrap();
         assert_eq!(&text[start as usize..end as usize], "\"a b\"");
-        assert!(parse("[package]\nname = \"a\"\n[dependencies]\nstd = { path = \"s\" }\n").unwrap_err().range.is_some());
+        assert!(
+            parse("[package]\nname = \"a\"\n[dependencies]\nstd = { path = \"s\" }\n")
+                .unwrap_err()
+                .range
+                .is_some()
+        );
         assert!(message("[package]\n").contains("name"));
         assert!(message("[package]\nname = \"a\"\nversion = \"1\"\n").contains("version"));
-        assert_eq!(message("[package]\nname = \"a b\"\n"), "`a b` can't be the name of a package: use letters, digits, `_` and `-`");
-        assert_eq!(message("[package]\nname = \"a\"\n[dependencies]\nstd = { path = \"s\" }\n"), "`std` comes with the compiler, so it can't be a dependency");
-        assert_eq!(message("[package]\nname = \"a\"\nprelude = \"geo\"\n"), "the prelude is that of `geo`, which isn't a dependency");
+        assert_eq!(
+            message("[package]\nname = \"a b\"\n"),
+            "`a b` can't be the name of a package: use letters, digits, `_` and `-`"
+        );
+        assert_eq!(
+            message("[package]\nname = \"a\"\n[dependencies]\nstd = { path = \"s\" }\n"),
+            "`std` comes with the compiler, so it can't be a dependency"
+        );
+        assert_eq!(
+            message("[package]\nname = \"a\"\nprelude = \"geo\"\n"),
+            "the prelude is that of `geo`, which isn't a dependency"
+        );
     }
 }

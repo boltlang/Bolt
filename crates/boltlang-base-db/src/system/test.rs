@@ -1,7 +1,11 @@
 use std::sync::Arc;
 
+use crate::system::{
+    InMemorySystem, SystemPathBuf,
+    common::{Result, System, WritableSystem},
+    path::{SystemPath, SystemVirtualPath},
+};
 use crate::vfs::Metadata;
-use crate::system::{InMemorySystem, SystemPathBuf, common::{Result, System, WritableSystem}, path::{SystemPath, SystemVirtualPath}};
 
 #[allow(unused)]
 #[derive(Clone)]
@@ -10,11 +14,9 @@ pub struct TestSystem {
 }
 
 impl TestSystem {
-
     pub fn new(inner: impl WritableSystem + 'static) -> Self {
         Self { inner: Arc::new(inner) }
     }
-
 }
 
 impl Default for TestSystem {
@@ -24,7 +26,6 @@ impl Default for TestSystem {
 }
 
 impl System for TestSystem {
-
     fn read_to_string(&self, path: &SystemPath) -> Result<String> {
         self.inner.read_to_string(path)
     }
@@ -52,11 +53,9 @@ impl System for TestSystem {
     fn virtual_path_metadata(&self, path: &SystemVirtualPath) -> Result<Metadata> {
         self.inner.virtual_path_metadata(path)
     }
-
 }
 
 impl WritableSystem for TestSystem {
-
     fn write_file_bytes(&self, path: &SystemPath, contents: &[u8]) -> Result<()> {
         self.inner.write_file_bytes(path, contents)
     }
@@ -64,5 +63,4 @@ impl WritableSystem for TestSystem {
     fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, contents: &[u8]) -> Result<()> {
         self.inner.write_file_bytes_virtual(path, contents)
     }
-
 }

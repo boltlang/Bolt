@@ -57,7 +57,9 @@ use std::path::Path;
 
 use boltlang_base_db::{File, TestDb};
 use boltlang_codegen::{link, run};
-use boltlang_corpus::{Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating};
+use boltlang_corpus::{
+    Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
+};
 use boltlang_eval::{Evaluator, Limits, Recorder};
 use boltlang_ide_diagnostics::{Severity, dependency_diagnostics, diagnostics};
 use libtest_mimic::{Arguments, Failed, Trial};
@@ -101,7 +103,13 @@ struct Attributes {
 
 impl Attributes {
     fn parse(case: &Case) -> Result<Self, String> {
-        let mut attributes = Attributes { eval: Status::Run, wasm: Status::Run, fuel: 10_000_000, prelude: false, test_prelude: false };
+        let mut attributes = Attributes {
+            eval: Status::Run,
+            wasm: Status::Run,
+            fuel: 10_000_000,
+            prelude: false,
+            test_prelude: false,
+        };
         for attribute in &case.attributes {
             let mut words = attribute.split_whitespace();
             let status = match words.next() {
@@ -117,10 +125,10 @@ impl Attributes {
                     continue;
                 }
                 Some("fuel") => {
-                    attributes.fuel = words
-                        .next()
-                        .and_then(|n| n.replace('_', "").parse().ok())
-                        .ok_or_else(|| format!("`{}`: expected a number after `:fuel`", case.title))?;
+                    attributes.fuel =
+                        words.next().and_then(|n| n.replace('_', "").parse().ok()).ok_or_else(
+                            || format!("`{}`: expected a number after `:fuel`", case.title),
+                        )?;
                     continue;
                 }
                 _ => {
@@ -135,7 +143,12 @@ impl Attributes {
                 None => &Backend::ALL[..],
                 Some("eval") => &[Backend::Eval],
                 Some("wasm") => &[Backend::Wasm],
-                Some(other) => return Err(format!("`{}`: unknown backend `{other}`; use `eval` or `wasm`", case.title)),
+                Some(other) => {
+                    return Err(format!(
+                        "`{}`: unknown backend `{other}`; use `eval` or `wasm`",
+                        case.title
+                    ));
+                }
             };
             for backend in backends {
                 *attributes.status_mut(*backend) = status;
@@ -169,8 +182,10 @@ fn database(case: &Case, prelude: bool, test_prelude: bool) -> Result<(TestDb, F
         db.add_std();
     }
     db.set_prelude(prelude.then_some("std"), prelude);
-    let files: Vec<_> =
-        split_files(&case.input)?.into_iter().map(|(path, text)| (path.clone(), db.file(&path, &text))).collect();
+    let files: Vec<_> = split_files(&case.input)?
+        .into_iter()
+        .map(|(path, text)| (path.clone(), db.file(&path, &text)))
+        .collect();
     let main = files.iter().find(|(path, _)| path == "/main.bolt").map(|(_, file)| *file);
     let main = main.ok_or("the program needs a file `/main.bolt`")?;
     let errors: Vec<_> = files
@@ -203,12 +218,17 @@ fn output(case: &Case, attributes: &Attributes, backend: Backend) -> Result<Stri
     let result = match backend {
         Backend::Eval => {
             let limits = Limits { fuel: Some(attributes.fuel), ..Limits::default() };
-            let mut evaluator = Evaluator::with_limits(&db, limits).with_mutability_checks().with_host(printed.clone());
-            catch("the evaluator", || Ok(evaluator.eval_file(file).map_err(|e| vec![e.kind.to_string()])))?
+            let mut evaluator = Evaluator::with_limits(&db, limits)
+                .with_mutability_checks()
+                .with_host(printed.clone());
+            catch("the evaluator", || {
+                Ok(evaluator.eval_file(file).map_err(|e| vec![e.kind.to_string()]))
+            })?
         }
         Backend::Wasm => catch("the code generator", || {
             Ok(match link(&db, file) {
-                Ok(bytes) => run(&db, file, &bytes, printed.clone(), Some(attributes.fuel)).map_err(|e| vec![e.to_string()]),
+                Ok(bytes) => run(&db, file, &bytes, printed.clone(), Some(attributes.fuel))
+                    .map_err(|e| vec![e.to_string()]),
                 Err(errors) => Err(errors.iter().map(|e| e.to_string()).collect()),
             })
         })?,
@@ -217,7 +237,9 @@ fn output(case: &Case, attributes: &Attributes, backend: Backend) -> Result<Stri
     // compiled code too.
     let result = result.and_then(|value| match value.is_unit() {
         true => Ok(None),
-        false => Evaluator::new(&db).show(file, &value).map(Some).map_err(|e| vec![e.kind.to_string()]),
+        false => {
+            Evaluator::new(&db).show(file, &value).map(Some).map_err(|e| vec![e.kind.to_string()])
+        }
     });
     let mut out = printed.output();
     match result {
@@ -281,7 +303,10 @@ fn main() {
         for case in cases {
             let name = format!("{stem}::{}", slug(&case.title));
             if seen.contains(&name) {
-                trials.push(fail(format!("{name}_again"), format!("{}: two cases are called `{}`", path.display(), case.title)));
+                trials.push(fail(
+                    format!("{name}_again"),
+                    format!("{}: two cases are called `{}`", path.display(), case.title),
+                ));
                 continue;
             }
             seen.push(name.clone());
@@ -297,11 +322,17 @@ fn main() {
                 let name = format!("{name}::{}", backend.name());
                 let trial = match case.1.status(backend) {
                     // Never run, even with `--ignored`, since it may hang.
-                    Status::Skip => Trial::test(name, || Ok(())).with_kind("skip").with_ignored_flag(true),
+                    Status::Skip => {
+                        Trial::test(name, || Ok(())).with_kind("skip").with_ignored_flag(true)
+                    }
                     status => {
                         let case = case.clone();
                         let trial = Trial::test(name, move || test(&case.0, &case.1, backend));
-                        if status == Status::Todo { trial.with_kind("todo").with_ignored_flag(true) } else { trial }
+                        if status == Status::Todo {
+                            trial.with_kind("todo").with_ignored_flag(true)
+                        } else {
+                            trial
+                        }
                     }
                 };
                 trials.push(trial);

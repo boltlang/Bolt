@@ -15,16 +15,16 @@
 use std::fmt;
 
 use boltlang_base_db::{Db, File, parse_file, source_text};
+use boltlang_hir::{BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
+/// The manifest of a file's package, and the name of manifests.
+pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
+/// The files a file uses, through its prelude and its imports.
+pub use boltlang_hir_def::nameres::files_used_by;
 use boltlang_hir_def::{
     item_tree::{ModItem, item_tree},
     manifest::manifest_problems,
     nameres::{package_of, prelude_file, resolve_import_path},
 };
-/// The files a file uses, through its prelude and its imports.
-pub use boltlang_hir_def::nameres::files_used_by;
-/// The manifest of a file's package, and the name of manifests.
-pub use boltlang_hir_def::manifest::{MANIFEST, package_manifest};
-use boltlang_hir::{BadTest, Because, BecauseKind, ClassItemKind, DiagnosticKind, ImportPathError};
 use boltlang_hir_ty::{AdtId, NumberKind, Ty, TyNames, builtin::Builtin, lower::ClassConstraint};
 use boltlang_syntax::{
     SyntaxKind, SyntaxNode,
@@ -189,14 +189,16 @@ pub fn dependency_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
         .collect();
     let mut out = Vec::new();
     for &used in files_used_by(db, file) {
-        let errors: Vec<Diagnostic> = diagnostics(db, used).into_iter().filter(|d| d.severity == Severity::Error).collect();
+        let errors: Vec<Diagnostic> =
+            diagnostics(db, used).into_iter().filter(|d| d.severity == Severity::Error).collect();
         let Some(first) = errors.first() else { continue };
         let name = short_path(db, file, used);
         let count = count(errors.len(), "error", "errors");
         let (range, through) = if in_prelude(used) {
             (TextRange::default(), "through the prelude")
         } else {
-            let import = imports.iter().find(|(f, _)| *f == used || files_used_by(db, *f).contains(&used));
+            let import =
+                imports.iter().find(|(f, _)| *f == used || files_used_by(db, *f).contains(&used));
             (import.map_or(TextRange::default(), |(_, range)| *range), "through this import")
         };
         out.push(Diagnostic {
@@ -204,8 +206,14 @@ pub fn dependency_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
             severity: Severity::Error,
             file,
             range,
-            message: format!("`{name}`, which this file uses {through}, has {count}; fix them first"),
-            labels: vec![Label { file: used, range: first.range, message: format!("the first: {}", first.message) }],
+            message: format!(
+                "`{name}`, which this file uses {through}, has {count}; fix them first"
+            ),
+            labels: vec![Label {
+                file: used,
+                range: first.range,
+                message: format!("the first: {}", first.message),
+            }],
         });
     }
     out
@@ -218,7 +226,10 @@ pub fn short_path(db: &dyn Db, file: File, used: File) -> String {
     let path = path.as_std_path();
     let base = match package_of(db, used) {
         Some(package) => package.as_std_path().parent().map(|p| p.to_path_buf()),
-        None => file.path(db).as_system_path_buf().and_then(|f| f.as_std_path().parent().map(|p| p.to_path_buf())),
+        None => file
+            .path(db)
+            .as_system_path_buf()
+            .and_then(|f| f.as_std_path().parent().map(|p| p.to_path_buf())),
     };
     let short = base.as_deref().and_then(|base| path.strip_prefix(base).ok()).unwrap_or(path);
     short.to_string_lossy().into_owned()
@@ -246,7 +257,8 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
             // an `imm fn()` and a generic `fn()`, are shown with them.
             if let DiagnosticKind::TypeMismatch { expected, actual, .. } = &d.kind
                 && same_named.is_empty()
-                && expected.display_with(db, &names).to_string() == actual.display_with(db, &names).to_string()
+                && expected.display_with(db, &names).to_string()
+                    == actual.display_with(db, &names).to_string()
             {
                 names = TyNames::explicit(db, &types_in(&d.kind));
             }
@@ -262,11 +274,13 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                     range: *other_range,
                     message: "the impl it overlaps".to_string(),
                 }],
-                DiagnosticKind::OverlappingFunction { other_file, other_range, .. } => vec![Label {
-                    file: *other_file,
-                    range: *other_range,
-                    message: "the function it overlaps".to_string(),
-                }],
+                DiagnosticKind::OverlappingFunction { other_file, other_range, .. } => {
+                    vec![Label {
+                        file: *other_file,
+                        range: *other_range,
+                        message: "the function it overlaps".to_string(),
+                    }]
+                }
                 DiagnosticKind::TypeMismatch { because: Some(because), .. }
                 | DiagnosticKind::NoInstance { because: Some(because), .. }
                 | DiagnosticKind::AmbiguousConstraint { because: Some(because), .. }
@@ -276,17 +290,32 @@ pub fn diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 }
                 _ => Vec::new(),
             };
-            let (code, mut message) =
-                describe(db, &names, &text[usize::from(d.range.start())..usize::from(d.range.end())], d.kind);
+            let (code, mut message) = describe(
+                db,
+                &names,
+                &text[usize::from(d.range.start())..usize::from(d.range.end())],
+                d.kind,
+            );
             for (name, ids) in &same_named {
                 let all = if ids.len() == 2 { "both" } else { "all" };
                 message.push_str(&format!(" (these are different types, {all} called `{name}`)"));
                 for (i, &id) in ids.iter().enumerate() {
                     let which = if i == 0 { "one" } else { "another" };
-                    labels.extend(definition_label(db, id, format!("{which} `{name}` is defined here")));
+                    labels.extend(definition_label(
+                        db,
+                        id,
+                        format!("{which} `{name}` is defined here"),
+                    ));
                 }
             }
-            Diagnostic { code, severity: code.severity(), file: d.file, range: d.range, message, labels }
+            Diagnostic {
+                code,
+                severity: code.severity(),
+                file: d.file,
+                range: d.range,
+                message,
+                labels,
+            }
         })
         .collect()
 }
@@ -301,7 +330,9 @@ pub fn manifest_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
             code: DiagnosticCode::BAD_MANIFEST,
             severity: Severity::Error,
             file,
-            range: problem.range.map_or_else(TextRange::default, |(start, end)| TextRange::new(start.into(), end.into())),
+            range: problem.range.map_or_else(TextRange::default, |(start, end)| {
+                TextRange::new(start.into(), end.into())
+            }),
             message: problem.message,
             labels: Vec::new(),
         })
@@ -365,7 +396,10 @@ pub fn syntax_diagnostics(db: &dyn Db, file: File) -> Vec<Diagnostic> {
                 code: DiagnosticCode::SYNTAX,
                 severity: Severity::Error,
                 file,
-                range: TextRange::new(TextSize::from(span.start as u32), TextSize::from(span.end as u32)),
+                range: TextRange::new(
+                    TextSize::from(span.start as u32),
+                    TextSize::from(span.end as u32),
+                ),
                 message: error.message(),
                 labels: Vec::new(),
             }
@@ -401,13 +435,13 @@ fn types_in<'a, 'db>(kind: &'a DiagnosticKind<'db>) -> Vec<&'a Ty<'db>> {
         DiagnosticKind::NotAtMost { held, .. } => vec![held],
         DiagnosticKind::NoInstance { constraint, .. }
         | DiagnosticKind::AmbiguousConstraint { constraint, .. }
-        | DiagnosticKind::UnmetAssocBound { constraint, .. } => {
-            constraint.args.iter().collect()
-        }
+        | DiagnosticKind::UnmetAssocBound { constraint, .. } => constraint.args.iter().collect(),
         DiagnosticKind::UnusedImplParam { instance, suggestion, .. } => {
             instance.args.iter().chain(suggestion).collect()
         }
-        DiagnosticKind::OverlappingImpl { instance, other, .. } => instance.args.iter().chain(other.args.iter()).collect(),
+        DiagnosticKind::OverlappingImpl { instance, other, .. } => {
+            instance.args.iter().chain(other.args.iter()).collect()
+        }
         DiagnosticKind::NoOverload { ty, .. } => vec![ty],
         DiagnosticKind::UnmetAssocEquality { expected, actual, .. } => vec![expected, actual],
         _ => Vec::new(),
@@ -422,7 +456,12 @@ fn article(word: &str) -> &'static str {
 
 /// The code and message of a diagnostic about `source`, the text it's at.
 /// `names` names the unknown types in it.
-fn describe(db: &dyn Db, names: &TyNames, source: &str, kind: DiagnosticKind<'_>) -> (DiagnosticCode, String) {
+fn describe(
+    db: &dyn Db,
+    names: &TyNames,
+    source: &str,
+    kind: DiagnosticKind<'_>,
+) -> (DiagnosticCode, String) {
     use DiagnosticCode as C;
     use DiagnosticKind as K;
     match kind {
@@ -821,8 +860,12 @@ fn because_label(db: &dyn Db, names: &TyNames, because: &Because<'_>) -> Label {
         BecauseKind::Annotation => "expected because of this annotation".to_string(),
         BecauseKind::ReturnType => "expected because of the return type".to_string(),
         BecauseKind::ConstType => "expected because of the type of the constant".to_string(),
-        BecauseKind::Parameter { function: Some(name) } => format!("expected because of this parameter of `{name}`"),
-        BecauseKind::Parameter { function: None } => "expected because of this parameter".to_string(),
+        BecauseKind::Parameter { function: Some(name) } => {
+            format!("expected because of this parameter of `{name}`")
+        }
+        BecauseKind::Parameter { function: None } => {
+            "expected because of this parameter".to_string()
+        }
         BecauseKind::Field { name } => format!("expected because of the type of field `{name}`"),
         BecauseKind::SameAs { ty } => format!("this has type `{}`", ty.display_with(db, names)),
         BecauseKind::ClassItem { class } => {
@@ -853,8 +896,10 @@ fn item_list(items: &[(ClassItemKind, impl fmt::Display)]) -> String {
     let groups: Vec<String> = [ClassItemKind::Method, ClassItemKind::Const, ClassItemKind::Type]
         .into_iter()
         .filter_map(|kind| {
-            let names: Vec<String> = items.iter().filter(|(k, _)| *k == kind).map(|(_, n)| format!("`{n}`")).collect();
-            (!names.is_empty()).then(|| format!("{} {}", item_noun(kind, names.len()), names.join(", ")))
+            let names: Vec<String> =
+                items.iter().filter(|(k, _)| *k == kind).map(|(_, n)| format!("`{n}`")).collect();
+            (!names.is_empty())
+                .then(|| format!("{} {}", item_noun(kind, names.len()), names.join(", ")))
         })
         .collect();
     match groups.split_last() {
@@ -866,7 +911,8 @@ fn item_list(items: &[(ClassItemKind, impl fmt::Display)]) -> String {
 
 fn constraint_display(db: &dyn Db, names: &TyNames, constraint: &ClassConstraint<'_>) -> String {
     let name = constraint.class.item(db).name.as_ref().map_or("?", |n| n.as_str());
-    let args: Vec<_> = constraint.args.iter().map(|t| t.display_with(db, names).to_string()).collect();
+    let args: Vec<_> =
+        constraint.args.iter().map(|t| t.display_with(db, names).to_string()).collect();
     format!("{name}[{}]", args.join(", "))
 }
 

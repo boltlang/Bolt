@@ -53,7 +53,10 @@ fn comparisons_and_logic() {
 fn true_and_false_are_names() {
     assert_eq!(run("(True, !True, False || True)"), "(True, False, True)");
     assert_eq!(run("match 1 > 2 { True => \"yes\", False => \"no\" }"), "\"no\"");
-    assert_eq!(run("enum Answer { True, Maybe }\nimport Answer.*;\nmatch True { Maybe => 1, True => 2 }"), "2");
+    assert_eq!(
+        run("enum Answer { True, Maybe }\nimport Answer.*;\nmatch True { Maybe => 1, True => 2 }"),
+        "2"
+    );
 }
 
 #[test]
@@ -152,7 +155,10 @@ fn mutability_checks_find_what_the_type_checker_should_rule_out() {
     assert_eq!(checked("let xs = [1, 2];\nxs[0] = 3;"), changed);
     assert_eq!(checked("let xs = [1, 2];\narray_copy(xs, 0, [9], 0, 1);"), changed);
     assert_eq!(checked("struct P { x: i32 }\nlet p = P { x: 1 };\np.x = 2;"), changed);
-    assert_eq!(checked("struct P { t: (i32, i32) }\nlet p = P { t: (1, 2) };\np.t.0 = 2;"), changed);
+    assert_eq!(
+        checked("struct P { t: (i32, i32) }\nlet p = P { t: (1, 2) };\np.t.0 = 2;"),
+        changed
+    );
     assert_eq!(checked("let xs = [mut [1]];"), holds_mut);
     assert_eq!(checked("struct P { xs: [i32] }\nlet p = P { xs: mut [1] };"), holds_mut);
     // Through a variant or a tuple too.
@@ -175,7 +181,9 @@ fn to_imm_of_an_imm_array_is_the_array_itself() {
     let (db, file) = db_with_std("let xs = [1, 2];\nlet ys = to_imm(xs);\n(xs, ys);");
     let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();
     let crate::Value::Tuple(items) = value else { panic!("{value:?}") };
-    let (crate::Value::Array(xs), crate::Value::Array(ys)) = (&items[0], &items[1]) else { panic!() };
+    let (crate::Value::Array(xs), crate::Value::Array(ys)) = (&items[0], &items[1]) else {
+        panic!()
+    };
     assert!(std::rc::Rc::ptr_eq(xs, ys));
 }
 
@@ -255,7 +263,10 @@ fn consts() {
         M
     ";
     assert_eq!(run(code), "42");
-    assert!(matches!(error_kind("const A: i32 = A + 1; A", Limits::default()), ErrorKind::ConstCycle(_)));
+    assert!(matches!(
+        error_kind("const A: i32 = A + 1; A", Limits::default()),
+        ErrorKind::ConstCycle(_)
+    ));
 }
 
 #[test]
@@ -304,7 +315,9 @@ const ARRAY_ALLOC: &str = "extern \"bolt\" { fn array_alloc[T](len: i32) -> mut 
 
 #[test]
 fn print_goes_to_the_host() {
-    let (db, file) = db_with_std("fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");");
+    let (db, file) = db_with_std(
+        "fn greet(name: String) { print(\"hello\"); print(name); }\ngreet(\"Bolt\");\nprint(\"bye\");",
+    );
     let recorder = crate::Recorder::default();
     let mut evaluator = Evaluator::new(&db).with_mutability_checks().with_host(recorder.clone());
     evaluator.eval_file(file).unwrap();
@@ -318,17 +331,23 @@ fn effects_are_refused_without_a_host_and_in_consts() {
     assert_eq!(error.kind, ErrorKind::Effect("print"));
 
     // Even with a host, a const can't print.
-    let (db, file) = db_with_std("fn noisy() -> i32 { print(\"evaluating\"); 1 }\nconst N: i32 = noisy();\nN;");
+    let (db, file) =
+        db_with_std("fn noisy() -> i32 { print(\"evaluating\"); 1 }\nconst N: i32 = noisy();\nN;");
     let recorder = crate::Recorder::default();
-    let error = Evaluator::new(&db).with_mutability_checks().with_host(recorder.clone()).eval_file(file).unwrap_err();
+    let error = Evaluator::new(&db)
+        .with_mutability_checks()
+        .with_host(recorder.clone())
+        .eval_file(file)
+        .unwrap_err();
     assert_eq!(error.kind, ErrorKind::Effect("print"));
     assert_eq!(recorder.output(), "");
 }
 
 #[test]
 fn array_alloc_makes_elements_to_set() {
-    let (db, file) =
-        db_with_std(&format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);"));
+    let (db, file) = db_with_std(&format!(
+        "{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\nxs[2] = 3;\n(array_len(xs), xs);"
+    ));
     let value = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap();
     assert_eq!(value.display(&db).to_string(), "(3, [1, _, 3])");
 }
@@ -336,19 +355,25 @@ fn array_alloc_makes_elements_to_set() {
 #[test]
 fn reading_an_unset_element_is_an_error() {
     let prefix = format!("{ARRAY_ALLOC}let xs: mut [i32] = array_alloc(3);\nxs[0] = 1;\n");
-    for read in ["xs[1];", "xs[1] += 1;", "for x in xs { x; }", "match xs { [a, b, c] => a, _ => 0 };"] {
+    for read in
+        ["xs[1];", "xs[1] += 1;", "for x in xs { x; }", "match xs { [a, b, c] => a, _ => 0 };"]
+    {
         let (db, file) = db_with_std(&format!("{prefix}{read}"));
         let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
         assert_eq!(error.kind, ErrorKind::UnsetElement { index: 1 }, "{read}");
     }
-    let (db, file) = db_with_std(&format!("{ARRAY_ALLOC}struct P {{ x: i32 }}\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;"));
+    let (db, file) = db_with_std(&format!(
+        "{ARRAY_ALLOC}struct P {{ x: i32 }}\nlet ps: mut [mut P] = array_alloc(1);\nps[0].x = 1;"
+    ));
     let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::UnsetElement { index: 0 });
 }
 
 #[test]
 fn array_copy_copies_unset_elements_as_they_are() {
-    let code = format!("{ARRAY_ALLOC}let a: mut [i32] = array_alloc(3);\na[0] = 1;\nlet b = mut [7, 8, 9];\narray_copy(b, 0, a, 0, 3);\nb;");
+    let code = format!(
+        "{ARRAY_ALLOC}let a: mut [i32] = array_alloc(3);\na[0] = 1;\nlet b = mut [7, 8, 9];\narray_copy(b, 0, a, 0, 3);\nb;"
+    );
     assert_eq!(run(&code), "[1, _, _]");
 }
 
@@ -373,7 +398,9 @@ fn an_error_in_std_is_reported_at_the_program() {
 
 #[test]
 fn panic_stops_with_its_message() {
-    let (db, file) = db_with_std("fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);");
+    let (db, file) = db_with_std(
+        "fn check(n: i32) -> i32 = if n < 0 { panic(\"negative\") } else { n };\ncheck(1) + check(-1);",
+    );
     let error = Evaluator::new(&db).with_mutability_checks().eval_file(file).unwrap_err();
     assert_eq!(error.kind, ErrorKind::Panic("negative".into()));
     assert_eq!(error.to_string(), "panicked: negative");

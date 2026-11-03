@@ -41,7 +41,16 @@ fn setup(db: &TestDb) -> (Setup<'_>, File) {
     let ModItem::Enum(idx) = tree.top_level[3] else { panic!() };
     let body = DefWithBodyId::new(db, DefWithBody::File(file));
     let origin = Origin::new(body, ExprOrPat::Expr(ExprId::new(0)));
-    (Setup { eq: class(0), ord: class(1), show: class(2), list: EnumId::new(db, file, idx), origin }, file)
+    (
+        Setup {
+            eq: class(0),
+            ord: class(1),
+            show: class(2),
+            list: EnumId::new(db, file, idx),
+            origin,
+        },
+        file,
+    )
 }
 
 fn class<'db>(class: ClassId<'db>, ty: Ty<'db>) -> ClassConstraint<'db> {
@@ -54,11 +63,15 @@ fn instances_from_impls() {
     let (s, file) = setup(&db);
     let list = |t| Ty::adt(AdtId::Enum(s.list), [t], [], Ty::Error);
     let mut solver = Solver::new(&db, file);
-    solver.add(Constraint::Class { constraint: class(s.show, list(list(i32()))), origin: s.origin });
+    solver
+        .add(Constraint::Class { constraint: class(s.show, list(list(i32()))), origin: s.origin });
     solver.add(Constraint::Class { constraint: class(s.show, list(Ty::bool())), origin: s.origin });
     solver.finish();
     // `Show[List[Bool]]` needs `Show[Bool]`, which has no impl.
-    assert_eq!(solver.errors, [TypeError::NoInstance { origin: s.origin, constraint: class(s.show, Ty::bool()) }]);
+    assert_eq!(
+        solver.errors,
+        [TypeError::NoInstance { origin: s.origin, constraint: class(s.show, Ty::bool()) }]
+    );
 }
 
 #[test]
@@ -91,5 +104,7 @@ fn assumptions_and_superclasses() {
     solver.add(Constraint::Class { constraint: class(s.eq, t.clone()), origin: s.origin });
     solver.add(Constraint::Class { constraint: class(s.show, t), origin: s.origin });
     solver.finish();
-    assert!(matches!(&solver.errors[..], [TypeError::NoInstance { constraint, .. }] if constraint.class == s.show));
+    assert!(
+        matches!(&solver.errors[..], [TypeError::NoInstance { constraint, .. }] if constraint.class == s.show)
+    );
 }

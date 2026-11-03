@@ -12,12 +12,12 @@ use boltlang_hir_def::{
 
 use crate::{
     lower::{
-        ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty, impl_header, named_mutabilities,
-        subst_params,
+        ClassConstraint, fn_sig, generic_predicates, identity_args, imm, impl_assoc_ty,
+        impl_header, named_mutabilities, subst_params,
     },
     solve::{
-        AssocConstraint, AtMostConstraint, AtMostSource, Constraint, ConstraintSource, FieldConstraint, Held, Origin,
-        Reason, Solver, normalize_assoc,
+        AssocConstraint, AtMostConstraint, AtMostSource, Constraint, ConstraintSource,
+        FieldConstraint, Held, Origin, Reason, Solver, normalize_assoc,
     },
     ty::{GenericParamId, Ty, TyNames, VarKind, is_hidden_param},
 };
@@ -57,7 +57,10 @@ pub struct SchemeSources<'db> {
 
 /// The origin of a constraint of a scheme instantiated at `origin`: the
 /// same place, with a reason that points at where the scheme needs it.
-fn required_by<'db>(origin: Origin<'db>, source: Option<&Option<ConstraintSource<'db>>>) -> Origin<'db> {
+fn required_by<'db>(
+    origin: Origin<'db>,
+    source: Option<&Option<ConstraintSource<'db>>>,
+) -> Origin<'db> {
     match source.copied().flatten() {
         Some(source) => Origin { reason: Reason::RequiredBy(source), ..origin },
         None => origin,
@@ -103,7 +106,8 @@ impl<'db> Scheme<'db> {
     /// The types it gives the parameters and bound variables are kept, by
     /// `origin`, for the code generator and the evaluator.
     pub fn instantiate(&self, solver: &mut Solver<'db>, origin: Origin<'db>) -> Ty<'db> {
-        let args: Vec<Ty<'db>> = self.params.iter().map(|_| solver.new_var(VarKind::General)).collect();
+        let args: Vec<Ty<'db>> =
+            self.params.iter().map(|_| solver.new_var(VarKind::General)).collect();
         let params: HashMap<_, _> = self.params.iter().copied().zip(args.iter().cloned()).collect();
         let bound: Vec<_> = (0..self.bound).map(|_| solver.new_var(VarKind::General)).collect();
         solver.instantiations.push((origin, args.iter().chain(&bound).cloned().collect()));
@@ -134,7 +138,10 @@ impl<'db> Scheme<'db> {
             let origin = required_by(origin, self.sources.assoc.get(i));
             let args = assoc.args.iter().map(|t| solver.flatten_assoc(&subst(t), origin)).collect();
             let ty = solver.flatten_assoc(&subst(&assoc.ty), origin);
-            solver.add(Constraint::Assoc { constraint: AssocConstraint { alias: assoc.alias, args, ty }, origin });
+            solver.add(Constraint::Assoc {
+                constraint: AssocConstraint { alias: assoc.alias, args, ty },
+                origin,
+            });
         }
         for (i, bound) in self.bounds.iter().enumerate() {
             let origin = required_by(origin, self.sources.bounds.get(i));
@@ -157,13 +164,15 @@ impl<'db> Scheme<'db> {
         for field in self.fields.iter() {
             tys.extend([&field.ty, &field.field]);
         }
-        let projections: Vec<Ty<'db>> = self.assoc.iter().map(|a| Ty::Assoc(a.alias, a.args.clone())).collect();
+        let projections: Vec<Ty<'db>> =
+            self.assoc.iter().map(|a| Ty::Assoc(a.alias, a.args.clone())).collect();
         for (projection, assoc) in projections.iter().zip(self.assoc.iter()) {
             tys.extend([projection, &assoc.ty]);
         }
         // A mutability in a bound counts as a use of it, so that it gets a
         // name like `'m`.
-        let as_mutability = |m: &Ty<'db>| Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()));
+        let as_mutability =
+            |m: &Ty<'db>| Ty::Fn(Box::new([]), Box::new(Ty::unit()), Box::new(m.clone()));
         let bound_tys: Vec<Ty<'db>> = self
             .bounds
             .iter()
@@ -178,8 +187,12 @@ impl<'db> Scheme<'db> {
         tys.extend(bound_tys.iter());
         let names = TyNames::new(db, &tys);
         let show = |t: &Ty<'db>| t.display_with(db, &names).to_string();
-        let mut forall: Vec<String> =
-            self.params.iter().filter(|p| !is_hidden_param(db, **p)).map(|p| show(&Ty::Param(*p))).collect();
+        let mut forall: Vec<String> = self
+            .params
+            .iter()
+            .filter(|p| !is_hidden_param(db, **p))
+            .map(|p| show(&Ty::Param(*p)))
+            .collect();
         forall.extend(names.bound_names().map(str::to_string));
         let mut out = String::new();
         if !forall.is_empty() {
@@ -192,7 +205,12 @@ impl<'db> Scheme<'db> {
         }
         for field in self.fields.iter() {
             let prefix = if field.assign { "mut " } else { "" };
-            out.push_str(&format!("{prefix}{}.{}: {} => ", show(&field.ty), field.name, show(&field.field)));
+            out.push_str(&format!(
+                "{prefix}{}.{}: {} => ",
+                show(&field.ty),
+                field.name,
+                show(&field.field)
+            ));
         }
         for (projection, assoc) in projections.iter().zip(self.assoc.iter()) {
             out.push_str(&format!("{} = {} => ", show(projection), show(&assoc.ty)));
@@ -257,14 +275,17 @@ pub fn assumptions_with_sources<'db>(
 ) -> Vec<(ClassConstraint<'db>, Option<ConstraintSource<'db>>)> {
     let mut out = Vec::new();
     if let ItemContainerId::Class(c) = f.container(db) {
-        out.push((ClassConstraint { class: c, args: identity_args(db, GenericDefId::Class(c)) }, None));
+        out.push((
+            ClassConstraint { class: c, args: identity_args(db, GenericDefId::Class(c)) },
+            None,
+        ));
     }
     for def in generic_chain(db, f) {
         if !matches!(def, GenericDefId::Class(_)) {
             let predicates = generic_predicates(db, def);
-            out.extend(predicates.predicates.iter().zip(predicates.sources.iter()).map(|(c, &type_ref)| {
-                (c.clone(), Some(ConstraintSource::Declared { def, type_ref }))
-            }));
+            out.extend(predicates.predicates.iter().zip(predicates.sources.iter()).map(
+                |(c, &type_ref)| (c.clone(), Some(ConstraintSource::Declared { def, type_ref })),
+            ));
         }
     }
     out
@@ -280,12 +301,9 @@ pub fn at_most_assumptions<'db>(
     for def in generic_chain(db, f) {
         if !matches!(def, GenericDefId::Class(_)) {
             let predicates = generic_predicates(db, def);
-            out.extend(
-                predicates
-                    .at_most
-                    .iter()
-                    .map(|(c, type_ref)| (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))),
-            );
+            out.extend(predicates.at_most.iter().map(|(c, type_ref)| {
+                (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))
+            }));
         }
     }
     out
@@ -302,12 +320,9 @@ pub fn equality_assumptions<'db>(
     for def in generic_chain(db, f) {
         if !matches!(def, GenericDefId::Class(_)) {
             let predicates = generic_predicates(db, def);
-            out.extend(
-                predicates
-                    .equalities
-                    .iter()
-                    .map(|(c, type_ref)| (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))),
-            );
+            out.extend(predicates.equalities.iter().map(|(c, type_ref)| {
+                (c.clone(), Some(ConstraintSource::Declared { def, type_ref: *type_ref }))
+            }));
         }
     }
     out
@@ -316,7 +331,10 @@ pub fn equality_assumptions<'db>(
 /// The parameter and return types a method in a class impl must have,
 /// from the class's declaration of the method: for `fn show(x: T) -> String`
 /// in `impl Show[i32]`, `fn(i32) -> String`.
-pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option<(Box<[Ty<'db>]>, Ty<'db>)> {
+pub fn class_impl_method_sig<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> Option<(Box<[Ty<'db>]>, Ty<'db>)> {
     let ItemContainerId::Impl(imp) = f.container(db) else { return None };
     let target = impl_header(db, imp).class.as_ref()?;
     let method = class_method_of(db, f)?;
@@ -341,7 +359,8 @@ pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option
     let own_assoc = |t: Ty<'db>| {
         t.fold(&mut |t| match t {
             Ty::Assoc(alias, args)
-                if alias.container(db) == ItemContainerId::Class(target.class) && *args == target.args =>
+                if alias.container(db) == ItemContainerId::Class(target.class)
+                    && *args == target.args =>
             {
                 Some(impl_assoc_ty(db, imp, *alias).unwrap_or(Ty::Error))
             }
@@ -352,7 +371,8 @@ pub fn class_impl_method_sig<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Option
     // the impl.
     let file = imp.file(db);
     let normalize = |t: Ty<'db>| normalize_assoc(db, file, &own_assoc(t));
-    let params = sig.params.iter().map(|t| normalize(t.as_ref().map_or(Ty::Error, subst))).collect();
+    let params =
+        sig.params.iter().map(|t| normalize(t.as_ref().map_or(Ty::Error, subst))).collect();
     let ret = normalize(sig.ret.as_ref().map_or(Ty::Error, |t| subst(&t.fill_unwritten(&mut imm))));
     Some((params, ret))
 }
@@ -418,7 +438,8 @@ pub fn declared_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Scheme<'db> 
     {
         defs.push(GenericDefId::Function(method));
     }
-    let (predicates, sources): (Vec<_>, Vec<_>) = assumptions_with_sources(db, f).into_iter().unzip();
+    let (predicates, sources): (Vec<_>, Vec<_>) =
+        assumptions_with_sources(db, f).into_iter().unzip();
     let (bounds, bound_sources): (Vec<_>, Vec<_>) = at_most_assumptions(db, f).into_iter().unzip();
     let (assoc, assoc_sources): (Vec<_>, Vec<_>) = equality_assumptions(db, f).into_iter().unzip();
     Scheme {

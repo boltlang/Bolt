@@ -12,8 +12,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId, body},
     builtin_type::{BuiltinFloat, BuiltinInt, BuiltinType, BuiltinUint},
     hir::{
-        BinaryOp, BindingId, BlockKind, Expr, ExprId, LabelId, Literal, LogicOp, MatchArm, Pat, PatId, Path,
-        PathSegment, Statement,
+        BinaryOp, BindingId, BlockKind, Expr, ExprId, LabelId, Literal, LogicOp, MatchArm, Pat,
+        PatId, Path, PathSegment, Statement,
     },
     ids::{ConstId, EnumId, EnumVariantId, FunctionId, ItemContainerId},
     resolver::{Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
@@ -42,7 +42,10 @@ type Result<'db, T> = std::result::Result<T, CodegenError<'db>>;
 /// A type the code generator can compile, and how its values behave.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Scalar {
-    Int { bits: u8, signed: bool },
+    Int {
+        bits: u8,
+        signed: bool,
+    },
     F32,
     F64,
     Bool,
@@ -116,7 +119,9 @@ impl Scalar {
 fn through_newtypes(mut value: Value<'_>) -> Value<'_> {
     loop {
         let inner = match &value {
-            Value::Adt { ctor: Ctor::Struct(_), fields } if fields.borrow().len() == 1 => fields.borrow()[0].1.clone(),
+            Value::Adt { ctor: Ctor::Struct(_), fields } if fields.borrow().len() == 1 => {
+                fields.borrow()[0].1.clone()
+            }
             _ => return value,
         };
         value = inner;
@@ -136,19 +141,28 @@ enum Frame {
     Plain,
     /// What `break` leaves: a loop, or a labeled block. A loop's block
     /// gives the value of `break value`.
-    Break { label: Option<LabelId>, is_loop: bool, result: Option<ValTy> },
+    Break {
+        label: Option<LabelId>,
+        is_loop: bool,
+        result: Option<ValTy>,
+    },
     /// What `continue` goes back to: the `loop` of a loop.
-    Continue { label: Option<LabelId> },
+    Continue {
+        label: Option<LabelId>,
+    },
 }
 
-pub(crate) fn compile<'db>(db: &'db dyn Db, instance: Instance<'db>) -> Result<'db, CompiledFn<'db>> {
+pub(crate) fn compile<'db>(
+    db: &'db dyn Db,
+    instance: Instance<'db>,
+) -> Result<'db, CompiledFn<'db>> {
     let def = instance.body(db);
     let body = body(db, def);
     let scheme = match def.def(db) {
-        DefWithBody::Function(f) => Some(
-            function_scheme(db, f)
-                .map_err(|_| CodegenError { kind: ErrorKind::UnknownType, location: Some((def, body.body_expr)) })?,
-        ),
+        DefWithBody::Function(f) => Some(function_scheme(db, f).map_err(|_| CodegenError {
+            kind: ErrorKind::UnknownType,
+            location: Some((def, body.body_expr)),
+        })?),
         DefWithBody::File(_) => None,
         DefWithBody::Const(_) | DefWithBody::Variant(_) => {
             return Err(CodegenError {
@@ -178,7 +192,13 @@ pub(crate) fn compile<'db>(db: &'db dyn Db, instance: Instance<'db>) -> Result<'
         None => c.entry()?,
     }
     c.code.push(Inst::End);
-    Ok(CompiledFn { params: c.params, result: c.result, locals: c.locals, code: c.code, callees: c.callees })
+    Ok(CompiledFn {
+        params: c.params,
+        result: c.result,
+        locals: c.locals,
+        code: c.code,
+        callees: c.callees,
+    })
 }
 
 struct Compiler<'db> {
@@ -251,10 +271,21 @@ impl<'db> Compiler<'db> {
         let imp = match self.infer.instance(at, class) {
             Some(imp) => Some(imp),
             None => {
-                let scheme = function_scheme(db, f).map_err(|_| self.error(at, ErrorKind::UnknownType))?;
-                let type_args: Vec<Ty<'db>> =
-                    self.infer.type_args(at).unwrap_or_default().iter().map(|t| self.subst(t)).collect();
-                select_impl(db, &[self.root], class, &class_args(db, class, &scheme.params, &type_args))
+                let scheme =
+                    function_scheme(db, f).map_err(|_| self.error(at, ErrorKind::UnknownType))?;
+                let type_args: Vec<Ty<'db>> = self
+                    .infer
+                    .type_args(at)
+                    .unwrap_or_default()
+                    .iter()
+                    .map(|t| self.subst(t))
+                    .collect();
+                select_impl(
+                    db,
+                    &[self.root],
+                    class,
+                    &class_args(db, class, &scheme.params, &type_args),
+                )
             }
         };
         match imp {
@@ -270,19 +301,26 @@ impl<'db> Compiler<'db> {
     /// The Wasm type of values of `ty`, or `None` for `()` and `!`.
     fn val_ty(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Option<ValTy>> {
         match ty {
-            Ty::Var(_) | Ty::Error | Ty::Bound(_) | Ty::Param(_) => Err(self.error(at, ErrorKind::UnknownType)),
-            _ => layout::val_ty(self.db, ty)
-                .ok_or_else(|| self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))),
+            Ty::Var(_) | Ty::Error | Ty::Bound(_) | Ty::Param(_) => {
+                Err(self.error(at, ErrorKind::UnknownType))
+            }
+            _ => layout::val_ty(self.db, ty).ok_or_else(|| {
+                self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))
+            }),
         }
     }
 
     fn repr(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Repr<'db>> {
-        layout::repr(self.db, ty).ok_or_else(|| self.unsupported(at, format!("a value of type `{}`", ty.display(self.db))))
+        layout::repr(self.db, ty).ok_or_else(|| {
+            self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))
+        })
     }
 
     /// The fields of a struct or tuple of type `ty` in memory.
     fn layout(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Layout<'db>> {
-        layout::layout(self.db, ty).ok_or_else(|| self.unsupported(at, format!("a value of type `{}`", ty.display(self.db))))
+        layout::layout(self.db, ty).ok_or_else(|| {
+            self.unsupported(at, format!("a value of type `{}`", ty.display(self.db)))
+        })
     }
 
     fn expr_val_ty(&self, expr: ExprId) -> Result<'db, Option<ValTy>> {
@@ -291,7 +329,9 @@ impl<'db> Compiler<'db> {
 
     fn scalar(&self, expr: ExprId) -> Result<'db, Scalar> {
         let ty = self.ty(expr);
-        Scalar::of(self.db, &ty).ok_or_else(|| self.unsupported(expr, format!("an operation on `{}`", ty.display(self.db))))
+        Scalar::of(self.db, &ty).ok_or_else(|| {
+            self.unsupported(expr, format!("an operation on `{}`", ty.display(self.db)))
+        })
     }
 
     // Locals
@@ -327,7 +367,9 @@ impl<'db> Compiler<'db> {
 
     fn function(&mut self, scheme: &'db Scheme<'db>) -> Result<'db, ()> {
         let body = self.body;
-        let Ty::Fn(params, ret, _) = self.subst(&scheme.ty) else { unreachable!("a function has a function type") };
+        let Ty::Fn(params, ret, _) = self.subst(&scheme.ty) else {
+            unreachable!("a function has a function type")
+        };
         // All the parameters first, since locals are numbered after them.
         let mut indices = Vec::new();
         for ty in params.iter() {
@@ -358,7 +400,9 @@ impl<'db> Compiler<'db> {
     /// it's an expression.
     fn entry(&mut self) -> Result<'db, ()> {
         let body = self.body;
-        let Expr::Block { statements, .. } = &body[body.body_expr] else { unreachable!("a file's body is a block") };
+        let Expr::Block { statements, .. } = &body[body.body_expr] else {
+            unreachable!("a file's body is a block")
+        };
         if let Some(Statement::Expr { expr, .. }) = statements.last() {
             self.result = self.expr_val_ty(*expr)?;
         }
@@ -373,19 +417,31 @@ impl<'db> Compiler<'db> {
 
     fn statement(&mut self, statement: &Statement) -> Result<'db, ()> {
         match statement {
-            Statement::Let { pat, initializer, else_branch, .. } => self.let_stmt(*pat, *initializer, *else_branch),
+            Statement::Let { pat, initializer, else_branch, .. } => {
+                self.let_stmt(*pat, *initializer, *else_branch)
+            }
             Statement::Expr { expr, .. } => self.expr_as(*expr, None),
             Statement::Item => Ok(()),
         }
     }
 
-    fn let_stmt(&mut self, pat: PatId, initializer: Option<ExprId>, else_branch: Option<ExprId>) -> Result<'db, ()> {
+    fn let_stmt(
+        &mut self,
+        pat: PatId,
+        initializer: Option<ExprId>,
+        else_branch: Option<ExprId>,
+    ) -> Result<'db, ()> {
         let body = self.body;
         let Some(init) = initializer else {
             // `let x;` only needs the local.
             return match &body[pat] {
-                Pat::Bind { id, subpat: None } => self.binding_local(*id, body.body_expr).map(|_| ()),
-                _ => Err(self.unsupported(body.body_expr, "a `let` without a value and with a pattern")),
+                Pat::Bind { id, subpat: None } => {
+                    self.binding_local(*id, body.body_expr).map(|_| ())
+                }
+                _ => {
+                    Err(self
+                        .unsupported(body.body_expr, "a `let` without a value and with a pattern"))
+                }
             };
         };
         match (&body[pat], else_branch) {
@@ -471,22 +527,31 @@ impl<'db> Compiler<'db> {
             Expr::Index { base, index } => self.index(expr, *base, *index),
             Expr::Tuple { exprs } if exprs.is_empty() => Ok(()),
             Expr::Tuple { exprs } => {
-                let fields: Vec<_> = exprs.iter().enumerate().map(|(i, &e)| (Name::new(i.to_string()), e)).collect();
+                let fields: Vec<_> =
+                    exprs.iter().enumerate().map(|(i, &e)| (Name::new(i.to_string()), e)).collect();
                 self.construct(expr, &fields, None)
             }
             Expr::Record { path, fields, spread, .. } => {
                 let resolution = path.as_ref().and_then(|p| self.resolve(expr, p));
                 match resolution {
-                    Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
-                        let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
+                    Some(ValueResolution::Type(TypeResolution {
+                        ty: TypeNs::Struct(_),
+                        unresolved: None,
+                    })) => {
+                        let fields: Vec<_> =
+                            fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
                         self.construct(expr, &fields, *spread)
                     }
                     // `Shape.Rect { w, h }`, a variant with named fields.
                     Some(
                         ValueResolution::Value(ValueNs::Variant(v))
-                        | ValueResolution::Type(TypeResolution { ty: TypeNs::Variant(v), unresolved: None }),
+                        | ValueResolution::Type(TypeResolution {
+                            ty: TypeNs::Variant(v),
+                            unresolved: None,
+                        }),
                     ) if spread.is_none() => {
-                        let fields: Vec<_> = fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
+                        let fields: Vec<_> =
+                            fields.iter().map(|f| (f.name.clone(), f.expr)).collect();
                         self.construct_variant(expr, v, &fields)
                     }
                     _ => Err(self.unsupported(expr, "this struct or variant")),
@@ -512,7 +577,10 @@ impl<'db> Compiler<'db> {
             }
             Expr::Match { expr: scrutinee, arms } => self.match_expr(expr, *scrutinee, arms),
             Expr::While { condition, body: loop_body, label } => {
-                self.open(Inst::Block(BlockTy::Empty), Frame::Break { label: *label, is_loop: true, result: None });
+                self.open(
+                    Inst::Block(BlockTy::Empty),
+                    Frame::Break { label: *label, is_loop: true, result: None },
+                );
                 self.open(Inst::Loop(BlockTy::Empty), Frame::Continue { label: *label });
                 self.expr(*condition)?;
                 self.op(Op::I32Eqz);
@@ -525,7 +593,10 @@ impl<'db> Compiler<'db> {
             }
             Expr::Loop { body: loop_body, label } => {
                 let result = self.expr_val_ty(expr)?;
-                self.open(Inst::Block(result.into()), Frame::Break { label: *label, is_loop: true, result });
+                self.open(
+                    Inst::Block(result.into()),
+                    Frame::Break { label: *label, is_loop: true, result },
+                );
                 self.open(Inst::Loop(BlockTy::Empty), Frame::Continue { label: *label });
                 self.expr_as(*loop_body, None)?;
                 self.push(Inst::Br(0));
@@ -572,7 +643,11 @@ impl<'db> Compiler<'db> {
         (self.frames.len() - 1 - frame) as u32
     }
 
-    fn break_target(&self, expr: ExprId, label: Option<&Name>) -> Result<'db, (u32, Option<ValTy>)> {
+    fn break_target(
+        &self,
+        expr: ExprId,
+        label: Option<&Name>,
+    ) -> Result<'db, (u32, Option<ValTy>)> {
         for (i, frame) in self.frames.iter().enumerate().rev() {
             if let Frame::Break { label: frame_label, is_loop, result } = *frame {
                 let found = match label {
@@ -626,17 +701,21 @@ impl<'db> Compiler<'db> {
                 self.push(Inst::I32Const(v.as_bool() as i32));
                 Ok(())
             }
-            Some(ValueResolution::Value(ValueNs::Function(_))) => Err(self.unsupported(expr, "a function as a value")),
+            Some(ValueResolution::Value(ValueNs::Function(_))) => {
+                Err(self.unsupported(expr, "a function as a value"))
+            }
             Some(ValueResolution::Value(ValueNs::Variant(v))) => self.variant(expr, v),
             // A struct without fields, like `struct Unit;`.
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None }))
-                if layout::fields(self.db, &self.ty(expr)).is_some_and(|f| f.is_empty()) =>
-            {
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(_),
+                unresolved: None,
+            })) if layout::fields(self.db, &self.ty(expr)).is_some_and(|f| f.is_empty()) => {
                 self.construct(expr, &[], None)
             }
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
-                Err(self.unsupported(expr, "a constructor as a value"))
-            }
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(_),
+                unresolved: None,
+            })) => Err(self.unsupported(expr, "a constructor as a value")),
             _ => Err(self.unsupported(expr, "this path")),
         }
     }
@@ -646,7 +725,12 @@ impl<'db> Compiler<'db> {
     /// A new struct or tuple of the type of `expr`, with the values of
     /// `given` for its fields, in that order, and copies of those of
     /// `spread` for the others.
-    fn construct(&mut self, expr: ExprId, given: &[(Name, ExprId)], spread: Option<ExprId>) -> Result<'db, ()> {
+    fn construct(
+        &mut self,
+        expr: ExprId,
+        given: &[(Name, ExprId)],
+        spread: Option<ExprId>,
+    ) -> Result<'db, ()> {
         let ty = self.ty(expr);
         match self.repr(&ty, expr)? {
             // Its one field is the value.
@@ -678,7 +762,9 @@ impl<'db> Compiler<'db> {
                     }
                 }
                 for (name, value) in given {
-                    let Some(slot) = layout.slot(name) else { return Err(self.unsupported(*value, "this field")) };
+                    let Some(slot) = layout.slot(name) else {
+                        return Err(self.unsupported(*value, "this field"));
+                    };
                     match slot.val_ty {
                         Some(val_ty) => {
                             self.push(Inst::LocalGet(address));
@@ -691,7 +777,9 @@ impl<'db> Compiler<'db> {
                 self.push(Inst::LocalGet(address));
                 Ok(())
             }
-            Repr::Unit | Repr::Scalar(_) | Repr::Array(_) | Repr::Enum => Err(self.unsupported(expr, "this struct")),
+            Repr::Unit | Repr::Scalar(_) | Repr::Array(_) | Repr::Enum => {
+                Err(self.unsupported(expr, "this struct"))
+            }
         }
     }
 
@@ -718,7 +806,9 @@ impl<'db> Compiler<'db> {
             Repr::Newtype(_) => self.expr(base),
             _ => {
                 let layout = self.layout(&ty, base)?;
-                let Some(slot) = layout.slot(name) else { return Err(self.unsupported(base, "this field")) };
+                let Some(slot) = layout.slot(name) else {
+                    return Err(self.unsupported(base, "this field"));
+                };
                 self.expr(base)?;
                 match slot.val_ty {
                     Some(val_ty) => self.push(Inst::Load(val_ty, slot.offset)),
@@ -741,7 +831,9 @@ impl<'db> Compiler<'db> {
         match &self.body[place] {
             Expr::Path(path) => {
                 let local = match self.resolve(place, path) {
-                    Some(ValueResolution::Value(ValueNs::Local(binding))) => self.binding_local(binding, place)?,
+                    Some(ValueResolution::Value(ValueNs::Local(binding))) => {
+                        self.binding_local(binding, place)?
+                    }
                     _ => return Err(self.unsupported(place, "assigning to this")),
                 };
                 match local {
@@ -772,7 +864,9 @@ impl<'db> Compiler<'db> {
                         let Some(val_ty) = other.val_ty else { continue };
                         self.push(Inst::LocalGet(new));
                         match value {
-                            Some(value) if other.name == slot.name => self.push(Inst::LocalGet(value)),
+                            Some(value) if other.name == slot.name => {
+                                self.push(Inst::LocalGet(value))
+                            }
                             _ => {
                                 self.push(Inst::LocalGet(old));
                                 self.push(Inst::Load(val_ty, other.offset));
@@ -806,7 +900,8 @@ impl<'db> Compiler<'db> {
             Expr::Field { expr: base, .. } => self.is_place(*base),
             // `c[i]`, evaluated again by `c[i] += x`.
             Expr::Index { base, index } => {
-                self.is_place(*base) && (self.is_place(*index) || matches!(self.body[*index], Expr::Literal(_)))
+                self.is_place(*base)
+                    && (self.is_place(*index) || matches!(self.body[*index], Expr::Literal(_)))
             }
             _ => false,
         }
@@ -827,9 +922,9 @@ impl<'db> Compiler<'db> {
 
     /// A const, whose value the evaluator computes at compile time.
     fn const_value(&mut self, expr: ExprId, id: ConstId<'db>) -> Result<'db, ()> {
-        let value = Evaluator::new(self.db)
-            .eval_const(id)
-            .map_err(|e| self.unsupported(expr, format!("a const whose value can't be computed ({e})")))?;
+        let value = Evaluator::new(self.db).eval_const(id).map_err(|e| {
+            self.unsupported(expr, format!("a const whose value can't be computed ({e})"))
+        })?;
         // A `String`, laid out like a literal.
         if let Ty::Adt(AdtId::Struct(s), ..) = self.ty(expr)
             && string_struct(self.db, s.file(self.db)) == Some(s)
@@ -1000,7 +1095,9 @@ impl<'db> Compiler<'db> {
     /// `a <$> b` or `a + b` of structs.
     fn call_operator(&mut self, expr: ExprId, op: &str, args: &[ExprId]) -> Result<'db, ()> {
         match self.resolve(expr, &Path::from_name(Name::new(op))) {
-            Some(ValueResolution::Value(ValueNs::Function(f))) => self.call_function(expr, f, None, args),
+            Some(ValueResolution::Value(ValueNs::Function(f))) => {
+                self.call_function(expr, f, None, args)
+            }
             _ => Err(self.unsupported(expr, "this operator")),
         }
     }
@@ -1008,8 +1105,15 @@ impl<'db> Compiler<'db> {
     /// `lhs <op> rhs` for `lhs <op>= rhs`, with the value first,
     /// then the place, like the evaluator. The call has the type of the
     /// place, since its result is stored there.
-    fn compound_operator(&mut self, expr: ExprId, op: &Name, lhs: ExprId, rhs: ExprId) -> Result<'db, ()> {
-        let Some(ValueResolution::Value(ValueNs::Function(f))) = self.resolve(expr, &Path::from_name(Name::new(op.as_str())))
+    fn compound_operator(
+        &mut self,
+        expr: ExprId,
+        op: &Name,
+        lhs: ExprId,
+        rhs: ExprId,
+    ) -> Result<'db, ()> {
+        let Some(ValueResolution::Value(ValueNs::Function(f))) =
+            self.resolve(expr, &Path::from_name(Name::new(op.as_str())))
         else {
             return Err(self.unsupported(expr, "this operator"));
         };
@@ -1102,7 +1206,9 @@ impl<'db> Compiler<'db> {
     fn call(&mut self, expr: ExprId, callee: ExprId, args: &[ExprId]) -> Result<'db, ()> {
         // `x.f(y)` is `f(x, y)`.
         if let Some(&f) = self.infer.method_calls.get(expr) {
-            let Expr::Field { expr: receiver, .. } = &self.body[callee] else { unreachable!("a method call") };
+            let Expr::Field { expr: receiver, .. } = &self.body[callee] else {
+                unreachable!("a method call")
+            };
             let mut all = vec![*receiver];
             all.extend_from_slice(args);
             return self.call_function(expr, f, Some(callee), &all);
@@ -1114,15 +1220,22 @@ impl<'db> Compiler<'db> {
             _ => None,
         };
         match path.and_then(|p| self.resolve(callee, &p)) {
-            Some(ValueResolution::Value(ValueNs::Function(f))) => self.call_function(expr, f, Some(callee), args),
+            Some(ValueResolution::Value(ValueNs::Function(f))) => {
+                self.call_function(expr, f, Some(callee), args)
+            }
             // `Some(x)`, a variant with fields.
             Some(ValueResolution::Value(ValueNs::Variant(v))) => {
-                let fields: Vec<_> = args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
+                let fields: Vec<_> =
+                    args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
                 self.construct_variant(expr, v, &fields)
             }
             // `Wrap(x)`, a tuple struct.
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => {
-                let fields: Vec<_> = args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(_),
+                unresolved: None,
+            })) => {
+                let fields: Vec<_> =
+                    args.iter().enumerate().map(|(i, &a)| (Name::new(i.to_string()), a)).collect();
                 self.construct(expr, &fields, None)
             }
             _ => Err(self.unsupported(callee, "calling something other than a function")),
@@ -1165,7 +1278,9 @@ impl<'db> Compiler<'db> {
             match f.container(db) {
                 ItemContainerId::ExternBlock(_) => Callee::Import(f),
                 ItemContainerId::Class(_) => {
-                    return Err(self.unsupported(expr, "calling a class method whose impl isn't known"));
+                    return Err(
+                        self.unsupported(expr, "calling a class method whose impl isn't known")
+                    );
                 }
                 _ => return Err(self.unsupported(expr, "calling a function without a body")),
             }
@@ -1216,16 +1331,23 @@ impl<'db> Compiler<'db> {
         callee: Option<ExprId>,
         args: &[ExprId],
     ) -> Result<'db, Instance<'db>> {
-        let at_call = callee.map(|c| self.ty(c)).filter(|t| matches!(t, Ty::Fn(..))).unwrap_or_else(|| {
-            Ty::func(args.iter().map(|&a| self.ty(a)).collect::<Box<[_]>>(), self.ty(expr))
-        });
+        let at_call =
+            callee.map(|c| self.ty(c)).filter(|t| matches!(t, Ty::Fn(..))).unwrap_or_else(|| {
+                Ty::func(args.iter().map(|&a| self.ty(a)).collect::<Box<[_]>>(), self.ty(expr))
+            });
         self.instance_at(expr, f, &at_call)
     }
 
     /// The instance of `f` that a call at `expr` of type `at_call` calls.
-    fn instance_at(&self, expr: ExprId, f: FunctionId<'db>, at_call: &Ty<'db>) -> Result<'db, Instance<'db>> {
+    fn instance_at(
+        &self,
+        expr: ExprId,
+        f: FunctionId<'db>,
+        at_call: &Ty<'db>,
+    ) -> Result<'db, Instance<'db>> {
         let db = self.db;
-        let scheme = function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
+        let scheme =
+            function_scheme(db, f).map_err(|_| self.error(expr, ErrorKind::UnknownType))?;
         let found = bind_scheme_args(scheme, at_call);
         let mut type_args = Vec::new();
         for ty in found {
@@ -1238,7 +1360,12 @@ impl<'db> Compiler<'db> {
             type_args.push(ty);
         }
         let type_args: Box<[Ty<'db>]> = type_args.into();
-        Ok(Instance::new(db, DefWithBodyId::new(db, DefWithBody::Function(f)), type_args, self.root))
+        Ok(Instance::new(
+            db,
+            DefWithBodyId::new(db, DefWithBody::Function(f)),
+            type_args,
+            self.root,
+        ))
     }
 
     // Patterns
@@ -1246,7 +1373,13 @@ impl<'db> Compiler<'db> {
     /// Test whether the value in `local`, of type `ty`, matches `pat`,
     /// leaving 1 or 0, and set the pattern's variables. `local` is `None`
     /// for a value of type `()`.
-    fn pattern(&mut self, pat: PatId, local: Option<u32>, ty: &Ty<'db>, at: ExprId) -> Result<'db, ()> {
+    fn pattern(
+        &mut self,
+        pat: PatId,
+        local: Option<u32>,
+        ty: &Ty<'db>,
+        at: ExprId,
+    ) -> Result<'db, ()> {
         let body = self.body;
         match &body[pat] {
             Pat::Wild => self.push(Inst::I32Const(1)),
@@ -1301,7 +1434,8 @@ impl<'db> Compiler<'db> {
                 }
             }
             Pat::Tuple { args, rest } => {
-                let fields = positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
+                let fields =
+                    positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
                 self.field_patterns(&fields, local, ty, at)?;
             }
             Pat::TupleStruct { path, args, rest } if self.repr(ty, at)? == Repr::Enum => {
@@ -1316,7 +1450,8 @@ impl<'db> Compiler<'db> {
             }
             Pat::TupleStruct { path, args, rest } => {
                 self.struct_pattern_path(path, at)?;
-                let fields = positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
+                let fields =
+                    positional(args, *rest, layout::fields(self.db, ty).map_or(0, |f| f.len()));
                 self.field_patterns(&fields, local, ty, at)?;
             }
             Pat::Record { path, fields, .. } => {
@@ -1333,14 +1468,23 @@ impl<'db> Compiler<'db> {
     /// value of its type always is.
     fn struct_pattern_path(&self, path: &Path, at: ExprId) -> Result<'db, ()> {
         match Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path) {
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(_), unresolved: None })) => Ok(()),
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(_),
+                unresolved: None,
+            })) => Ok(()),
             _ => Err(self.unsupported(at, "a pattern of an enum with fields")),
         }
     }
 
     /// Test the fields of the struct or tuple in `local`, of type `ty`,
     /// against their patterns, leaving 1 if all match.
-    fn field_patterns(&mut self, fields: &[(Name, PatId)], local: Option<u32>, ty: &Ty<'db>, at: ExprId) -> Result<'db, ()> {
+    fn field_patterns(
+        &mut self,
+        fields: &[(Name, PatId)],
+        local: Option<u32>,
+        ty: &Ty<'db>,
+        at: ExprId,
+    ) -> Result<'db, ()> {
         if let Repr::Newtype(field_ty) = self.repr(ty, at)? {
             return match fields {
                 [(_, pat)] => self.pattern(*pat, local, &field_ty, at),
@@ -1356,12 +1500,20 @@ impl<'db> Compiler<'db> {
 
     /// Test the fields in `layout` of what's at the address in `local`
     /// against their patterns, leaving 1 if all match.
-    fn slot_patterns(&mut self, fields: &[(Name, PatId)], local: Option<u32>, layout: &Layout<'db>, at: ExprId) -> Result<'db, ()> {
+    fn slot_patterns(
+        &mut self,
+        fields: &[(Name, PatId)],
+        local: Option<u32>,
+        layout: &Layout<'db>,
+        at: ExprId,
+    ) -> Result<'db, ()> {
         if fields.is_empty() {
             self.push(Inst::I32Const(1));
         }
         for (i, (name, pat)) in fields.iter().enumerate() {
-            let Some(slot) = layout.slot(name) else { return Err(self.unsupported(at, "this field")) };
+            let Some(slot) = layout.slot(name) else {
+                return Err(self.unsupported(at, "this field"));
+            };
             let field = match (slot.val_ty, local) {
                 (Some(val_ty), Some(local)) => {
                     let field = self.new_local(val_ty);
@@ -1380,10 +1532,18 @@ impl<'db> Compiler<'db> {
         Ok(())
     }
 
-    fn pattern_operand(&self, ty: &Ty<'db>, local: Option<u32>, at: ExprId) -> Result<'db, (Scalar, u32)> {
+    fn pattern_operand(
+        &self,
+        ty: &Ty<'db>,
+        local: Option<u32>,
+        at: ExprId,
+    ) -> Result<'db, (Scalar, u32)> {
         match (Scalar::through(self.db, ty), local) {
             (Some(scalar), Some(local)) => Ok((scalar, local)),
-            _ => Err(self.unsupported(at, format!("matching a value of type `{}`", ty.display(self.db)))),
+            _ => {
+                Err(self
+                    .unsupported(at, format!("matching a value of type `{}`", ty.display(self.db))))
+            }
         }
     }
 
@@ -1396,7 +1556,8 @@ impl<'db> Compiler<'db> {
                     self.int_const(scalar, if *negative { -n } else { n });
                 }
                 Literal::Float(text, _) => {
-                    let x: f64 = text.parse().map_err(|_| self.error(at, ErrorKind::UnknownType))?;
+                    let x: f64 =
+                        text.parse().map_err(|_| self.error(at, ErrorKind::UnknownType))?;
                     self.float_const(scalar, if *negative { -x } else { x });
                 }
                 Literal::Char(c) => self.push(Inst::I32Const(*c as i32)),
@@ -1404,7 +1565,8 @@ impl<'db> Compiler<'db> {
                 _ => return Err(self.unsupported(at, "a string pattern")),
             },
             Pat::Path(path) => {
-                let resolution = Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path);
+                let resolution =
+                    Resolver::for_body(self.db, self.def).resolve_path_in_value_ns(self.db, path);
                 match resolution {
                     Some(ValueResolution::Value(ValueNs::Builtin(v))) => {
                         self.push(Inst::I32Const(v.as_bool() as i32));
@@ -1419,13 +1581,13 @@ impl<'db> Compiler<'db> {
                 let Some(ValueResolution::Value(ValueNs::Const(id))) = resolution else {
                     return Err(self.unsupported(at, "a pattern of an enum with fields"));
                 };
-                let value = Evaluator::new(self.db)
-                    .eval_const(id)
-                    .map_err(|e| self.unsupported(at, format!("a const whose value can't be computed ({e})")))?;
+                let value = Evaluator::new(self.db).eval_const(id).map_err(|e| {
+                    self.unsupported(at, format!("a const whose value can't be computed ({e})"))
+                })?;
                 match through_newtypes(value) {
                     Value::Int(n) => self.int_const(scalar, n),
                     Value::Bool(b) => self.int_const(scalar, b as i128),
-                            Value::Float(x) => self.float_const(scalar, x),
+                    Value::Float(x) => self.float_const(scalar, x),
                     Value::Adt { ctor: Ctor::Variant(v), .. } if scalar == Scalar::Enum => {
                         self.push(Inst::I32Const(v.index as i32))
                     }
@@ -1437,7 +1599,12 @@ impl<'db> Compiler<'db> {
         Ok(())
     }
 
-    fn match_expr(&mut self, expr: ExprId, scrutinee: ExprId, arms: &[MatchArm]) -> Result<'db, ()> {
+    fn match_expr(
+        &mut self,
+        expr: ExprId,
+        scrutinee: ExprId,
+        arms: &[MatchArm],
+    ) -> Result<'db, ()> {
         let ty = self.ty(scrutinee);
         let local = self.temp(scrutinee)?;
         let result = self.expr_val_ty(expr)?;

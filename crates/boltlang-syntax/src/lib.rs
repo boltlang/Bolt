@@ -1,4 +1,3 @@
-
 pub mod ast;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -66,7 +65,6 @@ pub enum SyntaxKind {
     ASSIGNMENT,
     FLOAT_NUMBER,
     INT_NUMBER,
-
 
     // Keywords. `macro_rules` is contextual: the lexer produces an IDENT and
     // the parser remaps it where it acts as a keyword.
@@ -410,7 +408,6 @@ pub use rowan;
 pub const LAST_TOKEN_KIND_DISCRIMINANT: usize = YIELD_KEYWORD as usize;
 
 impl SyntaxKind {
-
     pub fn is_trivia(&self) -> bool {
         matches!(self, WHITESPACE | LINE_COMMENT | BLOCK_COMMENT)
     }
@@ -547,7 +544,7 @@ impl SyntaxKind {
             BYTE => "a single byte (like b'a')",
             BYTE_STRING => "a byte string (like b\"foo\")",
             CALL_EXPR => "a call expression",
-            CAST_EXPR  => "a cast expression",
+            CAST_EXPR => "a cast expression",
             CHAR => "a single character (like 'f')",
             COLON => "':'",
             COLONCOLON => "'::'",
@@ -614,7 +611,6 @@ impl SyntaxKind {
             WHITESPACE => "some whitespace",
         }
     }
-
 }
 
 impl From<SyntaxKind> for rowan::SyntaxKind {
@@ -657,7 +653,6 @@ pub struct DbNode<'db> {
     #[returns(ref)]
     pub node: GreenNode,
 }
-
 
 #[cfg(test)]
 mod tests {

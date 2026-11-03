@@ -14,9 +14,9 @@ use crate::{
     Name,
     arena::{Arena, ArenaMap, Idx},
     hir::{
-        BinaryOp, Binding, BlockKind, Expr, ExprId, GenericArg, Label, LambdaKind, Literal, LogicOp,
-        MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment, RecordField, RecordFieldPat, Statement, TypeRef,
-        TypeRefId,
+        BinaryOp, Binding, BlockKind, Expr, ExprId, GenericArg, Label, LambdaKind, Literal,
+        LogicOp, MatchArm, Mutability, MutabilityRef, Pat, PatId, Path, PathSegment, RecordField,
+        RecordFieldPat, Statement, TypeRef, TypeRefId,
     },
 };
 
@@ -66,10 +66,19 @@ impl ExprCollector {
 
     /// A mutability parameter like the `'v` of `struct VecIter[T, 'v]`, as
     /// the mutability on its own that it names, and its bounds.
-    pub fn lower_mutability_param(&mut self, param: &ast::MutabilityParam) -> Option<(Name, TypeRefId, Box<[TypeRefId]>)> {
+    pub fn lower_mutability_param(
+        &mut self,
+        param: &ast::MutabilityParam,
+    ) -> Option<(Name, TypeRefId, Box<[TypeRefId]>)> {
         let name = Name::new(param.name_token()?.text().trim_start_matches('\''));
-        let type_ref = self.alloc_type(TypeRef::Mutability(MutabilityRef::Named(name.clone())), Some(param.syntax()));
-        let bounds = param.bounds().map(|b| b.bounds().map(|t| self.lower_type(t)).collect()).unwrap_or_default();
+        let type_ref = self.alloc_type(
+            TypeRef::Mutability(MutabilityRef::Named(name.clone())),
+            Some(param.syntax()),
+        );
+        let bounds = param
+            .bounds()
+            .map(|b| b.bounds().map(|t| self.lower_type(t)).collect())
+            .unwrap_or_default();
         Some((name, type_ref, bounds))
     }
 
@@ -80,7 +89,9 @@ impl ExprCollector {
                 Some(path) => TypeRef::Path(path),
                 None => TypeRef::Error,
             },
-            ast::Type::Tuple(ty) => TypeRef::Tuple(ty.fields().map(|t| self.lower_type(t)).collect()),
+            ast::Type::Tuple(ty) => {
+                TypeRef::Tuple(ty.fields().map(|t| self.lower_type(t)).collect())
+            }
             ast::Type::Array(ty) => {
                 let element = self.lower_opt_type(ty.element());
                 let len = ty.length().map(|e| self.lower_expr(e));
@@ -216,11 +227,17 @@ impl ExprCollector {
             .map(|arg| match arg {
                 ast::GenericArg::Type(arg) => {
                     let type_ref = self.lower_opt_type(arg.ty());
-                    let bounds = arg.bounds().map(|b| b.bounds().map(|t| self.lower_type(t)).collect()).unwrap_or_default();
+                    let bounds = arg
+                        .bounds()
+                        .map(|b| b.bounds().map(|t| self.lower_type(t)).collect())
+                        .unwrap_or_default();
                     GenericArg::Type { type_ref, bounds }
                 }
                 ast::GenericArg::AssocType(arg) => GenericArg::AssocType {
-                    name: arg.name_ref().map(|n| Name::from_ident(&n.text())).unwrap_or_else(|| Name::new("")),
+                    name: arg
+                        .name_ref()
+                        .map(|n| Name::from_ident(&n.text()))
+                        .unwrap_or_else(|| Name::new("")),
                     generic_args: arg.generic_arg_list().map(|l| self.lower_generic_args(l)),
                     type_ref: self.lower_opt_type(arg.ty()),
                 },
@@ -264,7 +281,10 @@ impl ExprCollector {
             }
             E::Field(e) => {
                 let expr = self.lower_opt_expr(e.expr());
-                let name = e.name_ref().map(|n| Name::from_ident(&n.text())).unwrap_or_else(|| Name::new(""));
+                let name = e
+                    .name_ref()
+                    .map(|n| Name::from_ident(&n.text()))
+                    .unwrap_or_else(|| Name::new(""));
                 Expr::Field { expr, name }
             }
             E::Await(e) => Expr::Await { expr: self.lower_opt_expr(e.expr()) },
@@ -300,7 +320,9 @@ impl ExprCollector {
                 let rhs = e.end().map(|s| self.lower_expr(s));
                 Expr::Range { lhs, rhs, inclusive }
             }
-            E::Tuple(e) => Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() },
+            E::Tuple(e) => {
+                Expr::Tuple { exprs: e.elements().map(|x| self.lower_expr(x)).collect() }
+            }
             E::Array(e) => {
                 if e.is_repeat() {
                     let value = self.lower_opt_expr(e.elements().next());
@@ -321,7 +343,10 @@ impl ExprCollector {
                         // `x` is short for `x: x`.
                         let expr = match field.expr() {
                             Some(expr) => self.lower_expr(expr),
-                            None => self.alloc_expr(Expr::Path(Path::from_name(name.clone())), Some(field.syntax())),
+                            None => self.alloc_expr(
+                                Expr::Path(Path::from_name(name.clone())),
+                                Some(field.syntax()),
+                            ),
                         };
                         fields.push(RecordField { name, expr });
                     }
@@ -382,10 +407,16 @@ impl ExprCollector {
             E::Ret(e) => Expr::Return { expr: e.expr().map(|x| self.lower_expr(x)) },
             E::Yield(e) => Expr::Yield { expr: e.expr().map(|x| self.lower_expr(x)) },
             E::Closure(e) => {
-                let kind = if e.async_token().is_some() { LambdaKind::AsyncClosure } else { LambdaKind::Closure };
+                let kind = if e.async_token().is_some() {
+                    LambdaKind::AsyncClosure
+                } else {
+                    LambdaKind::Closure
+                };
                 self.lower_lambda(e.param_list(), e.ret_type(), e.body(), kind)
             }
-            E::Fun(e) => self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Function),
+            E::Fun(e) => {
+                self.lower_lambda(e.param_list(), e.ret_type(), e.body(), LambdaKind::Function)
+            }
             E::Macro(e) => Expr::MacroCall { name: macro_name(e.macro_call()) },
         };
         self.alloc_expr(lowered, Some(&node))
@@ -407,7 +438,13 @@ impl ExprCollector {
         }
         let ret_type = ret_type.map(|r| self.lower_opt_type(r.ty()));
         let body = self.lower_opt_expr(body);
-        Expr::Lambda { params: params.into(), param_types: param_types.into(), ret_type, body, kind }
+        Expr::Lambda {
+            params: params.into(),
+            param_types: param_types.into(),
+            ret_type,
+            body,
+            kind,
+        }
     }
 
     fn lower_label(&mut self, label: Option<ast::Label>) -> Option<crate::hir::LabelId> {
@@ -437,11 +474,17 @@ impl ExprCollector {
             statements = self.lower_statements(block.elements());
             tail = block.tail_expr().map(|e| self.lower_expr(e));
         }
-        self.alloc_expr(Expr::Block { statements: statements.into(), tail, label, kind }, Some(block_expr.syntax()))
+        self.alloc_expr(
+            Expr::Block { statements: statements.into(), tail, label, kind },
+            Some(block_expr.syntax()),
+        )
     }
 
     /// Lower the statements of a block or a source file.
-    pub fn lower_statements(&mut self, elements: impl Iterator<Item = ast::SourceElement>) -> Vec<Statement> {
+    pub fn lower_statements(
+        &mut self,
+        elements: impl Iterator<Item = ast::SourceElement>,
+    ) -> Vec<Statement> {
         elements
             .map(|element| match element {
                 ast::SourceElement::VarDecl(decl) => {
@@ -551,15 +594,24 @@ impl ExprCollector {
         self.alloc_pat(lowered, Some(&node))
     }
 
-    fn binding_pat(&mut self, name: Option<ast::Name>, mutable: bool, subpat: Option<PatId>) -> Pat {
+    fn binding_pat(
+        &mut self,
+        name: Option<ast::Name>,
+        mutable: bool,
+        subpat: Option<PatId>,
+    ) -> Pat {
         let Some(name) = name else { return Pat::Missing };
-        let id = self.store.bindings.alloc(Binding { name: Name::from_ident(&name.text()), mutable });
+        let id =
+            self.store.bindings.alloc(Binding { name: Name::from_ident(&name.text()), mutable });
         Pat::Bind { id, subpat }
     }
 
     /// Lower the patterns of a tuple, tuple struct or slice pattern, and find
     /// the position of the `..`, if there is one.
-    fn lower_pat_list(&mut self, pats: impl Iterator<Item = ast::Pattern>) -> (Box<[PatId]>, Option<u32>) {
+    fn lower_pat_list(
+        &mut self,
+        pats: impl Iterator<Item = ast::Pattern>,
+    ) -> (Box<[PatId]>, Option<u32>) {
         let mut args = Vec::new();
         let mut rest = None;
         for pat in pats {
@@ -636,8 +688,10 @@ fn binary_op(op: &str) -> BinaryOp {
     }
 }
 
-const NUMERIC_SUFFIXES: &[&str] =
-    &["u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "isize", "usize", "f32", "f64"];
+const NUMERIC_SUFFIXES: &[&str] = &[
+    "u8", "i8", "u16", "i16", "u32", "i32", "u64", "i64", "u128", "i128", "isize", "usize", "f32",
+    "f64",
+];
 
 /// Lower a literal token. Returns `None` for a token that isn't a literal.
 pub(crate) fn lower_literal(token: &SyntaxToken) -> Option<Literal> {
@@ -660,7 +714,9 @@ pub(crate) fn lower_literal(token: &SyntaxToken) -> Option<Literal> {
             Literal::Float(digits.chars().filter(|c| *c != '_').collect(), suffix)
         }
         CHAR => Literal::Char(unescape(strip_quotes(text, '\'')).chars().next().unwrap_or('\0')),
-        BYTE => Literal::Byte(unescape_bytes(strip_quotes(&text[1..], '\'')).first().copied().unwrap_or(0)),
+        BYTE => Literal::Byte(
+            unescape_bytes(strip_quotes(&text[1..], '\'')).first().copied().unwrap_or(0),
+        ),
         STRING => Literal::String(string_contents(text)),
         BYTE_STRING => Literal::ByteString(byte_string_contents(&text[1..])),
         C_STRING => Literal::CString(string_contents(&text[1..])),
@@ -789,4 +845,3 @@ fn unescape_with(text: &str, mut out: impl FnMut(Unescaped)) {
         }
     }
 }
-

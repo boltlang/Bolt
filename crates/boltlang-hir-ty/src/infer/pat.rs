@@ -51,7 +51,8 @@ impl<'db> InferenceContext<'_, 'db> {
                         return;
                     }
                     (_, None) => {
-                        let tys: Vec<_> = args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
+                        let tys: Vec<_> =
+                            args.iter().map(|_| self.solver.new_var(VarKind::General)).collect();
                         self.expect_shape(pat, expected, &Ty::Tuple(tys.clone().into()), &tys);
                         tys
                     }
@@ -70,7 +71,11 @@ impl<'db> InferenceContext<'_, 'db> {
                 if fields.kind != FieldsKind::Tuple {
                     self.unresolved(ExprOrPat::Pat(pat));
                 }
-                let field_tys: Vec<_> = fields.fields.iter().map(|(_, t)| subst_params(t, generic_def, &args_ty)).collect();
+                let field_tys: Vec<_> = fields
+                    .fields
+                    .iter()
+                    .map(|(_, t)| subst_params(t, generic_def, &args_ty))
+                    .collect();
                 if rest.is_none() && field_tys.len() != args.len() {
                     self.result.diagnostics.push(InferenceDiagnostic::WrongArgCount {
                         expr: ExprOrPat::Pat(pat),
@@ -132,22 +137,30 @@ impl<'db> InferenceContext<'_, 'db> {
         let split = rest.map_or(args.len(), |r| r as usize);
         let after = args.len() - split;
         for (i, &arg) in args.iter().enumerate() {
-            let index = if i < split { Some(i) } else { elems.len().checked_sub(after - (i - split)) };
+            let index =
+                if i < split { Some(i) } else { elems.len().checked_sub(after - (i - split)) };
             let ty = index.and_then(|i| elems.get(i)).cloned().unwrap_or(Ty::Error);
             self.check_pat(arg, &ty);
         }
     }
 
-    fn check_record_fields(&mut self, pat: PatId, def: VariantDef<'db>, args: &[Ty<'db>], fields: &[RecordFieldPat]) {
+    fn check_record_fields(
+        &mut self,
+        pat: PatId,
+        def: VariantDef<'db>,
+        args: &[Ty<'db>],
+        fields: &[RecordFieldPat],
+    ) {
         let (_, generic_def) = def.adt();
         let field_tys = field_types(self.db, def);
         for field in fields {
             let ty = match field_tys.field(&field.name) {
                 Some((_, ty)) => subst_params(ty, generic_def, args),
                 None => {
-                    self.result
-                        .diagnostics
-                        .push(InferenceDiagnostic::NoSuchField { expr: ExprOrPat::Pat(pat), name: field.name.clone() });
+                    self.result.diagnostics.push(InferenceDiagnostic::NoSuchField {
+                        expr: ExprOrPat::Pat(pat),
+                        name: field.name.clone(),
+                    });
                     Ty::Error
                 }
             };
@@ -158,11 +171,20 @@ impl<'db> InferenceContext<'_, 'db> {
     /// Resolve the path of a struct or variant pattern, and check that its
     /// type is `expected`. Returns the struct or variant, and the arguments
     /// of its type.
-    fn variant_pat(&mut self, pat: PatId, path: &Path, expected: &Ty<'db>) -> Option<(VariantDef<'db>, Box<[Ty<'db>]>)> {
+    fn variant_pat(
+        &mut self,
+        pat: PatId,
+        path: &Path,
+        expected: &Ty<'db>,
+    ) -> Option<(VariantDef<'db>, Box<[Ty<'db>]>)> {
         let resolver = Resolver::for_body(self.db, self.def);
         let def = match resolver.resolve_path_in_type_ns(self.db, path) {
-            Some(TypeResolution { ty: TypeNs::Struct(s), unresolved: None }) => VariantDef::Struct(s),
-            Some(TypeResolution { ty: TypeNs::Variant(v), unresolved: None }) => VariantDef::Variant(v),
+            Some(TypeResolution { ty: TypeNs::Struct(s), unresolved: None }) => {
+                VariantDef::Struct(s)
+            }
+            Some(TypeResolution { ty: TypeNs::Variant(v), unresolved: None }) => {
+                VariantDef::Variant(v)
+            }
             _ => {
                 // A bare variant name like `Some`, imported into scope.
                 match resolver.resolve_path_in_value_ns(self.db, path) {
@@ -187,11 +209,14 @@ impl<'db> InferenceContext<'_, 'db> {
         let resolver = Resolver::for_body(self.db, self.def);
         let def = match resolver.resolve_path_in_value_ns(self.db, path) {
             Some(ValueResolution::Value(ValueNs::Variant(v))) => VariantDef::Variant(v),
-            Some(ValueResolution::Value(ValueNs::Const(c))) => return const_ty(self.db, c).ty.clone(),
-            Some(ValueResolution::Value(ValueNs::Builtin(v))) => return Ty::Builtin(v.ty()),
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(s), unresolved: None })) => {
-                VariantDef::Struct(s)
+            Some(ValueResolution::Value(ValueNs::Const(c))) => {
+                return const_ty(self.db, c).ty.clone();
             }
+            Some(ValueResolution::Value(ValueNs::Builtin(v))) => return Ty::Builtin(v.ty()),
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(s),
+                unresolved: None,
+            })) => VariantDef::Struct(s),
             _ => {
                 self.unresolved_path(ExprOrPat::Pat(pat), &resolver, path);
                 return Ty::Error;

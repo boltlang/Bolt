@@ -224,11 +224,13 @@ impl PrimOp {
 fn all_builtins() -> &'static [(Builtin, &'static str)] {
     static ALL: OnceLock<Vec<(Builtin, &'static str)>> = OnceLock::new();
     ALL.get_or_init(|| {
-        let mut all: Vec<(Builtin, &'static str)> = Builtin::BASE.iter().map(|&b| (b, b.base_name())).collect();
+        let mut all: Vec<(Builtin, &'static str)> =
+            Builtin::BASE.iter().map(|&b| (b, b.base_name())).collect();
         for &(name, ty) in BuiltinType::ALL {
             for &op in PrimOp::ALL {
                 if op.applies_to(ty) {
-                    let name: &'static str = format!("{}_{}", name.to_lowercase(), op.name()).leak();
+                    let name: &'static str =
+                        format!("{}_{}", name.to_lowercase(), op.name()).leak();
                     all.push((Builtin::Prim(op, ty), name));
                 }
             }
@@ -262,7 +264,9 @@ impl Builtin {
 
     pub fn name(self) -> &'static str {
         match self {
-            Builtin::Prim(..) => all_builtins().iter().find(|&&(b, _)| b == self).map_or("?", |&(_, n)| n),
+            Builtin::Prim(..) => {
+                all_builtins().iter().find(|&&(b, _)| b == self).map_or("?", |&(_, n)| n)
+            }
             _ => self.base_name(),
         }
     }
@@ -310,7 +314,9 @@ impl Builtin {
     /// either mutability otherwise.
     pub fn signature<'db>(self, db: &'db dyn Db, file: File) -> Ty<'db> {
         let str_ty = match string_struct(db, file) {
-            Some(id) if id.item(db).is_imm => Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm)),
+            Some(id) if id.item(db).is_imm => {
+                Ty::adt(AdtId::Struct(id), [], [], Ty::Mutability(Mutability::Imm))
+            }
             Some(id) => Ty::adt(AdtId::Struct(id), [], [], Ty::Bound(0)),
             None => Ty::Error,
         };
@@ -334,14 +340,17 @@ impl Builtin {
                 let src = Ty::array(Ty::Bound(1), Ty::Bound(0));
                 Ty::func([dst, i32_ty.clone(), src, i32_ty.clone(), i32_ty], Ty::unit())
             }
-            Builtin::ArrayFreeze => {
-                Ty::func([Ty::array(Ty::Bound(0), Ty::Bound(1))], Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1)))
-            }
+            Builtin::ArrayFreeze => Ty::func(
+                [Ty::array(Ty::Bound(0), Ty::Bound(1))],
+                Ty::array(Ty::Mutability(Mutability::Imm), Ty::Bound(1)),
+            ),
             Builtin::Prim(op, ty) => {
                 let t = Ty::Builtin(ty);
                 match op {
                     PrimOp::Neg | PrimOp::Not => Ty::func([t.clone()], t),
-                    PrimOp::Shl | PrimOp::Shr => Ty::func([t.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], t),
+                    PrimOp::Shl | PrimOp::Shr => {
+                        Ty::func([t.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], t)
+                    }
                     PrimOp::Eq | PrimOp::Ne | PrimOp::Lt | PrimOp::Le | PrimOp::Gt | PrimOp::Ge => {
                         Ty::func([t.clone(), t], Ty::bool())
                     }
@@ -413,7 +422,10 @@ mod tests {
     fn primitive_operations_are_named_after_their_type() {
         let i32_ty = BuiltinType::Int(BuiltinInt::I32);
         assert_eq!(Builtin::by_name("i32_add"), Some(Builtin::Prim(PrimOp::Add, i32_ty)));
-        assert_eq!(Builtin::by_name("bool_not"), Some(Builtin::Prim(PrimOp::Not, BuiltinType::Bool)));
+        assert_eq!(
+            Builtin::by_name("bool_not"),
+            Some(Builtin::Prim(PrimOp::Not, BuiltinType::Bool))
+        );
         assert_eq!(Builtin::by_name("string_add"), None);
         // Only what the operators do: unsigned integers have no `-`, and
         // integers no `!`.
@@ -424,6 +436,9 @@ mod tests {
         let file = db.file("/main.bolt", "");
         let shl = Builtin::by_name("i64_shl").unwrap().signature(&db, file);
         let i64_ty = Ty::Builtin(BuiltinType::Int(BuiltinInt::I64));
-        assert_eq!(shl, Ty::func([i64_ty.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], i64_ty));
+        assert_eq!(
+            shl,
+            Ty::func([i64_ty.clone(), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U32))], i64_ty)
+        );
     }
 }

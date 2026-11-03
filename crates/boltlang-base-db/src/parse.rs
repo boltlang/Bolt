@@ -1,5 +1,5 @@
-use boltlang_parser::Diagnostic;
 use crate::rowan::GreenNode;
+use boltlang_parser::Diagnostic;
 
 use crate::{Db, File, source_text};
 

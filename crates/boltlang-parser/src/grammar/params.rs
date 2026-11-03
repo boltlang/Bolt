@@ -1,11 +1,11 @@
 //! Parameter lists of functions, as in the grammar's `parameters`.
 
-use boltlang_syntax::{SyntaxKind::*, T};
 use crate::{
     grammar::{PATTERN_FIRST, delimited, outer_attrs, parse_expr, pattern_single, type_},
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
+use boltlang_syntax::{SyntaxKind::*, T};
 
 const PARAM_FIRST: TokenSet = PATTERN_FIRST.union(TokenSet::new(&[T![...], T![#]]));
 

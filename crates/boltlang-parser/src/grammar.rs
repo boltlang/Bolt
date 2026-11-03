@@ -27,12 +27,8 @@ pub use types::*;
 pub use items::parse_item;
 pub use patterns::parse_pattern;
 
+use crate::{parser::Parser, token_set::TokenSet};
 use boltlang_syntax::SyntaxKind::{self, *};
-use crate::{
-        parser::Parser,
-        token_set::TokenSet
-};
-
 
 /// The name of something being declared, like the `f` in `fn f()`.
 pub(crate) fn name(p: &mut Parser) {

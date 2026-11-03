@@ -25,8 +25,9 @@ impl<'db> Compiler<'db> {
     /// How the elements of arrays of type `ty` are kept.
     fn element_of(&self, ty: &Ty<'db>, at: ExprId) -> Result<'db, Element> {
         match ty {
-            Ty::Array(_, elem) => layout::element(self.db, elem)
-                .ok_or_else(|| self.unsupported(at, format!("an array of `{}`", elem.display(self.db)))),
+            Ty::Array(_, elem) => layout::element(self.db, elem).ok_or_else(|| {
+                self.unsupported(at, format!("an array of `{}`", elem.display(self.db)))
+            }),
             _ => Err(self.unsupported(at, format!("a `{}` as an array", ty.display(self.db)))),
         }
     }
@@ -63,7 +64,12 @@ impl<'db> Compiler<'db> {
 
     /// `[value; count]`: `value`, evaluated once, in each element, as in the
     /// evaluator.
-    pub(super) fn array_repeat(&mut self, expr: ExprId, value: ExprId, count: ExprId) -> Result<'db, ()> {
+    pub(super) fn array_repeat(
+        &mut self,
+        expr: ExprId,
+        value: ExprId,
+        count: ExprId,
+    ) -> Result<'db, ()> {
         let el = self.element_of(&self.ty(expr), expr)?;
         let value = self.temp(value)?;
         let count = self.temp(count)?.expect("a `usize` is an `i32`");
@@ -96,7 +102,12 @@ impl<'db> Compiler<'db> {
     /// A builtin of `std`'s `array.bolt`, like `array_len`, called with
     /// `args` at `expr`. The type of an array argument, or of the result,
     /// says how its elements are kept.
-    pub(super) fn array_builtin(&mut self, expr: ExprId, builtin: Builtin, args: &[ExprId]) -> Result<'db, ()> {
+    pub(super) fn array_builtin(
+        &mut self,
+        expr: ExprId,
+        builtin: Builtin,
+        args: &[ExprId],
+    ) -> Result<'db, ()> {
         match (builtin, args) {
             (Builtin::ArrayLen, &[xs]) => {
                 self.expr(xs)?;
@@ -133,9 +144,11 @@ impl<'db> Compiler<'db> {
             }
             (Builtin::ArrayCopy, &[dst, dst_start, src, src_start, count]) => {
                 let el = self.element_of(&self.ty(src), src)?;
-                let [dst, dst_start, src, src_start, count] = [dst, dst_start, src, src_start, count]
-                    .map(|e| self.temp(e).map(|local| local.expect("an array or an `i32`")));
-                let (dst, dst_start, src, src_start, count) = (dst?, dst_start?, src?, src_start?, count?);
+                let [dst, dst_start, src, src_start, count] =
+                    [dst, dst_start, src, src_start, count]
+                        .map(|e| self.temp(e).map(|local| local.expect("an array or an `i32`")));
+                let (dst, dst_start, src, src_start, count) =
+                    (dst?, dst_start?, src?, src_start?, count?);
                 // The source's range first, like the evaluator.
                 self.check_range(src, src_start, count);
                 self.check_range(dst, dst_start, count);
@@ -186,7 +199,8 @@ impl<'db> Compiler<'db> {
     /// `c[i]` at `expr`: the `index` of the impl of `Index` for `c`.
     pub(super) fn index(&mut self, expr: ExprId, base: ExprId, index: ExprId) -> Result<'db, ()> {
         let i32 = self.ty(index);
-        let instance = self.lang_instance(expr, LangClass::Index, vec![self.ty(base), i32], self.ty(expr))?;
+        let instance =
+            self.lang_instance(expr, LangClass::Index, vec![self.ty(base), i32], self.ty(expr))?;
         self.expr(base)?;
         self.expr(index)?;
         self.call_callee(Callee::Instance(instance));
@@ -195,7 +209,12 @@ impl<'db> Compiler<'db> {
 
     /// `c[i] = x` at `place`, `c[i]`, with `x` on the stack, if it has a
     /// value: the `set_index` of the impl of `IndexMut` for `c`.
-    pub(super) fn assign_index(&mut self, place: ExprId, base: ExprId, index: ExprId) -> Result<'db, ()> {
+    pub(super) fn assign_index(
+        &mut self,
+        place: ExprId,
+        base: ExprId,
+        index: ExprId,
+    ) -> Result<'db, ()> {
         let value = self.expr_val_ty(place)?.map(|ty| self.new_local(ty));
         if let Some(value) = value {
             self.push(Inst::LocalSet(value));
@@ -215,16 +234,24 @@ impl<'db> Compiler<'db> {
     /// arguments of the types `params` and a result of type `ret`: of the impl
     /// the type checker chose, or in a generic function the one for the
     /// instance's types.
-    fn lang_instance(&self, at: ExprId, lang: LangClass, params: Vec<Ty<'db>>, ret: Ty<'db>) -> Result<'db, Instance<'db>> {
+    fn lang_instance(
+        &self,
+        at: ExprId,
+        lang: LangClass,
+        params: Vec<Ty<'db>>,
+        ret: Ty<'db>,
+    ) -> Result<'db, Instance<'db>> {
         let db = self.db;
         let file = self.def.def(db).file(db);
-        let unsupported = || self.unsupported(at, format!("`{}` without its class in the prelude", lang.name()));
+        let unsupported =
+            || self.unsupported(at, format!("`{}` without its class in the prelude", lang.name()));
         let class = lang.class(db, file).ok_or_else(unsupported)?;
         let method = lang.method(db, class).ok_or_else(unsupported)?;
         let imp = match self.infer.instance(at, class) {
             Some(imp) => imp,
-            None => select_impl(db, &[self.root], class, &params[..1])
-                .ok_or_else(|| self.unsupported(at, format!("`{}` of a `{}`", lang.name(), params[0].display(db))))?,
+            None => select_impl(db, &[self.root], class, &params[..1]).ok_or_else(|| {
+                self.unsupported(at, format!("`{}` of a `{}`", lang.name(), params[0].display(db)))
+            })?,
         };
         let target = impl_method(db, imp, method);
         self.instance_at(at, target, &Ty::func(params, ret))

@@ -9,13 +9,17 @@ use crate::{
 fn function<'db>(db: &'db TestDb, file: File, index: usize) -> DefWithBodyId<'db> {
     let tree = item_tree(db, file);
     let ModItem::Function(idx) = tree.top_level[index] else { panic!() };
-    DefWithBodyId::new(db, DefWithBody::Function(FunctionId::new(db, ItemContainerId::File(file), idx)))
+    DefWithBodyId::new(
+        db,
+        DefWithBody::Function(FunctionId::new(db, ItemContainerId::File(file), idx)),
+    )
 }
 
 #[test]
 fn function_bodies_and_params() {
     let db = TestDb::new();
-    let file = db.file("/main.bolt", "fn f(a, (b, c): (i32, i32)) { a + b }\nfn g(x) = x;\nfn h();\n");
+    let file =
+        db.file("/main.bolt", "fn f(a, (b, c): (i32, i32)) { a + b }\nfn g(x) = x;\nfn h();\n");
     let f = body(&db, function(&db, file, 0));
     assert_eq!(f.params.len(), 2);
     assert!(matches!(f.store[f.body_expr], Expr::Block { .. }));
@@ -28,10 +32,14 @@ fn function_bodies_and_params() {
 #[test]
 fn const_variant_and_file_bodies() {
     let db = TestDb::new();
-    let file = db.file("/main.bolt", "const N: i32 = 42;\nenum E { A, B = 7 }\nlet x = 1;\nprint(x);\n");
+    let file =
+        db.file("/main.bolt", "const N: i32 = 42;\nenum E { A, B = 7 }\nlet x = 1;\nprint(x);\n");
     let tree = item_tree(&db, file);
     let ModItem::Const(idx) = tree.top_level[0] else { panic!() };
-    let def = DefWithBodyId::new(&db, DefWithBody::Const(crate::ids::ConstId::new(&db, ItemContainerId::File(file), idx)));
+    let def = DefWithBodyId::new(
+        &db,
+        DefWithBody::Const(crate::ids::ConstId::new(&db, ItemContainerId::File(file), idx)),
+    );
     let n = body(&db, def);
     assert_eq!(n.store[n.body_expr], Expr::Literal(Literal::Int(42, None)));
 
@@ -42,7 +50,10 @@ fn const_variant_and_file_bodies() {
 
     let top = body(&db, DefWithBodyId::new(&db, DefWithBody::File(file)));
     let Expr::Block { statements, .. } = &top.store[top.body_expr] else { panic!() };
-    assert!(matches!(statements[..], [Statement::Item, Statement::Item, Statement::Let { .. }, Statement::Expr { .. }]));
+    assert!(matches!(
+        statements[..],
+        [Statement::Item, Statement::Item, Statement::Let { .. }, Statement::Expr { .. }]
+    ));
 }
 
 /// A query that depends on the body of the first function in a file, to
@@ -52,7 +63,10 @@ fn const_variant_and_file_bodies() {
 fn expr_count(db: &dyn Db, file: File) -> usize {
     let tree = item_tree(db, file);
     let ModItem::Function(idx) = tree.top_level[0] else { panic!() };
-    let def = DefWithBodyId::new(db, DefWithBody::Function(FunctionId::new(db, ItemContainerId::File(file), idx)));
+    let def = DefWithBodyId::new(
+        db,
+        DefWithBody::Function(FunctionId::new(db, ItemContainerId::File(file), idx)),
+    );
     body(db, def).store.exprs.len()
 }
 

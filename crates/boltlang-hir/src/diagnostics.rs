@@ -16,37 +16,42 @@ use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::{ExpressionStoreSourceMap, SyntaxPtr},
     hir::{MutabilityRef, TypeRef, TypeRefId},
-    ids::{ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
+    ids::{
+        ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
+        ItemContainerId, StructId, TypeAliasId,
+    },
     item_tree::{AssocItem, AstId, ModItem, item_tree},
     nameres::{ImportPathError, NameResDiagnostic, file_scope},
     resolver::GenericDefId,
     signatures::{
-        FieldList, class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map,
-        function_signature, function_signature_with_source_map, impl_signature, impl_signature_with_source_map, struct_signature_with_source_map,
+        FieldList, class_signature_with_source_map, const_signature_with_source_map,
+        enum_signature_with_source_map, function_signature, function_signature_with_source_map,
+        impl_signature, impl_signature_with_source_map, struct_signature_with_source_map,
         type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
-    InferenceDiagnostic, InferenceResult, Ty, function_scheme,
-    infer::mut_inside_imm,
+    InferenceDiagnostic, InferenceResult, Ty,
     builtin::{Builtin, is_builtin_block},
-    kind::Kind,
-    inhabited::{field_without_values, has_values},
     check::{unmet_assoc_bounds, unmet_assoc_equalities},
+    function_scheme,
+    infer::mut_inside_imm,
     infer_body,
-    overlap::{overlapped_functions, overlapped_impls},
+    inhabited::{field_without_values, has_values},
+    kind::Kind,
     lower::{
-        ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty, default_refers_to_itself, enum_field_types, fn_sig,
-        generic_predicates, impl_header, named_mutabilities, struct_field_types, subst_params, type_alias_ty,
-        unused_impl_params,
+        ClassConstraint, LowerDiagnostic, VariantDef, assoc_type_bounds, const_ty,
+        default_refers_to_itself, enum_field_types, fn_sig, generic_predicates, impl_header,
+        named_mutabilities, struct_field_types, subst_params, type_alias_ty, unused_impl_params,
     },
-    ty::GenericParamId,
+    overlap::{overlapped_functions, overlapped_impls},
     solve::{ConstraintSource, ExprOrPat, Held, Origin, Reason, TypeError},
+    ty::GenericParamId,
 };
 use boltlang_syntax::{
     SyntaxKind::{
-        self, FIELD_EXPR, FIELD_PATT, GENERIC_PARAM_LIST, NAME, NAME_REF, PATH, PATH_SEGMENT, PATH_TYPE,
-        RECORD_EXPR_FIELD, STRING, STRUCT_PATT, TYPE_PARAM,
+        self, FIELD_EXPR, FIELD_PATT, GENERIC_PARAM_LIST, NAME, NAME_REF, PATH, PATH_SEGMENT,
+        PATH_TYPE, RECORD_EXPR_FIELD, STRING, STRUCT_PATT, TYPE_PARAM,
     },
     SyntaxNode,
     rowan::{TextRange, TextSize},
@@ -68,27 +73,50 @@ pub enum DiagnosticKind<'db> {
     Syntax(String),
     /// The `bolt.toml` of the file's package, `manifest`, has an error, at
     /// `range` in it if that's known.
-    BadManifest { manifest: File, message: String, range: Option<TextRange> },
+    BadManifest {
+        manifest: File,
+        message: String,
+        range: Option<TextRange>,
+    },
 
     // Names
     /// Two definitions or imports of the same name in the same namespace.
-    DuplicateDefinition { name: Name },
+    DuplicateDefinition {
+        name: Name,
+    },
     /// The path of an import doesn't lead to a file.
-    UnresolvedImportPath { path: String, error: ImportPathError },
+    UnresolvedImportPath {
+        path: String,
+        error: ImportPathError,
+    },
     /// The file to import from has no item with this name.
-    UnresolvedImportName { name: Name },
+    UnresolvedImportName {
+        name: Name,
+    },
     /// The item to import, or that a path like `m.f` names, exists but isn't
     /// visible here: it's private, or `pub(package)` in another package
     /// when `package_only` is set.
-    NotVisible { name: Name, package_only: bool },
+    NotVisible {
+        name: Name,
+        package_only: bool,
+    },
     /// The enum of `import Option.*;` can't be found.
-    UnresolvedImportEnum { path: String },
+    UnresolvedImportEnum {
+        path: String,
+    },
     /// The path of `import Point.*;` isn't an enum.
-    NotAnEnum { path: String },
+    NotAnEnum {
+        path: String,
+    },
     /// The prelude that was asked for can't be found.
-    UnresolvedPrelude { package: String, error: ImportPathError },
+    UnresolvedPrelude {
+        package: String,
+        error: ImportPathError,
+    },
     /// The `Vec` of `fn Vec.new()` isn't a struct or enum of the same file.
-    UnresolvedOwner { name: Name },
+    UnresolvedOwner {
+        name: Name,
+    },
     /// `fn Vec.new()` somewhere other than the top level of a file.
     OwnerNotTopLevel,
     UnresolvedName,
@@ -100,41 +128,88 @@ pub enum DiagnosticKind<'db> {
 
     // Types
     /// `because` is what made the expected type expected, if it's known.
-    TypeMismatch { expected: Ty<'db>, actual: Ty<'db>, because: Option<Because<'db>> },
-    InfiniteType { ty: Ty<'db> },
-    NoInstance { constraint: ClassConstraint<'db>, because: Option<Because<'db>> },
+    TypeMismatch {
+        expected: Ty<'db>,
+        actual: Ty<'db>,
+        because: Option<Because<'db>>,
+    },
+    InfiniteType {
+        ty: Ty<'db>,
+    },
+    NoInstance {
+        constraint: ClassConstraint<'db>,
+        because: Option<Because<'db>>,
+    },
     /// A class constraint whose types are never found, so it's not known
     /// which instance to use.
-    AmbiguousConstraint { constraint: ClassConstraint<'db>, because: Option<Because<'db>> },
-    NotAFunction { ty: Ty<'db> },
-    WrongArgCount { expected: usize, found: usize },
-    WrongTypeArgCount { expected: usize, found: usize },
+    AmbiguousConstraint {
+        constraint: ClassConstraint<'db>,
+        because: Option<Because<'db>>,
+    },
+    NotAFunction {
+        ty: Ty<'db>,
+    },
+    WrongArgCount {
+        expected: usize,
+        found: usize,
+    },
+    WrongTypeArgCount {
+        expected: usize,
+        found: usize,
+    },
     /// A type of the wrong kind, like `i32` where a type constructor like
     /// `Option` is expected.
-    KindMismatch { expected: Kind, found: Kind },
+    KindMismatch {
+        expected: Kind,
+        found: Kind,
+    },
     /// A field that the type doesn't have. `ty` is `None` for a field in a
     /// struct literal or pattern, where the struct is named.
-    NoSuchField { ty: Option<Ty<'db>>, name: Name, because: Option<Because<'db>> },
-    MissingFields { names: Vec<Name> },
+    NoSuchField {
+        ty: Option<Ty<'db>>,
+        name: Name,
+        because: Option<Because<'db>>,
+    },
+    MissingFields {
+        names: Vec<Name>,
+    },
     /// A field or index of a value whose type isn't known yet.
     TypeNeeded,
     /// `Iterator[Itme = T]`, where the class has no associated type `name`.
-    NotAnAssocTypeOf { class: Name, name: Name },
+    NotAnAssocTypeOf {
+        class: Name,
+        name: Name,
+    },
     /// An associated type given, like `Iterator[Item = T]`, where that
     /// can't be assumed, like in an impl's instance.
     EqualityNotAllowed,
     /// None of the functions called `name` fits its use, of type `ty`.
     /// `candidates` are their types, as text (#275).
-    NoOverload { name: Name, ty: Ty<'db>, candidates: Vec<String> },
+    NoOverload {
+        name: Name,
+        ty: Ty<'db>,
+        candidates: Vec<String>,
+    },
     /// More than one of the functions called `name` fits its use when the
     /// body is done.
-    AmbiguousOverload { name: Name, candidates: Vec<String> },
+    AmbiguousOverload {
+        name: Name,
+        candidates: Vec<String>,
+    },
     /// A function with `#[test]` that can't be run as a test.
-    BadTest { reason: BadTest },
+    BadTest {
+        reason: BadTest,
+    },
     /// A call could fit both this function, of type `ty`, and one with the
     /// same name before it, of type `other`, whose name is at `other_range`
     /// in `other_file` (#275).
-    OverlappingFunction { name: Name, ty: String, other: String, other_file: File, other_range: TextRange },
+    OverlappingFunction {
+        name: Name,
+        ty: String,
+        other: String,
+        other_file: File,
+        other_range: TextRange,
+    },
     /// A type alias that refers to itself.
     RecursiveAlias,
     /// A function whose type can't be inferred, because functions without
@@ -144,17 +219,29 @@ pub enum DiagnosticKind<'db> {
     BreakOutside,
     /// An assignment to the variable `name`, or to a field of it, while it
     /// isn't `mut`.
-    AssignToImmutable { name: Name },
+    AssignToImmutable {
+        name: Name,
+    },
     /// An assignment to an element of an array, or a field of a struct, of
     /// type `ty`, which isn't `mut`.
-    CannotChange { ty: Ty<'db> },
+    CannotChange {
+        ty: Ty<'db>,
+    },
     /// `mut` or `imm` before something that isn't an array or a struct.
     NoMutability,
     /// An `imm` array or struct of type `ty` that holds a `mut` one, `inner`.
-    MutInsideImm { ty: Ty<'db>, inner: Ty<'db> },
+    MutInsideImm {
+        ty: Ty<'db>,
+        inner: Ty<'db>,
+    },
     /// `held`, a type or a mutability, isn't at most the mutability `bound`
     /// (#243), like a value of a type parameter in an `imm` array.
-    NotAtMost { held: Ty<'db>, is_mutability: bool, bound: Ty<'db>, because: Option<Because<'db>> },
+    NotAtMost {
+        held: Ty<'db>,
+        is_mutability: bool,
+        bound: Ty<'db>,
+        because: Option<Because<'db>>,
+    },
     /// `mut` in the type of a field.
     MutField,
     /// A mutability on its own where a type is expected.
@@ -166,13 +253,25 @@ pub enum DiagnosticKind<'db> {
     /// its instance doesn't use, so that choosing the impl can't decide it
     /// (#251). For a mutability, `suggestion` is the first type in the
     /// instance without a written one, with it instead, like `'v Vec[T]`.
-    UnusedImplParam { name: String, instance: ClassConstraint<'db>, suggestion: Option<Ty<'db>> },
+    UnusedImplParam {
+        name: String,
+        instance: ClassConstraint<'db>,
+        suggestion: Option<Ty<'db>>,
+    },
     /// Some types fit both this impl's instance and that of an impl before
     /// it, `other`, whose instance is at `other_range` in `other_file`
     /// (#276).
-    OverlappingImpl { instance: ClassConstraint<'db>, other: ClassConstraint<'db>, other_file: File, other_range: TextRange },
+    OverlappingImpl {
+        instance: ClassConstraint<'db>,
+        other: ClassConstraint<'db>,
+        other_file: File,
+        other_range: TextRange,
+    },
     /// More mutability arguments than the struct declares.
-    WrongMutabilityArgCount { expected: usize, found: usize },
+    WrongMutabilityArgCount {
+        expected: usize,
+        found: usize,
+    },
     /// A mutability parameter of an item that can't have one, like an enum.
     MutabilityParamNotAllowed,
     /// A path like `C.Item` where no class of `C` declares the associated
@@ -182,37 +281,71 @@ pub enum DiagnosticKind<'db> {
     AmbiguousAssocType,
     /// Syntax that needs a class of the prelude, like `xs[i]` needs
     /// `Index`, without a prelude that defines it.
-    NoLangClass { class: &'static str },
+    NoLangClass {
+        class: &'static str,
+    },
     /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
     /// without a prelude that defines it.
-    NoLangType { ty: &'static str },
+    NoLangType {
+        ty: &'static str,
+    },
     /// `x as T` for a struct or an enum, which `as` doesn't convert.
-    InvalidCast { from: Ty<'db>, to: Ty<'db> },
+    InvalidCast {
+        from: Ty<'db>,
+        to: Ty<'db>,
+    },
     /// The type an impl gives an associated type doesn't meet a bound the
     /// class puts on it, like `type Iter: Iterator;`.
-    UnmetAssocBound { name: Name, class: ClassId<'db>, constraint: ClassConstraint<'db> },
+    UnmetAssocBound {
+        name: Name,
+        class: ClassId<'db>,
+        constraint: ClassConstraint<'db>,
+    },
     /// An impl's type for the associated type `name` gives another `item`
     /// than its class's bound says, like the `Item = Item` of `type Iter:
     /// Iterator[Item = Item];`.
-    UnmetAssocEquality { name: Name, item: Name, class: ClassId<'db>, expected: Ty<'db>, actual: Ty<'db> },
+    UnmetAssocEquality {
+        name: Name,
+        item: Name,
+        class: ClassId<'db>,
+        expected: Ty<'db>,
+        actual: Ty<'db>,
+    },
     /// An assignment whose left side isn't a variable, a field or an
     /// element.
     NotAPlace,
     /// An item in an impl that its class doesn't declare.
-    NotInClass { kind: ClassItemKind, name: Name, class: ClassId<'db> },
+    NotInClass {
+        kind: ClassItemKind,
+        name: Name,
+        class: ClassId<'db>,
+    },
     /// Items of the class without a default that the impl doesn't define,
     /// in the order the class declares them.
-    MissingItems { items: Vec<(ClassItemKind, Name)>, class: ClassId<'db> },
+    MissingItems {
+        items: Vec<(ClassItemKind, Name)>,
+        class: ClassId<'db>,
+    },
 
     /// A struct or enum without values: building one needs a value of a
     /// type without values, like itself. `field` is a field of the struct,
     /// or of `variant` for an enum, that needs such a value.
-    NoValues { name: Name, variant: Option<Name>, field: Name, field_ty: Ty<'db> },
+    NoValues {
+        name: Name,
+        variant: Option<Name>,
+        field: Name,
+        field_ty: Ty<'db>,
+    },
 
     /// An item of an `extern "bolt"` block that isn't a builtin.
-    UnknownBuiltin { name: Name },
+    UnknownBuiltin {
+        name: Name,
+    },
     /// A builtin declared with another type than it has.
-    BuiltinSignature { name: Name, expected: Ty<'db> },
+    BuiltinSignature {
+        name: Name,
+        expected: Ty<'db>,
+    },
 
     /// Something the checker doesn't support yet, like `?` or `impl Trait`.
     Unsupported,
@@ -286,9 +419,15 @@ impl<'db> AssocItemDef<'db> {
         items
             .iter()
             .filter_map(|item| match *item {
-                AssocItem::Function(idx) => Some(AssocItemDef::Function(FunctionId::new(db, container, idx))),
-                AssocItem::Const(idx) => Some(AssocItemDef::Const(ConstId::new(db, container, idx))),
-                AssocItem::TypeAlias(idx) => Some(AssocItemDef::TypeAlias(TypeAliasId::new(db, container, idx))),
+                AssocItem::Function(idx) => {
+                    Some(AssocItemDef::Function(FunctionId::new(db, container, idx)))
+                }
+                AssocItem::Const(idx) => {
+                    Some(AssocItemDef::Const(ConstId::new(db, container, idx)))
+                }
+                AssocItem::TypeAlias(idx) => {
+                    Some(AssocItemDef::TypeAlias(TypeAliasId::new(db, container, idx)))
+                }
                 AssocItem::MacroCall(_) => None,
             })
             .collect()
@@ -332,7 +471,13 @@ impl<'db> AssocItemDef<'db> {
 /// The diagnostics of `file`, sorted by where they are.
 pub fn file_diagnostics<'db>(db: &'db dyn Db, file: File) -> Vec<Diagnostic<'db>> {
     let root = SyntaxNode::new_root(parse_file(db, file).tree(db).clone());
-    let mut collector = Collector { db, file, root, fallback: TextRange::empty(TextSize::from(0)), out: Vec::new() };
+    let mut collector = Collector {
+        db,
+        file,
+        root,
+        fallback: TextRange::empty(TextSize::from(0)),
+        out: Vec::new(),
+    };
     collector.syntax_errors();
     collector.manifest();
     collector.name_resolution();
@@ -366,7 +511,11 @@ impl<'db> Collector<'db> {
         let Some(manifest_file) = package_manifest(self.db, self.file) else { return };
         if let Err(error) = manifest(self.db, manifest_file) {
             let range = error.range.map(|(start, end)| TextRange::new(start.into(), end.into()));
-            let kind = DiagnosticKind::BadManifest { manifest: manifest_file, message: error.message.clone(), range };
+            let kind = DiagnosticKind::BadManifest {
+                manifest: manifest_file,
+                message: error.message.clone(),
+                range,
+            };
             self.push(Some(TextRange::empty(TextSize::from(0))), kind);
         }
     }
@@ -374,7 +523,8 @@ impl<'db> Collector<'db> {
     fn syntax_errors(&mut self) {
         for error in parse_file(self.db, self.file).errors(self.db) {
             let span = error.span();
-            let range = TextRange::new(TextSize::from(span.start as u32), TextSize::from(span.end as u32));
+            let range =
+                TextRange::new(TextSize::from(span.start as u32), TextSize::from(span.end as u32));
             self.push(Some(range), DiagnosticKind::Syntax(error.message()));
         }
     }
@@ -382,40 +532,59 @@ impl<'db> Collector<'db> {
     fn name_resolution(&mut self) {
         for diagnostic in &file_scope(self.db, self.file).diagnostics {
             let (range, kind) = match diagnostic {
-                NameResDiagnostic::Duplicate { name, ast_id } => {
-                    (self.name_in(*ast_id, name), DiagnosticKind::DuplicateDefinition { name: name.clone() })
-                }
+                NameResDiagnostic::Duplicate { name, ast_id } => (
+                    self.name_in(*ast_id, name),
+                    DiagnosticKind::DuplicateDefinition { name: name.clone() },
+                ),
                 NameResDiagnostic::UnresolvedImportPath { import, path, error } => {
                     let node = import.to_node(self.db, self.file, &self.root);
                     let string = node.as_ref().and_then(|n| {
-                        n.children_with_tokens().filter_map(|e| e.into_token()).find(|t| t.kind() == STRING)
+                        n.children_with_tokens()
+                            .filter_map(|e| e.into_token())
+                            .find(|t| t.kind() == STRING)
                     });
                     let range = string.map(|t| t.text_range()).or(node.map(|n| n.text_range()));
-                    (range, DiagnosticKind::UnresolvedImportPath { path: path.clone(), error: error.clone() })
+                    (
+                        range,
+                        DiagnosticKind::UnresolvedImportPath {
+                            path: path.clone(),
+                            error: error.clone(),
+                        },
+                    )
                 }
-                NameResDiagnostic::UnresolvedImportName { import, name } => {
-                    (self.name_in(*import, name), DiagnosticKind::UnresolvedImportName { name: name.clone() })
-                }
+                NameResDiagnostic::UnresolvedImportName { import, name } => (
+                    self.name_in(*import, name),
+                    DiagnosticKind::UnresolvedImportName { name: name.clone() },
+                ),
                 NameResDiagnostic::PrivateImport { import, name, package_only } => {
-                    let kind = DiagnosticKind::NotVisible { name: name.clone(), package_only: *package_only };
+                    let kind = DiagnosticKind::NotVisible {
+                        name: name.clone(),
+                        package_only: *package_only,
+                    };
                     (self.name_in(*import, name), kind)
                 }
-                NameResDiagnostic::UnresolvedImportEnum { import, path } => {
-                    (self.import_path_range(*import), DiagnosticKind::UnresolvedImportEnum { path: path.clone() })
-                }
-                NameResDiagnostic::NotAnEnum { import, path } => {
-                    (self.import_path_range(*import), DiagnosticKind::NotAnEnum { path: path.clone() })
-                }
-                NameResDiagnostic::UnresolvedOwner { function, name } => {
-                    (self.owner_range(*function), DiagnosticKind::UnresolvedOwner { name: name.clone() })
-                }
+                NameResDiagnostic::UnresolvedImportEnum { import, path } => (
+                    self.import_path_range(*import),
+                    DiagnosticKind::UnresolvedImportEnum { path: path.clone() },
+                ),
+                NameResDiagnostic::NotAnEnum { import, path } => (
+                    self.import_path_range(*import),
+                    DiagnosticKind::NotAnEnum { path: path.clone() },
+                ),
+                NameResDiagnostic::UnresolvedOwner { function, name } => (
+                    self.owner_range(*function),
+                    DiagnosticKind::UnresolvedOwner { name: name.clone() },
+                ),
                 NameResDiagnostic::OwnerNotTopLevel { function } => {
                     (self.owner_range(*function), DiagnosticKind::OwnerNotTopLevel)
                 }
                 // It's about the whole file, so it's at its start.
                 NameResDiagnostic::UnresolvedPrelude { package, error } => (
                     Some(TextRange::empty(TextSize::from(0))),
-                    DiagnosticKind::UnresolvedPrelude { package: package.clone(), error: error.clone() },
+                    DiagnosticKind::UnresolvedPrelude {
+                        package: package.clone(),
+                        error: error.clone(),
+                    },
                 ),
             };
             self.push(range, kind);
@@ -516,7 +685,8 @@ impl<'db> Collector<'db> {
             let other_file = other.file(db);
             let root = SyntaxNode::new_root(parse_file(db, other_file).tree(db).clone());
             let Some(node) = other.item(db).ast_id.to_node(db, other_file, &root) else { continue };
-            let other_range = node.children().find(|n| n.kind() == NAME).unwrap_or(node).text_range();
+            let other_range =
+                node.children().find(|n| n.kind() == NAME).unwrap_or(node).text_range();
             let kind = DiagnosticKind::OverlappingFunction {
                 name: overload_name(db, &[f]),
                 ty: overload_types(db, &[f]).remove(0),
@@ -537,7 +707,9 @@ impl<'db> Collector<'db> {
         for &other in overlapped_impls(db, imp) {
             let Some(other_instance) = &impl_header(db, other).class else { continue };
             let (sig, other_map) = impl_signature_with_source_map(db, other);
-            let Some(other_range) = other_map.type_syntax(sig.class).map(ptr_range) else { continue };
+            let Some(other_range) = other_map.type_syntax(sig.class).map(ptr_range) else {
+                continue;
+            };
             let kind = DiagnosticKind::OverlappingImpl {
                 instance: instance.clone(),
                 other: other_instance.clone(),
@@ -570,13 +742,20 @@ impl<'db> Collector<'db> {
             let index = index as usize;
             let (name, range, suggestion) = match params.type_params.get(index) {
                 Some(param) => {
-                    let node = list.as_ref().and_then(|l| l.children().filter(|c| c.kind() == TYPE_PARAM).nth(index));
-                    let range = node.map(|n| n.children().find(|c| c.kind() == NAME).unwrap_or(n).text_range());
+                    let node = list
+                        .as_ref()
+                        .and_then(|l| l.children().filter(|c| c.kind() == TYPE_PARAM).nth(index));
+                    let range = node
+                        .map(|n| n.children().find(|c| c.kind() == NAME).unwrap_or(n).text_range());
                     (param.name.to_string(), range, None)
                 }
                 None => {
                     let name = &named[index - params.type_params.len()];
-                    let declared = params.mutability_params.iter().find(|p| &p.name == name).map(|p| p.type_ref);
+                    let declared = params
+                        .mutability_params
+                        .iter()
+                        .find(|p| &p.name == name)
+                        .map(|p| p.type_ref);
                     let written = || {
                         impl_signature(db, imp).store.types.iter().find_map(|(id, t)| match t {
                             TypeRef::Mut { mutability: MutabilityRef::Named(n), .. }
@@ -588,13 +767,24 @@ impl<'db> Collector<'db> {
                             _ => None,
                         })
                     };
-                    let range = declared.or_else(written).and_then(|id| map.type_syntax(id)).map(ptr_range);
+                    let range =
+                        declared.or_else(written).and_then(|id| map.type_syntax(id)).map(ptr_range);
                     let param = Ty::Param(GenericParamId { def, index: index as u32 });
-                    let first_hidden = GenericParamId { def, index: (params.type_params.len() + named.len()) as u32 };
-                    (format!("'{name}"), range, with_hidden_mutability(instance, first_hidden, param))
+                    let first_hidden = GenericParamId {
+                        def,
+                        index: (params.type_params.len() + named.len()) as u32,
+                    };
+                    (
+                        format!("'{name}"),
+                        range,
+                        with_hidden_mutability(instance, first_hidden, param),
+                    )
                 }
             };
-            self.push(range, DiagnosticKind::UnusedImplParam { name, instance: instance.clone(), suggestion });
+            self.push(
+                range,
+                DiagnosticKind::UnusedImplParam { name, instance: instance.clone(), suggestion },
+            );
         }
     }
 
@@ -611,11 +801,15 @@ impl<'db> Collector<'db> {
         for item in AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items) {
             let Some(name) = item.name(db) else { continue };
             let kind = item.kind();
-            let declaration = declared.iter().find(|d| d.kind() == kind && d.name(db).as_ref() == Some(&name));
+            let declaration =
+                declared.iter().find(|d| d.kind() == kind && d.name(db).as_ref() == Some(&name));
             match (item, declaration) {
                 (_, None) => {
                     let range = self.item_range(item.ast_id(db));
-                    self.push(Some(range), DiagnosticKind::NotInClass { kind, name: name.clone(), class });
+                    self.push(
+                        Some(range),
+                        DiagnosticKind::NotInClass { kind, name: name.clone(), class },
+                    );
                 }
                 (AssocItemDef::Const(c), Some(&AssocItemDef::Const(declaration))) => {
                     self.impl_const_ty(c, declaration, constraint);
@@ -630,18 +824,33 @@ impl<'db> Collector<'db> {
             let Some(name) = alias.item(db).name.clone() else { continue };
             let own = AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
                 .into_iter()
-                .find(|item| matches!(item, AssocItemDef::TypeAlias(_)) && item.name(db).as_ref() == Some(&name));
+                .find(|item| {
+                    matches!(item, AssocItemDef::TypeAlias(_))
+                        && item.name(db).as_ref() == Some(&name)
+                });
             let range = own.map(|item| self.item_range(item.ast_id(db)));
-            self.push(range, DiagnosticKind::UnmetAssocBound { name, class, constraint: constraint.clone() });
+            self.push(
+                range,
+                DiagnosticKind::UnmetAssocBound { name, class, constraint: constraint.clone() },
+            );
         }
         for (alias, of, expected, actual) in unmet_assoc_equalities(db, imp) {
-            let (Some(name), Some(item)) = (alias.item(db).name.clone(), of.item(db).name.clone()) else { continue };
+            let (Some(name), Some(item)) = (alias.item(db).name.clone(), of.item(db).name.clone())
+            else {
+                continue;
+            };
             let own = AssocItemDef::all(db, ItemContainerId::Impl(imp), &imp.item(db).items)
                 .into_iter()
-                .find(|item| matches!(item, AssocItemDef::TypeAlias(_)) && item.name(db).as_ref() == Some(&name));
+                .find(|item| {
+                    matches!(item, AssocItemDef::TypeAlias(_))
+                        && item.name(db).as_ref() == Some(&name)
+                });
             let range = own.map(|item| self.item_range(item.ast_id(db)));
             let (expected, actual) = (expected.clone(), actual.clone());
-            self.push(range, DiagnosticKind::UnmetAssocEquality { name, item, class, expected, actual });
+            self.push(
+                range,
+                DiagnosticKind::UnmetAssocEquality { name, item, class, expected, actual },
+            );
         }
         let missing: Vec<(ClassItemKind, Name)> = declared
             .iter()
@@ -659,7 +868,12 @@ impl<'db> Collector<'db> {
 
     /// Check that a const of an impl has the type its class declares, in
     /// terms of the impl's class arguments.
-    fn impl_const_ty(&mut self, c: ConstId<'db>, declaration: ConstId<'db>, constraint: &ClassConstraint<'db>) {
+    fn impl_const_ty(
+        &mut self,
+        c: ConstId<'db>,
+        declaration: ConstId<'db>,
+        constraint: &ClassConstraint<'db>,
+    ) {
         let db = self.db;
         let class_def = GenericDefId::Class(constraint.class);
         let expected = subst_params(&const_ty(db, declaration).ty, class_def, &constraint.args);
@@ -684,7 +898,9 @@ impl<'db> Collector<'db> {
             match *item {
                 AssocItem::Function(idx) => self.function(FunctionId::new(self.db, container, idx)),
                 AssocItem::Const(idx) => self.const_(ConstId::new(self.db, container, idx)),
-                AssocItem::TypeAlias(idx) => self.type_alias(TypeAliasId::new(self.db, container, idx)),
+                AssocItem::TypeAlias(idx) => {
+                    self.type_alias(TypeAliasId::new(self.db, container, idx))
+                }
                 AssocItem::MacroCall(_) => {}
             }
         }
@@ -733,10 +949,14 @@ impl<'db> Collector<'db> {
     /// builtins, with their types.
     fn builtins(&mut self, block: ExternBlockId<'db>) {
         let db = self.db;
-        for item in AssocItemDef::all(db, ItemContainerId::ExternBlock(block), &block.item(db).items) {
+        for item in
+            AssocItemDef::all(db, ItemContainerId::ExternBlock(block), &block.item(db).items)
+        {
             let Some(name) = item.name(db) else { continue };
             let range = Some(self.item_range(item.ast_id(db)));
-            let (AssocItemDef::Function(f), Some(builtin)) = (item, Builtin::by_name(name.as_str())) else {
+            let (AssocItemDef::Function(f), Some(builtin)) =
+                (item, Builtin::by_name(name.as_str()))
+            else {
                 self.push(range, DiagnosticKind::UnknownBuiltin { name });
                 continue;
             };
@@ -747,7 +967,13 @@ impl<'db> Collector<'db> {
             );
             let file = block.file(db);
             if !builtin.has_signature(db, file, &declared) && !has_error(&declared) {
-                self.push(range, DiagnosticKind::BuiltinSignature { name, expected: builtin.signature(db, file) });
+                self.push(
+                    range,
+                    DiagnosticKind::BuiltinSignature {
+                        name,
+                        expected: builtin.signature(db, file),
+                    },
+                );
             }
         }
     }
@@ -762,19 +988,30 @@ impl<'db> Collector<'db> {
         let (ast_id, name, culprit) = match def {
             GenericDefId::Struct(id) => {
                 let fields = &struct_field_types(db, id).fields;
-                (id.item(db).ast_id, &id.item(db).name, field_without_values(db, fields).map(|f| (None, f)))
+                (
+                    id.item(db).ast_id,
+                    &id.item(db).name,
+                    field_without_values(db, fields).map(|f| (None, f)),
+                )
             }
             GenericDefId::Enum(id) => {
                 let variants = &enum_signature_with_source_map(db, id).0.variants;
-                let culprit = variants.iter().zip(enum_field_types(db, id)).find_map(|(variant, fields)| {
-                    field_without_values(db, &fields.fields).map(|f| (Some(variant.name.clone()), f))
-                });
+                let culprit =
+                    variants.iter().zip(enum_field_types(db, id)).find_map(|(variant, fields)| {
+                        field_without_values(db, &fields.fields)
+                            .map(|f| (Some(variant.name.clone()), f))
+                    });
                 (id.item(db).ast_id, &id.item(db).name, culprit)
             }
             _ => return,
         };
         let (Some(name), Some((variant, (field, field_ty)))) = (name, culprit) else { return };
-        let kind = DiagnosticKind::NoValues { name: name.clone(), variant, field: field.clone(), field_ty: field_ty.clone() };
+        let kind = DiagnosticKind::NoValues {
+            name: name.clone(),
+            variant,
+            field: field.clone(),
+            field_ty: field_ty.clone(),
+        };
         self.push(Some(self.item_range(ast_id)), kind);
     }
 
@@ -810,7 +1047,12 @@ impl<'db> Collector<'db> {
     /// `mut VecIter[mut [i32], imm]`, whose `data` would be an `imm` array
     /// of `mut` ones. A body's types are checked with the body; this is for
     /// the types no body looks at, like those of a class method.
-    fn written_type(&mut self, map: &ExpressionStoreSourceMap, type_ref: Option<TypeRefId>, ty: &Ty<'db>) {
+    fn written_type(
+        &mut self,
+        map: &ExpressionStoreSourceMap,
+        type_ref: Option<TypeRefId>,
+        ty: &Ty<'db>,
+    ) {
         if let Some((ty, inner)) = mut_inside_imm(self.db, ty) {
             let range = type_ref.and_then(|t| map.type_syntax(t)).map(ptr_range);
             self.push(range, DiagnosticKind::MutInsideImm { ty, inner });
@@ -829,33 +1071,52 @@ impl<'db> Collector<'db> {
             );
             let (type_ref, kind): (TypeRefId, _) = match diagnostic {
                 LowerDiagnostic::UnresolvedType(id) => (*id, DiagnosticKind::UnresolvedType),
-                LowerDiagnostic::NotVisible { type_ref, hidden } => {
-                    (*type_ref, DiagnosticKind::NotVisible { name: hidden.name.clone(), package_only: hidden.package_only })
-                }
+                LowerDiagnostic::NotVisible { type_ref, hidden } => (
+                    *type_ref,
+                    DiagnosticKind::NotVisible {
+                        name: hidden.name.clone(),
+                        package_only: hidden.package_only,
+                    },
+                ),
                 LowerDiagnostic::NotAType(id) => (*id, DiagnosticKind::NotAType),
                 LowerDiagnostic::NotAClass(id) => (*id, DiagnosticKind::NotAClass),
-                LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
-                    (*type_ref, DiagnosticKind::WrongTypeArgCount { expected: *expected, found: *found })
-                }
-                LowerDiagnostic::KindMismatch { type_ref, expected, found } => {
-                    (*type_ref, DiagnosticKind::KindMismatch { expected: expected.clone(), found: found.clone() })
-                }
+                LowerDiagnostic::WrongArgCount { type_ref, expected, found } => (
+                    *type_ref,
+                    DiagnosticKind::WrongTypeArgCount { expected: *expected, found: *found },
+                ),
+                LowerDiagnostic::KindMismatch { type_ref, expected, found } => (
+                    *type_ref,
+                    DiagnosticKind::KindMismatch {
+                        expected: expected.clone(),
+                        found: found.clone(),
+                    },
+                ),
                 LowerDiagnostic::RecursiveAlias(id) => (*id, DiagnosticKind::RecursiveAlias),
                 LowerDiagnostic::Unsupported(id) => (*id, DiagnosticKind::Unsupported),
                 LowerDiagnostic::NoMutability(id) => (*id, DiagnosticKind::NoMutability),
                 LowerDiagnostic::MutField(id) => (*id, DiagnosticKind::MutField),
                 LowerDiagnostic::MutabilityAlone(id) => (*id, DiagnosticKind::MutabilityAlone),
                 LowerDiagnostic::UnknownMutability(id) => (*id, DiagnosticKind::UnknownMutability),
-                LowerDiagnostic::WrongMutabilityCount { type_ref, expected, found } => {
-                    (*type_ref, DiagnosticKind::WrongMutabilityArgCount { expected: *expected, found: *found })
+                LowerDiagnostic::WrongMutabilityCount { type_ref, expected, found } => (
+                    *type_ref,
+                    DiagnosticKind::WrongMutabilityArgCount { expected: *expected, found: *found },
+                ),
+                LowerDiagnostic::MutabilityParamNotAllowed(id) => {
+                    (*id, DiagnosticKind::MutabilityParamNotAllowed)
                 }
-                LowerDiagnostic::MutabilityParamNotAllowed(id) => (*id, DiagnosticKind::MutabilityParamNotAllowed),
-                LowerDiagnostic::NoAssocType { type_ref } => (*type_ref, DiagnosticKind::NoAssocType),
-                LowerDiagnostic::AmbiguousAssocType { type_ref } => (*type_ref, DiagnosticKind::AmbiguousAssocType),
-                LowerDiagnostic::NotAnAssocTypeOf { type_ref, class, name } => {
-                    (*type_ref, DiagnosticKind::NotAnAssocTypeOf { class: class.clone(), name: name.clone() })
+                LowerDiagnostic::NoAssocType { type_ref } => {
+                    (*type_ref, DiagnosticKind::NoAssocType)
                 }
-                LowerDiagnostic::EqualityNotAllowed(id) => (*id, DiagnosticKind::EqualityNotAllowed),
+                LowerDiagnostic::AmbiguousAssocType { type_ref } => {
+                    (*type_ref, DiagnosticKind::AmbiguousAssocType)
+                }
+                LowerDiagnostic::NotAnAssocTypeOf { type_ref, class, name } => (
+                    *type_ref,
+                    DiagnosticKind::NotAnAssocTypeOf { class: class.clone(), name: name.clone() },
+                ),
+                LowerDiagnostic::EqualityNotAllowed(id) => {
+                    (*id, DiagnosticKind::EqualityNotAllowed)
+                }
             };
             let ptr = map.type_syntax(type_ref);
             let range = match ptr {
@@ -884,17 +1145,32 @@ impl<'db> Collector<'db> {
                             let because = self.because(origin, result);
                             (origin, DiagnosticKind::TypeMismatch { expected, actual, because })
                         }
-                        TypeError::InfiniteType { origin, ty } => (origin, DiagnosticKind::InfiniteType { ty }),
+                        TypeError::InfiniteType { origin, ty } => {
+                            (origin, DiagnosticKind::InfiniteType { ty })
+                        }
                         TypeError::NoOverload { origin, ty, candidates } => {
                             if has_error(&ty) {
                                 continue;
                             }
                             let name = overload_name(db, &candidates);
-                            (origin, DiagnosticKind::NoOverload { name, ty, candidates: overload_types(db, &candidates) })
+                            (
+                                origin,
+                                DiagnosticKind::NoOverload {
+                                    name,
+                                    ty,
+                                    candidates: overload_types(db, &candidates),
+                                },
+                            )
                         }
                         TypeError::AmbiguousOverload { origin, candidates, .. } => {
                             let name = overload_name(db, &candidates);
-                            (origin, DiagnosticKind::AmbiguousOverload { name, candidates: overload_types(db, &candidates) })
+                            (
+                                origin,
+                                DiagnosticKind::AmbiguousOverload {
+                                    name,
+                                    candidates: overload_types(db, &candidates),
+                                },
+                            )
                         }
                         TypeError::NoInstance { origin, constraint } => {
                             if constraint.args.iter().any(has_error) {
@@ -918,11 +1194,16 @@ impl<'db> Collector<'db> {
                             // At the name of the field, for `p.z`.
                             let range = self.unresolved_range(map, origin.node);
                             let because = self.because(origin, result);
-                            self.push(range, DiagnosticKind::NoSuchField { ty: Some(ty), name, because });
+                            self.push(
+                                range,
+                                DiagnosticKind::NoSuchField { ty: Some(ty), name, because },
+                            );
                             continue;
                         }
                         TypeError::TypeNeeded { origin } => (origin, DiagnosticKind::TypeNeeded),
-                        TypeError::CannotChange { origin, ty } => (origin, DiagnosticKind::CannotChange { ty }),
+                        TypeError::CannotChange { origin, ty } => {
+                            (origin, DiagnosticKind::CannotChange { ty })
+                        }
                         TypeError::NotAtMost { origin, constraint } => {
                             if has_error(constraint.held.ty()) || has_error(&constraint.bound) {
                                 continue;
@@ -930,7 +1211,15 @@ impl<'db> Collector<'db> {
                             let because = self.because(origin, result);
                             let is_mutability = matches!(constraint.held, Held::Mutability(_));
                             let held = constraint.held.ty().clone();
-                            (origin, DiagnosticKind::NotAtMost { held, is_mutability, bound: constraint.bound, because })
+                            (
+                                origin,
+                                DiagnosticKind::NotAtMost {
+                                    held,
+                                    is_mutability,
+                                    bound: constraint.bound,
+                                    because,
+                                },
+                            )
                         }
                     };
                     debug_assert_eq!(origin.body, id);
@@ -945,7 +1234,10 @@ impl<'db> Collector<'db> {
                 }
                 InferenceDiagnostic::NotVisible { expr, hidden } => (
                     self.unresolved_range(map, expr),
-                    DiagnosticKind::NotVisible { name: hidden.name, package_only: hidden.package_only },
+                    DiagnosticKind::NotVisible {
+                        name: hidden.name,
+                        package_only: hidden.package_only,
+                    },
                 ),
                 InferenceDiagnostic::NotAFunction { expr, ty } => {
                     if has_error(&ty) {
@@ -963,23 +1255,34 @@ impl<'db> Collector<'db> {
                 InferenceDiagnostic::MissingFields { expr, names } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::MissingFields { names })
                 }
-                InferenceDiagnostic::BreakOutside { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::BreakOutside),
-                InferenceDiagnostic::AssignToImmutable { expr, binding } => {
-                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::AssignToImmutable { name: body[binding].name.clone() })
+                InferenceDiagnostic::BreakOutside { expr } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::BreakOutside)
                 }
-                InferenceDiagnostic::NoMutability { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoMutability),
+                InferenceDiagnostic::AssignToImmutable { expr, binding } => (
+                    at(ExprOrPat::Expr(expr)),
+                    DiagnosticKind::AssignToImmutable { name: body[binding].name.clone() },
+                ),
+                InferenceDiagnostic::NoMutability { expr } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoMutability)
+                }
                 InferenceDiagnostic::MutInsideImm { at: node, ty, inner } => {
                     if has_error(&ty) {
                         continue;
                     }
                     (at(node), DiagnosticKind::MutInsideImm { ty, inner })
                 }
-                InferenceDiagnostic::NotAPlace { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace),
-                InferenceDiagnostic::Unsupported { expr } => (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported),
+                InferenceDiagnostic::NotAPlace { expr } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::NotAPlace)
+                }
+                InferenceDiagnostic::Unsupported { expr } => {
+                    (at(ExprOrPat::Expr(expr)), DiagnosticKind::Unsupported)
+                }
                 InferenceDiagnostic::NoLangClass { expr, class } => {
                     (at(ExprOrPat::Expr(expr)), DiagnosticKind::NoLangClass { class })
                 }
-                InferenceDiagnostic::NoLangType { at: node, ty } => (at(node), DiagnosticKind::NoLangType { ty }),
+                InferenceDiagnostic::NoLangType { at: node, ty } => {
+                    (at(node), DiagnosticKind::NoLangType { ty })
+                }
                 InferenceDiagnostic::InvalidCast { expr, from, to } => {
                     if has_error(&from) || has_error(&to) {
                         continue;
@@ -999,7 +1302,9 @@ impl<'db> Collector<'db> {
         let (_, body_map) = body_with_source_map(db, origin.body);
         let (file, ptr, kind) = match origin.reason {
             Reason::None => return None,
-            Reason::Annotation(type_ref) => (self.file, body_map.type_syntax(type_ref)?, BecauseKind::Annotation),
+            Reason::Annotation(type_ref) => {
+                (self.file, body_map.type_syntax(type_ref)?, BecauseKind::Annotation)
+            }
             Reason::ReturnType => {
                 let DefWithBody::Function(f) = origin.body.def(db) else { return None };
                 let (sig, map) = function_signature_with_source_map(db, f);
@@ -1035,9 +1340,15 @@ impl<'db> Collector<'db> {
                         (v.parent.file(db), &sig.variants.get(v.index as usize)?.fields, map)
                     }
                 };
-                let (FieldList::Record(fields) | FieldList::Tuple(fields)) = fields else { return None };
+                let (FieldList::Record(fields) | FieldList::Tuple(fields)) = fields else {
+                    return None;
+                };
                 let field = fields.get(index as usize)?;
-                (file, map.type_syntax(field.type_ref)?, BecauseKind::Field { name: field.name.clone() })
+                (
+                    file,
+                    map.type_syntax(field.type_ref)?,
+                    BecauseKind::Field { name: field.name.clone() },
+                )
             }
             Reason::SameAs(expr) => {
                 let ty = result.expr_ty(expr).clone();
@@ -1061,14 +1372,22 @@ impl<'db> Collector<'db> {
                         let name = f.item(db).display_name();
                         (f.file(db), &function_signature_with_source_map(db, f).1, name)
                     }
-                    GenericDefId::Struct(s) => {
-                        (s.file(db), &struct_signature_with_source_map(db, s).1, s.item(db).name.clone())
+                    GenericDefId::Struct(s) => (
+                        s.file(db),
+                        &struct_signature_with_source_map(db, s).1,
+                        s.item(db).name.clone(),
+                    ),
+                    GenericDefId::Enum(e) => (
+                        e.file(db),
+                        &enum_signature_with_source_map(db, e).1,
+                        e.item(db).name.clone(),
+                    ),
+                    GenericDefId::Impl(i) => {
+                        (i.file(db), &impl_signature_with_source_map(db, i).1, None)
                     }
-                    GenericDefId::Enum(e) => {
-                        (e.file(db), &enum_signature_with_source_map(db, e).1, e.item(db).name.clone())
+                    GenericDefId::Class(c) => {
+                        (c.file(db), &class_signature_with_source_map(db, c).1, None)
                     }
-                    GenericDefId::Impl(i) => (i.file(db), &impl_signature_with_source_map(db, i).1, None),
-                    GenericDefId::Class(c) => (c.file(db), &class_signature_with_source_map(db, c).1, None),
                     GenericDefId::TypeAlias(_) => return None,
                 };
                 (file, map.type_syntax(type_ref)?, BecauseKind::Bound { item })
@@ -1079,7 +1398,11 @@ impl<'db> Collector<'db> {
 
     /// Where a name that can't be found is. For `x.f` or `x.f()`, that's the
     /// `f`.
-    fn unresolved_range(&self, map: &ExpressionStoreSourceMap, node: ExprOrPat) -> Option<TextRange> {
+    fn unresolved_range(
+        &self,
+        map: &ExpressionStoreSourceMap,
+        node: ExprOrPat,
+    ) -> Option<TextRange> {
         let range = node_range(map, node);
         let ExprOrPat::Expr(expr) = node else { return range };
         let ptr = map.expr_syntax(expr)?;
@@ -1111,7 +1434,12 @@ impl<'db> Collector<'db> {
 
     /// The name of the field `name` of a record: the `z` of `Point { z: 1 }`,
     /// for its value `1`, or of the pattern `Point { z, .. }`.
-    fn field_name_range(&self, map: &ExpressionStoreSourceMap, node: ExprOrPat, name: &Name) -> Option<TextRange> {
+    fn field_name_range(
+        &self,
+        map: &ExpressionStoreSourceMap,
+        node: ExprOrPat,
+        name: &Name,
+    ) -> Option<TextRange> {
         let ptr = node_ptr(map, node)?;
         let node = ptr.to_node(&self.root)?;
         let name_in = |field: &SyntaxNode| {
@@ -1119,7 +1447,9 @@ impl<'db> Collector<'db> {
         };
         if node.kind() == STRUCT_PATT {
             let field = node.children().filter(|n| n.kind() == FIELD_PATT).find(|field| {
-                field.children().any(|n| matches!(n.kind(), NAME | NAME_REF) && n.text() == name.as_str())
+                field
+                    .children()
+                    .any(|n| matches!(n.kind(), NAME | NAME_REF) && n.text() == name.as_str())
             })?;
             return name_in(&field);
         }
@@ -1132,7 +1462,9 @@ impl<'db> Collector<'db> {
 
     /// The name of an item, or the whole item if it has none.
     fn item_range(&self, ast_id: AstId) -> TextRange {
-        let Some(node) = ast_id.to_node(self.db, self.file, &self.root) else { return self.fallback };
+        let Some(node) = ast_id.to_node(self.db, self.file, &self.root) else {
+            return self.fallback;
+        };
         node.children().find(|n| n.kind() == NAME).unwrap_or(node).text_range()
     }
 

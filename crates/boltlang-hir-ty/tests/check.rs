@@ -63,7 +63,9 @@
 use std::path::Path;
 
 use boltlang_base_db::{Settings, SystemPathBuf, TestDb, source_text};
-use boltlang_corpus::{Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating};
+use boltlang_corpus::{
+    Case, catch, data_files, data_name, parse_cases, slug, split_files, update, updating,
+};
 use boltlang_hir_def::{
     body::{DefWithBody, DefWithBodyId, body_with_source_map},
     expr_store::ExpressionStoreSourceMap,
@@ -72,15 +74,18 @@ use boltlang_hir_def::{
     item_tree::{AssocItem, ModItem, item_tree},
     resolver::GenericDefId,
     signatures::{
-        class_signature_with_source_map, const_signature_with_source_map, enum_signature_with_source_map, function_signature_with_source_map,
-        impl_signature, impl_signature_with_source_map, struct_signature_with_source_map, type_alias_signature_with_source_map,
+        class_signature_with_source_map, const_signature_with_source_map,
+        enum_signature_with_source_map, function_signature_with_source_map, impl_signature,
+        impl_signature_with_source_map, struct_signature_with_source_map,
+        type_alias_signature_with_source_map,
     },
 };
 use boltlang_hir_ty::{
     InferenceCycle, InferenceDiagnostic, Ty, TyNames, function_scheme, infer_body,
     lower::{
-        LowerDiagnostic, class_assoc_types, const_ty, default_refers_to_itself, enum_field_types, fn_sig, generic_predicates, impl_header, named_mutabilities,
-        struct_field_types, type_alias_ty, unused_impl_params,
+        LowerDiagnostic, class_assoc_types, const_ty, default_refers_to_itself, enum_field_types,
+        fn_sig, generic_predicates, impl_header, named_mutabilities, struct_field_types,
+        type_alias_ty, unused_impl_params,
     },
     overlap::{overlapped_functions, overlapped_impls},
     solve::{ExprOrPat, Held, TypeError},
@@ -164,7 +169,8 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
         let names = TyNames::new(&db, tys);
         tys.iter().map(|ty| ty.display_with(&db, &names).to_string()).collect()
     };
-    let files: Vec<_> = files.into_iter().map(|(path, text)| (db.file(&path, &text), path)).collect();
+    let files: Vec<_> =
+        files.into_iter().map(|(path, text)| (db.file(&path, &text), path)).collect();
     let mut types = Vec::new();
     let mut diagnostics = Vec::new();
     for &(file, ref path) in &files {
@@ -172,7 +178,8 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
         let tree = item_tree(&db, file);
         let text = source_text(&db, file);
         let type_snippet = |map: &ExpressionStoreSourceMap, id| {
-            map.type_syntax(id).map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
+            map.type_syntax(id)
+                .map_or("?".to_string(), |p| text[p.start as usize..p.end as usize].to_string())
         };
         let mut defs = Vec::new();
         // The functions of the file and of its impls, those of an impl named
@@ -181,15 +188,23 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
         let mut consts = Vec::new();
         for item in &tree.top_level {
             match *item {
-                ModItem::Function(idx) => functions.push((String::new(), FunctionId::new(&db, ItemContainerId::File(file), idx))),
+                ModItem::Function(idx) => functions
+                    .push((String::new(), FunctionId::new(&db, ItemContainerId::File(file), idx))),
                 // The problems with the types of fields and consts, and with
                 // the bounds and `where` predicates of each item.
                 ModItem::Struct(idx) => {
                     let id = StructId::new(&db, file, idx);
                     let (_, map) = struct_signature_with_source_map(&db, id);
                     let predicates = generic_predicates(&db, GenericDefId::Struct(id));
-                    for lower in struct_field_types(&db, id).diagnostics.iter().chain(&predicates.diagnostics) {
-                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    for lower in struct_field_types(&db, id)
+                        .diagnostics
+                        .iter()
+                        .chain(&predicates.diagnostics)
+                    {
+                        diagnostics.push(format!(
+                            "{prefix}{}",
+                            lower_line(lower, &|id| type_snippet(map, id))
+                        ));
                     }
                 }
                 ModItem::Enum(idx) => {
@@ -198,14 +213,20 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     let predicates = generic_predicates(&db, GenericDefId::Enum(id));
                     let fields = enum_field_types(&db, id).iter().flat_map(|v| &v.diagnostics);
                     for lower in fields.chain(&predicates.diagnostics) {
-                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                        diagnostics.push(format!(
+                            "{prefix}{}",
+                            lower_line(lower, &|id| type_snippet(map, id))
+                        ));
                     }
                 }
                 ModItem::Class(idx) => {
                     let id = ClassId::new(&db, file, idx);
                     let (_, map) = class_signature_with_source_map(&db, id);
                     for lower in &generic_predicates(&db, GenericDefId::Class(id)).diagnostics {
-                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                        diagnostics.push(format!(
+                            "{prefix}{}",
+                            lower_line(lower, &|id| type_snippet(map, id))
+                        ));
                     }
                     // The defaults of associated types that lead back to
                     // themselves (#298).
@@ -216,13 +237,20 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         }
                     }
                 }
-                ModItem::Const(idx) => consts.push(ConstId::new(&db, ItemContainerId::File(file), idx)),
+                ModItem::Const(idx) => {
+                    consts.push(ConstId::new(&db, ItemContainerId::File(file), idx))
+                }
                 ModItem::TypeAlias(idx) => {
                     let id = TypeAliasId::new(&db, ItemContainerId::File(file), idx);
                     let (_, map) = type_alias_signature_with_source_map(&db, id);
                     let predicates = generic_predicates(&db, GenericDefId::TypeAlias(id));
-                    for lower in type_alias_ty(&db, id).diagnostics.iter().chain(&predicates.diagnostics) {
-                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                    for lower in
+                        type_alias_ty(&db, id).diagnostics.iter().chain(&predicates.diagnostics)
+                    {
+                        diagnostics.push(format!(
+                            "{prefix}{}",
+                            lower_line(lower, &|id| type_snippet(map, id))
+                        ));
                     }
                 }
                 ModItem::Impl(idx) => {
@@ -239,7 +267,10 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     let (_, map) = impl_signature_with_source_map(&db, id);
                     let predicates = generic_predicates(&db, GenericDefId::Impl(id));
                     for lower in header.diagnostics.iter().chain(&predicates.diagnostics) {
-                        diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                        diagnostics.push(format!(
+                            "{prefix}{}",
+                            lower_line(lower, &|id| type_snippet(map, id))
+                        ));
                     }
                     // The parameters that its instance doesn't use (#251).
                     let def = GenericDefId::Impl(id);
@@ -247,7 +278,10 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     for index in unused_impl_params(&db, id) {
                         let name = match params.get(index as usize) {
                             Some(p) => p.name.to_string(),
-                            None => format!("'{}", named_mutabilities(&db, def)[index as usize - params.len()]),
+                            None => format!(
+                                "'{}",
+                                named_mutabilities(&db, def)[index as usize - params.len()]
+                            ),
                         };
                         diagnostics.push(format!("{prefix}error at `{name}`: not in the instance"));
                     }
@@ -262,11 +296,16 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                             ),
                             None => "?".to_string(),
                         };
-                        diagnostics.push(format!("{prefix}error at `{at}`: overlaps the impl for {other}"));
+                        diagnostics.push(format!(
+                            "{prefix}error at `{at}`: overlaps the impl for {other}"
+                        ));
                     }
                     for item in &id.item(&db).items {
                         if let AssocItem::Function(f) = *item {
-                            functions.push((instance.clone(), FunctionId::new(&db, ItemContainerId::Impl(id), f)));
+                            functions.push((
+                                instance.clone(),
+                                FunctionId::new(&db, ItemContainerId::Impl(id), f),
+                            ));
                         }
                     }
                 }
@@ -286,14 +325,18 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                     Ok(scheme) => scheme.display(&db),
                     Err(InferenceCycle) => "<cycle>".into(),
                 };
-                diagnostics.push(format!("{prefix}error at `{name}`: overlaps the {} of type {other}", f.item(&db).display_name().unwrap()));
+                diagnostics.push(format!(
+                    "{prefix}error at `{name}`: overlaps the {} of type {other}",
+                    f.item(&db).display_name().unwrap()
+                ));
             }
             // The problems with the types in its signature.
             let (_, map) = function_signature_with_source_map(&db, f);
             let sig = fn_sig(&db, f);
             let predicates = generic_predicates(&db, GenericDefId::Function(f));
             for lower in sig.diagnostics.iter().chain(&predicates.diagnostics) {
-                diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                diagnostics
+                    .push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
             }
             if f.item(&db).has_body {
                 defs.push(DefWithBodyId::new(&db, DefWithBody::Function(f)));
@@ -302,7 +345,8 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
         for c in consts {
             let (_, map) = const_signature_with_source_map(&db, c);
             for lower in &const_ty(&db, c).diagnostics {
-                diagnostics.push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
+                diagnostics
+                    .push(format!("{prefix}{}", lower_line(lower, &|id| type_snippet(map, id))));
             }
             defs.push(DefWithBodyId::new(&db, DefWithBody::Const(c)));
         }
@@ -341,23 +385,35 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                 let line = match diagnostic {
                     InferenceDiagnostic::Type(TypeError::Mismatch { origin, expected, actual }) => {
                         let tys = show(&[expected, actual]);
-                        format!("error at `{}`: expected {}, found {}", at(origin.node), tys[0], tys[1])
+                        format!(
+                            "error at `{}`: expected {}, found {}",
+                            at(origin.node),
+                            tys[0],
+                            tys[1]
+                        )
                     }
-                    InferenceDiagnostic::Type(TypeError::NoInstance { origin, constraint }) => format!(
-                        "error at `{}`: no instance {}[{}]",
-                        at(origin.node),
-                        constraint.class.item(&db).name.as_ref().unwrap(),
-                        show(&constraint.args.iter().collect::<Vec<_>>()).join(", ")
-                    ),
+                    InferenceDiagnostic::Type(TypeError::NoInstance { origin, constraint }) => {
+                        format!(
+                            "error at `{}`: no instance {}[{}]",
+                            at(origin.node),
+                            constraint.class.item(&db).name.as_ref().unwrap(),
+                            show(&constraint.args.iter().collect::<Vec<_>>()).join(", ")
+                        )
+                    }
                     InferenceDiagnostic::Type(TypeError::Ambiguous { origin, .. }) => {
                         format!("error at `{}`: ambiguous", at(origin.node))
                     }
-                    InferenceDiagnostic::UnresolvedName { expr } => format!("error at `{}`: unresolved", at(*expr)),
+                    InferenceDiagnostic::UnresolvedName { expr } => {
+                        format!("error at `{}`: unresolved", at(*expr))
+                    }
                     InferenceDiagnostic::NotVisible { expr, hidden } => {
                         format!("error at `{}`: `{}` isn't visible", at(*expr), hidden.name)
                     }
                     InferenceDiagnostic::WrongArgCount { expr, expected, found } => {
-                        format!("error at `{}`: expected {expected} arguments, found {found}", at(*expr))
+                        format!(
+                            "error at `{}`: expected {expected} arguments, found {found}",
+                            at(*expr)
+                        )
                     }
                     InferenceDiagnostic::NoSuchField { expr, name } => {
                         format!("error at `{}`: no field {name}", at(*expr))
@@ -366,13 +422,29 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         format!("error at `{}`: type needed", at(origin.node))
                     }
                     InferenceDiagnostic::Type(TypeError::NoOverload { origin, ty, .. }) => {
-                        format!("error at `{}`: no overload fits {}", at(origin.node), show(&[ty])[0])
+                        format!(
+                            "error at `{}`: no overload fits {}",
+                            at(origin.node),
+                            show(&[ty])[0]
+                        )
                     }
-                    InferenceDiagnostic::Type(TypeError::AmbiguousOverload { origin, candidates, .. }) => {
-                        format!("error at `{}`: ambiguous, {} overloads fit", at(origin.node), candidates.len())
+                    InferenceDiagnostic::Type(TypeError::AmbiguousOverload {
+                        origin,
+                        candidates,
+                        ..
+                    }) => {
+                        format!(
+                            "error at `{}`: ambiguous, {} overloads fit",
+                            at(origin.node),
+                            candidates.len()
+                        )
                     }
                     InferenceDiagnostic::Type(TypeError::NoSuchField { origin, ty, name }) => {
-                        format!("error at `{}`: {} has no field {name}", at(origin.node), show(&[ty])[0])
+                        format!(
+                            "error at `{}`: {} has no field {name}",
+                            at(origin.node),
+                            show(&[ty])[0]
+                        )
                     }
                     InferenceDiagnostic::MissingFields { expr, names } => format!(
                         "error at `{}`: missing {}",
@@ -383,10 +455,17 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         format!("error at `{}`: infinite type {}", at(origin.node), show(&[ty])[0])
                     }
                     InferenceDiagnostic::NotAFunction { expr, ty } => {
-                        format!("error at `{}`: {} is not a function", at(ExprOrPat::Expr(*expr)), show(&[ty])[0])
+                        format!(
+                            "error at `{}`: {} is not a function",
+                            at(ExprOrPat::Expr(*expr)),
+                            show(&[ty])[0]
+                        )
                     }
                     InferenceDiagnostic::BreakOutside { expr } => {
-                        format!("error at `{}`: nothing to break out of", at(ExprOrPat::Expr(*expr)))
+                        format!(
+                            "error at `{}`: nothing to break out of",
+                            at(ExprOrPat::Expr(*expr))
+                        )
                     }
                     InferenceDiagnostic::AssignToImmutable { expr, .. } => {
                         format!("error at `{}`: not mut", at(ExprOrPat::Expr(*expr)))
@@ -422,20 +501,30 @@ fn check(input: &str, prelude: Prelude) -> Result<(String, String), String> {
                         format!("error at `{}`: not a place", at(ExprOrPat::Expr(*expr)))
                     }
                     InferenceDiagnostic::NoLangClass { expr, class } => {
-                        format!("error at `{}`: needs {class} from the prelude", at(ExprOrPat::Expr(*expr)))
+                        format!(
+                            "error at `{}`: needs {class} from the prelude",
+                            at(ExprOrPat::Expr(*expr))
+                        )
                     }
                     InferenceDiagnostic::NoLangType { at: node, ty } => {
                         format!("error at `{}`: needs {ty} from the prelude", at(*node))
                     }
                     InferenceDiagnostic::InvalidCast { expr, from, to } => {
                         let tys = show(&[from, to]);
-                        format!("error at `{}`: can't cast {} to {}", at(ExprOrPat::Expr(*expr)), tys[0], tys[1])
+                        format!(
+                            "error at `{}`: can't cast {} to {}",
+                            at(ExprOrPat::Expr(*expr)),
+                            tys[0],
+                            tys[1]
+                        )
                     }
                     InferenceDiagnostic::Unsupported { expr } => {
                         format!("warning at `{}`: unsupported", at(ExprOrPat::Expr(*expr)))
                     }
                     InferenceDiagnostic::Lower(lower) => lower_line(lower, &at_type),
-                    InferenceDiagnostic::CyclicInference => "error: cyclic inference between files".to_string(),
+                    InferenceDiagnostic::CyclicInference => {
+                        "error: cyclic inference between files".to_string()
+                    }
                 };
                 diagnostics.push(format!("{prefix}{line}"));
             }
@@ -454,7 +543,10 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         LowerDiagnostic::NotAType(id) => format!("error at `{}`: not a type", at(*id)),
         LowerDiagnostic::NotAClass(id) => format!("error at `{}`: not a class", at(*id)),
         LowerDiagnostic::WrongArgCount { type_ref, expected, found } => {
-            format!("error at `{}`: expected {expected} type arguments, found {found}", at(*type_ref))
+            format!(
+                "error at `{}`: expected {expected} type arguments, found {found}",
+                at(*type_ref)
+            )
         }
         LowerDiagnostic::KindMismatch { type_ref, expected, found } => {
             format!("error at `{}`: expected kind {expected}, found {found}", at(*type_ref))
@@ -463,15 +555,24 @@ fn lower_line(lower: &LowerDiagnostic, at: &dyn Fn(TypeRefId) -> String) -> Stri
         LowerDiagnostic::Unsupported(id) => format!("warning at `{}`: unsupported", at(*id)),
         LowerDiagnostic::NoMutability(id) => format!("error at `{}`: can't be mut or imm", at(*id)),
         LowerDiagnostic::MutField(id) => format!("error at `{}`: mut field", at(*id)),
-        LowerDiagnostic::MutabilityAlone(id) => format!("error at `{}`: a mutability isn't a type", at(*id)),
-        LowerDiagnostic::UnknownMutability(id) => format!("error at `{}`: unknown mutability", at(*id)),
+        LowerDiagnostic::MutabilityAlone(id) => {
+            format!("error at `{}`: a mutability isn't a type", at(*id))
+        }
+        LowerDiagnostic::UnknownMutability(id) => {
+            format!("error at `{}`: unknown mutability", at(*id))
+        }
         LowerDiagnostic::WrongMutabilityCount { type_ref, expected, found } => {
-            format!("error at `{}`: expected at most {expected} mutability arguments, found {found}", at(*type_ref))
+            format!(
+                "error at `{}`: expected at most {expected} mutability arguments, found {found}",
+                at(*type_ref)
+            )
         }
         LowerDiagnostic::MutabilityParamNotAllowed(id) => {
             format!("error at `{}`: can't have a mutability parameter", at(*id))
         }
-        LowerDiagnostic::NoAssocType { type_ref } => format!("error at `{}`: no such associated type", at(*type_ref)),
+        LowerDiagnostic::NoAssocType { type_ref } => {
+            format!("error at `{}`: no such associated type", at(*type_ref))
+        }
         LowerDiagnostic::NotAnAssocTypeOf { type_ref, class, name } => {
             format!("error at `{}`: {class} has no associated type {name}", at(*type_ref))
         }
@@ -495,7 +596,12 @@ fn run(case: &Case, attributes: &Attributes) -> Result<(), Failed> {
     let actual = check_caught(case)?;
     let expected = expected(case);
     if actual != expected {
-        return Err(format!("expected:\n{}\nfound:\n{}", show_output(&expected), show_output(&actual)).into());
+        return Err(format!(
+            "expected:\n{}\nfound:\n{}",
+            show_output(&expected),
+            show_output(&actual)
+        )
+        .into());
     }
     if attributes.error && !has_errors(&actual) {
         return Err("the case is marked `:error`, but the checker found no errors".into());
@@ -507,7 +613,10 @@ fn run(case: &Case, attributes: &Attributes) -> Result<(), Failed> {
 /// `error at ...` or `/lib.bolt: error at ...`.
 fn has_errors((_, diagnostics): &(String, String)) -> bool {
     diagnostics.lines().any(|line| {
-        let line = line.split_once(": ").filter(|(path, _)| path.starts_with('/')).map_or(line, |(_, rest)| rest);
+        let line = line
+            .split_once(": ")
+            .filter(|(path, _)| path.starts_with('/'))
+            .map_or(line, |(_, rest)| rest);
         line.starts_with("error")
     })
 }

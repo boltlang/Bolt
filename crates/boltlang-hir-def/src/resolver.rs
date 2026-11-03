@@ -14,19 +14,19 @@ use boltlang_base_db::{Db, File};
 
 use crate::{
     Name,
-    builtin_type::{BuiltinType, BuiltinValue},
     body::{DefWithBody, DefWithBodyId},
+    builtin_type::{BuiltinType, BuiltinValue},
     hir::{BindingId, ExprId, Path, PathSegment, TypeRef},
-    item_tree::{AssocItem, FunctionName, RawVisibility, item_tree},
     ids::{
-        ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId, StructId,
-        TypeAliasId,
+        ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, ModuleDefId,
+        StructId, TypeAliasId,
     },
+    item_tree::{AssocItem, FunctionName, RawVisibility, item_tree},
     nameres::{Namespace, file_scope, is_visible_from, type_member, type_member_entry},
     scope::{ExprScopes, ScopeId, expr_scopes},
     signatures::{
-        GenericParams, class_signature, enum_signature, function_signature, impl_signature, struct_signature,
-        type_alias_signature,
+        GenericParams, class_signature, enum_signature, function_signature, impl_signature,
+        struct_signature, type_alias_signature,
     },
 };
 
@@ -64,7 +64,10 @@ pub enum TypeNs<'db> {
     Class(ClassId<'db>),
     TypeAlias(TypeAliasId<'db>),
     /// The `index`th type parameter of `def`.
-    GenericParam { def: GenericDefId<'db>, index: u32 },
+    GenericParam {
+        def: GenericDefId<'db>,
+        index: u32,
+    },
     Builtin(BuiltinType),
 }
 
@@ -86,7 +89,10 @@ pub enum ValueNs<'db> {
     /// A variant used as a value or constructor, like `None` or `Some`.
     Variant(EnumVariantId<'db>),
     /// The `index`th const parameter of `def`.
-    ConstParam { def: GenericDefId<'db>, index: u32 },
+    ConstParam {
+        def: GenericDefId<'db>,
+        index: u32,
+    },
     /// `True` or `False`.
     Builtin(BuiltinValue),
 }
@@ -198,12 +204,18 @@ impl<'db> Resolver<'db> {
                 }
                 (Scope::Generics(def, params), Namespace::Types) => {
                     if let Some(index) = params.type_params.iter().position(|p| &p.name == name) {
-                        return Some(Local::Type(TypeNs::GenericParam { def: *def, index: index as u32 }));
+                        return Some(Local::Type(TypeNs::GenericParam {
+                            def: *def,
+                            index: index as u32,
+                        }));
                     }
                 }
                 (Scope::Generics(def, params), Namespace::Values) => {
                     if let Some(index) = params.const_params.iter().position(|p| &p.name == name) {
-                        return Some(Local::Value(ValueNs::ConstParam { def: *def, index: index as u32 }));
+                        return Some(Local::Value(ValueNs::ConstParam {
+                            def: *def,
+                            index: index as u32,
+                        }));
                     }
                 }
                 _ => {}
@@ -236,26 +248,40 @@ impl<'db> Resolver<'db> {
         })
     }
 
-    pub fn resolve_path_in_type_ns(&self, db: &'db dyn Db, path: &Path) -> Option<TypeResolution<'db>> {
+    pub fn resolve_path_in_type_ns(
+        &self,
+        db: &'db dyn Db,
+        path: &Path,
+    ) -> Option<TypeResolution<'db>> {
         let segments = &path.segments;
         let first = segments.first()?;
         if let Some(Local::Type(ty)) = self.resolve_local(Namespace::Types, &first.name) {
             return Some(TypeResolution { ty, unresolved: rest(segments, 1) });
         }
         if let Some(alias) = self.resolve_assoc_type(db, &first.name) {
-            return Some(TypeResolution { ty: TypeNs::TypeAlias(alias), unresolved: rest(segments, 1) });
+            return Some(TypeResolution {
+                ty: TypeNs::TypeAlias(alias),
+                unresolved: rest(segments, 1),
+            });
         }
         let (file, i) = self.walk_files(db, segments);
-        let Some(def) = lookup(db, file, self.file, Namespace::Types, &segments.get(i)?.name) else {
+        let Some(def) = lookup(db, file, self.file, Namespace::Types, &segments.get(i)?.name)
+        else {
             // `i32`, or `u8.MAX`, unless it's in another file, like `m.i32`.
             let builtin = if i == 0 { BuiltinType::by_name(first.name.as_str()) } else { None };
-            return builtin.map(|ty| TypeResolution { ty: TypeNs::Builtin(ty), unresolved: rest(segments, 1) });
+            return builtin.map(|ty| TypeResolution {
+                ty: TypeNs::Builtin(ty),
+                unresolved: rest(segments, 1),
+            });
         };
         let ty = match def {
             ModuleDefId::Struct(id) => TypeNs::Struct(id),
             ModuleDefId::Enum(id) => {
                 if let Some(variant) = segments.get(i + 1).and_then(|s| id.variant(db, &s.name)) {
-                    return Some(TypeResolution { ty: TypeNs::Variant(variant), unresolved: rest(segments, i + 2) });
+                    return Some(TypeResolution {
+                        ty: TypeNs::Variant(variant),
+                        unresolved: rest(segments, i + 2),
+                    });
                 }
                 TypeNs::Enum(id)
             }
@@ -270,7 +296,11 @@ impl<'db> Resolver<'db> {
         Some(TypeResolution { ty, unresolved: rest(segments, i + 1) })
     }
 
-    pub fn resolve_path_in_value_ns(&self, db: &'db dyn Db, path: &Path) -> Option<ValueResolution<'db>> {
+    pub fn resolve_path_in_value_ns(
+        &self,
+        db: &'db dyn Db,
+        path: &Path,
+    ) -> Option<ValueResolution<'db>> {
         let segments = &path.segments;
         let first = segments.first()?;
         if segments.len() == 1
@@ -302,7 +332,9 @@ impl<'db> Resolver<'db> {
         // Otherwise a variant, like `Option.None`, or something of a type.
         let resolution = self.resolve_path_in_type_ns(db, path)?;
         Some(match resolution {
-            TypeResolution { ty: TypeNs::Variant(id), unresolved: None } => ValueResolution::Value(ValueNs::Variant(id)),
+            TypeResolution { ty: TypeNs::Variant(id), unresolved: None } => {
+                ValueResolution::Value(ValueNs::Variant(id))
+            }
             TypeResolution { ty, unresolved: Some(i) } if i + 1 == segments.len() => {
                 match self.resolve_member(db, ty, &segments[i].name) {
                     Some(f) => ValueResolution::Value(ValueNs::Function(f)),
@@ -315,7 +347,12 @@ impl<'db> Resolver<'db> {
 
     /// The function `name` in the namespace of the type `ty`, like `new` for
     /// `Vec.new`.
-    fn resolve_member(&self, db: &'db dyn Db, ty: TypeNs<'db>, name: &Name) -> Option<FunctionId<'db>> {
+    fn resolve_member(
+        &self,
+        db: &'db dyn Db,
+        ty: TypeNs<'db>,
+        name: &Name,
+    ) -> Option<FunctionId<'db>> {
         let (file, owner) = owner_of(db, ty)?;
         match type_member(db, file, owner, name, self.file)? {
             ModuleDefId::Function(f) => Some(f),
@@ -348,13 +385,18 @@ impl<'db> Resolver<'db> {
     /// Whether `path` refers to anything: a value, a type, or a file
     /// imported with `as`, like the `m` of `m.f`.
     pub fn resolves(&self, db: &'db dyn Db, path: &Path) -> bool {
-        if self.resolve_path_in_value_ns(db, path).is_some() || self.resolve_path_in_type_ns(db, path).is_some() {
+        if self.resolve_path_in_value_ns(db, path).is_some()
+            || self.resolve_path_in_type_ns(db, path).is_some()
+        {
             return true;
         }
         let segments = &path.segments;
         let (file, i) = self.walk_files(db, segments);
         i + 1 == segments.len()
-            && matches!(lookup(db, file, self.file, Namespace::Types, &segments[i].name), Some(ModuleDefId::File(_)))
+            && matches!(
+                lookup(db, file, self.file, Namespace::Types, &segments[i].name),
+                Some(ModuleDefId::File(_))
+            )
     }
 
     /// The local variable a name refers to at this position.
@@ -372,7 +414,8 @@ impl<'db> Resolver<'db> {
     pub fn hidden(&self, db: &'db dyn Db, path: &Path) -> Option<Hidden> {
         let segments = &path.segments;
         // A private function of a type in another file, like `Vec.grow`.
-        if let Some(TypeResolution { ty, unresolved: Some(i) }) = self.resolve_path_in_type_ns(db, path)
+        if let Some(TypeResolution { ty, unresolved: Some(i) }) =
+            self.resolve_path_in_type_ns(db, path)
             && i + 1 == segments.len()
             && let Some((file, owner)) = owner_of(db, ty)
             && let Some(entry) = type_member_entry(db, file, owner, &segments[i].name)
@@ -391,8 +434,10 @@ impl<'db> Resolver<'db> {
         [Namespace::Values, Namespace::Types].into_iter().find_map(|ns| {
             // The prelude's names aren't the file's: it has nothing by that name.
             let entry = scope.get(ns, name).filter(|entry| !entry.prelude)?;
-            (!is_visible_from(db, entry.visibility, file, self.file))
-                .then(|| Hidden { name: name.clone(), package_only: entry.visibility == RawVisibility::Package })
+            (!is_visible_from(db, entry.visibility, file, self.file)).then(|| Hidden {
+                name: name.clone(),
+                package_only: entry.visibility == RawVisibility::Package,
+            })
         })
     }
 
@@ -438,7 +483,13 @@ enum Local<'db> {
 /// the names visible there can be used: see [`is_visible_from`]. An
 /// imported name has the visibility of its import, so `m.f` only sees the
 /// names `m` defines or re-exports.
-fn lookup<'db>(db: &'db dyn Db, file: File, from: File, ns: Namespace, name: &Name) -> Option<ModuleDefId<'db>> {
+fn lookup<'db>(
+    db: &'db dyn Db,
+    file: File,
+    from: File,
+    ns: Namespace,
+    name: &Name,
+) -> Option<ModuleDefId<'db>> {
     let entry = file_scope(db, file).scope.get(ns, name)?;
     is_visible_from(db, entry.visibility, file, from).then_some(entry.def)
 }

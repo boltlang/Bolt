@@ -23,7 +23,11 @@ use crate::{
 
 /// `ty` with `args`, the type arguments of a scheme with `params`, for its
 /// parameters and then its bound variables. What `args` leaves out stays.
-pub fn subst_scheme_args<'db>(params: &[GenericParamId<'db>], args: &[Ty<'db>], ty: &Ty<'db>) -> Ty<'db> {
+pub fn subst_scheme_args<'db>(
+    params: &[GenericParamId<'db>],
+    args: &[Ty<'db>],
+    ty: &Ty<'db>,
+) -> Ty<'db> {
     ty.fold(&mut |t| match t {
         Ty::Param(p) => params.iter().position(|q| q == p).and_then(|i| args.get(i).cloned()),
         Ty::Bound(i) => args.get(params.len() + *i as usize).cloned(),
@@ -40,7 +44,10 @@ pub fn class_args<'db>(
     params: &[GenericParamId<'db>],
     type_args: &[Ty<'db>],
 ) -> Box<[Ty<'db>]> {
-    identity_args(db, GenericDefId::Class(class)).iter().map(|t| subst_scheme_args(params, type_args, t)).collect()
+    identity_args(db, GenericDefId::Class(class))
+        .iter()
+        .map(|t| subst_scheme_args(params, type_args, t))
+        .collect()
 }
 
 /// The types that a use of type `ty` gives the parameters and then the bound
@@ -98,7 +105,12 @@ pub fn is_concrete(ty: &Ty<'_>) -> bool {
 /// the program's files, which see every impl that the type checker could
 /// have chosen. `None` if no impl fits them, more than one does, or they
 /// aren't known well enough.
-pub fn select_impl<'db>(db: &'db dyn Db, files: &[File], class: ClassId<'db>, args: &[Ty<'db>]) -> Option<ImplId<'db>> {
+pub fn select_impl<'db>(
+    db: &'db dyn Db,
+    files: &[File],
+    class: ClassId<'db>,
+    args: &[Ty<'db>],
+) -> Option<ImplId<'db>> {
     let file = *files.first()?;
     let args: Vec<Ty<'db>> = args.iter().map(|t| normalize_assoc(db, file, t)).collect();
     if !args.iter().all(is_concrete) {
@@ -106,7 +118,9 @@ pub fn select_impl<'db>(db: &'db dyn Db, files: &[File], class: ClassId<'db>, ar
     }
     let mut impls: Vec<ImplId<'db>> = Vec::new();
     for &file in files {
-        impls.extend(visible_impls(db, file).iter().filter(|i| !impls.contains(i)).collect::<Vec<_>>());
+        impls.extend(
+            visible_impls(db, file).iter().filter(|i| !impls.contains(i)).collect::<Vec<_>>(),
+        );
     }
     let mut found = None;
     for imp in impls {
@@ -126,7 +140,11 @@ pub fn select_impl<'db>(db: &'db dyn Db, files: &[File], class: ClassId<'db>, ar
 
 /// The function of `imp` for the class method `method`, or the method
 /// itself if the impl leaves it to the class's default.
-pub fn impl_method<'db>(db: &'db dyn Db, imp: ImplId<'db>, method: FunctionId<'db>) -> FunctionId<'db> {
+pub fn impl_method<'db>(
+    db: &'db dyn Db,
+    imp: ImplId<'db>,
+    method: FunctionId<'db>,
+) -> FunctionId<'db> {
     let name = &method.item(db).name;
     imp.item(db)
         .items

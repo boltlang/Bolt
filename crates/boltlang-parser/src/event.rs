@@ -1,8 +1,11 @@
-
 use std::num::NonZeroU32;
 
+use crate::{
+    diagnostic::{Diagnostics, ExpectedTokenDiagnostic},
+    lexer::LexResult,
+    rowan::{GreenNode, GreenNodeBuilder},
+};
 use boltlang_syntax::SyntaxKind::{self, TOMBSTONE};
-use crate::{diagnostic::{Diagnostics, ExpectedTokenDiagnostic}, lexer::LexResult, rowan::{GreenNode, GreenNodeBuilder}};
 
 /// Intermediate error structure generated during parsing.
 pub type ParseError = String;
@@ -16,7 +19,6 @@ pub type ParseError = String;
 /// the forward parent sits later in the event stream.
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Event {
-
     /// This event signifies the start of the node.
     /// It should be either abandoned (in which case the
     /// `kind` is `TOMBSTONE`, and the event is ignored),
@@ -24,31 +26,22 @@ pub(crate) enum Event {
     ///
     /// All tokens between a `Start` and a `Finish` would
     /// become the children of the respective node.
-    Start {
-        kind: SyntaxKind,
-        forward_parent: Option<NonZeroU32>,
-    },
+    Start { kind: SyntaxKind, forward_parent: Option<NonZeroU32> },
 
     /// Complete previous `Start` event
     Finish,
 
     /// Produce a single leaf-element.
-    Token {
-        kind: SyntaxKind,
-    },
+    Token { kind: SyntaxKind },
 
     /// Produce an error at the given syntax level.
-    Error {
-        msg: ParseError,
-    }
+    Error { msg: ParseError },
 }
 
 impl Event {
-
     pub(crate) fn tombstone() -> Self {
         Event::Start { kind: TOMBSTONE, forward_parent: None }
     }
-
 }
 
 pub fn process_events<I: Iterator<Item = Event>>(
@@ -76,17 +69,9 @@ struct EventProcessor<'lex, 'text, 'cache, 'diag> {
     text_pos: usize,
 }
 
-impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
-
+impl<'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
     fn new(lexed: &'lex LexResult, text: &'text str, diags: &'diag mut Diagnostics) -> Self {
-        Self {
-            lexed,
-            text,
-            diags,
-            builder: GreenNodeBuilder::new(),
-            pos: 0,
-            text_pos: 0,
-        }
+        Self { lexed, text, diags, builder: GreenNodeBuilder::new(), pos: 0, text_pos: 0 }
     }
 
     /// Add the next token from the source text to the tree, as `kind`. This is
@@ -103,15 +88,15 @@ impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
 
     fn feed_event(&mut self, event: Event) {
         match event {
-            Event::Start { kind: TOMBSTONE, .. } => {},
-            Event::Start { kind, ..  } => {
+            Event::Start { kind: TOMBSTONE, .. } => {}
+            Event::Start { kind, .. } => {
                 self.builder.start_node(kind.into());
             }
             Event::Token { kind } => {
                 self.push_token(kind);
             }
             Event::Error { msg } => {
-                let start  = self.text_pos;
+                let start = self.text_pos;
                 self.diags.push(ExpectedTokenDiagnostic::new(msg, start..start).into());
             }
             Event::Finish => {
@@ -119,7 +104,6 @@ impl <'lex, 'text, 'cache, 'diag> EventProcessor<'lex, 'text, 'cache, 'diag> {
             }
         }
     }
-
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -192,8 +176,7 @@ pub(crate) fn intersperse_trivia(events: Vec<Event>, lexed: &LexResult) -> Vec<E
     builder.output
 }
 
-impl <'a> IntersperseTrivia<'a> {
-
+impl<'a> IntersperseTrivia<'a> {
     pub fn new(lexed: &'a LexResult) -> Self {
         Self {
             lexed,
@@ -232,7 +215,7 @@ impl <'a> IntersperseTrivia<'a> {
                 self.eat_trivias();
                 self.do_token(kind);
             }
-            Event::Start { kind: TOMBSTONE, .. } => {},
+            Event::Start { kind: TOMBSTONE, .. } => {}
             Event::Start { kind, .. } => {
                 match std::mem::replace(&mut self.state, IntersperseState::Normal) {
                     IntersperseState::PendingEnter => {
@@ -256,7 +239,7 @@ impl <'a> IntersperseTrivia<'a> {
                     IntersperseState::Normal => (),
                 }
             }
-            e@Event::Error { .. } => {
+            e @ Event::Error { .. } => {
                 // Close a finished node first, or the trivia before the error
                 // would end up inside it, like the space in `g ` of `g x`.
                 if self.state == IntersperseState::PendingExit {
@@ -268,6 +251,4 @@ impl <'a> IntersperseTrivia<'a> {
             }
         }
     }
-
 }
-

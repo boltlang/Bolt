@@ -147,7 +147,8 @@ type Alias = Point;
     assert_eq!(ast_ids.len(), 18);
     let mut ranges = Vec::new();
     for ast_id in ast_ids {
-        let node = ast_id.to_node(&db, file, &root).unwrap_or_else(|| panic!("no node for {ast_id:?}"));
+        let node =
+            ast_id.to_node(&db, file, &root).unwrap_or_else(|| panic!("no node for {ast_id:?}"));
         assert_eq!(node.kind(), ast_id.kind);
         ranges.push(node.text_range());
     }

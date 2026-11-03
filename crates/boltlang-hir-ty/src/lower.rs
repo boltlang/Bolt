@@ -6,12 +6,15 @@ use boltlang_hir_def::{
     Name,
     expr_store::ExpressionStore,
     hir::{GenericArg, MutabilityRef, Path, TypeRef, TypeRefId},
-    ids::{ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, StructId, TypeAliasId},
+    ids::{
+        ClassId, ConstId, EnumId, EnumVariantId, FunctionId, ImplId, ItemContainerId, StructId,
+        TypeAliasId,
+    },
     item_tree::AssocItem,
     resolver::{GenericDefId, Hidden, Resolver, TypeNs, TypeResolution},
     signatures::{
-        self, FieldList, GenericParams, class_signature, const_signature, enum_signature, function_signature,
-        impl_signature, struct_signature, type_alias_signature,
+        self, FieldList, GenericParams, class_signature, const_signature, enum_signature,
+        function_signature, impl_signature, struct_signature, type_alias_signature,
     },
 };
 
@@ -66,26 +69,45 @@ impl<'db> ClassConstraint<'db> {
 pub enum LowerDiagnostic {
     UnresolvedType(TypeRefId),
     /// A path whose last name is in another file, but not visible here.
-    NotVisible { type_ref: TypeRefId, hidden: Hidden },
+    NotVisible {
+        type_ref: TypeRefId,
+        hidden: Hidden,
+    },
     /// A path that names something other than a type, like a class.
     NotAType(TypeRefId),
     /// A bound or `where` predicate that isn't a class.
     NotAClass(TypeRefId),
-    WrongArgCount { type_ref: TypeRefId, expected: usize, found: usize },
+    WrongArgCount {
+        type_ref: TypeRefId,
+        expected: usize,
+        found: usize,
+    },
     /// A type of the wrong kind, like `i32` in `Functor[i32]`, where a type
     /// constructor like `Option` is expected.
-    KindMismatch { type_ref: TypeRefId, expected: Kind, found: Kind },
+    KindMismatch {
+        type_ref: TypeRefId,
+        expected: Kind,
+        found: Kind,
+    },
     /// A type alias that refers to itself.
     RecursiveAlias(TypeRefId),
     /// Something the checker doesn't support yet, like `impl Trait`.
     Unsupported(TypeRefId),
     /// A path like `C.Item` where no class of `C` has the associated type.
-    NoAssocType { type_ref: TypeRefId },
+    NoAssocType {
+        type_ref: TypeRefId,
+    },
     /// A path like `C.Item` where several classes of `C` have it.
-    AmbiguousAssocType { type_ref: TypeRefId },
+    AmbiguousAssocType {
+        type_ref: TypeRefId,
+    },
     /// `Iterator[Itme = T]`, where the class has no associated type called
     /// `name`. `type_ref` is the class constraint.
-    NotAnAssocTypeOf { type_ref: TypeRefId, class: Name, name: Name },
+    NotAnAssocTypeOf {
+        type_ref: TypeRefId,
+        class: Name,
+        name: Name,
+    },
     /// What an associated type is, like the `Item = T` of `Iterator[Item =
     /// T]`, somewhere other than a bound or `where` clause of a function or
     /// an impl, like an impl's instance. `type_ref` is the class constraint.
@@ -106,7 +128,11 @@ pub enum LowerDiagnostic {
     UnknownMutability(TypeRefId),
     /// More mutability arguments than the struct declares, like the `imm`
     /// of `Point[imm]` for a `Point` that declares none.
-    WrongMutabilityCount { type_ref: TypeRefId, expected: usize, found: usize },
+    WrongMutabilityCount {
+        type_ref: TypeRefId,
+        expected: usize,
+        found: usize,
+    },
     /// A mutability parameter, like the `'v` of `enum E['v]`, of an item
     /// that isn't a struct, function or impl.
     MutabilityParamNotAllowed(TypeRefId),
@@ -228,9 +254,14 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 // still that type, with errors for what's missing, so that
                 // the rest of it is known.
                 match ty {
-                    Ty::Adt(adt, args, ms, m) if *expected == Kind::Type && kind.is_first_order() => {
+                    Ty::Adt(adt, args, ms, m)
+                        if *expected == Kind::Type && kind.is_first_order() =>
+                    {
                         let missing = kind.split().0.len();
-                        let args = args.into_vec().into_iter().chain(std::iter::repeat_n(Ty::Error, missing));
+                        let args = args
+                            .into_vec()
+                            .into_iter()
+                            .chain(std::iter::repeat_n(Ty::Error, missing));
                         Ty::Adt(adt, args.collect(), ms, m)
                     }
                     _ => Ty::Error,
@@ -251,7 +282,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 _ => 0,
             };
             let missing = found.split().0.len();
-            self.diagnostics.push(LowerDiagnostic::WrongArgCount { type_ref: id, expected: given + missing, found: given });
+            self.diagnostics.push(LowerDiagnostic::WrongArgCount {
+                type_ref: id,
+                expected: given + missing,
+                found: given,
+            });
         } else {
             self.diagnostics.push(LowerDiagnostic::KindMismatch {
                 type_ref: id,
@@ -309,7 +344,9 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     fn with_mutability(&mut self, id: TypeRefId, ty: Ty<'db>, written: Ty<'db>) -> Ty<'db> {
         let fits = |old: &Ty<'db>| matches!(old, Ty::Unwritten) || *old == written;
         match ty {
-            Ty::Adt(adt @ AdtId::Struct(_), args, ms, old) if fits(&old) => Ty::Adt(adt, args, ms, Box::new(written)),
+            Ty::Adt(adt @ AdtId::Struct(_), args, ms, old) if fits(&old) => {
+                Ty::Adt(adt, args, ms, Box::new(written))
+            }
             Ty::Array(old, elem) if fits(&old) => Ty::Array(Box::new(written), elem),
             Ty::Fn(params, ret, old) if fits(&old) => Ty::Fn(params, ret, Box::new(written)),
             Ty::Error => Ty::Error,
@@ -351,10 +388,15 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
                 let head = Ty::adt(AdtId::Struct(s), [], mutabilities, own);
                 (head, def_kind(self.db, GenericDefId::Struct(s)))
             }
-            TypeNs::Enum(e) => (Ty::adt(AdtId::Enum(e), [], [], imm()), def_kind(self.db, GenericDefId::Enum(e))),
+            TypeNs::Enum(e) => {
+                (Ty::adt(AdtId::Enum(e), [], [], imm()), def_kind(self.db, GenericDefId::Enum(e)))
+            }
             TypeNs::Builtin(ty) => (Ty::Builtin(ty), Kind::Type),
             TypeNs::GenericParam { def, index } => {
-                let kind = generic_param_kinds(self.db, def).get(index as usize).cloned().unwrap_or(Kind::Type);
+                let kind = generic_param_kinds(self.db, def)
+                    .get(index as usize)
+                    .cloned()
+                    .unwrap_or(Kind::Type);
                 (Ty::Param(GenericParamId { def, index }), kind)
             }
             TypeNs::TypeAlias(alias) => return self.lower_alias(id, alias, args),
@@ -384,7 +426,8 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             return (Ty::Error, None);
         }
         let param_kinds: Vec<Kind> = param_kinds.into_iter().cloned().collect();
-        let tys: Vec<Ty<'db>> = type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
+        let tys: Vec<Ty<'db>> =
+            type_args.iter().zip(&param_kinds).map(|(&t, k)| self.lower_ty_expect(t, k)).collect();
         let result = kind.apply(tys.len()).cloned();
         (Ty::app(head, tys), result)
     }
@@ -393,7 +436,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// `VecIter[i32, imm]`: the arguments that are a mutability on their own,
     /// one for each that it declares. Those not given are
     /// [`Ty::Unwritten`], decided by where the type is written.
-    fn mutability_args(&mut self, id: TypeRefId, s: StructId<'db>, args: &[GenericArg]) -> Vec<Ty<'db>> {
+    fn mutability_args(
+        &mut self,
+        id: TypeRefId,
+        s: StructId<'db>,
+        args: &[GenericArg],
+    ) -> Vec<Ty<'db>> {
         let expected = named_mutabilities(self.db, GenericDefId::Struct(s)).len();
         let written: Vec<TypeRefId> = self
             .type_args(id, args)
@@ -401,7 +449,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             .filter(|&t| matches!(self.store[t], TypeRef::Mutability(_)))
             .collect();
         if written.len() > expected {
-            self.diagnostics.push(LowerDiagnostic::WrongMutabilityCount { type_ref: id, expected, found: written.len() });
+            self.diagnostics.push(LowerDiagnostic::WrongMutabilityCount {
+                type_ref: id,
+                expected,
+                found: written.len(),
+            });
         }
         let mut out: Vec<Ty<'db>> = written
             .iter()
@@ -413,7 +465,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     }
 
     /// A type alias, which must be given all its arguments.
-    fn lower_alias(&mut self, id: TypeRefId, alias: TypeAliasId<'db>, args: &[GenericArg]) -> (Ty<'db>, Option<Kind>) {
+    fn lower_alias(
+        &mut self,
+        id: TypeRefId,
+        alias: TypeAliasId<'db>,
+        args: &[GenericArg],
+    ) -> (Ty<'db>, Option<Kind>) {
         let kinds = generic_param_kinds(self.db, GenericDefId::TypeAlias(alias));
         let args = self.lower_exact_args(id, args, &kinds);
         // An associated type of a class, named from inside the class: `Item`
@@ -421,7 +478,10 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         // even with a default like `type Item = i32;`, which is only what an
         // impl that doesn't say gets.
         if let ItemContainerId::Class(class) = alias.container(self.db) {
-            return (Ty::Assoc(alias, identity_args(self.db, GenericDefId::Class(class))), Some(Kind::Type));
+            return (
+                Ty::Assoc(alias, identity_args(self.db, GenericDefId::Class(class))),
+                Some(Kind::Type),
+            );
         }
         let ty = match &type_alias_ty(self.db, alias).ty {
             Some(ty) if *ty == Ty::Error && type_alias_ty(self.db, alias).recursive => {
@@ -442,7 +502,13 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// `where` clause of the item that declares it, or a superclass of one.
     /// Inside a class, its own parameter has an instance of the class.
     /// Other types and longer paths aren't supported yet.
-    fn lower_assoc_path(&mut self, id: TypeRefId, path: &Path, head: TypeNs<'db>, unresolved: usize) -> Ty<'db> {
+    fn lower_assoc_path(
+        &mut self,
+        id: TypeRefId,
+        path: &Path,
+        head: TypeNs<'db>,
+        unresolved: usize,
+    ) -> Ty<'db> {
         let db = self.db;
         let segments = &path.segments[unresolved..];
         if segments.iter().any(|s| s.generic_args.is_some()) {
@@ -462,16 +528,22 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             // `type Item = Iter.Item;`: `C.Iter.Item`, from the classes that
             // the bounds of `Iter` give it. Not in those bounds themselves,
             // which would need themselves.
-            TypeNs::TypeAlias(alias) if self.bounds_of != Some(alias) => match alias.container(db) {
-                ItemContainerId::Class(class) => {
-                    let target = Ty::Assoc(alias, identity_args(db, GenericDefId::Class(class)));
-                    (target, with_superclasses(db, assoc_type_bounds(db, alias).predicates.to_vec()))
+            TypeNs::TypeAlias(alias) if self.bounds_of != Some(alias) => {
+                match alias.container(db) {
+                    ItemContainerId::Class(class) => {
+                        let target =
+                            Ty::Assoc(alias, identity_args(db, GenericDefId::Class(class)));
+                        (
+                            target,
+                            with_superclasses(db, assoc_type_bounds(db, alias).predicates.to_vec()),
+                        )
+                    }
+                    _ => {
+                        self.diagnostics.push(LowerDiagnostic::Unsupported(id));
+                        return Ty::Error;
+                    }
                 }
-                _ => {
-                    self.diagnostics.push(LowerDiagnostic::Unsupported(id));
-                    return Ty::Error;
-                }
-            },
+            }
             _ => {
                 self.diagnostics.push(LowerDiagnostic::Unsupported(id));
                 return Ty::Error;
@@ -511,7 +583,12 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
     /// The arguments of something that must be given exactly one for each
     /// of `kinds`: those missing are errors, and extra ones are only lowered
     /// for their diagnostics.
-    fn lower_exact_args(&mut self, id: TypeRefId, args: &[GenericArg], kinds: &[Kind]) -> Vec<Ty<'db>> {
+    fn lower_exact_args(
+        &mut self,
+        id: TypeRefId,
+        args: &[GenericArg],
+        kinds: &[Kind],
+    ) -> Vec<Ty<'db>> {
         let type_args = self.type_args(id, args);
         if type_args.len() != kinds.len() {
             self.diagnostics.push(LowerDiagnostic::WrongArgCount {
@@ -601,8 +678,11 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
         }
         let explicit = &kinds[args.len().min(kinds.len())..];
         // `Iterator[Item = T]` says what an associated type is.
-        let (bindings, plain): (Vec<GenericArg>, Vec<GenericArg>) =
-            path.last_generic_args().iter().cloned().partition(|a| matches!(a, GenericArg::AssocType { .. }));
+        let (bindings, plain): (Vec<GenericArg>, Vec<GenericArg>) = path
+            .last_generic_args()
+            .iter()
+            .cloned()
+            .partition(|a| matches!(a, GenericArg::AssocType { .. }));
         args.extend(self.lower_exact_args(id, &plain, explicit));
         let constraint = ClassConstraint { class, args: args.into() };
         for binding in &bindings {
@@ -613,14 +693,24 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
 
     /// Lower `Item = T` in the class constraint `constraint`, written at
     /// `id`, into what the associated type `Item` is for its arguments.
-    fn lower_equality(&mut self, id: TypeRefId, constraint: &ClassConstraint<'db>, binding: &GenericArg) {
+    fn lower_equality(
+        &mut self,
+        id: TypeRefId,
+        constraint: &ClassConstraint<'db>,
+        binding: &GenericArg,
+    ) {
         let GenericArg::AssocType { name, generic_args, type_ref } = binding else { return };
         let ty = self.lower_ty(*type_ref);
         if generic_args.is_some() {
             self.diagnostics.push(LowerDiagnostic::Unsupported(id));
             return;
         }
-        if !self.allow_equalities && !matches!(self.predicates_of, Some(GenericDefId::Function(_) | GenericDefId::Impl(_))) {
+        if !self.allow_equalities
+            && !matches!(
+                self.predicates_of,
+                Some(GenericDefId::Function(_) | GenericDefId::Impl(_))
+            )
+        {
             self.diagnostics.push(LowerDiagnostic::EqualityNotAllowed(id));
             return;
         }
@@ -628,7 +718,8 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             .into_iter()
             .find(|alias| alias.item(self.db).name.as_ref() == Some(name));
         let Some(alias) = alias else {
-            let class = constraint.class.item(self.db).name.clone().unwrap_or_else(|| Name::new("?"));
+            let class =
+                constraint.class.item(self.db).name.clone().unwrap_or_else(|| Name::new("?"));
             let name = name.clone();
             self.diagnostics.push(LowerDiagnostic::NotAnAssocTypeOf { type_ref: id, class, name });
             return;
@@ -652,12 +743,17 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             for &bound in param.bounds.iter() {
                 let constraint = match self.lower_mutability(bound) {
                     Some(Some(mutability)) => {
-                        let constraint = AtMostConstraint { held: Held::Type(target.clone()), bound: mutability };
+                        let constraint = AtMostConstraint {
+                            held: Held::Type(target.clone()),
+                            bound: mutability,
+                        };
                         self.at_most.push((constraint, bound));
                         None
                     }
                     Some(None) => None,
-                    None => self.lower_class_constraint(bound, Some((target.clone(), kind.clone()))),
+                    None => {
+                        self.lower_class_constraint(bound, Some((target.clone(), kind.clone())))
+                    }
                 };
                 out.extend(constraint.map(|c| (c, bound)));
                 self.lowered = out.iter().map(|(c, _)| c.clone()).collect();
@@ -673,18 +769,25 @@ impl<'a, 'db> TyLoweringContext<'a, 'db> {
             let index = (params.type_params.len() + index) as u32;
             let target = Ty::Param(GenericParamId { def, index });
             for &bound in param.bounds.iter() {
-                out.extend(self.lower_bound(Held::Mutability(target.clone()), bound).map(|c| (c, bound)));
+                out.extend(
+                    self.lower_bound(Held::Mutability(target.clone()), bound).map(|c| (c, bound)),
+                );
             }
         }
         for pred in params.where_predicates.iter() {
             if pred.bounds.is_empty() {
                 // A bare constraint like `Convert[A, B]`.
-                out.extend(self.lower_class_constraint(pred.target, None).map(|c| (c, pred.target)));
+                out.extend(
+                    self.lower_class_constraint(pred.target, None).map(|c| (c, pred.target)),
+                );
             } else if let Some(target) = self.lower_mutability(pred.target) {
                 // `'v: 'm`: a mutability is at most another.
                 let Some(target) = target else { continue };
                 for &bound in pred.bounds.iter() {
-                    out.extend(self.lower_bound(Held::Mutability(target.clone()), bound).map(|c| (c, bound)));
+                    out.extend(
+                        self.lower_bound(Held::Mutability(target.clone()), bound)
+                            .map(|c| (c, bound)),
+                    );
                 }
             } else {
                 let target = self.lower_ty_kinded(pred.target);
@@ -748,7 +851,8 @@ pub fn named_mutabilities<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Box<[
 /// The class constraints that hold for the parameters of `def`: its bounds
 /// and `where` clauses, a class's own instance, and their superclasses.
 pub fn constraints_on<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Vec<ClassConstraint<'db>> {
-    let mut constraints: Vec<ClassConstraint<'db>> = generic_predicates(db, def).predicates.to_vec();
+    let mut constraints: Vec<ClassConstraint<'db>> =
+        generic_predicates(db, def).predicates.to_vec();
     if let GenericDefId::Class(class) = def {
         constraints.push(ClassConstraint { class, args: identity_args(db, def) });
     }
@@ -756,7 +860,10 @@ pub fn constraints_on<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Vec<Class
 }
 
 /// `constraints` and the superclasses they imply.
-pub fn with_superclasses<'db>(db: &'db dyn Db, constraints: Vec<ClassConstraint<'db>>) -> Vec<ClassConstraint<'db>> {
+pub fn with_superclasses<'db>(
+    db: &'db dyn Db,
+    constraints: Vec<ClassConstraint<'db>>,
+) -> Vec<ClassConstraint<'db>> {
     let mut stack = constraints;
     let mut out = Vec::new();
     while let Some(c) = stack.pop() {
@@ -789,13 +896,20 @@ pub fn implied_by<'db>(db: &'db dyn Db, c: &ClassConstraint<'db>) -> Vec<ClassCo
 /// What associated types are wherever `c` holds, from the bounds of its
 /// class's associated types: with `type Iter: Iterator[Item = Item];` in
 /// `class Iterable[C]`, `Iterable[X]` gives `X.Iter.Item = X.Item`.
-pub fn implied_equalities<'db>(db: &'db dyn Db, c: &ClassConstraint<'db>) -> Vec<AssocConstraint<'db>> {
+pub fn implied_equalities<'db>(
+    db: &'db dyn Db,
+    c: &ClassConstraint<'db>,
+) -> Vec<AssocConstraint<'db>> {
     let class_def = GenericDefId::Class(c.class);
     let subst = |t: &Ty<'db>| subst_params(t, class_def, &c.args);
     class_assoc_types(db, c.class)
         .into_iter()
         .flat_map(|alias| assoc_type_bounds(db, alias).equalities.iter())
-        .map(|(e, _)| AssocConstraint { alias: e.alias, args: e.args.iter().map(subst).collect(), ty: subst(&e.ty) })
+        .map(|(e, _)| AssocConstraint {
+            alias: e.alias,
+            args: e.args.iter().map(subst).collect(),
+            ty: subst(&e.ty),
+        })
         .collect()
 }
 
@@ -806,7 +920,9 @@ pub fn class_assoc_types<'db>(db: &'db dyn Db, class: ClassId<'db>) -> Vec<TypeA
         .items
         .iter()
         .filter_map(|item| match *item {
-            AssocItem::TypeAlias(idx) => Some(TypeAliasId::new(db, ItemContainerId::Class(class), idx)),
+            AssocItem::TypeAlias(idx) => {
+                Some(TypeAliasId::new(db, ItemContainerId::Class(class), idx))
+            }
             _ => None,
         })
         .collect()
@@ -838,7 +954,9 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
     let mut predicates = Vec::new();
     let mut sources = Vec::new();
     for &bound in sig.bounds.iter() {
-        if let Some(constraint) = ctx.lower_class_constraint(bound, Some((target.clone(), Some(Kind::Type)))) {
+        if let Some(constraint) =
+            ctx.lower_class_constraint(bound, Some((target.clone(), Some(Kind::Type))))
+        {
             predicates.push(constraint);
             sources.push(bound);
         }
@@ -854,7 +972,11 @@ pub fn assoc_type_bounds<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> Predi
 }
 
 /// The associated type called `name` that `class` declares, if any.
-pub fn assoc_type<'db>(db: &'db dyn Db, class: ClassId<'db>, name: &Name) -> Option<TypeAliasId<'db>> {
+pub fn assoc_type<'db>(
+    db: &'db dyn Db,
+    class: ClassId<'db>,
+    name: &Name,
+) -> Option<TypeAliasId<'db>> {
     class.item(db).items.iter().find_map(|item| match *item {
         AssocItem::TypeAlias(idx) => {
             let alias = TypeAliasId::new(db, ItemContainerId::Class(class), idx);
@@ -870,7 +992,11 @@ pub fn assoc_type<'db>(db: &'db dyn Db, class: ClassId<'db>, name: &Name) -> Opt
 /// without a body. It's a query, since solving any projection through the
 /// impl needs it.
 #[salsa::tracked(returns(clone))]
-pub fn impl_assoc_ty<'db>(db: &'db dyn Db, imp: ImplId<'db>, alias: TypeAliasId<'db>) -> Option<Ty<'db>> {
+pub fn impl_assoc_ty<'db>(
+    db: &'db dyn Db,
+    imp: ImplId<'db>,
+    alias: TypeAliasId<'db>,
+) -> Option<Ty<'db>> {
     impl_assoc_ty_seen(db, imp, alias, &mut Vec::new())
 }
 
@@ -906,12 +1032,15 @@ fn impl_assoc_ty_seen<'db>(
         return Some(Ty::Error);
     }
     seen.push(alias);
-    let ty = subst_params(&default, GenericDefId::Class(class), &target.args).fold(&mut |t| match t {
-        Ty::Assoc(a, args) if a.container(db) == ItemContainerId::Class(class) && *args == target.args => {
-            Some(impl_assoc_ty_seen(db, imp, *a, seen).unwrap_or(Ty::Error))
-        }
-        _ => None,
-    });
+    let ty =
+        subst_params(&default, GenericDefId::Class(class), &target.args).fold(&mut |t| match t {
+            Ty::Assoc(a, args)
+                if a.container(db) == ItemContainerId::Class(class) && *args == target.args =>
+            {
+                Some(impl_assoc_ty_seen(db, imp, *a, seen).unwrap_or(Ty::Error))
+            }
+            _ => None,
+        });
     seen.pop();
     Some(ty.fill_unwritten(&mut imm))
 }
@@ -932,7 +1061,9 @@ pub fn default_refers_to_itself<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -
         seen.push(next);
         let Some(default) = &type_alias_ty(db, next).ty else { continue };
         let found = default.any(&mut |t| match t {
-            Ty::Assoc(a, args) if a.container(db) == ItemContainerId::Class(class) && *args == own => {
+            Ty::Assoc(a, args)
+                if a.container(db) == ItemContainerId::Class(class) && *args == own =>
+            {
                 todo.push(*a);
                 *a == alias
             }
@@ -948,7 +1079,9 @@ pub fn default_refers_to_itself<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -
 /// Replace the type parameters of `def` with `args`.
 pub fn subst_params<'db>(ty: &Ty<'db>, def: GenericDefId<'db>, args: &[Ty<'db>]) -> Ty<'db> {
     ty.fold(&mut |t| match t {
-        Ty::Param(p) if p.def == def => Some(args.get(p.index as usize).cloned().unwrap_or(Ty::Error)),
+        Ty::Param(p) if p.def == def => {
+            Some(args.get(p.index as usize).cloned().unwrap_or(Ty::Error))
+        }
         _ => None,
     })
 }
@@ -985,7 +1118,11 @@ pub fn type_alias_ty<'db>(db: &'db dyn Db, alias: TypeAliasId<'db>) -> TypeAlias
     TypeAliasTy { ty, recursive: false, diagnostics: ctx.diagnostics }
 }
 
-fn type_alias_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _alias: TypeAliasId<'db>) -> TypeAliasTy<'db> {
+fn type_alias_cycle<'db>(
+    _db: &'db dyn Db,
+    _id: salsa::Id,
+    _alias: TypeAliasId<'db>,
+) -> TypeAliasTy<'db> {
     TypeAliasTy { ty: Some(Ty::Error), recursive: true, diagnostics: Vec::new() }
 }
 
@@ -1045,13 +1182,13 @@ pub fn generic_predicates<'db>(db: &'db dyn Db, def: GenericDefId<'db>) -> Predi
         .into_iter()
         .map(|(p, at)| (p.map(|t| t.fill_unwritten(&mut imm)), at))
         .unzip();
-    let at_most = std::mem::take(&mut ctx.at_most).into_iter().map(|(c, at)| (c.map(|t| t.fill_unwritten(&mut imm)), at));
-    let equalities = std::mem::take(&mut ctx.equalities)
+    let at_most = std::mem::take(&mut ctx.at_most)
         .into_iter()
-        .map(|(c, at)| {
-            let args = c.args.iter().map(|t| t.fill_unwritten(&mut imm)).collect();
-            (AssocConstraint { alias: c.alias, args, ty: c.ty.fill_unwritten(&mut imm) }, at)
-        });
+        .map(|(c, at)| (c.map(|t| t.fill_unwritten(&mut imm)), at));
+    let equalities = std::mem::take(&mut ctx.equalities).into_iter().map(|(c, at)| {
+        let args = c.args.iter().map(|t| t.fill_unwritten(&mut imm)).collect();
+        (AssocConstraint { alias: c.alias, args, ty: c.ty.fill_unwritten(&mut imm) }, at)
+    });
     Predicates {
         predicates: predicates.into(),
         equalities: equalities.collect(),
@@ -1084,7 +1221,8 @@ impl FnSig<'_> {
     /// signature without looking at the body. A return type with an array or
     /// struct whose mutability isn't written needs the body.
     pub fn is_complete(&self) -> bool {
-        self.ret.as_ref().is_some_and(|t| !t.has_unwritten()) && self.params.iter().all(Option::is_some)
+        self.ret.as_ref().is_some_and(|t| !t.has_unwritten())
+            && self.params.iter().all(Option::is_some)
     }
 }
 
@@ -1092,9 +1230,11 @@ impl FnSig<'_> {
 pub fn fn_sig<'db>(db: &'db dyn Db, id: FunctionId<'db>) -> FnSig<'db> {
     let sig = function_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Function(id));
-    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Function(id));
+    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store)
+        .with_mutabilities(GenericDefId::Function(id));
     let mut hidden = HiddenParams::new(db, GenericDefId::Function(id));
-    let params = sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref).map(|t| hidden.fill(&t))).collect();
+    let params =
+        sig.params.iter().map(|p| ctx.lower_opt_ty(p.type_ref).map(|t| hidden.fill(&t))).collect();
     let ret = match sig.ret_type {
         Some(ret) => Some(ctx.lower_ty(ret)),
         None if !id.item(db).has_body => Some(Ty::unit()),
@@ -1161,7 +1301,8 @@ pub fn struct_field_types<'db>(db: &'db dyn Db, id: StructId<'db>) -> FieldTypes
     let own = if id.item(db).is_imm { imm() } else { struct_mutability(db, id) };
     // A field can have a mutability the struct declares, like the `'v` of
     // `data: 'v Vec[T]` in `struct VecIter[T, 'v]`.
-    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Struct(id));
+    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store)
+        .with_mutabilities(GenericDefId::Struct(id));
     lower_fields(&mut ctx, &sig.fields, &own)
 }
 
@@ -1177,7 +1318,11 @@ pub fn struct_mutability<'db>(db: &'db dyn Db, id: StructId<'db>) -> Ty<'db> {
 /// The arguments to substitute in the field types of a struct of type
 /// `Adt(id, args, mutabilities, mutability)`: its type arguments, its
 /// mutability arguments, then its mutability.
-pub fn struct_args<'db>(args: &[Ty<'db>], mutabilities: &[Ty<'db>], mutability: &Ty<'db>) -> Vec<Ty<'db>> {
+pub fn struct_args<'db>(
+    args: &[Ty<'db>],
+    mutabilities: &[Ty<'db>],
+    mutability: &Ty<'db>,
+) -> Vec<Ty<'db>> {
     args.iter().chain(mutabilities).chain(std::iter::once(mutability)).cloned().collect()
 }
 
@@ -1195,7 +1340,11 @@ pub fn enum_field_types<'db>(db: &'db dyn Db, id: EnumId<'db>) -> Vec<FieldTypes
 /// Lower fields, with `own` for the arrays and structs in them without `mut`
 /// or `imm`. A field can't say `mut`: whether what it holds can be changed
 /// is up to the struct.
-fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList, own: &Ty<'db>) -> FieldTypes<'db> {
+fn lower_fields<'db>(
+    ctx: &mut TyLoweringContext<'_, 'db>,
+    fields: &FieldList,
+    own: &Ty<'db>,
+) -> FieldTypes<'db> {
     let (kind, list): (_, &[signatures::FieldData]) = match fields {
         FieldList::Record(fields) => (FieldsKind::Record, fields),
         FieldList::Tuple(fields) => (FieldsKind::Tuple, fields),
@@ -1221,7 +1370,8 @@ fn lower_fields<'db>(ctx: &mut TyLoweringContext<'_, 'db>, fields: &FieldList, o
 /// (#271). The parameters and result of a function type aren't held by it,
 /// so they get `own`.
 fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
-    let inner = |m: &Ty<'db>| if *m == Ty::Mutability(Mutability::Imm) { m.clone() } else { fill.clone() };
+    let inner =
+        |m: &Ty<'db>| if *m == Ty::Mutability(Mutability::Imm) { m.clone() } else { fill.clone() };
     ty.fold(&mut |t| match t {
         Ty::Unwritten => Some(fill.clone()),
         Ty::Array(m, elem) => {
@@ -1240,7 +1390,11 @@ fn fill_field<'db>(ty: &Ty<'db>, fill: &Ty<'db>, own: &Ty<'db>) -> Ty<'db> {
         }
         Ty::Fn(params, ret, m) => {
             let params = params.iter().map(|p| fill_field(p, own, own)).collect();
-            Some(Ty::Fn(params, Box::new(fill_field(ret, own, own)), Box::new(fill_field(m, fill, own))))
+            Some(Ty::Fn(
+                params,
+                Box::new(fill_field(ret, own, own)),
+                Box::new(fill_field(m, fill, own)),
+            ))
         }
         _ => None,
     })
@@ -1262,7 +1416,8 @@ pub struct ImplHeader<'db> {
 pub fn impl_header<'db>(db: &'db dyn Db, id: ImplId<'db>) -> ImplHeader<'db> {
     let sig = impl_signature(db, id);
     let resolver = Resolver::for_generic_def(db, GenericDefId::Impl(id));
-    let mut ctx = TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Impl(id));
+    let mut ctx =
+        TyLoweringContext::new(db, &resolver, &sig.store).with_mutabilities(GenericDefId::Impl(id));
     let mut hidden = HiddenParams::new(db, GenericDefId::Impl(id));
     let class = ctx.lower_class_constraint(sig.class, None).map(|c| c.map(|t| hidden.fill(t)));
     ImplHeader { class, hidden: hidden.count, diagnostics: ctx.diagnostics }

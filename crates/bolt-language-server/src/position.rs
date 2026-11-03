@@ -37,7 +37,8 @@ pub struct LineIndex<'a> {
 
 impl<'a> LineIndex<'a> {
     pub fn new(text: &'a str) -> Self {
-        let line_starts = std::iter::once(0).chain(text.match_indices('\n').map(|(i, _)| i + 1)).collect();
+        let line_starts =
+            std::iter::once(0).chain(text.match_indices('\n').map(|(i, _)| i + 1)).collect();
         LineIndex { text, line_starts }
     }
 

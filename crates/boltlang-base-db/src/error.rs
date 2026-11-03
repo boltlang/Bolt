@@ -1,4 +1,3 @@
-
 use crate::OwnedUri;
 
 // #[derive(Debug)]
@@ -23,7 +22,6 @@ use crate::OwnedUri;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
-
     #[error("the file {0} was not found in the database")]
     FileNotFound(OwnedUri),
 
@@ -32,7 +30,6 @@ pub enum Error {
 
     #[error("{0}")]
     Custom(String),
-
 }
 
 impl From<fluent_uri::ParseError> for Error {

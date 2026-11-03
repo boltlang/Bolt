@@ -1,10 +1,7 @@
-
 use crate::{
-    System,
-    SystemPath,
-    WritableSystem,
-    system::{common::Result, SystemPathBuf, SystemVirtualPath},
-    vfs::{MemoryFs, Metadata}
+    System, SystemPath, WritableSystem,
+    system::{SystemPathBuf, SystemVirtualPath, common::Result},
+    vfs::{MemoryFs, Metadata},
 };
 
 fn file_not_found() -> std::io::Error {
@@ -17,22 +14,18 @@ pub struct InMemorySystem {
 }
 
 impl InMemorySystem {
-
     pub fn new() -> Self {
         Self::with_cwd("/")
     }
 
     pub fn with_cwd(cwd: impl Into<SystemPathBuf>) -> Self {
-        Self {
-            fs: MemoryFs::with_cwd(cwd),
-        }
+        Self { fs: MemoryFs::with_cwd(cwd) }
     }
 
     /// Remove the file at `path`.
     pub fn remove_file(&self, path: &SystemPath) -> Result<()> {
         self.fs.remove_file(path)
     }
-
 }
 
 impl Default for InMemorySystem {
@@ -40,7 +33,6 @@ impl Default for InMemorySystem {
         Self::new()
     }
 }
-
 
 impl InMemorySystem {
     /// Make `link` a symbolic link to `target`, which is relative to the
@@ -51,7 +43,6 @@ impl InMemorySystem {
 }
 
 impl System for InMemorySystem {
-
     fn canonicalize_path(&self, path: &SystemPath) -> Result<SystemPathBuf> {
         self.fs.canonicalize(path)
     }
@@ -79,11 +70,9 @@ impl System for InMemorySystem {
     fn read_virtual_path_to_string(&self, _path: &SystemVirtualPath) -> Result<String> {
         Err(file_not_found())
     }
-
 }
 
 impl WritableSystem for InMemorySystem {
-
     fn write_file_bytes(&self, path: &SystemPath, content: &[u8]) -> Result<()> {
         self.fs.write_file_bytes(path, content)
     }
@@ -91,5 +80,4 @@ impl WritableSystem for InMemorySystem {
     fn write_file_bytes_virtual(&self, path: &SystemVirtualPath, content: &[u8]) -> Result<()> {
         self.fs.write_file_bytes_virtual(path, content)
     }
-
 }

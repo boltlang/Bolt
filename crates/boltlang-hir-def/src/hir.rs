@@ -81,48 +81,126 @@ pub enum Expr {
     Missing,
     Path(Path),
     Literal(Literal),
-    Block { statements: Box<[Statement]>, tail: Option<ExprId>, label: Option<LabelId>, kind: BlockKind },
+    Block {
+        statements: Box<[Statement]>,
+        tail: Option<ExprId>,
+        label: Option<LabelId>,
+        kind: BlockKind,
+    },
     /// `f(a, b)`
-    Call { callee: ExprId, args: Box<[ExprId]> },
+    Call {
+        callee: ExprId,
+        args: Box<[ExprId]>,
+    },
     /// `x.name` or `t.0`; a tuple index is a name like `0`.
-    Field { expr: ExprId, name: Name },
-    Await { expr: ExprId },
-    Try { expr: ExprId },
-    Cast { expr: ExprId, type_ref: TypeRefId },
-    Index { base: ExprId, index: ExprId },
+    Field {
+        expr: ExprId,
+        name: Name,
+    },
+    Await {
+        expr: ExprId,
+    },
+    Try {
+        expr: ExprId,
+    },
+    Cast {
+        expr: ExprId,
+        type_ref: TypeRefId,
+    },
+    Index {
+        base: ExprId,
+        index: ExprId,
+    },
     /// `-a` or `!a`: a call of the function `-` or `!`, like `fn -a`.
-    Prefix { op: Name, expr: ExprId },
+    Prefix {
+        op: Name,
+        expr: ExprId,
+    },
     /// `imm e`: a copy of `e` that can't be changed, with everything it
     /// holds that's `mut` copied too. Not a function, since its type can't
     /// be written as a signature.
-    Imm { expr: ExprId },
+    Imm {
+        expr: ExprId,
+    },
     /// `mut e`. Before an array, a struct literal or a call of a tuple
     /// struct's constructor, like `mut [1]`, it makes that one `mut`, which
     /// the type checker finds. Before anything else, it's `e` with what's
     /// `imm` in it copied into `mut` objects, keeping what's `mut` already.
-    Mut { expr: ExprId },
-    Binary { op: BinaryOp, lhs: ExprId, rhs: ExprId },
+    Mut {
+        expr: ExprId,
+    },
+    Binary {
+        op: BinaryOp,
+        lhs: ExprId,
+        rhs: ExprId,
+    },
     /// `a..b`, `a..=b`, `a..`, `..b` or `..`
-    Range { lhs: Option<ExprId>, rhs: Option<ExprId>, inclusive: bool },
-    Tuple { exprs: Box<[ExprId]> },
+    Range {
+        lhs: Option<ExprId>,
+        rhs: Option<ExprId>,
+        inclusive: bool,
+    },
+    Tuple {
+        exprs: Box<[ExprId]>,
+    },
     /// `[a, b]`
-    Array { exprs: Box<[ExprId]> },
+    Array {
+        exprs: Box<[ExprId]>,
+    },
     /// `[value; count]`
-    ArrayRepeat { value: ExprId, count: ExprId },
+    ArrayRepeat {
+        value: ExprId,
+        count: ExprId,
+    },
     /// `Point { x, y: 1, ..base }`
-    Record { path: Option<Path>, fields: Box<[RecordField]>, spread: Option<ExprId> },
-    If { condition: ExprId, then_branch: ExprId, else_branch: Option<ExprId> },
+    Record {
+        path: Option<Path>,
+        fields: Box<[RecordField]>,
+        spread: Option<ExprId>,
+    },
+    If {
+        condition: ExprId,
+        then_branch: ExprId,
+        else_branch: Option<ExprId>,
+    },
     /// `let pattern = value` in a condition
-    Let { pat: PatId, expr: ExprId },
-    Match { expr: ExprId, arms: Box<[MatchArm]> },
-    While { condition: ExprId, body: ExprId, label: Option<LabelId> },
-    Loop { body: ExprId, label: Option<LabelId> },
-    For { pat: PatId, iterable: ExprId, body: ExprId, label: Option<LabelId> },
+    Let {
+        pat: PatId,
+        expr: ExprId,
+    },
+    Match {
+        expr: ExprId,
+        arms: Box<[MatchArm]>,
+    },
+    While {
+        condition: ExprId,
+        body: ExprId,
+        label: Option<LabelId>,
+    },
+    Loop {
+        body: ExprId,
+        label: Option<LabelId>,
+    },
+    For {
+        pat: PatId,
+        iterable: ExprId,
+        body: ExprId,
+        label: Option<LabelId>,
+    },
     /// The label is resolved by the type checker.
-    Break { expr: Option<ExprId>, label: Option<Name> },
-    Continue { label: Option<Name> },
-    Return { expr: Option<ExprId> },
-    Yield { expr: Option<ExprId> },
+    Break {
+        expr: Option<ExprId>,
+        label: Option<Name>,
+    },
+    Continue {
+        label: Option<Name>,
+    },
+    Return {
+        expr: Option<ExprId>,
+    },
+    Yield {
+        expr: Option<ExprId>,
+    },
     /// A closure or an anonymous function.
     Lambda {
         params: Box<[PatId]>,
@@ -132,7 +210,9 @@ pub enum Expr {
         kind: LambdaKind,
     },
     /// A macro invocation, which isn't expanded yet.
-    MacroCall { name: Option<Name> },
+    MacroCall {
+        name: Option<Name>,
+    },
 }
 
 /// `x`, `x: value` or `0: value` in a struct literal.
@@ -152,7 +232,12 @@ pub struct MatchArm {
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum Statement {
     /// `let pattern: Type = value else { ... };`
-    Let { pat: PatId, type_ref: Option<TypeRefId>, initializer: Option<ExprId>, else_branch: Option<ExprId> },
+    Let {
+        pat: PatId,
+        type_ref: Option<TypeRefId>,
+        initializer: Option<ExprId>,
+        else_branch: Option<ExprId>,
+    },
     /// An expression followed by `;`, or one that ends in a block.
     Expr { expr: ExprId, has_semi: bool },
     /// An item inside a body, like a nested function. Items in bodies
@@ -179,26 +264,52 @@ pub enum Pat {
     /// `_`
     Wild,
     /// `x`, or `x @ pattern`
-    Bind { id: BindingId, subpat: Option<PatId> },
+    Bind {
+        id: BindingId,
+        subpat: Option<PatId>,
+    },
     /// `1`, `-1` or `"s"`
-    Lit { literal: Literal, negative: bool },
+    Lit {
+        literal: Literal,
+        negative: bool,
+    },
     /// A constant or variant like `Color.Red`
     Path(Path),
     /// `(a, b)`. `rest` is the position of a `..`, if there is one.
-    Tuple { args: Box<[PatId]>, rest: Option<u32> },
+    Tuple {
+        args: Box<[PatId]>,
+        rest: Option<u32>,
+    },
     /// `Some(x)`
-    TupleStruct { path: Path, args: Box<[PatId]>, rest: Option<u32> },
+    TupleStruct {
+        path: Path,
+        args: Box<[PatId]>,
+        rest: Option<u32>,
+    },
     /// `Point { x, y: 0, .. }`
-    Record { path: Path, fields: Box<[RecordFieldPat]>, rest: bool },
+    Record {
+        path: Path,
+        fields: Box<[RecordFieldPat]>,
+        rest: bool,
+    },
     /// `[a, .., b]`
-    Slice { args: Box<[PatId]>, rest: Option<u32> },
+    Slice {
+        args: Box<[PatId]>,
+        rest: Option<u32>,
+    },
     /// `1..=5`, `a..` or `..=b`. The ends are literal or path patterns.
-    Range { start: Option<PatId>, end: Option<PatId>, inclusive: bool },
+    Range {
+        start: Option<PatId>,
+        end: Option<PatId>,
+        inclusive: bool,
+    },
     /// `a | b`
     Or(Box<[PatId]>),
     /// `const { ... }`
     ConstBlock(ExprId),
-    MacroCall { name: Option<Name> },
+    MacroCall {
+        name: Option<Name>,
+    },
 }
 
 impl Pat {
@@ -207,14 +318,18 @@ impl Pat {
     pub fn children(&self) -> Vec<PatId> {
         match self {
             Pat::Bind { subpat, .. } => subpat.iter().copied().collect(),
-            Pat::Tuple { args, .. } | Pat::TupleStruct { args, .. } | Pat::Slice { args, .. } | Pat::Or(args) => {
-                args.to_vec()
-            }
+            Pat::Tuple { args, .. }
+            | Pat::TupleStruct { args, .. }
+            | Pat::Slice { args, .. }
+            | Pat::Or(args) => args.to_vec(),
             Pat::Record { fields, .. } => fields.iter().map(|f| f.pat).collect(),
             Pat::Range { start, end, .. } => start.iter().chain(end.iter()).copied().collect(),
-            Pat::Missing | Pat::Wild | Pat::Lit { .. } | Pat::Path(_) | Pat::ConstBlock(_) | Pat::MacroCall { .. } => {
-                Vec::new()
-            }
+            Pat::Missing
+            | Pat::Wild
+            | Pat::Lit { .. }
+            | Pat::Path(_)
+            | Pat::ConstBlock(_)
+            | Pat::MacroCall { .. } => Vec::new(),
         }
     }
 }
@@ -293,10 +408,17 @@ pub enum TypeRef {
     /// `(A, B)`, or `()` for the unit type.
     Tuple(Box<[TypeRefId]>),
     /// `[T]` or `[T; N]`, with the `mut` or `imm` written before it
-    Array { element: TypeRefId, len: Option<ExprId>, mutability: Option<Mutability> },
+    Array {
+        element: TypeRefId,
+        len: Option<ExprId>,
+        mutability: Option<Mutability>,
+    },
     /// `mut T` or `imm T` for a type other than an array, like `mut Point`,
     /// or a named mutability before any type, like `'m Point`.
-    Mut { mutability: MutabilityRef, inner: TypeRefId },
+    Mut {
+        mutability: MutabilityRef,
+        inner: TypeRefId,
+    },
     /// A mutability on its own, as a bound like the `imm` of `T: imm`, or
     /// what's bounded, like the `'v` of `'v: 'm` (#243). It's not a type.
     Mutability(MutabilityRef),
@@ -313,8 +435,13 @@ pub enum TypeRef {
         abi: Option<Option<String>>,
     },
     /// `impl Trait`, with the generic parameters of `impl for[T] Trait`.
-    ImplTrait { generic_params: Box<[Name]>, bounds: Box<[TypeRefId]> },
+    ImplTrait {
+        generic_params: Box<[Name]>,
+        bounds: Box<[TypeRefId]>,
+    },
     /// `A + B`
     Bounded(Box<[TypeRefId]>),
-    MacroCall { name: Option<Name> },
+    MacroCall {
+        name: Option<Name>,
+    },
 }

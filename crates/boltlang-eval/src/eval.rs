@@ -10,8 +10,8 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId, body},
     builtin_type::BuiltinType,
     hir::{
-        BinaryOp, BindingId, BlockKind, Expr, ExprId, LabelId, Literal, LogicOp, Mutability, Pat, PatId, Path,
-        PathSegment, Statement, TypeRef,
+        BinaryOp, BindingId, BlockKind, Expr, ExprId, LabelId, Literal, LogicOp, Mutability, Pat,
+        PatId, Path, PathSegment, Statement, TypeRef,
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId, ModuleDefId},
     nameres::{Namespace, file_scope, package_of},
@@ -23,7 +23,9 @@ use boltlang_hir_ty::{
     GenericParamId, Ty,
     builtin::{ArithOp, Builtin, CmpOp, PrefixOp, PrimOp, builtin},
     function_scheme, infer_body,
-    instances::{bind_scheme_args, class_args, impl_const, impl_method, select_impl, subst_scheme_args},
+    instances::{
+        bind_scheme_args, class_args, impl_const, impl_method, select_impl, subst_scheme_args,
+    },
     lang::{LangClass, debug_string_fn},
     scheme::generic_param_ids,
     solve::normalize_assoc,
@@ -101,7 +103,11 @@ enum Place<'db> {
     /// An element of an array, a `Vec` or another type, which is read and
     /// written through its impls of `Index` and `IndexMut`. `at` is the
     /// expression `c[i]`.
-    Indexed { container: Value<'db>, index: Value<'db>, at: ExprId },
+    Indexed {
+        container: Value<'db>,
+        index: Value<'db>,
+        at: ExprId,
+    },
 }
 
 /// What a `for` loop goes over: the items of a string or a range, or an
@@ -112,11 +118,16 @@ enum Items<'db> {
 }
 
 /// The part of `value` that the fields of tuples in `fields` lead to.
-fn tuple_field<'a, 'db>(value: Option<&'a mut Value<'db>>, fields: &[Name]) -> Result<&'a mut Value<'db>, ErrorKind> {
+fn tuple_field<'a, 'db>(
+    value: Option<&'a mut Value<'db>>,
+    fields: &[Name],
+) -> Result<&'a mut Value<'db>, ErrorKind> {
     let mut current = value.ok_or_else(|| ErrorKind::Uninitialized(Name::new("variable")))?;
     for name in fields {
         current = match current {
-            Value::Tuple(items) => name.as_str().parse::<usize>().ok().and_then(|i| items.get_mut(i)),
+            Value::Tuple(items) => {
+                name.as_str().parse::<usize>().ok().and_then(|i| items.get_mut(i))
+            }
             _ => None,
         }
         .ok_or_else(|| ErrorKind::NoSuchField(name.clone()))?;
@@ -130,7 +141,9 @@ impl<'db> Place<'db> {
     fn update<T>(&self, f: impl FnOnce(Option<&mut Value<'db>>) -> Res<'db, T>) -> Res<'db, T> {
         match self {
             Place::Variable(slot) => f(slot.borrow_mut().as_mut()),
-            Place::Field(fields, name) => f(fields.borrow_mut().iter_mut().find(|(n, _)| n == name).map(|(_, v)| v)),
+            Place::Field(fields, name) => {
+                f(fields.borrow_mut().iter_mut().find(|(n, _)| n == name).map(|(_, v)| v))
+            }
             // Assignments handle it before.
             Place::Indexed { .. } => fail(ErrorKind::NotAssignable),
         }
@@ -202,13 +215,17 @@ impl<'db> Evaluator<'db> {
             Value::Array(items) if items.mutability == Mutability::Imm => {
                 items.borrow().iter().all(Value::holds_only_imm)
             }
-            Value::Adt { ctor: Ctor::Struct(_), fields } if fields.mutability == Mutability::Imm => {
+            Value::Adt { ctor: Ctor::Struct(_), fields }
+                if fields.mutability == Mutability::Imm =>
+            {
                 fields.borrow().iter().all(|(_, v)| v.holds_only_imm())
             }
             _ => true,
         };
         if !deep {
-            return fail(ErrorKind::MutabilityViolation("an `imm` value was made holding a `mut` one"));
+            return fail(ErrorKind::MutabilityViolation(
+                "an `imm` value was made holding a `mut` one",
+            ));
         }
         Ok(value)
     }
@@ -278,7 +295,11 @@ impl<'db> Evaluator<'db> {
     }
 
     /// Call any callable value: a function, closure or constructor.
-    pub fn call(&mut self, callee: Value<'db>, args: Vec<Value<'db>>) -> Result<Value<'db>, EvalError<'db>> {
+    pub fn call(
+        &mut self,
+        callee: Value<'db>,
+        args: Vec<Value<'db>>,
+    ) -> Result<Value<'db>, EvalError<'db>> {
         finish(self.apply(callee, args))
     }
 
@@ -296,7 +317,9 @@ impl<'db> Evaluator<'db> {
             self.files.push(file);
         }
         let mut shown = Shown::new();
-        finish(self.debug_parts(file, value, &mut shown, &mut HashSet::new()).map(|()| Value::unit()))?;
+        finish(
+            self.debug_parts(file, value, &mut shown, &mut HashSet::new()).map(|()| Value::unit()),
+        )?;
         Ok(value.display_with(self.db, &shown).to_string())
     }
 
@@ -326,7 +349,9 @@ impl<'db> Evaluator<'db> {
             }
             Value::Tuple(items) => items.clone(),
             Value::Array(items) => items.borrow().clone(),
-            Value::Range { start, end, .. } => start.iter().chain(end.iter()).map(|v| (**v).clone()).collect(),
+            Value::Range { start, end, .. } => {
+                start.iter().chain(end.iter()).map(|v| (**v).clone()).collect()
+            }
             _ => return Ok(()),
         };
         for part in &parts {
@@ -345,7 +370,10 @@ impl<'db> Evaluator<'db> {
         if impl_for_args(db, &self.files, method, std::slice::from_ref(value)).is_none() {
             return Ok(None);
         }
-        match self.call_function_inner(debug_string, self.no_type_args.clone(), vec![value.clone()])?.text() {
+        match self
+            .call_function_inner(debug_string, self.no_type_args.clone(), vec![value.clone()])?
+            .text()
+        {
             Some(text) => Ok(Some(text)),
             None => mismatch("`debug_string` didn't give a `String`"),
         }
@@ -434,7 +462,9 @@ impl<'db> Evaluator<'db> {
                     }
                 }
                 None if !function.item(db).has_body => {
-                    return fail(ErrorKind::Unsupported("calling a class method whose impl isn't known"));
+                    return fail(ErrorKind::Unsupported(
+                        "calling a class method whose impl isn't known",
+                    ));
                 }
                 None => {}
             }
@@ -453,7 +483,10 @@ impl<'db> Evaluator<'db> {
         let def = DefWithBodyId::new(db, DefWithBody::Function(function));
         let body = body(db, def);
         if args.len() != body.params.len() {
-            return fail(ErrorKind::WrongArgCount { expected: body.params.len(), found: args.len() });
+            return fail(ErrorKind::WrongArgCount {
+                expected: body.params.len(),
+                found: args.len(),
+            });
         }
         self.enter()?;
         let mut frame = self.frame(def, Locals::new(), type_args);
@@ -478,7 +511,9 @@ impl<'db> Evaluator<'db> {
             (Builtin::Prim(op, _), [lhs, rhs]) if op.arith().is_some() => {
                 arith(op.arith().unwrap(), lhs.clone(), rhs.clone())
             }
-            (Builtin::Prim(op, _), [lhs, rhs]) if op.cmp().is_some() => compare(op.cmp().unwrap(), lhs, rhs),
+            (Builtin::Prim(op, _), [lhs, rhs]) if op.cmp().is_some() => {
+                compare(op.cmp().unwrap(), lhs, rhs)
+            }
             (Builtin::Prim(PrimOp::Neg, _), [value]) => prefix(PrefixOp::Neg, value.clone()),
             (Builtin::Prim(PrimOp::Not, _), [value]) => prefix(PrefixOp::Not, value.clone()),
             (Builtin::Print, [text]) if text.text().is_some() => {
@@ -486,8 +521,12 @@ impl<'db> Evaluator<'db> {
                 self.host.print(&text)?;
                 Ok(Value::unit())
             }
-            (Builtin::Panic, [text]) if text.text().is_some() => fail(ErrorKind::Panic(text.text().unwrap())),
-            (Builtin::ArrayLen, [Value::Array(items)]) => Ok(Value::Int(items.borrow().len() as i128)),
+            (Builtin::Panic, [text]) if text.text().is_some() => {
+                fail(ErrorKind::Panic(text.text().unwrap()))
+            }
+            (Builtin::ArrayLen, [Value::Array(items)]) => {
+                Ok(Value::Int(items.borrow().len() as i128))
+            }
             (Builtin::ArrayAlloc, [Value::Int(len)]) => {
                 let len = usize::try_from(*len).map_err(|_| ErrorKind::Overflow)?;
                 Ok(Value::array(Mutability::Mut, vec![Value::Unset; len]))
@@ -505,7 +544,13 @@ impl<'db> Evaluator<'db> {
             }
             (
                 Builtin::ArrayCopy,
-                [Value::Array(dst), Value::Int(dst_start), Value::Array(src), Value::Int(src_start), Value::Int(count)],
+                [
+                    Value::Array(dst),
+                    Value::Int(dst_start),
+                    Value::Array(src),
+                    Value::Int(src_start),
+                    Value::Int(count),
+                ],
             ) => {
                 self.changing(dst.mutability)?;
                 let src_range = range(*src_start, *count, src.borrow().len())?;
@@ -517,7 +562,9 @@ impl<'db> Evaluator<'db> {
                 Ok(Value::unit())
             }
             // An `imm` array never changes, so it's its own copy.
-            (Builtin::ArrayFreeze, [Value::Array(items)]) if items.mutability == Mutability::Imm => {
+            (Builtin::ArrayFreeze, [Value::Array(items)])
+                if items.mutability == Mutability::Imm =>
+            {
                 Ok(Value::Array(items.clone()))
             }
             (Builtin::ArrayFreeze, [Value::Array(items)]) => {
@@ -532,14 +579,22 @@ impl<'db> Evaluator<'db> {
             Value::Function(id, type_args) => self.call_function_inner(id, type_args, args),
             Value::Closure(closure) => self.call_closure(&closure, args),
             Value::Constructor(ctor) => {
-                let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
+                let fields = args
+                    .into_iter()
+                    .enumerate()
+                    .map(|(i, v)| (Name::new(i.to_string()), v))
+                    .collect();
                 self.made(Value::adt(ctor, Mutability::Imm, fields))
             }
             _ => fail(ErrorKind::NotCallable),
         }
     }
 
-    fn call_closure(&mut self, closure: &Closure<'db>, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
+    fn call_closure(
+        &mut self,
+        closure: &Closure<'db>,
+        args: Vec<Value<'db>>,
+    ) -> Res<'db, Value<'db>> {
         let body = body(self.db, closure.def);
         let Expr::Lambda { params, body: lambda_body, .. } = &body[closure.expr] else {
             unreachable!("a closure is made from a lambda")
@@ -548,7 +603,8 @@ impl<'db> Evaluator<'db> {
             return fail(ErrorKind::WrongArgCount { expected: params.len(), found: args.len() });
         }
         self.enter()?;
-        let mut frame = self.frame(closure.def, closure.captured.clone(), closure.type_args.clone());
+        let mut frame =
+            self.frame(closure.def, closure.captured.clone(), closure.type_args.clone());
         let result = (|| {
             for (&pat, arg) in params.iter().zip(&args) {
                 if !self.match_pat(&mut frame, pat, arg)? {
@@ -567,20 +623,23 @@ impl<'db> Evaluator<'db> {
         self.tick()?;
         // Grow the native stack as needed, so that deep recursion is bounded
         // by `Limits::max_depth` and not by the size of the thread's stack.
-        stacker::maybe_grow(RED_ZONE, STACK_GROWTH, || self.eval_inner(f, expr)).map_err(|unwind| match unwind {
-            Unwind::Error(mut e) => {
-                // An error in the code of a package, like `std`'s array
-                // impls, is reported at the program's code that led to it,
-                // like `xs[5]`.
-                let db = self.db;
-                let in_package = |def: DefWithBodyId<'db>| package_of(db, def.def(db).file(db)).is_some();
-                match e.location {
-                    Some((def, _)) if !in_package(def) || in_package(f.def) => {}
-                    _ => e.location = Some((f.def, expr)),
+        stacker::maybe_grow(RED_ZONE, STACK_GROWTH, || self.eval_inner(f, expr)).map_err(|unwind| {
+            match unwind {
+                Unwind::Error(mut e) => {
+                    // An error in the code of a package, like `std`'s array
+                    // impls, is reported at the program's code that led to it,
+                    // like `xs[5]`.
+                    let db = self.db;
+                    let in_package =
+                        |def: DefWithBodyId<'db>| package_of(db, def.def(db).file(db)).is_some();
+                    match e.location {
+                        Some((def, _)) if !in_package(def) || in_package(f.def) => {}
+                        _ => e.location = Some((f.def, expr)),
+                    }
+                    Unwind::Error(e)
                 }
-                Unwind::Error(e)
+                other => other,
             }
-            other => other,
         })
     }
 
@@ -589,7 +648,9 @@ impl<'db> Evaluator<'db> {
         match &body[expr] {
             Expr::Missing => fail(ErrorKind::Missing),
             Expr::Path(path) => self.eval_path(f, expr, path),
-            Expr::Literal(literal) => literal_value(self.db, f.def.def(self.db).file(self.db), literal),
+            Expr::Literal(literal) => {
+                literal_value(self.db, f.def.def(self.db).file(self.db), literal)
+            }
             Expr::Block { statements, tail, label, kind } => {
                 if *kind == BlockKind::Async {
                     return fail(ErrorKind::Unsupported("`async`"));
@@ -597,7 +658,11 @@ impl<'db> Evaluator<'db> {
                 let result = self.eval_block(f, statements, *tail);
                 match (result, label) {
                     // A labeled block is left with `break 'label value`.
-                    (Err(Unwind::Break(Some(name), value)), Some(label)) if body[*label].name == name => Ok(value),
+                    (Err(Unwind::Break(Some(name), value)), Some(label))
+                        if body[*label].name == name =>
+                    {
+                        Ok(value)
+                    }
                     (result, _) => result,
                 }
             }
@@ -710,7 +775,9 @@ impl<'db> Evaluator<'db> {
             Expr::Loop { body: loop_body, label } => loop {
                 match self.eval(f, *loop_body) {
                     Ok(_) => {}
-                    Err(Unwind::Break(target, value)) if targets(body, *label, &target) => return Ok(value),
+                    Err(Unwind::Break(target, value)) if targets(body, *label, &target) => {
+                        return Ok(value);
+                    }
                     Err(Unwind::Continue(target)) if targets(body, *label, &target) => {}
                     Err(e) => return Err(e),
                 }
@@ -722,7 +789,12 @@ impl<'db> Evaluator<'db> {
                     Value::Range { .. } => Items::Builtin(iterate(iterable)?),
                     // Through the impl of `Iterable` for the type, arrays too,
                     // whose iterator gives the items.
-                    _ => Items::Class(self.call_lang(f, *iterable_expr, LangClass::Iterable, vec![iterable])?),
+                    _ => Items::Class(self.call_lang(
+                        f,
+                        *iterable_expr,
+                        LangClass::Iterable,
+                        vec![iterable],
+                    )?),
                 };
                 loop {
                     let item = match &mut items {
@@ -731,7 +803,12 @@ impl<'db> Evaluator<'db> {
                             None => break,
                         },
                         Items::Class(iterator) => {
-                            let next = self.call_lang(f, expr, LangClass::Iterator, vec![iterator.clone()])?;
+                            let next = self.call_lang(
+                                f,
+                                expr,
+                                LangClass::Iterator,
+                                vec![iterator.clone()],
+                            )?;
                             match option_value(self.db, next)? {
                                 Some(item) => item,
                                 None => break,
@@ -765,21 +842,24 @@ impl<'db> Evaluator<'db> {
                 };
                 Err(Unwind::Return(value))
             }
-            Expr::Lambda { .. } => {
-                Ok(Value::Closure(Rc::new(Closure {
-                    def: f.def,
-                    expr,
-                    captured: f.locals.clone(),
-                    type_args: f.type_args.clone(),
-                })))
-            }
+            Expr::Lambda { .. } => Ok(Value::Closure(Rc::new(Closure {
+                def: f.def,
+                expr,
+                captured: f.locals.clone(),
+                type_args: f.type_args.clone(),
+            }))),
         }
     }
 
     /// An array, a struct literal or a call of a tuple struct's
     /// constructor, made with `mutability`: `mut [1]`, `mut Point { x: 1 }`
     /// and `mut Wrapper(1)` are `mut`.
-    fn eval_literal(&mut self, f: &mut Frame<'db>, expr: ExprId, mutability: Mutability) -> Res<'db, Value<'db>> {
+    fn eval_literal(
+        &mut self,
+        f: &mut Frame<'db>,
+        expr: ExprId,
+        mutability: Mutability,
+    ) -> Res<'db, Value<'db>> {
         let body = f.body;
         match &body[expr] {
             Expr::Array { exprs } => {
@@ -806,7 +886,9 @@ impl<'db> Evaluator<'db> {
                 let mut values = match spread {
                     Some(base) => match self.eval(f, *base)? {
                         // A new struct, with copies of the fields.
-                        Value::Adt { ctor: base_ctor, fields } if base_ctor == ctor => fields.borrow().clone(),
+                        Value::Adt { ctor: base_ctor, fields } if base_ctor == ctor => {
+                            fields.borrow().clone()
+                        }
                         _ => return mismatch("the base of `..` must be of the same struct"),
                     },
                     None => Vec::new(),
@@ -823,7 +905,11 @@ impl<'db> Evaluator<'db> {
             Expr::Call { callee, args } => match self.eval(f, *callee)? {
                 Value::Constructor(ctor @ Ctor::Struct(_)) => {
                     let args = self.eval_all(f, args)?;
-                    let fields = args.into_iter().enumerate().map(|(i, v)| (Name::new(i.to_string()), v)).collect();
+                    let fields = args
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, v)| (Name::new(i.to_string()), v))
+                        .collect();
                     self.made(Value::adt(ctor, mutability, fields))
                 }
                 _ => self.eval_call(f, expr, *callee, args),
@@ -860,7 +946,11 @@ impl<'db> Evaluator<'db> {
 
     /// Run a statement. Its value is that of its expression, even with a
     /// `;`, or `()` for other statements.
-    fn eval_statement(&mut self, f: &mut Frame<'db>, statement: &Statement) -> Res<'db, Value<'db>> {
+    fn eval_statement(
+        &mut self,
+        f: &mut Frame<'db>,
+        statement: &Statement,
+    ) -> Res<'db, Value<'db>> {
         match statement {
             Statement::Let { pat, initializer: Some(init), else_branch, .. } => {
                 let value = self.eval(f, *init)?;
@@ -923,7 +1013,13 @@ impl<'db> Evaluator<'db> {
     /// An operator: a call of the function with its name, like the prelude's
     /// `fn a < b = lt(a, b)`, as the type checker has it. Only the operations
     /// that the prelude's impls use, like `i32_lt`, are built in.
-    fn call_operator(&mut self, f: &mut Frame<'db>, expr: ExprId, op: &str, args: Vec<Value<'db>>) -> Res<'db, Value<'db>> {
+    fn call_operator(
+        &mut self,
+        f: &mut Frame<'db>,
+        expr: ExprId,
+        op: &str,
+        args: Vec<Value<'db>>,
+    ) -> Res<'db, Value<'db>> {
         let callee = match self.resolve_value(f.def, expr, &Path::from_name(Name::new(op))) {
             Some(ValueResolution::Value(value)) => self.value_at(f, expr, value)?,
             _ => return fail(ErrorKind::UnresolvedName(op.to_string())),
@@ -931,7 +1027,13 @@ impl<'db> Evaluator<'db> {
         self.apply(callee, args)
     }
 
-    fn eval_call(&mut self, f: &mut Frame<'db>, expr: ExprId, callee: ExprId, args: &[ExprId]) -> Res<'db, Value<'db>> {
+    fn eval_call(
+        &mut self,
+        f: &mut Frame<'db>,
+        expr: ExprId,
+        callee: ExprId,
+        args: &[ExprId],
+    ) -> Res<'db, Value<'db>> {
         // `x.f(y)` is a field holding a function, a longer path like `m.f`,
         // or `f(x, y)` with the `f` in scope.
         if let Expr::Field { expr: receiver, name } = &f.body[callee] {
@@ -946,7 +1048,9 @@ impl<'db> Evaluator<'db> {
                     } else {
                         let path = Path::from_name(name.clone());
                         let method = match self.resolve_value(f.def, expr, &path) {
-                            Some(ValueResolution::Value(value)) => self.value_at(f, callee, value)?,
+                            Some(ValueResolution::Value(value)) => {
+                                self.value_at(f, callee, value)?
+                            }
                             _ => return fail(ErrorKind::UnresolvedName(name.to_string())),
                         };
                         let mut values = vec![receiver];
@@ -965,7 +1069,12 @@ impl<'db> Evaluator<'db> {
 
     // Paths
 
-    fn resolve_value(&mut self, def: DefWithBodyId<'db>, expr: ExprId, path: &Path) -> Option<ValueResolution<'db>> {
+    fn resolve_value(
+        &mut self,
+        def: DefWithBodyId<'db>,
+        expr: ExprId,
+        path: &Path,
+    ) -> Option<ValueResolution<'db>> {
         let db = self.db;
         *self
             .resolutions
@@ -980,7 +1089,9 @@ impl<'db> Evaluator<'db> {
             | ValueResolution::Type(TypeResolution { ty: TypeNs::Variant(id), unresolved: None }) => {
                 Some(Ctor::Variant(id))
             }
-            ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(id), unresolved: None }) => Some(Ctor::Struct(id)),
+            ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(id), unresolved: None }) => {
+                Some(Ctor::Struct(id))
+            }
             _ => None,
         }
     }
@@ -988,9 +1099,10 @@ impl<'db> Evaluator<'db> {
     fn eval_path(&mut self, f: &mut Frame<'db>, expr: ExprId, path: &Path) -> Res<'db, Value<'db>> {
         match self.resolve_value(f.def, expr, path) {
             Some(ValueResolution::Value(value)) => self.value_at(f, expr, value),
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(id), unresolved: None })) => {
-                Ok(self.ctor_value(Ctor::Struct(id)))
-            }
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(id),
+                unresolved: None,
+            })) => Ok(self.ctor_value(Ctor::Struct(id))),
             _ => fail(ErrorKind::UnresolvedName(path_to_string(path))),
         }
     }
@@ -1007,7 +1119,9 @@ impl<'db> Evaluator<'db> {
     ) -> Res<'db, Value<'db>> {
         let db = self.db;
         let file = f.def.def(db).file(db);
-        let Some(method) = lang.class(db, file).and_then(|class| Some((class, lang.method(db, class)?))) else {
+        let Some(method) =
+            lang.class(db, file).and_then(|class| Some((class, lang.method(db, class)?)))
+        else {
             return fail(ErrorKind::NoLangClass(lang.name()));
         };
         let (class, method) = method;
@@ -1020,20 +1134,31 @@ impl<'db> Evaluator<'db> {
 
     /// The value of what the name used by `expr` refers to. A class method
     /// or constant is the impl's, when the types decide which impl it is.
-    fn value_at(&mut self, f: &mut Frame<'db>, expr: ExprId, value: ValueNs<'db>) -> Res<'db, Value<'db>> {
+    fn value_at(
+        &mut self,
+        f: &mut Frame<'db>,
+        expr: ExprId,
+        value: ValueNs<'db>,
+    ) -> Res<'db, Value<'db>> {
         let db = self.db;
         match value {
             // A name with several functions is the one the types chose (#275).
             ValueNs::Overloaded(_) => {
                 return match infer_body(db, f.def).overload(expr) {
                     Some(id) => self.value_at(f, expr, ValueNs::Function(id)),
-                    None => fail(ErrorKind::Unsupported("a name with several functions that the types don't decide")),
+                    None => fail(ErrorKind::Unsupported(
+                        "a name with several functions that the types don't decide",
+                    )),
                 };
             }
             ValueNs::Function(id) => {
                 let type_args = self.use_type_args(f, expr);
-                let Some(class) = method_class(db, id) else { return Ok(Value::Function(id, type_args)) };
-                let Ok(scheme) = function_scheme(db, id) else { return Ok(Value::Function(id, type_args)) };
+                let Some(class) = method_class(db, id) else {
+                    return Ok(Value::Function(id, type_args));
+                };
+                let Ok(scheme) = function_scheme(db, id) else {
+                    return Ok(Value::Function(id, type_args));
+                };
                 let Some(imp) = self.impl_at(f, expr, class, &scheme.params, &type_args) else {
                     return Ok(Value::Function(id, type_args));
                 };
@@ -1045,9 +1170,10 @@ impl<'db> Evaluator<'db> {
                 // The impl's method has the type the class method has here.
                 let at = subst_scheme_args(&scheme.params, &type_args, &scheme.ty);
                 let target_args = match function_scheme(db, target) {
-                    Ok(scheme) => {
-                        bind_scheme_args(scheme, &at).into_iter().map(|t| t.unwrap_or_else(Ty::unit)).collect()
-                    }
+                    Ok(scheme) => bind_scheme_args(scheme, &at)
+                        .into_iter()
+                        .map(|t| t.unwrap_or_else(Ty::unit))
+                        .collect(),
                     Err(_) => self.no_type_args.clone(),
                 };
                 return Ok(Value::Function(target, target_args));
@@ -1067,7 +1193,12 @@ impl<'db> Evaluator<'db> {
     }
 
     /// A frame for running the body `def` with `type_args`.
-    fn frame(&self, def: DefWithBodyId<'db>, locals: Locals<'db>, type_args: TypeArgs<'db>) -> Frame<'db> {
+    fn frame(
+        &self,
+        def: DefWithBodyId<'db>,
+        locals: Locals<'db>,
+        type_args: TypeArgs<'db>,
+    ) -> Frame<'db> {
         let db = self.db;
         let params = match def.def(db) {
             DefWithBody::Function(id) => function_scheme(db, id).map_or(&[][..], |s| &s.params[..]),
@@ -1126,7 +1257,9 @@ impl<'db> Evaluator<'db> {
                 slot.ok_or_else(|| ErrorKind::Uninitialized(f.body[binding].name.clone()).into())
             }
             ValueNs::Function(id) => Ok(Value::Function(id, self.no_type_args.clone())),
-            ValueNs::Overloaded(_) => fail(ErrorKind::Unsupported("a name with several functions that the types don't decide")),
+            ValueNs::Overloaded(_) => fail(ErrorKind::Unsupported(
+                "a name with several functions that the types don't decide",
+            )),
             ValueNs::Const(id) => self.eval_const_inner(id),
             ValueNs::Variant(id) => Ok(self.ctor_value(Ctor::Variant(id))),
             ValueNs::ConstParam { .. } => fail(ErrorKind::Unsupported("a const parameter")),
@@ -1140,15 +1273,26 @@ impl<'db> Evaluator<'db> {
         let is_unit = match ctor {
             Ctor::Struct(id) => matches!(struct_signature(db, id).fields, FieldList::Unit),
             Ctor::Variant(id) => {
-                matches!(enum_signature(db, id.parent).variants[id.index as usize].fields, FieldList::Unit)
+                matches!(
+                    enum_signature(db, id.parent).variants[id.index as usize].fields,
+                    FieldList::Unit
+                )
             }
         };
-        if is_unit { Value::adt(ctor, Mutability::Imm, Vec::new()) } else { Value::Constructor(ctor) }
+        if is_unit {
+            Value::adt(ctor, Mutability::Imm, Vec::new())
+        } else {
+            Value::Constructor(ctor)
+        }
     }
 
     /// `Color.Red` and `m.f` are parsed as field accesses. When `expr` is
     /// one and its base isn't a value, evaluate it as a longer path.
-    fn eval_extended_path(&mut self, f: &mut Frame<'db>, expr: ExprId) -> Res<'db, Option<Value<'db>>> {
+    fn eval_extended_path(
+        &mut self,
+        f: &mut Frame<'db>,
+        expr: ExprId,
+    ) -> Res<'db, Option<Value<'db>>> {
         let Expr::Field { expr: base, name } = &f.body[expr] else { return Ok(None) };
         let Some(base_path) = expr_as_path(f.body, *base) else { return Ok(None) };
         if let Some(ValueResolution::Value(_)) = self.resolve_value(f.def, *base, &base_path) {
@@ -1159,9 +1303,10 @@ impl<'db> Evaluator<'db> {
         let path = Path { segments: segments.into() };
         match self.resolve_value(f.def, expr, &path) {
             Some(ValueResolution::Value(value)) => Ok(Some(self.value_of(f, value)?)),
-            Some(ValueResolution::Type(TypeResolution { ty: TypeNs::Struct(id), unresolved: None })) => {
-                Ok(Some(self.ctor_value(Ctor::Struct(id))))
-            }
+            Some(ValueResolution::Type(TypeResolution {
+                ty: TypeNs::Struct(id),
+                unresolved: None,
+            })) => Ok(Some(self.ctor_value(Ctor::Struct(id)))),
             _ => Ok(None),
         }
     }
@@ -1203,7 +1348,12 @@ impl<'db> Evaluator<'db> {
             let value = if op.is_none() && fields.is_empty() {
                 value
             } else {
-                let mut element = self.call_lang(f, indexed, LangClass::Index, vec![container.clone(), index.clone()])?;
+                let mut element = self.call_lang(
+                    f,
+                    indexed,
+                    LangClass::Index,
+                    vec![container.clone(), index.clone()],
+                )?;
                 let current = tuple_field(Some(&mut element), &fields)?.clone();
                 let value = match op {
                     Some(op) => self.combine(f, at, op, current, value)?,
@@ -1245,7 +1395,11 @@ impl<'db> Evaluator<'db> {
         match &f.body[expr] {
             Expr::Path(path) => match self.resolve_value(f.def, expr, path) {
                 Some(ValueResolution::Value(ValueNs::Local(binding))) => {
-                    let slot = f.locals.entry(binding).or_insert_with(|| Rc::new(RefCell::new(None))).clone();
+                    let slot = f
+                        .locals
+                        .entry(binding)
+                        .or_insert_with(|| Rc::new(RefCell::new(None)))
+                        .clone();
                     Ok((Place::Variable(slot), Vec::new()))
                 }
                 _ => fail(ErrorKind::NotAssignable),
@@ -1269,7 +1423,9 @@ impl<'db> Evaluator<'db> {
                         let mut element = self.call_lang(f, *at, LangClass::Index, args)?;
                         shared_fields(tuple_field(Some(&mut element), &fields)?)
                     }
-                    _ => place.update(|current| Ok(shared_fields(tuple_field(current, &fields)?)))?,
+                    _ => {
+                        place.update(|current| Ok(shared_fields(tuple_field(current, &fields)?)))?
+                    }
                 };
                 match shared {
                     Some(adt) => {
@@ -1320,7 +1476,9 @@ impl<'db> Evaluator<'db> {
             Pat::Slice { args, rest } => match value {
                 Value::Array(items) => {
                     let items = items.borrow();
-                    let items = (0..items.len()).map(|i| element(&items, i)).collect::<Res<'db, Vec<_>>>()?;
+                    let items = (0..items.len())
+                        .map(|i| element(&items, i))
+                        .collect::<Res<'db, Vec<_>>>()?;
                     self.match_seq(f, args, *rest, &items)
                 }
                 _ => Ok(false),
@@ -1331,7 +1489,8 @@ impl<'db> Evaluator<'db> {
                 };
                 match value {
                     Value::Adt { ctor: c, fields } if *c == ctor => {
-                        let items: Vec<_> = fields.borrow().iter().map(|(_, v)| v.clone()).collect();
+                        let items: Vec<_> =
+                            fields.borrow().iter().map(|(_, v)| v.clone()).collect();
                         self.match_seq(f, args, *rest, &items)
                     }
                     _ => Ok(false),
@@ -1362,7 +1521,9 @@ impl<'db> Evaluator<'db> {
                     return Ok(false);
                 }
                 if let Some(end) = end {
-                    let Some(ord) = value.compare(&self.pat_value(f, *end)?) else { return Ok(false) };
+                    let Some(ord) = value.compare(&self.pat_value(f, *end)?) else {
+                        return Ok(false);
+                    };
                     return Ok(if *inclusive { ord.is_le() } else { ord.is_lt() });
                 }
                 Ok(true)
@@ -1427,7 +1588,11 @@ impl<'db> Evaluator<'db> {
     }
 
     /// Paths in patterns name constants and variants, not local variables.
-    fn resolve_pat_path(&self, def: DefWithBodyId<'db>, path: &Path) -> Option<ValueResolution<'db>> {
+    fn resolve_pat_path(
+        &self,
+        def: DefWithBodyId<'db>,
+        path: &Path,
+    ) -> Option<ValueResolution<'db>> {
         Resolver::for_body(self.db, def).resolve_path_in_value_ns(self.db, path)
     }
 }
@@ -1475,7 +1640,10 @@ fn pat_bindings(body: &Body, pat: PatId, out: &mut Vec<BindingId>) {
                 pat_bindings(body, *subpat, out);
             }
         }
-        Pat::Tuple { args, .. } | Pat::TupleStruct { args, .. } | Pat::Slice { args, .. } | Pat::Or(args) => {
+        Pat::Tuple { args, .. }
+        | Pat::TupleStruct { args, .. }
+        | Pat::Slice { args, .. }
+        | Pat::Or(args) => {
             for &arg in args.iter() {
                 pat_bindings(body, arg, out);
             }
@@ -1516,7 +1684,9 @@ fn literal_value<'db>(db: &'db dyn Db, file: File, literal: &Literal) -> Res<'db
 /// `-x` or `!x`.
 fn prefix<'db>(op: PrefixOp, value: Value<'db>) -> Res<'db, Value<'db>> {
     match (op, value) {
-        (PrefixOp::Neg, Value::Int(n)) => n.checked_neg().map(Value::Int).ok_or(ErrorKind::Overflow.into()),
+        (PrefixOp::Neg, Value::Int(n)) => {
+            n.checked_neg().map(Value::Int).ok_or(ErrorKind::Overflow.into())
+        }
         (PrefixOp::Neg, Value::Float(x)) => Ok(Value::Float(-x)),
         (PrefixOp::Not, Value::Bool(b)) => Ok(Value::Bool(!b)),
         (PrefixOp::Not, Value::Int(n)) => Ok(Value::Int(!n)),
@@ -1591,7 +1761,9 @@ fn arith<'db>(op: ArithOp, lhs: Value<'db>, rhs: Value<'db>) -> Res<'db, Value<'
 /// `x as T`, for the primitive types. Other casts leave the value as it is.
 fn cast<'db>(value: Value<'db>, type_ref: &TypeRef) -> Res<'db, Value<'db>> {
     let TypeRef::Path(path) = type_ref else { return Ok(value) };
-    let Some(ty) = path.as_name().and_then(|n| BuiltinType::by_name(n.as_str())) else { return Ok(value) };
+    let Some(ty) = path.as_name().and_then(|n| BuiltinType::by_name(n.as_str())) else {
+        return Ok(value);
+    };
     Ok(match (value, ty) {
         (Value::Int(n), BuiltinType::Float(_)) => Value::Float(n as f64),
         (Value::Float(x), BuiltinType::Int(_) | BuiltinType::Uint(_)) => Value::Int(x as i128),
@@ -1613,7 +1785,10 @@ fn range<'db>(start: i128, count: i128, len: usize) -> Res<'db, std::ops::Range<
 
 /// `index` as a position in an array of `len` elements, if it's in bounds.
 fn in_bounds<'db>(index: i128, len: usize) -> Res<'db, usize> {
-    usize::try_from(index).ok().filter(|&i| i < len).ok_or(ErrorKind::IndexOutOfBounds { index, len }.into())
+    usize::try_from(index)
+        .ok()
+        .filter(|&i| i < len)
+        .ok_or(ErrorKind::IndexOutOfBounds { index, len }.into())
 }
 
 /// The element of `items` at `index`, which is in bounds, unless it isn't
@@ -1638,10 +1813,14 @@ fn option_value<'db>(db: &'db dyn Db, value: Value<'db>) -> Res<'db, Option<Valu
 }
 
 /// The items of a range that a `for` loop goes over.
-fn iterate<'db>(value: Value<'db>) -> Res<'db, Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>> {
+fn iterate<'db>(
+    value: Value<'db>,
+) -> Res<'db, Box<dyn Iterator<Item = Res<'db, Value<'db>>> + 'db>> {
     match value {
         Value::Range { start: Some(start), end, inclusive } => {
-            let Value::Int(start) = *start else { return mismatch("only ranges of integers can be iterated") };
+            let Value::Int(start) = *start else {
+                return mismatch("only ranges of integers can be iterated");
+            };
             let end = match end.map(|e| *e) {
                 Some(Value::Int(end)) => Some(if inclusive { end } else { end - 1 }),
                 None => None,

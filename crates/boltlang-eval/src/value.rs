@@ -1,6 +1,7 @@
 use std::{cell::RefCell, cmp::Ordering, collections::HashMap, fmt, ops::Deref, rc::Rc};
 
 use boltlang_base_db::{Db, File};
+use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_def::{
     Name,
     body::DefWithBodyId,
@@ -8,7 +9,6 @@ use boltlang_hir_def::{
     ids::{EnumVariantId, FunctionId, StructId},
     item_tree::FunctionName,
 };
-use boltlang_hir_def::resolver::GenericDefId;
 use boltlang_hir_ty::{
     AdtId, Ty,
     lang::{char_struct, string_struct},
@@ -89,7 +89,10 @@ pub struct Closure<'db> {
 
 impl fmt::Debug for Closure<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Closure").field("def", &self.def).field("expr", &self.expr).finish_non_exhaustive()
+        f.debug_struct("Closure")
+            .field("def", &self.def)
+            .field("expr", &self.expr)
+            .finish_non_exhaustive()
     }
 }
 
@@ -104,11 +107,18 @@ pub enum Value<'db> {
     Tuple(Vec<Value<'db>>),
     /// Shared: `let ys = xs` makes another name for the same array.
     Array(Shared<Vec<Value<'db>>>),
-    Range { start: Option<Box<Value<'db>>>, end: Option<Box<Value<'db>>>, inclusive: bool },
+    Range {
+        start: Option<Box<Value<'db>>>,
+        end: Option<Box<Value<'db>>>,
+        inclusive: bool,
+    },
     /// A struct or variant with its fields, in order. The fields of tuple
     /// structs and variants are named `0`, `1`, ... Shared, like an array.
     /// A variant can't be changed, so it being shared makes no difference.
-    Adt { ctor: Ctor<'db>, fields: Shared<Fields<'db>> },
+    Adt {
+        ctor: Ctor<'db>,
+        fields: Shared<Fields<'db>>,
+    },
     /// A function, with the types it's used with.
     Function(FunctionId<'db>, TypeArgs<'db>),
     /// A tuple struct or variant used as a function, like `Some`.
@@ -185,7 +195,9 @@ impl<'db> Value<'db> {
         match self {
             Value::Array(items) => items.mutability == Mutability::Imm,
             Value::Adt { ctor: Ctor::Struct(_), fields } => fields.mutability == Mutability::Imm,
-            Value::Adt { ctor: Ctor::Variant(_), fields } => fields.borrow().iter().all(|(_, v)| v.holds_only_imm()),
+            Value::Adt { ctor: Ctor::Variant(_), fields } => {
+                fields.borrow().iter().all(|(_, v)| v.holds_only_imm())
+            }
             Value::Tuple(items) => items.iter().all(Value::holds_only_imm),
             Value::Range { start, end, .. } => {
                 start.iter().chain(end.iter()).all(|v| v.holds_only_imm())
@@ -280,7 +292,11 @@ impl<'db> Value<'db> {
                 }
                 let copy = Object::new(Mutability::Mut, Vec::new());
                 copies.insert(key, Value::Array(copy.clone()));
-                let thawed = items.borrow().iter().map(|v| v.thaw_with(db, from_elem, to_elem, copies)).collect();
+                let thawed = items
+                    .borrow()
+                    .iter()
+                    .map(|v| v.thaw_with(db, from_elem, to_elem, copies))
+                    .collect();
                 *copy.borrow_mut() = thawed;
                 Value::Array(copy)
             }
@@ -325,7 +341,11 @@ impl<'db> Value<'db> {
                 Value::Adt { ctor: *ctor, fields: copy }
             }
             (Value::Tuple(items), Ty::Tuple(from_tys), Ty::Tuple(to_tys)) => Value::Tuple(
-                items.iter().zip(from_tys.iter().zip(to_tys.iter())).map(|(v, (f, t))| v.thaw_with(db, f, t, copies)).collect(),
+                items
+                    .iter()
+                    .zip(from_tys.iter().zip(to_tys.iter()))
+                    .map(|(v, (f, t))| v.thaw_with(db, f, t, copies))
+                    .collect(),
             ),
             _ => self.clone(),
         }
@@ -334,7 +354,9 @@ impl<'db> Value<'db> {
     /// The field called `name`, of a struct or variant or tuple.
     pub fn field(&self, name: &Name) -> Option<Value<'db>> {
         match self {
-            Value::Adt { fields, .. } => fields.borrow().iter().find(|(n, _)| n == name).map(|(_, v)| v.clone()),
+            Value::Adt { fields, .. } => {
+                fields.borrow().iter().find(|(n, _)| n == name).map(|(_, v)| v.clone())
+            }
             Value::Tuple(items) => items.get(name.as_str().parse::<usize>().ok()?).cloned(),
             _ => None,
         }
@@ -345,7 +367,9 @@ impl<'db> Value<'db> {
     pub fn equals(&self, other: &Value<'db>) -> bool {
         match (self, other) {
             (Value::Array(a), Value::Array(b)) if Rc::ptr_eq(a, b) => true,
-            (Value::Adt { fields: a, .. }, Value::Adt { fields: b, .. }) if Rc::ptr_eq(a, b) => true,
+            (Value::Adt { fields: a, .. }, Value::Adt { fields: b, .. }) if Rc::ptr_eq(a, b) => {
+                true
+            }
             (Value::Bool(a), Value::Bool(b)) => a == b,
             (Value::Int(a), Value::Int(b)) => a == b,
             (Value::Float(a), Value::Float(b)) => a == b,
@@ -353,7 +377,9 @@ impl<'db> Value<'db> {
             (Value::Array(a), Value::Array(b)) => equal_items(&a.borrow(), &b.borrow()),
             (Value::Adt { ctor: c1, fields: f1 }, Value::Adt { ctor: c2, fields: f2 }) => {
                 let (f1, f2) = (f1.borrow(), f2.borrow());
-                c1 == c2 && f1.len() == f2.len() && f1.iter().zip(f2.iter()).all(|((_, a), (_, b))| a.equals(b))
+                c1 == c2
+                    && f1.len() == f2.len()
+                    && f1.iter().zip(f2.iter()).all(|((_, a), (_, b))| a.equals(b))
             }
             (
                 Value::Range { start: s1, end: e1, inclusive: i1 },
@@ -383,7 +409,10 @@ impl<'db> Value<'db> {
             (Value::Float(a), Value::Float(b)) => a.partial_cmp(b),
             (Value::Tuple(a), Value::Tuple(b)) => compare_items(a, b),
             (Value::Array(a), Value::Array(b)) => compare_items(&a.borrow(), &b.borrow()),
-            (Value::Adt { ctor: c1 @ Ctor::Struct(_), fields: f1 }, Value::Adt { ctor: c2, fields: f2 }) if c1 == c2 => {
+            (
+                Value::Adt { ctor: c1 @ Ctor::Struct(_), fields: f1 },
+                Value::Adt { ctor: c2, fields: f2 },
+            ) if c1 == c2 => {
                 let values = |f: &Fields<'db>| f.iter().map(|(_, v)| v.clone()).collect::<Vec<_>>();
                 compare_items(&values(&f1.borrow()), &values(&f2.borrow()))
             }
@@ -400,11 +429,20 @@ impl<'db> Value<'db> {
 
     /// [`Value::display`], but showing the structs and variants in `shown`,
     /// by the address of their fields, as the text there.
-    pub(crate) fn display_with<'a>(&'a self, db: &'db dyn Db, shown: &'a Shown) -> impl fmt::Display + 'a
+    pub(crate) fn display_with<'a>(
+        &'a self,
+        db: &'db dyn Db,
+        shown: &'a Shown,
+    ) -> impl fmt::Display + 'a
     where
         'db: 'a,
     {
-        DisplayValue { value: self, db, outer: Rc::new(RefCell::new(Vec::new())), shown: Some(shown) }
+        DisplayValue {
+            value: self,
+            db,
+            outer: Rc::new(RefCell::new(Vec::new())),
+            shown: Some(shown),
+        }
     }
 
     /// The address of the shared array or struct, if it's one.
@@ -514,7 +552,9 @@ impl<'db> DisplayValue<'_, 'db> {
             }
             // The prelude's `String`, as its text, for a prelude without an
             // impl of `Debug` for it, like the small one of the tests.
-            Value::Adt { ctor: Ctor::Struct(id), .. } if string_struct(db, id.file(db)) == Some(*id) => {
+            Value::Adt { ctor: Ctor::Struct(id), .. }
+                if string_struct(db, id.file(db)) == Some(*id) =>
+            {
                 match self.value.text() {
                     Some(text) => write!(f, "{text:?}"),
                     None => f.write_str("String(?)"),
@@ -526,7 +566,8 @@ impl<'db> DisplayValue<'_, 'db> {
                 if fields.is_empty() {
                     return Ok(());
                 }
-                let is_tuple = fields.iter().all(|(name, _)| name.as_str().parse::<usize>().is_ok());
+                let is_tuple =
+                    fields.iter().all(|(name, _)| name.as_str().parse::<usize>().is_ok());
                 if is_tuple {
                     f.write_str("(")?;
                     let values: Vec<_> = fields.iter().map(|(_, v)| v.clone()).collect();
@@ -560,7 +601,9 @@ impl<'db> DisplayValue<'_, 'db> {
 /// mutability.
 fn adt_subst<'db>(ty: &Ty<'db>) -> Vec<Ty<'db>> {
     match ty {
-        Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) => struct_args(args, mutabilities, mutability),
+        Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) => {
+            struct_args(args, mutabilities, mutability)
+        }
         Ty::Adt(AdtId::Enum(_), args, ..) => args.to_vec(),
         _ => Vec::new(),
     }

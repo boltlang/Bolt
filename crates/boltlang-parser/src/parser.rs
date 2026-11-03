@@ -1,14 +1,14 @@
-
 use std::{cell::Cell, num::NonZeroU32};
 
-use boltlang_syntax::{SyntaxKind, T};
-use boltlang_common::DropBomb;
 use crate::{event::Event, token_set::TokenSet};
+use boltlang_common::DropBomb;
+use boltlang_syntax::{SyntaxKind, T};
 
 use SyntaxKind::*;
 
 /// Whether `kind` is a run of operator characters (see [`crate::lexer`]),
 /// leaving out `=` and compound assignments like `+=`.
+#[rustfmt::skip]
 pub(crate) fn is_operator_kind(kind: SyntaxKind) -> bool {
     matches!(
         kind,
@@ -41,12 +41,8 @@ fn fwd_parent(offset: u32) -> NonZeroU32 {
 }
 
 impl Marker {
-
     pub(crate) fn new(pos: u32) -> Self {
-        Marker {
-            pos,
-            bomb: DropBomb::new("Marker must be either completed or abandoned"),
-        }
+        Marker { pos, bomb: DropBomb::new("Marker must be either completed or abandoned") }
     }
 
     /// Whether everything since this marker is one node, with no tokens or
@@ -64,7 +60,8 @@ impl Marker {
                 p.events.pop(),
                 Some(Event::Start { kind: TOMBSTONE, forward_parent: None })
             ));
-        }}
+        }
+    }
 
     /// Will create a node with children between [Parer::start] and the current position.
     pub(crate) fn complete(mut self, p: &mut Parser, kind: SyntaxKind) -> CompletedMarker {
@@ -79,7 +76,6 @@ impl Marker {
         p.push_event(Event::Finish);
         CompletedMarker::new(self.pos, kind)
     }
-
 }
 
 /// Whether `events` make one node, and nothing outside of it.
@@ -123,12 +119,8 @@ pub struct CompletedMarker {
 }
 
 impl CompletedMarker {
-
     pub(crate) fn new(start_pos: u32, kind: SyntaxKind) -> Self {
-        Self {
-            start_pos,
-            kind
-        }
+        Self { start_pos, kind }
     }
 
     /// This method allows to create a new node which starts
@@ -172,7 +164,6 @@ impl CompletedMarker {
     pub(crate) fn kind(&self) -> SyntaxKind {
         self.kind
     }
-
 }
 
 /// The tokens the parser reads, without trivia, as kinds and the ranges of
@@ -184,11 +175,9 @@ pub struct Input<'t> {
 }
 
 impl<'t> Input<'t> {
-
     pub fn new(text: &'t str, kinds: Vec<SyntaxKind>, ranges: Vec<(u32, u32)>) -> Self {
         Self { text, kinds, ranges }
     }
-
 }
 
 /// A token: its kind and the range of its text.
@@ -215,8 +204,7 @@ pub struct Parser<'t> {
 /// stuck in a loop, and [`Parser::nth`] panics instead of hanging.
 const PARSER_STEP_LIMIT: u32 = if cfg!(debug_assertions) { 150_000 } else { 15_000_000 };
 
-impl <'t> Parser<'t> {
-
+impl<'t> Parser<'t> {
     pub fn new(inp: Input<'t>) -> Self {
         Self {
             events: Vec::with_capacity(2 * inp.kinds.len()),
@@ -309,7 +297,7 @@ impl <'t> Parser<'t> {
     /// Tries to consume a specific token.
     ///
     /// If the token isn't present, this function returns `false`.
-    pub (crate) fn eat(&mut self, kind: SyntaxKind) -> bool {
+    pub(crate) fn eat(&mut self, kind: SyntaxKind) -> bool {
         if !self.at(kind) {
             return false;
         }
@@ -372,7 +360,6 @@ impl <'t> Parser<'t> {
         false
     }
 
-
     /// The text of the current token, or `None` at the end.
     pub(crate) fn value(&self) -> Option<&'t str> {
         self.token(0).map(|token| self.token_text(token))
@@ -382,15 +369,8 @@ impl <'t> Parser<'t> {
     /// that have a kind of their own, like `|` and `<`. Leaves out `=` and
     /// compound assignments like `+=`.
     pub(crate) fn op_text(&self) -> Option<&str> {
-        if is_operator_kind(self.current()) {
-            self.value()
-        } else {
-            None
-        }
+        if is_operator_kind(self.current()) { self.value() } else { None }
     }
-
-
-
 
     /// Create an error node and consume the next token unless it is in the recovery set.
     ///
@@ -463,6 +443,4 @@ impl <'t> Parser<'t> {
     pub(crate) fn finish(self) -> (Vec<Event>, Vec<Split>) {
         (self.events, self.splits)
     }
-
 }
-

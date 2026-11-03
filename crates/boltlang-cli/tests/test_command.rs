@@ -27,7 +27,6 @@ fn bolt_test(dir: &PathBuf, args: &[&str]) -> (bool, String) {
     (output.status.success(), String::from_utf8(output.stdout).unwrap())
 }
 
-
 #[test]
 fn runs_the_tests_of_a_directory() {
     let dir = dir_with(
@@ -56,7 +55,10 @@ fn doesnt_run_the_tests_of_a_file_with_errors() {
     let dir = dir_with("errors", &[("a.bolt", "#[test]\nfn broken() { let x: i32 = True; }\n")]);
     let (ok, out) = bolt_test(&dir, &[]);
     assert!(!ok, "{out}");
-    assert_eq!(out, "a.bolt: not run, since it has errors\ntest result: FAILED. 0 passed; 0 failed; 1 not run\n");
+    assert_eq!(
+        out,
+        "a.bolt: not run, since it has errors\ntest result: FAILED. 0 passed; 0 failed; 1 not run\n"
+    );
     fs::remove_dir_all(dir).unwrap();
 }
 
@@ -95,11 +97,22 @@ fn runs_the_tests_compiled_to_wasm() {
 
 #[test]
 fn a_test_that_cant_be_compiled_fails() {
-    let dir = dir_with("wasm-unsupported", &[("a.bolt", "#[test]\nfn calls_a_closure() { let f = |x: i32| x; assert(f(1) == 1); }\n")]);
-    let output =
-        Command::new(env!("CARGO_BIN_EXE_bolt")).args(["test", "--wasm"]).current_dir(&dir).output().unwrap();
+    let dir = dir_with(
+        "wasm-unsupported",
+        &[("a.bolt", "#[test]\nfn calls_a_closure() { let f = |x: i32| x; assert(f(1) == 1); }\n")],
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_bolt"))
+        .args(["test", "--wasm"])
+        .current_dir(&dir)
+        .output()
+        .unwrap();
     assert!(!output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "test a.bolt::calls_a_closure ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n");
-    assert!(String::from_utf8(output.stderr).unwrap().contains("not supported by the code generator"));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "test a.bolt::calls_a_closure ... FAILED\ntest result: FAILED. 0 passed; 1 failed\n"
+    );
+    assert!(
+        String::from_utf8(output.stderr).unwrap().contains("not supported by the code generator")
+    );
     fs::remove_dir_all(dir).unwrap();
 }

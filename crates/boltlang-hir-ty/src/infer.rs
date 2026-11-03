@@ -13,25 +13,32 @@ use boltlang_hir_def::{
     body::{Body, DefWithBody, DefWithBodyId},
     builtin_type::{BuiltinInt, BuiltinType, BuiltinUint},
     hir::{
-        BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path, PathSegment,
-        RecordField, Statement, TypeRefId,
+        BinaryOp, Binding, BindingId, Expr, ExprId, LabelId, Literal, Pat, PatId, Path,
+        PathSegment, RecordField, Statement, TypeRefId,
     },
     ids::{ClassId, ConstId, FunctionId, ImplId, ItemContainerId},
-    signatures::function_signature,
-    resolver::{GenericDefId, Hidden, OverloadSet, Resolver, TypeNs, TypeResolution, ValueNs, ValueResolution},
+    resolver::{
+        GenericDefId, Hidden, OverloadSet, Resolver, TypeNs, TypeResolution, ValueNs,
+        ValueResolution,
+    },
     scope::expr_scopes,
+    signatures::function_signature,
 };
 
 use crate::{
+    check::{InferenceCycle, function_scheme},
     holds::struct_atoms_of,
     lang::{LangClass, char_ty, string_ty},
     lower::{
-        ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty, field_types, struct_mutability,
-        generic_predicates, identity_args, named_mutabilities, struct_args, subst_params,
+        ClassConstraint, FieldsKind, LowerDiagnostic, TyLoweringContext, VariantDef, const_ty,
+        field_types, generic_predicates, identity_args, named_mutabilities, struct_args,
+        struct_mutability, subst_params,
     },
-    check::{InferenceCycle, function_scheme},
     scheme::{Scheme, generic_param_ids},
-    solve::{AtMostConstraint, AtMostSource, Constraint, Held, ConstraintSource, ExprOrPat, FieldConstraint, ImmConstraint, MutConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError},
+    solve::{
+        AtMostConstraint, AtMostSource, Constraint, ConstraintSource, ExprOrPat, FieldConstraint,
+        Held, ImmConstraint, MutConstraint, Origin, OverloadConstraint, Reason, Solver, TypeError,
+    },
     ty::{AdtId, Mutability, Ty, VarKind},
 };
 
@@ -113,7 +120,8 @@ impl<'db> InferenceResult<'db> {
             {
                 // Resolved here, since a body that isn't generalized, like a
                 // file's, has its types resolved before.
-                self.type_args.insert(expr, args.iter().map(|t| solver.unifier.resolve(t)).collect());
+                self.type_args
+                    .insert(expr, args.iter().map(|t| solver.unifier.resolve(t)).collect());
             }
         }
         for (origin, method_call, f) in &solver.overload_choices {
@@ -146,12 +154,16 @@ impl<'db> InferenceResult<'db> {
             .diagnostics
             .iter()
             .filter_map(|d| match d {
-                InferenceDiagnostic::Type(TypeError::NotAtMost { constraint, .. }) => Some(constraint.held.ty().clone()),
+                InferenceDiagnostic::Type(TypeError::NotAtMost { constraint, .. }) => {
+                    Some(constraint.held.ty().clone())
+                }
                 _ => None,
             })
             .collect();
         // A literal after `mut` is reported with its `mut`.
-        let outer = |e: ExprId| self.mut_literals.iter().find(|(_, inner)| *inner == e).map_or(e, |(outer, _)| *outer);
+        let outer = |e: ExprId| {
+            self.mut_literals.iter().find(|(_, inner)| *inner == e).map_or(e, |(outer, _)| *outer)
+        };
         let exprs = self.expr_types.iter().map(|(e, t)| (ExprOrPat::Expr(outer(e)), t));
         let pats = self.pat_types.iter().map(|(p, t)| (ExprOrPat::Pat(p), t));
         for (at, ty) in exprs.chain(pats) {
@@ -167,7 +179,12 @@ impl<'db> InferenceResult<'db> {
 
     /// Replace the types with `f` of them, once inference is done.
     pub(crate) fn map_types(&mut self, f: &mut impl FnMut(&Ty<'db>) -> Ty<'db>) {
-        for ty in self.expr_types.values_mut().chain(self.pat_types.values_mut()).chain(self.binding_types.values_mut()) {
+        for ty in self
+            .expr_types
+            .values_mut()
+            .chain(self.pat_types.values_mut())
+            .chain(self.binding_types.values_mut())
+        {
             *ty = f(ty);
         }
         for args in self.type_args.values_mut() {
@@ -184,38 +201,81 @@ pub enum InferenceDiagnostic<'db> {
     Type(TypeError<'db>),
     /// A type reference in the body, like that of a `let`.
     Lower(LowerDiagnostic),
-    UnresolvedName { expr: ExprOrPat },
+    UnresolvedName {
+        expr: ExprOrPat,
+    },
     /// A path whose last name is in another file, but not visible here.
-    NotVisible { expr: ExprOrPat, hidden: Hidden },
-    NotAFunction { expr: ExprId, ty: Ty<'db> },
-    WrongArgCount { expr: ExprOrPat, expected: usize, found: usize },
-    NoSuchField { expr: ExprOrPat, name: Name },
-    MissingFields { expr: ExprId, names: Vec<Name> },
+    NotVisible {
+        expr: ExprOrPat,
+        hidden: Hidden,
+    },
+    NotAFunction {
+        expr: ExprId,
+        ty: Ty<'db>,
+    },
+    WrongArgCount {
+        expr: ExprOrPat,
+        expected: usize,
+        found: usize,
+    },
+    NoSuchField {
+        expr: ExprOrPat,
+        name: Name,
+    },
+    MissingFields {
+        expr: ExprId,
+        names: Vec<Name>,
+    },
     /// A label or loop to break out of that doesn't exist.
-    BreakOutside { expr: ExprId },
+    BreakOutside {
+        expr: ExprId,
+    },
     /// An assignment to a variable, or to a field of one, that isn't `mut`.
     /// `expr` is the left side.
-    AssignToImmutable { expr: ExprId, binding: BindingId },
+    AssignToImmutable {
+        expr: ExprId,
+        binding: BindingId,
+    },
     /// `mut` before something other than an array or a struct, like the
     /// call of a function or an enum's variant: `mut f(x)`.
-    NoMutability { expr: ExprId },
+    NoMutability {
+        expr: ExprId,
+    },
     /// A type `ty` with a `mut` array or struct, `inner`, inside an `imm`
     /// one, which can't hold it: `imm` is deep.
-    MutInsideImm { at: ExprOrPat, ty: Ty<'db>, inner: Ty<'db> },
+    MutInsideImm {
+        at: ExprOrPat,
+        ty: Ty<'db>,
+        inner: Ty<'db>,
+    },
     /// An assignment whose left side isn't a variable, a field or an
     /// element, like `1 = 2` or `f() = 3`. `expr` is the left side.
-    NotAPlace { expr: ExprId },
+    NotAPlace {
+        expr: ExprId,
+    },
     /// Something the checker doesn't support yet, like `?` or ranges.
-    Unsupported { expr: ExprId },
+    Unsupported {
+        expr: ExprId,
+    },
     /// Syntax that needs a class of the prelude, like `xs[i]` needs
     /// `Index`, without a prelude that defines it.
-    NoLangClass { expr: ExprId, class: &'static str },
+    NoLangClass {
+        expr: ExprId,
+        class: &'static str,
+    },
     /// Syntax that needs a type of the prelude, like `"hi"` needs `String`,
     /// without a prelude that defines it.
-    NoLangType { at: ExprOrPat, ty: &'static str },
+    NoLangType {
+        at: ExprOrPat,
+        ty: &'static str,
+    },
     /// `x as T` where `x` or `T` is a struct or an enum, like a `Char`:
     /// `as` only converts between the primitive types.
-    InvalidCast { expr: ExprId, from: Ty<'db>, to: Ty<'db> },
+    InvalidCast {
+        expr: ExprId,
+        from: Ty<'db>,
+        to: Ty<'db>,
+    },
     /// Functions without complete signatures in files that import each
     /// other call each other; one of them needs a signature.
     CyclicInference,
@@ -372,7 +432,12 @@ struct ClosureFrame {
 }
 
 impl<'a, 'db> InferenceContext<'a, 'db> {
-    pub fn new(db: &'db dyn Db, def: DefWithBodyId<'db>, solver: &'a mut Solver<'db>, env: &'a FnEnv<'db>) -> Self {
+    pub fn new(
+        db: &'db dyn Db,
+        def: DefWithBodyId<'db>,
+        solver: &'a mut Solver<'db>,
+        env: &'a FnEnv<'db>,
+    ) -> Self {
         let body = boltlang_hir_def::body::body(db, def);
         InferenceContext {
             db,
@@ -430,9 +495,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     /// `path` doesn't resolve: say so, or that what it names isn't visible.
-    pub(crate) fn unresolved_path(&mut self, expr: ExprOrPat, resolver: &Resolver<'db>, path: &Path) {
+    pub(crate) fn unresolved_path(
+        &mut self,
+        expr: ExprOrPat,
+        resolver: &Resolver<'db>,
+        path: &Path,
+    ) {
         match resolver.hidden(self.db, path) {
-            Some(hidden) => self.result.diagnostics.push(InferenceDiagnostic::NotVisible { expr, hidden }),
+            Some(hidden) => {
+                self.result.diagnostics.push(InferenceDiagnostic::NotVisible { expr, hidden })
+            }
             None => {
                 let expr = match expr {
                     ExprOrPat::Expr(e) => ExprOrPat::Expr(self.unresolved_part(e, resolver, path)),
@@ -467,7 +539,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// mutability `mutability`. Also gives what to substitute in its field
     /// types: the arguments, then for a struct its mutability arguments and
     /// its mutability (see [`struct_args`]).
-    pub(crate) fn fresh_adt(&mut self, def: VariantDef<'db>, mutability: Ty<'db>) -> (Ty<'db>, Box<[Ty<'db>]>) {
+    pub(crate) fn fresh_adt(
+        &mut self,
+        def: VariantDef<'db>,
+        mutability: Ty<'db>,
+    ) -> (Ty<'db>, Box<[Ty<'db>]>) {
         let (adt, generic_def) = def.adt();
         // An `imm struct` is always `imm`.
         let mutability = match adt {
@@ -480,7 +556,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         let mutabilities: Vec<Ty<'db>> = (0..named).map(|_| self.new_mutability()).collect();
         let ty = Ty::adt(adt, args.clone(), mutabilities, mutability);
         let subst = match &ty {
-            Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) => struct_args(args, mutabilities, mutability),
+            Ty::Adt(AdtId::Struct(_), args, mutabilities, mutability) => {
+                struct_args(args, mutabilities, mutability)
+            }
             _ => args,
         };
         (ty, subst.into())
@@ -489,7 +567,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// An array or struct of mutability `mutability` that holds values of
     /// type `ty` is made at `at`: they must be at most its mutability.
     fn holds(&mut self, ty: &Ty<'db>, mutability: &Ty<'db>, at: ExprId) {
-        let constraint = AtMostConstraint { held: Held::Type(ty.clone()), bound: mutability.clone() };
+        let constraint =
+            AtMostConstraint { held: Held::Type(ty.clone()), bound: mutability.clone() };
         let source = AtMostSource::Object(constraint.clone());
         self.solver.add(Constraint::AtMost { constraint, source, origin: self.origin(at) });
     }
@@ -563,7 +642,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         }
         self.return_ty = ret.clone();
         self.return_reason = match self.def.def(self.db) {
-            DefWithBody::Function(f) if function_signature(self.db, f).ret_type.is_some() => Reason::ReturnType,
+            DefWithBody::Function(f) if function_signature(self.db, f).ret_type.is_some() => {
+                Reason::ReturnType
+            }
             _ => Reason::None,
         };
         let body_expr = self.body.body_expr;
@@ -601,13 +682,21 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
 
     /// Infer the type of an expression. `expected` is a hint, for branches
     /// and lambdas; the caller checks the result against it.
-    fn infer_expr_expect(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+    fn infer_expr_expect(
+        &mut self,
+        expr: ExprId,
+        expected: Option<Expectation<'_, 'db>>,
+    ) -> Ty<'db> {
         let ty = self.infer_expr_inner(expr, expected);
         self.result.expr_types.insert(expr, ty.clone());
         ty
     }
 
-    fn infer_expr_inner(&mut self, expr: ExprId, expected: Option<Expectation<'_, 'db>>) -> Ty<'db> {
+    fn infer_expr_inner(
+        &mut self,
+        expr: ExprId,
+        expected: Option<Expectation<'_, 'db>>,
+    ) -> Ty<'db> {
         let body = self.body;
         let reason = expected.map_or(Reason::None, |e| e.reason);
         match &body[expr] {
@@ -617,8 +706,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Expr::Block { statements, tail, label, .. } => {
                 if let Some(label) = label {
                     let ty = self.expected_or_var(expected);
-                    self.breakables.push(Breakable { label: Some(*label), is_loop: false, ty: Some(ty.clone()), broken: false });
-                    let actual = self.infer_block(statements, *tail, Some(Expectation { ty: &ty, reason }));
+                    self.breakables.push(Breakable {
+                        label: Some(*label),
+                        is_loop: false,
+                        ty: Some(ty.clone()),
+                        broken: false,
+                    });
+                    let actual =
+                        self.infer_block(statements, *tail, Some(Expectation { ty: &ty, reason }));
                     self.breakables.pop();
                     self.solver.equal(&ty, &actual, self.origin(expr));
                     ty
@@ -645,8 +740,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     _ => None,
                 };
                 let known = |ty: &Ty<'db>| !matches!(ty, Ty::Var(_) | Ty::Error | Ty::Never);
-                if known(&from) && known(&to) && (adt(&from).is_some() || adt(&to).is_some()) && adt(&from) != adt(&to) {
-                    self.result.diagnostics.push(InferenceDiagnostic::InvalidCast { expr, from, to: to.clone() });
+                if known(&from)
+                    && known(&to)
+                    && (adt(&from).is_some() || adt(&to).is_some())
+                    && adt(&from) != adt(&to)
+                {
+                    self.result.diagnostics.push(InferenceDiagnostic::InvalidCast {
+                        expr,
+                        from,
+                        to: to.clone(),
+                    });
                 }
                 to
             }
@@ -701,14 +804,20 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::Error
             }
             Expr::Tuple { exprs } => {
-                let hints: Option<Vec<Ty<'db>>> = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                    Some(Ty::Tuple(tys)) if tys.len() == exprs.len() => Some(tys.into_vec()),
-                    _ => None,
-                };
+                let hints: Option<Vec<Ty<'db>>> =
+                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
+                        Some(Ty::Tuple(tys)) if tys.len() == exprs.len() => Some(tys.into_vec()),
+                        _ => None,
+                    };
                 let tys = exprs
                     .iter()
                     .enumerate()
-                    .map(|(i, e)| self.infer_expr_expect(*e, hints.as_ref().map(|h| Expectation { ty: &h[i], reason })))
+                    .map(|(i, e)| {
+                        self.infer_expr_expect(
+                            *e,
+                            hints.as_ref().map(|h| Expectation { ty: &h[i], reason }),
+                        )
+                    })
                     .collect();
                 Ty::Tuple(tys)
             }
@@ -721,7 +830,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     Some(else_branch) => {
                         let ty = self.expected_or_var(expected);
                         self.check_expr_because(*then_branch, &ty, reason);
-                        self.check_expr_because(*else_branch, &ty, reason_for_nth(reason, *then_branch, 1));
+                        self.check_expr_because(
+                            *else_branch,
+                            &ty,
+                            reason_for_nth(reason, *then_branch, 1),
+                        );
                         ty
                     }
                     None => {
@@ -748,7 +861,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 if arms.is_empty() { Ty::Never } else { ty }
             }
             Expr::While { condition, body: loop_body, label } => {
-                self.breakables.push(Breakable { label: *label, is_loop: true, ty: None, broken: false });
+                self.breakables.push(Breakable {
+                    label: *label,
+                    is_loop: true,
+                    ty: None,
+                    broken: false,
+                });
                 self.check_expr(*condition, &Ty::bool());
                 self.check_expr(*loop_body, &Ty::unit());
                 self.breakables.pop();
@@ -756,7 +874,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
             Expr::Loop { body: loop_body, label } => {
                 let ty = self.expected_or_var(expected);
-                self.breakables.push(Breakable { label: *label, is_loop: true, ty: Some(ty.clone()), broken: false });
+                self.breakables.push(Breakable {
+                    label: *label,
+                    is_loop: true,
+                    ty: Some(ty.clone()),
+                    broken: false,
+                });
                 self.check_expr(*loop_body, &Ty::unit());
                 let breakable = self.breakables.pop().unwrap();
                 // A loop that's never left doesn't give a value.
@@ -771,7 +894,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     .and_then(|iter| self.lang_assoc(LangClass::Iterator, &iter, expr))
                     .unwrap_or(Ty::Error);
                 self.check_pat(*pat, &elem);
-                self.breakables.push(Breakable { label: *label, is_loop: true, ty: None, broken: false });
+                self.breakables.push(Breakable {
+                    label: *label,
+                    is_loop: true,
+                    ty: None,
+                    broken: false,
+                });
                 self.check_expr(*loop_body, &Ty::unit());
                 self.breakables.pop();
                 Ty::unit()
@@ -780,7 +908,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let target = match label {
                     Some(name) => {
                         let scopes = expr_scopes(self.db, self.def);
-                        let id = scopes.scope_for(expr).and_then(|s| scopes.resolve_label(s, Some(name)));
+                        let id = scopes
+                            .scope_for(expr)
+                            .and_then(|s| scopes.resolve_label(s, Some(name)));
                         self.breakables.iter().rposition(|b| b.label.is_some() && b.label == id)
                     }
                     None => self.breakables.iter().rposition(|b| b.is_loop),
@@ -808,7 +938,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let ret = self.return_ty.clone();
                 match value {
                     Some(value) => self.check_expr_because(*value, &ret, self.return_reason),
-                    None => self.solver.equal(&ret, &Ty::unit(), Origin { reason: self.return_reason, ..self.origin(expr) }),
+                    None => self.solver.equal(
+                        &ret,
+                        &Ty::unit(),
+                        Origin { reason: self.return_reason, ..self.origin(expr) },
+                    ),
                 }
                 Ty::Never
             }
@@ -820,10 +954,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 Ty::unit()
             }
             Expr::Lambda { params, param_types, ret_type, body: lambda_body, .. } => {
-                let (hint_params, hint_ret) = match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
-                    Some(Ty::Fn(ps, r, _)) if ps.len() == params.len() => (Some(ps), Some(*r)),
-                    _ => (None, None),
-                };
+                let (hint_params, hint_ret) =
+                    match expected.map(|e| self.solver.unifier.shallow_resolve(e.ty)) {
+                        Some(Ty::Fn(ps, r, _)) if ps.len() == params.len() => (Some(ps), Some(*r)),
+                        _ => (None, None),
+                    };
                 self.closures.push(ClosureFrame::default());
                 let mut param_tys = Vec::new();
                 for (i, (&pat, type_ref)) in params.iter().zip(param_types.iter()).enumerate() {
@@ -850,7 +985,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.return_ty = outer_return;
                 let frame = self.closures.pop().unwrap();
                 let body = self.body;
-                let closure = Ty::Fn(param_tys.into(), Box::new(ret), Box::new(self.new_mutability()));
+                let closure =
+                    Ty::Fn(param_tys.into(), Box::new(ret), Box::new(self.new_mutability()));
                 // What the closure captured is at most its mutability, and a
                 // `let mut` variable it shares makes it `mut`.
                 let Ty::Fn(_, _, own) = &closure else { unreachable!() };
@@ -859,9 +995,15 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     self.solver.equal(own, &Ty::Mutability(Mutability::Mut), origin);
                 }
                 for &b in &frame.captured {
-                    let constraint =
-                        AtMostConstraint { held: Held::Type(self.result.binding_ty(b).clone()), bound: (**own).clone() };
-                    self.solver.add(Constraint::AtMost { constraint, source: AtMostSource::Closure(closure.clone()), origin });
+                    let constraint = AtMostConstraint {
+                        held: Held::Type(self.result.binding_ty(b).clone()),
+                        bound: (**own).clone(),
+                    };
+                    self.solver.add(Constraint::AtMost {
+                        constraint,
+                        source: AtMostSource::Closure(closure.clone()),
+                        origin,
+                    });
                 }
                 closure
             }
@@ -887,7 +1029,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                         None => self.new_var(),
                     };
                     if let Some(init) = initializer {
-                        self.check_expr_because(*init, &ty, type_ref.map_or(Reason::None, Reason::Annotation));
+                        self.check_expr_because(
+                            *init,
+                            &ty,
+                            type_ref.map_or(Reason::None, Reason::Annotation),
+                        );
                     } else if let Pat::Bind { id, subpat: None } = &self.body[*pat] {
                         self.uninitialized.push(*id);
                     }
@@ -921,14 +1067,22 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     }
 
     fn literal_ty(&mut self, at: ExprOrPat, lit: &Literal) -> Ty<'db> {
-        let suffixed = |suffix: &Option<Name>| suffix.as_ref().and_then(|s| BuiltinType::by_name(s.as_str())).map(Ty::Builtin);
+        let suffixed = |suffix: &Option<Name>| {
+            suffix.as_ref().and_then(|s| BuiltinType::by_name(s.as_str())).map(Ty::Builtin)
+        };
         match lit {
-            Literal::Int(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Int)),
-            Literal::Float(_, suffix) => suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Float)),
+            Literal::Int(_, suffix) => {
+                suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Int))
+            }
+            Literal::Float(_, suffix) => {
+                suffixed(suffix).unwrap_or_else(|| self.solver.new_var(VarKind::Float))
+            }
             Literal::Char(_) => {
                 let file = self.def.def(self.db).file(self.db);
                 char_ty(self.db, file).unwrap_or_else(|| {
-                    self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: "Char" });
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::NoLangType { at, ty: "Char" });
                     Ty::Error
                 })
             }
@@ -936,11 +1090,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             Literal::String(_) | Literal::CString(_) => {
                 let file = self.def.def(self.db).file(self.db);
                 string_ty(self.db, file).unwrap_or_else(|| {
-                    self.result.diagnostics.push(InferenceDiagnostic::NoLangType { at, ty: "String" });
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::NoLangType { at, ty: "String" });
                     Ty::Error
                 })
             }
-            Literal::ByteString(_) => Ty::array(literal_mutability(false), Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8))),
+            Literal::ByteString(_) => Ty::array(
+                literal_mutability(false),
+                Ty::Builtin(BuiltinType::Uint(BuiltinUint::U8)),
+            ),
         }
     }
 
@@ -960,7 +1119,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// `push` (#275): a new variable, which an [`OverloadConstraint`]
     /// decides once the types leave one of them. `method_call` is the call
     /// if the use is the method of `x.f(y)`.
-    fn overloaded_ty(&mut self, expr: ExprId, set: OverloadSet<'db>, method_call: Option<ExprId>) -> Ty<'db> {
+    fn overloaded_ty(
+        &mut self,
+        expr: ExprId,
+        set: OverloadSet<'db>,
+        method_call: Option<ExprId>,
+    ) -> Ty<'db> {
         let all: Vec<_> = set.functions(self.db).iter().map(|&f| (f, self.probe_ty(f))).collect();
         let ty = self.new_var();
         let constraint = OverloadConstraint {
@@ -1069,8 +1233,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         match fields.kind {
             FieldsKind::Unit => adt_ty,
             FieldsKind::Tuple => {
-                let params: Box<[Ty<'db>]> =
-                    fields.fields.iter().map(|(_, t)| subst_params(t, generic_def, &args)).collect();
+                let params: Box<[Ty<'db>]> = fields
+                    .fields
+                    .iter()
+                    .map(|(_, t)| subst_params(t, generic_def, &args))
+                    .collect();
                 Ty::func(params, adt_ty)
             }
             // A record struct can't be used as a value.
@@ -1119,7 +1286,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         // The solver finds the field once the type is known; until then, a
         // variable stands for the field's type.
         let field = self.new_var();
-        let constraint = FieldConstraint { ty: base_ty, name: name.clone(), field: field.clone(), assign: false };
+        let constraint = FieldConstraint {
+            ty: base_ty,
+            name: name.clone(),
+            field: field.clone(),
+            assign: false,
+        };
         self.solver.add(Constraint::Field { constraint, origin: self.origin(expr) });
         field
     }
@@ -1155,7 +1327,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.holds(&elem, &mutability, expr);
                 Ty::array(mutability, elem)
             }
-            Expr::Record { path, fields, spread } => self.infer_record(expr, path.as_ref(), fields, *spread, is_mut),
+            Expr::Record { path, fields, spread } => {
+                self.infer_record(expr, path.as_ref(), fields, *spread, is_mut)
+            }
             Expr::Call { callee, args } => self.infer_call(expr, *callee, args, is_mut),
             _ => unreachable!("only arrays, struct literals and calls are literals"),
         }
@@ -1178,21 +1352,36 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         )
     }
 
-    fn infer_call(&mut self, expr: ExprId, callee: ExprId, args: &[ExprId], is_mut: bool) -> Ty<'db> {
+    fn infer_call(
+        &mut self,
+        expr: ExprId,
+        callee: ExprId,
+        args: &[ExprId],
+        is_mut: bool,
+    ) -> Ty<'db> {
         // `x.f(y)`: a field holding a function, a longer path, or `f(x, y)`.
         if let Expr::Field { expr: receiver, name } = &self.body[callee] {
             let (receiver, name) = (*receiver, name.clone());
             if self.path_extended(receiver, &name).is_none() {
                 let receiver_ty = self.infer_expr(receiver);
                 let is_field = match self.solver.unifier.shallow_resolve(&receiver_ty) {
-                    Ty::Adt(AdtId::Struct(s), ..) => field_types(self.db, VariantDef::Struct(s)).field(&name).is_some(),
+                    Ty::Adt(AdtId::Struct(s), ..) => {
+                        field_types(self.db, VariantDef::Struct(s)).field(&name).is_some()
+                    }
                     _ => false,
                 };
                 if !is_field {
                     if is_mut {
                         self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
                     }
-                    return self.infer_method_call(expr, callee, receiver, &receiver_ty, &name, args);
+                    return self.infer_method_call(
+                        expr,
+                        callee,
+                        receiver,
+                        &receiver_ty,
+                        &name,
+                        args,
+                    );
                 }
             }
         }
@@ -1203,7 +1392,8 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             self.result.diagnostics.push(InferenceDiagnostic::NoMutability { expr });
         }
         let function = match &self.body[callee] {
-            Expr::Path(path) => match self.resolver(callee).resolve_path_in_value_ns(self.db, path) {
+            Expr::Path(path) => match self.resolver(callee).resolve_path_in_value_ns(self.db, path)
+            {
                 Some(ValueResolution::Value(ValueNs::Function(f))) => Some(f),
                 _ => None,
             },
@@ -1233,7 +1423,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 self.result.method_calls.insert(expr, f);
                 self.function_ty(callee, f)
             }
-            Some(ValueResolution::Value(ValueNs::Overloaded(set))) => self.overloaded_ty(callee, set, Some(expr)),
+            Some(ValueResolution::Value(ValueNs::Overloaded(set))) => {
+                self.overloaded_ty(callee, set, Some(expr))
+            }
             // A local holding a function works too.
             Some(ValueResolution::Value(value)) => self.value_ty(callee, value),
             _ => {
@@ -1244,7 +1436,14 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
             }
         };
         self.result.expr_types.insert(callee, callee_ty.clone());
-        let ty = self.apply(expr, callee, &callee_ty, function, args, Some((receiver, receiver_ty, false)));
+        let ty = self.apply(
+            expr,
+            callee,
+            &callee_ty,
+            function,
+            args,
+            Some((receiver, receiver_ty, false)),
+        );
         self.solve_overloads();
         ty
     }
@@ -1287,7 +1486,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 return Ty::Error;
             }
             other => {
-                self.result.diagnostics.push(InferenceDiagnostic::NotAFunction { expr: callee, ty: other });
+                self.result
+                    .diagnostics
+                    .push(InferenceDiagnostic::NotAFunction { expr: callee, ty: other });
                 for &arg in args {
                     self.infer_expr(arg);
                 }
@@ -1311,7 +1512,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         if let Some((receiver, receiver_ty, _)) = receiver
             && let Some(param) = params.next()
         {
-            self.solver.equal(param, receiver_ty, Origin { reason: reason(0), ..self.origin(receiver) });
+            self.solver.equal(
+                param,
+                receiver_ty,
+                Origin { reason: reason(0), ..self.origin(receiver) },
+            );
         }
         let first = receiver.is_some() as usize;
         for (i, &arg) in args.iter().enumerate() {
@@ -1353,7 +1558,11 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     // `a += b` is `a = a + b`.
                     Some(op) => {
                         let result = self.infer_operator_call(expr, op, lhs, ty.clone(), &[rhs]);
-                        self.solver.equal(&ty, &result, Origin { reason: Reason::SameAs(lhs), ..self.origin(expr) });
+                        self.solver.equal(
+                            &ty,
+                            &result,
+                            Origin { reason: Reason::SameAs(lhs), ..self.origin(expr) },
+                        );
                     }
                     _ => self.check_expr_because(rhs, &ty, Reason::SameAs(lhs)),
                 }
@@ -1399,23 +1608,31 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// `lhs <op> rhs`, or `<op> lhs` when `rest` is empty, as a call of the
     /// function named `name` in scope, with `lhs` of type `lhs_ty` already
     /// inferred.
-    fn infer_operator_call(&mut self, expr: ExprId, name: &Name, lhs: ExprId, lhs_ty: Ty<'db>, rest: &[ExprId]) -> Ty<'db> {
+    fn infer_operator_call(
+        &mut self,
+        expr: ExprId,
+        name: &Name,
+        lhs: ExprId,
+        lhs_ty: Ty<'db>,
+        rest: &[ExprId],
+    ) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let mut function = None;
         let mut gives_operand_assoc = false;
-        let callee_ty = match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
-            Some(ValueResolution::Value(value)) => {
-                if let ValueNs::Function(f) = value {
-                    function = Some(f);
+        let callee_ty =
+            match resolver.resolve_path_in_value_ns(self.db, &Path::from_name(name.clone())) {
+                Some(ValueResolution::Value(value)) => {
+                    if let ValueNs::Function(f) = value {
+                        function = Some(f);
+                    }
+                    gives_operand_assoc = self.gives_operand_assoc(value, rest.len() + 1);
+                    self.value_ty(expr, value)
                 }
-                gives_operand_assoc = self.gives_operand_assoc(value, rest.len() + 1);
-                self.value_ty(expr, value)
-            }
-            _ => {
-                self.unresolved(ExprOrPat::Expr(expr));
-                Ty::Error
-            }
-        };
+                _ => {
+                    self.unresolved(ExprOrPat::Expr(expr));
+                    Ty::Error
+                }
+            };
         // An operator whose operands have one type, like `fn(T, T)` for `+`,
         // says that the right one must be what the left one is.
         let same = match self.solver.unifier.shallow_resolve(&callee_ty) {
@@ -1498,11 +1715,16 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
         };
         if !body[binding].mutable {
             // The first `x = ...` after `let x;` initializes `x`.
-            if plain && root == place && let Some(i) = self.uninitialized.iter().position(|&b| b == binding) {
+            if plain
+                && root == place
+                && let Some(i) = self.uninitialized.iter().position(|&b| b == binding)
+            {
                 self.uninitialized.swap_remove(i);
                 return;
             }
-            self.result.diagnostics.push(InferenceDiagnostic::AssignToImmutable { expr: place, binding });
+            self.result
+                .diagnostics
+                .push(InferenceDiagnostic::AssignToImmutable { expr: place, binding });
         }
     }
 
@@ -1544,8 +1766,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     /// prelude that defines the class, that's reported, and it's `None`.
     fn lang_assoc(&mut self, lang: LangClass, arg: &Ty<'db>, at: ExprId) -> Option<Ty<'db>> {
         let file = self.def.def(self.db).file(self.db);
-        let Some((class, alias)) = lang.class(self.db, file).and_then(|c| Some((c, lang.assoc(self.db, c)?))) else {
-            self.result.diagnostics.push(InferenceDiagnostic::NoLangClass { expr: at, class: lang.name() });
+        let Some((class, alias)) =
+            lang.class(self.db, file).and_then(|c| Some((c, lang.assoc(self.db, c)?)))
+        else {
+            self.result
+                .diagnostics
+                .push(InferenceDiagnostic::NoLangClass { expr: at, class: lang.name() });
             return None;
         };
         let origin = self.origin(at);
@@ -1564,8 +1790,12 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
     ) -> Ty<'db> {
         let resolver = self.resolver(expr);
         let def = match path.and_then(|p| resolver.resolve_path_in_type_ns(self.db, p)) {
-            Some(TypeResolution { ty: TypeNs::Struct(s), unresolved: None }) => Some(VariantDef::Struct(s)),
-            Some(TypeResolution { ty: TypeNs::Variant(v), unresolved: None }) => Some(VariantDef::Variant(v)),
+            Some(TypeResolution { ty: TypeNs::Struct(s), unresolved: None }) => {
+                Some(VariantDef::Struct(s))
+            }
+            Some(TypeResolution { ty: TypeNs::Variant(v), unresolved: None }) => {
+                Some(VariantDef::Variant(v))
+            }
             _ => None,
         };
         let Some(def) = def else {
@@ -1617,7 +1847,10 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                 let base = match (&ty, def) {
                     // The fields not given that have a mutability the struct
                     // declares are shared too, so `base` has the same ones.
-                    (Ty::Adt(id @ AdtId::Struct(_), args, mutabilities, _), VariantDef::Struct(s)) => {
+                    (
+                        Ty::Adt(id @ AdtId::Struct(_), args, mutabilities, _),
+                        VariantDef::Struct(s),
+                    ) => {
                         let own = struct_mutability(self.db, s);
                         let shares = field_tys
                             .fields
@@ -1643,7 +1876,9 @@ impl<'a, 'db> InferenceContext<'a, 'db> {
                     .map(|(_, (name, _))| name.clone())
                     .collect();
                 if !missing.is_empty() {
-                    self.result.diagnostics.push(InferenceDiagnostic::MissingFields { expr, names: missing });
+                    self.result
+                        .diagnostics
+                        .push(InferenceDiagnostic::MissingFields { expr, names: missing });
                 }
             }
         }
@@ -1703,7 +1938,9 @@ pub(crate) fn solve_overloads<'db>(db: &'db dyn Db, solver: &mut Solver<'db>, en
                 (Ty::Fn(args, ret, m), Ty::Fn(params, own_ret, own_m))
                     if args.len() == params.len() && constraint.args.len() == args.len() =>
                 {
-                    for (index, ((arg, param), at)) in args.iter().zip(params.iter()).zip(&constraint.args).enumerate() {
+                    for (index, ((arg, param), at)) in
+                        args.iter().zip(params.iter()).zip(&constraint.args).enumerate()
+                    {
                         let reason = Reason::Argument { function: f, index: index as u32 };
                         solver.equal(param, arg, Origin { reason, ..*at });
                     }

@@ -18,10 +18,7 @@ use boltlang_hir_def::{
     nameres::{Namespace, file_scope, prelude_lib},
 };
 
-use crate::{
-    AdtId, Ty,
-    lower::assoc_type,
-};
+use crate::{AdtId, Ty, lower::assoc_type};
 
 /// The struct called `name` in the prelude, as `file` sees it. Files of
 /// the prelude's own package find it too.

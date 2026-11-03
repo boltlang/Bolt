@@ -19,19 +19,21 @@ use crate::{
     holds::split,
     infer::{FnEnv, InferenceContext, InferenceDiagnostic, InferenceResult, solve_overloads},
     lower::{
-        ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig, generic_predicates, impl_assoc_ty,
-        impl_header, subst_params, with_superclasses,
+        ClassConstraint, assoc_type_bounds, class_assoc_types, const_ty, fn_sig,
+        generic_predicates, impl_assoc_ty, impl_header, subst_params, with_superclasses,
     },
     scheme::{
-        Scheme, SchemeSources, assumptions, assumptions_with_sources, at_most_assumptions, class_impl_method_sig, equality_assumptions, declared_scheme,
-        generic_chain, generic_param_ids, is_declared,
+        Scheme, SchemeSources, assumptions, assumptions_with_sources, at_most_assumptions,
+        class_impl_method_sig, declared_scheme, equality_assumptions, generic_chain,
+        generic_param_ids, is_declared,
     },
     solve::{
-        AssocConstraint, AtMostConstraint, Constraint, ConstraintSource, ExprOrPat, FieldConstraint, Origin, Solver, TypeError,
-        normalize_assoc, prune_implied_errors, resolve_error, vars_in,
+        AssocConstraint, AtMostConstraint, Constraint, ConstraintSource, ExprOrPat,
+        FieldConstraint, Origin, Solver, TypeError, normalize_assoc, prune_implied_errors,
+        resolve_error, vars_in,
     },
-    unify::Unifier,
     ty::{Mutability, Ty, TyVar, VarKind},
+    unify::Unifier,
 };
 
 /// Why a function's type can't be inferred: files that import each other
@@ -41,7 +43,10 @@ use crate::{
 pub struct InferenceCycle;
 
 /// The type of a function, for its callers.
-pub fn function_scheme<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Result<&'db Scheme<'db>, InferenceCycle> {
+pub fn function_scheme<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+) -> Result<&'db Scheme<'db>, InferenceCycle> {
     if is_declared(db, f) {
         return Ok(declared_scheme(db, f));
     }
@@ -58,7 +63,10 @@ pub fn infer_body<'db>(db: &'db dyn Db, def: DefWithBodyId<'db>) -> InferenceRes
             let inference = file_inference(db, file);
             match inference.results.iter().find(|(g, _)| *g == f) {
                 Some((_, result)) => result.clone(),
-                None => InferenceResult { diagnostics: vec![InferenceDiagnostic::CyclicInference], ..Default::default() },
+                None => InferenceResult {
+                    diagnostics: vec![InferenceDiagnostic::CyclicInference],
+                    ..Default::default()
+                },
             }
         }
         def_kind => {
@@ -167,7 +175,9 @@ pub fn unmet_assoc_equalities<'db>(
         for (equality, _) in assoc_type_bounds(db, alias).equalities.iter() {
             let expected = own(&equality.ty);
             let args: Box<[Ty<'db>]> = equality.args.iter().map(&own).collect();
-            if expected.any(&mut |t| *t == Ty::Error) || args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
+            if expected.any(&mut |t| *t == Ty::Error)
+                || args.iter().any(|t| t.any(&mut |t| *t == Ty::Error))
+            {
                 continue;
             }
             let mut solver = assuming.clone();
@@ -199,7 +209,10 @@ pub fn unmet_assoc_equalities<'db>(
 /// has no impl of `Iterator`. The impl's own bounds and `where` clauses are
 /// assumed. Each is given with the associated type of the class.
 #[salsa::tracked(returns(ref))]
-pub fn unmet_assoc_bounds<'db>(db: &'db dyn Db, imp: ImplId<'db>) -> Vec<(TypeAliasId<'db>, ClassConstraint<'db>)> {
+pub fn unmet_assoc_bounds<'db>(
+    db: &'db dyn Db,
+    imp: ImplId<'db>,
+) -> Vec<(TypeAliasId<'db>, ClassConstraint<'db>)> {
     let Some(target) = impl_header(db, imp).class.clone() else { return Vec::new() };
     let file = imp.file(db);
     // The solver reports at a place in a body; the errors are only counted.
@@ -246,7 +259,12 @@ pub fn file_inference<'db>(db: &'db dyn Db, file: File) -> FileInference<'db> {
     let functions = inferred_functions(db, file);
     let calls: Vec<Vec<usize>> = functions
         .iter()
-        .map(|&f| called_functions(db, f).iter().filter_map(|g| functions.iter().position(|h| h == g)).collect())
+        .map(|&f| {
+            called_functions(db, f)
+                .iter()
+                .filter_map(|g| functions.iter().position(|h| h == g))
+                .collect()
+        })
         .collect();
     let mut env = FnEnv::default();
     let mut out = FileInference::default();
@@ -267,7 +285,11 @@ fn file_inference_cycle<'db>(_db: &'db dyn Db, _id: salsa::Id, _file: File) -> F
 /// do. They aren't part of `f`'s type for its callers: arguments meet them
 /// already, being values. What's about a type still being inferred isn't
 /// assumed.
-fn implied_assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>, params: &[Ty<'db>]) -> Vec<AtMostConstraint<'db>> {
+fn implied_assumptions<'db>(
+    db: &'db dyn Db,
+    f: FunctionId<'db>,
+    params: &[Ty<'db>],
+) -> Vec<AtMostConstraint<'db>> {
     let mutable = Ty::Mutability(Mutability::Mut);
     let mut out = Vec::new();
     for param in params {
@@ -280,7 +302,10 @@ fn implied_assumptions<'db>(db: &'db dyn Db, f: FunctionId<'db>, params: &[Ty<'d
             split(db, arg, &mutable, &mut out);
         }
     }
-    out.retain(|a| !a.held.ty().any(&mut |t| matches!(t, Ty::Var(_))) && !a.bound.any(&mut |t| matches!(t, Ty::Var(_))));
+    out.retain(|a| {
+        !a.held.ty().any(&mut |t| matches!(t, Ty::Var(_)))
+            && !a.bound.any(&mut |t| matches!(t, Ty::Var(_)))
+    });
     out
 }
 
@@ -305,8 +330,11 @@ fn infer_group<'db>(
             solver.assume_assoc(assumption);
         }
         let sig = fn_sig(db, f);
-        let params: Box<[Ty<'db>]> =
-            sig.params.iter().map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General))).collect();
+        let params: Box<[Ty<'db>]> = sig
+            .params
+            .iter()
+            .map(|t| t.clone().unwrap_or_else(|| solver.new_var(VarKind::General)))
+            .collect();
         for assumption in implied_assumptions(db, f, &params) {
             solver.assume_at_most(assumption);
         }
@@ -345,15 +373,24 @@ fn infer_group<'db>(
     solver.settle_at_most(&keep, true);
     // The errors are resolved before what's unknown because of them becomes
     // the error type, or they'd be left out for having it in them.
-    let mut errors: Vec<_> =
-        std::mem::take(&mut solver.errors).into_iter().map(|e| resolve_error(&solver.unifier, e)).collect();
+    let mut errors: Vec<_> = std::mem::take(&mut solver.errors)
+        .into_iter()
+        .map(|e| resolve_error(&solver.unifier, e))
+        .collect();
     prune_implied_errors(db, &mut errors);
     solver.unifier.error_unknowns();
     let pending = solver.take_pending();
     let pending_fields = solver.take_pending_fields();
     let pending_assoc = solver.take_pending_assoc();
     let pending_at_most = solver.take_pending_at_most();
-    let solved = Solved { unifier: &solver.unifier, errors, pending, pending_fields, pending_assoc, pending_at_most };
+    let solved = Solved {
+        unifier: &solver.unifier,
+        errors,
+        pending,
+        pending_fields,
+        pending_assoc,
+        pending_at_most,
+    };
     for (&f, (def, mut result)) in group.iter().zip(results) {
         result.add_instances(def, &solver);
         let ty = solved.unifier.resolve(&env.mono.remove(&f).unwrap());
@@ -393,7 +430,8 @@ impl<'db> Solved<'_, 'db> {
         vars.add(ty);
         let (fields, field_sources, untyped) = self.function_fields(def, &mut vars);
         let (assoc, assoc_sources) = self.function_assoc(def, &mut vars);
-        let (predicates, predicate_sources, ambiguous) = self.function_predicates(db, f, def, &vars);
+        let (predicates, predicate_sources, ambiguous) =
+            self.function_predicates(db, f, def, &vars);
         let (bounds, bound_sources) = self.function_bounds(db, f, def, &vars);
         let scheme = Scheme {
             params: generic_param_ids(db, generic_chain(db, f)),
@@ -432,7 +470,8 @@ impl<'db> Solved<'_, 'db> {
         def: DefWithBodyId<'db>,
         vars: &mut Generalization,
     ) -> (Box<[FieldConstraint<'db>]>, Sources<'db>, Vec<Origin<'db>>) {
-        let mut rest: Vec<_> = self.pending_fields.iter().filter(|(_, origin)| origin.body == def).collect();
+        let mut rest: Vec<_> =
+            self.pending_fields.iter().filter(|(_, origin)| origin.body == def).collect();
         let mut accepted = Vec::new();
         // Accepting a constraint can make others about the function's types,
         // so this goes on until nothing changes.
@@ -473,7 +512,9 @@ impl<'db> Solved<'_, 'db> {
     ) -> (Box<[AssocConstraint<'db>]>, Sources<'db>) {
         let mut out = Vec::new();
         let mut sources = Vec::new();
-        for (constraint, origin) in self.pending_assoc.iter().filter(|(_, origin)| origin.body == def) {
+        for (constraint, origin) in
+            self.pending_assoc.iter().filter(|(_, origin)| origin.body == def)
+        {
             if !vars.covers(constraint.args.iter()) {
                 continue;
             }
@@ -502,8 +543,11 @@ impl<'db> Solved<'_, 'db> {
         vars: &Generalization,
     ) -> (Box<[AtMostConstraint<'db>]>, Sources<'db>) {
         // Those it assumes first, as for class constraints.
-        let (mut out, mut sources): (Vec<_>, Vec<_>) = at_most_assumptions(db, f).into_iter().unzip();
-        for (constraint, origin) in self.pending_at_most.iter().filter(|(_, origin)| origin.body == def) {
+        let (mut out, mut sources): (Vec<_>, Vec<_>) =
+            at_most_assumptions(db, f).into_iter().unzip();
+        for (constraint, origin) in
+            self.pending_at_most.iter().filter(|(_, origin)| origin.body == def)
+        {
             let mut found = Vec::new();
             vars_in(constraint.held.ty(), &mut found);
             vars_in(&constraint.bound, &mut found);
@@ -542,14 +586,17 @@ impl<'db> Solved<'_, 'db> {
             } else if !constraint.args.iter().any(|t| t.any(&mut |t| *t == Ty::Error)) {
                 // Not about a type that's unknown because of an error, which
                 // is reported already.
-                ambiguous.push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
+                ambiguous
+                    .push(TypeError::Ambiguous { origin: *origin, constraint: constraint.clone() });
             }
         }
         // Leave out those of the body that another one implies, like
         // `Index[a]` next to `IndexMut[a]`.
         let implied: Vec<ClassConstraint<'db>> = predicates
             .iter()
-            .flat_map(|(p, _)| with_superclasses(db, vec![p.clone()]).into_iter().filter(move |s| s != p))
+            .flat_map(|(p, _)| {
+                with_superclasses(db, vec![p.clone()]).into_iter().filter(move |s| s != p)
+            })
             .collect();
         let mut index = 0;
         predicates.retain(|(p, _)| {
@@ -646,7 +693,10 @@ fn called_functions<'db>(db: &'db dyn Db, f: FunctionId<'db>) -> Vec<FunctionId<
                 paths
             }
             // Every operator is a call of the function with its name.
-            Expr::Binary { op: BinaryOp::Operator(name) | BinaryOp::Assign(Some(name)), .. } | Expr::Prefix { op: name, .. } => {
+            Expr::Binary {
+                op: BinaryOp::Operator(name) | BinaryOp::Assign(Some(name)), ..
+            }
+            | Expr::Prefix { op: name, .. } => {
                 vec![Path::from_name(name.clone())]
             }
             _ => continue,

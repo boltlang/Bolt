@@ -13,7 +13,9 @@ fn top(db: &TestDb, file: File, index: usize) -> ModItem {
 /// The name of a type that is a single-segment path.
 fn type_name(store: &ExpressionStore, ty: TypeRefId) -> String {
     match &store[ty] {
-        TypeRef::Path(path) => path.segments.iter().map(|s| s.name.to_string()).collect::<Vec<_>>().join("."),
+        TypeRef::Path(path) => {
+            path.segments.iter().map(|s| s.name.to_string()).collect::<Vec<_>>().join(".")
+        }
         other => format!("{other:?}"),
     }
 }
@@ -122,7 +124,9 @@ fn class_impl_const_and_type_alias_signatures() {
     let ModItem::TypeAlias(idx) = top(&db, file, 3) else { panic!() };
     let map = type_alias_signature(&db, TypeAliasId::new(&db, ItemContainerId::File(file), idx));
     assert_eq!(map.generic_params.type_params[0].name.as_str(), "K");
-    assert!(matches!(&map.store[map.type_ref.unwrap()], TypeRef::Path(p) if p.segments[0].name.as_str() == "HashMap"));
+    assert!(
+        matches!(&map.store[map.type_ref.unwrap()], TypeRef::Path(p) if p.segments[0].name.as_str() == "HashMap")
+    );
 }
 
 /// Depends on the signature of the first function in a file.

@@ -135,7 +135,8 @@ fn struct_pattern() {
     let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
     let Some(SourceElement::VarDecl(decl)) = file.elements().next() else { panic!() };
     let Some(Pattern::Struct(pattern)) = decl.pattern() else { panic!() };
-    let path: Vec<_> = pattern.path().unwrap().segments().iter().map(|s| s.name_ref().unwrap().text()).collect();
+    let path: Vec<_> =
+        pattern.path().unwrap().segments().iter().map(|s| s.name_ref().unwrap().text()).collect();
     assert_eq!(path, ["Shape", "Circle"]);
     let fields: Vec<_> = pattern.fields().collect();
     assert_eq!(fields[0].name().unwrap().text(), "radius");
@@ -168,12 +169,20 @@ fn doc_comments() {
     let (green, diags) = parse_file(source);
     assert!(diags.is_empty(), "{diags:?}");
     let file = SourceFile::cast(SyntaxNode::new_root(green)).unwrap();
-    let inner: Vec<_> = file.inner_doc_comments().iter().map(|c| c.doc_text().unwrap().to_string()).collect();
+    let inner: Vec<_> =
+        file.inner_doc_comments().iter().map(|c| c.doc_text().unwrap().to_string()).collect();
     assert_eq!(inner, [" The file"]);
     let items: Vec<_> = file.elements().collect();
     let SourceElement::FuncDecl(f) = &items[0] else { panic!() };
-    let docs: Vec<_> = f.doc_comments().iter().map(|c| (c.kind(), c.doc_text().unwrap().to_string())).collect();
-    assert_eq!(docs, [(CommentKind::OuterDoc, " First".to_string()), (CommentKind::OuterDoc, " Second ".to_string())]);
+    let docs: Vec<_> =
+        f.doc_comments().iter().map(|c| (c.kind(), c.doc_text().unwrap().to_string())).collect();
+    assert_eq!(
+        docs,
+        [
+            (CommentKind::OuterDoc, " First".to_string()),
+            (CommentKind::OuterDoc, " Second ".to_string())
+        ]
+    );
     let SourceElement::FuncDecl(g) = &items[1] else { panic!() };
     assert!(g.doc_comments().is_empty());
 }

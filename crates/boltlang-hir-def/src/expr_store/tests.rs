@@ -1,4 +1,7 @@
-use boltlang_syntax::{SyntaxNode, ast::{self, Node}};
+use boltlang_syntax::{
+    SyntaxNode,
+    ast::{self, Node},
+};
 
 use super::*;
 use crate::hir::*;
@@ -49,11 +52,13 @@ impl Printer<'_> {
                     s.name,
                     args.iter()
                         .map(|a| match a {
-                            GenericArg::Type { type_ref, bounds } if bounds.is_empty() => self.ty(*type_ref),
+                            GenericArg::Type { type_ref, bounds } if bounds.is_empty() =>
+                                self.ty(*type_ref),
                             GenericArg::Type { type_ref, bounds } => {
                                 format!("{}: {}", self.ty(*type_ref), self.list(bounds, Self::ty))
                             }
-                            GenericArg::AssocType { name, type_ref, .. } => format!("{name} = {}", self.ty(*type_ref)),
+                            GenericArg::AssocType { name, type_ref, .. } =>
+                                format!("{name} = {}", self.ty(*type_ref)),
                             GenericArg::Const(e) => self.expr(*e),
                         })
                         .collect::<Vec<_>>()
@@ -83,7 +88,9 @@ impl Printer<'_> {
                 initializer.map_or(String::new(), |e| format!(" = {}", self.expr(e))),
                 else_branch.map_or(String::new(), |e| format!(" else {}", self.expr(e))),
             ),
-            Statement::Expr { expr, has_semi } => format!("{}{}", self.expr(*expr), if *has_semi { ";" } else { "" }),
+            Statement::Expr { expr, has_semi } => {
+                format!("{}{}", self.expr(*expr), if *has_semi { ";" } else { "" })
+            }
             Statement::Item => "item".into(),
         }
     }
@@ -109,7 +116,9 @@ impl Printer<'_> {
                 };
                 format!("{}{kind}{{{}}}", self.label(*label), parts.join(" "))
             }
-            Expr::Call { callee, args } => format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr)),
+            Expr::Call { callee, args } => {
+                format!("(call {} {})", self.expr(*callee), self.list(args, Self::expr))
+            }
             Expr::Field { expr, name } => format!("(. {} {name})", self.expr(*expr)),
             Expr::Await { expr } => format!("(await {})", self.expr(*expr)),
             Expr::Try { expr } => format!("(? {})", self.expr(*expr)),
@@ -124,8 +133,12 @@ impl Printer<'_> {
                     _ => format!("(mut {inner})"),
                 }
             }
-            Expr::Cast { expr, type_ref } => format!("(as {} {})", self.expr(*expr), self.ty(*type_ref)),
-            Expr::Index { base, index } => format!("(index {} {})", self.expr(*base), self.expr(*index)),
+            Expr::Cast { expr, type_ref } => {
+                format!("(as {} {})", self.expr(*expr), self.ty(*type_ref))
+            }
+            Expr::Index { base, index } => {
+                format!("(index {} {})", self.expr(*base), self.expr(*index))
+            }
             Expr::Prefix { op, expr } => format!("({op} {})", self.expr(*expr)),
             Expr::Binary { op, lhs, rhs } => {
                 let op = match op {
@@ -138,15 +151,26 @@ impl Printer<'_> {
                 format!("({op} {} {})", self.expr(*lhs), self.expr(*rhs))
             }
             Expr::Range { lhs, rhs, inclusive } => {
-                format!("({} {} {})", if *inclusive { "..=" } else { ".." }, self.opt_expr(*lhs), self.opt_expr(*rhs))
+                format!(
+                    "({} {} {})",
+                    if *inclusive { "..=" } else { ".." },
+                    self.opt_expr(*lhs),
+                    self.opt_expr(*rhs)
+                )
             }
             Expr::Tuple { exprs } => format!("(tuple {})", self.list(exprs, Self::expr)),
             Expr::Array { exprs } => format!("[{}]", self.list(exprs, Self::expr)),
-            Expr::ArrayRepeat { value, count } => format!("[{}; {}]", self.expr(*value), self.expr(*count)),
+            Expr::ArrayRepeat { value, count } => {
+                format!("[{}; {}]", self.expr(*value), self.expr(*count))
+            }
             Expr::Record { path, fields, spread } => format!(
                 "(record {} {}{})",
                 path.as_ref().map_or("_".into(), |p| self.path(p)),
-                fields.iter().map(|f| format!("{}: {}", f.name, self.expr(f.expr))).collect::<Vec<_>>().join(", "),
+                fields
+                    .iter()
+                    .map(|f| format!("{}: {}", f.name, self.expr(f.expr)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 spread.map_or(String::new(), |s| format!(" ..{}", self.expr(s))),
             ),
             Expr::If { condition, then_branch, else_branch } => format!(
@@ -170,20 +194,39 @@ impl Printer<'_> {
                     .join(" ")
             ),
             Expr::While { condition, body, label } => {
-                format!("({}while {} {})", self.label(*label), self.expr(*condition), self.expr(*body))
+                format!(
+                    "({}while {} {})",
+                    self.label(*label),
+                    self.expr(*condition),
+                    self.expr(*body)
+                )
             }
-            Expr::Loop { body, label } => format!("({}loop {})", self.label(*label), self.expr(*body)),
+            Expr::Loop { body, label } => {
+                format!("({}loop {})", self.label(*label), self.expr(*body))
+            }
             Expr::For { pat, iterable, body, label } => {
-                format!("({}for {} {} {})", self.label(*label), self.pat(*pat), self.expr(*iterable), self.expr(*body))
+                format!(
+                    "({}for {} {} {})",
+                    self.label(*label),
+                    self.pat(*pat),
+                    self.expr(*iterable),
+                    self.expr(*body)
+                )
             }
             Expr::Break { expr, label } => format!(
                 "(break{}{})",
                 label.as_ref().map_or(String::new(), |l| format!(" '{l}")),
                 expr.map_or(String::new(), |e| format!(" {}", self.expr(e)))
             ),
-            Expr::Continue { label } => format!("(continue{})", label.as_ref().map_or(String::new(), |l| format!(" '{l}"))),
-            Expr::Return { expr } => format!("(return{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e)))),
-            Expr::Yield { expr } => format!("(yield{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e)))),
+            Expr::Continue { label } => {
+                format!("(continue{})", label.as_ref().map_or(String::new(), |l| format!(" '{l}")))
+            }
+            Expr::Return { expr } => {
+                format!("(return{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e))))
+            }
+            Expr::Yield { expr } => {
+                format!("(yield{})", expr.map_or(String::new(), |e| format!(" {}", self.expr(e))))
+            }
             Expr::Lambda { params, param_types, ret_type, body, kind } => format!(
                 "({kind:?} ({}){} {})",
                 params
@@ -198,7 +241,9 @@ impl Printer<'_> {
                 ret_type.map_or(String::new(), |t| format!(" -> {}", self.ty(t))),
                 self.expr(*body)
             ),
-            Expr::MacroCall { name } => format!("({}!)", name.as_ref().map_or("?".into(), |n| n.to_string())),
+            Expr::MacroCall { name } => {
+                format!("({}!)", name.as_ref().map_or("?".into(), |n| n.to_string()))
+            }
         }
     }
 
@@ -221,14 +266,22 @@ impl Printer<'_> {
                 }
                 s
             }
-            Pat::Lit { literal, negative } => format!("{}{}", if *negative { "-" } else { "" }, self.lit(literal)),
+            Pat::Lit { literal, negative } => {
+                format!("{}{}", if *negative { "-" } else { "" }, self.lit(literal))
+            }
             Pat::Path(path) => format!("<{}>", self.path(path)),
             Pat::Tuple { args, rest: r } => format!("({})", rest(args, *r)),
-            Pat::TupleStruct { path, args, rest: r } => format!("{}({})", self.path(path), rest(args, *r)),
+            Pat::TupleStruct { path, args, rest: r } => {
+                format!("{}({})", self.path(path), rest(args, *r))
+            }
             Pat::Record { path, fields, rest } => format!(
                 "{} {{ {}{} }}",
                 self.path(path),
-                fields.iter().map(|f| format!("{}: {}", f.name, self.pat(f.pat))).collect::<Vec<_>>().join(", "),
+                fields
+                    .iter()
+                    .map(|f| format!("{}: {}", f.name, self.pat(f.pat)))
+                    .collect::<Vec<_>>()
+                    .join(", "),
                 if *rest { ", .." } else { "" }
             ),
             Pat::Slice { args, rest: r } => format!("[{}]", rest(args, *r)),
@@ -240,7 +293,9 @@ impl Printer<'_> {
             ),
             Pat::Or(pats) => pats.iter().map(|p| self.pat(*p)).collect::<Vec<_>>().join(" | "),
             Pat::ConstBlock(e) => format!("const {}", self.expr(*e)),
-            Pat::MacroCall { name } => format!("({}!)", name.as_ref().map_or("?".into(), |n| n.to_string())),
+            Pat::MacroCall { name } => {
+                format!("({}!)", name.as_ref().map_or("?".into(), |n| n.to_string()))
+            }
         }
     }
 
@@ -276,7 +331,8 @@ impl Printer<'_> {
             TypeRef::Never => "!".into(),
             TypeRef::Fn { params, is_variadic, ret_type, abi, .. } => format!(
                 "{}fn({}{}){}",
-                abi.as_ref().map_or(String::new(), |a| format!("extern {} ", a.as_deref().unwrap_or("_"))),
+                abi.as_ref()
+                    .map_or(String::new(), |a| format!("extern {} ", a.as_deref().unwrap_or("_"))),
                 params
                     .iter()
                     .map(|(n, t)| match n {
@@ -293,12 +349,17 @@ impl Printer<'_> {
                 if generic_params.is_empty() {
                     String::new()
                 } else {
-                    format!(" for[{}]", generic_params.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", "))
+                    format!(
+                        " for[{}]",
+                        generic_params.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ")
+                    )
                 },
                 self.list(bounds, Self::ty)
             ),
             TypeRef::Bounded(ts) => ts.iter().map(|t| self.ty(*t)).collect::<Vec<_>>().join(" + "),
-            TypeRef::MacroCall { name } => format!("({}!)", name.as_ref().map_or("?".into(), |n| n.to_string())),
+            TypeRef::MacroCall { name } => {
+                format!("({}!)", name.as_ref().map_or("?".into(), |n| n.to_string()))
+            }
         }
     }
 }
@@ -318,7 +379,9 @@ fn operators() {
 #[test]
 fn literals() {
     assert_eq!(
-        render(r##"1_000u8; 0xff; 0xf32; 0b101; 1.5e3f64; 2.; 'a'; '\n'; b'x'; "a\tb\u{e9}"; r#"raw\n"#; b"hi"; c"c";"##),
+        render(
+            r##"1_000u8; 0xff; 0xf32; 0b101; 1.5e3f64; 2.; 'a'; '\n'; b'x'; "a\tb\u{e9}"; r#"raw\n"#; b"hi"; c"c";"##
+        ),
         "1000u8;\n255;\n3890;\n5;\n1.5e3f64;\n2.;\nChar('a');\nChar('\\n');\nByte(120);\n\
          String(\"a\\tbé\");\nString(\"raw\\\\n\");\nByteString([104, 105]);\nCString(\"c\");"
     );
@@ -345,7 +408,9 @@ fn postfix_expressions() {
 #[test]
 fn blocks_and_statements() {
     assert_eq!(
-        render("let mut x: i32 = 1;\nlet Some(y) = o else { return; };\n{ f(); g() }\nfn item() {}\nasync { 1 };\n'l: { break 'l 2; };"),
+        render(
+            "let mut x: i32 = 1;\nlet Some(y) = o else { return; };\n{ f(); g() }\nfn item() {}\nasync { 1 };\n'l: { break 'l 2; };"
+        ),
         "(let mut x : i32 = 1)\n\
          (let Some(y) = o else {(return);})\n\
          {(call f ); (call g )}\n\
@@ -389,7 +454,9 @@ fn compound_expressions() {
 #[test]
 fn lambdas_and_macros() {
     assert_eq!(
-        render("|x| x;\n|a, b: i32| -> i32 { a };\nasync || 1;\nfn (x) = x + 1;\nfn (x: i32) -> i32 = x;\nprintln!(\"{}\", x);"),
+        render(
+            "|x| x;\n|a, b: i32| -> i32 { a };\nasync || 1;\nfn (x) = x + 1;\nfn (x: i32) -> i32 = x;\nprintln!(\"{}\", x);"
+        ),
         "(Closure (x) x);\n\
          (Closure (a, b: i32) -> i32 {a});\n\
          (AsyncClosure () 1);\n\
@@ -479,7 +546,11 @@ fn mutability_of_structs() {
 #[test]
 fn source_map_points_back_to_the_syntax() {
     let (store, source_map, _, root) = lower("let x = (a + b) * c;");
-    let bin = root.descendants().filter(|n| n.kind() == boltlang_syntax::SyntaxKind::BIN_EXPR).nth(1).unwrap();
+    let bin = root
+        .descendants()
+        .filter(|n| n.kind() == boltlang_syntax::SyntaxKind::BIN_EXPR)
+        .nth(1)
+        .unwrap();
     assert_eq!(bin.text().to_string(), "a + b");
     let id = source_map.node_expr(&bin).unwrap();
     assert!(matches!(store[id], Expr::Binary { .. }));

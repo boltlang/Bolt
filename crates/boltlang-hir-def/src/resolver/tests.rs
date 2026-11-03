@@ -24,10 +24,15 @@ fn describe_value(db: &dyn Db, value: ValueResolution<'_>) -> String {
     match value {
         ValueResolution::Value(ValueNs::Local(_)) => "local".into(),
         ValueResolution::Value(ValueNs::Function(id)) => match id.item(db).name.as_ref().unwrap() {
-            crate::item_tree::FunctionName::Name(n) | crate::item_tree::FunctionName::Operator(n) => format!("fn {n}"),
+            crate::item_tree::FunctionName::Name(n)
+            | crate::item_tree::FunctionName::Operator(n) => format!("fn {n}"),
         },
-        ValueResolution::Value(ValueNs::Overloaded(set)) => format!("{} overloads", set.functions(db).len()),
-        ValueResolution::Value(ValueNs::Const(id)) => format!("const {}", id.item(db).name.as_ref().unwrap()),
+        ValueResolution::Value(ValueNs::Overloaded(set)) => {
+            format!("{} overloads", set.functions(db).len())
+        }
+        ValueResolution::Value(ValueNs::Const(id)) => {
+            format!("const {}", id.item(db).name.as_ref().unwrap())
+        }
         ValueResolution::Value(ValueNs::Variant(id)) => format!("variant {}", id.name(db)),
         ValueResolution::Value(ValueNs::Builtin(value)) => format!("builtin {value}"),
         ValueResolution::Value(ValueNs::ConstParam { def, index }) => {
@@ -72,10 +77,12 @@ fn setup() -> (TestDb, File) {
 fn types_at_the_top_level() {
     let (db, main) = setup();
     let r = Resolver::for_file(main);
-    let ty = |p: &str| r.resolve_path_in_type_ns(&db, &path(p)).map(|t| match t.unresolved {
-        None => describe_type(&db, t.ty),
-        Some(i) => format!("{} + {i}", describe_type(&db, t.ty)),
-    });
+    let ty = |p: &str| {
+        r.resolve_path_in_type_ns(&db, &path(p)).map(|t| match t.unresolved {
+            None => describe_type(&db, t.ty),
+            Some(i) => format!("{} + {i}", describe_type(&db, t.ty)),
+        })
+    };
     assert_eq!(ty("Option").as_deref(), Some("enum Option"));
     assert_eq!(ty("Option.Some").as_deref(), Some("variant Some"));
     assert_eq!(ty("Option.new").as_deref(), Some("enum Option + 1"));
@@ -135,7 +142,10 @@ fn generic_params_and_locals() {
     assert_eq!(value("a").as_deref(), Some("local"));
     assert_eq!(value("b").as_deref(), Some("local"));
     assert_eq!(value("M").as_deref(), Some("const param M"));
-    assert_eq!(r.resolve_path_in_type_ns(&db, &path("T")).map(|t| describe_type(&db, t.ty)).as_deref(), Some("param T"));
+    assert_eq!(
+        r.resolve_path_in_type_ns(&db, &path("T")).map(|t| describe_type(&db, t.ty)).as_deref(),
+        Some("param T")
+    );
     // `b` isn't in scope at the start of the body.
     let r = Resolver::for_body(&db, def);
     assert!(r.resolve_local_binding(&Name::new("b")).is_none());

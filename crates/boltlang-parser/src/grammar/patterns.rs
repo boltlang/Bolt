@@ -3,22 +3,26 @@
 use boltlang_syntax::{SyntaxKind::*, T};
 
 use crate::{
-    grammar::{LITERAL_FIRST, at_macro_call, macro_call, PATH_SEGMENT_FIRST, delimited, dotted_path, name, name_ref, parse_block_expr},
+    grammar::{
+        LITERAL_FIRST, PATH_SEGMENT_FIRST, at_macro_call, delimited, dotted_path, macro_call, name,
+        name_ref, parse_block_expr,
+    },
     parser::{CompletedMarker, Parser},
     token_set::TokenSet,
 };
 
-pub(crate) const PATTERN_FIRST: TokenSet = LITERAL_FIRST.union(PATH_SEGMENT_FIRST).union(TokenSet::new(&[
-    T![-],
-    T!['('],
-    T!['['],
-    T![_],
-    T![mut],
-    T![..],
-    T![..=],
-    T![|],
-    T![const],
-]));
+pub(crate) const PATTERN_FIRST: TokenSet =
+    LITERAL_FIRST.union(PATH_SEGMENT_FIRST).union(TokenSet::new(&[
+        T![-],
+        T!['('],
+        T!['['],
+        T![_],
+        T![mut],
+        T![..],
+        T![..=],
+        T![|],
+        T![const],
+    ]));
 
 const PATTERN_RECOVERY_SET: TokenSet =
     TokenSet::new(&[T![')'], T![']'], T!['}'], T![,], T![=], T![=>], T![:], T![;], T![if], T![in]]);
@@ -71,7 +75,8 @@ pub(crate) fn pattern_single(p: &mut Parser) -> Option<CompletedMarker> {
 
 /// Whether the token `n` ahead can end a range pattern: a literal or path.
 fn at_range_end(p: &Parser, n: usize) -> bool {
-    p.nth_at_ts(n, LITERAL_FIRST.union(PATH_SEGMENT_FIRST)) || (p.nth_at(n, T![-]) && p.nth_at_ts(n + 1, LITERAL_FIRST))
+    p.nth_at_ts(n, LITERAL_FIRST.union(PATH_SEGMENT_FIRST))
+        || (p.nth_at(n, T![-]) && p.nth_at_ts(n + 1, LITERAL_FIRST))
 }
 
 fn range_end(p: &mut Parser) {
@@ -183,14 +188,26 @@ fn slice_pattern(p: &mut Parser) -> CompletedMarker {
     m.complete(p, SLICE_PATT)
 }
 
-fn pattern_list(p: &mut Parser, bra: boltlang_syntax::SyntaxKind, ket: boltlang_syntax::SyntaxKind) {
-    delimited(p, bra, ket, T![,], || "expected a pattern".into(), PATTERN_FIRST, |p| {
-        if !p.at_ts(PATTERN_FIRST) {
-            return false;
-        }
-        parse_pattern(p);
-        true
-    });
+fn pattern_list(
+    p: &mut Parser,
+    bra: boltlang_syntax::SyntaxKind,
+    ket: boltlang_syntax::SyntaxKind,
+) {
+    delimited(
+        p,
+        bra,
+        ket,
+        T![,],
+        || "expected a pattern".into(),
+        PATTERN_FIRST,
+        |p| {
+            if !p.at_ts(PATTERN_FIRST) {
+                return false;
+            }
+            parse_pattern(p);
+            true
+        },
+    );
 }
 
 /// `{ x, mut y, z: pattern, .. }`

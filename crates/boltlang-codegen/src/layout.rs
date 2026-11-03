@@ -75,7 +75,9 @@ pub(crate) fn element<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Element> {
     let narrow = match Scalar::through(db, ty) {
         Some(Scalar::Bool) => Some(Narrow::U8),
         Some(Scalar::Int { bits: 8, signed }) => Some(if signed { Narrow::S8 } else { Narrow::U8 }),
-        Some(Scalar::Int { bits: 16, signed }) => Some(if signed { Narrow::S16 } else { Narrow::U16 }),
+        Some(Scalar::Int { bits: 16, signed }) => {
+            Some(if signed { Narrow::S16 } else { Narrow::U16 })
+        }
         _ => None,
     };
     let size = match (narrow, val_ty) {
@@ -155,12 +157,19 @@ pub(crate) fn val_ty<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Option<ValTy>
 /// arguments in them.
 pub(crate) fn fields<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Vec<(Name, Ty<'db>)>> {
     match ty {
-        Ty::Tuple(tys) => Some(tys.iter().enumerate().map(|(i, t)| (Name::new(i.to_string()), t.clone())).collect()),
+        Ty::Tuple(tys) => Some(
+            tys.iter().enumerate().map(|(i, t)| (Name::new(i.to_string()), t.clone())).collect(),
+        ),
         Ty::Adt(AdtId::Struct(id), args, mutabilities, own) => {
             let args = struct_args(args, mutabilities, own);
             let def = GenericDefId::Struct(*id);
             let fields = &field_types(db, VariantDef::Struct(*id)).fields;
-            Some(fields.iter().map(|(name, t)| (name.clone(), subst_params(t, def, &args))).collect())
+            Some(
+                fields
+                    .iter()
+                    .map(|(name, t)| (name.clone(), subst_params(t, def, &args)))
+                    .collect(),
+            )
         }
         _ => None,
     }
@@ -174,7 +183,11 @@ pub(crate) fn layout<'db>(db: &'db dyn Db, ty: &Ty<'db>) -> Option<Layout<'db>> 
 
 /// The names and types of the fields of the variant `v` of the enum of
 /// type `ty`, with its type arguments in them.
-pub(crate) fn variant_fields<'db>(db: &'db dyn Db, ty: &Ty<'db>, v: EnumVariantId<'db>) -> Option<Vec<(Name, Ty<'db>)>> {
+pub(crate) fn variant_fields<'db>(
+    db: &'db dyn Db,
+    ty: &Ty<'db>,
+    v: EnumVariantId<'db>,
+) -> Option<Vec<(Name, Ty<'db>)>> {
     let Ty::Adt(AdtId::Enum(id), args, ..) = ty else { return None };
     if *id != v.parent {
         return None;
@@ -186,12 +199,20 @@ pub(crate) fn variant_fields<'db>(db: &'db dyn Db, ty: &Ty<'db>, v: EnumVariantI
 
 /// Where the fields of the variant `v` of an enum with fields of type `ty`
 /// are, after its index.
-pub(crate) fn variant_layout<'db>(db: &'db dyn Db, ty: &Ty<'db>, v: EnumVariantId<'db>) -> Option<Layout<'db>> {
+pub(crate) fn variant_layout<'db>(
+    db: &'db dyn Db,
+    ty: &Ty<'db>,
+    v: EnumVariantId<'db>,
+) -> Option<Layout<'db>> {
     layout_from(db, variant_fields(db, ty, v)?, 4)
 }
 
 /// The layout of `fields`, from the byte `start` on.
-fn layout_from<'db>(db: &'db dyn Db, fields: Vec<(Name, Ty<'db>)>, start: u32) -> Option<Layout<'db>> {
+fn layout_from<'db>(
+    db: &'db dyn Db,
+    fields: Vec<(Name, Ty<'db>)>,
+    start: u32,
+) -> Option<Layout<'db>> {
     let mut slots = Vec::new();
     let mut end: u32 = start;
     for (name, ty) in fields {

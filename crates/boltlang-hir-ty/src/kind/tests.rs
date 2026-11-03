@@ -52,7 +52,10 @@ fn kinds(code: &str) -> Vec<(String, Vec<Kind>)> {
 
 #[test]
 fn parameters_are_types_by_default() {
-    assert_eq!(kinds("struct Pair[A, B] { a: A, b: B }"), vec![("Pair".into(), vec![star(), star()])]);
+    assert_eq!(
+        kinds("struct Pair[A, B] { a: A, b: B }"),
+        vec![("Pair".into(), vec![star(), star()])]
+    );
     assert_eq!(kinds("fn id[T](x: T) -> T = x;"), vec![("id".into(), vec![star()])]);
     // Unused parameters too.
     assert_eq!(kinds("enum Phantom[T] { P }"), vec![("Phantom".into(), vec![star()])]);

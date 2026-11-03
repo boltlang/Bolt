@@ -17,13 +17,16 @@ use std::collections::BTreeMap;
 
 use boltlang_base_db::{Db, File, Settings, SystemPath, SystemPathBuf};
 
-use crate::manifest::{Manifest, PreludeChoice, dependency_dir, is_package_name, manifest, package_manifest, package_root};
+use crate::manifest::{
+    Manifest, PreludeChoice, dependency_dir, is_package_name, manifest, package_manifest,
+    package_root,
+};
 
 use crate::{
     Name,
     ids::{
-        ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId, ItemContainerId, MacroRulesId, ModuleDefId,
-        StructId, TypeAliasId,
+        ClassId, ConstId, EnumId, EnumVariantId, ExternBlockId, FunctionId, ImplId,
+        ItemContainerId, MacroRulesId, ModuleDefId, StructId, TypeAliasId,
     },
     item_tree::{AssocItem, AstId, ImportKind, ItemTree, ModItem, RawVisibility, item_tree},
 };
@@ -92,7 +95,9 @@ impl<'db> ItemScope<'db> {
     /// All names in a namespace, in alphabetical order, with a name once
     /// for each of its overloads.
     pub fn entries(&self, ns: Namespace) -> impl Iterator<Item = (&Name, &ScopeEntry<'db>)> {
-        self.namespace(ns).keys().flat_map(move |name| self.get_all(ns, name).map(move |entry| (name, entry)))
+        self.namespace(ns)
+            .keys()
+            .flat_map(move |name| self.get_all(ns, name).map(move |entry| (name, entry)))
     }
 
     /// The impls in the file. They don't have a name.
@@ -196,9 +201,21 @@ impl<'db> FileScope<'db> {
     }
 
     /// Add an item that's defined in the file.
-    fn define_item(&mut self, ns: Namespace, name: &Option<Name>, def: ModuleDefId<'db>, visibility: RawVisibility, ast_id: AstId) {
+    fn define_item(
+        &mut self,
+        ns: Namespace,
+        name: &Option<Name>,
+        def: ModuleDefId<'db>,
+        visibility: RawVisibility,
+        ast_id: AstId,
+    ) {
         if let Some(name) = name {
-            self.define(ns, name, ScopeEntry { def, visibility, import: None, prelude: false }, ast_id);
+            self.define(
+                ns,
+                name,
+                ScopeEntry { def, visibility, import: None, prelude: false },
+                ast_id,
+            );
         }
     }
 
@@ -217,17 +234,35 @@ impl<'db> FileScope<'db> {
                 let f = &tree.functions[idx.index()];
                 let def = ModuleDefId::Function(FunctionId::new(db, container, idx));
                 let name = f.name.as_ref().map(|name| name.name().clone());
-                self.define_item(Namespace::Values, &name, def, visibility.unwrap_or(f.visibility), f.ast_id);
+                self.define_item(
+                    Namespace::Values,
+                    &name,
+                    def,
+                    visibility.unwrap_or(f.visibility),
+                    f.ast_id,
+                );
             }
             AssocItem::Const(idx) => {
                 let c = &tree.consts[idx.index()];
                 let def = ModuleDefId::Const(ConstId::new(db, container, idx));
-                self.define_item(Namespace::Values, &c.name, def, visibility.unwrap_or(c.visibility), c.ast_id);
+                self.define_item(
+                    Namespace::Values,
+                    &c.name,
+                    def,
+                    visibility.unwrap_or(c.visibility),
+                    c.ast_id,
+                );
             }
             AssocItem::TypeAlias(idx) => {
                 let t = &tree.type_aliases[idx.index()];
                 let def = ModuleDefId::TypeAlias(TypeAliasId::new(db, container, idx));
-                self.define_item(Namespace::Types, &t.name, def, visibility.unwrap_or(t.visibility), t.ast_id);
+                self.define_item(
+                    Namespace::Types,
+                    &t.name,
+                    def,
+                    visibility.unwrap_or(t.visibility),
+                    t.ast_id,
+                );
             }
             AssocItem::MacroCall(_) => {}
         }
@@ -244,10 +279,18 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         match *item {
             // Those of a type are added below, once the types are known.
             // Tests aren't called by name: see `test_functions`.
-            ModItem::Function(idx) if tree.functions[idx.index()].owner.is_some() || tree.functions[idx.index()].is_test => {}
-            ModItem::Function(idx) => out.define_assoc(db, tree, container, AssocItem::Function(idx), None),
-            ModItem::Const(idx) => out.define_assoc(db, tree, container, AssocItem::Const(idx), None),
-            ModItem::TypeAlias(idx) => out.define_assoc(db, tree, container, AssocItem::TypeAlias(idx), None),
+            ModItem::Function(idx)
+                if tree.functions[idx.index()].owner.is_some()
+                    || tree.functions[idx.index()].is_test => {}
+            ModItem::Function(idx) => {
+                out.define_assoc(db, tree, container, AssocItem::Function(idx), None)
+            }
+            ModItem::Const(idx) => {
+                out.define_assoc(db, tree, container, AssocItem::Const(idx), None)
+            }
+            ModItem::TypeAlias(idx) => {
+                out.define_assoc(db, tree, container, AssocItem::TypeAlias(idx), None)
+            }
             ModItem::Struct(idx) => {
                 let s = &tree.structs[idx.index()];
                 let def = ModuleDefId::Struct(StructId::new(db, file, idx));
@@ -261,14 +304,26 @@ pub fn local_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             ModItem::Class(idx) => {
                 let c = &tree.classes[idx.index()];
                 let class = ClassId::new(db, file, idx);
-                out.define_item(Namespace::Types, &c.name, ModuleDefId::Class(class), c.visibility, c.ast_id);
+                out.define_item(
+                    Namespace::Types,
+                    &c.name,
+                    ModuleDefId::Class(class),
+                    c.visibility,
+                    c.ast_id,
+                );
                 // Class methods are called like functions, as in Haskell, and
                 // class constants are used like constants, so they're in the
                 // file's scope, with the class's visibility. Associated types
                 // aren't.
                 for &item in &c.items {
                     if !matches!(item, AssocItem::TypeAlias(_)) {
-                        out.define_assoc(db, tree, ItemContainerId::Class(class), item, Some(c.visibility));
+                        out.define_assoc(
+                            db,
+                            tree,
+                            ItemContainerId::Class(class),
+                            item,
+                            Some(c.visibility),
+                        );
                     }
                 }
             }
@@ -309,7 +364,10 @@ fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut F
             Some(ModuleDefId::Struct(_)) => &[][..],
             Some(ModuleDefId::Enum(id)) => &id.item(db).variants[..],
             _ => {
-                out.diagnostics.push(NameResDiagnostic::UnresolvedOwner { function: f.ast_id, name: owner.clone() });
+                out.diagnostics.push(NameResDiagnostic::UnresolvedOwner {
+                    function: f.ast_id,
+                    name: owner.clone(),
+                });
                 continue;
             }
         };
@@ -323,7 +381,8 @@ fn define_members<'db>(db: &'db dyn Db, file: File, tree: &ItemTree, out: &mut F
         if added {
             members.insert(name.clone(), entry);
         } else {
-            out.diagnostics.push(NameResDiagnostic::Duplicate { name: name.clone(), ast_id: f.ast_id });
+            out.diagnostics
+                .push(NameResDiagnostic::Duplicate { name: name.clone(), ast_id: f.ast_id });
         }
     }
     // Only functions at the top level can be in a type's namespace.
@@ -361,14 +420,25 @@ pub fn test_functions<'db>(db: &'db dyn Db, file: File) -> Vec<FunctionId<'db>> 
 
 /// The function `name` in the namespace of the type `owner`, a struct or
 /// enum defined in `file`, as for `Vec.new`, if it's visible from `from`.
-pub fn type_member<'db>(db: &'db dyn Db, file: File, owner: &Name, name: &Name, from: File) -> Option<ModuleDefId<'db>> {
+pub fn type_member<'db>(
+    db: &'db dyn Db,
+    file: File,
+    owner: &Name,
+    name: &Name,
+    from: File,
+) -> Option<ModuleDefId<'db>> {
     let entry = type_member_entry(db, file, owner, name)?;
     is_visible_from(db, entry.visibility, file, from).then_some(entry.def)
 }
 
 /// The function `name` in the namespace of the type `owner` of `file`,
 /// whether it's visible or not.
-pub fn type_member_entry<'db>(db: &'db dyn Db, file: File, owner: &Name, name: &Name) -> Option<ScopeEntry<'db>> {
+pub fn type_member_entry<'db>(
+    db: &'db dyn Db,
+    file: File,
+    owner: &Name,
+    name: &Name,
+) -> Option<ScopeEntry<'db>> {
     local_scope(db, file).members.get(owner)?.get(name).copied()
 }
 
@@ -386,18 +456,30 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             Ok(target) => target,
             Err(error) => {
                 let path = source.clone();
-                out.diagnostics.push(NameResDiagnostic::UnresolvedImportPath { import: import.ast_id, path, error });
+                out.diagnostics.push(NameResDiagnostic::UnresolvedImportPath {
+                    import: import.ast_id,
+                    path,
+                    error,
+                });
                 continue;
             }
         };
         let exports = &file_scope(db, target).scope;
         let imported = |entry: &ScopeEntry<'db>| {
-            ScopeEntry::imported(entry.def, narrower(import.visibility, entry.visibility), import.ast_id)
+            ScopeEntry::imported(
+                entry.def,
+                narrower(import.visibility, entry.visibility),
+                import.ast_id,
+            )
         };
         match &import.kind {
             ImportKind::Plain => {}
             ImportKind::Alias(alias) => {
-                let entry = ScopeEntry::imported(ModuleDefId::File(target), import.visibility, import.ast_id);
+                let entry = ScopeEntry::imported(
+                    ModuleDefId::File(target),
+                    import.visibility,
+                    import.ast_id,
+                );
                 out.define(Namespace::Types, alias, entry, import.ast_id);
             }
             ImportKind::List(names) => {
@@ -423,7 +505,10 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
                                 name: name.clone(),
                                 package_only: visibility == RawVisibility::Package,
                             },
-                            None => NameResDiagnostic::UnresolvedImportName { import: import.ast_id, name: name.clone() },
+                            None => NameResDiagnostic::UnresolvedImportName {
+                                import: import.ast_id,
+                                name: name.clone(),
+                            },
                         });
                     }
                 }
@@ -439,8 +524,11 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         for ns in Namespace::ALL {
             for (name, entry) in file_scope(db, target).scope.entries(ns) {
                 if is_visible_from(db, entry.visibility, target, file) {
-                    let entry =
-                        ScopeEntry::imported(entry.def, narrower(import.visibility, entry.visibility), import.ast_id);
+                    let entry = ScopeEntry::imported(
+                        entry.def,
+                        narrower(import.visibility, entry.visibility),
+                        import.ast_id,
+                    );
                     out.scope.insert(ns, name.clone(), entry);
                 }
             }
@@ -454,7 +542,12 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
             for ns in Namespace::ALL {
                 for (name, entry) in file_scope(db, source).scope.entries(ns) {
                     if is_visible_from(db, entry.visibility, source, file) {
-                        let entry = ScopeEntry { visibility: RawVisibility::Private, import: None, prelude: true, ..*entry };
+                        let entry = ScopeEntry {
+                            visibility: RawVisibility::Private,
+                            import: None,
+                            prelude: true,
+                            ..*entry
+                        };
                         prelude.insert(ns, name.clone(), entry);
                     }
                 }
@@ -470,7 +563,8 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
     // `import Option.*;` comes after the other imports, so that the enum can
     // be one of the names they bring in, wherever the import is, or one of
     // the prelude.
-    let has_variants = tree.imports.iter().any(|import| matches!(import.kind, ImportKind::Variants(_)));
+    let has_variants =
+        tree.imports.iter().any(|import| matches!(import.kind, ImportKind::Variants(_)));
     // The names an enum can be found by: a copy, since the variants go into
     // the scope while it's looked in. Most files have no such import.
     let enums = has_variants.then(|| {
@@ -490,7 +584,8 @@ pub fn file_scope<'db>(db: &'db dyn Db, file: File) -> FileScope<'db> {
         };
         for (index, name) in id.item(db).variants.iter().enumerate() {
             let variant = EnumVariantId { parent: id, index: index as u32 };
-            let entry = ScopeEntry::imported(ModuleDefId::Variant(variant), visibility, import.ast_id);
+            let entry =
+                ScopeEntry::imported(ModuleDefId::Variant(variant), visibility, import.ast_id);
             // Like a glob import, it doesn't replace names already in scope.
             // A variant is a value, like `None`, and can be the type of a
             // record literal, like `Circle { r: 1 }`.
@@ -609,7 +704,8 @@ fn import_enum<'db>(
     scope: &ItemScope<'db>,
     path: &[Name],
 ) -> Result<(EnumId<'db>, RawVisibility), NameResDiagnostic> {
-    let joined = |count: usize| path[..count].iter().map(Name::as_str).collect::<Vec<_>>().join(".");
+    let joined =
+        |count: usize| path[..count].iter().map(Name::as_str).collect::<Vec<_>>().join(".");
     let (mut scope, mut owner) = (scope, file);
     for (i, name) in path.iter().enumerate() {
         let last = i + 1 == path.len();
@@ -618,7 +714,11 @@ fn import_enum<'db>(
         };
         if owner != file && !is_visible_from(db, entry.visibility, owner, file) {
             let package_only = entry.visibility == RawVisibility::Package;
-            return Err(NameResDiagnostic::PrivateImport { import, name: name.clone(), package_only });
+            return Err(NameResDiagnostic::PrivateImport {
+                import,
+                name: name.clone(),
+                package_only,
+            });
         }
         match entry.def {
             ModuleDefId::File(next) if !last => {
@@ -628,7 +728,12 @@ fn import_enum<'db>(
             ModuleDefId::Enum(id) if last => return Ok((id, entry.visibility)),
             _ if last => return Err(NameResDiagnostic::NotAnEnum { import, path: joined(i + 1) }),
             // Only files can be in the middle of the path.
-            _ => return Err(NameResDiagnostic::UnresolvedImportEnum { import, path: joined(i + 2) }),
+            _ => {
+                return Err(NameResDiagnostic::UnresolvedImportEnum {
+                    import,
+                    path: joined(i + 2),
+                });
+            }
         }
     }
     // An empty path, after a syntax error.
@@ -677,14 +782,21 @@ pub enum ImportPathError {
 /// ([`Files::resolve`](boltlang_base_db::Files::resolve)).
 /// Salsa doesn't track symbolic links, so changing where one points takes
 /// effect when the server starts again.
-pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<File, ImportPathError> {
+pub fn resolve_import_path(
+    db: &dyn Db,
+    importer: File,
+    source: &str,
+) -> Result<File, ImportPathError> {
     let dir = importer
         .path(db)
         .as_system_path_buf()
         .and_then(|p| p.as_std_path().parent())
         .ok_or(ImportPathError::FileNotFound)?;
     if source.starts_with("./") || source.starts_with("../") {
-        let path = SystemPath::absolute(SystemPath::new(&with_extension(dir.join(source))), SystemPath::new("/"));
+        let path = SystemPath::absolute(
+            SystemPath::new(&with_extension(dir.join(source))),
+            SystemPath::new("/"),
+        );
         let file = db.files().resolve(db, &path);
         return if file.exists(db) { Ok(file) } else { Err(ImportPathError::FileNotFound) };
     }
@@ -699,25 +811,36 @@ pub fn resolve_import_path(db: &dyn Db, importer: File, source: &str) -> Result<
     if file.exists(db) {
         Ok(file)
     } else {
-        Err(ImportPathError::NotInPackage { package: package.to_string(), path: path.to_string_lossy().into_owned() })
+        Err(ImportPathError::NotInPackage {
+            package: package.to_string(),
+            path: path.to_string_lossy().into_owned(),
+        })
     }
 }
 
 /// The directory of the package that `importer` calls `package`: `std`, or a
 /// dependency of its package.
-fn package_dir(db: &dyn Db, importer: File, package: &str) -> Result<SystemPathBuf, ImportPathError> {
+fn package_dir(
+    db: &dyn Db,
+    importer: File,
+    package: &str,
+) -> Result<SystemPathBuf, ImportPathError> {
     if package == STD {
         return Settings::get(db).std_dir(db).clone().ok_or(ImportPathError::NoStd);
     }
     let Some(manifest_file) = package_manifest(db, importer) else {
         return Err(ImportPathError::NoManifest { package: package.to_string() });
     };
-    let Ok(manifest) = manifest(db, manifest_file) else { return Err(ImportPathError::BadManifest) };
+    let Ok(manifest) = manifest(db, manifest_file) else {
+        return Err(ImportPathError::BadManifest);
+    };
     let Some(written) = manifest.dependency(package) else {
         return Err(ImportPathError::NotADependency { package: package.to_string() });
     };
-    dependency_dir(db, manifest_file, written)
-        .ok_or_else(|| ImportPathError::DependencyNotFound { package: package.to_string(), path: written.to_string() })
+    dependency_dir(db, manifest_file, written).ok_or_else(|| ImportPathError::DependencyNotFound {
+        package: package.to_string(),
+        path: written.to_string(),
+    })
 }
 
 /// The path of the file an import names: `.bolt` is added, unless it's
@@ -730,7 +853,6 @@ fn with_extension(path: std::path::PathBuf) -> std::path::PathBuf {
     path.push(".bolt");
     path.into()
 }
-
 
 #[cfg(test)]
 mod tests;

@@ -6,12 +6,14 @@ use std::sync::Arc;
 use filetime::FileTime;
 
 use crate::vfs::FileType;
-use crate::{system::{common::Result, System, SystemPath, SystemPathBuf, SystemVirtualPath}, vfs::Metadata};
+use crate::{
+    system::{System, SystemPath, SystemPathBuf, SystemVirtualPath, common::Result},
+    vfs::Metadata,
+};
 
 fn file_not_found() -> std::io::Error {
     std::io::Error::new(std::io::ErrorKind::NotFound, "file not found")
 }
-
 
 #[derive(Clone)]
 pub struct OsSystem {
@@ -27,21 +29,14 @@ fn other_error<E: std::fmt::Display>(error: E) -> std::io::Error {
 }
 
 impl OsSystem {
-
     pub fn new(cwd: impl AsRef<SystemPath>) -> Self {
         let cwd = cwd.as_ref();
         assert!(cwd.is_absolute());
-        Self {
-            inner: Arc::new(OsSystemInner {
-                cwd: cwd.to_system_path_buf(),
-            })
-        }
+        Self { inner: Arc::new(OsSystemInner { cwd: cwd.to_system_path_buf() }) }
     }
-
 }
 
 impl System for OsSystem {
-
     fn read_to_string(&self, path: &SystemPath) -> Result<String> {
         std::fs::read_to_string(path.as_std_path())
     }
@@ -68,7 +63,6 @@ impl System for OsSystem {
     }
 
     fn path_metadata(&self, path: &SystemPath) -> Result<Metadata> {
-
         let metadata = std::fs::metadata(path.as_std_path())?;
 
         let file_type = if metadata.file_type().is_dir() {
@@ -88,11 +82,14 @@ impl System for OsSystem {
         };
         #[cfg(not(unix))]
         let permissions = None;
-        Ok(Metadata::new(FileTime::from_last_modification_time(&metadata).into(), permissions, file_type))
+        Ok(Metadata::new(
+            FileTime::from_last_modification_time(&metadata).into(),
+            permissions,
+            file_type,
+        ))
     }
 
     fn virtual_path_metadata(&self, _path: &SystemVirtualPath) -> Result<Metadata> {
         Err(file_not_found())
     }
-
 }

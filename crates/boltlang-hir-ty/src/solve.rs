@@ -17,8 +17,9 @@ use boltlang_hir_def::{
 use crate::{
     holds::{enum_thawable, struct_atoms_of, struct_thawable},
     lower::{
-        ClassConstraint, VariantDef, enum_field_types, field_types, generic_predicates, impl_assoc_ty, impl_header, struct_args,
-        implied_by, implied_equalities, subst_params, with_superclasses,
+        ClassConstraint, VariantDef, enum_field_types, field_types, generic_predicates,
+        impl_assoc_ty, impl_header, implied_by, implied_equalities, struct_args, subst_params,
+        with_superclasses,
     },
     ty::{AdtId, GenericParamId, Mutability, Ty, TyVar, VarKind},
     unify::{Unifier, UnifyError},
@@ -94,7 +95,12 @@ pub struct FieldConstraint<'db> {
 
 impl<'db> FieldConstraint<'db> {
     pub fn map(&self, mut f: impl FnMut(&Ty<'db>) -> Ty<'db>) -> Self {
-        FieldConstraint { ty: f(&self.ty), name: self.name.clone(), field: f(&self.field), assign: self.assign }
+        FieldConstraint {
+            ty: f(&self.ty),
+            name: self.name.clone(),
+            field: f(&self.field),
+            assign: self.assign,
+        }
     }
 }
 
@@ -252,29 +258,62 @@ pub enum Constraint<'db> {
 /// A type error. Its types are resolved as far as inference got.
 #[derive(Debug, Clone, PartialEq, Eq, salsa::SalsaValue)]
 pub enum TypeError<'db> {
-    Mismatch { origin: Origin<'db>, expected: Ty<'db>, actual: Ty<'db> },
-    InfiniteType { origin: Origin<'db>, ty: Ty<'db> },
+    Mismatch {
+        origin: Origin<'db>,
+        expected: Ty<'db>,
+        actual: Ty<'db>,
+    },
+    InfiniteType {
+        origin: Origin<'db>,
+        ty: Ty<'db>,
+    },
     /// No impl or `where` clause provides the instance.
-    NoInstance { origin: Origin<'db>, constraint: ClassConstraint<'db> },
+    NoInstance {
+        origin: Origin<'db>,
+        constraint: ClassConstraint<'db>,
+    },
     /// The types weren't known well enough to choose an instance.
-    Ambiguous { origin: Origin<'db>, constraint: ClassConstraint<'db> },
+    Ambiguous {
+        origin: Origin<'db>,
+        constraint: ClassConstraint<'db>,
+    },
     /// Something isn't at most a mutability that it must be, like a `mut`
     /// array given to a function that needs `a ⊑ imm`, or a value of a
     /// type parameter put in an `imm` array, which an assumption could
     /// allow but a complete signature can't state yet.
-    NotAtMost { origin: Origin<'db>, constraint: AtMostConstraint<'db> },
+    NotAtMost {
+        origin: Origin<'db>,
+        constraint: AtMostConstraint<'db>,
+    },
     /// The type has no field with this name.
-    NoSuchField { origin: Origin<'db>, ty: Ty<'db>, name: Name },
+    NoSuchField {
+        origin: Origin<'db>,
+        ty: Ty<'db>,
+        name: Name,
+    },
     /// The type of a value whose field is used was never found.
-    TypeNeeded { origin: Origin<'db> },
+    TypeNeeded {
+        origin: Origin<'db>,
+    },
     /// An element of an array, or a field of a struct, of type `ty` is
     /// assigned to, but `ty` isn't `mut`.
-    CannotChange { origin: Origin<'db>, ty: Ty<'db> },
+    CannotChange {
+        origin: Origin<'db>,
+        ty: Ty<'db>,
+    },
     /// None of the functions with a name fits its use, of type `ty` (#275).
-    NoOverload { origin: Origin<'db>, ty: Ty<'db>, candidates: Vec<FunctionId<'db>> },
+    NoOverload {
+        origin: Origin<'db>,
+        ty: Ty<'db>,
+        candidates: Vec<FunctionId<'db>>,
+    },
     /// More than one of the functions with a name still fits its use when
     /// the body is done.
-    AmbiguousOverload { origin: Origin<'db>, ty: Ty<'db>, candidates: Vec<FunctionId<'db>> },
+    AmbiguousOverload {
+        origin: Origin<'db>,
+        ty: Ty<'db>,
+        candidates: Vec<FunctionId<'db>>,
+    },
 }
 
 impl<'db> TypeError<'db> {
@@ -426,7 +465,9 @@ impl<'db> Solver<'db> {
         let resolve = |t: &Ty<'db>| self.unifier.shallow_resolve(t);
         let bound = resolve(bound);
         let below = |x: &Ty<'db>| {
-            *x == bound || matches!(x, Ty::Mutability(Mutability::Imm)) || matches!(bound, Ty::Mutability(Mutability::Mut))
+            *x == bound
+                || matches!(x, Ty::Mutability(Mutability::Imm))
+                || matches!(bound, Ty::Mutability(Mutability::Mut))
         };
         // What `m` is at most, through the assumptions so far.
         let mut seen = vec![resolve(m), Ty::Mutability(Mutability::Mut)];
@@ -454,7 +495,9 @@ impl<'db> Solver<'db> {
     /// `'v: imm`, that `pred` holds for.
     fn assumes_mutability(&self, mut pred: impl FnMut(&Ty<'db>, &Ty<'db>) -> bool) -> bool {
         self.at_most_assumptions.iter().any(|a| match &a.held {
-            Held::Mutability(h) => pred(&self.unifier.shallow_resolve(h), &self.unifier.shallow_resolve(&a.bound)),
+            Held::Mutability(h) => {
+                pred(&self.unifier.shallow_resolve(h), &self.unifier.shallow_resolve(&a.bound))
+            }
             Held::Type(_) => false,
         })
     }
@@ -462,9 +505,9 @@ impl<'db> Solver<'db> {
     /// Whether the type parameter or associated type `t` is at most `bound`
     /// by an assumption.
     fn type_assumed(&self, t: &Ty<'db>, bound: &Ty<'db>) -> bool {
-        self.at_most_assumptions
-            .iter()
-            .any(|a| matches!(&a.held, Held::Type(h) if h == t) && self.mutability_le(&a.bound, bound))
+        self.at_most_assumptions.iter().any(|a| {
+            matches!(&a.held, Held::Type(h) if h == t) && self.mutability_le(&a.bound, bound)
+        })
     }
 
     pub fn add(&mut self, constraint: Constraint<'db>) {
@@ -548,7 +591,11 @@ impl<'db> Solver<'db> {
             },
             Ty::Adt(AdtId::Struct(s), args, mutabilities, m) => {
                 // An `imm struct` is never `mut`, so there's nothing to copy.
-                let copies = if s.item(self.db).is_imm { Some(false) } else { says_mut(self, m).map(|is| !is) };
+                let copies = if s.item(self.db).is_imm {
+                    Some(false)
+                } else {
+                    says_mut(self, m).map(|is| !is)
+                };
                 match copies {
                     None => return false,
                     Some(false) => self.equal(&c.to, &from, origin),
@@ -561,10 +608,15 @@ impl<'db> Solver<'db> {
             }
             Ty::Adt(AdtId::Enum(e), args, ..) => {
                 let args_to = self.mut_args(args, enum_thawable(self.db, *e), origin);
-                self.equal(&c.to, &Ty::adt(AdtId::Enum(*e), args_to, [], Ty::Mutability(Mutability::Imm)), origin);
+                self.equal(
+                    &c.to,
+                    &Ty::adt(AdtId::Enum(*e), args_to, [], Ty::Mutability(Mutability::Imm)),
+                    origin,
+                );
             }
             Ty::Tuple(tys) => {
-                let tos: Vec<Ty<'db>> = tys.iter().map(|_| self.new_var(VarKind::General)).collect();
+                let tos: Vec<Ty<'db>> =
+                    tys.iter().map(|_| self.new_var(VarKind::General)).collect();
                 self.equal(&c.to, &Ty::Tuple(tos.clone().into()), origin);
                 for (from, to) in tys.iter().zip(tos) {
                     sub(self, from.clone(), to);
@@ -591,7 +643,12 @@ impl<'db> Solver<'db> {
     /// The type arguments of a struct or enum that `mut e` copies: those
     /// that `thawable` says only it holds are made `mut` the same way, and
     /// the others stay as they are.
-    fn mut_args(&mut self, args: &[Ty<'db>], thawable: &[bool], origin: Origin<'db>) -> Vec<Ty<'db>> {
+    fn mut_args(
+        &mut self,
+        args: &[Ty<'db>],
+        thawable: &[bool],
+        origin: Origin<'db>,
+    ) -> Vec<Ty<'db>> {
         args.iter()
             .enumerate()
             .map(|(i, arg)| {
@@ -789,7 +846,12 @@ impl<'db> Solver<'db> {
     /// the mutabilities it holds: an array or struct is at most the bound,
     /// and what it holds at most its own mutability. Returns whether the
     /// constraint is solved, possibly by adding simpler ones.
-    fn solve_at_most(&mut self, c: &AtMostConstraint<'db>, source: &AtMostSource<'db>, origin: Origin<'db>) -> bool {
+    fn solve_at_most(
+        &mut self,
+        c: &AtMostConstraint<'db>,
+        source: &AtMostSource<'db>,
+        origin: Origin<'db>,
+    ) -> bool {
         let bound = self.unifier.shallow_resolve(&c.bound);
         if matches!(bound, Ty::Mutability(Mutability::Mut) | Ty::Error | Ty::Never) {
             return true;
@@ -850,7 +912,9 @@ impl<'db> Solver<'db> {
                 // bound could be that one, and is decided later
                 // (`Le.eq_mutable` in `lean/BoltMut/Solver.lean`).
                 (Ty::Mutability(Mutability::Mut), Ty::Var(_)) => {
-                    if self.assumes_mutability(|h, _| matches!(h, Ty::Mutability(Mutability::Mut) | Ty::Var(_))) {
+                    if self.assumes_mutability(|h, _| {
+                        matches!(h, Ty::Mutability(Mutability::Mut) | Ty::Var(_))
+                    }) {
                         return false;
                     }
                     self.equal(&bound, &Ty::Mutability(Mutability::Mut), origin);
@@ -860,7 +924,9 @@ impl<'db> Solver<'db> {
                 // mutability is, like the `'v` of `where 'v: imm`: then `m`
                 // could be that one, and is decided later (`Le.eq_immutable`).
                 (m @ Ty::Var(_), Ty::Mutability(Mutability::Imm)) => {
-                    if self.assumes_mutability(|_, b| matches!(b, Ty::Mutability(Mutability::Imm) | Ty::Var(_))) {
+                    if self.assumes_mutability(|_, b| {
+                        matches!(b, Ty::Mutability(Mutability::Imm) | Ty::Var(_))
+                    }) {
                         return false;
                     }
                     self.equal(&m, &Ty::Mutability(Mutability::Imm), origin);
@@ -868,7 +934,9 @@ impl<'db> Solver<'db> {
                 }
                 // Something `mut` below a bound that isn't, unless an
                 // assumption like `mut: 'v` says it is.
-                (Ty::Mutability(Mutability::Mut), bound) if !self.mutability_le(&Ty::Mutability(Mutability::Mut), bound) => {
+                (Ty::Mutability(Mutability::Mut), bound)
+                    if !self.mutability_le(&Ty::Mutability(Mutability::Mut), bound) =>
+                {
                     self.at_most_broken(source, origin);
                     true
                 }
@@ -882,8 +950,11 @@ impl<'db> Solver<'db> {
         match source {
             AtMostSource::Object(_) => {}
             AtMostSource::Closure(closure) => {
-                let Ty::Fn(params, ret, _) = closure else { unreachable!("a closure has a function type") };
-                let mutable = Ty::Fn(params.clone(), ret.clone(), Box::new(Ty::Mutability(Mutability::Mut)));
+                let Ty::Fn(params, ret, _) = closure else {
+                    unreachable!("a closure has a function type")
+                };
+                let mutable =
+                    Ty::Fn(params.clone(), ret.clone(), Box::new(Ty::Mutability(Mutability::Mut)));
                 let error = TypeError::Mismatch {
                     origin,
                     expected: self.unifier.resolve(closure),
@@ -894,7 +965,10 @@ impl<'db> Solver<'db> {
                 }
             }
             AtMostSource::Needed(needed) => {
-                let error = TypeError::NotAtMost { origin, constraint: needed.map(|t| self.unifier.resolve(t)) };
+                let error = TypeError::NotAtMost {
+                    origin,
+                    constraint: needed.map(|t| self.unifier.resolve(t)),
+                };
                 if !self.errors.contains(&error) {
                     self.errors.push(error);
                 }
@@ -924,7 +998,9 @@ impl<'db> Solver<'db> {
                     self.pending_at_most.push((constraint, source, origin));
                 } else {
                     let needed = match &source {
-                        AtMostSource::Needed(needed) | AtMostSource::Object(needed) => needed.clone(),
+                        AtMostSource::Needed(needed) | AtMostSource::Object(needed) => {
+                            needed.clone()
+                        }
                         AtMostSource::Closure(_) => resolved.clone(),
                     };
                     self.at_most_broken(&AtMostSource::Needed(needed), origin);
@@ -999,8 +1075,11 @@ impl<'db> Solver<'db> {
             return true;
         }
         // `I.Item` with `I: Iterator[Item = T]` is `T`.
-        if let Some(assumed) =
-            self.assoc_assumptions.iter().find(|a| a.alias == constraint.alias && *a.args == *goal.args).cloned()
+        if let Some(assumed) = self
+            .assoc_assumptions
+            .iter()
+            .find(|a| a.alias == constraint.alias && *a.args == *goal.args)
+            .cloned()
         {
             let ty = self.flatten_assoc(&assumed.ty, origin);
             self.equal(&constraint.ty, &ty, origin);
@@ -1039,7 +1118,9 @@ impl<'db> Solver<'db> {
             },
             None if goal.args.iter().any(has_vars) => return false,
             // `C.Item` for a parameter `C` with `where Index[C]`.
-            None if self.assumptions.contains(&goal) => Ty::Assoc(constraint.alias, goal.args.clone()),
+            None if self.assumptions.contains(&goal) => {
+                Ty::Assoc(constraint.alias, goal.args.clone())
+            }
             None => {
                 let error = TypeError::NoInstance { origin, constraint: goal };
                 if !self.errors.contains(&error) {
@@ -1105,16 +1186,24 @@ impl<'db> Solver<'db> {
                 }
                 let fields = field_types(self.db, VariantDef::Struct(*s));
                 let args = struct_args(args, mutabilities, mutability);
-                fields.field(&constraint.name).map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))
+                fields
+                    .field(&constraint.name)
+                    .map(|(_, t)| subst_params(t, GenericDefId::Struct(*s), &args))
             }
-            Ty::Tuple(tys) => constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned()),
+            Ty::Tuple(tys) => {
+                constraint.name.as_str().parse::<usize>().ok().and_then(|i| tys.get(i).cloned())
+            }
             _ => None,
         };
         match field {
             Some(declared) => self.equal(&declared, &constraint.field, origin),
             None => {
                 let ty = self.unifier.resolve(&ty);
-                self.errors.push(TypeError::NoSuchField { origin, ty, name: constraint.name.clone() });
+                self.errors.push(TypeError::NoSuchField {
+                    origin,
+                    ty,
+                    name: constraint.name.clone(),
+                });
                 self.unifier.set_error(&constraint.field);
             }
         }
@@ -1160,7 +1249,9 @@ impl<'db> Solver<'db> {
     /// unifier, so that nothing is decided. Returns the uses with one
     /// candidate left, with it, for the caller to instantiate; those with
     /// none left are errors, and the others wait.
-    pub fn narrow_overloads(&mut self) -> Vec<(OverloadConstraint<'db>, Origin<'db>, FunctionId<'db>)> {
+    pub fn narrow_overloads(
+        &mut self,
+    ) -> Vec<(OverloadConstraint<'db>, Origin<'db>, FunctionId<'db>)> {
         let mut ready = Vec::new();
         for (mut c, origin) in std::mem::take(&mut self.pending_overloads) {
             c.candidates.retain(|(_, probe)| self.fits(probe, &c.ty));
@@ -1194,7 +1285,8 @@ impl<'db> Solver<'db> {
     fn best_overload(&self, c: &OverloadConstraint<'db>) -> Option<FunctionId<'db>> {
         let Ty::Fn(params, _, _) = self.unifier.shallow_resolve(&c.ty) else { return None };
         // The error type fits anything.
-        let loose = |t: &Ty<'db>| t.fold(&mut |t| matches!(t, Ty::Mutability(_)).then_some(Ty::Error));
+        let loose =
+            |t: &Ty<'db>| t.fold(&mut |t| matches!(t, Ty::Mutability(_)).then_some(Ty::Error));
         let scores: Vec<(FunctionId<'db>, (usize, usize))> = c
             .all
             .iter()
@@ -1202,7 +1294,9 @@ impl<'db> Solver<'db> {
                 Ty::Fn(own, _, _) if own.len() == params.len() => {
                     let pairs = || own.iter().zip(params.iter());
                     let strict = pairs().filter(|(a, b)| self.fits(a, b)).count();
-                    let loose = pairs().filter(|(a, b)| self.fits(&loose(a), &loose(&self.unifier.resolve(b)))).count();
+                    let loose = pairs()
+                        .filter(|(a, b)| self.fits(&loose(a), &loose(&self.unifier.resolve(b))))
+                        .count();
                     Some((*f, (strict, loose)))
                 }
                 _ => None,
@@ -1305,9 +1399,13 @@ impl<'db> Solver<'db> {
                         }
                         // What the impl says its associated types are.
                         for c in equalities {
-                            let args = c.args.iter().map(|t| self.flatten_assoc(t, origin)).collect();
+                            let args =
+                                c.args.iter().map(|t| self.flatten_assoc(t, origin)).collect();
                             let ty = self.flatten_assoc(&c.ty, origin);
-                            self.add(Constraint::Assoc { constraint: AssocConstraint { alias: c.alias, args, ty }, origin });
+                            self.add(Constraint::Assoc {
+                                constraint: AssocConstraint { alias: c.alias, args, ty },
+                                origin,
+                            });
                         }
                     }
                     Step::NoInstance => {
@@ -1416,7 +1514,9 @@ impl<'db> Solver<'db> {
                 let def = GenericDefId::Impl(imp);
                 let instantiate = |t: &Ty<'db>| {
                     t.fold(&mut |t| match t {
-                        Ty::Param(p) if p.def == def => Some(subst.get(p).cloned().unwrap_or(Ty::Error)),
+                        Ty::Param(p) if p.def == def => {
+                            Some(subst.get(p).cloned().unwrap_or(Ty::Error))
+                        }
                         _ => None,
                     })
                 };
@@ -1444,7 +1544,12 @@ enum Step<'db> {
     /// Solved, if these hold too, with the impl that was used, if any.
     /// What the impl's `where` clauses say its associated types are, like
     /// the `Item = T` of `where Iterator[I, Item = T]`, must hold too.
-    Solved(Vec<ClassConstraint<'db>>, Vec<AtMostConstraint<'db>>, Vec<AssocConstraint<'db>>, Option<ImplId<'db>>),
+    Solved(
+        Vec<ClassConstraint<'db>>,
+        Vec<AtMostConstraint<'db>>,
+        Vec<AssocConstraint<'db>>,
+        Option<ImplId<'db>>,
+    ),
     NoInstance,
     /// The types aren't known well enough yet.
     Wait,
@@ -1494,7 +1599,11 @@ pub(crate) fn match_all<'db>(
     patterns.iter().zip(tys).fold(Match::Yes, |result, (p, t)| result.and(|| match_ty(p, t, subst)))
 }
 
-fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
+fn match_ty<'db>(
+    pattern: &Ty<'db>,
+    ty: &Ty<'db>,
+    subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>,
+) -> Match {
     match (pattern, ty) {
         (Ty::Param(p), _) if matches!(p.def, GenericDefId::Impl(_)) => match subst.get(p) {
             Some(bound) if bound == ty => Match::Yes,
@@ -1515,7 +1624,9 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
         (Ty::Adt(a, xs, ms, m), Ty::Adt(b, ys, ns, n)) if a == b && xs.len() == ys.len() => {
             match_all(xs, ys, subst).and(|| match_all(ms, ns, subst)).and(|| match_ty(m, n, subst))
         }
-        (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => match_app(pattern, ty, subst),
+        (Ty::App(..), Ty::Adt(..) | Ty::App(..)) | (Ty::Adt(..), Ty::App(..)) => {
+            match_app(pattern, ty, subst)
+        }
         (Ty::Tuple(xs), Ty::Tuple(ys)) => match_all(xs, ys, subst),
         (Ty::Array(m, x), Ty::Array(n, y)) => match_ty(x, y, subst).and(|| match_ty(m, n, subst)),
         (Ty::Fn(xs, x, m), Ty::Fn(ys, y, n)) => {
@@ -1529,10 +1640,16 @@ fn match_ty<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPar
 /// Match two applications by their last arguments, and their heads with
 /// the arguments before them, as in unification: the pattern `F[A]` matches
 /// `Either[String, i32]` with `F` the constructor `Either[String]`.
-fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>) -> Match {
+fn match_app<'db>(
+    pattern: &Ty<'db>,
+    ty: &Ty<'db>,
+    subst: &mut HashMap<GenericParamId<'db>, Ty<'db>>,
+) -> Match {
     let split = |t: &Ty<'db>| -> (Ty<'db>, Vec<Ty<'db>>) {
         match t {
-            Ty::Adt(id, args, ms, m) => (Ty::Adt(*id, Box::new([]), ms.clone(), m.clone()), args.to_vec()),
+            Ty::Adt(id, args, ms, m) => {
+                (Ty::Adt(*id, Box::new([]), ms.clone(), m.clone()), args.to_vec())
+            }
             Ty::App(head, args) => ((**head).clone(), args.to_vec()),
             t => (t.clone(), Vec::new()),
         }
@@ -1542,7 +1659,8 @@ fn match_app<'db>(pattern: &Ty<'db>, ty: &Ty<'db>, subst: &mut HashMap<GenericPa
     let n = p_args.len().min(t_args.len());
     let p_rest = Ty::app(p_head, p_args[..p_args.len() - n].to_vec());
     let t_rest = Ty::app(t_head, t_args[..t_args.len() - n].to_vec());
-    match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst).and(|| match_ty(&p_rest, &t_rest, subst))
+    match_all(&p_args[p_args.len() - n..], &t_args[t_args.len() - n..], subst)
+        .and(|| match_ty(&p_rest, &t_rest, subst))
 }
 
 /// The impls code in `file` can use: those of the file, of its prelude,
@@ -1582,7 +1700,9 @@ pub fn normalize_assoc<'db>(db: &'db dyn Db, file: File, ty: &Ty<'db>) -> Ty<'db
         let Some((imp, subst)) = found else { return Some(Ty::Assoc(*alias, args)) };
         let ty = impl_assoc_ty(db, imp, *alias)?;
         let ty = ty.fold(&mut |t| match t {
-            Ty::Param(p) if p.def == GenericDefId::Impl(imp) => Some(subst.get(p).cloned().unwrap_or(Ty::Error)),
+            Ty::Param(p) if p.def == GenericDefId::Impl(imp) => {
+                Some(subst.get(p).cloned().unwrap_or(Ty::Error))
+            }
             _ => None,
         });
         // It can have associated types of its own.
@@ -1605,12 +1725,17 @@ pub fn prune_implied_errors<'db>(db: &'db dyn Db, errors: &mut Vec<TypeError<'db
         let TypeError::NoInstance { origin, constraint } = e else { return true };
         let same_place = |o: &Origin<'db>| o.body == origin.body && o.node == origin.node;
         let implied = missing.iter().any(|(o, other)| {
-            same_place(o) && other != constraint && with_superclasses(db, vec![other.clone()]).contains(constraint)
+            same_place(o)
+                && other != constraint
+                && with_superclasses(db, vec![other.clone()]).contains(constraint)
         });
         // The same one twice, like from a class constraint and from an
         // associated type of the class: the one that says why is kept.
         let better = missing.iter().any(|(o, other)| {
-            same_place(o) && other == constraint && o.reason != Reason::None && origin.reason == Reason::None
+            same_place(o)
+                && other == constraint
+                && o.reason != Reason::None
+                && origin.reason == Reason::None
         });
         let again = kept.iter().any(|(o, other)| same_place(o) && other == constraint);
         if implied || better || again {
