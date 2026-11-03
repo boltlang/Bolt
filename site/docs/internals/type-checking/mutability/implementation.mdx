@@ -95,7 +95,8 @@ description: Where the rules of mutability are in the checker, the tests and the
   solved (`Solver::settle_imm`) stays as it is, and must be at most `imm`.
   The evaluator copies with `Value::freeze`; the IR has `Rvalue::Imm`.
   Leaving the copy out is for the region and uniqueness analyses, an
-  optimization step in `boltlang-mir` that doesn't exist yet.
+  optimization step in `boltlang-mir` that doesn't exist yet. What they
+  must show is proven in Lean (below).
 - **`mut e`** (`infer.rs`, `solve.rs`): `mut` before an array, a struct
   literal or a call of a tuple struct's constructor (`constructs_struct`)
   makes that literal `mut`, and is kept in `InferenceResult::mut_literals`.
@@ -132,7 +133,14 @@ description: Where the rules of mutability are in the checker, the tests and the
   the way down can reach (`Frame.lean`), which the reactive design needs.
   And an `imm` value can be copied, or two equal ones shared, without
   changing what a program computes (`Sharing.lean`), so the code
-  generator may store them however it likes.
+  generator may store them however it likes. `imm e` is a copy of what's
+  `mut` in its value, which shares what's `imm`, as `Value::freeze` does
+  (`Freeze` in `Semantics.lean`), and it gets the type `solve_imm` gives
+  it (`ImmTy`). Leaving the copy out, by making the value's region `imm`
+  where it is, can't be noticed when nothing outside the region has its
+  objects (`region_freeze_step` in `Unique.lean`). A local check of the
+  program gives that for one object whose contents are `imm` already
+  (`UniqueCheck.lean`).
   It includes the
   "at most" assumptions that #243 proposes, like `T: imm`, and proves the
   solver's shortcuts for them (`Solver.lean`): how it splits a type, when

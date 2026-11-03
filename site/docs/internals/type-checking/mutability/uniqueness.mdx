@@ -13,6 +13,12 @@ in `boltlang-mir`, on the IR after type checking, like the
 [region](./regions.mdx) analysis. Both are about mutability: they find
 when the copy that `imm e` makes can be left out. Nothing on this page is
 written in a program, and it never changes which programs type-check.
+
+The [Lean proof](https://github.com/boltlang/Bolt/tree/main/lean) checks a
+local version of this: a `mut` object a `let` makes, that the code only
+reads, writes and gives to functions that borrow it before making it
+`imm` last, can be made `imm` where it is (`UniqueCheck.lean`). For now,
+that's for an object whose contents are `imm` already.
 :::
 
 ## The copies

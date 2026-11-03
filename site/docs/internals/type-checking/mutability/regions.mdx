@@ -19,10 +19,18 @@ nothing outside the block that made the value can reach it, or because it
 has one name. Neither changes which programs type-check. Nothing of it is
 implemented yet.
 
-The rules and the Lean proof below are what the region analysis relies
-on: `program_blocks_freeze_in_place` says when the copy can be left out.
-On the IR, a closure lists what it captures, so the analysis can follow
-what a closure holds rather than going by its type, as rule 5 does.
+What the analysis must establish is proven in the
+[Lean proof](https://github.com/boltlang/Bolt/tree/main/lean)
+([#335](https://github.com/boltlang/Bolt/issues/335)). The *region* of a
+value `v` is the `mut` objects it reaches, following the arrays and
+structs it holds but not what closures captured, and `imm v` copies
+exactly those (`Freeze.keys` in `Region.lean`). When the program has the
+region's objects only inside `v`, and no object outside the region holds
+one, making the region `imm` where it is can't be told apart from copying
+it (`region_freeze_step` in `Unique.lean`). The rest of this page is the
+earlier design, with regions in the types. On the IR, a closure lists what
+it captures, so the analysis can follow what a closure holds rather than
+going by its type, as rule 5 does.
 :::
 
 ## Making a value that can't be changed from one that can
@@ -312,22 +320,12 @@ writes one that rule 2 found.
   `imm` value that holds it. Copying the value when the block ends, as
   the proof does, is always right; changing the tag instead is the
   optimization below.
-- **Proof**: in the Lean proof, a block whose region becomes `imm` ends
-  with a freeze that copies the region's part of its value into new `imm`
-  objects ([#292](https://github.com/boltlang/Bolt/issues/292)). A region
-  that becomes `mut` or another region needs no freeze: its objects are
-  made with that mutability. With the copy, the heap's types only grow,
-  so `imm` values never changing and programs never getting stuck are
-  proven as for any other step, with rules 1 and 4. Leaving the copy out
-  is an optimization, and it's sound when nothing after the block can
-  reach the originals: `freeze_in_place_changes_nothing` proves that for
-  one freeze, and `freeze_in_place_of_typing` that rules 2, 3 and 5, and
-  the restriction on generic functions above, make it so. Only objects of
-  the region are copied, since a copy of a `mut` object would be noticed.
-  `program_blocks_freeze_in_place` leaves out every freeze of a program
-  written with blocks: nothing from before a block mentions its region, so
-  what's beside a block when it ends is older than the region and can't
-  reach it.
+- **Proof**: the Lean proof once typed this design, with a block whose
+  region becomes `imm` ending in a freeze that copied the region's part of
+  its value ([#292](https://github.com/boltlang/Bolt/issues/292)). That
+  was removed when regions became an analysis
+  ([#335](https://github.com/boltlang/Bolt/issues/335)); what's proven
+  now is in the note at the top of this page.
 
 ## Open questions
 
