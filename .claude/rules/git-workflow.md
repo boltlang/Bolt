@@ -1,5 +1,6 @@
 # Git & Workflow Rules
 
+- Ask me about any design or implementation decisions
 - For now, commits should just happen on `main`
 - Commit automatically, splitting larger changes in multiple smaller commits
   where this would improve readability during reviews.
