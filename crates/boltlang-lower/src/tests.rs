@@ -213,3 +213,103 @@ fn the_tests_of_std_collect_without_errors() {
     }
     assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
+
+/// The decision of the first `match` of a file's top-level statements, then
+/// whether it can fail, with a value that does, and which arms are reached.
+fn decision(src: &str) -> String {
+    use boltlang_hir_def::body::{DefWithBody, DefWithBodyId};
+    let mut db = TestDb::new();
+    db.set_prelude(Some("std"), false);
+    db.add_std();
+    let file = db.file("/main.bolt", src);
+    let def = DefWithBodyId::new(&db, DefWithBody::File(file));
+    let decisions = crate::decision::body_decisions(&db, def);
+    let Some((_, found)) = decisions.matches.first() else { return "no match".into() };
+    let d = match found {
+        Ok(d) => d,
+        Err(e) => return format!("{e:?}"),
+    };
+    let mut out = d.display(&db);
+    if let Some(missing) = d.missing(&db) {
+        out.push_str(&format!("missing {missing}\n"));
+    }
+    let unreached: Vec<String> = d
+        .reached_arms()
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| !**r)
+        .map(|(i, _)| i.to_string())
+        .collect();
+    if !unreached.is_empty() {
+        out.push_str(&format!("unreached {}\n", unreached.join(", ")));
+    }
+    out
+}
+
+#[test]
+fn a_switch_on_variants_binds_their_fields() {
+    assert_eq!(
+        decision("let x = Option.Some(1);\nmatch x { Option.Some(y) => y, Option.None => 0 };\n"),
+        "$1 = $0.Some.0\nn0 = switch $0 { Some => n1, None => n2 }\nn1 = arm 0 with b1 = $1\nn2 = arm 1\n",
+    );
+}
+
+#[test]
+fn a_match_that_misses_a_variant_fails() {
+    assert_eq!(
+        decision(
+            "let x = Option.Some(1);\nmatch x { Option.Some(1) => 1, Option.Some(_) => 2 };\n"
+        ),
+        "$1 = $0.Some.0\nn0 = switch $0 { Some => n1, _ => n4 }\nn1 = switch $1 { 1 => n2, _ => n3 }\nn2 = arm 0\nn3 = arm 1\nn4 = fail\nmissing Option.None\n",
+    );
+}
+
+#[test]
+fn tuples_test_one_place_at_a_time() {
+    assert_eq!(
+        decision("let p = (True, 1);\nmatch p { (True, n) => n, (False, 0) => 0, (_, _) => 2 };\n"),
+        "$1 = $0.0\n$2 = $0.1\nn0 = switch $1 { true => n1, false => n2 }\nn1 = arm 0 with b2 = $2\nn2 = switch $2 { 0 => n3, _ => n4 }\nn3 = arm 1\nn4 = arm 2\n",
+    );
+}
+
+#[test]
+fn strings_are_compared_one_at_a_time() {
+    assert_eq!(
+        decision("let s = \"a\";\nmatch s { \"a\" => 1, \"b\" => 2, _ => 3 };\n"),
+        "n0 = if $0 == \"a\" then n1 else n2\nn1 = arm 0\nn2 = if $0 == \"b\" then n3 else n4\nn3 = arm 1\nn4 = arm 2\n",
+    );
+}
+
+#[test]
+fn ranges_and_arms_never_taken() {
+    assert_eq!(
+        decision("let n = 5;\nmatch n { 0 => 0, 1..=9 => 1, _ => 2, 3 => 3 };\n"),
+        "n0 = switch $0 { 0 => n1, _ => n2 }\nn1 = arm 0\nn2 = if $0 in 1..=9 then n3 else n4\nn3 = arm 1\nn4 = arm 2\nunreached 3\n",
+    );
+}
+
+#[test]
+fn a_guard_falls_through_to_the_next_arm() {
+    assert_eq!(
+        decision("let x = Option.Some(1);\nmatch x { Option.Some(y) if y > 0 => y, _ => 0 };\n"),
+        "$1 = $0.Some.0\nn0 = switch $0 { Some => n1, _ => n3 }\nn1 = guard 0 with b1 = $1 then n2 else n3\nn2 = arm 0 with b1 = $1\nn3 = arm 1\n",
+    );
+}
+
+#[test]
+fn an_or_pattern_shares_its_arm() {
+    assert_eq!(
+        decision(
+            "let x = (Option.Some(1), Option.Some(2));\nmatch x { (Option.Some(a), Option.Some(b)) => a + b, (Option.None, _) | (_, Option.None) => 0 };\n"
+        ),
+        "$1 = $0.0\n$2 = $0.1\n$3 = $1.Some.0\n$4 = $2.Some.0\nn0 = switch $1 { Some => n1, None => n3 }\nn1 = switch $2 { Some => n2, None => n3 }\nn2 = arm 0 with b1 = $3, b2 = $4\nn3 = arm 1\n",
+    );
+}
+
+#[test]
+fn slice_patterns_are_not_supported_yet() {
+    assert_eq!(
+        decision("let xs = [1];\nmatch xs { [a] => a, _ => 0 };\n"),
+        "Unsupported(Idx::<Pat>(2))",
+    );
+}

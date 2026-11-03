@@ -1,7 +1,8 @@
 //! Lowering after type checking, shared by the backends.
 //!
-//! For now it's monomorphization: which instances of its functions a
-//! program needs, and what each use in them calls.
+//! So far: monomorphization, which instances of its functions a program
+//! needs and what each use in them calls, and compiling patterns to
+//! decisions.
 //!
 //! - [`instance`]: an [`Instance`] is a body at concrete types. It's
 //!   specialized on types, not on mutabilities: those are its parameters.
@@ -11,8 +12,10 @@
 //!   the dictionaries that erased code calls class methods through.
 //! - [`collect`]: every instance a program needs, from its entry file and
 //!   its tests, erasing functions that recurse polymorphically.
+//! - [`decision`]: the tests that a `match` or a `let` makes, as a graph.
 
 pub mod collect;
+pub mod decision;
 pub mod instance;
 pub mod ty;
 pub mod uses;
