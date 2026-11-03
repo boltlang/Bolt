@@ -1,7 +1,7 @@
 // The tests of `array.bolt`.
 
 import "./array" *;
-import "./mutability" (to_mut, to_imm);
+import "./mutability" (to_mut, to_imm, to_mut_deep);
 import "./ops" *;
 import "./io" (assert);
 
@@ -31,6 +31,24 @@ fn copies_of_arrays_are_shallow() {
   let copy = to_mut(points);
   copy[0].x = 5;
   assert(points[0].x == 5);
+}
+
+#[test]
+fn a_deep_copy_of_an_array_can_be_changed_all_the_way_down() {
+  let grid = [[0, 0], [0, 0]];
+  let copy: mut [mut [i32]] = to_mut_deep(grid);
+  copy[0][1] = 1;
+  assert(grid[0][1] == 0);
+  assert(copy[0][1] == 1);
+}
+
+#[test]
+fn a_deep_copy_copies_each_path_to_an_array() {
+  let row = [0];
+  let grid = [row, row];
+  let copy = to_mut_deep(grid);
+  copy[0][0] = 1;
+  assert(copy[1][0] == 0);
 }
 
 #[test]

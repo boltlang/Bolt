@@ -4,7 +4,7 @@
 import "./ops" *;
 import "./option" (Option, Some, None);
 import "./iter" (Iterable, Iterator);
-import "./mutability" (ToMut, ToImm, to_mut, to_imm);
+import "./mutability" (ToMut, ToImm, ToMutDeep, to_mut, to_imm, to_mut_deep);
 import "./io" (assert);
 
 extern "bolt" {
@@ -78,6 +78,22 @@ impl[T] ToMut[[T]] {
     let n = array_len(xs);
     let ys = array_alloc(n);
     array_copy(ys, 0, xs, 0, n);
+    ys
+  }
+}
+
+/// A copy of an array that can be changed all the way down: each element
+/// is copied with its own `to_mut_deep`.
+impl[T: ToMutDeep] ToMutDeep[[T]] {
+  type MutDeep = mut [T.MutDeep];
+  fn to_mut_deep(xs) {
+    let n = array_len(xs);
+    let ys = array_alloc(n);
+    let mut i = 0;
+    while i < n {
+      array_set(ys, i, to_mut_deep(array_get(xs, i)));
+      i = i + 1;
+    }
     ys
   }
 }

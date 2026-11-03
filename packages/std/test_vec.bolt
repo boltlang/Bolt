@@ -1,7 +1,7 @@
 // The tests of `vec.bolt`.
 
 import "./vec" *;
-import "./mutability" (to_mut, to_imm);
+import "./mutability" (to_mut, to_imm, to_mut_deep);
 import "./option" (None, Some);
 import "./ops" *;
 import "./iter" (Iterable, Iterator);
@@ -202,4 +202,22 @@ fn a_copy_of_a_vec_that_can_t_be_changed() {
   assert(to_array(v) == mut [1, 2, 3]);
   assert(len(f) == 2);
   assert(f[0] == 1);
+}
+
+#[test]
+fn a_deep_copy_of_a_vec_can_be_changed_all_the_way_down() {
+  let rows = imm Vec.from_array([[1], [2]]);
+  let copy: mut Vec[mut [i32]] = to_mut_deep(rows);
+  copy[0][0] = 5;
+  copy.push(mut [3]);
+  assert(rows[0][0] == 1);
+  assert(copy[0][0] == 5);
+  assert(copy.len == 3);
+}
+
+#[test]
+fn a_deep_copy_of_a_vec_shares_its_strings() {
+  let names = Vec.from_array(["ada"]);
+  let copy: mut Vec[String] = to_mut_deep(names);
+  assert(copy[0] == "ada");
 }

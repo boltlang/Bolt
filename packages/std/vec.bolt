@@ -1,9 +1,9 @@
 // A growable array.
 
-import "./mutability" (ToMut, ToImm, to_mut, to_imm);
+import "./mutability" (ToMut, ToImm, ToMutDeep, to_mut, to_imm, to_mut_deep);
 import "./option" (Option, None, Some);
 import "./ops" *;
-import "./array" (array_alloc, array_copy, array_freeze, array_len);
+import "./array" (array_alloc, array_copy, array_freeze, array_get, array_len, array_set);
 import "./iter" (Iterable, Iterator, zip);
 import "./string" (String);
 import "./io" (panic, assert);
@@ -235,6 +235,22 @@ impl[T] ToMut[Vec[T]] {
   fn to_mut(v) {
     let items = array_alloc(capacity(v));
     array_copy(items, 0, v.items, 0, v.len);
+    mut Vec { items, len: v.len }
+  }
+}
+
+/// A copy of a `Vec` that can be changed all the way down, with as much
+/// room as the original: each element is copied with its own
+/// `to_mut_deep`.
+impl[T: ToMutDeep] ToMutDeep[Vec[T]] {
+  type MutDeep = mut Vec[T.MutDeep];
+  fn to_mut_deep(v) {
+    let items = array_alloc(capacity(v));
+    let mut i = 0;
+    while i < v.len {
+      array_set(items, i, to_mut_deep(array_get(v.items, i)));
+      i = i + 1;
+    }
     mut Vec { items, len: v.len }
   }
 }

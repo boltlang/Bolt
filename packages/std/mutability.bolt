@@ -26,3 +26,39 @@ pub class ToImm[T] {
   /// so with a bound, like `impl[T: imm] ToImm[[T]]`.
   fn to_imm(x: T) -> Imm;
 }
+
+/// Types that have a copy that can be changed all the way down, without
+/// changing the original: the arrays and structs it holds are copied too,
+/// not shared as with [ToMut].
+///
+/// Each path to an object gets its own copy, so two references to one
+/// `imm` object become two `mut` objects. That means a cycle, which only an
+/// `imm` copy of a cyclic `mut` value can have, is copied forever.
+///
+/// Values that are `imm` all the way down and never change, like numbers,
+/// `String` and `Char`, are given back as they are: they have nothing to
+/// make `mut`.
+pub class ToMutDeep[T] {
+  /// The `mut` version of `T`, all the way down, like `mut [mut [i32]]`
+  /// for `[[i32]]`.
+  type MutDeep;
+
+  /// A copy of `x` that can be changed all the way down.
+  fn to_mut_deep(x: T) -> MutDeep;
+}
+
+impl ToMutDeep[Bool] { type MutDeep = Bool; fn to_mut_deep(x) = x; }
+impl ToMutDeep[i8] { type MutDeep = i8; fn to_mut_deep(x) = x; }
+impl ToMutDeep[i16] { type MutDeep = i16; fn to_mut_deep(x) = x; }
+impl ToMutDeep[i32] { type MutDeep = i32; fn to_mut_deep(x) = x; }
+impl ToMutDeep[i64] { type MutDeep = i64; fn to_mut_deep(x) = x; }
+impl ToMutDeep[i128] { type MutDeep = i128; fn to_mut_deep(x) = x; }
+impl ToMutDeep[isize] { type MutDeep = isize; fn to_mut_deep(x) = x; }
+impl ToMutDeep[u8] { type MutDeep = u8; fn to_mut_deep(x) = x; }
+impl ToMutDeep[u16] { type MutDeep = u16; fn to_mut_deep(x) = x; }
+impl ToMutDeep[u32] { type MutDeep = u32; fn to_mut_deep(x) = x; }
+impl ToMutDeep[u64] { type MutDeep = u64; fn to_mut_deep(x) = x; }
+impl ToMutDeep[u128] { type MutDeep = u128; fn to_mut_deep(x) = x; }
+impl ToMutDeep[usize] { type MutDeep = usize; fn to_mut_deep(x) = x; }
+impl ToMutDeep[f32] { type MutDeep = f32; fn to_mut_deep(x) = x; }
+impl ToMutDeep[f64] { type MutDeep = f64; fn to_mut_deep(x) = x; }
