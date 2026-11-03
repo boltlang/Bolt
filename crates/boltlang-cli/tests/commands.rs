@@ -1,6 +1,5 @@
-//! `bolt dump-ast`, `bolt check`, `bolt run` and `bolt build`, run on files
-//! in a temporary directory, without a prelude, so that they don't depend on
-//! `std`, unless they print: strings are `std`'s.
+//! `bolt dump-ast` and `bolt check`, run on files in a temporary directory,
+//! without a prelude, so that they don't depend on `std`.
 
 use std::{fs, path::PathBuf, process::Command};
 
@@ -79,7 +78,7 @@ fn dump_ast_reports_syntax_errors_and_still_prints() {
 #[test]
 fn a_missing_file_is_an_error() {
     let dir = dir_with("missing", &[]);
-    for command in ["dump-ast", "check", "run", "build"] {
+    for command in ["dump-ast", "check"] {
         let o = bolt(&dir, command, &["nope.bolt"]);
         assert!(!o.ok, "{command}");
         assert!(o.err.contains("error: cannot read `nope.bolt`"), "{command}: {}", o.err);
@@ -125,95 +124,13 @@ fn check_reports_a_used_file_with_errors() {
 }
 
 #[test]
-fn run_prints_what_the_program_prints_and_its_value() {
-    let dir = dir_with("run", &[("a.bolt", "print(\"hi\");\n1 + 2;\n")]);
-    let o = bolt_std(&dir, "run", &["a.bolt"]);
-    assert!(o.ok, "{}", o.err);
-    assert_eq!(o.out, "hi\n3\n");
-    // Compiled code doesn't have strings yet, but has values.
-    let dir = dir_with("run-wasm", &[("a.bolt", "1 + 2;\n")]);
-    let o = bolt_std(&dir, "run", &["a.bolt", "--wasm"]);
-    assert!(o.ok, "{}", o.err);
-    assert_eq!(o.out, "3\n");
-}
-
-#[test]
-fn run_doesnt_print_a_unit_value() {
-    let dir = dir_with("run-unit", &[("a.bolt", "fn f() {}\nf();\n")]);
-    let o = bolt(&dir, "run", &["a.bolt"]);
-    assert!(o.ok, "{}", o.err);
-    assert_eq!(o.out, "");
-}
-
-#[test]
-fn run_doesnt_run_a_program_with_errors() {
-    let dir = dir_with("run-error", &[("a.bolt", "print(\"hi\");\nlet x: i32 = True;\n")]);
-    let o = bolt_std(&dir, "run", &["a.bolt"]);
-    assert!(!o.ok);
-    assert_eq!(o.out, "");
-    // With `--no-check`, it runs anyway.
-    let o = bolt_std(&dir, "run", &["a.bolt", "--no-check"]);
-    assert_eq!(o.out, "hi\n", "{}", o.err);
-}
-
-#[test]
-fn run_reports_an_error_while_running() {
-    let dir = dir_with(
-        "run-panic",
-        &[("a.bolt", "fn divide(a: i32, b: i32) -> i32 = a / b;\ndivide(1, 0);\n")],
-    );
-    let o = bolt_std(&dir, "run", &["a.bolt"]);
-    assert!(!o.ok);
-    assert!(o.err.contains("division by zero"), "{}", o.err);
-}
-
-#[test]
-fn run_stops_when_it_runs_out_of_fuel() {
-    let dir = dir_with("run-fuel", &[("a.bolt", "fn f(n: i32) -> i32 = f(n);\nf(0);\n")]);
-    for wasm in [false, true] {
-        let mut args = vec!["a.bolt", "--fuel", "1000"];
-        if wasm {
-            args.push("--wasm");
-        }
-        let o = bolt(&dir, "run", &args);
-        assert!(!o.ok, "wasm: {wasm}");
-        assert!(!o.err.is_empty(), "wasm: {wasm}");
+fn run_test_and_build_are_not_available() {
+    let dir = dir_with("stubs", &[("a.bolt", "1;\n")]);
+    for command in ["run", "test", "build"] {
+        let o = bolt(&dir, command, &["a.bolt", "--wasm"]);
+        assert!(!o.ok, "{command}");
+        assert!(o.err.contains("not available until the Conduit backend lands"), "{}", o.err);
     }
-}
-
-#[test]
-fn run_reports_what_the_code_generator_doesnt_support() {
-    let dir = dir_with("run-unsupported", &[("a.bolt", "let f = |x: i32| x;\nf(1);\n")]);
-    let o = bolt(&dir, "run", &["a.bolt", "--wasm"]);
-    assert!(!o.ok);
-    assert!(o.err.contains("not supported"), "{}", o.err);
-}
-
-#[test]
-fn build_writes_a_module() {
-    let dir = dir_with("build", &[("a.bolt", "1 + 2;\n")]);
-    let o = bolt_std(&dir, "build", &["a.bolt"]);
-    assert!(o.ok, "{}", o.err);
-    let bytes = fs::read(dir.join("a.wasm")).unwrap();
-    assert_eq!(&bytes[..4], b"\0asm");
-    let o = bolt_std(&dir, "build", &["a.bolt", "-o", "out.wasm"]);
-    assert!(o.ok, "{}", o.err);
-    assert_eq!(fs::read(dir.join("out.wasm")).unwrap(), bytes);
-}
-
-#[test]
-fn build_doesnt_write_a_module_with_errors() {
-    let dir = dir_with(
-        "build-error",
-        &[("a.bolt", "let x: i32 = True;\n"), ("b.bolt", "let f = |x: i32| x;\nf(1);\n")],
-    );
-    let o = bolt(&dir, "build", &["a.bolt"]);
-    assert!(!o.ok);
-    assert!(!dir.join("a.wasm").exists());
-    let o = bolt(&dir, "build", &["b.bolt"]);
-    assert!(!o.ok);
-    assert!(o.err.contains("not supported"), "{}", o.err);
-    assert!(!dir.join("b.wasm").exists());
 }
 
 /// `bolt --version`, with `BOLT_PRELUDE_PATH` set to `std`, or unset.
@@ -259,13 +176,13 @@ fn a_missing_std_is_a_warning() {
     // Without `std` there are no operators: `+` is a function of the prelude.
     let dir = dir_with("no-std", &[("a.bolt", "True;\n")]);
     let output = Command::new(env!("CARGO_BIN_EXE_bolt"))
-        .args(["run", "--no-prelude", "a.bolt"])
+        .args(["check", "--no-prelude", "a.bolt"])
         .env("BOLT_PRELUDE_PATH", "/no/such/dir")
         .current_dir(&dir)
         .output()
         .unwrap();
     assert!(output.status.success());
-    assert_eq!(String::from_utf8(output.stdout).unwrap(), "True\n");
+    assert_eq!(String::from_utf8(output.stdout).unwrap(), "");
     assert_eq!(
         String::from_utf8(output.stderr).unwrap(),
         "warning: BOLT_PRELUDE_PATH is `/no/such/dir`, which isn't a directory\n"

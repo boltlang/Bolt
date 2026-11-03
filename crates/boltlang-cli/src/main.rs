@@ -11,11 +11,8 @@ use ariadne::{Color, Config, IndexType, Label, Report, ReportKind};
 use boltlang_base_db::{
     DEFAULT_PRELUDE, Db, File, FilePath, SystemPath, SystemPathBuf, parse_file, source_text,
 };
-use boltlang_codegen::{CodegenError, link, link_function, run, run_test};
-use boltlang_eval::{EvalError, Evaluator, Limits, Stdout};
-use boltlang_hir_def::{ids::FunctionId, nameres::test_functions};
 use boltlang_ide_diagnostics::{
-    Diagnostic, DiagnosticCode, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
+    Diagnostic, Severity, dependency_diagnostics, diagnostics, syntax_diagnostics,
 };
 use boltlang_syntax::{
     SyntaxElement, SyntaxKind, SyntaxNode,
@@ -161,249 +158,49 @@ impl Exec for CheckCommand {
     }
 }
 
-/// Check a file, then run the statements at its top level. The value of
-/// the last one is printed, if it's an expression with a value.
+/// Run a file. Not available until the Conduit backend lands.
 #[derive(clap::Parser)]
 struct RunCommand {
-    file: PathBuf,
-    #[command(flatten)]
-    prelude: PreludeArgs,
-    /// Run the file even when the checker finds errors.
-    #[arg(long)]
-    no_check: bool,
-    /// Stop after evaluating this many expressions, or with `--wasm`,
-    /// after about this many WebAssembly instructions.
-    #[arg(long, value_name = "STEPS")]
-    fuel: Option<u64>,
-    /// Compile the file to WebAssembly and run that, instead of evaluating it.
-    #[arg(long)]
-    wasm: bool,
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
+    _args: Vec<String>,
+}
+
+/// Run the tests of files. Not available until the Conduit backend lands.
+#[derive(clap::Parser)]
+struct TestCommand {
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
+    _args: Vec<String>,
+}
+
+/// Compile a file. Not available until the Conduit backend lands.
+#[derive(clap::Parser)]
+struct BuildCommand {
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true, hide = true)]
+    _args: Vec<String>,
+}
+
+/// What `bolt run`, `bolt test` and `bolt build` do until Bolt has a
+/// backend again.
+fn not_available(command: &str) -> anyhow::Result<bool> {
+    eprintln!("error: `bolt {command}` is not available until the Conduit backend lands");
+    Ok(false)
 }
 
 impl Exec for RunCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
-        let Some(file) = open(&db, &self.file) else { return Ok(false) };
-        let found =
-            if self.no_check { diagnostics(&db, file) } else { checked(&db, file, &[file]) };
-        report(&db, &found)?;
-        if !self.no_check && found.iter().any(|d| d.severity == Severity::Error) {
-            return Ok(false);
-        }
-        let limits = Limits { fuel: self.fuel, ..Limits::default() };
-        let mut evaluator = Evaluator::with_limits(&db, limits).with_host(Stdout);
-        let result = if self.wasm {
-            let bytes = match link(&db, file) {
-                Ok(bytes) => bytes,
-                Err(errors) => {
-                    report(&db, &codegen_diagnostics(&db, file, &errors))?;
-                    return Ok(false);
-                }
-            };
-            run(&db, file, &bytes, Stdout, self.fuel).map_err(|error| {
-                located_diagnostic(file, None, DiagnosticCode::RUNTIME_ERROR, error.to_string())
-            })
-        } else {
-            evaluator.eval_file(file).map_err(|error| runtime_diagnostic(&db, file, &error))
-        };
-        // Shown with the impls of `Debug`, which the evaluator runs, for
-        // compiled code too.
-        let shown = result.and_then(|value| match value.is_unit() {
-            true => Ok(None),
-            false => evaluator
-                .show(file, &value)
-                .map(Some)
-                .map_err(|error| runtime_diagnostic(&db, file, &error)),
-        });
-        match shown {
-            Ok(text) => {
-                if let Some(text) = text {
-                    println!("{text}");
-                }
-                Ok(true)
-            }
-            Err(diagnostic) => {
-                report(&db, &[diagnostic])?;
-                Ok(false)
-            }
-        }
+        not_available("run")
     }
-}
-
-/// Check files, then run their tests: the functions with `#[test]` before
-/// them. A test fails when it stops with an error, like a panic.
-#[derive(clap::Parser)]
-struct TestCommand {
-    /// Files, or directories whose `.bolt` files to test, recursively
-    /// [default: the current directory]
-    paths: Vec<PathBuf>,
-    #[command(flatten)]
-    prelude: PreludeArgs,
-    /// Only run the tests whose name contains this.
-    #[arg(long, value_name = "NAME")]
-    filter: Option<String>,
-    /// Stop a test after evaluating this many expressions, or with
-    /// `--wasm`, after about this many WebAssembly instructions.
-    #[arg(long, value_name = "STEPS")]
-    fuel: Option<u64>,
-    /// Compile each test to WebAssembly and run that, instead of evaluating
-    /// it.
-    #[arg(long)]
-    wasm: bool,
 }
 
 impl Exec for TestCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
-        let mut paths = Vec::new();
-        let roots =
-            if self.paths.is_empty() { vec![PathBuf::from(".")] } else { self.paths.clone() };
-        for root in &roots {
-            bolt_files(root, &mut paths)?;
-        }
-        let mut files = Vec::new();
-        let mut ok = true;
-        for path in &paths {
-            match open(&db, path) {
-                Some(file) => files.push(file),
-                None => ok = false,
-            }
-        }
-        let (mut passed, mut failed, mut skipped) = (0, 0, 0);
-        for &file in &files {
-            let tests: Vec<_> = test_functions(&db, file)
-                .iter()
-                .copied()
-                .filter(|f| {
-                    let name =
-                        f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
-                    self.filter.as_ref().is_none_or(|filter| name.contains(filter.as_str()))
-                })
-                .collect();
-            if tests.is_empty() {
-                continue;
-            }
-            // A file with errors isn't run.
-            let found = checked(&db, file, &files);
-            report(&db, &found)?;
-            if found.iter().any(|d| d.severity == Severity::Error) {
-                println!("{}: not run, since it has errors", display_path(&db, file));
-                skipped += tests.len();
-                ok = false;
-                continue;
-            }
-            for f in tests {
-                let name = f.item(&db).display_name().map(|n| n.to_string()).unwrap_or_default();
-                print!("test {}::{name} ... ", display_path(&db, file));
-                io::stdout().flush()?;
-                match self.run_test(&db, file, f) {
-                    Ok(()) => {
-                        println!("ok");
-                        passed += 1;
-                    }
-                    Err(found) => {
-                        println!("FAILED");
-                        report(&db, &found)?;
-                        failed += 1;
-                    }
-                }
-            }
-        }
-        let result = if failed == 0 && ok { "ok" } else { "FAILED" };
-        let skipped = if skipped > 0 { format!("; {skipped} not run") } else { String::new() };
-        println!("test result: {result}. {passed} passed; {failed} failed{skipped}");
-        Ok(ok && failed == 0)
+        not_available("test")
     }
-}
-
-impl TestCommand {
-    /// Run the test `f` of `file`, or give why it failed: the error it
-    /// stopped with, or with `--wasm`, why it couldn't be compiled.
-    fn run_test<'db>(
-        &self,
-        db: &'db CliDatabase,
-        file: File,
-        f: FunctionId<'db>,
-    ) -> Result<(), Vec<Diagnostic>> {
-        if self.wasm {
-            // Each test is a module of its own, whose `main` is the test.
-            let bytes = link_function(db, f, file)
-                .map_err(|errors| codegen_diagnostics(db, file, &errors))?;
-            return run_test(&bytes, Stdout, self.fuel).map_err(|error| {
-                vec![located_diagnostic(
-                    file,
-                    None,
-                    DiagnosticCode::RUNTIME_ERROR,
-                    error.to_string(),
-                )]
-            });
-        }
-        // Each test gets a new evaluator, so that tests don't see each
-        // other's values.
-        let limits = Limits { fuel: self.fuel, ..Limits::default() };
-        let mut evaluator = Evaluator::with_limits(db, limits).with_host(Stdout);
-        evaluator
-            .call_function(f, Vec::new())
-            .map(|_| ())
-            .map_err(|error| vec![runtime_diagnostic(db, file, &error)])
-    }
-}
-
-/// The `.bolt` files of `path`: the file itself, or those of a directory
-/// and the directories in it, but not hidden ones, like `.bolt`. In order of
-/// their paths, so that tests run in the same order each time.
-fn bolt_files(path: &std::path::Path, out: &mut Vec<PathBuf>) -> anyhow::Result<()> {
-    if !path.is_dir() {
-        out.push(path.to_path_buf());
-        return Ok(());
-    }
-    let mut entries: Vec<PathBuf> =
-        std::fs::read_dir(path)?.map(|e| e.map(|e| e.path())).collect::<Result<_, _>>()?;
-    entries.sort();
-    for entry in entries {
-        let hidden = entry.file_name().is_some_and(|n| n.to_string_lossy().starts_with('.'));
-        if entry.is_dir() && !hidden {
-            bolt_files(&entry, out)?;
-        } else if entry.extension().is_some_and(|e| e == "bolt") {
-            out.push(entry);
-        }
-    }
-    Ok(())
-}
-
-/// Check a file, then compile it to a WebAssembly module. The top-level
-/// statements are its exported function `main`.
-#[derive(clap::Parser)]
-struct BuildCommand {
-    file: PathBuf,
-    /// Where to write the module [default: the file with the extension `.wasm`]
-    #[arg(short, long, value_name = "FILE")]
-    output: Option<PathBuf>,
-    #[command(flatten)]
-    prelude: PreludeArgs,
 }
 
 impl Exec for BuildCommand {
     fn exec(&self) -> anyhow::Result<bool> {
-        let db = self.prelude.database()?;
-        let Some(file) = open(&db, &self.file) else { return Ok(false) };
-        let found = checked(&db, file, &[file]);
-        report(&db, &found)?;
-        if found.iter().any(|d| d.severity == Severity::Error) {
-            return Ok(false);
-        }
-        match link(&db, file) {
-            Ok(bytes) => {
-                let output =
-                    self.output.clone().unwrap_or_else(|| self.file.with_extension("wasm"));
-                std::fs::write(&output, bytes)?;
-                Ok(true)
-            }
-            Err(errors) => {
-                report(&db, &codegen_diagnostics(&db, file, &errors))?;
-                Ok(false)
-            }
-        }
+        not_available("build")
     }
 }
 
@@ -416,51 +213,6 @@ fn checked(db: &dyn Db, file: File, reported: &[File]) -> Vec<Diagnostic> {
         broken.into_iter().filter(|d| !d.labels.iter().any(|l| reported.contains(&l.file))),
     );
     found
-}
-
-/// Why `file` couldn't be compiled, as diagnostics.
-fn codegen_diagnostics<'db>(
-    db: &'db dyn Db,
-    file: File,
-    errors: &[CodegenError<'db>],
-) -> Vec<Diagnostic> {
-    errors
-        .iter()
-        .map(|e| {
-            located_diagnostic(
-                file,
-                e.source_range(db),
-                DiagnosticCode::CODEGEN_ERROR,
-                e.to_string(),
-            )
-        })
-        .collect()
-}
-
-/// An error of the evaluator as a diagnostic, at the expression where it
-/// happened, or at the start of `file` when that isn't known.
-fn runtime_diagnostic<'db>(db: &'db dyn Db, file: File, error: &EvalError<'db>) -> Diagnostic {
-    located_diagnostic(
-        file,
-        error.source_range(db),
-        DiagnosticCode::RUNTIME_ERROR,
-        error.to_string(),
-    )
-}
-
-/// A diagnostic at a byte range of a file, or at the start of `file` when
-/// it's not known where.
-fn located_diagnostic(
-    file: File,
-    at: Option<(File, std::ops::Range<u32>)>,
-    code: DiagnosticCode,
-    message: String,
-) -> Diagnostic {
-    let (file, range) = match at {
-        Some((file, range)) => (file, TextRange::new(range.start.into(), range.end.into())),
-        None => (file, TextRange::default()),
-    };
-    Diagnostic { code, severity: Severity::Error, file, range, message, labels: Vec::new() }
 }
 
 fn current_dir() -> anyhow::Result<SystemPathBuf> {
