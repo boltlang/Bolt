@@ -1,0 +1,6 @@
+# Commits that only reformat code, for `git blame --ignore-revs-file`.
+# GitHub uses this file automatically. Locally:
+#   git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# Format the workspace with cargo fmt (#330)
+f0713fbbba79684509c45998b5670cea9a0a6c18

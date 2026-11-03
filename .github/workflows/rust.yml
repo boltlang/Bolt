@@ -11,6 +11,14 @@ env:
 
 jobs:
 
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - run: rustup update nightly && rustup default nightly && rustup component add rustfmt
+    - name: Check formatting
+      run: cargo fmt --all --check
+
   build:
     runs-on: ubuntu-latest
     strategy:
