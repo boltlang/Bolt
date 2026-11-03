@@ -37,12 +37,8 @@ that's only known from what the function assumes, like `T ⊑ imm` or
 namespace BoltMut
 
 /-- A mutability: `mut` (`mutable`, since `mut` is a keyword of Lean),
-`imm`, the `i`th mutability parameter of the function being checked, or
-the region `r`: the mutability of the values a block makes and that nothing
-outside the block has, which can be changed while the block runs (#209;
-see `Regions.lean`). A region becomes `imm` when its block ends. One that
-would have to hold `mut` objects, `mut ⊑ r`, is just `mut`: the checker
-decides that right away, as `Le.eq_mutable` in `Solver.lean` says (#286). -/
+`imm`, `ro`, or the `i`th mutability parameter of the function being
+checked. -/
 inductive Mu where
   | mutable
   | immutable
@@ -51,7 +47,6 @@ inductive Mu where
   or `imm` one is seen as `ro` through subtyping (`Sub`). -/
   | readonly
   | param (i : Nat)
-  | region (r : Nat)
   deriving DecidableEq, Repr
 
 /-- Types. `cell m t` is a shared object with mutability `m` holding a `t`,
@@ -87,17 +82,6 @@ inductive Expr where
   | pair (e₁ e₂ : Expr)
   | fst (e : Expr)
   | snd (e : Expr)
-  /-- The end of a block whose region `r` becomes `imm` (#292): `e`'s value,
-  of type `t`, copied, with what's of `r` in new `imm` objects. One
-  `inPlace` makes the same copy, but the program goes on with the value
-  itself; only the program that leaves copies out has it (`Expr.erase`),
-  so it isn't typed. -/
-  | freeze (inPlace : Bool) (r : Nat) (t : Ty) (e : Expr)
-  /-- A block `{ e }` whose value has type `t` (#292). Inside it, its region
-  is `2 * k + 1`. When it starts, it gets a new region, made in the heap,
-  and ends with a freeze of it, in place if the block is `inPlace`, which
-  only the program that leaves copies out has. -/
-  | block (inPlace : Bool) (k : Nat) (t : Ty) (e : Expr)
   /-- Making an `imm` object from a `mut` one, as `array_freeze` does in
   Bolt (#284): a copy of the object, whose contents are `imm` already, so
   the copy is shallow. One `inPlace` makes the same copy but goes on with
@@ -131,8 +115,6 @@ def Expr.NoLocs : Expr → Prop
   | .pair e₁ e₂ => e₁.NoLocs ∧ e₂.NoLocs
   | .fst e => e.NoLocs
   | .snd e => e.NoLocs
-  | .freeze _ _ _ e => e.NoLocs
-  | .block _ _ _ e => e.NoLocs
   | .toImm _ e => e.NoLocs
 
 /-- The location `l` is in the expression: what a closure captured is in its
@@ -150,85 +132,13 @@ def Expr.HasLoc : Expr → Nat → Prop
   | .pair e₁ e₂, l => e₁.HasLoc l ∨ e₂.HasLoc l
   | .fst e, l => e.HasLoc l
   | .snd e, l => e.HasLoc l
-  | .freeze _ _ _ e, l => e.HasLoc l
-  | .block _ _ _ e, l => e.HasLoc l
   | .toImm _ e, l => e.HasLoc l
-
-/-- A mutability that isn't a region. -/
-def Mu.NoRegion : Mu → Prop
-  | .region _ => False
-  | _ => True
-
-/-- A type that mentions no region. -/
-def Ty.NoRegion : Ty → Prop
-  | .unit | .int | .tparam _ => True
-  | .cell m t => m.NoRegion ∧ t.NoRegion
-  | .fn m a b => m.NoRegion ∧ a.NoRegion ∧ b.NoRegion
-  | .prod a b => a.NoRegion ∧ b.NoRegion
-
-/-- `m` is the region `r`. -/
-def Mu.mentions (r : Nat) : Mu → Bool
-  | .region r' => r' == r
-  | _ => false
-
-/-- `t` mentions the region `r`. -/
-def Ty.mentions (r : Nat) : Ty → Bool
-  | .unit | .int | .tparam _ => false
-  | .cell m t => m.mentions r || t.mentions r
-  | .fn m a b => m.mentions r || a.mentions r || b.mentions r
-  | .prod a b => a.mentions r || b.mentions r
-
-/-- Regions are numbered (#292): an even one, `2 * n`, is the one a block
-made when it started, with its marker at location `n`; an odd one,
-`2 * k + 1`, is how `block k` calls its region before it starts. `Made n r`:
-if `r` is one a block made, it's one of the first `n` locations, so it
-exists when `n` is the heap's length. -/
-def Made (n r : Nat) : Prop := r % 2 = 0 → r / 2 < n
-
-@[simp] theorem made_iff {n r : Nat} : Made n r ↔ (r % 2 = 0 → r / 2 < n) := Iff.rfl
-
-theorem Made.mono {n n' r : Nat} (h : Made n r) (hn : n ≤ n') : Made n' r :=
-  fun he => Nat.lt_of_lt_of_le (h he) hn
-
-/-- Every region `m` mentions exists. -/
-def Mu.Below (n : Nat) (m : Mu) : Prop := ∀ r, m.mentions r = true → Made n r
-
-theorem Mu.Below.mono {n n' : Nat} {m : Mu} (h : m.Below n) (hn : n ≤ n') : m.Below n' :=
-  fun r hr => (h r hr).mono hn
-
-/-- What a list of mutabilities gives for a parameter is below `n` if they all
-are. -/
-theorem Mu.Below.getD {n : Nat} {ms : List Mu} (hb : ∀ m ∈ ms, m.Below n) (i : Nat) :
-    (ms[i]?.getD .immutable).Below n := by
-  cases h : ms[i]? with
-  | none => intro r hr; simp [Mu.mentions] at hr
-  | some m => exact hb m (List.mem_of_getElem? h)
-
-/-- The only region `m` can be is `μ`'s: what a closure of mutability `μ`
-captures, by rule 5 of the regions page. -/
-def Mu.RegionsIn (m μ : Mu) : Prop := ∀ r, m.mentions r = true → μ.mentions r = true
-
-/-- The only region `t` mentions is `μ`'s. -/
-def Ty.RegionsIn (t : Ty) (μ : Mu) : Prop := ∀ r, t.mentions r = true → μ.mentions r = true
-
-/-- Every region `t` mentions exists: a block's or a freeze's type, which
-can't mention one that a block makes later. -/
-def Ty.Below (n : Nat) (t : Ty) : Prop := ∀ r, t.mentions r = true → Made n r
-
-theorem Ty.Below.mono {n n' : Nat} {t : Ty} (h : t.Below n) (hn : n ≤ n') : t.Below n' :=
-  fun r hr => (h r hr).mono hn
 
 /-- Replace the mutability parameters with `ms`; one without an argument
 becomes `imm`. -/
 def Mu.subst (ms : List Mu) : Mu → Mu
   | .param i => ms[i]?.getD .immutable
   | m => m
-
-theorem Mu.Below.subst {n : Nat} {m : Mu} {ms : List Mu} (h : m.Below n) (hb : ∀ m ∈ ms, m.Below n) :
-    (m.subst ms).Below n := by
-  cases m with
-  | param i => exact Mu.Below.getD hb i
-  | _ => exact h
 
 /-- Replace the mutability parameters with `ms` and the type parameters with
 `τs`; one without an argument becomes `()`. -/
@@ -256,8 +166,6 @@ def Expr.inst (ms : List Mu) (τs : List Ty) : Expr → Expr
   | .pair e₁ e₂ => .pair (e₁.inst ms τs) (e₂.inst ms τs)
   | .fst e => .fst (e.inst ms τs)
   | .snd e => .snd (e.inst ms τs)
-  | .freeze c r t e => .freeze c r (t.inst ms τs) (e.inst ms τs)
-  | .block c k t e => .block c k (t.inst ms τs) (e.inst ms τs)
   | .toImm b e => .toImm b (e.inst ms τs)
 
 /-- Replace the variable `x` with the value `v`, which has no variables, so
@@ -277,8 +185,6 @@ def Expr.subst : Expr → Nat → Expr → Expr
   | .pair e₁ e₂, x, v => .pair (e₁.subst x v) (e₂.subst x v)
   | .fst e, x, v => .fst (e.subst x v)
   | .snd e, x, v => .snd (e.subst x v)
-  | .freeze c r t e, x, v => .freeze c r t (e.subst x v)
-  | .block c k t e, x, v => .block c k t (e.subst x v)
   | .toImm b e, x, v => .toImm b (e.subst x v)
 
 /-! ## At most -/
@@ -289,15 +195,6 @@ that nothing in `T` is more `mut` than `μ`. -/
 structure Assume where
   mus : List (Mu × Mu) := []
   tys : List (Nat × Mu) := []
-  /-- The mutability parameters and type parameters that a call can't give
-  a region (#285): those that what a closure captures has. Then the closure
-  doesn't capture a region's value once the function is called. -/
-  noRegionMus : List Nat := []
-  noRegionTys : List Nat := []
-  /-- The mutability parameters that a call can only give `mut` or a
-  region (rule 1 of the regions page): the function can change what has
-  them. -/
-  changeable : List Nat := []
 
 /-- Nothing assumed, as for the program that's running. -/
 def Assume.none : Assume := {}
@@ -323,39 +220,13 @@ def AtMost (Δ : Assume) (μ : Mu) : Ty → Prop
   | .prod a b => AtMost Δ μ a ∧ AtMost Δ μ b
   | .tparam i => ∃ μ', (μ' = .mutable ∨ (i, μ') ∈ Δ.tys) ∧ Le Δ μ' μ
 
-/-- The parameters in `m` are ones that a call can't give a region. -/
-def Mu.ParamsNoRegion (Δ : Assume) : Mu → Prop
-  | .param i => i ∈ Δ.noRegionMus
-  | _ => True
-
-/-- The parameters in `t` are ones that a call can't give a region: once
-the function is called, `t` mentions no region that it doesn't now. -/
-def Ty.ParamsNoRegion (Δ : Assume) : Ty → Prop
-  | .unit | .int => True
-  | .tparam i => i ∈ Δ.noRegionTys
-  | .cell m t => m.ParamsNoRegion Δ ∧ t.ParamsNoRegion Δ
-  | .fn m a b => m.ParamsNoRegion Δ ∧ a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
-  | .prod a b => a.ParamsNoRegion Δ ∧ b.ParamsNoRegion Δ
-
-/-- A mutability whose objects can be changed: `mut`, a region, or a
-parameter that's assumed to be one of them. -/
-def Mu.Changeable (Δ : Assume) : Mu → Prop
-  | .mutable | .region _ => True
-  | .param i => i ∈ Δ.changeable
-  | .immutable | .readonly => False
-
 /-- The arguments `ms` and `τs` meet the assumptions `Δ` of a function,
 given what the caller assumes, `Δ'`. Every type argument is at most `mut`:
-the objects in it are well-formed. A parameter that can't be given a region
-gets an argument that mentions none, and whose parameters can't be given
-one either, and a changeable parameter gets a changeable argument. -/
+the objects in it are well-formed. -/
 def Sat (Δ' Δ : Assume) (ms : List Mu) (τs : List Ty) : Prop :=
   (∀ p ∈ Δ.mus, Le Δ' (p.1.subst ms) (p.2.subst ms)) ∧
     (∀ p ∈ Δ.tys, AtMost Δ' (p.2.subst ms) (τs[p.1]?.getD .unit)) ∧
-    (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit)) ∧
-    (∀ i ∈ Δ.noRegionMus, (ms[i]?.getD .immutable).NoRegion ∧ (ms[i]?.getD .immutable).ParamsNoRegion Δ') ∧
-    (∀ i ∈ Δ.noRegionTys, (τs[i]?.getD .unit).NoRegion ∧ (τs[i]?.getD .unit).ParamsNoRegion Δ') ∧
-    (∀ i ∈ Δ.changeable, (ms[i]?.getD .immutable).Changeable Δ')
+    (∀ i : Nat, AtMost Δ' .mutable (τs[i]?.getD .unit))
 
 /-- With nothing assumed, `m ⊑ μ` only by the order itself. -/
 theorem Le.none_inv {m μ : Mu} (h : Le .none m μ) : m = .immutable ∨ μ = .mutable ∨ m = μ := by
@@ -411,7 +282,7 @@ theorem AtMost.inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat �
   | tparam i =>
     obtain ⟨μ', hmem, hle⟩ := h
     rcases hmem with rfl | hmem
-    · exact (hs.2.2.1 i).mono (Le.inst hs hle)
+    · exact (hs.2.2 i).mono (Le.inst hs hle)
     · exact (hs.2.1 (i, μ') hmem).mono (Le.inst hs hle)
 
 theorem Mu.subst_muOf (ms : List Mu) (b : Bool) : (muOf b).subst ms = muOf b := by
@@ -426,7 +297,6 @@ theorem Mu.subst_subst (ms ms' : List Mu) (m : Mu) :
   | param i =>
     simp only [Mu.subst, List.getElem?_map]
     cases ms'[i]? <;> rfl
-  | region _ => rfl
 
 theorem Ty.getD_inst (ms : List Mu) (τs τs' : List Ty) (i : Nat) :
     (τs'[i]?.getD .unit).inst ms τs = (τs'.map (Ty.inst ms τs))[i]?.getD .unit := by
@@ -445,72 +315,22 @@ theorem Ty.inst_inst (ms ms' : List Mu) (τs τs' : List Ty) (t : Ty) :
 
 /-- Instantiating a call inside a generic function that's being
 instantiated still meets the callee's assumptions. -/
-theorem Mu.getD_subst (ms ms' : List Mu) (i : Nat) :
-    (ms'[i]?.getD .immutable).subst ms = (ms'.map (Mu.subst ms))[i]?.getD .immutable := by
-  simp only [List.getElem?_map]
-  cases ms'[i]? <;> rfl
-
-/-- What mentions no region, and has only parameters that can't be given
-one, mentions none once they're given. -/
-theorem Mu.noRegion_subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
-    (hn : m.NoRegion) (hp : m.ParamsNoRegion Δ) : (m.subst ms).NoRegion ∧ (m.subst ms).ParamsNoRegion Δ' := by
-  cases m with
-  | param i => exact hs.2.2.2.1 i hp
-  | region => exact hn.elim
-  | mutable | immutable | readonly => exact ⟨trivial, trivial⟩
-
-theorem Ty.noRegion_inst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {t : Ty}
-    (hn : t.NoRegion) (hp : t.ParamsNoRegion Δ) : (t.inst ms τs).NoRegion ∧ (t.inst ms τs).ParamsNoRegion Δ' := by
-  induction t with
-  | unit | int => exact ⟨trivial, trivial⟩
-  | cell m t ih =>
-    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
-    obtain ⟨h₃, h₄⟩ := ih hn.2 hp.2
-    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
-  | fn m a b iha ihb =>
-    obtain ⟨h₁, h₂⟩ := Mu.noRegion_subst hs hn.1 hp.1
-    obtain ⟨h₃, h₄⟩ := iha hn.2.1 hp.2.1
-    obtain ⟨h₅, h₆⟩ := ihb hn.2.2 hp.2.2
-    exact ⟨⟨h₁, h₃, h₅⟩, ⟨h₂, h₄, h₆⟩⟩
-  | prod a b iha ihb =>
-    obtain ⟨h₁, h₂⟩ := iha hn.1 hp.1
-    obtain ⟨h₃, h₄⟩ := ihb hn.2 hp.2
-    exact ⟨⟨h₁, h₃⟩, ⟨h₂, h₄⟩⟩
-  | tparam i => exact hs.2.2.2.2.1 i hp
-
-/-- A changeable mutability stays so with arguments that meet the
-assumptions. -/
-theorem Mu.Changeable.subst {Δ Δ' : Assume} {ms : List Mu} {τs : List Ty} (hs : Sat Δ' Δ ms τs) {m : Mu}
-    (h : m.Changeable Δ) : (m.subst ms).Changeable Δ' := by
-  cases m with
-  | param i => exact hs.2.2.2.2.2 i h
-  | immutable | readonly => exact h.elim
-  | _ => exact h
-
 theorem Sat.comp {Δ₀ Δ₁ Δ₂ : Assume} {ms ms' : List Mu} {τs τs' : List Ty}
     (h₁ : Sat Δ₁ Δ₂ ms' τs') (h₀ : Sat Δ₀ Δ₁ ms τs) :
     Sat Δ₀ Δ₂ (ms'.map (Mu.subst ms)) (τs'.map (Ty.inst ms τs)) := by
-  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_, fun i hi => ?_, fun i hi => ?_, fun i hi => ?_⟩
+  refine ⟨fun p hp => ?_, fun p hp => ?_, fun i => ?_⟩
   · have := Le.inst h₀ (h₁.1 p hp)
     rwa [Mu.subst_subst, Mu.subst_subst] at this
   · have := AtMost.inst h₀ (h₁.2.1 p hp)
     rwa [Mu.subst_subst, Ty.getD_inst] at this
-  · have := AtMost.inst h₀ (h₁.2.2.1 i)
+  · have := AtMost.inst h₀ (h₁.2.2 i)
     rwa [Ty.getD_inst] at this
-  · obtain ⟨hn, hp⟩ := h₁.2.2.2.1 i hi
-    rw [← Mu.getD_subst]
-    exact Mu.noRegion_subst h₀ hn hp
-  · obtain ⟨hn, hp⟩ := h₁.2.2.2.2.1 i hi
-    rw [← Ty.getD_inst]
-    exact Ty.noRegion_inst h₀ hn hp
-  · rw [← Mu.getD_subst]
-    exact Mu.Changeable.subst h₀ (h₁.2.2.2.2.2 i hi)
 
 theorem Expr.NoLocs.inst {e : Expr} (ms : List Mu) (τs : List Ty) (h : e.NoLocs) : (e.inst ms τs).NoLocs := by
   induction e with
   | var | unit | int => trivial
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | block _ _ _ _ ih | toImm _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | lam _ _ _ ih => exact ih h
 
@@ -519,7 +339,7 @@ theorem Expr.NoLocs.not_hasLoc {e : Expr} (h : e.NoLocs) (l : Nat) : ¬ e.HasLoc
   induction e with
   | var | unit | int => exact id
   | loc => exact h.elim
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | block _ _ _ _ ih | toImm _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     exact fun hl => hl.elim (ih₁ h.1) (ih₂ h.2)
 
@@ -534,7 +354,7 @@ theorem Expr.hasLoc_subst {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : (e.subs
     · exact h.elim
   | unit | int => exact h.elim
   | loc => exact .inl h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih | block _ _ _ _ ih | toImm _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     rcases h with h | h
     · exact (ih₁ h).imp .inl id
@@ -563,13 +383,12 @@ an `imm` object can't hold a `ro` one, since that may change, but an `imm`
 object can be seen as `ro`.
 
 A `ro` view is deep: what it holds is at most `ro`, so what's read through
-it can't be changed either. A region's or a parameter's object isn't seen
-as `ro`, so a type still mentions every region its values reach. -/
+it can't be changed either. A parameter's object isn't seen as `ro`. -/
 
 /-- The mutabilities whose objects can be seen as `ro`. -/
 def Mu.Viewable : Mu → Prop
   | .mutable | .immutable | .readonly => True
-  | .param _ | .region _ => False
+  | .param _ => False
 
 /-- `t` can be used where `t'` is expected: the same type, with some of its
 `mut`, `imm` and `ro` objects seen as `ro`. A `mut` object's contents can
@@ -633,193 +452,5 @@ theorem Sub.eq_of_not {Δ : Assume} {t t' : Ty} (h : Sub Δ t t')
   | refl => rfl
   | ro => exact (hc _ _ rfl).elim
   | prod => exact (hp _ _ rfl).elim
-
-/-! ## Freeing a region in types
-
-When a block's region becomes `imm`, its value is copied (#292), and the
-copy's type is the value's with the region replaced: `Mu.free` and
-`Ty.free`. What a region's values hold is at most the region (rule 4 of
-the regions page), so the copy is `imm` all the way down
-(`AtMost.region_free`). -/
-
-/-- `m` with the region `r` replaced with `μ`. -/
-def Mu.free : Mu → Nat → Mu → Mu
-  | .region r', r, μ => if r' = r then μ else .region r'
-  | m, _, _ => m
-
-/-- `t` with the region `r` replaced with `μ`. -/
-def Ty.free : Ty → Nat → Mu → Ty
-  | .unit, _, _ => .unit
-  | .int, _, _ => .int
-  | .cell m t, r, μ => .cell (m.free r μ) (t.free r μ)
-  | .fn m a b, r, μ => .fn (m.free r μ) (a.free r μ) (b.free r μ)
-  | .prod a b, r, μ => .prod (a.free r μ) (b.free r μ)
-  | .tparam i, _, _ => .tparam i
-
-theorem Mu.free_not_mentions {m : Mu} {r : Nat} (h : m.mentions r = false) (μ : Mu) : m.free r μ = m := by
-  cases m with
-  | region r' =>
-    simp only [Mu.mentions, beq_eq_false_iff_ne] at h
-    simp [Mu.free, h]
-  | _ => rfl
-
-theorem Ty.free_not_mentions {t : Ty} {r : Nat} (h : t.mentions r = false) (μ : Mu) : t.free r μ = t := by
-  induction t with
-  | unit | int | tparam => rfl
-  | cell m t ih =>
-    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
-    simp [Ty.free, Mu.free_not_mentions h.1, ih h.2]
-  | fn m a b iha ihb =>
-    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
-    simp [Ty.free, Mu.free_not_mentions h.1.1, iha h.1.2, ihb h.2]
-  | prod a b iha ihb =>
-    simp only [Ty.mentions, Bool.or_eq_false_iff] at h
-    simp [Ty.free, iha h.1, ihb h.2]
-
-@[simp] theorem Mu.free_mutable (r : Nat) (μ : Mu) : Mu.mutable.free r μ = .mutable := rfl
-@[simp] theorem Mu.free_immutable (r : Nat) (μ : Mu) : Mu.immutable.free r μ = .immutable := rfl
-@[simp] theorem Mu.free_self (r : Nat) (μ : Mu) : (Mu.region r).free r μ = μ := by simp [Mu.free]
-
-/-- Freeing a region keeps what's below what, with nothing assumed. -/
-theorem Le.free {m μ : Mu} (h : Le .none m μ) (r : Nat) (ν : Mu) : Le .none (m.free r ν) (μ.free r ν) := by
-  induction h with
-  | bot => exact .bot _
-  | top => exact .top _
-  | refl => exact .refl _
-  | assume h => simp [Assume.none] at h
-  | trans _ _ ih₁ ih₂ => exact .trans ih₁ ih₂
-
-/-- Freeing a region keeps "at most", with nothing assumed. -/
-theorem AtMost.free {μ : Mu} {t : Ty} (h : AtMost .none μ t) (r : Nat) (ν : Mu) :
-    AtMost .none (μ.free r ν) (t.free r ν) := by
-  induction t generalizing μ with
-  | unit => trivial
-  | int => trivial
-  | cell m t ih => exact ⟨h.1.free r ν, ih h.2⟩
-  | fn m a b => exact Le.free h r ν
-  | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
-  | tparam i =>
-    obtain ⟨μ', hμ', hle⟩ := h
-    rcases hμ' with rfl | hmem
-    · exact ⟨.mutable, .inl rfl, Le.free hle r ν⟩
-    · simp [Assume.none] at hmem
-
-/-- What a region holds becomes `imm` all the way down when the region is
-freed to `imm`. -/
-theorem AtMost.region_free {r : Nat} {t : Ty} (h : AtMost .none (.region r) t) :
-    AtMost .none .immutable (t.free r .immutable) := by
-  simpa using h.free r .immutable
-
-/-- With nothing assumed, only `imm` and the region itself are below a
-region: neither `mut` nor another region. -/
-theorem Le.below_region {m : Mu} {r : Nat} (h : Le .none m (.region r)) : m = .immutable ∨ m = .region r := by
-  rcases h.none_inv with h | h | h
-  · exact .inl h
-  · cases h
-  · exact .inr h
-
-/-- What a freeze of the region `r` can copy (#292). A closure can't be
-copied, so no function type in `t` mentions `r` (rule 5 of the regions
-page). And only an object of `r` holds what mentions `r`: a copy of a `mut`
-one would be a second `mut` object where there was one, which can be
-noticed. So every copy is `imm`. -/
-def Ty.Freezable (r : Nat) : Ty → Prop
-  | .unit | .int | .tparam _ => True
-  | .cell m t => (t.mentions r = true → m = .region r) ∧ t.Freezable r
-  | .fn m a b => (Ty.fn m a b).mentions r = false
-  | .prod a b => a.Freezable r ∧ b.Freezable r
-
-/-- `t` has no type or mutability parameter. -/
-def Ty.NoParams : Ty → Prop
-  | .unit | .int => True
-  | .tparam _ => False
-  | .cell m t => (∀ i, m ≠ .param i) ∧ t.NoParams
-  | .fn m a b => (∀ i, m ≠ .param i) ∧ a.NoParams ∧ b.NoParams
-  | .prod a b => a.NoParams ∧ b.NoParams
-
-theorem Mu.subst_of_ne {m : Mu} (h : ∀ i, m ≠ .param i) (ms : List Mu) : m.subst ms = m := by
-  cases m with
-  | param i => exact (h i rfl).elim
-  | _ => rfl
-
-theorem Ty.inst_noParams {t : Ty} (h : t.NoParams) (ms : List Mu) (τs : List Ty) : t.inst ms τs = t := by
-  induction t with
-  | unit | int => rfl
-  | tparam => exact h.elim
-  | cell m t ih => simp [Ty.inst, Mu.subst_of_ne h.1, ih h.2]
-  | fn m a b iha ihb => simp [Ty.inst, Mu.subst_of_ne h.1, iha h.2.1, ihb h.2.2]
-  | prod a b iha ihb => simp [Ty.inst, iha h.1, ihb h.2]
-
-theorem Mu.free_ne_param {m : Mu} (h : ∀ i, m ≠ .param i) (r : Nat) {μ : Mu} (hμ : ∀ i, μ ≠ .param i) :
-    ∀ i, m.free r μ ≠ .param i := by
-  intro i he
-  cases m with
-  | param j => exact h j rfl
-  | region r' =>
-    simp only [Mu.free] at he
-    split at he
-    · exact hμ i he
-    · cases he
-  | _ => cases he
-
-theorem Ty.NoParams.free {t : Ty} (h : t.NoParams) (r : Nat) : (t.free r .immutable).NoParams := by
-  have hi : ∀ i, Mu.immutable ≠ .param i := fun _ he => nomatch he
-  induction t with
-  | unit | int => trivial
-  | tparam => exact h.elim
-  | cell m t ih => exact ⟨Mu.free_ne_param h.1 r hi, ih h.2⟩
-  | fn m a b iha ihb => exact ⟨Mu.free_ne_param h.1 r hi, iha h.2.1, ihb h.2.2⟩
-  | prod a b iha ihb => exact ⟨iha h.1, ihb h.2⟩
-
-
-/-! ## Renaming a region
-
-When a block starts, its name for its region, `2 * k + 1`, becomes the
-region it makes (`Expr.ren`). An inner block with the same name has its
-own region, so renaming stops there. -/
-
-/-- `e` with the region `a` renamed `b`, where it isn't an inner block's. -/
-def Expr.ren (a b : Nat) : Expr → Expr
-  | .var x => .var x
-  | .unit => .unit
-  | .int n => .int n
-  | .loc l => .loc l
-  | .new c e => .new c (e.ren a b)
-  | .get e => .get (e.ren a b)
-  | .set e₁ e₂ => .set (e₁.ren a b) (e₂.ren a b)
-  | .letE x e₁ e₂ => .letE x (e₁.ren a b) (e₂.ren a b)
-  | .call f ms τs e => .call f (ms.map (Mu.free · a (.region b))) (τs.map (Ty.free · a (.region b))) (e.ren a b)
-  | .lam c x e => .lam c x (e.ren a b)
-  | .app e₁ e₂ => .app (e₁.ren a b) (e₂.ren a b)
-  | .pair e₁ e₂ => .pair (e₁.ren a b) (e₂.ren a b)
-  | .fst e => .fst (e.ren a b)
-  | .snd e => .snd (e.ren a b)
-  | .freeze c r t e => .freeze c (if r = a then b else r) (t.free a (.region b)) (e.ren a b)
-  | .block c k t e => if 2 * k + 1 = a then .block c k t e else .block c k (t.free a (.region b)) (e.ren a b)
-  | .toImm c e => .toImm c (e.ren a b)
-
-/-! ## Scoping
-
-A block's name for its region, `2 * k + 1`, only means something inside
-it. A running program's calls only give a function regions that exist, so
-a block in the function can't have the same name as one of them. -/
-
-/-- The odd regions `m` mentions are in `B`. -/
-def Mu.Scoped (B : Nat → Prop) (m : Mu) : Prop := ∀ r, m.mentions r = true → r % 2 = 1 → B r
-
-def Ty.Scoped (B : Nat → Prop) (t : Ty) : Prop := ∀ r, t.mentions r = true → r % 2 = 1 → B r
-
-/-- The arguments of `e`'s calls mention only the names of regions of the
-blocks they are in, and those in `B`. -/
-def Expr.Scoped : (Nat → Prop) → Expr → Prop
-  | _, .var _ | _, .unit | _, .int _ | _, .loc _ => True
-  | B, .new _ e | B, .get e | B, .lam _ _ e | B, .fst e | B, .snd e
-    | B, .freeze _ _ _ e | B, .toImm _ e => e.Scoped B
-  | B, .set e₁ e₂ | B, .letE _ e₁ e₂ | B, .app e₁ e₂ | B, .pair e₁ e₂ => e₁.Scoped B ∧ e₂.Scoped B
-  | B, .call _ ms τs e => (∀ m ∈ ms, m.Scoped B) ∧ (∀ τ ∈ τs, τ.Scoped B) ∧ e.Scoped B
-  | B, .block _ k _ e => e.Scoped (fun r => r = 2 * k + 1 ∨ B r)
-
-/-- No region a running program mentions is a block's name. -/
-abbrev Expr.Closed (e : Expr) : Prop := e.Scoped (fun _ => False)
 
 end BoltMut

@@ -13,24 +13,6 @@ namespace BoltMut
 
 abbrev Heap := List Expr
 
-/-- The copy that a freeze of the region `r` makes of a value of type `t`
-(#292): an object whose type mentions `r` is copied, into a new one with
-what it holds copied, and the rest is shared. An object of `r` itself only
-holds what's `imm` or of `r`, so everything copied is `imm` once `r` is.
-`m` says which objects are copied already, and to where: an object reached
-twice is copied once, so the copy shares what the value shares. A copy
-only adds to the heap. -/
-inductive Copy (r : Nat) : Ty → Heap → List (Nat × Nat) → Expr → Heap → List (Nat × Nat) → Expr → Prop where
-  | keep {t : Ty} {h : Heap} {m : List (Nat × Nat)} {v : Expr} : t.mentions r = false → Copy r t h m v h m v
-  | seen {μ : Mu} {s : Ty} {h : Heap} {m : List (Nat × Nat)} {l c : Nat} :
-      (Ty.cell μ s).mentions r = true → m.lookup l = some c → Copy r (.cell μ s) h m (.loc l) h m (.loc c)
-  | cell {μ : Mu} {s : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {l : Nat} {w w' : Expr} :
-      (Ty.cell μ s).mentions r = true → m.lookup l = none → h[l]? = some w → Copy r s h m w h' m' w' →
-      Copy r (.cell μ s) h m (.loc l) (h' ++ [w']) ((l, h'.length) :: m') (.loc h'.length)
-  | pair {a b : Ty} {h h₁ h₂ : Heap} {m m₁ m₂ : List (Nat × Nat)} {v₁ v₂ v₁' v₂' : Expr} :
-      (Ty.prod a b).mentions r = true → Copy r a h m v₁ h₁ m₁ v₁' → Copy r b h₁ m₁ v₂ h₂ m₂ v₂' →
-      Copy r (.prod a b) h m (.pair v₁ v₂) h₂ m₂ (.pair v₁' v₂')
-
 inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
   | newCong {h h' : Heap} {e e' : Expr} {b : Bool} :
       Step fns h e h' e' → Step fns h (.new b e) h' (.new b e')
@@ -73,23 +55,6 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
       Step fns h e h' e' → Step fns h (.snd e) h' (.snd e')
   | sndVal {h : Heap} {v₁ v₂ : Expr} :
       v₁.IsValue → v₂.IsValue → Step fns h (.snd (.pair v₁ v₂)) h v₂
-  | freezeCong {h h' : Heap} {c : Bool} {r : Nat} {t : Ty} {e e' : Expr} :
-      Step fns h e h' e' → Step fns h (.freeze c r t e) h' (.freeze c r t e')
-  | freezeVal {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
-      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze false r t v) h' v'
-  /-- A block starts: it makes its region, with a marker at the end of the
-  heap, and its name for the region becomes that one. It ends with a
-  freeze of it. -/
-  | blockEnter {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
-      Step fns h (.block false k t e) (h ++ [.unit])
-        (.freeze false (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
-  /-- The same, for a block that freezes in place. -/
-  | blockKeep {h : Heap} {k : Nat} {t : Ty} {e : Expr} :
-      Step fns h (.block true k t e) (h ++ [.unit])
-        (.freeze true (2 * h.length) (t.free (2 * k + 1) (.region (2 * h.length))) (e.ren (2 * k + 1) (2 * h.length)))
-  /-- In place, it makes the same copy, but goes on with the value. -/
-  | freezeKeep {h h' : Heap} {r : Nat} {t : Ty} {m : List (Nat × Nat)} {v v' : Expr} :
-      v.IsValue → Copy r t h [] v h' m v' → Step fns h (.freeze true r t v) h' v
   | toImmCong {h h' : Heap} {b : Bool} {e e' : Expr} :
       Step fns h e h' e' → Step fns h (.toImm b e) h' (.toImm b e')
   /-- A freeze copies the object to the end of the heap. -/
@@ -103,5 +68,16 @@ inductive Step (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
 inductive Steps (fns : List Fn) : Heap → Expr → Heap → Expr → Prop where
   | refl : Steps fns h e h e
   | step : Step fns h e h' e' → Steps fns h' e' h'' e'' → Steps fns h e h'' e''
+
+/-- A value takes no step. -/
+theorem Expr.IsValue.no_step {fns : List Fn} {v : Expr} (hv : v.IsValue) {h h' : Heap} {e' : Expr}
+    (hs : Step fns h v h' e') : False := by
+  induction hv generalizing h' e' with
+  | unit | int | loc | lam => cases hs
+  | pair _ _ ih₁ ih₂ =>
+    cases hs with
+    | pairCong₁ s => exact ih₁ s
+    | pairCong₂ _ s => exact ih₂ s
+
 
 end BoltMut

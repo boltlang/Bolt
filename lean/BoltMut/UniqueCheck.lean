@@ -1,5 +1,4 @@
 import BoltMut.Unique
-import BoltMut.Scope
 
 /-!
 # Checking that `toImm`s are unique (#284)
@@ -48,8 +47,7 @@ variable {B : Nat → Pos → Prop}
 def Expr.Free (x : Nat) : Expr → Prop
   | .var y => y = x
   | .unit | .int _ | .loc _ => False
-  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .freeze _ _ _ e | .block _ _ _ e
-    | .toImm _ e => e.Free x
+  | .new _ e | .get e | .call _ _ _ e | .fst e | .snd e | .toImm _ e => e.Free x
   | .set a b | .app a b | .pair a b => a.Free x ∨ b.Free x
   | .letE y a b => a.Free x ∨ (y ≠ x ∧ b.Free x)
   | .lam _ y e => y ≠ x ∧ e.Free x
@@ -63,8 +61,7 @@ theorem Expr.subst_of_not_free {e : Expr} {x : Nat} (h : ¬ e.Free x) (v : Expr)
     simp only [Expr.Free] at h
     simp [Expr.subst, h]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.subst, ih h]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => simp only [Expr.subst, ih h]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.Free, not_or] at h
     simp only [Expr.subst, ih₁ h.1, ih₂ h.2]
@@ -97,8 +94,7 @@ theorem Expr.subst_comm (e : Expr) {x y : Nat} {v w : Expr} (hxy : x ≠ y) (hv 
         simp [Expr.subst, hzx, Expr.subst_of_not_free (hw x)]
       · simp [Expr.subst, hzx, hzy]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.subst, ih]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => simp only [Expr.subst, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, ih₁, ih₂]
   | letE z _ _ ih₁ ih₂ =>
     simp only [Expr.subst, ih₁]
@@ -118,9 +114,8 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     rw [hx] at h
     cases h
   | unit | int | loc | locSub => intro _ _ h; exact h
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih
-    | freeze _ _ _ _ _ ih | toImm _ _ ih => exact ih
-  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
+  | new _ _ ih | get _ ih | call _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih
+  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     intro x hx hf
     exact hf.elim (ih₁ x hx) (ih₂ x hx)
   | @letE _ _ y _ _ _ _ _ _ ih₁ ih₂ =>
@@ -128,7 +123,7 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     rcases hf with hf | ⟨hyx, hf⟩
     · exact ih₁ x hx hf
     · exact ih₂ x (by simp [Ctx.update, Ne.symm hyx, hx]) hf
-  | @lam _ _ Γc _ y _ _ _ _ _ hc _ _ _ _ _ ih =>
+  | @lam _ _ Γc _ y _ _ _ hc _ _ ih =>
     intro x hx hf
     obtain ⟨hyx, hf⟩ := hf
     refine ih x ?_ hf
@@ -136,12 +131,6 @@ theorem HasType.not_free {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool}
     cases h : Γc x with
     | none => rfl
     | some s => rw [hc x s h] at hx; cases hx
-  | @block _ _ Γb _ _ _ hsub _ _ _ _ _ _ ih =>
-    intro x hx hf
-    refine ih x ?_ hf
-    cases h : Γb x with
-    | none => rfl
-    | some s => rw [hsub x s h] at hx; cases hx
 
 theorem HasType.noFree {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool} {e : Expr} {t : Ty}
     (ht : HasType fns σ Δ io Ctx.empty e t) : e.NoFree :=
@@ -152,8 +141,7 @@ theorem Expr.subst_inst (e : Expr) (x : Nat) (v : Expr) (ms : List Mu) (τs : Li
   induction e with
   | var y => simp only [Expr.subst]; split <;> simp [Expr.inst, Expr.subst, *]
   | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.subst, Expr.inst, ih]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => simp only [Expr.subst, Expr.inst, ih]
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.inst, ih₁, ih₂]
   | letE y _ _ ih₁ ih₂ =>
     simp only [Expr.subst, Expr.inst, ih₁]
@@ -162,34 +150,13 @@ theorem Expr.subst_inst (e : Expr) (x : Nat) (v : Expr) (ms : List Mu) (τs : Li
     simp only [Expr.subst, Expr.inst]
     split <;> simp [ih]
 
-/-- Renaming a region commutes with substituting a value that mentions none,
-like a location. -/
-theorem Expr.subst_ren (e : Expr) (x : Nat) {v : Expr} {a b : Nat} (hv : v.ren a b = v) :
-    (e.subst x v).ren a b = (e.ren a b).subst x v := by
-  induction e with
-  | var y => simp only [Expr.subst]; split <;> simp [Expr.ren, Expr.subst, *]
-  | unit | int | loc => rfl
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | toImm _ _ ih => simp only [Expr.subst, Expr.ren, ih]
-  | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => simp only [Expr.subst, Expr.ren, ih₁, ih₂]
-  | letE y _ _ ih₁ ih₂ =>
-    simp only [Expr.subst, Expr.ren, ih₁]
-    split <;> simp [ih₂]
-  | lam c y _ ih =>
-    simp only [Expr.subst, Expr.ren]
-    split <;> simp [ih]
-  | block c k t _ ih =>
-    simp only [Expr.subst, Expr.ren]
-    split <;> simp [Expr.subst, ih]
-
 /-- Substituting doesn't remove locations. -/
 theorem Expr.hasLoc_subst_of {e : Expr} {x : Nat} {v : Expr} {l : Nat} (h : e.HasLoc l) :
     (e.subst x v).HasLoc l := by
   induction e with
   | var | unit | int => exact h.elim
   | loc => exact h
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact h.imp ih₁ ih₂
   | letE y _ _ ih₁ ih₂ =>
     simp only [Expr.subst, Expr.HasLoc]
@@ -230,8 +197,6 @@ inductive Bor (B : Nat → Pos → Prop) (l : Nat) : Expr → Prop where
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Bor B l e → Bor B l (.call f ms τs e)
   | fst {e : Expr} : Bor B l e → Bor B l (.fst e)
   | snd {e : Expr} : Bor B l e → Bor B l (.snd e)
-  | freeze {c : Bool} {r : Nat} {t : Ty} {e : Expr} : Bor B l e → Bor B l (.freeze c r t e)
-  | block {c : Bool} {k : Nat} {t : Ty} {e : Expr} : Bor B l e → Bor B l (.block c k t e)
   | toImm {b : Bool} {e : Expr} : Bor B l e → Bor B l (.toImm b e)
   /-- A call of a function that borrows its argument, with `l`. -/
   | callL {f : Nat} {ms : List Mu} {τs : List Ty} {a : Expr} : B f .whole → Path l a → Bor B l (.call f ms τs a)
@@ -256,8 +221,6 @@ inductive Con (B : Nat → Pos → Prop) (l : Nat) : Expr → Prop where
   | call {f : Nat} {ms : List Mu} {τs : List Ty} {e : Expr} : Con B l e → Con B l (.call f ms τs e)
   | fst {e : Expr} : Con B l e → Con B l (.fst e)
   | snd {e : Expr} : Con B l e → Con B l (.snd e)
-  | freeze {c : Bool} {r : Nat} {t : Ty} {e : Expr} : Con B l e → Con B l (.freeze c r t e)
-  | block {c : Bool} {k : Nat} {t : Ty} {e : Expr} : Con B l e → Con B l (.block c k t e)
   | set₁ {a b : Expr} : Con B l a → ¬ b.HasLoc l → Con B l (.set a b)
   | set₂ {a b : Expr} : Bor B l a → Con B l b → Con B l (.set a b)
   | let₁ {x : Nat} {a b : Expr} : Con B l a → ¬ b.HasLoc l → Con B l (.letE x a b)
@@ -284,9 +247,6 @@ inductive Ok (B : Nat → Pos → Prop) : Nat → (Nat → Prop) → Expr → Pr
       Ok B n L e → Ok B n L (.call f ms τs e)
   | fst {n : Nat} {L : Nat → Prop} {e : Expr} : Ok B n L e → Ok B n L (.fst e)
   | snd {n : Nat} {L : Nat → Prop} {e : Expr} : Ok B n L e → Ok B n L (.snd e)
-  | freeze {n : Nat} {L : Nat → Prop} {c : Bool} {r : Nat} {t : Ty} {e : Expr} : Ok B n L e → Ok B n L (.freeze c r t e)
-  | block {n : Nat} {L : Nat → Prop} {c : Bool} {k : Nat} {t : Ty} {e : Expr} :
-      Ok B n L e → Ok B n L (.block c k t e)
   | set {n : Nat} {L : Nat → Prop} {a b : Expr} : Ok B n L a → Ok B n L b → Ok B n L (.set a b)
   | letE {n : Nat} {L : Nat → Prop} {x : Nat} {a b : Expr} : Ok B n L a → Ok B n L b → Ok B n L (.letE x a b)
   | app {n : Nat} {L : Nat → Prop} {a b : Expr} : Ok B n L a → Ok B n L b → Ok B n L (.app a b)
@@ -331,14 +291,6 @@ theorem Expr.IsValue.inst {v : Expr} (hv : v.IsValue) (ms : List Mu) (τs : List
   | lam => exact .lam
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
 
-theorem Expr.IsValue.ren {v : Expr} (hv : v.IsValue) (a b : Nat) : (v.ren a b).IsValue := by
-  induction hv with
-  | unit => exact .unit
-  | int => exact .int
-  | loc => exact .loc
-  | lam => exact .lam
-  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
-
 theorem Path.not_toImmOf {l : Nat} {a : Expr} (h : Path l a) {l' : Nat} : ¬ a.ToImmOf l' := by
   cases h with
   | loc => exact id
@@ -353,8 +305,7 @@ theorem Expr.count_zero {e : Expr} {l : Nat} (h : ¬ e.HasLoc l) : e.count l = 0
   | loc l' =>
     simp only [Expr.HasLoc] at h
     simp [Expr.count, h]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.HasLoc, not_or] at h
     simp only [Expr.count, ih₁ h.1, ih₂ h.2]
@@ -391,8 +342,7 @@ theorem Bor.not_toImmOf {l : Nat} {e : Expr} (h : Bor B l e) : ¬ e.ToImmOf l :=
   | setP hp _ ih => exact fun hf => hf.elim hp.not_toImmOf fun h => ih h.2
   | fstD hw _ | callT₂ _ hw _ => exact fun hf => hf.elim hw.not_toImmOf fun h => h.2
   | sndD hw _ | callT₁ _ hw _ => exact fun hf => hf.elim id fun h => hw.not_toImmOf h.2
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih
-  | block => exact id
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih => exact ih
   | @toImm _ e h ih =>
     intro hf
     rcases hf with rfl | hf
@@ -410,8 +360,7 @@ theorem Con.count {l : Nat} {e : Expr} (h : Con B l e) (hf : e.ToImmOf l) : e.co
     rcases hf with rfl | hf
     · cases h
     · exact ih hf
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih hf
-  | block => exact hf.elim
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih => exact ih hf
   | set₁ ha hb ih | app₁ ha hb ih | pair₁ ha hb ih =>
     rcases hf with hf | ⟨hv, _⟩
     · simp only [Expr.count, ih hf, Expr.count_zero hb]
@@ -428,8 +377,7 @@ theorem Expr.hasLoc_inst {e : Expr} {ms : List Mu} {τs : List Ty} {l : Nat} :
     (e.inst ms τs).HasLoc l ↔ e.HasLoc l := by
   induction e with
   | var | unit | int | loc => simp [Expr.inst, Expr.HasLoc]
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => simp only [Expr.inst, Expr.HasLoc, ih]
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => simp only [Expr.inst, Expr.HasLoc, ih]
   | set _ _ ih₁ ih₂ | letE _ _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ =>
     simp only [Expr.inst, Expr.HasLoc, ih₁, ih₂]
 
@@ -448,12 +396,6 @@ theorem Path.inst {l : Nat} {a : Expr} (h : Path l a) (ms : List Mu) (τs : List
   | loc => exact .loc
   | fst hw hwl => exact .fst (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
   | snd hw hwl => exact .snd (hw.inst ms τs) fun h' => hwl (Expr.hasLoc_inst.mp h')
-
-theorem Path.ren {l : Nat} {a : Expr} (h : Path l a) (x y : Nat) : Path l (a.ren x y) := by
-  cases h with
-  | loc => exact .loc
-  | fst hw hwl => exact .fst (hw.ren x y) fun h' => hwl (Expr.hasLoc_ren h')
-  | snd hw hwl => exact .snd (hw.ren x y) fun h' => hwl (Expr.hasLoc_ren h')
 
 /-- A path that's a value is the location. -/
 theorem Path.value {l : Nat} {a : Expr} (h : Path l a) (hv : a.IsValue) : a = .loc l := by
@@ -492,8 +434,6 @@ theorem Bor.subst {l : Nat} {e : Expr} (h : Bor B l e) {v : Expr} (hv : ¬ v.Has
   | call _ ih => exact .call ih
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
   | toImm _ ih => exact .toImm ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
@@ -516,8 +456,6 @@ theorem Con.subst {l : Nat} {e : Expr} (h : Con B l e) {v : Expr} (hv : ¬ v.Has
   | call _ ih => exact .call ih
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
   | set₁ _ hb ih => exact .set₁ ih (Expr.noLoc_subst hb hv)
   | set₂ ha _ ih => exact .set₂ (ha.subst hv x) ih
   | app₁ _ hb ih => exact .app₁ ih (Expr.noLoc_subst hb hv)
@@ -555,8 +493,6 @@ theorem Ok.of_noToImm {n : Nat} {L : Nat → Prop} {e : Expr} (h : e.NoToImm) : 
   | call _ _ _ _ ih => exact .call (ih h)
   | fst _ ih => exact .fst (ih h)
   | snd _ ih => exact .snd (ih h)
-  | freeze _ _ _ _ ih => exact .freeze (ih h)
-  | block _ _ _ _ ih => exact .block (ih h)
   | set _ _ ih₁ ih₂ => exact .set (ih₁ h.1) (ih₂ h.2)
   | letE _ _ _ ih₁ ih₂ => exact .letE (ih₁ h.1) (ih₂ h.2)
   | app _ _ ih₁ ih₂ => exact .app (ih₁ h.1) (ih₂ h.2)
@@ -577,8 +513,6 @@ theorem Ok.mono {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) :
   | call _ ih => exact fun hn hL => .call (ih hn hL)
   | fst _ ih => exact fun hn hL => .fst (ih hn hL)
   | snd _ ih => exact fun hn hL => .snd (ih hn hL)
-  | freeze _ ih => exact fun hn hL => .freeze (ih hn hL)
-  | block _ ih => exact fun hn hL => .block (ih hn hL)
   | set _ _ ih₁ ih₂ => exact fun hn hL => .set (ih₁ hn hL) (ih₂ hn hL)
   | letE _ _ ih₁ ih₂ => exact fun hn hL => .letE (ih₁ hn hL) (ih₂ hn hL)
   | app _ _ ih₁ ih₂ => exact fun hn hL => .app (ih₁ hn hL) (ih₂ hn hL)
@@ -618,8 +552,6 @@ theorem Ok.subst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) :
   | call _ ih => exact fun x _ a b c d => .call (ih x a b c d)
   | fst _ ih => exact fun x _ a b c d => .fst (ih x a b c d)
   | snd _ ih => exact fun x _ a b c d => .snd (ih x a b c d)
-  | freeze _ ih => exact fun x _ a b c d => .freeze (ih x a b c d)
-  | block _ ih => exact fun x _ a b c d => .block (ih x a b c d)
   | set _ _ ih₁ ih₂ => exact fun x _ a b c d => .set (ih₁ x a b c d) (ih₂ x a b c d)
   | app _ _ ih₁ ih₂ => exact fun x _ a b c d => .app (ih₁ x a b c d) (ih₂ x a b c d)
   | pair _ _ ih₁ ih₂ => exact fun x _ a b c d => .pair (ih₁ x a b c d) (ih₂ x a b c d)
@@ -667,8 +599,8 @@ theorem Ok.subst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) :
 /-- What `Ok` lets a program make `imm` next is owned. -/
 theorem Ok.toImmOf {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) {l : Nat} (hf : e.ToImmOf l) : L l := by
   induction h with
-  | var | unit | int | loc | lam | block | bound => exact hf.elim
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih => exact ih hf
+  | var | unit | int | loc | lam | bound => exact hf.elim
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih => exact ih hf
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hf.elim ih₁ fun h => ih₂ h.2
   | letE _ _ ih₁ _ => exact ih₁ hf
   | @toImm _ _ _ l' hl =>
@@ -680,8 +612,7 @@ theorem Ok.toImmOf {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) {l :
 theorem Expr.NoToImm.of_subst {e : Expr} {x : Nat} {v : Expr} (h : (e.subst x v).NoToImm) : e.NoToImm := by
   induction e with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
     simp only [Expr.subst] at h
@@ -699,8 +630,7 @@ theorem Expr.NoToImm.of_subst {e : Expr} {x : Nat} {v : Expr} (h : (e.subst x v)
 theorem Expr.LamNoToImm.of_subst {e : Expr} {x : Nat} {v : Expr} (h : (e.subst x v).LamNoToImm) : e.LamNoToImm := by
   induction e with
   | var | unit | int | loc => trivial
-  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ ih
-    | block _ _ _ _ ih | toImm _ _ ih => exact ih h
+  | new _ _ ih | get _ ih | call _ _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih h
   | set _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁ h.1, ih₂ h.2⟩
   | letE y _ _ ih₁ ih₂ =>
     simp only [Expr.subst] at h
@@ -719,7 +649,7 @@ theorem Ok.lamNoToImm {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) :
   induction h with
   | var | unit | int | loc | toImm => trivial
   | lam h => exact h
-  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih | freeze _ ih | block _ ih => exact ih
+  | new _ ih | get _ ih | call _ ih | fst _ ih | snd _ ih => exact ih
   | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact ⟨ih₁, ih₂⟩
   | @own n _ _ _ _ _ _ _ ih₀ ih => exact ⟨ih₀, (ih n (Nat.le_refl _)).of_subst⟩
   | @ownCall n _ _ _ _ _ _ _ _ _ _ _ ih₀ ih => exact ⟨ih₀, (ih n (Nat.le_refl _)).of_subst⟩
@@ -760,8 +690,6 @@ theorem Bor.inst {l : Nat} {e : Expr} (h : Bor B l e) (ms : List Mu) (τs : List
   | call _ ih => exact .call ih
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
   | toImm _ ih => exact .toImm ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
@@ -778,8 +706,6 @@ theorem Con.inst {l : Nat} {e : Expr} (h : Con B l e) (ms : List Mu) (τs : List
   | call _ ih => exact .call ih
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
   | set₁ _ hb ih => exact .set₁ ih (nl hb)
   | set₂ ha _ ih => exact .set₂ (ha.inst ms τs) ih
   | app₁ _ hb ih => exact .app₁ ih (nl hb)
@@ -807,8 +733,6 @@ theorem Ok.inst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) (ms : L
   | call _ ih => exact .call ih
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
   | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
   | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
   | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
@@ -833,107 +757,6 @@ theorem Ok.inst {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) (ms : L
   | bound hl _ ih =>
     refine .bound hl ?_
     rw [Expr.subst_inst] at ih
-    exact ih
-
-theorem Bor.ren {l : Nat} {e : Expr} (h : Bor B l e) (a b : Nat) : Bor B l (e.ren a b) := by
-  induction h with
-  | none h => exact .none fun h' => h (Expr.hasLoc_ren h')
-  | callL hf hp => exact .callL hf (hp.ren a b)
-  | getP hp => exact .getP (hp.ren a b)
-  | setP hp _ ih => exact .setP (hp.ren a b) ih
-  | fstD hw hwl => exact .fstD (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
-  | sndD hw hwl => exact .sndD (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
-  | callT₁ hf hw hwl => exact .callT₁ hf (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
-  | callT₂ hf hw hwl => exact .callT₂ hf (hw.ren a b) fun h' => hwl (Expr.hasLoc_ren h')
-  | new _ ih => exact .new ih
-  | get _ ih => exact .get ih
-  | call _ ih => exact .call ih
-  | fst _ ih => exact .fst ih
-  | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | @block _ k _ _ hb ih =>
-    simp only [Expr.ren]
-    split
-    · exact .block hb
-    · exact .block ih
-  | toImm _ ih => exact .toImm ih
-  | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
-  | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
-  | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
-  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
-
-theorem Con.ren {l : Nat} {e : Expr} (h : Con B l e) (a b : Nat) : Con B l (e.ren a b) := by
-  have nl : ∀ {e : Expr}, ¬ e.HasLoc l → ¬ (e.ren a b).HasLoc l := fun h h' => h (Expr.hasLoc_ren h')
-  induction h with
-  | toImm => exact .toImm
-  | toImmC _ ih => exact .toImmC ih
-  | new _ ih => exact .new ih
-  | get _ ih => exact .get ih
-  | call _ ih => exact .call ih
-  | fst _ ih => exact .fst ih
-  | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | @block _ k _ _ hc ih =>
-    simp only [Expr.ren]
-    split
-    · exact .block hc
-    · exact .block ih
-  | set₁ _ hb ih => exact .set₁ ih (nl hb)
-  | set₂ ha _ ih => exact .set₂ (ha.ren a b) ih
-  | app₁ _ hb ih => exact .app₁ ih (nl hb)
-  | app₂ ha _ ih => exact .app₂ (ha.ren a b) ih
-  | pair₁ _ hb ih => exact .pair₁ ih (nl hb)
-  | pair₂ ha _ ih => exact .pair₂ (ha.ren a b) ih
-  | let₁ _ hb ih => exact .let₁ ih (nl hb)
-  | let₂ ha _ ih => exact .let₂ (ha.ren a b) ih
-  | @bind x e hb _ ih =>
-    refine .bind (nl hb) ?_
-    have := ih
-    rw [Expr.subst_ren e x (v := .loc l) rfl] at this
-    exact this
-
-theorem Ok.ren {n : Nat} {L : Nat → Prop} {e : Expr} (h : Ok B n L e) (a b : Nat) : Ok B n L (e.ren a b) := by
-  induction h with
-  | var => exact .var
-  | unit => exact .unit
-  | int => exact .int
-  | loc => exact .loc
-  | lam h => exact .lam (h.ren a b)
-  | new _ ih => exact .new ih
-  | get _ ih => exact .get ih
-  | call _ ih => exact .call ih
-  | fst _ ih => exact .fst ih
-  | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | @block _ _ _ k _ _ hb ih =>
-    simp only [Expr.ren]
-    split
-    · exact .block hb
-    · exact .block ih
-  | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
-  | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
-  | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
-  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
-  | toImm hl => exact .toImm hl
-  | @ownCall _ _ x _ _ _ _ e hfB _ hc _ ih₀ ih =>
-    refine .ownCall hfB ih₀ (fun l hl => ?_) (fun l hl => ?_)
-    · have := (hc l hl).ren a b
-      rw [Expr.subst_ren e x (v := .loc l) rfl] at this
-      exact this
-    · have := ih l hl
-      rw [Expr.subst_ren e x (v := .loc l) rfl] at this
-      exact this
-  | @own _ _ x _ e _ hc _ ih₀ ih =>
-    refine .own ih₀ (fun l hl => ?_) (fun l hl => ?_)
-    · have := (hc l hl).ren a b
-      rw [Expr.subst_ren e x (v := .loc l) rfl] at this
-      exact this
-    · have := ih l hl
-      rw [Expr.subst_ren e x (v := .loc l) rfl] at this
-      exact this
-  | @bound _ _ x l e hl _ ih =>
-    refine .bound hl ?_
-    rw [Expr.subst_ren e x (v := .loc l) rfl] at ih
     exact ih
 
 /-! ## Locations nothing has -/
@@ -965,41 +788,13 @@ theorem HeapNoLoc.set {h : Heap} {l : Nat} (hh : HeapNoLoc h l) {v : Expr} (hv :
     · cases ha
   · exact hh a' w ha
 
-/-- A copy doesn't make anything hold `l`, if nothing it copies does. -/
-theorem Copy.noLoc {r : Nat} {t : Ty} {h h' : Heap} {m m' : List (Nat × Nat)} {v v' : Expr}
-    (hc : Copy r t h m v h' m' v') {l : Nat} : HeapNoLoc h l → ¬ v.HasLoc l → l < h.length →
-      (∀ o c, m.lookup o = some c → c ≠ l) →
-      HeapNoLoc h' l ∧ ¬ v'.HasLoc l ∧ ∀ o c, m'.lookup o = some c → c ≠ l := by
-  induction hc with
-  | keep => exact fun hh hv _ hm => ⟨hh, hv, hm⟩
-  | seen _ hlk => exact fun hh _ _ hm => ⟨hh, fun h => hm _ _ hlk h, hm⟩
-  | @cell μ s h h' m m' o w w' _ _ hw hcw ih =>
-    intro hh _ hl hm
-    obtain ⟨hh', hw', hm'⟩ := ih hh (hh _ _ hw) hl hm
-    have hlen : h.length ≤ h'.length := by
-      obtain ⟨e, rfl⟩ := hcw.prefix
-      simp
-    refine ⟨hh'.append hw', fun h => by simp only [Expr.HasLoc] at h; omega, fun o' c hk => ?_⟩
-    simp only [List.lookup] at hk
-    split at hk
-    · cases hk; omega
-    · exact hm' o' c hk
-  | pair _ hc₁ _ ih₁ ih₂ =>
-    intro hh hv hl hm
-    obtain ⟨hh₁, hv₁, hm₁⟩ := ih₁ hh (fun h => hv (.inl h)) hl hm
-    have hlen : _ := hc₁.prefix
-    obtain ⟨hh₂, hv₂, hm₂⟩ := ih₂ hh₁ (fun h => hv (.inr h))
-      (by obtain ⟨e, rfl⟩ := hlen; simp; omega) hm₁
-    exact ⟨hh₂, fun h => h.elim hv₁ hv₂, hm₂⟩
-
 /-- A step doesn't give a location to what doesn't have it, nor to an
 object, if nothing has it to start with. -/
 theorem step_noLoc {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' : Heap} {e e' : Expr}
     (hs : Step fns h e h' e') {l : Nat} :
     ¬ e.HasLoc l → l < h.length → HeapNoLoc h l → ¬ e'.HasLoc l ∧ HeapNoLoc h' l ∧ l < h'.length := by
   induction hs with
-  | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | callCong _ ih | freezeCong _ ih
-    | toImmCong _ ih => exact ih
+  | newCong _ ih | getCong _ ih | fstCong _ ih | sndCong _ ih | callCong _ ih | toImmCong _ ih => exact ih
   | setCong₁ _ ih | letCong _ ih | appCong₁ _ ih | pairCong₁ _ ih =>
     intro he hl hh
     obtain ⟨he', hh', hl'⟩ := ih (fun h => he (.inl h)) hl hh
@@ -1027,15 +822,6 @@ theorem step_noLoc {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) {h h' 
     exact ⟨Expr.noLoc_subst (fun h => he (.inl h)) (fun h => he (.inr h)), hh, hl⟩
   | fstVal _ _ => exact fun he hl hh => ⟨fun h => he (.inl h), hh, hl⟩
   | sndVal _ _ => exact fun he hl hh => ⟨fun h => he (.inr h), hh, hl⟩
-  | freezeVal _ hc | freezeKeep _ hc =>
-    intro he hl hh
-    obtain ⟨hh', hv', _⟩ := hc.noLoc hh he hl (fun _ _ h => by simp at h)
-    have hlen : _ := hc.prefix
-    refine ⟨?_, hh', by obtain ⟨e, rfl⟩ := hlen; simp; omega⟩
-    first | exact hv' | exact he
-  | @blockEnter k t e | @blockKeep k t e =>
-    intro he hl hh
-    exact ⟨fun h => he (Expr.hasLoc_ren (e := e) h), hh.append id, by simp; omega⟩
   | toImmVal hw =>
     intro _ hl hh
     exact ⟨fun h => by simp only [Expr.HasLoc] at h; omega, hh.append (hh _ _ hw), by simp; omega⟩
@@ -1187,37 +973,6 @@ theorem step_bor {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) (hB : Bo
     | none hn => exact nl (.sndVal hv₁ hv₂) hn hl hh
     | snd hb => exact ⟨.none fun h => hb.value (.pair hv₁ hv₂) (.inr h), hh, hl⟩
     | sndD _ hwl => exact ⟨.none hwl, hh, hl⟩
-  | freezeCong s ih =>
-    intro hb hl hh
-    cases hb with
-    | none hn => exact nl (.freezeCong s) hn hl hh
-    | freeze hb => obtain ⟨a, b, c⟩ := ih hb hl hh; exact ⟨.freeze a, b, c⟩
-  | freezeVal hv hc =>
-    intro hb hl hh
-    cases hb with
-    | none hn => exact nl (.freezeVal hv hc) hn hl hh
-    | freeze hb =>
-      obtain ⟨hh', hv', _⟩ := hc.noLoc hh (hb.value hv) hl (fun _ _ h => by simp at h)
-      obtain ⟨ext, rfl⟩ := hc.prefix
-      exact ⟨.none hv', hh', by simp; omega⟩
-  | blockEnter =>
-    intro hb hl hh
-    cases hb with
-    | none hn => exact nl .blockEnter hn hl hh
-    | block hb => exact ⟨.freeze (hb.ren _ _), hh.append id, by simp; omega⟩
-  | blockKeep =>
-    intro hb hl hh
-    cases hb with
-    | none hn => exact nl .blockKeep hn hl hh
-    | block hb => exact ⟨.freeze (hb.ren _ _), hh.append id, by simp; omega⟩
-  | freezeKeep hv hc =>
-    intro hb hl hh
-    cases hb with
-    | none hn => exact nl (.freezeKeep hv hc) hn hl hh
-    | freeze hb =>
-      obtain ⟨hh', _, _⟩ := hc.noLoc hh (hb.value hv) hl (fun _ _ h => by simp at h)
-      obtain ⟨ext, rfl⟩ := hc.prefix
-      exact ⟨hb, hh', by simp; omega⟩
   | toImmCong s ih =>
     intro hb hl hh
     cases hb with
@@ -1342,20 +1097,6 @@ theorem step_con {fns : List Fn} (hfn : ∀ fn ∈ fns, fn.body.NoLocs) (hB : Bo
     | snd hc => obtain ⟨a, b, c⟩ := ih hc hf hl hh; exact ⟨a.imp .snd id, b, c⟩
   | fstVal hv₁ hv₂ => intro hc; cases hc with | fst hc => exact (hc.not_value (.pair hv₁ hv₂)).elim
   | sndVal hv₁ hv₂ => intro hc; cases hc with | snd hc => exact (hc.not_value (.pair hv₁ hv₂)).elim
-  | freezeCong _ ih =>
-    intro hc hf hl hh
-    cases hc with
-    | freeze hc => obtain ⟨a, b, c⟩ := ih hc hf hl hh; exact ⟨a.imp .freeze id, b, c⟩
-  | freezeVal hv _ => intro hc; cases hc with | freeze hc => exact (hc.not_value hv).elim
-  | blockEnter =>
-    intro hc _ hl hh
-    cases hc with
-    | block hc => exact ⟨.inl (.freeze (hc.ren _ _)), hh.append id, by simp; omega⟩
-  | blockKeep =>
-    intro hc _ hl hh
-    cases hc with
-    | block hc => exact ⟨.inl (.freeze (hc.ren _ _)), hh.append id, by simp; omega⟩
-  | freezeKeep hv _ => intro hc; cases hc with | freeze hc => exact (hc.not_value hv).elim
   | toImmCong s ih =>
     intro hc hf hl hh
     cases hc with
@@ -1377,13 +1118,10 @@ theorem step_len {fns : List Fn} {h h' : Heap} {e e' : Expr} (hs : Step fns h e 
   induction hs with
   | newCong _ ih | getCong _ ih | setCong₁ _ ih | setCong₂ _ _ ih | letCong _ ih | callCong _ ih
     | appCong₁ _ ih | appCong₂ _ _ ih | pairCong₁ _ ih | pairCong₂ _ _ ih | fstCong _ ih | sndCong _ ih
-    | freezeCong _ ih | toImmCong _ ih => exact ih
-  | newVal _ | blockEnter | blockKeep | toImmVal _ | toImmKeep _ => simp
+    | toImmCong _ ih => exact ih
+  | newVal _ | toImmVal _ | toImmKeep _ => simp
   | setLoc _ _ => simp
   | getLoc _ | letVal _ | callVal _ _ | appVal _ | fstVal _ _ | sndVal _ _ => exact Nat.le_refl _
-  | freezeVal _ hc | freezeKeep _ hc =>
-    obtain ⟨e, rfl⟩ := hc.prefix
-    simp
 
 /-- A checked value has no `toImm`. -/
 theorem Ok.value_noToImm {n : Nat} {L : Nat → Prop} {v : Expr} (hv : v.IsValue) (h : Ok B n L v) : v.NoToImm := by
@@ -1593,28 +1331,6 @@ theorem step_ok {fns : List Fn} (hR : Returns B fns)
     intro hok _ _ _ _
     cases hok with
     | snd hok => cases hok with | pair _ h₂ => exact okNone (h₂.up (Nat.le_refl _) _)
-  | freezeCong _ ih =>
-    intro hok hl hhl hnh hf
-    cases hok with
-    | freeze hok =>
-      obtain ⟨N, hN, hok'⟩ := ih hok hl hhl hnh hf
-      exact ⟨N, fun l h => let ⟨a, b, c, d⟩ := hN l h; ⟨a, b, .freeze c, d⟩, .freeze hok'⟩
-  | freezeVal hv hc =>
-    intro hok _ _ hnh _
-    cases hok with
-    | freeze hok => exact okNone (.of_noToImm (hc.noToImm hnh (hok.value_noToImm hv)).2)
-  | blockEnter =>
-    intro hok _ _ _ _
-    cases hok with
-    | block hok => exact okNone (.freeze ((hok.ren _ _).up (by simp) _))
-  | blockKeep =>
-    intro hok _ _ _ _
-    cases hok with
-    | block hok => exact okNone (.freeze ((hok.ren _ _).up (by simp) _))
-  | freezeKeep _ hc =>
-    intro hok _ _ _ _
-    cases hok with
-    | freeze hok => exact okNone (hok.up (by obtain ⟨e, rfl⟩ := hc.prefix; simp) _)
   | toImmCong s _ =>
     intro hok
     cases hok with
@@ -1657,16 +1373,15 @@ theorem steps_inv {fns : List Fn} (hf : FnsOk fns) (hfo : ∀ fn ∈ fns, Ok B 0
     (hB : Borrows B fns) (hR : Returns B fns)
     {h h' : Heap} {e e' : Expr} (hs : Steps fns h e h' e') :
     ∀ {σ : HeapTy} {t : Ty}, HeapOk fns σ h → HasType fns σ .none false Ctx.empty e t → HeapNoToImm h →
-      HeapClosed h → e.Closed → Inv B h e → Inv B h' e' := by
+      Inv B h e → Inv B h' e' := by
   induction hs with
-  | refl => exact fun _ _ _ _ _ hi => hi
+  | refl => exact fun _ _ _ hi => hi
   | step s _ ih =>
-    intro σ t hh ht hnh hcl hc hi
-    obtain ⟨σ', _, hh', ht'⟩ := preservation hf s hh ht hc
-    obtain ⟨hcl', hc'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hcl hc
+    intro σ t hh ht hnh hi
+    obtain ⟨σ', _, hh', ht'⟩ := preservation hf s hh ht
     have hok := hi.choose_spec.1
     obtain ⟨hnh', _⟩ := step_lamNoToImm (fun fn h => (hfo fn h).lamNoToImm) s hnh hok.lamNoToImm
-    exact ih hh' ht' hnh' hcl' hc' (step_inv hf hfo hB hR s hh ht hnh hi)
+    exact ih hh' ht' hnh' (step_inv hf hfo hB hR s hh ht hnh hi)
 
 /-- **A checked program can make `imm` in place.** If every `toImm` in a program,
 and in its functions, is of a variable that holds a new `mut` object and
@@ -1680,14 +1395,14 @@ theorem checked_toImms_in_place_change_nothing {fns : List Fn} (hf : FnsOk fns)
     (hfo : ∀ fn ∈ fns, Ok B 0 (fun _ => False) fn.body) (hB : Borrows B fns) (hR : Returns B fns)
     {σ : HeapTy} {h h₁ : Heap} {e e₁ : Expr} {T : Ty}
     (hh : HeapOk fns σ h) (ht : HasType fns σ .none false Ctx.empty e T) (hnh : HeapNoToImm h)
-    (hok : Ok B h.length (fun _ => False) e) (hcl : HeapClosed h) (hec : e.Closed)
+    (hok : Ok B h.length (fun _ => False) e)
     (hs : Steps fns h e h₁ e₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (e₂ : Expr),
       Steps (fns.map Fn.inPlace) h e.inPlace h₂ e₂ ∧ Rel ρ e₁.inPlace e₂ ∧ ∀ n, e₁ = .int n → e₂ = .int n :=
   toImms_in_place_change_nothing hf (fun fn h => (hfo fn h).lamNoToImm) hh ht hnh hok.lamNoToImm
     (fun _ _ _ hs' _ _ =>
-      (steps_inv hf hfo hB hR hs' hh ht hnh hcl hec ⟨fun _ => False, hok, fun _ h => h.elim⟩).uniqToImm)
-    hcl hec hs
+      (steps_inv hf hfo hB hR hs' hh ht hnh ⟨fun _ => False, hok, fun _ h => h.elim⟩).uniqToImm)
+    hs
 
 /-! ## Examples -/
 

@@ -11,7 +11,7 @@ Two runs are compared: one on a heap, and one on a heap where `imm`
 locations are laid out differently, like with a copy of one, or two equal
 ones merged. A *correspondence* `ρ` says which location of the first is
 which of the second (`Rel`, `Corr`). An `imm` location can correspond to
-several, but a `mut` one, or one of a region, corresponds to exactly one,
+several, but a `mut` one corresponds to exactly one,
 both ways: writing to it must be seen through every name for it, on both
 sides.
 
@@ -45,8 +45,6 @@ inductive Rel (ρ : Nat → Nat → Prop) : Expr → Expr → Prop where
   | pair {a₁ a₂ b₁ b₂ : Expr} : Rel ρ a₁ a₂ → Rel ρ b₁ b₂ → Rel ρ (.pair a₁ b₁) (.pair a₂ b₂)
   | fst {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.fst e₁) (.fst e₂)
   | snd {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.snd e₁) (.snd e₂)
-  | freeze {c : Bool} {r : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.freeze c r t e₁) (.freeze c r t e₂)
-  | block {c : Bool} {k : Nat} {t : Ty} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.block c k t e₁) (.block c k t e₂)
   | toImm {b : Bool} {e₁ e₂ : Expr} : Rel ρ e₁ e₂ → Rel ρ (.toImm b e₁) (.toImm b e₂)
 
 theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' a c) {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) :
@@ -66,9 +64,29 @@ theorem Rel.mono {ρ ρ' : Nat → Nat → Prop} (hρ : ∀ a c, ρ a c → ρ' 
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
   | toImm _ ih => exact .toImm ih
+
+/-- A relation of expressions that only needs the locations of the first
+to correspond. -/
+theorem Rel.mono_on {ρ ρ' : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂)
+    (hρ : ∀ a c, e₁.HasLoc a → ρ a c → ρ' a c) : Rel ρ' e₁ e₂ := by
+  induction h with
+  | var => exact .var
+  | unit => exact .unit
+  | int => exact .int
+  | loc h => exact .loc (hρ _ _ rfl h)
+  | new _ ih => exact .new (ih hρ)
+  | get _ ih => exact .get (ih hρ)
+  | call _ ih => exact .call (ih hρ)
+  | lam _ ih => exact .lam (ih hρ)
+  | fst _ ih => exact .fst (ih hρ)
+  | snd _ ih => exact .snd (ih hρ)
+  | toImm _ ih => exact .toImm (ih hρ)
+  | set _ _ ih₁ ih₂ => exact .set (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
+  | letE _ _ ih₁ ih₂ => exact .letE (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
+  | app _ _ ih₁ ih₂ => exact .app (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
+  | pair _ _ ih₁ ih₂ => exact .pair (ih₁ fun a c h => hρ a c (.inl h)) (ih₂ fun a c h => hρ a c (.inr h))
+
 
 /-- What corresponds to a value is a value. -/
 theorem Rel.isValue {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) (hv : e₁.IsValue) : e₂.IsValue := by
@@ -99,8 +117,6 @@ theorem Rel.refl {ρ : Nat → Nat → Prop} : ∀ {e : Expr}, (∀ l, e.HasLoc 
   | .lam _ _ e, h => .lam (Rel.refl (e := e) h)
   | .fst e, h => .fst (Rel.refl (e := e) h)
   | .snd e, h => .snd (Rel.refl (e := e) h)
-  | .freeze _ _ _ e, h => .freeze (Rel.refl (e := e) h)
-  | .block _ _ _ e, h => .block (Rel.refl (e := e) h)
   | .toImm _ e, h => .toImm (Rel.refl (e := e) h)
   | .set _ _, h => .set (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
   | .letE _ _ _, h => .letE (Rel.refl fun l hl => h l (.inl hl)) (Rel.refl fun l hl => h l (.inr hl))
@@ -137,34 +153,6 @@ theorem Rel.subst {ρ : Nat → Nat → Prop} {e₁ e₂ v₁ v₂ : Expr} (h : 
   | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
   | fst _ ih => exact .fst ih
   | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | block _ ih => exact .block ih
-  | toImm _ ih => exact .toImm ih
-
-/-- Renaming a region in both keeps them corresponding. -/
-theorem Rel.ren {ρ : Nat → Nat → Prop} {e₁ e₂ : Expr} (h : Rel ρ e₁ e₂) (a b : Nat) :
-    Rel ρ (e₁.ren a b) (e₂.ren a b) := by
-  induction h with
-  | var => exact .var
-  | unit => exact .unit
-  | int => exact .int
-  | loc h => exact .loc h
-  | new _ ih => exact .new ih
-  | get _ ih => exact .get ih
-  | set _ _ ih₁ ih₂ => exact .set ih₁ ih₂
-  | letE _ _ ih₁ ih₂ => exact .letE ih₁ ih₂
-  | call _ ih => exact .call ih
-  | lam _ ih => exact .lam ih
-  | app _ _ ih₁ ih₂ => exact .app ih₁ ih₂
-  | pair _ _ ih₁ ih₂ => exact .pair ih₁ ih₂
-  | fst _ ih => exact .fst ih
-  | snd _ ih => exact .snd ih
-  | freeze _ ih => exact .freeze ih
-  | @block _ k _ _ _ h ih =>
-    simp only [Expr.ren]
-    split
-    · exact .block h
-    · exact .block ih
   | toImm _ ih => exact .toImm ih
 
 /-- The locations in a well-typed expression are in its heap typing. -/
@@ -176,11 +164,8 @@ theorem HasType.hasLoc_lt {fns : List Fn} {σ : HeapTy} {Δ : Assume} {io : Bool
     simp only [Expr.HasLoc] at hl
     subst hl
     exact (List.getElem?_eq_some_iff.mp hσ).1
-  | new _ _ ih | newR _ _ _ ih | newP _ _ _ ih | get _ ih | call _ _ _ _ ih | lam _ _ _ _ _ _ _ ih | fst _ ih | snd _ ih | freeze _ _ _ _ _ ih | toImm _ _ ih => exact ih hl
-  | block _ _ hle _ _ _ _ _ =>
-    obtain ⟨_, _, h, _⟩ := hle _ hl
-    exact (List.getElem?_eq_some_iff.mp h).1
-  | set _ _ ih₁ ih₂ | setR _ _ ih₁ ih₂ | setP _ _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
+  | new _ _ ih | get _ ih | call _ _ _ ih | lam _ _ _ ih | fst _ ih | snd _ ih | toImm _ _ ih => exact ih hl
+  | set _ _ ih₁ ih₂ | letE _ _ ih₁ ih₂ | app _ _ ih₁ ih₂ | pair _ _ ih₁ ih₂ => exact hl.elim ih₁ ih₂
 
 /-! ## Heaps that correspond -/
 
@@ -247,213 +232,30 @@ theorem Corr.alloc {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₁ h₂ : H
     · exact absurd (hc.lt₁ had) (by omega)
     · omega
 
-/-- The two runs' copies have copied corresponding objects, to
-corresponding locations: an object of the region corresponds to exactly
-one, so either both have copied it or neither has. -/
-def MemoRel (M : Nat → Prop) (ρ : Nat → Nat → Prop) (m₁ m₂ : List (Nat × Nat)) : Prop :=
-  (∀ l₁ l₂, ρ l₁ l₂ → M l₁ → (m₁.lookup l₁ = none ∧ m₂.lookup l₂ = none) ∨
-    ∃ c₁ c₂, m₁.lookup l₁ = some c₁ ∧ m₂.lookup l₂ = some c₂ ∧ ρ c₁ c₂) ∧
-  (∀ l₂ c₂, m₂.lookup l₂ = some c₂ → ∃ l₁ c₁, ρ l₁ l₂ ∧ M l₁ ∧ m₁.lookup l₁ = some c₁)
-
-theorem MemoRel.congr {M M' : Nat → Prop} {ρ : Nat → Nat → Prop} {m₁ m₂ : List (Nat × Nat)}
-    (h : MemoRel M ρ m₁ m₂) (hM : ∀ a, M a ↔ M' a) : MemoRel M' ρ m₁ m₂ := by
-  refine ⟨fun l₁ l₂ hl hM' => h.1 l₁ l₂ hl ((hM l₁).mpr hM'), fun l₂ c₂ hl => ?_⟩
-  obtain ⟨l₁, c₁, h₁, hM₁, h₂⟩ := h.2 l₂ c₂ hl
-  exact ⟨l₁, c₁, h₁, (hM l₁).mp hM₁, h₂⟩
-
-/-- Adding what's past the end of the first heap changes nothing. -/
-theorem MemoRel.widen {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₁ h₂ : Heap} {m₁ m₂ : List (Nat × Nat)}
-    (h : MemoRel M ρ m₁ m₂) (hc : Corr M ρ h₁ h₂) : MemoRel (fun a => M a ∨ h₁.length ≤ a) ρ m₁ m₂ := by
-  refine ⟨fun l₁ l₂ hl hM' => h.1 l₁ l₂ hl ?_, fun l₂ c₂ hl => ?_⟩
-  · rcases hM' with hM' | hM'
-    · exact hM'
-    · exact absurd (hc.lt₁ hl) (by omega)
-  · obtain ⟨l₁, c₁, h₁, hM₁, h₂⟩ := h.2 l₂ c₂ hl
-    exact ⟨l₁, c₁, h₁, .inl hM₁, h₂⟩
-
-theorem List.lookup_cons_nat (k l c : Nat) (m : List (Nat × Nat)) :
-    ((l, c) :: m).lookup k = if k = l then some c else m.lookup k := by
-  simp only [List.lookup]
-  split <;> rename_i h <;> simp_all
-
-/-- A freeze's copy in the first run is one in the second, of what
-corresponds, and the copies correspond: the copy only looks at the type,
-at what corresponding locations hold, and at what it copied already. -/
-theorem Copy.sim {fns : List Fn} {σ : HeapTy} {h₀ : Heap} (hh : HeapOk fns σ h₀)
-    {r : Nat} {t : Ty} {h₁ h₁' : Heap} {m₁ m₁' : List (Nat × Nat)} {v₁ v₁' : Expr}
-    (hcp : Copy r t h₁ m₁ v₁ h₁' m₁' v₁') :
-    (∃ ext, h₁ = h₀ ++ ext) → ∀ {io : Bool} {Γ : Ctx}, HasType fns σ .none io Γ v₁ t → t.Freezable r →
-    (∀ l c, m₁.lookup l = some c → l < h₀.length) →
-    ∀ {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {m₂ : List (Nat × Nat)} {v₂ : Expr},
-      (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ v₁ v₂ →
-      MemoRel M ρ m₁ m₂ →
-      ∃ ρ' h₂' m₂' v₂', Copy r t h₂ m₂ v₂ h₂' m₂' v₂' ∧ (∀ a c, ρ a c → ρ' a c) ∧
-        Corr (fun a => M a ∨ h₁.length ≤ a) ρ' h₁' h₂' ∧ Rel ρ' v₁' v₂' ∧
-        MemoRel (fun a => M a ∨ h₁.length ≤ a) ρ' m₁' m₂' ∧ (∀ l c, m₁'.lookup l = some c → l < h₀.length) ∧
-        h₂'.length + h₁.length = h₁'.length + h₂.length := by
-  induction hcp with
-  | keep hm =>
-    intro _ io Γ _ _ hk M ρ h₂ m₂ v₂ _ hc hr hmr
-    exact ⟨ρ, h₂, m₂, v₂, .keep hm, fun _ _ h => h, hc.widen, hr, hmr.widen hc, hk, Nat.add_comm _ _⟩
-  | @seen μ s h m l c hmen hlk =>
-    intro _ io Γ ht hf hk M ρ h₂ m₂ v₂ hM hc hr hmr
-    -- A region's object isn't seen as `ro`.
-    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by rw [hf.cell_region hmen]; simp)
-    cases hl'
-    · have hreg := hf.cell_region hmen
-      subst hreg
-      cases hr with
-      | @loc _ c₂ hlc =>
-        rcases hmr.1 l c₂ hlc (hM l _ _ hσ (by simp)) with ⟨hn, _⟩ | ⟨c₁, c₂', h₁, h₂', hcc⟩
-        · rw [hlk] at hn; cases hn
-        · rw [hlk] at h₁
-          cases h₁
-          exact ⟨ρ, h₂, m₂, _, .seen hmen h₂', fun _ _ h => h, hc.widen, .loc hcc, hmr.widen hc, hk, Nat.add_comm _ _⟩
-  | @cell μ s h h' m m' l w w' hmen hnone hw hcw ih =>
-    intro hpre io Γ ht hf hk M ρ h₂ m₂ v₂ hM hc hr hmr
-    -- A region's object isn't seen as `ro`.
-    obtain ⟨_, hl', hσ⟩ := canonical_cell .loc ht (by rw [hf.cell_region hmen]; simp)
-    cases hl'
-    · have hreg := hf.cell_region hmen
-      subst hreg
-      obtain ⟨_, _, w₀, hw₀, _, hwt⟩ := hh.2 l _ s hσ
-      have hl₀ : l < h₀.length := hh.lt hσ
-      have hMl : M l := hM l _ _ hσ (by simp)
-      cases hr with
-      | @loc _ l₂ hlc =>
-        obtain ⟨w₁, w₂, hw₁, hw₂, hrw⟩ := hc.heap l l₂ hlc
-        rw [hw] at hw₁
-        cases hw₁
-        have hw₀' : w₀ = w := by
-          obtain ⟨ext, rfl⟩ := hpre
-          rw [List.getElem?_append_left hl₀, hw₀] at hw
-          exact Option.some.inj hw
-        subst hw₀'
-        have hnone₂ : m₂.lookup l₂ = none := by
-          rcases hmr.1 l l₂ hlc hMl with ⟨_, h⟩ | ⟨c₁, _, h₁, _, _⟩
-          · exact h
-          · rw [hnone] at h₁; cases h₁
-        obtain ⟨ρ₁, h₂₁, m₂₁, w₂', hc₂, hρ₁, hcorr₁, hrw', hmr₁, hk₁, hlen₁⟩ := ih hpre hwt hf.2 hk hM hc hrw hmr
-        have hlen : h.length ≤ h'.length := by
-          obtain ⟨e, rfl⟩ := hcw.prefix
-          simp
-        have hlen₂ : h₂.length ≤ h₂₁.length := by
-          obtain ⟨e, rfl⟩ := hc₂.prefix
-          simp
-        have hl₂ : l₂ < h₂.length := hc.lt₂ hlc
-        have hlh : l < h.length := hc.lt₁ hlc
-        let M₁ : Nat → Prop := fun a => M a ∨ h.length ≤ a
-        have hMl₁ : M₁ l := .inl hMl
-        -- Nothing past the end of a heap has been copied.
-        have hnew₁ : m'.lookup h'.length = none := by
-          cases e : m'.lookup h'.length with
-          | none => rfl
-          | some c =>
-            have := hk₁ _ _ e
-            have : h₀.length ≤ h.length := by obtain ⟨e, rfl⟩ := hpre; simp
-            omega
-        have hnew₂ : m₂₁.lookup h₂₁.length = none := by
-          cases e : m₂₁.lookup h₂₁.length with
-          | none => rfl
-          | some c =>
-            obtain ⟨l₁, _, hl₁, _, _⟩ := hmr₁.2 _ _ e
-            have := hcorr₁.lt₂ hl₁
-            omega
-        refine ⟨fun a c' => ρ₁ a c' ∨ (a = h'.length ∧ c' = h₂₁.length), h₂₁ ++ [w₂'], (l₂, h₂₁.length) :: m₂₁,
-          .loc h₂₁.length, .cell hmen hnone₂ hw₂ hc₂, fun a c' h => .inl (hρ₁ a c' h),
-          (hcorr₁.alloc hrw').weaken fun a ha => .inl ha, .loc (.inr ⟨rfl, rfl⟩), ⟨?_, ?_⟩, ?_, by simp; omega⟩
-        · -- The original and its counterpart are copied together; the rest
-          -- is as it was.
-          intro k₁ k₂ hk₁₂ hMk
-          rw [List.lookup_cons_nat, List.lookup_cons_nat]
-          rcases hk₁₂ with hk₁₂ | ⟨rfl, rfl⟩
-          · by_cases hkl : k₁ = l
-            · subst hkl
-              have hk₂ : k₂ = l₂ := hcorr₁.func k₁ k₂ l₂ hk₁₂ (hρ₁ _ _ hlc) hMl₁
-              subst hk₂
-              exact .inr ⟨_, _, by simp, by simp, .inr ⟨rfl, rfl⟩⟩
-            · have hk₂ : k₂ ≠ l₂ := by
-                rintro rfl
-                exact hkl (hcorr₁.inj k₁ l k₂ hk₁₂ (hρ₁ _ _ hlc) hMk)
-              simp only [hkl, hk₂, ite_false]
-              rcases hmr₁.1 k₁ k₂ hk₁₂ hMk with h | ⟨c₁, c₂, h₁, h₂, hcc⟩
-              · exact .inl h
-              · exact .inr ⟨c₁, c₂, h₁, h₂, .inl hcc⟩
-          · -- A new copy is no original.
-            have hne₁ : h'.length ≠ l := by omega
-            have hne₂ : h₂₁.length ≠ l₂ := by omega
-            simp only [hne₁, hne₂, ite_false]
-            exact .inl ⟨hnew₁, hnew₂⟩
-        · intro k₂ c₂ hk₂
-          rw [List.lookup_cons_nat] at hk₂
-          split at hk₂
-          · rename_i he
-            subst he
-            exact ⟨l, h'.length, .inl (hρ₁ _ _ hlc), hMl₁, by simp⟩
-          · rename_i hne
-            obtain ⟨k₁, c₁, hk₁₂, hMk, hk₁⟩ := hmr₁.2 k₂ c₂ hk₂
-            have hkl : k₁ ≠ l := by
-              rintro rfl
-              exact hne (hcorr₁.func k₁ k₂ l₂ hk₁₂ (hρ₁ _ _ hlc) hMk)
-            exact ⟨k₁, c₁, .inl hk₁₂, hMk, by simp [List.lookup_cons_nat, hkl, hk₁]⟩
-        · intro k c hk'
-          rw [List.lookup_cons_nat] at hk'
-          split at hk'
-          · rename_i he; rw [he]; exact hl₀
-          · exact hk₁ k c hk'
-  | @pair a b h h₁ h₂ m m₁ m₂ v₁ v₂ v₁' v₂' hm hc₁ hc₂ ih₁ ih₂ =>
-    intro hpre io Γ ht hf hk M ρ hh₂ mm₂ e₂ hM hc hr hmr
-    cases ht with
-    | pair ht₁ ht₂ =>
-      cases hr with
-      | pair hr₁ hr₂ =>
-        obtain ⟨ρ₁, k₁, n₁, u₁, hk₁, hρ₁, hcorr₁, hru₁, hmr₁, hkk₁, hl₁⟩ := ih₁ hpre ht₁ hf.1 hk hM hc hr₁ hmr
-        have hpre₁ : ∃ ext, h₁ = h₀ ++ ext := by
-          obtain ⟨e₁, rfl⟩ := hpre
-          obtain ⟨e₂, rfl⟩ := hc₁.prefix
-          exact ⟨e₁ ++ e₂, by simp⟩
-        have hle : h.length ≤ h₁.length := by
-          obtain ⟨e₂, rfl⟩ := hc₁.prefix
-          simp
-        obtain ⟨ρ₂, k₂, n₂, u₂, hk₂, hρ₂, hcorr₂, hru₂, hmr₂, hkk₂, hl₂⟩ :=
-          ih₂ hpre₁ ht₂ hf.2 hkk₁ (fun a m' t' h hm' => .inl (hM a m' t' h hm')) hcorr₁ (hr₂.mono hρ₁) hmr₁
-        have hiff : ∀ x, ((M x ∨ h.length ≤ x) ∨ h₁.length ≤ x) ↔ (M x ∨ h.length ≤ x) := by
-          intro x
-          constructor
-          · rintro ((hx | hx) | hx)
-            · exact .inl hx
-            · exact .inr hx
-            · exact .inr (by omega)
-          · exact .inl
-        exact ⟨ρ₂, k₂, n₂, _, .pair hm hk₁ hk₂, fun a c h => hρ₂ a c (hρ₁ a c h),
-          hcorr₂.weaken fun x hx => .inl hx, .pair (hru₁.mono hρ₂) hru₂, hmr₂.congr hiff, hkk₂, by omega⟩
-
 /-- One step of the first run is one of the second, and they still
 correspond. -/
 theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁' : Expr} (hs : Step fns h₁ e₁ h₁' e₁') :
     ∀ {σ : HeapTy} {t : Ty} {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {e₂ : Expr},
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁ e₂ →
-      h₂.length = h₁.length →
       ∃ ρ' h₂' e₂', Step fns h₂ e₂ h₂' e₂' ∧ (∀ a c, ρ a c → ρ' a c) ∧
-        Corr (fun a => M a ∨ h₁.length ≤ a) ρ' h₁' h₂' ∧ Rel ρ' e₁' e₂' ∧ h₂'.length = h₁'.length := by
+        Corr (fun a => M a ∨ h₁.length ≤ a) ρ' h₁' h₂' ∧ Rel ρ' e₁' e₂' := by
   induction hs with
   | newCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | newP _ hi _ => simp [Assume.none] at hi
-    | new he _ | newR he _ =>
+    | new he _ =>
       cases hr with
       | new hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+        exact ⟨ρ', h₂', _, .newCong s₂, hρ, hc', .new hr'⟩
   | @newVal e b hv =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | @new _ _ e' hr =>
       let ρ' : Nat → Nat → Prop := fun a c => ρ a c ∨ (a = h₁.length ∧ c = h₂.length)
       have old : ∀ a c, ρ a c → ρ' a c := fun _ _ h => .inl h
-      refine ⟨ρ', h₂ ++ [e'], .loc h₂.length, .newVal (hr.isValue hv), old, ?_, .loc (.inr ⟨rfl, rfl⟩), by simp [hlen]⟩
+      refine ⟨ρ', h₂ ++ [e'], .loc h₂.length, .newVal (hr.isValue hv), old, ?_, .loc (.inr ⟨rfl, rfl⟩)⟩
       refine ⟨?_, ?_, ?_⟩
       · intro a c hac
         rcases hac with hac | ⟨rfl, rfl⟩
@@ -477,15 +279,15 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         · exact absurd (hc.lt₁ had) (by omega)
         · omega
   | getCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | get he =>
       cases hr with
       | get hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .getCong s₂, hρ, hc', .get hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+        exact ⟨ρ', h₂', _, .getCong s₂, hρ, hc', .get hr'⟩
   | @getLoc l v hl =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | get hr =>
       cases hr with
@@ -493,30 +295,27 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         obtain ⟨v₁, v₂, h₁v, h₂v, hrel⟩ := hc.heap _ _ hρ
         rw [hl] at h₁v
         cases h₁v
-        exact ⟨ρ, h₂, v₂, .getLoc h₂v, fun _ _ h => h, hc.widen, hrel, hlen⟩
+        exact ⟨ρ, h₂, v₂, .getLoc h₂v, fun _ _ h => h, hc.widen, hrel⟩
   | setCong₁ _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | setP _ hi _ => simp [Assume.none] at hi
-    | set he₁ _ | setR he₁ _ =>
+    | set he₁ _ =>
       cases hr with
       | set hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hlen
-        exact ⟨ρ', h₂', _, .setCong₁ s₂, hρ, hc', .set hr' (hr₂.mono hρ), hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+        exact ⟨ρ', h₂', _, .setCong₁ s₂, hρ, hc', .set hr' (hr₂.mono hρ)⟩
   | setCong₂ hv _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | setP _ hi _ => simp [Assume.none] at hi
-    | set _ he₂ | setR _ he₂ =>
+    | set _ he₂ =>
       cases hr with
       | set hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hlen
-        exact ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv) s₂, hρ, hc', .set (hr₁.mono hρ) hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
+        exact ⟨ρ', h₂', _, .setCong₂ (hr₁.isValue hv) s₂, hρ, hc', .set (hr₁.mono hρ) hr'⟩
   | @setLoc l₀ v hl hv =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
-    | setP _ hi _ => simp [Assume.none] at hi
-    | set he₁ _ | setR he₁ _ =>
+    | set he₁ _ =>
       obtain ⟨_, hl', hσ⟩ := canonical_cell .loc he₁ (by simp)
       cases hl'
       · have hMl : M l₀ := hM _ _ _ hσ (by intro h; cases h)
@@ -525,7 +324,7 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
           cases hr₁ with
           | @loc _ c hρ =>
             have hc₂ : c < h₂.length := hc.lt₂ hρ
-            refine ⟨ρ, h₂.set c v', .unit, .setLoc hc₂ (hr₂.isValue hv), fun _ _ h => h, ?_, .unit, by simp [hlen]⟩
+            refine ⟨ρ, h₂.set c v', .unit, .setLoc hc₂ (hr₂.isValue hv), fun _ _ h => h, ?_, .unit⟩
             have key : Corr M ρ (h₁.set l₀ v) (h₂.set c v') := by
               refine ⟨?_, hc.inj, hc.func⟩
               intro a d had
@@ -545,143 +344,114 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
             simp only [List.length_set] at this
             exact this
   | letCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | letE he₁ _ =>
       cases hr with
       | letE hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hlen
-        exact ⟨ρ', h₂', _, .letCong s₂, hρ, hc', .letE hr' (hr₂.mono hρ), hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+        exact ⟨ρ', h₂', _, .letCong s₂, hρ, hc', .letE hr' (hr₂.mono hρ)⟩
   | @letVal x v _ hv =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | letE hr₁ hr₂ =>
-      exact ⟨ρ, h₂, _, .letVal (hr₁.isValue hv), fun _ _ h => h, hc.widen, hr₂.subst hr₁ x, hlen⟩
+      exact ⟨ρ, h₂, _, .letVal (hr₁.isValue hv), fun _ _ h => h, hc.widen, hr₂.subst hr₁ x⟩
   | callCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | call _ _ he =>
       cases hr with
       | call hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .callCong s₂, hρ, hc', .call hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+        exact ⟨ρ', h₂', _, .callCong s₂, hρ, hc', .call hr'⟩
   | @callVal f fn ms τs v hfn hv =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | call hr =>
       -- A function's body has no locations, so it corresponds to itself.
       have hb := ((hf fn (List.mem_of_getElem? hfn)).1).inst ms τs
       have hbody : Rel ρ (fn.body.inst ms τs) (fn.body.inst ms τs) :=
         Rel.refl fun l hl => (hb.not_hasLoc l hl).elim
-      exact ⟨ρ, h₂, _, .callVal hfn (hr.isValue hv), fun _ _ h => h, hc.widen, hbody.subst hr fn.param, hlen⟩
+      exact ⟨ρ, h₂, _, .callVal hfn (hr.isValue hv), fun _ _ h => h, hc.widen, hbody.subst hr fn.param⟩
   | appCong₁ _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | app he₁ _ =>
       cases hr with
       | app hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hlen
-        exact ⟨ρ', h₂', _, .appCong₁ s₂, hρ, hc', .app hr' (hr₂.mono hρ), hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+        exact ⟨ρ', h₂', _, .appCong₁ s₂, hρ, hc', .app hr' (hr₂.mono hρ)⟩
   | appCong₂ hv _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | app _ he₂ =>
       cases hr with
       | app hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hlen
-        exact ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv) s₂, hρ, hc', .app (hr₁.mono hρ) hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
+        exact ⟨ρ', h₂', _, .appCong₂ (hr₁.isValue hv) s₂, hρ, hc', .app (hr₁.mono hρ) hr'⟩
   | @appVal b x body v hv =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | app hr₁ hr₂ =>
       cases hr₁ with
       | lam hbody =>
-        exact ⟨ρ, h₂, _, .appVal (hr₂.isValue hv), fun _ _ h => h, hc.widen, hbody.subst hr₂ x, hlen⟩
+        exact ⟨ρ, h₂, _, .appVal (hr₂.isValue hv), fun _ _ h => h, hc.widen, hbody.subst hr₂ x⟩
   | pairCong₁ _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | pair he₁ _ =>
       cases hr with
       | pair hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₁ hM hc hr₁ hlen
-        exact ⟨ρ', h₂', _, .pairCong₁ s₂, hρ, hc', .pair hr' (hr₂.mono hρ), hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₁ hM hc hr₁
+        exact ⟨ρ', h₂', _, .pairCong₁ s₂, hρ, hc', .pair hr' (hr₂.mono hρ)⟩
   | pairCong₂ hv _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | pair _ he₂ =>
       cases hr with
       | pair hr₁ hr₂ =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he₂ hM hc hr₂ hlen
-        exact ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv) s₂, hρ, hc', .pair (hr₁.mono hρ) hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he₂ hM hc hr₂
+        exact ⟨ρ', h₂', _, .pairCong₂ (hr₁.isValue hv) s₂, hρ, hc', .pair (hr₁.mono hρ) hr'⟩
   | fstCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | fst he =>
       cases hr with
       | fst hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .fstCong s₂, hρ, hc', .fst hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+        exact ⟨ρ', h₂', _, .fstCong s₂, hρ, hc', .fst hr'⟩
   | sndCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | snd he =>
       cases hr with
       | snd hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .sndCong s₂, hρ, hc', .snd hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+        exact ⟨ρ', h₂', _, .sndCong s₂, hρ, hc', .snd hr'⟩
   | fstVal hv₁ hv₂ =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | fst hr =>
       cases hr with
       | pair hr₁ hr₂ =>
-        exact ⟨ρ, h₂, _, .fstVal (hr₁.isValue hv₁) (hr₂.isValue hv₂), fun _ _ h => h, hc.widen, hr₁, hlen⟩
+        exact ⟨ρ, h₂, _, .fstVal (hr₁.isValue hv₁) (hr₂.isValue hv₂), fun _ _ h => h, hc.widen, hr₁⟩
   | sndVal hv₁ hv₂ =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | snd hr =>
       cases hr with
       | pair hr₁ hr₂ =>
-        exact ⟨ρ, h₂, _, .sndVal (hr₁.isValue hv₁) (hr₂.isValue hv₂), fun _ _ h => h, hc.widen, hr₂, hlen⟩
-  | freezeCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
-    cases ht with
-    | freeze he _ _ _ _ =>
-      cases hr with
-      | freeze hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .freezeCong s₂, hρ, hc', .freeze hr', hl'⟩
-  | freezeVal hv hcp =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
-    cases ht with
-    | freeze he hf _ _ _ =>
-      cases hr with
-      | freeze hr =>
-        -- The second run copies what corresponds, the same way.
-        obtain ⟨ρ', h₂', m₂', v₂', hc₂, hρ, hc', hr', _, _, hl'⟩ :=
-          hcp.sim hh ⟨[], by simp⟩ he hf (fun _ _ h => by simp at h) (m₂ := []) hM hc hr
-            ⟨fun _ _ _ _ => .inl ⟨rfl, rfl⟩, fun _ _ h => by simp at h⟩
-        exact ⟨ρ', h₂', v₂', .freezeVal (hr.isValue hv) hc₂, hρ, hc', hr', by omega⟩
-  | @blockEnter k t e =>
-    -- Both heaps are as long, so the block makes the same region in both.
-    intro σ T M ρ h₂ e₂ hh ht hM hc hr hlen
-    cases hr with
-    | block hr =>
-      refine ⟨_, h₂ ++ [.unit], _, .blockEnter, fun _ _ h => .inl h, hc.alloc .unit, ?_, by simp [hlen]⟩
-      rw [hlen]
-      exact .freeze ((hr.ren _ _).mono fun _ _ h => .inl h)
-  | blockKeep => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
-  | freezeKeep _ _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
+        exact ⟨ρ, h₂, _, .sndVal (hr₁.isValue hv₁) (hr₂.isValue hv₂), fun _ _ h => h, hc.widen, hr₂⟩
   | toImmCong _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases ht with
     | toImm he _ =>
       cases hr with
       | toImm hr =>
-        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr', hl'⟩ := ih hh he hM hc hr hlen
-        exact ⟨ρ', h₂', _, .toImmCong s₂, hρ, hc', .toImm hr', hl'⟩
+        obtain ⟨ρ', h₂', e₂', s₂, hρ, hc', hr'⟩ := ih hh he hM hc hr
+        exact ⟨ρ', h₂', _, .toImmCong s₂, hρ, hc', .toImm hr'⟩
   | @toImmVal l w hl =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hlen
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
     cases hr with
     | toImm hr =>
       cases hr with
@@ -691,8 +461,8 @@ theorem step_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e₁
         rw [hl] at h₁v
         cases h₁v
         exact ⟨_, h₂ ++ [v₂], .loc h₂.length, .toImmVal h₂v, fun _ _ h => .inl h, hc.alloc hrel,
-          .loc (.inr ⟨rfl, rfl⟩), by simp [hlen]⟩
-  | toImmKeep _ => intro σ t M ρ h₂ e₂ hh ht _ _ _ _; cases ht
+          .loc (.inr ⟨rfl, rfl⟩)⟩
+  | toImmKeep _ => intro σ t M ρ h₂ e₂ hh ht _ _ _; cases ht
 
 /-- However many steps the first run takes, the second takes them too, and
 they still correspond. -/
@@ -700,18 +470,16 @@ theorem steps_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
     ∀ {σ : HeapTy} {t : Ty} {M : Nat → Prop} {ρ : Nat → Nat → Prop} {h₂ : Heap} {e₂ : Expr},
       HeapOk fns σ h₁ → HasType fns σ .none false Ctx.empty e₁ t →
       (∀ a m t', σ[a]? = some (m, t') → m ≠ .immutable → M a) → Corr M ρ h₁ h₂ → Rel ρ e₁ e₂ →
-      HeapClosed h₁ → e₁.Closed → h₂.length = h₁.length →
       ∃ (M' : Nat → Prop) (ρ' : Nat → Nat → Prop) (h₂' : Heap) (e₂' : Expr),
         Steps fns h₂ e₂ h₂' e₂' ∧ Corr M' ρ' h₁' h₂' ∧ Rel ρ' e₁' e₂' := by
   induction hs with
   | refl =>
-    intro σ t M ρ h₂ e₂ _ _ _ hc hr _ _ _
+    intro σ t M ρ h₂ e₂ _ _ _ hc hr
     exact ⟨M, ρ, h₂, e₂, .refl, hc, hr⟩
   | @step h₀ _ _ _ _ _ s _ ih =>
-    intro σ t M ρ h₂ e₂ hh ht hM hc hr hcl hcl' hlen
-    obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr', hl'⟩ := step_sim hf s hh ht hM hc hr hlen
-    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht hcl'
-    obtain ⟨hcl₁, hcl₁'⟩ := step_closed (fun fn h => (hf fn h).2.2.2) s hcl hcl'
+    intro σ t M ρ h₂ e₂ hh ht hM hc hr
+    obtain ⟨ρ', h₂', e₂', s₂, _, hc', hr'⟩ := step_sim hf s hh ht hM hc hr
+    obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
     -- What isn't `imm` after the step wasn't before, or is new.
     have hM' : ∀ a m t', σ'[a]? = some (m, t') → m ≠ .immutable → M a ∨ h₀.length ≤ a := by
       intro a m t' ha hm
@@ -721,7 +489,7 @@ theorem steps_sim {fns : List Fn} (hf : FnsOk fns) {h₁ h₁' : Heap} {e₁ e�
         rw [hx a _ hp] at ha
         exact .inl (hM a m t' (hp.trans ha) hm)
       · exact .inr (by omega)
-    obtain ⟨M'', ρ'', h₂'', e₂'', ss, hc'', hr''⟩ := ih hh' ht' hM' hc' hr' hcl₁ hcl₁' hl'
+    obtain ⟨M'', ρ'', h₂'', e₂'', ss, hc'', hr''⟩ := ih hh' ht' hM' hc' hr'
     exact ⟨M'', ρ'', h₂'', e₂'', .step s₂ ss, hc'', hr''⟩
 
 /-! ## Copying and merging -/
@@ -749,19 +517,19 @@ def copyCorr (n l : Nat) : Nat → Nat → Prop := fun a c => (a = c ∧ a < n) 
 location of `h`, and `v` what it holds: put a copy of `v` at the end of
 the heap. A program `e₂` that's `e₁` with the copy in place of `l` in some
 places computes what `e₁` does, with a result that corresponds, and the
-same integer. Both run with the copy in the heap, so that a block makes
-the same region in both; `e₁` just doesn't use it. -/
+same integer. Both run with the copy in the heap; `e₁` just doesn't use
+it. -/
 theorem imm_copy_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap} {l : Nat}
     {t t₀ : Ty} {v e₁ e₂ v₁ : Expr} (hh : HeapOk fns σ h) (hl : σ[l]? = some (.immutable, t))
     (hv : h[l]? = some v) (ht : HasType fns σ .none false Ctx.empty e₁ t₀) (hr : Rel (copyCorr h.length l) e₁ e₂)
-    (hcl : HeapClosed h) (hc₁ : e₁.Closed) (hs : Steps fns (h ++ [v]) e₁ h' v₁) :
+    (hs : Steps fns (h ++ [v]) e₁ h' v₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (v₂ : Expr),
       Steps fns (h ++ [v]) e₂ h₂ v₂ ∧ Rel ρ v₁ v₂ ∧ ∀ n, v₁ = .int n → v₂ = .int n := by
   obtain ⟨_, _, w₀, hw₀, hv₀, hvt⟩ := hh.2 _ _ _ hl
   rw [hv] at hw₀
   cases hw₀
   let σ' := σ ++ [(Mu.immutable, t)]
-  have hh' : HeapOk fns σ' (h ++ [v]) := hh.alloc (.inr (.inl rfl)) (hh.2 _ _ _ hl).2.1 hv₀ hvt
+  have hh' : HeapOk fns σ' (h ++ [v]) := hh.alloc (.inr rfl) (hh.2 _ _ _ hl).2.1 hv₀ hvt
   have hl' : σ'[l]? = some (.immutable, t) := Extends.append σ _ _ _ hl
   let M : Nat → Prop := fun a => ∃ m t', σ'[a]? = some (m, t') ∧ m ≠ .immutable
   have notM : ¬ M l := fun ⟨_, _, h', hm⟩ => by rw [hl'] at h'; cases h'; exact hm rfl
@@ -788,7 +556,7 @@ theorem imm_copy_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} 
         · exact (notM hMa).elim
       · exact (notM hMa).elim
   obtain ⟨_, ρ, h₂, v₂, ss, _, hr'⟩ := steps_sim hf hs hh' (ht.weaken_heap (Extends.append σ _))
-    (fun _ m t' h hm => ⟨m, t', h, hm⟩) hc hr (hcl.append (hcl _ _ hv)) hc₁ rfl
+    (fun _ m t' h hm => ⟨m, t', h, hm⟩) hc hr
   exact ⟨ρ, h₂, v₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
 
 /-- The correspondence of merging `l'` into `l`, in a heap of `n`
@@ -803,7 +571,7 @@ theorem imm_merge_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy}
     {t t' t₀ : Ty} {e₁ e₂ v₁ : Expr} (hh : HeapOk fns σ h) (hl : σ[l]? = some (.immutable, t))
     (hl' : σ[l']? = some (.immutable, t')) (heq : h[l']? = h[l]?)
     (ht : HasType fns σ .none false Ctx.empty e₁ t₀) (hr : Rel (mergeCorr h.length l l') e₁ e₂)
-    (hcl : HeapClosed h) (hc₁ : e₁.Closed) (hs : Steps fns h e₁ h' v₁) :
+    (hs : Steps fns h e₁ h' v₁) :
     ∃ (ρ : Nat → Nat → Prop) (h₂ : Heap) (v₂ : Expr),
       Steps fns h e₂ h₂ v₂ ∧ Rel ρ v₁ v₂ ∧ ∀ n, v₁ = .int n → v₂ = .int n := by
   let M : Nat → Prop := fun a => ∃ m t', σ[a]? = some (m, t') ∧ m ≠ .immutable
@@ -833,7 +601,6 @@ theorem imm_merge_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy}
         · exact (notM hl' hMa).elim
       · exact (notM hl' hMa).elim
   obtain ⟨_, ρ, h₂, v₂, ss, _, hr'⟩ := steps_sim hf hs hh ht (fun _ m t' h hm => ⟨m, t', h, hm⟩) hc hr
-    hcl hc₁ rfl
   exact ⟨ρ, h₂, v₂, ss, hr', fun n hn => (hn ▸ hr').int_eq⟩
 
 end BoltMut
