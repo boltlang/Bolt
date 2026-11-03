@@ -3,11 +3,8 @@ import BoltMut.Purity
 /-!
 # What a call can change (#255)
 
-`Purity.lean` proves that a call of an `imm` function with `imm` arguments
-changes nothing that existed before, and with a handler, only what the
-handler can reach. This generalizes it: **a program changes only what's
-reachable from the locations in it that aren't `imm`**, its *frame*
-(`changes_only_frame`). For a call, that's what's reachable from the
+**A program changes only what's reachable from the locations in it that
+aren't `imm`**, its *frame* (`changes_only_frame`). For a call, that's what's reachable from the
 function and its argument (`call_changes_only_what_args_reach`), and what's
 `imm` all the way down, like an `imm` closure or an `imm` array, adds
 nothing (`Frame.of_deepImm`). So for a call like
@@ -18,7 +15,17 @@ fill(xs, ys)    // fn fill(xs: mut [i32], ys: [i32]) with `ys` an `imm` array
 
 only what `xs` reaches can change (`imm_fn_changes_only_what_it_is_given`).
 That's what the reactive design (#200) needs: which calls change what,
-from the types alone.
+from the types alone. In particular, calling an `imm` function with
+arguments that are `imm` all the way down changes nothing that existed
+before the call (`imm_fn_changes_nothing`).
+
+With algebraic effects, an operation that resumes right away, like `state`
+and `read` of the `Reactive` effect in `site/docs/internals/reactive.mdx`,
+compiles to a call of its handler, passed as a hidden argument. Then
+calling an `imm` function with `imm` arguments and a handler changes only
+what the handler can reach (`imm_fn_changes_only_through_handler`). That's
+what makes tracking complete: while drawing, a component can only affect
+the world through its effects.
 
 It's `steps_clean` again, with the frame as what's allowed: every location
 in the program is `imm` or in the frame, and what a location in the frame
@@ -100,5 +107,33 @@ theorem imm_fn_changes_only_what_it_is_given {fns : List Fn} (hf : FnsOk fns) {�
   rintro ⟨l₀, h₀ | h₀, himm, hr⟩
   · exact hnw ⟨l₀, h₀, himm, hr⟩
   · exact Frame.of_deepImm huv hut hd l ⟨l₀, h₀, himm, hr⟩
+
+/-- Calling an `imm` function with an argument that's `imm` all the way
+down changes nothing that existed before the call, however many steps it
+takes. -/
+theorem imm_fn_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
+    {f v e' : Expr} {a r : Ty} (hh : HeapOk fns σ h)
+    (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable a r))
+    (hvv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v a) (hd : AtMost .none .immutable a)
+    (hs : Steps fns h (.app f v) h' e') : ∀ l, l < h.length → h'[l]? = h[l]? := fun l hl =>
+  call_changes_only_what_args_reach hf hh hft hvt hs l hl (Frame.of_imm_fn hfv hft l)
+    (Frame.of_deepImm hvv hvt hd l)
+
+/-- With effects: calling an `imm` function with an argument that's `imm`
+all the way down and a handler `k`, as the hidden argument of an effect
+whose operations resume right away, changes only what the handler can
+reach. -/
+theorem imm_fn_changes_only_through_handler {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
+    {f v k e' : Expr} {a kt r : Ty} (hh : HeapOk fns σ h)
+    (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable (.prod a kt) r))
+    (hvv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v a) (hd : AtMost .none .immutable a)
+    (hkt : HasType fns σ .none false Ctx.empty k kt)
+    (hs : Steps fns h (.app f (.pair v k)) h' e') :
+    ∀ l, l < h.length → (¬ ∃ l₀, k.HasLoc l₀ ∧ Reaches h l₀ l) → h'[l]? = h[l]? := by
+  intro l hl hA
+  refine call_changes_only_what_args_reach hf hh hft (.pair hvt hkt) hs l hl (Frame.of_imm_fn hfv hft l) ?_
+  rintro ⟨l₀, h₀ | h₀, himm, hr⟩
+  · exact Frame.of_deepImm hvv hvt hd l ⟨l₀, h₀, himm, hr⟩
+  · exact hA ⟨l₀, h₀, hr⟩
 
 end BoltMut

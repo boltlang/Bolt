@@ -1,25 +1,13 @@
 import BoltMut.Immutability
 
 /-!
-# What a call to an `imm` function can change
+# What a program can change
 
-An `imm` closure only captures what's `imm` all the way down. So calling one
-with arguments that are `imm` all the way down changes nothing that existed
-before the call (`imm_fn_changes_nothing`): it can change only the objects
-it makes itself, which no one else can see.
-
-With algebraic effects, an operation that resumes right away, like `state`
-and `read` of the `Reactive` effect in `site/docs/internals/reactive.mdx`,
-compiles to a call of its handler, passed as a hidden argument. Then
-`imm_fn_changes_only_through_handler`: calling an `imm` function with `imm`
-arguments and a handler changes only what the handler can reach. That's
-what makes tracking complete: while drawing, a component can only affect
-the world through its effects.
-
-Both follow from one invariant, `Clean`: every location the program can
-reach is `imm`, was made since the call started, or is allowed (`A`, what
-the handler can reach). A well-typed step keeps it, and only writes to
-locations that are new or allowed (`step_clean`).
+The invariant behind what a call can change (`Frame.lean`): `Clean`, every
+location the program can reach is `imm`, was made since it started, or is
+allowed (`A`). A well-typed step keeps it, and only writes to locations
+that are new or allowed (`step_clean`). So however many steps it takes, a
+program changes only what's new or allowed (`steps_clean`).
 -/
 
 namespace BoltMut
@@ -282,26 +270,6 @@ theorem steps_clean {fns : List Fn} (hf : FnsOk fns) {h h' : Heap} {e e' : Expr}
     obtain ⟨σ', hx, hh', ht'⟩ := preservation hf s hh ht
     rw [ih hh' ht' hn' (hc'.extend hx) (hhc'.extend hx) l hl hA, hu l hl hA]
 
-/-- Calling an `imm` function with an argument that's `imm` all the way
-down changes nothing that existed before the call, however many steps it
-takes. -/
-theorem imm_fn_changes_nothing {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
-    {f v e' : Expr} {a r : Ty} (hh : HeapOk fns σ h)
-    (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable a r))
-    (hvv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v a) (hd : AtMost .none .immutable a)
-    (hs : Steps fns h (.app f v) h' e') : ∀ l, l < h.length → h'[l]? = h[l]? := by
-  intro l hl
-  refine steps_clean hf hs (A := fun _ => False) hh (.app hft hvt) (Nat.le_refl _) ?_ ?_ l hl id
-  · intro l' hl'
-    rcases hl' with hl' | hl'
-    · exact clean_of_deepImm (n := h.length) (A := fun _ => False) (t := .fn .immutable a r) hfv hft (.refl _) l' hl'
-    · exact clean_of_deepImm (n := h.length) (A := fun _ => False) hvv hvt hd l' hl'
-  · intro l' b w hA hw
-    rcases hA with hA | hA
-    · have := (List.getElem?_eq_some_iff.mp hw).1
-      omega
-    · exact hA.elim
-
 /-- Following a location in what `l` holds extends a path from `l₀` to
 `l`. -/
 theorem Reaches.tail {h : Heap} {l₀ l : Nat} (hr : Reaches h l₀ l) :
@@ -309,30 +277,5 @@ theorem Reaches.tail {h : Heap} {l₀ l : Nat} (hr : Reaches h l₀ l) :
   induction hr with
   | refl => intro b v l₁ hv hl; exact .step hv hl .refl
   | step hv' hl' _ ih => intro b v l₁ hv hl; exact .step hv' hl' (ih hv hl)
-
-/-- With effects: calling an `imm` function with an argument that's `imm`
-all the way down and a handler `k`, as the hidden argument of an effect
-whose operations resume right away, changes only what the handler can
-reach. -/
-theorem imm_fn_changes_only_through_handler {fns : List Fn} (hf : FnsOk fns) {σ : HeapTy} {h h' : Heap}
-    {f v k e' : Expr} {a kt r : Ty} (hh : HeapOk fns σ h)
-    (hfv : f.IsValue) (hft : HasType fns σ .none false Ctx.empty f (.fn .immutable (.prod a kt) r))
-    (hvv : v.IsValue) (hvt : HasType fns σ .none false Ctx.empty v a) (hd : AtMost .none .immutable a)
-    (hkt : HasType fns σ .none false Ctx.empty k kt)
-    (hs : Steps fns h (.app f (.pair v k)) h' e') :
-    ∀ l, l < h.length → (¬ ∃ l₀, k.HasLoc l₀ ∧ Reaches h l₀ l) → h'[l]? = h[l]? := by
-  intro l hl hA
-  let A : Nat → Prop := fun l => ∃ l₀, k.HasLoc l₀ ∧ Reaches h l₀ l
-  refine steps_clean hf hs (A := A) hh (.app hft (.pair hvt hkt)) (Nat.le_refl _) ?_ ?_ l hl hA
-  · intro l' hl'
-    rcases hl' with hl' | hl' | hl'
-    · exact clean_of_deepImm (n := h.length) (A := A) (t := .fn .immutable (.prod a kt) r) hfv hft (.refl _) l' hl'
-    · exact clean_of_deepImm (n := h.length) (A := A) hvv hvt hd l' hl'
-    · exact .inr (.inl ⟨l', hl', .refl⟩)
-  · intro l' b w hA' hw
-    rcases hA' with hA' | ⟨l₀, hk, hr⟩
-    · have := (List.getElem?_eq_some_iff.mp hw).1
-      omega
-    · exact fun l₁ hl₁ => .inr (.inl ⟨l₀, hk, hr.tail hw hl₁⟩)
 
 end BoltMut
