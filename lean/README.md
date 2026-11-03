@@ -39,7 +39,8 @@ A small language with what matters for mutability:
 | a generic function, called with the arguments the checker finds | a top-level `Fn`, called as `call f ms τs e` with mutability and type arguments |
 | a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
-| `array_freeze(xs)`: an `imm` copy of a `mut` array (#284) | `toImm false e`, a shallow copy, since what `xs` holds is `imm` already; `toImm true e` makes the same copy but goes on with `xs`, and isn't typed |
+| `imm e`: `e`'s value with each `mut` array and struct it reaches copied into an `imm` one (#335) | `toImm false e`, a deep copy (`Freeze`) that copies each `mut` object once and shares what's `imm`; `toImm true e` makes the same copy but goes on with the value, and makes what it copied `imm` where it is; it isn't typed |
+| an object knows whether it's `mut`, as in the evaluator | each heap object is a pair: whether it's `mut`, and what it holds |
 
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 
@@ -57,6 +58,11 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 - **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`. A
   mutability parameter isn't enough: a generic function can read what it's
   given but not change it.
+- **`imm e`** (#335): `toImm false e` has the type `ImmTy` gives: each cell
+  becomes `imm`, a tuple is done part by part, and what's `imm` all the
+  way down may stay as it is, which is how closures and type parameters
+  are done, since they can't be copied. So `imm` of a `mut` closure is
+  rejected, and `imm x` with `x : T` and `T ⊑ imm` is a `T`.
 - **Read-only views** (#320): `ro` is a fifth mutability. For holding it
   sits between the two, `imm ⊑ ro ⊑ mut`, so an `imm` object can't hold a
   `ro` one, which may change. For subtyping it's above both: `Sub` sees a
@@ -88,13 +94,14 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `changes_only_frame` | `Frame.lean` | a program changes only what's reachable from the locations in it that aren't `imm`, its frame (#255) |
 | `call_changes_only_what_args_reach` | `Frame.lean` | for a call, that's what the function and its argument reach; what's `imm` all the way down, like an `imm` closure or array, adds nothing |
 | `changed_is_in_frame_and_mut` | `Frame.lean` | what a program changes is in its frame and isn't `imm` |
-| `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254) |
+| `Freeze.typed`, `Freeze.exists` | `Soundness.lean` | `imm e`'s copy has `e`'s type with each cell `imm` (`Ty.imm`), and can always be made: so preservation and progress hold for `toImm` |
+| `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254). Both copy the same way when they reach `imm e` (`Freeze.sim`) |
 | `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
 | `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
-| `unique_toImm_changes_nothing` | `Unique.lean` | making an `imm` copy of a `mut` object that no object holds, `new false (get xs)`, can use `xs` itself instead of the copy: a program that has the copy, but not `xs`, computes what it does with `xs` in place of the copy (#284). The copy is shallow, like `array_freeze`, so only `xs` needs to be unique |
-| `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, what it makes `imm` is unique: in the program once, and held by no object (`Expr.UniqToImm`). The simulation gives up the original at the freeze and relates the copy to it. No closure may have a `toImm` |
-| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`; or a part of a tuple, like `push((xs, 1))`, which the body reaches with `fst` or `snd`. A variable can also hold what a function gives back new, like `make()`, when the function's body is `mut [e]` (`Returns`). Then the program with every `toImm` in place computes what it does. The proof keeps an invariant of the running program (`Inv`): each object it owns is consumed, or gone from it, and no object holds it |
+| `unique_toImm_changes_nothing` | `Unique.lean` | making an `imm` copy of a `mut` object that no object holds, and that holds only what's `imm`, can use the object itself instead of the copy, made `imm` where it is: a program that has the copy, but not `xs`, computes what it does with `xs` in place of the copy (#284) |
+| `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, what it makes `imm` is unique: in the program once, and held by no object; and it's an object that holds only what's `imm` already (`Expr.UniqToImm`, `Shallow`). The simulation gives up the original at the freeze and relates the copy to it. No closure may have a `toImm` |
+| `checked_toImms_in_place_change_nothing` | `UniqueCheck.lean` | a check of the program as written gives that premise (#284): every `toImm` is of a variable that a `let` binds to a new `mut` object, `let x = mut [..] in b`, where `b` only reads and writes `x` before making it `imm` last, and doesn't give it another name, put it in an object or a closure, or pass it to a function that keeps it (`Ok`, `Con`, `Bor`). A function borrows its argument when its body only reads and writes it, or passes it to functions that borrow it (`Borrows`), like `fill(xs)`; or a part of a tuple, like `push((xs, 1))`, which the body reaches with `fst` or `snd`. A variable can also hold what a function gives back new, like `make()`, when the function's body is `mut [e]` (`Returns`). Then the program with every `toImm` in place computes what it does. That what each `toImm` makes `imm` holds only what's `imm` already is a premise (`Shallow`). The proof keeps an invariant of the running program (`Inv`): each object it owns is `mut`, consumed or gone from it, and no object holds it |
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
@@ -163,9 +170,12 @@ no `sorry`.
   substitution would then need to know what each owned object is used
   for. Freezing where the object is built is covered. A closure can't
   make an `imm` copy in place, and a `toImm`'s argument must be a
-  variable.
+  variable. Freezing in place is only covered for an object whose
+  contents are `imm` already, and the check doesn't show that: it's a
+  premise of `checked_toImms_in_place_change_nothing` (#335).
 - **Leaving out the copy** (#293): freezing in place with `toImm`
-  (`toImmKeep`) still makes the copy and only goes on with the original. That a run that also skips the copy
+  (`toImmKeep`) still makes the copy and only goes on with the original.
+  That a run that also skips the copy
   computes the same, since nothing uses it, isn't proven.
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
