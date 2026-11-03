@@ -39,8 +39,6 @@ A small language with what matters for mutability:
 | a generic function, called with the arguments the checker finds | a top-level `Fn`, called as `call f ms τs e` with mutability and type arguments |
 | a closure, `\|x\| body` | `lam b x body`, of type `fn m a r`: `mut` or `imm`, as #244 proposes |
 | a `let mut` variable a closure captures, which it shares | a `mut` cell |
-| a value a block makes, that nothing outside it has (#209) | a cell of the region `r`: `new true x` of type `cell (region r) t` |
-| the end of a block whose region becomes `imm` | `freeze r t e`: a copy of `e`'s value, with what's of `r` in new `imm` objects (#292) |
 | `array_freeze(xs)`: an `imm` copy of a `mut` array (#284) | `toImm false e`, a shallow copy, since what `xs` holds is `imm` already; `toImm true e` makes the same copy but goes on with `xs`, and isn't typed |
 
 The typing rules (`BoltMut/Typing.lean`) that the proof is about:
@@ -56,29 +54,15 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
   a `T`, is rejected where it's made (#247), and is fine with that
   assumption. A call must meet the callee's assumptions with its arguments
   (`Sat`).
-- **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`, or a
-  cell of a region. A mutability parameter is only enough if the function
-  assumes it's changeable (`Assume.changeable`, #285): then a call gives it
-  `mut` or a region, as rule 1 of the regions page says. Otherwise a
-  generic function can read what it's given but not change it.
-- **Regions** (#209): `new true e` can make a cell of a region `r` instead
-  of a `mut` one, which can be changed like one. What it holds is at most
-  `r`: `imm`, or of the same region. A value that would have to hold `mut`
-  objects is just `mut`, as the checker decides (#286). A `mut` closure can
-  have a region as its mutability, and then capture what's of that region
-  (rule 5, #287); other closures capture nothing whose type mentions a
-  region. A call can give a region to a generic function (#285), except to
-  a parameter that a closure in it captures, and the function can change
-  and make what has a changeable mutability parameter. A region that
-  becomes `imm` is copied (#292), and leaving the copy out can't be
-  noticed.
+- **Only `mut` can change**: `set e₁ e₂` needs `e₁ : cell mutable t`. A
+  mutability parameter isn't enough: a generic function can read what it's
+  given but not change it.
 - **Read-only views** (#320): `ro` is a fifth mutability. For holding it
   sits between the two, `imm ⊑ ro ⊑ mut`, so an `imm` object can't hold a
   `ro` one, which may change. For subtyping it's above both: `Sub` sees a
   `mut`, `imm` or `ro` cell as `ro`, and its contents too, as long as they
   are at most `ro`, so the view is deep. No object is made `ro`, and `set`
-  never takes one. A region's or a parameter's cell isn't seen as `ro`, so
-  a type still mentions every region its values reach. Subtyping happens
+  never takes one. A parameter's cell isn't seen as `ro`. Subtyping happens
   only at variables and locations (`varSub`, `locSub`): the other rules
   stay syntax-directed, and an argument is converted by naming it first.
 - **Aliases share the mutability**: a location has one type in the heap
@@ -105,15 +89,8 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `call_changes_only_what_args_reach` | `Frame.lean` | for a call, that's what the function and its argument reach; what's `imm` all the way down, like an `imm` closure or array, adds nothing |
 | `changed_is_in_frame_and_mut` | `Frame.lean` | what a program changes is in its frame and isn't `imm` |
 | `steps_sim` | `Sharing.lean` | two runs whose heaps differ only in how `imm` values are stored, each `mut` location being one in both, take the same steps, with results that correspond (#254) |
-| `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same. Both runs have the copy in their heap, so that blocks make the same regions in both |
+| `imm_copy_changes_nothing` | `Sharing.lean` | using a copy of an `imm` value in place of it computes the same |
 | `imm_merge_changes_nothing` | `Sharing.lean` | using one of two `imm` locations that hold the same value for both computes the same |
-| `HasType.ren` | `Rename.lean` | a block's body stays well-typed when it starts and its name for its region, `2 * k + 1`, becomes the region `2 * n` it makes, with its marker at location `n` (#292). Nothing outside the block, and no location, mentions its name, and nothing in the heap mentions the new region |
-| `step_closed` | `Rename.lean` | a running program's calls only give functions regions that exist, never a block's name for its region (`Expr.Closed`), so a block in a function can't take the name of an argument |
-| `Copy.typed`, `Copy.exists` | `Soundness.lean` | a freeze's copy has the value's type with the region `imm`, and can always be made (#292): so preservation and progress hold for `freeze` like for any step |
-| `freeze_in_place_changes_nothing` | `Elision.lean` | at the end of a block, going on with the value itself rather than the freeze's copy computes the same, if nothing after the block, or the copy, can reach the region's objects (#292) |
-| `freeze_in_place_of_typing` | `Elision.lean` | the typing gives that: for a block whose region the heap typing didn't mention when it started, with what comes after typed before it. A value can only reach a region's objects if its type mentions the region, since a closure that captures them has the region as its mutability (rule 5) |
-| `freezes_in_place_change_nothing` | `ElideAll.lean` | every freeze of a program can be in place: the program with its freezes erased, in it and its functions, computes what it does, if whenever it gets to a freeze, what's around it can't reach the region's objects (`Expr.Sep`). A copy copies each object once, so that copies and originals correspond one to one |
-| `blocks_freeze_in_place`, `program_blocks_freeze_in_place` | `Scope.lean` | the premise of `freezes_in_place_change_nothing` holds for a program written without freezes, whose blocks make them. A running program keeps an order (`Expr.Run`): what's beside a freeze of a block's region has only locations older than the block's marker, and such a location's type can't reach the region (`AllocOk`) |
 | `HasType.value_sub` | `Lemmas.lean` | a value can be used at any supertype of its type: what's seen as `ro` in it is a location (#320). Preservation uses it when a `ro` view is read or a variable is replaced |
 | `unique_toImm_changes_nothing` | `Unique.lean` | making an `imm` copy of a `mut` object that no object holds, `new false (get xs)`, can use `xs` itself instead of the copy: a program that has the copy, but not `xs`, computes what it does with `xs` in place of the copy (#284). The copy is shallow, like `array_freeze`, so only `xs` needs to be unique |
 | `toImms_in_place_change_nothing` | `Unique.lean` | every `toImm` of a program can be in place: the program with every `toImm` in place, in it and its functions, computes what it does, if whenever it gets to a `toImm`, what it makes `imm` is unique: in the program once, and held by no object (`Expr.UniqToImm`). The simulation gives up the original at the freeze and relates the copy to it. No closure may have a `toImm` |
@@ -121,7 +98,6 @@ The typing rules (`BoltMut/Typing.lean`) that the proof is about:
 | `atMost_iff_split` | `Solver.lean` | the solver's split of "at most" into the mutabilities a type holds, and its type parameters, says exactly what `AtMost` does |
 | `Le.eq_immutable`, `Le.eq_mutable` | `Solver.lean` | deciding an unknown below `imm` to be `imm`, or one above `mut` to be `mut`, loses no solution, unless an assumption ends at `imm` or starts at `mut` |
 | `le_iff_leSearch` | `Solver.lean` | following assumptions from `m`, and from `mut`, finds every `m ⊑ μ` within as many steps as there are assumptions |
-| `AtMost.free`, `AtMost.region_free` | `Syntax.lean` | replacing a region with a mutability keeps "at most"; and what a region holds is `imm` all the way down with the region replaced with `imm` |
 | `StructDecl.atMost_ty_iff` | `Structs.lean` | a struct type like `mut VecIter[T, 'v]` is well-formed exactly when its arguments meet what its fields imply, like `T ⊑ 'v` |
 
 The key lemma for generic functions, and for #243, is `HasType.inst` in
@@ -169,14 +145,10 @@ no `sorry`.
   of their types are well-formed, not to type programs with them.
 - **Bounds checks, enums, classes and `let mut`**: a cell is one element,
   so an index out of bounds can't happen; enums are values, like tuples.
-- **The rest of regions** (#209, #292): that the typing gives the premise
-  of `freezes_in_place_change_nothing` for a whole program, which needs a
-  fresh region each time a block runs. #284 needs the same for unique
-  values.
-  Also borrowed parameters (#283).
+- **Borrowed parameters** (#283).
 - **The rest of `ro`** (#320): subtyping is only for cells and tuples, not
-  for closures, whose types stay as they are; a parameter's or a region's
-  cell can't be seen as `ro`; and there's no rule for other places, like
+  for closures, whose types stay as they are; a parameter's cell can't be
+  seen as `ro`; and there's no rule for other places, like
   `if` branches, which the core doesn't have. Impls and inference aren't
   covered either.
 - **The rest of uniqueness** (#284): a unique object can go to a function
@@ -192,9 +164,8 @@ no `sorry`.
   for. Freezing where the object is built is covered. A closure can't
   make an `imm` copy in place, and a `toImm`'s argument must be a
   variable.
-- **Leaving out the copy** (#293): freezing in place, of a region
-  (`freezeKeep`) or with `toImm` (`toImmKeep`), still makes the copy and
-  only goes on with the original. That a run that also skips the copy
+- **Leaving out the copy** (#293): freezing in place with `toImm`
+  (`toImmKeep`) still makes the copy and only goes on with the original. That a run that also skips the copy
   computes the same, since nothing uses it, isn't proven.
 - **Effects that suspend**, like `Async`. Only operations that resume right
   away are covered, as a handler passed in.
