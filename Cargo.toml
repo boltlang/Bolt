@@ -8,7 +8,6 @@ members = [
   "crates/boltlang-hir-def",
   "crates/boltlang-hir",
   "crates/boltlang-hir-ty",
-  "crates/boltlang-mir",
   "crates/boltlang-lower",
   "crates/boltlang-codegen-conduit",
   "crates/boltlang-corpus",

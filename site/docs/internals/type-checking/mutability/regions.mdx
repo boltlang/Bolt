@@ -12,8 +12,8 @@ for [#209](https://github.com/boltlang/Bolt/issues/209) that wasn't
 implemented, and won't be: the type checker has no regions. A program
 makes an `imm` value from a `mut` one with `imm e`, which means a copy.
 
-Regions become an optimization step in `boltlang-mir`, on the IR after
-type checking, like [uniqueness](./uniqueness.mdx). Both are about
+Regions become an optimization in Conduit, the IR that Bolt compiles to
+after type checking, like [uniqueness](./uniqueness.mdx). Both are about
 mutability: they find when the copy of `imm e` can be left out, because
 nothing outside the block that made the value can reach it, or because it
 has one name. Neither changes which programs type-check. Nothing of it is

@@ -8,8 +8,8 @@ description: A proposal for leaving out the copies that make imm values, when no
 
 :::info[Proposal]
 Nothing on this page is implemented. It's part of the design for
-[#209](https://github.com/boltlang/Bolt/issues/209): an optimization step
-in `boltlang-mir`, on the IR after type checking, like the
+[#209](https://github.com/boltlang/Bolt/issues/209): an optimization in
+Conduit, the IR that Bolt compiles to after type checking, like the
 [region](./regions.mdx) analysis. Both are about mutability: they find
 when the copy that `imm e` makes can be left out. Nothing on this page is
 written in a program, and it never changes which programs type-check.
@@ -48,8 +48,8 @@ leaves its block: it goes to `push` and to `build`.
 one copies it, and a function never takes a value away from its caller.
 The compiler leaves a copy out only when nothing could tell the
 difference, so no program is rejected because of this, and nothing new is
-written. It's an optimization step in `boltlang-mir`, which runs on the
-IR once the types are known.
+written. It's an optimization in Conduit, the IR that Bolt compiles to
+once the types are known.
 
 Rust's moves do something like it, but they're part of the meaning: using
 a value after it's moved is an error. Here, using it again only means that
